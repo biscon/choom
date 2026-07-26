@@ -12,7 +12,6 @@
 namespace game {
 
 struct SectorEditorLightmapBakeModalCallbacks {
-    std::function<bool()> isBlocking;
     std::function<void()> requestCancel;
     std::function<void()> closeAcknowledgement;
 };
@@ -23,7 +22,7 @@ void DrawLightmapBakeModal(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
-        LightmapBakeAsyncState& lightmapBake,
+        const SectorEditorLightmapBakeModalView& view,
         const SectorEditorLightmapBakeModalCallbacks& callbacks);
 
 } // namespace game

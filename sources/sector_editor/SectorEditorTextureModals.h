@@ -15,6 +15,8 @@
 
 namespace game {
 
+class SectorEditorTextureCatalogService;
+
 struct SectorEditorAddTextureModalCallbacks {
     std::function<void()> close;
     std::function<bool()> addSelected;
@@ -27,7 +29,6 @@ struct SectorEditorTexturePickerCallbacks {
     std::function<void()> close;
     std::function<void()> applySelection;
     std::function<std::string()> currentTextureForTarget;
-    std::function<engine::TextureHandle(const std::string&)> textureHandleForId;
 };
 
 struct SectorEditorSpritePickerCallbacks {
@@ -75,7 +76,7 @@ void DrawTexturePickerModal(
         engine::AssetManager& assets,
         engine::FontHandle font,
         TexturePickerState& picker,
-        const SectorTopologyMap& map,
+        SectorEditorTextureCatalogService& textureCatalog,
         const SectorEditorTexturePickerCallbacks& callbacks);
 
 void DrawSpritePickerModal(
@@ -88,13 +89,7 @@ void DrawSpritePickerModal(
         const SectorEditorSpritePickerCallbacks& callbacks);
 
 void RefreshAddMapTextureScan(AddMapTextureState& modalState);
-void SelectAddMapTexturePath(
-        AddMapTextureState& modalState,
-        const SectorTopologyMap& map,
-        int pathIndex);
 void RefreshAddMapTexturePreview(AddMapTextureState& modalState, engine::AssetManager& assets);
-bool ValidateAddMapTextureId(const AddMapTextureState& modalState, std::string& error);
-SectorEditorAddTextureResult AddSelectedMapTexture(SectorEditorState& state);
 
 void RefreshSpritePickerScan(SpritePickerState& picker);
 void RefreshSpriteMetadataCatalog(SectorSpriteMetadataCatalog& catalog);
@@ -116,40 +111,27 @@ bool RepairBillboardClipsForSpriteMetadata(
         const SectorSpriteMetadata& metadata,
         bool repairInvalidNonEmpty);
 
-bool OpenTopologyTexturePicker(
+bool OpenMapSkyTexturePicker(
         SectorEditorState& state,
-        int sectorId,
-        TopologySectorTextureField field,
-        TopologyMaterialLayer layer);
-bool OpenTopologySideDefTexturePicker(
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        SectorEditorTextureCatalogService& textureCatalog);
+bool OpenRuntimeDoorTexturePicker(
         SectorEditorState& state,
-        int sideDefId,
-        TopologyWallPart wallPart,
-        TopologyMaterialLayer layer);
-bool OpenAuthoringFaceAnchorTexturePicker(
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        SectorEditorTextureCatalogService& textureCatalog,
+        int runtimeObjectId);
+std::string CurrentTextureForPickerTarget(
+        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        SectorEditorConstDerivationDocumentAccess derivation);
+SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(
         SectorEditorState& state,
-        int topologySectorId,
-        TopologySectorTextureField field,
-        TopologyMaterialLayer layer);
-bool OpenAuthoringFaceAnchorTexturePickerById(
-        SectorEditorState& state,
-        int faceAnchorId,
-        TopologySectorTextureField field,
-        TopologyMaterialLayer layer);
-bool OpenAuthoringSideTexturePicker(
-        SectorEditorState& state,
-        int topologySideDefId,
-        TopologyWallPart wallPart,
-        TopologyMaterialLayer layer);
-bool OpenAuthoringSideTexturePickerById(
-        SectorEditorState& state,
-        SectorAuthoringSideId sideId,
-        TopologyWallPart wallPart,
-        TopologyMaterialLayer layer);
-bool OpenMapSkyTexturePicker(SectorEditorState& state);
-bool OpenRuntimeDoorTexturePicker(SectorEditorState& state, int runtimeObjectId);
-std::string CurrentTextureForPickerTarget(const SectorEditorState& state);
-SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(SectorEditorState& state);
-SectorEditorTexturePickerApplyResult ApplyAuthoringTexturePickerSelection(SectorEditorState& state);
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation);
 
 } // namespace game

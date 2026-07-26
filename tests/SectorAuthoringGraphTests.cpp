@@ -5,11 +5,16 @@
 #include "sector_demo/SectorTopologySerialization.h"
 #include "sector_demo/SectorUnits.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
-#include "sector_editor/SectorEditorDocumentActions.h"
+#include "sector_editor/document/SectorEditorDocumentActions.h"
+#include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
+#include "sector_editor/services/lights/SectorEditorLightEditingService.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -310,17 +315,20 @@ void AddFaceAnchor(
     graph.faceAnchors.push_back(anchor);
 }
 
-game::SectorEditorState MakeEditorStateWithAuthoringGraph(
+void InitializeEditorStateWithAuthoringGraph(
+        game::SectorEditorState& state,
+        game::SectorEditorDocumentState& documentState,
+        game::SectorAuthoringGraph& authoringGraph,
         const game::SectorAuthoringGraph& graph,
         bool refreshDerivation = true)
 {
-    game::SectorEditorState state;
-    state.topologyMap = game::CreateEmptySectorTopologyDocument();
-    state.authoringGraph = graph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap = game::CreateEmptySectorTopologyDocument();
+    authoringGraph = graph;
     if (refreshDerivation) {
-        game::RefreshSectorEditorAuthoringDerivation(state);
+        game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph,
+                game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
     }
-    return state;
 }
 
 game::LevelPaths MakeTempLevelPaths(const char* name)
@@ -336,6 +344,8 @@ game::LevelPaths MakeTempLevelPaths(const char* name)
 
 Json SaveEditorStateToJson(
         const game::SectorEditorState& state,
+        const game::SectorEditorDocumentState& documentState,
+        const game::SectorAuthoringGraph& authoringGraph,
         const char* fileName,
         std::string* outText = nullptr)
 {
@@ -344,7 +354,12 @@ Json SaveEditorStateToJson(
     std::filesystem::remove(paths.jsonFilePath, removeError);
 
     std::string error;
-    Check(game::SaveSectorEditorAuthoringDocument(paths, state, error),
+    Check(game::SaveSectorEditorAuthoringDocument(
+                  paths,
+                  authoringGraph,
+                  documentState.map.topologyMap,
+                  documentState.derivation.authoringDerivation,
+                  error),
           TextFormat("editor authoring save succeeds for %s", fileName));
     Check(error.empty(), "successful editor authoring save clears error");
     const std::string text = ReadTextFile(paths.jsonFilePath);
@@ -357,39 +372,137 @@ Json SaveEditorStateToJson(
 
 game::SectorEditorState MakeEditorStateFromLoadedDocument(
         const game::SectorEditorLoadedDocument& loaded,
+        game::SectorEditorDocumentState& documentState,
+        game::SectorAuthoringGraph& authoringGraph,
         bool* outDerivationCurrent = nullptr)
 {
     game::SectorEditorState state;
+    game::SelectionState selectionState;
     if (loaded.format == game::SectorEditorDocumentFormat::TopologyV2Import) {
-        state.topologyMap = loaded.mapData;
-        game::InitializeSectorEditorAuthoringStateFromTopology(state, state.topologyMap);
+        documentState.map.topologyMap = loaded.mapData;
+        game::InitializeSectorEditorAuthoringStateFromTopology(
+                authoringGraph,
+                game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                documentState.map.topologyMap);
         if (outDerivationCurrent != nullptr) {
             *outDerivationCurrent =
-                    state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
-                    && !state.authoringDerivedTopologyStale
-                    && state.authoringDerivation.success;
+                    game::IsSectorEditorAuthoringDerivationCurrent(
+                            game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
         }
         return state;
     }
 
-    state.topologyMap = loaded.mapData;
-    const game::SectorLightmapMetadata loadedBakedLightmap = state.topologyMap.bakedLightmap;
-    state.authoringGraph = loaded.authoringGraph;
-    const bool refreshed = game::RefreshSectorEditorAuthoringDerivation(state);
+    documentState.map.topologyMap = loaded.mapData;
+    const game::SectorLightmapMetadata loadedBakedLightmap = documentState.map.topologyMap.bakedLightmap;
+    authoringGraph = loaded.authoringGraph;
+    const bool refreshed = game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph,
+            game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
     if (refreshed) {
-        state.topologyMap.bakedLightmap = loadedBakedLightmap;
-        state.authoringDerivation.topology.bakedLightmap = loadedBakedLightmap;
-        if (state.lastValidAuthoringDerivedTopology.has_value()) {
-            state.lastValidAuthoringDerivedTopology->bakedLightmap = loadedBakedLightmap;
+        documentState.map.topologyMap.bakedLightmap = loadedBakedLightmap;
+        documentState.derivation.authoringDerivation.topology.bakedLightmap = loadedBakedLightmap;
+        if (documentState.derivation.lastValidAuthoringDerivedTopology.has_value()) {
+            documentState.derivation.lastValidAuthoringDerivedTopology->bakedLightmap = loadedBakedLightmap;
         }
     }
     if (outDerivationCurrent != nullptr) {
         *outDerivationCurrent = refreshed
-                && state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
-                && !state.authoringDerivedTopologyStale
-                && state.authoringDerivation.success;
+                && game::IsSectorEditorAuthoringDerivationCurrent(
+                        game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
     }
     return state;
+}
+
+bool IsAuthoringDerivationCurrent(const game::SectorEditorDocumentState& documentState)
+{
+    return game::IsSectorEditorAuthoringDerivationCurrent(
+            game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
+}
+
+bool FindEditorAuthoringSelectionAtMapPoint(
+        const game::SectorEditorState& state,
+        const game::SectorEditorDocumentState& documentState,
+        const game::SectorAuthoringGraph& authoringGraph,
+        Vector2 mapPoint,
+        float vertexMaxDistance,
+        float lineMaxDistance,
+        game::SectorAuthoringSelectionTarget* outTarget = nullptr,
+        game::SectorTopologyCoordPoint* outVertexPoint = nullptr,
+        std::string* outStatus = nullptr)
+{
+    return game::FindSectorEditorAuthoringSelectionAtMapPoint(
+            authoringGraph,
+            documentState.derivation.authoringDerivation,
+            IsAuthoringDerivationCurrent(documentState),
+            mapPoint,
+            vertexMaxDistance,
+            lineMaxDistance,
+            outTarget,
+            outVertexPoint,
+            outStatus);
+}
+
+game::SectorEditorInspectorTarget ResolveEditorInspectorTarget(
+        const game::SectorEditorState& state,
+        const game::SectorEditorDocumentState& documentState,
+        const game::SectorAuthoringGraph& authoringGraph,
+        const game::SelectionState& selectionState)
+{
+    return game::ResolveSectorEditorInspectorTarget(
+            documentState.map.topologyMap,
+            authoringGraph,
+            documentState.derivation.authoringDerivation,
+            IsAuthoringDerivationCurrent(documentState),
+            selectionState);
+}
+
+bool ResolveEditorAuthoringSurfaceTarget(
+        const game::SectorEditorState& state,
+        const game::SectorEditorDocumentState& documentState,
+        const game::SectorAuthoringGraph& authoringGraph,
+        game::SectorSurfaceRef surface,
+        game::SectorEditorAuthoringSurfaceTarget& outTarget,
+        std::string* outStatus = nullptr)
+{
+    return game::ResolveSectorEditorAuthoringSurfaceTarget(
+            documentState.map.topologyMap,
+            authoringGraph,
+            documentState.derivation.authoringDerivation,
+            IsAuthoringDerivationCurrent(documentState),
+            surface,
+            outTarget,
+            outStatus);
+}
+
+std::string BuildEditorSurface3DTargetLabel(
+        const game::SectorEditorState& state,
+        const game::SectorEditorDocumentState& documentState,
+        const game::SectorAuthoringGraph& authoringGraph,
+        game::SectorSurfaceRef surface,
+        game::TopologySurfaceEditTarget target)
+{
+    return game::BuildSectorEditorSurface3DTargetLabel(
+            documentState.map.topologyMap,
+            authoringGraph,
+            documentState.derivation.authoringDerivation,
+            IsAuthoringDerivationCurrent(documentState),
+            surface,
+            target);
+}
+
+bool ClearSelectedEditorSurface3DIfAuthoringMappingUnavailable(
+        const game::SectorEditorState& state,
+        const game::SectorEditorDocumentState& documentState,
+        const game::SectorAuthoringGraph& authoringGraph,
+        game::SectorEditorPreviewSelectionState& previewSelectionState,
+        std::string* outStatus = nullptr)
+{
+    return game::ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
+            documentState.map.topologyMap,
+            authoringGraph,
+            documentState.derivation.authoringDerivation,
+            IsAuthoringDerivationCurrent(documentState),
+            previewSelectionState,
+            outStatus);
 }
 
 bool PointEqualsInteger(
@@ -517,6 +630,156 @@ game::SectorTopologyWallPartSettings WallPart(
     part.uv.scale = Vector2{scaleX, scaleY};
     part.uv.offset = Vector2{offsetX, offsetY};
     return part;
+}
+
+game::TopologySurfaceEditTarget SideDefMaterialTarget(const game::SectorTopologySideDef& sideDef)
+{
+    return game::TopologySurfaceEditTarget{
+            game::TopologySurfaceEditTargetKind::SideDefWall,
+            sideDef.sectorId,
+            sideDef.lineDefId,
+            sideDef.id,
+            sideDef.side};
+}
+
+game::MaterialEditingUiState& TestMaterialEditingUiState();
+game::SelectionState& TestSelectionState();
+game::SectorEditorPreviewSelectionState& TestPreviewSelectionState();
+
+game::SectorEditorMaterialEditingService MakeMaterialEditingService(
+        game::SectorEditorState& state,
+        game::SectorEditorDocumentState& documentState,
+        game::SectorAuthoringGraph& authoringGraph,
+        game::SectorEditorUiState& uiState,
+        std::string& statusText,
+        bool* previewRebuildRequested = nullptr)
+{
+    static game::MaterialEditingState materialState;
+    game::SelectionState& selectionState = TestSelectionState();
+    game::SectorEditorPreviewSelectionState& previewSelectionState = TestPreviewSelectionState();
+    game::MaterialEditingUiState& materialUiState = TestMaterialEditingUiState();
+    (void)uiState;
+    selectionState = game::SelectionState{};
+    materialState = game::MaterialEditingState{};
+    materialUiState = game::MaterialEditingUiState{};
+    return game::SectorEditorMaterialEditingService{
+            game::SectorEditorMaterialEditingServiceContext{
+                    game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                    documentState.map.topologyMap,
+                    authoringGraph,
+                    game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                    state.topologyRenderWarning,
+                    state.topologyRenderRevision,
+                    state.topologyRenderCache,
+                    previewSelectionState,
+                    selectionState,
+                    materialState,
+                    materialUiState,
+                    state.texturePicker,
+                    state.decalTintModal,
+                    statusText,
+                    [previewRebuildRequested](engine::AssetManager*) {
+                        if (previewRebuildRequested != nullptr) {
+                            *previewRebuildRequested = true;
+                        }
+                        return true;
+                    }}};
+}
+
+game::MaterialEditingUiState& TestMaterialEditingUiState()
+{
+    static game::MaterialEditingUiState materialUiState;
+    return materialUiState;
+}
+
+game::SectorEditorPreviewSelectionState& TestPreviewSelectionState()
+{
+    static game::SectorEditorPreviewSelectionState previewSelectionState;
+    return previewSelectionState;
+}
+
+game::SelectionState& TestSelectionState()
+{
+    static game::SelectionState selectionState;
+    return selectionState;
+}
+
+game::ManipulationState& TestManipulationState()
+{
+    static game::ManipulationState manipulationState;
+    return manipulationState;
+}
+
+game::SectorEditorLightEditingService MakeLightEditingService(
+        game::SectorEditorState& state,
+        game::SectorEditorDocumentState& documentState,
+        game::SectorTopologyMap& topologyMap,
+        game::SectorEditorUiState& uiState,
+        std::string& statusText)
+{
+    static game::LightEditingState lightState;
+    static game::InspectorIdUiState inspectorIdUiState;
+    game::SelectionState& selectionState = TestSelectionState();
+    game::ManipulationState& manipulationState = TestManipulationState();
+    lightState = game::LightEditingState{};
+    inspectorIdUiState = game::InspectorIdUiState{};
+    selectionState = game::SelectionState{};
+    manipulationState = game::ManipulationState{};
+    return game::SectorEditorLightEditingService{
+            game::SectorEditorLightEditingServiceContext{
+                    topologyMap,
+                    lightState,
+                    game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                    state.topologyRenderRevision,
+                    state.topologyRenderCache,
+                    {
+                            manipulationState,
+                            state.runtimeObjectDrag,
+                            selectionState.topologySelectionKind,
+                            selectionState.selectedTopologySectorId,
+                            selectionState.selectedTopologyVertexId,
+                            selectionState.selectedTopologySideDefId,
+                            selectionState.selectedTopologyLineDefId,
+                            selectionState.selectedTopologyLightId,
+                            selectionState.selectedTopologyStaticSpotLightId,
+                            selectionState.selectedTopologyDynamicLightId,
+                            selectionState.selectedTopologyDynamicSpotLightId,
+                            selectionState.selectedRuntimeObjectId,
+                            selectionState.selectedTopologySideKind,
+                            selectionState.inspectedTopologyVertexId,
+                            TestPreviewSelectionState().selectedSurface3D,
+                            TestPreviewSelectionState().selectedTopologySurface3D,
+                            selectionState.selectedAuthoring,
+                            selectionState.hoveredTopologyLightId,
+                            selectionState.hoveredTopologyStaticSpotLightId,
+                            selectionState.hoveredTopologyDynamicLightId,
+                            selectionState.hoveredTopologyDynamicSpotLightId,
+                    },
+                    {
+                            uiState.inspectorScroll,
+                            uiState.lightXInput,
+                            uiState.lightYInput,
+                            uiState.lightZInput,
+                            uiState.lightTargetXInput,
+                            uiState.lightTargetYInput,
+                            uiState.lightTargetZInput,
+                            uiState.lightIntensityInput,
+                            uiState.lightRadiusInput,
+                            uiState.lightInnerConeInput,
+                            uiState.lightOuterConeInput,
+                            uiState.lightSourceRadiusInput,
+                            uiState.lightFlickerSpeedInput,
+                            uiState.lightFlickerAmountInput,
+                            uiState.lightShadowPriorityInput,
+                            uiState.lightShadowBiasInput,
+                            uiState.lightShadowStrengthInput,
+                            uiState.lightShadowSoftnessInput,
+                            uiState.lightRedInput,
+                            uiState.lightGreenInput,
+                            uiState.lightBlueInput,
+                            inspectorIdUiState,
+                    },
+                    statusText}};
 }
 
 game::SectorTopologySideDef SideDef(
@@ -1606,11 +1869,16 @@ void TestEnclosedVoidFaceCreatesHoleAndSolidInnerWalls()
               "enclosed void inner boundary is collision blocking");
     }
 
-    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(state, documentState, authoringGraph, graph);
     game::SectorAuthoringSelectionTarget target;
     std::string status;
-    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+    Check(FindEditorAuthoringSelectionAtMapPoint(
                   state,
+                  documentState,
+                  authoringGraph,
                   VisibleAuthoringPoint(64, 64),
                   0.25f,
                   0.25f,
@@ -2520,17 +2788,20 @@ void TestFreshDerivedTopologyUsesDefaultMaterials()
 void TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
 
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "fresh outer refresh synthesizes and derives valid topology");
-    Check(state.authoringGraph.faceAnchors.size() == 1,
+    Check(authoringGraph.faceAnchors.size() == 1,
           "fresh outer refresh synthesizes one face anchor");
-    const game::SectorAuthoringFaceAnchor* anchor = state.authoringGraph.faceAnchors.empty()
+    const game::SectorAuthoringFaceAnchor* anchor = authoringGraph.faceAnchors.empty()
             ? nullptr
-            : &state.authoringGraph.faceAnchors.front();
+            : &authoringGraph.faceAnchors.front();
     Check(anchor != nullptr && anchor->name == "Sector 1",
           "fresh outer synthesized anchor gets first generated label");
     Check(anchor != nullptr
@@ -2548,13 +2819,13 @@ void TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials()
                   && anchor->defaultUpper.textureId == "wall",
           "fresh outer synthesized anchor uses normal graph-authored defaults");
     Check(AllDerivedSectorsHaveExactlyOneValidFaceAnchorMapping(
-                  state.authoringGraph,
-                  state.authoringDerivation),
+                  authoringGraph,
+                  documentState.derivation.authoringDerivation),
           "fresh outer synthesized anchor maps to derived sector");
 
     game::SectorGeneratedGeometry geometry;
     std::string error;
-    Check(game::BuildSectorGeneratedGeometry(state.topologyMap, geometry, &error),
+    Check(game::BuildSectorGeneratedGeometry(documentState.map.topologyMap, geometry, &error),
           "fresh outer reconciled topology builds generated geometry");
     bool sawEmptyTexture = false;
     for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
@@ -2567,20 +2838,23 @@ void TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials()
 void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {128, 0}, {128, 128}, {0, 128}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "outer-only anchor preservation setup derives valid topology");
-    Check(state.authoringGraph.faceAnchors.size() == 1,
+    Check(authoringGraph.faceAnchors.size() == 1,
           "outer-only anchor preservation setup synthesizes one anchor");
-    if (state.authoringGraph.faceAnchors.empty()) {
+    if (authoringGraph.faceAnchors.empty()) {
         return;
     }
 
-    const int outerAnchorId = state.authoringGraph.faceAnchors.front().id;
+    const int outerAnchorId = authoringGraph.faceAnchors.front().id;
     game::SectorAuthoringFaceAnchor* outerAnchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, outerAnchorId);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, outerAnchorId);
     Check(outerAnchor != nullptr, "outer anchor exists before adding inner loop");
     if (outerAnchor == nullptr) {
         return;
@@ -2594,22 +2868,22 @@ void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
     outerAnchor->defaultLower = WallPart("outer_lower", 2.0f, 3.0f, 4.0f, 5.0f);
     outerAnchor->defaultUpper = WallPart("outer_upper", 3.0f, 4.0f, 5.0f, 6.0f);
 
-    AddAuthoringVertexWithId(state.authoringGraph, 5, 32, 32);
-    AddAuthoringVertexWithId(state.authoringGraph, 6, 96, 32);
-    AddAuthoringVertexWithId(state.authoringGraph, 7, 96, 96);
-    AddAuthoringVertexWithId(state.authoringGraph, 8, 32, 96);
-    AddAuthoringLineWithId(state.authoringGraph, 14, 5, 6);
-    AddAuthoringLineWithId(state.authoringGraph, 15, 6, 7);
-    AddAuthoringLineWithId(state.authoringGraph, 16, 7, 8);
-    AddAuthoringLineWithId(state.authoringGraph, 17, 8, 5);
+    AddAuthoringVertexWithId(authoringGraph, 5, 32, 32);
+    AddAuthoringVertexWithId(authoringGraph, 6, 96, 32);
+    AddAuthoringVertexWithId(authoringGraph, 7, 96, 96);
+    AddAuthoringVertexWithId(authoringGraph, 8, 32, 96);
+    AddAuthoringLineWithId(authoringGraph, 14, 5, 6);
+    AddAuthoringLineWithId(authoringGraph, 15, 6, 7);
+    AddAuthoringLineWithId(authoringGraph, 16, 7, 8);
+    AddAuthoringLineWithId(authoringGraph, 17, 8, 5);
 
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "adding inner loop reconciles and derives valid topology");
-    Check(state.authoringGraph.faceAnchors.size() == 2,
+    Check(authoringGraph.faceAnchors.size() == 2,
           "adding inner loop synthesizes only one new face anchor");
 
     const game::SectorAuthoringFaceAnchor* preservedOuter =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, outerAnchorId);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, outerAnchorId);
     Check(preservedOuter != nullptr && preservedOuter->name == "Sector 1",
           "outer anchor keeps original generated label");
     Check(preservedOuter != nullptr
@@ -2624,8 +2898,10 @@ void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
 
     game::SectorAuthoringSelectionTarget outerTarget;
     game::SectorAuthoringSelectionTarget innerTarget;
-    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+    Check(FindEditorAuthoringSelectionAtMapPoint(
                   state,
+                  documentState,
+                  authoringGraph,
                   VisibleAuthoringPoint(16, 16),
                   0.25f,
                   0.25f,
@@ -2634,8 +2910,10 @@ void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
     Check(outerTarget.kind == game::SectorAuthoringSelectionKind::FaceAnchor
                   && outerTarget.faceAnchorId == outerAnchorId,
           "outer ring point still selects original outer anchor");
-    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+    Check(FindEditorAuthoringSelectionAtMapPoint(
                   state,
+                  documentState,
+                  authoringGraph,
                   VisibleAuthoringPoint(64, 64),
                   0.25f,
                   0.25f,
@@ -2646,7 +2924,7 @@ void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
           "inner face point selects newly synthesized anchor");
 
     const game::SectorAuthoringFaceAnchor* innerAnchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, innerTarget.faceAnchorId);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, innerTarget.faceAnchorId);
     Check(innerAnchor != nullptr && innerAnchor->name == "Sector 2",
           "inner synthesized anchor gets next generated label");
     Check(innerAnchor != nullptr
@@ -2661,17 +2939,20 @@ void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
 void TestEditorAuthoringGraphMutationMarksDirtyAndStale()
 {
     game::SectorEditorState state;
-    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    game::InitializeSectorEditorAuthoringStateFromTopology(authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), game::SectorTopologyMap{});
     const uint64_t originalRevision = state.topologyRenderRevision;
 
     int firstVertexId = -1;
-    Check(game::AddSectorAuthoringVertex(state.authoringGraph, 0, 0, &firstVertexId),
+    Check(game::AddSectorAuthoringVertex(authoringGraph, 0, 0, &firstVertexId),
           "editor authoring mutation test adds vertex");
-    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed");
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring graph changed");
 
-    Check(state.topologyDocumentDirty, "graph mutation marks document dirty");
-    Check(state.authoringDerivedTopologyStale, "graph mutation marks derived topology stale");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidNoDerived,
+    Check(documentState.lifecycle.topologyDocumentDirty, "graph mutation marks document dirty");
+    Check(documentState.derivation.authoringDerivedTopologyStale, "graph mutation marks derived topology stale");
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidNoDerived,
           "graph mutation without last valid topology has invalid/no-derived state");
     Check(!state.topologyRenderCache.valid, "graph mutation invalidates topology render cache");
     Check(state.topologyRenderRevision == originalRevision + 1,
@@ -2802,12 +3083,15 @@ void TestAuthoringOverlayFaceAnchorHighlightResolvesVisibleBoundary()
     AddFaceAnchor(graph, 201, 48, 48, "ring");
     AddFaceAnchor(graph, 202, 96, 96, "inner");
 
-    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(state, documentState, authoringGraph, graph);
     const game::SectorEditorTopologyRenderCache cache =
             game::BuildSectorEditorTopologyRenderCache(
-                    state.topologyMap,
-                    state.authoringGraph,
-                    state.authoringDerivation,
+                    documentState.map.topologyMap,
+                    authoringGraph,
+                    documentState.derivation.authoringDerivation,
                     10);
 
     const game::CachedAuthoringFaceHighlightDraw* outer =
@@ -2850,12 +3134,15 @@ void TestAuthoringOverlayFaceAnchorHighlightFailsClosedWithoutCurrentMapping()
     AddFaceAnchor(graph, 200, 16, 16, "outer");
     AddFaceAnchor(graph, 201, 64, 64, "inner");
 
-    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(state, documentState, authoringGraph, graph);
     game::SectorEditorTopologyRenderCache cache =
             game::BuildSectorEditorTopologyRenderCache(
-                    state.topologyMap,
-                    state.authoringGraph,
-                    state.authoringDerivation,
+                    documentState.map.topologyMap,
+                    authoringGraph,
+                    documentState.derivation.authoringDerivation,
                     11);
 
     game::SectorEditorTopologyDrawContext context;
@@ -2864,12 +3151,12 @@ void TestAuthoringOverlayFaceAnchorHighlightFailsClosedWithoutCurrentMapping()
     Check(!game::ShouldDrawAuthoringFaceSelectionHighlight(cache, context, 200),
           "stale authoring derivation suppresses face-boundary highlight");
 
-    game::SectorAuthoringDerivationResult missingMapping = state.authoringDerivation;
+    game::SectorAuthoringDerivationResult missingMapping = documentState.derivation.authoringDerivation;
     missingMapping.mapping.sectors.clear();
     missingMapping.mapping.resolvedFaces.clear();
     cache = game::BuildSectorEditorTopologyRenderCache(
-            state.topologyMap,
-            state.authoringGraph,
+            documentState.map.topologyMap,
+            authoringGraph,
             missingMapping,
             12);
     context.derivedTopologyStale = false;
@@ -2878,12 +3165,12 @@ void TestAuthoringOverlayFaceAnchorHighlightFailsClosedWithoutCurrentMapping()
     Check(!game::ShouldDrawAuthoringFaceSelectionHighlight(cache, context, 200),
           "missing face-anchor mapping does not fall back to topology selection");
 
-    game::SectorAuthoringDerivationResult ambiguousMapping = state.authoringDerivation;
+    game::SectorAuthoringDerivationResult ambiguousMapping = documentState.derivation.authoringDerivation;
     ambiguousMapping.mapping.sectors.push_back(ambiguousMapping.mapping.sectors.front());
     ambiguousMapping.mapping.resolvedFaces.push_back(ambiguousMapping.mapping.resolvedFaces.front());
     cache = game::BuildSectorEditorTopologyRenderCache(
-            state.topologyMap,
-            state.authoringGraph,
+            documentState.map.topologyMap,
+            authoringGraph,
             ambiguousMapping,
             13);
     Check(game::FindCachedAuthoringFaceHighlight(cache, 200) == nullptr,
@@ -2893,45 +3180,53 @@ void TestAuthoringOverlayFaceAnchorHighlightFailsClosedWithoutCurrentMapping()
 void TestEditorAuthoringSuccessfulDerivationUpdatesState()
 {
     game::SectorEditorState state;
-    state.topologyMap.texturesById.emplace("wall", game::SectorTextureDefinition{"wall", "assets/images/wall.png"});
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace("wall", game::SectorTextureDefinition{"wall", "assets/images/wall.png"});
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring square changed");
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring square changed");
 
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "successful editor derivation returns true");
-    Check(state.authoringDerivation.success, "successful editor derivation stores successful result");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+    Check(documentState.derivation.authoringDerivation.success, "successful editor derivation stores successful result");
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
           "successful editor derivation marks state current");
-    Check(!state.authoringDerivedTopologyStale, "successful editor derivation clears stale flag");
-    Check(state.lastValidAuthoringDerivedTopology.has_value(),
+    Check(!documentState.derivation.authoringDerivedTopologyStale, "successful editor derivation clears stale flag");
+    Check(documentState.derivation.lastValidAuthoringDerivedTopology.has_value(),
           "successful editor derivation stores memory-only last-valid topology");
-    Check(state.topologyMap.sectors.size() == 1,
+    Check(documentState.map.topologyMap.sectors.size() == 1,
           "successful editor derivation updates current derived topology");
-    Check(state.authoringDerivation.mapping.sectors.size() == 1,
+    Check(documentState.derivation.authoringDerivation.mapping.sectors.size() == 1,
           "successful editor derivation preserves mapping for editor state");
-    Check(state.topologyMap.texturesById.find("wall") != state.topologyMap.texturesById.end(),
+    Check(documentState.map.topologyMap.texturesById.find("wall") != documentState.map.topologyMap.texturesById.end(),
           "successful editor derivation preserves map-level texture data");
 }
 
 void TestEditorAuthoringFaceAnchorInspectorWritesProjectAfterDerivation()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "face anchor inspector write setup derives valid topology");
-    Check(game::FindSectorEditorAuthoringFaceAnchorIdForTopologySector(state, 200) == 200,
+    Check(game::FindSectorEditorAuthoringFaceAnchorIdForTopologySector(authoringGraph, documentState.derivation.authoringDerivation, 200) == 200,
           "derived sector maps back to face anchor");
 
     state.topologyRenderCache.valid = true;
     const uint64_t originalRevision = state.topologyRenderRevision;
 
     Check(game::MutateSectorEditorAuthoringFaceAnchorForTopologySector(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   200,
                   "Updated authoring face anchor properties",
                   [](game::SectorAuthoringFaceAnchor& anchor) {
@@ -2947,9 +3242,9 @@ void TestEditorAuthoringFaceAnchorInspectorWritesProjectAfterDerivation()
           "face anchor inspector write helper accepts mapped derived sector");
 
     const game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* sector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(anchor != nullptr && anchor->name == "edited-room" && anchor->ceilingSky,
           "face anchor inspector write updates authoring anchor source");
     Check(sector != nullptr && sector->name == "edited-room"
@@ -2960,11 +3255,11 @@ void TestEditorAuthoringFaceAnchorInspectorWritesProjectAfterDerivation()
                   && sector->ambientIntensity == 0.375f
                   && sector->floorUv.scale.x == 2.0f,
           "face anchor inspector write projects to derived sector after derivation");
-    Check(state.topologyDocumentDirty, "face anchor inspector write marks document dirty");
-    Check(state.hasUnsavedChanges, "face anchor inspector write marks unsaved changes");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+    Check(documentState.lifecycle.topologyDocumentDirty, "face anchor inspector write marks document dirty");
+    Check(documentState.lifecycle.hasUnsavedChanges, "face anchor inspector write marks unsaved changes");
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
           "face anchor inspector write leaves successful derivation current");
-    Check(!state.authoringDerivedTopologyStale,
+    Check(!documentState.derivation.authoringDerivedTopologyStale,
           "face anchor inspector write clears stale flag after successful derivation");
     Check(!state.topologyRenderCache.valid,
           "face anchor inspector write invalidates cached editor topology rendering");
@@ -2975,18 +3270,23 @@ void TestEditorAuthoringFaceAnchorInspectorWritesProjectAfterDerivation()
 void TestEditorAuthoringFaceAnchorInspectorWriteDoesNotDirectlyMutateDerivedTopology()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "failed face anchor write setup derives valid topology");
 
-    const game::SectorTopologyMap lastValid = state.topologyMap;
-    AddFaceAnchor(state.authoringGraph, 201, 128, 128, "unresolved-room");
+    const game::SectorTopologyMap lastValid = documentState.map.topologyMap;
+    AddFaceAnchor(authoringGraph, 201, 128, 128, "unresolved-room");
 
     Check(!game::MutateSectorEditorAuthoringFaceAnchorForTopologySector(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   200,
                   "Updated authoring face anchor while graph is invalid",
                   [](game::SectorAuthoringFaceAnchor& anchor) {
@@ -2996,9 +3296,9 @@ void TestEditorAuthoringFaceAnchorInspectorWriteDoesNotDirectlyMutateDerivedTopo
           "face anchor inspector write reports failed derivation when graph is invalid");
 
     const game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* sector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     const game::SectorTopologySector* lastValidSector =
             game::FindSectorTopologySector(lastValid, 200);
     Check(anchor != nullptr && anchor->floorZ == -16.0f,
@@ -3006,24 +3306,27 @@ void TestEditorAuthoringFaceAnchorInspectorWriteDoesNotDirectlyMutateDerivedTopo
     Check(sector != nullptr && lastValidSector != nullptr
                   && sector->floorZ == lastValidSector->floorZ,
           "failed face anchor inspector write does not directly mutate derived topology");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
           "failed face anchor inspector write records invalid last-valid state");
-    Check(state.authoringDerivedTopologyStale,
+    Check(documentState.derivation.authoringDerivedTopologyStale,
           "failed face anchor inspector write leaves derived topology stale");
 }
 
 void TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "side material inspector write setup derives valid topology");
 
     const game::SectorTopologySideDef* initialSideDef = FindDerivedSideDefForAuthoringSide(
-            state.authoringDerivation,
+            documentState.derivation.authoringDerivation,
             10,
             game::SectorTopologySideKind::Front);
     Check(initialSideDef != nullptr, "derived sidedef maps back to authoring side");
@@ -3035,7 +3338,9 @@ void TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation()
     const uint64_t originalRevision = state.topologyRenderRevision;
 
     Check(game::MutateSectorEditorAuthoringSideForTopologySideDef(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   initialSideDef->id,
                   "Updated authoring side material",
                   [](game::SectorAuthoringLineSide& side) {
@@ -3048,10 +3353,10 @@ void TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation()
           "side material inspector write helper accepts mapped derived sidedef");
 
     const game::SectorAuthoringLineSide* authoringSide = game::FindSectorAuthoringLineSide(
-            state.authoringGraph,
+            authoringGraph,
             game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front});
     const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
-            state.authoringDerivation,
+            documentState.derivation.authoringDerivation,
             10,
             game::SectorTopologySideKind::Front);
     Check(authoringSide != nullptr && authoringSide->wall.textureId == "edited_wall",
@@ -3062,11 +3367,11 @@ void TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation()
                   && projectedSideDef->upper.textureId == "edited_upper"
                   && projectedSideDef->middle.textureId == "edited_middle",
           "side material inspector write projects to derived sidedef after derivation");
-    Check(state.topologyDocumentDirty, "side material inspector write marks document dirty");
-    Check(state.hasUnsavedChanges, "side material inspector write marks unsaved changes");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+    Check(documentState.lifecycle.topologyDocumentDirty, "side material inspector write marks document dirty");
+    Check(documentState.lifecycle.hasUnsavedChanges, "side material inspector write marks unsaved changes");
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
           "side material inspector write leaves successful derivation current");
-    Check(!state.authoringDerivedTopologyStale,
+    Check(!documentState.derivation.authoringDerivedTopologyStale,
           "side material inspector write clears stale flag after successful derivation");
     Check(!state.topologyRenderCache.valid,
           "side material inspector write invalidates cached editor topology rendering");
@@ -3077,15 +3382,18 @@ void TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation()
 void TestEditorAuthoringSideMaterialInspectorWritesProjectToSplitDerivedSideDefs()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {1, 3}, {2, 4}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "split side material inspector write setup derives valid topology");
 
     int selectedSideDefId = -1;
     int projectedBeforeCount = 0;
-    for (const game::SectorAuthoringDerivedSideMapping& mapping : state.authoringDerivation.mapping.sides) {
+    for (const game::SectorAuthoringDerivedSideMapping& mapping : documentState.derivation.authoringDerivation.mapping.sides) {
         if (mapping.authoringLineId == 14
                 && mapping.authoringSide == game::SectorTopologySideKind::Front) {
             selectedSideDefId = mapping.topologySideDefId;
@@ -3096,7 +3404,9 @@ void TestEditorAuthoringSideMaterialInspectorWritesProjectToSplitDerivedSideDefs
     Check(projectedBeforeCount == 2, "split source side maps to both child sidedefs before edit");
 
     Check(game::MutateSectorEditorAuthoringSideForTopologySideDef(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   selectedSideDefId,
                   "Updated split authoring side material",
                   [](game::SectorAuthoringLineSide& side) {
@@ -3106,13 +3416,13 @@ void TestEditorAuthoringSideMaterialInspectorWritesProjectToSplitDerivedSideDefs
           "split side material inspector write helper accepts one child derived sidedef");
 
     int projectedAfterCount = 0;
-    for (const game::SectorAuthoringDerivedSideMapping& mapping : state.authoringDerivation.mapping.sides) {
+    for (const game::SectorAuthoringDerivedSideMapping& mapping : documentState.derivation.authoringDerivation.mapping.sides) {
         if (mapping.authoringLineId != 14
                 || mapping.authoringSide != game::SectorTopologySideKind::Front) {
             continue;
         }
         const game::SectorTopologySideDef* sideDef =
-                game::FindSectorTopologySideDef(state.topologyMap, mapping.topologySideDefId);
+                game::FindSectorTopologySideDef(documentState.map.topologyMap, mapping.topologySideDefId);
         Check(sideDef != nullptr && sideDef->wall.textureId == "split_edited_wall",
               "split side material inspector write projects to each child derived sidedef");
         ++projectedAfterCount;
@@ -3123,15 +3433,18 @@ void TestEditorAuthoringSideMaterialInspectorWritesProjectToSplitDerivedSideDefs
 void TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTopology()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "failed side material write setup derives valid topology");
 
     const game::SectorTopologySideDef* initialSideDef = FindDerivedSideDefForAuthoringSide(
-            state.authoringDerivation,
+            documentState.derivation.authoringDerivation,
             10,
             game::SectorTopologySideKind::Front);
     Check(initialSideDef != nullptr, "failed side material write setup has mapped side");
@@ -3140,11 +3453,13 @@ void TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTo
     }
 
     const int sideDefId = initialSideDef->id;
-    const game::SectorTopologyMap lastValid = state.topologyMap;
-    AddFaceAnchor(state.authoringGraph, 201, 128, 128, "unresolved-room");
+    const game::SectorTopologyMap lastValid = documentState.map.topologyMap;
+    AddFaceAnchor(authoringGraph, 201, 128, 128, "unresolved-room");
 
     Check(!game::MutateSectorEditorAuthoringSideForTopologySideDef(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   sideDefId,
                   "Updated authoring side while graph is invalid",
                   [](game::SectorAuthoringLineSide& side) {
@@ -3154,10 +3469,10 @@ void TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTo
           "side material inspector write reports failed derivation when graph is invalid");
 
     const game::SectorAuthoringLineSide* authoringSide = game::FindSectorAuthoringLineSide(
-            state.authoringGraph,
+            authoringGraph,
             game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front});
     const game::SectorTopologySideDef* sideDef =
-            game::FindSectorTopologySideDef(state.topologyMap, sideDefId);
+            game::FindSectorTopologySideDef(documentState.map.topologyMap, sideDefId);
     const game::SectorTopologySideDef* lastValidSideDef =
             game::FindSectorTopologySideDef(lastValid, sideDefId);
     Check(authoringSide != nullptr && authoringSide->wall.textureId == "invalid_graph_wall",
@@ -3165,23 +3480,597 @@ void TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTo
     Check(sideDef != nullptr && lastValidSideDef != nullptr
                   && sideDef->wall.textureId == lastValidSideDef->wall.textureId,
           "failed side material inspector write does not directly mutate derived sidedef");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
           "failed side material inspector write records invalid last-valid state");
-    Check(state.authoringDerivedTopologyStale,
+    Check(documentState.derivation.authoringDerivedTopologyStale,
           "failed side material inspector write leaves derived topology stale");
+}
+
+void TestEditorLightEditingServiceStaticEditMarksDirtyAndInvalidatesCache()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    state.topologyRenderCache.valid = true;
+    state.topologyRenderRevision = 41;
+    state.topologyRenderWarning = "keep warning";
+    game::SectorEditorUiState uiState;
+    std::string statusText = "old";
+    game::SectorEditorLightEditingService service =
+            MakeLightEditingService(state, documentState, documentState.map.topologyMap, uiState, statusText);
+
+    game::SectorTopologyStaticPointLight light;
+    light.id = 7;
+    light.radius = 4.0f;
+
+    Check(service.SetStaticLightRadius(light, 6.0f),
+          "light service static radius edit succeeds");
+    Check(Near(light.radius, 6.0f),
+          "light service static radius edit changes field");
+    Check(documentState.lifecycle.topologyDocumentDirty && documentState.lifecycle.hasUnsavedChanges,
+          "light service static edit marks document dirty and unsaved");
+    Check(!state.topologyRenderCache.valid,
+          "light service static edit invalidates topology render cache");
+    Check(state.topologyRenderRevision == 42,
+          "light service static edit increments topology render revision");
+    Check(state.topologyRenderWarning == "keep warning",
+          "light service static edit preserves topology render warning like old dirty path");
+    Check(statusText == "Updated static light 7",
+          "light service static edit updates status");
+}
+
+void TestEditorLightEditingServiceDynamicEditPreservesDirtyBehavior()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    state.topologyRenderCache.valid = true;
+    state.topologyRenderRevision = 9;
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorLightEditingService service =
+            MakeLightEditingService(state, documentState, documentState.map.topologyMap, uiState, statusText);
+
+    game::SectorTopologyDynamicPointLight light;
+    light.id = 12;
+    light.enabled = true;
+
+    Check(service.SetDynamicLightEnabled(light, false),
+          "light service dynamic enabled edit succeeds");
+    Check(!light.enabled,
+          "light service dynamic enabled edit changes field");
+    Check(documentState.lifecycle.topologyDocumentDirty && documentState.lifecycle.hasUnsavedChanges,
+          "light service dynamic edit marks document dirty and unsaved");
+    Check(!state.topologyRenderCache.valid,
+          "light service dynamic edit invalidates topology render cache");
+    Check(state.topologyRenderRevision == 10,
+          "light service dynamic edit increments topology render revision");
+    Check(statusText == "Updated dynamic light 12 enabled",
+          "light service dynamic edit updates status");
+}
+
+void TestEditorLightEditingServiceNoOpDoesNotDirtyOrUpdateStatus()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    state.topologyRenderCache.valid = true;
+    state.topologyRenderRevision = 5;
+    game::SectorEditorUiState uiState;
+    std::string statusText = "unchanged";
+    game::SectorEditorLightEditingService service =
+            MakeLightEditingService(state, documentState, documentState.map.topologyMap, uiState, statusText);
+
+    game::SectorTopologyDynamicSpotLight light;
+    light.id = 33;
+    light.shadowBias = game::DynamicSpotLightMinShadowBias;
+
+    Check(!service.SetDynamicSpotLightShadowBias(light, -1.0f),
+          "light service clamp-first no-op returns false");
+    Check(!documentState.lifecycle.topologyDocumentDirty && !documentState.lifecycle.hasUnsavedChanges,
+          "light service no-op does not mark document dirty");
+    Check(state.topologyRenderCache.valid,
+          "light service no-op does not invalidate topology render cache");
+    Check(state.topologyRenderRevision == 5,
+          "light service no-op does not increment topology render revision");
+    Check(statusText == "unchanged",
+          "light service no-op does not update status");
+}
+
+void TestEditorMaterialEditingServiceSideDefBaseUvWritesThroughAuthoringSide()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall = WallPart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "service sidedef base UV setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service sidedef base UV setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    bool previewRebuildRequested = false;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText, &previewRebuildRequested);
+
+    Check(service.ApplyInspectorSideDefUvValue(
+                  SideDefMaterialTarget(*sideDef),
+                  game::TopologyMaterialLayer::Base,
+                  0,
+                  2.25f,
+                  assets),
+          "service sidedef base UV apply succeeds");
+
+    const game::SectorAuthoringLineSide* editedSide = game::FindSectorAuthoringLineSide(
+            authoringGraph,
+            side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(editedSide != nullptr && Near(editedSide->wall.uv.scale.x, 2.25f),
+          "service sidedef base UV apply writes authoring side");
+    Check(projectedSideDef != nullptr && Near(projectedSideDef->wall.uv.scale.x, 2.25f),
+          "service sidedef base UV apply refreshes derived topology");
+    Check(documentState.lifecycle.topologyDocumentDirty && documentState.lifecycle.hasUnsavedChanges,
+          "service sidedef base UV apply marks document dirty");
+    Check(!previewRebuildRequested,
+          "service sidedef base UV apply does not rebuild preview for non-middle wall part");
+}
+
+void TestEditorMaterialEditingServiceNoAuthoringMaterialEditFailsWithoutMutatingTopology()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap = MakeSingleSectorSquareMap();
+    game::SectorTopologySector* sector = game::FindSectorTopologySector(documentState.map.topologyMap, 200);
+    Check(sector != nullptr, "invalid no-authoring material edit setup finds sector");
+    if (sector == nullptr) {
+        return;
+    }
+    sector->floorDecal.textureId = "mark";
+    sector->floorDecal.opacity = 0.25f;
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+    const game::TopologySurfaceEditTarget target{
+            game::TopologySurfaceEditTargetKind::SectorFloor,
+            200,
+            -1,
+            -1,
+            game::SectorTopologySideKind::Front};
+
+    Check(!service.ApplyDecalOpacity(target, 0.75f, nullptr),
+          "invalid no-authoring material edit fails");
+    const game::SectorTopologySector* afterSector =
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
+    Check(statusText.find("authoring data is required") != std::string::npos,
+          "invalid no-authoring material edit reports authoring requirement");
+    Check(afterSector != nullptr && afterSector->floorDecal.opacity == 0.25f,
+          "invalid no-authoring material edit does not mutate derived topology");
+}
+
+void TestEditorMaterialEditingServiceSideDefDecalUvWritesThroughAuthoringSide()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.textureId = "wall";
+    side.wall.decal.textureId = "poster";
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "service sidedef decal UV setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service sidedef decal UV setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+
+    Check(service.ApplyInspectorSideDefUvValue(
+                  SideDefMaterialTarget(*sideDef),
+                  game::TopologyMaterialLayer::Decal,
+                  2,
+                  7.5f,
+                  assets),
+          "service sidedef decal UV apply succeeds");
+
+    const game::SectorAuthoringLineSide* editedSide = game::FindSectorAuthoringLineSide(
+            authoringGraph,
+            side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(editedSide != nullptr && Near(editedSide->wall.decal.uv.offset.x, 7.5f),
+          "service sidedef decal UV apply writes authoring side");
+    Check(projectedSideDef != nullptr && Near(projectedSideDef->wall.decal.uv.offset.x, 7.5f),
+          "service sidedef decal UV apply refreshes derived topology");
+}
+
+void TestEditorMaterialEditingServiceSideDefBaseUvResetWritesThroughAuthoringSide()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall = WallPart("wall", 2.0f, 3.0f, 4.0f, 5.0f);
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "service sidedef base UV reset setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service sidedef base UV reset setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+    game::MaterialEditingUiState& materialUiState = TestMaterialEditingUiState();
+    materialUiState.topologySideDefUvInputs[0].buffer[0] = 'x';
+    materialUiState.topologySideDefUvInputs[0].editing = true;
+
+    Check(service.ResetInspectorSideDefUv(
+                  SideDefMaterialTarget(*sideDef),
+                  game::TopologyMaterialLayer::Base,
+                  assets),
+          "service sidedef base UV reset succeeds");
+
+    const game::SectorAuthoringLineSide* editedSide = game::FindSectorAuthoringLineSide(
+            authoringGraph,
+            side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(editedSide != nullptr
+                  && Near(editedSide->wall.uv.scale.x, 1.0f)
+                  && Near(editedSide->wall.uv.scale.y, 1.0f)
+                  && Near(editedSide->wall.uv.offset.x, 0.0f)
+                  && Near(editedSide->wall.uv.offset.y, 0.0f),
+          "service sidedef base UV reset writes authoring defaults");
+    Check(projectedSideDef != nullptr
+                  && Near(projectedSideDef->wall.uv.scale.x, 1.0f)
+                  && Near(projectedSideDef->wall.uv.offset.x, 0.0f),
+          "service sidedef base UV reset refreshes derived topology");
+    Check(materialUiState.topologySideDefUvInputs[0].buffer[0] == '\0'
+                  && !materialUiState.topologySideDefUvInputs[0].editing,
+          "service sidedef base UV reset clears inspector input buffers");
+}
+
+void TestEditorMaterialEditingServiceSideDefDecalUvResetWritesThroughAuthoringSide()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.textureId = "wall";
+    side.wall.decal.textureId = "poster";
+    side.wall.decal.uv.scale = Vector2{2.0f, 3.0f};
+    side.wall.decal.uv.offset = Vector2{4.0f, 5.0f};
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "service sidedef decal UV reset setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service sidedef decal UV reset setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+
+    Check(service.ResetInspectorSideDefUv(
+                  SideDefMaterialTarget(*sideDef),
+                  game::TopologyMaterialLayer::Decal,
+                  assets),
+          "service sidedef decal UV reset succeeds");
+
+    const game::SectorAuthoringLineSide* editedSide = game::FindSectorAuthoringLineSide(
+            authoringGraph,
+            side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(editedSide != nullptr
+                  && Near(editedSide->wall.decal.uv.scale.x, 1.0f)
+                  && Near(editedSide->wall.decal.uv.offset.x, 0.0f),
+          "service sidedef decal UV reset writes authoring defaults");
+    Check(projectedSideDef != nullptr
+                  && Near(projectedSideDef->wall.decal.uv.scale.x, 1.0f)
+                  && Near(projectedSideDef->wall.decal.uv.offset.x, 0.0f),
+          "service sidedef decal UV reset refreshes derived topology");
+}
+
+void TestEditorMaterialEditingServiceSideDefUvMissingMappingDoesNotMutateTopology()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall = WallPart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "service sidedef missing mapping setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service sidedef missing mapping setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+    const game::TopologySurfaceEditTarget target = SideDefMaterialTarget(*sideDef);
+    const game::SectorTopologyMap beforeTopology = documentState.map.topologyMap;
+    documentState.derivation.authoringDerivation.mapping.sides.clear();
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+
+    Check(!service.ApplyInspectorSideDefUvValue(
+                  target,
+                  game::TopologyMaterialLayer::Base,
+                  0,
+                  2.0f,
+                  assets),
+          "service sidedef UV apply fails without authoring side mapping");
+
+    const game::SectorTopologySideDef* afterSideDef =
+            game::FindSectorTopologySideDef(documentState.map.topologyMap, target.sideDefId);
+    const game::SectorTopologySideDef* beforeSideDef =
+            game::FindSectorTopologySideDef(beforeTopology, target.sideDefId);
+    Check(statusText.find("not mapped to an authoring line") != std::string::npos,
+          "service sidedef UV missing mapping reports clear status");
+    Check(afterSideDef != nullptr
+                  && beforeSideDef != nullptr
+                  && Near(afterSideDef->wall.uv.scale.x, beforeSideDef->wall.uv.scale.x)
+                  && Near(afterSideDef->wall.uv.offset.x, beforeSideDef->wall.uv.offset.x),
+          "service sidedef UV missing mapping does not mutate derived topology");
+}
+
+void TestEditorMaterialEditingServiceSideDecalOpacityWritesThroughAuthoringSide()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.textureId = "wall";
+    side.wall.decal.textureId = "poster";
+    side.wall.decal.opacity = 0.25f;
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "service side decal opacity setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service side decal opacity setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+
+    Check(service.ApplyDecalOpacity(SideDefMaterialTarget(*sideDef), 0.75f, nullptr),
+          "service side decal opacity apply succeeds");
+
+    const game::SectorAuthoringLineSide* editedSide =
+            game::FindSectorAuthoringLineSide(authoringGraph, side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(editedSide != nullptr && Near(editedSide->wall.decal.opacity, 0.75f),
+          "service side decal opacity writes authoring side");
+    Check(projectedSideDef != nullptr && Near(projectedSideDef->wall.decal.opacity, 0.75f),
+          "service side decal opacity refreshes derived topology");
+}
+
+void TestEditorMaterialEditingServiceFlatDecalFitWritesThroughFaceAnchor()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringFaceAnchor* anchor =
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
+    Check(anchor != nullptr, "service flat decal fit setup has anchor");
+    if (anchor == nullptr) {
+        return;
+    }
+    anchor->floorDecal.textureId = "floor_mark";
+    anchor->floorDecal.uv.scale = Vector2{2.0f, 2.0f};
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "service flat decal fit setup derives valid topology");
+
+    game::TopologySurfaceEditTarget target;
+    target.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
+    target.sectorId = 200;
+    TestPreviewSelectionState().selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
+    TestPreviewSelectionState().selectedSurface3D.topologySectorId = 200;
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+
+    Check(service.FitSelectedFlatDecal(target, nullptr),
+          "service flat decal fit succeeds");
+
+    const game::SectorAuthoringFaceAnchor* editedAnchor =
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
+    const game::SectorTopologySector* projectedSector =
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
+    Check(editedAnchor != nullptr
+                  && (!Near(editedAnchor->floorDecal.uv.scale.x, 2.0f)
+                          || !Near(editedAnchor->floorDecal.uv.scale.y, 2.0f)),
+          "service flat decal fit writes authoring face anchor UV");
+    Check(projectedSector != nullptr
+                  && Near(projectedSector->floorDecal.uv.scale.x, editedAnchor->floorDecal.uv.scale.x)
+                  && Near(projectedSector->floorDecal.uv.scale.y, editedAnchor->floorDecal.uv.scale.y),
+          "service flat decal fit refreshes derived topology");
+}
+
+void TestEditorMaterialEditingServiceDerivedSidePickerWritesAuthoringSideDirectly()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
+    documentState.map.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
+    authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    game::SectorAuthoringLineSide side;
+    side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    side.wall.textureId = "old_wall";
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "service derived side picker setup derives valid topology");
+
+    const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(sideDef != nullptr, "service derived side picker setup has mapped side");
+    if (sideDef == nullptr) {
+        return;
+    }
+
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+    Check(service.OpenMaterialPickerForDerivedSideDef(
+                  sideDef->id,
+                  game::TopologyWallPart::Wall,
+                  game::TopologyMaterialLayer::Base),
+          "service derived side picker opens through material service");
+    SelectTextureInPicker(state.texturePicker, "new_wall");
+    const game::SectorEditorTexturePickerApplyResult result =
+            service.ApplyTexturePickerSelection(nullptr);
+
+    const game::SectorAuthoringLineSide* editedSide =
+            game::FindSectorAuthoringLineSide(authoringGraph, side.id);
+    const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
+            documentState.derivation.authoringDerivation,
+            10,
+            game::SectorTopologySideKind::Front);
+    Check(result.changed, "service derived side picker reports texture change");
+    Check(editedSide != nullptr && editedSide->wall.textureId == "new_wall",
+          "service derived side picker writes authoring side");
+    Check(projectedSideDef != nullptr && projectedSideDef->wall.textureId == "new_wall",
+          "service derived side picker refreshes derived topology");
+    Check(!state.texturePicker.open, "service derived side picker closes after apply");
 }
 
 void TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "line flag inspector write setup derives valid topology");
 
     const game::SectorTopologyLineDef* initialLineDef =
-            FindDerivedLineDefForAuthoringLine(state.authoringDerivation, 11);
+            FindDerivedLineDefForAuthoringLine(documentState.derivation.authoringDerivation, 11);
     Check(initialLineDef != nullptr, "derived linedef maps back to authoring line");
     if (initialLineDef == nullptr) {
         return;
@@ -3191,7 +4080,9 @@ void TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation()
     const uint64_t originalRevision = state.topologyRenderRevision;
 
     Check(game::MutateSectorEditorAuthoringLineForTopologyLineDef(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   initialLineDef->id,
                   "Updated authoring line flags",
                   [](game::SectorAuthoringLine& line) {
@@ -3201,18 +4092,18 @@ void TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation()
           "line flag inspector write helper accepts mapped derived linedef");
 
     const game::SectorAuthoringLine* authoringLine =
-            game::FindSectorAuthoringLine(state.authoringGraph, 11);
+            game::FindSectorAuthoringLine(authoringGraph, 11);
     const game::SectorTopologyLineDef* projectedLineDef =
-            FindDerivedLineDefForAuthoringLine(state.authoringDerivation, 11);
+            FindDerivedLineDefForAuthoringLine(documentState.derivation.authoringDerivation, 11);
     Check(authoringLine != nullptr && authoringLine->flags.blocksPlayer,
           "line flag inspector write updates authoring line source");
     Check(projectedLineDef != nullptr && projectedLineDef->flags.blocksPlayer,
           "line flag inspector write projects to derived linedef after derivation");
-    Check(state.topologyDocumentDirty, "line flag inspector write marks document dirty");
-    Check(state.hasUnsavedChanges, "line flag inspector write marks unsaved changes");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+    Check(documentState.lifecycle.topologyDocumentDirty, "line flag inspector write marks document dirty");
+    Check(documentState.lifecycle.hasUnsavedChanges, "line flag inspector write marks unsaved changes");
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
           "line flag inspector write leaves successful derivation current");
-    Check(!state.authoringDerivedTopologyStale,
+    Check(!documentState.derivation.authoringDerivedTopologyStale,
           "line flag inspector write clears stale flag after successful derivation");
     Check(!state.topologyRenderCache.valid,
           "line flag inspector write invalidates cached editor topology rendering");
@@ -3220,18 +4111,131 @@ void TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation()
           "line flag inspector write bumps topology render revision");
 }
 
+void TestEditorNoAuthoringBlocksPlayerEditFailsWithoutMutatingTopology()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
+    const game::SectorAuthoringDerivationResult derivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    Check(derivation.success, "invalid no-authoring blocksPlayer setup derives topology");
+    documentState.map.topologyMap = derivation.topology;
+
+    const game::SectorTopologyLineDef* initialLineDef =
+            FindDerivedLineDefForAuthoringLine(derivation, 11);
+    Check(initialLineDef != nullptr, "invalid no-authoring blocksPlayer setup finds portal");
+    if (initialLineDef == nullptr) {
+        return;
+    }
+
+    std::string status;
+    Check(!game::SetSectorEditorAuthoringLineDefBlocksPlayer(
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  initialLineDef->id,
+                  true,
+                  &status),
+          "invalid no-authoring blocksPlayer edit fails");
+    const game::SectorTopologyLineDef* afterLineDef =
+            game::FindSectorTopologyLineDef(documentState.map.topologyMap, initialLineDef->id);
+    Check(status.find("authoring data is required") != std::string::npos,
+          "invalid no-authoring blocksPlayer edit reports authoring requirement");
+    Check(afterLineDef != nullptr && !afterLineDef->flags.blocksPlayer,
+          "invalid no-authoring blocksPlayer edit does not mutate derived topology");
+}
+
+void TestEditorAuthoringBlocksPlayerEditWritesAuthoringLine()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "authoring blocksPlayer edit setup derives valid topology");
+
+    const game::SectorTopologyLineDef* initialLineDef =
+            FindDerivedLineDefForAuthoringLine(documentState.derivation.authoringDerivation, 11);
+    Check(initialLineDef != nullptr, "authoring blocksPlayer edit setup finds portal");
+    if (initialLineDef == nullptr) {
+        return;
+    }
+
+    std::string status;
+    Check(game::SetSectorEditorAuthoringLineDefBlocksPlayer(
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  initialLineDef->id,
+                  true,
+                  &status),
+          "authoring blocksPlayer edit succeeds");
+    const game::SectorAuthoringLine* authoringLine =
+            game::FindSectorAuthoringLine(authoringGraph, 11);
+    const game::SectorTopologyLineDef* projectedLineDef =
+            FindDerivedLineDefForAuthoringLine(documentState.derivation.authoringDerivation, 11);
+    Check(authoringLine != nullptr && authoringLine->flags.blocksPlayer,
+          "authoring blocksPlayer edit mutates authoring line");
+    Check(projectedLineDef != nullptr && projectedLineDef->flags.blocksPlayer,
+          "authoring blocksPlayer edit refreshes derived topology");
+    Check(status.find("authoring portal") != std::string::npos,
+          "authoring blocksPlayer edit reports authoring status");
+}
+
+void TestEditorNoAuthoringSectorPropertyEditFailsWithoutMutatingTopology()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap = MakeSingleSectorSquareMap();
+    const game::SectorTopologySector* beforeSector =
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
+    Check(beforeSector != nullptr, "invalid no-authoring sector property setup finds sector");
+    if (beforeSector == nullptr) {
+        return;
+    }
+    const float originalFloorZ = beforeSector->floorZ;
+
+    Check(!game::MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  200,
+                  "Updated sector height",
+                  [](game::SectorAuthoringFaceAnchor& anchor) {
+                      anchor.floorZ = 8.0f;
+                      return true;
+                  }),
+          "invalid no-authoring sector property edit fails");
+    const game::SectorTopologySector* afterSector =
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
+    Check(afterSector != nullptr && afterSector->floorZ == originalFloorZ,
+          "invalid no-authoring sector property edit does not mutate derived topology");
+}
+
 void TestEditorAuthoringLineFlagInspectorWritesProjectToSplitDerivedLineDefs()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {1, 3}, {2, 4}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "split line flag inspector write setup derives valid topology");
 
     int selectedLineDefId = -1;
     int projectedBeforeCount = 0;
-    for (const game::SectorAuthoringDerivedLineMapping& mapping : state.authoringDerivation.mapping.lines) {
+    for (const game::SectorAuthoringDerivedLineMapping& mapping : documentState.derivation.authoringDerivation.mapping.lines) {
         if (mapping.authoringLineId == 14) {
             selectedLineDefId = mapping.topologyLineDefId;
             ++projectedBeforeCount;
@@ -3241,7 +4245,9 @@ void TestEditorAuthoringLineFlagInspectorWritesProjectToSplitDerivedLineDefs()
     Check(projectedBeforeCount == 2, "split source line maps to both child linedefs before edit");
 
     Check(game::MutateSectorEditorAuthoringLineForTopologyLineDef(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   selectedLineDefId,
                   "Updated split authoring line flags",
                   [](game::SectorAuthoringLine& line) {
@@ -3251,12 +4257,12 @@ void TestEditorAuthoringLineFlagInspectorWritesProjectToSplitDerivedLineDefs()
           "split line flag inspector write helper accepts one child derived linedef");
 
     int projectedAfterCount = 0;
-    for (const game::SectorAuthoringDerivedLineMapping& mapping : state.authoringDerivation.mapping.lines) {
+    for (const game::SectorAuthoringDerivedLineMapping& mapping : documentState.derivation.authoringDerivation.mapping.lines) {
         if (mapping.authoringLineId != 14) {
             continue;
         }
         const game::SectorTopologyLineDef* lineDef =
-                game::FindSectorTopologyLineDef(state.topologyMap, mapping.topologyLineDefId);
+                game::FindSectorTopologyLineDef(documentState.map.topologyMap, mapping.topologyLineDefId);
         Check(lineDef != nullptr && lineDef->flags.blocksPlayer,
               "split line flag inspector write projects to each child derived linedef");
         ++projectedAfterCount;
@@ -3267,25 +4273,30 @@ void TestEditorAuthoringLineFlagInspectorWritesProjectToSplitDerivedLineDefs()
 void TestEditorAuthoringLineFlagInspectorWriteDoesNotDirectlyMutateDerivedTopology()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "failed line flag write setup derives valid topology");
 
     const game::SectorTopologyLineDef* initialLineDef =
-            FindDerivedLineDefForAuthoringLine(state.authoringDerivation, 11);
+            FindDerivedLineDefForAuthoringLine(documentState.derivation.authoringDerivation, 11);
     Check(initialLineDef != nullptr, "failed line flag write setup has mapped line");
     if (initialLineDef == nullptr) {
         return;
     }
 
     const int lineDefId = initialLineDef->id;
-    const game::SectorTopologyMap lastValid = state.topologyMap;
-    AddFaceAnchor(state.authoringGraph, 201, 256, 256, "unresolved-room");
+    const game::SectorTopologyMap lastValid = documentState.map.topologyMap;
+    AddFaceAnchor(authoringGraph, 201, 256, 256, "unresolved-room");
 
     Check(!game::MutateSectorEditorAuthoringLineForTopologyLineDef(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   lineDefId,
                   "Updated authoring line while graph is invalid",
                   [](game::SectorAuthoringLine& line) {
@@ -3295,9 +4306,9 @@ void TestEditorAuthoringLineFlagInspectorWriteDoesNotDirectlyMutateDerivedTopolo
           "line flag inspector write reports failed derivation when graph is invalid");
 
     const game::SectorAuthoringLine* authoringLine =
-            game::FindSectorAuthoringLine(state.authoringGraph, 11);
+            game::FindSectorAuthoringLine(authoringGraph, 11);
     const game::SectorTopologyLineDef* lineDef =
-            game::FindSectorTopologyLineDef(state.topologyMap, lineDefId);
+            game::FindSectorTopologyLineDef(documentState.map.topologyMap, lineDefId);
     const game::SectorTopologyLineDef* lastValidLineDef =
             game::FindSectorTopologyLineDef(lastValid, lineDefId);
     Check(authoringLine != nullptr && authoringLine->flags.blocksPlayer,
@@ -3305,44 +4316,48 @@ void TestEditorAuthoringLineFlagInspectorWriteDoesNotDirectlyMutateDerivedTopolo
     Check(lineDef != nullptr && lastValidLineDef != nullptr
                   && lineDef->flags.blocksPlayer == lastValidLineDef->flags.blocksPlayer,
           "failed line flag inspector write does not directly mutate derived linedef");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
           "failed line flag inspector write records invalid last-valid state");
-    Check(state.authoringDerivedTopologyStale,
+    Check(documentState.derivation.authoringDerivedTopologyStale,
           "failed line flag inspector write leaves derived topology stale");
 }
 
 void TestEditorSelectedAuthoringLineInspectorTargetDoesNotNeedTopologySelection()
 {
-    game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
-    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+    game::SectorAuthoringGraph graph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 64, 0);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
 
-    Check(game::SelectSectorEditorAuthoringLine(state, 10),
+    Check(game::SelectSectorEditorAuthoringLine(graph, selectionState, 10),
           "selected authoring line inspector target setup selects line");
-    Check(state.topologySelectionKind == game::TopologySelectionKind::None
-                  && state.selectedTopologyLineDefId == -1
-                  && state.selectedTopologySideDefId == -1,
+    Check(selectionState.topologySelectionKind == game::TopologySelectionKind::None
+                  && selectionState.selectedTopologyLineDefId == -1
+                  && selectionState.selectedTopologySideDefId == -1,
           "selected authoring line inspector target does not require topology selection");
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line
-                  && state.selectedAuthoring.lineId == 10,
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line
+                  && selectionState.selectedAuthoring.lineId == 10,
           "selected authoring line inspector target stores authoring line ID");
-    Check(game::IsSectorAuthoringSelectionTargetValid(state.authoringGraph, state.selectedAuthoring),
+    Check(game::IsSectorAuthoringSelectionTargetValid(graph, selectionState.selectedAuthoring),
           "selected authoring line inspector target validates against authoring graph");
 }
 
 void TestEditorMappedTopologySideSelectionUsesAuthoringInspectorTarget()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "mapped side inspector target setup derives valid topology");
 
     const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
-            state.authoringDerivation,
+            documentState.derivation.authoringDerivation,
             10,
             game::SectorTopologySideKind::Front);
     Check(sideDef != nullptr, "mapped side inspector target setup finds derived sidedef");
@@ -3350,13 +4365,13 @@ void TestEditorMappedTopologySideSelectionUsesAuthoringInspectorTarget()
         return;
     }
 
-    state.topologySelectionKind = game::TopologySelectionKind::SideDef;
-    state.selectedTopologySideDefId = sideDef->id;
-    state.selectedTopologyLineDefId = sideDef->lineDefId;
-    state.selectedTopologySideKind = sideDef->side;
+    selectionState.topologySelectionKind = game::TopologySelectionKind::SideDef;
+    selectionState.selectedTopologySideDefId = sideDef->id;
+    selectionState.selectedTopologyLineDefId = sideDef->lineDefId;
+    selectionState.selectedTopologySideKind = sideDef->side;
 
     const game::SectorEditorInspectorTarget target =
-            game::ResolveSectorEditorInspectorTarget(state);
+            ResolveEditorInspectorTarget(state, documentState, authoringGraph, selectionState);
     Check(target.kind == game::SectorEditorInspectorTargetKind::AuthoringLine,
           "mapped topology side selection resolves to authoring inspector");
     Check(target.lineId == 10
@@ -3368,18 +4383,21 @@ void TestEditorMappedTopologySideSelectionUsesAuthoringInspectorTarget()
 void TestEditorMappedTopologySectorSelectionUsesAuthoringInspectorTarget()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "mapped sector inspector target setup derives valid topology");
 
-    state.topologySelectionKind = game::TopologySelectionKind::Sector;
-    state.selectedTopologySectorId = 200;
+    selectionState.topologySelectionKind = game::TopologySelectionKind::Sector;
+    selectionState.selectedTopologySectorId = 200;
 
     const game::SectorEditorInspectorTarget target =
-            game::ResolveSectorEditorInspectorTarget(state);
+            ResolveEditorInspectorTarget(state, documentState, authoringGraph, selectionState);
     Check(target.kind == game::SectorEditorInspectorTargetKind::AuthoringFaceAnchor,
           "mapped topology sector selection resolves to authoring face inspector");
     Check(target.faceAnchorId == 200,
@@ -3389,28 +4407,31 @@ void TestEditorMappedTopologySectorSelectionUsesAuthoringInspectorTarget()
 void TestEditorMappedTopologyMissingOrStaleMappingDoesNotUseLegacyInspectorTarget()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "stale inspector target setup derives valid topology");
 
-    state.topologySelectionKind = game::TopologySelectionKind::Sector;
-    state.selectedTopologySectorId = 200;
-    game::MarkSectorEditorAuthoringGraphEdited(state, "stale mapping for inspector target test");
+    selectionState.topologySelectionKind = game::TopologySelectionKind::Sector;
+    selectionState.selectedTopologySectorId = 200;
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "stale mapping for inspector target test");
 
     game::SectorEditorInspectorTarget target =
-            game::ResolveSectorEditorInspectorTarget(state);
+            ResolveEditorInspectorTarget(state, documentState, authoringGraph, selectionState);
     Check(target.kind == game::SectorEditorInspectorTargetKind::AuthoringUnavailable,
           "stale mapped topology selection resolves to unavailable authoring target");
     Check(target.status.find("not current") != std::string::npos,
           "stale mapped topology selection reports stale mapping");
 
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "missing mapping inspector target setup rederives current topology");
-    state.authoringDerivation.mapping.sectors.clear();
-    target = game::ResolveSectorEditorInspectorTarget(state);
+    documentState.derivation.authoringDerivation.mapping.sectors.clear();
+    target = ResolveEditorInspectorTarget(state, documentState, authoringGraph, selectionState);
     Check(target.kind == game::SectorEditorInspectorTargetKind::AuthoringUnavailable,
           "missing mapped topology selection resolves to unavailable authoring target");
     Check(target.status.find("no face anchor mapping") != std::string::npos,
@@ -3420,21 +4441,26 @@ void TestEditorMappedTopologyMissingOrStaleMappingDoesNotUseLegacyInspectorTarge
 void TestEditorAuthoringSideClearMiddleAndDecalProjectsAfterDerivation()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
     side.middle.textureId = "bars";
     side.wall.decal.textureId = "poster";
     side.wall.decal.opacity = 0.5f;
-    state.authoringGraph.lineSides.push_back(side);
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring side clear setup derives valid topology");
 
     Check(game::MutateSectorEditorAuthoringSideById(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   side.id,
                   "Cleared authoring side optional materials",
                   [](game::SectorAuthoringLineSide& editedSide) {
@@ -3445,9 +4471,9 @@ void TestEditorAuthoringSideClearMiddleAndDecalProjectsAfterDerivation()
           "authoring side clear optional material mutation succeeds");
 
     const game::SectorAuthoringLineSide* authoringSide =
-            game::FindSectorAuthoringLineSide(state.authoringGraph, side.id);
+            game::FindSectorAuthoringLineSide(authoringGraph, side.id);
     const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
-            state.authoringDerivation,
+            documentState.derivation.authoringDerivation,
             10,
             game::SectorTopologySideKind::Front);
     Check(authoringSide != nullptr
@@ -3463,23 +4489,28 @@ void TestEditorAuthoringSideClearMiddleAndDecalProjectsAfterDerivation()
 void TestEditorAuthoringFaceClearDecalProjectsAfterDerivation()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     Check(anchor != nullptr, "authoring face clear setup has anchor");
     if (anchor == nullptr) {
         return;
     }
     anchor->floorDecal.textureId = "floor_mark";
     anchor->floorDecal.opacity = 0.25f;
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring face clear setup derives valid topology");
 
     Check(game::MutateSectorEditorAuthoringFaceAnchorById(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   200,
                   "Cleared authoring face decal",
                   [](game::SectorAuthoringFaceAnchor& editedAnchor) {
@@ -3489,9 +4520,9 @@ void TestEditorAuthoringFaceClearDecalProjectsAfterDerivation()
           "authoring face clear decal mutation succeeds");
 
     const game::SectorAuthoringFaceAnchor* updatedAnchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* projectedSector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(updatedAnchor != nullptr && updatedAnchor->floorDecal.textureId.empty(),
           "authoring face clear decal updates face anchor");
     Check(projectedSector != nullptr && projectedSector->floorDecal.textureId.empty(),
@@ -3501,19 +4532,24 @@ void TestEditorAuthoringFaceClearDecalProjectsAfterDerivation()
 void TestEditorAuthoringSideDecalPropertyEditProjectsAfterDerivation()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
     side.wall.decal.textureId = "poster";
-    state.authoringGraph.lineSides.push_back(side);
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring side decal property setup derives valid topology");
 
     Check(game::MutateSectorEditorAuthoringSideById(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   side.id,
                   "Updated authoring side decal opacity",
                   [](game::SectorAuthoringLineSide& editedSide) {
@@ -3524,9 +4560,9 @@ void TestEditorAuthoringSideDecalPropertyEditProjectsAfterDerivation()
           "authoring side decal property mutation succeeds");
 
     const game::SectorAuthoringLineSide* authoringSide =
-            game::FindSectorAuthoringLineSide(state.authoringGraph, side.id);
+            game::FindSectorAuthoringLineSide(authoringGraph, side.id);
     const game::SectorTopologySideDef* projectedSideDef = FindDerivedSideDefForAuthoringSide(
-            state.authoringDerivation,
+            documentState.derivation.authoringDerivation,
             10,
             game::SectorTopologySideKind::Front);
     Check(authoringSide != nullptr
@@ -3542,22 +4578,27 @@ void TestEditorAuthoringSideDecalPropertyEditProjectsAfterDerivation()
 void TestEditorAuthoringFaceDecalPropertyEditProjectsAfterDerivation()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     Check(anchor != nullptr, "authoring face decal property setup has anchor");
     if (anchor == nullptr) {
         return;
     }
     anchor->floorDecal.textureId = "floor_mark";
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring face decal property setup derives valid topology");
 
     Check(game::MutateSectorEditorAuthoringFaceAnchorById(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   200,
                   "Updated authoring face decal opacity",
                   [](game::SectorAuthoringFaceAnchor& editedAnchor) {
@@ -3568,9 +4609,9 @@ void TestEditorAuthoringFaceDecalPropertyEditProjectsAfterDerivation()
           "authoring face decal property mutation succeeds");
 
     const game::SectorAuthoringFaceAnchor* updatedAnchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* projectedSector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(updatedAnchor != nullptr
                   && updatedAnchor->floorDecal.opacity == 0.45f
                   && Near(updatedAnchor->floorDecal.tint, Vector3{0.7f, 0.5f, 0.3f}),
@@ -3584,28 +4625,34 @@ void TestEditorAuthoringFaceDecalPropertyEditProjectsAfterDerivation()
 void TestEditorAuthoringFaceDefaultDecalTexturePickerWritesThroughAnchor()
 {
     game::SectorEditorState state;
-    state.topologyMap.texturesById.emplace("default_poster", game::SectorTextureDefinition{"default_poster", "default_poster.png"});
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace("default_poster", game::SectorTextureDefinition{"default_poster", "default_poster.png"});
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring face default decal picker setup derives valid topology");
 
-    Check(game::OpenAuthoringFaceAnchorTexturePickerById(
-                  state,
+    Check(game::OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
+                  state.texturePicker,
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   200,
                   game::TopologySectorTextureField::DefaultWall,
                   game::TopologyMaterialLayer::Decal),
           "authoring face default wall decal picker opens");
     SelectTextureInPicker(state.texturePicker, "default_poster");
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state.texturePicker, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), state.topologyRenderRevision, state.topologyRenderCache, documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
 
     const game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* sector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(result.changed, "authoring face default wall decal picker reports change");
     Check(anchor != nullptr && anchor->defaultWall.decal.textureId == "default_poster",
           "authoring face default wall decal picker writes face anchor");
@@ -3616,15 +4663,18 @@ void TestEditorAuthoringFaceDefaultDecalTexturePickerWritesThroughAnchor()
 void TestEditorSurface3DMappedPanelLabelMentionsAuthoringAndDerivedIds()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "3D label setup derives valid topology");
 
     const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
-            state.authoringDerivation,
+            documentState.derivation.authoringDerivation,
             10,
             game::SectorTopologySideKind::Front);
     Check(sideDef != nullptr, "3D label setup finds derived side");
@@ -3645,7 +4695,7 @@ void TestEditorSurface3DMappedPanelLabelMentionsAuthoringAndDerivedIds()
             sideDef->id,
             sideDef->side};
     const std::string wallLabel =
-            game::BuildSectorEditorSurface3DTargetLabel(state, wallSurface, wallTarget);
+            BuildEditorSurface3DTargetLabel(state, documentState, authoringGraph, wallSurface, wallTarget);
     Check(wallLabel.find("Authoring Side") != std::string::npos,
           "mapped 3D wall label identifies authoring side");
     Check(wallLabel.find("derived sideDef") != std::string::npos
@@ -3665,7 +4715,7 @@ void TestEditorSurface3DMappedPanelLabelMentionsAuthoringAndDerivedIds()
             -1,
             game::SectorTopologySideKind::Front};
     const std::string floorLabel =
-            game::BuildSectorEditorSurface3DTargetLabel(state, floorSurface, floorTarget);
+            BuildEditorSurface3DTargetLabel(state, documentState, authoringGraph, floorSurface, floorTarget);
     Check(floorLabel.find("Authoring Floor") != std::string::npos,
           "mapped 3D floor label identifies authoring floor");
     Check(floorLabel.find("derived sector 200") != std::string::npos,
@@ -3675,21 +4725,26 @@ void TestEditorSurface3DMappedPanelLabelMentionsAuthoringAndDerivedIds()
 void TestEditorSelectedAuthoringLineBlocksPlayerWritesWithoutTopologySelection()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "selected line blocksPlayer direct write setup derives valid topology");
-    Check(game::SelectSectorEditorAuthoringLine(state, 11),
+    Check(game::SelectSectorEditorAuthoringLine(authoringGraph, selectionState, 11),
           "selected line blocksPlayer direct write selects authoring line");
 
-    state.topologySelectionKind = game::TopologySelectionKind::None;
-    state.selectedTopologyLineDefId = -1;
-    state.selectedTopologySideDefId = -1;
+    selectionState.topologySelectionKind = game::TopologySelectionKind::None;
+    selectionState.selectedTopologyLineDefId = -1;
+    selectionState.selectedTopologySideDefId = -1;
 
     Check(game::MutateSectorEditorAuthoringLineById(
-                  state,
-                  state.selectedAuthoring.lineId,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState.selectedAuthoring.lineId,
                   "Updated selected authoring line flags",
                   [](game::SectorAuthoringLine& line) {
                       line.flags.blocksPlayer = true;
@@ -3698,36 +4753,41 @@ void TestEditorSelectedAuthoringLineBlocksPlayerWritesWithoutTopologySelection()
           "selected line blocksPlayer direct write succeeds without topology selection");
 
     const game::SectorAuthoringLine* authoringLine =
-            game::FindSectorAuthoringLine(state.authoringGraph, 11);
+            game::FindSectorAuthoringLine(authoringGraph, 11);
     const game::SectorTopologyLineDef* projectedLineDef =
-            FindDerivedLineDefForAuthoringLine(state.authoringDerivation, 11);
+            FindDerivedLineDefForAuthoringLine(documentState.derivation.authoringDerivation, 11);
     Check(authoringLine != nullptr && authoringLine->flags.blocksPlayer,
           "selected line blocksPlayer direct write updates authoring source");
     Check(projectedLineDef != nullptr && projectedLineDef->flags.blocksPlayer,
           "selected line blocksPlayer direct write refreshes projected derived linedef");
-    Check(state.topologySelectionKind == game::TopologySelectionKind::None
-                  && state.selectedTopologyLineDefId == -1
-                  && state.selectedTopologySideDefId == -1,
+    Check(selectionState.topologySelectionKind == game::TopologySelectionKind::None
+                  && selectionState.selectedTopologyLineDefId == -1
+                  && selectionState.selectedTopologySideDefId == -1,
           "selected line blocksPlayer direct write does not create topology selection");
 }
 
 void TestEditorSelectedAuthoringLineSideMaterialWritesWithoutTopologySelection()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}, {1, 3}, {2, 4}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "selected side direct material write setup derives valid topology");
-    Check(game::SelectSectorEditorAuthoringLine(state, 14),
+    Check(game::SelectSectorEditorAuthoringLine(authoringGraph, selectionState, 14),
           "selected side direct material write selects source line");
 
-    state.topologySelectionKind = game::TopologySelectionKind::None;
-    state.selectedTopologyLineDefId = -1;
-    state.selectedTopologySideDefId = -1;
+    selectionState.topologySelectionKind = game::TopologySelectionKind::None;
+    selectionState.selectedTopologyLineDefId = -1;
+    selectionState.selectedTopologySideDefId = -1;
 
     Check(game::MutateSectorEditorAuthoringSideById(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   game::SectorAuthoringSideId{14, game::SectorTopologySideKind::Front},
                   "Updated selected authoring side material",
                   [](game::SectorAuthoringLineSide& side) {
@@ -3738,49 +4798,54 @@ void TestEditorSelectedAuthoringLineSideMaterialWritesWithoutTopologySelection()
 
     const game::SectorAuthoringLineSide* authoringSide =
             game::FindSectorAuthoringLineSide(
-                    state.authoringGraph,
+                    authoringGraph,
                     game::SectorAuthoringSideId{14, game::SectorTopologySideKind::Front});
     Check(authoringSide != nullptr && authoringSide->wall.textureId == "direct_selected_wall",
           "selected side direct material write updates authoring side metadata");
 
     int projectedCount = 0;
-    for (const game::SectorAuthoringDerivedSideMapping& mapping : state.authoringDerivation.mapping.sides) {
+    for (const game::SectorAuthoringDerivedSideMapping& mapping : documentState.derivation.authoringDerivation.mapping.sides) {
         if (mapping.authoringLineId != 14
                 || mapping.authoringSide != game::SectorTopologySideKind::Front) {
             continue;
         }
         const game::SectorTopologySideDef* sideDef =
-                game::FindSectorTopologySideDef(state.topologyMap, mapping.topologySideDefId);
+                game::FindSectorTopologySideDef(documentState.map.topologyMap, mapping.topologySideDefId);
         Check(sideDef != nullptr && sideDef->wall.textureId == "direct_selected_wall",
               "selected side direct material write projects to split derived sidedef");
         ++projectedCount;
     }
     Check(projectedCount == 2,
           "selected side direct material write preserves split-line projection");
-    Check(state.topologySelectionKind == game::TopologySelectionKind::None
-                  && state.selectedTopologyLineDefId == -1
-                  && state.selectedTopologySideDefId == -1,
+    Check(selectionState.topologySelectionKind == game::TopologySelectionKind::None
+                  && selectionState.selectedTopologyLineDefId == -1
+                  && selectionState.selectedTopologySideDefId == -1,
           "selected side direct material write does not create topology selection");
 }
 
 void TestEditorSelectedFaceAnchorPropertiesWriteWithoutTopologySelection()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "selected face direct property write setup derives valid topology");
-    Check(game::SelectSectorEditorAuthoringFaceAnchor(state, 200),
+    Check(game::SelectSectorEditorAuthoringFaceAnchor(authoringGraph, selectionState, 200),
           "selected face direct property write selects face anchor");
 
-    state.topologySelectionKind = game::TopologySelectionKind::None;
-    state.selectedTopologySectorId = -1;
+    selectionState.topologySelectionKind = game::TopologySelectionKind::None;
+    selectionState.selectedTopologySectorId = -1;
 
     Check(game::MutateSectorEditorAuthoringFaceAnchorById(
-                  state,
-                  state.selectedAuthoring.faceAnchorId,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState.selectedAuthoring.faceAnchorId,
                   "Updated selected authoring face properties",
                   [](game::SectorAuthoringFaceAnchor& anchor) {
                       anchor.floorZ = -4.0f;
@@ -3793,9 +4858,9 @@ void TestEditorSelectedFaceAnchorPropertiesWriteWithoutTopologySelection()
           "selected face direct property write succeeds without topology sector selection");
 
     const game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* sector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(anchor != nullptr && anchor->floorZ == -4.0f && anchor->ceilingSky,
           "selected face direct property write updates authoring source");
     Check(sector != nullptr
@@ -3805,34 +4870,39 @@ void TestEditorSelectedFaceAnchorPropertiesWriteWithoutTopologySelection()
                   && sector->ambientColor.g == 20
                   && sector->ambientIntensity == 0.25f,
           "selected face direct property write refreshes derived sector");
-    Check(state.topologySelectionKind == game::TopologySelectionKind::None
-                  && state.selectedTopologySectorId == -1,
+    Check(selectionState.topologySelectionKind == game::TopologySelectionKind::None
+                  && selectionState.selectedTopologySectorId == -1,
           "selected face direct property write does not create topology sector selection");
 }
 
 void TestEditorSelectedFaceAnchorVoidToggleWritesAuthoringOnly()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "left-room");
-    AddFaceAnchor(state.authoringGraph, 201, 96, 32, "right-room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "left-room");
+    AddFaceAnchor(authoringGraph, 201, 96, 32, "right-room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "selected face void toggle setup derives valid topology");
-    Check(game::SelectSectorEditorAuthoringFaceAnchor(state, 201),
+    Check(game::SelectSectorEditorAuthoringFaceAnchor(authoringGraph, selectionState, 201),
           "selected face void toggle selects face anchor");
-    Check(state.topologyMap.sectors.size() == 2,
+    Check(documentState.map.topologyMap.sectors.size() == 2,
           "selected face void toggle starts with two sectors");
 
     state.topologyRenderCache.valid = true;
     const uint64_t originalRevision = state.topologyRenderRevision;
-    state.topologySelectionKind = game::TopologySelectionKind::None;
-    state.selectedTopologySectorId = -1;
+    selectionState.topologySelectionKind = game::TopologySelectionKind::None;
+    selectionState.selectedTopologySectorId = -1;
 
     Check(game::MutateSectorEditorAuthoringFaceAnchorById(
-                  state,
-                  state.selectedAuthoring.faceAnchorId,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState.selectedAuthoring.faceAnchorId,
                   "Updated selected authoring face void state",
                   [](game::SectorAuthoringFaceAnchor& anchor) {
                       anchor.isVoid = true;
@@ -3841,38 +4911,43 @@ void TestEditorSelectedFaceAnchorVoidToggleWritesAuthoringOnly()
           "selected face void toggle succeeds through authoring helper");
 
     const game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 201);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 201);
     Check(anchor != nullptr && anchor->isVoid,
           "selected face void toggle updates authoring anchor");
-    Check(game::FindSectorTopologySector(state.topologyMap, 201) == nullptr,
+    Check(game::FindSectorTopologySector(documentState.map.topologyMap, 201) == nullptr,
           "selected face void toggle removes void sector through derivation");
-    Check(state.topologyMap.sectors.size() == 1,
+    Check(documentState.map.topologyMap.sectors.size() == 1,
           "selected face void toggle leaves non-void sector only");
-    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
+    Check(documentState.lifecycle.topologyDocumentDirty && documentState.lifecycle.hasUnsavedChanges,
           "selected face void toggle marks document dirty");
     Check(!state.topologyRenderCache.valid,
           "selected face void toggle invalidates cached editor topology rendering");
     Check(state.topologyRenderRevision == originalRevision + 1,
           "selected face void toggle bumps topology render revision");
-    Check(state.topologySelectionKind == game::TopologySelectionKind::None
-                  && state.selectedTopologySectorId == -1,
+    Check(selectionState.topologySelectionKind == game::TopologySelectionKind::None
+                  && selectionState.selectedTopologySectorId == -1,
           "selected face void toggle does not create topology selection");
 }
 
 void TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "point face-anchor selection setup derives valid topology");
 
     game::SectorAuthoringSelectionTarget target;
     std::string status;
-    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+    Check(FindEditorAuthoringSelectionAtMapPoint(
                   state,
+                  documentState,
+                  authoringGraph,
                   Vector2{game::SectorCoordToVisibleAuthoring(32), game::SectorCoordToVisibleAuthoring(32)},
                   0.25f,
                   0.25f,
@@ -3885,11 +4960,18 @@ void TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping()
           "point inside derived face resolves expected face anchor ID");
 
     game::SectorEditorState staleState = state;
-    game::MarkSectorEditorAuthoringGraphEdited(staleState, "authoring graph changed before face selection");
+    game::SectorEditorDocumentState staleDocumentState = documentState;
+    game::MarkSectorEditorAuthoringGraphEdited(
+            staleState,
+            game::MakeSectorEditorDocumentLifecycleAccess(staleDocumentState.lifecycle),
+            game::MakeSectorEditorDerivationDocumentAccess(staleDocumentState.derivation),
+            "authoring graph changed before face selection");
     target = game::SectorAuthoringSelectionTarget{};
     status.clear();
-    Check(!game::FindSectorEditorAuthoringSelectionAtMapPoint(
+    Check(!FindEditorAuthoringSelectionAtMapPoint(
                   staleState,
+                  staleDocumentState,
+                  authoringGraph,
                   Vector2{game::SectorCoordToVisibleAuthoring(32), game::SectorCoordToVisibleAuthoring(32)},
                   0.25f,
                   0.25f,
@@ -3903,11 +4985,14 @@ void TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping()
           "stale point face selection reports current-derivation requirement");
 
     game::SectorEditorState missingState = state;
-    missingState.authoringDerivation.mapping.sectors.clear();
-    missingState.authoringDerivation.mapping.resolvedFaces.clear();
+    game::SectorEditorDocumentState missingDocumentState = documentState;
+    missingDocumentState.derivation.authoringDerivation.mapping.sectors.clear();
+    missingDocumentState.derivation.authoringDerivation.mapping.resolvedFaces.clear();
     status.clear();
-    Check(!game::FindSectorEditorAuthoringSelectionAtMapPoint(
+    Check(!FindEditorAuthoringSelectionAtMapPoint(
                   missingState,
+                  missingDocumentState,
+                  authoringGraph,
                   Vector2{game::SectorCoordToVisibleAuthoring(32), game::SectorCoordToVisibleAuthoring(32)},
                   0.25f,
                   0.25f,
@@ -3919,13 +5004,16 @@ void TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping()
           "missing point face selection reports missing mapping");
 
     game::SectorEditorState ambiguousState = state;
-    ambiguousState.authoringDerivation.mapping.sectors.push_back(
-            ambiguousState.authoringDerivation.mapping.sectors.front());
-    ambiguousState.authoringDerivation.mapping.resolvedFaces.push_back(
-            ambiguousState.authoringDerivation.mapping.resolvedFaces.front());
+    game::SectorEditorDocumentState ambiguousDocumentState = documentState;
+    ambiguousDocumentState.derivation.authoringDerivation.mapping.sectors.push_back(
+            ambiguousDocumentState.derivation.authoringDerivation.mapping.sectors.front());
+    ambiguousDocumentState.derivation.authoringDerivation.mapping.resolvedFaces.push_back(
+            ambiguousDocumentState.derivation.authoringDerivation.mapping.resolvedFaces.front());
     status.clear();
-    Check(!game::FindSectorEditorAuthoringSelectionAtMapPoint(
+    Check(!FindEditorAuthoringSelectionAtMapPoint(
                   ambiguousState,
+                  ambiguousDocumentState,
+                  authoringGraph,
                   Vector2{game::SectorCoordToVisibleAuthoring(32), game::SectorCoordToVisibleAuthoring(32)},
                   0.25f,
                   0.25f,
@@ -3940,19 +5028,24 @@ void TestEditorAuthoringFacePointSelectionRequiresCurrentUnambiguousMapping()
 void TestEditorAuthoringNestedFacePointSelectionChoosesDeepestAnchor()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeNestedRectangleGraph(4);
-    AddFaceAnchor(state.authoringGraph, 200, 16, 16, "outer");
-    AddFaceAnchor(state.authoringGraph, 201, 48, 48, "middle");
-    AddFaceAnchor(state.authoringGraph, 202, 80, 80, "inner");
-    AddFaceAnchor(state.authoringGraph, 203, 128, 128, "deepest");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeNestedRectangleGraph(4);
+    AddFaceAnchor(authoringGraph, 200, 16, 16, "outer");
+    AddFaceAnchor(authoringGraph, 201, 48, 48, "middle");
+    AddFaceAnchor(authoringGraph, 202, 80, 80, "inner");
+    AddFaceAnchor(authoringGraph, 203, 128, 128, "deepest");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "nested point face selection setup derives valid topology");
 
     const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, int expectedAnchorId, const char* description) {
         game::SectorAuthoringSelectionTarget target;
         std::string status;
-        Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
-                      state,
+        Check(FindEditorAuthoringSelectionAtMapPoint(
+                  state,
+                  documentState,
+                  authoringGraph,
                       VisibleAuthoringPoint(x, y),
                       0.25f,
                       0.25f,
@@ -3963,7 +5056,7 @@ void TestEditorAuthoringNestedFacePointSelectionChoosesDeepestAnchor()
         Check(target.kind == game::SectorAuthoringSelectionKind::FaceAnchor
                       && target.faceAnchorId == expectedAnchorId,
               TextFormat("%s returns expected face anchor", description));
-        Check(state.topologySelectionKind == game::TopologySelectionKind::None,
+        Check(selectionState.topologySelectionKind == game::TopologySelectionKind::None,
               TextFormat("%s does not use topology selection", description));
     };
 
@@ -3973,8 +5066,10 @@ void TestEditorAuthoringNestedFacePointSelectionChoosesDeepestAnchor()
     expectFace(128, 128, 203, "point in deepest nested face selects deepest anchor");
 
     game::SectorAuthoringSelectionTarget target;
-    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+    Check(FindEditorAuthoringSelectionAtMapPoint(
                   state,
+                  documentState,
+                  authoringGraph,
                   VisibleAuthoringPoint(0, 0),
                   0.25f,
                   0.25f,
@@ -3988,24 +5083,29 @@ void TestEditorAuthoringNestedFacePointSelectionChoosesDeepestAnchor()
 void TestEditorAuthoringSiblingNestedFacePointSelectionChoosesIndependentAnchors()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {256, 0}, {256, 256}, {0, 256},
              {32, 32}, {96, 32}, {96, 96}, {32, 96},
              {160, 32}, {224, 32}, {224, 96}, {160, 96}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1},
              {5, 6}, {6, 7}, {7, 8}, {8, 5},
              {9, 10}, {10, 11}, {11, 12}, {12, 9}});
-    AddFaceAnchor(state.authoringGraph, 200, 16, 16, "outer");
-    AddFaceAnchor(state.authoringGraph, 201, 64, 64, "left");
-    AddFaceAnchor(state.authoringGraph, 202, 192, 64, "right");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 16, 16, "outer");
+    AddFaceAnchor(authoringGraph, 201, 64, 64, "left");
+    AddFaceAnchor(authoringGraph, 202, 192, 64, "right");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "sibling point face selection setup derives valid topology");
 
     const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, int expectedAnchorId, const char* description) {
         game::SectorAuthoringSelectionTarget target;
         std::string status;
-        Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
-                      state,
+        Check(FindEditorAuthoringSelectionAtMapPoint(
+                  state,
+                  documentState,
+                  authoringGraph,
                       VisibleAuthoringPoint(x, y),
                       0.25f,
                       0.25f,
@@ -4026,29 +5126,34 @@ void TestEditorAuthoringSiblingNestedFacePointSelectionChoosesIndependentAnchors
 void TestEditorAuthoringRefreshSynthesizesMissingNestedFaceAnchors()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {128, 0}, {128, 128}, {0, 128},
              {32, 32}, {96, 32}, {96, 96}, {32, 96}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1},
              {5, 6}, {6, 7}, {7, 8}, {8, 5}});
-    AddFaceAnchor(state.authoringGraph, 200, 16, 16, "outer");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 16, 16, "outer");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "missing nested face anchor setup reconciles and derives valid topology");
-    Check(state.authoringGraph.faceAnchors.size() == 2,
+    Check(authoringGraph.faceAnchors.size() == 2,
           "missing nested face anchor reconciliation adds exactly one anchor");
     Check(AllDerivedSectorsHaveExactlyOneValidFaceAnchorMapping(
-                  state.authoringGraph,
-                  state.authoringDerivation),
+                  authoringGraph,
+                  documentState.derivation.authoringDerivation),
           "missing nested face anchor reconciliation maps every visible sector once");
-    Check(state.topologyDocumentDirty,
+    Check(documentState.lifecycle.topologyDocumentDirty,
           "missing nested face anchor reconciliation marks document dirty");
-    Check(state.hasUnsavedChanges,
+    Check(documentState.lifecycle.hasUnsavedChanges,
           "missing nested face anchor reconciliation marks unsaved changes");
 
     game::SectorAuthoringSelectionTarget target;
     std::string status;
-    Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+    Check(FindEditorAuthoringSelectionAtMapPoint(
                   state,
+                  documentState,
+                  authoringGraph,
                   VisibleAuthoringPoint(64, 64),
                   0.25f,
                   0.25f,
@@ -4064,7 +5169,10 @@ void TestEditorAuthoringRefreshSynthesizesMissingNestedFaceAnchors()
 void TestEditorAuthoringRefreshSynthesizesSiblingFaceAnchorsWithUniqueLabels()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {256, 0}, {256, 256}, {0, 256},
              {32, 32}, {96, 32}, {96, 96}, {32, 96},
              {160, 32}, {224, 32}, {224, 96}, {160, 96}},
@@ -4072,17 +5180,17 @@ void TestEditorAuthoringRefreshSynthesizesSiblingFaceAnchorsWithUniqueLabels()
              {5, 6}, {6, 7}, {7, 8}, {8, 5},
              {9, 10}, {10, 11}, {11, 12}, {12, 9}});
 
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "sibling missing face anchor refresh reconciles and derives valid topology");
-    Check(state.authoringGraph.faceAnchors.size() == 3,
+    Check(authoringGraph.faceAnchors.size() == 3,
           "sibling missing face anchor reconciliation adds one anchor per visible face");
     Check(AllDerivedSectorsHaveExactlyOneValidFaceAnchorMapping(
-                  state.authoringGraph,
-                  state.authoringDerivation),
+                  authoringGraph,
+                  documentState.derivation.authoringDerivation),
           "sibling missing face anchor reconciliation maps every visible sector once");
 
     std::set<std::string> labels;
-    for (const game::SectorAuthoringFaceAnchor& anchor : state.authoringGraph.faceAnchors) {
+    for (const game::SectorAuthoringFaceAnchor& anchor : authoringGraph.faceAnchors) {
         Check(labels.insert(anchor.name).second,
               "sibling synthesized face anchors have unique labels");
     }
@@ -4094,8 +5202,10 @@ void TestEditorAuthoringRefreshSynthesizesSiblingFaceAnchorsWithUniqueLabels()
     std::set<int> selectedAnchorIds;
     const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, const char* description) {
         game::SectorAuthoringSelectionTarget target;
-        Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
-                      state,
+        Check(FindEditorAuthoringSelectionAtMapPoint(
+                  state,
+                  documentState,
+                  authoringGraph,
                       VisibleAuthoringPoint(x, y),
                       0.25f,
                       0.25f,
@@ -4117,33 +5227,39 @@ void TestEditorAuthoringRefreshSynthesizesSiblingFaceAnchorsWithUniqueLabels()
 void TestEditorAuthoringRefreshDoesNotSynthesizeForInvalidDerivation()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}},
             {{1, 2}, {2, 3}});
-    const std::size_t originalAnchorCount = state.authoringGraph.faceAnchors.size();
+    const std::size_t originalAnchorCount = authoringGraph.faceAnchors.size();
 
-    Check(!game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(!game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "invalid authoring graph refresh fails");
-    Check(state.authoringGraph.faceAnchors.size() == originalAnchorCount,
+    Check(authoringGraph.faceAnchors.size() == originalAnchorCount,
           "invalid authoring graph refresh does not synthesize face anchors");
 }
 
 void TestEditorAuthoringRefreshPreservesUnresolvedExistingAnchors()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "custom-room");
-    AddFaceAnchor(state.authoringGraph, 201, 512, 512, "custom-unresolved");
-    const std::size_t originalAnchorCount = state.authoringGraph.faceAnchors.size();
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "custom-room");
+    AddFaceAnchor(authoringGraph, 201, 512, 512, "custom-unresolved");
+    const std::size_t originalAnchorCount = authoringGraph.faceAnchors.size();
 
-    Check(!game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(!game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "unresolved existing anchor refresh fails");
-    Check(state.authoringGraph.faceAnchors.size() == originalAnchorCount,
+    Check(authoringGraph.faceAnchors.size() == originalAnchorCount,
           "unresolved existing anchor refresh does not delete or synthesize anchors");
     const game::SectorAuthoringFaceAnchor* unresolved =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 201);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 201);
     Check(unresolved != nullptr
                   && unresolved->name == "custom-unresolved"
                   && unresolved->x == 512
@@ -4204,22 +5320,25 @@ void TestDeriveGeneratedFallbackLabelsSkipExistingNames()
 void TestEditorAuthoringRefreshPreservesCustomAndImportedLabels()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeNestedRectangleGraph(4);
-    AddFaceAnchor(state.authoringGraph, 200, 16, 16, "Kitchen");
-    AddFaceAnchor(state.authoringGraph, 201, 48, 48, "Sector 1");
-    AddFaceAnchor(state.authoringGraph, 202, 80, 80, "Sector 7");
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeNestedRectangleGraph(4);
+    AddFaceAnchor(authoringGraph, 200, 16, 16, "Kitchen");
+    AddFaceAnchor(authoringGraph, 201, 48, 48, "Sector 1");
+    AddFaceAnchor(authoringGraph, 202, 80, 80, "Sector 7");
 
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "custom/imported label reconciliation derives valid topology");
-    Check(state.authoringGraph.faceAnchors.size() == 4,
+    Check(authoringGraph.faceAnchors.size() == 4,
           "custom/imported label reconciliation synthesizes one missing anchor");
 
     const game::SectorAuthoringFaceAnchor* kitchen =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorAuthoringFaceAnchor* importedSector1 =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 201);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 201);
     const game::SectorAuthoringFaceAnchor* importedSector7 =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 202);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 202);
     Check(kitchen != nullptr && kitchen->name == "Kitchen",
           "custom label Kitchen is preserved");
     Check(importedSector1 != nullptr && importedSector1->name == "Sector 1",
@@ -4229,7 +5348,7 @@ void TestEditorAuthoringRefreshPreservesCustomAndImportedLabels()
 
     bool foundSector2 = false;
     bool renamedExisting = false;
-    for (const game::SectorAuthoringFaceAnchor& anchor : state.authoringGraph.faceAnchors) {
+    for (const game::SectorAuthoringFaceAnchor& anchor : authoringGraph.faceAnchors) {
         if (anchor.id == 200 || anchor.id == 201 || anchor.id == 202) {
             renamedExisting = renamedExisting
                     || (anchor.id == 200 && anchor.name != "Kitchen")
@@ -4248,39 +5367,45 @@ void TestEditorAuthoringRefreshPreservesCustomAndImportedLabels()
 void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailable()
 {
     game::SectorEditorState state;
-    state.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
-    state.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
-    state.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
-    state.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
+    documentState.map.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
+    documentState.map.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
+    documentState.map.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     if (anchor != nullptr) {
         anchor->floorTextureId = "old_floor";
     }
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
     side.wall.textureId = "old_wall";
-    state.authoringGraph.lineSides.push_back(side);
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "direct authoring picker fail-closed setup derives valid topology");
 
-    Check(game::OpenAuthoringSideTexturePickerById(
-                  state,
+    Check(game::OpenSectorEditorMaterialPickerForAuthoringSide(
+                  state.texturePicker,
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front},
                   game::TopologyWallPart::Wall,
                   game::TopologyMaterialLayer::Base),
           "direct authoring side picker opens while mapping is current");
     SelectTextureInPicker(state.texturePicker, "new_wall");
-    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed after direct side picker open");
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring graph changed after direct side picker open");
     const game::SectorEditorTexturePickerApplyResult staleSideResult =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state.texturePicker, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), state.topologyRenderRevision, state.topologyRenderCache, documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
     const game::SectorAuthoringLineSide* afterStaleSide =
             game::FindSectorAuthoringLineSide(
-                    state.authoringGraph,
+                    authoringGraph,
                     game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front});
     Check(!staleSideResult.changed,
           "direct authoring side picker apply fails closed when derivation becomes stale");
@@ -4289,11 +5414,14 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
     Check(afterStaleSide != nullptr && afterStaleSide->wall.textureId == "old_wall",
           "direct stale side picker does not mutate authoring side");
 
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "direct picker fail-closed setup restores current derivation");
-    state.authoringDerivation.mapping.sectors.clear();
-    Check(!game::OpenAuthoringFaceAnchorTexturePickerById(
-                  state,
+    documentState.derivation.authoringDerivation.mapping.sectors.clear();
+    Check(!game::OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
+                  state.texturePicker,
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   200,
                   game::TopologySectorTextureField::Floor,
                   game::TopologyMaterialLayer::Base),
@@ -4301,11 +5429,14 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
     Check(!state.texturePicker.open,
           "direct authoring face picker missing mapping leaves picker closed");
 
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "direct picker fail-closed setup restores current derivation again");
-    state.authoringDerivation.mapping.sectors.push_back(state.authoringDerivation.mapping.sectors.front());
-    Check(!game::OpenAuthoringFaceAnchorTexturePickerById(
-                  state,
+    documentState.derivation.authoringDerivation.mapping.sectors.push_back(documentState.derivation.authoringDerivation.mapping.sectors.front());
+    Check(!game::OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
+                  state.texturePicker,
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   200,
                   game::TopologySectorTextureField::Floor,
                   game::TopologyMaterialLayer::Base),
@@ -4317,11 +5448,14 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
 void TestEditorAuthoringSurfaceMappingResolvesFlatSurfaceToFaceAnchor()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "3D flat surface mapping setup derives valid topology");
 
     game::SectorEditorAuthoringSurfaceTarget target;
@@ -4330,7 +5464,7 @@ void TestEditorAuthoringSurfaceMappingResolvesFlatSurfaceToFaceAnchor()
     surface.kind = game::SectorSurfaceKind::Floor;
     surface.topologySectorId = 200;
 
-    Check(game::ResolveSectorEditorAuthoringSurfaceTarget(state, surface, target, &status),
+    Check(ResolveEditorAuthoringSurfaceTarget(state, documentState, authoringGraph, surface, target, &status),
           "3D flat surface resolves to authoring face anchor");
     Check(target.kind == game::SectorEditorAuthoringSurfaceTargetKind::FaceAnchor
                   && target.faceAnchorId == 200,
@@ -4343,7 +5477,7 @@ void TestEditorAuthoringSurfaceMappingResolvesFlatSurfaceToFaceAnchor()
     Check(status.empty(), "successful 3D flat surface mapping leaves status empty");
 
     surface.kind = game::SectorSurfaceKind::Ceiling;
-    Check(game::ResolveSectorEditorAuthoringSurfaceTarget(state, surface, target, &status),
+    Check(ResolveEditorAuthoringSurfaceTarget(state, documentState, authoringGraph, surface, target, &status),
           "3D ceiling surface resolves to authoring face anchor");
     const game::SectorAuthoringSelectionTarget ceilingSelection =
             game::MakeSectorEditorAuthoringSelectionTargetForSurfaceTarget(target);
@@ -4355,15 +5489,18 @@ void TestEditorAuthoringSurfaceMappingResolvesFlatSurfaceToFaceAnchor()
 void TestEditorAuthoringSurfaceMappingResolvesWallSurfaceToAuthoringSide()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "3D wall surface mapping setup derives valid topology");
 
     const game::SectorTopologySideDef* sideDef = FindDerivedSideDefForAuthoringSide(
-            state.authoringDerivation,
+            documentState.derivation.authoringDerivation,
             10,
             game::SectorTopologySideKind::Front);
     Check(sideDef != nullptr, "3D wall surface mapping setup has mapped side");
@@ -4380,7 +5517,7 @@ void TestEditorAuthoringSurfaceMappingResolvesWallSurfaceToAuthoringSide()
     surface.topologySideDefId = sideDef->id;
     surface.topologySide = sideDef->side;
 
-    Check(game::ResolveSectorEditorAuthoringSurfaceTarget(state, surface, target, &status),
+    Check(ResolveEditorAuthoringSurfaceTarget(state, documentState, authoringGraph, surface, target, &status),
           "3D wall surface resolves to authoring side");
     Check(target.kind == game::SectorEditorAuthoringSurfaceTargetKind::Side
                   && target.side.lineId == 10
@@ -4398,13 +5535,16 @@ void TestEditorAuthoringSurfaceMappingResolvesWallSurfaceToAuthoringSide()
 void TestEditorAuthoringSurfaceMappingBlocksStaleDerivedTopology()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "stale 3D surface mapping setup derives valid topology");
-    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed");
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring graph changed");
 
     game::SectorEditorAuthoringSurfaceTarget target;
     std::string status;
@@ -4412,7 +5552,7 @@ void TestEditorAuthoringSurfaceMappingBlocksStaleDerivedTopology()
     surface.kind = game::SectorSurfaceKind::Floor;
     surface.topologySectorId = 200;
 
-    Check(!game::ResolveSectorEditorAuthoringSurfaceTarget(state, surface, target, &status),
+    Check(!ResolveEditorAuthoringSurfaceTarget(state, documentState, authoringGraph, surface, target, &status),
           "stale 3D surface mapping blocks inspector edits");
     Check(target.kind == game::SectorEditorAuthoringSurfaceTargetKind::None,
           "stale 3D surface mapping leaves no authoring target");
@@ -4423,13 +5563,16 @@ void TestEditorAuthoringSurfaceMappingBlocksStaleDerivedTopology()
 void TestEditorAuthoringSurfaceMappingBlocksMissingMapping()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "missing 3D surface mapping setup derives valid topology");
-    state.authoringDerivation.mapping.sectors.clear();
+    documentState.derivation.authoringDerivation.mapping.sectors.clear();
 
     game::SectorEditorAuthoringSurfaceTarget target;
     std::string status;
@@ -4437,7 +5580,7 @@ void TestEditorAuthoringSurfaceMappingBlocksMissingMapping()
     surface.kind = game::SectorSurfaceKind::Floor;
     surface.topologySectorId = 200;
 
-    Check(!game::ResolveSectorEditorAuthoringSurfaceTarget(state, surface, target, &status),
+    Check(!ResolveEditorAuthoringSurfaceTarget(state, documentState, authoringGraph, surface, target, &status),
           "missing 3D surface mapping blocks inspector edits");
     Check(target.kind == game::SectorEditorAuthoringSurfaceTargetKind::None,
           "missing 3D surface mapping leaves no authoring target");
@@ -4448,45 +5591,48 @@ void TestEditorAuthoringSurfaceMappingBlocksMissingMapping()
 void TestEditorAuthoringSelectedSurfaceClearsWhenMappingBecomesStaleBeforeEdit()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "already-selected 3D surface stale mapping setup derives valid topology");
 
     const game::SectorTopologySector* sector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(sector != nullptr, "already-selected 3D surface stale mapping setup has sector");
     if (sector == nullptr) {
         return;
     }
 
-    state.selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
-    state.selectedSurface3D.topologySectorId = 200;
-    state.selectedTopologySurface3D.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
-    state.selectedTopologySurface3D.sectorId = 200;
+    TestPreviewSelectionState().selectedSurface3D.kind = game::SectorSurfaceKind::Floor;
+    TestPreviewSelectionState().selectedSurface3D.topologySectorId = 200;
+    TestPreviewSelectionState().selectedTopologySurface3D.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
+    TestPreviewSelectionState().selectedTopologySurface3D.sectorId = 200;
     const float originalScaleU = sector->floorUv.scale.x;
 
-    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed after 3D selection");
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring graph changed after 3D selection");
 
     std::string status;
     const bool mappingCurrent =
-            game::ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(state, &status);
+            ClearSelectedEditorSurface3DIfAuthoringMappingUnavailable(state, documentState, authoringGraph, TestPreviewSelectionState(), &status);
     if (mappingCurrent) {
         game::SectorTopologySector* mutableSector =
-                game::FindSectorTopologySector(state.topologyMap, 200);
+                game::FindSectorTopologySector(documentState.map.topologyMap, 200);
         if (mutableSector != nullptr) {
             mutableSector->floorUv.scale.x = 3.0f;
         }
     }
 
     const game::SectorTopologySector* afterSector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(!mappingCurrent, "already-selected 3D surface stale mapping blocks attempted edit");
-    Check(state.selectedSurface3D.kind == game::SectorSurfaceKind::None,
+    Check(TestPreviewSelectionState().selectedSurface3D.kind == game::SectorSurfaceKind::None,
           "already-selected 3D surface stale mapping clears selected surface");
-    Check(state.selectedTopologySurface3D.kind == game::TopologySurfaceEditTargetKind::None,
+    Check(TestPreviewSelectionState().selectedTopologySurface3D.kind == game::TopologySurfaceEditTargetKind::None,
           "already-selected 3D surface stale mapping clears topology edit target");
     Check(status.find("derived topology is not current") != std::string::npos,
           "already-selected 3D surface stale mapping reports unavailable status");
@@ -4497,11 +5643,14 @@ void TestEditorAuthoringSelectedSurfaceClearsWhenMappingBecomesStaleBeforeEdit()
 void TestEditorAuthoringFlatSurfaceFloorUvWritesThroughFaceAnchor()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "3D floor UV face-anchor write setup derives valid topology");
 
     game::SectorSurfaceRef surface;
@@ -4510,52 +5659,50 @@ void TestEditorAuthoringFlatSurfaceFloorUvWritesThroughFaceAnchor()
     game::TopologySurfaceEditTarget target;
     target.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
     target.sectorId = 200;
-    state.selectedSurface3D = surface;
-    state.selectedTopologySurface3D = target;
+    TestPreviewSelectionState().selectedSurface3D = surface;
+    TestPreviewSelectionState().selectedTopologySurface3D = target;
 
-    game::SectorEditorAuthoringFlatMaterialActionResult result;
-    Check(game::ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
-                  state,
-                  surface,
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+
+    Check(service.ApplySurfaceUvValue(
                   target,
-                  [target](game::SectorTopologyMap& map) {
-                      game::SectorEditorMaterialActionResult action;
-                      game::SectorTopologySector* sector =
-                              game::FindSectorTopologySector(map, target.sectorId);
-                      if (sector != nullptr) {
-                          sector->floorUv.scale.x = 2.5f;
-                          action.changed = true;
-                          action.status = "Updated 3D floor base UV";
-                      }
-                      return action;
-                  },
-                  &result),
-          "3D floor UV face-anchor helper handles graph-authored flat target");
+                  game::TopologyMaterialLayer::Base,
+                  0,
+                  2.5f,
+                  game::SectorSurfaceKind::Floor,
+                  assets),
+          "service 3D floor UV edit handles graph-authored flat target");
 
     const game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* sector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
-    Check(result.changed, "3D floor UV face-anchor helper reports changed edit");
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(anchor != nullptr && anchor->floorUv.scale.x == 2.5f,
-          "3D floor UV edit writes to face anchor floor UV");
+          "service 3D floor UV edit writes to face anchor floor UV");
     Check(sector != nullptr && sector->floorUv.scale.x == 2.5f,
-          "3D floor UV edit refreshes derived sector projection");
-    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
-          "3D floor UV edit marks authoring document dirty");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
-                  && !state.authoringDerivedTopologyStale,
-          "3D floor UV edit leaves refreshed authoring derivation current");
+          "service 3D floor UV edit refreshes derived sector projection");
+    Check(documentState.lifecycle.topologyDocumentDirty && documentState.lifecycle.hasUnsavedChanges,
+          "service 3D floor UV edit marks authoring document dirty");
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
+                  && !documentState.derivation.authoringDerivedTopologyStale,
+          "service 3D floor UV edit leaves refreshed authoring derivation current");
 }
 
 void TestEditorAuthoringFlatSurfaceCeilingUvWritesThroughFaceAnchor()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "3D ceiling UV face-anchor write setup derives valid topology");
 
     game::SectorSurfaceRef surface;
@@ -4564,47 +5711,46 @@ void TestEditorAuthoringFlatSurfaceCeilingUvWritesThroughFaceAnchor()
     game::TopologySurfaceEditTarget target;
     target.kind = game::TopologySurfaceEditTargetKind::SectorCeiling;
     target.sectorId = 200;
-    state.selectedSurface3D = surface;
-    state.selectedTopologySurface3D = target;
+    TestPreviewSelectionState().selectedSurface3D = surface;
+    TestPreviewSelectionState().selectedTopologySurface3D = target;
 
-    game::SectorEditorAuthoringFlatMaterialActionResult result;
-    Check(game::ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
-                  state,
-                  surface,
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+
+    Check(service.ApplySurfaceUvValue(
                   target,
-                  [target](game::SectorTopologyMap& map) {
-                      game::SectorEditorMaterialActionResult action;
-                      game::SectorTopologySector* sector =
-                              game::FindSectorTopologySector(map, target.sectorId);
-                      if (sector != nullptr) {
-                          sector->ceilingUv.offset.y = 1.25f;
-                          action.changed = true;
-                          action.status = "Updated 3D ceiling base UV";
-                      }
-                      return action;
-                  },
-                  &result),
-          "3D ceiling UV face-anchor helper handles graph-authored flat target");
+                  game::TopologyMaterialLayer::Base,
+                  3,
+                  1.25f,
+                  game::SectorSurfaceKind::Ceiling,
+                  assets),
+          "service 3D ceiling UV edit handles graph-authored flat target");
 
     const game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* sector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
-    Check(result.changed, "3D ceiling UV face-anchor helper reports changed edit");
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(anchor != nullptr && anchor->ceilingUv.offset.y == 1.25f,
-          "3D ceiling UV edit writes to face anchor ceiling UV");
+          "service 3D ceiling UV edit writes to face anchor ceiling UV");
     Check(sector != nullptr && sector->ceilingUv.offset.y == 1.25f,
-          "3D ceiling UV edit refreshes derived sector projection");
+          "service 3D ceiling UV edit refreshes derived sector projection");
 }
 
 void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace("floor_tiles", game::SectorTextureDefinition{"floor_tiles", "floor_tiles.png"});
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "3D flat texture face-anchor write setup derives valid topology");
 
     game::SectorSurfaceRef surface;
@@ -4613,47 +5759,50 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
     game::TopologySurfaceEditTarget target;
     target.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
     target.sectorId = 200;
-    state.selectedSurface3D = surface;
-    state.selectedTopologySurface3D = target;
+    TestPreviewSelectionState().selectedSurface3D = surface;
+    TestPreviewSelectionState().selectedTopologySurface3D = target;
 
-    game::SectorEditorAuthoringFlatMaterialActionResult result;
-    Check(game::ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
-                  state,
-                  surface,
-                  target,
-                  [target](game::SectorTopologyMap& map) {
-                      game::SectorEditorMaterialActionResult action;
-                      game::SectorTopologySector* sector =
-                              game::FindSectorTopologySector(map, target.sectorId);
-                      if (sector != nullptr) {
-                          sector->floorTextureId = "floor_tiles";
-                          action.changed = true;
-                          action.status = "Selected floor texture.";
-                      }
-                      return action;
-                  },
-                  &result),
-          "3D flat texture face-anchor helper handles graph-authored flat target");
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+
+    Check(service.OpenMaterialPickerForDerivedSector(
+                  200,
+                  game::TopologySectorTextureField::Floor,
+                  game::TopologyMaterialLayer::Base),
+          "service flat texture picker opens for graph-authored flat target");
+    for (size_t i = 0; i < state.texturePicker.textureIds.size(); ++i) {
+        if (state.texturePicker.textureIds[i] == "floor_tiles") {
+            state.texturePicker.selectedTextureIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    const game::SectorEditorTexturePickerApplyResult result =
+            service.ApplyTexturePickerSelection(nullptr);
 
     const game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* sector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
-    Check(result.changed, "3D flat texture face-anchor helper reports changed edit");
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
+    Check(result.changed, "service flat texture picker reports changed edit");
     Check(anchor != nullptr && anchor->floorTextureId == "floor_tiles",
-          "3D floor texture edit writes to face anchor floor texture");
+          "service flat texture picker writes to face anchor floor texture");
     Check(sector != nullptr && sector->floorTextureId == "floor_tiles",
-          "3D floor texture edit refreshes derived sector projection");
+          "service flat texture picker refreshes derived sector projection");
 }
 
 void TestEditorAuthoringFlatSurfaceStaleMappingBlocksMaterialEdits()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "3D flat stale material edit setup derives valid topology");
 
     game::SectorSurfaceRef surface;
@@ -4662,46 +5811,41 @@ void TestEditorAuthoringFlatSurfaceStaleMappingBlocksMaterialEdits()
     game::TopologySurfaceEditTarget target;
     target.kind = game::TopologySurfaceEditTargetKind::SectorFloor;
     target.sectorId = 200;
-    state.selectedSurface3D = surface;
-    state.selectedTopologySurface3D = target;
+    TestPreviewSelectionState().selectedSurface3D = surface;
+    TestPreviewSelectionState().selectedTopologySurface3D = target;
 
     const game::SectorAuthoringFaceAnchor* beforeAnchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* beforeSector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     const float originalAnchorScale = beforeAnchor != nullptr ? beforeAnchor->floorUv.scale.x : -1.0f;
     const float originalSectorScale = beforeSector != nullptr ? beforeSector->floorUv.scale.x : -1.0f;
 
-    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed before flat edit");
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring graph changed before flat edit");
 
-    game::SectorEditorAuthoringFlatMaterialActionResult result;
-    Check(game::ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
-                  state,
-                  surface,
+    game::SectorEditorUiState uiState;
+    std::string statusText;
+    engine::AssetManager assets;
+    game::SectorEditorMaterialEditingService service =
+            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+
+    Check(service.ApplySurfaceUvValue(
                   target,
-                  [target](game::SectorTopologyMap& map) {
-                      game::SectorEditorMaterialActionResult action;
-                      game::SectorTopologySector* sector =
-                              game::FindSectorTopologySector(map, target.sectorId);
-                      if (sector != nullptr) {
-                          sector->floorUv.scale.x = 3.0f;
-                          action.changed = true;
-                          action.status = "Updated 3D floor base UV";
-                      }
-                      return action;
-                  },
-                  &result),
-          "stale 3D flat material edit is handled as unavailable");
+                  game::TopologyMaterialLayer::Base,
+                  0,
+                  3.0f,
+                  game::SectorSurfaceKind::Floor,
+                  assets),
+          "stale service 3D flat material edit fails");
 
     const game::SectorAuthoringFaceAnchor* afterAnchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* afterSector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
-    Check(!result.changed, "stale 3D flat material edit reports no mutation");
-    Check(result.status.find("derived topology is not current") != std::string::npos,
-          "stale 3D flat material edit reports stale mapping");
-    Check(state.selectedSurface3D.kind == game::SectorSurfaceKind::None
-                  && state.selectedTopologySurface3D.kind == game::TopologySurfaceEditTargetKind::None,
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
+    Check(statusText.find("derived topology is not current") != std::string::npos,
+          "stale service 3D flat material edit reports stale mapping");
+    Check(TestPreviewSelectionState().selectedSurface3D.kind == game::SectorSurfaceKind::None
+                  && TestPreviewSelectionState().selectedTopologySurface3D.kind == game::TopologySurfaceEditTargetKind::None,
           "stale 3D flat material edit clears selected 3D surface");
     Check(afterAnchor != nullptr && afterAnchor->floorUv.scale.x == originalAnchorScale,
           "stale 3D flat material edit does not mutate face anchor");
@@ -4723,46 +5867,53 @@ void SelectTextureInPicker(game::TexturePickerState& picker, const std::string& 
 void TestEditorAuthoringFaceTexturePickerWritesThroughFaceAnchor()
 {
     game::SectorEditorState state;
-    state.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
-    state.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
+    documentState.map.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     Check(anchor != nullptr, "authoring face picker setup has face anchor");
     if (anchor != nullptr) {
         anchor->floorTextureId = "old_floor";
     }
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring face picker setup derives valid topology");
 
-    Check(game::OpenAuthoringFaceAnchorTexturePicker(
-                  state,
+    Check(game::OpenSectorEditorMaterialPickerForDerivedSector(
+                  state.texturePicker,
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   200,
                   game::TopologySectorTextureField::Floor,
                   game::TopologyMaterialLayer::Base),
           "authoring face picker opens for mapped derived sector");
     Check(state.texturePicker.topologyTargetKind == game::TopologyTexturePickerTargetKind::AuthoringFaceAnchor,
           "authoring face picker records authoring target kind");
-    Check(game::CurrentTextureForPickerTarget(state) == "old_floor",
+    state.texturePicker.authoringFaceAnchorId = 200;
+    Check(game::CurrentTextureForPickerTarget(state, documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorConstDerivationDocumentAccess(game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation))) == "old_floor",
           "authoring face picker reads current texture from face anchor");
 
     SelectTextureInPicker(state.texturePicker, "new_floor");
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state.texturePicker, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), state.topologyRenderRevision, state.topologyRenderCache, documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
 
     const game::SectorAuthoringFaceAnchor* editedAnchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* projectedSector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(result.changed, "authoring face picker reports texture change");
     Check(editedAnchor != nullptr && editedAnchor->floorTextureId == "new_floor",
           "authoring face picker writes selected texture to face anchor");
     Check(projectedSector != nullptr && projectedSector->floorTextureId == "new_floor",
           "authoring face picker refreshes projected derived sector texture");
-    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
+    Check(documentState.lifecycle.topologyDocumentDirty && documentState.lifecycle.hasUnsavedChanges,
           "authoring face picker marks document dirty");
     Check(!state.topologyRenderCache.valid,
           "authoring face picker invalidates cached topology rendering through graph edit");
@@ -4771,22 +5922,25 @@ void TestEditorAuthoringFaceTexturePickerWritesThroughFaceAnchor()
 void TestEditorAuthoringSideTexturePickerWritesThroughAuthoringSide()
 {
     game::SectorEditorState state;
-    state.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
-    state.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
+    documentState.map.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
     side.wall.textureId = "old_wall";
-    state.authoringGraph.lineSides.push_back(side);
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring side picker setup derives valid topology");
 
     const game::SectorTopologySideDef* sideDef =
             FindDerivedSideDefForAuthoringSide(
-                    state.authoringDerivation,
+                    documentState.derivation.authoringDerivation,
                     10,
                     game::SectorTopologySideKind::Front);
     Check(sideDef != nullptr, "authoring side picker setup has mapped sidedef");
@@ -4794,28 +5948,33 @@ void TestEditorAuthoringSideTexturePickerWritesThroughAuthoringSide()
         return;
     }
 
-    Check(game::OpenAuthoringSideTexturePicker(
-                  state,
+    Check(game::OpenSectorEditorMaterialPickerForDerivedSideDef(
+                  state.texturePicker,
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   sideDef->id,
                   game::TopologyWallPart::Wall,
                   game::TopologyMaterialLayer::Base),
           "authoring side picker opens for mapped derived sidedef");
     Check(state.texturePicker.topologyTargetKind == game::TopologyTexturePickerTargetKind::AuthoringSide,
           "authoring side picker records authoring target kind");
-    Check(game::CurrentTextureForPickerTarget(state) == "old_wall",
+    state.texturePicker.authoringLineId = 10;
+    state.texturePicker.authoringSide = game::SectorTopologySideKind::Front;
+    Check(game::CurrentTextureForPickerTarget(state, documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorConstDerivationDocumentAccess(game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation))) == "old_wall",
           "authoring side picker reads current texture from authoring side");
 
     SelectTextureInPicker(state.texturePicker, "new_wall");
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state.texturePicker, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), state.topologyRenderRevision, state.topologyRenderCache, documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
 
     const game::SectorAuthoringLineSide* editedSide =
             game::FindSectorAuthoringLineSide(
-                    state.authoringGraph,
+                    authoringGraph,
                     game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front});
     const game::SectorTopologySideDef* projectedSideDef =
             FindDerivedSideDefForAuthoringSide(
-                    state.authoringDerivation,
+                    documentState.derivation.authoringDerivation,
                     10,
                     game::SectorTopologySideKind::Front);
     Check(result.changed, "authoring side picker reports texture change");
@@ -4828,23 +5987,29 @@ void TestEditorAuthoringSideTexturePickerWritesThroughAuthoringSide()
 void TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen()
 {
     game::SectorEditorState state;
-    state.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
-    state.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
+    documentState.map.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringFaceAnchor* anchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     Check(anchor != nullptr, "stale face picker setup has face anchor");
     if (anchor != nullptr) {
         anchor->floorTextureId = "old_floor";
     }
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "stale face picker setup derives valid topology");
 
-    Check(game::OpenAuthoringFaceAnchorTexturePicker(
-                  state,
+    Check(game::OpenSectorEditorMaterialPickerForDerivedSector(
+                  state.texturePicker,
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   200,
                   game::TopologySectorTextureField::Floor,
                   game::TopologyMaterialLayer::Base),
@@ -4852,19 +6017,19 @@ void TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen()
     SelectTextureInPicker(state.texturePicker, "new_floor");
 
     const game::SectorTopologySector* beforeSector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     const std::string beforeSectorTexture = beforeSector != nullptr
             ? beforeSector->floorTextureId
             : std::string{};
-    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed after picker open");
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring graph changed after picker open");
 
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state.texturePicker, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), state.topologyRenderRevision, state.topologyRenderCache, documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
 
     const game::SectorAuthoringFaceAnchor* afterAnchor =
-            game::FindSectorAuthoringFaceAnchor(state.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* afterSector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(!result.changed, "stale face picker apply reports no texture change");
     Check(result.status.find("derived topology is not current") != std::string::npos,
           "stale face picker apply reports stale mapping");
@@ -4878,22 +6043,25 @@ void TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen()
 void TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen()
 {
     game::SectorEditorState state;
-    state.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
-    state.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
+    documentState.map.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
     side.wall.textureId = "old_wall";
-    state.authoringGraph.lineSides.push_back(side);
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    authoringGraph.lineSides.push_back(side);
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "stale side picker setup derives valid topology");
 
     const game::SectorTopologySideDef* sideDef =
             FindDerivedSideDefForAuthoringSide(
-                    state.authoringDerivation,
+                    documentState.derivation.authoringDerivation,
                     10,
                     game::SectorTopologySideKind::Front);
     Check(sideDef != nullptr, "stale side picker setup has mapped sidedef");
@@ -4902,8 +6070,11 @@ void TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen()
     }
     const int sideDefId = sideDef->id;
 
-    Check(game::OpenAuthoringSideTexturePicker(
-                  state,
+    Check(game::OpenSectorEditorMaterialPickerForDerivedSideDef(
+                  state.texturePicker,
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   sideDefId,
                   game::TopologyWallPart::Wall,
                   game::TopologyMaterialLayer::Base),
@@ -4911,21 +6082,21 @@ void TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen()
     SelectTextureInPicker(state.texturePicker, "new_wall");
 
     const game::SectorTopologySideDef* beforeSideDef =
-            game::FindSectorTopologySideDef(state.topologyMap, sideDefId);
+            game::FindSectorTopologySideDef(documentState.map.topologyMap, sideDefId);
     const std::string beforeSideTexture = beforeSideDef != nullptr
             ? beforeSideDef->wall.textureId
             : std::string{};
-    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed after picker open");
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring graph changed after picker open");
 
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyAuthoringTexturePickerSelection(state);
+            game::ApplySectorEditorMaterialTexturePickerSelection(state.texturePicker, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), state.topologyRenderRevision, state.topologyRenderCache, documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
 
     const game::SectorAuthoringLineSide* afterSide =
             game::FindSectorAuthoringLineSide(
-                    state.authoringGraph,
+                    authoringGraph,
                     game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front});
     const game::SectorTopologySideDef* afterSideDef =
-            game::FindSectorTopologySideDef(state.topologyMap, sideDefId);
+            game::FindSectorTopologySideDef(documentState.map.topologyMap, sideDefId);
     Check(!result.changed, "stale side picker apply reports no texture change");
     Check(result.status.find("derived topology is not current") != std::string::npos,
           "stale side picker apply reports stale mapping");
@@ -4939,17 +6110,23 @@ void TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen()
 void TestEditorAuthoringTexturePickerRejectsStaleMapping()
 {
     game::SectorEditorState state;
-    state.topologyMap.texturesById.emplace("wall", game::SectorTextureDefinition{"wall", "wall.png"});
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace("wall", game::SectorTextureDefinition{"wall", "wall.png"});
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    AddFaceAnchor(state.authoringGraph, 200, 32, 32, "room");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "stale authoring picker setup derives valid topology");
-    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph changed before picker open");
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring graph changed before picker open");
 
-    Check(!game::OpenAuthoringFaceAnchorTexturePicker(
-                  state,
+    Check(!game::OpenSectorEditorMaterialPickerForDerivedSector(
+                  state.texturePicker,
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   200,
                   game::TopologySectorTextureField::Floor,
                   game::TopologyMaterialLayer::Base),
@@ -4958,57 +6135,77 @@ void TestEditorAuthoringTexturePickerRejectsStaleMapping()
           "authoring face picker closes state when mapping is stale");
 }
 
-void TestEditorLegacyTopologyTexturePickerWritesLiveTopologyWithoutAuthoringGraph()
+void TestEditorNoAuthoringTexturePickerApplyFailsWithoutMutatingTopology()
 {
     game::SectorEditorState state;
-    state.topologyMap = MakeSingleSectorSquareMap();
-    state.topologyMap.texturesById.emplace("room_floor", game::SectorTextureDefinition{"room_floor", "room_floor.png"});
-    state.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap = MakeSingleSectorSquareMap();
+    documentState.map.topologyMap.texturesById.emplace("room_floor", game::SectorTextureDefinition{"room_floor", "room_floor.png"});
+    documentState.map.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
 
-    Check(game::OpenTopologyTexturePicker(
-                  state,
-                  200,
-                  game::TopologySectorTextureField::Floor,
-                  game::TopologyMaterialLayer::Base),
-          "legacy topology texture picker opens without authoring graph");
+    state.texturePicker.open = true;
+    state.texturePicker.topologyTargetKind = game::TopologyTexturePickerTargetKind::Sector;
+    state.texturePicker.topologyLayer = game::TopologyMaterialLayer::Base;
+    state.texturePicker.topologySectorId = 200;
+    state.texturePicker.topologyField = game::TopologySectorTextureField::Floor;
+    state.texturePicker.textureIds.push_back("room_floor");
+    state.texturePicker.textureIds.push_back("new_floor");
     SelectTextureInPicker(state.texturePicker, "new_floor");
 
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyTexturePickerSelection(state);
+            game::ApplyTexturePickerSelection(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
     const game::SectorTopologySector* sector =
-            game::FindSectorTopologySector(state.topologyMap, 200);
-    Check(result.changed, "legacy topology texture picker reports texture change");
-    Check(sector != nullptr && sector->floorTextureId == "new_floor",
-          "legacy topology texture picker writes live topology when no authoring graph is active");
-    Check(!state.texturePicker.open, "legacy topology texture picker closes after apply");
+            game::FindSectorTopologySector(documentState.map.topologyMap, 200);
+    Check(!result.changed, "invalid no-authoring texture picker reports no material change");
+    Check(result.status.find("authoring data is required") != std::string::npos,
+          "invalid no-authoring texture picker reports authoring requirement");
+    Check(sector != nullptr && sector->floorTextureId == "room_floor",
+          "invalid no-authoring texture picker does not mutate derived topology");
+    Check(!state.texturePicker.open, "invalid no-authoring texture picker closes after apply");
 }
 
 void TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture()
 {
     game::SectorEditorState state;
-    state.topologyMap.texturesById.emplace("old_door", game::SectorTextureDefinition{"old_door", "old_door.png"});
-    state.topologyMap.texturesById.emplace("new_door", game::SectorTextureDefinition{"new_door", "new_door.png"});
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace("old_door", game::SectorTextureDefinition{"old_door", "old_door.png"});
+    documentState.map.topologyMap.texturesById.emplace("new_door", game::SectorTextureDefinition{"new_door", "new_door.png"});
 
     game::SectorPlacedRuntimeObject object;
     object.id = 77;
     object.kind = "door";
     object.door.textureId = "old_door";
-    state.topologyMap.runtimeObjects.push_back(object);
+    documentState.map.topologyMap.runtimeObjects.push_back(object);
 
-    Check(game::OpenRuntimeDoorTexturePicker(state, 77),
+    game::TextureCatalogState textureCatalogState;
+    game::SectorEditorTextureCatalogService catalog{
+            game::SectorEditorTextureCatalogServiceContext{
+                    documentState.map.topologyMap,
+                    textureCatalogState,
+                    state.defaultFloorTextureId,
+                    state.defaultCeilingTextureId,
+                    state.defaultWallTextureId,
+                    state.defaultLowerWallTextureId,
+                    state.defaultUpperWallTextureId}};
+
+    Check(game::OpenRuntimeDoorTexturePicker(state, documentState.map.topologyMap, authoringGraph, catalog, 77),
           "runtime door texture picker opens for authored door");
     Check(state.texturePicker.topologyTargetKind == game::TopologyTexturePickerTargetKind::RuntimeDoor,
           "runtime door texture picker records door target kind");
     Check(state.texturePicker.runtimeObjectId == 77,
           "runtime door texture picker records target object id");
-    Check(game::CurrentTextureForPickerTarget(state) == "old_door",
+    Check(game::CurrentTextureForPickerTarget(state, documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorConstDerivationDocumentAccess(game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation))) == "old_door",
           "runtime door texture picker reads current authored door texture");
 
     SelectTextureInPicker(state.texturePicker, "new_door");
     const game::SectorEditorTexturePickerApplyResult result =
-            game::ApplyTexturePickerSelection(state);
+            game::ApplyTexturePickerSelection(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation));
     const game::SectorPlacedRuntimeObject* editedObject =
-            game::FindSectorPlacedRuntimeObject(state.topologyMap, 77);
+            game::FindSectorPlacedRuntimeObject(documentState.map.topologyMap, 77);
     Check(result.changed, "runtime door texture picker reports texture change");
     Check(editedObject != nullptr && editedObject->door.textureId == "new_door",
           "runtime door texture picker writes selected texture to authored door");
@@ -5018,6 +6215,15 @@ void TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture()
 void TestEditorMapTextureImportPreservesMapLevelRegistryOnly()
 {
     game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.texturesById.emplace(
+            "z_existing",
+            game::SectorTextureDefinition{"z_existing", "assets/images/z_existing.png"});
+    documentState.map.topologyMap.texturesById.emplace(
+            "a_existing",
+            game::SectorTextureDefinition{"a_existing", "assets/images/a_existing.png"});
     state.topologyRenderCache.valid = true;
     const uint64_t originalRevision = state.topologyRenderRevision;
     state.addMapTexture.paths.push_back("assets/images/imported_wall.png");
@@ -5029,19 +6235,55 @@ void TestEditorMapTextureImportPreservesMapLevelRegistryOnly()
             "imported_wall");
     state.addMapTexture.filter = game::SectorTextureFilter::Point;
 
+    game::TextureCatalogState textureCatalogState;
+    game::SectorEditorTextureCatalogService catalog{
+            game::SectorEditorTextureCatalogServiceContext{
+                    documentState.map.topologyMap,
+                    textureCatalogState,
+                    state.defaultFloorTextureId,
+                    state.defaultCeilingTextureId,
+                    state.defaultWallTextureId,
+                    state.defaultLowerWallTextureId,
+                    state.defaultUpperWallTextureId}};
     const game::SectorEditorAddTextureResult result =
-            game::AddSelectedMapTexture(state);
+            catalog.RegisterSelectedMapTexture(state.addMapTexture);
 
-    const auto textureIt = state.topologyMap.texturesById.find("imported_wall");
-    Check(result.success, "map texture import helper succeeds for valid texture id");
-    Check(textureIt != state.topologyMap.texturesById.end()
+    const auto textureIt = documentState.map.topologyMap.texturesById.find("imported_wall");
+    Check(result.success, "texture catalog registers valid map texture id");
+    Check(textureIt != documentState.map.topologyMap.texturesById.end()
                   && textureIt->second.path == "assets/images/imported_wall.png"
                   && textureIt->second.filter == game::SectorTextureFilter::Point,
-          "map texture import writes only the map-level texture registry");
+          "texture catalog writes only the map-level texture registry");
+    Check(catalog.HasTexture("imported_wall"), "texture catalog finds registered texture id");
+    Check(catalog.FindTexture("missing_texture") == nullptr, "texture catalog reports missing texture id");
+    Check(catalog.TextureHandleForId("missing_texture") == engine::NullTextureHandle(),
+          "texture catalog missing handle lookup returns null texture handle");
     Check(state.topologyRenderCache.valid,
-          "map texture import does not invalidate cached topology rendering by itself");
+          "texture catalog registration does not invalidate cached topology rendering by itself");
     Check(state.topologyRenderRevision == originalRevision,
-          "map texture import does not bump topology render revision by itself");
+          "texture catalog registration does not bump topology render revision by itself");
+
+    state.addMapTexture.paths[0] = "assets/images/imported_wall_replacement.png";
+    state.addMapTexture.filter = game::SectorTextureFilter::Bilinear;
+    const game::SectorEditorAddTextureResult replacement =
+            catalog.RegisterSelectedMapTexture(state.addMapTexture);
+    const game::SectorTextureDefinition* replaced = catalog.FindTexture("imported_wall");
+    Check(replacement.success && replacement.replacing,
+          "texture catalog preserves duplicate id replacement reporting");
+    Check(replaced != nullptr
+                  && replaced->path == "assets/images/imported_wall_replacement.png"
+                  && replaced->filter == game::SectorTextureFilter::Bilinear,
+          "texture catalog preserves duplicate id replacement behavior");
+
+    game::TexturePickerState picker;
+    catalog.PopulatePickerOptions(picker, "imported_wall");
+    Check(picker.textureIds.size() == 3
+                  && picker.textureIds[0] == "a_existing"
+                  && picker.textureIds[1] == "imported_wall"
+                  && picker.textureIds[2] == "z_existing",
+          "texture catalog picker options remain sorted by texture id");
+    Check(picker.selectedTextureIndex == 1,
+          "texture catalog picker options preserve current texture selection");
 }
 
 void TestSpriteMetadataScannerFindsNestedJsonAndFrameTagClips()
@@ -5292,66 +6534,75 @@ void TestBillboardClipRepairOverwritesInvalidOnSpriteChange()
 void TestEditorAuthoringFailedDerivationKeepsGraphAndDiagnostics()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "failed editor derivation setup creates last valid topology");
-    const game::SectorTopologyMap lastValid = state.topologyMap;
+    const game::SectorTopologyMap lastValid = documentState.map.topologyMap;
 
     const int addedLineId = 99;
-    AddAuthoringVertexWithId(state.authoringGraph, 5, 128, 0);
-    AddAuthoringLineWithId(state.authoringGraph, addedLineId, 2, 5);
-    game::MarkSectorEditorAuthoringGraphEdited(state, "dangling authoring line added");
+    AddAuthoringVertexWithId(authoringGraph, 5, 128, 0);
+    AddAuthoringLineWithId(authoringGraph, addedLineId, 2, 5);
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "dangling authoring line added");
 
-    Check(!game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(!game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "failed editor derivation returns false");
-    Check(!state.authoringDerivation.success, "failed editor derivation stores failed result");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
+    Check(!documentState.derivation.authoringDerivation.success, "failed editor derivation stores failed result");
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
           "failed editor derivation keeps invalid/last-valid state");
-    Check(state.authoringDerivedTopologyStale, "failed editor derivation leaves stale flag set");
-    Check(!state.authoringDerivation.diagnostics.empty(),
+    Check(documentState.derivation.authoringDerivedTopologyStale, "failed editor derivation leaves stale flag set");
+    Check(!documentState.derivation.authoringDerivation.diagnostics.empty(),
           "failed editor derivation records diagnostics");
-    Check(game::FindSectorAuthoringLine(state.authoringGraph, addedLineId) != nullptr,
+    Check(game::FindSectorAuthoringLine(authoringGraph, addedLineId) != nullptr,
           "failed editor derivation keeps edited graph data");
-    Check(state.topologyMap.sectors.size() == lastValid.sectors.size(),
+    Check(documentState.map.topologyMap.sectors.size() == lastValid.sectors.size(),
           "failed editor derivation keeps current topology unchanged");
-    Check(state.lastValidAuthoringDerivedTopology.has_value(),
+    Check(documentState.derivation.lastValidAuthoringDerivedTopology.has_value(),
           "failed editor derivation keeps memory-only last-valid topology");
 }
 
 void TestEditorAuthoringPreviewAndBakeGateAllowsCurrentDerivedTopology()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "preview gate setup derives a valid topology");
 
     std::string previewMessage = "not cleared";
-    Check(game::CanUseCurrentAuthoringDerivedTopologyForPreview(state, &previewMessage),
+    Check(game::CanUseCurrentAuthoringDerivedTopologyForPreview(game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), &previewMessage),
           "preview gate allows current valid derived topology");
     Check(previewMessage.empty(), "preview gate clears message when allowed");
 
     std::string bakeMessage = "not cleared";
-    Check(game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(state, &bakeMessage),
+    Check(game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), &bakeMessage),
           "bake gate allows current valid derived topology");
     Check(bakeMessage.empty(), "bake gate clears message when allowed");
-    Check(!state.topologyMap.sectors.empty(), "allowed gate still uses derived topology map");
+    Check(!documentState.map.topologyMap.sectors.empty(), "allowed gate still uses derived topology map");
 }
 
 void TestEditorAuthoringPreviewAndBakeGateRejectsInvalidNoDerived()
 {
     game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
     std::string previewMessage;
-    Check(!game::CanUseCurrentAuthoringDerivedTopologyForPreview(state, &previewMessage),
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForPreview(game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), &previewMessage),
           "preview gate rejects invalid/no-derived graph");
     Check(previewMessage.find("no valid derived topology") != std::string::npos,
           "preview gate reports missing derived topology");
 
     std::string bakeMessage;
-    Check(!game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(state, &bakeMessage),
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), &bakeMessage),
           "bake gate rejects invalid/no-derived graph");
     Check(bakeMessage.find("no valid derived topology") != std::string::npos,
           "bake gate reports missing derived topology");
@@ -5360,21 +6611,24 @@ void TestEditorAuthoringPreviewAndBakeGateRejectsInvalidNoDerived()
 void TestEditorAuthoringPreviewAndBakeGateRejectsStaleDerivedTopology()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "stale gate setup derives a valid topology");
-    game::MarkSectorEditorAuthoringGraphEdited(state, "authoring graph edited for stale gate test");
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring graph edited for stale gate test");
 
     std::string previewMessage;
-    Check(!game::CanUseCurrentAuthoringDerivedTopologyForPreview(state, &previewMessage),
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForPreview(game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), &previewMessage),
           "preview gate rejects stale derived topology");
     Check(previewMessage.find("re-derive") != std::string::npos,
           "preview gate reports stale derivation");
 
     std::string bakeMessage;
-    Check(!game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(state, &bakeMessage),
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), &bakeMessage),
           "bake gate rejects stale derived topology");
     Check(bakeMessage.find("re-derive") != std::string::npos,
           "bake gate reports stale derivation");
@@ -5383,25 +6637,28 @@ void TestEditorAuthoringPreviewAndBakeGateRejectsStaleDerivedTopology()
 void TestEditorAuthoringPreviewAndBakeGateRejectsFailedDerivation()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "failed gate setup creates last valid topology");
-    AddAuthoringVertexWithId(state.authoringGraph, 5, 128, 0);
-    AddAuthoringLineWithId(state.authoringGraph, 99, 2, 5);
-    game::MarkSectorEditorAuthoringGraphEdited(state, "dangling authoring line added");
-    Check(!game::RefreshSectorEditorAuthoringDerivation(state),
+    AddAuthoringVertexWithId(authoringGraph, 5, 128, 0);
+    AddAuthoringLineWithId(authoringGraph, 99, 2, 5);
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "dangling authoring line added");
+    Check(!game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "failed gate setup records failed derivation");
 
     std::string previewMessage;
-    Check(!game::CanUseCurrentAuthoringDerivedTopologyForPreview(state, &previewMessage),
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForPreview(game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), &previewMessage),
           "preview gate rejects failed derivation without crashing");
     Check(previewMessage.find("derivation failed") != std::string::npos,
           "preview gate reports failed derivation");
 
     std::string bakeMessage;
-    Check(!game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(state, &bakeMessage),
+    Check(!game::CanUseCurrentAuthoringDerivedTopologyForLightmapBake(game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), &bakeMessage),
           "bake gate rejects failed derivation without crashing");
     Check(bakeMessage.find("derivation failed") != std::string::npos,
           "bake gate reports failed derivation");
@@ -5410,48 +6667,54 @@ void TestEditorAuthoringPreviewAndBakeGateRejectsFailedDerivation()
 void TestEditorAuthoringSuccessfulDerivationPreservesBakedLightmapMetadata()
 {
     game::SectorEditorState state;
-    state.topologyMap.bakedLightmap.path = "assets/levels/test/lightmap.png";
-    state.topologyMap.bakedLightmap.width = 128;
-    state.topologyMap.bakedLightmap.height = 128;
-    state.topologyMap.bakedLightmap.sourceHash = "old-hash";
-    state.topologyMap.bakedLightmap.objectProbes.path =
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    documentState.map.topologyMap.bakedLightmap.path = "assets/levels/test/lightmap.png";
+    documentState.map.topologyMap.bakedLightmap.width = 128;
+    documentState.map.topologyMap.bakedLightmap.height = 128;
+    documentState.map.topologyMap.bakedLightmap.sourceHash = "old-hash";
+    documentState.map.topologyMap.bakedLightmap.objectProbes.path =
             "assets/levels/test/lightmap.object_probes.bin";
-    state.topologyMap.bakedLightmap.objectProbes.version =
+    documentState.map.topologyMap.bakedLightmap.objectProbes.version =
             game::kSectorBakedObjectLightProbeSidecarVersion;
-    state.topologyMap.bakedLightmap.objectProbes.sourceHash = "old-hash";
-    state.topologyMap.bakedLightmap.objectProbes.count = 5;
-    state.topologyMap.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
-    state.topologyMap.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
-    state.topologyMap.bakedLightmap.objectProbes.format =
+    documentState.map.topologyMap.bakedLightmap.objectProbes.sourceHash = "old-hash";
+    documentState.map.topologyMap.bakedLightmap.objectProbes.count = 5;
+    documentState.map.topologyMap.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
+    documentState.map.topologyMap.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    documentState.map.topologyMap.bakedLightmap.objectProbes.format =
             game::kSectorBakedObjectLightProbeSidecarFormat;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
 
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "lightmap stale setup derives valid topology");
-    Check(state.topologyMap.bakedLightmap.path == "assets/levels/test/lightmap.png",
+    Check(documentState.map.topologyMap.bakedLightmap.path == "assets/levels/test/lightmap.png",
           "successful derivation preserves baked lightmap path");
-    Check(state.topologyMap.bakedLightmap.width == 128 && state.topologyMap.bakedLightmap.height == 128,
+    Check(documentState.map.topologyMap.bakedLightmap.width == 128 && documentState.map.topologyMap.bakedLightmap.height == 128,
           "successful derivation preserves baked lightmap dimensions");
-    Check(state.topologyMap.bakedLightmap.sourceHash == "old-hash",
+    Check(documentState.map.topologyMap.bakedLightmap.sourceHash == "old-hash",
           "successful derivation preserves baked lightmap source hash");
-    Check(state.topologyMap.bakedLightmap.objectProbes.path
+    Check(documentState.map.topologyMap.bakedLightmap.objectProbes.path
                   == "assets/levels/test/lightmap.object_probes.bin"
-                  && state.topologyMap.bakedLightmap.objectProbes.count == 5,
+                  && documentState.map.topologyMap.bakedLightmap.objectProbes.count == 5,
           "successful derivation preserves baked object probe metadata");
-    Check(game::GetSectorLightmapStatus(state.topologyMap) == game::SectorLightmapStatus::Stale,
+    Check(game::GetSectorLightmapStatus(documentState.map.topologyMap) == game::SectorLightmapStatus::Stale,
           "preserved baked lightmap metadata becomes stale when source hash no longer matches");
-    Check(game::GetSectorBakedObjectLightProbeStatus(state.topologyMap) == game::SectorLightmapStatus::Stale,
+    Check(game::GetSectorBakedObjectLightProbeStatus(documentState.map.topologyMap) == game::SectorLightmapStatus::Stale,
           "preserved object probe metadata becomes stale when source hash no longer matches");
 }
 
 void TestEditorAuthoringSelectionTargetsRepresentLineAndVertex()
 {
     game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
-    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(authoringGraph, 2, 64, 0);
+    AddAuthoringLineWithId(authoringGraph, 10, 1, 2);
 
     const game::SectorAuthoringSelectionTarget lineTarget =
             game::MakeSectorAuthoringLineSelectionTarget(10);
@@ -5466,178 +6729,199 @@ void TestEditorAuthoringSelectionTargetsRepresentLineAndVertex()
           "authoring selection target can represent a vertex");
     Check(vertexTarget.vertexId == 1 && vertexTarget.lineId == -1,
           "authoring vertex selection target stores only the vertex ID");
-    Check(game::IsSectorAuthoringSelectionTargetValid(state.authoringGraph, lineTarget),
+    Check(game::IsSectorAuthoringSelectionTargetValid(authoringGraph, lineTarget),
           "authoring line target validates against the graph");
-    Check(game::IsSectorAuthoringSelectionTargetValid(state.authoringGraph, vertexTarget),
+    Check(game::IsSectorAuthoringSelectionTargetValid(authoringGraph, vertexTarget),
           "authoring vertex target validates against the graph");
-    Check(state.topologyMap.vertices.empty() && state.topologyMap.lineDefs.empty(),
+    Check(documentState.map.topologyMap.vertices.empty() && documentState.map.topologyMap.lineDefs.empty(),
           "authoring selection target helpers do not mutate derived topology");
 }
 
 void TestEditorAuthoringSelectionHelpersSetClearAndRejectMissingTargets()
 {
     game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
-    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(authoringGraph, 2, 64, 0);
+    AddAuthoringLineWithId(authoringGraph, 10, 1, 2);
 
-    Check(game::SelectSectorEditorAuthoringLine(state, 10),
+    Check(game::SelectSectorEditorAuthoringLine(authoringGraph, selectionState, 10),
           "select authoring line helper accepts an existing line");
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line,
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line,
           "select authoring line helper records line selection");
-    Check(!game::SelectSectorEditorAuthoringLine(state, 99),
+    Check(!game::SelectSectorEditorAuthoringLine(authoringGraph, selectionState, 99),
           "select authoring line helper rejects missing line");
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line
-                  && state.selectedAuthoring.lineId == 10,
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line
+                  && selectionState.selectedAuthoring.lineId == 10,
           "rejected authoring line selection leaves previous selection intact");
-    Check(!game::SelectSectorEditorAuthoringLine(state, 0),
+    Check(!game::SelectSectorEditorAuthoringLine(authoringGraph, selectionState, 0),
           "select authoring line helper rejects zero line ID");
-    Check(!game::SelectSectorEditorAuthoringLine(state, -1),
+    Check(!game::SelectSectorEditorAuthoringLine(authoringGraph, selectionState, -1),
           "select authoring line helper rejects negative line ID");
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line
-                  && state.selectedAuthoring.lineId == 10,
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Line
+                  && selectionState.selectedAuthoring.lineId == 10,
           "invalid authoring line selection leaves previous selection intact");
 
-    Check(game::SelectSectorEditorAuthoringVertex(state, 1),
+    Check(game::SelectSectorEditorAuthoringVertex(authoringGraph, selectionState, 1),
           "select authoring vertex helper accepts an existing vertex");
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex,
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex,
           "select authoring vertex helper records vertex selection");
-    Check(!game::SelectSectorEditorAuthoringVertex(state, 99),
+    Check(!game::SelectSectorEditorAuthoringVertex(authoringGraph, selectionState, 99),
           "select authoring vertex helper rejects missing vertex");
-    Check(!game::SelectSectorEditorAuthoringVertex(state, 0),
+    Check(!game::SelectSectorEditorAuthoringVertex(authoringGraph, selectionState, 0),
           "select authoring vertex helper rejects zero vertex ID");
-    Check(!game::SelectSectorEditorAuthoringVertex(state, -1),
+    Check(!game::SelectSectorEditorAuthoringVertex(authoringGraph, selectionState, -1),
           "select authoring vertex helper rejects negative vertex ID");
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
-                  && state.selectedAuthoring.vertexId == 1,
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && selectionState.selectedAuthoring.vertexId == 1,
           "invalid authoring vertex selection leaves previous selection intact");
 
-    game::ClearSectorEditorAuthoringSelection(state);
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+    game::ClearSectorEditorAuthoringSelection(selectionState);
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
           "clear authoring selection helper clears selection kind");
-    Check(state.topologyMap.vertices.empty() && state.topologyMap.lineDefs.empty(),
+    Check(documentState.map.topologyMap.vertices.empty() && documentState.map.topologyMap.lineDefs.empty(),
           "authoring selection helpers do not mutate derived topology");
 }
 
 void TestEditorAuthoringHoverAndPruneUseGraphValidity()
 {
     game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
-    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(authoringGraph, 2, 64, 0);
+    AddAuthoringLineWithId(authoringGraph, 10, 1, 2);
 
-    Check(game::SelectSectorEditorAuthoringLine(state, 10),
+    Check(game::SelectSectorEditorAuthoringLine(authoringGraph, selectionState, 10),
           "prune setup selects authoring line");
-    Check(game::SetHoveredSectorEditorAuthoringVertex(state, 2),
+    Check(game::SetHoveredSectorEditorAuthoringVertex(authoringGraph, selectionState, 2),
           "hover authoring vertex helper accepts existing vertex");
-    Check(!game::SetHoveredSectorEditorAuthoringVertex(state, 0),
+    Check(!game::SetHoveredSectorEditorAuthoringVertex(authoringGraph, selectionState, 0),
           "hover authoring vertex helper rejects zero vertex ID");
-    Check(!game::SetHoveredSectorEditorAuthoringVertex(state, -1),
+    Check(!game::SetHoveredSectorEditorAuthoringVertex(authoringGraph, selectionState, -1),
           "hover authoring vertex helper rejects negative vertex ID");
-    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
-                  && state.hoveredAuthoring.vertexId == 2,
+    Check(selectionState.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && selectionState.hoveredAuthoring.vertexId == 2,
           "invalid authoring vertex hover leaves previous hover intact");
-    Check(game::SetHoveredSectorEditorAuthoringLine(state, 10),
+    Check(game::SetHoveredSectorEditorAuthoringLine(authoringGraph, selectionState, 10),
           "hover authoring line helper accepts existing line");
-    Check(!game::SetHoveredSectorEditorAuthoringLine(state, 0),
+    Check(!game::SetHoveredSectorEditorAuthoringLine(authoringGraph, selectionState, 0),
           "hover authoring line helper rejects zero line ID");
-    Check(!game::SetHoveredSectorEditorAuthoringLine(state, -1),
+    Check(!game::SetHoveredSectorEditorAuthoringLine(authoringGraph, selectionState, -1),
           "hover authoring line helper rejects negative line ID");
-    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::Line
-                  && state.hoveredAuthoring.lineId == 10,
+    Check(selectionState.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::Line
+                  && selectionState.hoveredAuthoring.lineId == 10,
           "invalid authoring line hover leaves previous hover intact");
-    Check(game::SetHoveredSectorEditorAuthoringVertex(state, 2),
+    Check(game::SetHoveredSectorEditorAuthoringVertex(authoringGraph, selectionState, 2),
           "prune setup restores authoring vertex hover");
 
-    state.authoringGraph.lines.clear();
-    state.authoringGraph.vertices.erase(
+    authoringGraph.lines.clear();
+    authoringGraph.vertices.erase(
             std::remove_if(
-                    state.authoringGraph.vertices.begin(),
-                    state.authoringGraph.vertices.end(),
+                    authoringGraph.vertices.begin(),
+                    authoringGraph.vertices.end(),
                     [](const game::SectorAuthoringVertex& vertex) {
                         return vertex.id == 2;
                     }),
-            state.authoringGraph.vertices.end());
+            authoringGraph.vertices.end());
 
-    game::PruneSectorEditorAuthoringSelectionToGraph(state);
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+    game::PruneSectorEditorAuthoringSelectionToGraph(authoringGraph, selectionState);
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
           "authoring selection prune clears deleted line selection");
-    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+    Check(selectionState.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::None,
           "authoring selection prune clears deleted vertex hover");
-    Check(state.topologyMap.vertices.empty() && state.topologyMap.lineDefs.empty(),
+    Check(documentState.map.topologyMap.vertices.empty() && documentState.map.topologyMap.lineDefs.empty(),
           "authoring hover/prune helpers do not mutate derived topology");
 }
 
 void TestEditorAuthoringLineDrawHelperCreatesLooseLineAndMarksDirty()
 {
     game::SectorEditorState state;
-    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    game::InitializeSectorEditorAuthoringStateFromTopology(authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), game::SectorTopologyMap{});
     const uint64_t originalRevision = state.topologyRenderRevision;
-    const std::size_t originalTopologyVertexCount = state.topologyMap.vertices.size();
-    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+    const std::size_t originalTopologyVertexCount = documentState.map.topologyMap.vertices.size();
+    const std::size_t originalTopologyLineCount = documentState.map.topologyMap.lineDefs.size();
 
     int lineId = -1;
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{0, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{0, 0},
                   game::SectorTopologyCoordPoint{64, 0},
                   &lineId),
           "authoring line draw helper creates a loose line");
 
     Check(game::IsValidSectorAuthoringId(lineId), "authoring line draw helper returns a valid line ID");
-    Check(state.authoringGraph.vertices.size() == 2,
+    Check(authoringGraph.vertices.size() == 2,
           "authoring line draw helper creates endpoint vertices");
-    Check(state.authoringGraph.lines.size() == 1,
+    Check(authoringGraph.lines.size() == 1,
           "authoring line draw helper creates one authoring line");
     const game::SectorAuthoringLine* line =
-            game::FindSectorAuthoringLine(state.authoringGraph, lineId);
+            game::FindSectorAuthoringLine(authoringGraph, lineId);
     Check(line != nullptr && line->startVertexId != line->endVertexId,
           "authoring line draw helper connects distinct endpoint vertices");
-    Check(state.topologyDocumentDirty, "authoring line draw helper marks document dirty");
-    Check(state.authoringDerivedTopologyStale,
+    Check(documentState.lifecycle.topologyDocumentDirty, "authoring line draw helper marks document dirty");
+    Check(documentState.derivation.authoringDerivedTopologyStale,
           "authoring line draw helper marks derived topology stale");
     Check(!state.topologyRenderCache.valid,
           "authoring line draw helper invalidates cached editor topology rendering");
     Check(state.topologyRenderRevision == originalRevision + 1,
           "authoring line draw helper bumps topology render revision");
-    Check(state.topologyMap.vertices.size() == originalTopologyVertexCount
-                  && state.topologyMap.lineDefs.size() == originalTopologyLineCount,
+    Check(documentState.map.topologyMap.vertices.size() == originalTopologyVertexCount
+                  && documentState.map.topologyMap.lineDefs.size() == originalTopologyLineCount,
           "authoring line draw helper does not directly mutate derived topology");
 }
 
 void TestEditorAuthoringLineDrawHelperReusesVerticesAndRejectsZeroLength()
 {
     game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 7, 0, 0);
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(authoringGraph, 7, 0, 0);
     const uint64_t originalRevision = state.topologyRenderRevision;
 
     int lineId = -1;
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{0, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{0, 0},
                   game::SectorTopologyCoordPoint{64, 0},
                   &lineId),
           "authoring line draw helper creates a line from an existing endpoint");
-    Check(state.authoringGraph.vertices.size() == 2,
+    Check(authoringGraph.vertices.size() == 2,
           "authoring line draw helper reuses exact-coordinate endpoint vertex");
     const game::SectorAuthoringLine* line =
-            game::FindSectorAuthoringLine(state.authoringGraph, lineId);
+            game::FindSectorAuthoringLine(authoringGraph, lineId);
     Check(line != nullptr && line->startVertexId == 7,
           "authoring line draw helper connects reused start vertex");
 
-    const std::size_t vertexCount = state.authoringGraph.vertices.size();
-    const std::size_t lineCount = state.authoringGraph.lines.size();
+    const std::size_t vertexCount = authoringGraph.vertices.size();
+    const std::size_t lineCount = authoringGraph.lines.size();
     Check(!game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{64, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{64, 0},
                   game::SectorTopologyCoordPoint{64, 0}),
           "authoring line draw helper rejects zero-length lines");
-    Check(state.authoringGraph.vertices.size() == vertexCount
-                  && state.authoringGraph.lines.size() == lineCount,
+    Check(authoringGraph.vertices.size() == vertexCount
+                  && authoringGraph.lines.size() == lineCount,
           "rejected zero-length authoring line leaves graph unchanged");
     Check(state.topologyRenderRevision == originalRevision + 1,
           "rejected zero-length authoring line does not invalidate cache again");
-    Check(state.topologyMap.vertices.empty() && state.topologyMap.lineDefs.empty(),
+    Check(documentState.map.topologyMap.vertices.empty() && documentState.map.topologyMap.lineDefs.empty(),
           "authoring line draw helper zero-length rejection does not mutate derived topology");
 }
 
@@ -5654,11 +6938,14 @@ int FindAuthoringVertexIdAt(
 void TestEditorAuthoringLineDrawHelperAutoSplitsEndpointOnLine()
 {
     game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 2, 96, 0);
-    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(authoringGraph, 2, 96, 0);
+    AddAuthoringLineWithId(authoringGraph, 10, 1, 2);
     game::SectorAuthoringLine* originalLine =
-            game::FindSectorAuthoringLine(state.authoringGraph, 10);
+            game::FindSectorAuthoringLine(authoringGraph, 10);
     Check(originalLine != nullptr, "auto-split line draw setup has original line");
     originalLine->flags.blocksPlayer = true;
     originalLine->special.type = 7;
@@ -5667,33 +6954,36 @@ void TestEditorAuthoringLineDrawHelperAutoSplitsEndpointOnLine()
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
     side.middle = WallPart("split_middle", 1.0f, 2.0f, 3.0f, 4.0f);
-    state.authoringGraph.lineSides.push_back(side);
+    authoringGraph.lineSides.push_back(side);
 
     int lineId = -1;
     game::SectorEditorAuthoringLineSegmentResult result;
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{32, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{32, 0},
                   game::SectorTopologyCoordPoint{32, 64},
                   &lineId,
                   &result),
           "authoring line draw helper auto-splits an existing line endpoint");
 
-    const int splitVertexId = FindAuthoringVertexIdAt(state.authoringGraph, 32, 0);
-    const int newVertexId = FindAuthoringVertexIdAt(state.authoringGraph, 32, 64);
+    const int splitVertexId = FindAuthoringVertexIdAt(authoringGraph, 32, 0);
+    const int newVertexId = FindAuthoringVertexIdAt(authoringGraph, 32, 64);
     Check(splitVertexId > 0 && newVertexId > 0,
           "auto-split line draw creates/reuses expected endpoint vertices");
     Check(result.startVertexId == splitVertexId && result.endVertexId == newVertexId,
           "auto-split line draw returns materialized endpoint IDs");
-    Check(game::FindSectorAuthoringLine(state.authoringGraph, 10) == nullptr,
+    Check(game::FindSectorAuthoringLine(authoringGraph, 10) == nullptr,
           "auto-split line draw removes the original containing line");
-    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, 1, splitVertexId) != nullptr
-                  && FindAuthoringLineWithEndpoints(state.authoringGraph, splitVertexId, 2) != nullptr,
+    Check(FindAuthoringLineWithEndpoints(authoringGraph, 1, splitVertexId) != nullptr
+                  && FindAuthoringLineWithEndpoints(authoringGraph, splitVertexId, 2) != nullptr,
           "auto-split line draw creates child source-line segments");
-    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, splitVertexId, newVertexId) != nullptr,
+    Check(FindAuthoringLineWithEndpoints(authoringGraph, splitVertexId, newVertexId) != nullptr,
           "auto-split line draw creates the requested new line from the split vertex");
 
-    for (const game::SectorAuthoringLine& line : state.authoringGraph.lines) {
+    for (const game::SectorAuthoringLine& line : authoringGraph.lines) {
         if (line.id == lineId) {
             continue;
         }
@@ -5703,13 +6993,13 @@ void TestEditorAuthoringLineDrawHelperAutoSplitsEndpointOnLine()
               "auto-split source child line preserves source metadata");
         const game::SectorAuthoringLineSide* childSide =
                 game::FindSectorAuthoringLineSide(
-                        state.authoringGraph,
+                        authoringGraph,
                         game::SectorAuthoringSideId{line.id, game::SectorTopologySideKind::Front});
         Check(childSide != nullptr
                       && childSide->middle.textureId == "split_middle",
               "auto-split source child line preserves side material metadata");
     }
-    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
+    Check(documentState.lifecycle.topologyDocumentDirty && documentState.lifecycle.hasUnsavedChanges,
           "auto-split line draw marks document dirty and unsaved");
     Check(!state.topologyRenderCache.valid,
           "auto-split line draw invalidates topology render cache");
@@ -5718,52 +7008,64 @@ void TestEditorAuthoringLineDrawHelperAutoSplitsEndpointOnLine()
 void TestEditorAuthoringLineDrawHelperAutoSplitsTwoEndpointsOnSameBoundary()
 {
     game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 2, 128, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 3, 128, 128);
-    AddAuthoringVertexWithId(state.authoringGraph, 4, 0, 128);
-    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
-    AddAuthoringLineWithId(state.authoringGraph, 11, 2, 3);
-    AddAuthoringLineWithId(state.authoringGraph, 12, 3, 4);
-    AddAuthoringLineWithId(state.authoringGraph, 13, 4, 1);
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(authoringGraph, 2, 128, 0);
+    AddAuthoringVertexWithId(authoringGraph, 3, 128, 128);
+    AddAuthoringVertexWithId(authoringGraph, 4, 0, 128);
+    AddAuthoringLineWithId(authoringGraph, 10, 1, 2);
+    AddAuthoringLineWithId(authoringGraph, 11, 2, 3);
+    AddAuthoringLineWithId(authoringGraph, 12, 3, 4);
+    AddAuthoringLineWithId(authoringGraph, 13, 4, 1);
 
     int lineId = -1;
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{32, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{32, 0},
                   game::SectorTopologyCoordPoint{32, 64},
                   &lineId),
           "authoring line draw helper auto-splits first room endpoint on boundary");
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{32, 64},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{32, 64},
                   game::SectorTopologyCoordPoint{96, 64},
                   &lineId),
           "authoring line draw helper creates room side away from boundary");
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{96, 64},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{96, 64},
                   game::SectorTopologyCoordPoint{96, 0},
                   &lineId),
           "authoring line draw helper auto-splits second room endpoint on boundary");
 
-    const int firstVertexId = FindAuthoringVertexIdAt(state.authoringGraph, 32, 0);
-    const int secondVertexId = FindAuthoringVertexIdAt(state.authoringGraph, 96, 0);
+    const int firstVertexId = FindAuthoringVertexIdAt(authoringGraph, 32, 0);
+    const int secondVertexId = FindAuthoringVertexIdAt(authoringGraph, 96, 0);
     Check(firstVertexId > 0 && secondVertexId > 0,
           "two-endpoint auto-split creates both boundary vertices");
-    Check(game::FindSectorAuthoringLine(state.authoringGraph, 10) == nullptr,
+    Check(game::FindSectorAuthoringLine(authoringGraph, 10) == nullptr,
           "two-endpoint auto-split removes original boundary line");
-    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, 1, firstVertexId) != nullptr,
+    Check(FindAuthoringLineWithEndpoints(authoringGraph, 1, firstVertexId) != nullptr,
           "two-endpoint auto-split keeps first boundary child");
-    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, firstVertexId, secondVertexId) != nullptr,
+    Check(FindAuthoringLineWithEndpoints(authoringGraph, firstVertexId, secondVertexId) != nullptr,
           "two-endpoint auto-split materializes selectable middle boundary child");
-    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, secondVertexId, 2) != nullptr,
+    Check(FindAuthoringLineWithEndpoints(authoringGraph, secondVertexId, 2) != nullptr,
           "two-endpoint auto-split keeps final boundary child");
     const game::SectorAuthoringLine* middleBoundary =
-            FindAuthoringLineWithEndpoints(state.authoringGraph, firstVertexId, secondVertexId);
+            FindAuthoringLineWithEndpoints(authoringGraph, firstVertexId, secondVertexId);
     Check(middleBoundary != nullptr && middleBoundary->id != lineId,
           "two-endpoint auto-split middle boundary child is distinct from final drawn room side");
-    Check(state.authoringDerivation.success,
+    Check(documentState.derivation.authoringDerivation.success,
           "two-endpoint auto-split room workflow derives valid topology");
 }
 
@@ -5780,13 +7082,16 @@ int FindAuthoringVertexIdAt(
 void TestEditorAuthoringLineToolChainCommitsConnectedSegments()
 {
     game::SectorEditorState state;
-    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
-    const std::size_t originalTopologyVertexCount = state.topologyMap.vertices.size();
-    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    game::InitializeSectorEditorAuthoringStateFromTopology(authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), game::SectorTopologyMap{});
+    const std::size_t originalTopologyVertexCount = documentState.map.topologyMap.vertices.size();
+    const std::size_t originalTopologyLineCount = documentState.map.topologyMap.lineDefs.size();
     const uint64_t originalRevision = state.topologyRenderRevision;
 
     game::SectorEditorAuthoringLineToolClickResult first =
-            game::ClickSectorEditorAuthoringLineTool(state, game::SectorTopologyCoordPoint{0, 0});
+            game::ClickSectorEditorAuthoringLineTool(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), selectionState, game::SectorTopologyCoordPoint{0, 0});
     Check(first.status == game::SectorEditorAuthoringLineToolClickStatus::StartedChain,
           "line chain first click starts pending chain");
     Check(state.pendingAuthoringLine.active
@@ -5795,7 +7100,7 @@ void TestEditorAuthoringLineToolChainCommitsConnectedSegments()
           "line chain starts at first point");
 
     game::SectorEditorAuthoringLineToolClickResult second =
-            game::ClickSectorEditorAuthoringLineTool(state, game::SectorTopologyCoordPoint{64, 0});
+            game::ClickSectorEditorAuthoringLineTool(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), selectionState, game::SectorTopologyCoordPoint{64, 0});
     Check(second.status == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
           "line chain second click creates first segment");
     Check(state.pendingAuthoringLine.active
@@ -5804,7 +7109,7 @@ void TestEditorAuthoringLineToolChainCommitsConnectedSegments()
           "line chain advances to first segment endpoint");
 
     game::SectorEditorAuthoringLineToolClickResult third =
-            game::ClickSectorEditorAuthoringLineTool(state, game::SectorTopologyCoordPoint{64, 64});
+            game::ClickSectorEditorAuthoringLineTool(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), selectionState, game::SectorTopologyCoordPoint{64, 64});
     Check(third.status == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
           "line chain third click creates second segment");
     Check(state.pendingAuthoringLine.active
@@ -5812,39 +7117,48 @@ void TestEditorAuthoringLineToolChainCommitsConnectedSegments()
                   && state.pendingAuthoringLine.startPoint.y == 64,
           "line chain advances to second segment endpoint");
 
-    const int a = FindAuthoringVertexIdAt(state.authoringGraph, 0, 0);
-    const int b = FindAuthoringVertexIdAt(state.authoringGraph, 64, 0);
-    const int c = FindAuthoringVertexIdAt(state.authoringGraph, 64, 64);
+    const int a = FindAuthoringVertexIdAt(authoringGraph, 0, 0);
+    const int b = FindAuthoringVertexIdAt(authoringGraph, 64, 0);
+    const int c = FindAuthoringVertexIdAt(authoringGraph, 64, 64);
     Check(a > 0 && b > 0 && c > 0, "line chain creates expected vertices");
-    Check(state.authoringGraph.lines.size() == 2, "line chain creates two authoring lines");
-    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, a, b) != nullptr,
+    Check(authoringGraph.lines.size() == 2, "line chain creates two authoring lines");
+    Check(FindAuthoringLineWithEndpoints(authoringGraph, a, b) != nullptr,
           "line chain first line connects A to B");
-    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, b, c) != nullptr,
+    Check(FindAuthoringLineWithEndpoints(authoringGraph, b, c) != nullptr,
           "line chain second line connects B to C");
     Check(second.segment.endVertexId == b && third.segment.startVertexId == b,
           "line chain reuses B as the shared endpoint vertex");
-    Check(state.topologyDocumentDirty, "line chain marks document dirty through authoring edit path");
-    Check(state.authoringDerivedTopologyStale,
+    Check(documentState.lifecycle.topologyDocumentDirty, "line chain marks document dirty through authoring edit path");
+    Check(documentState.derivation.authoringDerivedTopologyStale,
           "line chain leaves open graph derivation stale after failed refresh");
     Check(state.topologyRenderRevision == originalRevision + 2,
           "line chain invalidates render cache once per committed segment");
-    Check(state.topologyMap.vertices.size() == originalTopologyVertexCount
-                  && state.topologyMap.lineDefs.size() == originalTopologyLineCount,
+    Check(documentState.map.topologyMap.vertices.size() == originalTopologyVertexCount
+                  && documentState.map.topologyMap.lineDefs.size() == originalTopologyLineCount,
           "line chain does not directly mutate derived topology");
 }
 
 void TestEditorAuthoringLineToolCancelStartsNewChain()
 {
     game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
     state.currentTool = game::SectorEditorTool::AuthoringLine;
 
     Check(game::ClickSectorEditorAuthoringLineTool(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState,
                   game::SectorTopologyCoordPoint{0, 0}).status
                   == game::SectorEditorAuthoringLineToolClickStatus::StartedChain,
           "line chain cancel setup starts chain");
     Check(game::ClickSectorEditorAuthoringLineTool(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState,
                   game::SectorTopologyCoordPoint{64, 0}).status
                   == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
           "line chain cancel setup commits first segment");
@@ -5855,44 +7169,56 @@ void TestEditorAuthoringLineToolCancelStartsNewChain()
           "line chain cancel keeps authoring line tool selected");
 
     Check(game::ClickSectorEditorAuthoringLineTool(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState,
                   game::SectorTopologyCoordPoint{128, 0}).status
                   == game::SectorEditorAuthoringLineToolClickStatus::StartedChain,
           "line chain click after cancel starts a new chain");
     Check(game::ClickSectorEditorAuthoringLineTool(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState,
                   game::SectorTopologyCoordPoint{192, 0}).status
                   == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
           "line chain new chain commits separate segment");
 
-    const int a = FindAuthoringVertexIdAt(state.authoringGraph, 0, 0);
-    const int b = FindAuthoringVertexIdAt(state.authoringGraph, 64, 0);
-    const int c = FindAuthoringVertexIdAt(state.authoringGraph, 128, 0);
-    const int d = FindAuthoringVertexIdAt(state.authoringGraph, 192, 0);
-    Check(state.authoringGraph.lines.size() == 2,
+    const int a = FindAuthoringVertexIdAt(authoringGraph, 0, 0);
+    const int b = FindAuthoringVertexIdAt(authoringGraph, 64, 0);
+    const int c = FindAuthoringVertexIdAt(authoringGraph, 128, 0);
+    const int d = FindAuthoringVertexIdAt(authoringGraph, 192, 0);
+    Check(authoringGraph.lines.size() == 2,
           "line chain after cancel has only two committed segments");
-    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, a, b) != nullptr,
+    Check(FindAuthoringLineWithEndpoints(authoringGraph, a, b) != nullptr,
           "line chain before cancel creates A to B");
-    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, c, d) != nullptr,
+    Check(FindAuthoringLineWithEndpoints(authoringGraph, c, d) != nullptr,
           "line chain after cancel creates C to D");
-    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, b, c) == nullptr,
+    Check(FindAuthoringLineWithEndpoints(authoringGraph, b, c) == nullptr,
           "line chain cancel prevents accidental B to C segment");
 }
 
 void TestEditorAuthoringLineToolRejectsZeroLengthWithoutEndingChain()
 {
     game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
     Check(game::ClickSectorEditorAuthoringLineTool(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState,
                   game::SectorTopologyCoordPoint{0, 0}).status
                   == game::SectorEditorAuthoringLineToolClickStatus::StartedChain,
           "zero-length line chain setup starts chain");
 
     const game::SectorEditorAuthoringLineToolClickResult zero =
-            game::ClickSectorEditorAuthoringLineTool(state, game::SectorTopologyCoordPoint{0, 0});
+            game::ClickSectorEditorAuthoringLineTool(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), selectionState, game::SectorTopologyCoordPoint{0, 0});
     Check(zero.status == game::SectorEditorAuthoringLineToolClickStatus::ZeroLength,
           "line chain rejects zero-length segment");
-    Check(state.authoringGraph.lines.empty(), "zero-length line chain creates no line");
+    Check(authoringGraph.lines.empty(), "zero-length line chain creates no line");
     Check(state.pendingAuthoringLine.active
                   && state.pendingAuthoringLine.startPoint.x == 0
                   && state.pendingAuthoringLine.startPoint.y == 0,
@@ -5901,45 +7227,60 @@ void TestEditorAuthoringLineToolRejectsZeroLengthWithoutEndingChain()
           "zero-length line chain stores clear error message");
 
     Check(game::ClickSectorEditorAuthoringLineTool(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState,
                   game::SectorTopologyCoordPoint{64, 0}).status
                   == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
           "line chain continues after zero-length rejection");
-    const int a = FindAuthoringVertexIdAt(state.authoringGraph, 0, 0);
-    const int b = FindAuthoringVertexIdAt(state.authoringGraph, 64, 0);
-    Check(state.authoringGraph.lines.size() == 1
-                  && FindAuthoringLineWithEndpoints(state.authoringGraph, a, b) != nullptr,
+    const int a = FindAuthoringVertexIdAt(authoringGraph, 0, 0);
+    const int b = FindAuthoringVertexIdAt(authoringGraph, 64, 0);
+    Check(authoringGraph.lines.size() == 1
+                  && FindAuthoringLineWithEndpoints(authoringGraph, a, b) != nullptr,
           "line chain creates A to B after zero-length rejection");
 }
 
 void TestEditorAuthoringLineToolLoopClosureRemainsActive()
 {
     game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
     Check(game::ClickSectorEditorAuthoringLineTool(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState,
                   game::SectorTopologyCoordPoint{0, 0}).status
                   == game::SectorEditorAuthoringLineToolClickStatus::StartedChain,
           "loop closure setup starts chain");
     Check(game::ClickSectorEditorAuthoringLineTool(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState,
                   game::SectorTopologyCoordPoint{64, 0}).status
                   == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
           "loop closure creates first segment");
     Check(game::ClickSectorEditorAuthoringLineTool(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                  selectionState,
                   game::SectorTopologyCoordPoint{0, 64}).status
                   == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
           "loop closure creates second segment");
     const game::SectorEditorAuthoringLineToolClickResult close =
-            game::ClickSectorEditorAuthoringLineTool(state, game::SectorTopologyCoordPoint{0, 0});
+            game::ClickSectorEditorAuthoringLineTool(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), selectionState, game::SectorTopologyCoordPoint{0, 0});
     Check(close.status == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
           "loop closure creates final segment back to first point");
 
-    const int a = FindAuthoringVertexIdAt(state.authoringGraph, 0, 0);
-    const int b = FindAuthoringVertexIdAt(state.authoringGraph, 64, 0);
-    const int c = FindAuthoringVertexIdAt(state.authoringGraph, 0, 64);
-    Check(state.authoringGraph.lines.size() == 3, "loop closure creates three lines");
-    Check(FindAuthoringLineWithEndpoints(state.authoringGraph, c, a) != nullptr,
+    const int a = FindAuthoringVertexIdAt(authoringGraph, 0, 0);
+    const int b = FindAuthoringVertexIdAt(authoringGraph, 64, 0);
+    const int c = FindAuthoringVertexIdAt(authoringGraph, 0, 64);
+    Check(authoringGraph.lines.size() == 3, "loop closure creates three lines");
+    Check(FindAuthoringLineWithEndpoints(authoringGraph, c, a) != nullptr,
           "loop closure final line connects C to A");
     Check(state.pendingAuthoringLine.active
                   && state.pendingAuthoringLine.startVertexId == a
@@ -5948,7 +7289,7 @@ void TestEditorAuthoringLineToolLoopClosureRemainsActive()
           "loop closure leaves chain active from closed point");
 
     const game::SectorAuthoringDerivationResult derivation =
-            game::DeriveSectorTopologyMapFromAuthoringGraph(state.authoringGraph);
+            game::DeriveSectorTopologyMapFromAuthoringGraph(authoringGraph);
     Check(derivation.success && !derivation.topology.sectors.empty(),
           "loop closure graph derives a valid face");
     Check(b > 0, "loop closure keeps middle vertex valid");
@@ -6214,40 +7555,48 @@ void TestInsertVertexDerivationStillWorksForRectangle()
 void TestEditorAuthoringInsertVertexMarksDirtyInvalidatesAndSelectsVertex()
 {
     game::SectorEditorState state;
-    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    game::InitializeSectorEditorAuthoringStateFromTopology(authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), game::SectorTopologyMap{});
     game::SectorEditorAuthoringRectangleResult rectangle;
     Check(game::AddSectorEditorAuthoringRectangle(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   game::SectorTopologyCoordPoint{0, 0},
                   game::SectorTopologyCoordPoint{64, 64},
                   &rectangle),
           "editor insert vertex wrapper setup creates rectangle");
-    state.topologyDocumentDirty = false;
-    state.hasUnsavedChanges = false;
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
     state.topologyRenderCache.valid = true;
     const uint64_t originalRevision = state.topologyRenderRevision;
-    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+    const std::size_t originalTopologyLineCount = documentState.map.topologyMap.lineDefs.size();
 
     game::SectorAuthoringInsertVertexResult result;
     Check(game::InsertSectorEditorAuthoringVertexOnLine(
-                  state,
-                  rectangle.lineIds[0],
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            rectangle.lineIds[0],
                   game::SectorTopologyCoordPoint{32, 0},
                   &result),
           "editor insert vertex wrapper splits selected authoring line");
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
-                  && state.selectedAuthoring.vertexId == result.vertexId,
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && selectionState.selectedAuthoring.vertexId == result.vertexId,
           "editor insert vertex wrapper selects inserted vertex");
-    Check(state.topologyDocumentDirty && state.hasUnsavedChanges,
+    Check(documentState.lifecycle.topologyDocumentDirty && documentState.lifecycle.hasUnsavedChanges,
           "editor insert vertex wrapper marks document dirty and unsaved");
     Check(!state.topologyRenderCache.valid
                   && state.topologyRenderRevision == originalRevision + 1,
           "editor insert vertex wrapper invalidates topology render cache");
-    Check(state.authoringDerivation.success
-                  && state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
-                  && !state.authoringDerivedTopologyStale,
+    Check(documentState.derivation.authoringDerivation.success
+                  && documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
+                  && !documentState.derivation.authoringDerivedTopologyStale,
           "editor insert vertex wrapper refreshes derivation through authoring path");
-    Check(state.topologyMap.lineDefs.size() == originalTopologyLineCount + 1,
+    Check(documentState.map.topologyMap.lineDefs.size() == originalTopologyLineCount + 1,
           "editor insert vertex wrapper updates derived topology only through derivation refresh");
 }
 
@@ -6338,23 +7687,28 @@ void TestAuthoringRectangleHelperRejectsZeroSize()
 void TestAuthoringRectangleHelperDerivesValidTopology()
 {
     game::SectorEditorState state;
-    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    game::InitializeSectorEditorAuthoringStateFromTopology(authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), game::SectorTopologyMap{});
 
     Check(game::AddSectorEditorAuthoringRectangle(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   game::SectorTopologyCoordPoint{0, 0},
                   game::SectorTopologyCoordPoint{64, 64}),
           "authoring rectangle editor helper commits rectangle");
-    Check(state.authoringDerivation.success,
+    Check(documentState.derivation.authoringDerivation.success,
           "authoring rectangle derives valid topology through editor refresh");
     Check(!game::HasSectorTopologyValidationErrors(
-                  game::ValidateSectorTopologyMap(state.topologyMap)),
+                  game::ValidateSectorTopologyMap(documentState.map.topologyMap)),
           "authoring rectangle derived topology validates");
-    Check(state.authoringGraph.faceAnchors.size() == 1,
+    Check(authoringGraph.faceAnchors.size() == 1,
           "authoring rectangle reconciliation synthesizes a face anchor");
-    const game::SectorAuthoringFaceAnchor* anchor = state.authoringGraph.faceAnchors.empty()
+    const game::SectorAuthoringFaceAnchor* anchor = authoringGraph.faceAnchors.empty()
             ? nullptr
-            : &state.authoringGraph.faceAnchors.front();
+            : &authoringGraph.faceAnchors.front();
     Check(anchor != nullptr
                   && anchor->floorTextureId == "floor"
                   && anchor->ceilingTextureId == "ceiling"
@@ -6363,7 +7717,7 @@ void TestAuthoringRectangleHelperDerivesValidTopology()
 
     game::SectorGeneratedGeometry geometry;
     std::string error;
-    Check(game::BuildSectorGeneratedGeometry(state.topologyMap, geometry, &error),
+    Check(game::BuildSectorGeneratedGeometry(documentState.map.topologyMap, geometry, &error),
           "authoring rectangle derived topology builds generated geometry");
     Check(!geometry.surfaces.empty(),
           "authoring rectangle derived topology produces generated surfaces");
@@ -6372,59 +7726,238 @@ void TestAuthoringRectangleHelperDerivesValidTopology()
 void TestAuthoringNestedRectanglesDeriveThroughExistingBehavior()
 {
     game::SectorEditorState state;
-    game::InitializeSectorEditorAuthoringStateFromTopology(state, game::SectorTopologyMap{});
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    game::InitializeSectorEditorAuthoringStateFromTopology(authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), game::SectorTopologyMap{});
 
     Check(game::AddSectorEditorAuthoringRectangle(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   game::SectorTopologyCoordPoint{0, 0},
                   game::SectorTopologyCoordPoint{128, 128}),
           "nested rectangle test commits outer rectangle");
     Check(game::AddSectorEditorAuthoringRectangle(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   game::SectorTopologyCoordPoint{32, 32},
                   game::SectorTopologyCoordPoint{96, 96}),
           "nested rectangle test commits inner rectangle");
 
-    Check(state.authoringDerivation.success,
+    Check(documentState.derivation.authoringDerivation.success,
           "nested rectangles derive through existing nested-loop behavior");
     Check(!game::HasSectorTopologyValidationErrors(
-                  game::ValidateSectorTopologyMap(state.topologyMap)),
+                  game::ValidateSectorTopologyMap(documentState.map.topologyMap)),
           "nested rectangle derived topology validates");
-    Check(state.authoringGraph.faceAnchors.size() == 2,
+    Check(authoringGraph.faceAnchors.size() == 2,
           "nested rectangle reconciliation synthesizes expected face anchors");
-    Check(state.topologyMap.sectors.size() == 2,
+    Check(documentState.map.topologyMap.sectors.size() == 2,
           "nested rectangles produce expected visible faces");
 }
 
 void TestEditorAuthoringRectangleCommitMarksDirtyAndReusesVertices()
 {
     game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 7, 0, 0);
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(authoringGraph, 7, 0, 0);
     const uint64_t originalRevision = state.topologyRenderRevision;
 
     game::SectorEditorAuthoringRectangleResult result;
     Check(game::AddSectorEditorAuthoringRectangle(
-                  state,
+                  state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
                   game::SectorTopologyCoordPoint{0, 0},
                   game::SectorTopologyCoordPoint{64, 64},
                   &result),
           "authoring rectangle editor helper commits a rectangle");
 
-    Check(state.authoringGraph.vertices.size() == 4,
+    Check(authoringGraph.vertices.size() == 4,
           "authoring rectangle editor helper reuses an existing corner vertex");
     Check(result.vertexIds[0] == 7,
           "authoring rectangle editor helper records reused first corner vertex");
-    Check(state.authoringGraph.lines.size() == 4,
+    Check(authoringGraph.lines.size() == 4,
           "authoring rectangle editor helper creates four authoring lines");
-    Check(state.topologyDocumentDirty,
+    Check(documentState.lifecycle.topologyDocumentDirty,
           "authoring rectangle editor helper marks document dirty");
-    Check(!state.authoringDerivedTopologyStale
-                  && state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+    Check(!documentState.derivation.authoringDerivedTopologyStale
+                  && documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
           "authoring rectangle editor helper refreshes derivation through existing edit path");
     Check(!state.topologyRenderCache.valid,
           "authoring rectangle editor helper invalidates cached editor topology rendering");
     Check(state.topologyRenderRevision > originalRevision,
           "authoring rectangle editor helper bumps topology render revision");
+}
+
+void TestAuthoringRectangleSplitsCrossedAuthoringLineAndOwnEdges()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 32, -16);
+    AddAuthoringVertexWithId(graph, 2, 32, 80);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+    game::SectorAuthoringLine* source = game::FindSectorAuthoringLine(graph, 10);
+    Check(source != nullptr, "rectangle split metadata setup has source line");
+    source->flags.blocksPlayer = true;
+    source->special.type = 4;
+    source->special.tag = "portal";
+
+    game::SectorAuthoringLineSide sourceSide;
+    sourceSide.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
+    sourceSide.middle = WallPart("source_middle", 1.0f, 2.0f, 3.0f, 4.0f);
+    graph.lineSides.push_back(sourceSide);
+
+    game::SectorEditorAuthoringRectangleResult result;
+    Check(game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &result),
+          "rectangle crossing authoring line inserts successfully");
+
+    const int topSplit = FindAuthoringVertexIdAt(graph, 32, 0);
+    const int bottomSplit = FindAuthoringVertexIdAt(graph, 32, 64);
+    Check(topSplit > 0 && bottomSplit > 0,
+          "rectangle crossing creates shared authoring intersection vertices");
+    Check(game::FindSectorAuthoringLine(graph, 10) == nullptr,
+          "rectangle crossing removes original crossed source line");
+    Check(FindAuthoringLineWithEndpoints(graph, 1, topSplit) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, topSplit, bottomSplit) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, bottomSplit, 2) != nullptr,
+          "rectangle crossing splits existing source line into authoring children");
+    Check(FindAuthoringLineWithEndpoints(graph, result.vertexIds[0], topSplit) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, topSplit, result.vertexIds[1]) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, result.vertexIds[2], bottomSplit) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, bottomSplit, result.vertexIds[3]) != nullptr,
+          "rectangle crossing splits rectangle edges into authoring subsegments");
+    Check(result.insertedLineIds.size() == 6,
+          "rectangle crossing reports all inserted rectangle subsegment line IDs");
+
+    for (const game::SectorAuthoringLine& line : graph.lines) {
+        const bool sourceChild =
+                (line.startVertexId == 1 && line.endVertexId == topSplit)
+                || (line.startVertexId == topSplit && line.endVertexId == bottomSplit)
+                || (line.startVertexId == bottomSplit && line.endVertexId == 2);
+        if (!sourceChild) {
+            continue;
+        }
+        Check(line.flags.blocksPlayer
+                      && line.special.type == 4
+                      && line.special.tag == "portal",
+              "rectangle split source child preserves line flags and special data");
+        const game::SectorAuthoringLineSide* childSide =
+                game::FindSectorAuthoringLineSide(
+                        graph,
+                        game::SectorAuthoringSideId{line.id, game::SectorTopologySideKind::Front});
+        Check(childSide != nullptr
+                      && childSide->middle.textureId == "source_middle",
+              "rectangle split source child preserves side material metadata");
+    }
+
+    Check(!game::HasSectorAuthoringValidationErrors(
+                  game::ValidateSectorAuthoringGraphReferences(graph)),
+          "rectangle crossing leaves split authoring graph references valid");
+}
+
+void TestAuthoringRectangleSortsMultipleIntersectionsOnOneEdge()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 16, -16);
+    AddAuthoringVertexWithId(graph, 2, 16, 80);
+    AddAuthoringVertexWithId(graph, 3, 48, -16);
+    AddAuthoringVertexWithId(graph, 4, 48, 80);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+    AddAuthoringLineWithId(graph, 11, 3, 4);
+
+    game::SectorEditorAuthoringRectangleResult result;
+    Check(game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &result),
+          "rectangle with multiple crossings inserts successfully");
+
+    const int a = FindAuthoringVertexIdAt(graph, 16, 0);
+    const int b = FindAuthoringVertexIdAt(graph, 48, 0);
+    Check(a > 0 && b > 0, "multiple rectangle crossings create top-edge split vertices");
+    Check(FindAuthoringLineWithEndpoints(graph, result.vertexIds[0], a) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, a, b) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, b, result.vertexIds[1]) != nullptr,
+          "multiple rectangle crossings sort top-edge subsegments without overlap");
+}
+
+void TestAuthoringRectangleCornerOnLineSplitsExistingLine()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, -16, -16);
+    AddAuthoringVertexWithId(graph, 2, 16, 16);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+
+    game::SectorEditorAuthoringRectangleResult result;
+    Check(game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &result),
+          "rectangle corner touching existing line inserts successfully");
+
+    const int corner = FindAuthoringVertexIdAt(graph, 0, 0);
+    Check(corner == result.vertexIds[0],
+          "rectangle corner touching existing line reuses the corner authoring vertex");
+    Check(game::FindSectorAuthoringLine(graph, 10) == nullptr,
+          "rectangle corner touching line removes original crossed line");
+    Check(FindAuthoringLineWithEndpoints(graph, 1, corner) != nullptr
+                  && FindAuthoringLineWithEndpoints(graph, corner, 2) != nullptr,
+          "rectangle corner touching line splits source line at the corner vertex");
+}
+
+void TestAuthoringRectangleRejectsOverlapAtomically()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 64, 0);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+    const game::SectorAuthoringGraph original = graph;
+
+    game::SectorEditorAuthoringRectangleResult result;
+    Check(!game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{0, 0},
+                  game::SectorTopologyCoordPoint{64, 64},
+                  &result),
+          "rectangle overlapping an existing line is rejected");
+    Check(TextContains(result.errorMessage.c_str(), "overlaps"),
+          "rectangle overlap rejection reports clear status");
+    Check(graph.vertices.size() == original.vertices.size()
+                  && graph.lines.size() == original.lines.size()
+                  && game::FindSectorAuthoringLine(graph, 10) != nullptr,
+          "rejected overlapping rectangle leaves graph unchanged atomically");
+}
+
+void TestAuthoringRectangleRejectsNonGridIntersectionAtomically()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 64, 32);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+    const game::SectorAuthoringGraph original = graph;
+
+    game::SectorEditorAuthoringRectangleResult result;
+    Check(!game::CreateSectorAuthoringRectangle(
+                  graph,
+                  game::SectorTopologyCoordPoint{33, -10},
+                  game::SectorTopologyCoordPoint{80, 50},
+                  &result),
+          "rectangle with non-grid intersection is rejected");
+    Check(TextContains(result.errorMessage.c_str(), "not representable"),
+          "rectangle non-grid rejection reports clear status");
+    Check(graph.vertices.size() == original.vertices.size()
+                  && graph.lines.size() == original.lines.size()
+                  && CountAuthoringVerticesAt(graph, 33, 16) == 0,
+          "rejected non-grid rectangle leaves graph unchanged atomically");
 }
 
 void TestEditorAuthoringLinePickingFindsNearestValidLine()
@@ -6466,56 +7999,59 @@ void TestEditorAuthoringLinePickingFindsNearestValidLine()
 void TestEditorAuthoringDeleteSelectedLineOnlyMutatesGraphAndInvalidates()
 {
     game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 3, 64, 64);
-    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
-    AddAuthoringLineWithId(state.authoringGraph, 20, 2, 3);
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(authoringGraph, 2, 64, 0);
+    AddAuthoringVertexWithId(authoringGraph, 3, 64, 64);
+    AddAuthoringLineWithId(authoringGraph, 10, 1, 2);
+    AddAuthoringLineWithId(authoringGraph, 20, 2, 3);
 
     game::SectorAuthoringLineSide frontSide;
     frontSide.id.lineId = 10;
     frontSide.id.side = game::SectorTopologySideKind::Front;
-    state.authoringGraph.lineSides.push_back(frontSide);
+    authoringGraph.lineSides.push_back(frontSide);
     game::SectorAuthoringLineSide otherSide;
     otherSide.id.lineId = 20;
     otherSide.id.side = game::SectorTopologySideKind::Back;
-    state.authoringGraph.lineSides.push_back(otherSide);
+    authoringGraph.lineSides.push_back(otherSide);
 
-    Check(game::SelectSectorEditorAuthoringLine(state, 10),
+    Check(game::SelectSectorEditorAuthoringLine(authoringGraph, selectionState, 10),
           "delete selected authoring line setup selects line");
-    Check(game::SetHoveredSectorEditorAuthoringLine(state, 10),
+    Check(game::SetHoveredSectorEditorAuthoringLine(authoringGraph, selectionState, 10),
           "delete selected authoring line setup hovers line");
     const uint64_t originalRevision = state.topologyRenderRevision;
-    const std::size_t originalTopologyVertexCount = state.topologyMap.vertices.size();
-    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+    const std::size_t originalTopologyVertexCount = documentState.map.topologyMap.vertices.size();
+    const std::size_t originalTopologyLineCount = documentState.map.topologyMap.lineDefs.size();
 
-    Check(game::DeleteSectorEditorSelectedAuthoringLine(state),
+    Check(game::DeleteSectorEditorSelectedAuthoringLine(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), selectionState),
           "delete selected authoring line helper deletes the selected line");
-    Check(game::FindSectorAuthoringLine(state.authoringGraph, 10) == nullptr,
+    Check(game::FindSectorAuthoringLine(authoringGraph, 10) == nullptr,
           "delete selected authoring line removes the line from the graph");
-    Check(game::FindSectorAuthoringLine(state.authoringGraph, 20) != nullptr,
+    Check(game::FindSectorAuthoringLine(authoringGraph, 20) != nullptr,
           "delete selected authoring line preserves other lines");
-    Check(state.authoringGraph.vertices.size() == 3,
+    Check(authoringGraph.vertices.size() == 3,
           "delete selected authoring line leaves endpoint vertices for vertex pass");
-    Check(state.authoringGraph.lineSides.size() == 1
-                  && state.authoringGraph.lineSides.front().id.lineId == 20,
+    Check(authoringGraph.lineSides.size() == 1
+                  && authoringGraph.lineSides.front().id.lineId == 20,
           "delete selected authoring line removes side metadata for the deleted line");
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
           "delete selected authoring line prunes deleted selection");
-    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+    Check(selectionState.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::None,
           "delete selected authoring line prunes deleted hover");
-    Check(state.topologyDocumentDirty, "delete selected authoring line marks document dirty");
-    Check(state.authoringDerivedTopologyStale,
+    Check(documentState.lifecycle.topologyDocumentDirty, "delete selected authoring line marks document dirty");
+    Check(documentState.derivation.authoringDerivedTopologyStale,
           "delete selected authoring line marks derived topology stale");
     Check(!state.topologyRenderCache.valid,
           "delete selected authoring line invalidates cached editor topology rendering");
     Check(state.topologyRenderRevision == originalRevision + 1,
           "delete selected authoring line bumps topology render revision");
-    Check(state.topologyMap.vertices.size() == originalTopologyVertexCount
-                  && state.topologyMap.lineDefs.size() == originalTopologyLineCount,
+    Check(documentState.map.topologyMap.vertices.size() == originalTopologyVertexCount
+                  && documentState.map.topologyMap.lineDefs.size() == originalTopologyLineCount,
           "delete selected authoring line does not directly mutate derived topology");
 
-    Check(!game::DeleteSectorEditorSelectedAuthoringLine(state),
+    Check(!game::DeleteSectorEditorSelectedAuthoringLine(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), selectionState),
           "delete selected authoring line helper rejects missing selection");
 }
 
@@ -6651,59 +8187,68 @@ void TestEditorAuthoringSelectionPickingPrefersVerticesThenLines()
 void TestEditorAuthoringMoveVertexUpdatesConnectedLinesAndInvalidates()
 {
     game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 3, 0, 64);
-    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
-    AddAuthoringLineWithId(state.authoringGraph, 20, 3, 1);
-    Check(game::SelectSectorEditorAuthoringVertex(state, 1),
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(authoringGraph, 2, 64, 0);
+    AddAuthoringVertexWithId(authoringGraph, 3, 0, 64);
+    AddAuthoringLineWithId(authoringGraph, 10, 1, 2);
+    AddAuthoringLineWithId(authoringGraph, 20, 3, 1);
+    Check(game::SelectSectorEditorAuthoringVertex(authoringGraph, selectionState, 1),
           "move authoring vertex setup selects vertex");
-    Check(game::SetHoveredSectorEditorAuthoringVertex(state, 1),
+    Check(game::SetHoveredSectorEditorAuthoringVertex(authoringGraph, selectionState, 1),
           "move authoring vertex setup hovers vertex");
     const uint64_t originalRevision = state.topologyRenderRevision;
-    const std::size_t originalTopologyVertexCount = state.topologyMap.vertices.size();
-    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+    const std::size_t originalTopologyVertexCount = documentState.map.topologyMap.vertices.size();
+    const std::size_t originalTopologyLineCount = documentState.map.topologyMap.lineDefs.size();
 
     Check(game::MoveSectorEditorAuthoringVertex(
-                  state,
-                  1,
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            1,
                   game::SectorTopologyCoordPoint{16, 16}),
           "move authoring vertex helper moves the selected vertex");
 
     const game::SectorAuthoringVertex* moved =
-            game::FindSectorAuthoringVertex(state.authoringGraph, 1);
+            game::FindSectorAuthoringVertex(authoringGraph, 1);
     Check(moved != nullptr && moved->x == 16 && moved->y == 16,
           "move authoring vertex updates vertex coordinates");
     const game::SectorAuthoringLine* firstLine =
-            game::FindSectorAuthoringLine(state.authoringGraph, 10);
+            game::FindSectorAuthoringLine(authoringGraph, 10);
     const game::SectorAuthoringLine* secondLine =
-            game::FindSectorAuthoringLine(state.authoringGraph, 20);
+            game::FindSectorAuthoringLine(authoringGraph, 20);
     Check(firstLine != nullptr && firstLine->startVertexId == 1 && firstLine->endVertexId == 2,
           "move authoring vertex preserves first connected line endpoint IDs");
     Check(secondLine != nullptr && secondLine->startVertexId == 3 && secondLine->endVertexId == 1,
           "move authoring vertex preserves second connected line endpoint IDs");
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
-                  && state.selectedAuthoring.vertexId == 1,
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && selectionState.selectedAuthoring.vertexId == 1,
           "move authoring vertex preserves valid selection");
-    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
-                  && state.hoveredAuthoring.vertexId == 1,
+    Check(selectionState.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::Vertex
+                  && selectionState.hoveredAuthoring.vertexId == 1,
           "move authoring vertex preserves valid hover");
-    Check(state.topologyDocumentDirty, "move authoring vertex marks document dirty");
-    Check(state.hasUnsavedChanges, "move authoring vertex marks unsaved changes");
-    Check(state.authoringDerivedTopologyStale,
+    Check(documentState.lifecycle.topologyDocumentDirty, "move authoring vertex marks document dirty");
+    Check(documentState.lifecycle.hasUnsavedChanges, "move authoring vertex marks unsaved changes");
+    Check(documentState.derivation.authoringDerivedTopologyStale,
           "move authoring vertex marks derived topology stale");
     Check(!state.topologyRenderCache.valid,
           "move authoring vertex invalidates cached editor topology rendering");
     Check(state.topologyRenderRevision == originalRevision + 1,
           "move authoring vertex bumps topology render revision");
-    Check(state.topologyMap.vertices.size() == originalTopologyVertexCount
-                  && state.topologyMap.lineDefs.size() == originalTopologyLineCount,
+    Check(documentState.map.topologyMap.vertices.size() == originalTopologyVertexCount
+                  && documentState.map.topologyMap.lineDefs.size() == originalTopologyLineCount,
           "move authoring vertex does not directly mutate derived topology");
 
     const uint64_t afterMoveRevision = state.topologyRenderRevision;
     Check(!game::MoveSectorEditorAuthoringVertex(
-                  state,
-                  1,
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            1,
                   game::SectorTopologyCoordPoint{16, 16}),
           "move authoring vertex helper treats unchanged coordinates as no-op");
     Check(state.topologyRenderRevision == afterMoveRevision,
@@ -6713,42 +8258,48 @@ void TestEditorAuthoringMoveVertexUpdatesConnectedLinesAndInvalidates()
 void TestEditorAuthoringMoveNestedLoopVertexRederivesValidTopology()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeNestedRectangleGraph(3);
-    AddFaceAnchor(state.authoringGraph, 200, 16, 16, "outer");
-    AddFaceAnchor(state.authoringGraph, 201, 48, 48, "middle");
-    AddFaceAnchor(state.authoringGraph, 202, 96, 96, "inner");
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeNestedRectangleGraph(3);
+    AddFaceAnchor(authoringGraph, 200, 16, 16, "outer");
+    AddFaceAnchor(authoringGraph, 201, 48, 48, "middle");
+    AddFaceAnchor(authoringGraph, 202, 96, 96, "inner");
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "nested authoring move setup derives valid topology");
-    Check(state.authoringDerivation.success, "nested authoring move setup stores successful derivation");
-    Check(state.topologyMap.sectors.size() == 3, "nested authoring move setup derives three sectors");
+    Check(documentState.derivation.authoringDerivation.success, "nested authoring move setup stores successful derivation");
+    Check(documentState.map.topologyMap.sectors.size() == 3, "nested authoring move setup derives three sectors");
     const uint64_t originalRevision = state.topologyRenderRevision;
 
     Check(game::MoveSectorEditorAuthoringVertex(
-                  state,
-                  6,
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            6,
                   game::SectorTopologyCoordPoint{152, 40}),
           "nested authoring move helper moves a nested-loop vertex");
 
     const game::SectorAuthoringVertex* moved =
-            game::FindSectorAuthoringVertex(state.authoringGraph, 6);
+            game::FindSectorAuthoringVertex(authoringGraph, 6);
     Check(moved != nullptr && moved->x == 152 && moved->y == 40,
           "nested authoring move updates nested-loop vertex coordinates");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
           "nested authoring move re-derives current topology");
-    Check(!state.authoringDerivedTopologyStale,
+    Check(!documentState.derivation.authoringDerivedTopologyStale,
           "nested authoring move leaves derived topology current after refresh");
-    Check(state.authoringDerivation.success,
+    Check(documentState.derivation.authoringDerivation.success,
           "nested authoring move stores successful recursive derivation");
-    Check(state.topologyMap.sectors.size() == 3,
+    Check(documentState.map.topologyMap.sectors.size() == 3,
           "nested authoring move keeps three derived sectors");
-    Check(CountSectorHoles(state.topologyMap, 200, "moved nested outer sector extracts loops") == 1,
+    Check(CountSectorHoles(documentState.map.topologyMap, 200, "moved nested outer sector extracts loops") == 1,
           "moved nested outer sector keeps one direct hole");
-    Check(CountSectorHoles(state.topologyMap, 201, "moved nested middle sector extracts loops") == 1,
+    Check(CountSectorHoles(documentState.map.topologyMap, 201, "moved nested middle sector extracts loops") == 1,
           "moved nested middle sector keeps one direct hole");
-    Check(CountSectorHoles(state.topologyMap, 202, "moved nested inner sector extracts loops") == 0,
+    Check(CountSectorHoles(documentState.map.topologyMap, 202, "moved nested inner sector extracts loops") == 0,
           "moved nested inner sector keeps no holes");
-    Check(state.topologyDocumentDirty, "nested authoring move marks document dirty");
-    Check(state.hasUnsavedChanges, "nested authoring move marks unsaved changes");
+    Check(documentState.lifecycle.topologyDocumentDirty, "nested authoring move marks document dirty");
+    Check(documentState.lifecycle.hasUnsavedChanges, "nested authoring move marks unsaved changes");
     Check(!state.topologyRenderCache.valid,
           "nested authoring move invalidates cached editor topology rendering");
     Check(state.topologyRenderRevision == originalRevision + 1,
@@ -6758,182 +8309,227 @@ void TestEditorAuthoringMoveNestedLoopVertexRederivesValidTopology()
 void TestEditorAuthoringDeleteConnectedVertexIsExplicitlyRejected()
 {
     game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
-    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
-    Check(game::SelectSectorEditorAuthoringVertex(state, 1),
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(authoringGraph, 2, 64, 0);
+    AddAuthoringLineWithId(authoringGraph, 10, 1, 2);
+    Check(game::SelectSectorEditorAuthoringVertex(authoringGraph, selectionState, 1),
           "delete connected authoring vertex setup selects vertex");
     const uint64_t originalRevision = state.topologyRenderRevision;
 
-    Check(!game::DeleteSectorEditorSelectedAuthoringVertex(state),
+    Check(!game::DeleteSectorEditorSelectedAuthoringVertex(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), selectionState),
           "delete selected authoring vertex rejects connected vertices");
-    Check(game::FindSectorAuthoringVertex(state.authoringGraph, 1) != nullptr,
+    Check(game::FindSectorAuthoringVertex(authoringGraph, 1) != nullptr,
           "delete connected authoring vertex leaves vertex in graph");
-    Check(game::FindSectorAuthoringLine(state.authoringGraph, 10) != nullptr,
+    Check(game::FindSectorAuthoringLine(authoringGraph, 10) != nullptr,
           "delete connected authoring vertex leaves connected line in graph");
-    Check(!state.topologyDocumentDirty,
+    Check(!documentState.lifecycle.topologyDocumentDirty,
           "delete connected authoring vertex does not mark document dirty");
-    Check(!state.hasUnsavedChanges,
+    Check(!documentState.lifecycle.hasUnsavedChanges,
           "delete connected authoring vertex does not mark unsaved changes");
     Check(state.topologyRenderRevision == originalRevision,
           "delete connected authoring vertex does not invalidate cache");
-    Check(state.authoringDerivationStatus == "Authoring vertex is connected; delete its lines first.",
+    Check(documentState.derivation.authoringDerivationStatus == "Authoring vertex is connected; delete its lines first.",
           "delete connected authoring vertex records explicit safe-delete status");
-    Check(state.topologyMap.vertices.empty() && state.topologyMap.lineDefs.empty(),
+    Check(documentState.map.topologyMap.vertices.empty() && documentState.map.topologyMap.lineDefs.empty(),
           "delete connected authoring vertex does not directly mutate derived topology");
 }
 
 void TestEditorAuthoringDeleteIsolatedVertexOnlyMutatesGraphAndInvalidates()
 {
     game::SectorEditorState state;
-    AddAuthoringVertexWithId(state.authoringGraph, 1, 0, 0);
-    AddAuthoringVertexWithId(state.authoringGraph, 2, 64, 0);
-    AddAuthoringLineWithId(state.authoringGraph, 10, 1, 2);
-    Check(game::SelectSectorEditorAuthoringVertex(state, 2),
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    AddAuthoringVertexWithId(authoringGraph, 1, 0, 0);
+    AddAuthoringVertexWithId(authoringGraph, 2, 64, 0);
+    AddAuthoringLineWithId(authoringGraph, 10, 1, 2);
+    Check(game::SelectSectorEditorAuthoringVertex(authoringGraph, selectionState, 2),
           "delete isolated authoring vertex setup selects vertex");
-    Check(game::SetHoveredSectorEditorAuthoringVertex(state, 2),
+    Check(game::SetHoveredSectorEditorAuthoringVertex(authoringGraph, selectionState, 2),
           "delete isolated authoring vertex setup hovers vertex");
-    Check(game::DeleteSectorEditorSelectedAuthoringLine(state) == false,
+    Check(game::DeleteSectorEditorSelectedAuthoringLine(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), selectionState) == false,
           "delete isolated authoring vertex setup keeps line because vertex is selected");
-    state.authoringGraph.lines.clear();
+    authoringGraph.lines.clear();
     const uint64_t originalRevision = state.topologyRenderRevision;
-    const std::size_t originalTopologyVertexCount = state.topologyMap.vertices.size();
-    const std::size_t originalTopologyLineCount = state.topologyMap.lineDefs.size();
+    const std::size_t originalTopologyVertexCount = documentState.map.topologyMap.vertices.size();
+    const std::size_t originalTopologyLineCount = documentState.map.topologyMap.lineDefs.size();
 
-    Check(game::DeleteSectorEditorSelectedAuthoringVertex(state),
+    Check(game::DeleteSectorEditorSelectedAuthoringVertex(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), selectionState),
           "delete selected authoring vertex deletes isolated vertex");
-    Check(game::FindSectorAuthoringVertex(state.authoringGraph, 2) == nullptr,
+    Check(game::FindSectorAuthoringVertex(authoringGraph, 2) == nullptr,
           "delete isolated authoring vertex removes vertex from graph");
-    Check(game::FindSectorAuthoringVertex(state.authoringGraph, 1) != nullptr,
+    Check(game::FindSectorAuthoringVertex(authoringGraph, 1) != nullptr,
           "delete isolated authoring vertex preserves other vertices");
-    Check(state.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+    Check(selectionState.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
           "delete isolated authoring vertex prunes deleted selection");
-    Check(state.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+    Check(selectionState.hoveredAuthoring.kind == game::SectorAuthoringSelectionKind::None,
           "delete isolated authoring vertex prunes deleted hover");
-    Check(state.topologyDocumentDirty, "delete isolated authoring vertex marks document dirty");
-    Check(state.hasUnsavedChanges, "delete isolated authoring vertex marks unsaved changes");
-    Check(state.authoringDerivedTopologyStale,
+    Check(documentState.lifecycle.topologyDocumentDirty, "delete isolated authoring vertex marks document dirty");
+    Check(documentState.lifecycle.hasUnsavedChanges, "delete isolated authoring vertex marks unsaved changes");
+    Check(documentState.derivation.authoringDerivedTopologyStale,
           "delete isolated authoring vertex marks derived topology stale");
     Check(!state.topologyRenderCache.valid,
           "delete isolated authoring vertex invalidates cached editor topology rendering");
     Check(state.topologyRenderRevision == originalRevision + 1,
           "delete isolated authoring vertex bumps topology render revision");
-    Check(state.topologyMap.vertices.size() == originalTopologyVertexCount
-                  && state.topologyMap.lineDefs.size() == originalTopologyLineCount,
+    Check(documentState.map.topologyMap.vertices.size() == originalTopologyVertexCount
+                  && documentState.map.topologyMap.lineDefs.size() == originalTopologyLineCount,
           "delete isolated authoring vertex does not directly mutate derived topology");
 }
 
 void TestEditorAuthoringEditsRefreshValidCrossingDerivation()
 {
     game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
 
     int lineId = -1;
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{0, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{0, 0},
                   game::SectorTopologyCoordPoint{64, 0},
                   &lineId),
           "crossing refresh setup adds south boundary");
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{64, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{64, 0},
                   game::SectorTopologyCoordPoint{64, 64},
                   &lineId),
           "crossing refresh setup adds east boundary");
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{64, 64},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{64, 64},
                   game::SectorTopologyCoordPoint{0, 64},
                   &lineId),
           "crossing refresh setup adds north boundary");
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{0, 64},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{0, 64},
                   game::SectorTopologyCoordPoint{0, 0},
                   &lineId),
           "crossing refresh setup adds west boundary");
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{0, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{0, 0},
                   game::SectorTopologyCoordPoint{64, 64},
                   &lineId),
           "crossing refresh setup adds first diagonal");
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{64, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{64, 0},
                   game::SectorTopologyCoordPoint{0, 64},
                   &lineId),
           "crossing refresh setup adds second diagonal");
 
-    Check(state.authoringDerivation.success,
+    Check(documentState.derivation.authoringDerivation.success,
           "completed crossing graph edit refreshes successful derivation");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent,
           "completed crossing graph edit marks derivation current");
-    Check(!state.authoringDerivedTopologyStale,
+    Check(!documentState.derivation.authoringDerivedTopologyStale,
           "completed crossing graph edit clears stale flag");
-    Check(state.topologyMap.sectors.size() == 4,
+    Check(documentState.map.topologyMap.sectors.size() == 4,
           "completed crossing graph edit derives four sectors");
-    Check(state.topologyMap.vertices.size() == 5,
+    Check(documentState.map.topologyMap.vertices.size() == 5,
           "completed crossing graph edit derives inserted intersection vertex");
-    Check(state.lastValidAuthoringDerivedTopology.has_value(),
+    Check(documentState.derivation.lastValidAuthoringDerivedTopology.has_value(),
           "completed crossing graph edit records last-valid topology");
 }
 
 void TestEditorAuthoringFailedRefreshDoesNotReplaceLastValidTopology()
 {
     game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
 
     int lineId = -1;
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{0, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{0, 0},
                   game::SectorTopologyCoordPoint{64, 0},
                   &lineId),
           "failed refresh setup adds south boundary");
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{64, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{64, 0},
                   game::SectorTopologyCoordPoint{64, 64},
                   &lineId),
           "failed refresh setup adds east boundary");
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{64, 64},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{64, 64},
                   game::SectorTopologyCoordPoint{0, 64},
                   &lineId),
           "failed refresh setup adds north boundary");
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{0, 64},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{0, 64},
                   game::SectorTopologyCoordPoint{0, 0},
                   &lineId),
           "failed refresh setup adds west boundary");
 
-    Check(state.authoringDerivation.success,
+    Check(documentState.derivation.authoringDerivation.success,
           "failed refresh setup creates current derived topology");
-    const game::SectorTopologyMap lastValid = state.topologyMap;
+    const game::SectorTopologyMap lastValid = documentState.map.topologyMap;
 
     Check(game::AddSectorEditorAuthoringLineSegment(
-                  state,
-                  game::SectorTopologyCoordPoint{64, 0},
+            state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap,
+            authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+            selectionState,
+            game::SectorTopologyCoordPoint{64, 0},
                   game::SectorTopologyCoordPoint{128, 0},
                   &lineId),
           "failed refresh test adds dangling line");
 
-    Check(!state.authoringDerivation.success,
+    Check(!documentState.derivation.authoringDerivation.success,
           "failed refresh records failed derivation");
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
           "failed refresh keeps invalid/last-valid state");
-    Check(state.authoringDerivedTopologyStale,
+    Check(documentState.derivation.authoringDerivedTopologyStale,
           "failed refresh keeps derived topology stale");
-    Check(!state.authoringDerivation.diagnostics.empty(),
+    Check(!documentState.derivation.authoringDerivation.diagnostics.empty(),
           "failed refresh records diagnostics");
-    Check(state.topologyMap.sectors.size() == lastValid.sectors.size()
-                  && state.topologyMap.lineDefs.size() == lastValid.lineDefs.size()
-                  && state.topologyMap.vertices.size() == lastValid.vertices.size(),
+    Check(documentState.map.topologyMap.sectors.size() == lastValid.sectors.size()
+                  && documentState.map.topologyMap.lineDefs.size() == lastValid.lineDefs.size()
+                  && documentState.map.topologyMap.vertices.size() == lastValid.vertices.size(),
           "failed refresh does not replace current derived topology");
-    Check(state.lastValidAuthoringDerivedTopology.has_value()
-                  && state.lastValidAuthoringDerivedTopology->sectors.size() == lastValid.sectors.size(),
+    Check(documentState.derivation.lastValidAuthoringDerivedTopology.has_value()
+                  && documentState.derivation.lastValidAuthoringDerivedTopology->sectors.size() == lastValid.sectors.size(),
           "failed refresh keeps memory-only last-valid topology");
 }
 
@@ -7185,16 +8781,19 @@ void TestEditorUnifiedSelectPickOrderingCyclingAndDragGate()
 void TestEditorAuthoringLastValidTopologyIsNotPersisted()
 {
     game::SectorEditorState state;
-    state.authoringGraph = MakeGraphFromConnectedLines(
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
-    Check(game::RefreshSectorEditorAuthoringDerivation(state),
+    Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "last-valid persistence setup derives topology");
 
     game::SectorAuthoringDocument document;
-    document.graph = state.authoringGraph;
-    document.mapData = state.topologyMap;
-    document.derivation = state.authoringDerivation;
+    document.graph = authoringGraph;
+    document.mapData = documentState.map.topologyMap;
+    document.derivation = documentState.derivation.authoringDerivation;
 
     std::string json;
     std::string error;
@@ -7206,20 +8805,53 @@ void TestEditorAuthoringLastValidTopologyIsNotPersisted()
           "serialized authoring document keeps authoring graph source");
 }
 
+void TestEditorResetBlankMapClearsLifecyclePathAndDirtyState()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorEditorPreviewControllerState previewControllerState;
+    documentState.lifecycle.currentLevelName = "loaded_level";
+    documentState.lifecycle.currentLevelPath = "assets/levels/loaded_level/loaded_level.json";
+    documentState.lifecycle.hasCurrentLevelPath = true;
+    documentState.lifecycle.hasUnsavedChanges = true;
+    documentState.lifecycle.topologyDocumentDirty = true;
+    documentState.lifecycle.topologyDocumentStatus = "Loaded level";
+
+    game::ResetEditorTopologyDocumentState(documentState, previewControllerState);
+
+    Check(documentState.lifecycle.currentLevelName.empty(),
+          "blank reset clears current level name");
+    Check(documentState.lifecycle.currentLevelPath.empty(),
+          "blank reset clears current level path");
+    Check(!documentState.lifecycle.hasCurrentLevelPath,
+          "blank reset clears current level path availability");
+    Check(!documentState.lifecycle.hasUnsavedChanges,
+          "blank reset clears unsaved changes");
+    Check(!documentState.lifecycle.topologyDocumentDirty,
+          "blank reset clears document dirty state");
+    Check(documentState.lifecycle.topologyDocumentStatus == "Topology document: empty",
+          "blank reset reports empty topology document status");
+}
+
 void TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent()
 {
     game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
     AddFaceAnchor(graph, 200, 32, 32, "room");
-    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
-    Check(state.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
-                  && !state.authoringDerivedTopologyStale,
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(state, documentState, authoringGraph, graph);
+    Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::ValidCurrent
+                  && !documentState.derivation.authoringDerivedTopologyStale,
           "valid graph-authored save setup is current");
 
     std::string savedText;
     const Json saved = SaveEditorStateToJson(
             state,
+            documentState,
+            authoringGraph,
             "sector_editor_graph_native_valid_save_test.json",
             &savedText);
     Check(saved["formatVersion"] == 3, "editor save writes graph-native format version");
@@ -7243,13 +8875,16 @@ void TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent()
     Check(loaded.format == game::SectorEditorDocumentFormat::AuthoringGraph,
           "graph-native reload reports authoring route");
     bool current = false;
+    game::SectorEditorDocumentState loadedDocumentState;
+    game::SectorAuthoringGraph& loadedAuthoringGraph =
+            loadedDocumentState.authoring.authoringGraph;
     const game::SectorEditorState loadedState =
-            MakeEditorStateFromLoadedDocument(loaded, &current);
+            MakeEditorStateFromLoadedDocument(loaded, loadedDocumentState, loadedAuthoringGraph, &current);
     Check(current, "valid graph-native reload derives valid/current");
-    Check(loadedState.authoringGraph.faceAnchors.size() == 1
-                  && loadedState.authoringGraph.faceAnchors[0].name == "room",
+    Check(loadedAuthoringGraph.faceAnchors.size() == 1
+                  && loadedAuthoringGraph.faceAnchors[0].name == "room",
           "valid graph-native reload preserves face anchor label");
-    Check(game::GetSectorLightmapStatus(loadedState.topologyMap) == game::SectorLightmapStatus::None,
+    Check(game::GetSectorLightmapStatus(loadedDocumentState.map.topologyMap) == game::SectorLightmapStatus::None,
           "graph-native reload without baked metadata reports no lightmap metadata");
     std::error_code removeError;
     std::filesystem::remove(path, removeError);
@@ -7260,12 +8895,17 @@ void TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics()
     game::SectorAuthoringGraph graph;
     AddAuthoringVertexWithId(graph, 1, 0, 0);
     AddAuthoringLineWithId(graph, 10, 1, 99);
-    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph, false);
-    game::MarkSectorEditorAuthoringGraphEdited(state, "invalid authoring graph for save test");
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(state, documentState, authoringGraph, graph, false);
+    game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "invalid authoring graph for save test");
 
     std::string savedText;
     const Json saved = SaveEditorStateToJson(
             state,
+            documentState,
+            authoringGraph,
             "sector_editor_graph_native_invalid_save_test.json",
             &savedText);
     Check(saved["formatVersion"] == 3, "invalid editor graph save writes graph-native version");
@@ -7289,12 +8929,16 @@ void TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics()
           "invalid graph-native reload preserves dangling authoring line");
 
     bool current = true;
+    game::SectorEditorDocumentState loadedDocumentState;
+    game::SectorAuthoringGraph& loadedAuthoringGraph =
+            loadedDocumentState.authoring.authoringGraph;
     const game::SectorEditorState loadedState =
-            MakeEditorStateFromLoadedDocument(loaded, &current);
+            MakeEditorStateFromLoadedDocument(loaded, loadedDocumentState, loadedAuthoringGraph, &current);
     Check(!current, "invalid graph-native reload is not valid/current");
-    Check(loadedState.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidNoDerived
-                  && loadedState.authoringDerivedTopologyStale
-                  && !loadedState.authoringDerivation.diagnostics.empty(),
+    Check(loadedDocumentState.derivation.authoringDerivationState
+                      == game::SectorEditorAuthoringDerivationState::InvalidNoDerived
+                  && loadedDocumentState.derivation.authoringDerivedTopologyStale
+                  && !loadedDocumentState.derivation.authoringDerivation.diagnostics.empty(),
           "invalid graph-native reload reports derivation diagnostics");
     std::error_code removeError;
     std::filesystem::remove(path, removeError);
@@ -7316,12 +8960,16 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
           "legacy topology-v2 editor load succeeds");
     Check(loaded.format == game::SectorEditorDocumentFormat::TopologyV2Import,
           "legacy topology-v2 load reports import route");
-    const game::SectorEditorState state = MakeEditorStateFromLoadedDocument(loaded);
-    Check(game::HasAuthoringGraphData(state), "legacy topology import synthesizes authoring graph");
-    Check(state.authoringDerivation.success, "legacy topology import derives authoring graph");
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    const game::SectorEditorState state = MakeEditorStateFromLoadedDocument(loaded, documentState, authoringGraph);
+    Check(game::HasAuthoringGraphData(authoringGraph), "legacy topology import synthesizes authoring graph");
+    Check(documentState.derivation.authoringDerivation.success, "legacy topology import derives authoring graph");
 
     const Json saved = SaveEditorStateToJson(
             state,
+            documentState,
+            authoringGraph,
             "sector_editor_legacy_import_save_graph_native_test.json");
     Check(saved["formatVersion"] == 3, "save after topology-v2 import writes graph-native version");
     Check(saved["topology"] == "authoringGraph",
@@ -7345,10 +8993,15 @@ void TestEditorGraphNativeNestedRoundTripPreservesAnchorsMaterialsAndSelection()
     side.wall = WallPart("line_wall", 2.0f, 3.0f, 4.0f, 5.0f);
     graph.lineSides.push_back(side);
 
-    const game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(state, documentState, authoringGraph, graph);
     std::string savedText;
     SaveEditorStateToJson(
             state,
+            documentState,
+            authoringGraph,
             "sector_editor_nested_graph_native_save_test.json",
             &savedText);
     const std::filesystem::path path =
@@ -7360,37 +9013,42 @@ void TestEditorGraphNativeNestedRoundTripPreservesAnchorsMaterialsAndSelection()
     Check(game::LoadSectorEditorDocumentFromAsset(path.string(), loaded, error),
           "nested graph-native document loads");
     bool current = false;
+    game::SectorEditorDocumentState loadedDocumentState;
+    game::SectorAuthoringGraph& loadedAuthoringGraph =
+            loadedDocumentState.authoring.authoringGraph;
     const game::SectorEditorState loadedState =
-            MakeEditorStateFromLoadedDocument(loaded, &current);
+            MakeEditorStateFromLoadedDocument(loaded, loadedDocumentState, loadedAuthoringGraph, &current);
     Check(current, "nested graph-native reload derives valid/current");
     Check(!game::HasSectorTopologyValidationErrors(
-                  game::ValidateSectorTopologyMap(loadedState.topologyMap)),
+                  game::ValidateSectorTopologyMap(loadedDocumentState.map.topologyMap)),
           "nested graph-native reload validates derived topology");
 
     game::SectorGeneratedGeometry geometry;
-    Check(game::BuildSectorGeneratedGeometry(loadedState.topologyMap, geometry, &error),
+    Check(game::BuildSectorGeneratedGeometry(loadedDocumentState.map.topologyMap, geometry, &error),
           "nested graph-native reload builds generated geometry");
-    Check(loadedState.authoringGraph.faceAnchors.size() == 3,
+    Check(loadedAuthoringGraph.faceAnchors.size() == 3,
           "nested graph-native reload preserves face anchors");
     std::set<std::string> labels;
-    for (const game::SectorAuthoringFaceAnchor& anchor : loadedState.authoringGraph.faceAnchors) {
+    for (const game::SectorAuthoringFaceAnchor& anchor : loadedAuthoringGraph.faceAnchors) {
         Check(labels.insert(anchor.name).second, "nested graph-native labels remain unique");
     }
     const game::SectorAuthoringFaceAnchor* outer =
-            game::FindSectorAuthoringFaceAnchor(loadedState.authoringGraph, 200);
+            game::FindSectorAuthoringFaceAnchor(loadedAuthoringGraph, 200);
     Check(outer != nullptr && outer->defaultWall.textureId == "outer_wall",
           "nested graph-native reload preserves face material");
     const game::SectorAuthoringLineSide* loadedSide =
             game::FindSectorAuthoringLineSide(
-                    loadedState.authoringGraph,
+                    loadedAuthoringGraph,
                     game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front});
     Check(loadedSide != nullptr && loadedSide->wall.textureId == "line_wall",
           "nested graph-native reload preserves side material");
 
     const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, int expectedAnchorId, const char* description) {
         game::SectorAuthoringSelectionTarget target;
-        Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+        Check(FindEditorAuthoringSelectionAtMapPoint(
                       loadedState,
+                      loadedDocumentState,
+                      loadedAuthoringGraph,
                       VisibleAuthoringPoint(x, y),
                       0.25f,
                       0.25f,
@@ -7423,10 +9081,15 @@ void TestEditorGraphNativeSiblingHolesRoundTripPreservesSelection()
         left->defaultWall = WallPart("left_wall", 1.0f, 1.0f, 0.0f, 0.0f);
     }
 
-    const game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(state, documentState, authoringGraph, graph);
     std::string savedText;
     SaveEditorStateToJson(
             state,
+            documentState,
+            authoringGraph,
             "sector_editor_sibling_graph_native_save_test.json",
             &savedText);
     const std::filesystem::path path =
@@ -7438,27 +9101,32 @@ void TestEditorGraphNativeSiblingHolesRoundTripPreservesSelection()
     Check(game::LoadSectorEditorDocumentFromAsset(path.string(), loaded, error),
           "sibling holes graph-native document loads");
     bool current = false;
+    game::SectorEditorDocumentState loadedDocumentState;
+    game::SectorAuthoringGraph& loadedAuthoringGraph =
+            loadedDocumentState.authoring.authoringGraph;
     const game::SectorEditorState loadedState =
-            MakeEditorStateFromLoadedDocument(loaded, &current);
+            MakeEditorStateFromLoadedDocument(loaded, loadedDocumentState, loadedAuthoringGraph, &current);
     Check(current, "sibling holes graph-native reload derives valid/current");
     Check(AllDerivedSectorsHaveExactlyOneValidFaceAnchorMapping(
-                  loadedState.authoringGraph,
-                  loadedState.authoringDerivation),
+                  loadedAuthoringGraph,
+                  loadedDocumentState.derivation.authoringDerivation),
           "sibling holes graph-native reload maps each visible face to one anchor");
 
     std::set<std::string> labels;
-    for (const game::SectorAuthoringFaceAnchor& anchor : loadedState.authoringGraph.faceAnchors) {
+    for (const game::SectorAuthoringFaceAnchor& anchor : loadedAuthoringGraph.faceAnchors) {
         Check(labels.insert(anchor.name).second, "sibling holes labels remain unique");
     }
     const game::SectorAuthoringFaceAnchor* left =
-            game::FindSectorAuthoringFaceAnchor(loadedState.authoringGraph, 201);
+            game::FindSectorAuthoringFaceAnchor(loadedAuthoringGraph, 201);
     Check(left != nullptr && left->defaultWall.textureId == "left_wall",
           "sibling holes graph-native reload preserves material");
 
     const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, int expectedAnchorId, const char* description) {
         game::SectorAuthoringSelectionTarget target;
-        Check(game::FindSectorEditorAuthoringSelectionAtMapPoint(
+        Check(FindEditorAuthoringSelectionAtMapPoint(
                       loadedState,
+                      loadedDocumentState,
+                      loadedAuthoringGraph,
                       VisibleAuthoringPoint(x, y),
                       0.25f,
                       0.25f,
@@ -7481,10 +9149,13 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
     AddFaceAnchor(graph, 200, 32, 32, "room");
-    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
-    state.topologyMap.texturesById.emplace("sky", game::SectorTextureDefinition{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(state, documentState, authoringGraph, graph);
+    documentState.map.topologyMap.texturesById.emplace("sky", game::SectorTextureDefinition{
             "sky", "textures/sky.png", game::SectorTextureFilter::Trilinear});
-    state.topologyMap.staticLights.push_back(game::SectorTopologyStaticPointLight{
+    documentState.map.topologyMap.staticLights.push_back(game::SectorTopologyStaticPointLight{
             9,
             Vector3{1.0f, 2.0f, 3.0f},
             Color{10, 20, 30, 255},
@@ -7492,14 +9163,14 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
             32.0f,
             1.0f
     });
-    state.topologyMap.previewSettings.walkSpeed = 9.0f;
-    state.topologyMap.skySettings.textureId = "sky";
-    state.topologyMap.skySettings.yawOffsetDegrees = 17.0f;
-    state.topologyMap.directionalLight.enabled = true;
-    state.topologyMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
-    state.topologyMap.directionalLight.intensity = 1.5f;
-    state.topologyMap.lightmapSettings.ambientOcclusionStrength = 0.25f;
-    state.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
+    documentState.map.topologyMap.previewSettings.walkSpeed = 9.0f;
+    documentState.map.topologyMap.skySettings.textureId = "sky";
+    documentState.map.topologyMap.skySettings.yawOffsetDegrees = 17.0f;
+    documentState.map.topologyMap.directionalLight.enabled = true;
+    documentState.map.topologyMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
+    documentState.map.topologyMap.directionalLight.intensity = 1.5f;
+    documentState.map.topologyMap.lightmapSettings.ambientOcclusionStrength = 0.25f;
+    documentState.map.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             44,
             "assets/sprites/torch/torch.json",
             Vector3{12.0f, 0.0f, 20.0f},
@@ -7507,15 +9178,17 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     const std::filesystem::path lightmapPath =
             TempJsonPath("sector_editor_map_level_graph_native.lightmap.png");
     WriteTextFile(lightmapPath, "fake-lightmap");
-    state.topologyMap.bakedLightmap.path = lightmapPath.string();
-    state.topologyMap.bakedLightmap.width = 2048;
-    state.topologyMap.bakedLightmap.height = 2048;
-    state.topologyMap.bakedLightmap.sourceHash =
-            game::ComputeSectorLightmapSourceHash(state.topologyMap);
+    documentState.map.topologyMap.bakedLightmap.path = lightmapPath.string();
+    documentState.map.topologyMap.bakedLightmap.width = 2048;
+    documentState.map.topologyMap.bakedLightmap.height = 2048;
+    documentState.map.topologyMap.bakedLightmap.sourceHash =
+            game::ComputeSectorLightmapSourceHash(documentState.map.topologyMap);
 
     std::string savedText;
     const Json saved = SaveEditorStateToJson(
             state,
+            documentState,
+            authoringGraph,
             "sector_editor_map_level_graph_native_save_test.json",
             &savedText);
     Check(saved["textures"].contains("sky"), "editor graph-native save persists texture registry");
@@ -7537,7 +9210,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     Check(saved["bakedLightmap"]["width"] == 2048
                   && saved["bakedLightmap"]["height"] == 2048,
           "editor graph-native save persists baked lightmap dimensions");
-    Check(saved["bakedLightmap"]["sourceHash"] == state.topologyMap.bakedLightmap.sourceHash,
+    Check(saved["bakedLightmap"]["sourceHash"] == documentState.map.topologyMap.bakedLightmap.sourceHash,
           "editor graph-native save persists baked lightmap source hash");
     Check(!saved["bakedLightmap"].contains("objectProbes"),
           "editor graph-native save omits absent object probe metadata");
@@ -7558,34 +9231,39 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && loaded.mapData.bakedLightmap.path == lightmapPath.string()
                   && loaded.mapData.bakedLightmap.width == 2048
                   && loaded.mapData.bakedLightmap.height == 2048
-                  && loaded.mapData.bakedLightmap.sourceHash == state.topologyMap.bakedLightmap.sourceHash
+                  && loaded.mapData.bakedLightmap.sourceHash == documentState.map.topologyMap.bakedLightmap.sourceHash
                   && loaded.mapData.runtimeObjects.size() == 1
                   && loaded.mapData.runtimeObjects[0].id == 44,
           "editor graph-native load preserves map-level fields");
     bool current = false;
+    game::SectorEditorDocumentState loadedDocumentState;
+    game::SectorAuthoringGraph& loadedAuthoringGraph =
+            loadedDocumentState.authoring.authoringGraph;
     const game::SectorEditorState loadedState =
-            MakeEditorStateFromLoadedDocument(loaded, &current);
+            MakeEditorStateFromLoadedDocument(loaded, loadedDocumentState, loadedAuthoringGraph, &current);
     Check(current
-                  && loadedState.topologyMap.texturesById.count("sky") == 1
-                  && loadedState.topologyMap.staticLights.size() == 1
-                  && loadedState.topologyMap.skySettings.textureId == "sky"
-                  && loadedState.topologyMap.bakedLightmap.path == lightmapPath.string()
-                  && loadedState.topologyMap.runtimeObjects.size() == 1
-                  && loadedState.topologyMap.runtimeObjects[0].id == 44,
+                  && loadedDocumentState.map.topologyMap.texturesById.count("sky") == 1
+                  && loadedDocumentState.map.topologyMap.staticLights.size() == 1
+                  && loadedDocumentState.map.topologyMap.skySettings.textureId == "sky"
+                  && loadedDocumentState.map.topologyMap.bakedLightmap.path == lightmapPath.string()
+                  && loadedDocumentState.map.topologyMap.runtimeObjects.size() == 1
+                  && loadedDocumentState.map.topologyMap.runtimeObjects[0].id == 44,
           "editor graph-native derivation receives map-level fields after load");
-    Check(game::GetSectorLightmapStatus(loadedState.topologyMap) == game::SectorLightmapStatus::Valid,
+    Check(game::GetSectorLightmapStatus(loadedDocumentState.map.topologyMap) == game::SectorLightmapStatus::Valid,
           "editor graph-native reload reports matching baked lightmap metadata as valid");
-    Check(game::GetSectorBakedObjectLightProbeStatus(loadedState.topologyMap)
+    Check(game::GetSectorBakedObjectLightProbeStatus(loadedDocumentState.map.topologyMap)
                   == game::SectorLightmapStatus::None,
           "editor graph-native reload treats missing object probe metadata as none");
 
-    game::SectorEditorState staleState = loadedState;
-    staleState.topologyMap.bakedLightmap.sourceHash = "mismatched-source-hash";
-    Check(game::GetSectorLightmapStatus(staleState.topologyMap) == game::SectorLightmapStatus::Stale,
+    game::SectorTopologyMap staleMap = loadedDocumentState.map.topologyMap;
+    staleMap.bakedLightmap.sourceHash = "mismatched-source-hash";
+    Check(game::GetSectorLightmapStatus(staleMap) == game::SectorLightmapStatus::Stale,
           "editor graph-native reload uses existing stale policy for mismatched source hash");
 
     const Json resaved = SaveEditorStateToJson(
             loadedState,
+            loadedDocumentState,
+            loadedAuthoringGraph,
             "sector_editor_map_level_graph_native_resave_test.json");
     Check(resaved["formatVersion"] == 3 && resaved["topology"] == "authoringGraph",
           "editor graph-native resave remains graph-native");
@@ -7597,28 +9275,31 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     Check(resaved["runtimeObjects"] == saved["runtimeObjects"],
           "editor graph-native save/load/save preserves runtime objects");
 
-    game::SectorEditorState probeState = loadedState;
+    game::SectorEditorDocumentState probeDocumentState = loadedDocumentState;
+    game::SectorTopologyMap& probeMap = probeDocumentState.map.topologyMap;
     const std::filesystem::path probePath =
             TempJsonPath("sector_editor_map_level_graph_native.object_probes.bin");
     WriteTextFile(probePath, "fake-probe-sidecar");
-    probeState.topologyMap.bakedLightmap.objectProbes.path = probePath.string();
-    probeState.topologyMap.bakedLightmap.objectProbes.version =
+    probeMap.bakedLightmap.objectProbes.path = probePath.string();
+    probeMap.bakedLightmap.objectProbes.version =
             game::kSectorBakedObjectLightProbeSidecarVersion;
-    probeState.topologyMap.bakedLightmap.objectProbes.sourceHash =
-            probeState.topologyMap.bakedLightmap.sourceHash;
-    probeState.topologyMap.bakedLightmap.objectProbes.count = 3;
-    probeState.topologyMap.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
-    probeState.topologyMap.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
-    probeState.topologyMap.bakedLightmap.objectProbes.format =
+    probeMap.bakedLightmap.objectProbes.sourceHash =
+            probeMap.bakedLightmap.sourceHash;
+    probeMap.bakedLightmap.objectProbes.count = 3;
+    probeMap.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
+    probeMap.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    probeMap.bakedLightmap.objectProbes.format =
             game::kSectorBakedObjectLightProbeSidecarFormat;
 
     const Json savedWithProbes = SaveEditorStateToJson(
-            probeState,
+            loadedState,
+            probeDocumentState,
+            loadedAuthoringGraph,
             "sector_editor_map_level_graph_native_object_probes_save_test.json");
     const Json& savedObjectProbes = savedWithProbes["bakedLightmap"]["objectProbes"];
     Check(savedObjectProbes["path"] == probePath.string()
                   && savedObjectProbes["version"] == game::kSectorBakedObjectLightProbeSidecarVersion
-                  && savedObjectProbes["sourceHash"] == probeState.topologyMap.bakedLightmap.sourceHash
+                  && savedObjectProbes["sourceHash"] == probeMap.bakedLightmap.sourceHash
                   && savedObjectProbes["count"] == 3
                   && savedObjectProbes["probeSpacingWorld"] == 4.0f
                   && savedObjectProbes["probeHeightWorld"] == 1.2f
@@ -7626,9 +9307,9 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
           "editor graph-native save persists compact object probe metadata");
     Check(!savedObjectProbes.contains("probes") && !savedObjectProbes.contains("payload"),
           "editor graph-native save does not embed object probe payload");
-    Check(game::GetSectorLightmapStatus(probeState.topologyMap) == game::SectorLightmapStatus::Valid,
+    Check(game::GetSectorLightmapStatus(probeMap) == game::SectorLightmapStatus::Valid,
           "object probe metadata does not invalidate valid surface lightmap status");
-    Check(game::GetSectorBakedObjectLightProbeStatus(probeState.topologyMap)
+    Check(game::GetSectorBakedObjectLightProbeStatus(probeMap)
                   == game::SectorLightmapStatus::Valid,
           "object probe status reports valid metadata and existing sidecar");
 
@@ -7642,7 +9323,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && loadedWithProbes.mapData.bakedLightmap.objectProbes.version
                              == game::kSectorBakedObjectLightProbeSidecarVersion
                   && loadedWithProbes.mapData.bakedLightmap.objectProbes.sourceHash
-                             == probeState.topologyMap.bakedLightmap.sourceHash
+                             == probeMap.bakedLightmap.sourceHash
                   && loadedWithProbes.mapData.bakedLightmap.objectProbes.count == 3
                   && Near(loadedWithProbes.mapData.bakedLightmap.objectProbes.probeSpacingWorld, 4.0f)
                   && Near(loadedWithProbes.mapData.bakedLightmap.objectProbes.probeHeightWorld, 1.2f)
@@ -7652,9 +9333,9 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
 
     std::error_code removeError;
     std::filesystem::remove(probePath, removeError);
-    Check(game::GetSectorLightmapStatus(probeState.topologyMap) == game::SectorLightmapStatus::Valid,
+    Check(game::GetSectorLightmapStatus(probeMap) == game::SectorLightmapStatus::Valid,
           "missing object probe sidecar does not invalidate surface lightmap status");
-    Check(game::GetSectorBakedObjectLightProbeStatus(probeState.topologyMap)
+    Check(game::GetSectorBakedObjectLightProbeStatus(probeMap)
                   == game::SectorLightmapStatus::Stale,
           "object probe status reports missing sidecar as stale");
 
@@ -7669,13 +9350,16 @@ void TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation()
             {{0, 0}, {128, 0}, {128, 128}, {0, 128}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
     AddFaceAnchor(graph, 200, 64, 64, "room");
-    game::SectorEditorState state = MakeEditorStateWithAuthoringGraph(graph);
-    state.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(state, documentState, authoringGraph, graph);
+    documentState.map.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             1,
             "assets/sprites/torch/torch.json",
             Vector3{64.0f, 0.0f, 112.0f},
             0.0f));
-    state.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
+    documentState.map.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             7,
             "assets/sprites/crate/crate.json",
             Vector3{32.0f, 0.0f, 48.0f},
@@ -7684,6 +9368,8 @@ void TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation()
     std::string savedText;
     SaveEditorStateToJson(
             state,
+            documentState,
+            authoringGraph,
             "sector_editor_runtime_objects_graph_native_save_test.json",
             &savedText);
     const std::filesystem::path path =
@@ -7700,15 +9386,18 @@ void TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation()
           "runtime object fixture loaded map data includes saved runtime objects");
 
     bool current = false;
+    game::SectorEditorDocumentState loadedDocumentState;
+    game::SectorAuthoringGraph& loadedAuthoringGraph =
+            loadedDocumentState.authoring.authoringGraph;
     const game::SectorEditorState loadedState =
-            MakeEditorStateFromLoadedDocument(loaded, &current);
+            MakeEditorStateFromLoadedDocument(loaded, loadedDocumentState, loadedAuthoringGraph, &current);
     Check(current, "runtime object fixture rederives as current after editor load");
-    Check(loadedState.topologyMap.runtimeObjects.size() == loaded.mapData.runtimeObjects.size(),
+    Check(loadedDocumentState.map.topologyMap.runtimeObjects.size() == loaded.mapData.runtimeObjects.size(),
           "runtime objects survive editor authoring rederivation");
     const game::SectorPlacedRuntimeObject* first =
-            game::FindSectorPlacedRuntimeObject(loadedState.topologyMap, 1);
+            game::FindSectorPlacedRuntimeObject(loadedDocumentState.map.topologyMap, 1);
     const game::SectorPlacedRuntimeObject* second =
-            game::FindSectorPlacedRuntimeObject(loadedState.topologyMap, 7);
+            game::FindSectorPlacedRuntimeObject(loadedDocumentState.map.topologyMap, 7);
     Check(first != nullptr
                   && first->kind == "billboard"
                   && first->definitionId.empty()
@@ -7817,7 +9506,22 @@ int main()
     TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation();
     TestEditorAuthoringSideMaterialInspectorWritesProjectToSplitDerivedSideDefs();
     TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTopology();
+    TestEditorLightEditingServiceStaticEditMarksDirtyAndInvalidatesCache();
+    TestEditorLightEditingServiceDynamicEditPreservesDirtyBehavior();
+    TestEditorLightEditingServiceNoOpDoesNotDirtyOrUpdateStatus();
+    TestEditorMaterialEditingServiceSideDefBaseUvWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceNoAuthoringMaterialEditFailsWithoutMutatingTopology();
+    TestEditorMaterialEditingServiceSideDefDecalUvWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceSideDefBaseUvResetWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceSideDefDecalUvResetWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceSideDefUvMissingMappingDoesNotMutateTopology();
+    TestEditorMaterialEditingServiceSideDecalOpacityWritesThroughAuthoringSide();
+    TestEditorMaterialEditingServiceFlatDecalFitWritesThroughFaceAnchor();
+    TestEditorMaterialEditingServiceDerivedSidePickerWritesAuthoringSideDirectly();
     TestEditorAuthoringLineFlagInspectorWritesProjectAfterDerivation();
+    TestEditorNoAuthoringBlocksPlayerEditFailsWithoutMutatingTopology();
+    TestEditorAuthoringBlocksPlayerEditWritesAuthoringLine();
+    TestEditorNoAuthoringSectorPropertyEditFailsWithoutMutatingTopology();
     TestEditorAuthoringLineFlagInspectorWritesProjectToSplitDerivedLineDefs();
     TestEditorAuthoringLineFlagInspectorWriteDoesNotDirectlyMutateDerivedTopology();
     TestEditorSelectedAuthoringLineInspectorTargetDoesNotNeedTopologySelection();
@@ -7859,7 +9563,7 @@ int main()
     TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen();
     TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen();
     TestEditorAuthoringTexturePickerRejectsStaleMapping();
-    TestEditorLegacyTopologyTexturePickerWritesLiveTopologyWithoutAuthoringGraph();
+    TestEditorNoAuthoringTexturePickerApplyFailsWithoutMutatingTopology();
     TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture();
     TestEditorMapTextureImportPreservesMapLevelRegistryOnly();
     TestSpriteMetadataScannerFindsNestedJsonAndFrameTagClips();
@@ -7899,6 +9603,11 @@ int main()
     TestAuthoringRectangleHelperDerivesValidTopology();
     TestAuthoringNestedRectanglesDeriveThroughExistingBehavior();
     TestEditorAuthoringRectangleCommitMarksDirtyAndReusesVertices();
+    TestAuthoringRectangleSplitsCrossedAuthoringLineAndOwnEdges();
+    TestAuthoringRectangleSortsMultipleIntersectionsOnOneEdge();
+    TestAuthoringRectangleCornerOnLineSplitsExistingLine();
+    TestAuthoringRectangleRejectsOverlapAtomically();
+    TestAuthoringRectangleRejectsNonGridIntersectionAtomically();
     TestEditorAuthoringLinePickingFindsNearestValidLine();
     TestEditorAuthoringDeleteSelectedLineOnlyMutatesGraphAndInvalidates();
     TestEditorAuthoringVertexPickingFindsNearestValidVertex();
@@ -7915,6 +9624,7 @@ int main()
     TestEditorDoorPlacementRejectsOneSidedWall();
     TestEditorUnifiedSelectPickOrderingCyclingAndDragGate();
     TestEditorAuthoringLastValidTopologyIsNotPersisted();
+    TestEditorResetBlankMapClearsLifecyclePathAndDirtyState();
     TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent();
     TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics();
     TestEditorLegacyTopologyImportThenSaveWritesGraphNative();

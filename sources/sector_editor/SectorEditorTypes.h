@@ -1,18 +1,14 @@
 #pragma once
 
 #include "engine/ui/UI.h"
+#include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 #include "sector_editor/SectorEditorModalTypes.h"
-#include "sector_editor/SectorEditorPreviewTypes.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorSurfaceTypes.h"
 #include "sector_editor/SectorEditorTopologyRenderCacheTypes.h"
-#include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorAuthoringGraph.h"
-#include "sector_demo/SectorFpsController.h"
-#include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorPointTypes.h"
-#include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyCreation.h"
 #include "sector_demo/SectorTopologyEdit.h"
@@ -23,7 +19,6 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace game {
@@ -48,13 +43,6 @@ enum class SectorEditorMode {
     Preview3D
 };
 
-enum class SectorEditorAuthoringDerivationState {
-    InvalidNoDerived,
-    ValidCurrent,
-    ValidStale,
-    InvalidLastValid
-};
-
 enum class TopologyUvFitMode {
     Width,
     Height,
@@ -74,17 +62,6 @@ struct TopologyMaterialPayload {
 };
 
 struct SectorEditorState {
-    SectorTopologyMap topologyMap;
-    SectorAuthoringGraph authoringGraph;
-    SectorAuthoringDerivationResult authoringDerivation;
-    std::optional<SectorTopologyMap> lastValidAuthoringDerivedTopology;
-    SectorEditorAuthoringDerivationState authoringDerivationState =
-            SectorEditorAuthoringDerivationState::InvalidNoDerived;
-    bool authoringDerivedTopologyStale = true;
-    std::string authoringDerivationStatus;
-    bool topologyDocumentInitialized = false;
-    bool topologyDocumentDirty = false;
-    std::string topologyDocumentStatus;
     std::string topologyRenderWarning;
     uint64_t topologyRenderRevision = 1;
     SectorEditorTopologyRenderCache topologyRenderCache;
@@ -96,39 +73,12 @@ struct SectorEditorState {
     float viewZoom = 48.0f;
     int gridSize = 8;
 
-    TopologySelectionKind topologySelectionKind = TopologySelectionKind::None;
-    int selectedTopologySectorId = -1;
-    int selectedTopologyVertexId = -1;
-    int selectedTopologySideDefId = -1;
-    int selectedTopologyLineDefId = -1;
-    SectorTopologySideKind selectedTopologySideKind = SectorTopologySideKind::Front;
-    TopologyWallPart selectedTopologyWallPart = TopologyWallPart::Wall;
-    TopologyMaterialLayer activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
-    int selectedTopologyLightId = -1;
-    int selectedTopologyStaticSpotLightId = -1;
-    int selectedTopologyDynamicLightId = -1;
-    int selectedTopologyDynamicSpotLightId = -1;
-    int selectedRuntimeObjectId = -1;
-    SelectDragArmState selectDragArm;
-    int hoveredTopologyLightId = -1;
-    int hoveredTopologyStaticSpotLightId = -1;
-    int hoveredTopologyDynamicLightId = -1;
-    int hoveredTopologyDynamicSpotLightId = -1;
-    bool hasHoveredVertex = false;
-    int hoveredTopologyVertexId = -1;
-    SectorTopologyCoordPoint hoveredTopologyVertexPoint = {};
-    int inspectedTopologyVertexId = -1;
-    SectorAuthoringSelectionTarget selectedAuthoring;
-    SectorAuthoringSelectionTarget hoveredAuthoring;
-
     Vector2 snappedMouseMap = {0.0f, 0.0f};
     Vector2 rawMouseMap = {0.0f, 0.0f};
 
     PendingAuthoringLineDraw pendingAuthoringLine;
     PendingAuthoringRectangleDraw pendingAuthoringRectangle;
     PendingAuthoringInsertVertex pendingAuthoringInsertVertex;
-    AuthoringVertexDragState authoringVertexDrag;
-    LightDragState lightDrag;
     RuntimeObjectDragState runtimeObjectDrag;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
@@ -141,39 +91,6 @@ struct SectorEditorState {
     bool showGrid = true;
     bool showAxes = true;
     bool showSectorIds = true;
-    std::string currentLevelName;
-    std::string currentLevelPath;
-    bool hasCurrentLevelPath = false;
-    bool hasUnsavedChanges = false;
-    bool useBakedAmbientOcclusion = true;
-    bool showObjectProbeDebugOverlay = false;
-    SectorRuntimeObjectState runtimeObjects;
-    bool previewUiHidden = false;
-    PreviewDebugOverlayTab activePreviewDebugOverlayTab = PreviewDebugOverlayTab::None;
-    SectorPreviewControlMode previewControlMode = SectorPreviewControlMode::FreeFly;
-    SectorFreeflyControllerState freeflyController;
-    SectorFpsControllerConfig fpsControllerConfig;
-    SectorFpsControllerState fpsControllerState;
-    SectorCollisionWorld sectorCollisionWorld;
-    bool sectorCollisionWorldValid = false;
-    std::string sectorCollisionWorldWarning;
-    int previewCollisionSectorId = 0;
-    SectorFpsVerticalResult previewVerticalResult;
-    SectorCollisionMoveResult previewMoveResult;
-    bool previewCollisionNoclipFallback = false;
-    float visualStepOffsetY = 0.0f;
-    SectorFpsHeadBobState headBobState;
-    SectorFpsLandingDipState landingDipState;
-    bool hasPreviewPose = false;
-    SectorViewPose lastPreviewPose = {};
-    SpotLightPilotState spotLightPilot;
-    SectorSurfaceHit hoveredSurface3D;
-    SectorSurfaceRef selectedSurface3D;
-    TopologySurfaceEditTarget selectedTopologySurface3D;
-    TopologyMaterialPayload copiedTopologyMaterial;
-
-    engine::AssetScopeHandle editorTextureScope = engine::NullAssetScopeHandle();
-    std::unordered_map<std::string, engine::TextureHandle> editorTextureHandlesById;
     TexturePickerState texturePicker;
     AddMapTextureState addMapTexture;
     SectorSpriteMetadataCatalog spriteMetadataCatalog;
@@ -238,25 +155,8 @@ struct SectorEditorUiState {
     engine::UIFloatInputState runtimeObjectInteractionDistanceInput;
     engine::UIFloatInputState runtimeObjectOriginXInput;
     engine::UIFloatInputState runtimeObjectOriginYInput;
-    engine::UIFloatInputState surface3DUvScaleUInput;
-    engine::UIFloatInputState surface3DUvScaleVInput;
-    engine::UIFloatInputState surface3DUvOffsetUInput;
-    engine::UIFloatInputState surface3DUvOffsetVInput;
-    engine::UIFloatInputState surface3DDecalOpacityInput;
-    engine::UIFloatInputState surface3DDecalBloomIntensityInput;
-    engine::UIFloatInputState topologySectorUvInputs[20];
-    engine::UIFloatInputState topologySectorDecalOpacityInputs[2];
-    engine::UIFloatInputState topologySectorDecalBloomIntensityInputs[2];
-    engine::UIFloatInputState topologySideDefUvInputs[4];
-    engine::UIFloatInputState topologySideDefDecalOpacityInput;
-    engine::UIFloatInputState topologySideDefDecalBloomIntensityInput;
     engine::UIScrollState toolsScroll;
     engine::UIScrollState inspectorScroll;
-    char selectedSectorIdBuffer[64] = {};
-    int idBufferSectorIndex = -1;
-    char selectedLightIdBuffer[64] = {};
-    int idBufferLightIndex = -1;
-    std::string idEditError;
     bool keyboardCaptured = false;
 };
 

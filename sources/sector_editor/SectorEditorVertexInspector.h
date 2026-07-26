@@ -3,7 +3,8 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
-#include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
+#include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
 
@@ -29,7 +30,8 @@ bool DrawTopologyVertexInspector(
         float gap,
         const SectorTopologyVertex* inspectedVertex,
         bool hasSelectedTopologyVertex,
-        SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        SelectionState& selectionState,
         const SectorEditorVertexInspectorCallbacks& callbacks);
 
 } // namespace game

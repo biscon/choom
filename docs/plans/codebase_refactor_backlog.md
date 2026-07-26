@@ -55,12 +55,60 @@ Task Type:
 | REF-016 | `[x]` | Medium | Mesh preview | Extract runtime billboard renderer helper | Codex task | Medium | Completed; helper owns billboard shader/draw path |
 | REF-017 | `[x]` | Medium | Mesh preview | Extract sky/bloom helpers | Codex task | Medium | GPU resource lifetime sensitive |
 | REF-018 | `[x]` | Medium | Mesh preview | Review remaining facade and ownership | Audit first | Low | Completed; facade acceptable before rename |
-| REF-019 | `[ ]` | High | Editor god file | Audit remaining `SectorEditor.cpp` seams | Audit first | Low | Do after current feature work |
-| REF-020 | `[ ]` | Medium | Editor god file | Extract texture/material action or inspector code | Codex task | Medium | Preserve document/cache paths |
-| REF-021 | `[ ]` | Medium | Editor god file | Extract runtime object inspector/actions | Codex task | Medium | Runtime preview behavior sensitive |
-| REF-022 | `[ ]` | Medium | Editor god file | Extract light/static-light/object-probe inspector/actions | Codex task | Medium/High | Source-hash semantics matter |
-| REF-023 | `[ ]` | Medium | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Keep boundaries narrow |
-| REF-024 | `[ ]` | High | Editor god file | Review direct `state.topologyMap` mutations | Audit first | Medium | Cache invalidation audit |
+| REF-019 | `[x]` | High | Editor god file | Audit remaining `SectorEditor.cpp` seams | Audit first | Low | Completed; see audit report |
+| REF-053 | `[x]` | High | Editor god file | Post-tool-migration `SectorEditor.cpp` line map | Audit first | Low | Completed; current size is 10,551 lines; recommends materials/sidedef/decal next |
+| REF-020 | `[ ]` | Medium | Editor god file | Extract texture/material action or inspector code | Codex task | Medium | Post-REF-055 work should proceed through picker/material services, not broad generic extraction |
+| REF-021 | `[x]` | Medium | Editor god file | Extract runtime object inspector/actions | Codex task | Medium | Completed; runtime object inspector/actions/modal/drag seams extracted |
+| REF-022 | `[ ]` | Medium | Editor god file | Extract light/static-light/object-probe inspector/actions | Codex task | Medium/High | Source-hash semantics matter; audit recommends mini audit before source-hash-sensitive extraction |
+| REF-023 | `[ ]` | Low | Editor god file | Extract remaining modal draw flows | Codex task | Medium | Most obvious modal draw bodies have moved; remaining work is feature-specific routing |
+| REF-024 | `[ ]` | High | Editor god file | Review direct `state.topologyMap` mutations | Audit first | Medium | First-pass map exists in REF-019 audit; keep for narrower follow-up |
+| REF-054 | `[x]` | High | Editor god file | Audit materials/sidedef/decal extraction boundary | Audit first | Medium | Completed; report recommends callback-based REF-055 inspector extraction |
+| REF-055 | `[x]` | High | Editor god file | Extract SideDef/material/decal inspector into `tools/materials/` | Codex task | Medium/High | Completed; inspector moved to tools/materials while finish wrappers stayed central |
+| REF-056 | `[x]` | High | Editor architecture | SectorEditor shared service inventory audit | Audit first | Low | Completed; recommends minimal TexturePickerService first |
+| REF-057 | `[x]` | High | Editor architecture | Extract minimal TexturePickerService | Codex task | Medium | Generic picker lifecycle/result mechanics only; preserve feature-specific apply semantics |
+| REF-058 | `[ ]` | Medium | Editor architecture | Audit AssetCatalog/TextureCatalog service boundary | Audit first | Medium | Keep texture import/handle/catalog ownership separate from picker apply routing |
+| REF-080 | `[x]` | High | Editor architecture | Extract TextureCatalogService | Codex task | Medium | Completed; generic texture catalog/handle behavior moved, apply/document semantics unchanged |
+| REF-081 | `[x]` | High | Editor architecture | Clean up TextureCatalogService integration debt | Codex task | Medium | Completed; obsolete wrappers removed while add-map lifecycle stayed central |
+| REF-082 | `[x]` | High | Editor architecture | Pass TextureCatalogService to remaining texture UI clients | Codex task | Medium | Completed; remaining UI missing-texture checks use catalog service |
+| REF-083 | `[x]` | High | Editor architecture | SectorEditor state ownership and remaining code map | Audit first | Low | Completed; report recommends TextureCatalogState split next |
+| REF-084 | `[x]` | High | Editor architecture | Service-owned editor state migration runner plan | Runner plan | Low | Planning and implementation complete; preview/document ownership deferred to REF-085/REF-086 |
+| REF-085 | `[x]` | High | Editor architecture | PreviewState ownership runner plan and implementation | Runner plan | High | Planning and implementation complete; final audit refreshed the ownership map. Manual preview smoke still recommended. |
+| REF-086 | `[x]` | High | Editor architecture | DocumentState ownership runner plan and implementation | Runner plan | High | Planning and implementation complete; final audit refreshed the ownership map. Manual editor smoke still recommended. |
+| REF-087 | `[x]` | High | Editor architecture | Audit REF-085/REF-086 PreviewState and DocumentState implementation | Audit first | Low | Completed; report is `docs/audit/ref085_ref086_implementation_review.md`; recommends scoped runtime object editing state split next |
+| REF-059 | `[x]` | High | Editor architecture | Audit MaterialEditBridge and material-specific picker routing | Audit first | High | Completed; recommends material-specific picker routing extraction before MaterialEditBridge |
+| REF-060 | `[ ]` | Medium | Editor architecture | Audit Preview UV/material panel service dependencies | Audit first | Medium/High | Decide dependency on TexturePickerService, MaterialEditBridge, and preview-surface selection |
+| REF-061 | `[ ]` | Low | Editor architecture | Evaluate Status/Diagnostics service | Defer | Low/Medium | Only pursue if status/warning callback noise blocks service extraction |
+| REF-062 | `[x]` | Medium | Lightmap/probes | Extract LightmapBakeController | Runner plan | High | Completed through REF-077 runner plan; manual bake smoke still recommended |
+| REF-077 | `[x]` | High | Lightmap/probes | Write LightmapBakeController runner plan | Runner plan | Low | Planning and implementation complete under REF-062 |
+| REF-063 | `[x]` | High | Editor architecture | Extract material-specific texture picker routing | Codex task | High | Completed; material targets route through `services/material_edit`, non-material picker routes stayed out |
+| REF-064 | `[x]` | High | Editor architecture | Add minimal MaterialEditBridge for material action wrappers | Codex task | Medium/High | Completed; action wrappers route through bridge while finish paths stay in `SectorEditor.cpp` |
+| REF-065 | `[x]` | High | Editor architecture | Promote MaterialEditBridge into MaterialEditingService | Codex task | Medium/High | Completed; bridge removed and material clients use service directly |
+| REF-066 | `[x]` | Medium | Editor architecture | Extract Preview3D UV/material panel into `preview/` | Codex task | Medium/High | Completed; panel moved to preview module and uses `MaterialEditingService` directly |
+| REF-074 | `[x]` | Medium | Editor architecture | Extract Preview3D overlay/debug UI into `preview/` | Codex task | Medium | Completed; overlay module returns one-frame high-level action requests |
+| REF-075 | `[x]` | Medium | Editor architecture | Extract main inspector routing panel into `inspector/` | Codex task | Medium | Completed; selected-object inspector routing moved out of `SectorEditor.cpp` |
+| REF-076 | `[x]` | Medium | Editor architecture | Add LightEditingService for light inspector edits | Codex task | Medium/High | Completed; light inspector property edits use service directly |
+| REF-078 | `[x]` | Medium | Editor architecture | Complete LightEditingService mutation ownership | Codex task | Medium/High | Completed; light add/delete/drag/pilot data mutations moved to LightEditingService while preview/lightmap ownership stayed central |
+| REF-079 | `[x]` | Medium | Editor architecture | Clean up LightEditingService integration debt | Codex task | Medium | Completed; obsolete light wrappers removed and editor/service light names clarified |
+| REF-067 | `[x]` | High | Editor architecture | Authoring-owned topology edit cleanup and direct topology mutation inventory | Codex task | Medium/High | Completed; Blocks Player authoring-owned with strict mapping-gap failure and inventory report |
+| REF-068 | `[x]` | High | Editor architecture | Replace SideDef inspector UV topology mutation with authoring material edits | Codex task | Medium/High | Completed; inspector UV apply/reset writes authoring material data and fails without mapping |
+| REF-069 | `[x]` | Medium | Editor architecture | Remove invalid no-authoring topology-edit support | Codex task | Medium/High | Completed; normal editor edits require authoring data or fail |
+| REF-070 | `[x]` | High | Editor architecture | Write Sector Editor Architectural Principles document | Codex task | Low | Completed; architecture contract added under `docs/architecture/` |
+| REF-071 | `[x]` | High | Editor architecture | Remove remaining material topology scratch/writeback routes | Codex task | Medium/High | Completed; material service and picker routes now write authoring material data directly |
+| REF-072 | `[x]` | Medium | Editor architecture | Clean up material service debt after authoring-owned material migration | Codex task | Medium | Completed; stale scratch/writeback helper, wrappers, callback remnants, and misleading names removed |
+| REF-073 | `[x]` | High | Editor architecture | Rectangle tool authoring-graph split correctness | Codex task | Medium/High | Completed; rectangle insertion now splits authoring graph lines before topology derivation |
+| REF-040 | `[x]` | High | Editor architecture | Design SectorEditor tool/module boundaries | Audit first | Low | Completed; feature/tool folders should replace further category extraction |
+| REF-041 | `[x]` | High | Editor architecture | Placed-object tool folder pilot with billboards/doors split | Codex task | Low/Medium | Completed; common placed_objects plus concrete billboards/doors folders |
+| REF-042 | `[x]` | Medium | Editor architecture | Move document actions/modals into `document/` | Codex task | Medium | Keep lifecycle orchestration central |
+| REF-043 | `[x]` | Medium | Editor architecture | Authoring tool module contract and migration series | Codex task | Medium/High | Completed through Select using selection/manipulation services |
+| REF-047 | `[x]` | High | Editor architecture | Selection service and manipulation provider contract | Audit first | Low | Completed; Select is the frontend for selection/manipulation, not just another authoring tool |
+| REF-048 | `[x]` | High | Editor architecture | Add passive SelectionTarget and provider type definitions | Codex task | Low/Medium | No behavior changes; shared vocabulary before service extraction |
+| REF-049 | `[x]` | High | Editor architecture | Extract Selection service helpers | Codex task | Medium | Preserve current selected state fields, stale cleanup, and UI reset behavior |
+| REF-050 | `[x]` | High | Editor architecture | Add Manipulation service shell | Codex task | Medium | Own generic drag lifecycle while delegating existing movement paths first |
+| REF-051 | `[x]` | Medium | Editor architecture | Pilot first move provider | Codex task | Medium | Completed; placed-object/billboard movement routes through provider while preserving door movement refusal |
+| REF-052 | `[x]` | High | Editor architecture | Migrate Select tool using services/providers | Codex task | High | Completed; future provider refinements remain optional |
+| REF-044 | `[~]` | Medium | Editor architecture | Migrate material/sidedef/decal editing into `tools/materials/` | Audit first | Medium/High | Umbrella for REF-054/REF-055 materials migration series |
+| REF-045 | `[ ]` | Medium | Editor architecture | Audit lights/source-hash-sensitive tool migration | Audit first | High | Static lights, directional light, and object probe settings affect source hash |
+| REF-046 | `[ ]` | Low | Editor architecture | Audit preview tool/module migration | Audit first | High | Keep renderer resource orchestration central |
 | REF-025 | `[ ]` | Medium | Lightmap/probes | Extract object probe sidecar IO | Codex task | Medium | Preserve sidecar/status behavior |
 | REF-026 | `[x]` | Medium | Lightmap/probes | Extract or reuse `SectorAssetPaths` in lightmap | Codex task | Low | Pair with REF-002 if possible |
 | REF-027 | `[ ]` | Medium | Lightmap/probes | Audit BVH/raycast/light evaluation extraction candidates | Audit first | Medium/High | Needs audit first |
@@ -482,7 +530,7 @@ Task Type:
 
 ### 5. SectorEditor.cpp God File
 
-#### REF-019 `[ ]` Audit remaining `SectorEditor.cpp` seams after current feature work
+#### REF-019 `[x]` Audit remaining `SectorEditor.cpp` seams after current feature work
 
 - Source/audit reference: god file section for `SectorEditor.cpp`.
 - Why it helps: avoids extracting stale or feature-in-progress code.
@@ -492,6 +540,13 @@ Task Type:
 - Risk: Low.
 - Suggested verification: audit output only.
 - Completion notes:
+  - Completed in `docs/audit/sector_editor_cpp_seams_audit.md`.
+  - Conclusion: `SectorEditor.cpp` remains the largest god-file risk, but
+    existing action/modal/inspector/cache seams make small extractions
+    practical.
+  - Recommended first follow-up: split REF-021 and start by extracting the
+    runtime object inspector draw body while preserving
+    `MarkTopologyDocumentEdited()` and runtime object refresh behavior.
 
 #### REF-020 `[ ]` Extract texture/material action or inspector code
 
@@ -505,9 +560,20 @@ Task Type:
 - Risk: Medium.
 - Suggested verification: build, editor material/texture tests if present,
   manual material action smoke.
+- Notes:
+  - REF-019 recommends narrowing the first slice to the SideDef/material
+    inspector or texture/material picker glue, preserving
+    `FinishTopologyMaterialMutation()` / cache invalidation paths.
+  - REF-053 makes this more specific: do REF-054 first, then extract the
+    SideDef/material/decal inspector as REF-055. Keep texture catalog/import
+    separate from material-specific picker routing.
+  - REF-056 marks the next texture/material work as service-shaped: implement
+    the minimal TexturePickerService first, then audit material-specific picker
+    routing and a MaterialEditBridge. Avoid another broad generic
+    texture/material extraction.
 - Completion notes:
 
-#### REF-021 `[ ]` Extract runtime object inspector/actions
+#### REF-021 `[x]` Extract runtime object inspector/actions
 
 - Source/audit reference: editor responsibilities and runtime object split
   notes.
@@ -519,7 +585,24 @@ Task Type:
 - Risk: Medium.
 - Suggested verification: runtime object tests and manual object authoring
   smoke.
+- Notes:
+  - REF-019 recommends splitting this into runtime object inspector,
+    runtime object actions/drag, and door texture settings modal slices.
+  - Suggested first post-audit implementation item: extract the runtime object
+    inspector draw body into a focused module.
 - Completion notes:
+  - REF-021a progress: extracted the runtime object inspector draw body into
+    `SectorEditorRuntimeObjectInspector.*`. REF-021 remains open for runtime
+    object actions/drag and door texture settings modal/action slices.
+  - REF-021b progress: extracted the door texture settings modal draw flow and
+    focused UV action helpers into `SectorEditorRuntimeObjectModals.*`.
+    REF-021 remains open for runtime object actions/drag slices.
+  - REF-021c progress: extracted non-drag runtime object action wrappers into
+    `SectorEditorRuntimeObjectActions.*`. REF-021 remains open for runtime
+    object drag as a future slice.
+  - REF-021d progress: extracted runtime object drag helpers into
+    `SectorEditorRuntimeObjectDrag.*`. REF-021 is now complete for the planned
+    runtime object inspector, modal/action, non-drag action, and drag slices.
 
 #### REF-022 `[ ]` Extract light/static-light/object-probe inspector/actions
 
@@ -533,6 +616,9 @@ Task Type:
 - Risk: Medium/High.
 - Suggested verification: lightmap tests, source-hash tests, manual light/object
   probe UI smoke.
+- Notes:
+  - REF-019 recommends a mini audit before moving source-hash-sensitive
+    preview/object-probe/directional/static-light settings broadly.
 - Completion notes:
 
 #### REF-023 `[ ]` Extract remaining modal draw flows with clear boundaries
@@ -545,7 +631,26 @@ Task Type:
 - Suggested task type: Codex task.
 - Risk: Medium.
 - Suggested verification: build and manual modal smoke for touched flows.
+- Notes:
+  - REF-019 identifies document save/load/confirmation modals and add-map
+    texture modal as good first narrow slices.
+  - REF-053 marks those notes partly stale: document save/load/confirmation,
+    add-map texture, texture picker, sprite picker, decal tint, preview
+    settings, lightmap bake, and door texture settings draw bodies now have
+    module ownership. Remaining work is mostly feature-specific callback or
+    picker routing and should not displace material inspector extraction.
 - Completion notes:
+  - REF-023a progress: extracted document save/load/confirmation modal draw
+    flows into `SectorEditorDocumentModals.*`. REF-023 remains open for other
+    modal slices such as add-map-texture, decal tint, and preview overlay/UV
+    panel flows.
+  - REF-023b progress: verified that the add-map-texture modal draw flow already
+    lives in `SectorEditorTextureModals.*`; no source move was needed.
+    `SectorEditor.cpp` retains only wrapper/context/callback wiring and texture
+    action/import ownership.
+  - REF-023c progress: extracted the decal tint modal draw flow into
+    `SectorEditorMaterialModals.*`. `SectorEditor.cpp` retains only
+    wrapper/context/callback wiring and material mutation ownership.
 
 #### REF-024 `[ ]` Review direct `state.topologyMap` mutation sites and cache invalidation paths
 
@@ -557,6 +662,1573 @@ Task Type:
 - Risk: Medium.
 - Suggested verification: mutation-site audit; no behavior changes unless a
   follow-up bugfix is created.
+- Notes:
+  - REF-019 includes a first-pass mutation/cache map. Keep REF-024 for a
+    narrower follow-up audit, especially after future inspector/action
+    extractions.
+- Completion notes:
+
+#### REF-053 `[x]` Post-tool-migration `SectorEditor.cpp` line map
+
+- Source/audit reference: REF-041 through REF-052 moved placed objects,
+  document helpers, Line/Rectangle/Insert Vertex/Select tools, Selection
+  service helpers, Manipulation service shell, and the placed-object move
+  provider.
+- Why it helps: replaces stale line ranges from prior audits with a current
+  post-migration map of what still remains in `SectorEditor.cpp`.
+- Likely files: documentation only.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`.
+- Completion notes:
+  - Completed in
+    `docs/audit/sector_editor_post_tool_migration_line_map.md`.
+  - Current `sources/sector_editor/SectorEditor.cpp` line count: 10,551.
+  - Top remaining line-count clusters are main inspector/authoring remnants,
+    SideDef/material/decal inspector, preview overlay/UV panel, texture picker
+    routing plus material wrappers, and light/lightmap orchestration.
+  - Recommended next implementation sequence: REF-054 narrow
+    materials/sidedef/decal boundary audit, then REF-055 SideDef/material/decal
+    inspector extraction into `tools/materials/`.
+  - Source code, tests, CMake, runtime behavior, topology cache behavior,
+    lightmap source-hash behavior, collision, and preview behavior were not
+    changed by this audit.
+
+#### REF-054 `[x]` Audit materials/sidedef/decal extraction boundary
+
+- Source/audit reference:
+  `docs/audit/sector_editor_post_tool_migration_line_map.md`.
+- Why it helps: identifies the exact context/callback API needed before moving
+  material inspector UI out of `SectorEditor.cpp`.
+- Likely files: `SectorEditor.cpp`, `SectorEditor.h`,
+  `SectorEditorMaterialActions.*`, `SectorEditorMaterialModals.*`,
+  `SectorEditorTextureActions.*`, `SectorEditorTextureModals.*`, and future
+  `tools/materials/` candidates.
+- Suggested task type: Audit first.
+- Risk: Medium.
+- Suggested verification: documentation checks only.
+- Notes:
+  - Inventory `DrawTopologySideDefInspector()`, `DrawPreviewUvPanel()`,
+    `ApplyTexturePickerSelection()`, `FinishTopologyMaterialMutation()`,
+    `FinishMaterialActionResult()`, authoring-side material routes, and
+    authoring-face flat material routes.
+  - Decide which picker routing belongs with materials and which remains in
+    texture catalog/import modules.
+  - Explicitly document topology render-cache invalidation and preview rebuild
+    paths.
+- Completion notes:
+  - Completed in
+    `docs/audit/sector_editor_materials_boundary_audit.md`.
+  - Recommended REF-055 scope: extract the `DrawTopologySideDefInspector()`
+    body and inspector-only helper lambdas into
+    `sources/sector_editor/tools/materials/SectorEditorMaterialInspector.h/.cpp`
+    using a narrow state/UI/callback context and no direct `SectorEditor.h`
+    dependency.
+  - Expected `SectorEditor.cpp` reduction from REF-055: roughly 600-740 lines
+    if broad material finish wrappers, generic texture picker apply routing,
+    preview UV panel, and authoring graph internals remain in `SectorEditor.cpp`
+    initially.
+  - Source code, tests, CMake, runtime behavior, topology cache behavior,
+    lightmap source-hash behavior, collision, and preview behavior were not
+    changed by this audit.
+
+#### REF-055 `[x]` Extract SideDef/material/decal inspector into `tools/materials/`
+
+- Source/audit reference: REF-053 and
+  `docs/audit/sector_editor_materials_boundary_audit.md`.
+- Why it helps: removes the largest straightforward material UI block from
+  `SectorEditor.cpp` and starts a materials feature folder instead of growing
+  generic action/modal categories.
+- Likely files: new
+  `sources/sector_editor/tools/materials/SectorEditorMaterialInspector.h/.cpp`,
+  `SectorEditor.cpp`, `SectorEditor.h`, and existing material/texture helper
+  headers as needed.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, `git diff --check`, and manual
+  material/decal/texture picker smoke when practical.
+- Notes:
+  - Preserve `FinishTopologyMaterialMutation()` /
+    `FinishMaterialActionResult()` behavior.
+  - Preserve `MarkTopologyDocumentEdited()` and 2D topology render-cache
+    invalidation behavior.
+  - Preserve preview mesh rebuild behavior for material changes made while 3D
+    preview is active.
+  - Do not move texture catalog/import or add-map-texture ownership in this
+    task.
+  - Do not move `ApplyTexturePickerSelection()` or `DrawPreviewUvPanel()` in
+    this task unless a later implementation explicitly re-scopes the work.
+  - Expected `SectorEditor.cpp` reduction: roughly 600-740 lines.
+- Completion notes:
+  - Completed by extracting the topology SideDef/material/decal inspector into
+    `sources/sector_editor/tools/materials/SectorEditorMaterialInspector.h/.cpp`
+    with a state/UI/callback context and no concrete `SectorEditor`
+    dependency.
+  - `SectorEditor.cpp` now keeps a small callback wrapper for
+    `DrawTopologySideDefInspector()`; actual line count dropped from 10,551 to
+    9,936, a net reduction of 615 lines.
+  - Material finish wrappers remain in `SectorEditor.cpp`.
+  - `ApplyTexturePickerSelection()` remains in `SectorEditor.cpp`.
+  - `DrawPreviewUvPanel()` remains in `SectorEditor.cpp`.
+  - No behavior changes were intended.
+
+#### REF-056 `[x]` SectorEditor shared service inventory audit
+
+- Source/audit reference:
+  `docs/audit/sector_editor_post_tool_migration_line_map.md`,
+  `docs/audit/sector_editor_materials_boundary_audit.md`, and REF-055
+  completion notes.
+- Why it helps: identifies shared editor services before moving more feature
+  modules, so future tools depend on shared APIs instead of long callback
+  bridges back into `SectorEditor.cpp`.
+- Likely files: documentation only.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`.
+- Notes:
+  - Evaluate TexturePickerService, MaterialEditBridge, PreviewSurface/material
+    service, LightEditingService, LightmapBakeController, DocumentController,
+    AssetCatalog/TextureCatalog, Status/Diagnostics, and selection/manipulation
+    refinements.
+  - Decide which remaining `SectorEditor.cpp` functions are shared
+    capabilities, feature-specific code, or high-level coordinator glue.
+  - Keep REF-044 open while material picker routing, preview UV/material panel,
+    and wrapper cleanup remain incomplete.
+- Completion notes:
+  - Completed in
+    `docs/audit/sector_editor_shared_service_inventory.md`.
+  - Recommended first service implementation: minimal TexturePickerService for
+    generic picker lifecycle/result mechanics, preserving feature-specific
+    material, door, sky, and sprite apply semantics.
+  - Future backlog items were added/refined for TexturePickerService,
+    AssetCatalog/TextureCatalog, material-specific picker routing /
+    MaterialEditBridge, preview UV/material panel dependencies, status
+    diagnostics deferral, and LightmapBakeController runner-plan work.
+  - Source code, tests, CMake, runtime behavior, topology cache behavior,
+    lightmap source-hash behavior, collision, and preview behavior were not
+    changed by this audit.
+
+#### REF-057 `[x]` Extract minimal TexturePickerService
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md`.
+- Why it helps: centralizes generic texture picker modal/catalog/open/close and
+  selected-result mechanics before more material, door, sky, or preview clients
+  are moved.
+- Likely files: new focused service files under `sources/sector_editor/`,
+  `SectorEditorTextureActions.*`, `SectorEditorTextureModals.*`,
+  `SectorEditorModalTypes.h`, `SectorEditor.cpp`, and picker call sites.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`; manual texture
+  picker smoke for material, sky, door, and preview surfaces when practical.
+- Notes:
+  - Initial scope is generic picker lifecycle/result mechanics only.
+  - Preserve existing picker targets and apply semantics.
+  - Do not move material finish wrappers, authoring graph writeback, door
+    texture apply, sky apply, sprite picker behavior, add-map texture import, or
+    preview rebuild policy.
+- Completion notes:
+  - Minimal `TexturePickerService` added under
+    `sources/sector_editor/services/texture_picker/`.
+  - Generic picker lifecycle/result mechanics moved or centralized: close/reset,
+    open/modal option population, selected texture extraction, and modal
+    callback wiring.
+  - Feature-specific apply semantics remain in existing owners.
+  - `ApplyTexturePickerSelection()` behavior is unchanged; it now consumes the
+    service-selected texture result before running the existing apply routing.
+  - No behavior changes intended.
+
+#### REF-058 `[ ]` Audit AssetCatalog/TextureCatalog service boundary
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md`.
+- Why it helps: separates texture registry scans, imported texture handles,
+  sprite metadata catalog, and map texture dictionary helpers from picker apply
+  routing before the picker service grows too broad.
+- Likely files: `SectorEditorTextureActions.*`,
+  `SectorEditorTextureModals.*`, `SectorEditorTypes.h`, texture registry and
+  sprite metadata callers.
+- Suggested task type: Audit first.
+- Risk: Medium.
+- Suggested verification: documentation checks only.
+- Notes:
+  - Decide what belongs in an asset/texture catalog service versus
+    TexturePickerService.
+  - Keep add-map texture import and sprite metadata repair separate from
+    material-specific picker apply semantics.
+- Completion notes:
+
+#### REF-080 `[x]` Extract TextureCatalogService
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md` and
+  `docs/architecture/sector_editor_architectural_principles.md`.
+- Why it helps: gives tools, picker routing, and editor orchestration a real
+  service for generic map texture catalog and editor handle lookup behavior
+  without absorbing feature-specific apply semantics.
+- Likely files: `sources/sector_editor/services/texture_catalog/`,
+  `SectorEditorTextureActions.*`, `SectorEditor.cpp`,
+  `services/texture_picker/`, and focused tests.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, dependency grep
+  for no concrete `SectorEditor` dependency under `services/texture_catalog`,
+  and picker/add-map manual smoke when practical.
+- Notes:
+  - Keep `TexturePickerService` generic.
+  - Keep material, door, sky, sprite, and add-map apply semantics outside the
+    catalog service.
+  - Do not move document dirty/cache/status lifecycle into the catalog service.
+- Completion notes:
+  - `TextureCatalogService` added under
+    `sources/sector_editor/services/texture_catalog/`.
+  - Generic texture registry, sorted option source, default texture ID refresh,
+    editor texture handle refresh, handle lookup, and add-map texture registry
+    behavior moved or wrapped through the catalog service.
+  - `TexturePickerService` remains generic modal/result service.
+  - `MaterialEditingService` remains owner of material picker semantics.
+  - Door, sky, sprite, and add-map apply/modal behavior stayed outside the
+    catalog service.
+  - Remaining texture catalog debt: pure core texture helpers remain in
+    `SectorEditorHelpers` for non-catalog callers; broader asset catalog audit
+    remains open in REF-058.
+  - No source-hash or schema behavior changed.
+
+#### REF-081 `[x]` Clean up TextureCatalogService integration debt
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md` and REF-080
+  completion debt.
+- Why it helps: makes the texture catalog ownership boundary clearer after the
+  initial service extraction.
+- Likely files: `SectorEditor.cpp`, `SectorEditor.h`,
+  `SectorEditorTextureActions.cpp`, `SectorEditorTextureModals.h`,
+  `sources/sector_editor/services/texture_catalog/`, and focused tests/docs.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, dependency grep
+  for no concrete `SectorEditor` dependency under `services/texture_catalog`,
+  and texture picker/add-map manual smoke when practical.
+- Notes:
+  - Keep `TextureCatalogService` catalog-only.
+  - Keep add-map modal UI, preview scope lifetime, dirty/status/document
+    lifecycle, and texture import behavior outside the catalog service.
+  - Do not add callback bridges to force catalog access into modules.
+- Completion notes:
+  - Removed obsolete `SectorEditor` wrappers:
+    `RefreshDefaultTextures()`, `RefreshEditorTextureAssets()`,
+    `EditorTextureHandleForId()`, `RefreshAddMapTextureScan()`,
+    `SelectAddMapTexturePath()`, `RefreshAddMapTexturePreview()`, and
+    `ValidateAddMapTextureId()`.
+  - Removed obsolete free compatibility wrappers:
+    `SelectAddMapTexturePath(AddMapTextureState&, const SectorTopologyMap&, int)`,
+    `ValidateAddMapTextureId(const AddMapTextureState&, std::string&)`, and
+    `AddSelectedMapTexture(SectorEditorState&)`.
+  - Remaining `SectorEditor` texture functions are orchestration/lifecycle:
+    `BuildTextureCatalogService()`, `OpenAddMapTextureModal()`,
+    `CloseAddMapTextureModal()`, `AddSelectedMapTexture()`,
+    `OpenMapSkyTexturePicker()`, `OpenSelectedDoorTexturePicker()`,
+    `OpenSelectedBillboardSpritePicker()`,
+    `ApplySelectedBillboardSpritePickerSelection()`,
+    `ApplyTexturePickerSelection()`, and `CurrentTextureForPickerTarget()`.
+  - Direct generic catalog access cleaned up where it was already local to
+    `SectorEditor`; direct missing-texture UI checks remain as debt in
+    `SectorEditorTextureModals.cpp`, `SectorEditorSectorInspector.cpp`,
+    `inspector/SectorEditorInspectorPanel.cpp`,
+    `preview/SectorEditorPreviewUvPanel.cpp`,
+    `tools/doors/SectorEditorDoorInspector.cpp`, and
+    `tools/materials/SectorEditorMaterialInspector.cpp` because those modules
+    do not currently receive `SectorEditorTextureCatalogService` cleanly.
+  - `TextureCatalogService` remains catalog-only; `TexturePickerService`
+    remains generic picker lifecycle/result machinery.
+  - Material, door, sky, sprite/billboard, and add-map apply semantics stayed
+    in their existing feature owners.
+  - Add-map preview scope unload, selected path changes, preview refresh
+    timing, modal close/reset, handle refresh, status text, dirty/cache/status,
+    and document lifecycle behavior stayed unchanged.
+  - Rendering, collision, serialization schema, lightmap, and lightmap
+    source-hash behavior were not intentionally changed.
+
+#### REF-082 `[x]` Pass TextureCatalogService to remaining texture UI clients
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md` and REF-081
+  completion debt.
+- Why it helps: removes remaining direct generic texture catalog checks from UI
+  clients without adding callback-to-`SectorEditor` plumbing.
+- Likely files: `SectorEditor.cpp`, `SectorEditorTextureModals.*`,
+  `SectorEditorSectorInspector.*`, `inspector/SectorEditorInspectorPanel.*`,
+  `preview/SectorEditorPreviewUvPanel.*`, `tools/doors/`,
+  `tools/materials/`, and `tools/placed_objects/`.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, dependency greps
+  for texture catalog/helper use, no new catalog callback bridge, and no
+  concrete `SectorEditor` dependency under `services/texture_catalog`.
+- Notes:
+  - Keep `TextureCatalogService` catalog-only.
+  - Keep `TexturePickerService` generic lifecycle/result machinery.
+  - Do not move material, door, sky, sprite/billboard, or add-map apply
+    semantics into the catalog service.
+- Completion notes:
+  - `TextureCatalogService` passed to remaining UI clients where clean:
+    sector inspector, inspector panel, preview UV panel, door inspector,
+    material inspector, and texture picker modal display path.
+  - Direct missing-texture UI checks were replaced with
+    `textureCatalog.HasTexture()` calls, and texture picker preview metadata
+    now uses `textureCatalog.FindTexture()`.
+  - Remaining direct `FindSectorTopologyTexture` uses are exactly the helper
+    declaration/implementation in `SectorEditorHelpers.*` and
+    `SectorEditorTextureCatalogService::FindTexture()` in
+    `services/texture_catalog/SectorEditorTextureCatalogService.cpp`.
+  - No callback bridge was introduced.
+  - `SectorEditorTextureCatalogService` remains a stateless/context-backed
+    facade over `SectorEditorState`, constructed only at `SectorEditor`
+    composition boundaries and passed synchronously to clients.
+  - Feature apply behavior for material, door, sky, sprite/billboard, and
+    add-map texture flows stayed unchanged.
+  - Dirty/cache/status timing, document lifecycle, serialization schema,
+    rendering, collision, lightmap, and source-hash behavior were not
+    intentionally changed.
+
+#### REF-083 `[x]` SectorEditor state ownership and remaining code map
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md`,
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`, and current
+  post-REF-082 sector editor code.
+- Why it helps: records which extracted services own real state, which are
+  context-backed facades over `SectorEditorState`, what remains in
+  `SectorEditor.cpp`, and which state splits would help future runtime/game
+  mode reuse.
+- Likely files: documentation only.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`; build optional because this is documentation-only.
+- Completion notes:
+  - Report path:
+    `docs/audit/sector_editor_state_ownership_and_remaining_map.md`.
+  - Current `SectorEditor.cpp` line count: 5,305 lines.
+  - `SectorEditorState` is still acting as a god state object: recent services
+    own meaningful behavior, but most durable editor, document, preview,
+    selection, texture, material, light, modal, and runtime state is still
+    stored centrally.
+  - Top state ownership split candidates:
+    `TextureCatalogState`, `MaterialEditingState`, `LightEditingState`,
+    `SelectionState`/`ManipulationState`, `PreviewState`, `InspectorUiState`,
+    and a broader planned `DocumentState`.
+  - Top remaining `SectorEditor.cpp` clusters: lifecycle/update/render/UI
+    orchestration; canvas/tool routing and picking; preview/gameplay/collision
+    lifecycle; document/modal lifecycle; texture picker/add-map/door/sky/sprite
+    routing and service wrappers.
+  - Recommended next implementation task: split a narrow
+    `TextureCatalogState` out of `SectorEditorState` so
+    `TextureCatalogService` can own editor texture scope/handle-cache state
+    while keeping add-map modal lifecycle and feature-specific apply semantics
+    out of the catalog service.
+  - No source code, tests, CMake, editor behavior, topology mutation behavior,
+    lightmap behavior, or source-hash behavior was intentionally changed.
+
+#### REF-084 `[x]` Service-owned editor state migration runner plan
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md`,
+  `docs/audit/sector_editor_state_ownership_and_remaining_map.md`, and
+  current post-REF-083 sector editor service/state boundaries.
+- Why it helps: creates and executes a runner-compatible phased plan for moving
+  service-specific state out of `SectorEditorState` / `SectorEditorUiState`
+  without doing one broad refactor.
+- Likely files: `docs/plans/ref084_service_state_ownership_runner_plan.md`,
+  sector editor service/state headers and call sites touched by each runner
+  phase.
+- Suggested task type: Runner plan.
+- Risk: Low for planning; implementation phases ranged from low/medium
+  `TextureCatalogState` work to higher-risk selection/manipulation and
+  preview/document planning.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`; build optional because this is documentation-only.
+- Notes:
+  - Planning output:
+    `docs/plans/ref084_service_state_ownership_runner_plan.md`.
+  - The generated plan kept implementation phases separate:
+    `TextureCatalogState`, `MaterialEditingState`, `MaterialEditingUiState`,
+    `LightEditingState`, `SelectionState`, `ManipulationState`,
+    `InspectorIdUiState`, and preview/document planning notes.
+  - Plan amendment: tightened Phase 1 texture scope ownership so
+    `editorTextureHandlesById` moves first and `editorTextureScope` only moves
+    if lifetime/order is clearly catalog-owned; split Phase 2 into
+    `MaterialEditingState` and `MaterialEditingUiState` child passes; deferred
+    preview-surface selection by default from Phase 4.
+  - Implementation began with `TextureCatalogState`, kept
+    `SectorTopologyMap::texturesById` as map-level registry, and kept add-map
+    modal/apply semantics outside `TextureCatalogService`.
+  - Implementation phases were built and tested independently before moving to
+    the next phase, except the final documentation-only phase where build/ctest
+    were optional.
+  - Separate future runner plans are still needed for broad `PreviewState` and
+    `DocumentState` ownership work.
+- Completion notes:
+  - Runner-compatible plan and implementation completed at
+    `docs/plans/ref084_service_state_ownership_runner_plan.md`.
+  - Moved editor texture scope/cache into `TextureCatalogState`; copied
+    material into `MaterialEditingState`; material UV/decal input buffers into
+    `MaterialEditingUiState`; light drag/edit/pilot-light state into
+    `LightEditingState`; core 2D selection/hover state into `SelectionState`;
+    select drag-arm and authoring vertex drag into `ManipulationState`; and
+    sector/light ID edit buffers into `InspectorIdUiState`.
+  - Preview-surface selection, preview/runtime/controller/collision state,
+    document/source-of-truth state, runtime object drag/editing state, most
+    light inspector UI inputs, and broad modal state remain deferred.
+  - Separate future runner plans are needed for broad `PreviewState` and
+    `DocumentState` ownership work; tracked as REF-085 and REF-086.
+  - Topology cache invalidation behavior, lightmap source-hash behavior,
+    rendering/collision/sector lookup/physics behavior, and map
+    serialization/schema behavior were intended to remain unchanged.
+
+#### REF-085 `[x]` Write PreviewState ownership runner plan
+
+- Source/audit reference:
+  `docs/plans/ref084_service_state_ownership_runner_plan.md`,
+  `docs/audit/sector_editor_state_ownership_and_remaining_map.md`,
+  `sources/sector_editor/SectorEditorTypes.h`,
+  `sources/sector_editor/SectorEditorPreviewTypes.h`,
+  `sources/sector_editor/SectorEditor.cpp`,
+  `sources/sector_demo/renderer/`, and
+  `sources/sector_demo/SectorCollisionWorld.*`.
+- Why it helps: preview/runtime state is still mixed with editor document,
+  modal, and inspector state; future game-mode/runtime reuse needs a dedicated
+  plan before moving controller, collision, runtime object, preview selection,
+  object-probe, and renderer resource lifetime state.
+- Likely files: a new runner plan under `docs/plans/`; source files only in
+  later implementation phases.
+- Suggested task type: Runner plan.
+- Risk: High.
+- Suggested verification: planning phase can use documentation checks only;
+  later implementation phases need build, ctest, render/collision behavior
+  notes, and manual preview smoke when visual parity is claimed.
+- Notes:
+  - Must preserve the rule that visual camera effects such as step smoothing,
+    headbob, and landing dip never feed collision, sector lookup, or physics.
+  - Must preserve preview renderer GPU resource lifetime and explicit
+    enter/rebuild/leave behavior.
+  - Must account for preview-surface selection and material panel highlights
+    without pulling document ownership into preview state.
+- Completion notes:
+  - Runner-compatible implementation plan created at
+    `docs/plans/ref085_preview_state_ownership_runner_plan.md`.
+  - Implementation completed on 2026-07-07 through the runner plan's seven
+    phases, including the final dependency audit/backlog refresh.
+  - Added `sources/sector_editor/preview/SectorEditorPreviewState.h` with
+    narrow overlay, selection, controller, collision, and runtime sub-states,
+    composed by `SectorEditor`.
+  - Moved preview-owned overlay flags, 3D surface hover/selection state,
+    preview controller/camera/effect state, collision world/result/current
+    sector state, and `SectorRuntimeObjectState runtimeObjects` out of
+    `SectorEditorState`.
+  - `SectorMeshRenderer preview` ownership stayed in `SectorEditor`; preview
+    renderer GPU resource lifetime and explicit enter/rebuild/leave behavior
+    were preserved.
+  - Preview overlay and UV panel dependencies were narrowed so preview modules
+    and preview actions no longer take broad `SectorEditorState&` /
+    `SectorEditorUiState&` or include `SectorEditor.h`.
+  - The plan keeps REF-086 separate for `DocumentState` ownership and keeps
+    document/source-of-truth, authoring graph, topology derivation,
+    save/load/reset/import/path/dirty/status, and serialization/schema ownership
+    out of REF-085.
+  - The plan phases cover low-risk preview control flags, preview 3D surface
+    selection, controller/camera state, collision/sector lookup state, runtime
+    object/world adapter state, renderer lifecycle dependency cleanup, and final
+    dependency audit/backlog refresh.
+  - Plan amended to make preview responsibility sub-states the default, add
+    serialized/settings ownership checks for controller/config fields, keep
+    `SectorMeshRenderer` ownership in `SectorEditor`, require the final audit
+    refresh, and require child-pass splits if broad preview phases are too
+    large for one run.
+  - Remaining debt after implementation: REF-086 `DocumentState` ownership;
+    runtime object editing state (`runtimeObjectDrag`), sprite picker/catalog
+    and billboard metadata repair state; preview settings modal/UI input state;
+    material picker routing and inspector dependencies that still cross
+    document/UI boundaries; optional narrow preview controller follow-up if it
+    becomes justified; and manual preview smoke.
+  - Topology render-cache invalidation behavior, lightmap source-hash behavior,
+    serialization/schema behavior, rendering, collision, sector lookup,
+    physics, and camera behavior were intended unchanged by REF-085.
+
+#### REF-086 `[x]` DocumentState ownership runner plan and implementation
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md`,
+  `docs/plans/ref084_service_state_ownership_runner_plan.md`,
+  `docs/audit/sector_editor_state_ownership_and_remaining_map.md`,
+  `sources/sector_editor/SectorEditorTypes.h`,
+  `sources/sector_editor/SectorEditorAuthoringState.*`, and
+  `sources/sector_editor/document/`.
+- Why it helps: authoring graph, derived topology, dirty/path/status, last-valid
+  derivation, save/load/reset/import/migration, and source-of-truth boundaries
+  need a dedicated plan before ownership moves out of monolithic editor state.
+- Likely files: completed runner plan under `docs/plans/`, document state
+  ownership in `sources/sector_editor/document/`, and focused editor/tool/
+  service call-site retargeting.
+- Suggested task type: Runner plan.
+- Risk: High.
+- Suggested verification: build, ctest, grep checks, serialization/load/save
+  behavior notes, cache invalidation notes, and source-hash behavior notes.
+- Notes:
+  - Must preserve the architecture contract that the authoring graph is the
+    editable source of truth and `SectorTopologyMap` is derived output, except
+    for intentionally topology-owned global/runtime metadata already documented.
+  - Must not reintroduce no-authoring topology edit fallback behavior.
+  - Must explicitly account for topology render-cache invalidation and
+    lightmap source-hash behavior for any document mutation paths touched.
+- Completion notes:
+  - Runner-compatible implementation plan created at
+    `docs/plans/ref086_document_state_ownership_runner_plan.md`.
+  - Implementation completed through Phase 8. `SectorEditorDocumentState` is
+    now composed by `SectorEditor` and owns authoring source state, derivation
+    bookkeeping, the document map, and lifecycle dirty/path/status state through
+    narrow sub-states.
+  - `SectorEditorAuthoringDocumentState` owns `authoringGraph`, which remains
+    the editable source of truth for normal geometry, sector property, and
+    material edits.
+  - `SectorEditorDerivationState` owns `authoringDerivation`,
+    `lastValidAuthoringDerivedTopology`, `authoringDerivationState`,
+    `authoringDerivedTopologyStale`, and `authoringDerivationStatus`.
+  - `SectorEditorDocumentMapState` owns `topologyMap`, which remains compiled/
+    derived output plus documented map-level metadata/runtime definitions,
+    including texture registry, lights, runtime objects, preview settings, sky,
+    directional light, lightmap settings, and baked metadata.
+  - `SectorEditorDocumentLifecycleState` owns
+    `topologyDocumentInitialized`, `topologyDocumentDirty`,
+    `topologyDocumentStatus`, `currentLevelName`, `currentLevelPath`,
+    `hasCurrentLevelPath`, and `hasUnsavedChanges`.
+  - No `SectorEditorDocumentController` was created.
+  - REF-085 preview/runtime/controller/collision/camera state remained
+    separate. Modal UI state, inspector input buffers, tool transaction state,
+    texture picker modal state, runtime object editing state, and renderer
+    ownership stayed outside DocumentState.
+  - Topology render-cache ownership was deferred: `topologyRenderWarning`,
+    `topologyRenderRevision`, and `topologyRenderCache` remain in
+    `SectorEditorState` as 2D derived render/view cache state. Existing
+    invalidation helpers remain the contract.
+  - `docs/audit/sector_editor_state_ownership_and_remaining_map.md` was
+    refreshed after final implementation with remaining document fields/debt,
+    new document sub-states, preview/renderer separation, authoring graph
+    source-of-truth status, topology map derived-output status, cache
+    invalidation behavior, serialization/schema behavior, lightmap source-hash
+    behavior, and rendering/collision/sector lookup/physics/camera behavior.
+  - Verification across the final phase: `cmake --build cmake-build-debug -j2`,
+    `ctest --test-dir cmake-build-debug --output-on-failure`, `git diff
+    --check`, `git diff --stat`, `git status --short`, and the final REF-086
+    grep checks. No manual GUI verification was performed.
+
+#### REF-087 `[x]` Audit REF-085/REF-086 PreviewState and DocumentState implementation
+
+- Source/audit reference:
+  `docs/plans/ref085_preview_state_ownership_runner_plan.md`,
+  `docs/plans/ref086_document_state_ownership_runner_plan.md`,
+  `docs/audit/sector_editor_state_ownership_and_remaining_map.md`,
+  `sources/sector_editor/SectorEditorTypes.h`,
+  `sources/sector_editor/preview/SectorEditorPreviewState.h`,
+  `sources/sector_editor/document/SectorEditorDocumentState.h`, and
+  relevant preview/document/editor orchestration code.
+- Why it helps: verifies whether REF-085 and REF-086 actually improved
+  ownership and dependency direction instead of replacing one monolithic state
+  object with new god-state dumps.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Completion notes:
+  - Completed in `docs/audit/ref085_ref086_implementation_review.md`.
+  - Verdict: mostly green. `PreviewState` and `DocumentState` match the runner
+    plans in meaningful ownership terms, use responsibility-based sub-states,
+    and did not move renderer lifetime, document source data, preview runtime
+    state, modal UI, inspector buffers, or tool transactions into the wrong
+    owners.
+  - `SectorEditorState` still owns central 2D view/cache, tool transaction,
+    modal/picker, runtime-object editing, sprite picker/catalog, and default
+    authoring/material state. This is remaining debt, not a REF-085/REF-086
+    regression.
+  - Recommended next task: a scoped runtime object editing state split covering
+    `runtimeObjectDrag`, sprite picker/catalog, billboard metadata repair
+    fields, runtime object inspector UI inputs, and placed-object callback debt.
+    Keep authored `SectorTopologyMap::runtimeObjects` in document map state and
+    preview `SectorRuntimeObjectState` in preview runtime state.
+
+#### REF-059 `[x]` Audit MaterialEditBridge and material-specific picker routing
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md` and
+  `docs/audit/sector_editor_materials_boundary_audit.md`.
+- Why it helps: reduces `tools/materials` callback tentacles without duplicating
+  dirty/cache/preview rebuild or authoring-vs-topology routing behavior.
+- Likely files: `SectorEditor.cpp`, `SectorEditor.h`,
+  `SectorEditorMaterialActions.*`, `tools/materials/`,
+  `SectorEditorTextureActions.*`.
+- Suggested task type: Audit first.
+- Risk: High.
+- Suggested verification: audit first; future implementation needs build,
+  ctest, picker/material smoke, and explicit cache invalidation report.
+- Notes:
+  - Preserve `FinishTopologyMaterialMutation()`,
+    `FinishMaterialActionResult()`, authoring side/face writeback, UI reset
+    flags, preview rebuild behavior, and `MarkTopologyDocumentEdited()`.
+  - Decide whether material-specific texture picker apply routing moves into
+    `tools/materials` or a smaller `MaterialEditBridge`.
+- Completion notes:
+  - Completed in `docs/audit/sector_editor_material_edit_bridge_audit.md`.
+  - Recommended next implementation: REF-063, extract material-specific texture
+    picker routing before adding a broader `MaterialEditBridge`.
+  - Expected next-slice reduction: roughly 120-220 lines or 4-6 picker target
+    branches isolated; callback reduction likely 0-2 until bridge work follows.
+  - Keep REF-044 open because material migration is still incomplete; REF-058
+    and REF-060 remain open because this audit did not cover those scopes.
+
+#### REF-063 `[x]` Extract material-specific texture picker routing
+
+- Source/audit reference:
+  `docs/audit/sector_editor_material_edit_bridge_audit.md`.
+- Why it helps: isolates material picker target routing after REF-057 without
+  moving generic picker lifecycle, door, sky, sprite, or add-map texture paths.
+- Likely files: `SectorEditor.cpp`, `SectorEditorTextureActions.*`,
+  `SectorEditorTextureModals.*`, and a narrow material edit/picker routing file
+  under `services/material_edit/` or `tools/materials/` if scoped to material UI.
+- Suggested task type: Codex task.
+- Risk: High.
+- Suggested verification: build, ctest, `git diff --check`, and manual material
+  picker smoke for 2D SideDef/sector, authoring side/face, Preview3D surface,
+  plus door and sky regression smoke.
+- Notes:
+  - Keep `TexturePickerService` generic.
+  - Move material-specific current/open/apply routing only after clearly
+    isolating `Sector`, `SideDef`, `AuthoringFaceAnchor`, and `AuthoringSide`
+    target kinds.
+  - Preserve authoring temporary topology rollback/apply semantics exactly.
+  - Keep material dirty/cache/preview policy out of `TexturePickerService`.
+- Completion notes:
+  - Material-specific texture picker routing was extracted to
+    `sources/sector_editor/services/material_edit/`.
+  - `Sector`, `SideDef`, `AuthoringFaceAnchor`, and `AuthoringSide` material
+    targets now route through the material picker routing module.
+  - `RuntimeDoor`, `MapSky`, sprite picker, and add-map texture scan/import
+    behavior stayed out of the material picker route.
+  - `TexturePickerService` remains generic lifecycle/result mechanics.
+  - Broad `MaterialEditBridge` and finish-wrapper extraction remain future
+    work.
+  - No behavior changes intended.
+
+#### REF-064 `[x]` Add minimal MaterialEditBridge for material action wrappers
+
+- Source/audit reference:
+  `docs/audit/sector_editor_material_edit_bridge_audit.md`.
+- Why it helps: centralizes material edit orchestration without moving preview
+  UV UI, picker lifecycle, editor lifecycle, renderer lifecycle, or lightmap
+  behavior.
+- Likely files: `SectorEditor.cpp`, `tools/materials/`, and
+  `services/material_edit/`.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, `git diff --check`, dependency grep for
+  no concrete `SectorEditor` dependency under `services/material_edit`, and
+  manual material inspector smoke if practical.
+- Completion notes:
+  - Minimal `MaterialEditBridge` was added under `services/material_edit`.
+  - Material action wrappers were moved/routed through the bridge while existing
+    `SectorEditor` member wrapper names/signatures stayed available for the
+    sector inspector and preview UV panel.
+  - Broad editor finish paths remain in `SectorEditor.cpp`.
+  - `DrawPreviewUvPanel` remains unmoved.
+  - `TexturePickerService` remains generic.
+  - No behavior changes intended.
+
+#### REF-065 `[x]` Promote MaterialEditBridge into MaterialEditingService
+
+- Source/audit reference:
+  `docs/audit/sector_editor_material_edit_bridge_audit.md`.
+- Why it helps: replaces the temporary callback bridge with a concrete service
+  dependency that tools and panels can call directly.
+- Likely files: `SectorEditor.cpp`, `tools/materials/`, and
+  `services/material_edit/`.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, `git diff --check`, bridge grep,
+  dependency grep for no concrete `SectorEditor` dependency under
+  `services/material_edit`, and manual material smoke if practical.
+- Completion notes:
+  - `MaterialEditBridge` was removed/replaced.
+  - Real `SectorEditorMaterialEditingService` was added under
+    `services/material_edit`.
+  - `tools/materials` now uses the material editing service directly for
+    material operations.
+  - Material picker routing is used through the material editing service while
+    generic picker lifecycle/result mechanics remain in `TexturePickerService`.
+  - Old `SectorEditor` material wrapper/callback funnel was removed where
+    practical; no remaining material operation wrapper bridges are intended.
+  - `DrawPreviewUvPanel` remains in `SectorEditor.cpp`; extraction stays open
+    under REF-060.
+  - REF-044 remains open as the broader material migration umbrella.
+  - REF-058, lights, and lightmap/source-hash-sensitive work remain open.
+  - No behavior changes intended.
+
+#### REF-060 `[ ]` Audit Preview UV/material panel service dependencies
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md`.
+- Why it helps: `DrawPreviewUvPanel()` is line-count-heavy, but it depends on
+  picker routing, material finish behavior, selected 3D surface state, and
+  preview rebuild hooks.
+- Likely files: `SectorEditor.cpp`, `SectorEditorPreviewActions.*`,
+  `SectorEditorPreviewSettingsModal.*`, material action files,
+  selection service files, and renderer facade headers.
+- Suggested task type: Audit first.
+- Risk: Medium/High.
+- Suggested verification: audit only; future implementation should build,
+  ctest, and manually smoke preview UV/material editing if practical.
+- Notes:
+  - Decide whether `DrawPreviewUvPanel()` belongs in `tools/materials/`, a
+    preview module, or a small preview-surface material service.
+  - Keep collision/physics/sector lookup and renderer resource orchestration
+    central unless a later runner plan explicitly scopes them.
+  - Expected later `SectorEditor.cpp` reduction if extracted: roughly 350-480
+    lines for UV/material panel, separate from preview overlay.
+- Completion notes:
+
+#### REF-066 `[x]` Extract Preview3D UV/material panel into `preview/`
+
+- Source/audit reference:
+  `docs/audit/sector_editor_material_edit_bridge_audit.md`.
+- Why it helps: removes the selected-surface Preview3D UV/material panel from
+  `SectorEditor.cpp` after material operations were promoted to
+  `SectorEditorMaterialEditingService`.
+- Likely files: `SectorEditor.cpp`,
+  `sources/sector_editor/preview/SectorEditorPreviewUvPanel.h`,
+  `sources/sector_editor/preview/SectorEditorPreviewUvPanel.cpp`.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, `git diff --check`, dependency grep for
+  no concrete `SectorEditor` dependency under `preview/`, and manual Preview3D
+  material smoke if practical.
+- Completion notes:
+  - Preview3D UV/material panel extracted to `sources/sector_editor/preview/`.
+  - Created `SectorEditorPreviewUvPanel.h` and
+    `SectorEditorPreviewUvPanel.cpp`.
+  - Panel uses `SectorEditorMaterialEditingService` directly for material
+    operations.
+  - No new material callback bridge was introduced; the only panel callback is
+    the narrow non-material portal `Blocks Player` edit port.
+  - `SectorEditor.cpp` line count reduced from 9,172 to 8,710 lines, a
+    462-line reduction.
+  - Preview renderer/collision/camera ownership stayed in `SectorEditor.cpp`.
+  - Preview overlay/debug UI stayed in `SectorEditor.cpp`.
+  - `TexturePickerService` stayed generic.
+  - REF-044 remains open because material migration is still incomplete.
+  - REF-058, lights, and lightmap/source-hash-sensitive work remain open.
+  - No behavior changes intended.
+
+#### REF-074 `[x]` Extract Preview3D overlay/debug UI into `preview/`
+
+- Source/audit reference: REF-074 task.
+- Why it helps: removes Preview3D overlay/debug display code from
+  `SectorEditor.cpp` while keeping preview renderer, camera, collision,
+  lifecycle, material, and lightmap ownership in the editor.
+- Likely files: `SectorEditor.cpp`,
+  `sources/sector_editor/preview/SectorEditorPreviewOverlay.h`,
+  `sources/sector_editor/preview/SectorEditorPreviewOverlay.cpp`.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, dependency grep for
+  no concrete `SectorEditor` dependency under `preview/`, and manual Preview3D
+  overlay smoke if practical.
+- Completion notes:
+  - Preview3D overlay/debug UI extracted to `sources/sector_editor/preview/`.
+  - Created `SectorEditorPreviewOverlay.h` and
+    `SectorEditorPreviewOverlay.cpp`.
+  - `SectorEditor.cpp` line count reduced from 8,548 to 7,809 lines, a
+    739-line reduction.
+  - Preview renderer/collision/camera ownership stayed in `SectorEditor.cpp`.
+  - Light/lightmap/source-hash behavior unchanged.
+  - No callback bridge was introduced; the overlay returns one-frame action
+    requests for high-level editor-owned actions.
+  - No behavior changes intended.
+  - REF-058, lights, lightmap/source-hash-sensitive work, and main
+    tools/inspector extraction work remain open.
+
+#### REF-075 `[x]` Extract main inspector routing panel into `inspector/`
+
+- Source/audit reference: REF-075 task.
+- Why it helps: removes selected-object inspector routing from
+  `SectorEditor.cpp` while keeping editor lifecycle, preview, lightmap, and
+  source-hash ownership in the editor.
+- Likely files: `SectorEditor.cpp`,
+  `sources/sector_editor/inspector/SectorEditorInspectorPanel.h`,
+  `sources/sector_editor/inspector/SectorEditorInspectorPanel.cpp`.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, dependency grep for
+  no concrete `SectorEditor` dependency under `inspector/`, callback/request
+  grep, and manual selected-object inspector smoke if practical.
+- Completion notes:
+  - Main selected-object inspector routing panel extracted to
+    `sources/sector_editor/inspector/`.
+  - Created `SectorEditorInspectorPanel.h` and
+    `SectorEditorInspectorPanel.cpp`.
+  - `SectorEditor.cpp` line count reduced from 7,809 to 5,982 lines, a
+    1,827-line reduction.
+  - Feature inspectors and services are used directly where applicable,
+    including `SectorEditorMaterialEditingService`, selection service context,
+    placed-object action context, and existing feature inspector modules.
+  - No broad callback bridge introduced; result requests are limited to
+    high-level editor workflow/lifecycle, confirmation modal, bake/lifecycle,
+    infrastructure refresh, and temporary light-editing service debt.
+  - Preview lifecycle, preview renderer/collision/camera ownership, lightmap
+    bake ownership, and lightmap/source-hash behavior stayed in
+    `SectorEditor.cpp`.
+  - `engine::EngineContext*` remains in the inspector context only for existing
+    placed-object inspector runtime/world access.
+  - No behavior changes intended.
+  - REF-058, preview follow-ups, lights/lightmap work, and the main
+    tools/toolbar panel remain open.
+
+#### REF-076 `[x]` Add LightEditingService for light inspector edits
+
+- Source/audit reference: REF-076 task.
+- Why it helps: removes the temporary REF-075 light inspector dirty-request
+  bridge and moves normal light property mutation behind a shared editor
+  service.
+- Likely files: `sources/sector_editor/services/lights/`,
+  `SectorEditorLightInspector.*`, `inspector/SectorEditorInspectorPanel.*`,
+  `SectorEditor.cpp`.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, `git diff --check`, service dependency
+  grep, inspector dirty-request grep, and manual light inspector smoke if
+  practical.
+- Completion notes:
+  - Added `SectorEditorLightEditingService` under
+    `sources/sector_editor/services/lights/`.
+  - Added service-safe `MarkSectorEditorTopologyDocumentEdited()` helper for
+    exact old dirty/cache/revision/status behavior without depending on
+    `SectorEditor.h`.
+  - Light inspector static/dynamic point and spotlight property edits now call
+    the service directly.
+  - REF-075 `MarkTopologyDocumentEdited` light inspector dirty request removed.
+  - Static/dynamic light semantics and lightmap source-hash behavior unchanged.
+  - Lightmap bake worker/result install and LightmapBakeController work not
+    moved.
+  - Add light, delete confirmation/confirmed mutation, drag light, spotlight
+    pilot, and preview overlay light controls remain future service migration
+    debt.
+  - REF-058 and unrelated preview/tools work remain open.
+
+#### REF-078 `[x]` Complete LightEditingService mutation ownership
+
+- Source/audit reference: REF-078 task.
+- Why it helps: completes the REF-076 light service boundary by moving normal
+  light add/delete/drag/pilot data mutation semantics out of `SectorEditor`
+  while keeping preview, input, modal, document, lightmap, and source-hash
+  ownership central.
+- Likely files: `sources/sector_editor/services/lights/`, `SectorEditor.cpp`,
+  `SectorEditorTypes.h`, `SectorEditorSelectionTypes.h`,
+  `tests/SectorEditorLightEditingServiceTests.cpp`.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, full `ctest`, `git diff --check`, service
+  dependency grep, light mutation grep, and manual light editing smoke if
+  practical.
+- Completion notes:
+  - Added light add, confirmed delete, drag apply/finish/cancel, and spotlight
+    pilot apply/cancel data mutation methods to `SectorEditorLightEditingService`.
+  - Service owns original light position/target restore data through
+    `LightEditingState`; `SectorEditor` still owns mouse/input capture,
+    snapping, coordinate conversion, preview camera/mouse-look restoration, and
+    dynamic renderer refresh execution.
+  - Preview overlay UI still only emits start/apply/cancel requests.
+  - Delete confirmation modal flow remains editor-owned.
+  - Lightmap bake controller unchanged.
+  - `ComputeSectorLightmapSourceHash` and source-hash policy unchanged.
+  - Rendering, collision, and serialization/schema behavior were not
+    intentionally changed.
+  - Added dedicated `tests/SectorEditorLightEditingServiceTests.cpp` and
+    `sector_editor_light_editing_service` CMake test target.
+  - `SectorEditor.cpp` line count reduced from 5,768 to 5,381 lines.
+  - Remaining light service debt: preview renderer refresh is intentionally
+    reported by service result flags and executed by `SectorEditor`.
+  - REF-058 and unrelated preview/tools/document items remain open.
+
+#### REF-079 `[x]` Clean up LightEditingService integration debt
+
+- Source/audit reference: REF-079 task.
+- Why it helps: removes stale light wrapper/request naming after REF-078 and
+  keeps service-owned mutation names distinct from editor-owned orchestration.
+- Likely files: `SectorEditor.cpp`, `SectorEditor.h`,
+  `inspector/SectorEditorInspectorPanel.*`,
+  `preview/SectorEditorPreviewOverlay.*`,
+  `selection/SectorEditorSelectionService.*`, backlog/architecture docs.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, full `ctest`, `git diff --check`, service
+  dependency grep, light mutation grep, callback grep, and manual light editing
+  smoke if practical.
+- Completion notes:
+  - Removed obsolete `SectorEditor::TryRenameSelectedLight()`; no remaining
+    `SectorEditor` add/delete/drag/pilot data-mutation wrappers were found.
+  - Renamed `SectorEditor::DeleteSelectedLight()` to
+    `OpenDeleteSelectedLightConfirmation()` and inspector requests to
+    confirmation intent.
+  - Renamed `SectorEditor` spotlight pilot apply/cancel handlers to
+    `ApplySpotLightPilotFromPreviewPose()` and
+    `CancelSpotLightPilotWithPreviewRestore()`; preview overlay requests now
+    use request-oriented names.
+  - `LightEditingService` remains the owner of normal light data mutation,
+    including add/delete/drag/pilot data changes and original data restore.
+  - `SectorEditor` still owns confirmation, input/gesture, preview pose
+    restoration, dynamic renderer refresh execution, and high-level dispatch.
+  - Light inspector request/callback debt is removed for normal light
+    mutation; the remaining delete request is confirmation-modal flow.
+  - Lightmap bake controller and source-hash behavior unchanged.
+  - `SectorEditor.cpp` line count reduced from 5,381 after REF-078 to 5,365.
+  - REF-058 and unrelated preview/tools/document items remain open.
+
+#### REF-067 `[x]` Authoring-owned topology edit cleanup and direct topology mutation inventory
+
+- Source/audit reference: REF-067 task and
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+- Why it helps: keeps editable portal/player-blocking ownership on the
+  authoring graph instead of silently mutating derived topology.
+- Likely files: `SectorEditor.cpp`, `SectorEditorTopologyActions.*`,
+  material inspector and Preview3D UV panel callback contexts, audit docs.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: full build, full `ctest`, requested topology mutation
+  greps, `git diff --check`, and manual Blocks Player smoke in 2D and
+  Preview3D if practical.
+- Completion notes:
+  - Blocks Player edits use `SectorAuthoringLine::flags.blocksPlayer` when
+    authoring data exists.
+  - Topology derivation already copies authoring line flags into
+    `SectorTopologyLineDef::flags`.
+  - Invalid no-authoring edit support removed; Blocks Player now fails when
+    authoring data is missing instead of mutating derived topology.
+  - Authoring-backed linedefs with no derived authoring mapping now fail with a
+    clear status instead of falling back to topology mutation.
+  - Inventory report:
+    `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+  - Remaining direct topology mutation found: inspector-specific sidedef UV
+    apply/reset still mutates topology directly and should move under
+    authoring material edits in REF-068.
+  - No rendering, collision, serialization, material, lightmap, or preview
+    behavior changes intended except the Blocks Player ownership correction.
+  - REF-044 remains open because material migration is still incomplete.
+  - REF-058, lights, and lightmap/source-hash-sensitive work remain open.
+
+#### REF-068 `[x]` Replace SideDef inspector UV topology mutation with authoring material edits
+
+- Source/audit reference:
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+- Why it helps: keeps 2D SideDef inspector UV edits on the authoring graph
+  instead of mutating derived topology directly.
+- Likely files: `services/material_edit/`, `tools/materials/`, authoring graph
+  tests, and direct topology edit inventory/backlog docs.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: full build, full `ctest`, requested topology/material
+  greps, `git diff --check`, and manual SideDef UV smoke if practical.
+- Completion notes:
+  - SideDef inspector UV apply/reset now writes authoring side material data.
+  - Direct topology UV mutation was removed for this path, including the
+    inspector's immediate `selectedUv` pre-write.
+  - Missing authoring mapping and no-authoring data now fail instead of
+    mutating derived topology.
+  - No no-authoring topology edit behavior remains for this scoped UV path.
+  - Inventory updated.
+  - No behavior changes intended except the ownership correction.
+  - REF-044 remains open as the broader material/tool migration umbrella; the
+    broader material scratch/writeback routes were removed later by REF-071.
+  - REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
+    remain open.
+
+#### REF-069 `[x]` Remove invalid no-authoring topology-edit support
+
+- Source/audit reference:
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+- Why it helps: enforces that editable maps require authoring graph data and
+  that `SectorTopologyMap` is not an editable map model.
+- Likely files: editor topology/material action services and any explicit
+  invalid no-authoring edit-state helpers.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, direct topology mutation greps, and
+  targeted invalid no-authoring edit-state checks.
+- Completion notes:
+  - Normal no-authoring topology edit behavior was removed from map-editing UI
+    paths; invalid no-authoring edit states now fail clearly.
+  - Blocks Player now uses `SetAuthoringLineDefBlocksPlayer()` and
+    `SetSectorEditorAuthoringLineDefBlocksPlayer()`; the old topology mutation
+    helper was deleted.
+  - Sector name/height/sky/ambient/material/UV callbacks require authoring
+    face-anchor data and no longer mutate `SectorTopologySector`.
+  - Editor-facing material picker entry points were renamed to
+    `OpenMaterialPickerForDerivedSector()` and
+    `OpenMaterialPickerForDerivedSideDef()`.
+  - Inventory updated with remaining topology-owned runtime/cache/bake state,
+    import/migration-only conversion, lights/runtime objects, and then-open
+    REF-044 material cleanup work.
+  - No missing authoring fields were found for the scoped sector/material/line
+    properties.
+  - Do not fold this into REF-044 material scratch/writeback cleanup.
+  - REF-044 remains open as the broader material/tool migration umbrella.
+  - REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
+    remain open.
+
+#### REF-070 `[x]` Write Sector Editor Architectural Principles document
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md`,
+  `docs/audit/sector_editor_material_edit_bridge_audit.md`,
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`, and recent
+  REF-067/REF-068/REF-069 source-of-truth cleanup.
+- Why it helps: gives future sector editor tasks a strict architecture contract
+  so stale names, transitional code, and legacy fallback remnants are not copied
+  forward.
+- Likely files:
+  `docs/architecture/sector_editor_architectural_principles.md` and this
+  backlog.
+- Suggested task type: Codex task.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`, and
+  `git status --short`.
+- Completion notes:
+  - Architecture principles doc path:
+    `docs/architecture/sector_editor_architectural_principles.md`.
+  - Source-of-truth invariant documented: editable map data belongs to the
+    authoring graph; `SectorTopologyMap` is derived/compiled output and is not
+    an editable map model.
+  - Service/callback rules documented: tools and panels should depend on real
+    services directly, while callback bridges are short-lived migration seams.
+  - Future Codex task requirement documented: read the principles before sector
+    editor changes, stop on conflicts, avoid copying violations, and document
+    temporary exceptions as backlog debt.
+  - No source code, tests, CMake, editor/runtime behavior, cache behavior, or
+    lightmap source-hash behavior changed.
+
+#### REF-071 `[x]` Remove remaining material topology scratch/writeback routes
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md` and
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+- Why it helps: finishes the material ownership correction by making normal
+  material edits write authoring graph material fields directly.
+- Likely files: `services/material_edit/`, `SectorEditorMaterialActions.*`,
+  authoring graph tests, and direct topology edit inventory/backlog docs.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: full build, full `ctest`, requested material/topology
+  greps, `git diff --check`, and material inspector/Preview3D manual smoke if
+  practical.
+- Completion notes:
+  - Remaining known material scratch/writeback routes were removed; no remaining
+    normal editor material scratch/writeback route is listed.
+  - Direct authoring material edit routes were added for authoring side wall
+    parts and authoring face-anchor floor/ceiling flats.
+  - Material picker routing now writes selected material texture IDs directly to
+    authoring side/face data.
+  - No-authoring material edits fail instead of mutating topology.
+  - Missing authoring side overrides may still be seeded from current derived
+    display values by existing authoring mutation helpers before the direct
+    authoring assignment is applied.
+  - Inventory updated.
+  - No behavior changes intended except the material ownership correction.
+  - REF-044 remains open only as the broader material/tool migration umbrella.
+  - REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
+    remain open.
+
+#### REF-072 `[x]` Clean up material service debt after authoring-owned material migration
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md` and
+  `docs/audit/sector_editor_direct_topology_edit_inventory.md`.
+- Why it helps: removes stale names, wrappers, dead helpers, and callback
+  remnants that still implied topology material scratch/writeback.
+- Likely files: `services/material_edit/`, material/sector inspector modules,
+  `SectorEditorAuthoringState.*`, authoring graph tests, and architecture/audit
+  docs.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: full build, full `ctest`, requested material/topology
+  greps, `git diff --check`, and material inspector/Preview3D manual smoke if
+  practical.
+- Completion notes:
+  - Removed the obsolete flat material scratch/writeback helper from authoring
+    state.
+  - Renamed material service internals to `ApplyAuthoringSideMaterialEdit()` and
+    `ApplyAuthoringFaceAnchorMaterialEdit()`.
+  - Removed material-specific picker wrapper exports from texture actions; tests
+    and callers use `services/material_edit` routing/service APIs directly.
+  - Removed material operation callback remnants from the sector inspector and
+    the sidedef material inspector where `MaterialEditingService` is available.
+  - Removed unused `SectorEditor` material picker wrapper methods.
+  - Replaced obsolete scratch/writeback implementation tests with equivalent
+    authoring-owned material service/picker tests for floor UV, ceiling UV,
+    flat texture picker apply, and stale mapping failure.
+  - No remaining material source-of-truth debt is currently listed.
+  - REF-044 remains open only as the broader material/tool migration umbrella;
+    REF-058, preview extraction, lights, and lightmap/source-hash-sensitive work
+    remain open.
+
+#### REF-073 `[x]` Rectangle tool authoring-graph split correctness
+
+- Source/audit reference: sector editor architectural principles; editable
+  identity must be created in the authoring graph, not derived topology.
+- Why it helps: rectangle insertion no longer relies on topology-only splits
+  when rectangle edges cross existing authoring lines.
+- Likely files: `SectorEditorAuthoringState.*`, rectangle/line tool call paths,
+  and authoring graph tests.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, direct topology mutation greps, and
+  manual rectangle/selection/material smoke when practical.
+- Completion notes:
+  - Rectangle insertion now uses an atomic candidate authoring graph and commits
+    only after all four edges succeed.
+  - Rectangle edges split crossed authoring graph lines and split themselves
+    into authoring subsegments before topology derivation.
+  - Topology-only edit identity is not used; `SectorTopologyMap` remains derived
+    output for rectangle edit identity.
+  - Line tool and rectangle tool insertion share the split-aware authoring line
+    insertion helper.
+  - Tests cover crossed-line splits, rectangle edge splits, shared intersection
+    vertices, multiple sorted intersections, corner-on-line splits, overlap
+    rejection, non-grid intersection rejection, atomic failure, metadata
+    preservation, and derivation through the existing authoring refresh path.
+  - No rendering, collision, lightmap, material, texture picker, schema, or
+    document lifecycle behavior changes were intended.
+
+#### REF-061 `[>]` Evaluate Status/Diagnostics service
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md`.
+- Why it helps: may reduce repeated `statusText` and warning callback plumbing
+  if service contexts become noisy.
+- Likely files: `SectorEditor.cpp`, `SectorEditorTypes.h`, tool contexts,
+  preview overlay/status display code.
+- Suggested task type: Defer.
+- Risk: Low/Medium.
+- Suggested verification: audit first if revived.
+- Notes:
+  - Low priority because it does not unlock major line-count reduction by
+    itself.
+  - Do not move validation generation, cache warning ownership, or feature
+    mutation policy into a generic status sink.
+- Completion notes:
+
+#### REF-062 `[x]` Extract LightmapBakeController
+
+- Source/audit reference:
+  `docs/audit/sector_editor_shared_service_inventory.md` and
+  `docs/plans/ref077_lightmap_bake_controller_runner_plan.md`.
+- Why it helps: could encapsulate async bake worker lifecycle, cancellation,
+  temporary file cleanup, result installation, source-hash stale-result
+  rejection, object-probe sidecar installation, and bake progress/status.
+- Likely files: `SectorEditor.cpp`, `SectorEditorLightmapAsyncTypes.h`,
+  `SectorEditorLightmapModal.*`, lightmap backend files, object-probe sidecar
+  helpers, and tests around source-hash behavior.
+- Suggested task type: Runner plan.
+- Risk: High.
+- Suggested verification: runner plan with build, ctest, targeted lightmap
+  tests, source-hash checks, cancellation/result-install checks, and manual bake
+  smoke when practical.
+- Notes:
+  - Do not combine with broad light editing migration.
+  - Preserve source-hash stale-result rejection and object-probe sidecar install
+    behavior.
+  - Preview result refresh should remain an explicit callback/hook rather than
+    exposing renderer internals to the controller.
+  - Implement through the six phases in REF-077: skeleton, lifecycle state,
+    start/request construction, result polling/stale classification, install
+    boundary, and cleanup/docs.
+- Completion notes:
+  - Completed 2026-07-06 through
+    `docs/plans/ref077_lightmap_bake_controller_runner_plan.md`.
+  - `SectorEditorLightmapBakeController` now owns the async worker lifecycle,
+    cancellation, progress/modal state, pending-result polling, terminal state,
+    temporary output cleanup, stale-result file rejection, successful file
+    install, and metadata-ready install payload creation.
+  - `SectorEditor` still owns current-level preflight, source-hash computation
+    against live topology on the main thread, document dirty flags, status text,
+    report logging, and conditional preview rebuild.
+  - Source-hash policy and object-probe sidecar install behavior were preserved.
+  - Automated verification passed in the runner plan; manual bake smoke remains
+    recommended when practical.
+
+#### REF-077 `[x]` Write LightmapBakeController runner plan
+
+- Source/audit reference:
+  `docs/architecture/sector_editor_architectural_principles.md`, REF-062, and
+  current lightmap bake/controller code in `SectorEditor.cpp`.
+- Why it helps: turns the high-risk LightmapBakeController extraction into
+  independently buildable implementation phases with explicit source-hash,
+  object-probe sidecar, temp-file, cancel/join/shutdown, result-install, and
+  preview-refresh guardrails.
+- Likely files: documentation only for this planning task; future implementation
+  files are listed in `docs/plans/ref077_lightmap_bake_controller_runner_plan.md`.
+- Suggested task type: Runner plan.
+- Risk: Low for planning; High for later implementation.
+- Suggested verification: `git diff --check`, `git diff --stat`, and
+  `git status --short` for the planning task. Future implementation should run
+  build, ctest, focused non-GUI lifecycle/source-hash/object-probe tests, and
+  manual bake smoke.
+- Notes:
+  - Planning is complete; implementation completed under REF-062 on 2026-07-06.
+  - Runner-plan phases covered: controller skeleton, worker
+    lifecycle/cancel/join/shutdown state, start/request construction, result
+    polling/stale classification, install/result application boundary, and
+    cleanup/docs.
+- Completion notes: Runner-compatible plan written at
+  `docs/plans/ref077_lightmap_bake_controller_runner_plan.md`. No source, CMake,
+  tests, or behavior changes are included in REF-077. Amended to clarify
+  modal/controller ownership, per-phase wrapper/debt reporting, and Phase 5
+  result-install risk.
+
+#### REF-040 `[x]` Design SectorEditor tool/module boundaries
+
+- Source/audit reference: REF-019 and the risk that category-based extraction
+  can create new `Modals`, `Inspectors`, `Actions`, and `Helpers` landfills.
+- Why it helps: defines the next architecture direction for reducing
+  `SectorEditor.cpp` around feature/tool modules instead of broad category
+  files.
+- Likely files: audit/backlog documentation only.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`.
+- Completion notes:
+  - Completed in `docs/audit/sector_editor_tool_module_boundary_design.md`.
+  - Conclusion: future editor work should move toward feature/tool folders,
+    narrow toolbox/context APIs, and optional handler dispatch rather than a fat
+    `IEditorTool` hierarchy or more category-file growth.
+  - Recommended first implementation task: move the already extracted runtime
+    object editor files into `sources/sector_editor/tools/runtime_objects/`
+    with no behavior changes and no direct `SectorEditor` dependency.
+
+#### REF-041 `[x]` Placed-object tool folder pilot with billboards/doors split
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+- Why it helps: establishes the first placed-object tool layout using common
+  infrastructure plus concrete billboard and door feature folders.
+- Likely files: `SectorEditorRuntimeObjectInspector.*`,
+  `SectorEditorRuntimeObjectModals.*`,
+  `SectorEditorRuntimeObjectActions.*`,
+  `SectorEditorRuntimeObjectDrag.*`, include paths.
+- Suggested task type: Codex task.
+- Risk: Low/Medium.
+- Suggested verification: build, ctest, `git diff --check`, and manual runtime
+  object authoring smoke.
+- Notes:
+  - Do not add a full tool registry.
+  - Keep existing context/callback APIs.
+  - Do not move renderer/runtime backend files.
+- Completion notes:
+  - Created `sources/sector_editor/tools/placed_objects/`,
+    `sources/sector_editor/tools/billboards/`, and
+    `sources/sector_editor/tools/doors/`.
+  - Moved/split the existing runtime object editor modules into common
+    placed-object dispatch/actions/drag, billboard actions/inspector, and door
+    actions/inspector/modals.
+  - Preserved context/callback boundaries with no direct `SectorEditor`
+    dependency in the moved modules.
+  - No behavior changes intended.
+
+#### REF-042 `[x]` Move document actions/modals into `document/`
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+- Why it helps: separates document lifecycle helpers from tool modules while
+  keeping high-level editor lifecycle orchestration central.
+- Likely files: `SectorEditorDocumentActions.*`,
+  `SectorEditorDocumentModals.*`, include paths.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, and manual
+  new/load/save/reload smoke.
+- Notes:
+  - Document is not a tool.
+  - Do not move preview enter/leave or renderer/resource lifecycle into the
+    document folder.
+- Completion notes:
+  - Moved document actions/modals into
+    `sources/sector_editor/document/`.
+  - Document remains separate from tools.
+  - High-level document lifecycle orchestration remains in `SectorEditor`.
+  - No behavior changes intended.
+
+#### REF-043 `[x]` Authoring tool module contract and migration series
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+- Why it helps: avoids one giant authoring module and lets each tool own its
+  input/overlay/temporary state where practical.
+- Likely files: `SectorEditor.cpp`, `SectorEditorAuthoringState.*`,
+  `tools/`, `tools/select/`, `tools/line/`, `tools/rectangle/`,
+  `tools/insert_vertex/`.
+- Suggested task type: Codex task.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, and manual select/line/rectangle/insert
+  vertex authoring smoke after implementation tasks.
+- Series:
+  - REF-043a: Minimal authoring tool contract and Line tool pilot.
+  - REF-043b: Rectangle tool migration.
+  - REF-043c: Insert Vertex tool migration.
+  - REF-047: Selection service and manipulation provider contract.
+  - REF-048: Passive `SelectionTarget` and provider type definitions.
+  - REF-049: Selection service extraction.
+  - REF-050: Manipulation service shell.
+  - REF-051: First move provider pilot.
+  - REF-052: Select tool migration using services/providers.
+- Notes:
+  - Keep current "Authoring Line" terminology until a rename task is explicitly
+    scoped.
+  - Select migration should wait for Selection service extraction and a
+    Manipulation provider contract.
+  - Select is not just another authoring tool; it is the frontend for
+    selection/manipulation behavior.
+  - Do not migrate Select as a giant switch over movable types.
+- Completion notes:
+  - REF-043a added a minimal tool module descriptor/lookup.
+  - REF-043a migrated Authoring Line behavior into `tools/line/`.
+  - REF-043b migrated Authoring Rectangle behavior into `tools/rectangle/`.
+  - REF-043b registered Rectangle in `FindSectorEditorToolModule()`.
+  - REF-043c migrated Authoring Insert Vertex behavior into
+    `tools/insert_vertex/`.
+  - REF-043c registered Insert Vertex in `FindSectorEditorToolModule()`.
+  - `SectorEditor` uses module dispatch for Line, Rectangle, Insert Vertex, and
+    Select.
+  - REF-047 completed the Selection service and Manipulation provider contract
+    report.
+  - REF-052 migrated Select using Selection and Manipulation services/providers.
+  - Movement providers can continue as future refinements.
+  - No behavior changes intended.
+
+#### REF-047 `[x]` Selection service and manipulation provider contract
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: prevents Select migration from becoming a giant switch over all
+  selectable/movable primitives.
+- Likely files: audit/backlog documentation only.
+- Suggested task type: Audit first.
+- Risk: Low.
+- Suggested verification: `git diff --check`, `git diff --stat`,
+  `git status --short`.
+- Notes:
+  - Selection should own selected IDs/state transitions/queries.
+  - Manipulation should own generic drag transaction lifecycle and provider
+    dispatch.
+  - Select should own mouse behavior, pick cycling, and initiating
+    manipulation.
+- Completion notes:
+  - Completed in
+    `docs/audit/sector_editor_selection_manipulation_contract.md`.
+  - Recommended first implementation task: add passive `SelectionTarget` and
+    provider/capability type definitions only.
+
+#### REF-048 `[x]` Add passive SelectionTarget and provider type definitions
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: gives selection, picking, and manipulation code one target
+  vocabulary before behavior migration.
+- Likely files: `SectorEditorSelectionTypes.h` or a new narrow selection
+  provider header.
+- Suggested task type: Codex task.
+- Risk: Low/Medium.
+- Suggested verification: build, ctest, `git diff --check`.
+- Notes:
+  - No behavior changes.
+  - Preserve existing selection state fields during this slice.
+- Completion notes:
+  - Added passive `SectorEditorSelectionTarget` and provider/capability type
+    definitions in `sources/sector_editor/selection/SectorEditorSelectionTarget.h`.
+  - No behavior migration was performed.
+  - Current selected state fields are preserved.
+  - Future REF-049/050/051/052 work will use these definitions.
+
+#### REF-049 `[x]` Extract Selection service helpers
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: centralizes clear/select/query/stale cleanup before Select
+  migration.
+- Likely files: new selection service files, `SectorEditor.cpp/.h`.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, and manual
+  selection smoke for topology, authoring, runtime object, light, and surface
+  targets.
+- Notes:
+  - Preserve current selected state fields and UI reset behavior.
+  - Keep object-specific movement out of the Selection service.
+- Completion notes:
+  - Extracted selection service helpers into
+    `sources/sector_editor/selection/SectorEditorSelectionService.h/.cpp`.
+  - Moved passive SelectionTarget definitions to
+    `sources/sector_editor/selection/SectorEditorSelectionTarget.h`.
+  - Current selected state fields remain preserved as the source of truth.
+  - Select tool input/pick/drag behavior was not migrated.
+  - Manipulation service and providers remain future work.
+  - No behavior changes intended.
+
+#### REF-050 `[x]` Add Manipulation service shell
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: separates generic drag transaction lifecycle from Select input
+  behavior.
+- Likely files: new manipulation service files, select input glue.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, and manual drag
+  finish/cancel smoke for current movable targets.
+- Notes:
+  - Initially delegate to existing drag functions.
+  - Do not move object-specific mutation logic into the service.
+- Completion notes:
+  - Added the Manipulation service shell in
+    `sources/sector_editor/selection/SectorEditorManipulationService.h/.cpp`.
+  - Current drag state fields remain preserved as the source of truth.
+  - Existing movement implementations still own object-specific movement.
+  - The service delegates to existing drag paths through callbacks.
+  - No provider dispatch was added yet.
+  - No behavior changes intended.
+
+#### REF-051 `[x]` Pilot first move provider
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: proves the provider contract on one bounded movement family.
+- Likely files: `tools/placed_objects/`, `tools/billboards/`, manipulation
+  service glue.
+- Suggested task type: Codex task.
+- Risk: Medium.
+- Suggested verification: build, ctest, `git diff --check`, and manual
+  billboard move/cancel plus door refusal smoke.
+- Notes:
+  - Prefer placed-object/billboard movement because its drag code already has a
+    callback context.
+  - Preserve the current door movement refusal status text.
+- Completion notes:
+  - Added the first move provider pilot for placed objects.
+  - Placed-object/billboard movement now routes through the provider from the
+    Manipulation service.
+  - Door movement refusal is preserved by the existing placed-object drag path.
+  - Authoring vertex and light movement remain on fallback callbacks.
+  - No Select migration was performed.
+  - No behavior changes intended.
+
+#### REF-052 `[x]` Migrate Select tool using services/providers
+
+- Source/audit reference:
+  `docs/audit/sector_editor_selection_manipulation_contract.md`.
+- Why it helps: finishes Select migration without making Select own
+  object-specific movement.
+- Likely files: `tools/select/`, Selection service, Manipulation service,
+  `SectorEditor.cpp/.h`.
+- Suggested task type: Codex task.
+- Risk: High.
+- Suggested verification: build, ctest, `git diff --check`, and manual smoke
+  for pick cycling, hover, clear selection, drag threshold, movable targets, and
+  selectable-only targets.
+- Notes:
+  - Do after REF-048 through REF-051.
+  - Select should call services/providers rather than switching over every
+    primitive.
+- Completion notes:
+  - Migrated Select into `sources/sector_editor/tools/select/`.
+  - Select uses Selection and Manipulation services for selection state changes
+    and drag/manipulation lifecycle.
+  - Select does not own object-specific movement implementation.
+  - Placed-object movement still routes through the provider.
+  - Authoring vertex and light movement remain fallback movement paths.
+  - Future provider refinements remain open for authoring vertex movement,
+    light movement, and topology/preview selection providers if useful later.
+  - No behavior changes intended.
+
+#### REF-044 `[~]` Migrate material/sidedef/decal editing into `tools/materials/`
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md` and
+  `docs/audit/sector_editor_materials_boundary_audit.md`.
+- Why it helps: keeps material inspector UI, decal modal, material actions, and
+  material-specific picker routing together instead of expanding generic
+  material/action/modal categories.
+- Likely files: `SectorEditorMaterialActions.*`,
+  `SectorEditorMaterialModals.*`, SideDef/material inspector code, material
+  picker routing.
+- Suggested task type: Audit first.
+- Risk: Medium/High.
+- Suggested verification: build, ctest, material/decal/texture picker smoke;
+  implementation reports must mention topology render-cache invalidation.
+- Notes:
+  - Preserve `FinishTopologyMaterialMutation()` /
+    `FinishMaterialActionResult()` paths.
+  - Keep texture catalog/import workflows separate from material-specific
+    routing.
+  - REF-053 split this broad item into REF-054
+    materials/sidedef/decal boundary audit and REF-055 SideDef/material/decal
+    inspector extraction. Treat REF-044 as the umbrella, not the next direct
+    implementation task.
+- Completion notes:
+  - REF-054 completed the materials/sidedef/decal boundary audit at
+    `docs/audit/sector_editor_materials_boundary_audit.md`.
+  - REF-055 extracted the SideDef/material/decal inspector into
+    `tools/materials/`; follow-up material picker routing, preview UV panel, and
+    wrapper cleanup tasks were completed by later service/panel cleanup tasks.
+  - REF-044 remains open only as a broad umbrella for future material/tool
+    module cleanup if new concrete debt appears.
+
+#### REF-045 `[ ]` Audit lights/source-hash-sensitive tool migration
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+- Why it helps: lights, directional settings, object probe settings, and
+  lightmap bake coupling are high-risk boundaries that should not be moved
+  casually.
+- Likely files: `SectorEditorLightInspector.*`, light action/drag code,
+  preview settings apply code, lightmap tests.
+- Suggested task type: Audit first.
+- Risk: High.
+- Suggested verification: source-hash audit first; future implementation needs
+  build, ctest, source-hash tests, and manual light/preview/bake smoke.
+- Notes:
+  - Static lights, static spotlights, directional light, object probe spacing,
+    object probe height, and `ceilingSky` are source-hash-sensitive.
+  - Sky visual settings and preview settings should remain source-hash-neutral.
+  - REF-056 keeps broad light editing as audit-first and separates it from the
+    LightmapBakeController runner-plan work.
+- Completion notes:
+
+#### REF-046 `[ ]` Audit preview tool/module migration
+
+- Source/audit reference:
+  `docs/audit/sector_editor_tool_module_boundary_design.md`.
+- Why it helps: identifies which preview overlays, UV panel, and preview
+  settings UI can move without disturbing renderer resource lifecycle.
+- Likely files: `SectorEditorPreviewActions.*`,
+  `SectorEditorPreviewSettingsModal.*`, preview overlay/UV panel code,
+  `SectorEditor.cpp`.
+- Suggested task type: Audit first.
+- Risk: High.
+- Suggested verification: audit first; future implementation needs build,
+  ctest, and manual preview render/overlay/UV smoke.
+- Notes:
+  - Keep `SectorMeshRenderer` implementation and GPU resource orchestration
+    outside tool modules.
+  - Defer broad preview facade rewrites.
+  - REF-056 split the immediate preview question into REF-060 for the preview
+    UV/material panel dependency audit; keep preview overlay/debug UI migration
+    separate from material editing.
 - Completion notes:
 
 ### 6. Lightmap / Object Probe Cleanup

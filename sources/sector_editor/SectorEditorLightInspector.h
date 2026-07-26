@@ -3,19 +3,13 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/inspector/SectorEditorInspectorUiState.h"
+#include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/SectorEditorTypes.h"
 
 #include <raylib.h>
 
-#include <functional>
-
 namespace game {
-
-struct SectorEditorLightInspectorCallbacks {
-    std::function<void(const char*)> markTopologyDocumentEdited;
-    std::function<bool()> deleteSelectedLight;
-    std::function<bool()> bakeLightmaps;
-};
 
 float StaticLightInspectorContentHeight(float rowH, float gap, bool hasIdError);
 float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError);
@@ -34,7 +28,10 @@ bool DrawSelectedStaticLightInspector(
         float gap,
         SectorTopologyStaticPointLight& light,
         SectorEditorUiState& uiState,
-        const SectorEditorLightInspectorCallbacks& callbacks);
+        InspectorIdUiState& inspectorIdUiState,
+        SectorEditorLightEditingService& lightEditing,
+        bool& deleteRequested,
+        bool& bakeRequested);
 
 bool DrawSelectedStaticSpotLightInspector(
         engine::UIContext& ui,
@@ -48,7 +45,10 @@ bool DrawSelectedStaticSpotLightInspector(
         float gap,
         SectorTopologyStaticSpotLight& light,
         SectorEditorUiState& uiState,
-        const SectorEditorLightInspectorCallbacks& callbacks);
+        InspectorIdUiState& inspectorIdUiState,
+        SectorEditorLightEditingService& lightEditing,
+        bool& deleteRequested,
+        bool& bakeRequested);
 
 bool DrawSelectedDynamicLightInspector(
         engine::UIContext& ui,
@@ -62,7 +62,9 @@ bool DrawSelectedDynamicLightInspector(
         float gap,
         SectorTopologyDynamicPointLight& light,
         SectorEditorUiState& uiState,
-        const SectorEditorLightInspectorCallbacks& callbacks);
+        InspectorIdUiState& inspectorIdUiState,
+        SectorEditorLightEditingService& lightEditing,
+        bool& deleteRequested);
 
 bool DrawSelectedDynamicSpotLightInspector(
         engine::UIContext& ui,
@@ -77,6 +79,8 @@ bool DrawSelectedDynamicSpotLightInspector(
         float gap,
         SectorTopologyDynamicSpotLight& light,
         SectorEditorUiState& uiState,
-        const SectorEditorLightInspectorCallbacks& callbacks);
+        InspectorIdUiState& inspectorIdUiState,
+        SectorEditorLightEditingService& lightEditing,
+        bool& deleteRequested);
 
 } // namespace game

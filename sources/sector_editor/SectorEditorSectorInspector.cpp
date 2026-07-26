@@ -1,7 +1,9 @@
 #include "sector_editor/SectorEditorSectorInspector.h"
 
+#include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -54,7 +56,13 @@ bool DrawTopologySectorInspector(
         float gap,
         SectorTopologySector& sector,
         SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        SelectionState& selectionState,
         SectorEditorUiState& uiState,
+        InspectorIdUiState& inspectorIdUiState,
+        MaterialEditingUiState& materialUiState,
+        SectorEditorMaterialEditingService& materialEditing,
+        SectorEditorTextureCatalogService& textureCatalog,
         const SectorEditorSectorInspectorCallbacks& callbacks)
 {
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
@@ -81,18 +89,18 @@ bool DrawTopologySectorInspector(
             "sector_editor_selected_topology_sector_name",
             Rectangle{labelW, y, contentW - labelW, rowH},
             font,
-            uiState.selectedSectorIdBuffer,
-            sizeof(uiState.selectedSectorIdBuffer),
+            inspectorIdUiState.selectedSectorIdBuffer,
+            sizeof(inspectorIdUiState.selectedSectorIdBuffer),
             0,
-            sizeof(uiState.selectedSectorIdBuffer) - 1,
+            sizeof(inspectorIdUiState.selectedSectorIdBuffer) - 1,
             engine::UITextJustify::Left);
     if (nameResult.submitted) {
         callbacks.tryRenameSelectedTopologySector();
     }
     y += rowH + gap;
 
-    if (!uiState.idEditError.empty()) {
-        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, uiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
+    if (!inspectorIdUiState.idEditError.empty()) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, inspectorIdUiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
         y += 36.0f;
     }
 
@@ -250,7 +258,7 @@ bool DrawTopologySectorInspector(
         const float buttonW = 38.0f;
         const float labelColumnW = 82.0f;
         const Rectangle row{0.0f, y, contentW, 36.0f};
-        const bool missing = !textureId.empty() && FindSectorTopologyTexture(state.topologyMap, textureId) == nullptr;
+        const bool missing = !textureId.empty() && !textureCatalog.HasTexture(textureId);
         engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
         engine::Text(
                 ui,
@@ -262,7 +270,11 @@ bool DrawTopologySectorInspector(
                 engine::UITextJustify::Left,
                 missing ? config.invalidColor : config.mutedTextColor);
         if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
-            callbacks.openTopologyTexturePicker(sector.id, field, layer);
+            if (!materialEditing.OpenMaterialPickerForDerivedSector(sector.id, field, layer)) {
+                callbacks.setStatusText(HasAuthoringGraphData(authoringGraph)
+                        ? "No derived sector authoring material target"
+                        : "Cannot edit material: authoring data is required.");
+            }
         }
         y += row.height + gap;
     };
@@ -284,7 +296,7 @@ bool DrawTopologySectorInspector(
                     Rectangle{bounds.x, bounds.y + 26.0f, bounds.width, 36.0f},
                     engine::UITextJustify::Left,
                     value,
-                    uiState.topologySectorUvInputs[stateOffset + stateIndex],
+                    materialUiState.topologySectorUvInputs[stateOffset + stateIndex],
                     minValue,
                     maxValue,
                     3);
@@ -326,9 +338,9 @@ bool DrawTopologySectorInspector(
                     Rectangle{labelColumnW, y, buttonW, 36.0f},
                     font,
                     "Base",
-                    state.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
-            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
-            for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+                    selectionState.activeTopologyMaterialLayer == TopologyMaterialLayer::Base)) {
+            selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Base;
+            for (engine::UIFloatInputState& inputState : materialUiState.topologySectorUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
         }
@@ -341,9 +353,9 @@ bool DrawTopologySectorInspector(
                     Rectangle{labelColumnW + buttonW + gap, y, buttonW, 36.0f},
                     font,
                     "Decal",
-                    state.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
-            state.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
-            for (engine::UIFloatInputState& inputState : uiState.topologySectorUvInputs) {
+                    selectionState.activeTopologyMaterialLayer == TopologyMaterialLayer::Decal)) {
+            selectionState.activeTopologyMaterialLayer = TopologyMaterialLayer::Decal;
+            for (engine::UIFloatInputState& inputState : materialUiState.topologySectorUvInputs) {
                 inputState = engine::UIFloatInputState{};
             }
         }
@@ -357,7 +369,7 @@ bool DrawTopologySectorInspector(
         y += 30.0f;
         const TopologySurfaceEditTarget target{materialKind, sector.id};
         drawLayerToggle(uvPrefix);
-        const TopologyMaterialLayer layer = state.activeTopologyMaterialLayer;
+        const TopologyMaterialLayer layer = selectionState.activeTopologyMaterialLayer;
         if (layer == TopologyMaterialLayer::Base) {
             const float buttonW = (contentW - gap) * 0.5f;
             if (engine::Button(
@@ -369,7 +381,7 @@ bool DrawTopologySectorInspector(
                         Rectangle{0.0f, y, buttonW, 36.0f},
                         font,
                         "Copy")) {
-                callbacks.copyTopologyMaterial(target);
+                materialEditing.CopyMaterial(target);
             }
             if (engine::Button(
                         ui,
@@ -380,7 +392,7 @@ bool DrawTopologySectorInspector(
                         Rectangle{buttonW + gap, y, buttonW, 36.0f},
                         font,
                         "Paste")) {
-                callbacks.pasteTopologyMaterial(target, assets);
+                materialEditing.PasteMaterial(target, assets);
             }
             y += 36.0f + gap;
             drawTextureRow(textureButtonId, "Texture:", textureId, field, TopologyMaterialLayer::Base);
@@ -408,12 +420,12 @@ bool DrawTopologySectorInspector(
                 Rectangle{82.0f, y, contentW - 82.0f, rowH},
                 engine::UITextJustify::Left,
                 decal.opacity,
-                uiState.topologySectorDecalOpacityInputs[opacityStateIndex],
+                materialUiState.topologySectorDecalOpacityInputs[opacityStateIndex],
                 0.0f,
                 1.0f,
                 3);
         if (opacityResult.changed && opacityResult.value != decal.opacity && opacityResult.finite) {
-            callbacks.applySurfaceDecalOpacity(target, opacityResult.value);
+            materialEditing.ApplyDecalOpacity(target, opacityResult.value, nullptr);
         }
         y += rowH + gap;
         bool emissive = decal.emissive;
@@ -427,7 +439,7 @@ bool DrawTopologySectorInspector(
                     font,
                     "Emissive",
                     emissive)) {
-            callbacks.applySurfaceDecalEmissive(target, emissive);
+            materialEditing.ApplyDecalEmissive(target, emissive, nullptr);
         }
         y += 36.0f + gap;
 
@@ -444,12 +456,12 @@ bool DrawTopologySectorInspector(
                     Rectangle{82.0f, y, contentW - 82.0f, rowH},
                     engine::UITextJustify::Left,
                     decal.bloomIntensity,
-                    uiState.topologySectorDecalBloomIntensityInputs[opacityStateIndex],
+                    materialUiState.topologySectorDecalBloomIntensityInputs[opacityStateIndex],
                     0.0f,
                     10.0f,
                     3);
             if (bloomResult.changed && bloomResult.value != decal.bloomIntensity) {
-                callbacks.applySurfaceDecalBloomIntensity(target, bloomResult.value);
+                materialEditing.ApplyDecalBloomIntensity(target, bloomResult.value, nullptr);
             }
             y += rowH + gap;
         }
@@ -465,7 +477,7 @@ bool DrawTopologySectorInspector(
                     swatchLocal,
                     font,
                     "")) {
-            callbacks.openDecalTintModal(target);
+            materialEditing.OpenDecalTintModal(target);
         }
         const Rectangle swatchScreen{
                 scroll.viewport.x + swatchLocal.x,
@@ -485,7 +497,7 @@ bool DrawTopologySectorInspector(
                     Rectangle{0.0f, y, decalButtonW, 36.0f},
                     font,
                     "Fit Decal")) {
-            callbacks.fitSelectedDecal(target);
+            materialEditing.FitSelectedDecal(target, nullptr);
         }
         if (engine::Button(
                     ui,
@@ -496,7 +508,7 @@ bool DrawTopologySectorInspector(
                     Rectangle{decalButtonW + gap, y, decalButtonW, 36.0f},
                     font,
                     "Clear Decal")) {
-            callbacks.clearSurfaceDecal(target);
+            materialEditing.ClearSurfaceDecal(target, nullptr);
         }
         y += 36.0f + gap;
     };

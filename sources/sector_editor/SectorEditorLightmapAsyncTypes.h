@@ -47,4 +47,18 @@ struct LightmapBakeAsyncState {
     std::optional<SectorLightmapBakeAsyncResult> pendingResult;
 };
 
+struct SectorEditorLightmapBakeModalView {
+    bool blocking = false;
+    bool running = false;
+    bool awaitingAcknowledgement = false;
+    bool cancelButtonPressed = false;
+    bool terminalCancelled = false;
+    SectorLightmapBakePhase phase = SectorLightmapBakePhase::Idle;
+    uint32_t completedWork = 0;
+    uint32_t totalWork = 0;
+    double startTimeSeconds = 0.0;
+    double completedTimeSeconds = 0.0;
+    std::string terminalMessage;
+};
+
 } // namespace game

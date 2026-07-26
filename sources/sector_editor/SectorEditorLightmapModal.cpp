@@ -14,21 +14,21 @@ void DrawLightmapBakeModal(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
-        LightmapBakeAsyncState& lightmapBake,
+        const SectorEditorLightmapBakeModalView& view,
         const SectorEditorLightmapBakeModalCallbacks& callbacks)
 {
-    if (!callbacks.isBlocking()) {
+    if (!view.blocking) {
         return;
     }
 
-    const bool running = lightmapBake.progress.running.load();
-    const SectorLightmapBakePhase phase = lightmapBake.progress.phase.load();
-    const uint32_t completedWork = lightmapBake.progress.completedWork.load();
-    const uint32_t totalWork = lightmapBake.progress.totalWork.load();
+    const bool running = view.running;
+    const SectorLightmapBakePhase phase = view.phase;
+    const uint32_t completedWork = view.completedWork;
+    const uint32_t totalWork = view.totalWork;
     const float progress = LightmapBakeOverallProgress(phase, completedWork, totalWork);
     const double now = GetTime();
-    const double elapsed = (lightmapBake.completedTimeSeconds > 0.0 ? lightmapBake.completedTimeSeconds : now)
-            - lightmapBake.startTimeSeconds;
+    const double elapsed = (view.completedTimeSeconds > 0.0 ? view.completedTimeSeconds : now)
+            - view.startTimeSeconds;
 
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
 
@@ -45,10 +45,10 @@ void DrawLightmapBakeModal(
     engine::Text(config, assets, Rectangle{modal.x + 28.0f, y, modal.width - 56.0f, 42.0f}, font, "Baking lightmap", engine::UITextJustify::Left);
     y += 58.0f;
 
-    const char* phaseText = lightmapBake.awaitingAcknowledgement && !lightmapBake.terminalMessage.empty()
-            ? lightmapBake.terminalMessage.c_str()
-            : (lightmapBake.cancelButtonPressed && running ? "Cancelling bake..." : LightmapBakePhaseText(phase));
-    const Color phaseColor = lightmapBake.awaitingAcknowledgement && !lightmapBake.terminalCancelled
+    const char* phaseText = view.awaitingAcknowledgement && !view.terminalMessage.empty()
+            ? view.terminalMessage.c_str()
+            : (view.cancelButtonPressed && running ? "Cancelling bake..." : LightmapBakePhaseText(phase));
+    const Color phaseColor = view.awaitingAcknowledgement && !view.terminalCancelled
             ? config.invalidColor
             : config.textColor;
     engine::Text(config, assets, Rectangle{modal.x + 28.0f, y, modal.width - 56.0f, 38.0f}, font, phaseText, engine::UITextJustify::Left, phaseColor);
@@ -83,14 +83,14 @@ void DrawLightmapBakeModal(
     const float buttonH = 44.0f;
     const Rectangle button{modal.x + modal.width - buttonW - 28.0f, modal.y + modal.height - buttonH - 24.0f, buttonW, buttonH};
     if (running) {
-        if (lightmapBake.cancelButtonPressed) {
+        if (view.cancelButtonPressed) {
             DrawRectangleRec(button, config.disabledColor);
             DrawRectangleLinesEx(button, config.borderThickness, config.borderColor);
             engine::Text(config, assets, button, font, "Cancel", engine::UITextJustify::Center, config.mutedTextColor);
         } else if (engine::Button(ui, config, input, assets, "sector_editor_lightmap_bake_cancel", button, font, "Cancel")) {
             callbacks.requestCancel();
         }
-    } else if (lightmapBake.awaitingAcknowledgement) {
+    } else if (view.awaitingAcknowledgement) {
         if (engine::Button(ui, config, input, assets, "sector_editor_lightmap_bake_close", button, font, "Close")) {
             callbacks.closeAcknowledgement();
         }

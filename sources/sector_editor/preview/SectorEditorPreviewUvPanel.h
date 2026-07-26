@@ -1,0 +1,49 @@
+#pragma once
+
+#include "engine/assets/AssetManager.h"
+#include "engine/input/Input.h"
+#include "engine/ui/UI.h"
+#include "sector_editor/SectorEditorModalTypes.h"
+#include "sector_editor/preview/SectorEditorPreviewState.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
+
+#include <raylib.h>
+
+#include <functional>
+#include <string>
+
+namespace game {
+
+class SectorEditorTextureCatalogService;
+
+struct SectorEditorPreviewUvPanelContext {
+    engine::UIContext& ui;
+    const engine::UIConfig& config;
+    engine::Input& input;
+    engine::AssetManager& assets;
+    engine::FontHandle font;
+    engine::FontHandle smallFont;
+
+    Rectangle panelRect;
+
+    SectorTopologyMap& topologyMap;
+    SectorAuthoringGraph& authoringGraph;
+    const SectorAuthoringDerivationResult& authoringDerivation;
+    bool authoringDerivationCurrent = false;
+    TexturePickerState& texturePicker;
+    SectorEditorPreviewSelectionState& previewSelectionState;
+    SelectionState& selectionState;
+    MaterialEditingUiState& materialUiState;
+    std::string& statusText;
+
+    SectorEditorMaterialEditingService& materialEditing;
+    SectorEditorTextureCatalogService& textureCatalog;
+    std::function<bool(int, bool)> setAuthoringLineDefBlocksPlayer;
+};
+
+Rectangle BuildSectorEditorPreviewUvPanelRect();
+
+bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context);
+
+} // namespace game

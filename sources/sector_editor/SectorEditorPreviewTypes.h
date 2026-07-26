@@ -22,21 +22,9 @@ enum class PreviewDebugOverlayTab {
     Controls
 };
 
-enum class SpotLightPilotKind {
-    None,
-    Static,
-    Dynamic
-};
-
-struct SpotLightPilotState {
-    bool active = false;
-    SpotLightPilotKind kind = SpotLightPilotKind::None;
-    int lightId = -1;
-    Vector3 originalPosition = {};
-    Vector3 originalTarget = {};
+struct SpotLightPilotPreviewRestoreState {
     SectorViewPose originalPreviewPose = {};
     bool originalMouseLookEnabled = true;
-    float targetDistanceWorld = 4.0f;
 };
 
 } // namespace game

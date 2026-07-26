@@ -1,11 +1,13 @@
 #pragma once
 
-#include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/preview/SectorEditorPreviewState.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -21,16 +23,33 @@ bool IsSectorAuthoringSelectionTargetValid(
         const SectorAuthoringGraph& graph,
         SectorAuthoringSelectionTarget target);
 
-void ClearSectorEditorAuthoringSelection(SectorEditorState& state);
-bool SelectSectorEditorAuthoringLine(SectorEditorState& state, int lineId);
-bool SelectSectorEditorAuthoringVertex(SectorEditorState& state, int vertexId);
-bool SelectSectorEditorAuthoringFaceAnchor(SectorEditorState& state, int faceAnchorId);
+void ClearSectorEditorAuthoringSelection(SelectionState& selectionState);
+bool SelectSectorEditorAuthoringLine(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int lineId);
+bool SelectSectorEditorAuthoringVertex(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int vertexId);
+bool SelectSectorEditorAuthoringFaceAnchor(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int faceAnchorId);
 
-void ClearSectorEditorAuthoringHover(SectorEditorState& state);
-bool SetHoveredSectorEditorAuthoringLine(SectorEditorState& state, int lineId);
-bool SetHoveredSectorEditorAuthoringVertex(SectorEditorState& state, int vertexId);
+void ClearSectorEditorAuthoringHover(SelectionState& selectionState);
+bool SetHoveredSectorEditorAuthoringLine(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int lineId);
+bool SetHoveredSectorEditorAuthoringVertex(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int vertexId);
 
-void PruneSectorEditorAuthoringSelectionToGraph(SectorEditorState& state);
+void PruneSectorEditorAuthoringSelectionToGraph(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState);
 
 bool FindSectorAuthoringVertexAtPoint(
         const SectorAuthoringGraph& graph,
@@ -59,20 +78,22 @@ bool FindSectorEditorAuthoringSelectionNearMapPoint(
         SectorTopologyCoordPoint* outVertexPoint = nullptr);
 
 bool FindSectorEditorAuthoringFaceAnchorAtMapPoint(
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         Vector2 mapPoint,
         int* outFaceAnchorId = nullptr,
         std::string* outStatus = nullptr);
-
 bool FindSectorEditorAuthoringSelectionAtMapPoint(
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         Vector2 mapPoint,
         float vertexMaxDistance,
         float lineMaxDistance,
         SectorAuthoringSelectionTarget* outTarget = nullptr,
         SectorTopologyCoordPoint* outVertexPoint = nullptr,
         std::string* outStatus = nullptr);
-
 struct SectorEditorAuthoringLineSegmentResult {
     int lineId = -1;
     int startVertexId = -1;
@@ -83,6 +104,11 @@ struct SectorEditorAuthoringLineSegmentResult {
 
 bool AddSectorEditorAuthoringLineSegment(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SelectionState& selectionState,
         SectorTopologyCoordPoint start,
         SectorTopologyCoordPoint end,
         int* outLineId = nullptr,
@@ -103,6 +129,11 @@ struct SectorEditorAuthoringLineToolClickResult {
 
 SectorEditorAuthoringLineToolClickResult ClickSectorEditorAuthoringLineTool(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SelectionState& selectionState,
         SectorTopologyCoordPoint point);
 
 void CancelSectorEditorAuthoringLineToolChain(SectorEditorState& state);
@@ -110,6 +141,8 @@ void CancelSectorEditorAuthoringLineToolChain(SectorEditorState& state);
 struct SectorEditorAuthoringRectangleResult {
     int vertexIds[4] = {-1, -1, -1, -1};
     int lineIds[4] = {-1, -1, -1, -1};
+    std::vector<int> insertedLineIds;
+    std::string errorMessage;
 };
 
 bool CreateSectorAuthoringRectangle(
@@ -120,44 +153,82 @@ bool CreateSectorAuthoringRectangle(
 
 bool AddSectorEditorAuthoringRectangle(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         SectorTopologyCoordPoint firstCorner,
         SectorTopologyCoordPoint oppositeCorner,
         SectorEditorAuthoringRectangleResult* outResult = nullptr);
 
 bool InsertSectorEditorAuthoringVertexOnLine(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SelectionState& selectionState,
         int lineId,
         SectorTopologyCoordPoint point,
         SectorAuthoringInsertVertexResult* outResult = nullptr);
 
-bool DeleteSectorEditorSelectedAuthoringLine(SectorEditorState& state);
+bool DeleteSectorEditorSelectedAuthoringLine(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SelectionState& selectionState);
 bool MoveSectorEditorAuthoringVertex(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SelectionState& selectionState,
         int vertexId,
         SectorTopologyCoordPoint target);
-bool DeleteSectorEditorSelectedAuthoringVertex(SectorEditorState& state);
+bool DeleteSectorEditorSelectedAuthoringVertex(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SelectionState& selectionState);
 
 void InitializeSectorEditorAuthoringStateFromTopology(
-        SectorEditorState& state,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         const SectorTopologyMap& sourceMap);
 
-bool HasAuthoringGraphData(const SectorEditorState& state);
+bool HasAuthoringGraphData(const SectorAuthoringGraph& graph);
 
 void MarkSectorEditorAuthoringGraphEdited(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorEditorDerivationDocumentAccess derivation,
+        const char* status);
+void MarkSectorEditorAuthoringGraphEdited(
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorEditorDerivationDocumentAccess derivation,
         const char* status);
 
 int FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
         int topologySectorId);
 
 bool FindSectorEditorAuthoringSideIdForTopologySideDef(
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
         int topologySideDefId,
         SectorAuthoringSideId& outSideId);
 
 int FindSectorEditorAuthoringLineIdForTopologyLineDef(
-        const SectorEditorState& state,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
         int topologyLineDefId);
 
 enum class SectorEditorInspectorTargetKind {
@@ -178,10 +249,18 @@ struct SectorEditorInspectorTarget {
     std::string status;
 };
 
-SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(const SectorEditorState& state);
+SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
+        const SelectionState& selectionState);
 
 std::string BuildSectorEditorSurface3DTargetLabel(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         SectorSurfaceRef surface,
         TopologySurfaceEditTarget target);
 
@@ -198,7 +277,10 @@ struct SectorEditorAuthoringSurfaceTarget {
 };
 
 bool ResolveSectorEditorAuthoringSurfaceTarget(
-        const SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
         SectorSurfaceRef surface,
         SectorEditorAuthoringSurfaceTarget& outTarget,
         std::string* outStatus = nullptr);
@@ -207,70 +289,148 @@ SectorAuthoringSelectionTarget MakeSectorEditorAuthoringSelectionTargetForSurfac
         SectorEditorAuthoringSurfaceTarget target);
 
 bool ClearSelectedSectorEditorSurface3DIfAuthoringMappingUnavailable(
-        SectorEditorState& state,
+        const SectorTopologyMap& topologyMap,
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        bool authoringDerivationCurrent,
+        SectorEditorPreviewSelectionState& previewSelectionState,
         std::string* outStatus = nullptr);
-
-struct SectorEditorAuthoringFlatMaterialActionResult {
-    bool handled = false;
-    bool changed = false;
-    SectorEditorMaterialActionResult materialResult;
-    std::string status;
-};
-
-bool ApplySectorEditorAuthoringFaceAnchorFlatMaterialAction(
-        SectorEditorState& state,
-        SectorSurfaceRef surface,
-        TopologySurfaceEditTarget target,
-        const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action,
-        SectorEditorAuthoringFlatMaterialActionResult* outResult = nullptr);
 
 bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        int topologySectorId,
+        const char* status,
+        const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate);
+bool MutateSectorEditorAuthoringFaceAnchorForTopologySector(
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         int topologySectorId,
         const char* status,
         const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate);
 
 bool MutateSectorEditorAuthoringFaceAnchorById(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        int faceAnchorId,
+        const char* status,
+        const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate);
+bool MutateSectorEditorAuthoringFaceAnchorById(
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         int faceAnchorId,
         const char* status,
         const std::function<bool(SectorAuthoringFaceAnchor&)>& mutate);
 
 bool MutateSectorEditorAuthoringSideForTopologySideDef(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        int topologySideDefId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLineSide&)>& mutate);
+bool MutateSectorEditorAuthoringSideForTopologySideDef(
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         int topologySideDefId,
         const char* status,
         const std::function<bool(SectorAuthoringLineSide&)>& mutate);
 
 bool MutateSectorEditorAuthoringSideById(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SectorAuthoringSideId sideId,
+        const char* status,
+        const std::function<bool(SectorAuthoringLineSide&)>& mutate);
+bool MutateSectorEditorAuthoringSideById(
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         SectorAuthoringSideId sideId,
         const char* status,
         const std::function<bool(SectorAuthoringLineSide&)>& mutate);
 
 bool MutateSectorEditorAuthoringLineForTopologyLineDef(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         int topologyLineDefId,
         const char* status,
         const std::function<bool(SectorAuthoringLine&)>& mutate);
 
 bool MutateSectorEditorAuthoringLineById(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         int lineId,
         const char* status,
         const std::function<bool(SectorAuthoringLine&)>& mutate);
 
+bool SetSectorEditorAuthoringLineDefBlocksPlayer(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        int topologyLineDefId,
+        bool blocksPlayer,
+        std::string* outStatus = nullptr);
+
 bool RefreshSectorEditorAuthoringDerivation(
         SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        const char* successStatus = nullptr,
+        const char* failureStatus = nullptr);
+bool RefreshSectorEditorAuthoringDerivation(
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        uint64_t& topologyRenderRevision,
+        SectorEditorTopologyRenderCache& topologyRenderCache,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
         const char* successStatus = nullptr,
         const char* failureStatus = nullptr);
 
+
 bool CanUseCurrentAuthoringDerivedTopologyForPreview(
-        const SectorEditorState& state,
+        SectorEditorConstDerivationDocumentAccess derivation,
         std::string* outMessage = nullptr);
 
 bool CanUseCurrentAuthoringDerivedTopologyForLightmapBake(
-        const SectorEditorState& state,
+        SectorEditorConstDerivationDocumentAccess derivation,
         std::string* outMessage = nullptr);
 
 } // namespace game

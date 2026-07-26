@@ -113,14 +113,40 @@ if(BUILD_TESTING)
     target_link_libraries(sector_topology_tests PRIVATE raylib)
     add_test(NAME sector_topology_validation COMMAND sector_topology_tests)
 
+    add_executable(sector_editor_light_editing_service_tests
+            tests/SectorEditorLightEditingServiceTests.cpp
+            sources/sector_editor/SectorEditorDirtyState.cpp
+            sources/sector_editor/SectorEditorHelpers.cpp
+            sources/sector_editor/SectorEditorTopologyActions.cpp
+            sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+    )
+    target_include_directories(sector_editor_light_editing_service_tests PRIVATE sources)
+    target_compile_definitions(sector_editor_light_editing_service_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+    target_link_libraries(sector_editor_light_editing_service_tests PRIVATE raylib)
+    add_test(NAME sector_editor_light_editing_service COMMAND sector_editor_light_editing_service_tests)
+
     add_executable(sector_authoring_graph_tests
             tests/SectorAuthoringGraphTests.cpp
             sources/sector_editor/SectorEditorAuthoringState.cpp
-            sources/sector_editor/SectorEditorDocumentActions.cpp
+            sources/sector_editor/SectorEditorDirtyState.cpp
+            sources/sector_editor/document/SectorEditorDocumentActions.cpp
             sources/sector_editor/SectorEditorHelpers.cpp
+            sources/sector_editor/SectorEditorMaterialActions.cpp
             sources/sector_editor/SectorEditorTextureActions.cpp
+            sources/sector_editor/selection/SectorEditorSelectionService.cpp
+            sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
+            sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
+            sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
+            sources/sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.cpp
+            sources/sector_editor/services/texture_picker/SectorEditorTexturePickerService.cpp
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
@@ -179,6 +205,8 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_lightmap_tests
             tests/SectorTopologyLightmapTests.cpp
+            sources/sector_editor/SectorEditorHelpers.cpp
+            sources/sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp

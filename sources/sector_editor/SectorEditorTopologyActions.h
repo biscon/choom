@@ -104,9 +104,4 @@ SectorEditorTopologyActionResult FinishMoveDynamicLight(
         int lightId,
         Vector3 originalPosition);
 
-SectorEditorTopologyActionResult SetPortalBlocksPlayer(
-        SectorTopologyMap& map,
-        int lineDefId,
-        bool blocksPlayer);
-
 } // namespace game

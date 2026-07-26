@@ -6,9 +6,24 @@
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorLightmapAsyncTypes.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
+#include "sector_editor/document/SectorEditorDocumentState.h"
+#include "sector_editor/inspector/SectorEditorInspectorUiState.h"
+#include "sector_editor/services/lights/SectorEditorLightEditingService.h"
+#include "sector_editor/services/lights/SectorEditorLightEditingState.h"
+#include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogState.h"
+#include "sector_editor/preview/SectorEditorPreviewState.h"
+#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
+#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectDrag.h"
+#include "sector_editor/selection/SectorEditorManipulationService.h"
+#include "sector_editor/selection/SectorEditorManipulationState.h"
+#include "sector_editor/selection/SectorEditorSelectionService.h"
+#include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 
 #include <raylib.h>
@@ -18,6 +33,8 @@
 #include <vector>
 
 namespace game {
+
+struct SectorEditorToolContext;
 
 class SectorEditor {
 public:
@@ -54,15 +71,8 @@ private:
     bool IsMouseOverCanvas(const engine::Input& input) const;
     void UpdateHoverAndMouse(engine::Input& input);
     void HandleCanvasInput(engine::Input& input, float dt);
-    void UpdateSelectDragArm(engine::Input& input);
-    void ArmSelectedSelectDrag(Vector2 pressPosition);
-    void StartSelectDrag(SectorEditorPickTarget target, Vector2 screenPoint);
     SectorEditorPickTarget CurrentPickSelectionTarget() const;
     std::vector<SectorEditorPickCandidate> BuildSelectPickCandidates(Vector2 screenPoint) const;
-    bool SelectPickTarget(SectorEditorPickTarget target);
-    bool FindSelectedMovablePickTargetAtScreenPoint(
-            Vector2 screenPoint,
-            SectorEditorPickTarget& outTarget) const;
     void StartAuthoringVertexDrag(int vertexId, SectorTopologyCoordPoint point);
     void UpdateAuthoringVertexDrag(engine::Input& input);
     void FinishAuthoringVertexDrag();
@@ -83,15 +93,12 @@ private:
     void CancelPendingAuthoringRectangle(const char* message);
     void CancelPendingAuthoringInsertVertex(const char* message);
     void BeginPendingAuthoringInsertVertex(int lineId);
-    void AddAuthoringLinePoint(SectorPoint point);
-    void AddAuthoringRectanglePoint(SectorPoint point);
     bool TryResolveAuthoringInsertVertexPoint(
             int lineId,
             Vector2 mapPoint,
             SectorTopologyCoordPoint& outPoint,
             std::string& error) const;
     void UpdatePendingAuthoringInsertVertex(Vector2 mapPoint);
-    void CommitAuthoringInsertVertex(Vector2 screenPoint);
     SectorPoint CurrentSnappedSectorPoint() const;
     bool ToTopologyCoordPoint(SectorPoint point, SectorTopologyCoordPoint& outPoint, std::string& error) const;
     bool ToCanonicalSectorPoint(SectorPoint point, SectorPoint& outPoint, std::string& error) const;
@@ -102,9 +109,6 @@ private:
     void DrawTopologyDocument();
     void DrawTopologySelectedLineHighlight() const;
     void DrawTopologySnapCrosshair() const;
-    void DrawPendingAuthoringLine() const;
-    void DrawPendingAuthoringRectangle() const;
-    void DrawPendingAuthoringInsertVertex() const;
     void DrawAuthoringVertexMoveOverlay() const;
     void DrawLightMoveOverlay() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
@@ -142,17 +146,6 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font,
             engine::FontHandle smallFont);
-    bool DrawTopologySideDefInspector(
-            engine::UIContext& ui,
-            const engine::UIConfig& config,
-            engine::Input& input,
-            engine::AssetManager& assets,
-            engine::FontHandle font,
-            engine::FontHandle smallFont,
-            engine::UIScrollAreaResult scroll,
-            float contentW,
-            float rowH,
-            float gap);
     void DrawTexturePickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -277,8 +270,8 @@ private:
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();
     bool StartSpotLightPilot();
-    bool ApplySpotLightPilot();
-    void CancelSpotLightPilot(const char* message);
+    bool ApplySpotLightPilotFromPreviewPose();
+    void CancelSpotLightPilotWithPreviewRestore(const char* message);
     bool RebuildSectorCollisionWorld();
     SectorFpsVerticalContext BuildGameplayVerticalContext();
     void RefreshGameplaySectorAndVerticalContext();
@@ -286,21 +279,13 @@ private:
     void OpenPreviewSettingsModal();
     void ApplyPreviewSettingsModal(engine::AssetManager& assets);
     void OpenDoorTextureSettingsModal();
-    bool ApplySelectedDoorFaceUvValue(int component, float value);
-    bool ApplySelectedDoorFaceUvFit(SectorDoorUvFitMode mode);
-    bool ResetSelectedDoorFaceUv();
-    bool CopySelectedDoorFaceUvFromFront();
-    bool ApplySelectedDoorFaceUvToAll();
-    void RefreshDefaultTextures();
-    void RefreshEditorTextureAssets(engine::AssetManager& assets);
-    engine::TextureHandle EditorTextureHandleForId(const std::string& textureId) const;
     void OpenAddMapTextureModal(engine::AssetManager& assets);
     void CloseAddMapTextureModal(engine::AssetManager& assets);
-    void RefreshAddMapTextureScan();
-    void SelectAddMapTexturePath(int pathIndex);
-    void RefreshAddMapTexturePreview(engine::AssetManager& assets);
-    bool ValidateAddMapTextureId(std::string& error) const;
     bool AddSelectedMapTexture(engine::AssetManager& assets);
+    SectorEditorManipulationServiceContext BuildManipulationServiceContext();
+    SectorEditorSelectionServiceContext BuildSelectionServiceContext();
+    SectorAuthoringGraph& AuthoringGraph();
+    const SectorAuthoringGraph& AuthoringGraph() const;
     SectorTopologySector* SelectedTopologySector();
     const SectorTopologySector* SelectedTopologySector() const;
     SectorTopologyVertex* SelectedTopologyVertex();
@@ -343,72 +328,33 @@ private:
     bool IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget target) const;
     void ResetSurface3DUiState();
     Rectangle BuildPreviewUvPanelRect() const;
-    const SectorTopologyDecalLayer* DecalForSurface(TopologySurfaceEditTarget target) const;
-    SectorTopologyDecalLayer* MutableDecalForSurface(TopologySurfaceEditTarget target);
-    const SectorTopologyUvSettings* UvForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer) const;
-    SectorTopologyUvSettings* MutableUvForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer);
-    bool IsDecalAssigned(TopologySurfaceEditTarget target) const;
-    std::string CurrentTextureForSurface(TopologySurfaceEditTarget target, TopologyMaterialLayer layer) const;
-    bool CopyTopologyMaterial(TopologySurfaceEditTarget target);
-    bool PasteTopologyMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets);
-    bool ApplySurface3DUvValue(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, int component, float value, engine::AssetManager& assets);
-    bool ApplySurfaceDecalOpacity(TopologySurfaceEditTarget target, float opacity, engine::AssetManager* assets);
-    bool ApplySurfaceDecalEmissive(TopologySurfaceEditTarget target, bool emissive, engine::AssetManager* assets);
-    bool ApplySurfaceDecalTint(TopologySurfaceEditTarget target, Vector3 tint, engine::AssetManager* assets);
-    bool ApplySurfaceDecalBloomIntensity(TopologySurfaceEditTarget target, float bloomIntensity, engine::AssetManager* assets);
-    bool OpenDecalTintModal(TopologySurfaceEditTarget target);
-    bool ClearSurfaceDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
-    bool ClearMiddleTexture(TopologySurfaceEditTarget target, engine::AssetManager* assets);
-    bool SetLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
-    bool ResetSurface3DUv(TopologySurfaceEditTarget target, TopologyMaterialLayer layer, engine::AssetManager& assets);
-    bool FitSelectedDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
-    bool FitSelectedFlatDecal(TopologySurfaceEditTarget target, engine::AssetManager* assets);
-    bool FitSelectedWallMaterial(TopologySurfaceEditTarget target, TopologyUvFitMode mode, engine::AssetManager* assets, TopologyMaterialLayer layer);
-    bool AlignSelectedWallMaterialVertical(TopologySurfaceEditTarget target, engine::AssetManager* assets, TopologyMaterialLayer layer);
-    bool AlignSelectedWallMaterialU(TopologySurfaceEditTarget target, TopologyUAlignDirection direction, engine::AssetManager* assets, TopologyMaterialLayer layer);
+    bool SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
+    SectorEditorMaterialEditingService BuildMaterialEditingService();
+    SectorEditorLightEditingService BuildLightEditingService();
+    SectorEditorTextureCatalogService MakeTextureCatalogService();
+    SectorEditorDocumentLifecycleAccess Lifecycle();
+    SectorEditorConstDocumentLifecycleAccess Lifecycle() const;
+    SectorTopologyMap& TopologyMap();
+    const SectorTopologyMap& TopologyMap() const;
     bool HasAuthoringGraphData() const;
-    bool IsSelectedSurface3DFlatTarget(TopologySurfaceEditTarget target) const;
     bool EnsureSelectedSurface3DAuthoringMappingCurrent();
-    bool ApplyAuthoringSideMaterialAction(
-            TopologySurfaceEditTarget target,
-            engine::AssetManager* assets,
-            const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action);
-    bool ApplyAuthoringFaceAnchorFlatMaterialAction(
-            TopologySurfaceEditTarget target,
-            engine::AssetManager* assets,
-            const std::function<SectorEditorMaterialActionResult(SectorTopologyMap&)>& action);
-    bool FinishAuthoringSideMaterialActionResult(
-            TopologySurfaceEditTarget target,
-            const SectorEditorMaterialActionResult& result,
-            const SectorTopologyMap& editedTopology,
-            engine::AssetManager* assets);
-    bool FinishMaterialActionResult(const SectorEditorMaterialActionResult& result, engine::AssetManager* assets);
-    bool FinishTopologyMaterialMutation(const char* status, engine::AssetManager* assets);
     bool FinishTopologyActionResult(const SectorEditorTopologyActionResult& result);
     bool RebuildPreviewMeshesPreservingView(engine::EngineContext& context);
     void ClearTransientTopologyEditStateAfterGeometryChange();
     void ClearTopologySelectionOnly();
     void ClearSelection();
-    void OpenTopologyTexturePicker(int sectorId, TopologySectorTextureField field, TopologyMaterialLayer layer);
-    void OpenTopologySideDefTexturePicker(int sideDefId, TopologyWallPart wallPart, TopologyMaterialLayer layer);
     void OpenMapSkyTexturePicker();
     void OpenSelectedDoorTexturePicker();
     void OpenSelectedBillboardSpritePicker();
     void ApplySelectedBillboardSpritePickerSelection();
     void ApplyTexturePickerSelection(engine::AssetManager& assets);
     std::string CurrentTextureForPickerTarget() const;
-    bool TryRenameSelectedTopologySector();
+    bool TryRenameSelectedDerivedSectorAuthoringName();
     void MarkTopologyDocumentEdited(const char* status);
-    bool TryRenameSelectedLight();
-    bool DeleteSelectedLight();
-    bool DeleteLightById(int topologyLightId);
-    void AddStaticLightAt(Vector2 mapPoint);
-    bool DeleteStaticSpotLightById(int topologyLightId);
-    void AddStaticSpotLightAt(Vector2 mapPoint);
-    bool DeleteDynamicLightById(int topologyLightId);
-    void AddDynamicLightAt(Vector2 mapPoint);
-    bool DeleteDynamicSpotLightById(int topologyLightId);
-    void AddDynamicSpotLightAt(Vector2 mapPoint);
+    bool OpenDeleteSelectedLightConfirmation();
+    SectorEditorToolContext BuildToolContext(engine::Input* input);
+    SectorEditorPlacedObjectDragContext BuildRuntimeObjectDragContext();
+    SectorEditorPlacedObjectActionContext BuildRuntimeObjectActionContext();
     void AddRuntimeObjectAt(Vector2 mapPoint);
     void AddDoorAtPortal(Vector2 screenPoint);
     bool DeleteSelectedRuntimeObject();
@@ -417,18 +363,21 @@ private:
             const char* status,
             const std::function<bool(SectorPlacedRuntimeObject&)>& mutate);
     void RefreshRuntimeObjectsAfterAuthoringEdit();
-    bool BakeLightmaps();
     bool StartLightmapBake();
     void PollLightmapBakeResult(engine::AssetManager& assets);
-    void RequestLightmapBakeCancel();
-    void JoinLightmapBakeWorker();
-    void ShutdownLightmapBake();
-    bool IsLightmapBakeBlocking() const;
-    bool ConsumeLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
     bool InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
     SectorEditorState state;
+    SectorEditorDocumentState documentState;
+    SectorEditorPreviewState previewState;
+    SelectionState selectionState;
+    ManipulationState manipulationState;
+    LightEditingState lightEditingState;
     SectorEditorUiState uiState;
-    LightmapBakeAsyncState lightmapBake;
+    InspectorIdUiState inspectorIdUiState;
+    TextureCatalogState textureCatalogState;
+    MaterialEditingState materialEditingState;
+    MaterialEditingUiState materialEditingUiState;
+    SectorEditorLightmapBakeController lightmapBake;
     Rectangle canvasRect = {};
     std::string statusText;
     SectorMeshRenderer preview;

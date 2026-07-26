@@ -3,6 +3,7 @@
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_demo/SectorTextureTypes.h"
 
 #include <algorithm>
@@ -190,7 +191,7 @@ void DrawTexturePickerModal(
         engine::AssetManager& assets,
         engine::FontHandle font,
         TexturePickerState& picker,
-        const SectorTopologyMap& map,
+        SectorEditorTextureCatalogService& textureCatalog,
         const SectorEditorTexturePickerCallbacks& callbacks)
 {
     if (!picker.open) {
@@ -274,10 +275,10 @@ void DrawTexturePickerModal(
     }
 
     const Rectangle previewBounds{modal.x + 402.0f, y, 376.0f, 300.0f};
-    engine::Image(config, assets, previewBounds, callbacks.textureHandleForId(previewTextureId));
+    engine::Image(config, assets, previewBounds, textureCatalog.TextureHandleForId(previewTextureId));
     y += 316.0f;
 
-    const SectorTextureDefinition* previewTexture = FindSectorTopologyTexture(map, previewTextureId);
+    const SectorTextureDefinition* previewTexture = textureCatalog.FindTexture(previewTextureId);
     const std::string path = previewTexture == nullptr ? std::string{} : previewTexture->path;
     engine::Text(config, assets, Rectangle{modal.x + 402.0f, y, 376.0f, 34.0f}, font, TextFormat("Id: %s", previewTextureId.empty() ? "<none>" : previewTextureId.c_str()), engine::UITextJustify::Left, config.textColor);
     y += 38.0f;
