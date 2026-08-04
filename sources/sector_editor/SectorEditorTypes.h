@@ -32,6 +32,7 @@ enum class SectorEditorTool {
     RuntimeObject,
     StaticModel,
     Door,
+    AuthoringFogVolume,
     StaticLight,
     StaticSpotLight,
     DynamicLight,

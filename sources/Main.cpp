@@ -4,6 +4,7 @@
 #include "engine/assets/FontLoadFlags.h"
 #include "engine/render/FxaaShader.h"
 #include "sector_editor/SectorEditor.h"
+#include "sector_demo/renderer/SectorLocalFogRenderer.h"
 
 #include <cmath>
 
@@ -66,7 +67,14 @@ int main()
 
     SetExitKey(0);
 
-    RenderTexture2D worldTarget = LoadRenderTexture(WORLD_TARGET_WIDTH, WORLD_TARGET_HEIGHT);
+    RenderTexture2D worldTarget = game::LoadSectorDepthTextureRenderTarget(
+            WORLD_TARGET_WIDTH,
+            WORLD_TARGET_HEIGHT);
+    if (worldTarget.id == 0) {
+        TraceLog(LOG_WARNING, "PREVIEW: sampleable depth target unavailable; local fog disabled");
+        worldTarget = LoadRenderTexture(WORLD_TARGET_WIDTH, WORLD_TARGET_HEIGHT);
+        worldTarget.depth.mipmaps = 0;
+    }
     SetTextureFilter(worldTarget.texture, TEXTURE_FILTER_BILINEAR);
 
     RenderTexture2D editorTarget = LoadRenderTexture(INTERNAL_WIDTH, INTERNAL_HEIGHT);

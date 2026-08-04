@@ -68,11 +68,31 @@ struct SectorAuthoringFaceAnchor {
     SectorTopologyWallPartSettings defaultUpper;
 };
 
+struct SectorAuthoringFogVolume {
+    int id = -1;
+    SectorCoord x = 0;
+    SectorCoord y = 0;
+    bool enabled = true;
+    float bottomOffsetWorld = 0.02f;
+    float radiusXWorld = 1.5f;
+    float radiusZWorld = 1.5f;
+    float heightWorld = 0.65f;
+    Color color = Color{105, 116, 110, 255};
+    float density = 0.65f;
+    float maxOpacity = 0.75f;
+    float edgeSoftness = 0.35f;
+    float noiseScaleWorld = 1.0f;
+    float noiseAmount = 0.55f;
+    float flowDirectionDegrees = 0.0f;
+    float flowSpeedWorld = 0.12f;
+};
+
 struct SectorAuthoringGraph {
     std::vector<SectorAuthoringVertex> vertices;
     std::vector<SectorAuthoringLine> lines;
     std::vector<SectorAuthoringLineSide> lineSides;
     std::vector<SectorAuthoringFaceAnchor> faceAnchors;
+    std::vector<SectorAuthoringFogVolume> fogVolumes;
 };
 
 enum class SectorAuthoringValidationSeverity {
@@ -85,7 +105,8 @@ enum class SectorAuthoringObjectKind {
     Vertex,
     Line,
     Side,
-    FaceAnchor
+    FaceAnchor,
+    FogVolume
 };
 
 struct SectorAuthoringValidationIssue {
@@ -191,7 +212,8 @@ enum class SectorAuthoringDerivationDiagnosticKind {
     UnresolvedFaceAnchor,
     InvalidSideProjection,
     NonIntegerVertex,
-    InvalidTopology
+    InvalidTopology,
+    UnresolvedFogVolume
 };
 
 struct SectorAuthoringDerivationDiagnostic {
@@ -229,6 +251,13 @@ struct SectorAuthoringDerivedSectorMapping {
     int topologySectorId = -1;
 };
 
+struct SectorAuthoringDerivedFogVolumeMapping {
+    int authoringFogVolumeId = -1;
+    int extractedFaceId = -1;
+    int topologySectorId = -1;
+    bool resolved = false;
+};
+
 enum class SectorAuthoringFaceResolutionKind {
     Unresolved,
     DerivedSector,
@@ -248,6 +277,7 @@ struct SectorAuthoringDerivationMapping {
     std::vector<SectorAuthoringDerivedSideMapping> sides;
     std::vector<SectorAuthoringDerivedSectorMapping> sectors;
     std::vector<SectorAuthoringResolvedFaceMapping> resolvedFaces;
+    std::vector<SectorAuthoringDerivedFogVolumeMapping> fogVolumes;
 };
 
 struct SectorAuthoringDerivationResult {
@@ -281,6 +311,7 @@ bool IsValidSectorAuthoringId(int id);
 int AllocateSectorAuthoringVertexId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringLineId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringFaceAnchorId(const SectorAuthoringGraph& graph);
+int AllocateSectorAuthoringFogVolumeId(const SectorAuthoringGraph& graph);
 
 const SectorAuthoringVertex* FindSectorAuthoringVertex(const SectorAuthoringGraph& graph, int id);
 SectorAuthoringVertex* FindSectorAuthoringVertex(SectorAuthoringGraph& graph, int id);
@@ -299,6 +330,12 @@ const SectorAuthoringFaceAnchor* FindSectorAuthoringFaceAnchor(
         const SectorAuthoringGraph& graph,
         int id);
 SectorAuthoringFaceAnchor* FindSectorAuthoringFaceAnchor(SectorAuthoringGraph& graph, int id);
+
+const SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(
+        const SectorAuthoringGraph& graph,
+        int id);
+SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(SectorAuthoringGraph& graph, int id);
+SectorAuthoringFogVolume NormalizeSectorAuthoringFogVolume(SectorAuthoringFogVolume volume);
 
 bool SectorAuthoringSideIdsEqual(SectorAuthoringSideId lhs, SectorAuthoringSideId rhs);
 SectorAuthoringSideId OppositeSectorAuthoringSideId(SectorAuthoringSideId id);
@@ -351,5 +388,10 @@ bool SectorAuthoringFaceContainsMapPoint(
         const SectorAuthoringPlanarizationResult& planar,
         const SectorAuthoringExtractedFace& face,
         Vector2 mapPoint);
+
+bool ResolveSectorAuthoringPointToDerivedSector(
+        const SectorAuthoringDerivationResult& derivation,
+        SectorTopologyCoordPoint point,
+        int* outTopologySectorId = nullptr);
 
 } // namespace game

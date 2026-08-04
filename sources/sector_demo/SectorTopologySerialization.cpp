@@ -1040,6 +1040,24 @@ SectorTopologyFogSettings ReadFogSettings(const Json& value, const std::string& 
     readOptionalFloat("maxOpacity", settings.maxOpacity);
     readOptionalFloat("referenceHeightWorld", settings.referenceHeightWorld);
     readOptionalFloat("heightFalloff", settings.heightFalloff);
+    const auto qualityIt = value.find("localVolumeQuality");
+    if (qualityIt != value.end()) {
+        if (!qualityIt->is_string()) {
+            Fail(context + ".localVolumeQuality must be a string");
+        }
+        const std::string quality = qualityIt->get<std::string>();
+        if (quality == "off") {
+            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Off;
+        } else if (quality == "low") {
+            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Low;
+        } else if (quality == "medium") {
+            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Medium;
+        } else if (quality == "high") {
+            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::High;
+        } else {
+            Fail(context + ".localVolumeQuality must be 'off', 'low', 'medium', or 'high'");
+        }
+    }
     return NormalizeSectorTopologyFogSettings(settings);
 }
 
@@ -1777,7 +1795,7 @@ Json WriteFogSettings(const SectorTopologyFogSettings& settings)
     RequireFinite(settings.referenceHeightWorld, "fogSettings.referenceHeightWorld");
     RequireFinite(settings.heightFalloff, "fogSettings.heightFalloff");
     const SectorTopologyFogSettings normalized = NormalizeSectorTopologyFogSettings(settings);
-    return Json{
+    Json result{
             {"enabled", normalized.enabled},
             {"color", WriteColor(normalized.color)},
             {"startDistanceWorld", normalized.startDistanceWorld},
@@ -1786,6 +1804,21 @@ Json WriteFogSettings(const SectorTopologyFogSettings& settings)
             {"referenceHeightWorld", normalized.referenceHeightWorld},
             {"heightFalloff", normalized.heightFalloff}
     };
+    switch (normalized.localVolumeQuality) {
+        case SectorTopologyFogSettings::LocalVolumeQuality::Off:
+            result["localVolumeQuality"] = "off";
+            break;
+        case SectorTopologyFogSettings::LocalVolumeQuality::Low:
+            result["localVolumeQuality"] = "low";
+            break;
+        case SectorTopologyFogSettings::LocalVolumeQuality::Medium:
+            result["localVolumeQuality"] = "medium";
+            break;
+        case SectorTopologyFogSettings::LocalVolumeQuality::High:
+            result["localVolumeQuality"] = "high";
+            break;
+    }
+    return result;
 }
 
 bool IsDefaultFogSettings(const SectorTopologyFogSettings& settings)
@@ -1806,7 +1839,8 @@ bool IsDefaultFogSettings(const SectorTopologyFogSettings& settings)
             && normalized.density == defaults.density
             && normalized.maxOpacity == defaults.maxOpacity
             && normalized.referenceHeightWorld == defaults.referenceHeightWorld
-            && normalized.heightFalloff == defaults.heightFalloff;
+            && normalized.heightFalloff == defaults.heightFalloff
+            && normalized.localVolumeQuality == defaults.localVolumeQuality;
 }
 
 Json WriteBakedObjectLightProbeMetadata(const SectorBakedObjectLightProbeMetadata& metadata)
@@ -2289,6 +2323,52 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         graph.faceAnchors.push_back(std::move(anchor));
     }
 
+    const auto fogVolumesIt = value.find("fogVolumes");
+    if (fogVolumesIt != value.end()) {
+        if (!fogVolumesIt->is_array()) {
+            Fail("root.authoringGraph.fogVolumes must be an array");
+        }
+        for (size_t i = 0; i < fogVolumesIt->size(); ++i) {
+            const Json& fogJson = (*fogVolumesIt)[i];
+            const std::string context = "root.authoringGraph.fogVolumes[" + std::to_string(i) + "]";
+            if (!fogJson.is_object()) {
+                Fail(context + " must be an object");
+            }
+            SectorAuthoringFogVolume volume;
+            volume.id = ReadInt(fogJson, "id", context);
+            volume.x = ReadCoord(fogJson, "x", context);
+            volume.y = ReadCoord(fogJson, "y", context);
+            volume.enabled = ReadOptionalBool(fogJson, "enabled", context, volume.enabled);
+            volume.bottomOffsetWorld = ReadOptionalFloat(
+                    fogJson, "bottomOffsetWorld", context, volume.bottomOffsetWorld);
+            volume.radiusXWorld = ReadOptionalFloat(fogJson, "radiusXWorld", context, volume.radiusXWorld);
+            volume.radiusZWorld = ReadOptionalFloat(fogJson, "radiusZWorld", context, volume.radiusZWorld);
+            volume.heightWorld = ReadOptionalFloat(fogJson, "heightWorld", context, volume.heightWorld);
+            const auto colorIt = fogJson.find("color");
+            if (colorIt != fogJson.end()) {
+                if (!colorIt->is_object()) {
+                    Fail(context + ".color must be an object");
+                }
+                volume.color = Color{
+                        ReadOptionalColorChannel(*colorIt, "r", context + ".color", volume.color.r),
+                        ReadOptionalColorChannel(*colorIt, "g", context + ".color", volume.color.g),
+                        ReadOptionalColorChannel(*colorIt, "b", context + ".color", volume.color.b),
+                        255};
+            }
+            volume.density = ReadOptionalFloat(fogJson, "density", context, volume.density);
+            volume.maxOpacity = ReadOptionalFloat(fogJson, "maxOpacity", context, volume.maxOpacity);
+            volume.edgeSoftness = ReadOptionalFloat(fogJson, "edgeSoftness", context, volume.edgeSoftness);
+            volume.noiseScaleWorld = ReadOptionalFloat(
+                    fogJson, "noiseScaleWorld", context, volume.noiseScaleWorld);
+            volume.noiseAmount = ReadOptionalFloat(fogJson, "noiseAmount", context, volume.noiseAmount);
+            volume.flowDirectionDegrees = ReadOptionalFloat(
+                    fogJson, "flowDirectionDegrees", context, volume.flowDirectionDegrees);
+            volume.flowSpeedWorld = ReadOptionalFloat(
+                    fogJson, "flowSpeedWorld", context, volume.flowSpeedWorld);
+            graph.fogVolumes.push_back(NormalizeSectorAuthoringFogVolume(volume));
+        }
+    }
+
     return graph;
 }
 
@@ -2531,6 +2611,42 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             anchorJson["ceilingDecal"] = WriteDecal(anchor->ceilingDecal, context + ".ceilingDecal");
         }
         graphJson["faceAnchors"].push_back(std::move(anchorJson));
+    }
+
+    if (!graph.fogVolumes.empty()) {
+        graphJson["fogVolumes"] = Json::array();
+        const SectorAuthoringFogVolume defaults;
+        for (const SectorAuthoringFogVolume* source : SortedById(graph.fogVolumes)) {
+            const std::string context = "authoring fog volume " + std::to_string(source->id);
+            RequireFinite(source->bottomOffsetWorld, context + ".bottomOffsetWorld");
+            RequireFinite(source->radiusXWorld, context + ".radiusXWorld");
+            RequireFinite(source->radiusZWorld, context + ".radiusZWorld");
+            RequireFinite(source->heightWorld, context + ".heightWorld");
+            RequireFinite(source->density, context + ".density");
+            RequireFinite(source->maxOpacity, context + ".maxOpacity");
+            RequireFinite(source->edgeSoftness, context + ".edgeSoftness");
+            RequireFinite(source->noiseScaleWorld, context + ".noiseScaleWorld");
+            RequireFinite(source->noiseAmount, context + ".noiseAmount");
+            RequireFinite(source->flowDirectionDegrees, context + ".flowDirectionDegrees");
+            RequireFinite(source->flowSpeedWorld, context + ".flowSpeedWorld");
+            const SectorAuthoringFogVolume volume = NormalizeSectorAuthoringFogVolume(*source);
+            Json fogJson{{"id", volume.id}, {"x", volume.x}, {"y", volume.y}};
+            if (volume.enabled != defaults.enabled) fogJson["enabled"] = volume.enabled;
+            if (volume.bottomOffsetWorld != defaults.bottomOffsetWorld) fogJson["bottomOffsetWorld"] = volume.bottomOffsetWorld;
+            if (volume.radiusXWorld != defaults.radiusXWorld) fogJson["radiusXWorld"] = volume.radiusXWorld;
+            if (volume.radiusZWorld != defaults.radiusZWorld) fogJson["radiusZWorld"] = volume.radiusZWorld;
+            if (volume.heightWorld != defaults.heightWorld) fogJson["heightWorld"] = volume.heightWorld;
+            if (volume.color.r != defaults.color.r || volume.color.g != defaults.color.g
+                    || volume.color.b != defaults.color.b) fogJson["color"] = WriteColor(volume.color);
+            if (volume.density != defaults.density) fogJson["density"] = volume.density;
+            if (volume.maxOpacity != defaults.maxOpacity) fogJson["maxOpacity"] = volume.maxOpacity;
+            if (volume.edgeSoftness != defaults.edgeSoftness) fogJson["edgeSoftness"] = volume.edgeSoftness;
+            if (volume.noiseScaleWorld != defaults.noiseScaleWorld) fogJson["noiseScaleWorld"] = volume.noiseScaleWorld;
+            if (volume.noiseAmount != defaults.noiseAmount) fogJson["noiseAmount"] = volume.noiseAmount;
+            if (volume.flowDirectionDegrees != defaults.flowDirectionDegrees) fogJson["flowDirectionDegrees"] = volume.flowDirectionDegrees;
+            if (volume.flowSpeedWorld != defaults.flowSpeedWorld) fogJson["flowSpeedWorld"] = volume.flowSpeedWorld;
+            graphJson["fogVolumes"].push_back(std::move(fogJson));
+        }
     }
 
     return graphJson;

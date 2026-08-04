@@ -805,6 +805,19 @@ void SelectSectorEditorAuthoringFaceAnchorTarget(SectorEditorSelectionServiceCon
     }
 }
 
+void SelectSectorEditorAuthoringFogVolumeTarget(
+        SectorEditorSelectionServiceContext& context,
+        int fogVolumeId)
+{
+    if (FindSectorAuthoringFogVolume(context.authoringGraph, fogVolumeId) == nullptr) {
+        ClearSectorEditorSelection(context);
+        return;
+    }
+    ClearSectorEditorSelection(context);
+    SelectSectorEditorAuthoringFogVolume(context.authoringGraph, context.selectionState, fogVolumeId);
+    context.ui.inspectorScroll.offset = Vector2{};
+}
+
 void SelectSectorEditorSurface3D(SectorEditorSelectionServiceContext& context, SectorSurfaceRef surface)
 {
     const TopologySurfaceEditTarget target = SectorEditorTopologyEditTargetForSurface(surface);

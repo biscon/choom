@@ -166,6 +166,16 @@ bool FindAuthoringDiagnosticPosition(
         }
         return false;
     };
+    const auto findFogVolumePosition = [&]() {
+        if (const SectorAuthoringFogVolume* volume =
+                    FindSectorAuthoringFogVolume(graph, diagnostic.objectId)) {
+            outMap = Vector2{
+                    SectorCoordToVisibleAuthoring(volume->x),
+                    SectorCoordToVisibleAuthoring(volume->y)};
+            return true;
+        }
+        return false;
+    };
 
     switch (diagnostic.kind) {
     case SectorAuthoringDerivationDiagnosticKind::DanglingLine:
@@ -179,6 +189,8 @@ bool FindAuthoringDiagnosticPosition(
     case SectorAuthoringDerivationDiagnosticKind::AmbiguousFaceAnchor:
     case SectorAuthoringDerivationDiagnosticKind::UnresolvedFaceAnchor:
         return findAnchorPosition() || findLinePosition() || findVertexPosition();
+    case SectorAuthoringDerivationDiagnosticKind::UnresolvedFogVolume:
+        return findFogVolumePosition();
     case SectorAuthoringDerivationDiagnosticKind::AuthoringReference:
     case SectorAuthoringDerivationDiagnosticKind::FaceExtraction:
     case SectorAuthoringDerivationDiagnosticKind::TinySliverFace:
@@ -187,7 +199,7 @@ bool FindAuthoringDiagnosticPosition(
         break;
     }
 
-    if (findVertexPosition() || findLinePosition() || findAnchorPosition()) {
+    if (findVertexPosition() || findLinePosition() || findAnchorPosition() || findFogVolumePosition()) {
         return true;
     }
     return false;

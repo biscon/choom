@@ -14,6 +14,7 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
+#include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
@@ -10132,8 +10133,141 @@ void TestRuntimeObjectEditingServicesStayIndependentOfSectorEditor()
 
 } // namespace
 
+void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
+{
+    game::SectorAuthoringGraph graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {160, 0}, {160, 160}, {0, 160}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    game::SectorAuthoringFogVolume volume;
+    volume.id = 1;
+    volume.x = 80;
+    volume.y = 80;
+    graph.fogVolumes.push_back(volume);
+
+    game::SectorAuthoringDerivationResult result =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    Check(result.success, "resolved authoring fog volume keeps derivation valid");
+    Check(result.mapping.fogVolumes.size() == 1 && result.mapping.fogVolumes[0].resolved,
+          "authoring fog volume maps to derived sector");
+    Check(result.topology.compiledLocalFogVolumes.size() == 1,
+          "resolved authoring fog volume compiles for renderer");
+    if (!result.topology.compiledLocalFogVolumes.empty()) {
+        const game::SectorCompiledLocalFogVolume& compiled = result.topology.compiledLocalFogVolumes[0];
+        Check(compiled.sourceAuthoringFogVolumeId == 1 && Near(compiled.centerWorld.y, 0.345f),
+              "compiled fog volume uses source ID and floor-relative height");
+    }
+
+    graph.fogVolumes[0].x = 400;
+    graph.fogVolumes[0].y = 400;
+    result = game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    Check(result.success, "unresolved authoring fog volume is a non-fatal warning");
+    Check(result.topology.compiledLocalFogVolumes.empty(),
+          "unresolved authoring fog volume is omitted from compiled rendering");
+    Check(HasDerivationDiagnosticFor(
+                  result.diagnostics,
+                  game::SectorAuthoringDerivationDiagnosticKind::UnresolvedFogVolume,
+                  1),
+          "unresolved authoring fog volume produces targeted diagnostic");
+}
+
+void TestAuthoringFogVolumeSerializationRoundTrip()
+{
+    game::SectorAuthoringDocument document;
+    document.graph = MakeGraphFromConnectedLines(
+            {{0, 0}, {160, 0}, {160, 160}, {0, 160}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    game::SectorAuthoringFogVolume volume;
+    volume.id = 7;
+    volume.x = 48;
+    volume.y = 64;
+    volume.color = Color{12, 34, 56, 255};
+    volume.density = 1.25f;
+    document.graph.fogVolumes.push_back(volume);
+    document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
+
+    std::string json;
+    std::string error;
+    Check(game::SaveSectorAuthoringDocumentToJsonString(document, json, &error),
+          "authoring fog volume document saves");
+    const Json saved = Json::parse(json);
+    Check(saved["authoringGraph"]["fogVolumes"].size() == 1
+                  && !saved.contains("localFogVolumes"),
+          "fog volumes serialize only inside authoring graph");
+
+    game::SectorAuthoringDocument loaded;
+    Check(game::LoadSectorAuthoringDocumentFromJsonString(json, loaded, &error),
+          "authoring fog volume document loads");
+    Check(loaded.graph.fogVolumes.size() == 1
+                  && loaded.graph.fogVolumes[0].id == 7
+                  && Near(loaded.graph.fogVolumes[0].density, 1.25f),
+          "authoring fog volume properties round-trip");
+}
+
+void TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce()
+{
+    game::SectorEditorDocumentState documentState;
+    documentState.authoring.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {160, 0}, {160, 160}, {0, 160}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    documentState.derivation.authoringDerivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(documentState.authoring.authoringGraph);
+    documentState.map.topologyMap = documentState.derivation.authoringDerivation.topology;
+    documentState.derivation.lastValidAuthoringDerivedTopology = documentState.map.topologyMap;
+    documentState.derivation.authoringDerivationState = game::SectorEditorAuthoringDerivationState::ValidCurrent;
+    documentState.derivation.authoringDerivedTopologyStale = false;
+
+    game::SectorEditorState editorState;
+    editorState.topologyRenderCache.valid = true;
+    game::SelectionState selection;
+    game::ManipulationState manipulation;
+    std::string status;
+    game::SectorEditorAuthoringFogVolumeEditingService editing{
+            game::SectorEditorAuthoringFogVolumeEditingServiceContext{
+                    game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                    documentState.map.topologyMap,
+                    documentState.authoring.authoringGraph,
+                    game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                    editorState.topologyRenderRevision,
+                    editorState.topologyRenderCache,
+                    selection,
+                    manipulation,
+                    status}};
+
+    Check(editing.Place(game::SectorTopologyCoordPoint{80, 80}),
+          "fog volume editing service places into authoring graph");
+    Check(documentState.authoring.authoringGraph.fogVolumes.size() == 1
+                  && documentState.map.topologyMap.compiledLocalFogVolumes.size() == 1,
+          "fog volume placement re-derives compiled output");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && !editorState.topologyRenderCache.valid,
+          "fog volume placement marks dirty and invalidates 2D cache");
+
+    const int id = documentState.authoring.authoringGraph.fogVolumes[0].id;
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    editorState.topologyRenderCache.valid = true;
+    Check(editing.BeginMove(id), "fog volume drag begins from authoring identity");
+    editing.UpdateMove(game::SectorTopologyCoordPoint{96, 80});
+    Check(documentState.authoring.authoringGraph.fogVolumes[0].x == 80
+                  && !documentState.lifecycle.topologyDocumentDirty,
+          "fog volume drag preview does not mutate or dirty authoring graph");
+    Check(editing.FinishMove(), "fog volume drag commits valid target");
+    Check(documentState.authoring.authoringGraph.fogVolumes[0].x == 96
+                  && documentState.lifecycle.topologyDocumentDirty,
+          "fog volume drag commits once through authoring mutation path");
+
+    const size_t count = documentState.authoring.authoringGraph.fogVolumes.size();
+    Check(!editing.Place(game::SectorTopologyCoordPoint{400, 400})
+                  && documentState.authoring.authoringGraph.fogVolumes.size() == count,
+          "fog volume placement fails clearly outside derived faces");
+}
+
 int main()
 {
+    TestAuthoringFogVolumeDerivationAndUnresolvedWarning();
+    TestAuthoringFogVolumeSerializationRoundTrip();
+    TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce();
     TestEmptyGraph();
     TestStablePositiveIdAllocation();
     TestAddVerticesAndLines();

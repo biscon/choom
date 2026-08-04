@@ -351,7 +351,6 @@ void SectorBloomRenderer::ApplyEmissiveDecalBloomToScene(
     }
 
     BeginTextureMode(sceneTarget);
-    ClearBackground(BLANK);
     const float compositeStrength = BloomStrength * BloomLdrIntensityScale;
     SetShaderValue(compositeShader, compositeStrengthLoc, &compositeStrength, SHADER_UNIFORM_FLOAT);
     BeginShaderMode(compositeShader);

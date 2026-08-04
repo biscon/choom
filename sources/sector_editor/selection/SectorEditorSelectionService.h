@@ -128,6 +128,7 @@ void SelectSectorEditorRuntimeObject(SectorEditorSelectionServiceContext& contex
 void SelectSectorEditorAuthoringLineTarget(SectorEditorSelectionServiceContext& context, int lineId);
 void SelectSectorEditorAuthoringVertexTarget(SectorEditorSelectionServiceContext& context, int vertexId);
 void SelectSectorEditorAuthoringFaceAnchorTarget(SectorEditorSelectionServiceContext& context, int faceAnchorId);
+void SelectSectorEditorAuthoringFogVolumeTarget(SectorEditorSelectionServiceContext& context, int fogVolumeId);
 void SelectSectorEditorSurface3D(SectorEditorSelectionServiceContext& context, SectorSurfaceRef surface);
 
 bool IsValidSectorEditorSurfaceRef(const SectorEditorSelectionServiceContext& context, SectorSurfaceRef surface);

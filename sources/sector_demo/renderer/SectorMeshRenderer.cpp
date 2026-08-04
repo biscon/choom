@@ -691,6 +691,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
     doorRenderer.ReserveRuntimeDoorCapacity(kSectorRuntimeObjectInitialCapacity);
     runtimeSeconds = 0.0f;
+    localFogRenderer.Shutdown();
 
     if (!dynamicLightState.EnsureShadowMapResources()) {
         Shutdown(assets);
@@ -800,6 +801,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     dynamicLightState.Reset();
     doorRenderer.ClearPreparedShadowCasters();
     runtimeSeconds = 0.0f;
+    localFogRenderer.Shutdown();
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
@@ -1110,6 +1112,22 @@ void SectorMeshRenderer::ApplyEmissiveDecalBloomToScene(
             textureHandlesById,
             sceneTarget,
             BuildSectorFogRenderContext(fogSettings, camera.position));
+}
+
+bool SectorMeshRenderer::ApplyLocalFogToScene(
+        RenderTexture2D& sceneTarget,
+        const SectorTopologyMap& map,
+        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes)
+{
+    const SectorBillboardDynamicLightContext dynamicLightContext =
+            BuildBillboardDynamicLightContext();
+    return localFogRenderer.Apply(
+            sceneTarget,
+            map,
+            camera,
+            runtimeSeconds,
+            objectLightProbes,
+            dynamicLightContext);
 }
 
 SectorViewPose SectorMeshRenderer::Pose() const

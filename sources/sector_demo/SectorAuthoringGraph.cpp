@@ -1,4 +1,5 @@
 #include "sector_demo/SectorAuthoringGraph.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -11,6 +12,30 @@
 
 namespace game {
 namespace {
+
+constexpr float FogBottomOffsetMin = -16.0f;
+constexpr float FogBottomOffsetMax = 16.0f;
+constexpr float FogRadiusMin = 0.05f;
+constexpr float FogRadiusMax = 64.0f;
+constexpr float FogHeightMin = 0.05f;
+constexpr float FogHeightMax = 32.0f;
+constexpr float FogDensityMin = 0.0f;
+constexpr float FogDensityMax = 8.0f;
+constexpr float FogOpacityMin = 0.0f;
+constexpr float FogOpacityMax = 1.0f;
+constexpr float FogSoftnessMin = 0.0f;
+constexpr float FogSoftnessMax = 1.0f;
+constexpr float FogNoiseScaleMin = 0.05f;
+constexpr float FogNoiseScaleMax = 64.0f;
+constexpr float FogNoiseAmountMin = 0.0f;
+constexpr float FogNoiseAmountMax = 1.0f;
+constexpr float FogFlowSpeedMin = 0.0f;
+constexpr float FogFlowSpeedMax = 8.0f;
+
+float ClampFiniteFogValue(float value, float minimum, float maximum, float fallback)
+{
+    return std::isfinite(value) ? std::clamp(value, minimum, maximum) : fallback;
+}
 
 template<typename T>
 int AllocateNextId(const std::vector<T>& values)
@@ -1646,6 +1671,123 @@ void BuildDerivedTopologyFacesAndLines(
     PruneUnusedDerivedTopology(topology, mapping);
 }
 
+bool FacePointIsOnBoundary(
+        const SectorAuthoringPlanarizationResult& planar,
+        const SectorAuthoringExtractedFace& face,
+        double px,
+        double py)
+{
+    for (const SectorAuthoringFaceBoundaryEdge& boundary : face.boundary) {
+        const SectorAuthoringPlanarVertex* start = FindPlanarVertex(planar, boundary.startVertexId);
+        const SectorAuthoringPlanarVertex* end = FindPlanarVertex(planar, boundary.endVertexId);
+        if (start != nullptr && end != nullptr
+                && PointIsOnSegment(
+                        px,
+                        py,
+                        PlanarPointX(start->point),
+                        PlanarPointY(start->point),
+                        PlanarPointX(end->point),
+                        PlanarPointY(end->point))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void CompileAuthoringFogVolumes(
+        const SectorAuthoringGraph& graph,
+        const SectorAuthoringPlanarizationResult& planar,
+        const SectorAuthoringFaceExtractionResult& faces,
+        const FaceContainmentInfo& containment,
+        SectorTopologyMap& topology,
+        SectorAuthoringDerivationMapping& mapping,
+        std::vector<SectorAuthoringDerivationDiagnostic>& diagnostics)
+{
+    topology.compiledLocalFogVolumes.reserve(graph.fogVolumes.size());
+    mapping.fogVolumes.reserve(graph.fogVolumes.size());
+
+    for (const SectorAuthoringFogVolume& authored : graph.fogVolumes) {
+        const double px = static_cast<double>(authored.x);
+        const double py = static_cast<double>(authored.y);
+        const SectorAuthoringExtractedFace* bestFace = nullptr;
+        int bestDepth = std::numeric_limits<int>::min();
+        bool onBoundary = false;
+        for (const SectorAuthoringExtractedFace& face : faces.faces) {
+            if (FacePointIsOnBoundary(planar, face, px, py)) {
+                onBoundary = true;
+                continue;
+            }
+            if (!FaceContainsPoint(planar, face, px, py, false)) {
+                continue;
+            }
+            const auto depthIt = containment.depthByFaceId.find(face.id);
+            const int depth = depthIt == containment.depthByFaceId.end() ? 0 : depthIt->second;
+            if (bestFace == nullptr || depth > bestDepth) {
+                bestFace = &face;
+                bestDepth = depth;
+            }
+        }
+
+        SectorAuthoringDerivedFogVolumeMapping fogMapping;
+        fogMapping.authoringFogVolumeId = authored.id;
+        if (!onBoundary && bestFace != nullptr) {
+            fogMapping.extractedFaceId = bestFace->id;
+            for (const SectorAuthoringResolvedFaceMapping& faceMapping : mapping.resolvedFaces) {
+                if (faceMapping.extractedFaceId == bestFace->id
+                        && faceMapping.kind == SectorAuthoringFaceResolutionKind::DerivedSector) {
+                    fogMapping.topologySectorId = faceMapping.topologySectorId;
+                    fogMapping.resolved = true;
+                    break;
+                }
+            }
+        }
+        mapping.fogVolumes.push_back(fogMapping);
+
+        if (!fogMapping.resolved) {
+            AddDerivationDiagnostic(
+                    diagnostics,
+                    SectorAuthoringDerivationDiagnosticKind::UnresolvedFogVolume,
+                    authored.id,
+                    onBoundary
+                            ? "Authoring fog volume center lies on a face boundary"
+                            : "Authoring fog volume center is not inside a non-void derived face",
+                    SectorAuthoringValidationSeverity::Warning);
+            continue;
+        }
+
+        const SectorTopologySector* sector = FindSectorTopologySector(topology, fogMapping.topologySectorId);
+        if (sector == nullptr) {
+            continue;
+        }
+        const SectorAuthoringFogVolume volume = NormalizeSectorAuthoringFogVolume(authored);
+        const float bottomWorld = SectorAuthoringToWorldDistance(sector->floorZ)
+                + volume.bottomOffsetWorld;
+        SectorCompiledLocalFogVolume compiled;
+        compiled.sourceAuthoringFogVolumeId = volume.id;
+        compiled.topologySectorId = sector->id;
+        compiled.enabled = volume.enabled;
+        compiled.centerWorld = Vector3{
+                SectorAuthoringToWorldDistance(
+                        static_cast<float>(volume.x) / static_cast<float>(SectorCoordSubdivisions)),
+                bottomWorld + volume.heightWorld * 0.5f,
+                SectorAuthoringToWorldDistance(
+                        static_cast<float>(volume.y) / static_cast<float>(SectorCoordSubdivisions))};
+        compiled.radiiWorld = Vector3{
+                volume.radiusXWorld,
+                volume.heightWorld * 0.5f,
+                volume.radiusZWorld};
+        compiled.color = volume.color;
+        compiled.density = volume.density;
+        compiled.maxOpacity = volume.maxOpacity;
+        compiled.edgeSoftness = volume.edgeSoftness;
+        compiled.noiseScaleWorld = volume.noiseScaleWorld;
+        compiled.noiseAmount = volume.noiseAmount;
+        compiled.flowDirectionDegrees = volume.flowDirectionDegrees;
+        compiled.flowSpeedWorld = volume.flowSpeedWorld;
+        topology.compiledLocalFogVolumes.push_back(compiled);
+    }
+}
+
 } // namespace
 
 bool IsValidSectorAuthoringId(int id)
@@ -1666,6 +1808,11 @@ int AllocateSectorAuthoringLineId(const SectorAuthoringGraph& graph)
 int AllocateSectorAuthoringFaceAnchorId(const SectorAuthoringGraph& graph)
 {
     return AllocateNextId(graph.faceAnchors);
+}
+
+int AllocateSectorAuthoringFogVolumeId(const SectorAuthoringGraph& graph)
+{
+    return AllocateNextId(graph.fogVolumes);
 }
 
 const SectorAuthoringVertex* FindSectorAuthoringVertex(const SectorAuthoringGraph& graph, int id)
@@ -1730,6 +1877,51 @@ const SectorAuthoringFaceAnchor* FindSectorAuthoringFaceAnchor(
 SectorAuthoringFaceAnchor* FindSectorAuthoringFaceAnchor(SectorAuthoringGraph& graph, int id)
 {
     return FindById(graph.faceAnchors, id);
+}
+
+const SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(
+        const SectorAuthoringGraph& graph,
+        int id)
+{
+    return FindById(graph.fogVolumes, id);
+}
+
+SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(SectorAuthoringGraph& graph, int id)
+{
+    return FindById(graph.fogVolumes, id);
+}
+
+SectorAuthoringFogVolume NormalizeSectorAuthoringFogVolume(SectorAuthoringFogVolume volume)
+{
+    const SectorAuthoringFogVolume defaults;
+    volume.bottomOffsetWorld = ClampFiniteFogValue(
+            volume.bottomOffsetWorld, FogBottomOffsetMin, FogBottomOffsetMax, defaults.bottomOffsetWorld);
+    volume.radiusXWorld = ClampFiniteFogValue(
+            volume.radiusXWorld, FogRadiusMin, FogRadiusMax, defaults.radiusXWorld);
+    volume.radiusZWorld = ClampFiniteFogValue(
+            volume.radiusZWorld, FogRadiusMin, FogRadiusMax, defaults.radiusZWorld);
+    volume.heightWorld = ClampFiniteFogValue(
+            volume.heightWorld, FogHeightMin, FogHeightMax, defaults.heightWorld);
+    volume.color.a = 255;
+    volume.density = ClampFiniteFogValue(volume.density, FogDensityMin, FogDensityMax, defaults.density);
+    volume.maxOpacity = ClampFiniteFogValue(
+            volume.maxOpacity, FogOpacityMin, FogOpacityMax, defaults.maxOpacity);
+    volume.edgeSoftness = ClampFiniteFogValue(
+            volume.edgeSoftness, FogSoftnessMin, FogSoftnessMax, defaults.edgeSoftness);
+    volume.noiseScaleWorld = ClampFiniteFogValue(
+            volume.noiseScaleWorld, FogNoiseScaleMin, FogNoiseScaleMax, defaults.noiseScaleWorld);
+    volume.noiseAmount = ClampFiniteFogValue(
+            volume.noiseAmount, FogNoiseAmountMin, FogNoiseAmountMax, defaults.noiseAmount);
+    volume.flowSpeedWorld = ClampFiniteFogValue(
+            volume.flowSpeedWorld, FogFlowSpeedMin, FogFlowSpeedMax, defaults.flowSpeedWorld);
+    if (!std::isfinite(volume.flowDirectionDegrees)) {
+        volume.flowDirectionDegrees = defaults.flowDirectionDegrees;
+    }
+    volume.flowDirectionDegrees = std::fmod(volume.flowDirectionDegrees, 360.0f);
+    if (volume.flowDirectionDegrees < 0.0f) {
+        volume.flowDirectionDegrees += 360.0f;
+    }
+    return volume;
 }
 
 bool SectorAuthoringSideIdsEqual(SectorAuthoringSideId lhs, SectorAuthoringSideId rhs)
@@ -2002,6 +2194,41 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
             AddIssue(issues, SectorAuthoringObjectKind::FaceAnchor, anchor.id, "Invalid face anchor ID");
         } else if (!faceAnchorIds.insert(anchor.id).second) {
             AddIssue(issues, SectorAuthoringObjectKind::FaceAnchor, anchor.id, "Duplicate face anchor ID");
+        }
+    }
+
+    std::set<int> fogVolumeIds;
+    for (const SectorAuthoringFogVolume& volume : graph.fogVolumes) {
+        if (!IsValidSectorAuthoringId(volume.id)) {
+            AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Invalid authoring fog volume ID");
+        } else if (!fogVolumeIds.insert(volume.id).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Duplicate authoring fog volume ID");
+        }
+        const float values[] = {
+                volume.bottomOffsetWorld,
+                volume.radiusXWorld,
+                volume.radiusZWorld,
+                volume.heightWorld,
+                volume.density,
+                volume.maxOpacity,
+                volume.edgeSoftness,
+                volume.noiseScaleWorld,
+                volume.noiseAmount,
+                volume.flowDirectionDegrees,
+                volume.flowSpeedWorld};
+        if (std::any_of(std::begin(values), std::end(values), [](float value) { return !std::isfinite(value); })) {
+            AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Authoring fog volume has non-finite settings");
+        } else if (volume.radiusXWorld < FogRadiusMin || volume.radiusXWorld > FogRadiusMax
+                || volume.radiusZWorld < FogRadiusMin || volume.radiusZWorld > FogRadiusMax
+                || volume.heightWorld < FogHeightMin || volume.heightWorld > FogHeightMax
+                || volume.density < FogDensityMin || volume.density > FogDensityMax
+                || volume.maxOpacity < FogOpacityMin || volume.maxOpacity > FogOpacityMax
+                || volume.edgeSoftness < FogSoftnessMin || volume.edgeSoftness > FogSoftnessMax
+                || volume.noiseScaleWorld < FogNoiseScaleMin || volume.noiseScaleWorld > FogNoiseScaleMax
+                || volume.noiseAmount < FogNoiseAmountMin || volume.noiseAmount > FogNoiseAmountMax
+                || volume.flowSpeedWorld < FogFlowSpeedMin || volume.flowSpeedWorld > FogFlowSpeedMax
+                || volume.bottomOffsetWorld < FogBottomOffsetMin || volume.bottomOffsetWorld > FogBottomOffsetMax) {
+            AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Authoring fog volume settings are outside supported ranges");
         }
     }
 
@@ -2457,6 +2684,15 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
             result.topology,
             result.mapping);
 
+    CompileAuthoringFogVolumes(
+            graph,
+            result.planar,
+            result.faces,
+            faceContainment,
+            result.topology,
+            result.mapping,
+            result.diagnostics);
+
     const std::vector<SectorTopologyValidationIssue> topologyIssues =
             ValidateSectorTopologyMap(result.topology);
     for (const SectorTopologyValidationIssue& issue : topologyIssues) {
@@ -2536,6 +2772,52 @@ bool SectorAuthoringFaceContainsMapPoint(
             static_cast<double>(mapPoint.x) * SectorCoordSubdivisions,
             static_cast<double>(mapPoint.y) * SectorCoordSubdivisions,
             true);
+}
+
+bool ResolveSectorAuthoringPointToDerivedSector(
+        const SectorAuthoringDerivationResult& derivation,
+        SectorTopologyCoordPoint point,
+        int* outTopologySectorId)
+{
+    if (!derivation.success) {
+        return false;
+    }
+    const SectorAuthoringExtractedFace* bestFace = nullptr;
+    double bestArea = std::numeric_limits<double>::max();
+    for (const SectorAuthoringExtractedFace& face : derivation.faces.faces) {
+        if (FacePointIsOnBoundary(
+                    derivation.planar,
+                    face,
+                    static_cast<double>(point.x),
+                    static_cast<double>(point.y))
+                || !FaceContainsPoint(
+                        derivation.planar,
+                        face,
+                        static_cast<double>(point.x),
+                        static_cast<double>(point.y),
+                        false)) {
+            continue;
+        }
+        const double area = std::fabs(face.signedArea);
+        if (area < bestArea) {
+            bestFace = &face;
+            bestArea = area;
+        }
+    }
+    if (bestFace == nullptr) {
+        return false;
+    }
+    for (const SectorAuthoringResolvedFaceMapping& mapping : derivation.mapping.resolvedFaces) {
+        if (mapping.extractedFaceId == bestFace->id
+                && mapping.kind == SectorAuthoringFaceResolutionKind::DerivedSector
+                && FindSectorTopologySector(derivation.topology, mapping.topologySectorId) != nullptr) {
+            if (outTopologySectorId != nullptr) {
+                *outTopologySectorId = mapping.topologySectorId;
+            }
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace game

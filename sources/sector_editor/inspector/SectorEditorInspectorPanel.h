@@ -12,6 +12,8 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
+#include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
+#include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
 
 #include <array>
 #include <string>
@@ -27,6 +29,7 @@ enum class SectorEditorInspectorPanelRequestKind {
     BeginAuthoringInsertVertex,
     DeleteSelectedRuntimeObject,
     OpenDeleteSelectedLightConfirmation,
+    OpenDeleteSelectedFogVolumeConfirmation,
     BakeLightmaps
 };
 
@@ -62,6 +65,7 @@ struct SectorEditorInspectorPanelContext {
     SectorRuntimeObjectState& runtimeObjects;
     InspectorIdUiState& inspectorIdUiState;
     MaterialEditingUiState& materialUiState;
+    FogVolumeEditingUiState& fogVolumeUiState;
     std::string& statusText;
 
     SectorEditorSelectionServiceContext& selection;
@@ -70,6 +74,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorMaterialEditingService& materialEditing;
     SectorEditorTextureCatalogService& textureCatalog;
     SectorEditorLightEditingService& lightEditing;
+    SectorEditorAuthoringFogVolumeEditingService& fogVolumeEditing;
     engine::EngineContext* engineContext = nullptr;
 };
 

@@ -24,11 +24,14 @@
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.h"
+#include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
+#include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 
 #include <raylib.h>
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -110,6 +113,8 @@ private:
     void DrawTopologySelectedLineHighlight() const;
     void DrawTopologySnapCrosshair() const;
     void DrawAuthoringVertexMoveOverlay() const;
+    void DrawAuthoringFogVolumes() const;
+    void DrawAuthoringFogVolumeMoveOverlay() const;
     void DrawLightMoveOverlay() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
@@ -386,6 +391,8 @@ private:
     TextureCatalogState textureCatalogState;
     MaterialEditingState materialEditingState;
     MaterialEditingUiState materialEditingUiState;
+    FogVolumeEditingUiState fogVolumeEditingUiState;
+    std::optional<SectorEditorAuthoringFogVolumeEditingService> fogVolumeEditingService;
     SectorEditorLightmapBakeController lightmapBake;
     Rectangle canvasRect = {};
     std::string statusText;

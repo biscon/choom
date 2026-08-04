@@ -4,6 +4,7 @@
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
+#include "sector_demo/renderer/SectorLocalFogLighting.h"
 
 #include <raymath.h>
 
@@ -1327,6 +1328,13 @@ void TestSourceHashChanges()
     changedFog.fogSettings.heightFalloff = 2.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedFog) == hash,
           "hash ignores visual-only fog settings");
+    game::SectorTopologyMap changedLocalFog = base;
+    game::SectorCompiledLocalFogVolume localFog;
+    localFog.sourceAuthoringFogVolumeId = 1;
+    localFog.centerWorld = Vector3{1.0f, 0.5f, 2.0f};
+    changedLocalFog.compiledLocalFogVolumes.push_back(localFog);
+    Check(game::ComputeSectorLightmapSourceHash(changedLocalFog) == hash,
+          "hash ignores visual-only compiled local fog volumes");
 
     game::SectorTopologyMap changedProbeSettings = base;
     changedProbeSettings.lightmapSettings.objectProbeSpacingWorld = 3.0f;
@@ -2531,6 +2539,84 @@ void TestObjectLightProbeSamplingFallbacksAndFiniteOutput()
     }
 }
 
+void TestLocalFogEffectivePathLengthSaturatesGrazingTraversal()
+{
+    const game::SectorLocalFogPathLimitSettings settings;
+    const float shortPath = game::ComputeSectorLocalFogEffectivePathLength(0.25f, 0.5f, settings);
+    Check(shortPath > 0.249f && shortPath <= 0.25f,
+          "local fog path limit preserves short traversals");
+
+    const float mediumPath = game::ComputeSectorLocalFogEffectivePathLength(2.0f, 0.5f, settings);
+    const float longPath = game::ComputeSectorLocalFogEffectivePathLength(20.0f, 0.5f, settings);
+    Check(mediumPath > shortPath && longPath > mediumPath,
+          "local fog effective path remains monotonic");
+    Check(longPath <= 1.5f && longPath > 1.49f,
+          "local fog grazing path saturates at three times volume height");
+
+    const float tinyVolumeLongPath =
+            game::ComputeSectorLocalFogEffectivePathLength(20.0f, 0.05f, settings);
+    Check(tinyVolumeLongPath <= 0.5f && tinyVolumeLongPath > 0.49f,
+          "local fog path limit enforces the half-metre minimum cap");
+
+    const float stepLength =
+            game::ComputeSectorLocalFogEffectiveStepLength(20.0f, 0.5f, 8, settings);
+    Check(Near(stepLength * 8.0f, longPath, 0.0001f),
+          "local fog distributes capped optical distance across march samples exactly once");
+}
+
+void TestLocalFogProbeLightingReductionInterpolationAndFallback()
+{
+    game::BakedObjectLightingSample cube;
+    cube.ambientCube[0] = Vector3{1.0f, 0.0f, 0.0f};
+    cube.ambientCube[1] = Vector3{0.0f, 1.0f, 0.0f};
+    cube.ambientCube[2] = Vector3{0.0f, 0.0f, 1.0f};
+    cube.ambientCube[3] = Vector3{100.0f, 100.0f, 100.0f};
+    cube.ambientCube[4] = Vector3{1.0f, 1.0f, 0.0f};
+    cube.ambientCube[5] = Vector3{0.0f, 1.0f, 1.0f};
+    Check(SameVector(
+                  game::EvaluateSectorLocalFogProbeLighting(cube),
+                  Vector3{0.4f, 0.6f, 0.4f}),
+          "local fog uses the stable upper-hemisphere probe reduction and ignores the lower face");
+
+    game::SectorLocalFogStaticLightingSamples interpolation;
+    interpolation.corners[0] = Vector3{1.0f, 0.0f, 0.0f};
+    interpolation.corners[1] = Vector3{0.0f, 1.0f, 0.0f};
+    interpolation.corners[2] = Vector3{0.0f, 0.0f, 1.0f};
+    interpolation.corners[3] = Vector3{1.0f, 1.0f, 1.0f};
+    Check(SameVector(
+                  game::InterpolateSectorLocalFogStaticLighting(interpolation, Vector2{-0.5f, -0.5f}),
+                  interpolation.corners[0]),
+          "local fog probe interpolation preserves the negative corner");
+    Check(SameVector(
+                  game::InterpolateSectorLocalFogStaticLighting(interpolation, Vector2{0.5f, 0.5f}),
+                  interpolation.corners[3]),
+          "local fog probe interpolation preserves the positive corner");
+    Check(SameVector(
+                  game::InterpolateSectorLocalFogStaticLighting(interpolation, Vector2{}),
+                  Vector3{0.5f, 0.5f, 0.5f}),
+          "local fog probe interpolation blends the four representative samples at volume centre");
+
+    game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    game::SectorTopologySector* sector = game::FindSectorTopologySector(map, 10);
+    Check(sector != nullptr, "local fog sector-ambient fallback fixture exists");
+    if (sector == nullptr) return;
+    sector->ambientColor = Color{64, 128, 255, 255};
+    sector->ambientIntensity = 0.5f;
+
+    game::SectorCompiledLocalFogVolume volume;
+    volume.sourceAuthoringFogVolumeId = 1;
+    volume.topologySectorId = 10;
+    volume.centerWorld = Vector3{2.0f, 0.25f, 2.0f};
+    volume.radiiWorld = Vector3{1.0f, 0.25f, 1.0f};
+    const game::SectorBakedObjectLightProbeRuntimeData noProbes;
+    const game::SectorLocalFogStaticLightingSamples fallback =
+            game::SampleSectorLocalFogStaticLighting(map, noProbes, volume);
+    for (const Vector3& corner : fallback.corners) {
+        Check(SameVector(corner, Vector3{0.125490f, 0.250980f, 0.5f}),
+              "local fog without probes uses containing-sector ambient instead of emissive tint");
+    }
+}
+
 void TestObjectLightProbeBakeWritesSidecarAndStats()
 {
     const std::filesystem::path sandbox = ObjectProbePhase01aSandboxDir();
@@ -3480,6 +3566,8 @@ int main()
     TestObjectLightProbeSamplingDoesNotBlendThroughClosedOrUnavailableAdjacency();
     TestObjectLightProbeSamplingKeepsAllProbeFallbackWithoutPreferredProbes();
     TestObjectLightProbeSamplingFallbacksAndFiniteOutput();
+    TestLocalFogEffectivePathLengthSaturatesGrazingTraversal();
+    TestLocalFogProbeLightingReductionInterpolationAndFallback();
     TestObjectLightProbeBakeWritesSidecarAndStats();
     TestObjectLightProbeBakeCancellationDoesNotMarkValid();
     TestObjectLightProbePlacementGridCounts();

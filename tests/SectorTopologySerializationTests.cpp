@@ -2073,6 +2073,8 @@ void TestFogSettingsRoundTripAndValidation()
     original.fogSettings.maxOpacity = 0.8f;
     original.fogSettings.referenceHeightWorld = -2.25f;
     original.fogSettings.heightFalloff = 1.5f;
+    original.fogSettings.localVolumeQuality =
+            game::SectorTopologyFogSettings::LocalVolumeQuality::High;
 
     const Json saved = Json::parse(SaveText(original));
     Check(saved["fogSettings"].is_object(), "non-default fog settings are written");
@@ -2087,6 +2089,8 @@ void TestFogSettingsRoundTripAndValidation()
                   && Near(saved["fogSettings"]["referenceHeightWorld"].get<float>(), -2.25f)
                   && Near(saved["fogSettings"]["heightFalloff"].get<float>(), 1.5f),
           "fog settings serialize normalized values");
+    Check(saved["fogSettings"]["localVolumeQuality"] == "high",
+          "local fog quality serializes with preview fog settings");
 
     SectorTopologyMap loaded;
     std::string error;
@@ -2102,6 +2106,9 @@ void TestFogSettingsRoundTripAndValidation()
                   && Near(loaded.fogSettings.referenceHeightWorld, -2.25f)
                   && Near(loaded.fogSettings.heightFalloff, 1.5f),
           "fog settings round-trip");
+    Check(loaded.fogSettings.localVolumeQuality
+                  == game::SectorTopologyFogSettings::LocalVolumeQuality::High,
+          "local fog quality round-trips");
 
     Json missingFields = saved;
     for (const char* field : {"enabled", "startDistanceWorld", "density", "maxOpacity",

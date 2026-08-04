@@ -399,6 +399,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringVertex
             ? FindSectorAuthoringVertex(authoringGraph, inspectorTarget.vertexId)
             : nullptr;
+    const SectorAuthoringFogVolume* selectedAuthoringFogVolume =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringFogVolume
+            ? FindSectorAuthoringFogVolume(authoringGraph, inspectorTarget.fogVolumeId)
+            : nullptr;
     const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
             context.topologyMap,
             selectionState.inspectedTopologyVertexId);
@@ -518,6 +522,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         }
         if (selectedAuthoringVertex != nullptr) {
             return 120.0f;
+        }
+        if (selectedAuthoringFogVolume != nullptr) {
+            return 38.0f + (rowH + gap) * 18.0f + 28.0f;
         }
         return 42.0f;
     };
@@ -2070,6 +2077,149 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                         SectorCoordToVisibleAuthoring(selectedAuthoringVertex->y)),
                 engine::UITextJustify::Left,
                 config.mutedTextColor);
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
+    if (selectedAuthoringFogVolume != nullptr) {
+        SectorEditorAuthoringFogVolumeEditingService& editing = context.fogVolumeEditing;
+        FogVolumeEditingUiState& fogUi = context.fogVolumeUiState;
+        const int fogVolumeId = selectedAuthoringFogVolume->id;
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                TextFormat("Authoring Fog Volume: %d", fogVolumeId),
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+
+        bool enabled = selectedAuthoringFogVolume->enabled;
+        if (engine::Checkbox(
+                    ui, config, input, assets,
+                    "sector_editor_fog_volume_enabled",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font, "Enabled", enabled)) {
+            editing.MutateById(fogVolumeId, "Updated authoring fog volume", [enabled](SectorAuthoringFogVolume& volume) {
+                if (volume.enabled == enabled) return false;
+                volume.enabled = enabled;
+                return true;
+            });
+        }
+        y += rowH + gap;
+
+        const auto drawFloat = [&](const char* id,
+                                   const char* label,
+                                   float current,
+                                   size_t inputIndex,
+                                   float minimum,
+                                   float maximum,
+                                   int decimals,
+                                   float SectorAuthoringFogVolume::*member) {
+            const SectorEditorInspectorNumericRowLayout layout =
+                    BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+            const SectorEditorFloatInputResult value = DrawLabeledFloatInput(
+                    ui, config, input, assets, font,
+                    id, label,
+                    layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right,
+                    current,
+                    fogUi.floatInputs[inputIndex],
+                    minimum, maximum, decimals);
+            if (value.changed && value.value != current) {
+                editing.MutateById(fogVolumeId, "Updated authoring fog volume", [member, value](SectorAuthoringFogVolume& volume) {
+                    if (volume.*member == value.value) return false;
+                    volume.*member = value.value;
+                    return true;
+                });
+            }
+            y += rowH + gap;
+        };
+
+        const auto drawPosition = [&](const char* id, const char* label, bool xAxis, size_t inputIndex) {
+            const float current = xAxis
+                    ? SectorCoordToVisibleAuthoring(selectedAuthoringFogVolume->x)
+                    : SectorCoordToVisibleAuthoring(selectedAuthoringFogVolume->y);
+            const SectorEditorInspectorNumericRowLayout layout =
+                    BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+            const SectorEditorFloatInputResult value = DrawLabeledFloatInput(
+                    ui, config, input, assets, font,
+                    id, label,
+                    layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right,
+                    current,
+                    fogUi.floatInputs[inputIndex],
+                    -8192.0f, 8192.0f, 3);
+            if (value.changed && value.value != current) {
+                SectorCoord coord = 0;
+                if (!VisibleAuthoringToSectorCoord(value.value, coord)) {
+                    statusText = "Fog volume position is outside the authoring coordinate range";
+                } else {
+                    SectorTopologyCoordPoint point{
+                            selectedAuthoringFogVolume->x,
+                            selectedAuthoringFogVolume->y};
+                    if (xAxis) point.x = coord; else point.y = coord;
+                    editing.SetPosition(fogVolumeId, point, "Moved authoring fog volume");
+                }
+            }
+            y += rowH + gap;
+        };
+
+        drawPosition("sector_editor_fog_volume_x", "Center X", true, 0);
+        drawPosition("sector_editor_fog_volume_z", "Center Z", false, 1);
+        drawFloat("sector_editor_fog_volume_bottom", "Bottom offset", selectedAuthoringFogVolume->bottomOffsetWorld, 2, -16.0f, 16.0f, 3, &SectorAuthoringFogVolume::bottomOffsetWorld);
+        drawFloat("sector_editor_fog_volume_radius_x", "Radius X", selectedAuthoringFogVolume->radiusXWorld, 3, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusXWorld);
+        drawFloat("sector_editor_fog_volume_radius_z", "Radius Z", selectedAuthoringFogVolume->radiusZWorld, 4, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusZWorld);
+        drawFloat("sector_editor_fog_volume_height", "Height", selectedAuthoringFogVolume->heightWorld, 5, 0.05f, 32.0f, 3, &SectorAuthoringFogVolume::heightWorld);
+        drawFloat("sector_editor_fog_volume_density", "Density", selectedAuthoringFogVolume->density, 6, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::density);
+        drawFloat("sector_editor_fog_volume_opacity", "Max opacity", selectedAuthoringFogVolume->maxOpacity, 7, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::maxOpacity);
+        drawFloat("sector_editor_fog_volume_softness", "Edge softness", selectedAuthoringFogVolume->edgeSoftness, 8, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::edgeSoftness);
+        drawFloat("sector_editor_fog_volume_noise_scale", "Noise scale", selectedAuthoringFogVolume->noiseScaleWorld, 9, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::noiseScaleWorld);
+        drawFloat("sector_editor_fog_volume_noise_amount", "Noise amount", selectedAuthoringFogVolume->noiseAmount, 10, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::noiseAmount);
+        drawFloat("sector_editor_fog_volume_flow_direction", "Flow direction", selectedAuthoringFogVolume->flowDirectionDegrees, 11, 0.0f, 360.0f, 2, &SectorAuthoringFogVolume::flowDirectionDegrees);
+        drawFloat("sector_editor_fog_volume_flow_speed", "Flow speed", selectedAuthoringFogVolume->flowSpeedWorld, 12, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::flowSpeedWorld);
+
+        for (int channel = 0; channel < 3; ++channel) {
+            const char* labels[] = {"Color R", "Color G", "Color B"};
+            const char* ids[] = {
+                    "sector_editor_fog_volume_color_r",
+                    "sector_editor_fog_volume_color_g",
+                    "sector_editor_fog_volume_color_b"};
+            const unsigned char channels[] = {
+                    selectedAuthoringFogVolume->color.r,
+                    selectedAuthoringFogVolume->color.g,
+                    selectedAuthoringFogVolume->color.b};
+            const SectorEditorInspectorNumericRowLayout layout =
+                    BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+            const SectorEditorIntInputResult value = DrawLabeledIntInput(
+                    ui, config, input, assets, font,
+                    ids[channel], labels[channel],
+                    layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right,
+                    channels[channel],
+                    fogUi.colorInputs[static_cast<size_t>(channel)],
+                    0, 255, 1);
+            if (value.changed && value.value != channels[channel]) {
+                editing.MutateById(fogVolumeId, "Updated authoring fog volume color", [channel, value](SectorAuthoringFogVolume& volume) {
+                    unsigned char* target = channel == 0 ? &volume.color.r : channel == 1 ? &volume.color.g : &volume.color.b;
+                    if (*target == value.value) return false;
+                    *target = static_cast<unsigned char>(value.value);
+                    return true;
+                });
+            }
+            y += rowH + gap;
+        }
+
+        if (engine::Button(
+                    ui, config, input, assets,
+                    "sector_editor_fog_volume_delete",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font, "Delete Fog Volume")) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedFogVolumeConfirmation);
+        }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;

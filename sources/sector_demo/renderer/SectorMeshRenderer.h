@@ -11,6 +11,7 @@
 #include "sector_demo/renderer/SectorDoorRenderer.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
+#include "sector_demo/renderer/SectorLocalFogRenderer.h"
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
@@ -75,6 +76,10 @@ public:
             engine::AssetManager& assets,
             RenderTexture2D& sceneTarget,
             const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
+    bool ApplyLocalFogToScene(
+            RenderTexture2D& sceneTarget,
+            const SectorTopologyMap& map,
+            const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);
 
     bool IsReady() const { return initialized; }
     bool IsRendererReady() const { return IsReady(); }
@@ -178,6 +183,7 @@ private:
     int shadowSoftnessLoc = -1;
     int dynamicLightingClampLoc = -1;
     SectorFogShaderLocations fogShaderLocations;
+    SectorLocalFogRenderer localFogRenderer;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
     SectorBloomRenderer bloomRenderer;

@@ -263,6 +263,17 @@ bool SectorEditor::Init(engine::EngineContext& context)
     Shutdown(context);
     engineContext = &context;
     ResetToBlankMap(context);
+    fogVolumeEditingService.emplace(
+            SectorEditorAuthoringFogVolumeEditingServiceContext{
+                    Lifecycle(),
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    state.topologyRenderRevision,
+                    state.topologyRenderCache,
+                    selectionState,
+                    manipulationState,
+                    statusText});
     return true;
 }
 
@@ -293,6 +304,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     lightEditingState = LightEditingState{};
     materialEditingState = MaterialEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
+    fogVolumeEditingUiState = FogVolumeEditingUiState{};
+    fogVolumeEditingService.reset();
     canvasRect = {};
     statusText.clear();
     engineContext = nullptr;
@@ -308,6 +321,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         CancelLightDrag(nullptr);
         CancelPendingAuthoringLine(nullptr);
         CancelPendingAuthoringRectangle(nullptr);
+        if (fogVolumeEditingService) {
+            fogVolumeEditingService->CancelMove(nullptr);
+        }
         return;
     }
 
@@ -566,6 +582,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
             documentState.derivation.authoringDerivationStatus,
             input,
             canvasRect};
+    context.fogVolumeEditing = fogVolumeEditingService
+            ? &fogVolumeEditingService.value()
+            : nullptr;
     context.currentSnappedSectorPoint = [this]() {
         return CurrentSnappedSectorPoint();
     };
@@ -1243,6 +1262,12 @@ SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
             && selectionState.selectedAuthoring.faceAnchorId >= 0) {
         return SectorEditorPickTarget{SectorEditorPickKind::AuthoringFaceAnchor, selectionState.selectedAuthoring.faceAnchorId};
     }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FogVolume
+            && selectionState.selectedAuthoring.fogVolumeId >= 0) {
+        return SectorEditorPickTarget{
+                SectorEditorPickKind::AuthoringFogVolume,
+                selectionState.selectedAuthoring.fogVolumeId};
+    }
     return SectorEditorPickTarget{};
 }
 
@@ -1255,6 +1280,7 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             + TopologyMap().dynamicPointLights.size()
             + TopologyMap().staticSpotLights.size()
             + TopologyMap().staticLights.size()
+            + AuthoringGraph().fogVolumes.size()
             + 3);
 
     const auto addPointCandidate = [&](SectorEditorPickKind kind, int id, Vector2 center) {
@@ -1315,6 +1341,18 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
                 SectorEditorPickKind::StaticLight,
                 light.id,
                 MapToScreen(Vector2{light.position.x, light.position.z}));
+    }
+
+    if (fogVolumeEditingService) {
+        const Vector2 mapPoint = ScreenToMap(screenPoint);
+        const Vector2 tolerancePoint = ScreenToMap(Vector2{screenPoint.x + ScreenLightPickPixels, screenPoint.y});
+        const float tolerance = std::fabs(tolerancePoint.x - mapPoint.x);
+        const int fogVolumeId = fogVolumeEditingService->FindAtMapPoint(mapPoint, tolerance);
+        if (fogVolumeId >= 0) {
+            candidates.push_back(SectorEditorPickCandidate{
+                    SectorEditorPickTarget{SectorEditorPickKind::AuthoringFogVolume, fogVolumeId},
+                    0.0f});
+        }
     }
 
     SectorAuthoringSelectionTarget authoringTarget;
@@ -2074,6 +2112,9 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
                 outHandle);
     };
     context.placedObjectMoveProvider = nullptr;
+    context.fogVolumeEditing = fogVolumeEditingService
+            ? &fogVolumeEditingService.value()
+            : nullptr;
     context.startAuthoringVertexDrag = [](void* userData, int vertexId, SectorTopologyCoordPoint point) {
         static_cast<SectorEditor*>(userData)->StartAuthoringVertexDrag(vertexId, point);
     };
@@ -2869,6 +2910,10 @@ void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTextu
         return;
     }
     preview.ApplyEmissiveDecalBloomToScene(assets, sceneTarget, TopologyMap().fogSettings);
+    preview.ApplyLocalFogToScene(
+            sceneTarget,
+            TopologyMap(),
+            previewState.runtime.runtimeObjects.objectLightProbes);
 }
 
 void SectorEditor::RenderPreview3DOverlays()
@@ -3167,6 +3212,7 @@ void SectorEditor::DrawTopologyDocument()
             selectionState.hoveredAuthoring
     };
     DrawCachedTopologySectors(state.topologyRenderCache, drawContext);
+    DrawAuthoringFogVolumes();
 
     if (drawLegacyTopologySelection) {
         DrawTopologySelectedLineHighlight();
@@ -3176,6 +3222,7 @@ void SectorEditor::DrawTopologyDocument()
     DrawCachedAuthoringGraphOverlay(state.topologyRenderCache, drawContext);
     DrawCachedAuthoringDiagnostics(state.topologyRenderCache, drawContext);
     DrawAuthoringVertexMoveOverlay();
+    DrawAuthoringFogVolumeMoveOverlay();
     DrawCachedTopologyStaticLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyStaticSpotLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyDynamicLights(state.topologyRenderCache, drawContext);
@@ -3194,6 +3241,7 @@ void SectorEditor::DrawTopologyDocument()
     drawToolOverlay(SectorEditorTool::AuthoringLine);
     drawToolOverlay(SectorEditorTool::AuthoringRectangle);
     drawToolOverlay(SectorEditorTool::AuthoringInsertVertex);
+    drawToolOverlay(SectorEditorTool::AuthoringFogVolume);
     DrawTopologySnapCrosshair();
 
     if (!state.topologyRenderWarning.empty()) {
@@ -3218,6 +3266,131 @@ void SectorEditor::DrawTopologyDocument()
                 Color{236, 196, 92, 255}
         );
     }
+}
+
+void SectorEditor::DrawAuthoringFogVolumes() const
+{
+    const auto drawVolume = [this](
+            const SectorAuthoringFogVolume& volume,
+            SectorTopologyCoordPoint point,
+            Color outline,
+            bool resolved,
+            bool drawLabel) {
+        const Vector2 mapCenter{
+                SectorCoordToVisibleAuthoring(point.x),
+                SectorCoordToVisibleAuthoring(point.y)};
+        const Vector2 center = MapToScreen(mapCenter);
+        const Vector2 edgeX = MapToScreen(Vector2{
+                mapCenter.x + SectorWorldToAuthoringDistance(volume.radiusXWorld),
+                mapCenter.y});
+        const Vector2 edgeZ = MapToScreen(Vector2{
+                mapCenter.x,
+                mapCenter.y + SectorWorldToAuthoringDistance(volume.radiusZWorld)});
+        const float radiusX = std::max(2.0f, std::fabs(edgeX.x - center.x));
+        const float radiusY = std::max(2.0f, std::fabs(edgeZ.y - center.y));
+        Color fill = volume.enabled ? volume.color : Color{112, 118, 122, 255};
+        fill.a = 46;
+        DrawEllipse(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, fill);
+        DrawEllipseLines(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, outline);
+        const float innerScale = std::clamp(1.0f - volume.edgeSoftness, 0.05f, 1.0f);
+        Color inner = outline;
+        inner.a = 130;
+        DrawEllipseLines(
+                static_cast<int>(center.x),
+                static_cast<int>(center.y),
+                radiusX * innerScale,
+                radiusY * innerScale,
+                inner);
+        if (!resolved) {
+            DrawLineEx(
+                    Vector2{center.x - 8.0f, center.y - 8.0f},
+                    Vector2{center.x + 8.0f, center.y + 8.0f},
+                    2.0f,
+                    Color{240, 82, 82, 255});
+            DrawLineEx(
+                    Vector2{center.x + 8.0f, center.y - 8.0f},
+                    Vector2{center.x - 8.0f, center.y + 8.0f},
+                    2.0f,
+                    Color{240, 82, 82, 255});
+        }
+        if (drawLabel) {
+            DrawText("FG", static_cast<int>(center.x + 7.0f), static_cast<int>(center.y - 18.0f), 14, outline);
+        }
+    };
+
+    for (const SectorAuthoringFogVolume& volume : AuthoringGraph().fogVolumes) {
+        bool resolved = false;
+        for (const SectorAuthoringDerivedFogVolumeMapping& mapping
+                : documentState.derivation.authoringDerivation.mapping.fogVolumes) {
+            if (mapping.authoringFogVolumeId == volume.id) {
+                resolved = mapping.resolved;
+                break;
+            }
+        }
+        const bool selected = selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FogVolume
+                && selectionState.selectedAuthoring.fogVolumeId == volume.id;
+        const bool hovered = selectionState.hoveredAuthoring.kind == SectorAuthoringSelectionKind::FogVolume
+                && selectionState.hoveredAuthoring.fogVolumeId == volume.id;
+        Color outline = !resolved
+                ? Color{240, 82, 82, 255}
+                : !volume.enabled
+                        ? Color{145, 150, 155, 235}
+                        : selected
+                                ? Color{72, 220, 245, 255}
+                                : hovered
+                                        ? Color{244, 192, 70, 255}
+                                        : Color{116, 205, 164, 230};
+        drawVolume(
+                volume,
+                SectorTopologyCoordPoint{volume.x, volume.y},
+                outline,
+                resolved,
+                true);
+    }
+}
+
+void SectorEditor::DrawAuthoringFogVolumeMoveOverlay() const
+{
+    const AuthoringFogVolumeDragState& drag = manipulationState.authoringFogVolumeDrag;
+    if (!drag.active || !drag.hasPreviewPoint) {
+        return;
+    }
+    const SectorAuthoringFogVolume* volume = FindSectorAuthoringFogVolume(AuthoringGraph(), drag.fogVolumeId);
+    if (volume == nullptr) {
+        return;
+    }
+    const Vector2 originalMap{
+            SectorCoordToVisibleAuthoring(drag.originalPoint.x),
+            SectorCoordToVisibleAuthoring(drag.originalPoint.y)};
+    const Vector2 previewMap{
+            SectorCoordToVisibleAuthoring(drag.previewPoint.x),
+            SectorCoordToVisibleAuthoring(drag.previewPoint.y)};
+    const Vector2 original = MapToScreen(originalMap);
+    const Vector2 previewPoint = MapToScreen(previewMap);
+    const Vector2 radiusXPoint = MapToScreen(Vector2{
+            previewMap.x + SectorWorldToAuthoringDistance(volume->radiusXWorld),
+            previewMap.y});
+    const Vector2 radiusZPoint = MapToScreen(Vector2{
+            previewMap.x,
+            previewMap.y + SectorWorldToAuthoringDistance(volume->radiusZWorld)});
+    const float radiusX = std::max(2.0f, std::fabs(radiusXPoint.x - previewPoint.x));
+    const float radiusY = std::max(2.0f, std::fabs(radiusZPoint.y - previewPoint.y));
+    const Color previewColor = drag.previewResolved
+            ? Color{72, 220, 245, 255}
+            : Color{240, 82, 82, 255};
+    DrawLineEx(original, previewPoint, 2.0f, Color{150, 200, 220, 180});
+    DrawEllipseLines(
+            static_cast<int>(original.x),
+            static_cast<int>(original.y),
+            radiusX,
+            radiusY,
+            Color{150, 200, 220, 120});
+    DrawEllipseLines(
+            static_cast<int>(previewPoint.x),
+            static_cast<int>(previewPoint.y),
+            radiusX,
+            radiusY,
+            previewColor);
 }
 
 void SectorEditor::DrawTopologySelectedLineHighlight() const
@@ -3599,7 +3772,7 @@ void SectorEditor::DrawToolsPanel(
     };
     const float toolsContentH =
             sectionLabelH + rowsHeight(4)
-            + separatorH + sectionLabelH + rowsHeight(7)
+            + separatorH + sectionLabelH + rowsHeight(8)
             + separatorH + rowsHeight(4)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
@@ -3686,6 +3859,11 @@ void SectorEditor::DrawToolsPanel(
         if (manipulationState.authoringVertexDrag.active && tool != SectorEditorTool::AuthoringMove) {
             CancelAuthoringVertexDrag("Cancelled authoring vertex move");
         }
+        if (manipulationState.authoringFogVolumeDrag.active
+                && tool != SectorEditorTool::Select
+                && fogVolumeEditingService) {
+            fogVolumeEditingService->CancelMove("Cancelled fog volume move");
+        }
         if (lightEditingState.lightDrag.active
                 && tool != SectorEditorTool::Move
                 && tool != SectorEditorTool::Select
@@ -3718,6 +3896,8 @@ void SectorEditor::DrawToolsPanel(
             statusText = "3D Prop: click inside a derived sector to place a static model";
         } else if (tool == SectorEditorTool::Door) {
             statusText = "Door: click a two-sided portal line";
+        } else if (tool == SectorEditorTool::AuthoringFogVolume) {
+            statusText = "Fog Volume: click strictly inside a sector";
         }
     };
 
@@ -3740,6 +3920,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::RuntimeObject,
             SectorEditorTool::StaticModel,
             SectorEditorTool::Door,
+            SectorEditorTool::AuthoringFogVolume,
             SectorEditorTool::StaticLight,
             SectorEditorTool::StaticSpotLight,
             SectorEditorTool::DynamicLight,
@@ -3934,6 +4115,7 @@ void SectorEditor::DrawSectorsPanel(
             previewState.runtime.runtimeObjects,
             inspectorIdUiState,
             materialEditingUiState,
+            fogVolumeEditingUiState,
             statusText,
             selection,
             runtimeObjectEditing,
@@ -3941,6 +4123,7 @@ void SectorEditor::DrawSectorsPanel(
             materialEditing,
             textureCatalog,
             lightEditing,
+            fogVolumeEditingService.value(),
             engineContext};
     const SectorEditorInspectorPanelResult result = DrawSectorEditorInspectorPanel(context);
     for (int i = 0; i < result.requestCount; ++i) {
@@ -3957,6 +4140,16 @@ void SectorEditor::DrawSectorsPanel(
             break;
         case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation:
             OpenDeleteSelectedLightConfirmation();
+            break;
+        case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedFogVolumeConfirmation:
+            OpenConfirmation(
+                    "Delete Fog Volume",
+                    "Delete the selected authoring fog volume?",
+                    [this]() {
+                        if (fogVolumeEditingService) {
+                            fogVolumeEditingService->DeleteSelected();
+                        }
+                    });
             break;
         case SectorEditorInspectorPanelRequestKind::BakeLightmaps:
             StartLightmapBake();
@@ -4480,6 +4673,7 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     lightEditingState = LightEditingState{};
     materialEditingState = MaterialEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
+    fogVolumeEditingUiState = FogVolumeEditingUiState{};
     previewState.controller = SectorEditorPreviewControllerState{};
     ResetEditorTopologyDocumentState(
             Lifecycle(),
@@ -4515,6 +4709,9 @@ bool SectorEditor::LoadLevel(
         assets.UnloadScope(runtimeObjectEditingState.spritePicker.previewScope);
     }
     CancelAuthoringVertexDrag(nullptr);
+    if (fogVolumeEditingService) {
+        fogVolumeEditingService->CancelMove(nullptr);
+    }
     CancelLightDrag(nullptr);
     bool loadedAuthoringGraph = false;
     bool authoringDerivationCurrent = false;

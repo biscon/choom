@@ -156,6 +156,7 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorTextureActions.cpp
             sources/sector_editor/selection/SectorEditorSelectionService.cpp
             sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
+            sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
             sources/sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.cpp
@@ -251,6 +252,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
+            sources/sector_demo/renderer/SectorLocalFogLighting.cpp
     )
     target_include_directories(sector_topology_lightmap_tests PRIVATE sources)
     target_compile_definitions(sector_topology_lightmap_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")

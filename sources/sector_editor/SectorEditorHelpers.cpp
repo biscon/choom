@@ -557,6 +557,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::RuntimeObject: return "Billboard";
         case SectorEditorTool::StaticModel: return "3D Prop";
         case SectorEditorTool::Door: return "Door";
+        case SectorEditorTool::AuthoringFogVolume: return "Fog Volume";
         case SectorEditorTool::StaticLight: return "Static Light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot";
         case SectorEditorTool::DynamicLight: return "Dynamic Light";
@@ -571,6 +572,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
     return tool == SectorEditorTool::AuthoringLine
             || tool == SectorEditorTool::AuthoringRectangle
             || tool == SectorEditorTool::AuthoringInsertVertex
+            || tool == SectorEditorTool::AuthoringFogVolume
             || tool == SectorEditorTool::AuthoringMove;
 }
 
@@ -606,6 +608,7 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
         case SectorEditorPickKind::AuthoringVertex: return "authoring vertex";
         case SectorEditorPickKind::AuthoringLine: return "authoring line";
         case SectorEditorPickKind::AuthoringFaceAnchor: return "authoring face";
+        case SectorEditorPickKind::AuthoringFogVolume: return "fog volume";
     }
     return "unknown";
 }
@@ -626,6 +629,7 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
         case SectorEditorPickKind::StaticSpotLight:
         case SectorEditorPickKind::StaticLight:
         case SectorEditorPickKind::AuthoringVertex:
+        case SectorEditorPickKind::AuthoringFogVolume:
             return target.id >= 0;
         case SectorEditorPickKind::None:
         case SectorEditorPickKind::AuthoringLine:
@@ -1129,7 +1133,8 @@ bool SameFogSettings(
             && a.density == b.density
             && a.maxOpacity == b.maxOpacity
             && a.referenceHeightWorld == b.referenceHeightWorld
-            && a.heightFalloff == b.heightFalloff;
+            && a.heightFalloff == b.heightFalloff
+            && a.localVolumeQuality == b.localVolumeQuality;
 }
 
 bool SamePreviewSettings(const SectorPreviewSettings& left, const SectorPreviewSettings& right)

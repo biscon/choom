@@ -5,6 +5,7 @@
 #include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 
 #include <raylib.h>
 
@@ -33,6 +34,7 @@ struct SectorEditorToolContext {
     const std::string& authoringDerivationStatus;
     engine::Input* input = nullptr;
     Rectangle canvasRect = {};
+    SectorEditorAuthoringFogVolumeEditingService* fogVolumeEditing = nullptr;
 
     std::function<SectorPoint()> currentSnappedSectorPoint;
     std::function<bool(SectorPoint, SectorTopologyCoordPoint&, std::string&)> toTopologyCoordPoint;

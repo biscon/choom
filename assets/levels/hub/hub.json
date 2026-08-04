@@ -308,16 +308,17 @@
   "fogSettings": {
     "enabled": true,
     "color": {
-      "r": 80,
-      "g": 88,
-      "b": 84,
+      "r": 30,
+      "g": 32,
+      "b": 26,
       "a": 255
     },
     "startDistanceWorld": 2.0,
-    "density": 0.012500000186264515,
-    "maxOpacity": 0.5,
+    "density": 0.02500000037252903,
+    "maxOpacity": 0.6499999761581421,
     "referenceHeightWorld": 1.0,
-    "heightFalloff": 0.6000000238418579
+    "heightFalloff": 0.5,
+    "localVolumeQuality": "medium"
   },
   "bakedLightmap": {
     "path": "assets/levels/hub/hub.lightmap.png",
@@ -4266,6 +4267,75 @@
           ],
           "bloomIntensity": 1.0
         }
+      }
+    ],
+    "fogVolumes": [
+      {
+        "id": 1,
+        "x": 64,
+        "y": 1472,
+        "bottomOffsetWorld": -0.25,
+        "radiusXWorld": 0.8999999761581421,
+        "radiusZWorld": 1.0,
+        "heightWorld": 0.5,
+        "color": {
+          "r": 80,
+          "g": 80,
+          "b": 80,
+          "a": 255
+        },
+        "density": 1.7000000476837158,
+        "maxOpacity": 0.5,
+        "edgeSoftness": 1.0,
+        "noiseScaleWorld": 0.10000000149011612,
+        "noiseAmount": 1.0,
+        "flowDirectionDegrees": 90.0,
+        "flowSpeedWorld": 1.0
+      },
+      {
+        "id": 2,
+        "x": 64,
+        "y": 832,
+        "bottomOffsetWorld": -0.25,
+        "radiusXWorld": 0.8999999761581421,
+        "radiusZWorld": 1.0,
+        "heightWorld": 0.5,
+        "density": 1.75,
+        "maxOpacity": 0.5,
+        "edgeSoftness": 1.0,
+        "noiseScaleWorld": 0.30000001192092896,
+        "noiseAmount": 1.0,
+        "flowDirectionDegrees": 90.0,
+        "flowSpeedWorld": 1.0
+      },
+      {
+        "id": 3,
+        "x": 64,
+        "y": 192,
+        "bottomOffsetWorld": -0.25,
+        "radiusXWorld": 1.2000000476837158,
+        "radiusZWorld": 1.2999999523162842,
+        "heightWorld": 0.5,
+        "density": 1.75,
+        "maxOpacity": 0.5,
+        "edgeSoftness": 1.0,
+        "noiseScaleWorld": 0.20000000298023224,
+        "noiseAmount": 1.0,
+        "flowDirectionDegrees": 90.0,
+        "flowSpeedWorld": 1.0
+      },
+      {
+        "id": 4,
+        "x": 0,
+        "y": 352,
+        "bottomOffsetWorld": -0.25,
+        "radiusXWorld": 1.399999976158142,
+        "radiusZWorld": 1.2000000476837158,
+        "heightWorld": 0.5,
+        "density": 1.5,
+        "maxOpacity": 0.5,
+        "edgeSoftness": 1.0,
+        "noiseScaleWorld": 0.10000000149011612
       }
     ]
   }

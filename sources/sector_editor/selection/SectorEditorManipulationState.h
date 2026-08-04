@@ -7,6 +7,7 @@ namespace game {
 struct ManipulationState {
     SelectDragArmState selectDragArm;
     AuthoringVertexDragState authoringVertexDrag;
+    AuthoringFogVolumeDragState authoringFogVolumeDrag;
 };
 
 } // namespace game
