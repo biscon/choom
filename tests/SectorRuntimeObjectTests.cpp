@@ -3,6 +3,7 @@
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
@@ -2984,6 +2985,8 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
     object.position = Vector3{2.0f, 8.0f, 2.0f};
     object.yawRadians = 0.75f;
     object.staticModel.modelPath = "assets/models/props/missing_fixture.glb";
+    object.staticModel.rotationXRadians = 0.25f;
+    object.staticModel.rotationZRadians = -0.5f;
     object.staticModel.heightOffsetWorld = 0.625f;
     object.staticModel.scale = 1.75f;
     object.staticModel.collision = true;
@@ -3017,6 +3020,9 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
           "static prop converts authored floor position and adds world height offset");
     Check(Near(transform.yawRadians, 0.75f),
           "static prop copies authored yaw to ECS transform");
+    Check(Near(transform.rotationXRadians, 0.25f)
+                  && Near(transform.rotationZRadians, -0.5f),
+          "static prop copies authored X and Z rotations to ECS transform");
     Check(!engine::IsNull(world.Get<game::SectorStaticModel>(entity).model),
           "assigned static prop stores a model asset handle");
     Check(world.Get<game::SectorStaticModel>(entity).placedObjectId == 18,
@@ -3819,6 +3825,66 @@ void TestStaticModelColliderBuildUsesFullAuthoredTransform()
           "static model collider yaw axes remain orthonormal");
 }
 
+void TestStaticModelXzRotationUsesSharedTransformAndEnclosingBounds()
+{
+    const Vector3 position{4.0f, 3.0f, 6.0f};
+    const float yaw = 0.65f;
+    const Matrix yawOnly = game::BuildSectorStaticModelAuthoredTransform(
+            position,
+            0.0f,
+            yaw,
+            0.0f,
+            1.5f);
+    const Matrix legacyYawOnly = MatrixMultiply(
+            MatrixScale(1.5f, 1.5f, 1.5f),
+            MatrixMultiply(
+                    MatrixRotateY(yaw),
+                    MatrixTranslate(position.x, position.y, position.z)));
+    const Vector3 sample{1.25f, -0.5f, 2.0f};
+    Check(Near(
+                  Vector3Transform(sample, yawOnly),
+                  Vector3Transform(sample, legacyYawOnly)),
+          "shared static model transform preserves legacy yaw-only placement");
+
+    const Matrix xyz = game::BuildSectorStaticModelAuthoredTransform(
+            position,
+            0.4f,
+            yaw,
+            -0.3f,
+            1.5f);
+    const Matrix expectedXyz = MatrixMultiply(
+            MatrixScale(1.5f, 1.5f, 1.5f),
+            MatrixMultiply(
+                    MatrixRotateXYZ(Vector3{0.4f, yaw, -0.3f}),
+                    MatrixTranslate(position.x, position.y, position.z)));
+    Check(Near(
+                  Vector3Transform(sample, xyz),
+                  Vector3Transform(sample, expectedXyz)),
+          "shared static model transform composes local X, Y, and Z rotation");
+
+    const BoundingBox bounds{
+            Vector3{-1.0f, -0.5f, -2.0f},
+            Vector3{1.0f, 0.5f, 2.0f}};
+    const game::SectorObjectTransform tilted{
+            position,
+            0.0f,
+            PI * 0.5f,
+            0.0f};
+    game::SectorStaticModelCollider collider;
+    Check(game::BuildSectorStaticModelCollider(
+                  8,
+                  bounds,
+                  tilted,
+                  1.0f,
+                  collider),
+          "X-tilted static model bounds build a valid collider");
+    Check(Near(collider.center, Vector2{position.x, position.z})
+                  && Near(collider.halfExtents, Vector2{1.0f, 0.5f})
+                  && Near(collider.bottom, 1.0f)
+                  && Near(collider.top, 5.0f),
+          "tilted collision conservatively encloses all transformed model bounds");
+}
+
 void TestStaticModelColliderBlocksSweepsAndSlides()
 {
     const std::vector<game::SectorStaticModelCollider> colliders{
@@ -4317,6 +4383,7 @@ int main()
     TestSectorRuntimeObjectBakedLightingFallback();
     TestSectorRuntimeObjectBakedLightingUsesMapFallback();
     TestStaticModelColliderBuildUsesFullAuthoredTransform();
+    TestStaticModelXzRotationUsesSharedTransformAndEnclosingBounds();
     TestStaticModelColliderBlocksSweepsAndSlides();
     TestStaticModelColliderContactAllowsEscapeAndTangentMovement();
     TestStaticModelColliderRoundedCornerSweep();

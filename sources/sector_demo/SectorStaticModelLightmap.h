@@ -59,6 +59,8 @@ struct SectorStaticModelLightmapObject {
     int containingSectorId = -1;
     Vector3 worldPosition = {};
     float yawRadians = 0.0f;
+    float rotationXRadians = 0.0f;
+    float rotationZRadians = 0.0f;
     float scale = 1.0f;
     std::vector<SectorStaticModelLightmapMeshPlacement> meshPlacements;
 };

@@ -980,6 +980,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
     staticModel.position = Vector3{12.0f, -2.5f, 20.0f};
     staticModel.yawRadians = 0.5f;
     staticModel.staticModel.modelPath = "assets/models/props/nested/crate.glb";
+    staticModel.staticModel.rotationXRadians = 0.25f;
+    staticModel.staticModel.rotationZRadians = -0.75f;
     staticModel.staticModel.heightOffsetWorld = 0.75f;
     staticModel.staticModel.scale = 1.5f;
     staticModel.staticModel.collision = true;
@@ -996,6 +998,14 @@ void TestRuntimeObjectsRoundTripAndValidation()
                           staticModelSaved["runtimeObjects"][0]["staticModel"]["scale"]
                                   .get<float>(),
                           1.5f)
+                  && Near(
+                          staticModelSaved["runtimeObjects"][0]["staticModel"]["rotationXDegrees"]
+                                  .get<float>(),
+                          0.25f * 180.0f / PI)
+                  && Near(
+                          staticModelSaved["runtimeObjects"][0]["staticModel"]["rotationZDegrees"]
+                                  .get<float>(),
+                          -0.75f * 180.0f / PI)
                   && staticModelSaved["runtimeObjects"][0]["staticModel"]["collision"]
                              .get<bool>()
                   && Near(
@@ -1013,6 +1023,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
                           == "assets/models/props/nested/crate.glb"
                   && Near(loadedStaticModel->staticModel.heightOffsetWorld, 0.75f)
                   && Near(loadedStaticModel->staticModel.scale, 1.5f)
+                  && Near(loadedStaticModel->staticModel.rotationXRadians, 0.25f)
+                  && Near(loadedStaticModel->staticModel.rotationZRadians, -0.75f)
                   && loadedStaticModel->staticModel.collision
                   && Near(loadedStaticModel->position, Vector3{12.0f, -2.5f, 20.0f})
                   && Near(loadedStaticModel->yawRadians, 0.5f),
@@ -1030,6 +1042,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
             game::FindSectorPlacedRuntimeObject(unassignedStaticModelLoaded, 18);
     Check(unassignedStaticModel != nullptr
                   && unassignedStaticModel->staticModel.modelPath.empty()
+                  && Near(unassignedStaticModel->staticModel.rotationXRadians, 0.0f)
+                  && Near(unassignedStaticModel->staticModel.rotationZRadians, 0.0f)
                   && Near(unassignedStaticModel->staticModel.heightOffsetWorld, 0.0f)
                   && Near(unassignedStaticModel->staticModel.scale, 1.0f)
                   && !unassignedStaticModel->staticModel.collision,
@@ -1045,6 +1059,22 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && loadedStaticModel->staticModel.modelPath.empty()
                   && Near(loadedStaticModel->staticModel.heightOffsetWorld, 0.75f),
           "missing static prop model path defaults empty without losing height offset");
+
+    Json missingRotations = staticModelSaved;
+    missingRotations["runtimeObjects"][0]["staticModel"].erase(
+            "rotationXDegrees");
+    missingRotations["runtimeObjects"][0]["staticModel"].erase(
+            "rotationZDegrees");
+    SectorTopologyMap missingRotationsLoaded;
+    Check(LoadText(missingRotations.dump(), missingRotationsLoaded, error),
+          "legacy static prop payload without X/Z rotations loads");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(
+            missingRotationsLoaded,
+            18);
+    Check(loadedStaticModel != nullptr
+                  && Near(loadedStaticModel->staticModel.rotationXRadians, 0.0f)
+                  && Near(loadedStaticModel->staticModel.rotationZRadians, 0.0f),
+          "missing static prop X/Z rotations default to zero");
 
     Json missingScale = staticModelSaved;
     missingScale["runtimeObjects"][0]["staticModel"].erase("scale");
@@ -1079,6 +1109,25 @@ void TestRuntimeObjectsRoundTripAndValidation()
     ExpectSaveRejected(
             invalidStaticModel,
             "non-positive static prop scale is rejected on save");
+    invalidStaticModel = staticModelMap;
+    invalidStaticModel.runtimeObjects[0].staticModel.rotationXRadians =
+            std::numeric_limits<float>::infinity();
+    ExpectSaveRejected(
+            invalidStaticModel,
+            "non-finite static prop X rotation is rejected on save");
+    invalidStaticModel = staticModelMap;
+    invalidStaticModel.runtimeObjects[0].staticModel.rotationZRadians =
+            std::numeric_limits<float>::max();
+    ExpectSaveRejected(
+            invalidStaticModel,
+            "static prop Z rotation that overflows degrees is rejected on save");
+
+    Json invalidStaticModelRotation = staticModelSaved;
+    invalidStaticModelRotation["runtimeObjects"][0]["staticModel"]
+            ["rotationXDegrees"] = "ninety";
+    ExpectRejected(
+            invalidStaticModelRotation,
+            "non-numeric static prop X rotation is rejected on load");
 
     SectorTopologyMap authoringSource = original;
     game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(authoringSource);

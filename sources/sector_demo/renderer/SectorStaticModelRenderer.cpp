@@ -4,6 +4,7 @@
 #include "engine/ecs/World.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/SectorStaticModelTransform.h"
 
 #include <raylib.h>
 #include <raymath.h>
@@ -985,17 +986,13 @@ void SectorStaticModelRenderer::Draw(
                             &useAo,
                             SHADER_UNIFORM_INT);
                 }
-                const Matrix authoredTransform = MatrixMultiply(
-                        MatrixScale(
-                                staticModel.scale,
-                                staticModel.scale,
-                                staticModel.scale),
-                        MatrixMultiply(
-                                MatrixRotateY(transform.yawRadians),
-                                MatrixTranslate(
-                                        transform.position.x,
-                                        transform.position.y,
-                                        transform.position.z)));
+                const Matrix authoredTransform =
+                        BuildSectorStaticModelAuthoredTransform(
+                                transform.position,
+                                transform.rotationXRadians,
+                                transform.yawRadians,
+                                transform.rotationZRadians,
+                                staticModel.scale);
                 const Matrix modelTransform = MatrixMultiply(
                         model->transform,
                         authoredTransform);

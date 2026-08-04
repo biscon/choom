@@ -9967,15 +9967,19 @@ void TestStaticPropEditingPlacementMutationAndFloorRelativeDrag()
                   "Updated 3D prop settings",
                   [](game::SectorPlacedRuntimeObject& object) {
                       object.yawRadians = 1.25f;
+                      object.staticModel.rotationXRadians = 0.5f;
+                      object.staticModel.rotationZRadians = -0.25f;
                       object.staticModel.heightOffsetWorld = 0.75f;
                       object.staticModel.scale = 1.5f;
                       return true;
                   }),
-          "static prop yaw, height offset, and scale edit through the focused service");
+          "static prop rotations, height offset, and scale edit through the focused service");
     Check(Near(map.runtimeObjects[0].yawRadians, 1.25f)
+                  && Near(map.runtimeObjects[0].staticModel.rotationXRadians, 0.5f)
+                  && Near(map.runtimeObjects[0].staticModel.rotationZRadians, -0.25f)
                   && Near(map.runtimeObjects[0].staticModel.heightOffsetWorld, 0.75f)
                   && Near(map.runtimeObjects[0].staticModel.scale, 1.5f),
-          "static prop yaw, height offset, and scale edits are retained");
+          "static prop rotations, height offset, and scale edits are retained");
 
     FillRuntimeObjectTestSectorCache(renderCache, map);
     const int objectId = map.runtimeObjects[0].id;

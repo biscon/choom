@@ -26,6 +26,8 @@ struct SectorPlacedRuntimeObjectEntity {
 struct SectorObjectTransform {
     Vector3 position = {};
     float yawRadians = 0.0f;
+    float rotationXRadians = 0.0f;
+    float rotationZRadians = 0.0f;
 };
 
 struct SectorObject {

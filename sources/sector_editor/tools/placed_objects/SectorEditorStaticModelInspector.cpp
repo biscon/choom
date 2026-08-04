@@ -66,7 +66,7 @@ float MeasureSectorEditorStaticModelInspectorContentHeight(
         const SectorEditorPlacedObjectInspectorMeasureContext&,
         const SectorPlacedRuntimeObject&)
 {
-    return 38.0f * 2.0f + 48.0f * 6.0f + 8.0f * 8.0f + 40.0f
+    return 38.0f * 2.0f + 48.0f * 8.0f + 8.0f * 10.0f + 40.0f
             + 48.0f;
 }
 
@@ -210,8 +210,25 @@ void DrawSectorEditorStaticModelInspector(
     constexpr float radiansToDegrees = 180.0f / PI;
     constexpr float degreesToRadians = PI / 180.0f;
     drawFloat(
+            "sector_editor_static_model_rotation_x",
+            "Rotation X",
+            object->staticModel.rotationXRadians * radiansToDegrees,
+            context.uiState.rotationXInput,
+            "Updated 3D prop rotation",
+            [degreesToRadians](SectorPlacedRuntimeObject& target, float value) {
+                const float radians = value * degreesToRadians;
+                if (target.kind != "static_model"
+                        || target.staticModel.rotationXRadians == radians) {
+                    return false;
+                }
+                target.staticModel.rotationXRadians = radians;
+                return true;
+            });
+    object = context.editing.SelectedObject();
+    if (object == nullptr) return;
+    drawFloat(
             "sector_editor_static_model_yaw",
-            "Yaw",
+            "Yaw (Y)",
             object->yawRadians * radiansToDegrees,
             context.uiState.yawInput,
             "Updated 3D prop yaw",
@@ -222,6 +239,23 @@ void DrawSectorEditorStaticModelInspector(
                     return false;
                 }
                 target.yawRadians = radians;
+                return true;
+            });
+    object = context.editing.SelectedObject();
+    if (object == nullptr) return;
+    drawFloat(
+            "sector_editor_static_model_rotation_z",
+            "Rotation Z",
+            object->staticModel.rotationZRadians * radiansToDegrees,
+            context.uiState.rotationZInput,
+            "Updated 3D prop rotation",
+            [degreesToRadians](SectorPlacedRuntimeObject& target, float value) {
+                const float radians = value * degreesToRadians;
+                if (target.kind != "static_model"
+                        || target.staticModel.rotationZRadians == radians) {
+                    return false;
+                }
+                target.staticModel.rotationZRadians = radians;
                 return true;
             });
     object = context.editing.SelectedObject();

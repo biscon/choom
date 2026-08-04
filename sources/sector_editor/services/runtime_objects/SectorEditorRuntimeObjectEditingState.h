@@ -34,7 +34,9 @@ struct RuntimeObjectEditingUiState {
     engine::UIFloatInputState xInput;
     engine::UIFloatInputState yInput;
     engine::UIFloatInputState zInput;
+    engine::UIFloatInputState rotationXInput;
     engine::UIFloatInputState yawInput;
+    engine::UIFloatInputState rotationZInput;
     engine::UIFloatInputState heightOffsetInput;
     engine::UIFloatInputState scaleInput;
     engine::UIFloatInputState widthInput;

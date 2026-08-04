@@ -4,6 +4,7 @@
 #include "engine/assets/ModelAssets.h"
 #include "engine/ecs/World.h"
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/SectorStaticModelTransform.h"
 
 #include <raymath.h>
 
@@ -371,6 +372,8 @@ bool BuildSectorStaticModelCollider(
             || !IsFinite(localBounds.max)
             || !IsFinite(transform.position)
             || !std::isfinite(transform.yawRadians)
+            || !std::isfinite(transform.rotationXRadians)
+            || !std::isfinite(transform.rotationZRadians)
             || !std::isfinite(scale)
             || scale <= 0.0f) {
         outCollider.failed = true;
@@ -385,42 +388,60 @@ bool BuildSectorStaticModelCollider(
         return false;
     }
 
-    const Vector3 localCenter = Vector3Scale(
-            Vector3Add(localBounds.min, localBounds.max),
-            0.5f);
-    const Matrix authoredTransform = MatrixMultiply(
-            MatrixScale(scale, scale, scale),
-            MatrixMultiply(
-                    MatrixRotateY(transform.yawRadians),
-                    MatrixTranslate(
-                            transform.position.x,
-                            transform.position.y,
-                            transform.position.z)));
-    const Vector3 worldCenter = Vector3Transform(localCenter, authoredTransform);
-    const Vector3 worldOrigin = Vector3Transform(Vector3{}, authoredTransform);
-    const Vector3 worldX = Vector3Subtract(
-            Vector3Transform(Vector3{1.0f, 0.0f, 0.0f}, authoredTransform),
-            worldOrigin);
-    const Vector3 worldZ = Vector3Subtract(
-            Vector3Transform(Vector3{0.0f, 0.0f, 1.0f}, authoredTransform),
-            worldOrigin);
-    if (!IsFinite(worldCenter) || !IsFinite(worldX) || !IsFinite(worldZ)) {
-        outCollider.failed = true;
-        return false;
-    }
-
-    outCollider.center = Vector2{worldCenter.x, worldCenter.z};
+    const Matrix authoredTransform = BuildSectorStaticModelAuthoredTransform(
+            transform.position,
+            transform.rotationXRadians,
+            transform.yawRadians,
+            transform.rotationZRadians,
+            scale);
+    const float cosine = std::cos(transform.yawRadians);
+    const float sine = std::sin(transform.yawRadians);
     outCollider.axisX = NormalizeOrFallback(
-            Vector2{worldX.x, worldX.z},
+            Vector2{cosine, -sine},
             Vector2{1.0f, 0.0f});
     outCollider.axisZ = NormalizeOrFallback(
-            Vector2{worldZ.x, worldZ.z},
+            Vector2{sine, cosine},
             Vector2{0.0f, 1.0f});
+
+    float minimumX = std::numeric_limits<float>::infinity();
+    float maximumX = -std::numeric_limits<float>::infinity();
+    float minimumZ = std::numeric_limits<float>::infinity();
+    float maximumZ = -std::numeric_limits<float>::infinity();
+    float minimumY = std::numeric_limits<float>::infinity();
+    float maximumY = -std::numeric_limits<float>::infinity();
+    for (float x : {localBounds.min.x, localBounds.max.x}) {
+        for (float y : {localBounds.min.y, localBounds.max.y}) {
+            for (float z : {localBounds.min.z, localBounds.max.z}) {
+                const Vector3 world = Vector3Transform(
+                        Vector3{x, y, z},
+                        authoredTransform);
+                if (!IsFinite(world)) {
+                    outCollider.failed = true;
+                    return false;
+                }
+                const Vector2 horizontal{world.x, world.z};
+                const float projectedX = Dot(horizontal, outCollider.axisX);
+                const float projectedZ = Dot(horizontal, outCollider.axisZ);
+                minimumX = std::min(minimumX, projectedX);
+                maximumX = std::max(maximumX, projectedX);
+                minimumZ = std::min(minimumZ, projectedZ);
+                maximumZ = std::max(maximumZ, projectedZ);
+                minimumY = std::min(minimumY, world.y);
+                maximumY = std::max(maximumY, world.y);
+            }
+        }
+    }
+
+    const float centerX = (minimumX + maximumX) * 0.5f;
+    const float centerZ = (minimumZ + maximumZ) * 0.5f;
+    outCollider.center = Add(
+            Scale(outCollider.axisX, centerX),
+            Scale(outCollider.axisZ, centerZ));
     outCollider.halfExtents = Vector2{
-            localSize.x * scale * 0.5f,
-            localSize.z * scale * 0.5f};
-    outCollider.bottom = transform.position.y + localBounds.min.y * scale;
-    outCollider.top = transform.position.y + localBounds.max.y * scale;
+            (maximumX - minimumX) * 0.5f,
+            (maximumZ - minimumZ) * 0.5f};
+    outCollider.bottom = minimumY;
+    outCollider.top = maximumY;
     outCollider.resolved = true;
     outCollider.resolved = IsValidCollider(outCollider);
     outCollider.failed = !outCollider.resolved;

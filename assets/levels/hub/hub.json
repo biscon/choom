@@ -104,6 +104,37 @@
         56.0
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 3,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/wall_lamp.glb",
+        "rotationZDegrees": 180.0,
+        "heightOffsetWorld": 2.0999999046325684
+      },
+      "position": [
+        4.0,
+        0.0,
+        112.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 4,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/industrial_light.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 3.390000104904175,
+        "scale": 1.5
+      },
+      "position": [
+        4.0,
+        0.0,
+        24.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -178,30 +209,13 @@
     {
       "id": 5,
       "position": [
-        20.0,
-        17.0,
+        4.0,
+        19.0,
         24.0
       ],
       "radius": 32.0,
       "sourceRadius": 1.0,
       "intensity": 2.0,
-      "color": {
-        "r": 255,
-        "g": 245,
-        "b": 225,
-        "a": 255
-      }
-    },
-    {
-      "id": 7,
-      "position": [
-        16.0,
-        17.0,
-        88.0
-      ],
-      "radius": 32.0,
-      "sourceRadius": 2.0,
-      "intensity": 1.0,
       "color": {
         "r": 255,
         "g": 245,
@@ -238,18 +252,19 @@
     {
       "id": 1,
       "position": [
-        0.0,
-        14.399999618530273,
-        104.0
+        4.0,
+        17.0,
+        110.0
       ],
-      "radius": 64.0,
+      "radius": 32.0,
       "intensity": 1.0,
       "color": {
         "r": 255,
-        "g": 255,
-        "b": 255,
+        "g": 245,
+        "b": 190,
         "a": 255
-      }
+      },
+      "flicker": true
     }
   ],
   "dynamicSpotLights": [],
@@ -294,11 +309,11 @@
     "path": "assets/levels/hub/hub.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "58a889d8667e15ac",
+    "sourceHash": "a02d8c5c45a52cba",
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 1,
-      "sourceHash": "58a889d8667e15ac",
+      "sourceHash": "a02d8c5c45a52cba",
       "count": 15,
       "probeSpacingWorld": 4.0,
       "probeHeightWorld": 1.2000000476837158,
@@ -307,9 +322,9 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.png.static_models.bin",
       "version": 1,
-      "sourceHash": "58a889d8667e15ac",
-      "modelCount": 2,
-      "objectCount": 2,
+      "sourceHash": "a02d8c5c45a52cba",
+      "modelCount": 4,
+      "objectCount": 4,
       "format": "staticModelUvRemapF32LE"
     }
   },

@@ -4,6 +4,7 @@
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/SectorUnits.h"
 #include "util/json.hpp"
 
@@ -1178,6 +1179,10 @@ bool PrepareSectorStaticModelsForLightmapBake(
         preparedObject.containingSectorId = sectorId;
         preparedObject.worldPosition = worldPosition;
         preparedObject.yawRadians = object->yawRadians;
+        preparedObject.rotationXRadians =
+                object->staticModel.rotationXRadians;
+        preparedObject.rotationZRadians =
+                object->staticModel.rotationZRadians;
         preparedObject.scale = object->staticModel.scale;
         preparedObject.meshPlacements.resize(
                 outData.models[static_cast<size_t>(modelIndex->second)]

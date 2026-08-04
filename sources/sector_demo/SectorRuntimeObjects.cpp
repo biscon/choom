@@ -550,7 +550,11 @@ void SpawnPlacedRuntimeObjects(
             }
 
             const engine::Entity entity = world.CreateEntity();
-            world.Add(entity, SectorObjectTransform{worldPosition, placedObject.yawRadians});
+            world.Add(entity, SectorObjectTransform{
+                    worldPosition,
+                    placedObject.yawRadians,
+                    placedObject.staticModel.rotationXRadians,
+                    placedObject.staticModel.rotationZRadians});
             world.Add(entity, object);
             const Vector3 sectorAmbient =
                     StaticModelSectorAmbient(map, object.currentSectorId);

@@ -3,6 +3,7 @@
 #include "sector_demo/SectorColor.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMath.h"
+#include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorUnits.h"
@@ -572,14 +573,12 @@ Vector3 TransformStaticModelPosition(
         Vector3 importedPosition,
         const SectorStaticModelLightmapObject& object)
 {
-    const Matrix authoredTransform = MatrixMultiply(
-            MatrixScale(object.scale, object.scale, object.scale),
-            MatrixMultiply(
-                    MatrixRotateY(object.yawRadians),
-                    MatrixTranslate(
-                            object.worldPosition.x,
-                            object.worldPosition.y,
-                            object.worldPosition.z)));
+    const Matrix authoredTransform = BuildSectorStaticModelAuthoredTransform(
+            object.worldPosition,
+            object.rotationXRadians,
+            object.yawRadians,
+            object.rotationZRadians,
+            object.scale);
     return Vector3Transform(importedPosition, authoredTransform);
 }
 
@@ -587,12 +586,11 @@ Vector3 TransformStaticModelNormal(
         Vector3 importedNormal,
         const SectorStaticModelLightmapObject& object)
 {
-    const float cosine = std::cos(object.yawRadians);
-    const float sine = std::sin(object.yawRadians);
-    const Vector3 rotated{
-            importedNormal.x * cosine + importedNormal.z * sine,
-            importedNormal.y,
-            -importedNormal.x * sine + importedNormal.z * cosine};
+    const Vector3 rotated = RotateSectorStaticModelDirection(
+            importedNormal,
+            object.rotationXRadians,
+            object.yawRadians,
+            object.rotationZRadians);
     return Vector3LengthSqr(rotated) > BakeEpsilon
             ? Vector3Normalize(rotated)
             : Vector3{0.0f, 1.0f, 0.0f};
@@ -4627,6 +4625,16 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
             FnvAppendString(hash, object->staticModel.modelPath);
             FnvAppendVector3(hash, object->position);
             FnvAppendFloat(hash, object->yawRadians);
+            if (object->staticModel.rotationXRadians != 0.0f
+                    || object->staticModel.rotationZRadians != 0.0f) {
+                FnvAppendString(hash, "static-model-rotation-xz");
+                FnvAppendFloat(
+                        hash,
+                        object->staticModel.rotationXRadians);
+                FnvAppendFloat(
+                        hash,
+                        object->staticModel.rotationZRadians);
+            }
             FnvAppendFloat(hash, object->staticModel.heightOffsetWorld);
             FnvAppendFloat(hash, object->staticModel.scale);
             FnvAppendString(

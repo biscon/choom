@@ -602,6 +602,16 @@ SectorPlacedStaticModel ReadPlacedStaticModel(const Json& value, const std::stri
 
     SectorPlacedStaticModel staticModel;
     staticModel.modelPath = ReadOptionalString(value, "modelPath", context, staticModel.modelPath);
+    staticModel.rotationXRadians = DegreesToRadians(ReadOptionalFloat(
+            value,
+            "rotationXDegrees",
+            context,
+            0.0f));
+    staticModel.rotationZRadians = DegreesToRadians(ReadOptionalFloat(
+            value,
+            "rotationZDegrees",
+            context,
+            0.0f));
     staticModel.heightOffsetWorld = ReadOptionalFloat(
             value,
             "heightOffsetWorld",
@@ -1343,6 +1353,22 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             json["kind"] = object.kind;
             json["billboard"] = WritePlacedBillboard(object.billboard, context + ".billboard");
         } else if (object.kind == RuntimeObjectKindStaticModel) {
+            RequireFinite(
+                    object.staticModel.rotationXRadians,
+                    context + ".staticModel.rotationXRadians");
+            RequireFinite(
+                    object.staticModel.rotationZRadians,
+                    context + ".staticModel.rotationZRadians");
+            const float rotationXDegrees =
+                    RadiansToDegrees(object.staticModel.rotationXRadians);
+            const float rotationZDegrees =
+                    RadiansToDegrees(object.staticModel.rotationZRadians);
+            RequireFinite(
+                    rotationXDegrees,
+                    context + ".staticModel.rotationXDegrees");
+            RequireFinite(
+                    rotationZDegrees,
+                    context + ".staticModel.rotationZDegrees");
             RequireFinite(object.staticModel.heightOffsetWorld, context + ".staticModel.heightOffsetWorld");
             if (!std::isfinite(object.staticModel.scale)
                     || object.staticModel.scale <= 0.0f) {
@@ -1351,6 +1377,12 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             Json staticModel = Json::object();
             if (!object.staticModel.modelPath.empty()) {
                 staticModel["modelPath"] = object.staticModel.modelPath;
+            }
+            if (rotationXDegrees != 0.0f) {
+                staticModel["rotationXDegrees"] = rotationXDegrees;
+            }
+            if (rotationZDegrees != 0.0f) {
+                staticModel["rotationZDegrees"] = rotationZDegrees;
             }
             if (object.staticModel.heightOffsetWorld != 0.0f) {
                 staticModel["heightOffsetWorld"] = object.staticModel.heightOffsetWorld;
@@ -1792,6 +1824,12 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
             if (object.kind == RuntimeObjectKindBillboard) {
                 ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
             } else if (object.kind == RuntimeObjectKindStaticModel) {
+                if (!std::isfinite(object.staticModel.rotationXRadians)) {
+                    Fail(objectContext + ".staticModel.rotationXRadians must be finite");
+                }
+                if (!std::isfinite(object.staticModel.rotationZRadians)) {
+                    Fail(objectContext + ".staticModel.rotationZRadians must be finite");
+                }
                 if (!std::isfinite(object.staticModel.heightOffsetWorld)) {
                     Fail(objectContext + ".staticModel.heightOffsetWorld must be finite");
                 }

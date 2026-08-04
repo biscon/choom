@@ -1213,6 +1213,18 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedStaticModelScale)
                   != staticModelHash,
           "hash includes static prop scale edits");
+    game::SectorTopologyMap changedStaticModelRotationX = changedStaticModel;
+    changedStaticModelRotationX.runtimeObjects[0].staticModel.rotationXRadians =
+            0.5f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticModelRotationX)
+                  != staticModelHash,
+          "hash includes static prop X rotation edits");
+    game::SectorTopologyMap changedStaticModelRotationZ = changedStaticModel;
+    changedStaticModelRotationZ.runtimeObjects[0].staticModel.rotationZRadians =
+            -0.75f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticModelRotationZ)
+                  != staticModelHash,
+          "hash includes static prop Z rotation edits");
     changedStaticModel.runtimeObjects[0].position = Vector3{24.0f, 12.0f, 20.0f};
     changedStaticModel.runtimeObjects[0].yawRadians = 1.5f;
     changedStaticModel.runtimeObjects[0].staticModel.modelPath =

@@ -30,7 +30,9 @@ void ResetRuntimeObjectUiState(SectorEditorSelectionUiDependencies& ui)
     ui.runtimeObjectXInput = engine::UIFloatInputState{};
     ui.runtimeObjectYInput = engine::UIFloatInputState{};
     ui.runtimeObjectZInput = engine::UIFloatInputState{};
+    ui.runtimeObjectRotationXInput = engine::UIFloatInputState{};
     ui.runtimeObjectYawInput = engine::UIFloatInputState{};
+    ui.runtimeObjectRotationZInput = engine::UIFloatInputState{};
     ui.runtimeObjectHeightOffsetInput = engine::UIFloatInputState{};
     ui.runtimeObjectScaleInput = engine::UIFloatInputState{};
     ui.runtimeObjectWidthInput = engine::UIFloatInputState{};

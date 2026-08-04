@@ -41,7 +41,9 @@ struct SectorEditorSelectionUiDependencies {
     engine::UIFloatInputState& runtimeObjectXInput;
     engine::UIFloatInputState& runtimeObjectYInput;
     engine::UIFloatInputState& runtimeObjectZInput;
+    engine::UIFloatInputState& runtimeObjectRotationXInput;
     engine::UIFloatInputState& runtimeObjectYawInput;
+    engine::UIFloatInputState& runtimeObjectRotationZInput;
     engine::UIFloatInputState& runtimeObjectHeightOffsetInput;
     engine::UIFloatInputState& runtimeObjectScaleInput;
     engine::UIFloatInputState& runtimeObjectWidthInput;

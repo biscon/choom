@@ -585,7 +585,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 } else {
                     addWrappedLine("movement: WASD move, mouse look, Space/Ctrl up/down. F11 unlocks cursor for UI tabs.");
                 }
-                addWrappedLine("hotkeys: F1 AO, F2 hide/show 3D UI, F3 control mode, F4 dynamic lights, Tab/Esc return to 2D.");
+                addWrappedLine("hotkeys: F1 AO, F2 hide/show 3D UI, F3 control mode, F4 dynamic lights, F10 borderless window, Tab/Esc return to 2D.");
                 break;
             case PreviewDebugOverlayTab::None:
                 break;

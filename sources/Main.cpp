@@ -152,10 +152,10 @@ int main()
         assets.UpdateMainThread(2.0f);
 
         const float dt = GetFrameTime();
-        const int screenW = GetScreenWidth();
-        const int screenH = GetScreenHeight();
+        int screenW = GetScreenWidth();
+        int screenH = GetScreenHeight();
 
-        const Rectangle dst = BuildPresentationRect(
+        Rectangle dst = BuildPresentationRect(
                 static_cast<float>(INTERNAL_WIDTH),
                 static_cast<float>(INTERNAL_HEIGHT),
                 static_cast<float>(screenW),
@@ -173,6 +173,34 @@ int main()
 
         context.input.BeginFrame();
         context.input.PollRaylib(dt);
+        bool windowModeChanged = false;
+        context.input.ForEachEvent(
+                engine::InputEventType::KeyPressed,
+                true,
+                [&windowModeChanged](engine::InputEvent& event) {
+                    if (event.key.key != KEY_F10) {
+                        return;
+                    }
+
+                    ToggleBorderlessWindowed();
+                    windowModeChanged = true;
+                    engine::ConsumeEvent(event);
+                });
+        if (windowModeChanged) {
+            screenW = GetScreenWidth();
+            screenH = GetScreenHeight();
+            dst = BuildPresentationRect(
+                    static_cast<float>(INTERNAL_WIDTH),
+                    static_cast<float>(INTERNAL_HEIGHT),
+                    static_cast<float>(screenW),
+                    static_cast<float>(screenH));
+            SetMouseOffset(
+                    -static_cast<int>(dst.x),
+                    -static_cast<int>(dst.y));
+            SetMouseScale(
+                    static_cast<float>(INTERNAL_WIDTH) / dst.width,
+                    static_cast<float>(INTERNAL_HEIGHT) / dst.height);
+        }
 
         BeginTextureMode(uiTarget);
         ClearBackground(BLANK);
