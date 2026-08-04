@@ -234,7 +234,24 @@
       }
     }
   ],
-  "dynamicPointLights": [],
+  "dynamicPointLights": [
+    {
+      "id": 1,
+      "position": [
+        0.0,
+        14.399999618530273,
+        104.0
+      ],
+      "radius": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
   "dynamicSpotLights": [],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
@@ -277,11 +294,11 @@
     "path": "assets/levels/hub/hub.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "23605607805607cd",
+    "sourceHash": "58a889d8667e15ac",
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 1,
-      "sourceHash": "23605607805607cd",
+      "sourceHash": "58a889d8667e15ac",
       "count": 15,
       "probeSpacingWorld": 4.0,
       "probeHeightWorld": 1.2000000476837158,
@@ -290,7 +307,7 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.png.static_models.bin",
       "version": 1,
-      "sourceHash": "23605607805607cd",
+      "sourceHash": "58a889d8667e15ac",
       "modelCount": 2,
       "objectCount": 2,
       "format": "staticModelUvRemapF32LE"

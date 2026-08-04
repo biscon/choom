@@ -127,6 +127,60 @@ SectorTopologyMap MakeAdjacent(float leftFloor, float rightFloor, float rightCei
     return map;
 }
 
+SectorTopologyMap MakeRoomLandingAndBlockedPortal(
+        float landingWidth,
+        float roomFloor,
+        float landingFloor,
+        float farFloor)
+{
+    const SectorCoord roomRight = Coord(64.0f);
+    const SectorCoord landingRight = Coord(64.0f + landingWidth);
+    const SectorCoord farRight = Coord(128.0f + landingWidth);
+
+    SectorTopologyMap map;
+    map.vertices = {
+            {1, Coord(0), Coord(0)},
+            {2, roomRight, Coord(0)},
+            {3, roomRight, Coord(64)},
+            {4, Coord(0), Coord(64)},
+            {5, landingRight, Coord(0)},
+            {6, landingRight, Coord(64)},
+            {7, farRight, Coord(0)},
+            {8, farRight, Coord(64)}};
+    map.lineDefs = {
+            {1, 1, 2, 1, -1},
+            {2, 2, 3, 2, 8},
+            {3, 3, 4, 3, -1},
+            {4, 4, 1, 4, -1},
+            {5, 2, 5, 5, -1},
+            {6, 5, 6, 6, 12},
+            {7, 6, 3, 7, -1},
+            {8, 5, 7, 9, -1},
+            {9, 7, 8, 10, -1},
+            {10, 8, 6, 11, -1}};
+    map.lineDefs[5].flags.blocksPlayer = true;
+
+    AddSide(map, 1, 1, SectorTopologySideKind::Front, 10);
+    AddSide(map, 2, 2, SectorTopologySideKind::Front, 10);
+    AddSide(map, 3, 3, SectorTopologySideKind::Front, 10);
+    AddSide(map, 4, 4, SectorTopologySideKind::Front, 10);
+
+    AddSide(map, 5, 5, SectorTopologySideKind::Front, 20);
+    AddSide(map, 6, 6, SectorTopologySideKind::Front, 20);
+    AddSide(map, 7, 7, SectorTopologySideKind::Front, 20);
+    AddSide(map, 8, 2, SectorTopologySideKind::Back, 20);
+
+    AddSide(map, 9, 8, SectorTopologySideKind::Front, 30);
+    AddSide(map, 10, 9, SectorTopologySideKind::Front, 30);
+    AddSide(map, 11, 10, SectorTopologySideKind::Front, 30);
+    AddSide(map, 12, 6, SectorTopologySideKind::Back, 30);
+
+    map.sectors.push_back(Sector(10, roomFloor, 24.0f));
+    map.sectors.push_back(Sector(20, landingFloor, 24.0f));
+    map.sectors.push_back(Sector(30, farFloor, 24.0f));
+    return map;
+}
+
 game::SectorCollisionWorld BuildWorld(const SectorTopologyMap& map)
 {
     game::SectorCollisionWorld world;
@@ -252,6 +306,174 @@ void TestMiddleTexturePortalMovement()
           "diagonal movement into blocked middle-texture portal reports wall contact");
     Check(slide.positionXZ.y > start.y + 0.5f,
           "diagonal blocked middle-texture portal preserves tangential slide");
+}
+
+void TestBlockedPortalBeyondShallowLandingDoesNotJitter()
+{
+    constexpr float landingWidth = 2.0f;
+    const game::SectorCollisionWorld world =
+            BuildWorld(MakeRoomLandingAndBlockedPortal(landingWidth, 0.0f, 2.0f, 2.0f));
+    const float blockedPortalX =
+            game::SectorCoordToWorldPosition2(Coord(64.0f + landingWidth), Coord(0)).x;
+    const float centerZ = game::SectorCoordToWorldPosition2(Coord(0), Coord(32)).y;
+    const float radius = 0.5f;
+    const Vector2 frameDelta{9.0f / 120.0f, 0.0f};
+    const game::SectorCollisionMoveConfig moveConfig{radius, 1.75f, 0.4f, 4};
+
+    game::SectorFpsControllerConfig fpsConfig;
+    fpsConfig.playerRadius = radius;
+    fpsConfig.playerHeight = moveConfig.playerHeight;
+    fpsConfig.stepHeight = moveConfig.stepHeight;
+    game::SectorFpsControllerState fpsState;
+    fpsState.feetPosition = Vector3{blockedPortalX - 1.0f, 0.0f, centerZ};
+    fpsState.currentSectorId = 10;
+    fpsState.grounded = true;
+
+    bool reachedContact = false;
+    Vector2 settledPosition{};
+    int verticalStepTransitions = 0;
+    for (int frame = 0; frame < 240; ++frame) {
+        const Vector2 frameStart{fpsState.feetPosition.x, fpsState.feetPosition.z};
+        const game::SectorCollisionMoveResult moveResult = world.ResolveMovement(
+                game::SectorCollisionMoveState{
+                        frameStart,
+                        fpsState.feetPosition.y,
+                        fpsState.currentSectorId,
+                        fpsState.grounded},
+                frameDelta,
+                moveConfig);
+        fpsState.feetPosition.x = moveResult.positionXZ.x;
+        fpsState.feetPosition.z = moveResult.positionXZ.y;
+        fpsState.currentSectorId = moveResult.currentSectorId;
+
+        game::SectorCollisionHeights heights;
+        Check(world.GetSectorFloorCeiling(fpsState.currentSectorId, &heights),
+              "shallow landing movement sector heights are available");
+        const game::SectorFpsVerticalResult verticalResult =
+                game::UpdateSectorFpsVerticalPhysics(
+                        fpsState,
+                        fpsConfig,
+                        game::SectorFpsVerticalContext{true, heights.floorZ, heights.ceilingZ},
+                        1.0f / 120.0f);
+        if (verticalResult.transition == game::SectorFpsVerticalTransition::SteppedUp
+                || verticalResult.transition == game::SectorFpsVerticalTransition::SnappedDown) {
+            ++verticalStepTransitions;
+        }
+
+        if (!moveResult.hitWall) {
+            continue;
+        }
+        if (!reachedContact) {
+            reachedContact = true;
+            settledPosition = moveResult.positionXZ;
+        } else {
+            Check(Near(moveResult.positionXZ.x, settledPosition.x)
+                          && Near(moveResult.positionXZ.y, settledPosition.y),
+                  "held movement into shallow-landing blocked portal remains settled");
+        }
+        Check(moveResult.currentSectorId == 10,
+              "shallow-landing blocked portal keeps the room as center sector");
+        Check(Near(fpsState.feetPosition.y, 0.0f),
+              "shallow-landing blocked portal keeps feet on the room floor");
+    }
+
+    Check(reachedContact, "shallow-landing blocked portal is reached");
+    Check(Near(settledPosition.x, blockedPortalX - radius, 0.001f),
+          "shallow-landing blocked portal settles at player-radius clearance");
+    Check(verticalStepTransitions == 0,
+          "shallow-landing blocked portal causes no step-up or snap-down oscillation");
+
+    const Vector2 diagonalStart{blockedPortalX - 1.0f, centerZ - 1.0f};
+    game::SectorCollisionMoveResult diagonalResult;
+    Vector2 diagonalPosition = diagonalStart;
+    int diagonalSectorId = 10;
+    bool diagonalHit = false;
+    for (int frame = 0; frame < 80; ++frame) {
+        diagonalResult = world.ResolveMovement(
+                game::SectorCollisionMoveState{diagonalPosition, 0.0f, diagonalSectorId, true},
+                Vector2{frameDelta.x, 0.02f},
+                moveConfig);
+        diagonalPosition = diagonalResult.positionXZ;
+        diagonalSectorId = diagonalResult.currentSectorId;
+        diagonalHit = diagonalHit || diagonalResult.hitWall;
+    }
+    Check(diagonalHit, "diagonal shallow-landing approach reaches blocked portal");
+    Check(diagonalPosition.x <= blockedPortalX - radius + 0.001f,
+          "diagonal shallow-landing contact preserves normal clearance");
+    Check(diagonalPosition.y > diagonalStart.y + 1.0f,
+          "diagonal shallow-landing contact preserves tangential slide");
+}
+
+void TestBlockedPortalBeyondWideLandingPreservesStepUp()
+{
+    constexpr float landingWidth = 8.0f;
+    const game::SectorCollisionWorld world =
+            BuildWorld(MakeRoomLandingAndBlockedPortal(landingWidth, 0.0f, 2.0f, 2.0f));
+    const float blockedPortalX =
+            game::SectorCoordToWorldPosition2(Coord(64.0f + landingWidth), Coord(0)).x;
+    const float centerZ = game::SectorCoordToWorldPosition2(Coord(0), Coord(32)).y;
+    const float radius = 0.5f;
+    const game::SectorCollisionMoveConfig moveConfig{radius, 1.75f, 0.4f, 4};
+
+    game::SectorFpsControllerConfig fpsConfig;
+    fpsConfig.playerRadius = radius;
+    fpsConfig.playerHeight = moveConfig.playerHeight;
+    fpsConfig.stepHeight = moveConfig.stepHeight;
+    game::SectorFpsControllerState fpsState;
+    fpsState.feetPosition = Vector3{blockedPortalX - 1.5f, 0.0f, centerZ};
+    fpsState.currentSectorId = 10;
+    fpsState.grounded = true;
+
+    bool steppedUp = false;
+    bool reachedContact = false;
+    Vector2 settledPosition{};
+    for (int frame = 0; frame < 240; ++frame) {
+        const Vector2 frameStart{fpsState.feetPosition.x, fpsState.feetPosition.z};
+        const game::SectorCollisionMoveResult moveResult = world.ResolveMovement(
+                game::SectorCollisionMoveState{
+                        frameStart,
+                        fpsState.feetPosition.y,
+                        fpsState.currentSectorId,
+                        fpsState.grounded},
+                Vector2{9.0f / 120.0f, 0.0f},
+                moveConfig);
+        fpsState.feetPosition.x = moveResult.positionXZ.x;
+        fpsState.feetPosition.z = moveResult.positionXZ.y;
+        fpsState.currentSectorId = moveResult.currentSectorId;
+
+        game::SectorCollisionHeights heights;
+        Check(world.GetSectorFloorCeiling(fpsState.currentSectorId, &heights),
+              "wide landing movement sector heights are available");
+        const game::SectorFpsVerticalResult verticalResult =
+                game::UpdateSectorFpsVerticalPhysics(
+                        fpsState,
+                        fpsConfig,
+                        game::SectorFpsVerticalContext{true, heights.floorZ, heights.ceilingZ},
+                        1.0f / 120.0f);
+        steppedUp = steppedUp
+                || verticalResult.transition == game::SectorFpsVerticalTransition::SteppedUp;
+
+        if (!moveResult.hitWall) {
+            continue;
+        }
+        if (!reachedContact) {
+            reachedContact = true;
+            settledPosition = moveResult.positionXZ;
+        } else {
+            Check(Near(moveResult.positionXZ.x, settledPosition.x)
+                          && Near(moveResult.positionXZ.y, settledPosition.y),
+                  "held movement on wide landing remains settled at blocked portal");
+        }
+    }
+
+    Check(steppedUp, "wide landing still performs normal automatic step-up");
+    Check(reachedContact, "wide landing blocked portal is reached");
+    Check(fpsState.currentSectorId == 20,
+          "wide landing contact keeps player in raised landing sector");
+    Check(Near(fpsState.feetPosition.y, game::SectorAuthoringToWorldDistance(2.0f)),
+          "wide landing contact keeps raised floor height");
+    Check(Near(settledPosition.x, blockedPortalX - radius, 0.001f),
+          "wide landing blocked portal settles at player-radius clearance");
 }
 
 void TestDownwardPortalVerticalTransitions()
@@ -637,6 +859,8 @@ int main()
     TestPortalStepAndCeilingRules();
     TestBlocksPlayerPortalMovement();
     TestMiddleTexturePortalMovement();
+    TestBlockedPortalBeyondShallowLandingDoesNotJitter();
+    TestBlockedPortalBeyondWideLandingPreservesStepUp();
     TestDownwardPortalVerticalTransitions();
     TestDownwardPortalFootprintCommit();
     TestDownwardPortalOffAxisFootprintCommit();
