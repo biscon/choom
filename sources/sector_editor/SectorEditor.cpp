@@ -1727,6 +1727,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             }
             UpdateSectorEditorGameplayPreview(
                     previewState.runtime.runtimeObjects.dynamicDoorColliders,
+                    previewState.runtime.runtimeObjects.staticModelColliders,
                     previewState.collision,
                     previewState.controller,
                     state.previewSettingsModal.open,
@@ -4851,6 +4852,7 @@ void SectorEditor::TogglePreviewControlMode()
                 state.mode == SectorEditorMode::Preview3D,
                 previewState.collision,
                 previewState.controller,
+                previewState.runtime.runtimeObjects.staticModelColliders,
                 preview)) {
         return;
     }
@@ -4978,12 +4980,16 @@ bool SectorEditor::RebuildSectorCollisionWorld()
     return RebuildSectorEditorCollisionWorld(
             TopologyMap(),
             previewState.collision,
-            previewState.controller);
+            previewState.controller,
+            previewState.runtime.runtimeObjects.staticModelColliders);
 }
 
 SectorFpsVerticalContext SectorEditor::BuildGameplayVerticalContext()
 {
-    return BuildSectorEditorGameplayVerticalContext(previewState.collision, previewState.controller);
+    return BuildSectorEditorGameplayVerticalContext(
+            previewState.collision,
+            previewState.controller,
+            previewState.runtime.runtimeObjects.staticModelColliders);
 }
 
 void SectorEditor::RefreshGameplaySectorAndVerticalContext()
@@ -4993,7 +4999,10 @@ void SectorEditor::RefreshGameplaySectorAndVerticalContext()
 
 void SectorEditor::InitializeGameplayVerticalState()
 {
-    InitializeSectorEditorGameplayVerticalState(previewState.collision, previewState.controller);
+    InitializeSectorEditorGameplayVerticalState(
+            previewState.collision,
+            previewState.controller,
+            previewState.runtime.runtimeObjects.staticModelColliders);
 }
 
 void SectorEditor::OpenPreviewSettingsModal()

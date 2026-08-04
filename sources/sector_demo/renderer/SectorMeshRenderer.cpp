@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
+#include <filesystem>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -49,7 +50,7 @@ Vector2 PreviewYawForwardXZ(float yawRadians)
     return Vector2{std::cos(yawRadians), std::sin(yawRadians)};
 }
 
-float VisibilityDebugHorizontalFovRadians(const Camera3D& camera)
+float VisibilityDebugHorizontalFovRadians(const Camera3D& camera, float pitchRadians)
 {
     const int screenWidth = GetScreenWidth();
     const int screenHeight = GetScreenHeight();
@@ -57,7 +58,10 @@ float VisibilityDebugHorizontalFovRadians(const Camera3D& camera)
             ? static_cast<float>(screenWidth) / static_cast<float>(screenHeight)
             : DefaultVisibilityDebugAspect;
     const float verticalFovRadians = camera.fovy * DegreesToRadians;
-    return 2.0f * std::atan(std::tan(verticalFovRadians * 0.5f) * aspect);
+    return ComputeRuntimePortalVisibilityHorizontalFovRadians(
+            verticalFovRadians,
+            aspect,
+            pitchRadians);
 }
 
 const char* SectorLightmapVs = R"(
@@ -102,9 +106,11 @@ in vec4 fragColor;
 uniform sampler2D texture0;
 uniform sampler2D texture1;
 uniform sampler2D decalTexture;
+uniform sampler2D normalTexture;
 uniform float useLightmap;
 uniform float useBakedAmbientOcclusion;
 uniform int hasLightmap;
+uniform int hasNormalMap;
 uniform int alphaTest;
 uniform float alphaCutoff;
 uniform int hasDecal;
@@ -158,6 +164,37 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
 float SampleShadowMap(int shadowSlot, vec2 uv)
 {
     return shadowSlot == 0 ? texture(shadowMap0, uv).r : texture(shadowMap1, uv).r;
+}
+
+vec3 SurfaceNormal(vec3 geometricNormal)
+{
+    if (hasNormalMap == 0) {
+        return geometricNormal;
+    }
+
+    vec3 positionDx = dFdx(fragWorldPosition);
+    vec3 positionDy = dFdy(fragWorldPosition);
+    vec2 uvDx = dFdx(fragTexCoord);
+    vec2 uvDy = dFdy(fragTexCoord);
+    vec3 positionDyPerpendicular = cross(positionDy, geometricNormal);
+    vec3 positionDxPerpendicular = cross(geometricNormal, positionDx);
+    vec3 tangent = positionDyPerpendicular * uvDx.x
+            + positionDxPerpendicular * uvDy.x;
+    vec3 bitangent = positionDyPerpendicular * uvDx.y
+            + positionDxPerpendicular * uvDy.y;
+    float basisLengthSq = max(dot(tangent, tangent), dot(bitangent, bitangent));
+    if (basisLengthSq <= 0.00000001) {
+        return geometricNormal;
+    }
+
+    float inverseBasisLength = inversesqrt(basisLengthSq);
+    vec3 mappedNormal = texture(normalTexture, fragTexCoord).xyz * 2.0 - 1.0;
+    return SafeNormalize(
+            mat3(
+                    tangent * inverseBasisLength,
+                    bitangent * inverseBasisLength,
+                    geometricNormal) * mappedNormal,
+            geometricNormal);
 }
 
 float DynamicSpotLightShadowVisibility(
@@ -232,7 +269,8 @@ void main()
     }
     vec4 bakedSample = (useLightmap > 0.5 && hasLightmap != 0) ? texture(texture1, fragTexCoord2) : vec4(0.0, 0.0, 0.0, 1.0);
     float aoFactor = (useBakedAmbientOcclusion > 0.5 && hasLightmap != 0) ? bakedSample.a : 1.0;
-    vec3 worldNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
+    vec3 geometricNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
+    vec3 worldNormal = SurfaceNormal(geometricNormal);
     vec3 ambient = fragColor.rgb * aoFactor;
     vec3 bakedDirect = bakedSample.rgb;
     vec3 dynamicDirect = vec3(0.0);
@@ -263,7 +301,7 @@ void main()
                     float visibility = DynamicSpotLightShadowVisibility(
                             shadowSlot,
                             fragWorldPosition,
-                            worldNormal,
+                            geometricNormal,
                             lightDirection);
                     coneAtten *= mix(1.0, visibility, clamp(shadowStrength[shadowSlot], 0.0, 1.0));
                 }
@@ -378,6 +416,7 @@ bool LoadPreviewMaterial(
         int& useLightmapLoc,
         int& useBakedAmbientOcclusionLoc,
         int& hasLightmapLoc,
+        int& hasNormalMapLoc,
         int& alphaTestLoc,
         int& alphaCutoffLoc,
         int& hasDecalLoc,
@@ -415,11 +454,13 @@ bool LoadPreviewMaterial(
     material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
     material.shader.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(material.shader, "texture1");
     material.shader.locs[SHADER_LOC_MAP_NORMAL] = GetShaderLocation(material.shader, "decalTexture");
+    material.shader.locs[SHADER_LOC_MAP_HEIGHT] = GetShaderLocation(material.shader, "normalTexture");
     material.shader.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(material.shader, "shadowMap0");
     material.shader.locs[SHADER_LOC_MAP_OCCLUSION] = GetShaderLocation(material.shader, "shadowMap1");
     useLightmapLoc = GetShaderLocation(material.shader, "useLightmap");
     useBakedAmbientOcclusionLoc = GetShaderLocation(material.shader, "useBakedAmbientOcclusion");
     hasLightmapLoc = GetShaderLocation(material.shader, "hasLightmap");
+    hasNormalMapLoc = GetShaderLocation(material.shader, "hasNormalMap");
     alphaTestLoc = GetShaderLocation(material.shader, "alphaTest");
     alphaCutoffLoc = GetShaderLocation(material.shader, "alphaCutoff");
     hasDecalLoc = GetShaderLocation(material.shader, "hasDecal");
@@ -535,6 +576,22 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 resolvedPath.c_str(),
                 SectorTextureLoadFlags(texture.filter));
         textureHandlesById.emplace(texture.id, handle);
+
+        const std::string normalMapPath = SectorTextureNormalMapPath(texture.path);
+        const std::string resolvedNormalMapPath = ResolveSectorAssetPath(normalMapPath);
+        std::error_code normalMapError;
+        if (!normalMapPath.empty()
+                && std::filesystem::is_regular_file(resolvedNormalMapPath, normalMapError)
+                && !normalMapError) {
+            const std::string normalMapKey = texture.id + "_sector_normal";
+            normalTextureHandlesById.emplace(
+                    texture.id,
+                    assets.RequestTexture(
+                            assetScope,
+                            normalMapKey.c_str(),
+                            resolvedNormalMapPath.c_str(),
+                            SectorTextureLoadFlags(texture.filter)));
+        }
     }
 
     if (ShouldRenderSkyCylinder(map)) {
@@ -544,6 +601,11 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 : TextureForId(skyTexture->id);
         skyRenderer.Rebuild(map, skyTextureHandle);
     }
+    BuildSectorPbrEnvironment(
+            assets,
+            assetScope,
+            map,
+            pbrEnvironment);
 
     SectorLightmapLayout lightmapLayout;
     const SectorLightmapStatus status = GetSectorLightmapStatus(map);
@@ -639,6 +701,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 useLightmapLoc,
                 useBakedAmbientOcclusionLoc,
                 hasLightmapLoc,
+                hasNormalMapLoc,
                 alphaTestLoc,
                 alphaCutoffLoc,
                 hasDecalLoc,
@@ -728,9 +791,11 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     dynamicLightState.UnloadShadowMaterial();
     dynamicLightState.UnloadShadowMapResources();
     skyRenderer.Shutdown();
+    pbrEnvironment = {};
     doorRenderer.UnloadDoorMeshes();
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
+    normalTextureHandlesById.clear();
     lightmapTexture = engine::NullTextureHandle();
     sectorCount = 0;
 
@@ -738,6 +803,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
         material.maps[MATERIAL_MAP_DIFFUSE].texture = defaultMaterialTexture;
         material.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
         material.maps[MATERIAL_MAP_NORMAL].texture = Texture2D{};
+        material.maps[MATERIAL_MAP_HEIGHT].texture = Texture2D{};
         UnloadMaterial(material);
         material = Material{};
         defaultMaterialTexture = Texture2D{};
@@ -853,6 +919,9 @@ void SectorMeshRenderer::DrawScene(
                 ? *texture
                 : defaultMaterialTexture;
 
+        const Texture2D* normalTexture = assets.GetTexture(
+                NormalTextureForId(batch.textureId));
+
         const Texture2D* decalTexture = nullptr;
         if (!batch.decalTextureId.empty()) {
             decalTexture = assets.GetTexture(TextureForId(batch.decalTextureId));
@@ -860,6 +929,7 @@ void SectorMeshRenderer::DrawScene(
 
         const int hasDecal = decalTexture != nullptr ? 1 : 0;
         const int hasLightmap = batch.receivesLightmap ? 1 : 0;
+        const int hasNormalMap = normalTexture != nullptr ? 1 : 0;
         const int alphaTest = batch.alphaTest ? 1 : 0;
         const float alphaCutoff = batch.alphaCutoff;
         const float decalOpacity = batch.decalOpacity;
@@ -868,8 +938,14 @@ void SectorMeshRenderer::DrawScene(
         material.maps[MATERIAL_MAP_NORMAL].texture = (decalTexture != nullptr)
                 ? *decalTexture
                 : Texture2D{};
+        material.maps[MATERIAL_MAP_HEIGHT].texture = (normalTexture != nullptr)
+                ? *normalTexture
+                : Texture2D{};
         if (hasLightmapLoc >= 0) {
             SetShaderValue(material.shader, hasLightmapLoc, &hasLightmap, SHADER_UNIFORM_INT);
+        }
+        if (hasNormalMapLoc >= 0) {
+            SetShaderValue(material.shader, hasNormalMapLoc, &hasNormalMap, SHADER_UNIFORM_INT);
         }
         if (alphaTestLoc >= 0) {
             SetShaderValue(material.shader, alphaTestLoc, &alphaTest, SHADER_UNIFORM_INT);
@@ -912,9 +988,11 @@ void SectorMeshRenderer::DrawScene(
         staticModelRenderer.Draw(
                 assets,
                 *runtimeObjectWorld,
+                camera,
                 billboardLightContext,
                 visibilityResult,
                 lightmap,
+                assets.GetCubemap(pbrEnvironment.cubemap),
                 useBakedAmbientOcclusion,
                 renderDebugText);
         billboardRenderer.Draw(assets, *runtimeObjectWorld, camera, billboardLightContext, renderDebugText);
@@ -1034,7 +1112,7 @@ void SectorMeshRenderer::UpdateVisibilityDebug(
                 visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
                 Vector2{camera.position.x, camera.position.z},
                 PreviewYawForwardXZ(yawRadians),
-                VisibilityDebugHorizontalFovRadians(camera),
+                VisibilityDebugHorizontalFovRadians(camera, pitchRadians),
                 preferredStartSectorId,
                 0,
                 visibilitySeedRadiusWorld,
@@ -1095,6 +1173,15 @@ engine::TextureHandle SectorMeshRenderer::TextureForId(const std::string& textur
         return engine::NullTextureHandle();
     }
 
+    return it->second;
+}
+
+engine::TextureHandle SectorMeshRenderer::NormalTextureForId(const std::string& textureId) const
+{
+    const auto it = normalTextureHandlesById.find(textureId);
+    if (it == normalTextureHandlesById.end()) {
+        return engine::NullTextureHandle();
+    }
     return it->second;
 }
 

@@ -20,22 +20,27 @@ bool ToggleSectorEditorPreviewControlMode(
         bool preview3DActive,
         SectorEditorPreviewCollisionState& collisionState,
         SectorEditorPreviewControllerState& controllerState,
+        const std::vector<SectorStaticModelCollider>& staticModelColliders,
         SectorMeshRenderer& preview);
 bool RebuildSectorEditorCollisionWorld(
         const SectorTopologyMap& topologyMap,
         SectorEditorPreviewCollisionState& collisionState,
-        SectorEditorPreviewControllerState& controllerState);
+        SectorEditorPreviewControllerState& controllerState,
+        const std::vector<SectorStaticModelCollider>& staticModelColliders);
 SectorFpsVerticalContext BuildSectorEditorGameplayVerticalContext(
         const SectorEditorPreviewCollisionState& collisionState,
-        const SectorEditorPreviewControllerState& controllerState);
+        const SectorEditorPreviewControllerState& controllerState,
+        const std::vector<SectorStaticModelCollider>& staticModelColliders);
 void RefreshSectorEditorGameplaySectorAndVerticalContext(
         SectorEditorPreviewCollisionState& collisionState,
         SectorEditorPreviewControllerState& controllerState);
 void InitializeSectorEditorGameplayVerticalState(
         SectorEditorPreviewCollisionState& collisionState,
-        SectorEditorPreviewControllerState& controllerState);
+        SectorEditorPreviewControllerState& controllerState,
+        const std::vector<SectorStaticModelCollider>& staticModelColliders);
 void UpdateSectorEditorGameplayPreview(
         const std::vector<SectorDynamicDoorCollider>& dynamicDoorColliders,
+        const std::vector<SectorStaticModelCollider>& staticModelColliders,
         SectorEditorPreviewCollisionState& collisionState,
         SectorEditorPreviewControllerState& controllerState,
         bool previewSettingsModalOpen,

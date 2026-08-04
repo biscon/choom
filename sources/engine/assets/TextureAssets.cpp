@@ -1,6 +1,7 @@
 #include "engine/assets/TextureAssets.h"
 
 #include <raylib.h>
+#include <rlgl.h>
 
 #include <cassert>
 #include <chrono>
@@ -134,6 +135,72 @@ TextureHandle TextureAssets::CreateTextureFromImage(
     return handle;
 }
 
+TextureHandle TextureAssets::CreateCubemapFromImage(
+        AssetScopeHandle scope,
+        const char* key,
+        const Image& image,
+        int layout)
+{
+    if (key == nullptr || image.data == nullptr || image.width <= 0 || image.height <= 0) {
+        return NullTextureHandle();
+    }
+
+    const std::string requestKey = MakeGeneratedCubemapKey(key);
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (scope.index >= scopeData.size()) {
+            return NullTextureHandle();
+        }
+        const auto existing = scopeData[scope.index].textureByRequest.find(requestKey);
+        if (existing != scopeData[scope.index].textureByRequest.end()) {
+            return existing->second;
+        }
+    }
+
+    TextureCubemap uploaded = LoadTextureCubemap(image, layout);
+    if (uploaded.id == 0) {
+        std::fprintf(stderr, "[AssetManager WARNING] Cubemap upload failed for generated texture: %s\n", key);
+        return NullTextureHandle();
+    }
+    if (uploaded.mipmaps > 1) {
+        rlCubemapParameters(
+                uploaded.id,
+                RL_TEXTURE_MIN_FILTER,
+                RL_TEXTURE_FILTER_MIP_LINEAR);
+    }
+    rlCubemapParameters(
+            uploaded.id,
+            RL_TEXTURE_MAG_FILTER,
+            RL_TEXTURE_FILTER_LINEAR);
+
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (scope.index >= scopeData.size()) {
+        pendingUnloads.push_back(uploaded);
+        return NullTextureHandle();
+    }
+    TextureScopeData& data = scopeData[scope.index];
+    const auto existing = data.textureByRequest.find(requestKey);
+    if (existing != data.textureByRequest.end()) {
+        pendingUnloads.push_back(uploaded);
+        return existing->second;
+    }
+
+    assert(textureSlots.size() < std::numeric_limits<uint32_t>::max());
+    TextureSlot slot;
+    slot.state = TextureState::Ready;
+    slot.key = key;
+    slot.path = "<generated-cubemap>";
+    slot.scope = scope;
+    slot.texture = uploaded;
+    slot.cubemap = true;
+    const uint32_t index = static_cast<uint32_t>(textureSlots.size());
+    textureSlots.push_back(std::move(slot));
+    const TextureHandle handle{index, textureSlots[index].generation};
+    data.textures.push_back(handle);
+    data.textureByRequest.emplace(requestKey, handle);
+    return handle;
+}
+
 bool TextureAssets::IsReady(TextureHandle handle) const
 {
     std::lock_guard<std::mutex> lock(stateMutex);
@@ -163,10 +230,23 @@ const Texture2D* TextureAssets::GetTexture(TextureHandle handle) const
     }
 
     const TextureSlot& slot = textureSlots[handle.index];
-    if (slot.state != TextureState::Ready || slot.texture.id == 0) {
+    if (slot.state != TextureState::Ready || slot.texture.id == 0 || slot.cubemap) {
         return nullptr;
     }
 
+    return &slot.texture;
+}
+
+const TextureCubemap* TextureAssets::GetCubemap(TextureHandle handle) const
+{
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (!IsValidTextureNoLock(handle)) {
+        return nullptr;
+    }
+    const TextureSlot& slot = textureSlots[handle.index];
+    if (slot.state != TextureState::Ready || slot.texture.id == 0 || !slot.cubemap) {
+        return nullptr;
+    }
     return &slot.texture;
 }
 
@@ -407,6 +487,11 @@ std::string TextureAssets::MakeTextureRequestKey(const char* key, const char* pa
 std::string TextureAssets::MakeGeneratedTextureKey(const char* key, TextureLoadFlags flags)
 {
     return std::string(key) + "\n<generated>\n" + std::to_string(static_cast<uint32_t>(flags));
+}
+
+std::string TextureAssets::MakeGeneratedCubemapKey(const char* key)
+{
+    return std::string(key) + "\n<generated-cubemap>";
 }
 
 void TextureAssets::ApplyTextureLoadFlags(Texture2D& texture, TextureLoadFlags flags)

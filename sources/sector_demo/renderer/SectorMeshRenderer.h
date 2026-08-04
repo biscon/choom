@@ -11,6 +11,7 @@
 #include "sector_demo/renderer/SectorDoorRenderer.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorSkyRenderer.h"
+#include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
@@ -113,6 +114,7 @@ public:
 
 private:
     engine::TextureHandle TextureForId(const std::string& textureId) const;
+    engine::TextureHandle NormalTextureForId(const std::string& textureId) const;
     void UpdateCamera();
     SectorBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     static const Texture2D* ResolveShadowCasterTexture(
@@ -131,6 +133,7 @@ private:
     bool visibilityGraphValid = false;
     bool visibilityLookupWorldValid = false;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
+    std::unordered_map<std::string, engine::TextureHandle> normalTextureHandlesById;
     engine::TextureHandle lightmapTexture = engine::NullTextureHandle();
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
     Material material = {};
@@ -139,6 +142,7 @@ private:
     int useLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
     int hasLightmapLoc = -1;
+    int hasNormalMapLoc = -1;
     int alphaTestLoc = -1;
     int alphaCutoffLoc = -1;
     int hasDecalLoc = -1;
@@ -165,6 +169,7 @@ private:
     int shadowSoftnessLoc = -1;
     int dynamicLightingClampLoc = -1;
     SectorSkyRenderer skyRenderer;
+    SectorPbrEnvironment pbrEnvironment;
     SectorBloomRenderer bloomRenderer;
     SectorBillboardRenderer billboardRenderer;
     SectorStaticModelRenderer staticModelRenderer;

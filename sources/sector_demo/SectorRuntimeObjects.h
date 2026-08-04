@@ -5,6 +5,7 @@
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
+#include "sector_demo/SectorStaticModelCollision.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -41,6 +42,7 @@ struct SectorStaticModel {
     int placedObjectId = 0;
     Vector3 containingSectorAmbient = {0.15f, 0.15f, 0.15f};
     float scale = 1.0f;
+    float environmentExposure = 0.15f;
 };
 
 } // namespace game
@@ -61,6 +63,7 @@ struct SectorRuntimeObjectState {
     std::vector<SectorPlacedRuntimeObjectEntity> placedObjectEntities;
     std::vector<SectorDoorAnchorDiagnostic> doorAnchorDiagnostics;
     std::vector<SectorDynamicDoorCollider> dynamicDoorColliders;
+    std::vector<SectorStaticModelCollider> staticModelColliders;
     std::vector<RuntimePortalDynamicBlocker> dynamicPortalBlockers;
     size_t placedObjectCount = 0;
     size_t spawnedObjectCount = 0;

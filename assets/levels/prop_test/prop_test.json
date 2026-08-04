@@ -1,0 +1,369 @@
+{
+  "formatVersion": 3,
+  "topology": "authoringGraph",
+  "coordSubdivisions": 16,
+  "textures": {
+    "ceiling": {
+      "path": "assets/images/ceiling.png",
+      "filter": "anisotropic8x"
+    },
+    "floor": {
+      "path": "assets/images/floor.png",
+      "filter": "anisotropic8x"
+    },
+    "step_wall": {
+      "path": "assets/images/wall.png",
+      "filter": "anisotropic8x"
+    },
+    "upper_wall": {
+      "path": "assets/images/wall.png",
+      "filter": "anisotropic8x"
+    },
+    "wall": {
+      "path": "assets/images/wall.png",
+      "filter": "anisotropic8x"
+    }
+  },
+  "runtimeObjects": [
+    {
+      "id": 1,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/props/Cabinet.gltf"
+      },
+      "position": [
+        12.0,
+        0.0,
+        48.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 2,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/props/Crate_Wooden.gltf"
+      },
+      "position": [
+        40.0,
+        0.0,
+        12.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 3,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/props/Table_Large.gltf"
+      },
+      "position": [
+        120.0,
+        0.0,
+        48.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 4,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/props/Chair_1.gltf"
+      },
+      "position": [
+        120.0,
+        0.0,
+        40.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 5,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/props/Chair_1.gltf"
+      },
+      "position": [
+        120.0,
+        0.0,
+        56.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 6,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/props/Dummy.gltf"
+      },
+      "position": [
+        96.0,
+        0.0,
+        48.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 7,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/props/low_poly_wooden_barrel_asset.glb",
+        "scale": 5.0
+      },
+      "position": [
+        40.0,
+        0.0,
+        64.0
+      ],
+      "yawDegrees": 0.0
+    }
+  ],
+  "staticLights": [
+    {
+      "id": 1,
+      "position": [
+        24.0,
+        14.399999618530273,
+        24.0
+      ],
+      "radius": 84.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    },
+    {
+      "id": 2,
+      "position": [
+        88.0,
+        14.399999618530273,
+        48.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 1.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
+  "staticSpotLights": [
+    {
+      "id": 1,
+      "position": [
+        120.67112731933594,
+        21.7331485748291,
+        48.21531677246094
+      ],
+      "target": [
+        116.73876190185547,
+        -10.662775039672852,
+        48.18940353393555
+      ],
+      "range": 64.0,
+      "sourceRadius": 0.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0
+    }
+  ],
+  "dynamicPointLights": [],
+  "dynamicSpotLights": [],
+  "lightmapSettings": {
+    "ambientOcclusionRadius": 10.0,
+    "ambientOcclusionStrength": 0.550000011920929,
+    "indirectBounceRadius": 32.0,
+    "indirectBounceStrength": 0.20000000298023224,
+    "objectProbeSpacingWorld": 4.0,
+    "objectProbeHeightWorld": 1.2000000476837158
+  },
+  "previewSettings": {
+    "walkSpeed": 6.0,
+    "runSpeed": 12.0,
+    "mouseSensitivity": 1.0,
+    "eyeHeight": 1.2000000476837158,
+    "gravity": 25.0,
+    "playerRadius": 0.25,
+    "playerHeight": 1.600000023841858,
+    "stepHeight": 0.25,
+    "jumpHeight": 0.6000000238418579,
+    "headBobStrength": 0.019999999552965164,
+    "headBobFrequency": 2.0,
+    "objectProbeDebugDrawMaxDistanceWorld": 48.0
+  },
+  "directionalLight": {
+    "enabled": false,
+    "directionToLight": [
+      -0.38533732295036316,
+      0.8807710409164429,
+      -0.275240957736969
+    ],
+    "color": {
+      "r": 255,
+      "g": 244,
+      "b": 214,
+      "a": 255
+    },
+    "intensity": 1.0
+  },
+  "bakedLightmap": {
+    "path": "assets/levels/prop_test/prop_test.lightmap.png",
+    "width": 2048,
+    "height": 2048,
+    "sourceHash": "147f2cba51544722",
+    "objectProbes": {
+      "path": "assets/levels/prop_test/prop_test.lightmap.object_probes.bin",
+      "version": 1,
+      "sourceHash": "147f2cba51544722",
+      "count": 12,
+      "probeSpacingWorld": 4.0,
+      "probeHeightWorld": 1.2000000476837158,
+      "format": "ambientCubeF32LE"
+    },
+    "staticModels": {
+      "path": "assets/levels/prop_test/prop_test.lightmap.png.static_models.bin",
+      "version": 1,
+      "sourceHash": "147f2cba51544722",
+      "modelCount": 6,
+      "objectCount": 7,
+      "format": "staticModelUvRemapF32LE"
+    }
+  },
+  "authoringGraph": {
+    "vertices": [
+      {
+        "id": 1,
+        "x": 128,
+        "y": 128
+      },
+      {
+        "id": 2,
+        "x": 2304,
+        "y": 128
+      },
+      {
+        "id": 3,
+        "x": 2304,
+        "y": 1664
+      },
+      {
+        "id": 4,
+        "x": 128,
+        "y": 1664
+      }
+    ],
+    "lines": [
+      {
+        "id": 1,
+        "startVertexId": 1,
+        "endVertexId": 2
+      },
+      {
+        "id": 2,
+        "startVertexId": 2,
+        "endVertexId": 3
+      },
+      {
+        "id": 3,
+        "startVertexId": 3,
+        "endVertexId": 4
+      },
+      {
+        "id": 4,
+        "startVertexId": 4,
+        "endVertexId": 1
+      }
+    ],
+    "lineSides": [],
+    "faceAnchors": [
+      {
+        "id": 1,
+        "name": "Sector 1",
+        "x": 943,
+        "y": 894,
+        "floorZ": 0.0,
+        "ceilingZ": 24.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.20000000298023224,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

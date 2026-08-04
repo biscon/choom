@@ -76,6 +76,36 @@
       "filter": "anisotropic8x"
     }
   },
+  "runtimeObjects": [
+    {
+      "id": 1,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/tool_cart/tool_cart_1k.gltf",
+        "collision": true
+      },
+      "position": [
+        20.0,
+        0.0,
+        24.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 2,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/worn_metal_rack/worn_metal_rack_1k.gltf",
+        "collision": true
+      },
+      "position": [
+        20.0,
+        0.0,
+        56.0
+      ],
+      "yawDegrees": 90.0
+    }
+  ],
   "staticLights": [
     {
       "id": 1,
@@ -148,30 +178,13 @@
     {
       "id": 5,
       "position": [
-        16.0,
+        20.0,
         17.0,
         24.0
       ],
       "radius": 32.0,
-      "sourceRadius": 2.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 245,
-        "b": 225,
-        "a": 255
-      }
-    },
-    {
-      "id": 6,
-      "position": [
-        16.0,
-        17.0,
-        56.0
-      ],
-      "radius": 32.0,
-      "sourceRadius": 2.0,
-      "intensity": 1.0,
+      "sourceRadius": 1.0,
+      "intensity": 2.0,
       "color": {
         "r": 255,
         "g": 245,
@@ -197,7 +210,30 @@
       }
     }
   ],
-  "staticSpotLights": [],
+  "staticSpotLights": [
+    {
+      "id": 1,
+      "position": [
+        5.669118881225586,
+        20.720718383789063,
+        55.55404281616211
+      ],
+      "target": [
+        33.91773986816406,
+        4.381338119506836,
+        55.55404281616211
+      ],
+      "range": 64.0,
+      "sourceRadius": 0.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      }
+    }
+  ],
   "dynamicPointLights": [],
   "dynamicSpotLights": [],
   "lightmapSettings": {
@@ -217,7 +253,7 @@
     "playerRadius": 0.5,
     "playerHeight": 1.75,
     "stepHeight": 0.4000000059604645,
-    "jumpHeight": 0.800000011920929,
+    "jumpHeight": 1.2000000476837158,
     "headBobStrength": 0.019999999552965164,
     "headBobFrequency": 2.0,
     "objectProbeDebugDrawMaxDistanceWorld": 48.0
@@ -241,15 +277,23 @@
     "path": "assets/levels/hub/hub.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "77c55fee814ddd3e",
+    "sourceHash": "23605607805607cd",
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 1,
-      "sourceHash": "77c55fee814ddd3e",
+      "sourceHash": "23605607805607cd",
       "count": 15,
       "probeSpacingWorld": 4.0,
       "probeHeightWorld": 1.2000000476837158,
       "format": "ambientCubeF32LE"
+    },
+    "staticModels": {
+      "path": "assets/levels/hub/hub.lightmap.png.static_models.bin",
+      "version": 1,
+      "sourceHash": "23605607805607cd",
+      "modelCount": 2,
+      "objectCount": 2,
+      "format": "staticModelUvRemapF32LE"
     }
   },
   "authoringGraph": {

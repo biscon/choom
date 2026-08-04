@@ -2986,6 +2986,7 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
     object.staticModel.modelPath = "assets/models/props/missing_fixture.glb";
     object.staticModel.heightOffsetWorld = 0.625f;
     object.staticModel.scale = 1.75f;
+    object.staticModel.collision = true;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -3007,8 +3008,9 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
     const engine::Entity entity = state.placedObjectEntities[0].entity;
     Check(world.IsAlive(entity)
                   && world.Has<game::SectorStaticModel>(entity)
+                  && world.Has<game::SectorStaticModelCollider>(entity)
                   && !world.Has<game::SectorObjectLighting>(entity),
-          "static prop entity has model data and does not use object probes");
+          "collision-enabled static prop has model and collider data and does not use object probes");
     const game::SectorObjectTransform& transform =
             world.Get<game::SectorObjectTransform>(entity);
     Check(Near(transform.position, Vector3{0.25f, 1.625f, 0.25f}),
@@ -3021,10 +3023,16 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
           "assigned static prop stores its stable placed-object ID");
     Check(Near(world.Get<game::SectorStaticModel>(entity).scale, 1.75f),
           "static prop copies authored uniform scale to ECS model data");
+    Check(Near(world.Get<game::SectorStaticModel>(entity).environmentExposure, 0.35f),
+          "indoor static prop clamps sky reflection exposure from containing-sector ambient");
     Check(world.Get<game::SectorObject>(entity).currentSectorId == 10,
           "static prop spawn assigns the containing sector used by portal culling");
     Check(!world.Has<game::SectorDoorCollider>(entity),
           "static prop does not participate in door collision");
+    Check(!world.Get<game::SectorStaticModelCollider>(entity).resolved
+                  && !world.Get<game::SectorStaticModelCollider>(entity).failed
+                  && state.staticModelColliders.empty(),
+          "pending collision-enabled static prop remains inactive until model bounds are ready");
     Check(!world.Has<game::SectorBillboardSprite>(entity),
           "static prop does not acquire billboard render components");
 }
@@ -3035,10 +3043,11 @@ void TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity()
     engine::AssetManager assets;
     game::SectorRuntimeObjectState state;
     game::SectorTopologyMap map = MakeSquareMap();
+    map.sectors[0].ceilingSky = true;
     game::SectorPlacedRuntimeObject object;
     object.id = 19;
     object.kind = "static_model";
-    object.position = Vector3{8.0f, 0.0f, 8.0f};
+    object.position = Vector3{2.0f, 0.0f, 2.0f};
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -3050,6 +3059,10 @@ void TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity()
     const engine::Entity entity = state.placedObjectEntities[0].entity;
     Check(engine::IsNull(world.Get<game::SectorStaticModel>(entity).model),
           "unassigned static prop stores a null model handle");
+    Check(!world.Has<game::SectorStaticModelCollider>(entity),
+          "default-off static prop omits the collision component");
+    Check(Near(world.Get<game::SectorStaticModel>(entity).environmentExposure, 1.0f),
+          "sky-sector static prop uses full environment exposure");
     Check(engine::IsNull(state.runtimeObjectAssetScope),
           "unassigned static prop does not request an asset scope");
     Check(state.staticModelUnassignedCount == 1
@@ -3066,14 +3079,17 @@ void TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures()
     maps[game::SectorStaticModelLightmapMaterialMap].texture.id = 70;
     maps[game::SectorStaticModelShadowMap0MaterialMap].texture.id = 80;
     maps[game::SectorStaticModelShadowMap1MaterialMap].texture.id = 90;
+    maps[game::SectorStaticModelEnvironmentMaterialMap].texture.id = 75;
     const Texture2D lightmap{101, 2048, 2048, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
     const Texture2D shadowMap0{102, 1024, 1024, 1, PIXELFORMAT_UNCOMPRESSED_R32};
     const Texture2D shadowMap1{103, 1024, 1024, 1, PIXELFORMAT_UNCOMPRESSED_R32};
+    const TextureCubemap environment{104, 256, 256, 9, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
 
     game::ConfigureSectorStaticModelAuxiliaryMaterialMaps(
             maps,
             &lightmap,
             true,
+            &environment,
             &shadowMap0,
             &shadowMap1);
     Check(maps[MATERIAL_MAP_DIFFUSE].texture.id == 7
@@ -3085,13 +3101,17 @@ void TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures()
                           == shadowMap0.id
                   && maps[game::SectorStaticModelShadowMap1MaterialMap]
                              .texture.id
-                          == shadowMap1.id,
-          "static prop DrawMesh material maps bind lightmap and spotlight shadow textures without replacing albedo");
+                          == shadowMap1.id
+                  && maps[game::SectorStaticModelEnvironmentMaterialMap]
+                             .texture.id
+                          == environment.id,
+          "static prop DrawMesh material maps bind PBR environment, lightmap, and spotlight shadow textures without replacing albedo");
 
     game::ConfigureSectorStaticModelAuxiliaryMaterialMaps(
             maps,
             &lightmap,
             false,
+            nullptr,
             nullptr,
             nullptr);
     Check(maps[game::SectorStaticModelLightmapMaterialMap]
@@ -3101,6 +3121,9 @@ void TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures()
                              .texture.id
                           == 0
                   && maps[game::SectorStaticModelShadowMap1MaterialMap]
+                             .texture.id
+                          == 0
+                  && maps[game::SectorStaticModelEnvironmentMaterialMap]
                              .texture.id
                           == 0,
           "static prop fallback clears auxiliary material textures when no prop lightmap is valid");
@@ -3712,6 +3735,497 @@ void TestSectorRuntimeObjectBakedLightingUsesMapFallback()
             "runtime object baked lighting system uses sector ambient fallback when map is supplied");
 }
 
+game::SectorStaticModelCollider MakeStaticModelCollider(
+        Vector2 center,
+        Vector2 halfExtents,
+        float bottom,
+        float top)
+{
+    game::SectorStaticModelCollider collider;
+    collider.placedObjectId = 1;
+    collider.center = center;
+    collider.axisX = Vector2{1.0f, 0.0f};
+    collider.axisZ = Vector2{0.0f, 1.0f};
+    collider.halfExtents = halfExtents;
+    collider.bottom = bottom;
+    collider.top = top;
+    collider.resolved = true;
+    return collider;
+}
+
+game::SectorCollisionMoveResult ResolveStaticModelMovement(
+        const game::SectorFpsControllerState& state,
+        Vector2 destination,
+        const game::SectorFpsControllerConfig& fpsConfig,
+        const std::vector<game::SectorStaticModelCollider>& colliders,
+        game::SectorFpsVerticalContext sectorContext = {true, 0.0f, 4.0f})
+{
+    const game::SectorFpsControllerConfig config =
+            game::NormalizeSectorFpsControllerConfig(fpsConfig);
+    return game::ResolveSectorStaticModelCollidersForPlayerMovement(
+            game::SectorCollisionMoveState{
+                    Vector2{state.feetPosition.x, state.feetPosition.z},
+                    state.feetPosition.y,
+                    state.currentSectorId,
+                    state.grounded},
+            game::SectorCollisionMoveResult{destination, state.currentSectorId},
+            game::SectorCollisionMoveConfig{
+                    config.playerRadius,
+                    config.playerHeight,
+                    config.stepHeight,
+                    4},
+            sectorContext,
+            colliders);
+}
+
+void TestStaticModelColliderBuildUsesFullAuthoredTransform()
+{
+    const BoundingBox bounds{
+            Vector3{-1.0f, -0.5f, -2.0f},
+            Vector3{3.0f, 1.5f, 2.0f}};
+    const game::SectorObjectTransform transform{
+            Vector3{10.0f, 2.0f, 20.0f},
+            PI * 0.5f};
+    game::SectorStaticModelCollider collider;
+    Check(game::BuildSectorStaticModelCollider(
+                  7,
+                  bounds,
+                  transform,
+                  2.0f,
+                  collider),
+          "static model bounds build a valid oriented collider");
+
+    const Matrix authoredTransform = MatrixMultiply(
+            MatrixScale(2.0f, 2.0f, 2.0f),
+            MatrixMultiply(
+                    MatrixRotateY(transform.yawRadians),
+                    MatrixTranslate(10.0f, 2.0f, 20.0f)));
+    const Vector3 expectedCenter = Vector3Transform(
+            Vector3{1.0f, 0.5f, 0.0f},
+            authoredTransform);
+    Check(collider.placedObjectId == 7
+                  && collider.resolved
+                  && !collider.failed
+                  && Near(collider.center, Vector2{expectedCenter.x, expectedCenter.z})
+                  && Near(collider.halfExtents, Vector2{4.0f, 4.0f})
+                  && Near(collider.bottom, 1.0f)
+                  && Near(collider.top, 5.0f),
+          "static model collider applies off-center bounds, scale, position, and height");
+    Check(Near(collider.axisX.x * collider.axisZ.x
+                       + collider.axisX.y * collider.axisZ.y,
+               0.0f)
+                  && Near(Vector2Length(collider.axisX), 1.0f)
+                  && Near(Vector2Length(collider.axisZ), 1.0f),
+          "static model collider yaw axes remain orthonormal");
+}
+
+void TestStaticModelColliderBlocksSweepsAndSlides()
+{
+    const std::vector<game::SectorStaticModelCollider> colliders{
+            MakeStaticModelCollider(
+                    Vector2{2.0f, 0.0f},
+                    Vector2{0.5f, 4.0f},
+                    0.0f,
+                    1.0f)};
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{0.0f, 0.0f, 0.0f};
+    state.currentSectorId = 10;
+    state.grounded = true;
+    game::SectorFpsControllerConfig config;
+
+    const game::SectorCollisionMoveResult blocked = ResolveStaticModelMovement(
+            state,
+            Vector2{5.0f, 0.0f},
+            config,
+            colliders);
+    Check(blocked.hitWall && blocked.blockedByStep,
+          "tall static model box blocks grounded movement as a step");
+    Check(blocked.positionXZ.x < 1.26f,
+          "swept static model collision prevents high-speed tunneling");
+
+    const game::SectorCollisionMoveResult slide = ResolveStaticModelMovement(
+            state,
+            Vector2{5.0f, 1.0f},
+            config,
+            colliders);
+    Check(slide.hitWall
+                  && slide.positionXZ.x < 1.26f
+                  && slide.positionXZ.y > 0.5f,
+          "diagonal static model contact preserves tangential sliding");
+}
+
+void TestStaticModelColliderContactAllowsEscapeAndTangentMovement()
+{
+    const Vector2 halfExtents{0.46f, 0.30f};
+    const std::vector<game::SectorStaticModelCollider> colliders{
+            MakeStaticModelCollider(Vector2{}, halfExtents, 0.0f, 1.9f)};
+    game::SectorFpsControllerConfig config;
+    config.playerRadius = 0.5f;
+    config.playerHeight = 1.75f;
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{
+            -(halfExtents.x + config.playerRadius),
+            0.5f,
+            0.0f};
+    state.currentSectorId = 10;
+    state.grounded = false;
+
+    const Vector2 contact{state.feetPosition.x, state.feetPosition.z};
+    const game::SectorCollisionMoveResult away = ResolveStaticModelMovement(
+            state,
+            Vector2{contact.x - 0.4f, contact.y},
+            config,
+            colliders);
+    Check(away.positionXZ.x < contact.x - 0.39f,
+          "static model face contact permits separating movement");
+
+    const game::SectorCollisionMoveResult tangent = ResolveStaticModelMovement(
+            state,
+            Vector2{contact.x, contact.y + 0.4f},
+            config,
+            colliders);
+    Check(Near(tangent.positionXZ, Vector2{contact.x, contact.y + 0.4f}),
+          "static model face contact permits tangential movement");
+
+    const game::SectorCollisionMoveResult inward = ResolveStaticModelMovement(
+            state,
+            Vector2{contact.x + 0.4f, contact.y},
+            config,
+            colliders);
+    Check(inward.hitWall && inward.positionXZ.x <= contact.x + 0.001f,
+          "static model face contact still blocks inward movement");
+}
+
+void TestStaticModelColliderRoundedCornerSweep()
+{
+    const std::vector<game::SectorStaticModelCollider> colliders{
+            MakeStaticModelCollider(
+                    Vector2{},
+                    Vector2{0.5f, 0.5f},
+                    0.0f,
+                    2.0f)};
+    game::SectorFpsControllerConfig config;
+    config.playerRadius = 0.5f;
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{1.1f, 0.5f, 0.9f};
+    state.currentSectorId = 10;
+
+    const game::SectorCollisionMoveResult nearMiss = ResolveStaticModelMovement(
+            state,
+            Vector2{0.9f, 1.1f},
+            config,
+            colliders);
+    Check(!nearMiss.hitWall && Near(nearMiss.positionXZ, Vector2{0.9f, 1.1f}),
+          "rounded OBB corner does not block a circle path through empty corner space");
+
+    state.feetPosition = Vector3{1.2f, 0.5f, 1.2f};
+    const game::SectorCollisionMoveResult cornerHit = ResolveStaticModelMovement(
+            state,
+            Vector2{0.6f, 0.6f},
+            config,
+            colliders);
+    const Vector2 fromCorner = Vector2Subtract(
+            cornerHit.positionXZ,
+            Vector2{0.5f, 0.5f});
+    Check(cornerHit.hitWall
+                  && Vector2Length(fromCorner) >= config.playerRadius - 0.001f,
+          "true rounded-corner impact blocks with circle clearance");
+}
+
+void TestStaticModelColliderRotatedContactAndPenetrationRecovery()
+{
+    game::SectorStaticModelCollider collider = MakeStaticModelCollider(
+            Vector2{},
+            Vector2{0.46f, 0.30f},
+            0.0f,
+            1.9f);
+    const float angle = PI * 0.25f;
+    collider.axisX = Vector2{std::cos(angle), std::sin(angle)};
+    collider.axisZ = Vector2{-std::sin(angle), std::cos(angle)};
+    const std::vector<game::SectorStaticModelCollider> colliders{collider};
+    game::SectorFpsControllerConfig config;
+    config.playerRadius = 0.5f;
+    config.playerHeight = 1.75f;
+    const float contactDistance = collider.halfExtents.x + config.playerRadius;
+    const Vector2 contact = Vector2Scale(collider.axisX, -contactDistance);
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{contact.x, 0.5f, contact.y};
+    state.currentSectorId = 10;
+
+    const Vector2 awayDestination = Vector2Add(
+            contact,
+            Vector2Scale(collider.axisX, -0.4f));
+    const game::SectorCollisionMoveResult away = ResolveStaticModelMovement(
+            state,
+            awayDestination,
+            config,
+            colliders);
+    Check(Near(away.positionXZ, awayDestination),
+          "rotated static model contact permits movement away from its face");
+
+    const Vector2 tangentDestination = Vector2Add(
+            contact,
+            Vector2Scale(collider.axisZ, 0.4f));
+    const game::SectorCollisionMoveResult tangent = ResolveStaticModelMovement(
+            state,
+            tangentDestination,
+            config,
+            colliders);
+    Check(Near(tangent.positionXZ, tangentDestination),
+          "rotated static model contact preserves tangential movement");
+
+    const Vector2 penetrating = Vector2Scale(
+            collider.axisX,
+            -(contactDistance - 0.1f));
+    state.feetPosition = Vector3{penetrating.x, 0.5f, penetrating.y};
+    const Vector2 intendedDelta = Vector2Scale(collider.axisX, -0.3f);
+    const game::SectorCollisionMoveResult recovered = ResolveStaticModelMovement(
+            state,
+            Vector2Add(penetrating, intendedDelta),
+            config,
+            colliders);
+    const float recoveredAlongAxis = Vector2DotProduct(
+            recovered.positionXZ,
+            collider.axisX);
+    Check(recoveredAlongAxis <= -contactDistance - 0.29f,
+          "starting penetration is recovered before intended escape movement is applied");
+}
+
+void TestStaticModelColliderRepeatedContactCanBackAway()
+{
+    const std::vector<game::SectorStaticModelCollider> colliders{
+            MakeStaticModelCollider(
+                    Vector2{},
+                    Vector2{0.46f, 0.30f},
+                    0.0f,
+                    1.9f)};
+    game::SectorFpsControllerConfig config;
+    config.playerRadius = 0.5f;
+    config.playerHeight = 1.75f;
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{-2.0f, 0.5f, 0.0f};
+    state.currentSectorId = 10;
+
+    const game::SectorCollisionMoveResult impact = ResolveStaticModelMovement(
+            state,
+            Vector2{0.0f, 0.0f},
+            config,
+            colliders);
+    Check(impact.hitWall && impact.positionXZ.x < -0.95f,
+          "synthetic tall prop blocks an aggressive inbound sweep");
+
+    state.feetPosition.x = impact.positionXZ.x;
+    state.feetPosition.z = impact.positionXZ.y;
+    const game::SectorCollisionMoveResult escaped = ResolveStaticModelMovement(
+            state,
+            Vector2{impact.positionXZ.x - 0.5f, impact.positionXZ.y},
+            config,
+            colliders);
+    Check(escaped.positionXZ.x < impact.positionXZ.x - 0.49f,
+          "player can back away on the frame after aggressive prop contact");
+}
+
+void TestStaticModelColliderUsesVerticalOverlapAndStepHeight()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{0.0f, 0.0f, 0.0f};
+    state.currentSectorId = 10;
+    state.grounded = true;
+    game::SectorFpsControllerConfig config;
+
+    const std::vector<game::SectorStaticModelCollider> elevated{
+            MakeStaticModelCollider(
+                    Vector2{2.0f, 0.0f},
+                    Vector2{0.5f, 0.5f},
+                    2.0f,
+                    3.0f)};
+    Check(Near(ResolveStaticModelMovement(
+                       state,
+                       Vector2{2.0f, 0.0f},
+                       config,
+                       elevated)
+                       .positionXZ,
+               Vector2{2.0f, 0.0f}),
+          "player passes below a static model box with vertical clearance");
+
+    state.feetPosition.y = 1.0f;
+    state.grounded = false;
+    const std::vector<game::SectorStaticModelCollider> below{
+            MakeStaticModelCollider(
+                    Vector2{2.0f, 0.0f},
+                    Vector2{0.5f, 0.5f},
+                    0.0f,
+                    1.0f)};
+    Check(Near(ResolveStaticModelMovement(
+                       state,
+                       Vector2{2.0f, 0.0f},
+                       config,
+                       below)
+                       .positionXZ,
+               Vector2{2.0f, 0.0f}),
+          "airborne player passes over a static model once feet reach its top");
+
+    state.feetPosition.y = 0.0f;
+    state.grounded = true;
+    const std::vector<game::SectorStaticModelCollider> low{
+            MakeStaticModelCollider(
+                    Vector2{2.0f, 0.0f},
+                    Vector2{0.5f, 0.5f},
+                    0.0f,
+                    0.2f)};
+    const game::SectorCollisionMoveResult stepped = ResolveStaticModelMovement(
+            state,
+            Vector2{2.0f, 0.0f},
+            config,
+            low);
+    Check(!stepped.hitWall && Near(stepped.positionXZ, Vector2{2.0f, 0.0f}),
+          "static model top within Step Height allows horizontal entry");
+    state.feetPosition.x = stepped.positionXZ.x;
+    state.feetPosition.z = stepped.positionXZ.y;
+    const game::SectorFpsVerticalContext steppedContext =
+            game::BuildSectorStaticModelVerticalContext(
+                    game::SectorFpsVerticalContext{true, 0.0f, 4.0f},
+                    state,
+                    config,
+                    low);
+    const game::SectorFpsVerticalResult steppedVertical =
+            game::UpdateSectorFpsVerticalPhysics(
+                    state,
+                    config,
+                    steppedContext,
+                    0.0f);
+    Check(steppedVertical.transition == game::SectorFpsVerticalTransition::SteppedUp
+                  && Near(state.feetPosition.y, 0.2f),
+          "low static model top becomes the grounded support surface");
+
+    state.feetPosition = Vector3{0.0f, 0.0f, 0.0f};
+    state.grounded = true;
+    const game::SectorCollisionMoveResult noHeadroom = ResolveStaticModelMovement(
+            state,
+            Vector2{2.0f, 0.0f},
+            config,
+            low,
+            game::SectorFpsVerticalContext{true, 0.0f, 1.7f});
+    Check(noHeadroom.hitWall && noHeadroom.blockedByCeiling,
+          "step-height static model still blocks when there is no player headroom");
+}
+
+void TestStaticModelVerticalContextSelectsNearestSurfaces()
+{
+    std::vector<game::SectorStaticModelCollider> colliders{
+            MakeStaticModelCollider(
+                    Vector2{},
+                    Vector2{1.0f, 1.0f},
+                    0.0f,
+                    0.2f),
+            MakeStaticModelCollider(
+                    Vector2{},
+                    Vector2{1.0f, 1.0f},
+                    0.2f,
+                    0.5f),
+            MakeStaticModelCollider(
+                    Vector2{},
+                    Vector2{1.0f, 1.0f},
+                    2.0f,
+                    2.5f),
+            MakeStaticModelCollider(
+                    Vector2{},
+                    Vector2{1.0f, 1.0f},
+                    1.6f,
+                    1.8f)};
+    game::SectorFpsControllerState state;
+    state.feetPosition.y = 1.0f;
+    state.currentSectorId = 10;
+    game::SectorFpsControllerConfig config;
+    config.eyeHeight = 0.5f;
+    config.playerHeight = 0.5f;
+    const game::SectorFpsVerticalContext context =
+            game::BuildSectorStaticModelVerticalContext(
+                    game::SectorFpsVerticalContext{true, 0.0f, 4.0f},
+                    state,
+                    config,
+                    colliders);
+    Check(Near(context.floorZ, 0.5f)
+                  && Near(context.ceilingZ, 1.6f),
+          "multiple static model boxes select the highest floor and nearest underside");
+}
+
+void TestStaticModelColliderLandingUndersideAndWalkOff()
+{
+    const std::vector<game::SectorStaticModelCollider> platform{
+            MakeStaticModelCollider(
+                    Vector2{0.0f, 0.0f},
+                    Vector2{1.0f, 1.0f},
+                    0.0f,
+                    0.5f)};
+    game::SectorFpsControllerConfig config;
+    config.eyeHeight = 1.0f;
+    config.playerHeight = 1.0f;
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{0.0f, 1.0f, 0.0f};
+    state.currentSectorId = 10;
+    state.verticalVelocity = -2.0f;
+    const game::SectorFpsVerticalContext landingContext =
+            game::BuildSectorStaticModelVerticalContext(
+                    game::SectorFpsVerticalContext{true, 0.0f, 4.0f},
+                    state,
+                    config,
+                    platform);
+    const game::SectorFpsVerticalResult landed = game::UpdateSectorFpsVerticalPhysics(
+            state,
+            config,
+            landingContext,
+            0.2f);
+    Check(landed.transition == game::SectorFpsVerticalTransition::Landed
+                  && state.grounded
+                  && Near(state.feetPosition.y, 0.5f),
+          "falling player lands and grounds on a static model top");
+
+    state.feetPosition.x = 3.0f;
+    const game::SectorFpsVerticalContext offContext =
+            game::BuildSectorStaticModelVerticalContext(
+                    game::SectorFpsVerticalContext{true, 0.0f, 4.0f},
+                    state,
+                    config,
+                    platform);
+    const game::SectorFpsVerticalResult walkedOff =
+            game::UpdateSectorFpsVerticalPhysics(
+                    state,
+                    config,
+                    offContext,
+                    0.0f);
+    Check(walkedOff.transition == game::SectorFpsVerticalTransition::StartedDrop
+                  && !state.grounded,
+          "walking off a static model starts a fall to the sector floor");
+
+    const std::vector<game::SectorStaticModelCollider> overhead{
+            MakeStaticModelCollider(
+                    Vector2{0.0f, 0.0f},
+                    Vector2{1.0f, 1.0f},
+                    1.5f,
+                    2.0f)};
+    state = game::SectorFpsControllerState{};
+    state.currentSectorId = 10;
+    state.verticalVelocity = 4.0f;
+    config.gravity = 1.0f;
+    const game::SectorFpsVerticalContext overheadContext =
+            game::BuildSectorStaticModelVerticalContext(
+                    game::SectorFpsVerticalContext{true, 0.0f, 4.0f},
+                    state,
+                    config,
+                    overhead);
+    const game::SectorFpsVerticalResult bonked =
+            game::UpdateSectorFpsVerticalPhysics(
+                    state,
+                    config,
+                    overheadContext,
+                    0.2f);
+    Check(bonked.transition == game::SectorFpsVerticalTransition::CeilingBonk
+                  && Near(state.feetPosition.y, 0.5f)
+                  && Near(state.verticalVelocity, 0.0f),
+          "jumping player collides with an elevated static model underside");
+}
+
 } // namespace
 
 int main()
@@ -3802,6 +4316,15 @@ int main()
     TestSectorRuntimeObjectBakedLightingSystem();
     TestSectorRuntimeObjectBakedLightingFallback();
     TestSectorRuntimeObjectBakedLightingUsesMapFallback();
+    TestStaticModelColliderBuildUsesFullAuthoredTransform();
+    TestStaticModelColliderBlocksSweepsAndSlides();
+    TestStaticModelColliderContactAllowsEscapeAndTangentMovement();
+    TestStaticModelColliderRoundedCornerSweep();
+    TestStaticModelColliderRotatedContactAndPenetrationRecovery();
+    TestStaticModelColliderRepeatedContactCanBackAway();
+    TestStaticModelColliderUsesVerticalOverlapAndStepHeight();
+    TestStaticModelVerticalContextSelectsNearestSurfaces();
+    TestStaticModelColliderLandingUndersideAndWalkOff();
 
     if (failures != 0) {
         std::fprintf(stderr, "%d sector runtime object test(s) failed\n", failures);

@@ -20,11 +20,12 @@ namespace game {
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(15);
+    world.ReserveComponentTypes(16);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
     world.ReserveComponent<SectorStaticModel>(objectCapacity);
+    world.ReserveComponent<SectorStaticModelCollider>(objectCapacity);
     world.ReserveComponent<SectorBillboardSprite>(objectCapacity);
     world.ReserveComponent<SectorBillboardAnimator>(objectCapacity);
     world.ReserveComponent<SectorBillboardDirectionalClips>(objectCapacity);
@@ -69,6 +70,22 @@ Vector3 StaticModelSectorAmbient(
             static_cast<float>(sector->ambientColor.r) * scale,
             static_cast<float>(sector->ambientColor.g) * scale,
             static_cast<float>(sector->ambientColor.b) * scale};
+}
+
+float StaticModelEnvironmentExposure(
+        const SectorTopologyMap& map,
+        int sectorId,
+        Vector3 ambient)
+{
+    const SectorTopologySector* sector =
+            FindSectorTopologySector(map, sectorId);
+    if (sector != nullptr && sector->ceilingSky) {
+        return 1.0f;
+    }
+    const float luminance = ambient.x * 0.2126f
+            + ambient.y * 0.7152f
+            + ambient.z * 0.0722f;
+    return std::clamp(luminance, 0.08f, 0.35f);
 }
 
 void RefreshPlacedRuntimeObjectDiagnostics(
@@ -394,6 +411,8 @@ void SpawnPlacedRuntimeObjects(
     }
     world.FlushDestroyedEntities();
     state.placedObjectEntities.clear();
+    state.staticModelColliders.clear();
+    state.staticModelColliders.reserve(map.runtimeObjects.size());
     state.placedObjectCount = map.runtimeObjects.size();
     state.spawnedObjectCount = 0;
     state.skippedObjectCount = 0;
@@ -533,11 +552,21 @@ void SpawnPlacedRuntimeObjects(
             const engine::Entity entity = world.CreateEntity();
             world.Add(entity, SectorObjectTransform{worldPosition, placedObject.yawRadians});
             world.Add(entity, object);
+            const Vector3 sectorAmbient =
+                    StaticModelSectorAmbient(map, object.currentSectorId);
             world.Add(entity, SectorStaticModel{
                     model,
                     placedObject.id,
-                    StaticModelSectorAmbient(map, object.currentSectorId),
-                    placedObject.staticModel.scale});
+                    sectorAmbient,
+                    placedObject.staticModel.scale,
+                    StaticModelEnvironmentExposure(
+                            map,
+                            object.currentSectorId,
+                            sectorAmbient)});
+            if (placedObject.staticModel.collision) {
+                world.Add(entity, SectorStaticModelCollider{
+                        placedObject.id});
+            }
             state.placedObjectEntities.push_back(
                     SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
             ++spawnedCount;
@@ -633,6 +662,8 @@ void SpawnPlacedRuntimeObjects(
     state.spawnedObjectCount = spawnedCount;
     state.skippedObjectCount = skippedCount;
     UpdateSectorDoorDerivedStateSystem(world);
+    UpdateSectorStaticModelColliderSystem(world, assets);
+    CollectSectorStaticModelColliders(world, state.staticModelColliders);
     RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
 }
 
@@ -650,6 +681,8 @@ void UpdateSectorRuntimeObjects(
     }
     AdvanceSectorDoorMotionSystem(world, dt);
     UpdateSectorDoorDerivedStateSystem(world);
+    UpdateSectorStaticModelColliderSystem(world, assets);
+    CollectSectorStaticModelColliders(world, state.staticModelColliders);
     world.ForEach<SectorBillboardSprite, SectorBillboardDirectionalClips>(
             [&assets](engine::Entity, SectorBillboardSprite& sprite, SectorBillboardDirectionalClips& directionalClips) {
                 if (!directionalClips.resolved) {

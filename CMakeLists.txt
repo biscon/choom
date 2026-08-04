@@ -94,6 +94,7 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(raylib)
+target_compile_definitions(raylib PRIVATE SUPPORT_FILEFORMAT_JPG=1)
 
 FetchContent_Declare(
         xatlas
@@ -179,6 +180,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorPortalVisibility.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/SectorStaticModelCollision.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -338,7 +340,9 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorBillboardRuntime.cpp
             sources/sector_demo/SectorDoorRuntime.cpp
+            sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/SectorStaticModelCollision.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp

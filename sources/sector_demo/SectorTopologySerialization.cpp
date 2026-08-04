@@ -612,6 +612,11 @@ SectorPlacedStaticModel ReadPlacedStaticModel(const Json& value, const std::stri
             "scale",
             context,
             staticModel.scale);
+    staticModel.collision = ReadOptionalBool(
+            value,
+            "collision",
+            context,
+            staticModel.collision);
     return staticModel;
 }
 
@@ -1352,6 +1357,9 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             }
             if (object.staticModel.scale != 1.0f) {
                 staticModel["scale"] = object.staticModel.scale;
+            }
+            if (object.staticModel.collision) {
+                staticModel["collision"] = true;
             }
             json["kind"] = object.kind;
             json["staticModel"] = std::move(staticModel);

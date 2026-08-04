@@ -59,6 +59,7 @@ struct SectorPlacedStaticModel {
     std::string modelPath;
     float heightOffsetWorld = 0.0f;
     float scale = 1.0f;
+    bool collision = false;
     // Transient bake input. Refreshed only during explicit model preparation.
     std::string geometryFingerprint;
 };

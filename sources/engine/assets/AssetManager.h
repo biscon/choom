@@ -51,10 +51,18 @@ public:
             TextureLoadFlags flags = TextureLoad_PointFilter
     );
 
+    TextureHandle CreateCubemapFromImage(
+            AssetScopeHandle scope,
+            const char* key,
+            const Image& image,
+            int layout
+    );
+
     bool IsReady(TextureHandle handle) const;
     bool IsFinished(TextureHandle handle) const;
     bool HasFailed(TextureHandle handle) const;
     const Texture2D* GetTexture(TextureHandle handle) const;
+    const TextureCubemap* GetCubemap(TextureHandle handle) const;
 
     FontHandle RequestFont(
             AssetScopeHandle scope,
@@ -78,6 +86,7 @@ public:
     bool IsFinished(ModelHandle handle) const;
     bool HasFailed(ModelHandle handle) const;
     const Model* GetModel(ModelHandle handle) const;
+    const ModelAsset* GetModelAsset(ModelHandle handle) const;
     // Returns a borrowed ready asset from any live scope. The handle does not
     // acquire ownership; callers must consume it immediately on the main thread.
     ModelHandle FindReadyModelByPath(const char* path) const;

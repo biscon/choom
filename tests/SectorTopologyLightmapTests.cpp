@@ -2,6 +2,7 @@
 #include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
 
 #include <raymath.h>
@@ -553,6 +554,18 @@ void WriteSolidAlphaTestTexture(const std::filesystem::path& path, unsigned char
     std::filesystem::create_directories(path.parent_path());
     Image image = GenImageColor(2, 2, Color{255, 255, 255, alpha});
     Check(ExportImage(image, path.string().c_str()), "solid alpha test texture exports");
+    UnloadImage(image);
+}
+
+void WriteSolidRgbTexture(
+        const std::filesystem::path& path,
+        Color color,
+        int width = 2,
+        int height = 2)
+{
+    std::filesystem::create_directories(path.parent_path());
+    Image image = GenImageColor(width, height, color);
+    Check(ExportImage(image, path.string().c_str()), "solid RGB test texture exports");
     UnloadImage(image);
 }
 
@@ -1190,6 +1203,11 @@ void TestSourceHashChanges()
             game::ComputeSectorLightmapSourceHash(changedStaticModel);
     Check(staticModelHash != hash,
           "hash includes added assigned static props");
+    game::SectorTopologyMap changedStaticModelCollision = changedStaticModel;
+    changedStaticModelCollision.runtimeObjects[0].staticModel.collision = true;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticModelCollision)
+                  == staticModelHash,
+          "hash excludes static prop gameplay collision");
     game::SectorTopologyMap changedStaticModelScale = changedStaticModel;
     changedStaticModelScale.runtimeObjects[0].staticModel.scale = 2.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedStaticModelScale)
@@ -1385,8 +1403,8 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 11,
-          "lightmap bake version is bumped for baked static model lightmaps");
+    Check(game::kSectorLightmapBakeVersion == 12,
+          "lightmap bake version is bumped for generated-surface normal maps");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);
@@ -1865,6 +1883,93 @@ void TestDirectionalLightBakeBehavior()
                   && pointMetrics.directShadowRays > 0,
           "point lights are still evaluated with directional settings present");
     Check(pointMetrics.minAlpha < 255, "ambient occlusion alpha behavior remains present");
+}
+
+void TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting()
+{
+    const std::filesystem::path root =
+            Phase01bSandboxDir() / "generated_surface_normal_maps";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root);
+
+    Check(game::SectorTextureNormalMapPath("assets/images/stone.png")
+                  == "assets/images/stone_normal.png",
+          "normal-map convention inserts suffix before extension");
+    Check(game::SectorTextureNormalMapPath("/tmp/stone.wall.png")
+                  == "/tmp/stone.wall_normal.png",
+          "normal-map convention preserves dotted stems and directories");
+    Check(game::SectorTextureNormalMapPath("stone") == "stone_normal",
+          "normal-map convention supports extensionless texture paths");
+
+    const std::filesystem::path flatBasePath = root / "flat_floor.png";
+    const std::filesystem::path mappedBasePath = root / "mapped_floor.png";
+    const std::filesystem::path mappedNormalPath = root / "mapped_floor_normal.png";
+    WriteSolidRgbTexture(flatBasePath, WHITE);
+    WriteSolidRgbTexture(mappedBasePath, WHITE);
+    WriteSolidRgbTexture(mappedNormalPath, Color{255, 128, 128, 255});
+
+    auto makeDirectionalMap = [](const std::filesystem::path& floorTexturePath) {
+        game::SectorTopologyMap map = MakeSquare();
+        map.texturesById["floor"].path = floorTexturePath.string();
+        map.staticLights.clear();
+        map.staticSpotLights.clear();
+        map.sectors[0].ceilingSky = true;
+        map.directionalLight.enabled = true;
+        map.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
+        map.directionalLight.color = WHITE;
+        map.directionalLight.intensity = 1.0f;
+        map.lightmapSettings.ambientOcclusionStrength = 0.0f;
+        map.lightmapSettings.indirectBounceStrength = 0.0f;
+        return map;
+    };
+
+    const LightmapImageMetrics flat = BakeAndMeasure(
+            makeDirectionalMap(flatBasePath),
+            "generated_surface_flat_normal.lightmap.png");
+    const LightmapImageMetrics mapped = BakeAndMeasure(
+            makeDirectionalMap(mappedBasePath),
+            "generated_surface_mapped_normal.lightmap.png");
+    Check(flat.floorCenterRgb > 600,
+          "missing companion normal map preserves geometric direct lighting");
+    Check(mapped.floorCenterRgb + 300 < flat.floorCenterRgb,
+          "companion normal map changes baked direct-light response");
+
+    const std::filesystem::path hashBasePath = root / "hash_surface.png";
+    const std::filesystem::path hashNormalPath = root / "hash_surface_normal.png";
+    WriteSolidRgbTexture(hashBasePath, WHITE);
+    std::filesystem::remove(hashNormalPath);
+    game::SectorTopologyMap hashMap = MakeSquare();
+    hashMap.texturesById["floor"].path = hashBasePath.string();
+    const std::string missingNormalHash =
+            game::ComputeSectorLightmapSourceHash(hashMap);
+    WriteSolidRgbTexture(hashNormalPath, Color{128, 128, 255, 255});
+    const std::string presentNormalHash =
+            game::ComputeSectorLightmapSourceHash(hashMap);
+    Check(presentNormalHash != missingNormalHash,
+          "adding a referenced companion normal map changes the source hash");
+    WriteSolidRgbTexture(hashNormalPath, Color{255, 128, 128, 255}, 3, 2);
+    const std::string changedNormalHash =
+            game::ComputeSectorLightmapSourceHash(hashMap);
+    Check(changedNormalHash != presentNormalHash,
+          "changing referenced normal-map content changes the source hash");
+    std::filesystem::remove(hashNormalPath);
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "removing a companion normal map restores the missing-map source hash");
+
+    const std::filesystem::path unusedBasePath = root / "unused.png";
+    const std::filesystem::path unusedNormalPath = root / "unused_normal.png";
+    WriteSolidRgbTexture(unusedBasePath, WHITE);
+    game::SectorTextureDefinition unusedTexture;
+    unusedTexture.id = "unused";
+    unusedTexture.path = unusedBasePath.string();
+    hashMap.texturesById[unusedTexture.id] = unusedTexture;
+    const std::string withoutUnusedNormal =
+            game::ComputeSectorLightmapSourceHash(hashMap);
+    WriteSolidRgbTexture(unusedNormalPath, Color{255, 128, 128, 255});
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == withoutUnusedNormal,
+          "unreferenced companion normal maps do not affect the source hash");
+
+    std::filesystem::remove_all(root);
 }
 
 game::SectorTopologyStaticSpotLight MakeStaticSpotlight(
@@ -3374,6 +3479,7 @@ int main()
     TestAlphaAwareStaticRayOcclusion();
     TestAlphaAwareStaticLightBakePaths();
     TestDirectionalLightBakeBehavior();
+    TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting();
     TestStaticSpotlightBakeBehavior();
     TestStaticModelUvPreparationAndImportedTransforms();
     TestStaticModelPreparationReusesReadyEditorModels();

@@ -104,6 +104,11 @@ bool IsRuntimePortalDynamicallyBlocked(
 
 float ClampRuntimeVisibilitySeedRadiusWorld(float playerRadiusWorld);
 
+float ComputeRuntimePortalVisibilityHorizontalFovRadians(
+        float verticalFovRadians,
+        float aspectRatio,
+        float pitchRadians);
+
 std::string FormatRuntimePortalVisibilityDebugText(
         const RuntimePortalVisibilityResult& result);
 

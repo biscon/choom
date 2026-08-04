@@ -982,6 +982,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
     staticModel.staticModel.modelPath = "assets/models/props/nested/crate.glb";
     staticModel.staticModel.heightOffsetWorld = 0.75f;
     staticModel.staticModel.scale = 1.5f;
+    staticModel.staticModel.collision = true;
     staticModelMap.runtimeObjects.push_back(staticModel);
     const Json staticModelSaved = Json::parse(SaveText(staticModelMap));
     Check(staticModelSaved["runtimeObjects"][0]["kind"] == "static_model"
@@ -995,6 +996,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
                           staticModelSaved["runtimeObjects"][0]["staticModel"]["scale"]
                                   .get<float>(),
                           1.5f)
+                  && staticModelSaved["runtimeObjects"][0]["staticModel"]["collision"]
+                             .get<bool>()
                   && Near(
                           staticModelSaved["runtimeObjects"][0]["position"][1].get<float>(),
                           -2.5f),
@@ -1010,6 +1013,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                           == "assets/models/props/nested/crate.glb"
                   && Near(loadedStaticModel->staticModel.heightOffsetWorld, 0.75f)
                   && Near(loadedStaticModel->staticModel.scale, 1.5f)
+                  && loadedStaticModel->staticModel.collision
                   && Near(loadedStaticModel->position, Vector3{12.0f, -2.5f, 20.0f})
                   && Near(loadedStaticModel->yawRadians, 0.5f),
           "static prop JSON round-trip preserves payload and common transform");
@@ -1027,7 +1031,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
     Check(unassignedStaticModel != nullptr
                   && unassignedStaticModel->staticModel.modelPath.empty()
                   && Near(unassignedStaticModel->staticModel.heightOffsetWorld, 0.0f)
-                  && Near(unassignedStaticModel->staticModel.scale, 1.0f),
+                  && Near(unassignedStaticModel->staticModel.scale, 1.0f)
+                  && !unassignedStaticModel->staticModel.collision,
           "missing static prop payload fields use backward-compatible defaults");
 
     Json missingModelPath = staticModelSaved;
@@ -1050,6 +1055,18 @@ void TestRuntimeObjectsRoundTripAndValidation()
     Check(loadedStaticModel != nullptr
                   && Near(loadedStaticModel->staticModel.scale, 1.0f),
           "missing static prop scale defaults to one");
+
+    Json missingCollision = staticModelSaved;
+    missingCollision["runtimeObjects"][0]["staticModel"].erase("collision");
+    SectorTopologyMap missingCollisionLoaded;
+    Check(LoadText(missingCollision.dump(), missingCollisionLoaded, error),
+          "static prop payload without collision loads");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(
+            missingCollisionLoaded,
+            18);
+    Check(loadedStaticModel != nullptr
+                  && !loadedStaticModel->staticModel.collision,
+          "missing static prop collision defaults off");
 
     SectorTopologyMap invalidStaticModel = staticModelMap;
     invalidStaticModel.runtimeObjects[0].staticModel.heightOffsetWorld =

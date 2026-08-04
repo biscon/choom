@@ -916,6 +916,50 @@ float ClampRuntimeVisibilitySeedRadiusWorld(float playerRadiusWorld)
     return std::min(playerRadiusWorld, kMaxVisibilitySeedRadiusWorld);
 }
 
+float ComputeRuntimePortalVisibilityHorizontalFovRadians(
+        float verticalFovRadians,
+        float aspectRatio,
+        float pitchRadians)
+{
+    if (!std::isfinite(verticalFovRadians)
+            || !std::isfinite(aspectRatio)
+            || !std::isfinite(pitchRadians)
+            || verticalFovRadians <= 0.0f
+            || verticalFovRadians >= Pi
+            || aspectRatio <= 0.0f) {
+        return TwoPi;
+    }
+
+    const float absolutePitch = std::fabs(pitchRadians);
+    if (absolutePitch >= Pi * 0.5f - WindowEpsilon) {
+        return TwoPi;
+    }
+
+    const float verticalTangent = std::tan(verticalFovRadians * 0.5f);
+    const float horizontalTangent = verticalTangent * aspectRatio;
+    if (!std::isfinite(verticalTangent)
+            || !std::isfinite(horizontalTangent)
+            || horizontalTangent <= 0.0f) {
+        return TwoPi;
+    }
+
+    // Pitch tilts one horizontal edge of the perspective frustum back toward
+    // the camera in XZ. Use that edge to conservatively cover every screen ray.
+    const float minimumForward = std::cos(absolutePitch)
+            - verticalTangent * std::sin(absolutePitch);
+    if (!std::isfinite(minimumForward) || minimumForward <= WindowEpsilon) {
+        // The frustum contains a vertical ray, so its XZ projection covers all
+        // azimuths even though its ordinary level-camera FOV does not.
+        return TwoPi;
+    }
+
+    const float horizontalFov = 2.0f * std::atan2(horizontalTangent, minimumForward);
+    if (!std::isfinite(horizontalFov) || horizontalFov <= 0.0f) {
+        return TwoPi;
+    }
+    return std::clamp(horizontalFov, WindowEpsilon, TwoPi);
+}
+
 RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
         const RuntimeSectorVisibilityGraph& graph,
         Vector2 xz,

@@ -152,6 +152,21 @@ TextureHandle AssetManager::CreateTextureFromImage(
     return textures.CreateTextureFromImage(scope, key, image, flags);
 }
 
+TextureHandle AssetManager::CreateCubemapFromImage(
+        AssetScopeHandle scope,
+        const char* key,
+        const Image& image,
+        int layout)
+{
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (!IsValidScopeNoLock(scope)) {
+            return NullTextureHandle();
+        }
+    }
+    return textures.CreateCubemapFromImage(scope, key, image, layout);
+}
+
 bool AssetManager::IsReady(TextureHandle handle) const
 {
     return textures.IsReady(handle);
@@ -170,6 +185,11 @@ bool AssetManager::HasFailed(TextureHandle handle) const
 const Texture2D* AssetManager::GetTexture(TextureHandle handle) const
 {
     return textures.GetTexture(handle);
+}
+
+const TextureCubemap* AssetManager::GetCubemap(TextureHandle handle) const
+{
+    return textures.GetCubemap(handle);
 }
 
 FontHandle AssetManager::RequestFont(
@@ -241,6 +261,11 @@ bool AssetManager::HasFailed(ModelHandle handle) const
 const Model* AssetManager::GetModel(ModelHandle handle) const
 {
     return models.GetModel(handle);
+}
+
+const ModelAsset* AssetManager::GetModelAsset(ModelHandle handle) const
+{
+    return models.GetModelAsset(handle);
 }
 
 ModelHandle AssetManager::FindReadyModelByPath(const char* path) const

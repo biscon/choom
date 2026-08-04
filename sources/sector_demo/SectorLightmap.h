@@ -175,8 +175,8 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 11: assigned static models are baked into the shared atlas and BVH.
-constexpr int kSectorLightmapBakeVersion = 11;
+// Version 12: generated surfaces use optional companion normal maps for baked direct light.
+constexpr int kSectorLightmapBakeVersion = 12;
 constexpr int kSectorBakedObjectLightProbeSidecarVersion = 1;
 constexpr const char* kSectorBakedObjectLightProbeSidecarFormat = "ambientCubeF32LE";
 constexpr float kObjectProbeAdjacentPortalBlendDistanceWorld = 1.0f;
