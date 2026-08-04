@@ -38,6 +38,16 @@ constexpr float PreviewObjectProbeDebugDrawMaxDistanceMax = 512.0f;
 constexpr float SkyVerticalScaleMin = 0.01f;
 constexpr float SkyVerticalScaleMax = 100.0f;
 constexpr float DirectionalLightMinLengthSqr = 0.000001f;
+constexpr float FogStartDistanceMin = 0.0f;
+constexpr float FogStartDistanceMax = 512.0f;
+constexpr float FogDensityMin = 0.0f;
+constexpr float FogDensityMax = 1.0f;
+constexpr float FogMaxOpacityMin = 0.0f;
+constexpr float FogMaxOpacityMax = 1.0f;
+constexpr float FogReferenceHeightMin = -512.0f;
+constexpr float FogReferenceHeightMax = 512.0f;
+constexpr float FogHeightFalloffMin = 0.0f;
+constexpr float FogHeightFalloffMax = 16.0f;
 constexpr float DoorAnchorSideProbeDistance = 0.001f;
 constexpr float DoorAnchorSideEpsilon = 0.000001f;
 
@@ -185,6 +195,43 @@ SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings setti
             PreviewObjectProbeDebugDrawMaxDistanceMin,
             PreviewObjectProbeDebugDrawMaxDistanceMax,
             defaults.objectProbeDebugDrawMaxDistanceWorld);
+    return settings;
+}
+
+SectorTopologyFogSettings DefaultSectorTopologyFogSettings()
+{
+    return SectorTopologyFogSettings{};
+}
+
+SectorTopologyFogSettings NormalizeSectorTopologyFogSettings(SectorTopologyFogSettings settings)
+{
+    const SectorTopologyFogSettings defaults = DefaultSectorTopologyFogSettings();
+    settings.color.a = 255;
+    settings.startDistanceWorld = ClampFinite(
+            settings.startDistanceWorld,
+            FogStartDistanceMin,
+            FogStartDistanceMax,
+            defaults.startDistanceWorld);
+    settings.density = ClampFinite(
+            settings.density,
+            FogDensityMin,
+            FogDensityMax,
+            defaults.density);
+    settings.maxOpacity = ClampFinite(
+            settings.maxOpacity,
+            FogMaxOpacityMin,
+            FogMaxOpacityMax,
+            defaults.maxOpacity);
+    settings.referenceHeightWorld = ClampFinite(
+            settings.referenceHeightWorld,
+            FogReferenceHeightMin,
+            FogReferenceHeightMax,
+            defaults.referenceHeightWorld);
+    settings.heightFalloff = ClampFinite(
+            settings.heightFalloff,
+            FogHeightFalloffMin,
+            FogHeightFalloffMax,
+            defaults.heightFalloff);
     return settings;
 }
 

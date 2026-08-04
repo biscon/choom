@@ -41,6 +41,16 @@ struct SectorTopologyDirectionalLightSettings {
     float intensity = 1.0f;
 };
 
+struct SectorTopologyFogSettings {
+    bool enabled = false;
+    Color color = Color{80, 88, 84, 255};
+    float startDistanceWorld = 2.0f;
+    float density = 0.025f;
+    float maxOpacity = 0.65f;
+    float referenceHeightWorld = 1.0f;
+    float heightFalloff = 0.35f;
+};
+
 struct SectorPlacedBillboard {
     std::string spriteAnimationPath;
     Vector2 sizeWorld = {1.0f, 1.0f};
@@ -152,6 +162,7 @@ struct SectorTopologyMap {
     SectorPreviewSettings previewSettings;
     SectorTopologySkySettings skySettings;
     SectorTopologyDirectionalLightSettings directionalLight;
+    SectorTopologyFogSettings fogSettings;
     SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;
 };
@@ -178,6 +189,8 @@ SectorTopologySkySettings NormalizeSectorTopologySkySettings(SectorTopologySkySe
 SectorTopologyDirectionalLightSettings DefaultSectorTopologyDirectionalLightSettings();
 SectorTopologyDirectionalLightSettings NormalizeSectorTopologyDirectionalLightSettings(
         SectorTopologyDirectionalLightSettings settings);
+SectorTopologyFogSettings DefaultSectorTopologyFogSettings();
+SectorTopologyFogSettings NormalizeSectorTopologyFogSettings(SectorTopologyFogSettings settings);
 
 bool IsValidSectorTopologyId(int id);
 const char* SectorTopologySideKindName(SectorTopologySideKind side);

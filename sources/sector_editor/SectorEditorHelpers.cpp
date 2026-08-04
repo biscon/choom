@@ -1114,6 +1114,24 @@ bool SameDirectionalLightSettings(
             && a.intensity == b.intensity;
 }
 
+bool SameFogSettings(
+        const SectorTopologyFogSettings& left,
+        const SectorTopologyFogSettings& right)
+{
+    const SectorTopologyFogSettings a = NormalizeSectorTopologyFogSettings(left);
+    const SectorTopologyFogSettings b = NormalizeSectorTopologyFogSettings(right);
+    return a.enabled == b.enabled
+            && a.color.r == b.color.r
+            && a.color.g == b.color.g
+            && a.color.b == b.color.b
+            && a.color.a == b.color.a
+            && a.startDistanceWorld == b.startDistanceWorld
+            && a.density == b.density
+            && a.maxOpacity == b.maxOpacity
+            && a.referenceHeightWorld == b.referenceHeightWorld
+            && a.heightFalloff == b.heightFalloff;
+}
+
 bool SamePreviewSettings(const SectorPreviewSettings& left, const SectorPreviewSettings& right)
 {
     const SectorPreviewSettings a = NormalizeSectorPreviewSettings(left);

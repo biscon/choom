@@ -259,6 +259,13 @@ void CollectSectorDoorDynamicColliders(
         engine::World& world,
         std::vector<SectorDynamicDoorCollider>& colliders);
 
+bool SectorDoorDynamicCollidersAllowPlayerHeight(
+        Vector2 positionXZ,
+        float feetY,
+        float radius,
+        float playerHeight,
+        const std::vector<SectorDynamicDoorCollider>& colliders);
+
 void CollectSectorDoorDynamicPortalBlockers(
         engine::World& world,
         std::vector<RuntimePortalDynamicBlocker>& blockers);

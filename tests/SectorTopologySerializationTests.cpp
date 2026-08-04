@@ -307,6 +307,7 @@ game::SectorAuthoringDocument MakeAuthoringDocumentFromMap(const SectorTopologyM
     document.mapData.previewSettings = map.previewSettings;
     document.mapData.skySettings = map.skySettings;
     document.mapData.directionalLight = map.directionalLight;
+    document.mapData.fogSettings = map.fogSettings;
     document.mapData.lightmapSettings = map.lightmapSettings;
     document.mapData.bakedLightmap = map.bakedLightmap;
     document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
@@ -2062,6 +2063,111 @@ void TestDirectionalLightRoundTripAndValidation()
     ExpectRejected(invalid, "wrong-type directional intensity is rejected");
 }
 
+void TestFogSettingsRoundTripAndValidation()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.fogSettings.enabled = true;
+    original.fogSettings.color = Color{12, 34, 56, 128};
+    original.fogSettings.startDistanceWorld = 3.5f;
+    original.fogSettings.density = 0.075f;
+    original.fogSettings.maxOpacity = 0.8f;
+    original.fogSettings.referenceHeightWorld = -2.25f;
+    original.fogSettings.heightFalloff = 1.5f;
+
+    const Json saved = Json::parse(SaveText(original));
+    Check(saved["fogSettings"].is_object(), "non-default fog settings are written");
+    Check(saved["fogSettings"]["enabled"].get<bool>()
+                  && saved["fogSettings"]["color"]["r"].get<int>() == 12
+                  && saved["fogSettings"]["color"]["g"].get<int>() == 34
+                  && saved["fogSettings"]["color"]["b"].get<int>() == 56
+                  && saved["fogSettings"]["color"]["a"].get<int>() == 255
+                  && Near(saved["fogSettings"]["startDistanceWorld"].get<float>(), 3.5f)
+                  && Near(saved["fogSettings"]["density"].get<float>(), 0.075f)
+                  && Near(saved["fogSettings"]["maxOpacity"].get<float>(), 0.8f)
+                  && Near(saved["fogSettings"]["referenceHeightWorld"].get<float>(), -2.25f)
+                  && Near(saved["fogSettings"]["heightFalloff"].get<float>(), 1.5f),
+          "fog settings serialize normalized values");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error), "fog settings JSON loads");
+    Check(loaded.fogSettings.enabled
+                  && loaded.fogSettings.color.r == 12
+                  && loaded.fogSettings.color.g == 34
+                  && loaded.fogSettings.color.b == 56
+                  && loaded.fogSettings.color.a == 255
+                  && Near(loaded.fogSettings.startDistanceWorld, 3.5f)
+                  && Near(loaded.fogSettings.density, 0.075f)
+                  && Near(loaded.fogSettings.maxOpacity, 0.8f)
+                  && Near(loaded.fogSettings.referenceHeightWorld, -2.25f)
+                  && Near(loaded.fogSettings.heightFalloff, 1.5f),
+          "fog settings round-trip");
+
+    Json missingFields = saved;
+    for (const char* field : {"enabled", "startDistanceWorld", "density", "maxOpacity",
+                              "referenceHeightWorld", "heightFalloff"}) {
+        missingFields["fogSettings"].erase(field);
+    }
+    Check(LoadText(missingFields.dump(), loaded, error), "omitted fog fields are accepted");
+    const game::SectorTopologyFogSettings defaults = game::DefaultSectorTopologyFogSettings();
+    Check(loaded.fogSettings.enabled == defaults.enabled
+                  && loaded.fogSettings.color.r == 12
+                  && Near(loaded.fogSettings.startDistanceWorld, defaults.startDistanceWorld)
+                  && Near(loaded.fogSettings.density, defaults.density)
+                  && Near(loaded.fogSettings.maxOpacity, defaults.maxOpacity)
+                  && Near(loaded.fogSettings.referenceHeightWorld, defaults.referenceHeightWorld)
+                  && Near(loaded.fogSettings.heightFalloff, defaults.heightFalloff),
+          "omitted fog fields load defaults while present color remains");
+
+    Json withoutFog = saved;
+    withoutFog.erase("fogSettings");
+    Check(LoadText(withoutFog.dump(), loaded, error), "omitted fog settings are accepted");
+    Check(!loaded.fogSettings.enabled
+                  && loaded.fogSettings.color.r == defaults.color.r
+                  && Near(loaded.fogSettings.density, defaults.density),
+          "omitted fog settings load defaults");
+
+    Check(!Json::parse(SaveText(MakeSquare())).contains("fogSettings"),
+          "default fog settings are omitted");
+
+    Json clamped = saved;
+    clamped["fogSettings"]["startDistanceWorld"] = -1.0f;
+    clamped["fogSettings"]["density"] = 2.0f;
+    clamped["fogSettings"]["maxOpacity"] = -1.0f;
+    clamped["fogSettings"]["referenceHeightWorld"] = 999.0f;
+    clamped["fogSettings"]["heightFalloff"] = 99.0f;
+    Check(LoadText(clamped.dump(), loaded, error), "out-of-range fog settings load");
+    Check(Near(loaded.fogSettings.startDistanceWorld, 0.0f)
+                  && Near(loaded.fogSettings.density, 1.0f)
+                  && Near(loaded.fogSettings.maxOpacity, 0.0f)
+                  && Near(loaded.fogSettings.referenceHeightWorld, 512.0f)
+                  && Near(loaded.fogSettings.heightFalloff, 16.0f),
+          "out-of-range fog settings clamp");
+
+    Json invalid = saved;
+    invalid["fogSettings"] = 4;
+    ExpectRejected(invalid, "non-object fog settings are rejected");
+    invalid = saved;
+    invalid["fogSettings"]["enabled"] = "yes";
+    ExpectRejected(invalid, "wrong-type fog enabled is rejected");
+    invalid = saved;
+    invalid["fogSettings"]["color"] = Json::array({1, 2, 3});
+    ExpectRejected(invalid, "wrong-type fog color is rejected");
+    invalid = saved;
+    invalid["fogSettings"]["color"]["r"] = "red";
+    ExpectRejected(invalid, "wrong-type fog color channel is rejected");
+    for (const char* field : {"startDistanceWorld", "density", "maxOpacity",
+                              "referenceHeightWorld", "heightFalloff"}) {
+        invalid = saved;
+        invalid["fogSettings"][field] = "invalid";
+        ExpectRejected(invalid, "wrong-type fog numeric field is rejected");
+    }
+
+    SectorTopologyMap nonFinite = original;
+    nonFinite.fogSettings.density = std::numeric_limits<float>::infinity();
+    ExpectSaveRejected(nonFinite, "non-finite fog settings are rejected on save");
+}
+
 void TestDecalDefaultsAndOmission()
 {
     SectorTopologyMap map = MakeSquare();
@@ -3284,6 +3390,8 @@ void TestGraphNativeMapLevelRoundTrip()
     source.directionalLight.enabled = true;
     source.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
     source.directionalLight.intensity = 1.5f;
+    source.fogSettings.enabled = true;
+    source.fogSettings.density = 0.125f;
     source.lightmapSettings.ambientOcclusionStrength = 0.25f;
     source.bakedLightmap.path = "assets/levels/test/test.lightmap.png";
     source.bakedLightmap.width = 128;
@@ -3334,6 +3442,9 @@ void TestGraphNativeMapLevelRoundTrip()
     Check(saved["skySettings"]["textureId"] == "sky", "graph-native sky settings are persisted");
     Check(saved["directionalLight"]["enabled"] == true,
           "graph-native directional light settings are persisted");
+    Check(saved["fogSettings"]["enabled"] == true
+                  && Near(saved["fogSettings"]["density"].get<float>(), 0.125f),
+          "graph-native fog settings are persisted");
     Check(saved["lightmapSettings"]["ambientOcclusionStrength"] == 0.25f,
           "graph-native bake settings are persisted");
     Check(saved["bakedLightmap"].is_object(), "graph-native baked lightmap metadata is persisted");
@@ -3394,6 +3505,8 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
                   && loaded.mapData.skySettings.textureId == "sky"
                   && loaded.mapData.directionalLight.enabled
+                  && loaded.mapData.fogSettings.enabled
+                  && Near(loaded.mapData.fogSettings.density, 0.125f)
                   && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f)
                   && loaded.mapData.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
                   && loaded.mapData.bakedLightmap.width == 128
@@ -3430,6 +3543,8 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.derivation.topology.dynamicSpotLights[0].shadowStrength, 0.8f)
                   && Near(loaded.derivation.topology.dynamicSpotLights[0].shadowSoftness, 3.0f)
                   && loaded.derivation.topology.skySettings.textureId == "sky"
+                  && loaded.derivation.topology.fogSettings.enabled
+                  && Near(loaded.derivation.topology.fogSettings.density, 0.125f)
                   && loaded.derivation.topology.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
                   && loaded.derivation.topology.bakedLightmap.sourceHash == "abc123"
                   && loaded.derivation.topology.bakedLightmap.objectProbes.path
@@ -3495,6 +3610,7 @@ int main()
     TestPreviewSettingsRoundTripAndValidation();
     TestSkySettingsRoundTripAndValidation();
     TestDirectionalLightRoundTripAndValidation();
+    TestFogSettingsRoundTripAndValidation();
     TestDecalDefaultsAndOmission();
     TestMiddleDefaultsAndOmission();
     TestMiddleRoundTrip();

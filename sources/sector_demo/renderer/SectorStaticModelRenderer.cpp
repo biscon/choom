@@ -94,6 +94,15 @@ uniform vec3 containingSectorAmbient;
 uniform int hasStaticLightmap;
 uniform int useBakedAmbientOcclusion;
 
+uniform int fogEnabled;
+uniform vec3 fogColor;
+uniform vec3 fogCameraPosition;
+uniform float fogStartDistanceWorld;
+uniform float fogDensity;
+uniform float fogMaxOpacity;
+uniform float fogReferenceHeightWorld;
+uniform float fogHeightFalloff;
+
 #define MAX_DYNAMIC_LIGHTS 8
 #define MAX_DYNAMIC_SHADOW_CASTERS 2
 uniform int dynamicLightCount;
@@ -233,6 +242,22 @@ float DynamicSpotLightShadowVisibility(
     return visible / 12.0;
 }
 
+vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
+{
+    if (fogEnabled == 0 || fogDensity <= 0.0 || fogMaxOpacity <= 0.0) {
+        return surfaceRgb;
+    }
+
+    float fogDistance = max(length(worldPosition - fogCameraPosition) - fogStartDistanceWorld, 0.0);
+    float midpointHeight = (fogCameraPosition.y + worldPosition.y) * 0.5;
+    float heightAboveReference = max(midpointHeight - fogReferenceHeightWorld, 0.0);
+    float heightMultiplier = exp(-heightAboveReference * fogHeightFalloff);
+    float fogAmount = min(
+            1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
+            fogMaxOpacity);
+    return mix(surfaceRgb, fogColor, fogAmount);
+}
+
 void main()
 {
     vec3 geometricNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
@@ -360,7 +385,8 @@ void main()
     vec3 linearColor = min(
             staticDiffuse + dynamicDirect + environmentSpecular + roughSpecularFloor + emissive,
             vec3(dynamicLightingClamp));
-    finalColor = vec4(LinearToSrgb(AcesToneMap(linearColor)), 1.0);
+    vec3 outputRgb = LinearToSrgb(AcesToneMap(linearColor));
+    finalColor = vec4(ApplySectorFog(outputRgb, fragWorldPosition), 1.0);
 }
 )";
 
@@ -678,6 +704,7 @@ bool SectorStaticModelRenderer::Load()
                     + SectorStaticModelShadowMap1MaterialMap] =
             shadowMap1Loc;
     dynamicLightingClampLoc = GetShaderLocation(shader, "dynamicLightingClamp");
+    fogShaderLocations = GetSectorFogShaderLocations(shader);
     shaderLoaded = true;
     return true;
 }
@@ -728,6 +755,7 @@ void SectorStaticModelRenderer::Shutdown()
     shadowMap0Loc = -1;
     shadowMap1Loc = -1;
     dynamicLightingClampLoc = -1;
+    fogShaderLocations = SectorFogShaderLocations{};
     shaderLoaded = false;
     warningPrinted = false;
 }
@@ -856,6 +884,7 @@ void SectorStaticModelRenderer::Draw(
         engine::World& runtimeObjectWorld,
         const Camera3D& camera,
         const SectorBillboardDynamicLightContext& dynamicLightContext,
+        const SectorFogRenderContext& fogContext,
         const RuntimePortalVisibilityResult& visibility,
         const Texture2D* lightmap,
         const TextureCubemap* environment,
@@ -893,6 +922,7 @@ void SectorStaticModelRenderer::Draw(
             shader,
             shadowLocations,
             dynamicLightContext.shadowUniforms);
+    UploadSectorFogShaderValues(shader, fogShaderLocations, fogContext);
     if (cameraPositionLoc >= 0) {
         SetShaderValue(
                 shader,

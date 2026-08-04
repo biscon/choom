@@ -1317,6 +1317,17 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
           "hash ignores sky top color");
 
+    game::SectorTopologyMap changedFog = base;
+    changedFog.fogSettings.enabled = true;
+    changedFog.fogSettings.color = Color{12, 34, 56, 255};
+    changedFog.fogSettings.startDistanceWorld = 7.0f;
+    changedFog.fogSettings.density = 0.15f;
+    changedFog.fogSettings.maxOpacity = 0.9f;
+    changedFog.fogSettings.referenceHeightWorld = -4.0f;
+    changedFog.fogSettings.heightFalloff = 2.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedFog) == hash,
+          "hash ignores visual-only fog settings");
+
     game::SectorTopologyMap changedProbeSettings = base;
     changedProbeSettings.lightmapSettings.objectProbeSpacingWorld = 3.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedProbeSettings) != hash,

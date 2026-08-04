@@ -726,6 +726,25 @@ bool PlayerVerticalIntervalOverlapsDoor(
             && playerBottom < collider.top - DoorDynamicCollisionEpsilon;
 }
 
+bool CircleOverlapsDoorObb(
+        Vector2 position,
+        float radius,
+        const SectorDynamicDoorCollider& collider)
+{
+    const Vector2 tangent = NormalizedOrFallback(collider.tangent, Vector2{1.0f, 0.0f});
+    const Vector2 normal = NormalizedOrFallback(collider.normal, Vector2{0.0f, -1.0f});
+    const Vector2 relative = Subtract(position, collider.center);
+    const Vector2 local{
+            Dot(relative, tangent),
+            Dot(relative, normal)};
+    const Vector2 closest{
+            Clamp(local.x, -collider.halfExtents.x, collider.halfExtents.x),
+            Clamp(local.y, -collider.halfExtents.y, collider.halfExtents.y)};
+    const Vector2 delta = Subtract(local, closest);
+    return Dot(delta, delta)
+            <= radius * radius + DoorDynamicCollisionEpsilon;
+}
+
 bool ResolveCircleAgainstDoorObb(
         Vector2& position,
         float radius,
@@ -1211,6 +1230,45 @@ void CollectSectorDoorDynamicColliders(
                         collider.bottom,
                         collider.top});
             });
+}
+
+bool SectorDoorDynamicCollidersAllowPlayerHeight(
+        Vector2 positionXZ,
+        float feetY,
+        float radius,
+        float playerHeight,
+        const std::vector<SectorDynamicDoorCollider>& colliders)
+{
+    if (!IsFiniteVector2(positionXZ)
+            || !std::isfinite(feetY)
+            || !std::isfinite(radius)
+            || !std::isfinite(playerHeight)
+            || radius <= 0.0f
+            || playerHeight <= 0.0f) {
+        return false;
+    }
+
+    const float playerTop = feetY + playerHeight;
+    for (const SectorDynamicDoorCollider& collider : colliders) {
+        if (!IsFiniteVector2(collider.center)
+                || !IsFiniteVector2(collider.tangent)
+                || !IsFiniteVector2(collider.normal)
+                || !IsFiniteVector2(collider.halfExtents)
+                || !std::isfinite(collider.bottom)
+                || !std::isfinite(collider.top)
+                || collider.halfExtents.x <= 0.0f
+                || collider.halfExtents.y <= 0.0f
+                || collider.top <= collider.bottom
+                || !CircleOverlapsDoorObb(positionXZ, radius, collider)) {
+            continue;
+        }
+        if (collider.bottom > feetY + DoorDynamicCollisionEpsilon
+                && playerTop > collider.bottom + DoorDynamicCollisionEpsilon
+                && feetY < collider.top - DoorDynamicCollisionEpsilon) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void CollectSectorDoorDynamicPortalBlockers(

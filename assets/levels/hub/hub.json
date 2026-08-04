@@ -305,6 +305,20 @@
     },
     "intensity": 1.0
   },
+  "fogSettings": {
+    "enabled": true,
+    "color": {
+      "r": 80,
+      "g": 88,
+      "b": 84,
+      "a": 255
+    },
+    "startDistanceWorld": 2.0,
+    "density": 0.012500000186264515,
+    "maxOpacity": 0.5,
+    "referenceHeightWorld": 1.0,
+    "heightFalloff": 0.6000000238418579
+  },
   "bakedLightmap": {
     "path": "assets/levels/hub/hub.lightmap.png",
     "width": 2048,

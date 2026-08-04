@@ -30,7 +30,8 @@ enum class TopologyTexturePickerTargetKind {
 enum class PreviewSettingsTab {
     General,
     Sky,
-    Lighting
+    Lighting,
+    Fog
 };
 
 struct TexturePickerState {
@@ -150,6 +151,7 @@ struct SectorPreviewSettingsModalState {
     SectorFpsControllerConfig draftConfig;
     SectorTopologySkySettings draftSkySettings;
     SectorTopologyDirectionalLightSettings draftDirectionalLight;
+    SectorTopologyFogSettings draftFogSettings;
     SectorLightmapBakeSettings draftLightmapSettings;
     engine::UIFloatInputState walkSpeedInput;
     engine::UIFloatInputState runSpeedInput;
@@ -177,9 +179,18 @@ struct SectorPreviewSettingsModalState {
     engine::UIIntInputState lightColorRedInput;
     engine::UIIntInputState lightColorGreenInput;
     engine::UIIntInputState lightColorBlueInput;
+    engine::UIFloatInputState fogStartDistanceInput;
+    engine::UIFloatInputState fogDensityInput;
+    engine::UIFloatInputState fogMaxOpacityInput;
+    engine::UIFloatInputState fogReferenceHeightInput;
+    engine::UIFloatInputState fogHeightFalloffInput;
+    engine::UIIntInputState fogColorRedInput;
+    engine::UIIntInputState fogColorGreenInput;
+    engine::UIIntInputState fogColorBlueInput;
     engine::UIScrollState generalScroll;
     engine::UIScrollState skyScroll;
     engine::UIScrollState lightingScroll;
+    engine::UIScrollState fogScroll;
     std::string errorMessage;
 };
 

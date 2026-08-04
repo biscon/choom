@@ -50,9 +50,9 @@ void DrawPreviewSettingsModal(
 
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
     const Rectangle modal{
-            (EditorWidth - 620.0f) * 0.5f,
+            (EditorWidth - 700.0f) * 0.5f,
             (EditorHeight - 700.0f) * 0.5f,
-            620.0f,
+            700.0f,
             700.0f
     };
     DrawRectangleRec(modal, Color{20, 24, 32, 248});
@@ -62,15 +62,16 @@ void DrawPreviewSettingsModal(
     engine::Text(config, assets, Rectangle{modal.x + 26.0f, y, modal.width - 52.0f, 42.0f}, font, "Preview Settings");
     y += 54.0f;
 
-    const float tabW = 132.0f;
     const float tabH = 38.0f;
+    const std::array<Rectangle, 4> tabRects =
+            BuildSectorPreviewSettingsTabLayout(modal, y, tabH);
     if (engine::ToolButton(
                 ui,
                 config,
                 input,
                 assets,
                 "sector_editor_preview_settings_tab_general",
-                Rectangle{modal.x + 30.0f, y, tabW, tabH},
+                tabRects[0],
                 font,
                 "General",
                 modalState.activeTab == PreviewSettingsTab::General)) {
@@ -82,7 +83,7 @@ void DrawPreviewSettingsModal(
                 input,
                 assets,
                 "sector_editor_preview_settings_tab_sky",
-                Rectangle{modal.x + 30.0f + tabW + 8.0f, y, tabW, tabH},
+                tabRects[1],
                 font,
                 "Sky",
                 modalState.activeTab == PreviewSettingsTab::Sky)) {
@@ -94,11 +95,23 @@ void DrawPreviewSettingsModal(
                 input,
                 assets,
                 "sector_editor_preview_settings_tab_lighting",
-                Rectangle{modal.x + 30.0f + (tabW + 8.0f) * 2.0f, y, tabW, tabH},
+                tabRects[2],
                 font,
                 "Lighting",
                 modalState.activeTab == PreviewSettingsTab::Lighting)) {
         modalState.activeTab = PreviewSettingsTab::Lighting;
+    }
+    if (engine::ToolButton(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_preview_settings_tab_fog",
+                tabRects[3],
+                font,
+                "Fog",
+                modalState.activeTab == PreviewSettingsTab::Fog)) {
+        modalState.activeTab = PreviewSettingsTab::Fog;
     }
     y += tabH + 16.0f;
 
@@ -324,7 +337,72 @@ void DrawPreviewSettingsModal(
         engine::EndScrollArea(ui, config, input, scroll, modalState.lightingScroll);
     };
 
-    if (modalState.activeTab == PreviewSettingsTab::Lighting) {
+    auto drawFogTab = [&]() {
+        float contentY = 0.0f;
+        const float contentH = 10.0f * (rowH + gap) + 88.0f;
+        engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+                ui,
+                config,
+                input,
+                "sector_editor_preview_settings_fog_scroll",
+                scrollBounds,
+                Vector2{scrollContentW, contentH},
+                modalState.fogScroll);
+        const float contentW = scroll.viewport.width;
+
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_preview_fog_enabled",
+                    Rectangle{0.0f, contentY, contentW, rowH},
+                    font,
+                    "Enabled",
+                    modalState.draftFogSettings.enabled)) {
+            modalState.errorMessage.clear();
+        }
+        contentY += rowH + gap;
+
+        drawFloat(contentY, "sector_editor_preview_fog_start_distance", "Start distance", modalState.draftFogSettings.startDistanceWorld, modalState.fogStartDistanceInput, 0.0f, 512.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_fog_density", "Density", modalState.draftFogSettings.density, modalState.fogDensityInput, 0.0f, 1.0f, 4);
+        drawFloat(contentY, "sector_editor_preview_fog_max_opacity", "Maximum opacity", modalState.draftFogSettings.maxOpacity, modalState.fogMaxOpacityInput, 0.0f, 1.0f, 3);
+        drawFloat(contentY, "sector_editor_preview_fog_reference_height", "Reference height", modalState.draftFogSettings.referenceHeightWorld, modalState.fogReferenceHeightInput, -512.0f, 512.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_fog_height_falloff", "Height falloff", modalState.draftFogSettings.heightFalloff, modalState.fogHeightFalloffInput, 0.0f, 16.0f, 3);
+        modalState.draftFogSettings = NormalizeSectorTopologyFogSettings(modalState.draftFogSettings);
+
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, contentY, contentW, 32.0f},
+                font,
+                "Height falloff 0 produces uniform distance fog.",
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        contentY += 36.0f + gap;
+
+        engine::Text(ui, config, assets, Rectangle{0.0f, contentY, contentW, 34.0f}, font, "Color", engine::UITextJustify::Left, config.textColor);
+        contentY += 38.0f;
+        drawColorChannel(contentY, "sector_editor_preview_fog_r", "R:", modalState.draftFogSettings.color.r, modalState.fogColorRedInput);
+        drawColorChannel(contentY, "sector_editor_preview_fog_g", "G:", modalState.draftFogSettings.color.g, modalState.fogColorGreenInput);
+        drawColorChannel(contentY, "sector_editor_preview_fog_b", "B:", modalState.draftFogSettings.color.b, modalState.fogColorBlueInput);
+        modalState.draftFogSettings.color.a = 255;
+        const Rectangle swatch{
+                scroll.viewport.x + 104.0f,
+                scroll.viewport.y - modalState.fogScroll.offset.y + contentY + 2.0f,
+                std::min(130.0f, contentW - 104.0f),
+                28.0f
+        };
+        DrawColorSwatch(config, swatch, NormalizeSectorTopologyFogSettings(modalState.draftFogSettings).color, 1.0f);
+        contentY += 36.0f + gap;
+
+        engine::EndScrollArea(ui, config, input, scroll, modalState.fogScroll);
+    };
+
+    if (modalState.activeTab == PreviewSettingsTab::Fog) {
+        drawFogTab();
+    } else if (modalState.activeTab == PreviewSettingsTab::Lighting) {
         drawLightingTab();
     } else if (modalState.activeTab == PreviewSettingsTab::Sky) {
         drawSkyTab();
@@ -345,7 +423,9 @@ void DrawPreviewSettingsModal(
 
     const float buttonW = 132.0f;
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_reset", Rectangle{modal.x + 30.0f, buttonY, 176.0f, 44.0f}, font, "Reset Defaults")) {
-        if (modalState.activeTab == PreviewSettingsTab::Lighting) {
+        if (modalState.activeTab == PreviewSettingsTab::Fog) {
+            ResetSectorPreviewSettingsModalFogDefaults(modalState);
+        } else if (modalState.activeTab == PreviewSettingsTab::Lighting) {
             ResetSectorPreviewSettingsModalLightingDefaults(modalState);
         } else if (modalState.activeTab == PreviewSettingsTab::Sky) {
             modalState.draftSkySettings = DefaultSectorTopologySkySettings();

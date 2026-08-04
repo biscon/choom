@@ -25,6 +25,8 @@ constexpr float MaxLandingDip = 0.45f;
 constexpr float LandingDipRecoveryRate = 7.0f;
 constexpr float LandingDipCurvePower = 2.25f;
 constexpr float LandingDipOffsetEpsilon = 0.0001f;
+constexpr float CrouchHeightRatio = 0.625f;
+constexpr float CrouchTransitionDuration = 0.20f;
 constexpr float TwoPi = 6.28318530717958647692f;
 
 } // namespace
@@ -39,6 +41,11 @@ float DefaultSectorFpsHeadBobBlendRate()
     return HeadBobBlendRate;
 }
 
+float DefaultSectorFpsCrouchTransitionDuration()
+{
+    return CrouchTransitionDuration;
+}
+
 SectorFpsControllerConfig DefaultSectorFpsControllerConfig()
 {
     return SectorFpsControllerConfigFromPreviewSettings(DefaultSectorPreviewSettings());
@@ -49,6 +56,81 @@ SectorFpsControllerConfig NormalizeSectorFpsControllerConfig(SectorFpsController
     config = SectorFpsControllerConfigFromPreviewSettings(
             SectorPreviewSettingsFromFpsControllerConfig(config));
     return config;
+}
+
+float SectorFpsCrouchBlend(const SectorFpsControllerState& state)
+{
+    const float amount = std::isfinite(state.crouchAmount)
+            ? std::clamp(state.crouchAmount, 0.0f, 1.0f)
+            : 0.0f;
+    return amount * amount * (3.0f - 2.0f * amount);
+}
+
+SectorFpsControllerConfig EffectiveSectorFpsControllerConfig(
+        const SectorFpsControllerState& state,
+        SectorFpsControllerConfig config)
+{
+    const SectorFpsControllerConfig standing = NormalizeSectorFpsControllerConfig(config);
+    SectorFpsControllerConfig crouched = standing;
+    crouched.eyeHeight *= CrouchHeightRatio;
+    crouched.playerHeight *= CrouchHeightRatio;
+    crouched = NormalizeSectorFpsControllerConfig(crouched);
+
+    const float blend = SectorFpsCrouchBlend(state);
+    SectorFpsControllerConfig effective = standing;
+    effective.eyeHeight += (crouched.eyeHeight - standing.eyeHeight) * blend;
+    effective.playerHeight += (crouched.playerHeight - standing.playerHeight) * blend;
+    return effective;
+}
+
+bool TryToggleSectorFpsCrouch(
+        SectorFpsControllerState& state,
+        bool standingClearance)
+{
+    if (!state.grounded) {
+        return false;
+    }
+    if (!state.crouchTargeted) {
+        state.crouchTargeted = true;
+        return true;
+    }
+    if (!standingClearance) {
+        return false;
+    }
+    state.crouchTargeted = false;
+    return true;
+}
+
+void UpdateSectorFpsCrouch(
+        SectorFpsControllerState& state,
+        bool standingClearance,
+        float dt)
+{
+    if (!std::isfinite(state.crouchAmount)) {
+        state.crouchAmount = state.crouchTargeted ? 1.0f : 0.0f;
+    }
+    state.crouchAmount = std::clamp(state.crouchAmount, 0.0f, 1.0f);
+    if (!state.crouchTargeted
+            && state.crouchAmount > 0.0f
+            && !standingClearance) {
+        state.crouchTargeted = true;
+    }
+    if (!std::isfinite(dt) || dt <= 0.0f) {
+        return;
+    }
+
+    const float step = dt / CrouchTransitionDuration;
+    if (state.crouchTargeted) {
+        state.crouchAmount = std::min(1.0f, state.crouchAmount + step);
+    } else {
+        state.crouchAmount = std::max(0.0f, state.crouchAmount - step);
+    }
+}
+
+void ResetSectorFpsCrouch(SectorFpsControllerState& state)
+{
+    state.crouchTargeted = false;
+    state.crouchAmount = 0.0f;
 }
 
 SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
@@ -97,8 +179,8 @@ Vector3 SectorFpsControllerEyePosition(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config)
 {
-    const SectorFpsControllerConfig normalized = NormalizeSectorFpsControllerConfig(config);
-    return Vector3Add(state.feetPosition, Vector3{0.0f, normalized.eyeHeight, 0.0f});
+    const SectorFpsControllerConfig effective = EffectiveSectorFpsControllerConfig(state, config);
+    return Vector3Add(state.feetPosition, Vector3{0.0f, effective.eyeHeight, 0.0f});
 }
 
 SectorViewPose SectorFpsControllerPose(
@@ -407,7 +489,10 @@ Vector2 ComputeSectorFpsHorizontalMovementDelta(
 
     if (Vector3LengthSqr(movement) > 0.0001f && dt > 0.0f) {
         movement = Vector3Normalize(movement);
-        const float speed = input.run ? normalized.runSpeed : normalized.walkSpeed;
+        const float standingSpeed = input.run ? normalized.runSpeed : normalized.walkSpeed;
+        const float crouchedSpeed = normalized.walkSpeed * 0.5f;
+        const float crouchBlend = SectorFpsCrouchBlend(state);
+        const float speed = standingSpeed + (crouchedSpeed - standingSpeed) * crouchBlend;
         movement = Vector3Scale(movement, speed * dt);
         return Vector2{movement.x, movement.z};
     }
@@ -421,6 +506,10 @@ void UpdateSectorFpsController(
         float dt)
 {
     UpdateSectorFpsMouseLook(state, config, input);
+    if (input.crouchTogglePressed) {
+        TryToggleSectorFpsCrouch(state, true);
+    }
+    UpdateSectorFpsCrouch(state, true, dt);
     if (input.jumpPressed) {
         TryStartSectorFpsJump(state, config);
     }
@@ -449,7 +538,7 @@ SectorFpsVerticalResult UpdateSectorFpsVerticalPhysics(
         const SectorFpsVerticalContext& context,
         float dt)
 {
-    const SectorFpsControllerConfig normalized = NormalizeSectorFpsControllerConfig(config);
+    const SectorFpsControllerConfig normalized = EffectiveSectorFpsControllerConfig(state, config);
     SectorFpsVerticalResult result;
     result.hasSector = context.hasSector;
     result.floorZ = context.floorZ;

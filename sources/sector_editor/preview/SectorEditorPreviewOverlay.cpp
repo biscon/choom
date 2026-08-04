@@ -428,11 +428,25 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         : (controllerState.fpsControllerState.grounded
                                 ? "grounded"
                                 : (controllerState.fpsControllerState.verticalVelocity > 0.0f ? "jumping" : "falling"));
+                const float crouchAmount = controllerState.fpsControllerState.crouchAmount;
+                const char* stance = crouchAmount >= 0.999f
+                        ? "crouched"
+                        : (crouchAmount <= 0.001f
+                                ? "standing"
+                                : (controllerState.fpsControllerState.crouchTargeted
+                                        ? "crouching"
+                                        : "standing up"));
+                const SectorFpsControllerConfig effectiveConfig =
+                        EffectiveSectorFpsControllerConfig(
+                                controllerState.fpsControllerState,
+                                controllerState.fpsControllerConfig);
                 collisionStatus = TextFormat(
-                        "mode: gameplay collision | sector: %d | vertical: %s / %s | block: %s | radius: %.2f | step: %.2f | jump: %.2f",
+                        "mode: gameplay collision | sector: %d | vertical: %s / %s | stance: %s %.2fm | block: %s | radius: %.2f | step: %.2f | jump: %.2f",
                         controllerState.fpsControllerState.currentSectorId,
                         verticalState,
                         VerticalTransitionName(collisionState.previewVerticalResult.transition),
+                        stance,
+                        effectiveConfig.playerHeight,
                         blockText.c_str(),
                         controllerState.fpsControllerConfig.playerRadius,
                         controllerState.fpsControllerConfig.stepHeight,
@@ -581,7 +595,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 if (context.lightState.spotLightPilot.active) {
                     addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down. Unlock cursor with F11 to click Apply or Cancel.");
                 } else if (controllerState.previewControlMode == SectorPreviewControlMode::Gameplay) {
-                    addWrappedLine("movement: WASD move, Space jump, Shift run, mouse look. F11 unlocks cursor for UI tabs.");
+                    addWrappedLine("movement: WASD move, Space jump, Shift run, Ctrl toggle crouch, mouse look. F11 unlocks cursor for UI tabs.");
                 } else {
                     addWrappedLine("movement: WASD move, mouse look, Space/Ctrl up/down. F11 unlocks cursor for UI tabs.");
                 }

@@ -28,6 +28,8 @@ struct SectorFpsControllerState {
     int currentSectorId = 0;
     bool grounded = false;
     float verticalVelocity = 0.0f;
+    bool crouchTargeted = false;
+    float crouchAmount = 0.0f;
 };
 
 struct SectorFpsControllerInput {
@@ -37,6 +39,7 @@ struct SectorFpsControllerInput {
     bool strafeRight = false;
     bool run = false;
     bool jumpPressed = false;
+    bool crouchTogglePressed = false;
     bool mouseLookEnabled = false;
     Vector2 mouseDelta = {};
 };
@@ -80,13 +83,26 @@ struct SectorFpsLandingDipState {
 
 float DefaultSectorFpsStepSmoothingRate();
 float DefaultSectorFpsHeadBobBlendRate();
+float DefaultSectorFpsCrouchTransitionDuration();
 SectorFpsControllerConfig DefaultSectorFpsControllerConfig();
 SectorFpsControllerConfig NormalizeSectorFpsControllerConfig(SectorFpsControllerConfig config);
+SectorFpsControllerConfig EffectiveSectorFpsControllerConfig(
+        const SectorFpsControllerState& state,
+        SectorFpsControllerConfig config);
 SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
         SectorPreviewSettings settings);
 SectorPreviewSettings SectorPreviewSettingsFromFpsControllerConfig(
         SectorFpsControllerConfig config);
 float ClampSectorFpsPitch(float pitchRadians);
+float SectorFpsCrouchBlend(const SectorFpsControllerState& state);
+bool TryToggleSectorFpsCrouch(
+        SectorFpsControllerState& state,
+        bool standingClearance);
+void UpdateSectorFpsCrouch(
+        SectorFpsControllerState& state,
+        bool standingClearance,
+        float dt);
+void ResetSectorFpsCrouch(SectorFpsControllerState& state);
 Vector3 SectorFpsControllerEyePosition(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config);

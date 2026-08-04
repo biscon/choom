@@ -3,6 +3,7 @@
 #include "sector_demo/SectorLightmap.h"
 
 #include <cmath>
+#include <array>
 #include <iostream>
 
 namespace {
@@ -310,6 +311,56 @@ void TestPreviewSettingsModalResetsObjectProbeDefaults()
           "preview settings modal reset restores default object probe height");
 }
 
+void TestPreviewSettingsFogTabLayout()
+{
+    const Rectangle modal{610.0f, 190.0f, 700.0f, 700.0f};
+    const std::array<Rectangle, 4> tabs =
+            game::BuildSectorPreviewSettingsTabLayout(modal, modal.y + 76.0f, 38.0f);
+    for (size_t i = 0; i < tabs.size(); ++i) {
+        Check(Contains(modal, tabs[i]), "preview settings tab fits inside expanded modal");
+        for (size_t j = i + 1; j < tabs.size(); ++j) {
+            Check(!Overlaps(tabs[i], tabs[j]), "preview settings tabs do not overlap");
+        }
+    }
+    Check(tabs[3].x + tabs[3].width <= modal.x + modal.width - 30.0f,
+          "fog tab preserves the modal right margin");
+}
+
+void TestPreviewSettingsModalFogDraftApplyAndReset()
+{
+    game::SectorTopologyMap map;
+    map.fogSettings.enabled = true;
+    map.fogSettings.density = 0.2f;
+    map.fogSettings.color = Color{10, 20, 30, 80};
+
+    game::SectorPreviewSettingsModalState modal;
+    modal.draftFogSettings = game::NormalizeSectorTopologyFogSettings(map.fogSettings);
+    Check(modal.draftFogSettings.enabled
+                  && Near(modal.draftFogSettings.density, 0.2f)
+                  && modal.draftFogSettings.color.a == 255,
+          "preview settings modal copies normalized fog settings");
+
+    const std::string lightmapHash = game::ComputeSectorLightmapSourceHash(map);
+    modal.draftFogSettings.density = 0.35f;
+    modal.draftFogSettings.referenceHeightWorld = -3.0f;
+    Check(game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
+          "preview settings modal applies changed fog settings");
+    Check(Near(map.fogSettings.density, 0.35f)
+                  && Near(map.fogSettings.referenceHeightWorld, -3.0f),
+          "preview settings modal writes normalized fog settings");
+    Check(!game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
+          "preview settings modal reports unchanged fog settings");
+    Check(game::ComputeSectorLightmapSourceHash(map) == lightmapHash,
+          "preview fog settings do not change the lightmap source hash");
+
+    game::ResetSectorPreviewSettingsModalFogDefaults(modal);
+    const game::SectorTopologyFogSettings defaults = game::DefaultSectorTopologyFogSettings();
+    Check(modal.draftFogSettings.enabled == defaults.enabled
+                  && Near(modal.draftFogSettings.density, defaults.density)
+                  && Near(modal.draftFogSettings.heightFalloff, defaults.heightFalloff),
+          "preview settings modal resets fog defaults");
+}
+
 } // namespace
 
 int main()
@@ -328,6 +379,8 @@ int main()
     TestPreviewSettingsModalCopiesObjectProbeSettings();
     TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash();
     TestPreviewSettingsModalResetsObjectProbeDefaults();
+    TestPreviewSettingsFogTabLayout();
+    TestPreviewSettingsModalFogDraftApplyAndReset();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorUiLayoutTests failure(s)\n";

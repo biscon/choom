@@ -505,6 +505,37 @@ void CollectSectorStaticModelColliders(
             });
 }
 
+bool SectorStaticModelCollidersAllowPlayerHeight(
+        Vector2 positionXZ,
+        float feetY,
+        float radius,
+        float playerHeight,
+        const std::vector<SectorStaticModelCollider>& colliders)
+{
+    if (!IsFinite(positionXZ)
+            || !std::isfinite(feetY)
+            || !std::isfinite(radius)
+            || !std::isfinite(playerHeight)
+            || radius <= 0.0f
+            || playerHeight <= 0.0f) {
+        return false;
+    }
+
+    const float playerTop = feetY + playerHeight;
+    for (const SectorStaticModelCollider& collider : colliders) {
+        if (!IsValidCollider(collider)
+                || !CircleOverlapsCollider(positionXZ, radius, collider)) {
+            continue;
+        }
+        if (collider.bottom > feetY + StaticModelCollisionEpsilon
+                && playerTop > collider.bottom + StaticModelCollisionEpsilon
+                && feetY < collider.top - StaticModelCollisionEpsilon) {
+            return false;
+        }
+    }
+    return true;
+}
+
 SectorCollisionMoveResult ResolveSectorStaticModelCollidersForPlayerMovement(
         const SectorCollisionMoveState& moveState,
         const SectorCollisionMoveResult& sectorAndDoorResult,

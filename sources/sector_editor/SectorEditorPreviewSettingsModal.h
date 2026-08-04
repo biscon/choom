@@ -9,9 +9,30 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <array>
 #include <functional>
 
 namespace game {
+
+inline std::array<Rectangle, 4> BuildSectorPreviewSettingsTabLayout(
+        Rectangle modal,
+        float y,
+        float tabHeight)
+{
+    constexpr float margin = 30.0f;
+    constexpr float gap = 8.0f;
+    const float tabWidth = (modal.width - margin * 2.0f - gap * 3.0f) / 4.0f;
+    std::array<Rectangle, 4> tabs{};
+    for (size_t i = 0; i < tabs.size(); ++i) {
+        tabs[i] = Rectangle{
+                modal.x + margin + (tabWidth + gap) * static_cast<float>(i),
+                y,
+                tabWidth,
+                tabHeight
+        };
+    }
+    return tabs;
+}
 
 inline SectorLightmapBakeSettings NormalizeSectorPreviewObjectProbeSettings(
         SectorLightmapBakeSettings settings)
@@ -35,6 +56,43 @@ inline void ResetSectorPreviewSettingsModalLightingDefaults(
     modalState.lightColorRedInput = engine::UIIntInputState{};
     modalState.lightColorGreenInput = engine::UIIntInputState{};
     modalState.lightColorBlueInput = engine::UIIntInputState{};
+}
+
+inline void ResetSectorPreviewSettingsModalFogDefaults(
+        SectorPreviewSettingsModalState& modalState)
+{
+    modalState.draftFogSettings = DefaultSectorTopologyFogSettings();
+    modalState.fogStartDistanceInput = engine::UIFloatInputState{};
+    modalState.fogDensityInput = engine::UIFloatInputState{};
+    modalState.fogMaxOpacityInput = engine::UIFloatInputState{};
+    modalState.fogReferenceHeightInput = engine::UIFloatInputState{};
+    modalState.fogHeightFalloffInput = engine::UIFloatInputState{};
+    modalState.fogColorRedInput = engine::UIIntInputState{};
+    modalState.fogColorGreenInput = engine::UIIntInputState{};
+    modalState.fogColorBlueInput = engine::UIIntInputState{};
+}
+
+inline bool ApplySectorPreviewFogSettings(
+        SectorTopologyMap& map,
+        const SectorTopologyFogSettings& draftSettings)
+{
+    const SectorTopologyFogSettings draft = NormalizeSectorTopologyFogSettings(draftSettings);
+    const SectorTopologyFogSettings current = NormalizeSectorTopologyFogSettings(map.fogSettings);
+    const bool same = current.enabled == draft.enabled
+            && current.color.r == draft.color.r
+            && current.color.g == draft.color.g
+            && current.color.b == draft.color.b
+            && current.color.a == draft.color.a
+            && current.startDistanceWorld == draft.startDistanceWorld
+            && current.density == draft.density
+            && current.maxOpacity == draft.maxOpacity
+            && current.referenceHeightWorld == draft.referenceHeightWorld
+            && current.heightFalloff == draft.heightFalloff;
+    if (same) {
+        return false;
+    }
+    map.fogSettings = draft;
+    return true;
 }
 
 inline bool ApplySectorPreviewObjectProbeSettings(

@@ -118,6 +118,15 @@ uniform float decalOpacity;
 uniform int decalEmissive;
 uniform vec3 decalTint;
 
+uniform int fogEnabled;
+uniform vec3 fogColor;
+uniform vec3 fogCameraPosition;
+uniform float fogStartDistanceWorld;
+uniform float fogDensity;
+uniform float fogMaxOpacity;
+uniform float fogReferenceHeightWorld;
+uniform float fogHeightFalloff;
+
 #define MAX_DYNAMIC_LIGHTS 8
 #define MAX_DYNAMIC_SHADOW_CASTERS 2
 uniform int dynamicLightCount;
@@ -242,6 +251,22 @@ float DynamicSpotLightShadowVisibility(
     return visible / 12.0;
 }
 
+vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
+{
+    if (fogEnabled == 0 || fogDensity <= 0.0 || fogMaxOpacity <= 0.0) {
+        return surfaceRgb;
+    }
+
+    float fogDistance = max(length(worldPosition - fogCameraPosition) - fogStartDistanceWorld, 0.0);
+    float midpointHeight = (fogCameraPosition.y + worldPosition.y) * 0.5;
+    float heightAboveReference = max(midpointHeight - fogReferenceHeightWorld, 0.0);
+    float heightMultiplier = exp(-heightAboveReference * fogHeightFalloff);
+    float fogAmount = min(
+            1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
+            fogMaxOpacity);
+    return mix(surfaceRgb, fogColor, fogAmount);
+}
+
 void main()
 {
     vec4 baseColor = texture(texture0, fragTexCoord);
@@ -312,7 +337,8 @@ void main()
     vec3 bakedLighting = clamp(ambient + bakedDirect, 0.0, 1.0);
     vec3 lighting = clamp(bakedLighting + dynamicDirect, 0.0, dynamicLightingClamp);
     vec3 litRgb = surfaceRgb * lighting;
-    finalColor = vec4(mix(litRgb, emissiveDecalRgb, emissiveDecalAlpha), baseColor.a * fragColor.a);
+    vec3 surfaceOutput = mix(litRgb, emissiveDecalRgb, emissiveDecalAlpha);
+    finalColor = vec4(ApplySectorFog(surfaceOutput, fragWorldPosition), baseColor.a * fragColor.a);
 }
 )";
 
@@ -438,6 +464,7 @@ bool LoadPreviewMaterial(
         int& shadowStrengthLoc,
         int& shadowSoftnessLoc,
         int& dynamicLightingClampLoc,
+        SectorFogShaderLocations& fogShaderLocations,
         std::string& error)
 {
     material = LoadMaterialDefault();
@@ -484,6 +511,7 @@ bool LoadPreviewMaterial(
     shadowStrengthLoc = GetShaderLocationArrayBase(material.shader, "shadowStrength");
     shadowSoftnessLoc = GetShaderLocationArrayBase(material.shader, "shadowSoftness");
     dynamicLightingClampLoc = GetShaderLocation(material.shader, "dynamicLightingClamp");
+    fogShaderLocations = GetSectorFogShaderLocations(material.shader);
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
     return true;
@@ -723,6 +751,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 shadowStrengthLoc,
                 shadowSoftnessLoc,
                 dynamicLightingClampLoc,
+                fogShaderLocations,
                 error)) {
         Shutdown(assets);
         return false;
@@ -847,17 +876,19 @@ void SectorMeshRenderer::Render(
         engine::AssetManager& assets,
         bool useBakedAmbientOcclusion,
         engine::World* runtimeObjectWorld,
-        SectorRuntimeDoorLightingContext doorLighting)
+        SectorRuntimeDoorLightingContext doorLighting,
+        const SectorTopologyFogSettings& fogSettings)
 {
     RenderDynamicSpotLightShadowMaps(assets, runtimeObjectWorld);
-    DrawScene(assets, useBakedAmbientOcclusion, runtimeObjectWorld, doorLighting);
+    DrawScene(assets, useBakedAmbientOcclusion, runtimeObjectWorld, doorLighting, fogSettings);
 }
 
 void SectorMeshRenderer::DrawScene(
         engine::AssetManager& assets,
         bool useBakedAmbientOcclusion,
         engine::World* runtimeObjectWorld,
-        SectorRuntimeDoorLightingContext doorLighting)
+        SectorRuntimeDoorLightingContext doorLighting,
+        const SectorTopologyFogSettings& fogSettings)
 {
     if (!initialized) {
         return;
@@ -865,6 +896,10 @@ void SectorMeshRenderer::DrawScene(
 
     BeginMode3D(camera);
     skyRenderer.Draw(assets, camera);
+
+    const SectorFogRenderContext fogContext =
+            BuildSectorFogRenderContext(fogSettings, camera.position);
+    UploadSectorFogShaderValues(material.shader, fogShaderLocations, fogContext);
 
     const Texture2D* lightmap = assets.GetTexture(lightmapTexture);
     float useLightmap = lightmap != nullptr ? 1.0f : 0.0f;
@@ -978,6 +1013,7 @@ void SectorMeshRenderer::DrawScene(
         doorDrawContext.dynamicLighting.shadowUniforms = dynamicLightState.PackShadowUniforms();
         doorDrawContext.dynamicLighting.shadowMaps = dynamicLightState.BuildShadowMapTextures();
         doorDrawContext.dynamicLighting.lightingClamp = DynamicLightingClamp;
+        doorDrawContext.fog = fogContext;
         doorDrawContext.textureResolver.userData = this;
         doorDrawContext.textureResolver.resolve = &SectorMeshRenderer::ResolveShadowCasterTexture;
         doorDrawContext.defaultMaterialTexture = &defaultMaterialTexture;
@@ -990,12 +1026,19 @@ void SectorMeshRenderer::DrawScene(
                 *runtimeObjectWorld,
                 camera,
                 billboardLightContext,
+                fogContext,
                 visibilityResult,
                 lightmap,
                 assets.GetCubemap(pbrEnvironment.cubemap),
                 useBakedAmbientOcclusion,
                 renderDebugText);
-        billboardRenderer.Draw(assets, *runtimeObjectWorld, camera, billboardLightContext, renderDebugText);
+        billboardRenderer.Draw(
+                assets,
+                *runtimeObjectWorld,
+                camera,
+                billboardLightContext,
+                fogContext,
+                renderDebugText);
     }
     EndMode3D();
 }
@@ -1045,12 +1088,18 @@ void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
     dynamicLightState.RenderShadowMaps(context);
 }
 
-void SectorMeshRenderer::ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+void SectorMeshRenderer::ApplyEmissiveDecalBloom(
+        engine::AssetManager& assets,
+        RenderTexture2D& sceneTarget,
+        const SectorTopologyFogSettings& fogSettings)
 {
-    ApplyEmissiveDecalBloomToScene(assets, sceneTarget);
+    ApplyEmissiveDecalBloomToScene(assets, sceneTarget, fogSettings);
 }
 
-void SectorMeshRenderer::ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+void SectorMeshRenderer::ApplyEmissiveDecalBloomToScene(
+        engine::AssetManager& assets,
+        RenderTexture2D& sceneTarget,
+        const SectorTopologyFogSettings& fogSettings)
 {
     bloomRenderer.ApplyEmissiveDecalBloomToScene(
             assets,
@@ -1059,7 +1108,8 @@ void SectorMeshRenderer::ApplyEmissiveDecalBloomToScene(engine::AssetManager& as
             meshes.sectorDrawRecords,
             visibilityResult,
             textureHandlesById,
-            sceneTarget);
+            sceneTarget,
+            BuildSectorFogRenderContext(fogSettings, camera.position));
 }
 
 SectorViewPose SectorMeshRenderer::Pose() const

@@ -10,6 +10,7 @@
 #include "sector_demo/renderer/SectorBloomRenderer.h"
 #include "sector_demo/renderer/SectorDoorRenderer.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
+#include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
@@ -55,7 +56,8 @@ public:
             engine::AssetManager& assets,
             bool useBakedAmbientOcclusion = true,
             engine::World* runtimeObjectWorld = nullptr,
-            SectorRuntimeDoorLightingContext doorLighting = {});
+            SectorRuntimeDoorLightingContext doorLighting = {},
+            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
     void RenderDynamicSpotLightShadowMaps(
             engine::AssetManager& assets,
             engine::World* runtimeObjectWorld = nullptr);
@@ -63,9 +65,16 @@ public:
             engine::AssetManager& assets,
             bool useBakedAmbientOcclusion = true,
             engine::World* runtimeObjectWorld = nullptr,
-            SectorRuntimeDoorLightingContext doorLighting = {});
-    void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
-    void ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
+            SectorRuntimeDoorLightingContext doorLighting = {},
+            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
+    void ApplyEmissiveDecalBloom(
+            engine::AssetManager& assets,
+            RenderTexture2D& sceneTarget,
+            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
+    void ApplyEmissiveDecalBloomToScene(
+            engine::AssetManager& assets,
+            RenderTexture2D& sceneTarget,
+            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
 
     bool IsReady() const { return initialized; }
     bool IsRendererReady() const { return IsReady(); }
@@ -168,6 +177,7 @@ private:
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
     int dynamicLightingClampLoc = -1;
+    SectorFogShaderLocations fogShaderLocations;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
     SectorBloomRenderer bloomRenderer;

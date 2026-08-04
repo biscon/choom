@@ -1003,6 +1003,46 @@ SectorTopologyDirectionalLightSettings ReadDirectionalLightSettings(
     return NormalizeSectorTopologyDirectionalLightSettings(settings);
 }
 
+SectorTopologyFogSettings ReadFogSettings(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorTopologyFogSettings settings = DefaultSectorTopologyFogSettings();
+    const auto enabledIt = value.find("enabled");
+    if (enabledIt != value.end()) {
+        if (!enabledIt->is_boolean()) {
+            Fail(context + ".enabled must be a boolean");
+        }
+        settings.enabled = enabledIt->get<bool>();
+    }
+    const auto colorIt = value.find("color");
+    if (colorIt != value.end()) {
+        if (!colorIt->is_object()) {
+            Fail(context + ".color must be an object");
+        }
+        const Color defaults = DefaultSectorTopologyFogSettings().color;
+        settings.color = Color{
+                ReadOptionalColorChannel(*colorIt, "r", context + ".color", defaults.r),
+                ReadOptionalColorChannel(*colorIt, "g", context + ".color", defaults.g),
+                ReadOptionalColorChannel(*colorIt, "b", context + ".color", defaults.b),
+                255
+        };
+    }
+    const auto readOptionalFloat = [&](const char* field, float& output) {
+        if (value.find(field) != value.end()) {
+            output = ReadFloat(value, field, context);
+        }
+    };
+    readOptionalFloat("startDistanceWorld", settings.startDistanceWorld);
+    readOptionalFloat("density", settings.density);
+    readOptionalFloat("maxOpacity", settings.maxOpacity);
+    readOptionalFloat("referenceHeightWorld", settings.referenceHeightWorld);
+    readOptionalFloat("heightFalloff", settings.heightFalloff);
+    return NormalizeSectorTopologyFogSettings(settings);
+}
+
 SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
         const Json& value,
         const std::string& context)
@@ -1729,6 +1769,46 @@ bool IsDefaultDirectionalLightSettings(const SectorTopologyDirectionalLightSetti
             && normalized.intensity == defaults.intensity;
 }
 
+Json WriteFogSettings(const SectorTopologyFogSettings& settings)
+{
+    RequireFinite(settings.startDistanceWorld, "fogSettings.startDistanceWorld");
+    RequireFinite(settings.density, "fogSettings.density");
+    RequireFinite(settings.maxOpacity, "fogSettings.maxOpacity");
+    RequireFinite(settings.referenceHeightWorld, "fogSettings.referenceHeightWorld");
+    RequireFinite(settings.heightFalloff, "fogSettings.heightFalloff");
+    const SectorTopologyFogSettings normalized = NormalizeSectorTopologyFogSettings(settings);
+    return Json{
+            {"enabled", normalized.enabled},
+            {"color", WriteColor(normalized.color)},
+            {"startDistanceWorld", normalized.startDistanceWorld},
+            {"density", normalized.density},
+            {"maxOpacity", normalized.maxOpacity},
+            {"referenceHeightWorld", normalized.referenceHeightWorld},
+            {"heightFalloff", normalized.heightFalloff}
+    };
+}
+
+bool IsDefaultFogSettings(const SectorTopologyFogSettings& settings)
+{
+    RequireFinite(settings.startDistanceWorld, "fogSettings.startDistanceWorld");
+    RequireFinite(settings.density, "fogSettings.density");
+    RequireFinite(settings.maxOpacity, "fogSettings.maxOpacity");
+    RequireFinite(settings.referenceHeightWorld, "fogSettings.referenceHeightWorld");
+    RequireFinite(settings.heightFalloff, "fogSettings.heightFalloff");
+    const SectorTopologyFogSettings normalized = NormalizeSectorTopologyFogSettings(settings);
+    const SectorTopologyFogSettings defaults = DefaultSectorTopologyFogSettings();
+    return normalized.enabled == defaults.enabled
+            && normalized.color.r == defaults.color.r
+            && normalized.color.g == defaults.color.g
+            && normalized.color.b == defaults.color.b
+            && normalized.color.a == defaults.color.a
+            && normalized.startDistanceWorld == defaults.startDistanceWorld
+            && normalized.density == defaults.density
+            && normalized.maxOpacity == defaults.maxOpacity
+            && normalized.referenceHeightWorld == defaults.referenceHeightWorld
+            && normalized.heightFalloff == defaults.heightFalloff;
+}
+
 Json WriteBakedObjectLightProbeMetadata(const SectorBakedObjectLightProbeMetadata& metadata)
 {
     return Json{
@@ -2101,6 +2181,11 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
         map.directionalLight = ReadDirectionalLightSettings(*directionalLightIt, "root.directionalLight");
     }
 
+    const auto fogSettingsIt = root.find("fogSettings");
+    if (fogSettingsIt != root.end()) {
+        map.fogSettings = ReadFogSettings(*fogSettingsIt, "root.fogSettings");
+    }
+
     const auto bakedLightmapIt = root.find("bakedLightmap");
     if (bakedLightmapIt != root.end() && allowBakedLightmap) {
         map.bakedLightmap = ReadBakedLightmap(*bakedLightmapIt, "root.bakedLightmap");
@@ -2109,6 +2194,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
     map.previewSettings = NormalizeSectorPreviewSettings(map.previewSettings);
     map.skySettings = NormalizeSectorTopologySkySettings(map.skySettings);
     map.directionalLight = NormalizeSectorTopologyDirectionalLightSettings(map.directionalLight);
+    map.fogSettings = NormalizeSectorTopologyFogSettings(map.fogSettings);
     ValidateRuntimeObjects(map, "root");
 }
 
@@ -2221,6 +2307,7 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
     document.derivation.topology.previewSettings = document.mapData.previewSettings;
     document.derivation.topology.skySettings = document.mapData.skySettings;
     document.derivation.topology.directionalLight = document.mapData.directionalLight;
+    document.derivation.topology.fogSettings = document.mapData.fogSettings;
     document.derivation.topology.lightmapSettings = document.mapData.lightmapSettings;
     document.derivation.topology.bakedLightmap = document.mapData.bakedLightmap;
 }
@@ -2339,6 +2426,9 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
     }
     if (!IsDefaultDirectionalLightSettings(map.directionalLight)) {
         root["directionalLight"] = WriteDirectionalLightSettings(map.directionalLight);
+    }
+    if (!IsDefaultFogSettings(map.fogSettings)) {
+        root["fogSettings"] = WriteFogSettings(map.fogSettings);
     }
     if (includeBakedLightmap
             && !map.bakedLightmap.path.empty()
@@ -2735,6 +2825,9 @@ Json SerializeMap(const SectorTopologyMap& map)
     }
     if (!IsDefaultDirectionalLightSettings(map.directionalLight)) {
         root["directionalLight"] = WriteDirectionalLightSettings(map.directionalLight);
+    }
+    if (!IsDefaultFogSettings(map.fogSettings)) {
+        root["fogSettings"] = WriteFogSettings(map.fogSettings);
     }
     if (!map.bakedLightmap.path.empty()
             && map.bakedLightmap.width > 0

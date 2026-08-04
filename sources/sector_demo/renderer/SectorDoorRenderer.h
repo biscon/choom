@@ -4,6 +4,7 @@
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
+#include "sector_demo/renderer/SectorFog.h"
 
 #include <raylib.h>
 
@@ -70,6 +71,7 @@ struct SectorDoorDrawContext {
     engine::World* runtimeObjectWorld = nullptr;
     SectorRuntimeDoorLightingContext lighting;
     SectorDoorDynamicLightContext dynamicLighting;
+    SectorFogRenderContext fog;
     SectorDoorTextureResolver textureResolver;
     const Texture2D* defaultMaterialTexture = nullptr;
     std::string* renderDebugText = nullptr;
@@ -98,6 +100,7 @@ struct SectorDoorOpaqueShaderLocations {
     int dynamicLightingClamp = -1;
     int debugMode = -1;
     int tint = -1;
+    SectorFogShaderLocations fog;
 };
 
 class SectorDoorRenderer {

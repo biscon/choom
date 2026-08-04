@@ -124,7 +124,8 @@ void SectorDemo::Render(engine::EngineContext& context)
             context.assets,
             true,
             &context.world,
-            SectorRuntimeDoorLightingContext{&runtimeObjects.objectLightProbes, &topologyMap});
+            SectorRuntimeDoorLightingContext{&runtimeObjects.objectLightProbes, &topologyMap},
+            topologyMap.fogSettings);
 }
 
 void SectorDemo::RenderOverlay(engine::AssetManager& assets)

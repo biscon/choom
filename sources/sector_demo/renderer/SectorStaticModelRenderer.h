@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetHandles.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
+#include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
 
 #include <raylib.h>
@@ -73,6 +74,7 @@ public:
             engine::World& runtimeObjectWorld,
             const Camera3D& camera,
             const SectorBillboardDynamicLightContext& dynamicLightContext,
+            const SectorFogRenderContext& fogContext,
             const RuntimePortalVisibilityResult& visibility,
             const Texture2D* lightmap,
             const TextureCubemap* environment,
@@ -138,6 +140,7 @@ private:
     int shadowMap0Loc = -1;
     int shadowMap1Loc = -1;
     int dynamicLightingClampLoc = -1;
+    SectorFogShaderLocations fogShaderLocations;
     bool shaderLoaded = false;
     bool warningPrinted = false;
 };

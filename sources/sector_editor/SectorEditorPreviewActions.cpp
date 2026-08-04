@@ -59,6 +59,43 @@ SectorFpsVerticalContext BuildSectorOnlyVerticalContext(
     return context;
 }
 
+bool HasSectorEditorGameplayStandingClearance(
+        const SectorEditorPreviewCollisionState& collisionState,
+        const SectorEditorPreviewControllerState& controllerState,
+        const std::vector<SectorDynamicDoorCollider>& dynamicDoorColliders,
+        const std::vector<SectorStaticModelCollider>& staticModelColliders)
+{
+    const SectorFpsVerticalContext sectorContext = BuildSectorOnlyVerticalContext(
+            collisionState,
+            controllerState.fpsControllerState.currentSectorId);
+    if (!sectorContext.hasSector) {
+        return true;
+    }
+
+    const SectorFpsControllerConfig standing =
+            NormalizeSectorFpsControllerConfig(controllerState.fpsControllerConfig);
+    const SectorFpsControllerState& state = controllerState.fpsControllerState;
+    const Vector2 positionXZ{state.feetPosition.x, state.feetPosition.z};
+    if (state.feetPosition.y + standing.playerHeight
+            > sectorContext.ceilingZ + GameplayFloorSnapEpsilon) {
+        return false;
+    }
+    if (!SectorStaticModelCollidersAllowPlayerHeight(
+                positionXZ,
+                state.feetPosition.y,
+                standing.playerRadius,
+                standing.playerHeight,
+                staticModelColliders)) {
+        return false;
+    }
+    return SectorDoorDynamicCollidersAllowPlayerHeight(
+            positionXZ,
+            state.feetPosition.y,
+            standing.playerRadius,
+            standing.playerHeight,
+            dynamicDoorColliders);
+}
+
 } // namespace
 
 SectorViewPose ActiveSectorEditorPreviewPose(
@@ -119,6 +156,7 @@ bool ToggleSectorEditorPreviewControlMode(
         ApplySectorEditorGameplayPoseToPreview(controllerState, preview);
         ResetSectorFreeflyController(controllerState.freeflyController, preview.RendererPose());
         SetSectorFreeflyMouseLookEnabled(controllerState.freeflyController, mouseLookEnabled);
+        ResetSectorFpsCrouch(controllerState.fpsControllerState);
         ClearPreviewGameplayVisualState(controllerState);
         controllerState.previewControlMode = SectorPreviewControlMode::FreeFly;
         ResetPreviewCollisionState(collisionState, controllerState);
@@ -172,7 +210,9 @@ SectorFpsVerticalContext BuildSectorEditorGameplayVerticalContext(
                     collisionState,
                     controllerState.fpsControllerState.currentSectorId),
             controllerState.fpsControllerState,
-            controllerState.fpsControllerConfig,
+            EffectiveSectorFpsControllerConfig(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig),
             staticModelColliders);
 }
 
@@ -186,7 +226,9 @@ void RefreshSectorEditorGameplaySectorAndVerticalContext(
     }
 
     const SectorFpsControllerConfig normalizedConfig =
-            NormalizeSectorFpsControllerConfig(controllerState.fpsControllerConfig);
+            EffectiveSectorFpsControllerConfig(
+                    controllerState.fpsControllerState,
+                    controllerState.fpsControllerConfig);
     controllerState.fpsControllerState.currentSectorId =
             collisionState.sectorCollisionWorld.FindSectorForPlayerFootprint(
                     Vector2{
@@ -246,12 +288,34 @@ void UpdateSectorEditorGameplayPreview(
     if (!std::isfinite(controllerState.landingDipState.offsetY)) {
         ClearSectorFpsLandingDip(controllerState.landingDipState);
     }
-    const float previousStepVisualEyeY =
-            previousVisualEyeY - controllerState.landingDipState.offsetY;
+    const float previousStanceEyeHeight = EffectiveSectorFpsControllerConfig(
+            controllerState.fpsControllerState,
+            controllerState.fpsControllerConfig).eyeHeight;
     UpdateSectorFpsMouseLook(
             controllerState.fpsControllerState,
             controllerState.fpsControllerConfig,
             controllerInput);
+    const bool standingClearance = HasSectorEditorGameplayStandingClearance(
+            collisionState,
+            controllerState,
+            dynamicDoorColliders,
+            staticModelColliders);
+    if (controllerInput.crouchTogglePressed) {
+        TryToggleSectorFpsCrouch(
+                controllerState.fpsControllerState,
+                standingClearance);
+    }
+    UpdateSectorFpsCrouch(
+            controllerState.fpsControllerState,
+            standingClearance,
+            dt);
+    const SectorFpsControllerConfig effectiveConfig = EffectiveSectorFpsControllerConfig(
+            controllerState.fpsControllerState,
+            controllerState.fpsControllerConfig);
+    const float previousStepVisualEyeY =
+            previousVisualEyeY
+            - controllerState.landingDipState.offsetY
+            + (effectiveConfig.eyeHeight - previousStanceEyeHeight);
     const Vector2 desiredHorizontalMovement = ComputeSectorFpsHorizontalMovementDelta(
             controllerState.fpsControllerState,
             controllerState.fpsControllerConfig,
@@ -276,8 +340,6 @@ void UpdateSectorEditorGameplayPreview(
         const bool wasGrounded = controllerState.fpsControllerState.grounded;
 
         if (controllerState.fpsControllerState.currentSectorId != 0) {
-            const SectorFpsControllerConfig normalizedConfig =
-                    NormalizeSectorFpsControllerConfig(controllerState.fpsControllerConfig);
             SectorCollisionMoveResult moveResult =
                     collisionState.sectorCollisionWorld.ResolveMovement(
                             SectorCollisionMoveState{
@@ -287,9 +349,9 @@ void UpdateSectorEditorGameplayPreview(
                                     controllerState.fpsControllerState.grounded},
                             desiredHorizontalMovement,
                             SectorCollisionMoveConfig{
-                                    normalizedConfig.playerRadius,
-                                    normalizedConfig.playerHeight,
-                                    normalizedConfig.stepHeight,
+                                    effectiveConfig.playerRadius,
+                                    effectiveConfig.playerHeight,
+                                    effectiveConfig.stepHeight,
                                     4});
             moveResult = ResolveSectorDoorDynamicCollidersForPlayerMovement(
                     SectorCollisionMoveState{
@@ -299,9 +361,9 @@ void UpdateSectorEditorGameplayPreview(
                             controllerState.fpsControllerState.grounded},
                     moveResult,
                     SectorCollisionMoveConfig{
-                            normalizedConfig.playerRadius,
-                            normalizedConfig.playerHeight,
-                            normalizedConfig.stepHeight,
+                            effectiveConfig.playerRadius,
+                            effectiveConfig.playerHeight,
+                            effectiveConfig.stepHeight,
                             4},
                     dynamicDoorColliders);
             moveResult = ResolveSectorStaticModelCollidersForPlayerMovement(
@@ -312,9 +374,9 @@ void UpdateSectorEditorGameplayPreview(
                             controllerState.fpsControllerState.grounded},
                     moveResult,
                     SectorCollisionMoveConfig{
-                            normalizedConfig.playerRadius,
-                            normalizedConfig.playerHeight,
-                            normalizedConfig.stepHeight,
+                            effectiveConfig.playerRadius,
+                            effectiveConfig.playerHeight,
+                            effectiveConfig.stepHeight,
                             4},
                     BuildSectorOnlyVerticalContext(
                             collisionState,
@@ -327,7 +389,7 @@ void UpdateSectorEditorGameplayPreview(
                             moveResult.currentSectorId,
                             &movedHeights)
                     && movedHeights.floorZ - previousFeetY
-                            > normalizedConfig.stepHeight + GameplayFloorSnapEpsilon) {
+                            > effectiveConfig.stepHeight + GameplayFloorSnapEpsilon) {
                 moveResult.positionXZ = feetXZ;
                 moveResult.currentSectorId = previousSectorId;
                 moveResult.blockedByStep = true;

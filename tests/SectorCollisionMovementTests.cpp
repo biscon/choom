@@ -254,6 +254,9 @@ void TestPortalStepAndCeilingRules()
     result = Move(world, start, Vector2{2.0f, 0.0f}, 10, true, 0.0f, 0.25f, 1.6f);
     Check(result.currentSectorId == 10 && result.blockedByCeiling,
           "portal with insufficient ceiling clearance blocks");
+    result = Move(world, start, Vector2{2.0f, 0.0f}, 10, true, 0.0f, 0.25f, 1.0f);
+    Check(result.currentSectorId == 20 && !result.blockedByCeiling,
+          "crouched-height collider passes through the same low portal");
 }
 
 void TestBlocksPlayerPortalMovement()

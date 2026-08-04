@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetHandles.h"
 #include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/renderer/SectorFog.h"
 
 #include <raylib.h>
 
@@ -27,7 +28,8 @@ public:
             const std::vector<SectorMeshBatch>& sectorDrawRecords,
             const RuntimePortalVisibilityResult& visibilityResult,
             const std::unordered_map<std::string, engine::TextureHandle>& textureHandlesById,
-            RenderTexture2D& sceneTarget);
+            RenderTexture2D& sceneTarget,
+            const SectorFogRenderContext& fogContext);
 
     bool IsLoaded() const;
 
@@ -38,7 +40,8 @@ private:
             const Camera3D& camera,
             const std::vector<SectorMeshBatch>& sectorDrawRecords,
             const RuntimePortalVisibilityResult& visibilityResult,
-            const std::unordered_map<std::string, engine::TextureHandle>& textureHandlesById);
+            const std::unordered_map<std::string, engine::TextureHandle>& textureHandlesById,
+            const SectorFogRenderContext& fogContext);
     engine::TextureHandle TextureForId(
             const std::unordered_map<std::string, engine::TextureHandle>& textureHandlesById,
             const std::string& textureId) const;
@@ -51,6 +54,7 @@ private:
     int decalEmissiveLoc = -1;
     int decalTintLoc = -1;
     int decalIntensityLoc = -1;
+    SectorFogShaderLocations fogShaderLocations;
     Shader blurShader = {};
     Shader compositeShader = {};
     int blurTexelSizeLoc = -1;

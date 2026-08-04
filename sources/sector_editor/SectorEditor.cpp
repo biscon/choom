@@ -1707,22 +1707,26 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             controllerInput.run = input.IsKeyDown(KEY_LEFT_SHIFT) || input.IsKeyDown(KEY_RIGHT_SHIFT);
             controllerInput.mouseLookEnabled = previewState.controller.freeflyController.mouseLookEnabled;
             controllerInput.mouseDelta = input.MouseDelta();
-            const bool canConsumeGameplayJump =
+            const bool canConsumeGameplayActions =
                     state.mode == SectorEditorMode::Preview3D
                     && previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
                     && !uiState.keyboardCaptured
                     && !state.texturePicker.open
                     && !state.decalTintModal.open
                     && !state.previewSettingsModal.open;
-            if (canConsumeGameplayJump) {
+            if (canConsumeGameplayActions) {
                 input.ForEachEvent(
                         engine::InputEventType::KeyPressed,
                         true,
                         [&controllerInput](engine::InputEvent& event) {
-                            if (event.key.key != KEY_SPACE) {
+                            if (event.key.key == KEY_SPACE) {
+                                controllerInput.jumpPressed = true;
+                            } else if (event.key.key == KEY_LEFT_CONTROL
+                                    || event.key.key == KEY_RIGHT_CONTROL) {
+                                controllerInput.crouchTogglePressed = true;
+                            } else {
                                 return;
                             }
-                            controllerInput.jumpPressed = true;
                             engine::ConsumeEvent(event);
                         }
                 );
@@ -2855,7 +2859,8 @@ void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
             context.assets,
             previewState.overlay.useBakedAmbientOcclusion,
             &context.world,
-            SectorRuntimeDoorLightingContext{&previewState.runtime.runtimeObjects.objectLightProbes, &TopologyMap()});
+            SectorRuntimeDoorLightingContext{&previewState.runtime.runtimeObjects.objectLightProbes, &TopologyMap()},
+            TopologyMap().fogSettings);
 }
 
 void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
@@ -2863,7 +2868,7 @@ void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTextu
     if (state.mode != SectorEditorMode::Preview3D) {
         return;
     }
-    preview.ApplyEmissiveDecalBloomToScene(assets, sceneTarget);
+    preview.ApplyEmissiveDecalBloomToScene(assets, sceneTarget, TopologyMap().fogSettings);
 }
 
 void SectorEditor::RenderPreview3DOverlays()
@@ -4800,6 +4805,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     EnterSectorFreeflyController(previewState.controller.freeflyController);
     preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
     previewState.controller.visualStepOffsetY = 0.0f;
+    ResetSectorFpsCrouch(previewState.controller.fpsControllerState);
     ClearSectorFpsHeadBob(previewState.controller.headBobState);
     ClearSectorFpsLandingDip(previewState.controller.landingDipState);
     previewState.controller.fpsControllerConfig = NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
@@ -4828,6 +4834,7 @@ void SectorEditor::LeavePreview3D()
     previewState.controller.lastPreviewPose = ActivePreviewPose();
     previewState.controller.hasPreviewPose = true;
     previewState.controller.visualStepOffsetY = 0.0f;
+    ResetSectorFpsCrouch(previewState.controller.fpsControllerState);
     ClearSectorFpsHeadBob(previewState.controller.headBobState);
     ClearSectorFpsLandingDip(previewState.controller.landingDipState);
     previewState.controller.previewControlMode = SectorPreviewControlMode::FreeFly;
@@ -5015,6 +5022,8 @@ void SectorEditor::OpenPreviewSettingsModal()
     state.previewSettingsModal.draftSkySettings = NormalizeSectorTopologySkySettings(TopologyMap().skySettings);
     state.previewSettingsModal.draftDirectionalLight =
             NormalizeSectorTopologyDirectionalLightSettings(TopologyMap().directionalLight);
+    state.previewSettingsModal.draftFogSettings =
+            NormalizeSectorTopologyFogSettings(TopologyMap().fogSettings);
     state.previewSettingsModal.draftLightmapSettings =
             NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
 }
@@ -5036,6 +5045,8 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const SectorTopologyDirectionalLightSettings draftDirectionalLight =
             NormalizeSectorTopologyDirectionalLightSettings(
                     state.previewSettingsModal.draftDirectionalLight);
+    const SectorTopologyFogSettings draftFogSettings =
+            NormalizeSectorTopologyFogSettings(state.previewSettingsModal.draftFogSettings);
     const SectorLightmapBakeSettings draftLightmapSettings =
             NormalizeSectorPreviewObjectProbeSettings(state.previewSettingsModal.draftLightmapSettings);
     const bool previewChanged = !SamePreviewSettings(
@@ -5045,12 +5056,14 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const bool directionalChanged = !SameDirectionalLightSettings(
             TopologyMap().directionalLight,
             draftDirectionalLight);
+    const bool fogChanged = !SameFogSettings(TopologyMap().fogSettings, draftFogSettings);
     const SectorLightmapBakeSettings currentLightmapSettings =
             NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
     const bool objectProbeSettingsChanged =
             currentLightmapSettings.objectProbeSpacingWorld != draftLightmapSettings.objectProbeSpacingWorld
             || currentLightmapSettings.objectProbeHeightWorld != draftLightmapSettings.objectProbeHeightWorld;
-    if (!previewChanged && !skyChanged && !directionalChanged && !objectProbeSettingsChanged) {
+    if (!previewChanged && !skyChanged && !directionalChanged && !fogChanged
+            && !objectProbeSettingsChanged) {
         state.previewSettingsModal = SectorPreviewSettingsModalState{};
         statusText = "Preview settings unchanged";
         return;
@@ -5064,6 +5077,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     TopologyMap().previewSettings = draftPreviewSettings;
     TopologyMap().skySettings = draftSkySettings;
     TopologyMap().directionalLight = draftDirectionalLight;
+    ApplySectorPreviewFogSettings(TopologyMap(), draftFogSettings);
     ApplySectorPreviewObjectProbeSettings(TopologyMap(), draftLightmapSettings);
     MarkTopologyDocumentEdited("Preview settings updated");
     state.previewSettingsModal = SectorPreviewSettingsModalState{};

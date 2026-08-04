@@ -3759,6 +3759,75 @@ game::SectorStaticModelCollider MakeStaticModelCollider(
     return collider;
 }
 
+void TestPropAndDoorStandingClearanceQueries()
+{
+    const Vector2 playerPosition{};
+    const float feetY = 0.0f;
+    const float radius = 0.25f;
+    const std::vector<game::SectorStaticModelCollider> overheadProps{
+            MakeStaticModelCollider(
+                    Vector2{},
+                    Vector2{1.0f, 1.0f},
+                    1.1f,
+                    2.0f)};
+    Check(game::SectorStaticModelCollidersAllowPlayerHeight(
+                  playerPosition,
+                  feetY,
+                  radius,
+                  1.0f,
+                  overheadProps),
+          "crouched player height fits beneath a generated prop underside");
+    Check(!game::SectorStaticModelCollidersAllowPlayerHeight(
+                  playerPosition,
+                  feetY,
+                  radius,
+                  1.6f,
+                  overheadProps),
+          "standing player height is rejected beneath a generated prop underside");
+    Check(game::SectorStaticModelCollidersAllowPlayerHeight(
+                  Vector2{3.0f, 0.0f},
+                  feetY,
+                  radius,
+                  1.6f,
+                  overheadProps),
+          "prop standing clearance ignores horizontally separate colliders");
+
+    const std::vector<game::SectorDynamicDoorCollider> raisedDoors{
+            MakeDynamicDoorCollider(
+                    Vector2{},
+                    Vector2{1.0f, 0.125f},
+                    1.1f,
+                    2.0f)};
+    Check(game::SectorDoorDynamicCollidersAllowPlayerHeight(
+                  playerPosition,
+                  feetY,
+                  radius,
+                  1.0f,
+                  raisedDoors),
+          "crouched player height fits beneath a generated raised door");
+    Check(!game::SectorDoorDynamicCollidersAllowPlayerHeight(
+                  playerPosition,
+                  feetY,
+                  radius,
+                  1.6f,
+                  raisedDoors),
+          "standing player height is rejected beneath a generated raised door");
+
+    const std::vector<game::SectorStaticModelCollider> supportingProps{
+            MakeStaticModelCollider(
+                    Vector2{},
+                    Vector2{1.0f, 1.0f},
+                    -1.0f,
+                    0.0f)};
+    Check(game::SectorStaticModelCollidersAllowPlayerHeight(
+                  playerPosition,
+                  feetY,
+                  radius,
+                  1.6f,
+                  supportingProps),
+          "prop supporting the player's feet is not mistaken for overhead clearance");
+}
+
 game::SectorCollisionMoveResult ResolveStaticModelMovement(
         const game::SectorFpsControllerState& state,
         Vector2 destination,
@@ -4382,6 +4451,7 @@ int main()
     TestSectorRuntimeObjectBakedLightingSystem();
     TestSectorRuntimeObjectBakedLightingFallback();
     TestSectorRuntimeObjectBakedLightingUsesMapFallback();
+    TestPropAndDoorStandingClearanceQueries();
     TestStaticModelColliderBuildUsesFullAuthoredTransform();
     TestStaticModelXzRotationUsesSharedTransformAndEnclosingBounds();
     TestStaticModelColliderBlocksSweepsAndSlides();

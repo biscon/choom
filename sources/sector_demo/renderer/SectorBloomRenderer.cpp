@@ -55,6 +55,7 @@ const char* SectorBloomSourceFs = R"(
 in vec2 fragTexCoord;
 in vec2 fragTexCoord2;
 in vec2 fragDecalUv;
+in vec3 fragWorldPosition;
 in vec4 fragColor;
 
 uniform sampler2D texture0;
@@ -66,7 +67,31 @@ uniform int decalEmissive;
 uniform vec3 decalTint;
 uniform float decalBloomIntensity;
 
+uniform int fogEnabled;
+uniform vec3 fogCameraPosition;
+uniform float fogStartDistanceWorld;
+uniform float fogDensity;
+uniform float fogMaxOpacity;
+uniform float fogReferenceHeightWorld;
+uniform float fogHeightFalloff;
+
 out vec4 finalColor;
+
+float SectorFogTransmittance(vec3 worldPosition)
+{
+    if (fogEnabled == 0 || fogDensity <= 0.0 || fogMaxOpacity <= 0.0) {
+        return 1.0;
+    }
+
+    float fogDistance = max(length(worldPosition - fogCameraPosition) - fogStartDistanceWorld, 0.0);
+    float midpointHeight = (fogCameraPosition.y + worldPosition.y) * 0.5;
+    float heightAboveReference = max(midpointHeight - fogReferenceHeightWorld, 0.0);
+    float heightMultiplier = exp(-heightAboveReference * fogHeightFalloff);
+    float fogAmount = min(
+            1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
+            fogMaxOpacity);
+    return 1.0 - fogAmount;
+}
 
 void main()
 {
@@ -85,7 +110,8 @@ void main()
     if (alpha <= 0.0) {
         discard;
     }
-    vec3 rgb = decalColor.rgb * decalTint * alpha * (decalBloomIntensity / 10.0);
+    vec3 rgb = decalColor.rgb * decalTint * alpha * (decalBloomIntensity / 10.0)
+            * SectorFogTransmittance(fragWorldPosition);
     finalColor = vec4(rgb, 1.0);
 }
 )";
@@ -160,7 +186,8 @@ bool LoadBloomSourceMaterial(
         int& decalOpacityLoc,
         int& decalEmissiveLoc,
         int& decalTintLoc,
-        int& decalBloomIntensityLoc)
+        int& decalBloomIntensityLoc,
+        SectorFogShaderLocations& fogShaderLocations)
 {
     material = LoadMaterialDefault();
     Shader shader = LoadShaderFromMemory(SectorBloomSourceVs, SectorBloomSourceFs);
@@ -180,6 +207,7 @@ bool LoadBloomSourceMaterial(
     decalEmissiveLoc = GetShaderLocation(material.shader, "decalEmissive");
     decalTintLoc = GetShaderLocation(material.shader, "decalTint");
     decalBloomIntensityLoc = GetShaderLocation(material.shader, "decalBloomIntensity");
+    fogShaderLocations = GetSectorFogShaderLocations(material.shader);
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
     return true;
@@ -211,6 +239,7 @@ void SectorBloomRenderer::Shutdown()
     decalEmissiveLoc = -1;
     decalTintLoc = -1;
     decalIntensityLoc = -1;
+    fogShaderLocations = SectorFogShaderLocations{};
     blurTexelSizeLoc = -1;
     blurDirectionLoc = -1;
     compositeStrengthLoc = -1;
@@ -244,7 +273,8 @@ void SectorBloomRenderer::ApplyEmissiveDecalBloomToScene(
         const std::vector<SectorMeshBatch>& sectorDrawRecords,
         const RuntimePortalVisibilityResult& visibilityResult,
         const std::unordered_map<std::string, engine::TextureHandle>& textureHandlesById,
-        RenderTexture2D& sceneTarget)
+        RenderTexture2D& sceneTarget,
+        const SectorFogRenderContext& fogContext)
 {
     if (!previewInitialized || !BloomEnabled || sceneTarget.texture.id == 0) {
         return;
@@ -266,7 +296,13 @@ void SectorBloomRenderer::ApplyEmissiveDecalBloomToScene(
 
     BeginTextureMode(source);
     ClearBackground(BLANK);
-    RenderBloomSource(assets, camera, sectorDrawRecords, visibilityResult, textureHandlesById);
+    RenderBloomSource(
+            assets,
+            camera,
+            sectorDrawRecords,
+            visibilityResult,
+            textureHandlesById,
+            fogContext);
     EndTextureMode();
 
     RenderTexture2D* input = &source;
@@ -371,7 +407,8 @@ bool SectorBloomRenderer::EnsureResources(int sceneWidthValue, int sceneHeightVa
                     decalOpacityLoc,
                     decalEmissiveLoc,
                     decalTintLoc,
-                    decalIntensityLoc)) {
+                    decalIntensityLoc,
+                    fogShaderLocations)) {
             return false;
         }
     }
@@ -420,9 +457,11 @@ void SectorBloomRenderer::RenderBloomSource(
         const Camera3D& camera,
         const std::vector<SectorMeshBatch>& sectorDrawRecords,
         const RuntimePortalVisibilityResult& visibilityResult,
-        const std::unordered_map<std::string, engine::TextureHandle>& textureHandlesById)
+        const std::unordered_map<std::string, engine::TextureHandle>& textureHandlesById,
+        const SectorFogRenderContext& fogContext)
 {
     BeginMode3D(camera);
+    UploadSectorFogShaderValues(sourceMaterial.shader, fogShaderLocations, fogContext);
     sourceMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = defaultMaterialTexture;
     sourceMaterial.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
 

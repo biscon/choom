@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
+#include "sector_demo/renderer/SectorFog.h"
 
 #include <raylib.h>
 
@@ -25,6 +26,7 @@ public:
             engine::World& runtimeObjectWorld,
             const Camera3D& camera,
             const SectorBillboardDynamicLightContext& dynamicLightContext,
+            const SectorFogRenderContext& fogContext,
             std::string& renderDebugText);
 
     bool IsLoaded() const { return shaderLoaded; }
@@ -59,6 +61,7 @@ private:
     int shadowMap0Loc = -1;
     int shadowMap1Loc = -1;
     int dynamicLightingClampLoc = -1;
+    SectorFogShaderLocations fogShaderLocations;
     bool shaderLoaded = false;
     bool warningPrinted = false;
     std::string renderDebugText;

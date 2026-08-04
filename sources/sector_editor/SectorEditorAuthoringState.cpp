@@ -45,6 +45,7 @@ void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap
     target.previewSettings = source.previewSettings;
     target.skySettings = source.skySettings;
     target.directionalLight = source.directionalLight;
+    target.fogSettings = source.fogSettings;
     target.lightmapSettings = source.lightmapSettings;
     target.bakedLightmap = source.bakedLightmap;
 }
