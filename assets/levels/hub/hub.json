@@ -148,6 +148,21 @@
         88.0
       ],
       "yawDegrees": -90.0
+    },
+    {
+      "id": 6,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/leon.glb",
+        "scale": 0.3199999928474426,
+        "collision": true
+      },
+      "position": [
+        4.0,
+        0.0,
+        50.0
+      ],
+      "yawDegrees": 180.0
     }
   ],
   "staticLights": [
@@ -169,61 +184,10 @@
       }
     },
     {
-      "id": 2,
-      "position": [
-        -22.0,
-        16.0,
-        8.0
-      ],
-      "radius": 64.0,
-      "sourceRadius": 2.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 245,
-        "b": 210,
-        "a": 255
-      }
-    },
-    {
-      "id": 3,
-      "position": [
-        -22.0,
-        16.0,
-        40.0
-      ],
-      "radius": 64.0,
-      "sourceRadius": 2.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 245,
-        "b": 210,
-        "a": 255
-      }
-    },
-    {
-      "id": 4,
-      "position": [
-        -22.0,
-        16.0,
-        72.0
-      ],
-      "radius": 64.0,
-      "sourceRadius": 2.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 245,
-        "b": 210,
-        "a": 255
-      }
-    },
-    {
       "id": 5,
       "position": [
         4.0,
-        20.0,
+        25.0,
         24.0
       ],
       "radius": 32.0,
@@ -238,21 +202,25 @@
       "atmosphere": {
         "haze": {
           "enabled": true,
-          "density": 0.10000000149011612,
+          "extentScale": 0.5,
+          "density": 0.15000000596046448,
           "scatteringTint": {
-            "r": 255,
-            "g": 225,
+            "r": 210,
+            "g": 200,
             "b": 190,
             "a": 255
           },
-          "edgeSoftness": 0.8999999761581421,
-          "noiseAmount": 0.6000000238418579,
-          "noiseScaleWorld": 0.75,
+          "edgeSoftness": 0.699999988079071,
+          "noiseAmount": 0.75,
+          "noiseScaleWorld": 0.5,
+          "flowDirectionDegrees": 90.0,
           "flowSpeedWorld": 0.5
         },
         "dust": {
           "enabled": true,
           "amount": 51,
+          "extentScale": 0.25,
+          "maximumSizeWorld": 0.014999999664723873,
           "scatteringTint": {
             "r": 255,
             "g": 225,
@@ -265,25 +233,50 @@
   ],
   "staticSpotLights": [
     {
-      "id": 1,
+      "id": 2,
       "position": [
-        5.669118881225586,
-        20.720718383789063,
-        55.55404281616211
+        4.0,
+        26.0,
+        56.0
       ],
       "target": [
-        33.91773986816406,
-        4.381338119506836,
-        55.55404281616211
+        3.9598705768585205,
+        0.0,
+        52.0677490234375
       ],
       "range": 64.0,
-      "sourceRadius": 0.0,
-      "intensity": 1.0,
+      "sourceRadius": 1.0,
+      "intensity": 1.5,
       "color": {
         "r": 255,
-        "g": 255,
-        "b": 255,
+        "g": 245,
+        "b": 225,
         "a": 255
+      },
+      "atmosphere": {
+        "haze": {
+          "enabled": true,
+          "density": 0.10000000149011612,
+          "scatteringTint": {
+            "r": 200,
+            "g": 190,
+            "b": 145,
+            "a": 255
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "amount": 64,
+          "extentScale": 0.4000000059604645,
+          "maximumSizeWorld": 0.014999999664723873,
+          "opacity": 0.15000000596046448,
+          "scatteringTint": {
+            "r": 200,
+            "g": 200,
+            "b": 200,
+            "a": 255
+          }
+        }
       }
     }
   ],
@@ -308,26 +301,28 @@
         "haze": {
           "enabled": true,
           "extentScale": 0.25,
+          "density": 0.10000000149011612,
           "scatteringTint": {
-            "r": 255,
-            "g": 245,
-            "b": 190,
+            "r": 200,
+            "g": 190,
+            "b": 145,
             "a": 255
           },
           "edgeSoftness": 0.6000000238418579,
-          "noiseScaleWorld": 0.5
+          "noiseAmount": 0.6000000238418579,
+          "noiseScaleWorld": 0.25,
+          "flowSpeedWorld": 0.25
         },
         "dust": {
           "enabled": true,
-          "amount": 70,
-          "extentScale": 0.20000000298023224,
+          "amount": 32,
+          "extentScale": 0.15000000596046448,
           "minimumSizeWorld": 0.004000000189989805,
-          "maximumSizeWorld": 0.009999999776482582,
-          "opacity": 0.15000000596046448,
+          "maximumSizeWorld": 0.012000000104308128,
           "scatteringTint": {
-            "r": 255,
-            "g": 245,
-            "b": 190,
+            "r": 200,
+            "g": 190,
+            "b": 145,
             "a": 255
           }
         }
@@ -381,7 +376,7 @@
       "a": 255
     },
     "startDistanceWorld": 2.0,
-    "density": 0.02500000037252903,
+    "density": 0.029999999329447746,
     "maxOpacity": 0.6499999761581421,
     "referenceHeightWorld": 1.0,
     "heightFalloff": 0.5,
@@ -391,11 +386,11 @@
     "path": "assets/levels/hub/hub.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "f59fe33b4f8b1299",
+    "sourceHash": "fb5570407a69dcd6",
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 1,
-      "sourceHash": "f59fe33b4f8b1299",
+      "sourceHash": "fb5570407a69dcd6",
       "count": 15,
       "probeSpacingWorld": 4.0,
       "probeHeightWorld": 1.2000000476837158,
@@ -404,9 +399,9 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.png.static_models.bin",
       "version": 1,
-      "sourceHash": "f59fe33b4f8b1299",
-      "modelCount": 5,
-      "objectCount": 5,
+      "sourceHash": "fb5570407a69dcd6",
+      "modelCount": 6,
+      "objectCount": 6,
       "format": "staticModelUvRemapF32LE"
     }
   },
@@ -4364,12 +4359,12 @@
         "x": 64,
         "y": 832,
         "bottomOffsetWorld": -0.25,
-        "radiusXWorld": 0.8999999761581421,
-        "radiusZWorld": 1.0,
+        "radiusXWorld": 1.2000000476837158,
+        "radiusZWorld": 1.2999999523162842,
         "heightWorld": 0.5,
-        "density": 1.75,
+        "density": 2.5,
         "maxOpacity": 0.5,
-        "edgeSoftness": 1.0,
+        "edgeSoftness": 0.699999988079071,
         "noiseScaleWorld": 0.30000001192092896,
         "noiseAmount": 1.0,
         "flowDirectionDegrees": 90.0,
