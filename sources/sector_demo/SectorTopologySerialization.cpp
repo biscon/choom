@@ -1627,6 +1627,79 @@ Json WriteColor(Color color)
     };
 }
 
+Json WriteLightHazeSettings(const SectorLightHazeSettings& source)
+{
+    const SectorLightHazeSettings settings = NormalizeSectorLightHazeSettings(source);
+    const SectorLightHazeSettings defaults;
+    Json value = Json::object();
+    if (settings.enabled != defaults.enabled) value["enabled"] = settings.enabled;
+    if (settings.extentScale != defaults.extentScale) value["extentScale"] = settings.extentScale;
+    if (settings.density != defaults.density) value["density"] = settings.density;
+    if (settings.scatteringTint.r != defaults.scatteringTint.r
+            || settings.scatteringTint.g != defaults.scatteringTint.g
+            || settings.scatteringTint.b != defaults.scatteringTint.b) {
+        value["scatteringTint"] = WriteColor(settings.scatteringTint);
+    }
+    if (settings.edgeSoftness != defaults.edgeSoftness) value["edgeSoftness"] = settings.edgeSoftness;
+    if (settings.noiseAmount != defaults.noiseAmount) value["noiseAmount"] = settings.noiseAmount;
+    if (settings.noiseScaleWorld != defaults.noiseScaleWorld) value["noiseScaleWorld"] = settings.noiseScaleWorld;
+    if (settings.flowDirectionDegrees != defaults.flowDirectionDegrees) {
+        value["flowDirectionDegrees"] = settings.flowDirectionDegrees;
+    }
+    if (settings.flowSpeedWorld != defaults.flowSpeedWorld) value["flowSpeedWorld"] = settings.flowSpeedWorld;
+    return value;
+}
+
+Json WriteLightDustSettings(const SectorLightDustSettings& source)
+{
+    const SectorLightDustSettings settings = NormalizeSectorLightDustSettings(source);
+    const SectorLightDustSettings defaults;
+    Json value = Json::object();
+    if (settings.enabled != defaults.enabled) value["enabled"] = settings.enabled;
+    if (settings.amount != defaults.amount) value["amount"] = settings.amount;
+    if (settings.extentScale != defaults.extentScale) value["extentScale"] = settings.extentScale;
+    if (settings.minimumSizeWorld != defaults.minimumSizeWorld) {
+        value["minimumSizeWorld"] = settings.minimumSizeWorld;
+    }
+    if (settings.maximumSizeWorld != defaults.maximumSizeWorld) {
+        value["maximumSizeWorld"] = settings.maximumSizeWorld;
+    }
+    if (settings.opacity != defaults.opacity) value["opacity"] = settings.opacity;
+    if (settings.driftSpeedWorld != defaults.driftSpeedWorld) {
+        value["driftSpeedWorld"] = settings.driftSpeedWorld;
+    }
+    if (settings.turbulenceWorld != defaults.turbulenceWorld) {
+        value["turbulenceWorld"] = settings.turbulenceWorld;
+    }
+    if (settings.scatteringTint.r != defaults.scatteringTint.r
+            || settings.scatteringTint.g != defaults.scatteringTint.g
+            || settings.scatteringTint.b != defaults.scatteringTint.b) {
+        value["scatteringTint"] = WriteColor(settings.scatteringTint);
+    }
+    return value;
+}
+
+Json WriteLightAtmosphereSettings(const SectorLightAtmosphereSettings& source)
+{
+    const SectorLightAtmosphereSettings settings = NormalizeSectorLightAtmosphereSettings(source);
+    Json value = Json::object();
+    if (!IsDefaultSectorLightHazeSettings(settings.haze)) {
+        value["haze"] = WriteLightHazeSettings(settings.haze);
+    }
+    if (!IsDefaultSectorLightDustSettings(settings.dust)) {
+        value["dust"] = WriteLightDustSettings(settings.dust);
+    }
+    return value;
+}
+
+template<typename T>
+void WriteOptionalLightAtmosphere(Json& lightJson, const T& light)
+{
+    if (!IsDefaultSectorLightAtmosphereSettings(light.atmosphere)) {
+        lightJson["atmosphere"] = WriteLightAtmosphereSettings(light.atmosphere);
+    }
+}
+
 template<typename T>
 void WriteDynamicLightFlickerFields(Json& lightJson, const T& light, const std::string& context)
 {
@@ -1700,6 +1773,7 @@ Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const st
     if (shadowSoftness != DynamicSpotLightDefaultShadowSoftness) {
         lightJson["shadowSoftness"] = shadowSoftness;
     }
+    WriteOptionalLightAtmosphere(lightJson, light);
     return lightJson;
 }
 
@@ -1729,6 +1803,7 @@ Json WriteStaticSpotLight(const SectorTopologyStaticSpotLight& light, const std:
     if (outerConeDegrees != 35.0f) {
         lightJson["outerConeDegrees"] = outerConeDegrees;
     }
+    WriteOptionalLightAtmosphere(lightJson, light);
     return lightJson;
 }
 
@@ -1994,6 +2069,99 @@ void ReadTextures(const Json& root, SectorTopologyMap& map)
     }
 }
 
+SectorLightHazeSettings ReadLightHazeSettings(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+    SectorLightHazeSettings settings;
+    settings.enabled = ReadOptionalBool(value, "enabled", context, settings.enabled);
+    settings.extentScale = ReadOptionalClampedFloat(
+            value, "extentScale", context, settings.extentScale, 0.05f, 2.0f);
+    settings.density = ReadOptionalClampedFloat(
+            value, "density", context, settings.density, 0.0f, 2.0f);
+    const auto tintIt = value.find("scatteringTint");
+    if (tintIt != value.end()) {
+        settings.scatteringTint = ReadColor(*tintIt, context + ".scatteringTint");
+    }
+    settings.edgeSoftness = ReadOptionalClampedFloat(
+            value, "edgeSoftness", context, settings.edgeSoftness, 0.01f, 1.0f);
+    settings.noiseAmount = ReadOptionalClampedFloat(
+            value, "noiseAmount", context, settings.noiseAmount, 0.0f, 1.0f);
+    settings.noiseScaleWorld = ReadOptionalClampedFloat(
+            value, "noiseScaleWorld", context, settings.noiseScaleWorld, 0.05f, 16.0f);
+    settings.flowDirectionDegrees = ReadOptionalClampedFloat(
+            value,
+            "flowDirectionDegrees",
+            context,
+            settings.flowDirectionDegrees,
+            -360.0f,
+            360.0f);
+    settings.flowSpeedWorld = ReadOptionalClampedFloat(
+            value, "flowSpeedWorld", context, settings.flowSpeedWorld, 0.0f, 2.0f);
+    return NormalizeSectorLightHazeSettings(settings);
+}
+
+SectorLightDustSettings ReadLightDustSettings(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+    SectorLightDustSettings settings;
+    settings.enabled = ReadOptionalBool(value, "enabled", context, settings.enabled);
+    settings.amount = ReadOptionalClampedInt(value, "amount", context, settings.amount, 0, 128);
+    settings.extentScale = ReadOptionalClampedFloat(
+            value, "extentScale", context, settings.extentScale, 0.05f, 2.0f);
+    settings.minimumSizeWorld = ReadOptionalClampedFloat(
+            value,
+            "minimumSizeWorld",
+            context,
+            settings.minimumSizeWorld,
+            0.002f,
+            0.25f);
+    settings.maximumSizeWorld = ReadOptionalClampedFloat(
+            value,
+            "maximumSizeWorld",
+            context,
+            settings.maximumSizeWorld,
+            0.002f,
+            0.25f);
+    settings.opacity = ReadOptionalClampedFloat(
+            value, "opacity", context, settings.opacity, 0.0f, 1.0f);
+    settings.driftSpeedWorld = ReadOptionalClampedFloat(
+            value, "driftSpeedWorld", context, settings.driftSpeedWorld, 0.0f, 0.5f);
+    settings.turbulenceWorld = ReadOptionalClampedFloat(
+            value, "turbulenceWorld", context, settings.turbulenceWorld, 0.0f, 0.5f);
+    const auto tintIt = value.find("scatteringTint");
+    if (tintIt != value.end()) {
+        settings.scatteringTint = ReadColor(*tintIt, context + ".scatteringTint");
+    }
+    return NormalizeSectorLightDustSettings(settings);
+}
+
+SectorLightAtmosphereSettings ReadOptionalLightAtmosphereSettings(
+        const Json& light,
+        const std::string& context)
+{
+    SectorLightAtmosphereSettings settings;
+    const auto atmosphereIt = light.find("atmosphere");
+    if (atmosphereIt == light.end()) {
+        return settings;
+    }
+    if (!atmosphereIt->is_object()) {
+        Fail(context + ".atmosphere must be an object");
+    }
+    const auto hazeIt = atmosphereIt->find("haze");
+    if (hazeIt != atmosphereIt->end()) {
+        settings.haze = ReadLightHazeSettings(*hazeIt, context + ".atmosphere.haze");
+    }
+    const auto dustIt = atmosphereIt->find("dust");
+    if (dustIt != atmosphereIt->end()) {
+        settings.dust = ReadLightDustSettings(*dustIt, context + ".atmosphere.dust");
+    }
+    return NormalizeSectorLightAtmosphereSettings(settings);
+}
+
 void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBakedLightmap)
 {
     const auto runtimeObjectsIt = root.find("runtimeObjects");
@@ -2028,6 +2196,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             light.sourceRadius = ReadFloat(value, "sourceRadius", context);
             light.intensity = ReadFloat(value, "intensity", context);
             light.color = ReadColor(RequireField(value, "color", context), context + ".color");
+            light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
             map.staticLights.push_back(light);
         }
     }
@@ -2068,6 +2237,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
                     0.0f,
                     179.0f);
             light.outerConeDegrees = std::max(light.outerConeDegrees, light.innerConeDegrees);
+            light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
             map.staticSpotLights.push_back(light);
         }
     }
@@ -2107,6 +2277,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
                     DynamicLightFlickerDefaultAmount,
                     DynamicLightFlickerMinAmount,
                     DynamicLightFlickerMaxAmount);
+            light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
             map.dynamicPointLights.push_back(light);
         }
     }
@@ -2191,6 +2362,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
                     DynamicSpotLightDefaultShadowSoftness,
                     DynamicSpotLightMinShadowSoftness,
                     DynamicSpotLightMaxShadowSoftness);
+            light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
             map.dynamicSpotLights.push_back(light);
         }
     }
@@ -2458,14 +2630,16 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
         RequireFinite(light->intensity, context + ".intensity");
         RequireFinite(light->radius, context + ".radius");
         RequireFinite(light->sourceRadius, context + ".sourceRadius");
-        root["staticLights"].push_back(Json{
+        Json lightJson{
                 {"id", light->id},
                 {"position", WriteVector3(light->position, context + ".position")},
                 {"radius", light->radius},
                 {"sourceRadius", light->sourceRadius},
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
-        });
+        };
+        WriteOptionalLightAtmosphere(lightJson, *light);
+        root["staticLights"].push_back(std::move(lightJson));
     }
 
     root["staticSpotLights"] = Json::array();
@@ -2490,6 +2664,7 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
             lightJson["enabled"] = false;
         }
         WriteDynamicLightFlickerFields(lightJson, *light, context);
+        WriteOptionalLightAtmosphere(lightJson, *light);
         root["dynamicPointLights"].push_back(std::move(lightJson));
     }
 
@@ -2893,14 +3068,16 @@ Json SerializeMap(const SectorTopologyMap& map)
         RequireFinite(light->intensity, context + ".intensity");
         RequireFinite(light->radius, context + ".radius");
         RequireFinite(light->sourceRadius, context + ".sourceRadius");
-        root["staticLights"].push_back(Json{
+        Json lightJson{
                 {"id", light->id},
                 {"position", WriteVector3(light->position, context + ".position")},
                 {"radius", light->radius},
                 {"sourceRadius", light->sourceRadius},
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
-        });
+        };
+        WriteOptionalLightAtmosphere(lightJson, *light);
+        root["staticLights"].push_back(std::move(lightJson));
     }
 
     root["staticSpotLights"] = Json::array();
@@ -2925,6 +3102,7 @@ Json SerializeMap(const SectorTopologyMap& map)
             lightJson["enabled"] = false;
         }
         WriteDynamicLightFlickerFields(lightJson, *light, context);
+        WriteOptionalLightAtmosphere(lightJson, *light);
         root["dynamicPointLights"].push_back(std::move(lightJson));
     }
 

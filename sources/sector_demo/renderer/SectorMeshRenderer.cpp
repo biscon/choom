@@ -689,9 +689,15 @@ bool SectorMeshRenderer::RebuildRendererResources(
     dynamicLightState.RebuildSources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
+    BuildSectorLightAtmosphereSources(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+            lightAtmosphereSources);
     doorRenderer.ReserveRuntimeDoorCapacity(kSectorRuntimeObjectInitialCapacity);
     runtimeSeconds = 0.0f;
     localFogRenderer.Shutdown();
+    lightHazeRenderer.Shutdown();
+    lightDustRenderer.Shutdown();
 
     if (!dynamicLightState.EnsureShadowMapResources()) {
         Shutdown(assets);
@@ -799,9 +805,12 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     visibilityGraphValid = false;
     visibilityLookupWorldValid = false;
     dynamicLightState.Reset();
+    lightAtmosphereSources.clear();
     doorRenderer.ClearPreparedShadowCasters();
     runtimeSeconds = 0.0f;
     localFogRenderer.Shutdown();
+    lightHazeRenderer.Shutdown();
+    lightDustRenderer.Shutdown();
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
@@ -1058,6 +1067,7 @@ SectorBillboardDynamicLightContext SectorMeshRenderer::BuildBillboardDynamicLigh
     for (int i = 0; i < context.dynamicLightCount; ++i) {
         const SectorPreviewDynamicPointLightUniform& light =
                 dynamicLightState.SelectedLights()[static_cast<size_t>(i)];
+        context.dynamicLightIds[static_cast<size_t>(i)] = light.lightId;
         context.dynamicLightPositions[static_cast<size_t>(i)] = light.position;
         context.dynamicLightColors[static_cast<size_t>(i)] = light.color;
         context.dynamicLightRadii[static_cast<size_t>(i)] = light.radius;
@@ -1121,13 +1131,34 @@ bool SectorMeshRenderer::ApplyLocalFogToScene(
 {
     const SectorBillboardDynamicLightContext dynamicLightContext =
             BuildBillboardDynamicLightContext();
-    return localFogRenderer.Apply(
+    const bool localFogApplied = localFogRenderer.Apply(
             sceneTarget,
             map,
             camera,
             runtimeSeconds,
             objectLightProbes,
             dynamicLightContext);
+    const bool lightHazeApplied = lightHazeRenderer.Apply(
+            sceneTarget,
+            map,
+            camera,
+            runtimeSeconds,
+            objectLightProbes,
+            dynamicLightContext,
+            lightAtmosphereSources,
+            visibilityResult,
+            meshes.sectorReceiverBounds);
+    const bool lightDustApplied = lightDustRenderer.Apply(
+            sceneTarget,
+            map,
+            camera,
+            runtimeSeconds,
+            objectLightProbes,
+            dynamicLightContext,
+            lightAtmosphereSources,
+            visibilityResult,
+            meshes.sectorReceiverBounds);
+    return localFogApplied || lightHazeApplied || lightDustApplied;
 }
 
 SectorViewPose SectorMeshRenderer::Pose() const
@@ -1159,6 +1190,10 @@ void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map
     dynamicLightState.RebuildSources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
+    BuildSectorLightAtmosphereSources(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+            lightAtmosphereSources);
     UpdateVisibilityDebug();
 }
 

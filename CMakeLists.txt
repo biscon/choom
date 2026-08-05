@@ -252,6 +252,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
+            sources/sector_demo/renderer/SectorLightAtmosphere.cpp
             sources/sector_demo/renderer/SectorLocalFogLighting.cpp
     )
     target_include_directories(sector_topology_lightmap_tests PRIVATE sources)

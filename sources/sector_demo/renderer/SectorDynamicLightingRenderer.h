@@ -72,6 +72,7 @@ struct SectorDynamicShadowMapTextures {
 
 struct SectorBillboardDynamicLightContext {
     int dynamicLightCount = 0;
+    std::array<int, MaxDynamicLights> dynamicLightIds{};
     std::array<Vector3, MaxDynamicLights> dynamicLightPositions{};
     std::array<Vector3, MaxDynamicLights> dynamicLightColors{};
     std::array<float, MaxDynamicLights> dynamicLightRadii{};

@@ -1095,6 +1095,13 @@ void TestSourceHashChanges()
     changedLight = base;
     changedLight.staticLights[0].color.r = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) != hash, "hash changes when light color changes");
+    changedLight = base;
+    changedLight.staticLights[0].atmosphere.haze.enabled = true;
+    changedLight.staticLights[0].atmosphere.haze.density = 0.25f;
+    changedLight.staticLights[0].atmosphere.dust.enabled = true;
+    changedLight.staticLights[0].atmosphere.dust.amount = 64;
+    Check(game::ComputeSectorLightmapSourceHash(changedLight) == hash,
+          "hash ignores visual-only static-light atmosphere settings");
 
     game::SectorTopologyMap changedStaticSpotLight = base;
     changedStaticSpotLight.staticSpotLights.push_back(game::SectorTopologyStaticSpotLight{
@@ -2617,6 +2624,91 @@ void TestLocalFogProbeLightingReductionInterpolationAndFallback()
     }
 }
 
+void TestLightAtmosphereVolumeShapesAndProbeFallback()
+{
+    game::SectorTopologyMap sourceMap;
+    game::SectorTopologyStaticPointLight disabledAtmosphere;
+    disabledAtmosphere.id = 1;
+    disabledAtmosphere.atmosphere.haze.density = 0.2f;
+    sourceMap.staticLights.push_back(disabledAtmosphere);
+    std::vector<game::SectorLightAtmosphereSource> sources;
+    game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
+    Check(sources.empty(),
+          "disabled light atmosphere does not create a per-frame renderer source");
+    sourceMap.staticLights[0].atmosphere.haze.enabled = true;
+    game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
+    Check(sources.size() == 1,
+          "enabled static-light haze creates one bounded renderer source");
+    game::SectorTopologyDynamicPointLight disabledDynamic;
+    disabledDynamic.id = 2;
+    disabledDynamic.enabled = false;
+    disabledDynamic.atmosphere.haze.enabled = true;
+    sourceMap.dynamicPointLights.push_back(disabledDynamic);
+    game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
+    Check(sources.size() == 1,
+          "disabled dynamic light does not create an atmosphere renderer source");
+
+    game::SectorLightAtmosphereSource point;
+    point.shape = game::SectorLightAtmosphereShape::Sphere;
+    point.positionWorld = Vector3{1.0f, 2.0f, 3.0f};
+    point.rangeWorld = 10.0f;
+    game::SectorLightAtmosphereVolume pointVolume;
+    Check(game::MakeSectorLightAtmosphereVolume(point, 0.5f, pointVolume)
+                  && Near(pointVolume.extentWorld, 5.0f),
+          "point-light atmosphere extent scales the authored light range");
+    Check(game::IsPointInsideSectorLightAtmosphereVolume(
+                  pointVolume, Vector3{1.0f, 2.0f, 7.9f})
+                  && !game::IsPointInsideSectorLightAtmosphereVolume(
+                          pointVolume, Vector3{1.0f, 2.0f, 8.1f}),
+          "point-light atmosphere uses bounded spherical particle and haze containment");
+
+    game::SectorLightAtmosphereSource spot;
+    spot.shape = game::SectorLightAtmosphereShape::Cone;
+    spot.positionWorld = Vector3{};
+    spot.directionWorld = Vector3{0.0f, 0.0f, 1.0f};
+    spot.rangeWorld = 8.0f;
+    spot.outerConeCos = std::cos(30.0f * DEG2RAD);
+    game::SectorLightAtmosphereVolume spotVolume;
+    Check(game::MakeSectorLightAtmosphereVolume(spot, 1.0f, spotVolume),
+          "spot-light atmosphere builds a bounded cone proxy");
+    Check(game::IsPointInsideSectorLightAtmosphereVolume(
+                  spotVolume, Vector3{1.0f, 0.0f, 4.0f})
+                  && !game::IsPointInsideSectorLightAtmosphereVolume(
+                          spotVolume, Vector3{3.0f, 0.0f, 4.0f})
+                  && !game::IsPointInsideSectorLightAtmosphereVolume(
+                          spotVolume, Vector3{0.0f, 0.0f, 8.1f}),
+          "spot-light atmosphere bounds particles and haze to its finite cone");
+
+    game::SectorLightHazeStaticLightingSamples grid;
+    for (std::size_t index = 0; index < grid.corners.size(); ++index) {
+        const float value = static_cast<float>(index);
+        grid.corners[index] = Vector3{value, value, value};
+    }
+    Check(SameVector(
+                  game::InterpolateSectorLightHazeStaticLighting(grid, Vector3{0.5f, 0.5f, 0.5f}),
+                  Vector3{3.5f, 3.5f, 3.5f}),
+          "light haze trilinearly interpolates the representative 2x2x2 probe grid");
+
+    game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    game::SectorTopologySector* sector = game::FindSectorTopologySector(map, 10);
+    Check(sector != nullptr, "light atmosphere fallback sector fixture exists");
+    if (sector == nullptr) return;
+    sector->ambientColor = Color{64, 128, 255, 255};
+    sector->ambientIntensity = 0.5f;
+    point.ownerSectorId = 10;
+    point.positionWorld = Vector3{2.0f, 1.0f, 2.0f};
+    point.rangeWorld = 2.0f;
+    Check(game::MakeSectorLightAtmosphereVolume(point, 1.0f, pointVolume),
+          "light atmosphere fallback volume builds");
+    const game::SectorBakedObjectLightProbeRuntimeData noProbes;
+    const game::SectorLightHazeStaticLightingSamples fallback =
+            game::SampleSectorLightHazeStaticLighting(map, noProbes, pointVolume);
+    for (const Vector3& corner : fallback.corners) {
+        Check(SameVector(corner, Vector3{0.125490f, 0.250980f, 0.5f}),
+              "light atmosphere without probes uses sector ambient rather than emissive tint");
+    }
+}
+
 void TestObjectLightProbeBakeWritesSidecarAndStats()
 {
     const std::filesystem::path sandbox = ObjectProbePhase01aSandboxDir();
@@ -3568,6 +3660,7 @@ int main()
     TestObjectLightProbeSamplingFallbacksAndFiniteOutput();
     TestLocalFogEffectivePathLengthSaturatesGrazingTraversal();
     TestLocalFogProbeLightingReductionInterpolationAndFallback();
+    TestLightAtmosphereVolumeShapesAndProbeFallback();
     TestObjectLightProbeBakeWritesSidecarAndStats();
     TestObjectLightProbeBakeCancellationDoesNotMarkValid();
     TestObjectLightProbePlacementGridCounts();

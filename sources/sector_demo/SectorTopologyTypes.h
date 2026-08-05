@@ -172,6 +172,43 @@ struct SectorTopologySector {
     SectorTopologyWallPartSettings defaultUpper;
 };
 
+struct SectorLightHazeSettings {
+    bool enabled = false;
+    float extentScale = 0.40f;
+    float density = 0.04f;
+    Color scatteringTint = WHITE;
+    float edgeSoftness = 0.35f;
+    float noiseAmount = 0.35f;
+    float noiseScaleWorld = 1.25f;
+    float flowDirectionDegrees = 0.0f;
+    float flowSpeedWorld = 0.04f;
+};
+
+struct SectorLightDustSettings {
+    bool enabled = false;
+    int amount = 24;
+    float extentScale = 0.55f;
+    float minimumSizeWorld = 0.008f;
+    float maximumSizeWorld = 0.022f;
+    float opacity = 0.22f;
+    float driftSpeedWorld = 0.025f;
+    float turbulenceWorld = 0.015f;
+    Color scatteringTint = WHITE;
+};
+
+struct SectorLightAtmosphereSettings {
+    SectorLightHazeSettings haze;
+    SectorLightDustSettings dust;
+};
+
+SectorLightHazeSettings NormalizeSectorLightHazeSettings(SectorLightHazeSettings settings);
+SectorLightDustSettings NormalizeSectorLightDustSettings(SectorLightDustSettings settings);
+SectorLightAtmosphereSettings NormalizeSectorLightAtmosphereSettings(
+        SectorLightAtmosphereSettings settings);
+bool IsDefaultSectorLightHazeSettings(const SectorLightHazeSettings& settings);
+bool IsDefaultSectorLightDustSettings(const SectorLightDustSettings& settings);
+bool IsDefaultSectorLightAtmosphereSettings(const SectorLightAtmosphereSettings& settings);
+
 struct SectorTopologyStaticPointLight {
     int id = -1;
     Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
@@ -179,6 +216,7 @@ struct SectorTopologyStaticPointLight {
     float intensity = 1.0f;
     float radius = SectorWorldToAuthoringDistance(8.0f);
     float sourceRadius = 0.0f;
+    SectorLightAtmosphereSettings atmosphere;
 };
 
 struct SectorTopologyStaticSpotLight {
@@ -191,6 +229,7 @@ struct SectorTopologyStaticSpotLight {
     float innerConeDegrees = 20.0f;
     float outerConeDegrees = 35.0f;
     float sourceRadius = 0.0f;
+    SectorLightAtmosphereSettings atmosphere;
 };
 
 struct SectorTopologyDynamicPointLight {
@@ -204,6 +243,7 @@ struct SectorTopologyDynamicPointLight {
     // 0.2-0.4 is subtle, 0.6-0.8 is a strong failing-light dip, near 1.0 can drop nearly off.
     float flickerSpeed = DynamicLightFlickerDefaultSpeed;
     float flickerAmount = DynamicLightFlickerDefaultAmount;
+    SectorLightAtmosphereSettings atmosphere;
 };
 
 struct SectorTopologyDynamicSpotLight {
@@ -224,6 +264,7 @@ struct SectorTopologyDynamicSpotLight {
     float shadowBias = DynamicSpotLightDefaultShadowBias;
     float shadowStrength = DynamicSpotLightDefaultShadowStrength;
     float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
+    SectorLightAtmosphereSettings atmosphere;
 };
 
 enum class SectorTopologyValidationSeverity {

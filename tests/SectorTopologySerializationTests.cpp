@@ -888,6 +888,95 @@ void TestDynamicSpotLightRoundTrip()
           "outer cone widens to inner cone on load");
 }
 
+void TestLightAtmosphereRoundTripAndDefaultOmission()
+{
+    SectorTopologyMap defaults = MakeSquare();
+    defaults.staticLights.push_back(SectorTopologyStaticPointLight{});
+    defaults.staticLights.back().id = 1;
+    defaults.staticSpotLights.push_back(SectorTopologyStaticSpotLight{});
+    defaults.staticSpotLights.back().id = 2;
+    defaults.dynamicPointLights.push_back(SectorTopologyDynamicPointLight{});
+    defaults.dynamicPointLights.back().id = 3;
+    defaults.dynamicSpotLights.push_back(SectorTopologyDynamicSpotLight{});
+    defaults.dynamicSpotLights.back().id = 4;
+    const Json defaultJson = Json::parse(SaveText(defaults));
+    Check(!defaultJson["staticLights"][0].contains("atmosphere")
+                  && !defaultJson["staticSpotLights"][0].contains("atmosphere")
+                  && !defaultJson["dynamicPointLights"][0].contains("atmosphere")
+                  && !defaultJson["dynamicSpotLights"][0].contains("atmosphere"),
+          "default-disabled light atmosphere is omitted for every light variant");
+
+    game::SectorLightAtmosphereSettings atmosphere;
+    atmosphere.haze.enabled = true;
+    atmosphere.haze.extentScale = 0.75f;
+    atmosphere.haze.density = 0.125f;
+    atmosphere.haze.scatteringTint = Color{210, 225, 240, 255};
+    atmosphere.haze.edgeSoftness = 0.45f;
+    atmosphere.haze.noiseAmount = 0.6f;
+    atmosphere.haze.noiseScaleWorld = 2.5f;
+    atmosphere.haze.flowDirectionDegrees = 35.0f;
+    atmosphere.haze.flowSpeedWorld = 0.08f;
+    atmosphere.dust.enabled = true;
+    atmosphere.dust.amount = 47;
+    atmosphere.dust.extentScale = 0.9f;
+    atmosphere.dust.minimumSizeWorld = 0.01f;
+    atmosphere.dust.maximumSizeWorld = 0.04f;
+    atmosphere.dust.opacity = 0.3f;
+    atmosphere.dust.driftSpeedWorld = 0.035f;
+    atmosphere.dust.turbulenceWorld = 0.02f;
+    atmosphere.dust.scatteringTint = Color{255, 235, 200, 255};
+    defaults.staticLights[0].atmosphere = atmosphere;
+    defaults.staticSpotLights[0].atmosphere = atmosphere;
+    defaults.dynamicPointLights[0].atmosphere = atmosphere;
+    defaults.dynamicSpotLights[0].atmosphere = atmosphere;
+
+    const std::string text = SaveText(defaults);
+    const Json saved = Json::parse(text);
+    const bool allVariantsHaveAtmosphere = saved["staticLights"][0].contains("atmosphere")
+            && saved["staticSpotLights"][0].contains("atmosphere")
+            && saved["dynamicPointLights"][0].contains("atmosphere")
+            && saved["dynamicSpotLights"][0].contains("atmosphere");
+    Check(allVariantsHaveAtmosphere,
+          "enabled haze and dust serialize for every light variant");
+    if (allVariantsHaveAtmosphere) {
+        const Json& staticAtmosphere = saved["staticLights"][0]["atmosphere"];
+        Check(staticAtmosphere.contains("haze") && staticAtmosphere.contains("dust"),
+              "enabled atmosphere serializes both haze and dust blocks");
+        if (staticAtmosphere.contains("haze") && staticAtmosphere.contains("dust")) {
+            Check(staticAtmosphere["haze"].value("enabled", false)
+                          && staticAtmosphere["dust"].value("enabled", false),
+                  "enabled haze and dust flags are serialized");
+        }
+    }
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "light atmosphere JSON loads");
+    const auto checkAtmosphere = [](const game::SectorLightAtmosphereSettings& value) {
+        return value.haze.enabled
+                && Near(value.haze.extentScale, 0.75f)
+                && Near(value.haze.density, 0.125f)
+                && value.haze.scatteringTint.r == 210
+                && Near(value.haze.flowDirectionDegrees, 35.0f)
+                && Near(value.haze.flowSpeedWorld, 0.08f)
+                && value.dust.enabled
+                && value.dust.amount == 47
+                && Near(value.dust.extentScale, 0.9f)
+                && Near(value.dust.minimumSizeWorld, 0.01f)
+                && Near(value.dust.maximumSizeWorld, 0.04f)
+                && Near(value.dust.opacity, 0.3f)
+                && value.dust.scatteringTint.g == 235;
+    };
+    Check(loaded.staticLights.size() == 1 && checkAtmosphere(loaded.staticLights[0].atmosphere),
+          "static point atmosphere round-trips");
+    Check(loaded.staticSpotLights.size() == 1 && checkAtmosphere(loaded.staticSpotLights[0].atmosphere),
+          "static spot atmosphere round-trips");
+    Check(loaded.dynamicPointLights.size() == 1 && checkAtmosphere(loaded.dynamicPointLights[0].atmosphere),
+          "dynamic point atmosphere round-trips");
+    Check(loaded.dynamicSpotLights.size() == 1 && checkAtmosphere(loaded.dynamicSpotLights[0].atmosphere),
+          "dynamic spot atmosphere round-trips");
+}
+
 void TestRuntimeObjectsRoundTripAndValidation()
 {
     SectorTopologyMap empty = MakeSquare();
@@ -3611,6 +3700,7 @@ int main()
     TestStaticSpotLightRoundTrip();
     TestDynamicPointLightRoundTrip();
     TestDynamicSpotLightRoundTrip();
+    TestLightAtmosphereRoundTripAndDefaultOmission();
     TestRuntimeObjectsRoundTripAndValidation();
     TestRuntimeObjectEditAndDeleteHelpers();
     TestLightmapMetadataRoundTrip();

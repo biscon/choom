@@ -448,13 +448,16 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             return MeasureSectorEditorPlacedObjectInspectorContentHeight(runtimeObjectMeasureContext);
         }
         if (hasSelectedLight) {
-            return StaticLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
+            return StaticLightInspectorContentHeight(
+                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedStaticLight()->atmosphere);
         }
         if (hasSelectedStaticSpotLight) {
-            return StaticSpotLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
+            return StaticSpotLightInspectorContentHeight(
+                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedStaticSpotLight()->atmosphere);
         }
         if (hasSelectedDynamicLight) {
-            return DynamicLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
+            return DynamicLightInspectorContentHeight(
+                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedDynamicLight()->atmosphere);
         }
         if (hasSelectedDynamicSpotLight) {
             const float shadowNoteHeight = MeasureSectorEditorWrappedTextHeight(
@@ -466,7 +469,12 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                             MaxDynamicSpotLightShadowCasters),
                     scrollContentW,
                     2);
-            return DynamicSpotLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty(), shadowNoteHeight);
+            return DynamicSpotLightInspectorContentHeight(
+                    rowH,
+                    gap,
+                    !context.inspectorIdUiState.idEditError.empty(),
+                    shadowNoteHeight,
+                    selectedDynamicSpotLight()->atmosphere);
         }
         if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
             return SectorInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
@@ -844,6 +852,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     if (hasSelectedLight) {
         bool deleteRequested = false;
         bool bakeRequested = false;
+        bool sourceRefreshRequested = false;
         DrawSelectedStaticLightInspector(
                 ui,
                 config,
@@ -859,12 +868,16 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
-                bakeRequested);
+                bakeRequested,
+                sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
         }
         if (bakeRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
+        }
+        if (sourceRefreshRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
@@ -874,6 +887,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     if (hasSelectedStaticSpotLight) {
         bool deleteRequested = false;
         bool bakeRequested = false;
+        bool sourceRefreshRequested = false;
         DrawSelectedStaticSpotLightInspector(
                 ui,
                 config,
@@ -889,12 +903,16 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
-                bakeRequested);
+                bakeRequested,
+                sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
         }
         if (bakeRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
+        }
+        if (sourceRefreshRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
@@ -903,6 +921,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedDynamicLight) {
         bool deleteRequested = false;
+        bool sourceRefreshRequested = false;
         DrawSelectedDynamicLightInspector(
                 ui,
                 config,
@@ -917,9 +936,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 uiState,
                 context.inspectorIdUiState,
                 lightEditing,
-                deleteRequested);
+                deleteRequested,
+                sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (sourceRefreshRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
@@ -928,6 +951,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedDynamicSpotLight) {
         bool deleteRequested = false;
+        bool sourceRefreshRequested = false;
         DrawSelectedDynamicSpotLightInspector(
                 ui,
                 config,
@@ -943,9 +967,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 uiState,
                 context.inspectorIdUiState,
                 lightEditing,
-                deleteRequested);
+                deleteRequested,
+                sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (sourceRefreshRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);

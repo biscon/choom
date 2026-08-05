@@ -12,6 +12,9 @@
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorLocalFogRenderer.h"
+#include "sector_demo/renderer/SectorLightAtmosphere.h"
+#include "sector_demo/renderer/SectorLightDustRenderer.h"
+#include "sector_demo/renderer/SectorLightHazeRenderer.h"
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
@@ -184,6 +187,9 @@ private:
     int dynamicLightingClampLoc = -1;
     SectorFogShaderLocations fogShaderLocations;
     SectorLocalFogRenderer localFogRenderer;
+    SectorLightHazeRenderer lightHazeRenderer;
+    SectorLightDustRenderer lightDustRenderer;
+    std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
     SectorBloomRenderer bloomRenderer;

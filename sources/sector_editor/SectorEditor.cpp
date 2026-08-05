@@ -4154,6 +4154,11 @@ void SectorEditor::DrawSectorsPanel(
         case SectorEditorInspectorPanelRequestKind::BakeLightmaps:
             StartLightmapBake();
             break;
+        case SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources:
+            if (state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
+                preview.RefreshDynamicLightSources(TopologyMap());
+            }
+            break;
         }
     }
 }
@@ -6057,6 +6062,28 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
                             uiState.lightGreenInput,
                             uiState.lightBlueInput,
                             inspectorIdUiState,
+                            {
+                                    &uiState.lightHazeExtentScaleInput,
+                                    &uiState.lightHazeDensityInput,
+                                    &uiState.lightHazeEdgeSoftnessInput,
+                                    &uiState.lightHazeNoiseAmountInput,
+                                    &uiState.lightHazeNoiseScaleInput,
+                                    &uiState.lightHazeFlowDirectionInput,
+                                    &uiState.lightHazeFlowSpeedInput,
+                                    &uiState.lightHazeRedInput,
+                                    &uiState.lightHazeGreenInput,
+                                    &uiState.lightHazeBlueInput,
+                                    &uiState.lightDustAmountInput,
+                                    &uiState.lightDustExtentScaleInput,
+                                    &uiState.lightDustMinimumSizeInput,
+                                    &uiState.lightDustMaximumSizeInput,
+                                    &uiState.lightDustOpacityInput,
+                                    &uiState.lightDustDriftSpeedInput,
+                                    &uiState.lightDustTurbulenceInput,
+                                    &uiState.lightDustRedInput,
+                                    &uiState.lightDustGreenInput,
+                                    &uiState.lightDustBlueInput,
+                            },
                     },
                     statusText}};
 }

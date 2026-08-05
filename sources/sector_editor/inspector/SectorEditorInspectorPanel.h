@@ -30,7 +30,8 @@ enum class SectorEditorInspectorPanelRequestKind {
     DeleteSelectedRuntimeObject,
     OpenDeleteSelectedLightConfirmation,
     OpenDeleteSelectedFogVolumeConfirmation,
-    BakeLightmaps
+    BakeLightmaps,
+    RefreshPreviewLightSources
 };
 
 struct SectorEditorInspectorPanelRequest {
