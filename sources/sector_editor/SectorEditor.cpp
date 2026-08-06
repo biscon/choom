@@ -102,6 +102,7 @@ SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
             runtimeObjectUiState.rotationZInput,
             runtimeObjectUiState.heightOffsetInput,
             runtimeObjectUiState.scaleInput,
+            runtimeObjectUiState.animationSpeedInput,
             runtimeObjectUiState.widthInput,
             runtimeObjectUiState.heightInput,
             runtimeObjectUiState.thicknessInput,
@@ -1208,6 +1209,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
 
                 if (state.currentTool == SectorEditorTool::StaticModel) {
                     AddStaticModelAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
+                if (state.currentTool == SectorEditorTool::DynamicModel) {
+                    AddDynamicModelAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
                     engine::ConsumeEvent(event);
                     return;
                 }
@@ -2615,6 +2622,15 @@ void SectorEditor::AddStaticModelAt(Vector2 mapPoint)
     editing.AddStaticModel(mapPoint);
 }
 
+void SectorEditor::AddDynamicModelAt(Vector2 mapPoint)
+{
+    EnsureTopologyRenderCache();
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.AddDynamicModel(mapPoint);
+}
+
 void SectorEditor::AddDoorAtPortal(Vector2 screenPoint)
 {
     const Vector2 mapPoint = ScreenToMap(screenPoint);
@@ -3795,7 +3811,7 @@ void SectorEditor::DrawToolsPanel(
     };
     const float toolsContentH =
             sectionLabelH + rowsHeight(4)
-            + separatorH + sectionLabelH + rowsHeight(8)
+            + separatorH + sectionLabelH + rowsHeight(9)
             + separatorH + rowsHeight(4)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
@@ -3917,6 +3933,8 @@ void SectorEditor::DrawToolsPanel(
             statusText = "Billboard: click inside a sector to place a billboard";
         } else if (tool == SectorEditorTool::StaticModel) {
             statusText = "3D Prop: click inside a derived sector to place a static model";
+        } else if (tool == SectorEditorTool::DynamicModel) {
+            statusText = "Dynamic Prop: click inside a derived sector to place an animated model";
         } else if (tool == SectorEditorTool::Door) {
             statusText = "Door: click a two-sided portal line";
         } else if (tool == SectorEditorTool::AuthoringFogVolume) {
@@ -3942,6 +3960,7 @@ void SectorEditor::DrawToolsPanel(
     const SectorEditorTool mapTools[] = {
             SectorEditorTool::RuntimeObject,
             SectorEditorTool::StaticModel,
+            SectorEditorTool::DynamicModel,
             SectorEditorTool::Door,
             SectorEditorTool::AuthoringFogVolume,
             SectorEditorTool::StaticLight,
@@ -4308,7 +4327,9 @@ void SectorEditor::DrawStaticModelPickerModal(
             assets,
             Rectangle{modal.x + 22.0f, modal.y + 18.0f, modal.width - 44.0f, 36.0f},
             font,
-            "Choose 3D Prop Model");
+            pickerState.target == ModelPickerTarget::DynamicModel
+                    ? "Choose Dynamic Prop Model"
+                    : "Choose 3D Prop Model");
 
     const Rectangle listBounds{
             modal.x + 22.0f,
@@ -4416,7 +4437,11 @@ void SectorEditor::DrawStaticModelPickerModal(
                     BuildSelectionServiceContext();
             SectorEditorRuntimeObjectEditingService editing =
                     BuildRuntimeObjectEditingService(&selection);
-            editing.AssignSelectedStaticModel(picker.SelectedModelPath());
+            if (pickerState.target == ModelPickerTarget::DynamicModel) {
+                editing.AssignSelectedDynamicModel(picker.SelectedModelPath());
+            } else {
+                editing.AssignSelectedStaticModel(picker.SelectedModelPath());
+            }
             pickerState.open = false;
         }
     }

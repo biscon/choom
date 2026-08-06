@@ -1,4 +1,5 @@
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "engine/systems/AnimatedModelSystem.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorMath.h"
@@ -13,6 +14,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <string>
@@ -3076,6 +3078,86 @@ void TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity()
           "unassigned static prop produces an editor diagnostic without being skipped");
 }
 
+void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 27;
+    object.kind = "dynamic_model";
+    object.position = Vector3{2.0f, 8.0f, 2.0f};
+    object.yawRadians = 0.75f;
+    object.dynamicModel.rotationXRadians = 0.25f;
+    object.dynamicModel.rotationZRadians = -0.5f;
+    object.dynamicModel.heightOffsetWorld = 0.625f;
+    object.dynamicModel.scale = 1.75f;
+    object.dynamicModel.animation = "Standard Walk";
+    object.dynamicModel.loop = false;
+    object.dynamicModel.animationSpeed = 1.5f;
+    map.runtimeObjects.push_back(object);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    Check(state.placedObjectEntities.size() == 1,
+          "unassigned dynamic prop still spawns one runtime entity");
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Has<game::SectorDynamicModel>(entity)
+                  && world.Has<engine::AnimatedModelInstance>(entity)
+                  && world.Has<engine::AnimatedModelAnimator>(entity)
+                  && world.Has<game::SectorObjectLighting>(entity),
+          "dynamic prop owns reusable animation state and baked probe lighting data");
+    const game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(entity);
+    const game::SectorDynamicModel& dynamic = world.Get<game::SectorDynamicModel>(entity);
+    const engine::AnimatedModelAnimator& animator =
+            world.Get<engine::AnimatedModelAnimator>(entity);
+    Check(Near(transform.position, Vector3{0.25f, 1.625f, 0.25f})
+                  && Near(transform.yawRadians, 0.75f)
+                  && Near(transform.rotationXRadians, 0.25f)
+                  && Near(transform.rotationZRadians, -0.5f)
+                  && Near(dynamic.scale, 1.75f),
+          "dynamic prop copies the movable authored transform and scale");
+    Check(dynamic.requestedAnimation == "Standard Walk"
+                  && !dynamic.animationResolved
+                  && !animator.loop
+                  && !animator.playing
+                  && Near(animator.frame, 0.0f)
+                  && Near(animator.speed, 1.5f),
+          "non-looping editor dynamic prop is configured frozen on its first frame");
+}
+
+void TestAnimatedModelSelectionAndBlendApi()
+{
+    ModelAnimation animations[3] = {};
+    std::strncpy(animations[0].name, "Idle", sizeof(animations[0].name) - 1);
+    std::strncpy(animations[1].name, "Walk", sizeof(animations[1].name) - 1);
+    std::strncpy(animations[2].name, "Open", sizeof(animations[2].name) - 1);
+    engine::ModelAsset asset;
+    asset.animations = animations;
+    asset.animationCount = 3;
+    Check(engine::FindModelAnimationIndex(asset, "Walk") == 1
+                  && engine::FindModelAnimationIndex(asset, "Missing")
+                          == engine::InvalidModelAnimationIndex,
+          "animated model API resolves named clips without per-frame string lookup");
+
+    engine::AnimatedModelAnimator animator;
+    engine::SetAnimatedModelAnimation(animator, 0);
+    animator.frame = 12.0f;
+    engine::SetAnimatedModelAnimation(animator, 1, 0.4f);
+    Check(animator.animationIndex == 0
+                  && animator.targetAnimationIndex == 1
+                  && Near(animator.frame, 12.0f)
+                  && Near(animator.transitionDurationSeconds, 0.4f),
+          "positive-duration animation selection preserves a source clip for blending");
+    engine::SetAnimatedModelAnimation(animator, 2, 0.0f);
+    Check(animator.animationIndex == 2
+                  && animator.targetAnimationIndex == engine::InvalidModelAnimationIndex
+                  && Near(animator.frame, 0.0f),
+          "zero-duration animation selection switches immediately and restarts");
+}
+
 void TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures()
 {
     std::array<
@@ -4427,6 +4509,8 @@ int main()
     TestSpawnPlacedBillboardCopiesAuthoredPayloadToEcs();
     TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs();
     TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity();
+    TestSpawnDynamicModelCopiesPlaybackAndLightingPayload();
+    TestAnimatedModelSelectionAndBlendApi();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
     TestSpawnPlacedDirectionalBillboardCopiesClipNames();
     TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate();

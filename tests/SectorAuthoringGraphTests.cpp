@@ -9912,12 +9912,18 @@ void TestStaticModelAssetRequestsDeduplicateAndUnloadByScope()
             assets.RequestModel(firstScope, "different-key", "/tmp/models/crate.glb");
     const engine::ModelHandle distinct =
             assets.RequestModel(firstScope, "barrel", "/tmp/models/barrel.gltf");
+    const engine::ModelHandle animated = assets.RequestModel(
+            firstScope,
+            "crate-animated",
+            "/tmp/models/crate.glb",
+            engine::ModelLoad_Animations);
     const engine::ModelHandle otherScope =
             assets.RequestModel(secondScope, "crate", "/tmp/models/crate.glb");
     Check(!engine::IsNull(first)
                   && first == duplicate
-                  && distinct != first,
-          "model requests deduplicate identical paths only within one scope");
+                  && distinct != first
+                  && animated != first,
+          "model requests deduplicate identical path/flag requests and keep animated loads distinct");
     Check(otherScope != first,
           "identical model paths in different scopes receive distinct handles");
     Check(!assets.IsReady(first)
@@ -10164,6 +10170,81 @@ void TestStaticPropEditingPlacementMutationAndFloorRelativeDrag()
                   && renderRevision == revisionBeforeDelete + 1
                   && !renderCache.valid,
           "static prop deletion clears selection, dirties the document, and invalidates cache");
+}
+
+void TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    game::SectorTopologySector* left = game::FindSectorTopologySector(map, 200);
+    game::SectorTopologySector* right = game::FindSectorTopologySector(map, 201);
+    Check(left != nullptr && right != nullptr,
+          "dynamic prop editing fixture has adjacent sectors");
+    if (left == nullptr || right == nullptr) return;
+    left->floorZ = 16.0f;
+    right->floorZ = 80.0f;
+
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::RuntimeObjectEditingState editingState;
+    game::RuntimeObjectEditingUiState uiState;
+    game::SelectionState selectionState;
+    game::SectorEditorDocumentState documentState;
+    uint64_t renderRevision = 3;
+    game::SectorEditorTopologyRenderCache renderCache;
+    std::string statusText;
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    game::SectorEditorRuntimeObjectEditingService editing =
+            MakeRuntimeObjectEditingServiceForTest(
+                    map, runtimeObjects, editingState, uiState, selectionState,
+                    documentState, renderRevision, renderCache, statusText, true);
+
+    Check(editing.AddDynamicModel(Vector2{24.0f, 24.0f}),
+          "dynamic prop placement succeeds inside a cached derived sector");
+    Check(map.runtimeObjects.size() == 1
+                  && map.runtimeObjects[0].kind == "dynamic_model"
+                  && Near(map.runtimeObjects[0].position, Vector3{24.0f, 16.0f, 24.0f})
+                  && map.runtimeObjects[0].dynamicModel.modelPath.empty()
+                  && map.runtimeObjects[0].dynamicModel.loop
+                  && Near(map.runtimeObjects[0].dynamicModel.animationSpeed, 1.0f),
+          "dynamic prop placement creates default floor-relative authored playback data");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && renderRevision == 4
+                  && !renderCache.valid,
+          "dynamic prop placement dirties the document and invalidates the 2D cache");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.AssignSelectedDynamicModel("assets/models/characters/test.glb")
+                  && map.runtimeObjects[0].dynamicModel.modelPath
+                          == "assets/models/characters/test.glb"
+                  && map.runtimeObjects[0].dynamicModel.animation.empty()
+                  && !renderCache.valid,
+          "dynamic prop model assignment reuses the model picker mutation path and clears stale animation selection");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.MutateSelected(
+                  "Updated dynamic prop animation",
+                  [](game::SectorPlacedRuntimeObject& object) {
+                      object.dynamicModel.animation = "Walk";
+                      object.dynamicModel.loop = false;
+                      object.dynamicModel.animationSpeed = 1.5f;
+                      return true;
+                  })
+                  && map.runtimeObjects[0].dynamicModel.animation == "Walk"
+                  && !map.runtimeObjects[0].dynamicModel.loop
+                  && Near(map.runtimeObjects[0].dynamicModel.animationSpeed, 1.5f),
+          "dynamic prop inspector playback fields persist through the editing service");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    const int objectId = map.runtimeObjects[0].id;
+    Check(editing.BeginDrag(objectId), "dynamic prop drag begins");
+    editing.UpdateDrag(Vector2{96.0f, 32.0f});
+    Check(Near(map.runtimeObjects[0].position, Vector3{96.0f, 80.0f, 32.0f})
+                  && !renderCache.runtimeObjects.empty()
+                  && Near(renderCache.runtimeObjects[0].map.x, 96.0f)
+                  && Near(renderCache.runtimeObjects[0].map.y, 32.0f),
+          "dynamic prop drag follows XZ and reanchors to the destination sector floor");
+    Check(editing.FinishDrag() && !renderCache.valid,
+          "dynamic prop drag commit invalidates the derived 2D cache");
 }
 
 void TestRuntimeObjectEditingServicesStayIndependentOfSectorEditor()
@@ -10560,6 +10641,7 @@ int main()
     TestStaticModelPickerRecursionFilteringRefreshAndSelection();
     TestStaticModelAssetRequestsDeduplicateAndUnloadByScope();
     TestStaticPropEditingPlacementMutationAndFloorRelativeDrag();
+    TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag();
     TestRuntimeObjectEditingServicesStayIndependentOfSectorEditor();
 
     if (failures != 0) {

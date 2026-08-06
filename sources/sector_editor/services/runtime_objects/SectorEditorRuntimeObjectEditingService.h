@@ -48,6 +48,7 @@ public:
     bool AddBillboard(int sectorId, Vector2 mapPoint);
     bool AddDoor(int lineDefId);
     bool AddStaticModel(Vector2 mapPoint);
+    bool AddDynamicModel(Vector2 mapPoint);
     SectorEditorRuntimeObjectDeleteRequest RequestDeleteSelected() const;
     bool DeleteById(int objectId);
 
@@ -55,6 +56,7 @@ public:
             const char* status,
             const std::function<bool(SectorPlacedRuntimeObject&)>& mutate);
     bool AssignSelectedStaticModel(const std::string& modelPath);
+    bool AssignSelectedDynamicModel(const std::string& modelPath);
     bool SelectedDoorRuntimeTargetOpen(bool& outOpen) const;
     bool SetSelectedDoorRuntimeTargetOpen(bool open);
 

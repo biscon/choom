@@ -1630,6 +1630,60 @@ void TestRuntimeObjectsRoundTripAndValidation()
     ExpectRejected(invalidDoor, "missing door payload is rejected");
 }
 
+void TestDynamicModelRoundTripAndDefaultOmission()
+{
+    SectorTopologyMap map = MakeSquare();
+    SectorPlacedRuntimeObject object;
+    object.id = 41;
+    object.kind = "dynamic_model";
+    object.position = Vector3{12.0f, 16.0f, 20.0f};
+    object.yawRadians = 0.5f;
+    object.dynamicModel.modelPath = "assets/models/characters/test.glb";
+    object.dynamicModel.rotationXRadians = 0.25f;
+    object.dynamicModel.rotationZRadians = -0.5f;
+    object.dynamicModel.heightOffsetWorld = 0.75f;
+    object.dynamicModel.scale = 1.5f;
+    object.dynamicModel.collision = true;
+    object.dynamicModel.animation = "Standard Walk";
+    object.dynamicModel.loop = false;
+    object.dynamicModel.animationSpeed = 1.25f;
+    map.runtimeObjects.push_back(object);
+
+    const Json saved = Json::parse(SaveText(map));
+    const Json& payload = saved["runtimeObjects"][0]["dynamicModel"];
+    Check(saved["runtimeObjects"][0]["kind"] == "dynamic_model"
+                  && payload["modelPath"] == object.dynamicModel.modelPath
+                  && payload["animation"] == "Standard Walk"
+                  && !payload["loop"].get<bool>()
+                  && Near(payload["animationSpeed"].get<float>(), 1.25f)
+                  && payload["collision"].get<bool>(),
+          "dynamic prop writes model, animation, playback, and collision fields");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error), "dynamic prop JSON loads");
+    const SectorPlacedRuntimeObject* roundTripped =
+            game::FindSectorPlacedRuntimeObject(loaded, 41);
+    Check(roundTripped != nullptr
+                  && roundTripped->kind == "dynamic_model"
+                  && roundTripped->dynamicModel.modelPath == object.dynamicModel.modelPath
+                  && roundTripped->dynamicModel.animation == "Standard Walk"
+                  && !roundTripped->dynamicModel.loop
+                  && Near(roundTripped->dynamicModel.animationSpeed, 1.25f)
+                  && Near(roundTripped->dynamicModel.rotationXRadians, 0.25f)
+                  && Near(roundTripped->dynamicModel.rotationZRadians, -0.5f),
+          "dynamic prop fields round-trip");
+
+    map.runtimeObjects[0].dynamicModel = game::SectorPlacedDynamicModel{};
+    const Json defaults = Json::parse(SaveText(map))["runtimeObjects"][0]["dynamicModel"];
+    Check(!defaults.contains("animation")
+                  && !defaults.contains("loop")
+                  && !defaults.contains("animationSpeed")
+                  && !defaults.contains("scale")
+                  && !defaults.contains("collision"),
+          "dynamic prop default playback and transform fields are omitted");
+}
+
 void TestRuntimeObjectEditAndDeleteHelpers()
 {
     SectorTopologyMap map = MakeSquare();
@@ -3743,6 +3797,7 @@ int main()
     TestDynamicSpotLightRoundTrip();
     TestLightAtmosphereRoundTripAndDefaultOmission();
     TestRuntimeObjectsRoundTripAndValidation();
+    TestDynamicModelRoundTripAndDefaultOmission();
     TestRuntimeObjectEditAndDeleteHelpers();
     TestLightmapMetadataRoundTrip();
     TestPreviewSettingsRoundTripAndValidation();

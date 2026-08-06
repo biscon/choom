@@ -232,7 +232,8 @@ const FontAsset* AssetManager::GetFont(FontHandle handle) const
 ModelHandle AssetManager::RequestModel(
         AssetScopeHandle scope,
         const char* key,
-        const char* path)
+        const char* path,
+        ModelLoadFlags flags)
 {
     {
         std::lock_guard<std::mutex> lock(stateMutex);
@@ -240,7 +241,7 @@ ModelHandle AssetManager::RequestModel(
             return NullModelHandle();
         }
     }
-    return models.RequestModel(scope, key, path);
+    return models.RequestModel(scope, key, path, flags);
 }
 
 bool AssetManager::IsReady(ModelHandle handle) const

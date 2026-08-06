@@ -9,6 +9,11 @@
 
 namespace game {
 
+enum class ModelPickerTarget {
+    StaticModel,
+    DynamicModel
+};
+
 struct StaticModelPickerState {
     bool open = false;
     bool scanned = false;
@@ -18,6 +23,7 @@ struct StaticModelPickerState {
     std::vector<const char*> optionLabels;
     int selectedModelIndex = -1;
     std::string requestedModelPath;
+    ModelPickerTarget target = ModelPickerTarget::StaticModel;
 };
 
 struct RuntimeObjectEditingState {
@@ -39,6 +45,7 @@ struct RuntimeObjectEditingUiState {
     engine::UIFloatInputState rotationZInput;
     engine::UIFloatInputState heightOffsetInput;
     engine::UIFloatInputState scaleInput;
+    engine::UIFloatInputState animationSpeedInput;
     engine::UIFloatInputState widthInput;
     engine::UIFloatInputState heightInput;
     engine::UIFloatInputState thicknessInput;

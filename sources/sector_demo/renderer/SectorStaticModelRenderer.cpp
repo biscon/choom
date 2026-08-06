@@ -2,6 +2,8 @@
 
 #include "engine/assets/AssetManager.h"
 #include "engine/ecs/World.h"
+#include "engine/components/AnimatedModel.h"
+#include "engine/systems/AnimatedModelSystem.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorStaticModelTransform.h"
@@ -29,11 +31,16 @@ in vec4 vertexTangent;
 in vec2 vertexTexCoord;
 in vec2 vertexTexCoord2;
 in vec4 vertexColor;
+in vec4 vertexBoneIndices;
+in vec4 vertexBoneWeights;
 
 uniform mat4 mvp;
 uniform mat4 matModel;
 uniform mat4 matNormal;
 uniform vec4 lightmapScaleBias;
+uniform int useSkinning;
+#define MAX_BONE_NUM 128
+uniform mat4 boneMatrices[MAX_BONE_NUM];
 
 out vec2 fragTexCoord;
 out vec2 fragLightmapTexCoord;
@@ -45,15 +52,36 @@ out vec4 fragColor;
 
 void main()
 {
+    vec4 localPosition = vec4(vertexPosition, 1.0);
+    vec4 localNormal = vec4(vertexNormal, 0.0);
+    vec4 localTangent = vec4(vertexTangent.xyz, 0.0);
+    if (useSkinning != 0) {
+        int bone0 = int(vertexBoneIndices.x);
+        int bone1 = int(vertexBoneIndices.y);
+        int bone2 = int(vertexBoneIndices.z);
+        int bone3 = int(vertexBoneIndices.w);
+        localPosition = vertexBoneWeights.x * (boneMatrices[bone0] * localPosition)
+                + vertexBoneWeights.y * (boneMatrices[bone1] * localPosition)
+                + vertexBoneWeights.z * (boneMatrices[bone2] * localPosition)
+                + vertexBoneWeights.w * (boneMatrices[bone3] * localPosition);
+        localNormal = vertexBoneWeights.x * (boneMatrices[bone0] * localNormal)
+                + vertexBoneWeights.y * (boneMatrices[bone1] * localNormal)
+                + vertexBoneWeights.z * (boneMatrices[bone2] * localNormal)
+                + vertexBoneWeights.w * (boneMatrices[bone3] * localNormal);
+        localTangent = vertexBoneWeights.x * (boneMatrices[bone0] * localTangent)
+                + vertexBoneWeights.y * (boneMatrices[bone1] * localTangent)
+                + vertexBoneWeights.z * (boneMatrices[bone2] * localTangent)
+                + vertexBoneWeights.w * (boneMatrices[bone3] * localTangent);
+    }
     fragTexCoord = vertexTexCoord;
     fragLightmapTexCoord =
             vertexTexCoord2 * lightmapScaleBias.xy + lightmapScaleBias.zw;
-    fragWorldPosition = (matModel * vec4(vertexPosition, 1.0)).xyz;
-    fragWorldNormal = normalize((matNormal * vec4(vertexNormal, 0.0)).xyz);
-    fragWorldTangent = normalize((matModel * vec4(vertexTangent.xyz, 0.0)).xyz);
+    fragWorldPosition = (matModel * localPosition).xyz;
+    fragWorldNormal = normalize((matNormal * localNormal).xyz);
+    fragWorldTangent = normalize((matModel * localTangent).xyz);
     fragTangentSign = vertexTangent.w;
     fragColor = vertexColor;
-    gl_Position = mvp * vec4(vertexPosition, 1.0);
+    gl_Position = mvp * localPosition;
 }
 )";
 
@@ -93,6 +121,8 @@ uniform float environmentExposure;
 uniform vec3 containingSectorAmbient;
 uniform int hasStaticLightmap;
 uniform int useBakedAmbientOcclusion;
+uniform int useObjectProbeLighting;
+uniform vec3 objectAmbientCube[6];
 
 uniform int fogEnabled;
 uniform vec3 fogColor;
@@ -353,7 +383,16 @@ void main()
     }
 
     vec3 staticLighting = containingSectorAmbient;
-    if (hasStaticLightmap != 0) {
+    if (useObjectProbeLighting != 0) {
+        vec3 absNormal = abs(worldNormal);
+        if (absNormal.y >= absNormal.x && absNormal.y >= absNormal.z) {
+            staticLighting = objectAmbientCube[worldNormal.y >= 0.0 ? 2 : 3];
+        } else if (absNormal.z >= absNormal.x) {
+            staticLighting = objectAmbientCube[worldNormal.z >= 0.0 ? 4 : 5];
+        } else {
+            staticLighting = objectAmbientCube[worldNormal.x >= 0.0 ? 0 : 1];
+        }
+    } else if (hasStaticLightmap != 0) {
         vec4 baked = texture(lightmapTexture, fragLightmapTexCoord);
         float ao = useBakedAmbientOcclusion != 0 ? baked.a : 1.0;
         staticLighting = containingSectorAmbient * ao + baked.rgb;
@@ -632,6 +671,12 @@ bool SectorStaticModelRenderer::Load()
             GetShaderLocationAttrib(shader, "vertexTexCoord2");
     shader.locs[SHADER_LOC_VERTEX_COLOR] =
             GetShaderLocationAttrib(shader, "vertexColor");
+    shader.locs[SHADER_LOC_VERTEX_BONEIDS] =
+            GetShaderLocationAttrib(shader, "vertexBoneIndices");
+    shader.locs[SHADER_LOC_VERTEX_BONEWEIGHTS] =
+            GetShaderLocationAttrib(shader, "vertexBoneWeights");
+    shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] =
+            GetShaderLocation(shader, "boneMatrices");
     shader.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(shader, "mvp");
     shader.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(shader, "matModel");
     shader.locs[SHADER_LOC_MATRIX_NORMAL] = GetShaderLocation(shader, "matNormal");
@@ -666,6 +711,13 @@ bool SectorStaticModelRenderer::Load()
             GetShaderLocation(shader, "useBakedAmbientOcclusion");
     containingSectorAmbientLoc =
             GetShaderLocation(shader, "containingSectorAmbient");
+    useObjectProbeLightingLoc =
+            GetShaderLocation(shader, "useObjectProbeLighting");
+    for (size_t i = 0; i < objectAmbientCubeLocs.size(); ++i) {
+        objectAmbientCubeLocs[i] = GetShaderLocationArrayElement(
+                shader, "objectAmbientCube", i);
+    }
+    useSkinningLoc = GetShaderLocation(shader, "useSkinning");
     lightmapTextureLoc =
             GetShaderLocation(shader, "lightmapTexture");
     shader.locs[
@@ -737,6 +789,9 @@ void SectorStaticModelRenderer::Shutdown()
     hasStaticLightmapLoc = -1;
     useBakedAmbientOcclusionLoc = -1;
     containingSectorAmbientLoc = -1;
+    useObjectProbeLightingLoc = -1;
+    objectAmbientCubeLocs.fill(-1);
+    useSkinningLoc = -1;
     lightmapTextureLoc = -1;
     dynamicLightCountLoc = -1;
     dynamicLightPositionsLoc = -1;
@@ -813,6 +868,7 @@ void SectorStaticModelRenderer::FinalizeResources(
         engine::AssetManager& assets,
         engine::World& runtimeObjectWorld)
 {
+    engine::PrepareAnimatedModelInstancesSystem(runtimeObjectWorld, assets);
     if (lightmapData.objects.empty()) {
         return;
     }
@@ -994,6 +1050,15 @@ void SectorStaticModelRenderer::Draw(
                 }
                 const Model* model = &modelAsset->model;
 
+                const int useObjectProbe = 0;
+                const int useSkinning = 0;
+                if (useObjectProbeLightingLoc >= 0) {
+                    SetShaderValue(shader, useObjectProbeLightingLoc, &useObjectProbe, SHADER_UNIFORM_INT);
+                }
+                if (useSkinningLoc >= 0) {
+                    SetShaderValue(shader, useSkinningLoc, &useSkinning, SHADER_UNIFORM_INT);
+                }
+
                 if (containingSectorAmbientLoc >= 0) {
                     SetShaderValue(
                             shader,
@@ -1166,6 +1231,134 @@ void SectorStaticModelRenderer::Draw(
                 } else {
                     ++skipped;
                 }
+            });
+
+    runtimeObjectWorld.ForEach<
+            SectorObjectTransform,
+            SectorObject,
+            SectorObjectLighting,
+            SectorDynamicModel,
+            engine::AnimatedModelInstance>(
+            [this,
+             &assets,
+             &dynamicLightContext,
+             &visibility,
+             environment,
+             &considered,
+             &drawn,
+             &portalCulled,
+             &skipped](
+                    engine::Entity,
+                    SectorObjectTransform& transform,
+                    SectorObject& object,
+                    SectorObjectLighting& lighting,
+                    SectorDynamicModel& dynamicModel,
+                    engine::AnimatedModelInstance& instance) {
+                ++considered;
+                if (!ShouldDrawRuntimeSectorForVisibility(object.currentSectorId, visibility)) {
+                    ++portalCulled;
+                    return;
+                }
+                if (!object.visible || !instance.poseReady || instance.poseFailed) {
+                    ++skipped;
+                    return;
+                }
+                const engine::ModelAsset* modelAsset = assets.GetModelAsset(instance.model);
+                if (modelAsset == nullptr) {
+                    ++skipped;
+                    return;
+                }
+                Model model = engine::BuildAnimatedModelPoseView(*modelAsset, instance);
+                const bool canSkin = model.skeleton.boneCount > 0
+                        && model.skeleton.boneCount <= engine::MaxAnimatedModelBones
+                        && model.boneMatrices != nullptr
+                        && shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] >= 0;
+                const int useSkinning = canSkin ? 1 : 0;
+                const int useObjectProbe = 1;
+                const int noStaticLightmap = 0;
+                const int noBakedAo = 0;
+                if (useSkinningLoc >= 0) SetShaderValue(shader, useSkinningLoc, &useSkinning, SHADER_UNIFORM_INT);
+                if (useObjectProbeLightingLoc >= 0) SetShaderValue(shader, useObjectProbeLightingLoc, &useObjectProbe, SHADER_UNIFORM_INT);
+                if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &noStaticLightmap, SHADER_UNIFORM_INT);
+                if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &noBakedAo, SHADER_UNIFORM_INT);
+                if (containingSectorAmbientLoc >= 0) SetShaderValue(shader, containingSectorAmbientLoc, &dynamicModel.containingSectorAmbient, SHADER_UNIFORM_VEC3);
+                if (environmentExposureLoc >= 0) SetShaderValue(shader, environmentExposureLoc, &dynamicModel.environmentExposure, SHADER_UNIFORM_FLOAT);
+                for (size_t face = 0; face < objectAmbientCubeLocs.size(); ++face) {
+                    if (objectAmbientCubeLocs[face] >= 0) {
+                        SetShaderValue(
+                                shader,
+                                objectAmbientCubeLocs[face],
+                                &lighting.baked.ambientCube[face],
+                                SHADER_UNIFORM_VEC3);
+                    }
+                }
+                if (canSkin) {
+                    rlEnableShader(shader.id);
+                    rlSetUniformMatrices(
+                            shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS],
+                            model.boneMatrices,
+                            model.skeleton.boneCount);
+                }
+
+                const Matrix authoredTransform = BuildSectorStaticModelAuthoredTransform(
+                        transform.position,
+                        transform.rotationXRadians,
+                        transform.yawRadians,
+                        transform.rotationZRadians,
+                        dynamicModel.scale);
+                const Matrix modelTransform = MatrixMultiply(model.transform, authoredTransform);
+                bool drewMesh = false;
+                for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
+                    if (model.meshMaterial == nullptr) continue;
+                    const int materialIndex = model.meshMaterial[meshIndex];
+                    if (materialIndex < 0 || materialIndex >= model.materialCount) continue;
+                    const Material& source = model.materials[materialIndex];
+                    if (source.maps == nullptr) continue;
+
+                    std::array<MaterialMap, SectorStaticModelMaterialMapCount> maps{};
+                    std::copy_n(source.maps, SectorStaticModelMaterialMapCount, maps.begin());
+                    ConfigureSectorStaticModelAuxiliaryMaterialMaps(
+                            maps,
+                            nullptr,
+                            false,
+                            environment,
+                            dynamicLightContext.shadowMaps.shadowMap0,
+                            dynamicLightContext.shadowMaps.shadowMap1);
+                    Material material = source;
+                    material.shader = shader;
+                    material.maps = maps.data();
+                    engine::ModelMaterialAsset pbrMaterial;
+                    if (materialIndex < static_cast<int>(modelAsset->materials.size())
+                            && modelAsset->materials[static_cast<size_t>(materialIndex)].pbrMetallicRoughness) {
+                        pbrMaterial = modelAsset->materials[static_cast<size_t>(materialIndex)];
+                    } else {
+                        pbrMaterial.baseColorFactor = ColorToNormalizedVector4(maps[MATERIAL_MAP_DIFFUSE].color);
+                        pbrMaterial.roughnessFactor = 1.0f;
+                        pbrMaterial.hasBaseColorTexture = maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
+                    }
+                    if (baseColorFactorLoc >= 0) SetShaderValue(shader, baseColorFactorLoc, &pbrMaterial.baseColorFactor, SHADER_UNIFORM_VEC4);
+                    if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbrMaterial.emissiveFactor, SHADER_UNIFORM_VEC3);
+                    if (metallicFactorLoc >= 0) SetShaderValue(shader, metallicFactorLoc, &pbrMaterial.metallicFactor, SHADER_UNIFORM_FLOAT);
+                    if (roughnessFactorLoc >= 0) SetShaderValue(shader, roughnessFactorLoc, &pbrMaterial.roughnessFactor, SHADER_UNIFORM_FLOAT);
+                    if (normalScaleLoc >= 0) SetShaderValue(shader, normalScaleLoc, &pbrMaterial.normalScale, SHADER_UNIFORM_FLOAT);
+                    if (occlusionStrengthLoc >= 0) SetShaderValue(shader, occlusionStrengthLoc, &pbrMaterial.occlusionStrength, SHADER_UNIFORM_FLOAT);
+                    const int hasBase = pbrMaterial.hasBaseColorTexture ? 1 : 0;
+                    const int hasMetal = pbrMaterial.hasMetallicTexture ? 1 : 0;
+                    const int hasNormal = pbrMaterial.hasNormalTexture ? 1 : 0;
+                    const int hasRoughness = pbrMaterial.hasRoughnessTexture ? 1 : 0;
+                    const int hasOcclusion = pbrMaterial.hasOcclusionTexture ? 1 : 0;
+                    const int hasEmissive = pbrMaterial.hasEmissiveTexture ? 1 : 0;
+                    if (hasBaseColorTextureLoc >= 0) SetShaderValue(shader, hasBaseColorTextureLoc, &hasBase, SHADER_UNIFORM_INT);
+                    if (hasMetallicTextureLoc >= 0) SetShaderValue(shader, hasMetallicTextureLoc, &hasMetal, SHADER_UNIFORM_INT);
+                    if (hasNormalTextureLoc >= 0) SetShaderValue(shader, hasNormalTextureLoc, &hasNormal, SHADER_UNIFORM_INT);
+                    if (hasRoughnessTextureLoc >= 0) SetShaderValue(shader, hasRoughnessTextureLoc, &hasRoughness, SHADER_UNIFORM_INT);
+                    if (hasOcclusionTextureLoc >= 0) SetShaderValue(shader, hasOcclusionTextureLoc, &hasOcclusion, SHADER_UNIFORM_INT);
+                    if (hasEmissiveTextureLoc >= 0) SetShaderValue(shader, hasEmissiveTextureLoc, &hasEmissive, SHADER_UNIFORM_INT);
+                    DrawMesh(model.meshes[meshIndex], material, modelTransform);
+                    drewMesh = true;
+                }
+                if (drewMesh) ++drawn;
+                else ++skipped;
             });
 
     rlActiveTextureSlot(0);

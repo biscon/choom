@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/assets/AssetManager.h"
+#include "engine/components/AnimatedModel.h"
 #include "engine/ecs/World.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorLightmapTypes.h"
@@ -45,6 +46,16 @@ struct SectorStaticModel {
     Vector3 containingSectorAmbient = {0.15f, 0.15f, 0.15f};
     float scale = 1.0f;
     float environmentExposure = 0.15f;
+};
+
+struct SectorDynamicModel {
+    int placedObjectId = 0;
+    Vector3 containingSectorAmbient = {0.15f, 0.15f, 0.15f};
+    float scale = 1.0f;
+    float environmentExposure = 0.15f;
+    std::string requestedAnimation;
+    bool animationResolved = false;
+    bool animationFallback = false;
 };
 
 } // namespace game

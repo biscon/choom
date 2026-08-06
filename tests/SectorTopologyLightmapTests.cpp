@@ -1189,6 +1189,22 @@ void TestSourceHashChanges()
     const game::SectorTopologyMap base = MakeSquare();
     const std::string hash = game::ComputeSectorLightmapSourceHash(base);
 
+    game::SectorTopologyMap dynamicPropMap = base;
+    game::SectorPlacedRuntimeObject dynamicProp;
+    dynamicProp.id = 77;
+    dynamicProp.kind = "dynamic_model";
+    dynamicProp.position = Vector3{24.0f, 0.0f, 24.0f};
+    dynamicProp.dynamicModel.modelPath = "assets/models/characters/synthetic.glb";
+    dynamicProp.dynamicModel.animation = "Walk";
+    dynamicPropMap.runtimeObjects.push_back(dynamicProp);
+    Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
+          "hash excludes dynamic props because they are neither baked receivers nor occluders");
+    dynamicPropMap.runtimeObjects[0].position.x += 16.0f;
+    dynamicPropMap.runtimeObjects[0].dynamicModel.animation = "Idle";
+    dynamicPropMap.runtimeObjects[0].dynamicModel.animationSpeed = 2.0f;
+    Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
+          "hash excludes dynamic prop transform and playback changes");
+
     game::SectorTopologyMap movedVertex = base;
     movedVertex.vertices[0].x += 1;
     Check(game::ComputeSectorLightmapSourceHash(movedVertex) != hash, "hash changes when vertex coordinate changes");

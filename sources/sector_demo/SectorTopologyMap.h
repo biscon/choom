@@ -98,6 +98,18 @@ struct SectorPlacedStaticModel {
     std::string geometryFingerprint;
 };
 
+struct SectorPlacedDynamicModel {
+    std::string modelPath;
+    float rotationXRadians = 0.0f;
+    float rotationZRadians = 0.0f;
+    float heightOffsetWorld = 0.0f;
+    float scale = 1.0f;
+    bool collision = false;
+    std::string animation;
+    bool loop = true;
+    float animationSpeed = 1.0f;
+};
+
 enum class SectorDoorMotionType {
     SlideVertical,
     SlideLeft,
@@ -167,6 +179,7 @@ struct SectorPlacedRuntimeObject {
     std::string kind;
     SectorPlacedBillboard billboard;
     SectorPlacedStaticModel staticModel;
+    SectorPlacedDynamicModel dynamicModel;
     SectorPlacedDoor door;
 };
 

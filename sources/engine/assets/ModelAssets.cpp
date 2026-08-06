@@ -237,7 +237,8 @@ void ModelAssets::OnScopeCreated(AssetScopeHandle scope)
 ModelHandle ModelAssets::RequestModel(
         AssetScopeHandle scope,
         const char* key,
-        const char* path)
+        const char* path,
+        ModelLoadFlags flags)
 {
     if (key == nullptr || path == nullptr || key[0] == '\0' || path[0] == '\0') {
         return NullModelHandle();
@@ -249,7 +250,7 @@ ModelHandle ModelAssets::RequestModel(
     }
 
     ModelScopeData& data = scopeData[scope.index];
-    const std::string requestKey = MakeRequestKey(key, path);
+    const std::string requestKey = MakeRequestKey(key, path, flags);
     const auto existing = data.modelByRequest.find(requestKey);
     if (existing != data.modelByRequest.end()) {
         return existing->second;
@@ -260,6 +261,7 @@ ModelHandle ModelAssets::RequestModel(
     slot.state = ModelState::Queued;
     slot.key = key;
     slot.path = path;
+    slot.flags = flags;
     slot.scope = scope;
 
     const uint32_t index = static_cast<uint32_t>(modelSlots.size());
@@ -391,6 +393,7 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
     while (true) {
         ModelHandle handle;
         std::string path;
+        ModelLoadFlags flags = ModelLoad_None;
         {
             std::lock_guard<std::mutex> lock(stateMutex);
             if (pendingLoads.empty()) {
@@ -403,12 +406,18 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                 continue;
             }
             path = modelSlots[handle.index].path;
+            flags = modelSlots[handle.index].flags;
         }
 
         // raylib glTF loading performs GPU mesh and texture creation. Keep the
         // entire operation on the main thread.
         Model loaded = LoadModel(path.c_str());
         const bool loadedModel = IsModelValid(loaded);
+        ModelAnimation* loadedAnimations = nullptr;
+        int loadedAnimationCount = 0;
+        if (loadedModel && (flags & ModelLoad_Animations) != 0) {
+            loadedAnimations = LoadModelAnimations(path.c_str(), &loadedAnimationCount);
+        }
         if (!loadedModel) {
             std::fprintf(stderr, "[AssetManager WARNING] Failed to load model: %s\n", path.c_str());
             if (loaded.meshes != nullptr
@@ -477,7 +486,8 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                             texture = {};
                         }
                     }
-                    pendingUnloads.push_back(loaded);
+                    pendingUnloads.push_back(PendingModelUnload{
+                            loaded, loadedAnimations, loadedAnimationCount});
                 }
             } else {
                 ModelSlot& slot = modelSlots[handle.index];
@@ -540,6 +550,8 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                         }
                     }
                     slot.asset.model = loaded;
+                    slot.asset.animations = loadedAnimations;
+                    slot.asset.animationCount = loadedAnimationCount;
                     slot.asset.materials = std::move(parsed.materials);
                     slot.asset.localBounds = localBounds;
                     slot.asset.hasLocalBounds = hasLocalBounds;
@@ -600,7 +612,10 @@ void ModelAssets::ShutdownMainThread()
                     || slot.state == ModelState::QueuedForUnload)
                     && IsModelValid(slot.asset.model)) {
                 DetachModelTextures(slot.asset.model);
-                pendingUnloads.push_back(slot.asset.model);
+                pendingUnloads.push_back(PendingModelUnload{
+                        slot.asset.model,
+                        slot.asset.animations,
+                        slot.asset.animationCount});
                 slot.asset = {};
             }
             slot.state = ModelState::Unloaded;
@@ -644,10 +659,13 @@ bool ModelAssets::IsModelValid(const Model& model)
     return ::IsModelValid(model);
 }
 
-std::string ModelAssets::MakeRequestKey(const char* key, const char* path)
+std::string ModelAssets::MakeRequestKey(
+        const char* key,
+        const char* path,
+        ModelLoadFlags flags)
 {
     (void)key;
-    return path;
+    return std::string(path) + "#flags:" + std::to_string(static_cast<uint32_t>(flags));
 }
 
 void ModelAssets::DetachModelTextures(Model& model)
@@ -676,7 +694,10 @@ void ModelAssets::QueueModelUnloadNoLock(ModelHandle handle)
     ModelSlot& slot = modelSlots[handle.index];
     if (IsModelValid(slot.asset.model)) {
         DetachModelTextures(slot.asset.model);
-        pendingUnloads.push_back(slot.asset.model);
+        pendingUnloads.push_back(PendingModelUnload{
+                slot.asset.model,
+                slot.asset.animations,
+                slot.asset.animationCount});
         slot.asset = {};
     }
     slot.state = ModelState::QueuedForUnload;
@@ -685,16 +706,19 @@ void ModelAssets::QueueModelUnloadNoLock(ModelHandle handle)
 
 void ModelAssets::UnloadReadyModels()
 {
-    std::vector<Model> unloads;
+    std::vector<PendingModelUnload> unloads;
     std::vector<Texture2D> textureUnloads;
     {
         std::lock_guard<std::mutex> lock(stateMutex);
         unloads.swap(pendingUnloads);
         textureUnloads.swap(pendingTextureUnloads);
     }
-    for (Model model : unloads) {
-        if (IsModelValid(model)) {
-            UnloadGeometryModel(model);
+    for (PendingModelUnload& unload : unloads) {
+        if (unload.animations != nullptr && unload.animationCount > 0) {
+            UnloadModelAnimations(unload.animations, unload.animationCount);
+        }
+        if (IsModelValid(unload.model)) {
+            UnloadGeometryModel(unload.model);
         }
     }
     std::unordered_set<unsigned int> unloadedTextureIds;

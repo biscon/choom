@@ -132,6 +132,39 @@ bool SectorEditorRuntimeObjectEditingService::AddStaticModel(Vector2 mapPoint)
     return true;
 }
 
+bool SectorEditorRuntimeObjectEditingService::AddDynamicModel(Vector2 mapPoint)
+{
+    if (!context_.authoringDerivationCurrent || !context_.topologyRenderCache.valid) {
+        context_.statusText =
+                "Dynamic prop placement failed: derived sector cache is unavailable";
+        return false;
+    }
+    const int sectorId = FindCachedSectorAt(mapPoint);
+    const SectorTopologySector* sector = FindSectorTopologySector(context_.map, sectorId);
+    if (sector == nullptr) {
+        context_.statusText =
+                "Dynamic prop placement failed: click inside a derived sector";
+        return false;
+    }
+    const int objectId = AllocateSectorPlacedRuntimeObjectId(context_.map);
+    if (!IsValidSectorTopologyId(objectId)) {
+        context_.statusText =
+                "Dynamic prop placement failed: no runtime object IDs available";
+        return false;
+    }
+
+    SectorPlacedRuntimeObject object;
+    object.id = objectId;
+    object.kind = "dynamic_model";
+    object.position = Vector3{mapPoint.x, sector->floorZ, mapPoint.y};
+    object.dynamicModel = SectorPlacedDynamicModel{};
+    context_.map.runtimeObjects.push_back(std::move(object));
+    SelectObject(objectId);
+    MarkEdited(TextFormat("Added dynamic prop %d", objectId));
+    RefreshPreviewObjects();
+    return true;
+}
+
 SectorEditorRuntimeObjectDeleteRequest
 SectorEditorRuntimeObjectEditingService::RequestDeleteSelected() const
 {
@@ -174,7 +207,7 @@ bool SectorEditorRuntimeObjectEditingService::MutateSelected(
     if (!mutate(*object)) {
         return false;
     }
-    if (object->kind == "static_model"
+    if ((object->kind == "static_model" || object->kind == "dynamic_model")
             && context_.topologyRenderCache.valid
             && (std::fabs(object->position.x - previousPosition.x) > GeometryEpsilon
                     || std::fabs(object->position.z - previousPosition.z) > GeometryEpsilon)) {
@@ -202,6 +235,22 @@ bool SectorEditorRuntimeObjectEditingService::AssignSelectedStaticModel(
                 }
                 object.staticModel.modelPath = modelPath;
                 object.staticModel.geometryFingerprint.clear();
+                return true;
+            });
+}
+
+bool SectorEditorRuntimeObjectEditingService::AssignSelectedDynamicModel(
+        const std::string& modelPath)
+{
+    return MutateSelected(
+            "Updated dynamic prop model",
+            [&modelPath](SectorPlacedRuntimeObject& object) {
+                if (object.kind != "dynamic_model"
+                        || object.dynamicModel.modelPath == modelPath) {
+                    return false;
+                }
+                object.dynamicModel.modelPath = modelPath;
+                object.dynamicModel.animation.clear();
                 return true;
             });
 }
@@ -293,7 +342,7 @@ void SectorEditorRuntimeObjectEditingService::UpdateDrag(Vector2 snappedMapPoint
     }
 
     float baseFloor = object->position.y;
-    if (object->kind == "static_model"
+    if ((object->kind == "static_model" || object->kind == "dynamic_model")
             && context_.topologyRenderCache.valid) {
         const int sectorId = FindCachedSectorAt(snappedMapPoint);
         if (const SectorTopologySector* sector =

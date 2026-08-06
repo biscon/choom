@@ -556,6 +556,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::AuthoringMove: return "Move Vertex";
         case SectorEditorTool::RuntimeObject: return "Billboard";
         case SectorEditorTool::StaticModel: return "3D Prop";
+        case SectorEditorTool::DynamicModel: return "Dynamic Prop";
         case SectorEditorTool::Door: return "Door";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume";
         case SectorEditorTool::StaticLight: return "Static Light";
@@ -1028,6 +1029,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::AuthoringMove: return "Move Vertex: hidden; use Select to move selected authoring vertices";
         case SectorEditorTool::RuntimeObject: return "Billboard: click inside a sector to place a billboard marker";
         case SectorEditorTool::StaticModel: return "3D Prop: click inside a derived sector to place a floor-relative static model";
+        case SectorEditorTool::DynamicModel: return "Dynamic Prop: click inside a derived sector to place an animated model";
         case SectorEditorTool::Door: return "Door: click a two-sided portal line to place a sliding door";
         case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place a baked point light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place a baked spot light";

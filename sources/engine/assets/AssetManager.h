@@ -80,7 +80,8 @@ public:
     ModelHandle RequestModel(
             AssetScopeHandle scope,
             const char* key,
-            const char* path);
+            const char* path,
+            ModelLoadFlags flags = ModelLoad_None);
 
     bool IsReady(ModelHandle handle) const;
     bool IsFinished(ModelHandle handle) const;

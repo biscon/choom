@@ -15,6 +15,11 @@
 
 namespace engine {
 
+enum ModelLoadFlags : uint32_t {
+    ModelLoad_None = 0,
+    ModelLoad_Animations = 1 << 0
+};
+
 struct ModelMaterialAsset {
     Vector4 baseColorFactor = {1.0f, 1.0f, 1.0f, 1.0f};
     Vector3 emissiveFactor = {};
@@ -33,6 +38,8 @@ struct ModelMaterialAsset {
 
 struct ModelAsset {
     Model model = {};
+    ModelAnimation* animations = nullptr;
+    int animationCount = 0;
     std::vector<ModelMaterialAsset> materials;
     BoundingBox localBounds = {};
     bool hasLocalBounds = false;
@@ -53,7 +60,8 @@ public:
     ModelHandle RequestModel(
             AssetScopeHandle scope,
             const char* key,
-            const char* path);
+            const char* path,
+            ModelLoadFlags flags = ModelLoad_None);
 
     bool IsReady(ModelHandle handle) const;
     bool IsFinished(ModelHandle handle) const;
@@ -76,6 +84,7 @@ private:
         ModelState state = ModelState::Unloaded;
         std::string key;
         std::string path;
+        ModelLoadFlags flags = ModelLoad_None;
         AssetScopeHandle scope;
         ModelAsset asset;
         std::string error;
@@ -91,7 +100,7 @@ private:
     bool IsValidModelNoLock(ModelHandle handle) const;
     static bool IsTerminal(ModelState state);
     static bool IsModelValid(const Model& model);
-    static std::string MakeRequestKey(const char* key, const char* path);
+    static std::string MakeRequestKey(const char* key, const char* path, ModelLoadFlags flags);
     static void DetachModelTextures(Model& model);
     static void UnloadGeometryModel(Model model);
 
@@ -102,7 +111,13 @@ private:
     std::vector<ModelSlot> modelSlots;
     std::vector<ModelScopeData> scopeData;
     std::deque<ModelHandle> pendingLoads;
-    std::vector<Model> pendingUnloads;
+    struct PendingModelUnload {
+        Model model = {};
+        ModelAnimation* animations = nullptr;
+        int animationCount = 0;
+    };
+
+    std::vector<PendingModelUnload> pendingUnloads;
     std::vector<Texture2D> pendingTextureUnloads;
 };
 

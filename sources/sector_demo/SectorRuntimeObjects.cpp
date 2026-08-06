@@ -5,6 +5,7 @@
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
+#include "engine/systems/AnimatedModelSystem.h"
 
 #include <cmath>
 #include <cstdio>
@@ -20,11 +21,14 @@ namespace game {
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(16);
+    world.ReserveComponentTypes(19);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
     world.ReserveComponent<SectorStaticModel>(objectCapacity);
+    world.ReserveComponent<SectorDynamicModel>(objectCapacity);
+    world.ReserveComponent<engine::AnimatedModelInstance>(objectCapacity);
+    world.ReserveComponent<engine::AnimatedModelAnimator>(objectCapacity);
     world.ReserveComponent<SectorStaticModelCollider>(objectCapacity);
     world.ReserveComponent<SectorBillboardSprite>(objectCapacity);
     world.ReserveComponent<SectorBillboardAnimator>(objectCapacity);
@@ -310,6 +314,55 @@ bool EnsureSectorRuntimeObjectAssetScope(
     return true;
 }
 
+void ResolveDynamicModelAnimations(
+        engine::World& world,
+        engine::AssetManager& assets)
+{
+    world.ForEach<SectorDynamicModel, engine::AnimatedModelInstance, engine::AnimatedModelAnimator>(
+            [&assets](
+                    engine::Entity,
+                    SectorDynamicModel& dynamicModel,
+                    engine::AnimatedModelInstance& instance,
+                    engine::AnimatedModelAnimator& animator) {
+                if (dynamicModel.animationResolved) {
+                    return;
+                }
+                const engine::ModelAsset* asset = assets.GetModelAsset(instance.model);
+                if (asset == nullptr) {
+                    return;
+                }
+
+                if (asset->animationCount <= 0 || asset->animations == nullptr) {
+                    dynamicModel.animationResolved = true;
+                    return;
+                }
+
+                uint32_t animationIndex = engine::FindModelAnimationIndex(
+                        *asset,
+                        dynamicModel.requestedAnimation.c_str());
+                if (animationIndex == engine::InvalidModelAnimationIndex) {
+                    animationIndex = 0;
+                    dynamicModel.animationFallback = !dynamicModel.requestedAnimation.empty();
+                    if (dynamicModel.animationFallback) {
+                        std::fprintf(
+                                stderr,
+                                "[SectorRuntimeObjects WARNING] Animation '%s' was not found for dynamic model object %d; using '%s'.\n",
+                                dynamicModel.requestedAnimation.c_str(),
+                                dynamicModel.placedObjectId,
+                                asset->animations[0].name);
+                    }
+                }
+
+                engine::SetAnimatedModelAnimation(animator, animationIndex);
+                if (!animator.loop) {
+                    animator.playing = false;
+                    animator.frame = 0.0f;
+                    animator.poseDirty = true;
+                }
+                dynamicModel.animationResolved = true;
+            });
+}
+
 
 } // namespace
 
@@ -577,6 +630,76 @@ void SpawnPlacedRuntimeObjects(
             continue;
         }
 
+        if (placedObject.kind == "dynamic_model") {
+            engine::ModelHandle model = engine::NullModelHandle();
+            if (!placedObject.dynamicModel.modelPath.empty()) {
+                if (!EnsureSectorRuntimeObjectAssetScope(assets, state)) {
+                    recordWarning(TextFormat("asset scope unavailable for placed object %d", placedObject.id));
+                    ++skippedCount;
+                    continue;
+                }
+                const std::string modelPath = ResolveSectorAssetPath(
+                        placedObject.dynamicModel.modelPath);
+                model = assets.RequestModel(
+                        state.runtimeObjectAssetScope,
+                        placedObject.dynamicModel.modelPath.c_str(),
+                        modelPath.c_str(),
+                        engine::ModelLoad_Animations);
+                if (engine::IsNull(model)) {
+                    const std::string warning = TextFormat(
+                            "could not request dynamic model '%s' for placed object %d",
+                            placedObject.dynamicModel.modelPath.c_str(),
+                            placedObject.id);
+                    std::fprintf(stderr, "[SectorRuntimeObjects WARNING] %s\n", warning.c_str());
+                    recordWarning(warning);
+                }
+            }
+
+            Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
+                    placedObject.position);
+            worldPosition.y += placedObject.dynamicModel.heightOffsetWorld;
+            SectorObject object;
+            if (state.objectSectorLookupWorldValid) {
+                const int foundSectorId =
+                        state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                                Vector2{worldPosition.x, worldPosition.z}, -1);
+                object.currentSectorId = foundSectorId != 0 ? foundSectorId : -1;
+            }
+            const Vector3 sectorAmbient = StaticModelSectorAmbient(map, object.currentSectorId);
+
+            const engine::Entity entity = world.CreateEntity();
+            world.Add(entity, SectorObjectTransform{
+                    worldPosition,
+                    placedObject.yawRadians,
+                    placedObject.dynamicModel.rotationXRadians,
+                    placedObject.dynamicModel.rotationZRadians});
+            world.Add(entity, object);
+            world.Add(entity, SectorObjectLighting{SampleBakedObjectLighting(
+                    state.objectLightProbes,
+                    worldPosition,
+                    object.currentSectorId,
+                    &map)});
+            world.Add(entity, SectorDynamicModel{
+                    placedObject.id,
+                    sectorAmbient,
+                    placedObject.dynamicModel.scale,
+                    StaticModelEnvironmentExposure(map, object.currentSectorId, sectorAmbient),
+                    placedObject.dynamicModel.animation});
+            world.Add(entity, engine::AnimatedModelInstance{model});
+            engine::AnimatedModelAnimator animator;
+            animator.speed = placedObject.dynamicModel.animationSpeed;
+            animator.loop = placedObject.dynamicModel.loop;
+            animator.playing = placedObject.dynamicModel.loop;
+            world.Add(entity, animator);
+            if (placedObject.dynamicModel.collision) {
+                world.Add(entity, SectorStaticModelCollider{placedObject.id});
+            }
+            state.placedObjectEntities.push_back(
+                    SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
+            ++spawnedCount;
+            continue;
+        }
+
         if (placedObject.kind != "billboard") {
             const std::string warning = TextFormat(
                     "unsupported kind '%s' for placed object %d",
@@ -666,6 +789,7 @@ void SpawnPlacedRuntimeObjects(
     state.spawnedObjectCount = spawnedCount;
     state.skippedObjectCount = skippedCount;
     UpdateSectorDoorDerivedStateSystem(world);
+    ResolveDynamicModelAnimations(world, assets);
     UpdateSectorStaticModelColliderSystem(world, assets);
     CollectSectorStaticModelColliders(world, state.staticModelColliders);
     RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
@@ -680,6 +804,8 @@ void UpdateSectorRuntimeObjects(
         const Vector3* playerPosition)
 {
     AdvanceSectorBillboardAnimatorSystem(world, dt);
+    ResolveDynamicModelAnimations(world, assets);
+    engine::AnimatedModelSystem(world, assets, dt);
     if (playerPosition != nullptr) {
         UpdateSectorDoorAutoOpenSystem(world, *playerPosition);
     }

@@ -21,6 +21,7 @@ using Json = nlohmann::ordered_json;
 constexpr float Pi = 3.14159265358979323846f;
 constexpr const char* RuntimeObjectKindBillboard = "billboard";
 constexpr const char* RuntimeObjectKindStaticModel = "static_model";
+constexpr const char* RuntimeObjectKindDynamicModel = "dynamic_model";
 constexpr const char* RuntimeObjectKindDoor = "door";
 
 [[noreturn]] void Fail(const std::string& message)
@@ -630,6 +631,29 @@ SectorPlacedStaticModel ReadPlacedStaticModel(const Json& value, const std::stri
     return staticModel;
 }
 
+SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorPlacedDynamicModel model;
+    model.modelPath = ReadOptionalString(value, "modelPath", context, model.modelPath);
+    model.rotationXRadians = DegreesToRadians(ReadOptionalFloat(
+            value, "rotationXDegrees", context, 0.0f));
+    model.rotationZRadians = DegreesToRadians(ReadOptionalFloat(
+            value, "rotationZDegrees", context, 0.0f));
+    model.heightOffsetWorld = ReadOptionalFloat(
+            value, "heightOffsetWorld", context, model.heightOffsetWorld);
+    model.scale = ReadOptionalPositiveFloat(value, "scale", context, model.scale);
+    model.collision = ReadOptionalBool(value, "collision", context, model.collision);
+    model.animation = ReadOptionalString(value, "animation", context, model.animation);
+    model.loop = ReadOptionalBool(value, "loop", context, model.loop);
+    model.animationSpeed = ReadOptionalPositiveFloat(
+            value, "animationSpeed", context, model.animationSpeed);
+    return model;
+}
+
 SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -650,17 +674,21 @@ SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string
             object.staticModel = ReadPlacedStaticModel(
                     RequireObjectField(value, "staticModel", context),
                     context + ".staticModel");
+        } else if (object.kind == RuntimeObjectKindDynamicModel) {
+            object.dynamicModel = ReadPlacedDynamicModel(
+                    RequireObjectField(value, "dynamicModel", context),
+                    context + ".dynamicModel");
         } else if (object.kind == RuntimeObjectKindDoor) {
             object.door = ReadPlacedDoor(RequireObjectField(value, "door", context),
                     context + ".door");
         } else {
-            Fail(context + ".kind must be 'billboard', 'static_model', or 'door'");
+            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
         }
     } else {
         if (value.contains("definitionId")) {
             Fail(context + ".definitionId-only runtime objects are legacy unsupported data; use kind 'billboard'");
         }
-        Fail(context + ".kind must be 'billboard', 'static_model', or 'door'");
+        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
     }
     object.position = ReadVector3(RequireField(value, "position", context), context + ".position");
     object.yawRadians = DegreesToRadians(ReadFloat(value, "yawDegrees", context));
@@ -1450,7 +1478,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             {"id", object.id}
     };
     if (object.kind.empty()) {
-        Fail(context + ".kind must be 'billboard', 'static_model', or 'door'");
+        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
     } else {
         if (object.kind == RuntimeObjectKindBillboard) {
             json["kind"] = object.kind;
@@ -1498,11 +1526,36 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             }
             json["kind"] = object.kind;
             json["staticModel"] = std::move(staticModel);
+        } else if (object.kind == RuntimeObjectKindDynamicModel) {
+            const SectorPlacedDynamicModel& model = object.dynamicModel;
+            RequireFinite(model.rotationXRadians, context + ".dynamicModel.rotationXRadians");
+            RequireFinite(model.rotationZRadians, context + ".dynamicModel.rotationZRadians");
+            RequireFinite(model.heightOffsetWorld, context + ".dynamicModel.heightOffsetWorld");
+            if (!std::isfinite(model.scale) || model.scale <= 0.0f) {
+                Fail(context + ".dynamicModel.scale must be a finite positive value");
+            }
+            if (!std::isfinite(model.animationSpeed) || model.animationSpeed <= 0.0f) {
+                Fail(context + ".dynamicModel.animationSpeed must be a finite positive value");
+            }
+            const float rotationXDegrees = RadiansToDegrees(model.rotationXRadians);
+            const float rotationZDegrees = RadiansToDegrees(model.rotationZRadians);
+            Json dynamicModel = Json::object();
+            if (!model.modelPath.empty()) dynamicModel["modelPath"] = model.modelPath;
+            if (rotationXDegrees != 0.0f) dynamicModel["rotationXDegrees"] = rotationXDegrees;
+            if (rotationZDegrees != 0.0f) dynamicModel["rotationZDegrees"] = rotationZDegrees;
+            if (model.heightOffsetWorld != 0.0f) dynamicModel["heightOffsetWorld"] = model.heightOffsetWorld;
+            if (model.scale != 1.0f) dynamicModel["scale"] = model.scale;
+            if (model.collision) dynamicModel["collision"] = true;
+            if (!model.animation.empty()) dynamicModel["animation"] = model.animation;
+            if (!model.loop) dynamicModel["loop"] = false;
+            if (model.animationSpeed != 1.0f) dynamicModel["animationSpeed"] = model.animationSpeed;
+            json["kind"] = object.kind;
+            json["dynamicModel"] = std::move(dynamicModel);
         } else if (object.kind == RuntimeObjectKindDoor) {
             json["kind"] = object.kind;
             json["door"] = WritePlacedDoor(object.door);
         } else {
-            Fail(context + ".kind must be 'billboard', 'static_model', or 'door'");
+            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
         }
     }
     json["position"] = WriteVector3(object.position, context + ".position");
@@ -2077,7 +2130,7 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
             Fail(objectContext + ".id must be a positive integer");
         }
         if (object.kind.empty()) {
-            Fail(objectContext + ".kind must be 'billboard', 'static_model', or 'door'");
+            Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
         } else {
             if (object.kind == RuntimeObjectKindBillboard) {
                 ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
@@ -2095,10 +2148,23 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                         || object.staticModel.scale <= 0.0f) {
                     Fail(objectContext + ".staticModel.scale must be a finite positive value");
                 }
+            } else if (object.kind == RuntimeObjectKindDynamicModel) {
+                const SectorPlacedDynamicModel& model = object.dynamicModel;
+                if (!std::isfinite(model.rotationXRadians)
+                        || !std::isfinite(model.rotationZRadians)
+                        || !std::isfinite(model.heightOffsetWorld)) {
+                    Fail(objectContext + ".dynamicModel transforms must be finite");
+                }
+                if (!std::isfinite(model.scale) || model.scale <= 0.0f) {
+                    Fail(objectContext + ".dynamicModel.scale must be a finite positive value");
+                }
+                if (!std::isfinite(model.animationSpeed) || model.animationSpeed <= 0.0f) {
+                    Fail(objectContext + ".dynamicModel.animationSpeed must be a finite positive value");
+                }
             } else if (object.kind == RuntimeObjectKindDoor) {
                 ValidatePlacedDoorForSerialization(object.door, objectContext + ".door");
             } else {
-                Fail(objectContext + ".kind must be 'billboard', 'static_model', or 'door'");
+                Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
             }
         }
         if (!std::isfinite(object.position.x)

@@ -490,6 +490,46 @@ void UpdateSectorStaticModelColliderSystem(
                             staticModel.placedObjectId);
                 }
             });
+
+    // Dynamic model collision intentionally follows only the runtime object
+    // transform. It uses the bind-pose asset bounds, not per-bone deformation.
+    world.ForEach<
+            SectorObjectTransform,
+            SectorDynamicModel,
+            engine::AnimatedModelInstance,
+            SectorStaticModelCollider>(
+            [&assets](
+                    engine::Entity,
+                    SectorObjectTransform& transform,
+                    SectorDynamicModel& dynamicModel,
+                    engine::AnimatedModelInstance& instance,
+                    SectorStaticModelCollider& collider) {
+                if (collider.failed || engine::IsNull(instance.model)) {
+                    collider.failed = true;
+                    return;
+                }
+                const engine::ModelAsset* asset = assets.GetModelAsset(instance.model);
+                if (asset == nullptr) {
+                    if (assets.HasFailed(instance.model)) {
+                        collider.failed = true;
+                    }
+                    return;
+                }
+                collider.resolved = false;
+                if (!asset->hasLocalBounds
+                        || !BuildSectorStaticModelCollider(
+                                dynamicModel.placedObjectId,
+                                asset->localBounds,
+                                transform,
+                                dynamicModel.scale,
+                                collider)) {
+                    collider.failed = true;
+                    std::fprintf(
+                            stderr,
+                            "[SectorRuntimeObjects WARNING] Dynamic model object %d has no valid collision bounds\n",
+                            dynamicModel.placedObjectId);
+                }
+            });
 }
 
 void CollectSectorStaticModelColliders(

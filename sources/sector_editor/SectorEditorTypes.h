@@ -31,6 +31,7 @@ enum class SectorEditorTool {
     AuthoringMove,
     RuntimeObject,
     StaticModel,
+    DynamicModel,
     Door,
     AuthoringFogVolume,
     StaticLight,

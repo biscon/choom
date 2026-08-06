@@ -368,6 +368,7 @@ private:
     SectorEditorToolContext BuildToolContext(engine::Input* input);
     void AddRuntimeObjectAt(Vector2 mapPoint);
     void AddStaticModelAt(Vector2 mapPoint);
+    void AddDynamicModelAt(Vector2 mapPoint);
     void AddDoorAtPortal(Vector2 screenPoint);
     bool DeleteSelectedRuntimeObject();
     bool DeleteRuntimeObjectById(int objectId);

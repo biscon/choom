@@ -94,7 +94,10 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(raylib)
-target_compile_definitions(raylib PRIVATE SUPPORT_FILEFORMAT_JPG=1)
+target_compile_definitions(raylib PRIVATE
+    SUPPORT_FILEFORMAT_JPG=1
+    SUPPORT_GPU_SKINNING=1
+)
 
 FetchContent_Declare(
         xatlas
@@ -170,6 +173,7 @@ if(BUILD_TESTING)
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
             sources/engine/assets/TextureAssets.cpp
+            sources/engine/systems/AnimatedModelSystem.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
@@ -331,6 +335,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
+            sources/engine/systems/AnimatedModelSystem.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp

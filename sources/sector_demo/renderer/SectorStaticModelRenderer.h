@@ -118,6 +118,9 @@ private:
     int hasStaticLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
     int containingSectorAmbientLoc = -1;
+    int useObjectProbeLightingLoc = -1;
+    std::array<int, 6> objectAmbientCubeLocs = {-1, -1, -1, -1, -1, -1};
+    int useSkinningLoc = -1;
     int lightmapTextureLoc = -1;
     int dynamicLightCountLoc = -1;
     int dynamicLightPositionsLoc = -1;

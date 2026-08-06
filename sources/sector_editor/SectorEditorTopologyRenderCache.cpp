@@ -380,7 +380,8 @@ void UpdateCachedSectorEditorRuntimeObjectDraw(
         cached.yawRadians = object.yawRadians;
         cached.definitionKnown = object.kind == "billboard"
                 || object.kind == "door"
-                || object.kind == "static_model";
+                || object.kind == "static_model"
+                || object.kind == "dynamic_model";
         cached.isDoor = false;
         cached.doorFootprintValid = false;
         return;
@@ -743,7 +744,8 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cached.yawRadians = object.yawRadians;
         cached.definitionKnown = object.kind == "billboard"
                 || object.kind == "door"
-                || object.kind == "static_model";
+                || object.kind == "static_model"
+                || object.kind == "dynamic_model";
         cached.isDoor = object.kind == "door";
         if (cached.isDoor) {
             const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(map, object.door);

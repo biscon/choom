@@ -40,8 +40,10 @@ SectorEditorStaticModelPickerService::SectorEditorStaticModelPickerService(
 }
 
 void SectorEditorStaticModelPickerService::Open(
-        const std::string& currentModelPath)
+        const std::string& currentModelPath,
+        ModelPickerTarget target)
 {
+    state_.target = target;
     state_.open = true;
     state_.requestedModelPath = currentModelPath;
     state_.scroll = engine::UIScrollState{};
@@ -50,13 +52,17 @@ void SectorEditorStaticModelPickerService::Open(
     } else {
         RestoreRequestedSelection();
     }
-    statusText_ = "Choose a static prop model";
+    statusText_ = target == ModelPickerTarget::DynamicModel
+            ? "Choose a dynamic prop model"
+            : "Choose a static prop model";
 }
 
 void SectorEditorStaticModelPickerService::Close()
 {
     state_.open = false;
-    statusText_ = "Static model selection cancelled";
+    statusText_ = state_.target == ModelPickerTarget::DynamicModel
+            ? "Dynamic model selection cancelled"
+            : "Static model selection cancelled";
 }
 
 bool SectorEditorStaticModelPickerService::Refresh()

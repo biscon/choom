@@ -13,7 +13,9 @@ public:
             StaticModelPickerState& state,
             std::string& statusText);
 
-    void Open(const std::string& currentModelPath);
+    void Open(
+            const std::string& currentModelPath,
+            ModelPickerTarget target = ModelPickerTarget::StaticModel);
     void Close();
     bool Refresh();
     bool RefreshFromRoot(
