@@ -56,6 +56,7 @@ struct SectorDynamicModel {
     std::string requestedAnimation;
     bool animationResolved = false;
     bool animationFallback = false;
+    SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
 };
 
 } // namespace game

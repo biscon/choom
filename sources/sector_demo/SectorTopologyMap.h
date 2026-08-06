@@ -98,6 +98,12 @@ struct SectorPlacedStaticModel {
     std::string geometryFingerprint;
 };
 
+enum class SectorDynamicModelShadowMode {
+    None,
+    Contact,
+    ProjectedSilhouette
+};
+
 struct SectorPlacedDynamicModel {
     std::string modelPath;
     float rotationXRadians = 0.0f;
@@ -108,6 +114,7 @@ struct SectorPlacedDynamicModel {
     std::string animation;
     bool loop = true;
     float animationSpeed = 1.0f;
+    SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
 };
 
 enum class SectorDoorMotionType {

@@ -1202,8 +1202,10 @@ void TestSourceHashChanges()
     dynamicPropMap.runtimeObjects[0].position.x += 16.0f;
     dynamicPropMap.runtimeObjects[0].dynamicModel.animation = "Idle";
     dynamicPropMap.runtimeObjects[0].dynamicModel.animationSpeed = 2.0f;
+    dynamicPropMap.runtimeObjects[0].dynamicModel.shadowMode =
+            game::SectorDynamicModelShadowMode::ProjectedSilhouette;
     Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
-          "hash excludes dynamic prop transform and playback changes");
+          "hash excludes dynamic prop transform, playback, and runtime shadow changes");
 
     game::SectorTopologyMap movedVertex = base;
     movedVertex.vertices[0].x += 1;

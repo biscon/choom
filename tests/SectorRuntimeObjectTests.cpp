@@ -3096,6 +3096,7 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     object.dynamicModel.animation = "Standard Walk";
     object.dynamicModel.loop = false;
     object.dynamicModel.animationSpeed = 1.5f;
+    object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::ProjectedSilhouette;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -3117,8 +3118,10 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
                   && Near(transform.yawRadians, 0.75f)
                   && Near(transform.rotationXRadians, 0.25f)
                   && Near(transform.rotationZRadians, -0.5f)
-                  && Near(dynamic.scale, 1.75f),
-          "dynamic prop copies the movable authored transform and scale");
+                  && Near(dynamic.scale, 1.75f)
+                  && dynamic.shadowMode
+                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette,
+          "dynamic prop copies the movable authored transform, scale, and shadow mode");
     Check(dynamic.requestedAnimation == "Standard Walk"
                   && !dynamic.animationResolved
                   && !animator.loop

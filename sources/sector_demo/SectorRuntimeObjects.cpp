@@ -684,7 +684,10 @@ void SpawnPlacedRuntimeObjects(
                     sectorAmbient,
                     placedObject.dynamicModel.scale,
                     StaticModelEnvironmentExposure(map, object.currentSectorId, sectorAmbient),
-                    placedObject.dynamicModel.animation});
+                    placedObject.dynamicModel.animation,
+                    false,
+                    false,
+                    placedObject.dynamicModel.shadowMode});
             world.Add(entity, engine::AnimatedModelInstance{model});
             engine::AnimatedModelAnimator animator;
             animator.speed = placedObject.dynamicModel.animationSpeed;

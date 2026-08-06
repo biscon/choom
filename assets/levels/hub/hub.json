@@ -118,11 +118,11 @@
         "heightOffsetWorld": 2.0999999046325684
       },
       "position": [
-        4.0,
-        0.0,
-        112.0
+        28.0,
+        3.0,
+        89.0
       ],
-      "yawDegrees": 180.0
+      "yawDegrees": -90.0
     },
     {
       "id": 4,
@@ -152,21 +152,6 @@
         88.0
       ],
       "yawDegrees": -90.0
-    },
-    {
-      "id": 6,
-      "kind": "static_model",
-      "staticModel": {
-        "modelPath": "assets/models/leon.glb",
-        "scale": 0.3199999928474426,
-        "collision": true
-      },
-      "position": [
-        4.0,
-        0.0,
-        50.0
-      ],
-      "yawDegrees": 180.0
     },
     {
       "id": 7,
@@ -313,12 +298,13 @@
       "dynamicModel": {
         "modelPath": "assets/models/characters/TestCharacter.glb",
         "collision": true,
-        "animation": "Idle"
+        "animation": "Sitting Idle",
+        "shadowMode": "projected_silhouette"
       },
       "position": [
-        2.0,
+        12.0,
         0.0,
-        104.0
+        105.0
       ],
       "yawDegrees": 180.0
     }
@@ -360,15 +346,14 @@
       "atmosphere": {
         "haze": {
           "enabled": true,
-          "extentScale": 0.5,
-          "density": 0.15000000596046448,
+          "extentScale": 0.30000001192092896,
+          "density": 0.10000000149011612,
           "scatteringTint": {
             "r": 210,
             "g": 200,
             "b": 190,
             "a": 255
           },
-          "edgeSoftness": 0.699999988079071,
           "noiseAmount": 0.75,
           "noiseScaleWorld": 0.5,
           "flowDirectionDegrees": 90.0,
@@ -377,7 +362,7 @@
         "dust": {
           "enabled": true,
           "amount": 51,
-          "extentScale": 0.25,
+          "extentScale": 0.30000001192092896,
           "maximumSizeWorld": 0.014999999664723873,
           "scatteringTint": {
             "r": 255,
@@ -385,6 +370,82 @@
             "b": 190,
             "a": 255
           }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "position": [
+        27.0,
+        19.0,
+        89.0
+      ],
+      "radius": 42.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.25,
+      "color": {
+        "r": 255,
+        "g": 225,
+        "b": 190,
+        "a": 255
+      },
+      "atmosphere": {
+        "haze": {
+          "enabled": true,
+          "extentScale": 0.25,
+          "density": 0.10000000149011612,
+          "scatteringTint": {
+            "r": 255,
+            "g": 225,
+            "b": 100,
+            "a": 255
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "amount": 64,
+          "extentScale": 0.15000000596046448,
+          "maximumSizeWorld": 0.014000000432133675,
+          "scatteringTint": {
+            "r": 200,
+            "g": 200,
+            "b": 200,
+            "a": 255
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "position": [
+        -22.0,
+        13.0,
+        8.0
+      ],
+      "radius": 32.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 50,
+        "b": 15,
+        "a": 255
+      },
+      "atmosphere": {
+        "haze": {
+          "enabled": true,
+          "extentScale": 0.6000000238418579,
+          "density": 0.30000001192092896,
+          "scatteringTint": {
+            "r": 255,
+            "g": 50,
+            "b": 15,
+            "a": 255
+          },
+          "edgeSoftness": 0.8999999761581421,
+          "noiseAmount": 1.0,
+          "noiseScaleWorld": 0.25,
+          "flowSpeedWorld": 0.10000000149011612
         }
       }
     }
@@ -438,57 +499,43 @@
           }
         }
       }
-    }
-  ],
-  "dynamicPointLights": [
+    },
     {
-      "id": 1,
+      "id": 3,
       "position": [
-        4.0,
-        17.0,
-        110.0
+        -23.666549682617188,
+        15.0,
+        8.010000228881836
       ],
-      "radius": 42.0,
-      "intensity": 1.2000000476837158,
+      "target": [
+        6.056573867797852,
+        5.266408920288086,
+        8.366694450378418
+      ],
+      "range": 64.0,
+      "sourceRadius": 0.0,
+      "intensity": 1.5,
       "color": {
         "r": 255,
-        "g": 245,
-        "b": 190,
+        "g": 50,
+        "b": 15,
         "a": 255
       },
-      "flicker": true,
       "atmosphere": {
         "haze": {
-          "enabled": true,
-          "extentScale": 0.25,
-          "density": 0.10000000149011612,
+          "extentScale": 0.5,
+          "density": 0.4000000059604645,
           "scatteringTint": {
-            "r": 200,
-            "g": 190,
-            "b": 145,
-            "a": 255
-          },
-          "edgeSoftness": 0.6000000238418579,
-          "noiseAmount": 0.6000000238418579,
-          "noiseScaleWorld": 0.25,
-          "flowSpeedWorld": 0.25
-        },
-        "dust": {
-          "enabled": true,
-          "amount": 32,
-          "extentScale": 0.15000000596046448,
-          "minimumSizeWorld": 0.004000000189989805,
-          "maximumSizeWorld": 0.012000000104308128,
-          "scatteringTint": {
-            "r": 200,
-            "g": 190,
-            "b": 145,
+            "r": 255,
+            "g": 50,
+            "b": 15,
             "a": 255
           }
         }
       }
     }
   ],
+  "dynamicPointLights": [],
   "dynamicSpotLights": [],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
@@ -546,11 +593,11 @@
     "path": "assets/levels/hub/hub.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "430c2ed11c519bab",
+    "sourceHash": "5dfd5882fcb01f20",
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 1,
-      "sourceHash": "430c2ed11c519bab",
+      "sourceHash": "5dfd5882fcb01f20",
       "count": 19,
       "probeSpacingWorld": 4.0,
       "probeHeightWorld": 1.2000000476837158,
@@ -559,9 +606,9 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.png.static_models.bin",
       "version": 2,
-      "sourceHash": "430c2ed11c519bab",
-      "modelCount": 9,
-      "objectCount": 9,
+      "sourceHash": "5dfd5882fcb01f20",
+      "modelCount": 8,
+      "objectCount": 8,
       "format": "staticModelUvRemapF32LE"
     }
   },

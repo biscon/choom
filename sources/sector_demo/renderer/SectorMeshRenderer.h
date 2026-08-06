@@ -10,6 +10,7 @@
 #include "sector_demo/renderer/SectorBloomRenderer.h"
 #include "sector_demo/renderer/SectorDoorRenderer.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
+#include "sector_demo/renderer/SectorDynamicModelShadowRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorLocalFogRenderer.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
@@ -197,6 +198,7 @@ private:
     SectorStaticModelRenderer staticModelRenderer;
     SectorDoorRenderer doorRenderer;
     SectorDynamicLightingRenderer dynamicLightState;
+    SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
     int lightmapStatus = 0;

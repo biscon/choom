@@ -33,7 +33,7 @@ float MeasureSectorEditorDynamicModelInspectorContentHeight(
         const SectorEditorPlacedObjectInspectorMeasureContext&,
         const SectorPlacedRuntimeObject&)
 {
-    return 38.0f * 2.0f + 48.0f * 13.0f + 8.0f * 15.0f + 70.0f;
+    return 38.0f * 2.0f + 48.0f * 14.0f + 8.0f * 16.0f + 70.0f;
 }
 
 void DrawSectorEditorDynamicModelInspector(
@@ -219,6 +219,30 @@ void DrawSectorEditorDynamicModelInspector(
                 Rectangle{0.0f, y, contentW, rowH}, context.smallFont,
                 "Animations: none available", engine::UITextJustify::Left,
                 context.config.mutedTextColor);
+    }
+    y += rowH + gap;
+
+    object = context.editing.SelectedObject(); if (object == nullptr) return;
+    static const std::vector<std::string> shadowModes = {
+            "None", "Contact", "Projected Silhouette"};
+    int shadowMode = static_cast<int>(object->dynamicModel.shadowMode);
+    const int previousShadowMode = shadowMode;
+    if (engine::Option(
+                context.ui, context.config, context.input, context.assets,
+                "sector_editor_dynamic_shadow_mode",
+                Rectangle{0.0f, y, contentW, rowH}, context.font,
+                shadowModes, shadowMode)
+            && shadowMode != previousShadowMode
+            && shadowMode >= 0
+            && shadowMode < static_cast<int>(shadowModes.size())) {
+        const auto mode = static_cast<SectorDynamicModelShadowMode>(shadowMode);
+        context.editing.MutateSelected("Updated dynamic prop shadow", [mode](auto& target) {
+            if (target.kind != "dynamic_model" || target.dynamicModel.shadowMode == mode) {
+                return false;
+            }
+            target.dynamicModel.shadowMode = mode;
+            return true;
+        });
     }
     y += rowH + gap;
 

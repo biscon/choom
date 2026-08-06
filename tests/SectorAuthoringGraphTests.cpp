@@ -10204,8 +10204,10 @@ void TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag()
                   && Near(map.runtimeObjects[0].position, Vector3{24.0f, 16.0f, 24.0f})
                   && map.runtimeObjects[0].dynamicModel.modelPath.empty()
                   && map.runtimeObjects[0].dynamicModel.loop
+                  && map.runtimeObjects[0].dynamicModel.shadowMode
+                          == game::SectorDynamicModelShadowMode::Contact
                   && Near(map.runtimeObjects[0].dynamicModel.animationSpeed, 1.0f),
-          "dynamic prop placement creates default floor-relative authored playback data");
+          "dynamic prop placement creates default floor-relative playback and contact-shadow data");
     Check(documentState.lifecycle.topologyDocumentDirty
                   && documentState.lifecycle.hasUnsavedChanges
                   && renderRevision == 4
@@ -10227,12 +10229,16 @@ void TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag()
                       object.dynamicModel.animation = "Walk";
                       object.dynamicModel.loop = false;
                       object.dynamicModel.animationSpeed = 1.5f;
+                      object.dynamicModel.shadowMode =
+                              game::SectorDynamicModelShadowMode::ProjectedSilhouette;
                       return true;
                   })
                   && map.runtimeObjects[0].dynamicModel.animation == "Walk"
                   && !map.runtimeObjects[0].dynamicModel.loop
+                  && map.runtimeObjects[0].dynamicModel.shadowMode
+                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette
                   && Near(map.runtimeObjects[0].dynamicModel.animationSpeed, 1.5f),
-          "dynamic prop inspector playback fields persist through the editing service");
+          "dynamic prop inspector playback and shadow fields persist through the editing service");
 
     FillRuntimeObjectTestSectorCache(renderCache, map);
     const int objectId = map.runtimeObjects[0].id;

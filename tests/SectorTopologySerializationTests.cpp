@@ -1647,6 +1647,7 @@ void TestDynamicModelRoundTripAndDefaultOmission()
     object.dynamicModel.animation = "Standard Walk";
     object.dynamicModel.loop = false;
     object.dynamicModel.animationSpeed = 1.25f;
+    object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::ProjectedSilhouette;
     map.runtimeObjects.push_back(object);
 
     const Json saved = Json::parse(SaveText(map));
@@ -1656,8 +1657,9 @@ void TestDynamicModelRoundTripAndDefaultOmission()
                   && payload["animation"] == "Standard Walk"
                   && !payload["loop"].get<bool>()
                   && Near(payload["animationSpeed"].get<float>(), 1.25f)
+                  && payload["shadowMode"] == "projected_silhouette"
                   && payload["collision"].get<bool>(),
-          "dynamic prop writes model, animation, playback, and collision fields");
+          "dynamic prop writes model, animation, playback, shadow, and collision fields");
 
     SectorTopologyMap loaded;
     std::string error;
@@ -1669,6 +1671,8 @@ void TestDynamicModelRoundTripAndDefaultOmission()
                   && roundTripped->dynamicModel.modelPath == object.dynamicModel.modelPath
                   && roundTripped->dynamicModel.animation == "Standard Walk"
                   && !roundTripped->dynamicModel.loop
+                  && roundTripped->dynamicModel.shadowMode
+                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette
                   && Near(roundTripped->dynamicModel.animationSpeed, 1.25f)
                   && Near(roundTripped->dynamicModel.rotationXRadians, 0.25f)
                   && Near(roundTripped->dynamicModel.rotationZRadians, -0.5f),
@@ -1680,8 +1684,19 @@ void TestDynamicModelRoundTripAndDefaultOmission()
                   && !defaults.contains("loop")
                   && !defaults.contains("animationSpeed")
                   && !defaults.contains("scale")
+                  && !defaults.contains("shadowMode")
                   && !defaults.contains("collision"),
-          "dynamic prop default playback and transform fields are omitted");
+          "dynamic prop default playback, shadow, and transform fields are omitted");
+
+    map.runtimeObjects[0].dynamicModel.shadowMode =
+            game::SectorDynamicModelShadowMode::None;
+    const Json none = Json::parse(SaveText(map))["runtimeObjects"][0]["dynamicModel"];
+    Check(none["shadowMode"] == "none", "dynamic prop writes an explicit disabled shadow mode");
+
+    Json invalid = saved;
+    invalid["runtimeObjects"][0]["dynamicModel"]["shadowMode"] = "cinematic";
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "dynamic prop rejects unknown shadow modes");
 }
 
 void TestRuntimeObjectEditAndDeleteHelpers()

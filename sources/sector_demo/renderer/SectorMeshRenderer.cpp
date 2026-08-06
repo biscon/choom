@@ -736,6 +736,15 @@ bool SectorMeshRenderer::RebuildRendererResources(
         return false;
     }
 
+    if (!dynamicModelShadowRenderer.Load()) {
+        Shutdown(assets);
+        error = "Preview failed: could not load dynamic model shadow renderer";
+        return false;
+    }
+    dynamicModelShadowRenderer.RebuildSources(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
+
     if (!billboardRenderer.Load()) {
         Shutdown(assets);
         error = "Preview failed: could not load billboard cutout shader";
@@ -848,6 +857,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
             && !doorRenderer.HasCachedDoorMeshes()
             && !dynamicLightState.HasShadowMapResources()
             && !dynamicLightState.HasShadowMaterial()
+            && !dynamicModelShadowRenderer.IsLoaded()
             && !skyRenderer.IsLoaded()) {
         return;
     }
@@ -855,6 +865,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     bloomRenderer.Shutdown();
     dynamicLightState.UnloadShadowMaterial();
     dynamicLightState.UnloadShadowMapResources();
+    dynamicModelShadowRenderer.Shutdown();
     skyRenderer.Shutdown();
     pbrEnvironment = {};
     doorRenderer.UnloadDoorMeshes();
@@ -1078,6 +1089,18 @@ void SectorMeshRenderer::DrawScene(
                 assets.GetCubemap(pbrEnvironment.cubemap),
                 useBakedAmbientOcclusion,
                 renderDebugText);
+        SectorDynamicModelShadowDrawContext modelShadowContext;
+        modelShadowContext.assets = &assets;
+        modelShadowContext.world = runtimeObjectWorld;
+        modelShadowContext.camera = &camera;
+        modelShadowContext.collisionWorld = visibilityLookupWorldValid
+                ? &visibilityLookupWorld
+                : nullptr;
+        modelShadowContext.visibility = &visibilityResult;
+        modelShadowContext.sectorDrawRecords = &meshes.sectorDrawRecords;
+        modelShadowContext.textureResolverUserData = this;
+        modelShadowContext.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
+        dynamicModelShadowRenderer.Draw(modelShadowContext);
         billboardRenderer.Draw(
                 assets,
                 *runtimeObjectWorld,
@@ -1122,17 +1145,28 @@ void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
         engine::AssetManager& assets,
         engine::World* runtimeObjectWorld)
 {
-    if (!dynamicLightState.IsShadowRenderReady()) {
-        return;
+    if (dynamicLightState.IsShadowRenderReady()) {
+        SectorDynamicSpotLightShadowRenderContext context;
+        context.assets = &assets;
+        context.sectorDrawRecords = &meshes.sectorDrawRecords;
+        context.userData = this;
+        context.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
+        doorRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
+        dynamicLightState.RenderShadowMaps(context);
     }
 
-    SectorDynamicSpotLightShadowRenderContext context;
-    context.assets = &assets;
-    context.sectorDrawRecords = &meshes.sectorDrawRecords;
-    context.userData = this;
-    context.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
-    doorRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
-    dynamicLightState.RenderShadowMaps(context);
+    if (runtimeObjectWorld != nullptr && dynamicModelShadowRenderer.IsLoaded()) {
+        SectorDynamicModelShadowDrawContext context;
+        context.assets = &assets;
+        context.world = runtimeObjectWorld;
+        context.camera = &camera;
+        context.collisionWorld = visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr;
+        context.visibility = &visibilityResult;
+        context.sectorDrawRecords = &meshes.sectorDrawRecords;
+        context.textureResolverUserData = this;
+        context.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
+        dynamicModelShadowRenderer.RenderShadowMaps(context);
+    }
 }
 
 void SectorMeshRenderer::ApplyEmissiveDecalBloom(
@@ -1223,6 +1257,9 @@ void SectorMeshRenderer::ApplyRendererPose(const SectorViewPose& pose)
 void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map)
 {
     dynamicLightState.RebuildSources(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
+    dynamicModelShadowRenderer.RebuildSources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
     BuildSectorLightAtmosphereSources(

@@ -651,6 +651,17 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
     model.loop = ReadOptionalBool(value, "loop", context, model.loop);
     model.animationSpeed = ReadOptionalPositiveFloat(
             value, "animationSpeed", context, model.animationSpeed);
+    const std::string shadowMode = ReadOptionalString(
+            value, "shadowMode", context, "contact");
+    if (shadowMode == "none") {
+        model.shadowMode = SectorDynamicModelShadowMode::None;
+    } else if (shadowMode == "contact") {
+        model.shadowMode = SectorDynamicModelShadowMode::Contact;
+    } else if (shadowMode == "projected_silhouette") {
+        model.shadowMode = SectorDynamicModelShadowMode::ProjectedSilhouette;
+    } else {
+        Fail(context + ".shadowMode must be 'none', 'contact', or 'projected_silhouette'");
+    }
     return model;
 }
 
@@ -1537,6 +1548,11 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (!std::isfinite(model.animationSpeed) || model.animationSpeed <= 0.0f) {
                 Fail(context + ".dynamicModel.animationSpeed must be a finite positive value");
             }
+            if (model.shadowMode != SectorDynamicModelShadowMode::None
+                    && model.shadowMode != SectorDynamicModelShadowMode::Contact
+                    && model.shadowMode != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                Fail(context + ".dynamicModel.shadowMode is invalid");
+            }
             const float rotationXDegrees = RadiansToDegrees(model.rotationXRadians);
             const float rotationZDegrees = RadiansToDegrees(model.rotationZRadians);
             Json dynamicModel = Json::object();
@@ -1549,6 +1565,11 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (!model.animation.empty()) dynamicModel["animation"] = model.animation;
             if (!model.loop) dynamicModel["loop"] = false;
             if (model.animationSpeed != 1.0f) dynamicModel["animationSpeed"] = model.animationSpeed;
+            if (model.shadowMode == SectorDynamicModelShadowMode::None) {
+                dynamicModel["shadowMode"] = "none";
+            } else if (model.shadowMode == SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                dynamicModel["shadowMode"] = "projected_silhouette";
+            }
             json["kind"] = object.kind;
             json["dynamicModel"] = std::move(dynamicModel);
         } else if (object.kind == RuntimeObjectKindDoor) {
@@ -2160,6 +2181,11 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                 }
                 if (!std::isfinite(model.animationSpeed) || model.animationSpeed <= 0.0f) {
                     Fail(objectContext + ".dynamicModel.animationSpeed must be a finite positive value");
+                }
+                if (model.shadowMode != SectorDynamicModelShadowMode::None
+                        && model.shadowMode != SectorDynamicModelShadowMode::Contact
+                        && model.shadowMode != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                    Fail(objectContext + ".dynamicModel.shadowMode is invalid");
                 }
             } else if (object.kind == RuntimeObjectKindDoor) {
                 ValidatePlacedDoorForSerialization(object.door, objectContext + ".door");
