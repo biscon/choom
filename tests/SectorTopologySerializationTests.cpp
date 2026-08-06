@@ -1679,6 +1679,15 @@ void TestLightmapMetadataRoundTrip()
     original.bakedLightmap.width = 2048;
     original.bakedLightmap.height = 2048;
     original.bakedLightmap.sourceHash = "abc123";
+    original.bakedLightmap.additionalAtlases = {
+            game::SectorLightmapAtlasMetadata{
+                    "assets/levels/test/test.lightmap.1.png",
+                    2048,
+                    2048},
+            game::SectorLightmapAtlasMetadata{
+                    "assets/levels/test/test.lightmap.2.png",
+                    2048,
+                    2048}};
 
     const std::string text = SaveText(original);
     const Json saved = Json::parse(text);
@@ -1686,6 +1695,11 @@ void TestLightmapMetadataRoundTrip()
     Check(saved["bakedLightmap"].is_object(), "topology baked lightmap metadata is written");
     Check(saved["bakedLightmap"]["path"].get<std::string>() == original.bakedLightmap.path,
           "topology baked lightmap path is serialized");
+    Check(saved["bakedLightmap"]["additionalAtlases"].is_array()
+                  && saved["bakedLightmap"]["additionalAtlases"].size() == 2
+                  && saved["bakedLightmap"]["additionalAtlases"][1]["path"]
+                          == "assets/levels/test/test.lightmap.2.png",
+          "topology additional lightmap atlases are serialized in index order");
 
     SectorTopologyMap loaded;
     std::string error;
@@ -1700,8 +1714,23 @@ void TestLightmapMetadataRoundTrip()
     Check(loaded.bakedLightmap.path == original.bakedLightmap.path
                   && loaded.bakedLightmap.width == 2048
                   && loaded.bakedLightmap.height == 2048
-                  && loaded.bakedLightmap.sourceHash == "abc123",
+                  && loaded.bakedLightmap.sourceHash == "abc123"
+                  && loaded.bakedLightmap.additionalAtlases.size() == 2
+                  && loaded.bakedLightmap.additionalAtlases[0].width == 2048,
           "topology baked lightmap metadata round-trips");
+
+    SectorTopologyMap singleAtlas = original;
+    singleAtlas.bakedLightmap.additionalAtlases.clear();
+    const Json singleAtlasSaved = Json::parse(SaveText(singleAtlas));
+    Check(!singleAtlasSaved["bakedLightmap"].contains("additionalAtlases"),
+          "single-atlas metadata omits the optional additional atlas array");
+
+    Json duplicateAtlas = saved;
+    duplicateAtlas["bakedLightmap"]["additionalAtlases"][0]["path"] =
+            original.bakedLightmap.path;
+    SectorTopologyMap rejectedDuplicate;
+    Check(!LoadText(duplicateAtlas.dump(), rejectedDuplicate, error),
+          "duplicate multi-atlas paths are rejected transactionally");
 
     Json withoutLightmap = saved;
     withoutLightmap.erase("lightmapSettings");
@@ -3493,6 +3522,11 @@ void TestGraphNativeMapLevelRoundTrip()
     source.bakedLightmap.width = 128;
     source.bakedLightmap.height = 128;
     source.bakedLightmap.sourceHash = "abc123";
+    source.bakedLightmap.additionalAtlases.push_back(
+            game::SectorLightmapAtlasMetadata{
+                    "assets/levels/test/test.lightmap.1.png",
+                    128,
+                    128});
     source.bakedLightmap.objectProbes.path = "assets/levels/test/test.lightmap.object_probes.bin";
     source.bakedLightmap.objectProbes.version = 1;
     source.bakedLightmap.objectProbes.sourceHash = "abc123";
@@ -3551,6 +3585,10 @@ void TestGraphNativeMapLevelRoundTrip()
           "graph-native baked lightmap dimensions are persisted");
     Check(saved["bakedLightmap"]["sourceHash"] == "abc123",
           "graph-native baked lightmap source hash is persisted");
+    Check(saved["bakedLightmap"]["additionalAtlases"].size() == 1
+                  && saved["bakedLightmap"]["additionalAtlases"][0]["path"]
+                          == "assets/levels/test/test.lightmap.1.png",
+          "graph-native additional lightmap atlas metadata is persisted");
     Check(saved["bakedLightmap"]["objectProbes"].is_object(),
           "graph-native baked object probe metadata is persisted");
     Check(saved["bakedLightmap"]["objectProbes"]["path"]
@@ -3608,6 +3646,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.mapData.bakedLightmap.width == 128
                   && loaded.mapData.bakedLightmap.height == 128
                   && loaded.mapData.bakedLightmap.sourceHash == "abc123"
+                  && loaded.mapData.bakedLightmap.additionalAtlases.size() == 1
                   && loaded.mapData.bakedLightmap.objectProbes.path
                           == "assets/levels/test/test.lightmap.object_probes.bin"
                   && loaded.mapData.bakedLightmap.objectProbes.version == 1
@@ -3643,6 +3682,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.derivation.topology.fogSettings.density, 0.125f)
                   && loaded.derivation.topology.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
                   && loaded.derivation.topology.bakedLightmap.sourceHash == "abc123"
+                  && loaded.derivation.topology.bakedLightmap.additionalAtlases.size() == 1
                   && loaded.derivation.topology.bakedLightmap.objectProbes.path
                           == "assets/levels/test/test.lightmap.object_probes.bin"
                   && loaded.derivation.topology.bakedLightmap.objectProbes.count == 7
@@ -3655,6 +3695,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && resaved["bakedLightmap"]["width"] == saved["bakedLightmap"]["width"]
                   && resaved["bakedLightmap"]["height"] == saved["bakedLightmap"]["height"]
                   && resaved["bakedLightmap"]["sourceHash"] == saved["bakedLightmap"]["sourceHash"]
+                  && resaved["bakedLightmap"]["additionalAtlases"] == saved["bakedLightmap"]["additionalAtlases"]
                   && resaved["bakedLightmap"]["objectProbes"] == saved["bakedLightmap"]["objectProbes"]
                   && resaved["bakedLightmap"]["staticModels"] == saved["bakedLightmap"]["staticModels"],
           "graph-native save/load/save preserves baked lightmap metadata");

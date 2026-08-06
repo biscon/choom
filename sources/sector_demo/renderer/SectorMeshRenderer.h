@@ -151,7 +151,7 @@ private:
     bool visibilityLookupWorldValid = false;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
     std::unordered_map<std::string, engine::TextureHandle> normalTextureHandlesById;
-    engine::TextureHandle lightmapTexture = engine::NullTextureHandle();
+    std::vector<engine::TextureHandle> lightmapTextures;
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
     Material material = {};
     Texture2D defaultMaterialTexture = {};

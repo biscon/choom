@@ -76,7 +76,7 @@ public:
             const SectorBillboardDynamicLightContext& dynamicLightContext,
             const SectorFogRenderContext& fogContext,
             const RuntimePortalVisibilityResult& visibility,
-            const Texture2D* lightmap,
+            const std::vector<engine::TextureHandle>& lightmapTextures,
             const TextureCubemap* environment,
             bool useBakedAmbientOcclusion,
             std::string& renderDebugText);

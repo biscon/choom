@@ -713,11 +713,19 @@ transparent alpha-blended sprites are still deferred.
 ## Baked Lightmaps
 
 `Bake Lightmaps` uses topology generated geometry, topology static lights, and
-the optional map-level outdoor directional light. It writes the PNG to:
+the optional map-level outdoor directional light. Each atlas remains
+2048x2048. The primary PNG is written to:
 
 ```text
 assets/levels/<level_name>/<level_name>.lightmap.png
 ```
+
+If packing needs more space, the baker continues in
+`<level_name>.lightmap.1.png`, `<level_name>.lightmap.2.png`, and so on. There
+is no fixed atlas-count cap; only a single chart larger than 2048x2048 is
+rejected. The primary `bakedLightmap.path`, `width`, and `height` fields remain
+backward-compatible, while the optional `additionalAtlases` array records the
+ordered extra atlas paths and dimensions.
 
 The topology JSON stores bake settings in `lightmapSettings` and installed bake
 metadata in `bakedLightmap`. Bake settings include ambient occlusion radius and
@@ -738,7 +746,7 @@ for the bake. If the document changed during the bake, the temporary result is
 discarded.
 
 The source hash is deterministic over the topology lightmap bake version
-(`7`), atlas and sample constants, coordinate subdivision value, map texture
+(`13`), atlas and sample constants, coordinate subdivision value, map texture
 definitions referenced by baked surface fields, vertex/linedef/sidedef/sector
 IDs and geometry, sector and sidedef texture and UV fields, static lights, and
 bake settings. Directional light enabled state, normalized direction, RGB color,
@@ -747,10 +755,11 @@ Middle texture receiver data is included because it affects lightmap chart
 layout. Sky visual settings do not invalidate baked lightmaps. The hash does not
 include the installed baked-lightmap metadata itself.
 
-The baked PNG stores direct static-light contribution and one-bounce indirect
-light in RGB, and ambient occlusion in alpha. 3D Mode uses a baked atlas only
-when metadata exists, the atlas file is present, and the stored source hash
-matches the current topology. Otherwise the preview falls back to sector ambient
+Each baked PNG stores direct static-light contribution and one-bounce indirect
+light in RGB, and ambient occlusion in alpha. 3D Mode binds the atlas assigned
+to each topology batch or static-model mesh. Baked lighting is used only when
+metadata exists, every atlas file is present, and the stored source hash matches
+the current topology. Otherwise the preview falls back safely to sector ambient
 lighting.
 
 Equal-height portals generate no wall surface and therefore no wall lightmap
@@ -782,7 +791,6 @@ deferred.
   scripts, save-game door state, NPC/pathfinding integration, and door shadow
   casting are deferred.
 - No normal maps, material maps, PBR material editing, or texture search UI.
-- Single fixed-size lightmap atlas; no multi-atlas packing.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.
 - No direct linedef or sidedef deletion.
 - No standalone vertex deletion.

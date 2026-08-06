@@ -376,6 +376,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
             || HasDocumentModalOpen()) {
         return;
     }
+    if (state.currentTool == SectorEditorTool::Select) {
+        EnsureTopologyRenderCache();
+    }
     UpdateHoverAndMouse(input);
     HandleCanvasInput(input, dt);
 }
@@ -1310,12 +1313,16 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
                 distance2});
     };
 
-    for (const SectorPlacedRuntimeObject& object : TopologyMap().runtimeObjects) {
-        addPointCandidate(
-                SectorEditorPickKind::RuntimeObject,
-                object.id,
-                MapToScreen(Vector2{object.position.x, object.position.z}));
-    }
+    SectorEditorTopologyDrawContext pickContext;
+    pickContext.canvasRect = canvasRect;
+    pickContext.viewCenter = state.viewCenter;
+    pickContext.viewZoom = state.viewZoom;
+    AppendCachedRuntimeObjectPickCandidates(
+            state.topologyRenderCache,
+            pickContext,
+            screenPoint,
+            ScreenLightPickPixels,
+            candidates);
     for (const SectorTopologyDynamicSpotLight& light : TopologyMap().dynamicSpotLights) {
         addSpotCandidate(
                 SectorEditorPickKind::DynamicSpotLight,
@@ -2789,6 +2796,12 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     TopologyMap().bakedLightmap.width = installPayload.bakeResult.width;
     TopologyMap().bakedLightmap.height = installPayload.bakeResult.height;
     TopologyMap().bakedLightmap.sourceHash = installPayload.bakeResult.sourceHash;
+    TopologyMap().bakedLightmap.additionalAtlases.clear();
+    if (installPayload.bakeResult.atlases.size() > 1) {
+        TopologyMap().bakedLightmap.additionalAtlases.assign(
+                installPayload.bakeResult.atlases.begin() + 1,
+                installPayload.bakeResult.atlases.end());
+    }
     TopologyMap().bakedLightmap.objectProbes = installPayload.bakeResult.objectProbes;
     TopologyMap().bakedLightmap.staticModels =
             installPayload.bakeResult.staticModels;
@@ -2808,7 +2821,17 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
         }
     }
 
-    statusText = TextFormat("Baked lightmap in %.1fs", result.bakeResult.totalBakeSeconds);
+    const size_t atlasCount = std::max<size_t>(
+            1,
+            installPayload.bakeResult.atlases.size());
+    statusText = atlasCount == 1
+            ? TextFormat(
+                    "Baked lightmap in %.1fs",
+                    result.bakeResult.totalBakeSeconds)
+            : TextFormat(
+                    "Baked %zu lightmap atlases in %.1fs",
+                    atlasCount,
+                    result.bakeResult.totalBakeSeconds);
     return true;
 }
 

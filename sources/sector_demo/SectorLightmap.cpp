@@ -39,6 +39,7 @@ struct BakeTriangle {
     Vector2 lightmapUv0 = {};
     Vector2 lightmapUv1 = {};
     Vector2 lightmapUv2 = {};
+    int lightmapAtlasIndex = -1;
     SectorGeneratedSurfaceRef surfaceRef;
     int sourceSurfaceIndex = -1;
     int triangleIndex = -1;
@@ -58,6 +59,7 @@ struct RayHit {
     float distance = 0.0f;
     Vector3 normal = {};
     Vector2 lightmapUv = {};
+    int lightmapAtlasIndex = -1;
     int sourceSurfaceIndex = -1;
     int triangleIndex = -1;
     float barycentric0 = 0.0f;
@@ -74,6 +76,7 @@ struct AlphaRayHit {
 };
 
 struct BakeTexel {
+    int atlasIndex = -1;
     int x = 0;
     int y = 0;
     size_t pixelIndex = 0;
@@ -1357,6 +1360,7 @@ RayHit RaycastBakeTrianglesClosest(
                             tri.lightmapUv0.x * barycentric0 + tri.lightmapUv1.x * barycentric1 + tri.lightmapUv2.x * barycentric2,
                             tri.lightmapUv0.y * barycentric0 + tri.lightmapUv1.y * barycentric1 + tri.lightmapUv2.y * barycentric2
                     };
+                    closest.lightmapAtlasIndex = tri.lightmapAtlasIndex;
                 }
             }
             continue;
@@ -2547,6 +2551,7 @@ std::vector<BakeTriangle> BuildBakeTriangles(
                     uv0,
                     uv1,
                     uv2,
+                    chart.atlasIndex,
                     surface.ref,
                     static_cast<int>(surfaceIndex),
                     static_cast<int>(i / 3)
@@ -2623,6 +2628,7 @@ std::vector<BakeTriangle> BuildBakeTriangles(
                         atlasUv(mesh.localLightmapUvs[ia]),
                         atlasUv(mesh.localLightmapUvs[ib]),
                         atlasUv(mesh.localLightmapUvs[ic]),
+                        placement.atlasIndex,
                         surfaceRef,
                         staticSurfaceIndex,
                         static_cast<int>(i / 3)});
@@ -2699,11 +2705,15 @@ void DilateChart(
         const SectorLightmapChart& chart,
         std::vector<Color>& pixels,
         std::vector<unsigned char>& valid,
-        int atlasWidth)
+        int atlasWidth,
+        int atlasHeight)
 {
+    const size_t atlasOffset = static_cast<size_t>(chart.atlasIndex)
+            * static_cast<size_t>(atlasWidth)
+            * static_cast<size_t>(atlasHeight);
     for (int y = chart.y; y < chart.y + chart.height; ++y) {
         for (int x = chart.x; x < chart.x + chart.width; ++x) {
-            const size_t index = static_cast<size_t>(y * atlasWidth + x);
+            const size_t index = atlasOffset + static_cast<size_t>(y * atlasWidth + x);
             if (valid[index] != 0) {
                 continue;
             }
@@ -2712,7 +2722,7 @@ void DilateChart(
             Color best = BLACK;
             for (int sy = chart.usableY; sy < chart.usableY + chart.usableHeight; ++sy) {
                 for (int sx = chart.usableX; sx < chart.usableX + chart.usableWidth; ++sx) {
-                    const size_t sourceIndex = static_cast<size_t>(sy * atlasWidth + sx);
+                    const size_t sourceIndex = atlasOffset + static_cast<size_t>(sy * atlasWidth + sx);
                     if (valid[sourceIndex] == 0) {
                         continue;
                     }
@@ -2735,11 +2745,15 @@ void DilateChartFloat(
         const SectorLightmapChart& chart,
         std::vector<Vector3>& values,
         std::vector<unsigned char>& valid,
-        int atlasWidth)
+        int atlasWidth,
+        int atlasHeight)
 {
+    const size_t atlasOffset = static_cast<size_t>(chart.atlasIndex)
+            * static_cast<size_t>(atlasWidth)
+            * static_cast<size_t>(atlasHeight);
     for (int y = chart.y; y < chart.y + chart.height; ++y) {
         for (int x = chart.x; x < chart.x + chart.width; ++x) {
-            const size_t index = static_cast<size_t>(y * atlasWidth + x);
+            const size_t index = atlasOffset + static_cast<size_t>(y * atlasWidth + x);
             if (valid[index] != 0) {
                 continue;
             }
@@ -2748,7 +2762,7 @@ void DilateChartFloat(
             Vector3 best{};
             for (int sy = chart.usableY; sy < chart.usableY + chart.usableHeight; ++sy) {
                 for (int sx = chart.usableX; sx < chart.usableX + chart.usableWidth; ++sx) {
-                    const size_t sourceIndex = static_cast<size_t>(sy * atlasWidth + sx);
+                    const size_t sourceIndex = atlasOffset + static_cast<size_t>(sy * atlasWidth + sx);
                     if (valid[sourceIndex] == 0) {
                         continue;
                     }
@@ -2775,8 +2789,15 @@ Vector3 SampleDirectLightingAtLightmapUv(
         const std::vector<unsigned char>& valid,
         int atlasWidth,
         int atlasHeight,
+        int atlasIndex,
         Vector2 lightmapUv)
 {
+    if (atlasIndex < 0) {
+        return Vector3{};
+    }
+    const size_t atlasOffset = static_cast<size_t>(atlasIndex)
+            * static_cast<size_t>(atlasWidth)
+            * static_cast<size_t>(atlasHeight);
     const float pixelX = std::clamp(lightmapUv.x * static_cast<float>(atlasWidth) - 0.5f, 0.0f, static_cast<float>(atlasWidth - 1));
     const float pixelY = std::clamp(lightmapUv.y * static_cast<float>(atlasHeight) - 0.5f, 0.0f, static_cast<float>(atlasHeight - 1));
     const int x0 = static_cast<int>(std::floor(pixelX));
@@ -2800,7 +2821,7 @@ Vector3 SampleDirectLightingAtLightmapUv(
     Vector3 sum{};
     float weightSum = 0.0f;
     for (const Sample& sample : samples) {
-        const size_t index = static_cast<size_t>(sample.y * atlasWidth + sample.x);
+        const size_t index = atlasOffset + static_cast<size_t>(sample.y * atlasWidth + sample.x);
         if (valid[index] == 0 || sample.weight <= 0.0f) {
             continue;
         }
@@ -2816,7 +2837,7 @@ Vector3 SampleDirectLightingAtLightmapUv(
     for (int radius = 0; radius <= SectorLightmapGutterTexels + 2; ++radius) {
         for (int y = std::max(0, nearestY - radius); y <= std::min(atlasHeight - 1, nearestY + radius); ++y) {
             for (int x = std::max(0, nearestX - radius); x <= std::min(atlasWidth - 1, nearestX + radius); ++x) {
-                const size_t index = static_cast<size_t>(y * atlasWidth + x);
+                const size_t index = atlasOffset + static_cast<size_t>(y * atlasWidth + x);
                 if (valid[index] != 0) {
                     return directLightingFloat[index];
                 }
@@ -2877,6 +2898,7 @@ bool BuildSectorLightmapLayoutFromGeometry(
     int shelfX = 0;
     int shelfY = 0;
     int shelfHeight = 0;
+    int atlasIndex = 0;
 
     for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
         const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
@@ -2900,12 +2922,15 @@ bool BuildSectorLightmapLayoutFromGeometry(
         }
 
         if (shelfY + chartHeight > SectorLightmapAtlasHeight) {
-            outError = "Bake failed: 2048 lightmap atlas is full";
-            return false;
+            ++atlasIndex;
+            shelfX = 0;
+            shelfY = 0;
+            shelfHeight = 0;
         }
 
         SectorLightmapChart chart;
         chart.surfaceIndex = static_cast<int>(surfaceIndex);
+        chart.atlasIndex = atlasIndex;
         chart.x = shelfX;
         chart.y = shelfY;
         chart.width = chartWidth;
@@ -2924,6 +2949,8 @@ bool BuildSectorLightmapLayoutFromGeometry(
         shelfHeight = std::max(shelfHeight, chartHeight);
     }
 
+    outLayout.atlasCount = atlasIndex + 1;
+
     return true;
 }
 
@@ -2931,9 +2958,13 @@ SectorStaticModelLightmapPackCursor StaticModelPackCursorAfterTopology(
         const SectorLightmapLayout& layout)
 {
     SectorStaticModelLightmapPackCursor cursor;
+    cursor.atlasIndex = std::max(0, layout.atlasCount - 1);
     bool found = false;
     for (const SectorLightmapChart& chart : layout.charts) {
         if (chart.surfaceIndex < 0 || chart.width <= 0 || chart.height <= 0) {
+            continue;
+        }
+        if (chart.atlasIndex != cursor.atlasIndex) {
             continue;
         }
         if (!found || chart.y > cursor.shelfY) {
@@ -2953,6 +2984,7 @@ SectorLightmapChart PlacementAsChart(
         const SectorStaticModelLightmapMeshPlacement& placement)
 {
     SectorLightmapChart chart;
+    chart.atlasIndex = placement.atlasIndex;
     chart.x = placement.x;
     chart.y = placement.y;
     chart.width = placement.width;
@@ -3806,6 +3838,37 @@ std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath)
     return MakeSectorAssetRelativePath(path.generic_string());
 }
 
+std::string MakeSectorLightmapAtlasPath(
+        const std::string& primaryPath,
+        int atlasIndex)
+{
+    if (atlasIndex <= 0 || primaryPath.empty()) {
+        return primaryPath;
+    }
+    const std::filesystem::path primary(primaryPath);
+    const std::string filename = primary.stem().string()
+            + "." + std::to_string(atlasIndex)
+            + primary.extension().string();
+    return (primary.parent_path() / filename).generic_string();
+}
+
+std::vector<SectorLightmapAtlasMetadata> GetSectorLightmapAtlases(
+        const SectorLightmapMetadata& metadata)
+{
+    std::vector<SectorLightmapAtlasMetadata> atlases;
+    if (!metadata.path.empty()) {
+        atlases.push_back(SectorLightmapAtlasMetadata{
+                metadata.path,
+                metadata.width,
+                metadata.height});
+    }
+    atlases.insert(
+            atlases.end(),
+            metadata.additionalAtlases.begin(),
+            metadata.additionalAtlases.end());
+    return atlases;
+}
+
 std::string MakeSectorObjectProbeSidecarPathForLightmapPath(const std::string& lightmapPath)
 {
     std::filesystem::path path(lightmapPath);
@@ -3874,13 +3937,63 @@ bool BakeSectorLightmapForMap(
     const auto totalStart = Clock::now();
     const int width = layout.atlasWidth;
     const int height = layout.atlasHeight;
-    const size_t atlasPixelCount = static_cast<size_t>(width * height);
+    int atlasCount = std::max(1, layout.atlasCount);
+    for (const SectorLightmapChart& chart : layout.charts) {
+        if (chart.surfaceIndex >= 0) {
+            if (chart.atlasIndex < 0) {
+                outError = "Bake failed: lightmap chart has no atlas assignment";
+                return false;
+            }
+            atlasCount = std::max(atlasCount, chart.atlasIndex + 1);
+        }
+    }
+    if (staticModels != nullptr) {
+        for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+            for (const SectorStaticModelLightmapMeshPlacement& placement
+                    : object.meshPlacements) {
+                if (placement.atlasIndex < 0) {
+                    outError = "Bake failed: static model lightmap chart has no atlas assignment";
+                    return false;
+                }
+                atlasCount = std::max(atlasCount, placement.atlasIndex + 1);
+            }
+        }
+    }
+    if (width <= 0 || height <= 0
+            || static_cast<size_t>(width) > std::numeric_limits<size_t>::max()
+                    / static_cast<size_t>(height)) {
+        outError = "Bake failed: invalid lightmap atlas dimensions";
+        return false;
+    }
+    const size_t atlasPixelCount = static_cast<size_t>(width)
+            * static_cast<size_t>(height);
+    if (static_cast<size_t>(atlasCount)
+            > std::numeric_limits<size_t>::max() / atlasPixelCount) {
+        outError = "Bake failed: lightmap atlas storage is too large";
+        return false;
+    }
+    const size_t totalPixelCount = atlasPixelCount
+            * static_cast<size_t>(atlasCount);
+    outResult.width = width;
+    outResult.height = height;
+    outResult.atlases.reserve(static_cast<size_t>(atlasCount));
+    for (int atlasIndex = 0; atlasIndex < atlasCount; ++atlasIndex) {
+        outResult.atlases.push_back(SectorLightmapAtlasMetadata{
+                MakeSectorLightmapAtlasPath(outputPath, atlasIndex),
+                width,
+                height});
+    }
+    const auto removeAtlasOutputs = [&]() {
+        for (const SectorLightmapAtlasMetadata& atlas : outResult.atlases) {
+            RemoveFileIfExists(atlas.path);
+        }
+    };
     ReportProgress(callbacks, SectorLightmapBakePhase::Preparing, 0, 1);
-    std::vector<Color> pixels(static_cast<size_t>(width * height), Color{0, 0, 0, 255});
-    std::vector<Vector3> directLightingFloat(atlasPixelCount, Vector3{});
-    std::vector<Vector3> indirectLightingFloat(atlasPixelCount, Vector3{});
-    std::vector<float> ambientOcclusionFloat(atlasPixelCount, 1.0f);
-    std::vector<unsigned char> validChartTexel(atlasPixelCount, 0);
+    std::vector<Color> pixels(totalPixelCount, Color{0, 0, 0, 255});
+    std::vector<Vector3> directLightingFloat(totalPixelCount, Vector3{});
+    std::vector<Vector3> indirectLightingFloat(totalPixelCount, Vector3{});
+    std::vector<float> ambientOcclusionFloat(totalPixelCount, 1.0f);
+    std::vector<unsigned char> validChartTexel(totalPixelCount, 0);
     std::vector<BakeTexel> bakeTexels;
     const std::vector<SectorLightmapAlphaOccluderTriangle> alphaOccluders =
             CollectSectorLightmapAlphaOccluders(geometry);
@@ -3955,8 +4068,11 @@ bool BakeSectorLightmapForMap(
                         hit,
                         normalMapCache);
 
-                const size_t pixelIndex = static_cast<size_t>(y * width + x);
+                const size_t pixelIndex = static_cast<size_t>(chart.atlasIndex)
+                        * atlasPixelCount
+                        + static_cast<size_t>(y * width + x);
                 bakeTexels.push_back(BakeTexel{
+                        chart.atlasIndex,
                         x,
                         y,
                         pixelIndex,
@@ -4023,8 +4139,11 @@ bool BakeSectorLightmapForMap(
                             continue;
                         }
                         const size_t pixelIndex =
-                                static_cast<size_t>(y * width + x);
+                                static_cast<size_t>(placement.atlasIndex)
+                                        * atlasPixelCount
+                                + static_cast<size_t>(y * width + x);
                         bakeTexels.push_back(BakeTexel{
+                                placement.atlasIndex,
                                 x,
                                 y,
                                 pixelIndex,
@@ -4147,7 +4266,7 @@ bool BakeSectorLightmapForMap(
         std::vector<Vector3> directSampleFloat = directLightingFloat;
         std::vector<unsigned char> directSampleValid = validChartTexel;
         for (const SectorLightmapChart& chart : layout.charts) {
-            DilateChartFloat(chart, directSampleFloat, directSampleValid, width);
+            DilateChartFloat(chart, directSampleFloat, directSampleValid, width, height);
         }
         if (staticModels != nullptr) {
             for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
@@ -4158,7 +4277,8 @@ bool BakeSectorLightmapForMap(
                             chart,
                             directSampleFloat,
                             directSampleValid,
-                            width);
+                            width,
+                            height);
                 }
             }
         }
@@ -4194,6 +4314,7 @@ bool BakeSectorLightmapForMap(
                         directSampleValid,
                         width,
                         height,
+                        rayHit.lightmapAtlasIndex,
                         rayHit.lightmapUv
                 );
                 const float distanceT = std::clamp(1.0f - rayHit.distance / indirectBounceRadius, 0.0f, 1.0f);
@@ -4225,7 +4346,8 @@ bool BakeSectorLightmapForMap(
         }
     }
     const uint32_t exportWorkTotal = static_cast<uint32_t>(
-            layout.charts.size() + staticChartCount + bakeTexels.size());
+            layout.charts.size() + staticChartCount + bakeTexels.size()
+            + static_cast<size_t>(atlasCount));
     ReportProgress(
             callbacks,
             SectorLightmapBakePhase::DilatingAndEncoding,
@@ -4258,7 +4380,7 @@ bool BakeSectorLightmapForMap(
     }
     uint32_t completedExportWork = static_cast<uint32_t>(bakeTexels.size());
     for (const SectorLightmapChart& chart : layout.charts) {
-        DilateChart(chart, pixels, exportValid, width);
+        DilateChart(chart, pixels, exportValid, width, height);
         ++completedExportWork;
         ReportProgress(
                 callbacks,
@@ -4277,7 +4399,8 @@ bool BakeSectorLightmapForMap(
                         PlacementAsChart(placement),
                         pixels,
                         exportValid,
-                        width);
+                        width,
+                        height);
                 ++completedExportWork;
                 ReportProgress(
                         callbacks,
@@ -4291,13 +4414,6 @@ bool BakeSectorLightmapForMap(
         }
     }
 
-    Image image = {};
-    image.data = pixels.data();
-    image.width = width;
-    image.height = height;
-    image.mipmaps = 1;
-    image.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-
     const std::filesystem::path output(outputPath);
     std::error_code ec;
     if (!output.parent_path().empty()) {
@@ -4308,9 +4424,33 @@ bool BakeSectorLightmapForMap(
         return false;
     }
 
-    if (!ExportImage(image, outputPath)) {
-        outError = TextFormat("Bake failed: could not export %s", outputPath);
-        return false;
+    for (int atlasIndex = 0; atlasIndex < atlasCount; ++atlasIndex) {
+        Image image = {};
+        image.data = pixels.data()
+                + static_cast<size_t>(atlasIndex) * atlasPixelCount;
+        image.width = width;
+        image.height = height;
+        image.mipmaps = 1;
+        image.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+        const std::string& atlasPath =
+                outResult.atlases[static_cast<size_t>(atlasIndex)].path;
+        if (!ExportImage(image, atlasPath.c_str())) {
+            outError = TextFormat(
+                    "Bake failed: could not export %s",
+                    atlasPath.c_str());
+            removeAtlasOutputs();
+            return false;
+        }
+        ++completedExportWork;
+        ReportProgress(
+                callbacks,
+                SectorLightmapBakePhase::DilatingAndEncoding,
+                completedExportWork,
+                exportWorkTotal);
+        if (CheckBakeCancelled(callbacks, outError)) {
+            removeAtlasOutputs();
+            return false;
+        }
     }
     ReportProgress(
             callbacks,
@@ -4319,7 +4459,7 @@ bool BakeSectorLightmapForMap(
             exportWorkTotal);
     const auto exportEnd = Clock::now();
     if (CheckBakeCancelled(callbacks, outError)) {
-        RemoveFileIfExists(outputPath);
+        removeAtlasOutputs();
         return false;
     }
 
@@ -4339,11 +4479,11 @@ bool BakeSectorLightmapForMap(
         } else {
             outError = "Bake failed: " + outError;
         }
-        RemoveFileIfExists(outputPath);
+        removeAtlasOutputs();
         return false;
     }
     if (CheckBakeCancelled(callbacks, outError)) {
-        RemoveFileIfExists(outputPath);
+        removeAtlasOutputs();
         return false;
     }
     BakeObjectProbeAmbientCubesInScene(
@@ -4354,7 +4494,7 @@ bool BakeSectorLightmapForMap(
             objectProbes);
     const auto objectProbeBakeEnd = Clock::now();
     if (CheckBakeCancelled(callbacks, outError)) {
-        RemoveFileIfExists(outputPath);
+        removeAtlasOutputs();
         return false;
     }
 
@@ -4371,7 +4511,7 @@ bool BakeSectorLightmapForMap(
         } else {
             outError = "Bake failed: " + outError;
         }
-        RemoveFileIfExists(outputPath);
+        removeAtlasOutputs();
         RemoveFileIfExists(objectProbeSidecarPath);
         return false;
     }
@@ -4391,7 +4531,7 @@ bool BakeSectorLightmapForMap(
             } else {
                 outError = "Bake failed: " + outError;
             }
-            RemoveFileIfExists(outputPath);
+            removeAtlasOutputs();
             RemoveFileIfExists(objectProbeSidecarPath);
             RemoveFileIfExists(staticModelSidecarPath);
             return false;
@@ -4690,8 +4830,18 @@ SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map)
         return SectorLightmapStatus::Stale;
     }
 
-    if (!FileExistsResolved(ResolveSectorAssetPath(map.bakedLightmap.path))) {
+    const std::vector<SectorLightmapAtlasMetadata> atlases =
+            GetSectorLightmapAtlases(map.bakedLightmap);
+    if (atlases.empty()) {
         return SectorLightmapStatus::Stale;
+    }
+    for (const SectorLightmapAtlasMetadata& atlas : atlases) {
+        if (atlas.path.empty() || atlas.width <= 0 || atlas.height <= 0
+                || atlas.width != map.bakedLightmap.width
+                || atlas.height != map.bakedLightmap.height
+                || !FileExistsResolved(ResolveSectorAssetPath(atlas.path))) {
+            return SectorLightmapStatus::Stale;
+        }
     }
     if (HasAssignedSectorStaticModels(map)
             && GetSectorStaticModelLightmapStatus(map)

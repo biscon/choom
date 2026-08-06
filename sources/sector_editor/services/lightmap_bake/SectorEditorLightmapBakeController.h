@@ -32,6 +32,7 @@ struct SectorEditorLightmapBakePollResult {
 struct SectorEditorLightmapBakeInstallPayload {
     SectorLightmapBakeResult bakeResult;
     std::string finalLightmapPath;
+    std::vector<std::string> finalLightmapPaths;
     std::string finalObjectProbePath;
     std::string finalObjectProbeAssetPath;
     std::string finalStaticModelPath;

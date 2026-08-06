@@ -728,6 +728,38 @@ void TestSectorDrawRecordLightmapUvsUseOriginalSurfaceIndex()
           "second sector draw record copies lightmap UVs from original surface index");
 }
 
+void TestLightmapAtlasIndexSplitsDrawBatches()
+{
+    game::SectorGeneratedGeometry geometry;
+    game::SectorGeneratedSurface first = MakeBatchTestSurface(
+            "stone", "", Vector2{0.0f, 0.0f}, 1.0f, 0.0f);
+    game::SectorGeneratedSurface second = MakeBatchTestSurface(
+            "stone", "", Vector2{0.0f, 0.0f}, 1.0f, 2.0f);
+    first.ref.topologySectorId = 10;
+    second.ref.topologySectorId = 10;
+    geometry.surfaces = {first, second};
+
+    game::SectorLightmapLayout layout;
+    layout.atlasCount = 2;
+    layout.charts.resize(2);
+    layout.charts[0].atlasIndex = 0;
+    layout.charts[1].atlasIndex = 1;
+    layout.charts[0].vertexUvs = {
+            Vector2{0.1f, 0.1f}, Vector2{0.2f, 0.1f}, Vector2{0.1f, 0.2f}};
+    layout.charts[1].vertexUvs = {
+            Vector2{0.3f, 0.3f}, Vector2{0.4f, 0.3f}, Vector2{0.3f, 0.4f}};
+
+    const game::SectorMeshBatchDataResult result =
+            game::BuildSectorMeshDrawRecordData(geometry, &layout);
+    Check(result.batches.size() == 2,
+          "surfaces using different lightmap atlases produce separate draw batches");
+    if (result.batches.size() == 2) {
+        Check(result.batches[0].lightmapAtlasIndex == 0
+                      && result.batches[1].lightmapAtlasIndex == 1,
+              "draw batches preserve their assigned lightmap atlas indices");
+    }
+}
+
 void TestMiddleTextureBatchState()
 {
     game::SectorGeneratedGeometry geometry;
@@ -2127,6 +2159,7 @@ int main()
     TestDecalMeshBatchData();
     TestSectorDrawRecordMaterialGrouping();
     TestSectorDrawRecordLightmapUvsUseOriginalSurfaceIndex();
+    TestLightmapAtlasIndexSplitsDrawBatches();
     TestMiddleTextureBatchState();
     TestSectorDrawRecordMiddleTextureAlphaTest();
     TestSectorDrawRecordEmissiveDecalMetadata();

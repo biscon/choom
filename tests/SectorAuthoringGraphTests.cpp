@@ -8975,6 +8975,7 @@ void TestEditorDoorPlacementCreatesPortalAnchoredObject()
           "door placement helper preserves authored door defaults");
 
     map.runtimeObjects[0].door.normalOffset = 0.125f;
+    map.runtimeObjects[0].position = Vector3{400.0f, 0.0f, 400.0f};
     const game::SectorEditorTopologyRenderCache cache =
             game::BuildSectorEditorTopologyRenderCache(
                     map,
@@ -8991,6 +8992,50 @@ void TestEditorDoorPlacementCreatesPortalAnchoredObject()
                        + game::SectorWorldToAuthoringDistance(0.125f))
                   && Near(cache.runtimeObjects[0].map.y, game::SectorCoordToVisibleAuthoring(32)),
           "2D render cache offsets door footprint along the resolved front-to-back normal");
+
+    const game::CachedRuntimeObjectDraw& cachedDoor = cache.runtimeObjects[0];
+    const Vector2 doorEndMap{
+            (cachedDoor.doorCorners[1].x + cachedDoor.doorCorners[2].x) * 0.5f,
+            (cachedDoor.doorCorners[1].y + cachedDoor.doorCorners[2].y) * 0.5f};
+    game::SectorEditorTopologyDrawContext pickContext;
+    pickContext.canvasRect = Rectangle{0.0f, 0.0f, 200.0f, 200.0f};
+    pickContext.viewCenter = game::SectorAuthoringToWorldPosition(doorEndMap);
+    pickContext.viewZoom = 64.0f;
+
+    std::vector<game::SectorEditorPickCandidate> candidates;
+    game::AppendCachedRuntimeObjectPickCandidates(
+            cache,
+            pickContext,
+            Vector2{100.0f, 100.0f},
+            game::ScreenLightPickPixels,
+            candidates);
+    Check(candidates.size() == 1
+                  && candidates[0].target.kind == game::SectorEditorPickKind::RuntimeObject
+                  && candidates[0].target.id == object.id,
+          "door footprint picking uses cached portal geometry instead of the stored object position");
+
+    candidates.push_back(game::SectorEditorPickCandidate{
+            game::SectorEditorPickTarget{game::SectorEditorPickKind::AuthoringLine, 11},
+            0.0f});
+    game::SectorEditorPickTarget chosen = game::ChooseSectorEditorPickTarget(
+            candidates,
+            game::SectorEditorPickTarget{game::SectorEditorPickKind::RuntimeObject, object.id});
+    Check(chosen.kind == game::SectorEditorPickKind::AuthoringLine && chosen.id == 11,
+          "repeated door-footprint selection cycles to an overlapping editor target");
+    chosen = game::ChooseSectorEditorPickTarget(
+            candidates,
+            game::SectorEditorPickTarget{game::SectorEditorPickKind::AuthoringLine, 11});
+    Check(chosen.kind == game::SectorEditorPickKind::RuntimeObject && chosen.id == object.id,
+          "repeated selection cycles back to the cached door footprint");
+
+    candidates.clear();
+    game::AppendCachedRuntimeObjectPickCandidates(
+            cache,
+            pickContext,
+            Vector2{0.0f, 0.0f},
+            game::ScreenLightPickPixels,
+            candidates);
+    Check(candidates.empty(), "door footprint picking rejects clicks outside its screen tolerance");
 }
 
 void TestEditorDoorPlacementRejectsOneSidedWall()
@@ -9057,6 +9102,36 @@ void TestEditorUnifiedSelectPickOrderingCyclingAndDragGate()
           "select drag gate ignores small hand jitter");
     Check(game::ShouldStartSectorEditorSelectDrag(Vector2{10.0f, 10.0f}, Vector2{15.0f, 10.0f}),
           "select drag gate starts after deliberate movement");
+
+    game::SectorEditorTopologyRenderCache pointObjectCache;
+    pointObjectCache.valid = true;
+    game::CachedRuntimeObjectDraw pointObject;
+    pointObject.objectId = 4;
+    pointObject.map = Vector2{0.0f, 0.0f};
+    pointObjectCache.runtimeObjects.push_back(pointObject);
+    game::SectorEditorTopologyDrawContext pointPickContext;
+    pointPickContext.canvasRect = Rectangle{0.0f, 0.0f, 200.0f, 200.0f};
+    pointPickContext.viewCenter = Vector2{0.0f, 0.0f};
+    pointPickContext.viewZoom = 64.0f;
+
+    std::vector<game::SectorEditorPickCandidate> pointCandidates;
+    game::AppendCachedRuntimeObjectPickCandidates(
+            pointObjectCache,
+            pointPickContext,
+            Vector2{112.0f, 100.0f},
+            game::ScreenLightPickPixels,
+            pointCandidates);
+    Check(pointCandidates.size() == 1 && pointCandidates[0].target.id == 4,
+          "cached point runtime-object picking preserves the existing screen tolerance");
+    pointCandidates.clear();
+    game::AppendCachedRuntimeObjectPickCandidates(
+            pointObjectCache,
+            pointPickContext,
+            Vector2{112.1f, 100.0f},
+            game::ScreenLightPickPixels,
+            pointCandidates);
+    Check(pointCandidates.empty(),
+          "cached point runtime-object picking still rejects clicks outside the existing tolerance");
 }
 
 void TestEditorAuthoringLastValidTopologyIsNotPersisted()

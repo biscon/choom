@@ -120,7 +120,8 @@ void TestLightmapBakeReportFormatting()
 
     const std::string expected =
             "Lightmap bake report\n"
-            "  Atlas: 16 x 8\n"
+            "  Atlases: 1\n"
+            "  Atlas size: 16 x 8\n"
             "  Atlas pixels: 128\n"
             "  Valid chart texels: 32\n"
             "  Valid atlas occupancy: 25.00%\n"
@@ -188,6 +189,19 @@ void TestLightmapBakeReportFormatting()
 
     Check(game::FormatSectorLightmapBakeReport(result) == expected,
           "lightmap bake report formatting remains exact");
+
+    result.atlases = {
+            game::SectorLightmapAtlasMetadata{"atlas0.png", 16, 8},
+            game::SectorLightmapAtlasMetadata{"atlas1.png", 16, 8}};
+    const std::string multiAtlasReport =
+            game::FormatSectorLightmapBakeReport(result);
+    Check(multiAtlasReport.find("  Atlases: 2\n") != std::string::npos
+                  && multiAtlasReport.find("  Atlas pixels: 256\n")
+                          != std::string::npos
+                  && multiAtlasReport.find(
+                             "  Valid atlas occupancy: 12.50%\n")
+                          != std::string::npos,
+          "multi-atlas bake report aggregates capacity across every atlas");
 }
 
 void TestSectorAssetPathHelpers()
@@ -212,6 +226,16 @@ void TestSectorAssetPathHelpers()
           "asset-root filesystem path converts to project-relative asset path");
     Check(game::MakeSectorAssetRelativePath("/tmp/outside.lightmap.png") == "/tmp/outside.lightmap.png",
           "filesystem path outside asset root stays unchanged");
+    Check(game::MakeSectorLightmapAtlasPath(
+                  "assets/levels/test/test.lightmap.png", 0)
+                  == "assets/levels/test/test.lightmap.png"
+                  && game::MakeSectorLightmapAtlasPath(
+                             "assets/levels/test/test.lightmap.png", 2)
+                          == "assets/levels/test/test.lightmap.2.png"
+                  && game::MakeSectorLightmapAtlasPath(
+                             "/tmp/test.lightmap.tmp.png", 1)
+                          == "/tmp/test.lightmap.tmp.1.png",
+          "lightmap atlas path helper preserves the primary and indexes additional outputs");
 }
 
 game::SectorLightmapBakeAsyncResult MakeInstallTestResult(const std::filesystem::path& sandbox)
@@ -276,6 +300,7 @@ void AddInstallTestStaticModelSidecar(
     object.modelIndex = 0;
     object.containingSectorId = 10;
     object.meshPlacements.resize(1);
+    object.meshPlacements[0].atlasIndex = 0;
     object.meshPlacements[0].atlasScale = Vector2{0.1f, 0.1f};
     object.meshPlacements[0].atlasBias = Vector2{0.2f, 0.3f};
     data.objects.push_back(object);
@@ -445,6 +470,70 @@ void TestLightmapBakeInstallBoundarySuccessfulPayload()
           "install payload rewrites object probe metadata to final asset path");
     Check(payload.bakeResult.objectProbes.sourceHash == result.bakeResult.sourceHash,
           "install payload rewrites object probe source hash to lightmap source hash");
+    std::filesystem::remove_all(sandbox);
+}
+
+void TestLightmapBakeInstallBoundaryHandlesMultipleAtlases()
+{
+    const std::filesystem::path sandbox =
+            Ref077Phase05aSandboxDir() / "multi_atlas";
+    std::filesystem::remove_all(sandbox);
+    game::SectorLightmapBakeAsyncResult result = MakeInstallTestResult(sandbox);
+    result.bakeResult.atlases = {
+            game::SectorLightmapAtlasMetadata{
+                    result.temporaryOutputPath,
+                    result.bakeResult.width,
+                    result.bakeResult.height},
+            game::SectorLightmapAtlasMetadata{
+                    game::MakeSectorLightmapAtlasPath(
+                            result.temporaryOutputPath, 1),
+                    result.bakeResult.width,
+                    result.bakeResult.height}};
+    WriteInstallTestTemps(result);
+    WriteTextFile(result.bakeResult.atlases[1].path, "lightmap-1");
+
+    game::SectorEditorLightmapBakeController controller;
+    game::SectorEditorLightmapBakeInstallPayload payload;
+    Check(controller.InstallCompletedResultFiles(
+                  result,
+                  result.expectedSourceHash,
+                  payload),
+          "multi-atlas bake outputs install together");
+    const std::string secondFinal = game::MakeSectorLightmapAtlasPath(
+            result.finalOutputPath, 1);
+    Check(payload.finalLightmapPaths.size() == 2
+                  && std::filesystem::exists(result.finalOutputPath)
+                  && std::filesystem::exists(secondFinal)
+                  && !std::filesystem::exists(result.bakeResult.atlases[0].path)
+                  && !std::filesystem::exists(result.bakeResult.atlases[1].path),
+          "multi-atlas install publishes every final and cleans every temporary image");
+    Check(payload.bakeResult.atlases.size() == 2
+                  && payload.bakeResult.atlases[1].path
+                          == game::MakeSectorAssetRelativePath(secondFinal),
+          "multi-atlas install rewrites every atlas to its final asset path");
+
+    std::filesystem::remove_all(sandbox);
+    result = MakeInstallTestResult(sandbox / "missing");
+    result.bakeResult.atlases = {
+            game::SectorLightmapAtlasMetadata{
+                    result.temporaryOutputPath,
+                    result.bakeResult.width,
+                    result.bakeResult.height},
+            game::SectorLightmapAtlasMetadata{
+                    game::MakeSectorLightmapAtlasPath(
+                            result.temporaryOutputPath, 1),
+                    result.bakeResult.width,
+                    result.bakeResult.height}};
+    WriteInstallTestTemps(result);
+    payload = {};
+    Check(!controller.InstallCompletedResultFiles(
+                   result,
+                   result.expectedSourceHash,
+                   payload)
+                  && payload.status
+                          == "Bake failed: temporary lightmap output missing"
+                  && !std::filesystem::exists(result.temporaryOutputPath),
+          "missing additional atlas rejects installation and cleans remaining temporary outputs");
     std::filesystem::remove_all(sandbox);
 }
 
@@ -639,6 +728,44 @@ game::SectorTopologyMap MakeSquare()
             game::SectorWorldToAuthoringDistance(8.0f),
             game::SectorWorldToAuthoringDistance(0.2f)
     });
+    return map;
+}
+
+game::SectorTopologyMap MakeDisconnectedLargeSquares()
+{
+    game::SectorTopologyMap map;
+    AddTextureDefaults(map);
+    constexpr game::SectorCoord size = 30000;
+    constexpr game::SectorCoord gap = 32;
+    for (int squareIndex = 0; squareIndex < 3; ++squareIndex) {
+        const int vertexBase = squareIndex * 4 + 1;
+        const int lineBase = squareIndex * 4 + 1;
+        const int sectorId = 10 + squareIndex;
+        const game::SectorCoord x = squareIndex * (size + gap);
+        map.vertices.insert(map.vertices.end(), {
+                {vertexBase + 0, x, 0},
+                {vertexBase + 1, x + size, 0},
+                {vertexBase + 2, x + size, size},
+                {vertexBase + 3, x, size}});
+        for (int sideIndex = 0; sideIndex < 4; ++sideIndex) {
+            const int lineId = lineBase + sideIndex;
+            const int startVertexId = vertexBase + sideIndex;
+            const int endVertexId = vertexBase + ((sideIndex + 1) % 4);
+            map.lineDefs.push_back({
+                    lineId,
+                    startVertexId,
+                    endVertexId,
+                    lineId,
+                    -1});
+            AddSide(
+                    map,
+                    lineId,
+                    lineId,
+                    game::SectorTopologySideKind::Front,
+                    sectorId);
+        }
+        map.sectors.push_back(Sector(sectorId));
+    }
     return map;
 }
 
@@ -1441,8 +1568,8 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 12,
-          "lightmap bake version is bumped for generated-surface normal maps");
+    Check(game::kSectorLightmapBakeVersion == 13,
+          "lightmap bake version is bumped for multi-atlas output");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);
@@ -1454,6 +1581,21 @@ void TestBakeVersionInvalidatesOldLightmaps()
     map.bakedLightmap.sourceHash = game::ComputeSectorLightmapSourceHash(map);
     Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Valid,
           "current bake version source hash keeps existing lightmap valid");
+
+    const std::filesystem::path additionalAtlasPath =
+            Phase01bSandboxDir() / "phase06a_status_lightmap.1.png";
+    WriteSolidAlphaTestTexture(additionalAtlasPath, 255);
+    map.bakedLightmap.additionalAtlases.push_back(
+            game::SectorLightmapAtlasMetadata{
+                    additionalAtlasPath.string(),
+                    2,
+                    2});
+    Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Valid,
+          "current multi-atlas metadata is valid when every atlas file exists");
+    std::filesystem::remove(additionalAtlasPath);
+    Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Stale,
+          "missing additional atlas makes the installed lightmap stale");
+    WriteSolidAlphaTestTexture(additionalAtlasPath, 255);
 
     const std::filesystem::path objectProbePath =
             game::MakeSectorObjectProbeSidecarPathForLightmapPath(lightmapPath.string());
@@ -1479,6 +1621,7 @@ void TestBakeVersionInvalidatesOldLightmaps()
 
     std::error_code removeError;
     std::filesystem::remove(objectProbePath, removeError);
+    std::filesystem::remove(additionalAtlasPath, removeError);
     std::filesystem::remove(lightmapPath, removeError);
 }
 
@@ -1549,6 +1692,108 @@ void TestLayoutSmoke()
     Check(CountValidChartsForSurface(
                   geometry, layout, game::SectorGeneratedSurfaceKind::UpperWall, 10, 2) == 1,
           "one-sky portal keeps upper-wall chart");
+}
+
+void TestTopologyLayoutRollsIntoAdditionalAtlases()
+{
+    game::SectorLightmapLayout layout;
+    std::string error;
+    Check(game::BuildSectorLightmapLayout(
+                  MakeDisconnectedLargeSquares(),
+                  layout,
+                  error),
+          "large disconnected topology builds a multi-atlas layout");
+    bool sawPrimary = false;
+    bool sawAdditional = false;
+    for (const game::SectorLightmapChart& chart : layout.charts) {
+        if (chart.surfaceIndex < 0) {
+            continue;
+        }
+        sawPrimary = sawPrimary || chart.atlasIndex == 0;
+        sawAdditional = sawAdditional || chart.atlasIndex > 0;
+    }
+    Check(layout.atlasCount > 1 && sawPrimary && sawAdditional,
+          "topology shelf packing continues in another 2048 atlas instead of failing");
+}
+
+void TestSmallSyntheticMultiAtlasBake()
+{
+    game::SectorTopologyMap map = MakeSquare();
+    map.staticLights.clear();
+    map.lightmapSettings.ambientOcclusionStrength = 0.0f;
+    map.lightmapSettings.indirectBounceStrength = 0.0f;
+    game::SectorGeneratedGeometry geometry;
+    game::SectorLightmapLayout layout;
+    std::string error;
+    Check(game::BuildSectorGeneratedGeometry(map, geometry, &error)
+                  && game::BuildSectorLightmapLayout(map, layout, error),
+          "synthetic multi-atlas bake fixture builds source geometry");
+
+    std::vector<int> receivingSurfaceIndices;
+    for (const game::SectorLightmapChart& chart : layout.charts) {
+        if (chart.surfaceIndex >= 0) {
+            receivingSurfaceIndices.push_back(chart.surfaceIndex);
+        }
+    }
+    for (game::SectorLightmapChart& chart : layout.charts) {
+        chart = game::SectorLightmapChart{};
+    }
+    layout.atlasWidth = 8;
+    layout.atlasHeight = 8;
+    layout.atlasCount = 2;
+    for (int atlasIndex = 0; atlasIndex < 2; ++atlasIndex) {
+        const int surfaceIndex = receivingSurfaceIndices[
+                static_cast<size_t>(atlasIndex)];
+        game::SectorLightmapChart& chart =
+                layout.charts[static_cast<size_t>(surfaceIndex)];
+        chart.surfaceIndex = surfaceIndex;
+        chart.atlasIndex = atlasIndex;
+        chart.x = 0;
+        chart.y = 0;
+        chart.width = 8;
+        chart.height = 8;
+        chart.usableX = 2;
+        chart.usableY = 2;
+        chart.usableWidth = 4;
+        chart.usableHeight = 4;
+        chart.vertexUvs.assign(
+                geometry.surfaces[static_cast<size_t>(surfaceIndex)]
+                        .vertices.size(),
+                Vector2{0.5f, 0.5f});
+    }
+
+    const std::filesystem::path outputPath =
+            Phase01bSandboxDir() / "small_multi.lightmap.png";
+    game::SectorLightmapBakeResult result;
+    Check(game::BakeSectorLightmap(
+                  map,
+                  layout,
+                  outputPath.string().c_str(),
+                  result,
+                  error),
+          "small synthetic bake exports multiple atlas buffers");
+    const std::string secondPath = game::MakeSectorLightmapAtlasPath(
+            outputPath.string(), 1);
+    Image first = LoadImage(outputPath.string().c_str());
+    Image second = LoadImage(secondPath.c_str());
+    Check(result.atlases.size() == 2
+                  && result.atlases[1].path == secondPath
+                  && first.data != nullptr
+                  && second.data != nullptr
+                  && first.width == 8
+                  && second.width == 8,
+          "multi-atlas bake result reports and writes every indexed image");
+    if (first.data != nullptr) {
+        UnloadImage(first);
+    }
+    if (second.data != nullptr) {
+        UnloadImage(second);
+    }
+    std::filesystem::remove(outputPath);
+    std::filesystem::remove(secondPath);
+    std::filesystem::remove(
+            game::MakeSectorObjectProbeSidecarPathForLightmapPath(
+                    outputPath.string()));
 }
 
 void TestMiddleSurfacesReceiveLightmapsWithoutOccluding()
@@ -3346,14 +3591,32 @@ void TestStaticModelChartPackingAndSidecarLifecycle()
                   2048,
                   2048,
                   2,
-                  game::SectorStaticModelLightmapPackCursor{100, 20, 24},
+                  game::SectorStaticModelLightmapPackCursor{0, 100, 20, 24},
                   error),
           "static model charts append after a supplied topology shelf cursor");
     Check(data.objects[0].meshPlacements[0].x == 100
                   && data.objects[0].meshPlacements[0].y == 20
+                  && data.objects[0].meshPlacements[0].atlasIndex == 0
                   && data.objects[1].meshPlacements[0].x
                           > data.objects[0].meshPlacements[0].x,
           "static model chart packing preserves the preceding topology placement");
+
+    game::SectorStaticModelLightmapData rollover =
+            MakeStaticModelSidecarFixture();
+    rollover.objects.push_back(rollover.objects.front());
+    rollover.objects.back().objectId = 19;
+    Check(game::PackSectorStaticModelLightmapCharts(
+                  rollover,
+                  32,
+                  32,
+                  2,
+                  {},
+                  error)
+                  && rollover.objects[0].meshPlacements[0].atlasIndex == 0
+                  && rollover.objects[1].meshPlacements[0].atlasIndex == 1
+                  && rollover.objects[1].meshPlacements[0].x == 0
+                  && rollover.objects[1].meshPlacements[0].y == 0,
+          "static model chart packing rolls into a new atlas without a fixed atlas-count cap");
 
     game::SectorStaticModelLightmapData overflow =
             MakeStaticModelSidecarFixture();
@@ -3400,8 +3663,28 @@ void TestStaticModelChartPackingAndSidecarLifecycle()
                           data.objects[0].meshPlacements[0].atlasScale.x)
                   && Near(
                           loaded.objects[0].meshPlacements[0].atlasBias.y,
-                          data.objects[0].meshPlacements[0].atlasBias.y),
+                          data.objects[0].meshPlacements[0].atlasBias.y)
+                  && loaded.objects[0].meshPlacements[0].atlasIndex
+                          == data.objects[0].meshPlacements[0].atlasIndex,
           "static model sidecar preserves remaps and object atlas transforms");
+    Check(game::AreSectorStaticModelLightmapAtlasIndicesValid(loaded, 1),
+          "static model sidecar atlas indices validate against installed metadata");
+    loaded.objects[0].meshPlacements[0].atlasIndex = 1;
+    Check(!game::AreSectorStaticModelLightmapAtlasIndicesValid(loaded, 1),
+          "static model placement outside installed atlas metadata is rejected");
+
+    PatchByte(path, 4, 1);
+    Check(!game::ReadSectorStaticModelLightmapSidecar(
+                   path.string(),
+                   &metadata,
+                   loaded,
+                   error),
+          "version-1 static model sidecars are rejected after multi-atlas format adoption");
+    Check(game::WriteSectorStaticModelLightmapSidecar(
+                  path.string(),
+                  data,
+                  error),
+          "static model sidecar fixture rewrites after old-version rejection");
 
     game::SectorBakedStaticModelLightmapMetadata stale = metadata;
     stale.sourceHash = "different";
@@ -3646,6 +3929,7 @@ int main()
     TestLightmapBakeInstallBoundaryMissingTempsCleanUp();
     TestLightmapBakeInstallBoundaryCopyFailureCleanup();
     TestLightmapBakeInstallBoundarySuccessfulPayload();
+    TestLightmapBakeInstallBoundaryHandlesMultipleAtlases();
     TestLightmapBakeInstallBoundaryStaticModelSidecarIsAtomic();
     TestObjectLightProbeSidecarRoundTrip();
     TestObjectLightProbeSidecarRejectsInvalidFiles();
@@ -3677,6 +3961,8 @@ int main()
     TestBakeVersionInvalidatesOldLightmaps();
     TestLogicalSelfComparison();
     TestLayoutSmoke();
+    TestTopologyLayoutRollsIntoAdditionalAtlases();
+    TestSmallSyntheticMultiAtlasBake();
     TestMiddleSurfacesReceiveLightmapsWithoutOccluding();
     TestAlphaTestMiddleOccluderCollection();
     TestAlphaMaskCacheSampling();

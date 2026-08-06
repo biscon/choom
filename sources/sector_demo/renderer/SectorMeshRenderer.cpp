@@ -636,10 +636,19 @@ bool SectorMeshRenderer::RebuildRendererResources(
             pbrEnvironment);
 
     SectorLightmapLayout lightmapLayout;
+    const std::vector<SectorLightmapAtlasMetadata> lightmapAtlases =
+            GetSectorLightmapAtlases(map.bakedLightmap);
     const SectorLightmapStatus status = GetSectorLightmapStatus(map);
     lightmapStatus = static_cast<int>(status);
     bool useLightmapLayout = status == SectorLightmapStatus::Valid
             && BuildSectorLightmapLayout(map, lightmapLayout, error);
+    if (useLightmapLayout
+            && lightmapLayout.atlasCount
+                    > static_cast<int>(lightmapAtlases.size())) {
+        error = "Baked lightmap metadata does not contain every topology atlas";
+        useLightmapLayout = false;
+        lightmapStatus = static_cast<int>(SectorLightmapStatus::Stale);
+    }
     if (status == SectorLightmapStatus::Valid && !useLightmapLayout) {
         std::fprintf(stderr, "[SectorDemo WARNING] %s\n", error.c_str());
         error.clear();
@@ -662,18 +671,34 @@ bool SectorMeshRenderer::RebuildRendererResources(
             lightmapStatus =
                     static_cast<int>(SectorLightmapStatus::Stale);
             staticModelLightmapData = {};
+        } else if (!AreSectorStaticModelLightmapAtlasIndicesValid(
+                           staticModelLightmapData,
+                           static_cast<int>(lightmapAtlases.size()))) {
+            std::fprintf(
+                    stderr,
+                    "[SectorDemo WARNING] Static model lightmap disabled: atlas index is outside installed metadata\n");
+            useLightmapLayout = false;
+            lightmapStatus =
+                    static_cast<int>(SectorLightmapStatus::Stale);
+            staticModelLightmapData = {};
         }
     }
     staticModelRenderer.SetLightmapData(
             std::move(staticModelLightmapData));
 
     if (useLightmapLayout) {
-        const std::string resolvedPath = ResolveSectorAssetPath(map.bakedLightmap.path);
-        lightmapTexture = assets.RequestTexture(
-                assetScope,
-                "sector_lightmap_atlas",
-                resolvedPath.c_str(),
-                engine::TextureLoad_BilinearFilter);
+        lightmapTextures.reserve(lightmapAtlases.size());
+        for (size_t atlasIndex = 0; atlasIndex < lightmapAtlases.size(); ++atlasIndex) {
+            const std::string resolvedPath = ResolveSectorAssetPath(
+                    lightmapAtlases[atlasIndex].path);
+            const std::string key = "sector_lightmap_atlas_"
+                    + std::to_string(atlasIndex);
+            lightmapTextures.push_back(assets.RequestTexture(
+                    assetScope,
+                    key.c_str(),
+                    resolvedPath.c_str(),
+                    engine::TextureLoad_BilinearFilter));
+        }
     }
 
     std::string meshError;
@@ -836,7 +861,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
     normalTextureHandlesById.clear();
-    lightmapTexture = engine::NullTextureHandle();
+    lightmapTextures.clear();
     sectorCount = 0;
 
     if (materialLoaded) {
@@ -912,19 +937,11 @@ void SectorMeshRenderer::DrawScene(
             BuildSectorFogRenderContext(fogSettings, camera.position);
     UploadSectorFogShaderValues(material.shader, fogShaderLocations, fogContext);
 
-    const Texture2D* lightmap = assets.GetTexture(lightmapTexture);
-    float useLightmap = lightmap != nullptr ? 1.0f : 0.0f;
     float useAo = useBakedAmbientOcclusion ? 1.0f : 0.0f;
-    material.maps[MATERIAL_MAP_SPECULAR].texture = (lightmap != nullptr)
-            ? *lightmap
-            : Texture2D{};
     const Texture2D* shadowMap0 = dynamicLightState.ShadowMapDepthTexture(0);
     const Texture2D* shadowMap1 = dynamicLightState.ShadowMapDepthTexture(1);
     material.maps[MATERIAL_MAP_ROUGHNESS].texture = shadowMap0 != nullptr ? *shadowMap0 : Texture2D{};
     material.maps[MATERIAL_MAP_OCCLUSION].texture = shadowMap1 != nullptr ? *shadowMap1 : Texture2D{};
-    if (useLightmapLoc >= 0) {
-        SetShaderValue(material.shader, useLightmapLoc, &useLightmap, SHADER_UNIFORM_FLOAT);
-    }
     if (useBakedAmbientOcclusionLoc >= 0) {
         SetShaderValue(material.shader, useBakedAmbientOcclusionLoc, &useAo, SHADER_UNIFORM_FLOAT);
     }
@@ -973,8 +990,19 @@ void SectorMeshRenderer::DrawScene(
             decalTexture = assets.GetTexture(TextureForId(batch.decalTextureId));
         }
 
+        const Texture2D* lightmap = batch.lightmapAtlasIndex >= 0
+                && batch.lightmapAtlasIndex
+                        < static_cast<int>(lightmapTextures.size())
+                ? assets.GetTexture(lightmapTextures[
+                        static_cast<size_t>(batch.lightmapAtlasIndex)])
+                : nullptr;
+        const float useLightmap = lightmap != nullptr ? 1.0f : 0.0f;
+        material.maps[MATERIAL_MAP_SPECULAR].texture = lightmap != nullptr
+                ? *lightmap
+                : Texture2D{};
         const int hasDecal = decalTexture != nullptr ? 1 : 0;
-        const int hasLightmap = batch.receivesLightmap ? 1 : 0;
+        const int hasLightmap = batch.receivesLightmap
+                && lightmap != nullptr ? 1 : 0;
         const int hasNormalMap = normalTexture != nullptr ? 1 : 0;
         const int alphaTest = batch.alphaTest ? 1 : 0;
         const float alphaCutoff = batch.alphaCutoff;
@@ -987,6 +1015,13 @@ void SectorMeshRenderer::DrawScene(
         material.maps[MATERIAL_MAP_HEIGHT].texture = (normalTexture != nullptr)
                 ? *normalTexture
                 : Texture2D{};
+        if (useLightmapLoc >= 0) {
+            SetShaderValue(
+                    material.shader,
+                    useLightmapLoc,
+                    &useLightmap,
+                    SHADER_UNIFORM_FLOAT);
+        }
         if (hasLightmapLoc >= 0) {
             SetShaderValue(material.shader, hasLightmapLoc, &hasLightmap, SHADER_UNIFORM_INT);
         }
@@ -1039,7 +1074,7 @@ void SectorMeshRenderer::DrawScene(
                 billboardLightContext,
                 fogContext,
                 visibilityResult,
-                lightmap,
+                lightmapTextures,
                 assets.GetCubemap(pbrEnvironment.cubemap),
                 useBakedAmbientOcclusion,
                 renderDebugText);

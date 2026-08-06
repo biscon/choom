@@ -65,11 +65,18 @@ struct SectorBakedStaticModelLightmapMetadata {
     std::string format;
 };
 
+struct SectorLightmapAtlasMetadata {
+    std::string path;
+    int width = 0;
+    int height = 0;
+};
+
 struct SectorLightmapMetadata {
     std::string path;
     int width = 0;
     int height = 0;
     std::string sourceHash;
+    std::vector<SectorLightmapAtlasMetadata> additionalAtlases;
     SectorBakedObjectLightProbeMetadata objectProbes;
     SectorBakedStaticModelLightmapMetadata staticModels;
 };

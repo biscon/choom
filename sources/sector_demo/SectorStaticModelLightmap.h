@@ -18,7 +18,7 @@ namespace game {
 
 enum class SectorLightmapStatus;
 
-constexpr int kSectorStaticModelLightmapSidecarVersion = 1;
+constexpr int kSectorStaticModelLightmapSidecarVersion = 2;
 constexpr const char* kSectorStaticModelLightmapSidecarFormat =
         "staticModelUvRemapF32LE";
 
@@ -41,6 +41,7 @@ struct SectorStaticModelLightmapModel {
 };
 
 struct SectorStaticModelLightmapMeshPlacement {
+    int atlasIndex = -1;
     int x = 0;
     int y = 0;
     int width = 0;
@@ -72,6 +73,7 @@ struct SectorStaticModelLightmapData {
 };
 
 struct SectorStaticModelLightmapPackCursor {
+    int atlasIndex = 0;
     int shelfX = 0;
     int shelfY = 0;
     int shelfHeight = 0;
@@ -121,6 +123,10 @@ bool ReadSectorStaticModelLightmapSidecar(
         const SectorBakedStaticModelLightmapMetadata* expectedMetadata,
         SectorStaticModelLightmapData& outData,
         std::string& outError);
+
+bool AreSectorStaticModelLightmapAtlasIndicesValid(
+        const SectorStaticModelLightmapData& data,
+        int atlasCount);
 
 SectorLightmapStatus GetSectorStaticModelLightmapStatus(
         const SectorTopologyMap& map);

@@ -1135,6 +1135,26 @@ SectorBakedStaticModelLightmapMetadata ReadBakedStaticModelLightmapMetadata(
     return metadata;
 }
 
+SectorLightmapAtlasMetadata ReadLightmapAtlasMetadata(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+    SectorLightmapAtlasMetadata atlas;
+    atlas.path = ReadString(value, "path", context);
+    atlas.width = ReadInt(value, "width", context);
+    atlas.height = ReadInt(value, "height", context);
+    if (atlas.path.empty()) {
+        Fail(context + ".path must not be empty");
+    }
+    if (atlas.width <= 0 || atlas.height <= 0) {
+        Fail(context + " dimensions must be positive");
+    }
+    return atlas;
+}
+
 SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -1154,6 +1174,31 @@ SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& c
     }
     if (metadata.sourceHash.empty()) {
         Fail(context + ".sourceHash must not be empty");
+    }
+    const auto additionalAtlasesIt = value.find("additionalAtlases");
+    if (additionalAtlasesIt != value.end()) {
+        if (!additionalAtlasesIt->is_array()) {
+            Fail(context + ".additionalAtlases must be an array");
+        }
+        for (size_t index = 0; index < additionalAtlasesIt->size(); ++index) {
+            SectorLightmapAtlasMetadata atlas = ReadLightmapAtlasMetadata(
+                    (*additionalAtlasesIt)[index],
+                    context + ".additionalAtlases[" + std::to_string(index) + "]");
+            if (atlas.width != metadata.width
+                    || atlas.height != metadata.height) {
+                Fail(context + ".additionalAtlases dimensions must match the primary atlas");
+            }
+            if (atlas.path == metadata.path
+                    || std::any_of(
+                            metadata.additionalAtlases.begin(),
+                            metadata.additionalAtlases.end(),
+                            [&](const SectorLightmapAtlasMetadata& existing) {
+                                return existing.path == atlas.path;
+                            })) {
+                Fail(context + ".additionalAtlases contains a duplicate path");
+            }
+            metadata.additionalAtlases.push_back(std::move(atlas));
+        }
     }
     const auto objectProbesIt = value.find("objectProbes");
     if (objectProbesIt != value.end()) {
@@ -1946,6 +1991,20 @@ Json WriteBakedStaticModelLightmapMetadata(
 
 Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
 {
+    std::vector<std::string> atlasPaths{metadata.path};
+    for (const SectorLightmapAtlasMetadata& atlas : metadata.additionalAtlases) {
+        if (atlas.path.empty() || atlas.width <= 0 || atlas.height <= 0) {
+            Fail("bakedLightmap.additionalAtlases entries must have a path and positive dimensions");
+        }
+        if (atlas.width != metadata.width || atlas.height != metadata.height) {
+            Fail("bakedLightmap.additionalAtlases dimensions must match the primary atlas");
+        }
+        if (std::find(atlasPaths.begin(), atlasPaths.end(), atlas.path)
+                != atlasPaths.end()) {
+            Fail("bakedLightmap.additionalAtlases contains a duplicate path");
+        }
+        atlasPaths.push_back(atlas.path);
+    }
     Json lightmap = Json{
             {"path", metadata.path},
             {"width", metadata.width},
@@ -1958,6 +2017,16 @@ Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
     if (!metadata.staticModels.path.empty()) {
         lightmap["staticModels"] =
                 WriteBakedStaticModelLightmapMetadata(metadata.staticModels);
+    }
+    if (!metadata.additionalAtlases.empty()) {
+        lightmap["additionalAtlases"] = Json::array();
+        for (const SectorLightmapAtlasMetadata& atlas
+                : metadata.additionalAtlases) {
+            lightmap["additionalAtlases"].push_back(Json{
+                    {"path", atlas.path},
+                    {"width", atlas.width},
+                    {"height", atlas.height}});
+        }
     }
     return lightmap;
 }

@@ -45,6 +45,13 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         const SectorAuthoringDerivationResult& authoringDerivation,
         uint64_t revision);
 
+void AppendCachedRuntimeObjectPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates);
+
 void DrawCachedTopologySectors(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);

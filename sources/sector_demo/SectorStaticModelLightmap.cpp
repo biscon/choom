@@ -1229,12 +1229,14 @@ bool PackSectorStaticModelLightmapCharts(
                 cursor.shelfHeight = 0;
             }
             if (cursor.shelfY + height > atlasHeight) {
-                outError = "Bake failed: 2048 lightmap atlas is full after adding "
-                        "static model object " + std::to_string(object.objectId);
-                return false;
+                ++cursor.atlasIndex;
+                cursor.shelfX = 0;
+                cursor.shelfY = 0;
+                cursor.shelfHeight = 0;
             }
 
             auto& placement = object.meshPlacements[meshIndex];
+            placement.atlasIndex = cursor.atlasIndex;
             placement.x = cursor.shelfX;
             placement.y = cursor.shelfY;
             placement.width = width;
@@ -1349,8 +1351,10 @@ bool WriteSectorStaticModelLightmapSidecar(
             return false;
         }
         for (const auto& placement : object.meshPlacements) {
-            if (!IsFinite(placement.atlasScale)
+            if (placement.atlasIndex < 0
+                    || !IsFinite(placement.atlasScale)
                     || !IsFinite(placement.atlasBias)
+                    || !WriteU32(output, static_cast<uint32_t>(placement.atlasIndex))
                     || !WriteF32(output, placement.atlasScale.x)
                     || !WriteF32(output, placement.atlasScale.y)
                     || !WriteF32(output, placement.atlasBias.x)
@@ -1490,7 +1494,10 @@ bool ReadSectorStaticModelLightmapSidecar(
         object.containingSectorId = sectorId;
         object.meshPlacements.resize(meshCount);
         for (auto& placement : object.meshPlacements) {
-            if (!ReadF32(input, placement.atlasScale.x)
+            uint32_t atlasIndex = 0;
+            if (!ReadU32(input, atlasIndex)
+                    || atlasIndex > static_cast<uint32_t>(std::numeric_limits<int>::max())
+                    || !ReadF32(input, placement.atlasScale.x)
                     || !ReadF32(input, placement.atlasScale.y)
                     || !ReadF32(input, placement.atlasBias.x)
                     || !ReadF32(input, placement.atlasBias.y)) {
@@ -1498,6 +1505,7 @@ bool ReadSectorStaticModelLightmapSidecar(
                 outData = {};
                 return false;
             }
+            placement.atlasIndex = static_cast<int>(atlasIndex);
         }
     }
     char trailing = 0;
@@ -1510,6 +1518,25 @@ bool ReadSectorStaticModelLightmapSidecar(
         outError = "Static model lightmap sidecar read failed: truncated input";
         outData = {};
         return false;
+    }
+    return true;
+}
+
+bool AreSectorStaticModelLightmapAtlasIndicesValid(
+        const SectorStaticModelLightmapData& data,
+        int atlasCount)
+{
+    if (atlasCount <= 0) {
+        return false;
+    }
+    for (const SectorStaticModelLightmapObject& object : data.objects) {
+        for (const SectorStaticModelLightmapMeshPlacement& placement
+                : object.meshPlacements) {
+            if (placement.atlasIndex < 0
+                    || placement.atlasIndex >= atlasCount) {
+                return false;
+            }
+        }
     }
     return true;
 }

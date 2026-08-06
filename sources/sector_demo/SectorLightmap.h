@@ -18,6 +18,7 @@ namespace game {
 
 struct SectorLightmapChart {
     int surfaceIndex = -1;
+    int atlasIndex = -1;
     int x = 0;
     int y = 0;
     int width = 0;
@@ -32,6 +33,7 @@ struct SectorLightmapChart {
 struct SectorLightmapLayout {
     int atlasWidth = 2048;
     int atlasHeight = 2048;
+    int atlasCount = 1;
     int gutter = 2;
     float texelsPerWorldUnit = 8.0f;
     std::vector<SectorLightmapChart> charts;
@@ -98,6 +100,7 @@ struct SectorLightmapRaycastStats {
 struct SectorLightmapBakeResult {
     int width = 0;
     int height = 0;
+    std::vector<SectorLightmapAtlasMetadata> atlases;
     std::string sourceHash;
     int validChartTexels = 0;
     int allocatedChartRectanglePixels = 0;
@@ -175,8 +178,8 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 12: generated surfaces use optional companion normal maps for baked direct light.
-constexpr int kSectorLightmapBakeVersion = 12;
+// Version 13: baked lightmaps can span multiple fixed-size texture atlases.
+constexpr int kSectorLightmapBakeVersion = 13;
 constexpr int kSectorBakedObjectLightProbeSidecarVersion = 1;
 constexpr const char* kSectorBakedObjectLightProbeSidecarFormat = "ambientCubeF32LE";
 constexpr float kObjectProbeAdjacentPortalBlendDistanceWorld = 1.0f;
@@ -262,6 +265,9 @@ BakedObjectLightingSample SampleBakedObjectLighting(
         int preferredSectorId,
         const SectorTopologyMap* mapForFallback);
 std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath);
+std::string MakeSectorLightmapAtlasPath(const std::string& primaryPath, int atlasIndex);
+std::vector<SectorLightmapAtlasMetadata> GetSectorLightmapAtlases(
+        const SectorLightmapMetadata& metadata);
 std::string MakeSectorObjectProbeSidecarPathForLightmapPath(const std::string& lightmapPath);
 
 } // namespace game

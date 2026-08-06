@@ -886,7 +886,7 @@ void SectorStaticModelRenderer::Draw(
         const SectorBillboardDynamicLightContext& dynamicLightContext,
         const SectorFogRenderContext& fogContext,
         const RuntimePortalVisibilityResult& visibility,
-        const Texture2D* lightmap,
+        const std::vector<engine::TextureHandle>& lightmapTextures,
         const TextureCubemap* environment,
         bool useBakedAmbientOcclusion,
         std::string& renderDebugText)
@@ -956,7 +956,7 @@ void SectorStaticModelRenderer::Draw(
              &assets,
              &dynamicLightContext,
              &visibility,
-             lightmap,
+             &lightmapTextures,
              environment,
              useBakedAmbientOcclusion,
              &considered,
@@ -1037,9 +1037,7 @@ void SectorStaticModelRenderer::Draw(
                         : FindCachedModel(
                                 staticModel.model,
                                 lightmapObject->modelIndex);
-                const bool hasRemappedMeshes = lightmap != nullptr
-                        && lightmap->id != 0
-                        && lightmapObject != nullptr
+                const bool hasRemapData = lightmapObject != nullptr
                         && cached != nullptr
                         && cached->meshes.size()
                                 == static_cast<size_t>(model->meshCount)
@@ -1060,6 +1058,22 @@ void SectorStaticModelRenderer::Draw(
                         continue;
                     }
 
+                    const SectorStaticModelLightmapMeshPlacement* placement =
+                            hasRemapData
+                            ? &lightmapObject->meshPlacements[
+                                    static_cast<size_t>(meshIndex)]
+                            : nullptr;
+                    const Texture2D* lightmap = placement != nullptr
+                            && placement->atlasIndex >= 0
+                            && placement->atlasIndex
+                                    < static_cast<int>(lightmapTextures.size())
+                            ? assets.GetTexture(lightmapTextures[
+                                    static_cast<size_t>(placement->atlasIndex)])
+                            : nullptr;
+                    const bool hasRemappedMesh = placement != nullptr
+                            && lightmap != nullptr
+                            && lightmap->id != 0;
+
                     std::array<
                             MaterialMap,
                             SectorStaticModelMaterialMapCount> maps{};
@@ -1070,7 +1084,7 @@ void SectorStaticModelRenderer::Draw(
                     ConfigureSectorStaticModelAuxiliaryMaterialMaps(
                             maps,
                             lightmap,
-                            hasRemappedMeshes,
+                            hasRemappedMesh,
                             environment,
                             dynamicLightContext.shadowMaps.shadowMap0,
                             dynamicLightContext.shadowMaps.shadowMap1);
@@ -1118,7 +1132,7 @@ void SectorStaticModelRenderer::Draw(
                     if (hasOcclusionTextureLoc >= 0) SetShaderValue(shader, hasOcclusionTextureLoc, &hasOcclusion, SHADER_UNIFORM_INT);
                     if (hasEmissiveTextureLoc >= 0) SetShaderValue(shader, hasEmissiveTextureLoc, &hasEmissive, SHADER_UNIFORM_INT);
                     const int hasStaticLightmap =
-                            hasRemappedMeshes ? 1 : 0;
+                            hasRemappedMesh ? 1 : 0;
                     if (hasStaticLightmapLoc >= 0) {
                         SetShaderValue(
                                 shader,
@@ -1127,15 +1141,12 @@ void SectorStaticModelRenderer::Draw(
                                 SHADER_UNIFORM_INT);
                     }
                     Vector4 scaleBias{};
-                    if (hasRemappedMeshes) {
-                        const auto& placement =
-                                lightmapObject->meshPlacements[
-                                        static_cast<size_t>(meshIndex)];
+                    if (hasRemappedMesh) {
                         scaleBias = Vector4{
-                                placement.atlasScale.x,
-                                placement.atlasScale.y,
-                                placement.atlasBias.x,
-                                placement.atlasBias.y};
+                                placement->atlasScale.x,
+                                placement->atlasScale.y,
+                                placement->atlasBias.x,
+                                placement->atlasBias.y};
                     }
                     if (lightmapScaleBiasLoc >= 0) {
                         SetShaderValue(
@@ -1144,7 +1155,7 @@ void SectorStaticModelRenderer::Draw(
                                 &scaleBias,
                                 SHADER_UNIFORM_VEC4);
                     }
-                    const Mesh& mesh = hasRemappedMeshes
+                    const Mesh& mesh = hasRemappedMesh
                             ? cached->meshes[static_cast<size_t>(meshIndex)]
                             : model->meshes[meshIndex];
                     DrawMesh(mesh, material, modelTransform);
