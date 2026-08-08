@@ -31,6 +31,7 @@ bool GameApplication::Init(engine::EngineContext& context)
                 : weaponError;
         return false;
     }
+    RequestFpsWeaponAudioAssets(context.assets, weaponRegistry);
     if (!editor.Init(context)) {
         menuStatus = "Editor initialization failed";
         return false;
@@ -42,6 +43,7 @@ bool GameApplication::Init(engine::EngineContext& context)
 
 void GameApplication::Shutdown(engine::EngineContext& context)
 {
+    context.audio.StopAll(context.assets);
     if (gameSession.IsRunning()) {
         gameSession.Shutdown(context, gameScene);
     } else if (gameScene.IsReady()) {
@@ -115,6 +117,7 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
                     }
                     if (destination == ApplicationScreen::Game) {
                         gameSession.Resume(gameScene);
+                        context.audio.ResumeAll(context.assets);
                     }
                     menuStatus.clear();
                     engine::ConsumeEvent(event);
@@ -136,6 +139,7 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
                 });
         if (menuRequested) {
             gameSession.Pause();
+            context.audio.PauseAll(context.assets);
             OpenApplicationMenu(flow, ApplicationScreen::Game);
             return;
         }
@@ -276,6 +280,7 @@ void GameApplication::HandleMenuAction(
 
 void GameApplication::StartNewGame(engine::EngineContext& context)
 {
+    context.audio.StopAll(context.assets);
     editor.SuspendRuntime(context);
     std::string error;
     if (!gameSession.StartNew(
@@ -315,6 +320,7 @@ void GameApplication::ResumeGame(engine::EngineContext& context)
         }
     }
     gameSession.Resume(gameScene);
+    context.audio.ResumeAll(context.assets);
     flow.screen = ApplicationScreen::Game;
     flow.menuReturnScreen = ApplicationScreen::Game;
     menuStatus.clear();
@@ -324,6 +330,7 @@ void GameApplication::OpenEditor(engine::EngineContext& context)
 {
     if (gameSession.IsRunning()) {
         gameSession.Pause();
+        context.audio.StopAll(context.assets);
         if (gameScene.IsReady()) {
             gameScene.Shutdown(context);
         }

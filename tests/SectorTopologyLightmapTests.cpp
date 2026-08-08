@@ -1458,6 +1458,13 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
           "hash ignores object probe debug draw distance");
 
+    game::SectorTopologyMap changedAudio = base;
+    changedAudio.audioSettings.musicPath = "music/level_theme.ogg";
+    changedAudio.audioSettings.soundsById.emplace(
+            "door_open", "shared/door_open.wav");
+    Check(game::ComputeSectorLightmapSourceHash(changedAudio) == hash,
+          "hash ignores runtime-only audio settings");
+
     game::SectorTopologyMap changedSky = base;
     changedSky.skySettings.textureId = "storm_panorama";
     Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,

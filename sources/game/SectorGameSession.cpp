@@ -26,6 +26,16 @@ Vector3 GameplayForward(const SectorEditorPreviewControllerState& controller)
             std::sin(pose.yawRadians)};
 }
 
+void UpdateAudioListener(
+        engine::AudioSystem& audio,
+        const Camera3D& camera)
+{
+    audio.SetListener(engine::AudioListener{
+            camera.position,
+            Vector3Subtract(camera.target, camera.position),
+            camera.up});
+}
+
 } // namespace
 
 bool SectorGameSession::StartNew(
@@ -208,6 +218,7 @@ void SectorGameSession::Update(
             previousVisualEyeY,
             dt);
     ApplyPlayerPose(scene);
+    UpdateAudioListener(context.audio, scene.Renderer().RenderCamera());
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
         fpsPlayer.Update(
                 context.assets,
@@ -216,6 +227,8 @@ void SectorGameSession::Update(
                 dt);
         fpsPlayer.HandleInput(
                 context.input,
+                context.assets,
+                context.audio,
                 collision.sectorCollisionWorldValid
                         ? &collision.sectorCollisionWorld
                         : nullptr,

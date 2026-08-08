@@ -299,6 +299,7 @@ game::SectorAuthoringDocument MakeAuthoringDocumentFromMap(const SectorTopologyM
 {
     game::SectorAuthoringDocument document;
     document.graph = game::ImportSectorTopologyMapToAuthoringGraph(map);
+    document.mapData.audioSettings = map.audioSettings;
     document.mapData.texturesById = map.texturesById;
     document.mapData.staticLights = map.staticLights;
     document.mapData.staticSpotLights = map.staticSpotLights;
@@ -2079,6 +2080,53 @@ void TestPreviewSettingsRoundTripAndValidation()
           "low object probe debug draw distance clamps");
 }
 
+void TestAudioSettingsRoundTripAndValidation()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.audioSettings.musicPath = "music/level_theme.ogg";
+    original.audioSettings.soundsById.emplace(
+            "door_open", "shared/doors/open.wav");
+    original.audioSettings.soundsById.emplace(
+            "alarm", "ambience/alarm.mp3");
+
+    const Json saved = Json::parse(SaveText(original));
+    Check(saved["audio"]["music"] == "music/level_theme.ogg",
+          "level music path is serialized relative to assets/audio");
+    Check(saved["audio"]["sounds"]["door_open"]
+                  == "shared/doors/open.wav"
+                  && saved["audio"]["sounds"]["alarm"]
+                  == "ambience/alarm.mp3",
+          "named level sounds are serialized");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error), "level audio JSON loads");
+    Check(loaded.audioSettings.musicPath == "music/level_theme.ogg"
+                  && loaded.audioSettings.soundsById.at("door_open")
+                  == "shared/doors/open.wav"
+                  && loaded.audioSettings.soundsById.at("alarm")
+                  == "ambience/alarm.mp3",
+          "level audio settings round-trip");
+
+    const Json defaults = Json::parse(SaveText(MakeSquare()));
+    Check(defaults.find("audio") == defaults.end(),
+          "empty level audio settings are omitted");
+
+    Json invalid = saved;
+    invalid["audio"] = "music/level_theme.ogg";
+    ExpectRejected(invalid, "non-object level audio is rejected");
+    invalid = saved;
+    invalid["audio"]["music"] = "../outside.ogg";
+    ExpectRejected(invalid, "traversing level music path is rejected");
+    invalid = saved;
+    invalid["audio"]["sounds"]["door_open"] = "shared/door.flac";
+    ExpectRejected(invalid, "unsupported level sound format is rejected");
+
+    SectorTopologyMap invalidSave = original;
+    invalidSave.audioSettings.musicPath = "/absolute/theme.ogg";
+    ExpectSaveRejected(invalidSave, "absolute level music path is rejected on save");
+}
+
 void TestSkySettingsRoundTripAndValidation()
 {
     SectorTopologyMap original = MakeSquare();
@@ -3603,6 +3651,9 @@ void TestGraphNativeMapLevelRoundTrip()
             3.0f
     });
     source.previewSettings.walkSpeed = 9.0f;
+    source.audioSettings.musicPath = "music/graph_theme.ogg";
+    source.audioSettings.soundsById.emplace(
+            "ambient_hum", "ambience/hum.wav");
     source.skySettings.textureId = "sky";
     source.skySettings.yawOffsetDegrees = 17.0f;
     source.directionalLight.enabled = true;
@@ -3663,6 +3714,10 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(saved["dynamicSpotLights"][0]["shadowSoftness"].get<float>(), 3.0f),
           "graph-native dynamic spot lights are persisted");
     Check(saved["previewSettings"]["walkSpeed"] == 9.0f, "graph-native preview settings are persisted");
+    Check(saved["audio"]["music"] == "music/graph_theme.ogg"
+                  && saved["audio"]["sounds"]["ambient_hum"]
+                  == "ambience/hum.wav",
+          "graph-native audio settings are persisted");
     Check(saved["skySettings"]["textureId"] == "sky", "graph-native sky settings are persisted");
     Check(saved["directionalLight"]["enabled"] == true,
           "graph-native directional light settings are persisted");
@@ -3732,6 +3787,10 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.mapData.dynamicSpotLights[0].shadowStrength, 0.8f)
                   && Near(loaded.mapData.dynamicSpotLights[0].shadowSoftness, 3.0f)
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
+                  && loaded.mapData.audioSettings.musicPath
+                          == "music/graph_theme.ogg"
+                  && loaded.mapData.audioSettings.soundsById.at("ambient_hum")
+                          == "ambience/hum.wav"
                   && loaded.mapData.skySettings.textureId == "sky"
                   && loaded.mapData.directionalLight.enabled
                   && loaded.mapData.fogSettings.enabled
@@ -3757,6 +3816,10 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.mapData.bakedLightmap.staticModels.objectCount == 5,
           "graph-native map-level fields round-trip");
     Check(loaded.derivation.success
+                  && loaded.derivation.topology.audioSettings.musicPath
+                          == "music/graph_theme.ogg"
+                  && loaded.derivation.topology.audioSettings.soundsById.at(
+                          "ambient_hum") == "ambience/hum.wav"
                   && loaded.derivation.topology.texturesById.count("sky") == 1
                   && loaded.derivation.topology.staticLights.size() == 1
                   && loaded.derivation.topology.staticSpotLights.size() == 1
@@ -3926,6 +3989,7 @@ int main()
     TestRuntimeObjectEditAndDeleteHelpers();
     TestLightmapMetadataRoundTrip();
     TestPreviewSettingsRoundTripAndValidation();
+    TestAudioSettingsRoundTripAndValidation();
     TestSkySettingsRoundTripAndValidation();
     TestDirectionalLightRoundTripAndValidation();
     TestFogSettingsRoundTripAndValidation();

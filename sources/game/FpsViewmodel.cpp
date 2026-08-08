@@ -13,6 +13,19 @@ void ResetFpsViewmodelRuntime(FpsViewmodelRuntimeState& state)
     state = {};
 }
 
+float FpsWeaponShotPitch(uint64_t shotSequence, uint32_t randomState)
+{
+    uint32_t value = randomState
+            ^ static_cast<uint32_t>(shotSequence)
+            ^ static_cast<uint32_t>(shotSequence >> 32u)
+            ^ 0x9e3779b9u;
+    value ^= value << 13u;
+    value ^= value >> 17u;
+    value ^= value << 5u;
+    const float unit = static_cast<float>(value & 0xffffu) / 65535.0f;
+    return 0.96f + unit * 0.08f;
+}
+
 bool ToggleFpsViewmodelHolster(FpsViewmodelRuntimeState& state, bool preview3DActive, bool inputSuppressed)
 {
     if (!preview3DActive || inputSuppressed || state.activeWeaponId.empty()) {

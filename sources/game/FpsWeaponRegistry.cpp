@@ -3,6 +3,7 @@
 #include "util/json.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -103,6 +104,28 @@ bool ValidAssetPath(const std::string& path)
             && !parsed.is_absolute()
             && path.find("..") == std::string::npos
             && (parsed.extension() == ".glb" || parsed.extension() == ".gltf");
+}
+
+bool ValidAudioPath(const std::string& path)
+{
+    if (path.empty()) return false;
+    const std::filesystem::path parsed(path);
+    const bool windowsDrivePath = path.size() >= 2
+            && std::isalpha(static_cast<unsigned char>(path[0]))
+            && path[1] == ':';
+    if (parsed.is_absolute()
+            || windowsDrivePath
+            || path.front() == '\\'
+            || path.find('\\') != std::string::npos
+            || path.find("..") != std::string::npos) {
+        return false;
+    }
+    std::string extension = parsed.extension().generic_string();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+            [](unsigned char value) {
+                return static_cast<char>(std::tolower(value));
+            });
+    return extension == ".ogg" || extension == ".wav" || extension == ".mp3";
 }
 
 bool ValidLevelName(const std::string& name)
@@ -371,6 +394,16 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
     FpsWeaponFiringDefinition result;
     result.shotIntervalSeconds = Number(object, "shotIntervalSeconds", context);
     result.maximumRangeWorld = Number(object, "maximumRangeWorld", context);
+    const auto shootSound = object.find("shootSound");
+    if (shootSound != object.end()) {
+        if (!shootSound->is_string()) {
+            Fail(context + ".shootSound must be a string");
+        }
+        result.shootSoundPath = shootSound->get<std::string>();
+        if (!ValidAudioPath(result.shootSoundPath)) {
+            Fail(context + ".shootSound must be a relative .ogg, .wav, or .mp3 path beneath assets/audio");
+        }
+    }
 
     const Json& recoil = Require(object, "recoil", context);
     const std::string recoilContext = context + ".recoil";

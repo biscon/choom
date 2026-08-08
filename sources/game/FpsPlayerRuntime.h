@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/assets/AssetManager.h"
+#include "engine/audio/AudioSystem.h"
 #include "engine/ecs/World.h"
 #include "engine/input/Input.h"
 #include "game/FpsViewmodel.h"
@@ -40,6 +41,8 @@ public:
             const FpsPlayerRuntimeTuning* tuning = nullptr);
     void HandleInput(
             engine::Input& input,
+            engine::AssetManager& assets,
+            engine::AudioSystem& audio,
             const SectorCollisionWorld* collisionWorld,
             const SectorMeshRenderer& renderer,
             bool gameplayActive,
@@ -47,6 +50,8 @@ public:
             bool uiCaptured);
     void HandleFireInput(
             engine::Input& input,
+            engine::AssetManager& assets,
+            engine::AudioSystem& audio,
             const SectorCollisionWorld* collisionWorld,
             const SectorMeshRenderer& renderer,
             bool gameplayActive,

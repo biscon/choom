@@ -305,6 +305,8 @@ void FpsPlayerRuntime::Update(
 
 void FpsPlayerRuntime::HandleInput(
         engine::Input& input,
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
         const SectorCollisionWorld* collisionWorld,
         const SectorMeshRenderer& renderer,
         bool gameplayActive,
@@ -327,6 +329,8 @@ void FpsPlayerRuntime::HandleInput(
             });
     HandleFireInput(
             input,
+            assets,
+            audio,
             collisionWorld,
             renderer,
             gameplayActive,
@@ -336,6 +340,8 @@ void FpsPlayerRuntime::HandleInput(
 
 void FpsPlayerRuntime::HandleFireInput(
         engine::Input& input,
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
         const SectorCollisionWorld* collisionWorld,
         const SectorMeshRenderer& renderer,
         bool gameplayActive,
@@ -345,7 +351,7 @@ void FpsPlayerRuntime::HandleFireInput(
     input.ForEachEvent(
             engine::InputEventType::MouseButtonPressed,
             true,
-            [this, collisionWorld, &renderer, gameplayActive,
+            [this, &assets, &audio, collisionWorld, &renderer, gameplayActive,
                     mouseLookActive, uiCaptured](engine::InputEvent& event) {
                 if (event.mouseButton.button != MOUSE_BUTTON_LEFT) {
                     return;
@@ -417,6 +423,15 @@ void FpsPlayerRuntime::HandleFireInput(
                             camera);
                 }
                 ApplyFpsWeaponShotEffects(state.firing, shot, emission);
+                audio.PlaySound(
+                        assets,
+                        state.firing.definition.shootSound,
+                        engine::SoundPlaybackSettings{
+                                1.0f,
+                                FpsWeaponShotPitch(
+                                        state.firing.shotSequence,
+                                        state.firing.randomState),
+                                0.0f});
                 engine::ConsumeEvent(event);
             });
 }

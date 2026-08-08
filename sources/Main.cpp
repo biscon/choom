@@ -117,8 +117,10 @@ int main()
     engine::EngineContext context;
     context.input.Initialize();
     context.input.ReserveEvents(256);
+    context.audio.Initialize();
 
     if (!context.assets.Initialize()) {
+        context.audio.Shutdown();
         unloadRenderResources();
         CloseWindow();
         return 1;
@@ -154,6 +156,7 @@ int main()
     if (WindowShouldClose()) {
         unloadRenderResources();
         context.assets.Shutdown();
+        context.audio.Shutdown();
         CloseWindow();
         return 0;
     }
@@ -172,8 +175,26 @@ int main()
         TraceLog(LOG_ERROR, "Engine application initialization failed");
         unloadRenderResources();
         context.assets.Shutdown();
+        context.audio.Shutdown();
         CloseWindow();
         return 1;
+    }
+
+    while (!WindowShouldClose()
+            && !assets.IsScopeFinished(assets.GlobalScope())) {
+        assets.UpdateMainThread(2.0f);
+        BeginDrawing();
+        ClearBackground(BLACK);
+        DrawText("Loading global assets...", 40, 40, 32, RAYWHITE);
+        EndDrawing();
+    }
+    if (WindowShouldClose()) {
+        application.Shutdown(context);
+        unloadRenderResources();
+        context.assets.Shutdown();
+        context.audio.Shutdown();
+        CloseWindow();
+        return 0;
     }
 
     BeginTextureMode(editorTarget);
@@ -271,6 +292,7 @@ int main()
         }
 
         application.Update(context, dt);
+        context.audio.Update(assets);
 
         const game::ApplicationContentKind contentKind =
                 application.BackgroundContentKind();
@@ -350,7 +372,9 @@ int main()
 
     application.Shutdown(context);
     unloadRenderResources();
+    context.audio.StopAll(context.assets);
     context.assets.Shutdown();
+    context.audio.Shutdown();
     //ShowCursor();
     CloseWindow();
     return 0;

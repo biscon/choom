@@ -57,6 +57,11 @@ struct SectorTopologyFogSettings {
     } localVolumeQuality = LocalVolumeQuality::Medium;
 };
 
+struct SectorLevelAudioSettings {
+    std::string musicPath;
+    std::unordered_map<std::string, std::string> soundsById;
+};
+
 struct SectorCompiledLocalFogVolume {
     int sourceAuthoringFogVolumeId = -1;
     int topologySectorId = -1;
@@ -214,6 +219,7 @@ struct SectorTopologyMap {
     SectorTopologySkySettings skySettings;
     SectorTopologyDirectionalLightSettings directionalLight;
     SectorTopologyFogSettings fogSettings;
+    SectorLevelAudioSettings audioSettings;
     std::vector<SectorCompiledLocalFogVolume> compiledLocalFogVolumes;
     SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;

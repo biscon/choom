@@ -6,9 +6,11 @@
 #include "util/json.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <filesystem>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -26,6 +28,93 @@ constexpr const char* RuntimeObjectKindBillboard = "billboard";
 constexpr const char* RuntimeObjectKindStaticModel = "static_model";
 constexpr const char* RuntimeObjectKindDynamicModel = "dynamic_model";
 constexpr const char* RuntimeObjectKindDoor = "door";
+
+[[noreturn]] void Fail(const std::string& message);
+
+bool IsValidAudioPath(const std::string& path)
+{
+    if (path.empty()) return false;
+    const std::filesystem::path parsed(path);
+    const bool windowsDrivePath = path.size() >= 2
+            && std::isalpha(static_cast<unsigned char>(path[0]))
+            && path[1] == ':';
+    if (parsed.is_absolute()
+            || windowsDrivePath
+            || path.front() == '\\'
+            || path.find('\\') != std::string::npos
+            || path.find("..") != std::string::npos) {
+        return false;
+    }
+    std::string extension = parsed.extension().generic_string();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+            [](unsigned char value) {
+                return static_cast<char>(std::tolower(value));
+            });
+    return extension == ".ogg" || extension == ".wav" || extension == ".mp3";
+}
+
+void ValidateAudioSettings(
+        const SectorLevelAudioSettings& settings,
+        const std::string& context)
+{
+    if (!settings.musicPath.empty() && !IsValidAudioPath(settings.musicPath)) {
+        Fail(context + ".music must be a relative .ogg, .wav, or .mp3 path beneath assets/audio");
+    }
+    for (const auto& entry : settings.soundsById) {
+        if (entry.first.empty()) {
+            Fail(context + ".sounds contains an empty sound ID");
+        }
+        if (!IsValidAudioPath(entry.second)) {
+            Fail(context + ".sounds." + entry.first
+                    + " must be a relative .ogg, .wav, or .mp3 path beneath assets/audio");
+        }
+    }
+}
+
+void ReadAudioSettings(const Json& value, SectorLevelAudioSettings& settings)
+{
+    if (!value.is_object()) Fail("root.audio must be an object");
+    const auto musicIt = value.find("music");
+    if (musicIt != value.end()) {
+        if (!musicIt->is_string() || musicIt->get<std::string>().empty()) {
+            Fail("root.audio.music must be a non-empty string");
+        }
+        settings.musicPath = musicIt->get<std::string>();
+    }
+    const auto soundsIt = value.find("sounds");
+    if (soundsIt != value.end()) {
+        if (!soundsIt->is_object()) Fail("root.audio.sounds must be an object");
+        for (const auto& entry : soundsIt->items()) {
+            if (entry.key().empty() || !entry.value().is_string()
+                    || entry.value().get<std::string>().empty()) {
+                Fail("root.audio.sounds entries require non-empty IDs and string paths");
+            }
+            settings.soundsById.emplace(
+                    entry.key(),
+                    entry.value().get<std::string>());
+        }
+    }
+    ValidateAudioSettings(settings, "root.audio");
+}
+
+void WriteAudioSettings(Json& root, const SectorLevelAudioSettings& settings)
+{
+    ValidateAudioSettings(settings, "root.audio");
+    if (settings.musicPath.empty() && settings.soundsById.empty()) return;
+    Json audio = Json::object();
+    if (!settings.musicPath.empty()) audio["music"] = settings.musicPath;
+    if (!settings.soundsById.empty()) {
+        audio["sounds"] = Json::object();
+        std::vector<std::string> ids;
+        ids.reserve(settings.soundsById.size());
+        for (const auto& entry : settings.soundsById) ids.push_back(entry.first);
+        std::sort(ids.begin(), ids.end());
+        for (const std::string& id : ids) {
+            audio["sounds"][id] = settings.soundsById.at(id);
+        }
+    }
+    root["audio"] = std::move(audio);
+}
 
 [[noreturn]] void Fail(const std::string& message)
 {
@@ -2171,6 +2260,7 @@ std::vector<const T*> SortedById(const std::vector<T>& values)
 
 void ValidateForSerialization(const SectorTopologyMap& map)
 {
+    ValidateAudioSettings(map.audioSettings, "root.audio");
     const auto issues = ValidateSectorTopologyMap(map);
     const auto error = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
         return issue.severity == SectorTopologyValidationSeverity::Error;
@@ -2182,6 +2272,7 @@ void ValidateForSerialization(const SectorTopologyMap& map)
 
 void ValidateAuthoringMapData(const SectorTopologyMap& map)
 {
+    ValidateAudioSettings(map.audioSettings, "root.audio");
     const auto issues = ValidateSectorTopologyMap(map);
     const auto error = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
         return issue.severity == SectorTopologyValidationSeverity::Error;
@@ -2375,6 +2466,9 @@ SectorLightAtmosphereSettings ReadOptionalLightAtmosphereSettings(
 
 void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBakedLightmap)
 {
+    const auto audioIt = root.find("audio");
+    if (audioIt != root.end()) ReadAudioSettings(*audioIt, map.audioSettings);
+
     const auto levelMarkersIt = root.find("levelMarkers");
     if (levelMarkersIt != root.end()) {
         if (!levelMarkersIt->is_array()) {
@@ -2829,6 +2923,7 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
     document.derivation.topology.skySettings = document.mapData.skySettings;
     document.derivation.topology.directionalLight = document.mapData.directionalLight;
     document.derivation.topology.fogSettings = document.mapData.fogSettings;
+    document.derivation.topology.audioSettings = document.mapData.audioSettings;
     document.derivation.topology.lightmapSettings = document.mapData.lightmapSettings;
     document.derivation.topology.bakedLightmap = document.mapData.bakedLightmap;
 }
@@ -2954,6 +3049,7 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
     if (!IsDefaultFogSettings(map.fogSettings)) {
         root["fogSettings"] = WriteFogSettings(map.fogSettings);
     }
+    WriteAudioSettings(root, map.audioSettings);
     if (includeBakedLightmap
             && !map.bakedLightmap.path.empty()
             && map.bakedLightmap.width > 0
@@ -3435,6 +3531,7 @@ Json SerializeMap(const SectorTopologyMap& map)
     if (!IsDefaultFogSettings(map.fogSettings)) {
         root["fogSettings"] = WriteFogSettings(map.fogSettings);
     }
+    WriteAudioSettings(root, map.audioSettings);
     if (!map.bakedLightmap.path.empty()
             && map.bakedLightmap.width > 0
             && map.bakedLightmap.height > 0

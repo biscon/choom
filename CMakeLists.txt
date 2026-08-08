@@ -147,6 +147,20 @@ if(BUILD_TESTING)
     target_include_directories(application_flow_tests PRIVATE sources)
     add_test(NAME application_flow COMMAND application_flow_tests)
 
+    add_executable(audio_system_tests
+            tests/AudioSystemTests.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
+            sources/engine/audio/AudioSystem.cpp
+    )
+    target_include_directories(audio_system_tests PRIVATE sources)
+    target_link_libraries(audio_system_tests PRIVATE raylib)
+    add_test(NAME audio_system COMMAND audio_system_tests)
+
     add_executable(fps_viewmodel_tests
             tests/FpsViewmodelTests.cpp
             sources/game/FpsViewmodel.cpp
@@ -209,6 +223,7 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
             sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
@@ -282,6 +297,7 @@ if(BUILD_TESTING)
     add_executable(sector_topology_lightmap_tests
             tests/SectorTopologyLightmapTests.cpp
             sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
@@ -310,6 +326,7 @@ if(BUILD_TESTING)
     add_executable(sector_topology_creation_tests
             tests/SectorTopologyCreationTests.cpp
             sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
@@ -380,6 +397,7 @@ if(BUILD_TESTING)
             tests/SectorRuntimeObjectTests.cpp
             sources/engine/systems/AnimatedModelSystem.cpp
             sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
@@ -417,6 +435,7 @@ if(BUILD_TESTING)
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
             sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp

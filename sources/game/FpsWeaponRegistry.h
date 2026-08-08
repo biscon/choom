@@ -1,11 +1,15 @@
 #pragma once
 
+#include "engine/assets/AssetHandles.h"
+
 #include <raylib.h>
 
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace engine { class AssetManager; }
 
 namespace game {
 
@@ -104,6 +108,8 @@ struct FpsWeaponMuzzleLightDefinition {
 struct FpsWeaponFiringDefinition {
     float shotIntervalSeconds = 0.18f;
     float maximumRangeWorld = 100.0f;
+    std::string shootSoundPath;
+    engine::SoundHandle shootSound = engine::NullSoundHandle();
     FpsWeaponRecoilDefinition recoil;
     FpsWeaponMuzzleSocketDefinition muzzleSocket;
     FpsWeaponMuzzleFlashDefinition muzzleFlash;
@@ -209,6 +215,9 @@ bool LoadFpsWeaponRegistry(
         const std::string& path,
         FpsWeaponRegistry& outRegistry,
         std::string* outError = nullptr);
+void RequestFpsWeaponAudioAssets(
+        engine::AssetManager& assets,
+        FpsWeaponRegistry& registry);
 const FpsWeaponDefinition* FindFpsWeaponDefinition(
         const FpsWeaponRegistry& registry,
         std::string_view id);

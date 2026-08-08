@@ -23,6 +23,7 @@ constexpr const char* ValidRegistry = R"({
  "centerGapPixels":4,"segmentLengthPixels":6,
  "innerThicknessPixels":2,"outlineThicknessPixels":1},
  "firing":{"shotIntervalSeconds":0.18,"maximumRangeWorld":100,
+ "shootSound":"weapons/pistol/shot_01.ogg",
  "recoil":{"translationImpulse":[0,0,-0.03],
  "rotationImpulseDegrees":[-3,0,0],"rollVariationDegrees":0.45,
  "springFrequencyHz":8,"dampingRatio":0.82,
@@ -103,6 +104,7 @@ void RegistrySuccess()
     assert(Near(pistol->crosshair.outlineThicknessPixels, 1.0f));
     assert(Near(pistol->firing.shotIntervalSeconds, 0.18f));
     assert(Near(pistol->firing.maximumRangeWorld, 100.0f));
+    assert(pistol->firing.shootSoundPath == "weapons/pistol/shot_01.ogg");
     assert(Near(pistol->firing.recoil.translationImpulse.z, -0.03f));
     assert(Near(pistol->firing.recoil.rotationImpulseDegrees.x, -3.0f));
     assert(Near(pistol->firing.muzzleSocket.position.z, 0.105f));
@@ -285,6 +287,20 @@ void RegistryValidation()
     value.replace(value.find("\"shotIntervalSeconds\":0.18"), 26,
             "\"shotIntervalSeconds\":0");
     ExpectRegistryFailure(value, "shot interval and maximum range");
+
+    value = ValidRegistry;
+    value.replace(
+            value.find("weapons/pistol/shot_01.ogg"),
+            std::string("weapons/pistol/shot_01.ogg").size(),
+            "../shot_01.ogg");
+    ExpectRegistryFailure(value, "shootSound");
+
+    value = ValidRegistry;
+    value.replace(
+            value.find("weapons/pistol/shot_01.ogg"),
+            std::string("weapons/pistol/shot_01.ogg").size(),
+            "weapons/pistol/shot_01.flac");
+    ExpectRegistryFailure(value, "shootSound");
 
     value = ValidRegistry;
     value.replace(value.find("\"springFrequencyHz\":8"), 21,
@@ -725,6 +741,10 @@ void CameraMath()
 void HolsterTransitionStateAndMath()
 {
     game::FpsViewmodelRuntimeState state;
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstered);
+    assert(Near(state.equipProgress, 0.0f));
+    state.equipState = game::FpsViewmodelEquipState::Equipped;
+    state.equipProgress = 1.0f;
     state.activeWeaponId = "pistol";
     state.loadState = game::FpsViewmodelLoadState::Pending;
     state.holsterTransition.holsterDurationSeconds = 0.25f;
@@ -1044,6 +1064,8 @@ void CrosshairVisibilityAndLayout()
     assert(game::ParseFpsWeaponRegistry(ValidRegistry, registry, &error));
     game::FpsViewmodelRuntimeState runtime;
     runtime.activeWeaponId = "pistol";
+    runtime.equipState = game::FpsViewmodelEquipState::Equipped;
+    runtime.equipProgress = 1.0f;
 
     const auto visible = [&](bool preview3DActive) {
         return game::ShouldDrawFpsCrosshair(
@@ -1164,12 +1186,14 @@ void RuntimeStateAndGating()
     assert(Near(state.brightnessMultiplier, 1.0f));
     assert(Near(state.attachment.lighting.brightnessAdjustment, 0.0f));
     assert(Near(state.attachment.brightnessMultiplier, 1.0f));
-    assert(state.equipState == game::FpsViewmodelEquipState::Equipped);
-    assert(Near(state.equipProgress, 1.0f));
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstered);
+    assert(Near(state.equipProgress, 0.0f));
     assert(!game::IsFpsViewmodelReadyForUse(state));
     assert(!game::ToggleFpsViewmodelHolster(state,false,false));
     state.activeWeaponId = "pistol";
     state.loadState=game::FpsViewmodelLoadState::Pending;
+    state.equipState = game::FpsViewmodelEquipState::Equipped;
+    state.equipProgress = 1.0f;
     assert(!game::ToggleFpsViewmodelHolster(state,true,true));
     assert(game::ToggleFpsViewmodelHolster(state,true,false));
     assert(state.equipState == game::FpsViewmodelEquipState::Holstering);
@@ -1213,13 +1237,21 @@ void RuntimeStateAndGating()
     assert(state.attachment.boneIndex == -1);
     assert(Near(state.attachment.lighting.brightnessAdjustment, 0.0f));
     assert(Near(state.attachment.brightnessMultiplier, 1.0f));
-    assert(state.equipState == game::FpsViewmodelEquipState::Equipped);
-    assert(Near(state.equipProgress, 1.0f));
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstered);
+    assert(Near(state.equipProgress, 0.0f));
     assert(!game::IsFpsViewmodelReadyForUse(state));
 }
 
 void FiringRuntimeAndTransforms()
 {
+    const float firstPitch = game::FpsWeaponShotPitch(1, 0x12345678u);
+    const float repeatedPitch = game::FpsWeaponShotPitch(1, 0x12345678u);
+    const float nextPitch = game::FpsWeaponShotPitch(2, 0x12345678u);
+    assert(firstPitch >= 0.96f && firstPitch <= 1.04f);
+    assert(nextPitch >= 0.96f && nextPitch <= 1.04f);
+    assert(Near(firstPitch, repeatedPitch));
+    assert(!Near(firstPitch, nextPitch, 0.000001f));
+
     game::FpsWeaponFiringDefinition clampedDefinition;
     clampedDefinition.muzzleFlash.lifetimeSeconds = 120.0f;
     clampedDefinition.muzzleFlash.edgeSoftness = 2.0f;

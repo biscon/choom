@@ -16,6 +16,7 @@
       "firing": {
         "shotIntervalSeconds": 0.18,
         "maximumRangeWorld": 100.0,
+        "shootSound": "weapons/pistol/shot_01.ogg",
         "recoil": {
           "translationImpulse": [0.0, 0.0, -0.03],
           "rotationImpulseDegrees": [-3.0, 0.0, 0.0],

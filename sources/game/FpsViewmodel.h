@@ -162,8 +162,8 @@ struct FpsViewmodelRuntimeState {
     uint32_t animationIndex = engine::InvalidModelAnimationIndex;
     float sourceFrameCursor = 0.0f;
     float raylibFrame = 0.0f;
-    FpsViewmodelEquipState equipState = FpsViewmodelEquipState::Equipped;
-    float equipProgress = 1.0f;
+    FpsViewmodelEquipState equipState = FpsViewmodelEquipState::Holstered;
+    float equipProgress = 0.0f;
     FpsViewmodelHolsterTransition holsterTransition;
     FpsViewmodelHolsterPose holsterPose;
     int meshCount = 0;
@@ -269,5 +269,6 @@ void ApplyFpsWeaponShotEffects(
         const FpsMuzzleEmissionCapture& emission);
 float FpsMuzzleLightCurrentIntensity(
         const FpsMuzzleLightRuntimeState& state);
+float FpsWeaponShotPitch(uint64_t shotSequence, uint32_t randomState);
 
 } // namespace game

@@ -8,6 +8,7 @@
 #include <raylib.h>
 
 #include <string>
+#include <unordered_map>
 
 namespace game {
 
@@ -19,6 +20,7 @@ public:
             const char* assetScopeName,
             std::string& error);
     void Shutdown(engine::EngineContext& context);
+    void StopLevelAudio(engine::EngineContext& context);
 
     void RefreshMapRuntimeObjects(
             engine::EngineContext& context,
@@ -44,10 +46,22 @@ public:
     SectorRuntimeObjectState& RuntimeObjects() { return runtimeObjects; }
     const SectorRuntimeObjectState& RuntimeObjects() const { return runtimeObjects; }
     bool IsReady() const { return renderer.IsRendererReady(); }
+    engine::SoundHandle FindLevelSound(const std::string& id) const;
 
 private:
+    void BeginLevelAudio(
+            engine::EngineContext& context,
+            const SectorTopologyMap& map,
+            const char* scopeName);
+    void UpdateLevelAudio(engine::EngineContext& context);
+
     SectorMeshRenderer renderer;
     SectorRuntimeObjectState runtimeObjects;
+    engine::AssetScopeHandle audioScope = engine::NullAssetScopeHandle();
+    std::unordered_map<std::string, engine::SoundHandle> levelSounds;
+    engine::MusicHandle levelMusic = engine::NullMusicHandle();
+    bool levelMusicStartPending = false;
+    bool levelMusicFailureReported = false;
 };
 
 } // namespace game

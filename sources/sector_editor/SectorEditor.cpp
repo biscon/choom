@@ -346,6 +346,7 @@ bool SectorEditor::Init(engine::EngineContext& context)
         statusText = "Startup failed: " + weaponRegistryError;
         return false;
     }
+    RequestFpsWeaponAudioAssets(context.assets, weaponRegistry);
     applicationSettingsPath = ASSETS_PATH "config/application_settings.json";
     if (!LoadFpsApplicationSettings(applicationSettingsPath, applicationSettings, &applicationSettingsWarning)) {
         TraceLog(LOG_WARNING, "Application settings ignored: %s", applicationSettingsWarning.c_str());
@@ -484,6 +485,8 @@ void SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             || HasDocumentModalOpen();
     fpsPlayer.HandleFireInput(
             input,
+            engineContext->assets,
+            engineContext->audio,
             previewState.collision.sectorCollisionWorldValid
                     ? &previewState.collision.sectorCollisionWorld
                     : nullptr,
@@ -548,6 +551,11 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 || HasDocumentModalOpen();
         if (hasBlockingModal) {
             UpdateFpsViewmodelTransformsAndLight();
+            const Camera3D& camera = sceneRuntime.Renderer().RenderCamera();
+            context.audio.SetListener(engine::AudioListener{
+                    camera.position,
+                    Vector3Subtract(camera.target, camera.position),
+                    camera.up});
             return;
         }
         const bool canInteractWithDoors = previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
@@ -573,6 +581,11 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         if (state.mode == SectorEditorMode::Preview3D) {
             ProcessFpsWeaponFire(input);
             UpdateFpsViewmodelTransformsAndLight();
+            const Camera3D& camera = sceneRuntime.Renderer().RenderCamera();
+            context.audio.SetListener(engine::AudioListener{
+                    camera.position,
+                    Vector3Subtract(camera.target, camera.position),
+                    camera.up});
         }
         return;
     }
@@ -5423,7 +5436,11 @@ void SectorEditor::LeavePreview3D()
     ClearSectorFpsLandingDip(previewState.controller.landingDipState);
     previewState.controller.previewControlMode = SectorPreviewControlMode::FreeFly;
     state.mode = SectorEditorMode::Edit2D;
-    if (engineContext != nullptr) EndFpsViewmodel(engineContext->assets);
+    if (engineContext != nullptr) {
+        engineContext->audio.StopAll(engineContext->assets);
+        sceneRuntime.StopLevelAudio(*engineContext);
+        EndFpsViewmodel(engineContext->assets);
+    }
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     ResetSectorPreviewSettingsModalPreservingView(
             state.previewSettingsModal);
@@ -6741,6 +6758,8 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
             statusText = error.empty() ? "3D mode rebuild failed" : error;
         }
         state.mode = SectorEditorMode::Edit2D;
+        context.audio.StopAll(context.assets);
+        EndFpsViewmodel(context.assets);
         LeaveSectorFreeflyController();
         return false;
     }
