@@ -9495,7 +9495,11 @@ void TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics()
 
 void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
 {
-    const game::SectorTopologyMap source = MakeSingleSectorSquareMap();
+    game::SectorTopologyMap source = MakeSingleSectorSquareMap();
+    source.audioSettings.musicPath = "ambience/import_theme.wav";
+    source.audioSettings.musicVolume = 1.0f;
+    source.audioSettings.soundsById.emplace(
+            "import_hum", "ambience/import_hum.ogg");
     std::string topologyText;
     std::string error;
     Check(game::SaveSectorTopologyMapToJsonString(source, topologyText, &error),
@@ -9514,6 +9518,13 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
     const game::SectorEditorState state = MakeEditorStateFromLoadedDocument(loaded, documentState, authoringGraph);
     Check(game::HasAuthoringGraphData(authoringGraph), "legacy topology import synthesizes authoring graph");
     Check(documentState.derivation.authoringDerivation.success, "legacy topology import derives authoring graph");
+    Check(documentState.map.topologyMap.audioSettings.musicPath
+                      == source.audioSettings.musicPath
+                  && Near(documentState.map.topologyMap.audioSettings.musicVolume, 1.0f)
+                  && documentState.map.topologyMap.audioSettings.soundsById.at(
+                             "import_hum")
+                             == "ambience/import_hum.ogg",
+          "legacy topology import preserves map-level audio settings");
 
     const Json saved = SaveEditorStateToJson(
             state,
@@ -9524,6 +9535,11 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
     Check(saved["topology"] == "authoringGraph",
           "save after topology-v2 import writes graph-native marker");
     Check(saved.contains("authoringGraph"), "save after topology-v2 import writes authoring graph");
+    Check(saved["audio"]["music"] == "ambience/import_theme.wav"
+                  && Near(saved["audio"]["musicVolume"].get<float>(), 1.0f)
+                  && saved["audio"]["sounds"]["import_hum"]
+                             == "ambience/import_hum.ogg",
+          "save after topology-v2 import preserves map-level audio settings");
     std::error_code removeError;
     std::filesystem::remove(path, removeError);
 }
@@ -9718,6 +9734,11 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     documentState.map.topologyMap.directionalLight.enabled = true;
     documentState.map.topologyMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
     documentState.map.topologyMap.directionalLight.intensity = 1.5f;
+    documentState.map.topologyMap.audioSettings.musicPath =
+            "ambience/graph_theme.wav";
+    documentState.map.topologyMap.audioSettings.musicVolume = 1.0f;
+    documentState.map.topologyMap.audioSettings.soundsById.emplace(
+            "graph_hum", "ambience/graph_hum.ogg");
     documentState.map.topologyMap.lightmapSettings.ambientOcclusionStrength = 0.25f;
     documentState.map.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             44,
@@ -9747,6 +9768,11 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     Check(saved["skySettings"]["textureId"] == "sky", "editor graph-native save persists sky settings");
     Check(saved["directionalLight"]["enabled"] == true,
           "editor graph-native save persists directional light");
+    Check(saved["audio"]["music"] == "ambience/graph_theme.wav"
+                  && Near(saved["audio"]["musicVolume"].get<float>(), 1.0f)
+                  && saved["audio"]["sounds"]["graph_hum"]
+                             == "ambience/graph_hum.ogg",
+          "editor graph-native save persists map-level audio settings");
     Check(saved["lightmapSettings"]["ambientOcclusionStrength"] == 0.25f,
           "editor graph-native save persists lightmap settings");
     Check(saved["bakedLightmap"]["path"] == lightmapPath.string(),
@@ -9776,6 +9802,11 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
                   && loaded.mapData.skySettings.textureId == "sky"
                   && loaded.mapData.directionalLight.enabled
+                  && loaded.mapData.audioSettings.musicPath
+                             == "ambience/graph_theme.wav"
+                  && Near(loaded.mapData.audioSettings.musicVolume, 1.0f)
+                  && loaded.mapData.audioSettings.soundsById.at("graph_hum")
+                             == "ambience/graph_hum.ogg"
                   && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f)
                   && loaded.mapData.bakedLightmap.path == lightmapPath.string()
                   && loaded.mapData.bakedLightmap.width == 2048
@@ -9794,6 +9825,14 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && loadedDocumentState.map.topologyMap.texturesById.count("sky") == 1
                   && loadedDocumentState.map.topologyMap.staticLights.size() == 1
                   && loadedDocumentState.map.topologyMap.skySettings.textureId == "sky"
+                  && loadedDocumentState.map.topologyMap.audioSettings.musicPath
+                             == "ambience/graph_theme.wav"
+                  && Near(
+                             loadedDocumentState.map.topologyMap.audioSettings.musicVolume,
+                             1.0f)
+                  && loadedDocumentState.map.topologyMap.audioSettings.soundsById.at(
+                             "graph_hum")
+                             == "ambience/graph_hum.ogg"
                   && loadedDocumentState.map.topologyMap.bakedLightmap.path == lightmapPath.string()
                   && loadedDocumentState.map.topologyMap.runtimeObjects.size() == 1
                   && loadedDocumentState.map.topologyMap.runtimeObjects[0].id == 44,
@@ -9823,6 +9862,8 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
           "editor graph-native save/load/save preserves baked lightmap metadata");
     Check(resaved["runtimeObjects"] == saved["runtimeObjects"],
           "editor graph-native save/load/save preserves runtime objects");
+    Check(resaved["audio"] == saved["audio"],
+          "editor graph-native save/load/save preserves map-level audio settings");
 
     game::SectorEditorDocumentState probeDocumentState = loadedDocumentState;
     game::SectorTopologyMap& probeMap = probeDocumentState.map.topologyMap;
