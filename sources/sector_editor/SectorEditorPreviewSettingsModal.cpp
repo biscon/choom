@@ -165,6 +165,19 @@ void DrawPreviewSettingsModal(
         }
         localY += rowH + gap;
     };
+    auto drawInt = [&](float& localY, const char* id, const char* label,
+                       int& value, engine::UIIntInputState& inputState,
+                       int minValue, int maxValue) {
+        const SectorEditorIntInputResult result = DrawLabeledIntInput(
+                ui, config, input, assets, font, id, label,
+                Rectangle{0.0f, localY, labelW, rowH},
+                Rectangle{inputX, localY, inputW, rowH},
+                engine::UITextJustify::Left,
+                value, inputState, minValue, maxValue, 1);
+        value = result.value;
+        if (result.changed) modalState.errorMessage.clear();
+        localY += rowH + gap;
+    };
 
     auto drawGeneralTab = [&]() {
         float contentY = 0.0f;
@@ -469,7 +482,7 @@ void DrawPreviewSettingsModal(
 
     auto drawWeaponTab = [&]() {
         float contentY = 0.0f;
-        const float contentH = 44.0f * (rowH + gap) + 160.0f;
+        const float contentH = 51.0f * (rowH + gap) + 160.0f;
         engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
                 ui, config, input, "sector_editor_preview_settings_weapon_scroll",
                 scrollBounds, Vector2{scrollContentW, contentH}, modalState.weaponScroll);
@@ -524,8 +537,14 @@ void DrawPreviewSettingsModal(
         drawFloat(contentY, "sector_editor_weapon_muzzle_pitch", "Muzzle pitch", firing.muzzleSocket.rotationDegrees.x, modalState.weaponMuzzlePitchInput, -360.0f, 360.0f, 2);
         drawFloat(contentY, "sector_editor_weapon_muzzle_yaw", "Muzzle yaw", firing.muzzleSocket.rotationDegrees.y, modalState.weaponMuzzleYawInput, -360.0f, 360.0f, 2);
         drawFloat(contentY, "sector_editor_weapon_muzzle_roll", "Muzzle roll", firing.muzzleSocket.rotationDegrees.z, modalState.weaponMuzzleRollInput, -360.0f, 360.0f, 2);
-        drawFloat(contentY, "sector_editor_weapon_flash_lifetime", "Flash lifetime", firing.muzzleFlash.lifetimeSeconds, modalState.weaponFlashLifetimeInput, 0.005f, 10.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_flash_lifetime", "Flash lifetime", firing.muzzleFlash.lifetimeSeconds, modalState.weaponFlashLifetimeInput, 0.005f, 60.0f, 3);
         drawFloat(contentY, "sector_editor_weapon_flash_size", "Flash size", firing.muzzleFlash.sizeWorld, modalState.weaponFlashSizeInput, 0.005f, 2.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_flash_size_variation", "Flash size variation", firing.muzzleFlash.sizeVariation, modalState.weaponFlashSizeVariationInput, 0.0f, 0.5f, 3);
+        drawFloat(contentY, "sector_editor_weapon_flash_irregularity", "Flash irregularity", firing.muzzleFlash.irregularity, modalState.weaponFlashIrregularityInput, 0.0f, 1.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_flash_forward_stretch", "Flash forward stretch", firing.muzzleFlash.forwardStretch, modalState.weaponFlashForwardStretchInput, 1.0f, 4.0f, 2);
+        drawInt(contentY, "sector_editor_weapon_flash_min_lobes", "Flash minimum lobes", firing.muzzleFlash.minimumLobeCount, modalState.weaponFlashMinimumLobesInput, 3, MaxFpsMuzzleFlashLobes);
+        drawInt(contentY, "sector_editor_weapon_flash_max_lobes", "Flash maximum lobes", firing.muzzleFlash.maximumLobeCount, modalState.weaponFlashMaximumLobesInput, 3, MaxFpsMuzzleFlashLobes);
+        drawFloat(contentY, "sector_editor_weapon_flash_rear_suppression", "Flash rear suppression", firing.muzzleFlash.rearSuppression, modalState.weaponFlashRearSuppressionInput, 0.0f, 1.0f, 3);
         drawFloat(contentY, "sector_editor_weapon_flash_edge_softness", "Flash edge softness", firing.muzzleFlash.edgeSoftness, modalState.weaponFlashEdgeSoftnessInput, 0.01f, 1.0f, 3);
         drawFloat(contentY, "sector_editor_weapon_light_intensity", "Muzzle-light intensity", firing.muzzleLight.intensity, modalState.weaponLightIntensityInput, 0.0f, 100.0f, 2);
         drawFloat(contentY, "sector_editor_weapon_light_radius", "Muzzle-light radius", firing.muzzleLight.radiusWorld, modalState.weaponLightRadiusInput, 0.05f, 100.0f, 2);
@@ -618,6 +637,12 @@ void DrawPreviewSettingsModal(
             modalState.weaponMuzzleRollInput = {};
             modalState.weaponFlashLifetimeInput = {};
             modalState.weaponFlashSizeInput = {};
+            modalState.weaponFlashSizeVariationInput = {};
+            modalState.weaponFlashIrregularityInput = {};
+            modalState.weaponFlashForwardStretchInput = {};
+            modalState.weaponFlashMinimumLobesInput = {};
+            modalState.weaponFlashMaximumLobesInput = {};
+            modalState.weaponFlashRearSuppressionInput = {};
             modalState.weaponFlashEdgeSoftnessInput = {};
             modalState.weaponLightIntensityInput = {};
             modalState.weaponLightRadiusInput = {};

@@ -34,6 +34,27 @@ inline std::array<Rectangle, 6> BuildSectorPreviewSettingsTabLayout(
     return tabs;
 }
 
+inline void ResetSectorPreviewSettingsModalPreservingView(
+        SectorPreviewSettingsModalState& modalState)
+{
+    const PreviewSettingsTab activeTab = modalState.activeTab;
+    const engine::UIScrollState generalScroll = modalState.generalScroll;
+    const engine::UIScrollState skyScroll = modalState.skyScroll;
+    const engine::UIScrollState lightingScroll = modalState.lightingScroll;
+    const engine::UIScrollState fogScroll = modalState.fogScroll;
+    const engine::UIScrollState viewmodelScroll = modalState.viewmodelScroll;
+    const engine::UIScrollState weaponScroll = modalState.weaponScroll;
+
+    modalState = SectorPreviewSettingsModalState{};
+    modalState.activeTab = activeTab;
+    modalState.generalScroll = generalScroll;
+    modalState.skyScroll = skyScroll;
+    modalState.lightingScroll = lightingScroll;
+    modalState.fogScroll = fogScroll;
+    modalState.viewmodelScroll = viewmodelScroll;
+    modalState.weaponScroll = weaponScroll;
+}
+
 inline SectorLightmapBakeSettings NormalizeSectorPreviewObjectProbeSettings(
         SectorLightmapBakeSettings settings)
 {

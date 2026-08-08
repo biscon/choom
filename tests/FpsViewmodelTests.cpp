@@ -29,8 +29,10 @@ constexpr const char* ValidRegistry = R"({
  "maximumTranslation":[0.05,0.05,0.08],
  "maximumRotationDegrees":[8,2,2]},
  "muzzleSocket":{"position":[0,0.035,0.105],"rotationDegrees":[0,0,0]},
- "muzzleFlash":{"enabled":true,"lifetimeSeconds":0.055,"sizeWorld":0.1,
- "sizeVariation":0.2,"coreColor":{"r":255,"g":255,"b":245,"a":255},
+ "muzzleFlash":{"enabled":true,"lifetimeSeconds":0.033,"sizeWorld":0.1,
+ "sizeVariation":0.12,"irregularity":0.65,"forwardStretch":1.8,
+ "minimumLobeCount":5,"maximumLobeCount":8,"rearSuppression":0.9,
+ "coreColor":{"r":255,"g":255,"b":245,"a":255},
  "hotColor":{"r":255,"g":235,"b":120,"a":255},
  "warmColor":{"r":255,"g":90,"b":15,"a":230},
  "edgeColor":{"r":120,"g":15,"b":5,"a":150},"edgeSoftness":0.35},
@@ -104,7 +106,13 @@ void RegistrySuccess()
     assert(Near(pistol->firing.recoil.translationImpulse.z, -0.03f));
     assert(Near(pistol->firing.recoil.rotationImpulseDegrees.x, -3.0f));
     assert(Near(pistol->firing.muzzleSocket.position.z, 0.105f));
-    assert(Near(pistol->firing.muzzleFlash.lifetimeSeconds, 0.055f));
+    assert(Near(pistol->firing.muzzleFlash.lifetimeSeconds, 0.033f));
+    assert(Near(pistol->firing.muzzleFlash.sizeVariation, 0.12f));
+    assert(Near(pistol->firing.muzzleFlash.irregularity, 0.65f));
+    assert(Near(pistol->firing.muzzleFlash.forwardStretch, 1.8f));
+    assert(pistol->firing.muzzleFlash.minimumLobeCount == 5);
+    assert(pistol->firing.muzzleFlash.maximumLobeCount == 8);
+    assert(Near(pistol->firing.muzzleFlash.rearSuppression, 0.9f));
     assert(pistol->firing.muzzleFlash.coreColor.b == 245);
     assert(pistol->firing.muzzleFlash.hotColor.g == 235);
     assert(pistol->firing.muzzleFlash.warmColor.r == 255);
@@ -226,15 +234,9 @@ void RegistrySuccess()
             "\"innerColor\":{\"r\":255,\"g\":250,\"b\":220,\"a\":255},"
             "\"outerColor\":{\"r\":255,\"g\":145,\"b\":40,\"a\":200}");
     game::FpsWeaponRegistry legacyRegistry;
-    assert(game::ParseFpsWeaponRegistry(
+    assert(!game::ParseFpsWeaponRegistry(
             legacyFlash, legacyRegistry, &error));
-    const auto* legacyPistol = game::FindFpsWeaponDefinition(
-            legacyRegistry, "pistol");
-    assert(legacyPistol != nullptr);
-    assert(legacyPistol->firing.muzzleFlash.coreColor.r == 255);
-    assert(legacyPistol->firing.muzzleFlash.warmColor.g == 145);
-    assert(legacyPistol->firing.muzzleFlash.edgeColor.r == 115);
-    assert(Near(legacyPistol->firing.muzzleFlash.edgeSoftness, 0.35f));
+    assert(error.find("coreColor") != std::string::npos);
 }
 
 void ExpectRegistryFailure(std::string text, const char* expected)
@@ -290,14 +292,24 @@ void RegistryValidation()
     ExpectRegistryFailure(value, "recoil contains an invalid response");
 
     value = ValidRegistry;
-    value.replace(value.find("\"lifetimeSeconds\":0.055"), 23,
+    value.replace(value.find("\"lifetimeSeconds\":0.033"), 23,
             "\"lifetimeSeconds\":0");
     ExpectRegistryFailure(value, "muzzleFlash contains an invalid lifetime");
 
     value = ValidRegistry;
     value.replace(value.find("\"edgeSoftness\":0.35"), 19,
             "\"edgeSoftness\":0");
-    ExpectRegistryFailure(value, "invalid lifetime, size, variation, or edge softness");
+    ExpectRegistryFailure(value, "invalid lifetime, size, shape, lobe range, or edge softness");
+
+    value = ValidRegistry;
+    value.replace(value.find("\"minimumLobeCount\":5"), 20,
+            "\"minimumLobeCount\":9");
+    ExpectRegistryFailure(value, "invalid lifetime, size, shape, lobe range");
+
+    value = ValidRegistry;
+    value.replace(value.find("\"irregularity\":0.65"), 19,
+            "\"irregularity\":2");
+    ExpectRegistryFailure(value, "invalid lifetime, size, shape, lobe range");
 
     value = ValidRegistry;
     const std::string hotColor =
@@ -516,7 +528,7 @@ void SettingsResolutionAndPersistence()
 
     game::FpsApplicationSettings settings; std::string error;
     assert(game::ParseFpsApplicationSettings(
-            R"({"version":1,"viewmodelOverrides":{"pistol":{"position":[1,2,3],"scale":2,"holsterTransition":{"holsterDurationSeconds":0.2,"unholsterDurationSeconds":0.4,"hiddenTranslation":[0.5,-2,0.1],"hiddenRotationDegrees":[15,1,-12]},"gripCorrection":{"translation":[0.1,0.2,0.3],"rotationDegrees":[10,20,30],"scale":1.25},"attachmentLighting":{"brightnessAdjustment":0.2,"metallicFactor":0.45,"roughnessFactor":0.8},"firing":{"shotIntervalSeconds":0.2,"recoilTranslationImpulse":[0,0,-0.04],"recoilRotationImpulseDegrees":[-4,0,0],"recoilRollVariationDegrees":0.5,"recoilSpringFrequencyHz":9,"recoilDampingRatio":0.9,"muzzlePosition":[0,0.04,0.11],"muzzleRotationDegrees":[1,2,3],"flashLifetimeSeconds":0.06,"flashSizeWorld":0.12,"flashEdgeSoftness":0.4,"muzzleLightIntensity":7,"muzzleLightRadiusWorld":3,"muzzleLightLifetimeSeconds":0.08}}}})",
+            R"({"version":1,"viewmodelOverrides":{"pistol":{"position":[1,2,3],"scale":2,"holsterTransition":{"holsterDurationSeconds":0.2,"unholsterDurationSeconds":0.4,"hiddenTranslation":[0.5,-2,0.1],"hiddenRotationDegrees":[15,1,-12]},"gripCorrection":{"translation":[0.1,0.2,0.3],"rotationDegrees":[10,20,30],"scale":1.25},"attachmentLighting":{"brightnessAdjustment":0.2,"metallicFactor":0.45,"roughnessFactor":0.8},"firing":{"shotIntervalSeconds":0.2,"recoilTranslationImpulse":[0,0,-0.04],"recoilRotationImpulseDegrees":[-4,0,0],"recoilRollVariationDegrees":0.5,"recoilSpringFrequencyHz":9,"recoilDampingRatio":0.9,"muzzlePosition":[0,0.04,0.11],"muzzleRotationDegrees":[1,2,3],"flashLifetimeSeconds":0.06,"flashSizeWorld":0.12,"flashSizeVariation":0.1,"flashIrregularity":0.7,"flashForwardStretch":2.1,"flashMinimumLobeCount":4,"flashMaximumLobeCount":7,"flashRearSuppression":0.85,"flashEdgeSoftness":0.4,"muzzleLightIntensity":7,"muzzleLightRadiusWorld":3,"muzzleLightLifetimeSeconds":0.08}}}})",
             settings, &error));
     assert(game::FindFpsViewmodelOverride(settings, "pistol") != nullptr);
     const auto* parsedTransition =
@@ -545,6 +557,12 @@ void SettingsResolutionAndPersistence()
             && parsedFiring->shotIntervalSeconds
             && parsedFiring->recoilTranslationImpulse
             && parsedFiring->muzzlePosition
+            && parsedFiring->flashSizeVariation
+            && parsedFiring->flashIrregularity
+            && parsedFiring->flashForwardStretch
+            && parsedFiring->flashMinimumLobeCount
+            && parsedFiring->flashMaximumLobeCount
+            && parsedFiring->flashRearSuppression
             && parsedFiring->flashEdgeSoftness
             && parsedFiring->muzzleLightLifetimeSeconds);
     game::FpsViewmodelGripCorrection gripDefaults;
@@ -606,6 +624,12 @@ void SettingsResolutionAndPersistence()
     effectiveFiring.shotIntervalSeconds = 0.21f;
     effectiveFiring.recoil.translationImpulse.z = -0.05f;
     effectiveFiring.muzzleSocket.position.y = 0.05f;
+    effectiveFiring.muzzleFlash.sizeVariation = 0.2f;
+    effectiveFiring.muzzleFlash.irregularity = 0.8f;
+    effectiveFiring.muzzleFlash.forwardStretch = 2.2f;
+    effectiveFiring.muzzleFlash.minimumLobeCount = 4;
+    effectiveFiring.muzzleFlash.maximumLobeCount = 7;
+    effectiveFiring.muzzleFlash.rearSuppression = 0.95f;
     effectiveFiring.muzzleFlash.edgeSoftness = 0.6f;
     const game::FpsWeaponFiringOverride firingOverride =
             game::BuildFpsWeaponFiringOverride(
@@ -627,6 +651,14 @@ void SettingsResolutionAndPersistence()
             loaded, "pistol");
     assert(loadedFiring != nullptr
             && loadedFiring->flashEdgeSoftness
+            && loadedFiring->flashSizeVariation
+            && loadedFiring->flashIrregularity
+            && loadedFiring->flashForwardStretch
+            && loadedFiring->flashMinimumLobeCount
+            && loadedFiring->flashMaximumLobeCount
+            && loadedFiring->flashRearSuppression
+            && *loadedFiring->flashMinimumLobeCount == 4
+            && *loadedFiring->flashMaximumLobeCount == 7
             && Near(*loadedFiring->flashEdgeSoftness, 0.6f));
     std::error_code ignored; std::filesystem::remove(path, ignored);
     game::ClearFpsViewmodelOverride(loaded, "pistol");
@@ -1180,10 +1212,10 @@ void RuntimeStateAndGating()
 void FiringRuntimeAndTransforms()
 {
     game::FpsWeaponFiringDefinition clampedDefinition;
-    clampedDefinition.muzzleFlash.lifetimeSeconds = 12.0f;
+    clampedDefinition.muzzleFlash.lifetimeSeconds = 120.0f;
     clampedDefinition.muzzleFlash.edgeSoftness = 2.0f;
     clampedDefinition = game::ClampFpsWeaponFiringDefinition(clampedDefinition);
-    assert(Near(clampedDefinition.muzzleFlash.lifetimeSeconds, 10.0f));
+    assert(Near(clampedDefinition.muzzleFlash.lifetimeSeconds, 60.0f));
     assert(Near(clampedDefinition.muzzleFlash.edgeSoftness, 1.0f));
 
     game::FpsMuzzleFlashRuntimeState gradient;
@@ -1217,6 +1249,22 @@ void FiringRuntimeAndTransforms()
     const Color wide = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
             gradient, 0.80f, 1.0f);
     assert(wide.a < narrow.a);
+    const auto earlyTemporal =
+            game::EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+                    0.005f, 0.033f);
+    const auto lateTemporal =
+            game::EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+                    0.02475f, 0.033f);
+    const auto expiredTemporal =
+            game::EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+                    0.033f, 0.033f);
+    assert(Near(earlyTemporal.expansionScale, 1.0f));
+    assert(Near(earlyTemporal.opacity, 1.0f));
+    assert(lateTemporal.expansionScale > 1.0f
+            && lateTemporal.expansionScale < 1.14f);
+    assert(lateTemporal.opacity < 1.0f && lateTemporal.opacity > 0.0f);
+    assert(Near(expiredTemporal.expansionScale, 1.14f));
+    assert(Near(expiredTemporal.opacity, 0.0f));
 
     game::FpsViewmodelRuntimeState viewmodel;
     game::FpsFireRejectReason reason = game::FpsFireRejectReason::None;
@@ -1253,8 +1301,11 @@ void FiringRuntimeAndTransforms()
     shot.sectorId = 7;
     viewmodel.firing.randomState = 12345u;
     game::FpsWeaponFiringRuntimeState duplicate = viewmodel.firing;
-    game::ApplyFpsWeaponShotEffects(viewmodel.firing, shot);
-    game::ApplyFpsWeaponShotEffects(duplicate, shot);
+    game::FpsMuzzleEmissionCapture emission;
+    emission.valid = true;
+    emission.cameraLocalTransform = MatrixTranslate(0.1f, -0.2f, 0.4f);
+    game::ApplyFpsWeaponShotEffects(viewmodel.firing, shot, emission);
+    game::ApplyFpsWeaponShotEffects(duplicate, shot, emission);
     assert(viewmodel.firing.shotSequence == 1);
     assert(viewmodel.firing.hasLastShot
             && viewmodel.firing.lastShot.hit
@@ -1266,18 +1317,27 @@ void FiringRuntimeAndTransforms()
     assert(viewmodel.firing.flash.active && viewmodel.firing.light.active);
     assert(viewmodel.firing.flash.coreColor.r == 255);
     assert(Near(viewmodel.firing.flash.edgeSoftness, 0.35f));
-    const float fixedFlashSize = viewmodel.firing.flash.sizeWorld;
-    const float fixedFlashRotation = viewmodel.firing.flash.rotationDegrees;
+    assert(viewmodel.firing.emission.valid);
+    assert(viewmodel.firing.flash.shape.lobeCount >= 5
+            && viewmodel.firing.flash.shape.lobeCount <= 8);
+    assert(viewmodel.firing.flash.shape.seed
+            == duplicate.flash.shape.seed);
+    assert(Near(viewmodel.firing.flash.shape.phaseRadians,
+            duplicate.flash.shape.phaseRadians));
+    const game::FpsMuzzleFlashShape fixedShape =
+            viewmodel.firing.flash.shape;
     assert(!game::CanFireFpsWeapon(viewmodel, true, true, false, &reason));
     assert(reason == game::FpsFireRejectReason::Cooldown);
     game::AdvanceFpsWeaponFiringRuntime(viewmodel.firing, 0.01f);
     assert(viewmodel.firing.flash.active);
-    assert(Near(viewmodel.firing.flash.sizeWorld, fixedFlashSize));
-    assert(Near(viewmodel.firing.flash.rotationDegrees, fixedFlashRotation));
+    assert(viewmodel.firing.flash.shape.seed == fixedShape.seed);
+    assert(Near(viewmodel.firing.flash.shape.phaseRadians,
+            fixedShape.phaseRadians));
     const float recoilBeforeSecondShot = viewmodel.firing.recoil.translation.z;
 
-    game::ApplyFpsWeaponShotEffects(viewmodel.firing, shot);
+    game::ApplyFpsWeaponShotEffects(viewmodel.firing, shot, emission);
     assert(viewmodel.firing.shotSequence == 2);
+    assert(viewmodel.firing.flash.shape.seed != fixedShape.seed);
     assert(Near(
             viewmodel.firing.recoil.translation.z,
             recoilBeforeSecondShot - 0.03f));
@@ -1292,7 +1352,7 @@ void FiringRuntimeAndTransforms()
     assert(Near(viewmodel.firing.recoil.translation.y, 0.0f, 0.0001f));
     assert(Near(viewmodel.firing.recoil.translation.z, 0.0f, 0.0001f));
     assert(Near(viewmodel.firing.recoil.rotationDegrees.x, 0.0f, 0.001f));
-    game::ApplyFpsWeaponShotEffects(viewmodel.firing, shot);
+    game::ApplyFpsWeaponShotEffects(viewmodel.firing, shot, emission);
     game::AdvanceFpsWeaponFiringRuntime(viewmodel.firing, 10.0f);
     assert(std::isfinite(viewmodel.firing.recoil.translation.z));
     assert(std::isfinite(viewmodel.firing.recoil.rotationDegrees.x));
@@ -1323,6 +1383,197 @@ void FiringRuntimeAndTransforms()
     assert(SameTransform(
             game::BuildFpsViewmodelMuzzleTransform(pistol, socket),
             expected));
+
+    game::FpsWeaponMuzzleFlashDefinition shapeDefinition;
+    shapeDefinition.irregularity = 1.0f;
+    shapeDefinition.forwardStretch = 1.8f;
+    shapeDefinition.minimumLobeCount = 5;
+    shapeDefinition.maximumLobeCount = 8;
+    shapeDefinition.rearSuppression = 0.9f;
+    shapeDefinition.sizeVariation = 0.12f;
+    const game::FpsMuzzleFlashShape firstShape =
+            game::GenerateFpsMuzzleFlashShape(shapeDefinition, 42u);
+    const game::FpsMuzzleFlashShape repeatedShape =
+            game::GenerateFpsMuzzleFlashShape(shapeDefinition, 42u);
+    const game::FpsMuzzleFlashShape differentShape =
+            game::GenerateFpsMuzzleFlashShape(shapeDefinition, 43u);
+    assert(firstShape.lobeCount >= 5 && firstShape.lobeCount <= 8);
+    assert(firstShape.lobeCount == repeatedShape.lobeCount);
+    assert(Near(firstShape.phaseRadians, repeatedShape.phaseRadians));
+    assert(Near(firstShape.overallScale, repeatedShape.overallScale));
+    assert(firstShape.seed != differentShape.seed);
+    assert(firstShape.dominantLengthScale > 1.6f);
+    assert(firstShape.overallScale >= 0.88f
+            && firstShape.overallScale <= 1.12f);
+    assert(firstShape.lobes[1].visibilityAnchor);
+    assert(firstShape.lobes[1].forwardComponent >= 0.10f
+            && firstShape.lobes[1].forwardComponent <= 0.35f);
+    assert(firstShape.lobes[1].lengthScale >= 0.70f
+            && firstShape.lobes[1].lengthScale <= 0.90f);
+    assert(firstShape.lobes[1].widthScale >= 0.90f
+            && firstShape.lobes[1].widthScale <= 1.15f);
+    for (int index = 0; index < firstShape.lobeCount; ++index) {
+        const game::FpsMuzzleFlashLobe& lobe =
+                firstShape.lobes[static_cast<size_t>(index)];
+        assert(std::isfinite(lobe.azimuthRadians));
+        assert(std::isfinite(lobe.forwardComponent));
+        assert(lobe.lengthScale > 0.0f);
+        assert(lobe.widthScale > 0.0f);
+        if (index > 0) {
+            assert(lobe.lengthScale < firstShape.dominantLengthScale);
+            assert(lobe.forwardComponent >= -0.0351f);
+        }
+    }
+    bool observedDifferentLobeCountOrPhase = false;
+    for (uint32_t seed = 1; seed <= 256; ++seed) {
+        const game::FpsMuzzleFlashShape generated =
+                game::GenerateFpsMuzzleFlashShape(shapeDefinition, seed);
+        assert(generated.lobeCount >= shapeDefinition.minimumLobeCount);
+        assert(generated.lobeCount <= shapeDefinition.maximumLobeCount);
+        assert(generated.overallScale >= 0.88f
+                && generated.overallScale <= 1.12f);
+        assert(generated.dominantLengthScale > 1.6f);
+        int visibilityAnchorCount = 0;
+        for (int index = 0; index < generated.lobeCount; ++index) {
+            const game::FpsMuzzleFlashLobe& lobe =
+                    generated.lobes[static_cast<size_t>(index)];
+            assert(std::isfinite(lobe.azimuthRadians));
+            assert(std::isfinite(lobe.forwardComponent));
+            assert(std::isfinite(lobe.lengthScale)
+                    && lobe.lengthScale > 0.0f);
+            assert(std::isfinite(lobe.widthScale)
+                    && lobe.widthScale > 0.0f);
+            if (lobe.visibilityAnchor) {
+                ++visibilityAnchorCount;
+                assert(index == 1);
+                assert(lobe.forwardComponent >= 0.10f
+                        && lobe.forwardComponent <= 0.35f);
+                assert(lobe.lengthScale >= 0.70f
+                        && lobe.lengthScale <= 0.90f);
+                assert(lobe.widthScale >= 0.90f
+                        && lobe.widthScale <= 1.15f);
+            }
+            if (index > 0 && lobe.forwardComponent < 0.0f) {
+                const float rearExtent = lobe.lengthScale
+                        * -lobe.forwardComponent
+                        / std::sqrt(
+                                1.0f
+                                + lobe.forwardComponent
+                                        * lobe.forwardComponent);
+                assert(rearExtent < 0.03f);
+            }
+        }
+        assert(visibilityAnchorCount == 1);
+        observedDifferentLobeCountOrPhase =
+                observedDifferentLobeCountOrPhase
+                || generated.lobeCount != firstShape.lobeCount
+                || !Near(generated.phaseRadians, firstShape.phaseRadians);
+    }
+    assert(observedDifferentLobeCountOrPhase);
+
+    const game::SectorEditorPreviewMuzzleFlashRibbonAxes axialAxes =
+            game::BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+                    Vector3{0.0f, 0.0f, 1.0f},
+                    Vector3{1.0f, 0.0f, 0.0f});
+    assert(axialAxes.valid);
+    assert(Near(Vector3Length(axialAxes.first), 1.0f));
+    assert(Near(Vector3Length(axialAxes.second), 1.0f));
+    assert(Near(Vector3DotProduct(
+            axialAxes.first, axialAxes.second), 0.0f));
+    assert(Near(Vector3DotProduct(
+            axialAxes.first, Vector3{0.0f, 0.0f, 1.0f}), 0.0f));
+    assert(Near(Vector3DotProduct(
+            axialAxes.second, Vector3{0.0f, 0.0f, 1.0f}), 0.0f));
+
+    const game::SectorEditorPreviewMuzzleFlashRibbonAxes fallbackAxes =
+            game::BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+                    Vector3{0.0f, 1.0f, 0.0f},
+                    Vector3{0.0f, 2.0f, 0.0f});
+    assert(fallbackAxes.valid);
+    assert(Near(Vector3Length(fallbackAxes.first), 1.0f));
+    assert(Near(Vector3Length(fallbackAxes.second), 1.0f));
+    assert(Near(Vector3DotProduct(
+            fallbackAxes.first, fallbackAxes.second), 0.0f));
+    assert(!game::BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+            Vector3{}, Vector3{1.0f, 0.0f, 0.0f}).valid);
+
+    Camera3D shotCamera{};
+    shotCamera.position = Vector3{2.0f, 3.0f, 4.0f};
+    shotCamera.target = Vector3{2.2f, 3.1f, 5.0f};
+    shotCamera.up = Vector3{0.0f, 1.0f, 0.0f};
+    game::FpsViewmodelPresentation shotPresentation;
+    shotPresentation.position = Vector3{0.1f, -0.3f, 0.4f};
+    game::FpsRecoilRuntimeState previousRecoil;
+    previousRecoil.translation = Vector3{0.01f, 0.0f, -0.02f};
+    previousRecoil.rotationDegrees = Vector3{-1.0f, 0.0f, 0.1f};
+    const Matrix preShotRoot = game::BuildFpsViewmodelAnimatedTransform(
+            shotCamera,
+            shotPresentation,
+            game::FpsViewmodelHolsterPose{},
+            previousRecoil);
+    const Matrix preShotPistol = game::BuildFpsViewmodelAttachmentTransform(
+            preShotRoot,
+            MatrixTranslate(0.02f, 0.03f, 0.04f),
+            game::FpsViewmodelGripCorrection{});
+    const Matrix preShotMuzzle = game::BuildFpsViewmodelMuzzleTransform(
+            preShotPistol, socket);
+    const game::FpsMuzzleEmissionCapture captured =
+            game::CaptureFpsMuzzleEmission(preShotMuzzle, shotCamera);
+    assert(captured.valid);
+    assert(SameTransform(
+            game::ResolveFpsMuzzleEmissionTransform(captured, shotCamera),
+            preShotMuzzle));
+
+    game::FpsWeaponFiringRuntimeState captureOrderState;
+    captureOrderState.recoil = previousRecoil;
+    game::ApplyFpsWeaponShotEffects(captureOrderState, shot, captured);
+    assert(SameTransform(
+            captureOrderState.emission.cameraLocalTransform,
+            captured.cameraLocalTransform));
+    const Matrix postShotRoot = game::BuildFpsViewmodelAnimatedTransform(
+            shotCamera,
+            shotPresentation,
+            game::FpsViewmodelHolsterPose{},
+            captureOrderState.recoil);
+    const Matrix postShotPistol = game::BuildFpsViewmodelAttachmentTransform(
+            postShotRoot,
+            MatrixTranslate(0.02f, 0.03f, 0.04f),
+            game::FpsViewmodelGripCorrection{});
+    const Matrix postShotMuzzle = game::BuildFpsViewmodelMuzzleTransform(
+            postShotPistol, socket);
+    assert(!SameTransform(postShotMuzzle, preShotMuzzle));
+    assert(SameTransform(
+            game::ResolveFpsMuzzleEmissionTransform(
+                    captureOrderState.emission, shotCamera),
+            preShotMuzzle));
+
+    Camera3D movedCamera = shotCamera;
+    movedCamera.position = Vector3{-3.0f, 1.0f, 7.0f};
+    movedCamera.target = Vector3{-2.0f, 1.2f, 7.2f};
+    const Matrix movedEmission = game::ResolveFpsMuzzleEmissionTransform(
+            captured, movedCamera);
+    const game::FpsMuzzleEmissionCapture recaptured =
+            game::CaptureFpsMuzzleEmission(movedEmission, movedCamera);
+    assert(recaptured.valid);
+    assert(SameTransform(
+            recaptured.cameraLocalTransform,
+            captured.cameraLocalTransform));
+    const Matrix changedHandPistol = game::BuildFpsViewmodelAttachmentTransform(
+            postShotRoot,
+            MatrixTranslate(2.0f, 3.0f, 4.0f),
+            game::FpsViewmodelGripCorrection{});
+    assert(!SameTransform(
+            game::BuildFpsViewmodelMuzzleTransform(changedHandPistol, socket),
+            movedEmission));
+    assert(SameTransform(
+            game::ResolveFpsMuzzleEmissionTransform(captured, movedCamera),
+            movedEmission));
+
+    game::FpsMuzzleEmissionCapture invalidEmission;
+    game::ApplyFpsWeaponShotEffects(
+            captureOrderState, shot, invalidEmission);
+    assert(!captureOrderState.flash.active);
+    assert(!captureOrderState.light.active);
 
     game::FpsViewmodelHolsterPose holster;
     game::FpsViewmodelPresentation presentation;

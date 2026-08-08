@@ -9,8 +9,7 @@
 namespace game {
 namespace {
 
-constexpr int AngularPointCount = 16;
-constexpr int RadialBandCount = 12;
+constexpr int RibbonBandCount = 8;
 constexpr float HotStop = 0.22f;
 constexpr float WarmStop = 0.58f;
 constexpr float EdgeStop = 0.82f;
@@ -67,42 +66,197 @@ void EmitVertex(Vector3 position, Color color)
     rlVertex3f(position.x, position.y, position.z);
 }
 
-Vector3 StarPoint(
-        Vector3 origin,
-        Vector3 right,
-        Vector3 up,
-        float radius,
-        float normalizedRadius,
-        int angularIndex)
+Color WithAlpha(Color color, float multiplier)
 {
-    const float angle = 2.0f * PI * static_cast<float>(angularIndex)
-            / static_cast<float>(AngularPointCount);
-    const float boundaryScale = (angularIndex & 1) == 0 ? 1.35f : 0.72f;
-    return Vector3Add(origin, Vector3Add(
-            Vector3Scale(
-                    right,
-                    std::cos(angle) * radius * normalizedRadius
-                            * boundaryScale),
-            Vector3Scale(
-                    up,
-                    std::sin(angle) * radius * normalizedRadius
-                            * boundaryScale)));
+    color.a = static_cast<unsigned char>(std::lround(
+            static_cast<float>(color.a)
+                    * std::clamp(multiplier, 0.0f, 1.0f)));
+    return color;
+}
+
+float RibbonWidthProfile(float normalizedLength)
+{
+    const float t = std::clamp(normalizedLength, 0.0f, 1.0f);
+    return 0.18f + 0.82f * std::pow(std::sin(PI * t), 0.75f);
+}
+
+void EmitRibbon(
+        const FpsMuzzleFlashRuntimeState& flash,
+        const SectorEditorPreviewMuzzleFlashTemporalState& temporal,
+        Vector3 origin,
+        Vector3 direction,
+        Vector3 widthAxis,
+        float length,
+        float halfWidth)
+{
+    direction = Vector3Normalize(direction);
+    widthAxis = Vector3Normalize(widthAxis);
+    if (Vector3LengthSqr(direction) <= 0.000001f
+            || Vector3LengthSqr(widthAxis) <= 0.000001f
+            || !(length > 0.0f) || !(halfWidth > 0.0f)) {
+        return;
+    }
+    for (int band = 0; band < RibbonBandCount - 1; ++band) {
+        const float firstT = static_cast<float>(band)
+                / static_cast<float>(RibbonBandCount);
+        const float secondT = static_cast<float>(band + 1)
+                / static_cast<float>(RibbonBandCount);
+        const Vector3 firstCenter = Vector3Add(
+                origin, Vector3Scale(direction, length * firstT));
+        const Vector3 secondCenter = Vector3Add(
+                origin, Vector3Scale(direction, length * secondT));
+        const float firstWidth = halfWidth * RibbonWidthProfile(firstT);
+        const float secondWidth = halfWidth * RibbonWidthProfile(secondT);
+        const Vector3 firstLeft = Vector3Subtract(
+                firstCenter, Vector3Scale(widthAxis, firstWidth));
+        const Vector3 firstRight = Vector3Add(
+                firstCenter, Vector3Scale(widthAxis, firstWidth));
+        const Vector3 secondLeft = Vector3Subtract(
+                secondCenter, Vector3Scale(widthAxis, secondWidth));
+        const Vector3 secondRight = Vector3Add(
+                secondCenter, Vector3Scale(widthAxis, secondWidth));
+        const Color firstCenterColor =
+                EvaluateSectorEditorPreviewMuzzleFlashGradient(
+                        flash, firstT, temporal.opacity, temporal.warmth);
+        const Color secondCenterColor =
+                EvaluateSectorEditorPreviewMuzzleFlashGradient(
+                        flash, secondT, temporal.opacity, temporal.warmth);
+        const Color firstEdgeColor = WithAlpha(firstCenterColor, 0.0f);
+        const Color secondEdgeColor = WithAlpha(secondCenterColor, 0.0f);
+
+        EmitVertex(firstCenter, firstCenterColor);
+        EmitVertex(firstLeft, firstEdgeColor);
+        EmitVertex(secondLeft, secondEdgeColor);
+        EmitVertex(firstCenter, firstCenterColor);
+        EmitVertex(secondLeft, secondEdgeColor);
+        EmitVertex(secondCenter, secondCenterColor);
+        EmitVertex(firstCenter, firstCenterColor);
+        EmitVertex(secondCenter, secondCenterColor);
+        EmitVertex(secondRight, secondEdgeColor);
+        EmitVertex(firstCenter, firstCenterColor);
+        EmitVertex(secondRight, secondEdgeColor);
+        EmitVertex(firstRight, firstEdgeColor);
+    }
+
+    const float baseT = static_cast<float>(RibbonBandCount - 1)
+            / static_cast<float>(RibbonBandCount);
+    const Vector3 baseCenter = Vector3Add(
+            origin, Vector3Scale(direction, length * baseT));
+    const float baseWidth = halfWidth * RibbonWidthProfile(baseT);
+    const Vector3 baseLeft = Vector3Subtract(
+            baseCenter, Vector3Scale(widthAxis, baseWidth));
+    const Vector3 baseRight = Vector3Add(
+            baseCenter, Vector3Scale(widthAxis, baseWidth));
+    const Vector3 tip = Vector3Add(origin, Vector3Scale(direction, length));
+    const Color baseColor = EvaluateSectorEditorPreviewMuzzleFlashGradient(
+            flash, baseT, temporal.opacity, temporal.warmth);
+    const Color tipColor = EvaluateSectorEditorPreviewMuzzleFlashGradient(
+            flash, 1.0f, temporal.opacity, temporal.warmth);
+    EmitVertex(baseLeft, WithAlpha(baseColor, 0.0f));
+    EmitVertex(baseCenter, baseColor);
+    EmitVertex(tip, tipColor);
+    EmitVertex(baseCenter, baseColor);
+    EmitVertex(baseRight, WithAlpha(baseColor, 0.0f));
+    EmitVertex(tip, tipColor);
+}
+
+void EmitCrossedRibbon(
+        const FpsMuzzleFlashRuntimeState& flash,
+        const SectorEditorPreviewMuzzleFlashTemporalState& temporal,
+        Vector3 origin,
+        Vector3 direction,
+        Vector3 preferredWidthAxis,
+        float length,
+        float halfWidth)
+{
+    const SectorEditorPreviewMuzzleFlashRibbonAxes axes =
+            BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+                    direction, preferredWidthAxis);
+    if (!axes.valid) return;
+    EmitRibbon(
+            flash, temporal, origin, direction, axes.first,
+            length, halfWidth);
+    EmitRibbon(
+            flash, temporal, origin, direction, axes.second,
+            length, halfWidth);
 }
 
 } // namespace
 
+SectorEditorPreviewMuzzleFlashTemporalState
+EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+        float ageSeconds,
+        float lifetimeSeconds)
+{
+    SectorEditorPreviewMuzzleFlashTemporalState result;
+    if (!(lifetimeSeconds > 0.0f) || !std::isfinite(ageSeconds)) {
+        result.normalizedAge = 1.0f;
+        result.expansionScale = 1.14f;
+        result.opacity = 0.0f;
+        result.warmth = 1.0f;
+        return result;
+    }
+    result.normalizedAge = std::clamp(
+            ageSeconds / lifetimeSeconds, 0.0f, 1.0f);
+    if (result.normalizedAge <= 0.25f) return result;
+    const float tail = std::clamp(
+            (result.normalizedAge - 0.25f) / 0.75f, 0.0f, 1.0f);
+    const float smoothTail = Smoothstep(0.0f, 1.0f, tail);
+    result.expansionScale = 1.0f + 0.14f * smoothTail;
+    result.opacity = (1.0f - tail) * (1.0f - tail);
+    result.warmth = smoothTail;
+    return result;
+}
+
 Color EvaluateSectorEditorPreviewMuzzleFlashGradient(
         const FpsMuzzleFlashRuntimeState& flash,
         float normalizedRadius,
-        float lifeAmount)
+        float opacity,
+        float warmth)
 {
     const float radius = std::clamp(normalizedRadius, 0.0f, 1.0f);
-    const float life = std::clamp(lifeAmount, 0.0f, 1.0f);
+    const float life = std::clamp(opacity, 0.0f, 1.0f);
+    const float warmRadius = std::clamp(
+            radius + 0.14f * std::clamp(warmth, 0.0f, 1.0f),
+            0.0f,
+            1.0f);
     const float softness = std::clamp(flash.edgeSoftness, 0.01f, 1.0f);
     const float edgeFade = 1.0f - Smoothstep(1.0f - softness, 1.0f, radius);
-    Color result = GradientColor(flash, radius);
+    Color result = GradientColor(flash, warmRadius);
     result.a = static_cast<unsigned char>(std::lround(
             static_cast<float>(result.a) * edgeFade * life));
+    return result;
+}
+
+SectorEditorPreviewMuzzleFlashRibbonAxes
+BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+        Vector3 direction,
+        Vector3 preferredWidthAxis)
+{
+    SectorEditorPreviewMuzzleFlashRibbonAxes result;
+    if (Vector3LengthSqr(direction) <= 0.000001f) return result;
+    direction = Vector3Normalize(direction);
+
+    Vector3 first = Vector3Subtract(
+            preferredWidthAxis,
+            Vector3Scale(
+                    direction,
+                    Vector3DotProduct(preferredWidthAxis, direction)));
+    if (Vector3LengthSqr(first) <= 0.000001f) {
+        const Vector3 fallback = std::abs(direction.y) < 0.9f
+                ? Vector3{0.0f, 1.0f, 0.0f}
+                : Vector3{1.0f, 0.0f, 0.0f};
+        first = Vector3CrossProduct(direction, fallback);
+    }
+    if (Vector3LengthSqr(first) <= 0.000001f) return result;
+    first = Vector3Normalize(first);
+    const Vector3 second = Vector3Normalize(
+            Vector3CrossProduct(direction, first));
+    if (Vector3LengthSqr(second) <= 0.000001f) return result;
+
+    result.valid = true;
+    result.first = first;
+    result.second = second;
     return result;
 }
 
@@ -110,39 +264,49 @@ void DrawSectorEditorPreviewMuzzleFlash(
         const FpsWeaponFiringRuntimeState& firing,
         const Camera3D& viewmodelCamera)
 {
-    if (!firing.flash.active || !firing.muzzleWorldTransformValid
+    if (!firing.flash.active || !firing.emission.valid
             || !(firing.flash.sizeWorld > 0.0f)
             || !(firing.flash.lifetimeSeconds > 0.0f)) {
         return;
     }
-    const float life = std::clamp(
-            1.0f - firing.flash.ageSeconds / firing.flash.lifetimeSeconds,
-            0.0f,
-            1.0f);
-    if (life <= 0.0f) return;
+    const SectorEditorPreviewMuzzleFlashTemporalState temporal =
+            EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+                    firing.flash.ageSeconds,
+                    firing.flash.lifetimeSeconds);
+    if (temporal.opacity <= 0.0f) return;
 
+    const Matrix emissionTransform = ResolveFpsMuzzleEmissionTransform(
+            firing.emission, viewmodelCamera);
     const Vector3 origin = Vector3Transform(
-            Vector3{}, firing.muzzleWorldTransform);
+            Vector3{}, emissionTransform);
     Vector3 right = Vector3Subtract(
             Vector3Transform(
                     Vector3{1.0f, 0.0f, 0.0f},
-                    firing.muzzleWorldTransform),
+                    emissionTransform),
             origin);
     Vector3 up = Vector3Subtract(
             Vector3Transform(
                     Vector3{0.0f, 1.0f, 0.0f},
-                    firing.muzzleWorldTransform),
+                    emissionTransform),
+            origin);
+    Vector3 forward = Vector3Subtract(
+            Vector3Transform(
+                    Vector3{0.0f, 0.0f, 1.0f},
+                    emissionTransform),
             origin);
     right = Vector3Normalize(right);
     up = Vector3Normalize(up);
-    const float radians = firing.flash.rotationDegrees * DEG2RAD;
+    forward = Vector3Normalize(forward);
+    const float radians = firing.flash.shape.phaseRadians;
     const Vector3 rotatedRight = Vector3Add(
             Vector3Scale(right, std::cos(radians)),
             Vector3Scale(up, std::sin(radians)));
     const Vector3 rotatedUp = Vector3Add(
             Vector3Scale(right, -std::sin(radians)),
             Vector3Scale(up, std::cos(radians)));
-    const float radius = firing.flash.sizeWorld * (0.65f + 0.35f * life);
+    const float size = firing.flash.sizeWorld
+            * firing.flash.shape.overallScale
+            * temporal.expansionScale;
 
     BeginMode3D(viewmodelCamera);
     BeginBlendMode(BLEND_ADDITIVE);
@@ -151,48 +315,40 @@ void DrawSectorEditorPreviewMuzzleFlash(
     rlDisableBackfaceCulling();
     rlSetTexture(0);
     rlBegin(RL_TRIANGLES);
-    for (int band = 0; band < RadialBandCount; ++band) {
-        const float innerRadius = static_cast<float>(band)
-                / static_cast<float>(RadialBandCount);
-        const float outerRadius = static_cast<float>(band + 1)
-                / static_cast<float>(RadialBandCount);
-        const Color innerColor = EvaluateSectorEditorPreviewMuzzleFlashGradient(
-                firing.flash, innerRadius, life);
-        const Color outerColor = EvaluateSectorEditorPreviewMuzzleFlashGradient(
-                firing.flash, outerRadius, life);
-        for (int point = 0; point < AngularPointCount; ++point) {
-            const int nextPoint = (point + 1) % AngularPointCount;
-            const Vector3 outerA = StarPoint(
-                    origin, rotatedRight, rotatedUp,
-                    radius, outerRadius, point);
-            const Vector3 outerB = StarPoint(
-                    origin, rotatedRight, rotatedUp,
-                    radius, outerRadius, nextPoint);
-            if (band == 0) {
-                EmitVertex(origin, innerColor);
-                EmitVertex(outerA, outerColor);
-                EmitVertex(outerB, outerColor);
-                continue;
-            }
-            const Vector3 innerA = StarPoint(
-                    origin, rotatedRight, rotatedUp,
-                    radius, innerRadius, point);
-            const Vector3 innerB = StarPoint(
-                    origin, rotatedRight, rotatedUp,
-                    radius, innerRadius, nextPoint);
-            EmitVertex(innerA, innerColor);
-            EmitVertex(outerA, outerColor);
-            EmitVertex(outerB, outerColor);
-            EmitVertex(innerA, innerColor);
-            EmitVertex(outerB, outerColor);
-            EmitVertex(innerB, innerColor);
-        }
+    const float dominantLength = size
+            * firing.flash.shape.dominantLengthScale;
+    const float dominantWidth = size * 0.26f
+            * firing.flash.shape.dominantWidthScale;
+    EmitCrossedRibbon(
+            firing.flash, temporal, origin, forward, rotatedRight,
+            dominantLength, dominantWidth);
+    for (int index = 1; index < firing.flash.shape.lobeCount; ++index) {
+        const FpsMuzzleFlashLobe& lobe =
+                firing.flash.shape.lobes[static_cast<size_t>(index)];
+        const Vector3 radial = Vector3Add(
+                Vector3Scale(right, std::cos(lobe.azimuthRadians)),
+                Vector3Scale(up, std::sin(lobe.azimuthRadians)));
+        const Vector3 tangent = Vector3Add(
+                Vector3Scale(right, -std::sin(lobe.azimuthRadians)),
+                Vector3Scale(up, std::cos(lobe.azimuthRadians)));
+        const Vector3 direction = Vector3Normalize(Vector3Add(
+                radial,
+                Vector3Scale(forward, lobe.forwardComponent)));
+        EmitCrossedRibbon(
+                firing.flash, temporal, origin, direction, tangent,
+                size * lobe.lengthScale,
+                size * 0.18f * lobe.widthScale);
     }
     rlEnd();
+    // rlgl defers these immediate-mode triangles until the active batch is
+    // flushed. Draw them before restoring the depth mask and culling state so
+    // transparent ribbon edges cannot write depth and cut holes in later
+    // overlapping lobes.
+    rlDrawRenderBatchActive();
+    EndBlendMode();
     rlColor4ub(255, 255, 255, 255);
     rlEnableBackfaceCulling();
     rlEnableDepthMask();
-    EndBlendMode();
     EndMode3D();
 }
 

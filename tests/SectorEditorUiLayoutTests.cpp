@@ -279,6 +279,37 @@ void TestPreviewSettingsModalCopiesObjectProbeSettings()
           "preview settings modal draft copies layered object probe heights");
 }
 
+void TestPreviewSettingsModalResetPreservesSessionView()
+{
+    game::SectorPreviewSettingsModalState modal;
+    modal.open = true;
+    modal.activeTab = game::PreviewSettingsTab::Weapon;
+    modal.generalScroll.offset.y = 11.0f;
+    modal.skyScroll.offset.y = 22.0f;
+    modal.lightingScroll.offset.y = 33.0f;
+    modal.fogScroll.offset.y = 44.0f;
+    modal.viewmodelScroll.offset.y = 55.0f;
+    modal.weaponScroll.offset.y = 66.0f;
+    modal.draftConfig.walkSpeed = 123.0f;
+    modal.errorMessage = "discard me";
+
+    game::ResetSectorPreviewSettingsModalPreservingView(modal);
+
+    Check(!modal.open, "preview settings reset closes modal");
+    Check(modal.activeTab == game::PreviewSettingsTab::Weapon,
+          "preview settings reset preserves active tab for the session");
+    Check(Near(modal.generalScroll.offset.y, 11.0f)
+                  && Near(modal.skyScroll.offset.y, 22.0f)
+                  && Near(modal.lightingScroll.offset.y, 33.0f)
+                  && Near(modal.fogScroll.offset.y, 44.0f)
+                  && Near(modal.viewmodelScroll.offset.y, 55.0f)
+                  && Near(modal.weaponScroll.offset.y, 66.0f),
+          "preview settings reset preserves every tab scroll offset");
+    Check(modal.errorMessage.empty()
+                  && !Near(modal.draftConfig.walkSpeed, 123.0f),
+          "preview settings reset discards transient drafts and errors");
+}
+
 void TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash()
 {
     game::SectorTopologyMap map;
@@ -399,6 +430,7 @@ int main()
     TestDoorInspectorHeightCountsCoreRows();
     TestDoorTextureSettingsModalLayoutDoesNotOverlap();
     TestPreviewSettingsModalCopiesObjectProbeSettings();
+    TestPreviewSettingsModalResetPreservesSessionView();
     TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash();
     TestPreviewSettingsModalResetsObjectProbeDefaults();
     TestPreviewSettingsModalNormalizesLayeredProbeSettings();

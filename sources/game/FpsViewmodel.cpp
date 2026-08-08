@@ -401,6 +401,37 @@ Matrix BuildFpsViewmodelMuzzleTransform(
             pistolWorldTransform);
 }
 
+FpsMuzzleEmissionCapture CaptureFpsMuzzleEmission(
+        Matrix muzzleWorldTransform,
+        const Camera3D& camera)
+{
+    FpsMuzzleEmissionCapture result;
+    const Vector3 origin = Vector3Transform(Vector3{}, muzzleWorldTransform);
+    const Vector3 forwardPoint = Vector3Transform(
+            Vector3{0.0f, 0.0f, 1.0f}, muzzleWorldTransform);
+    const auto finite = [](Vector3 value) {
+        return std::isfinite(value.x)
+                && std::isfinite(value.y)
+                && std::isfinite(value.z);
+    };
+    if (!finite(origin) || !finite(forwardPoint)) return result;
+    result.cameraLocalTransform = MatrixMultiply(
+            muzzleWorldTransform,
+            MatrixInvert(BuildFpsViewmodelCameraTransform(camera)));
+    result.valid = true;
+    return result;
+}
+
+Matrix ResolveFpsMuzzleEmissionTransform(
+        const FpsMuzzleEmissionCapture& capture,
+        const Camera3D& camera)
+{
+    if (!capture.valid) return MatrixIdentity();
+    return MatrixMultiply(
+            capture.cameraLocalTransform,
+            BuildFpsViewmodelCameraTransform(camera));
+}
+
 namespace {
 
 bool Finite(Vector3 value)
@@ -419,6 +450,11 @@ float NextSignedUnit(uint32_t& state)
     return static_cast<float>(state & 0x00ffffffu)
                     / static_cast<float>(0x00ffffffu)
             * 2.0f - 1.0f;
+}
+
+float NextUnit(uint32_t& state)
+{
+    return NextSignedUnit(state) * 0.5f + 0.5f;
 }
 
 void AdvanceSpringAxis(
@@ -465,6 +501,79 @@ Vector3 ClampMagnitudePerAxis(Vector3 value, Vector3 limits)
 }
 
 } // namespace
+
+FpsMuzzleFlashShape GenerateFpsMuzzleFlashShape(
+        const FpsWeaponMuzzleFlashDefinition& sourceDefinition,
+        uint32_t seed)
+{
+    FpsWeaponFiringDefinition firingDefinition;
+    firingDefinition.muzzleFlash = sourceDefinition;
+    const FpsWeaponMuzzleFlashDefinition definition =
+            ClampFpsWeaponFiringDefinition(firingDefinition).muzzleFlash;
+    FpsMuzzleFlashShape result;
+    result.seed = seed == 0 ? 0x6d2b79f5u : seed;
+    uint32_t random = result.seed;
+    const int lobeRange = definition.maximumLobeCount
+            - definition.minimumLobeCount + 1;
+    result.lobeCount = definition.minimumLobeCount
+            + std::min(
+                    lobeRange - 1,
+                    static_cast<int>(NextUnit(random) * lobeRange));
+    result.phaseRadians = NextUnit(random) * 2.0f * PI;
+    result.overallScale = 1.0f
+            + NextSignedUnit(random) * definition.sizeVariation;
+    const float irregularity = definition.irregularity;
+    result.dominantLengthScale = definition.forwardStretch
+            * (1.0f + NextSignedUnit(random) * 0.10f * irregularity);
+    result.dominantWidthScale = 1.0f
+            + NextSignedUnit(random) * 0.25f * irregularity;
+
+    const int sideLobeCount = std::max(1, result.lobeCount - 1);
+    const float angularSpacing = 2.0f * PI
+            / static_cast<float>(sideLobeCount);
+    for (int index = 0; index < result.lobeCount; ++index) {
+        FpsMuzzleFlashLobe& lobe = result.lobes[static_cast<size_t>(index)];
+        if (index == 0) {
+            lobe.azimuthRadians = result.phaseRadians;
+            lobe.forwardComponent = 1.0f;
+            lobe.lengthScale = result.dominantLengthScale;
+            lobe.widthScale = result.dominantWidthScale;
+            continue;
+        }
+        const int sideIndex = index - 1;
+        const float angularJitter = NextSignedUnit(random)
+                * angularSpacing * 0.45f * irregularity;
+        lobe.azimuthRadians = result.phaseRadians
+                + angularSpacing * static_cast<float>(sideIndex)
+                + angularJitter;
+        if (index == 1) {
+            // A forward-biased plume can be strongly foreshortened in an FPS
+            // camera. Keep one randomized lateral lobe substantial enough to
+            // make the flame silhouette readable on every shot.
+            lobe.visibilityAnchor = true;
+            lobe.forwardComponent = 0.10f + NextUnit(random) * 0.25f;
+            lobe.lengthScale = 0.70f + NextUnit(random) * 0.20f;
+            lobe.widthScale = 0.90f + NextUnit(random) * 0.25f;
+            continue;
+        }
+        lobe.forwardComponent = -0.35f + NextUnit(random) * 0.80f;
+        const float variedLength = 1.0f + (
+                0.60f + NextUnit(random) * 0.70f - 1.0f)
+                * irregularity;
+        lobe.lengthScale = 0.55f * variedLength;
+        lobe.widthScale = 1.0f + (
+                0.65f + NextUnit(random) * 0.60f - 1.0f)
+                * irregularity;
+        if (lobe.forwardComponent < 0.0f) {
+            lobe.forwardComponent *= 1.0f - definition.rearSuppression;
+            lobe.lengthScale *= 1.0f
+                    - 0.80f * definition.rearSuppression;
+        }
+        lobe.lengthScale = std::max(0.05f, lobe.lengthScale);
+        lobe.widthScale = std::max(0.25f, lobe.widthScale);
+    }
+    return result;
+}
 
 bool CanFireFpsWeapon(
         const FpsViewmodelRuntimeState& state,
@@ -531,7 +640,8 @@ void AdvanceFpsWeaponFiringRuntime(
 
 void ApplyFpsWeaponShotEffects(
         FpsWeaponFiringRuntimeState& state,
-        const FpsShotResult& shot)
+        const FpsShotResult& shot,
+        const FpsMuzzleEmissionCapture& emission)
 {
     state.definition = ClampFpsWeaponFiringDefinition(state.definition);
     state.cooldownRemainingSeconds = state.definition.shotIntervalSeconds;
@@ -540,6 +650,42 @@ void ApplyFpsWeaponShotEffects(
     state.hasLastShot = true;
     ++state.shotSequence;
     state.lastRejectReason = FpsFireRejectReason::None;
+
+    state.emission = emission;
+
+    if (state.definition.muzzleFlash.enabled && emission.valid) {
+        state.flash.active = true;
+        state.flash.ageSeconds = 0.0f;
+        state.flash.lifetimeSeconds = state.definition.muzzleFlash.lifetimeSeconds;
+        state.flash.sizeWorld = state.definition.muzzleFlash.sizeWorld;
+        state.flash.coreColor = state.definition.muzzleFlash.coreColor;
+        state.flash.hotColor = state.definition.muzzleFlash.hotColor;
+        state.flash.warmColor = state.definition.muzzleFlash.warmColor;
+        state.flash.edgeColor = state.definition.muzzleFlash.edgeColor;
+        state.flash.edgeSoftness = state.definition.muzzleFlash.edgeSoftness;
+        state.flash.irregularity = state.definition.muzzleFlash.irregularity;
+        state.flash.forwardStretch = state.definition.muzzleFlash.forwardStretch;
+        state.flash.rearSuppression = state.definition.muzzleFlash.rearSuppression;
+        uint32_t shapeSeed = static_cast<uint32_t>(state.shotSequence)
+                ^ state.randomState ^ 0x9e3779b9u;
+        if (shapeSeed == 0) shapeSeed = 0x6d2b79f5u;
+        state.flash.shape = GenerateFpsMuzzleFlashShape(
+                state.definition.muzzleFlash, shapeSeed);
+        (void)NextSignedUnit(state.randomState);
+    } else {
+        state.flash.active = false;
+    }
+    if (state.definition.muzzleLight.enabled && emission.valid) {
+        state.light.active = true;
+        state.light.ageSeconds = 0.0f;
+        state.light.lifetimeSeconds = state.definition.muzzleLight.lifetimeSeconds;
+        state.light.intensity = state.definition.muzzleLight.intensity;
+        state.light.radiusWorld = state.definition.muzzleLight.radiusWorld;
+        state.light.decayExponent = state.definition.muzzleLight.decayExponent;
+        state.light.color = state.definition.muzzleLight.color;
+    } else {
+        state.light.active = false;
+    }
 
     const float roll = NextSignedUnit(state.randomState)
             * state.definition.recoil.rollVariationDegrees;
@@ -553,30 +699,6 @@ void ApplyFpsWeaponShotEffects(
     state.recoil.rotationDegrees = ClampMagnitudePerAxis(
             Vector3Add(state.recoil.rotationDegrees, rotationImpulse),
             state.definition.recoil.maximumRotationDegrees);
-
-    if (state.definition.muzzleFlash.enabled) {
-        state.flash.active = true;
-        state.flash.ageSeconds = 0.0f;
-        state.flash.lifetimeSeconds = state.definition.muzzleFlash.lifetimeSeconds;
-        const float sizeRandom = NextSignedUnit(state.randomState);
-        state.flash.sizeWorld = state.definition.muzzleFlash.sizeWorld
-                * (1.0f + sizeRandom * state.definition.muzzleFlash.sizeVariation);
-        state.flash.rotationDegrees = NextSignedUnit(state.randomState) * 180.0f;
-        state.flash.coreColor = state.definition.muzzleFlash.coreColor;
-        state.flash.hotColor = state.definition.muzzleFlash.hotColor;
-        state.flash.warmColor = state.definition.muzzleFlash.warmColor;
-        state.flash.edgeColor = state.definition.muzzleFlash.edgeColor;
-        state.flash.edgeSoftness = state.definition.muzzleFlash.edgeSoftness;
-    }
-    if (state.definition.muzzleLight.enabled) {
-        state.light.active = true;
-        state.light.ageSeconds = 0.0f;
-        state.light.lifetimeSeconds = state.definition.muzzleLight.lifetimeSeconds;
-        state.light.intensity = state.definition.muzzleLight.intensity;
-        state.light.radiusWorld = state.definition.muzzleLight.radiusWorld;
-        state.light.decayExponent = state.definition.muzzleLight.decayExponent;
-        state.light.color = state.definition.muzzleLight.color;
-    }
 }
 
 float FpsMuzzleLightCurrentIntensity(

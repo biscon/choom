@@ -9,6 +9,8 @@
 
 namespace game {
 
+constexpr int MaxFpsMuzzleFlashLobes = 12;
+
 struct FpsViewmodelPresentation {
     Vector3 position{0.0f, 0.0f, 0.0f};
     Vector3 rotationDegrees{0.0f, 0.0f, 0.0f};
@@ -75,9 +77,14 @@ struct FpsWeaponMuzzleSocketDefinition {
 
 struct FpsWeaponMuzzleFlashDefinition {
     bool enabled = true;
-    float lifetimeSeconds = 0.055f;
+    float lifetimeSeconds = 0.033f;
     float sizeWorld = 0.10f;
-    float sizeVariation = 0.20f;
+    float sizeVariation = 0.12f;
+    float irregularity = 0.65f;
+    float forwardStretch = 1.80f;
+    int minimumLobeCount = 5;
+    int maximumLobeCount = 8;
+    float rearSuppression = 0.90f;
     Color coreColor{255, 255, 245, 255};
     Color hotColor{255, 235, 120, 255};
     Color warmColor{255, 90, 15, 230};
@@ -167,6 +174,12 @@ struct FpsWeaponFiringOverride {
     std::optional<Vector3> muzzleRotationDegrees;
     std::optional<float> flashLifetimeSeconds;
     std::optional<float> flashSizeWorld;
+    std::optional<float> flashSizeVariation;
+    std::optional<float> flashIrregularity;
+    std::optional<float> flashForwardStretch;
+    std::optional<int> flashMinimumLobeCount;
+    std::optional<int> flashMaximumLobeCount;
+    std::optional<float> flashRearSuppression;
     std::optional<float> flashEdgeSoftness;
     std::optional<float> muzzleLightIntensity;
     std::optional<float> muzzleLightRadiusWorld;

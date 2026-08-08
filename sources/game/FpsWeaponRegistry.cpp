@@ -81,28 +81,6 @@ Color ReadColor(const Json& value, const std::string& context)
             ColorChannel(value, "a", context)};
 }
 
-Color MixColor(Color a, Color b, float amount)
-{
-    const auto channel = [amount](unsigned char first, unsigned char second) {
-        return static_cast<unsigned char>(std::lround(
-                static_cast<float>(first)
-                + (static_cast<float>(second) - static_cast<float>(first))
-                        * amount));
-    };
-    return Color{
-            channel(a.r, b.r), channel(a.g, b.g),
-            channel(a.b, b.b), channel(a.a, b.a)};
-}
-
-Color DarkenedColor(Color value)
-{
-    return Color{
-            static_cast<unsigned char>(std::lround(value.r * 0.45f)),
-            static_cast<unsigned char>(std::lround(value.g * 0.45f)),
-            static_cast<unsigned char>(std::lround(value.b * 0.45f)),
-            static_cast<unsigned char>(std::lround(value.a * 0.75f))};
-}
-
 Vector3 Vector(const Json& object, const char* name, const std::string& context)
 {
     const Json& value = Require(object, name, context);
@@ -320,7 +298,10 @@ void ValidateFiring(
             value.muzzleSocket.rotationDegrees.y,
             value.muzzleSocket.rotationDegrees.z,
             value.muzzleFlash.lifetimeSeconds, value.muzzleFlash.sizeWorld,
-            value.muzzleFlash.sizeVariation, value.muzzleFlash.edgeSoftness,
+            value.muzzleFlash.sizeVariation, value.muzzleFlash.irregularity,
+            value.muzzleFlash.forwardStretch,
+            value.muzzleFlash.rearSuppression,
+            value.muzzleFlash.edgeSoftness,
             value.muzzleLight.intensity,
             value.muzzleLight.radiusWorld, value.muzzleLight.lifetimeSeconds,
             value.muzzleLight.decayExponent};
@@ -344,10 +325,21 @@ void ValidateFiring(
     if (value.muzzleFlash.lifetimeSeconds <= 0.0f
             || value.muzzleFlash.sizeWorld <= 0.0f
             || value.muzzleFlash.sizeVariation < 0.0f
-            || value.muzzleFlash.sizeVariation > 1.0f
+            || value.muzzleFlash.sizeVariation > 0.5f
+            || value.muzzleFlash.irregularity < 0.0f
+            || value.muzzleFlash.irregularity > 1.0f
+            || value.muzzleFlash.forwardStretch < 1.0f
+            || value.muzzleFlash.forwardStretch > 4.0f
+            || value.muzzleFlash.minimumLobeCount < 3
+            || value.muzzleFlash.maximumLobeCount
+                    > MaxFpsMuzzleFlashLobes
+            || value.muzzleFlash.minimumLobeCount
+                    > value.muzzleFlash.maximumLobeCount
+            || value.muzzleFlash.rearSuppression < 0.0f
+            || value.muzzleFlash.rearSuppression > 1.0f
             || value.muzzleFlash.edgeSoftness < 0.01f
             || value.muzzleFlash.edgeSoftness > 1.0f) {
-        Fail(context + ".muzzleFlash contains an invalid lifetime, size, variation, or edge softness");
+        Fail(context + ".muzzleFlash contains an invalid lifetime, size, shape, lobe range, or edge softness");
     }
     if (value.muzzleLight.intensity < 0.0f
             || value.muzzleLight.radiusWorld <= 0.0f
@@ -385,37 +377,25 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
     result.muzzleFlash.lifetimeSeconds = Number(flash, "lifetimeSeconds", flashContext);
     result.muzzleFlash.sizeWorld = Number(flash, "sizeWorld", flashContext);
     result.muzzleFlash.sizeVariation = Number(flash, "sizeVariation", flashContext);
-    const bool hasGradientColors = flash.find("coreColor") != flash.end()
-            || flash.find("hotColor") != flash.end()
-            || flash.find("warmColor") != flash.end()
-            || flash.find("edgeColor") != flash.end();
-    if (hasGradientColors) {
-        result.muzzleFlash.coreColor = ReadColor(
-                Require(flash, "coreColor", flashContext),
-                flashContext + ".coreColor");
-        result.muzzleFlash.hotColor = ReadColor(
-                Require(flash, "hotColor", flashContext),
-                flashContext + ".hotColor");
-        result.muzzleFlash.warmColor = ReadColor(
-                Require(flash, "warmColor", flashContext),
-                flashContext + ".warmColor");
-        result.muzzleFlash.edgeColor = ReadColor(
-                Require(flash, "edgeColor", flashContext),
-                flashContext + ".edgeColor");
-        result.muzzleFlash.edgeSoftness = Number(
-                flash, "edgeSoftness", flashContext);
-    } else {
-        const Color inner = ReadColor(
-                Require(flash, "innerColor", flashContext),
-                flashContext + ".innerColor");
-        const Color outer = ReadColor(
-                Require(flash, "outerColor", flashContext),
-                flashContext + ".outerColor");
-        result.muzzleFlash.coreColor = inner;
-        result.muzzleFlash.hotColor = MixColor(inner, outer, 0.30f);
-        result.muzzleFlash.warmColor = outer;
-        result.muzzleFlash.edgeColor = DarkenedColor(outer);
-    }
+    result.muzzleFlash.irregularity = Number(flash, "irregularity", flashContext);
+    result.muzzleFlash.forwardStretch = Number(flash, "forwardStretch", flashContext);
+    result.muzzleFlash.minimumLobeCount = Integer(flash, "minimumLobeCount", flashContext);
+    result.muzzleFlash.maximumLobeCount = Integer(flash, "maximumLobeCount", flashContext);
+    result.muzzleFlash.rearSuppression = Number(flash, "rearSuppression", flashContext);
+    result.muzzleFlash.coreColor = ReadColor(
+            Require(flash, "coreColor", flashContext),
+            flashContext + ".coreColor");
+    result.muzzleFlash.hotColor = ReadColor(
+            Require(flash, "hotColor", flashContext),
+            flashContext + ".hotColor");
+    result.muzzleFlash.warmColor = ReadColor(
+            Require(flash, "warmColor", flashContext),
+            flashContext + ".warmColor");
+    result.muzzleFlash.edgeColor = ReadColor(
+            Require(flash, "edgeColor", flashContext),
+            flashContext + ".edgeColor");
+    result.muzzleFlash.edgeSoftness = Number(
+            flash, "edgeSoftness", flashContext);
 
     const Json& light = Require(object, "muzzleLight", context);
     const std::string lightContext = context + ".muzzleLight";
@@ -439,6 +419,12 @@ std::optional<float> OptionalNumber(const Json& object, const char* name, const 
 {
     if (object.find(name) == object.end()) return std::nullopt;
     return Number(object, name, context);
+}
+
+std::optional<int> OptionalInteger(const Json& object, const char* name, const std::string& context)
+{
+    if (object.find(name) == object.end()) return std::nullopt;
+    return Integer(object, name, context);
 }
 
 void SetError(std::string* output, const std::string& message) { if (output) *output = message; }
@@ -668,6 +654,12 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                     entry.firing.muzzleRotationDegrees = OptionalVector(*firing, "muzzleRotationDegrees", firingContext);
                     entry.firing.flashLifetimeSeconds = OptionalNumber(*firing, "flashLifetimeSeconds", firingContext);
                     entry.firing.flashSizeWorld = OptionalNumber(*firing, "flashSizeWorld", firingContext);
+                    entry.firing.flashSizeVariation = OptionalNumber(*firing, "flashSizeVariation", firingContext);
+                    entry.firing.flashIrregularity = OptionalNumber(*firing, "flashIrregularity", firingContext);
+                    entry.firing.flashForwardStretch = OptionalNumber(*firing, "flashForwardStretch", firingContext);
+                    entry.firing.flashMinimumLobeCount = OptionalInteger(*firing, "flashMinimumLobeCount", firingContext);
+                    entry.firing.flashMaximumLobeCount = OptionalInteger(*firing, "flashMaximumLobeCount", firingContext);
+                    entry.firing.flashRearSuppression = OptionalNumber(*firing, "flashRearSuppression", firingContext);
                     entry.firing.flashEdgeSoftness = OptionalNumber(*firing, "flashEdgeSoftness", firingContext);
                     entry.firing.muzzleLightIntensity = OptionalNumber(*firing, "muzzleLightIntensity", firingContext);
                     entry.firing.muzzleLightRadiusWorld = OptionalNumber(*firing, "muzzleLightRadiusWorld", firingContext);
@@ -761,6 +753,12 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         if (entry.firing.muzzleRotationDegrees) firing["muzzleRotationDegrees"] = Vec(*entry.firing.muzzleRotationDegrees);
         if (entry.firing.flashLifetimeSeconds) firing["flashLifetimeSeconds"] = *entry.firing.flashLifetimeSeconds;
         if (entry.firing.flashSizeWorld) firing["flashSizeWorld"] = *entry.firing.flashSizeWorld;
+        if (entry.firing.flashSizeVariation) firing["flashSizeVariation"] = *entry.firing.flashSizeVariation;
+        if (entry.firing.flashIrregularity) firing["flashIrregularity"] = *entry.firing.flashIrregularity;
+        if (entry.firing.flashForwardStretch) firing["flashForwardStretch"] = *entry.firing.flashForwardStretch;
+        if (entry.firing.flashMinimumLobeCount) firing["flashMinimumLobeCount"] = *entry.firing.flashMinimumLobeCount;
+        if (entry.firing.flashMaximumLobeCount) firing["flashMaximumLobeCount"] = *entry.firing.flashMaximumLobeCount;
+        if (entry.firing.flashRearSuppression) firing["flashRearSuppression"] = *entry.firing.flashRearSuppression;
         if (entry.firing.flashEdgeSoftness) firing["flashEdgeSoftness"] = *entry.firing.flashEdgeSoftness;
         if (entry.firing.muzzleLightIntensity) firing["muzzleLightIntensity"] = *entry.firing.muzzleLightIntensity;
         if (entry.firing.muzzleLightRadiusWorld) firing["muzzleLightRadiusWorld"] = *entry.firing.muzzleLightRadiusWorld;
@@ -1301,9 +1299,18 @@ FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
     clampVector(value.recoil.maximumRotationDegrees, 0.0f, 90.0f);
     clampVector(value.muzzleSocket.position, -2.0f, 2.0f);
     clampVector(value.muzzleSocket.rotationDegrees, -360.0f, 360.0f);
-    value.muzzleFlash.lifetimeSeconds = std::clamp(value.muzzleFlash.lifetimeSeconds, 0.005f, 10.0f);
+    value.muzzleFlash.lifetimeSeconds = std::clamp(value.muzzleFlash.lifetimeSeconds, 0.005f, 60.0f);
     value.muzzleFlash.sizeWorld = std::clamp(value.muzzleFlash.sizeWorld, 0.005f, 2.0f);
-    value.muzzleFlash.sizeVariation = std::clamp(value.muzzleFlash.sizeVariation, 0.0f, 1.0f);
+    value.muzzleFlash.sizeVariation = std::clamp(value.muzzleFlash.sizeVariation, 0.0f, 0.5f);
+    value.muzzleFlash.irregularity = std::clamp(value.muzzleFlash.irregularity, 0.0f, 1.0f);
+    value.muzzleFlash.forwardStretch = std::clamp(value.muzzleFlash.forwardStretch, 1.0f, 4.0f);
+    value.muzzleFlash.minimumLobeCount = std::clamp(
+            value.muzzleFlash.minimumLobeCount, 3, MaxFpsMuzzleFlashLobes);
+    value.muzzleFlash.maximumLobeCount = std::clamp(
+            value.muzzleFlash.maximumLobeCount,
+            value.muzzleFlash.minimumLobeCount,
+            MaxFpsMuzzleFlashLobes);
+    value.muzzleFlash.rearSuppression = std::clamp(value.muzzleFlash.rearSuppression, 0.0f, 1.0f);
     value.muzzleFlash.edgeSoftness = std::clamp(value.muzzleFlash.edgeSoftness, 0.01f, 1.0f);
     value.muzzleLight.intensity = std::clamp(value.muzzleLight.intensity, 0.0f, 100.0f);
     value.muzzleLight.radiusWorld = std::clamp(value.muzzleLight.radiusWorld, 0.05f, 100.0f);
@@ -1328,6 +1335,12 @@ FpsWeaponFiringDefinition ResolveFpsWeaponFiringDefinition(
         if (value->muzzleRotationDegrees) result.muzzleSocket.rotationDegrees = *value->muzzleRotationDegrees;
         if (value->flashLifetimeSeconds) result.muzzleFlash.lifetimeSeconds = *value->flashLifetimeSeconds;
         if (value->flashSizeWorld) result.muzzleFlash.sizeWorld = *value->flashSizeWorld;
+        if (value->flashSizeVariation) result.muzzleFlash.sizeVariation = *value->flashSizeVariation;
+        if (value->flashIrregularity) result.muzzleFlash.irregularity = *value->flashIrregularity;
+        if (value->flashForwardStretch) result.muzzleFlash.forwardStretch = *value->flashForwardStretch;
+        if (value->flashMinimumLobeCount) result.muzzleFlash.minimumLobeCount = *value->flashMinimumLobeCount;
+        if (value->flashMaximumLobeCount) result.muzzleFlash.maximumLobeCount = *value->flashMaximumLobeCount;
+        if (value->flashRearSuppression) result.muzzleFlash.rearSuppression = *value->flashRearSuppression;
         if (value->flashEdgeSoftness) result.muzzleFlash.edgeSoftness = *value->flashEdgeSoftness;
         if (value->muzzleLightIntensity) result.muzzleLight.intensity = *value->muzzleLightIntensity;
         if (value->muzzleLightRadiusWorld) result.muzzleLight.radiusWorld = *value->muzzleLightRadiusWorld;
@@ -1352,6 +1365,12 @@ FpsWeaponFiringOverride BuildFpsWeaponFiringOverride(
     if (!Same(defaults.muzzleSocket.rotationDegrees, clean.muzzleSocket.rotationDegrees)) result.muzzleRotationDegrees = clean.muzzleSocket.rotationDegrees;
     if (!NearlyEqual(defaults.muzzleFlash.lifetimeSeconds, clean.muzzleFlash.lifetimeSeconds)) result.flashLifetimeSeconds = clean.muzzleFlash.lifetimeSeconds;
     if (!NearlyEqual(defaults.muzzleFlash.sizeWorld, clean.muzzleFlash.sizeWorld)) result.flashSizeWorld = clean.muzzleFlash.sizeWorld;
+    if (!NearlyEqual(defaults.muzzleFlash.sizeVariation, clean.muzzleFlash.sizeVariation)) result.flashSizeVariation = clean.muzzleFlash.sizeVariation;
+    if (!NearlyEqual(defaults.muzzleFlash.irregularity, clean.muzzleFlash.irregularity)) result.flashIrregularity = clean.muzzleFlash.irregularity;
+    if (!NearlyEqual(defaults.muzzleFlash.forwardStretch, clean.muzzleFlash.forwardStretch)) result.flashForwardStretch = clean.muzzleFlash.forwardStretch;
+    if (defaults.muzzleFlash.minimumLobeCount != clean.muzzleFlash.minimumLobeCount) result.flashMinimumLobeCount = clean.muzzleFlash.minimumLobeCount;
+    if (defaults.muzzleFlash.maximumLobeCount != clean.muzzleFlash.maximumLobeCount) result.flashMaximumLobeCount = clean.muzzleFlash.maximumLobeCount;
+    if (!NearlyEqual(defaults.muzzleFlash.rearSuppression, clean.muzzleFlash.rearSuppression)) result.flashRearSuppression = clean.muzzleFlash.rearSuppression;
     if (!NearlyEqual(defaults.muzzleFlash.edgeSoftness, clean.muzzleFlash.edgeSoftness)) result.flashEdgeSoftness = clean.muzzleFlash.edgeSoftness;
     if (!NearlyEqual(defaults.muzzleLight.intensity, clean.muzzleLight.intensity)) result.muzzleLightIntensity = clean.muzzleLight.intensity;
     if (!NearlyEqual(defaults.muzzleLight.radiusWorld, clean.muzzleLight.radiusWorld)) result.muzzleLightRadiusWorld = clean.muzzleLight.radiusWorld;
@@ -1371,6 +1390,12 @@ bool FpsWeaponFiringOverrideEmpty(const FpsWeaponFiringOverride& value)
             && !value.muzzleRotationDegrees
             && !value.flashLifetimeSeconds
             && !value.flashSizeWorld
+            && !value.flashSizeVariation
+            && !value.flashIrregularity
+            && !value.flashForwardStretch
+            && !value.flashMinimumLobeCount
+            && !value.flashMaximumLobeCount
+            && !value.flashRearSuppression
             && !value.flashEdgeSoftness
             && !value.muzzleLightIntensity
             && !value.muzzleLightRadiusWorld

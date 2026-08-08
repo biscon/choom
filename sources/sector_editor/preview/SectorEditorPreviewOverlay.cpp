@@ -818,20 +818,77 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         firing.recoil.rotationDegrees.y,
                         firing.recoil.rotationDegrees.z));
                 addKeyValue("muzzle effects", TextFormat(
-                        "socket %s | flash %s %.3f/%.3f soft %.2f | light %s %.3f",
+                        "socket %s | flash %s %.3f/%.3f (%.2f) soft %.2f | light %s %.3f",
                         firing.muzzleWorldTransformValid ? "valid" : "invalid",
                         firing.flash.active ? "active" : "off",
                         firing.flash.ageSeconds,
                         firing.flash.lifetimeSeconds,
+                        firing.flash.lifetimeSeconds > 0.0f
+                                ? std::clamp(
+                                        firing.flash.ageSeconds
+                                                / firing.flash.lifetimeSeconds,
+                                        0.0f,
+                                        1.0f)
+                                : 1.0f,
                         firing.flash.edgeSoftness,
                         firing.light.active ? "active" : "off",
                         FpsMuzzleLightCurrentIntensity(firing.light)));
+                addKeyValue("flash shape", TextFormat(
+                        "seed %u | lobes %d | scale %.3f | phase %.1f deg | stretch %.2f | rear %.2f",
+                        firing.flash.shape.seed,
+                        firing.flash.shape.lobeCount,
+                        firing.flash.shape.overallScale,
+                        firing.flash.shape.phaseRadians * RAD2DEG,
+                        firing.flash.forwardStretch,
+                        firing.flash.rearSuppression));
                 if (firing.muzzleWorldTransformValid) {
                     addKeyValueStyled(
                             "muzzle transform",
                             FormatViewmodelTransform(firing.muzzleWorldTransform),
                             smallConfig.mutedTextColor,
                             true);
+                }
+                addKeyValue(
+                        "flash capture space",
+                        firing.emission.valid
+                                ? "camera/viewmodel local"
+                                : "no valid capture");
+                if (firing.emission.valid) {
+                    const Matrix capturedWorld =
+                            ResolveFpsMuzzleEmissionTransform(
+                                    firing.emission,
+                                    preview.RenderCamera());
+                    const Vector3 capturedPosition = Vector3Transform(
+                            Vector3{}, capturedWorld);
+                    const Vector3 capturedForward = Vector3Normalize(
+                            Vector3Subtract(
+                                    Vector3Transform(
+                                            Vector3{0.0f, 0.0f, 1.0f},
+                                            capturedWorld),
+                                    capturedPosition));
+                    addKeyValue("captured emission", TextFormat(
+                            "P %.3f %.3f %.3f | F %.3f %.3f %.3f",
+                            capturedPosition.x,
+                            capturedPosition.y,
+                            capturedPosition.z,
+                            capturedForward.x,
+                            capturedForward.y,
+                            capturedForward.z));
+                    if (firing.muzzleWorldTransformValid) {
+                        const Vector3 livePosition = Vector3Transform(
+                                Vector3{}, firing.muzzleWorldTransform);
+                        addKeyValue("live/captured muzzle", TextFormat(
+                                "live P %.3f %.3f %.3f | separation %.4f",
+                                livePosition.x,
+                                livePosition.y,
+                                livePosition.z,
+                                Vector3Distance(
+                                        livePosition,
+                                        capturedPosition)));
+                    }
+                    addKeyValue(
+                            "muzzle-light origin",
+                            "captured camera-local emission");
                 }
                 if (firing.hasLastShot) {
                     addKeyValue("last shot", TextFormat(

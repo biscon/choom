@@ -136,6 +136,12 @@ bool SameFiringOverride(
             && SameOptionalVector3(lhs.muzzleRotationDegrees, rhs.muzzleRotationDegrees)
             && lhs.flashLifetimeSeconds == rhs.flashLifetimeSeconds
             && lhs.flashSizeWorld == rhs.flashSizeWorld
+            && lhs.flashSizeVariation == rhs.flashSizeVariation
+            && lhs.flashIrregularity == rhs.flashIrregularity
+            && lhs.flashForwardStretch == rhs.flashForwardStretch
+            && lhs.flashMinimumLobeCount == rhs.flashMinimumLobeCount
+            && lhs.flashMaximumLobeCount == rhs.flashMaximumLobeCount
+            && lhs.flashRearSuppression == rhs.flashRearSuppression
             && lhs.flashEdgeSoftness == rhs.flashEdgeSoftness
             && lhs.muzzleLightIntensity == rhs.muzzleLightIntensity
             && lhs.muzzleLightRadiusWorld == rhs.muzzleLightRadiusWorld
@@ -750,7 +756,28 @@ void SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
                         case SectorCollisionRaySurfaceKind::None: break;
                     }
                 }
-                ApplyFpsWeaponShotEffects(runtime.firing, shot);
+                FpsMuzzleEmissionCapture emission;
+                const bool attachmentReady = runtime.attachment.handPoseValid
+                        && runtime.attachment.loadState
+                                == FpsViewmodelAttachmentLoadState::Ready;
+                if (attachmentReady) {
+                    const Matrix preShotRoot = BuildFpsViewmodelAnimatedTransform(
+                            camera,
+                            runtime.presentation,
+                            runtime.holsterPose,
+                            runtime.firing.recoil);
+                    const Matrix preShotPistol =
+                            BuildFpsViewmodelAttachmentTransform(
+                                    preShotRoot,
+                                    runtime.attachment.handModelTransform,
+                                    runtime.attachment.gripCorrection);
+                    const Matrix preShotMuzzle = BuildFpsViewmodelMuzzleTransform(
+                            preShotPistol,
+                            runtime.firing.definition.muzzleSocket);
+                    emission = CaptureFpsMuzzleEmission(
+                            preShotMuzzle, camera);
+                }
+                ApplyFpsWeaponShotEffects(runtime.firing, shot, emission);
                 engine::ConsumeEvent(event);
             });
 }
@@ -785,9 +812,12 @@ void SectorEditor::UpdateFpsViewmodelTransformsAndLight()
 
     SectorPreviewDynamicPointLightSource source;
     const float intensity = FpsMuzzleLightCurrentIntensity(runtime.firing.light);
-    if (intensity > 0.0f && runtime.firing.muzzleWorldTransformValid) {
+    if (intensity > 0.0f && runtime.firing.emission.valid) {
+        const Matrix lightTransform = ResolveFpsMuzzleEmissionTransform(
+                runtime.firing.emission,
+                preview.RenderCamera());
         const Vector3 position = Vector3Transform(
-                Vector3{}, runtime.firing.muzzleWorldTransform);
+                Vector3{}, lightTransform);
         source.lightId = -1;
         source.ownerSectorId = previewState.collision.sectorCollisionWorldValid
                 ? previewState.collision.sectorCollisionWorld.FindSectorContainingPoint(
@@ -5208,7 +5238,10 @@ void SectorEditor::DrawPreviewSettingsModal(
         engine::FontHandle font)
 {
     const SectorEditorPreviewSettingsModalCallbacks callbacks{
-            [this]() { state.previewSettingsModal = SectorPreviewSettingsModalState{}; },
+            [this]() {
+                ResetSectorPreviewSettingsModalPreservingView(
+                        state.previewSettingsModal);
+            },
             [this, &assets]() { ApplyPreviewSettingsModal(assets); },
             [this]() { OpenMapSkyTexturePicker(); }
     };
@@ -5710,7 +5743,8 @@ void SectorEditor::LeavePreview3D()
     state.mode = SectorEditorMode::Edit2D;
     if (engineContext != nullptr) EndFpsViewmodel(engineContext->assets);
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
-    state.previewSettingsModal = SectorPreviewSettingsModalState{};
+    ResetSectorPreviewSettingsModalPreservingView(
+            state.previewSettingsModal);
     LeaveSectorFreeflyController();
     statusText = "Returned to 2D editor";
 }
@@ -5886,7 +5920,8 @@ void SectorEditor::InitializeGameplayVerticalState()
 
 void SectorEditor::OpenPreviewSettingsModal()
 {
-    state.previewSettingsModal = SectorPreviewSettingsModalState{};
+    ResetSectorPreviewSettingsModalPreservingView(
+            state.previewSettingsModal);
     state.previewSettingsModal.open = true;
     state.previewSettingsModal.draftConfig = NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
     state.previewSettingsModal.draftSkySettings = NormalizeSectorTopologySkySettings(TopologyMap().skySettings);
@@ -6084,7 +6119,8 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
             && !objectProbeSettingsChanged && !viewmodelChanged && !gripChanged
             && !holsterTransitionChanged && !attachmentLightingChanged
             && !firingChanged) {
-        state.previewSettingsModal = SectorPreviewSettingsModalState{};
+        ResetSectorPreviewSettingsModalPreservingView(
+                state.previewSettingsModal);
         statusText = "Preview settings unchanged";
         return;
     }
@@ -6160,7 +6196,8 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     if (previewChanged || skyChanged || directionalChanged || fogChanged || objectProbeSettingsChanged) {
         MarkTopologyDocumentEdited("Preview settings updated");
     }
-    state.previewSettingsModal = SectorPreviewSettingsModalState{};
+    ResetSectorPreviewSettingsModalPreservingView(
+            state.previewSettingsModal);
     if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
         if (engineContext != nullptr) {
             RebuildPreviewMeshesPreservingView(*engineContext);

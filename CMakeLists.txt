@@ -24,6 +24,28 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE X11 Xcursor)
 endif()
 
+option(ENGINE_ENABLE_LTO "Enable link-time optimization for Release engine builds" ON)
+if(ENGINE_ENABLE_LTO)
+    include(CheckIPOSupported)
+    check_ipo_supported(
+            RESULT ENGINE_LTO_SUPPORTED
+            OUTPUT ENGINE_LTO_ERROR
+            LANGUAGES CXX
+    )
+    if(ENGINE_LTO_SUPPORTED)
+        set_property(
+                TARGET ${PROJECT_NAME}
+                PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
+        )
+        message(STATUS "Release LTO enabled for ${CMAKE_CXX_COMPILER_ID}")
+    else()
+        message(WARNING
+                "Release LTO requested but unsupported; continuing without it: ${ENGINE_LTO_ERROR}")
+    endif()
+else()
+    message(STATUS "Release LTO disabled (ENGINE_ENABLE_LTO=OFF)")
+endif()
+
 # -------------------------------
 # Build Type Flags
 # -------------------------------
@@ -61,7 +83,6 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
 
     target_compile_options(${PROJECT_NAME} PRIVATE
             -O3
-            -flto
             -fno-strict-aliasing
             -DNDEBUG
     )

@@ -40,7 +40,11 @@
           0.05000000074505806,
           0.12999999523162842
         ],
-        "flashLifetimeSeconds": 10.0
+        "flashLifetimeSeconds": 0.07500000298023224,
+        "flashSizeWorld": 0.12999999523162842,
+        "muzzleLightIntensity": 8.0,
+        "muzzleLightRadiusWorld": 3.0,
+        "muzzleLightLifetimeSeconds": 0.08500000089406967
       }
     }
   }

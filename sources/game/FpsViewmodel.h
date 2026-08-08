@@ -5,6 +5,8 @@
 
 #include <raylib.h>
 
+#include <array>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -53,17 +55,43 @@ struct FpsRecoilRuntimeState {
     Vector3 rotationVelocityDegrees{};
 };
 
+struct FpsMuzzleFlashLobe {
+    bool visibilityAnchor = false;
+    float azimuthRadians = 0.0f;
+    float forwardComponent = 0.0f;
+    float lengthScale = 1.0f;
+    float widthScale = 1.0f;
+};
+
+struct FpsMuzzleFlashShape {
+    uint32_t seed = 0;
+    int lobeCount = 0;
+    float phaseRadians = 0.0f;
+    float overallScale = 1.0f;
+    float dominantLengthScale = 1.0f;
+    float dominantWidthScale = 1.0f;
+    std::array<FpsMuzzleFlashLobe, MaxFpsMuzzleFlashLobes> lobes{};
+};
+
+struct FpsMuzzleEmissionCapture {
+    bool valid = false;
+    Matrix cameraLocalTransform = {};
+};
+
 struct FpsMuzzleFlashRuntimeState {
     bool active = false;
     float ageSeconds = 0.0f;
     float lifetimeSeconds = 0.0f;
     float sizeWorld = 0.0f;
-    float rotationDegrees = 0.0f;
     Color coreColor{};
     Color hotColor{};
     Color warmColor{};
     Color edgeColor{};
     float edgeSoftness = 0.35f;
+    float irregularity = 0.0f;
+    float forwardStretch = 1.0f;
+    float rearSuppression = 0.0f;
+    FpsMuzzleFlashShape shape;
 };
 
 struct FpsMuzzleLightRuntimeState {
@@ -87,6 +115,7 @@ struct FpsWeaponFiringRuntimeState {
     FpsRecoilRuntimeState recoil;
     FpsMuzzleFlashRuntimeState flash;
     FpsMuzzleLightRuntimeState light;
+    FpsMuzzleEmissionCapture emission;
     Matrix viewmodelRootTransform = {};
     Matrix muzzleWorldTransform = {};
     bool viewmodelRootTransformValid = false;
@@ -216,6 +245,15 @@ Matrix BuildFpsViewmodelAttachmentTransform(
 Matrix BuildFpsViewmodelMuzzleTransform(
         Matrix pistolWorldTransform,
         const FpsWeaponMuzzleSocketDefinition& socket);
+FpsMuzzleEmissionCapture CaptureFpsMuzzleEmission(
+        Matrix muzzleWorldTransform,
+        const Camera3D& camera);
+Matrix ResolveFpsMuzzleEmissionTransform(
+        const FpsMuzzleEmissionCapture& capture,
+        const Camera3D& camera);
+FpsMuzzleFlashShape GenerateFpsMuzzleFlashShape(
+        const FpsWeaponMuzzleFlashDefinition& definition,
+        uint32_t seed);
 bool CanFireFpsWeapon(
         const FpsViewmodelRuntimeState& state,
         bool preview3DGameplay,
@@ -227,7 +265,8 @@ void AdvanceFpsWeaponFiringRuntime(
         float deltaSeconds);
 void ApplyFpsWeaponShotEffects(
         FpsWeaponFiringRuntimeState& state,
-        const FpsShotResult& shot);
+        const FpsShotResult& shot,
+        const FpsMuzzleEmissionCapture& emission);
 float FpsMuzzleLightCurrentIntensity(
         const FpsMuzzleLightRuntimeState& state);
 

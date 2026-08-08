@@ -245,6 +245,12 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState weaponMuzzleRollInput;
     engine::UIFloatInputState weaponFlashLifetimeInput;
     engine::UIFloatInputState weaponFlashSizeInput;
+    engine::UIFloatInputState weaponFlashSizeVariationInput;
+    engine::UIFloatInputState weaponFlashIrregularityInput;
+    engine::UIFloatInputState weaponFlashForwardStretchInput;
+    engine::UIIntInputState weaponFlashMinimumLobesInput;
+    engine::UIIntInputState weaponFlashMaximumLobesInput;
+    engine::UIFloatInputState weaponFlashRearSuppressionInput;
     engine::UIFloatInputState weaponFlashEdgeSoftnessInput;
     engine::UIFloatInputState weaponLightIntensityInput;
     engine::UIFloatInputState weaponLightRadiusInput;
