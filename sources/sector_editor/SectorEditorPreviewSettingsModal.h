@@ -14,15 +14,15 @@
 
 namespace game {
 
-inline std::array<Rectangle, 5> BuildSectorPreviewSettingsTabLayout(
+inline std::array<Rectangle, 6> BuildSectorPreviewSettingsTabLayout(
         Rectangle modal,
         float y,
         float tabHeight)
 {
     constexpr float margin = 30.0f;
     constexpr float gap = 8.0f;
-    const float tabWidth = (modal.width - margin * 2.0f - gap * 4.0f) / 5.0f;
-    std::array<Rectangle, 5> tabs{};
+    const float tabWidth = (modal.width - margin * 2.0f - gap * 5.0f) / 6.0f;
+    std::array<Rectangle, 6> tabs{};
     for (size_t i = 0; i < tabs.size(); ++i) {
         tabs[i] = Rectangle{
                 modal.x + margin + (tabWidth + gap) * static_cast<float>(i),

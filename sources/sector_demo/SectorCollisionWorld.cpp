@@ -34,6 +34,18 @@ bool IsFinite(Vector2 value)
     return std::isfinite(value.x) && std::isfinite(value.y);
 }
 
+bool IsFinite(Vector3 value)
+{
+    return std::isfinite(value.x)
+            && std::isfinite(value.y)
+            && std::isfinite(value.z);
+}
+
+float Cross(Vector2 a, Vector2 b)
+{
+    return a.x * b.y - a.y * b.x;
+}
+
 float DistanceSquared(Vector2 a, Vector2 b)
 {
     const float dx = b.x - a.x;
@@ -453,6 +465,7 @@ bool SectorCollisionWorld::BuildFromTopology(
 
         SectorCollisionSector collisionSector;
         collisionSector.sectorId = sector->id;
+        collisionSector.ceilingSolid = !sector->ceilingSky;
         // Topology stores authored heights; collision/runtime Y matches rendered world-space geometry.
         collisionSector.heights = SectorCollisionHeights{
                 SectorAuthoringToWorldDistance(sector->floorZ),
@@ -809,6 +822,138 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
         result.currentSectorId = resolvedSectorId;
     }
 
+    return result;
+}
+
+SectorCollisionRayHit SectorCollisionWorld::Raycast(
+        Vector3 origin,
+        Vector3 direction,
+        float maximumDistance) const
+{
+    SectorCollisionRayHit result;
+    if (!IsFinite(origin) || !IsFinite(direction)
+            || !std::isfinite(maximumDistance)
+            || maximumDistance <= 0.0f) {
+        return result;
+    }
+    const float directionLength = std::sqrt(
+            direction.x * direction.x
+            + direction.y * direction.y
+            + direction.z * direction.z);
+    if (!(directionLength > CollisionMoveEpsilon)) return result;
+    direction.x /= directionLength;
+    direction.y /= directionLength;
+    direction.z /= directionLength;
+    float nearest = maximumDistance + CollisionPointEpsilon;
+
+    const auto accept = [&result, &nearest, origin, direction](
+            float distance,
+            Vector3 normal,
+            SectorCollisionRaySurfaceKind kind,
+            int sectorId,
+            int lineDefId,
+            int sideDefId,
+            int neighborSectorId) {
+        if (!(distance >= 0.0f) || distance > nearest) return;
+        if (result.hit && std::fabs(distance - nearest) <= CollisionPointEpsilon) return;
+        if (normal.x * direction.x + normal.y * direction.y
+                        + normal.z * direction.z > 0.0f) {
+            normal = Vector3{-normal.x, -normal.y, -normal.z};
+        }
+        result.hit = true;
+        result.distance = distance;
+        result.position = Vector3{
+                origin.x + direction.x * distance,
+                origin.y + direction.y * distance,
+                origin.z + direction.z * distance};
+        result.normal = normal;
+        result.surfaceKind = kind;
+        result.sectorId = sectorId;
+        result.lineDefId = lineDefId;
+        result.sideDefId = sideDefId;
+        result.neighborSectorId = neighborSectorId;
+        nearest = distance;
+    };
+
+    for (const SectorCollisionSector& sector : sectors) {
+        if (std::fabs(direction.y) > CollisionMoveEpsilon) {
+            const float floorDistance =
+                    (sector.heights.floorZ - origin.y) / direction.y;
+            const Vector2 floorPoint{
+                    origin.x + direction.x * floorDistance,
+                    origin.z + direction.z * floorDistance};
+            if (floorDistance >= 0.0f && floorDistance <= nearest
+                    && SectorContainsPoint(sector, floorPoint)) {
+                accept(floorDistance, Vector3{0.0f, 1.0f, 0.0f},
+                        SectorCollisionRaySurfaceKind::Floor,
+                        sector.sectorId, 0, 0, 0);
+            }
+            if (sector.ceilingSolid) {
+                const float ceilingDistance =
+                        (sector.heights.ceilingZ - origin.y) / direction.y;
+                const Vector2 ceilingPoint{
+                        origin.x + direction.x * ceilingDistance,
+                        origin.z + direction.z * ceilingDistance};
+                if (ceilingDistance >= 0.0f && ceilingDistance <= nearest
+                        && SectorContainsPoint(sector, ceilingPoint)) {
+                    accept(ceilingDistance, Vector3{0.0f, -1.0f, 0.0f},
+                            SectorCollisionRaySurfaceKind::Ceiling,
+                            sector.sectorId, 0, 0, 0);
+                }
+            }
+        }
+
+        const Vector2 rayOrigin{origin.x, origin.z};
+        const Vector2 rayDirection{direction.x, direction.z};
+        for (const SectorCollisionEdge& edge : sector.edges) {
+            const Vector2 edgeDirection = Subtract(edge.b, edge.a);
+            const float denominator = Cross(rayDirection, edgeDirection);
+            if (std::fabs(denominator) <= CollisionMoveEpsilon) continue;
+            const Vector2 toEdge = Subtract(edge.a, rayOrigin);
+            const float distance = Cross(toEdge, edgeDirection) / denominator;
+            const float edgeT = Cross(toEdge, rayDirection) / denominator;
+            if (distance < 0.0f || distance > nearest
+                    || edgeT < -CollisionPointEpsilon
+                    || edgeT > 1.0f + CollisionPointEpsilon) {
+                continue;
+            }
+            const float hitY = origin.y + direction.y * distance;
+            if (hitY < sector.heights.floorZ - CollisionPointEpsilon
+                    || hitY > sector.heights.ceilingZ + CollisionPointEpsilon) {
+                continue;
+            }
+
+            SectorCollisionRaySurfaceKind kind =
+                    SectorCollisionRaySurfaceKind::Wall;
+            bool solid = edge.kind == SectorCollisionEdgeKind::BlockingWall;
+            if (!solid) {
+                const SectorCollisionSector* neighbor =
+                        FindSector(edge.neighborSectorId);
+                if (neighbor == nullptr) {
+                    solid = true;
+                } else {
+                    const float openingFloor = std::max(
+                            sector.heights.floorZ,
+                            neighbor->heights.floorZ);
+                    const float openingCeiling = std::min(
+                            sector.heights.ceilingZ,
+                            neighbor->heights.ceilingZ);
+                    if (hitY < openingFloor - CollisionPointEpsilon) {
+                        solid = true;
+                        kind = SectorCollisionRaySurfaceKind::LowerWall;
+                    } else if (hitY > openingCeiling + CollisionPointEpsilon) {
+                        solid = true;
+                        kind = SectorCollisionRaySurfaceKind::UpperWall;
+                    }
+                }
+            }
+            if (!solid) continue;
+            const Vector2 inward = GetSectorCollisionEdgeInwardNormal(edge);
+            accept(distance, Vector3{inward.x, 0.0f, inward.y}, kind,
+                    sector.sectorId, edge.lineDefId, edge.sideDefId,
+                    edge.neighborSectorId);
+        }
+    }
     return result;
 }
 

@@ -29,6 +29,20 @@ struct OverlayLine {
     bool wrap;
 };
 
+const char* FpsFireRejectReasonLabel(FpsFireRejectReason reason)
+{
+    switch (reason) {
+        case FpsFireRejectReason::None: return "none";
+        case FpsFireRejectReason::NotInGameplay3D: return "not in gameplay 3D";
+        case FpsFireRejectReason::MouseInputInactive: return "gameplay mouse inactive";
+        case FpsFireRejectReason::UiCaptured: return "UI captured input";
+        case FpsFireRejectReason::NoActiveWeapon: return "no active weapon";
+        case FpsFireRejectReason::WeaponNotReady: return "weapon not ready";
+        case FpsFireRejectReason::Cooldown: return "cooldown active";
+    }
+    return "unknown";
+}
+
 bool IsPreviewOverlayMouseInteractive(const SectorEditorPreviewControllerState& controllerState)
 {
     return !controllerState.freeflyController.mouseLookEnabled;
@@ -610,8 +624,48 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 const char* loadState = vm.loadState == FpsViewmodelLoadState::Ready ? "ready"
                         : vm.loadState == FpsViewmodelLoadState::Pending ? "pending"
                         : vm.loadState == FpsViewmodelLoadState::Failed ? "failed" : "inactive";
+                const char* equipState = vm.equipState
+                                == FpsViewmodelEquipState::Holstered
+                        ? "holstered"
+                        : vm.equipState
+                                        == FpsViewmodelEquipState::Unholstering
+                                ? "unholstering"
+                                : vm.equipState
+                                                == FpsViewmodelEquipState::Holstering
+                                        ? "holstering"
+                                        : "equipped";
+                const Vector3 proceduralRotation = Vector3Scale(
+                        QuaternionToEuler(vm.holsterPose.rotation),
+                        RAD2DEG);
                 addKeyValue("weapon", vm.activeWeaponId.empty() ? "none" : vm.activeWeaponId);
-                addKeyValue("visible", vm.holstered ? "holstered" : "equipped");
+                addKeyValue("equip state", equipState);
+                addKeyValue("equip progress", TextFormat(
+                        "raw %.4f | hidden eased %.4f | ready %s",
+                        vm.equipProgress,
+                        vm.holsterPose.hiddenAmount,
+                        IsFpsViewmodelReadyForUse(vm) ? "yes" : "no"));
+                addKeyValue("transition timing", TextFormat(
+                        "holster %.3fs | unholster %.3fs",
+                        vm.holsterTransition.holsterDurationSeconds,
+                        vm.holsterTransition.unholsterDurationSeconds));
+                addKeyValue("hidden translation", TextFormat(
+                        "%.3f, %.3f, %.3f",
+                        vm.holsterTransition.hiddenTranslation.x,
+                        vm.holsterTransition.hiddenTranslation.y,
+                        vm.holsterTransition.hiddenTranslation.z));
+                addKeyValue("hidden rotation", TextFormat(
+                        "%.2f, %.2f, %.2f",
+                        vm.holsterTransition.hiddenRotationDegrees.x,
+                        vm.holsterTransition.hiddenRotationDegrees.y,
+                        vm.holsterTransition.hiddenRotationDegrees.z));
+                addKeyValue("procedural pose", TextFormat(
+                        "T %.3f, %.3f, %.3f | R %.2f, %.2f, %.2f",
+                        vm.holsterPose.translation.x,
+                        vm.holsterPose.translation.y,
+                        vm.holsterPose.translation.z,
+                        proceduralRotation.x,
+                        proceduralRotation.y,
+                        proceduralRotation.z));
                 addKeyValue("load", loadState);
                 addKeyValueStyled("model", vm.resolvedModelPath, smallConfig.mutedTextColor, true);
                 addKeyValue("animation", vm.animationName.empty() ? "none" : vm.animationName);
@@ -722,7 +776,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             true);
                 }
                 if (!IsFpsViewmodelAttachmentRenderable(vm)) {
-                    const char* reason = vm.holstered
+                    const char* reason = vm.equipState
+                                            == FpsViewmodelEquipState::Holstered
                             ? "viewmodel is holstered"
                             : attachment.loadState
                                             == FpsViewmodelAttachmentLoadState::Pending
@@ -745,6 +800,58 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             Color{236, 92, 92, 245},
                             true);
                 }
+                const FpsWeaponFiringRuntimeState& firing = vm.firing;
+                addKeyValue("fire", TextFormat(
+                        "shots %llu | cooldown %.3f | ready %s",
+                        static_cast<unsigned long long>(firing.shotSequence),
+                        firing.cooldownRemainingSeconds,
+                        IsFpsViewmodelReadyForUse(vm) ? "yes" : "no"));
+                addKeyValue(
+                        "last fire gate",
+                        FpsFireRejectReasonLabel(firing.lastRejectReason));
+                addKeyValue("recoil", TextFormat(
+                        "T %.4f %.4f %.4f | R %.3f %.3f %.3f",
+                        firing.recoil.translation.x,
+                        firing.recoil.translation.y,
+                        firing.recoil.translation.z,
+                        firing.recoil.rotationDegrees.x,
+                        firing.recoil.rotationDegrees.y,
+                        firing.recoil.rotationDegrees.z));
+                addKeyValue("muzzle effects", TextFormat(
+                        "socket %s | flash %s %.3f/%.3f soft %.2f | light %s %.3f",
+                        firing.muzzleWorldTransformValid ? "valid" : "invalid",
+                        firing.flash.active ? "active" : "off",
+                        firing.flash.ageSeconds,
+                        firing.flash.lifetimeSeconds,
+                        firing.flash.edgeSoftness,
+                        firing.light.active ? "active" : "off",
+                        FpsMuzzleLightCurrentIntensity(firing.light)));
+                if (firing.muzzleWorldTransformValid) {
+                    addKeyValueStyled(
+                            "muzzle transform",
+                            FormatViewmodelTransform(firing.muzzleWorldTransform),
+                            smallConfig.mutedTextColor,
+                            true);
+                }
+                if (firing.hasLastShot) {
+                    addKeyValue("last shot", TextFormat(
+                            "%s | distance %.3f | sector %d line %d side %d",
+                            firing.lastShot.hit ? "hit" : "miss",
+                            firing.lastShot.distance,
+                            firing.lastShot.sectorId,
+                            firing.lastShot.lineDefId,
+                            firing.lastShot.sideDefId));
+                    if (firing.lastShot.hit) {
+                        addKeyValue("last hit", TextFormat(
+                                "P %.3f %.3f %.3f | N %.3f %.3f %.3f",
+                                firing.lastShot.position.x,
+                                firing.lastShot.position.y,
+                                firing.lastShot.position.z,
+                                firing.lastShot.normal.x,
+                                firing.lastShot.normal.y,
+                                firing.lastShot.normal.z));
+                    }
+                }
                 if (!vm.error.empty()) addKeyValueStyled("error", vm.error, Color{236, 92, 92, 245}, true);
                 break;
             }
@@ -756,7 +863,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 } else {
                     addWrappedLine("movement: WASD move, mouse look, Space/Ctrl up/down. F11 unlocks cursor for UI tabs.");
                 }
-                addWrappedLine("hotkeys: H holster/equip viewmodel, F1 AO, F2 hide/show 3D UI, F3 control mode, F4 dynamic lights, F10 borderless window, Tab/Esc return to 2D.");
+                addWrappedLine("hotkeys: left mouse fire, H holster/equip viewmodel, F1 AO, F2 hide/show 3D UI, F3 control mode, F4 dynamic lights, F10 borderless window, Tab/Esc return to 2D.");
                 break;
             case PreviewDebugOverlayTab::None:
                 break;

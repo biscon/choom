@@ -108,6 +108,11 @@ public:
     void ApplyPose(const SectorViewPose& pose);
     void ApplyRendererPose(const SectorViewPose& pose);
     void RefreshDynamicLightSources(const SectorTopologyMap& map);
+    void SetRuntimePointLight(
+            const SectorPreviewDynamicPointLightSource* light)
+    {
+        dynamicLightState.SetRuntimePointLight(light);
+    }
     size_t SectorCount() const { return sectorCount; }
     size_t BatchCount() const { return meshes.sectorDrawRecords.size(); }
     int TriangleCount() const { return meshes.triangleCount; }

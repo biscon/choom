@@ -13,6 +13,10 @@
         0.0
       ],
       "verticalFovDegrees": 55.0,
+      "holsterTransition": {
+        "holsterDurationSeconds": 1.25,
+        "unholsterDurationSeconds": 0.800000011920929
+      },
       "gripCorrection": {
         "translation": [
           0.029999999329447746,
@@ -27,6 +31,16 @@
       },
       "attachmentLighting": {
         "brightnessAdjustment": 0.25
+      },
+      "firing": {
+        "recoilSpringFrequencyHz": 4.0,
+        "recoilDampingRatio": 0.6499999761581421,
+        "muzzlePosition": [
+          0.004999999888241291,
+          0.05000000074505806,
+          0.12999999523162842
+        ],
+        "flashLifetimeSeconds": 10.0
       }
     }
   }

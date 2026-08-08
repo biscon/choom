@@ -33,7 +33,8 @@ enum class PreviewSettingsTab {
     Sky,
     Lighting,
     Fog,
-    Viewmodel
+    Viewmodel,
+    Weapon
 };
 
 struct TexturePickerState {
@@ -157,10 +158,14 @@ struct SectorPreviewSettingsModalState {
     SectorLightmapBakeSettings draftLightmapSettings;
     FpsViewmodelPresentation viewmodelDefaults;
     FpsViewmodelPresentation draftViewmodel;
+    FpsViewmodelHolsterTransition viewmodelHolsterTransitionDefaults;
+    FpsViewmodelHolsterTransition draftViewmodelHolsterTransition;
     FpsViewmodelGripCorrection viewmodelGripDefaults;
     FpsViewmodelGripCorrection draftViewmodelGrip;
     FpsViewmodelAttachmentLighting viewmodelAttachmentLightingDefaults;
     FpsViewmodelAttachmentLighting draftViewmodelAttachmentLighting;
+    FpsWeaponFiringDefinition weaponFiringDefaults;
+    FpsWeaponFiringDefinition draftWeaponFiring;
     engine::UIFloatInputState walkSpeedInput;
     engine::UIFloatInputState runSpeedInput;
     engine::UIFloatInputState mouseSensitivityInput;
@@ -204,6 +209,14 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState viewmodelRollInput;
     engine::UIFloatInputState viewmodelScaleInput;
     engine::UIFloatInputState viewmodelFovInput;
+    engine::UIFloatInputState viewmodelHolsterDurationInput;
+    engine::UIFloatInputState viewmodelUnholsterDurationInput;
+    engine::UIFloatInputState viewmodelHiddenTranslationXInput;
+    engine::UIFloatInputState viewmodelHiddenTranslationYInput;
+    engine::UIFloatInputState viewmodelHiddenTranslationZInput;
+    engine::UIFloatInputState viewmodelHiddenPitchInput;
+    engine::UIFloatInputState viewmodelHiddenYawInput;
+    engine::UIFloatInputState viewmodelHiddenRollInput;
     engine::UIFloatInputState viewmodelGripTranslationXInput;
     engine::UIFloatInputState viewmodelGripTranslationYInput;
     engine::UIFloatInputState viewmodelGripTranslationZInput;
@@ -214,11 +227,34 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState viewmodelAttachmentBrightnessInput;
     engine::UIFloatInputState viewmodelAttachmentMetallicInput;
     engine::UIFloatInputState viewmodelAttachmentRoughnessInput;
+    engine::UIFloatInputState weaponShotIntervalInput;
+    engine::UIFloatInputState weaponRecoilTranslationXInput;
+    engine::UIFloatInputState weaponRecoilTranslationYInput;
+    engine::UIFloatInputState weaponRecoilTranslationZInput;
+    engine::UIFloatInputState weaponRecoilPitchInput;
+    engine::UIFloatInputState weaponRecoilYawInput;
+    engine::UIFloatInputState weaponRecoilRollInput;
+    engine::UIFloatInputState weaponRecoilRollVariationInput;
+    engine::UIFloatInputState weaponRecoilFrequencyInput;
+    engine::UIFloatInputState weaponRecoilDampingInput;
+    engine::UIFloatInputState weaponMuzzlePositionXInput;
+    engine::UIFloatInputState weaponMuzzlePositionYInput;
+    engine::UIFloatInputState weaponMuzzlePositionZInput;
+    engine::UIFloatInputState weaponMuzzlePitchInput;
+    engine::UIFloatInputState weaponMuzzleYawInput;
+    engine::UIFloatInputState weaponMuzzleRollInput;
+    engine::UIFloatInputState weaponFlashLifetimeInput;
+    engine::UIFloatInputState weaponFlashSizeInput;
+    engine::UIFloatInputState weaponFlashEdgeSoftnessInput;
+    engine::UIFloatInputState weaponLightIntensityInput;
+    engine::UIFloatInputState weaponLightRadiusInput;
+    engine::UIFloatInputState weaponLightLifetimeInput;
     engine::UIScrollState generalScroll;
     engine::UIScrollState skyScroll;
     engine::UIScrollState lightingScroll;
     engine::UIScrollState fogScroll;
     engine::UIScrollState viewmodelScroll;
+    engine::UIScrollState weaponScroll;
     std::string errorMessage;
 };
 

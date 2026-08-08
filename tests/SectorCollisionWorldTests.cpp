@@ -300,6 +300,95 @@ void TestHoles()
           "point on hole boundary is not contained by sector");
 }
 
+void TestRaycastSurfacesAndRange()
+{
+    const SectorTopologyMap map = MakeSquare(0.0f, 24.0f);
+    game::SectorCollisionWorld world;
+    std::string error;
+    Check(world.BuildFromTopology(map, &error), "raycast square builds");
+    const Vector2 center = game::SectorCoordToWorldPosition2(32, 32);
+    const float ceiling = game::SectorAuthoringToWorldDistance(24.0f);
+
+    const game::SectorCollisionRayHit floorHit = world.Raycast(
+            Vector3{center.x, 1.0f, center.y},
+            Vector3{0.0f, -1.0f, 0.0f},
+            100.0f);
+    Check(floorHit.hit
+                  && floorHit.surfaceKind
+                          == game::SectorCollisionRaySurfaceKind::Floor
+                  && Near(floorHit.position.y, 0.0f)
+                  && Near(floorHit.normal.y, 1.0f),
+          "raycast hits floor with world position and opposing normal");
+
+    const game::SectorCollisionRayHit ceilingHit = world.Raycast(
+            Vector3{center.x, 1.0f, center.y},
+            Vector3{0.0f, 1.0f, 0.0f},
+            100.0f);
+    Check(ceilingHit.hit
+                  && ceilingHit.surfaceKind
+                          == game::SectorCollisionRaySurfaceKind::Ceiling
+                  && Near(ceilingHit.position.y, ceiling)
+                  && Near(ceilingHit.normal.y, -1.0f),
+          "raycast hits ceiling with world position and opposing normal");
+
+    const game::SectorCollisionRayHit wallHit = world.Raycast(
+            Vector3{center.x, 1.0f, center.y},
+            Vector3{1.0f, 0.0f, 0.0f},
+            100.0f);
+    Check(wallHit.hit
+                  && wallHit.surfaceKind
+                          == game::SectorCollisionRaySurfaceKind::Wall
+                  && wallHit.lineDefId > 0
+                  && wallHit.sideDefId > 0
+                  && wallHit.sectorId == 10,
+          "raycast preserves nearest wall topology identity");
+    Check(!world.Raycast(
+                    Vector3{center.x, 1.0f, center.y},
+                    Vector3{1.0f, 0.0f, 0.0f},
+                    wallHit.distance * 0.5f).hit,
+          "raycast maximum range produces a normal miss");
+}
+
+void TestRaycastPortalOpeningAndWallStrips()
+{
+    const SectorTopologyMap map = MakeAdjacent();
+    game::SectorCollisionWorld world;
+    std::string error;
+    Check(world.BuildFromTopology(map, &error), "portal raycast world builds");
+    const Vector2 left = game::SectorCoordToWorldPosition2(32, 32);
+
+    const game::SectorCollisionRayHit through = world.Raycast(
+            Vector3{left.x, 1.0f, left.y},
+            Vector3{1.0f, 0.0f, 0.0f},
+            100.0f);
+    Check(through.hit && through.lineDefId == 6 && through.sectorId == 20,
+          "ray passes through portal opening and hits farther solid wall");
+
+    const game::SectorCollisionRayHit lower = world.Raycast(
+            Vector3{left.x, 0.2f, left.y},
+            Vector3{1.0f, 0.0f, 0.0f},
+            100.0f);
+    Check(lower.hit && lower.lineDefId == 2
+                  && lower.surfaceKind
+                          == game::SectorCollisionRaySurfaceKind::LowerWall,
+          "ray hits portal lower wall strip below opening");
+}
+
+void TestRaycastSkipsSkyCeiling()
+{
+    SectorTopologyMap map = MakeSquare(0.0f, 24.0f);
+    map.sectors.front().ceilingSky = true;
+    game::SectorCollisionWorld world;
+    std::string error;
+    Check(world.BuildFromTopology(map, &error), "sky raycast world builds");
+    const Vector2 center = game::SectorCoordToWorldPosition2(32, 32);
+    Check(!world.Raycast(
+                    Vector3{center.x, 1.0f, center.y},
+                    Vector3{0.0f, 1.0f, 0.0f},
+                    100.0f).hit,
+          "raycast does not hit an open-sky ceiling");
+}
+
 void ExpectBuildFailure(SectorTopologyMap map, const char* description)
 {
     game::SectorCollisionWorld world;
@@ -350,6 +439,9 @@ int main()
     TestBlocksPlayerFlagExtraction();
     TestPointLookup();
     TestHoles();
+    TestRaycastSurfacesAndRange();
+    TestRaycastPortalOpeningAndWallStrips();
+    TestRaycastSkipsSkyCeiling();
     TestRobustness();
 
     if (failures != 0) {

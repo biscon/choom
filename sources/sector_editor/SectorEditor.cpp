@@ -19,6 +19,7 @@
 #include "sector_editor/preview/SectorEditorPreviewOverlay.h"
 #include "sector_editor/preview/SectorEditorPreviewHudRenderer.h"
 #include "sector_editor/preview/SectorEditorPreviewUvPanel.h"
+#include "sector_editor/preview/SectorEditorPreviewViewmodelEffectsRenderer.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
@@ -89,6 +90,20 @@ bool SameViewmodelOverride(
             && lhs.verticalFovDegrees == rhs.verticalFovDegrees;
 }
 
+bool SameHolsterTransitionOverride(
+        const FpsViewmodelHolsterTransitionOverride& lhs,
+        const FpsViewmodelHolsterTransitionOverride& rhs)
+{
+    return lhs.holsterDurationSeconds == rhs.holsterDurationSeconds
+            && lhs.unholsterDurationSeconds == rhs.unholsterDurationSeconds
+            && SameOptionalVector3(
+                    lhs.hiddenTranslation,
+                    rhs.hiddenTranslation)
+            && SameOptionalVector3(
+                    lhs.hiddenRotationDegrees,
+                    rhs.hiddenRotationDegrees);
+}
+
 bool SameGripCorrectionOverride(
         const FpsViewmodelGripCorrectionOverride& lhs,
         const FpsViewmodelGripCorrectionOverride& rhs)
@@ -105,6 +120,26 @@ bool SameAttachmentLightingOverride(
     return lhs.brightnessAdjustment == rhs.brightnessAdjustment
             && lhs.metallicFactor == rhs.metallicFactor
             && lhs.roughnessFactor == rhs.roughnessFactor;
+}
+
+bool SameFiringOverride(
+        const FpsWeaponFiringOverride& lhs,
+        const FpsWeaponFiringOverride& rhs)
+{
+    return lhs.shotIntervalSeconds == rhs.shotIntervalSeconds
+            && SameOptionalVector3(lhs.recoilTranslationImpulse, rhs.recoilTranslationImpulse)
+            && SameOptionalVector3(lhs.recoilRotationImpulseDegrees, rhs.recoilRotationImpulseDegrees)
+            && lhs.recoilRollVariationDegrees == rhs.recoilRollVariationDegrees
+            && lhs.recoilSpringFrequencyHz == rhs.recoilSpringFrequencyHz
+            && lhs.recoilDampingRatio == rhs.recoilDampingRatio
+            && SameOptionalVector3(lhs.muzzlePosition, rhs.muzzlePosition)
+            && SameOptionalVector3(lhs.muzzleRotationDegrees, rhs.muzzleRotationDegrees)
+            && lhs.flashLifetimeSeconds == rhs.flashLifetimeSeconds
+            && lhs.flashSizeWorld == rhs.flashSizeWorld
+            && lhs.flashEdgeSoftness == rhs.flashEdgeSoftness
+            && lhs.muzzleLightIntensity == rhs.muzzleLightIntensity
+            && lhs.muzzleLightRadiusWorld == rhs.muzzleLightRadiusWorld
+            && lhs.muzzleLightLifetimeSeconds == rhs.muzzleLightLifetimeSeconds;
 }
 
 SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
@@ -412,6 +447,17 @@ void SectorEditor::BeginFpsViewmodel(engine::AssetManager& assets)
     runtime.presentation = ResolveFpsViewmodelPresentation(
             definition->viewmodel.presentation,
             FindFpsViewmodelOverride(applicationSettings, definition->id));
+    runtime.holsterTransition = ResolveFpsViewmodelHolsterTransition(
+            definition->viewmodel.holsterTransition,
+            FindFpsViewmodelHolsterTransitionOverride(
+                    applicationSettings,
+                    definition->id));
+    runtime.holsterPose = EvaluateFpsViewmodelHolsterPose(
+            runtime.holsterTransition,
+            runtime.equipProgress);
+    runtime.firing.definition = ResolveFpsWeaponFiringDefinition(
+            definition->firing,
+            FindFpsWeaponFiringOverride(applicationSettings, definition->id));
     if (state.previewSettingsModal.open) {
         runtime.presentation = ClampFpsViewmodelPresentation(state.previewSettingsModal.draftViewmodel);
     }
@@ -455,20 +501,39 @@ void SectorEditor::EndFpsViewmodel(engine::AssetManager& assets)
 {
     FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
     if (!engine::IsNull(runtime.assetScope)) assets.UnloadScope(runtime.assetScope);
+    preview.SetRuntimePointLight(nullptr);
     ResetFpsViewmodelRuntime(runtime);
 }
 
 void SectorEditor::UpdateFpsViewmodel(engine::AssetManager& assets, float dt)
 {
     FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
-    if (runtime.loadState == FpsViewmodelLoadState::Inactive
-            || runtime.loadState == FpsViewmodelLoadState::Failed) return;
+    if (runtime.loadState == FpsViewmodelLoadState::Inactive) return;
     const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(weaponRegistry, runtime.activeWeaponId);
     if (definition == nullptr) {
         runtime.loadState = FpsViewmodelLoadState::Failed;
         runtime.error = "Active weapon definition disappeared";
         return;
     }
+    runtime.holsterTransition = ResolveFpsViewmodelHolsterTransition(
+            definition->viewmodel.holsterTransition,
+            FindFpsViewmodelHolsterTransitionOverride(
+                    applicationSettings,
+                    definition->id));
+    if (state.previewSettingsModal.open) {
+        runtime.holsterTransition = ClampFpsViewmodelHolsterTransition(
+                state.previewSettingsModal.draftViewmodelHolsterTransition);
+    }
+    AdvanceFpsViewmodelEquipTransition(runtime, dt);
+    runtime.firing.definition = ResolveFpsWeaponFiringDefinition(
+            definition->firing,
+            FindFpsWeaponFiringOverride(applicationSettings, definition->id));
+    if (state.previewSettingsModal.open) {
+        runtime.firing.definition = ClampFpsWeaponFiringDefinition(
+                state.previewSettingsModal.draftWeaponFiring);
+    }
+    AdvanceFpsWeaponFiringRuntime(runtime.firing, dt);
+    if (runtime.loadState == FpsViewmodelLoadState::Failed) return;
     const auto failAttachmentBecauseArmsFailed = [&runtime]() {
         if (runtime.attachment.loadState
                 == FpsViewmodelAttachmentLoadState::Failed) {
@@ -620,6 +685,150 @@ void SectorEditor::UpdateFpsViewmodel(engine::AssetManager& assets, float dt)
     }
 }
 
+void SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
+{
+    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
+    const bool gameplay3D = state.mode == SectorEditorMode::Preview3D
+            && previewState.controller.previewControlMode
+                    == SectorPreviewControlMode::Gameplay;
+    const bool mouseActive = gameplay3D
+            && previewState.controller.freeflyController.mouseLookEnabled;
+    const bool uiCaptured = uiState.keyboardCaptured
+            || state.texturePicker.open
+            || state.decalTintModal.open
+            || state.previewSettingsModal.open
+            || runtimeObjectEditingState.spritePicker.open
+            || runtimeObjectEditingState.staticModelPicker.open
+            || HasDocumentModalOpen();
+    input.ForEachEvent(
+            engine::InputEventType::MouseButtonPressed,
+            true,
+            [this, &runtime, gameplay3D, mouseActive, uiCaptured](
+                    engine::InputEvent& event) {
+                if (event.mouseButton.button != MOUSE_BUTTON_LEFT) return;
+                FpsFireRejectReason reason = FpsFireRejectReason::None;
+                if (!CanFireFpsWeapon(
+                            runtime,
+                            gameplay3D,
+                            mouseActive,
+                            uiCaptured,
+                            &reason)) {
+                    runtime.firing.lastRejectReason = reason;
+                    if (gameplay3D && mouseActive && !uiCaptured) {
+                        engine::ConsumeEvent(event);
+                    }
+                    return;
+                }
+
+                const Camera3D& camera = preview.RenderCamera();
+                Vector3 direction = Vector3Normalize(
+                        Vector3Subtract(camera.target, camera.position));
+                FpsShotResult shot;
+                shot.accepted = true;
+                shot.rayOrigin = camera.position;
+                shot.rayDirection = direction;
+                if (previewState.collision.sectorCollisionWorldValid) {
+                    const SectorCollisionRayHit hit =
+                            previewState.collision.sectorCollisionWorld.Raycast(
+                                    camera.position,
+                                    direction,
+                                    runtime.firing.definition.maximumRangeWorld);
+                    shot.hit = hit.hit;
+                    shot.position = hit.position;
+                    shot.normal = hit.normal;
+                    shot.distance = hit.distance;
+                    shot.sectorId = hit.sectorId;
+                    shot.lineDefId = hit.lineDefId;
+                    shot.sideDefId = hit.sideDefId;
+                    shot.neighborSectorId = hit.neighborSectorId;
+                    switch (hit.surfaceKind) {
+                        case SectorCollisionRaySurfaceKind::Floor: shot.surfaceKind = FpsShotSurfaceKind::Floor; break;
+                        case SectorCollisionRaySurfaceKind::Ceiling: shot.surfaceKind = FpsShotSurfaceKind::Ceiling; break;
+                        case SectorCollisionRaySurfaceKind::Wall: shot.surfaceKind = FpsShotSurfaceKind::Wall; break;
+                        case SectorCollisionRaySurfaceKind::LowerWall: shot.surfaceKind = FpsShotSurfaceKind::LowerWall; break;
+                        case SectorCollisionRaySurfaceKind::UpperWall: shot.surfaceKind = FpsShotSurfaceKind::UpperWall; break;
+                        case SectorCollisionRaySurfaceKind::None: break;
+                    }
+                }
+                ApplyFpsWeaponShotEffects(runtime.firing, shot);
+                engine::ConsumeEvent(event);
+            });
+}
+
+void SectorEditor::UpdateFpsViewmodelTransformsAndLight()
+{
+    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
+    runtime.firing.viewmodelRootTransform = BuildFpsViewmodelAnimatedTransform(
+            preview.RenderCamera(),
+            runtime.presentation,
+            runtime.holsterPose,
+            runtime.firing.recoil);
+    runtime.firing.viewmodelRootTransformValid = !runtime.activeWeaponId.empty();
+    runtime.attachment.pistolWorldTransformValid =
+            runtime.firing.viewmodelRootTransformValid
+            && runtime.attachment.handPoseValid
+            && runtime.attachment.loadState
+                    == FpsViewmodelAttachmentLoadState::Ready;
+    if (runtime.attachment.pistolWorldTransformValid) {
+        runtime.attachment.pistolWorldTransform =
+                BuildFpsViewmodelAttachmentTransform(
+                        runtime.firing.viewmodelRootTransform,
+                        runtime.attachment.handModelTransform,
+                        runtime.attachment.gripCorrection);
+        runtime.firing.muzzleWorldTransform = BuildFpsViewmodelMuzzleTransform(
+                runtime.attachment.pistolWorldTransform,
+                runtime.firing.definition.muzzleSocket);
+        runtime.firing.muzzleWorldTransformValid = true;
+    } else {
+        runtime.firing.muzzleWorldTransformValid = false;
+    }
+
+    SectorPreviewDynamicPointLightSource source;
+    const float intensity = FpsMuzzleLightCurrentIntensity(runtime.firing.light);
+    if (intensity > 0.0f && runtime.firing.muzzleWorldTransformValid) {
+        const Vector3 position = Vector3Transform(
+                Vector3{}, runtime.firing.muzzleWorldTransform);
+        source.lightId = -1;
+        source.ownerSectorId = previewState.collision.sectorCollisionWorldValid
+                ? previewState.collision.sectorCollisionWorld.FindSectorContainingPoint(
+                        Vector2{position.x, position.z})
+                : 0;
+        source.light.lightId = source.lightId;
+        source.light.kind = SectorPreviewDynamicLightKind::Point;
+        source.light.position = position;
+        source.light.color = Vector3{
+                runtime.firing.light.color.r / 255.0f,
+                runtime.firing.light.color.g / 255.0f,
+                runtime.firing.light.color.b / 255.0f};
+        source.light.radius = runtime.firing.light.radiusWorld;
+        source.light.intensity = intensity;
+        source.light.flicker = false;
+        source.light.castsShadow = false;
+        preview.SetRuntimePointLight(&source);
+    } else {
+        preview.SetRuntimePointLight(nullptr);
+    }
+
+    if (previewState.controller.previewControlMode
+            == SectorPreviewControlMode::Gameplay) {
+        const SectorFpsControllerConfig config = NormalizeSectorFpsControllerConfig(
+                previewState.controller.fpsControllerConfig);
+        preview.UpdateVisibilityDebug(
+                previewState.controller.fpsControllerState.currentSectorId,
+                ClampRuntimeVisibilitySeedRadiusWorld(config.playerRadius),
+                true,
+                &previewState.runtime.runtimeObjects.dynamicPortalBlockers,
+                engineContext != nullptr ? &engineContext->world : nullptr);
+    } else {
+        preview.UpdateVisibilityDebug(
+                0,
+                0.0f,
+                false,
+                &previewState.runtime.runtimeObjects.dynamicPortalBlockers,
+                engineContext != nullptr ? &engineContext->world : nullptr);
+    }
+}
+
 void SectorEditor::Update(engine::EngineContext& context, float dt)
 {
     engine::Input& input = context.input;
@@ -652,6 +861,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 || runtimeObjectEditingState.staticModelPicker.open
                 || HasDocumentModalOpen();
         if (hasBlockingModal) {
+            UpdateFpsViewmodelTransformsAndLight();
             return;
         }
         const bool canInteractWithDoors = previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
@@ -674,6 +884,10 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                     });
         }
         UpdatePreview3D(input, assets, dt);
+        if (state.mode == SectorEditorMode::Preview3D) {
+            ProcessFpsWeaponFire(input);
+            UpdateFpsViewmodelTransformsAndLight();
+        }
         return;
     }
 
@@ -2021,8 +2235,10 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
 
                 if (event.key.key == KEY_H) {
                     if (ToggleFpsViewmodelHolster(previewState.runtime.viewmodel, true, uiState.keyboardCaptured)) {
-                        statusText = previewState.runtime.viewmodel.holstered
-                                ? "Viewmodel holstered" : "Viewmodel equipped";
+                        statusText = previewState.runtime.viewmodel.equipState
+                                        == FpsViewmodelEquipState::Holstering
+                                ? "Viewmodel holstering"
+                                : "Viewmodel unholstering";
                         engine::ConsumeEvent(event);
                     }
                     return;
@@ -3274,20 +3490,15 @@ void SectorEditor::RenderPreview3DViewmodel(engine::AssetManager& assets)
         return;
     }
 
-    const Matrix viewmodelRoot = BuildFpsViewmodelTransform(
-            preview.RenderCamera(), runtime.presentation);
+    if (!runtime.firing.viewmodelRootTransformValid) return;
+    const Matrix viewmodelRoot = runtime.firing.viewmodelRootTransform;
     const engine::ModelAsset* attachmentAsset = nullptr;
     if (IsFpsViewmodelAttachmentRenderable(runtime)) {
         attachmentAsset = assets.GetModelAsset(runtime.attachment.model);
     }
-    runtime.attachment.pistolWorldTransformValid = attachmentAsset != nullptr;
-    if (runtime.attachment.pistolWorldTransformValid) {
-        runtime.attachment.pistolWorldTransform =
-                BuildFpsViewmodelAttachmentTransform(
-                        viewmodelRoot,
-                        runtime.attachment.handModelTransform,
-                        runtime.attachment.gripCorrection);
-    }
+    runtime.attachment.pistolWorldTransformValid =
+            runtime.attachment.pistolWorldTransformValid
+            && attachmentAsset != nullptr;
 
     Camera3D camera = preview.RenderCamera();
     camera.fovy = runtime.presentation.verticalFovDegrees;
@@ -3337,6 +3548,7 @@ void SectorEditor::RenderPreview3DViewmodel(engine::AssetManager& assets)
             ambientLighting,
             viewmodelLighting,
             attachmentLighting);
+    DrawSectorEditorPreviewMuzzleFlash(runtime.firing, camera);
     rlSetClipPlanes(previousNear, previousFar);
 }
 
@@ -5691,6 +5903,14 @@ void SectorEditor::OpenPreviewSettingsModal()
         state.previewSettingsModal.draftViewmodel = ResolveFpsViewmodelPresentation(
                 weapon->viewmodel.presentation,
                 FindFpsViewmodelOverride(applicationSettings, weapon->id));
+        state.previewSettingsModal.viewmodelHolsterTransitionDefaults =
+                weapon->viewmodel.holsterTransition;
+        state.previewSettingsModal.draftViewmodelHolsterTransition =
+                ResolveFpsViewmodelHolsterTransition(
+                        weapon->viewmodel.holsterTransition,
+                        FindFpsViewmodelHolsterTransitionOverride(
+                                applicationSettings,
+                                weapon->id));
         state.previewSettingsModal.viewmodelGripDefaults =
                 weapon->viewmodel.attachment.gripCorrection;
         state.previewSettingsModal.draftViewmodelGrip =
@@ -5704,6 +5924,12 @@ void SectorEditor::OpenPreviewSettingsModal()
                 ResolveFpsViewmodelAttachmentLighting(
                         weapon->viewmodel.attachment.lighting,
                         FindFpsViewmodelAttachmentLightingOverride(
+                                applicationSettings, weapon->id));
+        state.previewSettingsModal.weaponFiringDefaults = weapon->firing;
+        state.previewSettingsModal.draftWeaponFiring =
+                ResolveFpsWeaponFiringDefinition(
+                        weapon->firing,
+                        FindFpsWeaponFiringOverride(
                                 applicationSettings, weapon->id));
     }
 }
@@ -5760,6 +5986,34 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
             : FpsViewmodelPresentationOverride{};
     const bool viewmodelChanged = weapon != nullptr
             && !SameViewmodelOverride(viewmodelOverride, currentOverride);
+    const FpsViewmodelHolsterTransition draftHolsterTransition =
+            ClampFpsViewmodelHolsterTransition(
+                    state.previewSettingsModal
+                            .draftViewmodelHolsterTransition);
+    const FpsViewmodelHolsterTransition currentHolsterTransition =
+            weapon != nullptr
+            ? ResolveFpsViewmodelHolsterTransition(
+                    weapon->viewmodel.holsterTransition,
+                    FindFpsViewmodelHolsterTransitionOverride(
+                            applicationSettings,
+                            weapon->id))
+            : FpsViewmodelHolsterTransition{};
+    const FpsViewmodelHolsterTransitionOverride holsterTransitionOverride =
+            weapon != nullptr
+            ? BuildFpsViewmodelHolsterTransitionOverride(
+                    weapon->viewmodel.holsterTransition,
+                    draftHolsterTransition)
+            : FpsViewmodelHolsterTransitionOverride{};
+    const FpsViewmodelHolsterTransitionOverride
+            currentHolsterTransitionOverride = weapon != nullptr
+            ? BuildFpsViewmodelHolsterTransitionOverride(
+                    weapon->viewmodel.holsterTransition,
+                    currentHolsterTransition)
+            : FpsViewmodelHolsterTransitionOverride{};
+    const bool holsterTransitionChanged = weapon != nullptr
+            && !SameHolsterTransitionOverride(
+                    holsterTransitionOverride,
+                    currentHolsterTransitionOverride);
     const FpsViewmodelGripCorrection draftGrip =
             ClampFpsViewmodelGripCorrection(
                     state.previewSettingsModal.draftViewmodelGrip);
@@ -5810,9 +6064,26 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
             && !SameAttachmentLightingOverride(
                     attachmentLightingOverride,
                     currentAttachmentLightingOverride);
+    const FpsWeaponFiringDefinition draftFiring =
+            ClampFpsWeaponFiringDefinition(
+                    state.previewSettingsModal.draftWeaponFiring);
+    const FpsWeaponFiringDefinition currentFiring = weapon != nullptr
+            ? ResolveFpsWeaponFiringDefinition(
+                    weapon->firing,
+                    FindFpsWeaponFiringOverride(applicationSettings, weapon->id))
+            : FpsWeaponFiringDefinition{};
+    const FpsWeaponFiringOverride firingOverride = weapon != nullptr
+            ? BuildFpsWeaponFiringOverride(weapon->firing, draftFiring)
+            : FpsWeaponFiringOverride{};
+    const FpsWeaponFiringOverride currentFiringOverride = weapon != nullptr
+            ? BuildFpsWeaponFiringOverride(weapon->firing, currentFiring)
+            : FpsWeaponFiringOverride{};
+    const bool firingChanged = weapon != nullptr
+            && !SameFiringOverride(firingOverride, currentFiringOverride);
     if (!previewChanged && !skyChanged && !directionalChanged && !fogChanged
             && !objectProbeSettingsChanged && !viewmodelChanged && !gripChanged
-            && !attachmentLightingChanged) {
+            && !holsterTransitionChanged && !attachmentLightingChanged
+            && !firingChanged) {
         state.previewSettingsModal = SectorPreviewSettingsModalState{};
         statusText = "Preview settings unchanged";
         return;
@@ -5828,7 +6099,8 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     TopologyMap().directionalLight = draftDirectionalLight;
     ApplySectorPreviewFogSettings(TopologyMap(), draftFogSettings);
     ApplySectorPreviewObjectProbeSettings(TopologyMap(), draftLightmapSettings);
-    if ((viewmodelChanged || gripChanged || attachmentLightingChanged)
+    if ((viewmodelChanged || holsterTransitionChanged || gripChanged
+                || attachmentLightingChanged || firingChanged)
             && weapon != nullptr) {
         if (viewmodelChanged) {
             if (FpsViewmodelOverrideEmpty(viewmodelOverride)) {
@@ -5836,6 +6108,19 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
             } else {
                 SetFpsViewmodelOverride(
                         applicationSettings, weapon->id, viewmodelOverride);
+            }
+        }
+        if (holsterTransitionChanged) {
+            if (FpsViewmodelHolsterTransitionOverrideEmpty(
+                        holsterTransitionOverride)) {
+                ClearFpsViewmodelHolsterTransitionOverride(
+                        applicationSettings,
+                        weapon->id);
+            } else {
+                SetFpsViewmodelHolsterTransitionOverride(
+                        applicationSettings,
+                        weapon->id,
+                        holsterTransitionOverride);
             }
         }
         if (gripChanged) {
@@ -5857,6 +6142,14 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                         applicationSettings,
                         weapon->id,
                         attachmentLightingOverride);
+            }
+        }
+        if (firingChanged) {
+            if (FpsWeaponFiringOverrideEmpty(firingOverride)) {
+                ClearFpsWeaponFiringOverride(applicationSettings, weapon->id);
+            } else {
+                SetFpsWeaponFiringOverride(
+                        applicationSettings, weapon->id, firingOverride);
             }
         }
         std::string saveError;

@@ -13,6 +13,91 @@ namespace game {
 enum class FpsViewmodelLoadState { Inactive, Pending, Ready, Failed };
 enum class FpsViewmodelAttachmentLoadState { Inactive, Pending, Ready, Failed };
 enum class FpsViewmodelBonePoseSpace { Unknown, Local, Model };
+enum class FpsViewmodelEquipState {
+    Holstered,
+    Unholstering,
+    Equipped,
+    Holstering
+};
+
+enum class FpsShotSurfaceKind { None, Floor, Ceiling, Wall, LowerWall, UpperWall };
+enum class FpsFireRejectReason {
+    None,
+    NotInGameplay3D,
+    MouseInputInactive,
+    UiCaptured,
+    NoActiveWeapon,
+    WeaponNotReady,
+    Cooldown
+};
+
+struct FpsShotResult {
+    bool accepted = false;
+    bool hit = false;
+    Vector3 rayOrigin{};
+    Vector3 rayDirection{};
+    Vector3 position{};
+    Vector3 normal{};
+    float distance = 0.0f;
+    FpsShotSurfaceKind surfaceKind = FpsShotSurfaceKind::None;
+    int sectorId = 0;
+    int lineDefId = 0;
+    int sideDefId = 0;
+    int neighborSectorId = 0;
+};
+
+struct FpsRecoilRuntimeState {
+    Vector3 translation{};
+    Vector3 translationVelocity{};
+    Vector3 rotationDegrees{};
+    Vector3 rotationVelocityDegrees{};
+};
+
+struct FpsMuzzleFlashRuntimeState {
+    bool active = false;
+    float ageSeconds = 0.0f;
+    float lifetimeSeconds = 0.0f;
+    float sizeWorld = 0.0f;
+    float rotationDegrees = 0.0f;
+    Color coreColor{};
+    Color hotColor{};
+    Color warmColor{};
+    Color edgeColor{};
+    float edgeSoftness = 0.35f;
+};
+
+struct FpsMuzzleLightRuntimeState {
+    bool active = false;
+    float ageSeconds = 0.0f;
+    float lifetimeSeconds = 0.0f;
+    float intensity = 0.0f;
+    float radiusWorld = 0.0f;
+    float decayExponent = 1.0f;
+    Color color{};
+};
+
+struct FpsWeaponFiringRuntimeState {
+    FpsWeaponFiringDefinition definition;
+    float cooldownRemainingSeconds = 0.0f;
+    uint32_t randomState = 0x6d2b79f5u;
+    uint64_t shotSequence = 0;
+    FpsFireRejectReason lastRejectReason = FpsFireRejectReason::None;
+    FpsShotResult lastShot;
+    bool hasLastShot = false;
+    FpsRecoilRuntimeState recoil;
+    FpsMuzzleFlashRuntimeState flash;
+    FpsMuzzleLightRuntimeState light;
+    Matrix viewmodelRootTransform = {};
+    Matrix muzzleWorldTransform = {};
+    bool viewmodelRootTransformValid = false;
+    bool muzzleWorldTransformValid = false;
+};
+
+struct FpsViewmodelHolsterPose {
+    float hiddenAmount = 0.0f;
+    Vector3 translation{0.0f, 0.0f, 0.0f};
+    Quaternion rotation{0.0f, 0.0f, 0.0f, 1.0f};
+};
 
 struct FpsViewmodelAttachmentRuntimeState {
     FpsViewmodelAttachmentLoadState loadState =
@@ -48,7 +133,10 @@ struct FpsViewmodelRuntimeState {
     uint32_t animationIndex = engine::InvalidModelAnimationIndex;
     float sourceFrameCursor = 0.0f;
     float raylibFrame = 0.0f;
-    bool holstered = false;
+    FpsViewmodelEquipState equipState = FpsViewmodelEquipState::Equipped;
+    float equipProgress = 1.0f;
+    FpsViewmodelHolsterTransition holsterTransition;
+    FpsViewmodelHolsterPose holsterPose;
     int meshCount = 0;
     int triangleCount = 0;
     int boneCount = 0;
@@ -58,6 +146,7 @@ struct FpsViewmodelRuntimeState {
     FpsViewmodelMaterialOverride materialOverride;
     float environmentExposure = 0.15f;
     FpsViewmodelAttachmentRuntimeState attachment;
+    FpsWeaponFiringRuntimeState firing;
     std::string error;
 };
 
@@ -66,6 +155,11 @@ bool ToggleFpsViewmodelHolster(
         FpsViewmodelRuntimeState& state,
         bool preview3DActive,
         bool inputSuppressed);
+void AdvanceFpsViewmodelEquipTransition(
+        FpsViewmodelRuntimeState& state,
+        float deltaSeconds);
+bool IsFpsViewmodelReadyForUse(const FpsViewmodelRuntimeState& state);
+bool IsFpsViewmodelPresentationVisible(const FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelRenderable(const FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelAttachmentRenderable(const FpsViewmodelRuntimeState& state);
 float AdvanceFpsViewmodelAnimationCursor(
@@ -90,6 +184,18 @@ Vector3 TransformFpsViewmodelLocalPosition(const Camera3D& camera, Vector3 local
 Matrix BuildFpsViewmodelTransform(
         const Camera3D& camera,
         const FpsViewmodelPresentation& presentation);
+FpsViewmodelHolsterPose EvaluateFpsViewmodelHolsterPose(
+        const FpsViewmodelHolsterTransition& transition,
+        float equipProgress);
+Matrix BuildFpsViewmodelAnimatedTransform(
+        const Camera3D& camera,
+        const FpsViewmodelPresentation& presentation,
+        const FpsViewmodelHolsterPose& holsterPose);
+Matrix BuildFpsViewmodelAnimatedTransform(
+        const Camera3D& camera,
+        const FpsViewmodelPresentation& presentation,
+        const FpsViewmodelHolsterPose& holsterPose,
+        const FpsRecoilRuntimeState& recoil);
 Matrix BuildFpsViewmodelGripCorrectionTransform(
         const FpsViewmodelGripCorrection& correction);
 int FindFpsViewmodelBoneIndex(
@@ -107,5 +213,22 @@ Matrix BuildFpsViewmodelAttachmentTransform(
         Matrix viewmodelRoot,
         Matrix handModelTransform,
         const FpsViewmodelGripCorrection& gripCorrection);
+Matrix BuildFpsViewmodelMuzzleTransform(
+        Matrix pistolWorldTransform,
+        const FpsWeaponMuzzleSocketDefinition& socket);
+bool CanFireFpsWeapon(
+        const FpsViewmodelRuntimeState& state,
+        bool preview3DGameplay,
+        bool mouseInputActive,
+        bool uiCaptured,
+        FpsFireRejectReason* outReason = nullptr);
+void AdvanceFpsWeaponFiringRuntime(
+        FpsWeaponFiringRuntimeState& state,
+        float deltaSeconds);
+void ApplyFpsWeaponShotEffects(
+        FpsWeaponFiringRuntimeState& state,
+        const FpsShotResult& shot);
+float FpsMuzzleLightCurrentIntensity(
+        const FpsMuzzleLightRuntimeState& state);
 
 } // namespace game

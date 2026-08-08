@@ -81,6 +81,28 @@ Color ReadColor(const Json& value, const std::string& context)
             ColorChannel(value, "a", context)};
 }
 
+Color MixColor(Color a, Color b, float amount)
+{
+    const auto channel = [amount](unsigned char first, unsigned char second) {
+        return static_cast<unsigned char>(std::lround(
+                static_cast<float>(first)
+                + (static_cast<float>(second) - static_cast<float>(first))
+                        * amount));
+    };
+    return Color{
+            channel(a.r, b.r), channel(a.g, b.g),
+            channel(a.b, b.b), channel(a.a, b.a)};
+}
+
+Color DarkenedColor(Color value)
+{
+    return Color{
+            static_cast<unsigned char>(std::lround(value.r * 0.45f)),
+            static_cast<unsigned char>(std::lround(value.g * 0.45f)),
+            static_cast<unsigned char>(std::lround(value.b * 0.45f)),
+            static_cast<unsigned char>(std::lround(value.a * 0.75f))};
+}
+
 Vector3 Vector(const Json& object, const char* name, const std::string& context)
 {
     const Json& value = Require(object, name, context);
@@ -117,6 +139,32 @@ void ValidatePresentation(const FpsViewmodelPresentation& value, const std::stri
     }
 }
 
+void ValidateHolsterTransition(
+        const FpsViewmodelHolsterTransition& value,
+        const std::string& context)
+{
+    const float values[] = {
+            value.holsterDurationSeconds,
+            value.unholsterDurationSeconds,
+            value.hiddenTranslation.x,
+            value.hiddenTranslation.y,
+            value.hiddenTranslation.z,
+            value.hiddenRotationDegrees.x,
+            value.hiddenRotationDegrees.y,
+            value.hiddenRotationDegrees.z};
+    for (float component : values) {
+        if (!std::isfinite(component)) {
+            Fail(context + " contains a non-finite value");
+        }
+    }
+    if (value.holsterDurationSeconds <= 0.0f) {
+        Fail(context + ".holsterDurationSeconds must be greater than zero");
+    }
+    if (value.unholsterDurationSeconds <= 0.0f) {
+        Fail(context + ".unholsterDurationSeconds must be greater than zero");
+    }
+}
+
 void ValidateGripCorrection(
         const FpsViewmodelGripCorrection& value,
         const std::string& context)
@@ -143,6 +191,23 @@ FpsViewmodelPresentation ReadPresentation(const Json& object, const std::string&
     result.scale = Number(object, "scale", context);
     result.verticalFovDegrees = Number(object, "verticalFovDegrees", context);
     ValidatePresentation(result, context);
+    return result;
+}
+
+FpsViewmodelHolsterTransition ReadHolsterTransition(
+        const Json& object,
+        const std::string& context)
+{
+    if (!object.is_object()) Fail(context + " must be an object");
+    FpsViewmodelHolsterTransition result;
+    result.holsterDurationSeconds = Number(
+            object, "holsterDurationSeconds", context);
+    result.unholsterDurationSeconds = Number(
+            object, "unholsterDurationSeconds", context);
+    result.hiddenTranslation = Vector(object, "hiddenTranslation", context);
+    result.hiddenRotationDegrees = Vector(
+            object, "hiddenRotationDegrees", context);
+    ValidateHolsterTransition(result, context);
     return result;
 }
 
@@ -231,6 +296,139 @@ FpsWeaponCrosshairDefinition ReadCrosshair(
     return result;
 }
 
+void ValidateFiring(
+        const FpsWeaponFiringDefinition& value,
+        const std::string& context)
+{
+    const float values[] = {
+            value.shotIntervalSeconds, value.maximumRangeWorld,
+            value.recoil.translationImpulse.x, value.recoil.translationImpulse.y,
+            value.recoil.translationImpulse.z,
+            value.recoil.rotationImpulseDegrees.x,
+            value.recoil.rotationImpulseDegrees.y,
+            value.recoil.rotationImpulseDegrees.z,
+            value.recoil.rollVariationDegrees,
+            value.recoil.springFrequencyHz, value.recoil.dampingRatio,
+            value.recoil.maximumTranslation.x, value.recoil.maximumTranslation.y,
+            value.recoil.maximumTranslation.z,
+            value.recoil.maximumRotationDegrees.x,
+            value.recoil.maximumRotationDegrees.y,
+            value.recoil.maximumRotationDegrees.z,
+            value.muzzleSocket.position.x, value.muzzleSocket.position.y,
+            value.muzzleSocket.position.z,
+            value.muzzleSocket.rotationDegrees.x,
+            value.muzzleSocket.rotationDegrees.y,
+            value.muzzleSocket.rotationDegrees.z,
+            value.muzzleFlash.lifetimeSeconds, value.muzzleFlash.sizeWorld,
+            value.muzzleFlash.sizeVariation, value.muzzleFlash.edgeSoftness,
+            value.muzzleLight.intensity,
+            value.muzzleLight.radiusWorld, value.muzzleLight.lifetimeSeconds,
+            value.muzzleLight.decayExponent};
+    for (float component : values) {
+        if (!std::isfinite(component)) Fail(context + " contains a non-finite value");
+    }
+    if (value.shotIntervalSeconds <= 0.0f || value.maximumRangeWorld <= 0.0f) {
+        Fail(context + " shot interval and maximum range must be greater than zero");
+    }
+    if (value.recoil.rollVariationDegrees < 0.0f
+            || value.recoil.springFrequencyHz <= 0.0f
+            || value.recoil.dampingRatio <= 0.0f
+            || value.recoil.maximumTranslation.x < 0.0f
+            || value.recoil.maximumTranslation.y < 0.0f
+            || value.recoil.maximumTranslation.z < 0.0f
+            || value.recoil.maximumRotationDegrees.x < 0.0f
+            || value.recoil.maximumRotationDegrees.y < 0.0f
+            || value.recoil.maximumRotationDegrees.z < 0.0f) {
+        Fail(context + ".recoil contains an invalid response or limit");
+    }
+    if (value.muzzleFlash.lifetimeSeconds <= 0.0f
+            || value.muzzleFlash.sizeWorld <= 0.0f
+            || value.muzzleFlash.sizeVariation < 0.0f
+            || value.muzzleFlash.sizeVariation > 1.0f
+            || value.muzzleFlash.edgeSoftness < 0.01f
+            || value.muzzleFlash.edgeSoftness > 1.0f) {
+        Fail(context + ".muzzleFlash contains an invalid lifetime, size, variation, or edge softness");
+    }
+    if (value.muzzleLight.intensity < 0.0f
+            || value.muzzleLight.radiusWorld <= 0.0f
+            || value.muzzleLight.lifetimeSeconds <= 0.0f
+            || value.muzzleLight.decayExponent <= 0.0f) {
+        Fail(context + ".muzzleLight contains an invalid intensity, radius, lifetime, or decay");
+    }
+}
+
+FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& context)
+{
+    if (!object.is_object()) Fail(context + " must be an object");
+    FpsWeaponFiringDefinition result;
+    result.shotIntervalSeconds = Number(object, "shotIntervalSeconds", context);
+    result.maximumRangeWorld = Number(object, "maximumRangeWorld", context);
+
+    const Json& recoil = Require(object, "recoil", context);
+    const std::string recoilContext = context + ".recoil";
+    result.recoil.translationImpulse = Vector(recoil, "translationImpulse", recoilContext);
+    result.recoil.rotationImpulseDegrees = Vector(recoil, "rotationImpulseDegrees", recoilContext);
+    result.recoil.rollVariationDegrees = Number(recoil, "rollVariationDegrees", recoilContext);
+    result.recoil.springFrequencyHz = Number(recoil, "springFrequencyHz", recoilContext);
+    result.recoil.dampingRatio = Number(recoil, "dampingRatio", recoilContext);
+    result.recoil.maximumTranslation = Vector(recoil, "maximumTranslation", recoilContext);
+    result.recoil.maximumRotationDegrees = Vector(recoil, "maximumRotationDegrees", recoilContext);
+
+    const Json& socket = Require(object, "muzzleSocket", context);
+    const std::string socketContext = context + ".muzzleSocket";
+    result.muzzleSocket.position = Vector(socket, "position", socketContext);
+    result.muzzleSocket.rotationDegrees = Vector(socket, "rotationDegrees", socketContext);
+
+    const Json& flash = Require(object, "muzzleFlash", context);
+    const std::string flashContext = context + ".muzzleFlash";
+    result.muzzleFlash.enabled = Boolean(flash, "enabled", flashContext);
+    result.muzzleFlash.lifetimeSeconds = Number(flash, "lifetimeSeconds", flashContext);
+    result.muzzleFlash.sizeWorld = Number(flash, "sizeWorld", flashContext);
+    result.muzzleFlash.sizeVariation = Number(flash, "sizeVariation", flashContext);
+    const bool hasGradientColors = flash.find("coreColor") != flash.end()
+            || flash.find("hotColor") != flash.end()
+            || flash.find("warmColor") != flash.end()
+            || flash.find("edgeColor") != flash.end();
+    if (hasGradientColors) {
+        result.muzzleFlash.coreColor = ReadColor(
+                Require(flash, "coreColor", flashContext),
+                flashContext + ".coreColor");
+        result.muzzleFlash.hotColor = ReadColor(
+                Require(flash, "hotColor", flashContext),
+                flashContext + ".hotColor");
+        result.muzzleFlash.warmColor = ReadColor(
+                Require(flash, "warmColor", flashContext),
+                flashContext + ".warmColor");
+        result.muzzleFlash.edgeColor = ReadColor(
+                Require(flash, "edgeColor", flashContext),
+                flashContext + ".edgeColor");
+        result.muzzleFlash.edgeSoftness = Number(
+                flash, "edgeSoftness", flashContext);
+    } else {
+        const Color inner = ReadColor(
+                Require(flash, "innerColor", flashContext),
+                flashContext + ".innerColor");
+        const Color outer = ReadColor(
+                Require(flash, "outerColor", flashContext),
+                flashContext + ".outerColor");
+        result.muzzleFlash.coreColor = inner;
+        result.muzzleFlash.hotColor = MixColor(inner, outer, 0.30f);
+        result.muzzleFlash.warmColor = outer;
+        result.muzzleFlash.edgeColor = DarkenedColor(outer);
+    }
+
+    const Json& light = Require(object, "muzzleLight", context);
+    const std::string lightContext = context + ".muzzleLight";
+    result.muzzleLight.enabled = Boolean(light, "enabled", lightContext);
+    result.muzzleLight.color = ReadColor(Require(light, "color", lightContext), lightContext + ".color");
+    result.muzzleLight.intensity = Number(light, "intensity", lightContext);
+    result.muzzleLight.radiusWorld = Number(light, "radiusWorld", lightContext);
+    result.muzzleLight.lifetimeSeconds = Number(light, "lifetimeSeconds", lightContext);
+    result.muzzleLight.decayExponent = Number(light, "decayExponent", lightContext);
+    ValidateFiring(result, context);
+    return result;
+}
+
 std::optional<Vector3> OptionalVector(const Json& object, const char* name, const std::string& context)
 {
     if (object.find(name) == object.end()) return std::nullopt;
@@ -277,6 +475,9 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
                         *crosshair,
                         context + ".crosshair");
             }
+            definition.firing = ReadFiring(
+                    Require(object, "firing", context),
+                    context + ".firing");
             const Json& viewmodel = Require(object, "viewmodel", context);
             if (!viewmodel.is_object()) Fail(context + ".viewmodel must be an object");
             const std::string vm = context + ".viewmodel";
@@ -288,6 +489,9 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
             definition.viewmodel.lastFrame = Integer(viewmodel, "lastFrame", vm);
             definition.viewmodel.playbackSpeed = Number(viewmodel, "playbackSpeed", vm);
             definition.viewmodel.presentation = ReadPresentation(viewmodel, vm);
+            definition.viewmodel.holsterTransition = ReadHolsterTransition(
+                    Require(viewmodel, "holsterTransition", vm),
+                    vm + ".holsterTransition");
             definition.viewmodel.brightnessAdjustment =
                     OptionalNumber(viewmodel, "brightnessAdjustment", vm).value_or(0.0f);
             if (definition.viewmodel.brightnessAdjustment < -1.0f
@@ -383,6 +587,36 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 entry.viewmodel.rotationDegrees = OptionalVector(it.value(), "rotationDegrees", "viewmodel override '" + it.key() + "'");
                 entry.viewmodel.scale = OptionalNumber(it.value(), "scale", "viewmodel override '" + it.key() + "'");
                 entry.viewmodel.verticalFovDegrees = OptionalNumber(it.value(), "verticalFovDegrees", "viewmodel override '" + it.key() + "'");
+                const auto holsterTransition =
+                        it.value().find("holsterTransition");
+                if (holsterTransition != it.value().end()) {
+                    const std::string transitionContext =
+                            "viewmodel override '" + it.key()
+                            + "'.holsterTransition";
+                    if (!holsterTransition->is_object()) {
+                        Fail(transitionContext + " must be an object");
+                    }
+                    entry.holsterTransition.holsterDurationSeconds =
+                            OptionalNumber(
+                                    *holsterTransition,
+                                    "holsterDurationSeconds",
+                                    transitionContext);
+                    entry.holsterTransition.unholsterDurationSeconds =
+                            OptionalNumber(
+                                    *holsterTransition,
+                                    "unholsterDurationSeconds",
+                                    transitionContext);
+                    entry.holsterTransition.hiddenTranslation =
+                            OptionalVector(
+                                    *holsterTransition,
+                                    "hiddenTranslation",
+                                    transitionContext);
+                    entry.holsterTransition.hiddenRotationDegrees =
+                            OptionalVector(
+                                    *holsterTransition,
+                                    "hiddenRotationDegrees",
+                                    transitionContext);
+                }
                 const auto gripCorrection = it.value().find("gripCorrection");
                 if (gripCorrection != it.value().end()) {
                     const std::string gripContext = "viewmodel override '" + it.key()
@@ -419,6 +653,26 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                             "roughnessFactor",
                             lightingContext);
                 }
+                const auto firing = it.value().find("firing");
+                if (firing != it.value().end()) {
+                    const std::string firingContext = "viewmodel override '"
+                            + it.key() + "'.firing";
+                    if (!firing->is_object()) Fail(firingContext + " must be an object");
+                    entry.firing.shotIntervalSeconds = OptionalNumber(*firing, "shotIntervalSeconds", firingContext);
+                    entry.firing.recoilTranslationImpulse = OptionalVector(*firing, "recoilTranslationImpulse", firingContext);
+                    entry.firing.recoilRotationImpulseDegrees = OptionalVector(*firing, "recoilRotationImpulseDegrees", firingContext);
+                    entry.firing.recoilRollVariationDegrees = OptionalNumber(*firing, "recoilRollVariationDegrees", firingContext);
+                    entry.firing.recoilSpringFrequencyHz = OptionalNumber(*firing, "recoilSpringFrequencyHz", firingContext);
+                    entry.firing.recoilDampingRatio = OptionalNumber(*firing, "recoilDampingRatio", firingContext);
+                    entry.firing.muzzlePosition = OptionalVector(*firing, "muzzlePosition", firingContext);
+                    entry.firing.muzzleRotationDegrees = OptionalVector(*firing, "muzzleRotationDegrees", firingContext);
+                    entry.firing.flashLifetimeSeconds = OptionalNumber(*firing, "flashLifetimeSeconds", firingContext);
+                    entry.firing.flashSizeWorld = OptionalNumber(*firing, "flashSizeWorld", firingContext);
+                    entry.firing.flashEdgeSoftness = OptionalNumber(*firing, "flashEdgeSoftness", firingContext);
+                    entry.firing.muzzleLightIntensity = OptionalNumber(*firing, "muzzleLightIntensity", firingContext);
+                    entry.firing.muzzleLightRadiusWorld = OptionalNumber(*firing, "muzzleLightRadiusWorld", firingContext);
+                    entry.firing.muzzleLightLifetimeSeconds = OptionalNumber(*firing, "muzzleLightLifetimeSeconds", firingContext);
+                }
                 parsed.weapons.push_back(std::move(entry));
             }
         }
@@ -446,6 +700,26 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         if (entry.viewmodel.rotationDegrees) value["rotationDegrees"] = Vec(*entry.viewmodel.rotationDegrees);
         if (entry.viewmodel.scale) value["scale"] = *entry.viewmodel.scale;
         if (entry.viewmodel.verticalFovDegrees) value["verticalFovDegrees"] = *entry.viewmodel.verticalFovDegrees;
+        Json holsterTransition = Json::object();
+        if (entry.holsterTransition.holsterDurationSeconds) {
+            holsterTransition["holsterDurationSeconds"] =
+                    *entry.holsterTransition.holsterDurationSeconds;
+        }
+        if (entry.holsterTransition.unholsterDurationSeconds) {
+            holsterTransition["unholsterDurationSeconds"] =
+                    *entry.holsterTransition.unholsterDurationSeconds;
+        }
+        if (entry.holsterTransition.hiddenTranslation) {
+            holsterTransition["hiddenTranslation"] = Vec(
+                    *entry.holsterTransition.hiddenTranslation);
+        }
+        if (entry.holsterTransition.hiddenRotationDegrees) {
+            holsterTransition["hiddenRotationDegrees"] = Vec(
+                    *entry.holsterTransition.hiddenRotationDegrees);
+        }
+        if (!holsterTransition.empty()) {
+            value["holsterTransition"] = std::move(holsterTransition);
+        }
         Json gripCorrection = Json::object();
         if (entry.gripCorrection.translation) {
             gripCorrection["translation"] = Vec(*entry.gripCorrection.translation);
@@ -476,6 +750,22 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         if (!attachmentLighting.empty()) {
             value["attachmentLighting"] = std::move(attachmentLighting);
         }
+        Json firing = Json::object();
+        if (entry.firing.shotIntervalSeconds) firing["shotIntervalSeconds"] = *entry.firing.shotIntervalSeconds;
+        if (entry.firing.recoilTranslationImpulse) firing["recoilTranslationImpulse"] = Vec(*entry.firing.recoilTranslationImpulse);
+        if (entry.firing.recoilRotationImpulseDegrees) firing["recoilRotationImpulseDegrees"] = Vec(*entry.firing.recoilRotationImpulseDegrees);
+        if (entry.firing.recoilRollVariationDegrees) firing["recoilRollVariationDegrees"] = *entry.firing.recoilRollVariationDegrees;
+        if (entry.firing.recoilSpringFrequencyHz) firing["recoilSpringFrequencyHz"] = *entry.firing.recoilSpringFrequencyHz;
+        if (entry.firing.recoilDampingRatio) firing["recoilDampingRatio"] = *entry.firing.recoilDampingRatio;
+        if (entry.firing.muzzlePosition) firing["muzzlePosition"] = Vec(*entry.firing.muzzlePosition);
+        if (entry.firing.muzzleRotationDegrees) firing["muzzleRotationDegrees"] = Vec(*entry.firing.muzzleRotationDegrees);
+        if (entry.firing.flashLifetimeSeconds) firing["flashLifetimeSeconds"] = *entry.firing.flashLifetimeSeconds;
+        if (entry.firing.flashSizeWorld) firing["flashSizeWorld"] = *entry.firing.flashSizeWorld;
+        if (entry.firing.flashEdgeSoftness) firing["flashEdgeSoftness"] = *entry.firing.flashEdgeSoftness;
+        if (entry.firing.muzzleLightIntensity) firing["muzzleLightIntensity"] = *entry.firing.muzzleLightIntensity;
+        if (entry.firing.muzzleLightRadiusWorld) firing["muzzleLightRadiusWorld"] = *entry.firing.muzzleLightRadiusWorld;
+        if (entry.firing.muzzleLightLifetimeSeconds) firing["muzzleLightLifetimeSeconds"] = *entry.firing.muzzleLightLifetimeSeconds;
+        if (!firing.empty()) value["firing"] = std::move(firing);
         if (!value.empty()) overrides[entry.weaponId] = std::move(value);
     }
     root["viewmodelOverrides"] = std::move(overrides);
@@ -517,10 +807,72 @@ void ClearFpsViewmodelOverride(FpsApplicationSettings& settings, std::string_vie
             settings.weapons.begin(), settings.weapons.end(),
             [](const FpsApplicationSettingsEntry& value) {
                 return FpsViewmodelOverrideEmpty(value.viewmodel)
+                        && FpsViewmodelHolsterTransitionOverrideEmpty(
+                                value.holsterTransition)
                         && FpsViewmodelGripCorrectionOverrideEmpty(
                                 value.gripCorrection)
                         && FpsViewmodelAttachmentLightingOverrideEmpty(
-                                value.attachmentLighting);
+                                value.attachmentLighting)
+                        && FpsWeaponFiringOverrideEmpty(value.firing);
+    }), settings.weapons.end());
+}
+
+const FpsViewmodelHolsterTransitionOverride*
+FindFpsViewmodelHolsterTransitionOverride(
+        const FpsApplicationSettings& settings,
+        std::string_view id)
+{
+    const auto it = std::find_if(
+            settings.weapons.begin(),
+            settings.weapons.end(),
+            [id](const FpsApplicationSettingsEntry& value) {
+                return value.weaponId == id;
+            });
+    return it == settings.weapons.end()
+                    || FpsViewmodelHolsterTransitionOverrideEmpty(
+                            it->holsterTransition)
+            ? nullptr
+            : &it->holsterTransition;
+}
+
+void SetFpsViewmodelHolsterTransitionOverride(
+        FpsApplicationSettings& settings,
+        std::string id,
+        const FpsViewmodelHolsterTransitionOverride& value)
+{
+    for (auto& entry : settings.weapons) {
+        if (entry.weaponId == id) {
+            entry.holsterTransition = value;
+            return;
+        }
+    }
+    FpsApplicationSettingsEntry entry;
+    entry.weaponId = std::move(id);
+    entry.holsterTransition = value;
+    settings.weapons.push_back(std::move(entry));
+}
+
+void ClearFpsViewmodelHolsterTransitionOverride(
+        FpsApplicationSettings& settings,
+        std::string_view id)
+{
+    for (auto& entry : settings.weapons) {
+        if (entry.weaponId == id) {
+            entry.holsterTransition = {};
+            break;
+        }
+    }
+    settings.weapons.erase(std::remove_if(
+            settings.weapons.begin(), settings.weapons.end(),
+            [](const FpsApplicationSettingsEntry& value) {
+                return FpsViewmodelOverrideEmpty(value.viewmodel)
+                        && FpsViewmodelHolsterTransitionOverrideEmpty(
+                                value.holsterTransition)
+                        && FpsViewmodelGripCorrectionOverrideEmpty(
+                                value.gripCorrection)
+                        && FpsViewmodelAttachmentLightingOverrideEmpty(
+                                value.attachmentLighting)
+                        && FpsWeaponFiringOverrideEmpty(value.firing);
             }), settings.weapons.end());
 }
 
@@ -570,10 +922,13 @@ void ClearFpsViewmodelGripCorrectionOverride(
             settings.weapons.begin(), settings.weapons.end(),
             [](const FpsApplicationSettingsEntry& value) {
                 return FpsViewmodelOverrideEmpty(value.viewmodel)
+                        && FpsViewmodelHolsterTransitionOverrideEmpty(
+                                value.holsterTransition)
                         && FpsViewmodelGripCorrectionOverrideEmpty(
                                 value.gripCorrection)
                         && FpsViewmodelAttachmentLightingOverrideEmpty(
-                                value.attachmentLighting);
+                                value.attachmentLighting)
+                        && FpsWeaponFiringOverrideEmpty(value.firing);
             }), settings.weapons.end());
 }
 
@@ -626,10 +981,13 @@ void ClearFpsViewmodelAttachmentLightingOverride(
             settings.weapons.begin(), settings.weapons.end(),
             [](const FpsApplicationSettingsEntry& value) {
                 return FpsViewmodelOverrideEmpty(value.viewmodel)
+                        && FpsViewmodelHolsterTransitionOverrideEmpty(
+                                value.holsterTransition)
                         && FpsViewmodelGripCorrectionOverrideEmpty(
                                 value.gripCorrection)
                         && FpsViewmodelAttachmentLightingOverrideEmpty(
-                                value.attachmentLighting);
+                                value.attachmentLighting)
+                        && FpsWeaponFiringOverrideEmpty(value.firing);
             }), settings.weapons.end());
 }
 
@@ -672,6 +1030,88 @@ FpsViewmodelPresentationOverride BuildFpsViewmodelOverride(const FpsViewmodelPre
 bool FpsViewmodelOverrideEmpty(const FpsViewmodelPresentationOverride& value)
 {
     return !value.position && !value.rotationDegrees && !value.scale && !value.verticalFovDegrees;
+}
+
+FpsViewmodelHolsterTransition ClampFpsViewmodelHolsterTransition(
+        FpsViewmodelHolsterTransition value)
+{
+    value.holsterDurationSeconds = std::clamp(
+            value.holsterDurationSeconds, 0.05f, 2.0f);
+    value.unholsterDurationSeconds = std::clamp(
+            value.unholsterDurationSeconds, 0.05f, 2.0f);
+    value.hiddenTranslation.x = std::clamp(
+            value.hiddenTranslation.x, -10.0f, 10.0f);
+    value.hiddenTranslation.y = std::clamp(
+            value.hiddenTranslation.y, -10.0f, 10.0f);
+    value.hiddenTranslation.z = std::clamp(
+            value.hiddenTranslation.z, -10.0f, 10.0f);
+    value.hiddenRotationDegrees.x = std::clamp(
+            value.hiddenRotationDegrees.x, -360.0f, 360.0f);
+    value.hiddenRotationDegrees.y = std::clamp(
+            value.hiddenRotationDegrees.y, -360.0f, 360.0f);
+    value.hiddenRotationDegrees.z = std::clamp(
+            value.hiddenRotationDegrees.z, -360.0f, 360.0f);
+    return value;
+}
+
+FpsViewmodelHolsterTransition ResolveFpsViewmodelHolsterTransition(
+        const FpsViewmodelHolsterTransition& defaults,
+        const FpsViewmodelHolsterTransitionOverride* value)
+{
+    FpsViewmodelHolsterTransition result = defaults;
+    if (value != nullptr) {
+        if (value->holsterDurationSeconds) {
+            result.holsterDurationSeconds = *value->holsterDurationSeconds;
+        }
+        if (value->unholsterDurationSeconds) {
+            result.unholsterDurationSeconds =
+                    *value->unholsterDurationSeconds;
+        }
+        if (value->hiddenTranslation) {
+            result.hiddenTranslation = *value->hiddenTranslation;
+        }
+        if (value->hiddenRotationDegrees) {
+            result.hiddenRotationDegrees = *value->hiddenRotationDegrees;
+        }
+    }
+    return ClampFpsViewmodelHolsterTransition(result);
+}
+
+FpsViewmodelHolsterTransitionOverride BuildFpsViewmodelHolsterTransitionOverride(
+        const FpsViewmodelHolsterTransition& defaults,
+        const FpsViewmodelHolsterTransition& effective)
+{
+    const FpsViewmodelHolsterTransition clean =
+            ClampFpsViewmodelHolsterTransition(effective);
+    FpsViewmodelHolsterTransitionOverride result;
+    if (!NearlyEqual(
+                defaults.holsterDurationSeconds,
+                clean.holsterDurationSeconds)) {
+        result.holsterDurationSeconds = clean.holsterDurationSeconds;
+    }
+    if (!NearlyEqual(
+                defaults.unholsterDurationSeconds,
+                clean.unholsterDurationSeconds)) {
+        result.unholsterDurationSeconds = clean.unholsterDurationSeconds;
+    }
+    if (!Same(defaults.hiddenTranslation, clean.hiddenTranslation)) {
+        result.hiddenTranslation = clean.hiddenTranslation;
+    }
+    if (!Same(
+                defaults.hiddenRotationDegrees,
+                clean.hiddenRotationDegrees)) {
+        result.hiddenRotationDegrees = clean.hiddenRotationDegrees;
+    }
+    return result;
+}
+
+bool FpsViewmodelHolsterTransitionOverrideEmpty(
+        const FpsViewmodelHolsterTransitionOverride& value)
+{
+    return !value.holsterDurationSeconds
+            && !value.unholsterDurationSeconds
+            && !value.hiddenTranslation
+            && !value.hiddenRotationDegrees;
 }
 
 FpsViewmodelGripCorrection ClampFpsViewmodelGripCorrection(
@@ -791,6 +1231,150 @@ bool FpsViewmodelAttachmentLightingOverrideEmpty(
     return !value.brightnessAdjustment
             && !value.metallicFactor
             && !value.roughnessFactor;
+}
+
+const FpsWeaponFiringOverride* FindFpsWeaponFiringOverride(
+        const FpsApplicationSettings& settings,
+        std::string_view id)
+{
+    const auto it = std::find_if(
+            settings.weapons.begin(), settings.weapons.end(),
+            [id](const FpsApplicationSettingsEntry& value) {
+                return value.weaponId == id;
+            });
+    return it == settings.weapons.end() || FpsWeaponFiringOverrideEmpty(it->firing)
+            ? nullptr
+            : &it->firing;
+}
+
+void SetFpsWeaponFiringOverride(
+        FpsApplicationSettings& settings,
+        std::string id,
+        const FpsWeaponFiringOverride& value)
+{
+    for (auto& entry : settings.weapons) {
+        if (entry.weaponId == id) {
+            entry.firing = value;
+            return;
+        }
+    }
+    FpsApplicationSettingsEntry entry;
+    entry.weaponId = std::move(id);
+    entry.firing = value;
+    settings.weapons.push_back(std::move(entry));
+}
+
+void ClearFpsWeaponFiringOverride(
+        FpsApplicationSettings& settings,
+        std::string_view id)
+{
+    for (auto& entry : settings.weapons) {
+        if (entry.weaponId == id) entry.firing = {};
+    }
+    settings.weapons.erase(std::remove_if(
+            settings.weapons.begin(), settings.weapons.end(),
+            [](const FpsApplicationSettingsEntry& value) {
+                return FpsViewmodelOverrideEmpty(value.viewmodel)
+                        && FpsViewmodelHolsterTransitionOverrideEmpty(value.holsterTransition)
+                        && FpsViewmodelGripCorrectionOverrideEmpty(value.gripCorrection)
+                        && FpsViewmodelAttachmentLightingOverrideEmpty(value.attachmentLighting)
+                        && FpsWeaponFiringOverrideEmpty(value.firing);
+            }), settings.weapons.end());
+}
+
+FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
+        FpsWeaponFiringDefinition value)
+{
+    value.shotIntervalSeconds = std::clamp(value.shotIntervalSeconds, 0.03f, 5.0f);
+    value.maximumRangeWorld = std::clamp(value.maximumRangeWorld, 1.0f, 10000.0f);
+    const auto clampVector = [](Vector3& vector, float minimum, float maximum) {
+        vector.x = std::clamp(vector.x, minimum, maximum);
+        vector.y = std::clamp(vector.y, minimum, maximum);
+        vector.z = std::clamp(vector.z, minimum, maximum);
+    };
+    clampVector(value.recoil.translationImpulse, -1.0f, 1.0f);
+    clampVector(value.recoil.rotationImpulseDegrees, -45.0f, 45.0f);
+    value.recoil.rollVariationDegrees = std::clamp(value.recoil.rollVariationDegrees, 0.0f, 10.0f);
+    value.recoil.springFrequencyHz = std::clamp(value.recoil.springFrequencyHz, 0.5f, 40.0f);
+    value.recoil.dampingRatio = std::clamp(value.recoil.dampingRatio, 0.1f, 3.0f);
+    clampVector(value.recoil.maximumTranslation, 0.0f, 2.0f);
+    clampVector(value.recoil.maximumRotationDegrees, 0.0f, 90.0f);
+    clampVector(value.muzzleSocket.position, -2.0f, 2.0f);
+    clampVector(value.muzzleSocket.rotationDegrees, -360.0f, 360.0f);
+    value.muzzleFlash.lifetimeSeconds = std::clamp(value.muzzleFlash.lifetimeSeconds, 0.005f, 10.0f);
+    value.muzzleFlash.sizeWorld = std::clamp(value.muzzleFlash.sizeWorld, 0.005f, 2.0f);
+    value.muzzleFlash.sizeVariation = std::clamp(value.muzzleFlash.sizeVariation, 0.0f, 1.0f);
+    value.muzzleFlash.edgeSoftness = std::clamp(value.muzzleFlash.edgeSoftness, 0.01f, 1.0f);
+    value.muzzleLight.intensity = std::clamp(value.muzzleLight.intensity, 0.0f, 100.0f);
+    value.muzzleLight.radiusWorld = std::clamp(value.muzzleLight.radiusWorld, 0.05f, 100.0f);
+    value.muzzleLight.lifetimeSeconds = std::clamp(value.muzzleLight.lifetimeSeconds, 0.005f, 2.0f);
+    value.muzzleLight.decayExponent = std::clamp(value.muzzleLight.decayExponent, 0.1f, 10.0f);
+    return value;
+}
+
+FpsWeaponFiringDefinition ResolveFpsWeaponFiringDefinition(
+        const FpsWeaponFiringDefinition& defaults,
+        const FpsWeaponFiringOverride* value)
+{
+    FpsWeaponFiringDefinition result = defaults;
+    if (value != nullptr) {
+        if (value->shotIntervalSeconds) result.shotIntervalSeconds = *value->shotIntervalSeconds;
+        if (value->recoilTranslationImpulse) result.recoil.translationImpulse = *value->recoilTranslationImpulse;
+        if (value->recoilRotationImpulseDegrees) result.recoil.rotationImpulseDegrees = *value->recoilRotationImpulseDegrees;
+        if (value->recoilRollVariationDegrees) result.recoil.rollVariationDegrees = *value->recoilRollVariationDegrees;
+        if (value->recoilSpringFrequencyHz) result.recoil.springFrequencyHz = *value->recoilSpringFrequencyHz;
+        if (value->recoilDampingRatio) result.recoil.dampingRatio = *value->recoilDampingRatio;
+        if (value->muzzlePosition) result.muzzleSocket.position = *value->muzzlePosition;
+        if (value->muzzleRotationDegrees) result.muzzleSocket.rotationDegrees = *value->muzzleRotationDegrees;
+        if (value->flashLifetimeSeconds) result.muzzleFlash.lifetimeSeconds = *value->flashLifetimeSeconds;
+        if (value->flashSizeWorld) result.muzzleFlash.sizeWorld = *value->flashSizeWorld;
+        if (value->flashEdgeSoftness) result.muzzleFlash.edgeSoftness = *value->flashEdgeSoftness;
+        if (value->muzzleLightIntensity) result.muzzleLight.intensity = *value->muzzleLightIntensity;
+        if (value->muzzleLightRadiusWorld) result.muzzleLight.radiusWorld = *value->muzzleLightRadiusWorld;
+        if (value->muzzleLightLifetimeSeconds) result.muzzleLight.lifetimeSeconds = *value->muzzleLightLifetimeSeconds;
+    }
+    return ClampFpsWeaponFiringDefinition(result);
+}
+
+FpsWeaponFiringOverride BuildFpsWeaponFiringOverride(
+        const FpsWeaponFiringDefinition& defaults,
+        const FpsWeaponFiringDefinition& effective)
+{
+    const FpsWeaponFiringDefinition clean = ClampFpsWeaponFiringDefinition(effective);
+    FpsWeaponFiringOverride result;
+    if (!NearlyEqual(defaults.shotIntervalSeconds, clean.shotIntervalSeconds)) result.shotIntervalSeconds = clean.shotIntervalSeconds;
+    if (!Same(defaults.recoil.translationImpulse, clean.recoil.translationImpulse)) result.recoilTranslationImpulse = clean.recoil.translationImpulse;
+    if (!Same(defaults.recoil.rotationImpulseDegrees, clean.recoil.rotationImpulseDegrees)) result.recoilRotationImpulseDegrees = clean.recoil.rotationImpulseDegrees;
+    if (!NearlyEqual(defaults.recoil.rollVariationDegrees, clean.recoil.rollVariationDegrees)) result.recoilRollVariationDegrees = clean.recoil.rollVariationDegrees;
+    if (!NearlyEqual(defaults.recoil.springFrequencyHz, clean.recoil.springFrequencyHz)) result.recoilSpringFrequencyHz = clean.recoil.springFrequencyHz;
+    if (!NearlyEqual(defaults.recoil.dampingRatio, clean.recoil.dampingRatio)) result.recoilDampingRatio = clean.recoil.dampingRatio;
+    if (!Same(defaults.muzzleSocket.position, clean.muzzleSocket.position)) result.muzzlePosition = clean.muzzleSocket.position;
+    if (!Same(defaults.muzzleSocket.rotationDegrees, clean.muzzleSocket.rotationDegrees)) result.muzzleRotationDegrees = clean.muzzleSocket.rotationDegrees;
+    if (!NearlyEqual(defaults.muzzleFlash.lifetimeSeconds, clean.muzzleFlash.lifetimeSeconds)) result.flashLifetimeSeconds = clean.muzzleFlash.lifetimeSeconds;
+    if (!NearlyEqual(defaults.muzzleFlash.sizeWorld, clean.muzzleFlash.sizeWorld)) result.flashSizeWorld = clean.muzzleFlash.sizeWorld;
+    if (!NearlyEqual(defaults.muzzleFlash.edgeSoftness, clean.muzzleFlash.edgeSoftness)) result.flashEdgeSoftness = clean.muzzleFlash.edgeSoftness;
+    if (!NearlyEqual(defaults.muzzleLight.intensity, clean.muzzleLight.intensity)) result.muzzleLightIntensity = clean.muzzleLight.intensity;
+    if (!NearlyEqual(defaults.muzzleLight.radiusWorld, clean.muzzleLight.radiusWorld)) result.muzzleLightRadiusWorld = clean.muzzleLight.radiusWorld;
+    if (!NearlyEqual(defaults.muzzleLight.lifetimeSeconds, clean.muzzleLight.lifetimeSeconds)) result.muzzleLightLifetimeSeconds = clean.muzzleLight.lifetimeSeconds;
+    return result;
+}
+
+bool FpsWeaponFiringOverrideEmpty(const FpsWeaponFiringOverride& value)
+{
+    return !value.shotIntervalSeconds
+            && !value.recoilTranslationImpulse
+            && !value.recoilRotationImpulseDegrees
+            && !value.recoilRollVariationDegrees
+            && !value.recoilSpringFrequencyHz
+            && !value.recoilDampingRatio
+            && !value.muzzlePosition
+            && !value.muzzleRotationDegrees
+            && !value.flashLifetimeSeconds
+            && !value.flashSizeWorld
+            && !value.flashEdgeSoftness
+            && !value.muzzleLightIntensity
+            && !value.muzzleLightRadiusWorld
+            && !value.muzzleLightLifetimeSeconds;
 }
 
 } // namespace game

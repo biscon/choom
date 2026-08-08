@@ -124,6 +124,7 @@ if(BUILD_TESTING)
             sources/game/FpsViewmodel.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/sector_editor/preview/SectorEditorPreviewHudRenderer.cpp
+            sources/sector_editor/preview/SectorEditorPreviewViewmodelEffectsRenderer.cpp
     )
     target_include_directories(fps_viewmodel_tests PRIVATE sources)
     target_link_libraries(fps_viewmodel_tests PRIVATE raylib)

@@ -111,6 +111,8 @@ public:
             const RuntimePortalVisibilityResult& visibility,
             const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
             engine::World* runtimeObjectWorld);
+    void SetRuntimePointLight(
+            const SectorPreviewDynamicPointLightSource* light);
 
     const std::vector<SectorPreviewDynamicPointLightSource>& Sources() const { return sources; }
     const std::vector<SectorPreviewDynamicPointLightSource>& Candidates() const { return candidates; }
@@ -142,6 +144,9 @@ private:
             engine::World* runtimeObjectWorld);
 
     std::vector<SectorPreviewDynamicPointLightSource> sources;
+    std::vector<SectorPreviewDynamicPointLightSource> selectionSources;
+    SectorPreviewDynamicPointLightSource runtimePointLight;
+    bool runtimePointLightActive = false;
     std::vector<SectorPreviewDynamicPointLightSource> candidates;
     std::vector<SectorPreviewDynamicPointLightUniform> selectedLights;
     std::vector<int> selectedLightIds;

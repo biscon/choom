@@ -263,6 +263,9 @@ void UploadSectorRendererDynamicSpotLightShadowUniforms(
 void SectorDynamicLightingRenderer::Reset()
 {
     sources.clear();
+    selectionSources.clear();
+    runtimePointLight = {};
+    runtimePointLightActive = false;
     candidates.clear();
     selectedLights.clear();
     selectedLightIds.clear();
@@ -276,7 +279,17 @@ void SectorDynamicLightingRenderer::RebuildSources(
         const SectorCollisionWorld* sectorLookupWorld)
 {
     BuildSectorPreviewDynamicPointLightSources(map, sectorLookupWorld, sources);
+    selectionSources.reserve(sources.size() + 1);
     ReserveSelectionBuffers();
+}
+
+void SectorDynamicLightingRenderer::SetRuntimePointLight(
+        const SectorPreviewDynamicPointLightSource* light)
+{
+    runtimePointLightActive = light != nullptr;
+    runtimePointLight = light != nullptr
+            ? *light
+            : SectorPreviewDynamicPointLightSource{};
 }
 
 void SectorDynamicLightingRenderer::UpdateSelection(
@@ -285,8 +298,10 @@ void SectorDynamicLightingRenderer::UpdateSelection(
         engine::World* runtimeObjectWorld)
 {
     BuildReceiverBounds(sectorReceiverBounds, runtimeObjectWorld);
+    selectionSources.assign(sources.begin(), sources.end());
+    if (runtimePointLightActive) selectionSources.push_back(runtimePointLight);
     CollectSectorPreviewDynamicPointLightCandidates(
-            sources,
+            selectionSources,
             visibility,
             receiverBounds,
             candidates);
@@ -535,7 +550,7 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
 void SectorDynamicLightingRenderer::ReserveSelectionBuffers()
 {
     candidates.clear();
-    candidates.reserve(sources.size());
+    candidates.reserve(sources.size() + 1);
     selectedLights.clear();
     selectedLights.reserve(MaxDynamicLights);
     selectedLightIds.clear();

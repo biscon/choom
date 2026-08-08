@@ -335,8 +335,8 @@ void TestPreviewSettingsModalNormalizesLayeredProbeSettings()
 
 void TestPreviewSettingsFogTabLayout()
 {
-    const Rectangle modal{610.0f, 190.0f, 700.0f, 700.0f};
-    const std::array<Rectangle, 5> tabs =
+    const Rectangle modal{510.0f, 190.0f, 900.0f, 700.0f};
+    const std::array<Rectangle, 6> tabs =
             game::BuildSectorPreviewSettingsTabLayout(modal, modal.y + 76.0f, 38.0f);
     for (size_t i = 0; i < tabs.size(); ++i) {
         Check(Contains(modal, tabs[i]), "preview settings tab fits inside expanded modal");
@@ -344,8 +344,8 @@ void TestPreviewSettingsFogTabLayout()
             Check(!Overlaps(tabs[i], tabs[j]), "preview settings tabs do not overlap");
         }
     }
-    Check(tabs[4].x + tabs[4].width <= modal.x + modal.width - 30.0f,
-          "viewmodel tab preserves the modal right margin");
+    Check(tabs[5].x + tabs[5].width <= modal.x + modal.width - 30.0f,
+          "weapon tab preserves the modal right margin");
 }
 
 void TestPreviewSettingsModalFogDraftApplyAndReset()

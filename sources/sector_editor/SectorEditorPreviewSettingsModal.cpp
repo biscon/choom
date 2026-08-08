@@ -50,9 +50,9 @@ void DrawPreviewSettingsModal(
 
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
     const Rectangle modal{
-            (EditorWidth - 700.0f) * 0.5f,
+            (EditorWidth - 900.0f) * 0.5f,
             (EditorHeight - 700.0f) * 0.5f,
-            700.0f,
+            900.0f,
             700.0f
     };
     DrawRectangleRec(modal, Color{20, 24, 32, 248});
@@ -63,7 +63,7 @@ void DrawPreviewSettingsModal(
     y += 54.0f;
 
     const float tabH = 38.0f;
-    const std::array<Rectangle, 5> tabRects =
+    const std::array<Rectangle, 6> tabRects =
             BuildSectorPreviewSettingsTabLayout(modal, y, tabH);
     if (engine::ToolButton(
                 ui,
@@ -119,6 +119,13 @@ void DrawPreviewSettingsModal(
                 tabRects[4], font, "Arms",
                 modalState.activeTab == PreviewSettingsTab::Viewmodel)) {
         modalState.activeTab = PreviewSettingsTab::Viewmodel;
+    }
+    if (engine::ToolButton(
+                ui, config, input, assets,
+                "sector_editor_preview_settings_tab_weapon",
+                tabRects[5], font, "Weapon",
+                modalState.activeTab == PreviewSettingsTab::Weapon)) {
+        modalState.activeTab = PreviewSettingsTab::Weapon;
     }
     y += tabH + 16.0f;
 
@@ -444,7 +451,7 @@ void DrawPreviewSettingsModal(
 
     auto drawViewmodelTab = [&]() {
         float contentY = 0.0f;
-        const float contentH = 20.0f * (rowH + gap) + 12.0f;
+        const float contentH = 8.0f * (rowH + gap) + 12.0f;
         engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
                 ui, config, input, "sector_editor_preview_settings_viewmodel_scroll",
                 scrollBounds, Vector2{scrollContentW, contentH}, modalState.viewmodelScroll);
@@ -457,45 +464,83 @@ void DrawPreviewSettingsModal(
         drawFloat(contentY, "sector_editor_viewmodel_scale", "Scale", modalState.draftViewmodel.scale, modalState.viewmodelScaleInput, 0.01f, 10.0f, 3);
         drawFloat(contentY, "sector_editor_viewmodel_fov", "Vertical FOV", modalState.draftViewmodel.verticalFovDegrees, modalState.viewmodelFovInput, 20.0f, 120.0f, 2);
         modalState.draftViewmodel = ClampFpsViewmodelPresentation(modalState.draftViewmodel);
-        engine::Text(
-                ui,
-                config,
-                assets,
-                Rectangle{0.0f, contentY, scrollContentW, rowH},
-                font,
-                "Weapon grip correction",
-                engine::UITextJustify::Left,
-                config.textColor);
-        contentY += rowH + gap;
-        drawFloat(contentY, "sector_editor_viewmodel_grip_translation_x", "Grip translation X", modalState.draftViewmodelGrip.translation.x, modalState.viewmodelGripTranslationXInput, -1.0f, 1.0f, 4);
-        drawFloat(contentY, "sector_editor_viewmodel_grip_translation_y", "Grip translation Y", modalState.draftViewmodelGrip.translation.y, modalState.viewmodelGripTranslationYInput, -1.0f, 1.0f, 4);
-        drawFloat(contentY, "sector_editor_viewmodel_grip_translation_z", "Grip translation Z", modalState.draftViewmodelGrip.translation.z, modalState.viewmodelGripTranslationZInput, -1.0f, 1.0f, 4);
-        drawFloat(contentY, "sector_editor_viewmodel_grip_pitch", "Grip pitch", modalState.draftViewmodelGrip.rotationDegrees.x, modalState.viewmodelGripPitchInput, -360.0f, 360.0f, 2);
-        drawFloat(contentY, "sector_editor_viewmodel_grip_yaw", "Grip yaw", modalState.draftViewmodelGrip.rotationDegrees.y, modalState.viewmodelGripYawInput, -360.0f, 360.0f, 2);
-        drawFloat(contentY, "sector_editor_viewmodel_grip_roll", "Grip roll", modalState.draftViewmodelGrip.rotationDegrees.z, modalState.viewmodelGripRollInput, -360.0f, 360.0f, 2);
-        drawFloat(contentY, "sector_editor_viewmodel_grip_scale", "Grip scale", modalState.draftViewmodelGrip.scale, modalState.viewmodelGripScaleInput, 0.01f, 10.0f, 4);
-        modalState.draftViewmodelGrip = ClampFpsViewmodelGripCorrection(
-                modalState.draftViewmodelGrip);
-        engine::Text(
-                ui,
-                config,
-                assets,
-                Rectangle{0.0f, contentY, scrollContentW, rowH},
-                font,
-                "Weapon lighting",
-                engine::UITextJustify::Left,
-                config.textColor);
-        contentY += rowH + gap;
-        drawFloat(contentY, "sector_editor_viewmodel_attachment_brightness", "Pistol brightness", modalState.draftViewmodelAttachmentLighting.brightnessAdjustment, modalState.viewmodelAttachmentBrightnessInput, -1.0f, 1.0f, 3);
-        drawFloat(contentY, "sector_editor_viewmodel_attachment_metallic", "Pistol metallic factor", modalState.draftViewmodelAttachmentLighting.materialOverride.metallicFactor, modalState.viewmodelAttachmentMetallicInput, 0.0f, 1.0f, 3);
-        drawFloat(contentY, "sector_editor_viewmodel_attachment_roughness", "Pistol roughness factor", modalState.draftViewmodelAttachmentLighting.materialOverride.roughnessFactor, modalState.viewmodelAttachmentRoughnessInput, 0.045f, 1.0f, 3);
-        modalState.draftViewmodelAttachmentLighting =
-                ClampFpsViewmodelAttachmentLighting(
-                        modalState.draftViewmodelAttachmentLighting);
         engine::EndScrollArea(ui, config, input, scroll, modalState.viewmodelScroll);
     };
 
-    if (modalState.activeTab == PreviewSettingsTab::Viewmodel) {
+    auto drawWeaponTab = [&]() {
+        float contentY = 0.0f;
+        const float contentH = 44.0f * (rowH + gap) + 160.0f;
+        engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+                ui, config, input, "sector_editor_preview_settings_weapon_scroll",
+                scrollBounds, Vector2{scrollContentW, contentH}, modalState.weaponScroll);
+        const auto section = [&](const char* title) {
+            engine::Text(ui, config, assets,
+                    Rectangle{0.0f, contentY, scrollContentW, rowH},
+                    font, title, engine::UITextJustify::Left, config.textColor);
+            contentY += rowH + gap;
+        };
+
+        section("Holster animation");
+        drawFloat(contentY, "sector_editor_weapon_holster_duration", "Holster duration (seconds)", modalState.draftViewmodelHolsterTransition.holsterDurationSeconds, modalState.viewmodelHolsterDurationInput, 0.05f, 2.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_unholster_duration", "Unholster duration (seconds)", modalState.draftViewmodelHolsterTransition.unholsterDurationSeconds, modalState.viewmodelUnholsterDurationInput, 0.05f, 2.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_hidden_x", "Hidden X (right)", modalState.draftViewmodelHolsterTransition.hiddenTranslation.x, modalState.viewmodelHiddenTranslationXInput, -10.0f, 10.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_hidden_y", "Hidden Y (up)", modalState.draftViewmodelHolsterTransition.hiddenTranslation.y, modalState.viewmodelHiddenTranslationYInput, -10.0f, 10.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_hidden_z", "Hidden Z (forward)", modalState.draftViewmodelHolsterTransition.hiddenTranslation.z, modalState.viewmodelHiddenTranslationZInput, -10.0f, 10.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_hidden_pitch", "Hidden pitch", modalState.draftViewmodelHolsterTransition.hiddenRotationDegrees.x, modalState.viewmodelHiddenPitchInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_hidden_yaw", "Hidden yaw", modalState.draftViewmodelHolsterTransition.hiddenRotationDegrees.y, modalState.viewmodelHiddenYawInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_hidden_roll", "Hidden roll", modalState.draftViewmodelHolsterTransition.hiddenRotationDegrees.z, modalState.viewmodelHiddenRollInput, -360.0f, 360.0f, 2);
+
+        section("Weapon grip correction");
+        drawFloat(contentY, "sector_editor_weapon_grip_x", "Grip translation X", modalState.draftViewmodelGrip.translation.x, modalState.viewmodelGripTranslationXInput, -1.0f, 1.0f, 4);
+        drawFloat(contentY, "sector_editor_weapon_grip_y", "Grip translation Y", modalState.draftViewmodelGrip.translation.y, modalState.viewmodelGripTranslationYInput, -1.0f, 1.0f, 4);
+        drawFloat(contentY, "sector_editor_weapon_grip_z", "Grip translation Z", modalState.draftViewmodelGrip.translation.z, modalState.viewmodelGripTranslationZInput, -1.0f, 1.0f, 4);
+        drawFloat(contentY, "sector_editor_weapon_grip_pitch", "Grip pitch", modalState.draftViewmodelGrip.rotationDegrees.x, modalState.viewmodelGripPitchInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_grip_yaw", "Grip yaw", modalState.draftViewmodelGrip.rotationDegrees.y, modalState.viewmodelGripYawInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_grip_roll", "Grip roll", modalState.draftViewmodelGrip.rotationDegrees.z, modalState.viewmodelGripRollInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_grip_scale", "Grip scale", modalState.draftViewmodelGrip.scale, modalState.viewmodelGripScaleInput, 0.01f, 10.0f, 4);
+
+        section("Weapon lighting");
+        drawFloat(contentY, "sector_editor_weapon_brightness", "Pistol brightness", modalState.draftViewmodelAttachmentLighting.brightnessAdjustment, modalState.viewmodelAttachmentBrightnessInput, -1.0f, 1.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_metallic", "Pistol metallic factor", modalState.draftViewmodelAttachmentLighting.materialOverride.metallicFactor, modalState.viewmodelAttachmentMetallicInput, 0.0f, 1.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_roughness", "Pistol roughness factor", modalState.draftViewmodelAttachmentLighting.materialOverride.roughnessFactor, modalState.viewmodelAttachmentRoughnessInput, 0.045f, 1.0f, 3);
+
+        section("Firing and recoil");
+        FpsWeaponFiringDefinition& firing = modalState.draftWeaponFiring;
+        drawFloat(contentY, "sector_editor_weapon_shot_interval", "Shot interval", firing.shotIntervalSeconds, modalState.weaponShotIntervalInput, 0.03f, 5.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_recoil_x", "Recoil translation X", firing.recoil.translationImpulse.x, modalState.weaponRecoilTranslationXInput, -1.0f, 1.0f, 4);
+        drawFloat(contentY, "sector_editor_weapon_recoil_y", "Recoil translation Y", firing.recoil.translationImpulse.y, modalState.weaponRecoilTranslationYInput, -1.0f, 1.0f, 4);
+        drawFloat(contentY, "sector_editor_weapon_recoil_z", "Recoil translation Z", firing.recoil.translationImpulse.z, modalState.weaponRecoilTranslationZInput, -1.0f, 1.0f, 4);
+        drawFloat(contentY, "sector_editor_weapon_recoil_pitch", "Recoil pitch", firing.recoil.rotationImpulseDegrees.x, modalState.weaponRecoilPitchInput, -45.0f, 45.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_recoil_yaw", "Recoil yaw", firing.recoil.rotationImpulseDegrees.y, modalState.weaponRecoilYawInput, -45.0f, 45.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_recoil_roll", "Recoil roll", firing.recoil.rotationImpulseDegrees.z, modalState.weaponRecoilRollInput, -45.0f, 45.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_roll_variation", "Roll variation", firing.recoil.rollVariationDegrees, modalState.weaponRecoilRollVariationInput, 0.0f, 10.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_recoil_frequency", "Spring frequency", firing.recoil.springFrequencyHz, modalState.weaponRecoilFrequencyInput, 0.5f, 40.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_recoil_damping", "Spring damping ratio", firing.recoil.dampingRatio, modalState.weaponRecoilDampingInput, 0.1f, 3.0f, 2);
+
+        section("Muzzle socket and effects");
+        drawFloat(contentY, "sector_editor_weapon_muzzle_x", "Muzzle position X", firing.muzzleSocket.position.x, modalState.weaponMuzzlePositionXInput, -2.0f, 2.0f, 4);
+        drawFloat(contentY, "sector_editor_weapon_muzzle_y", "Muzzle position Y", firing.muzzleSocket.position.y, modalState.weaponMuzzlePositionYInput, -2.0f, 2.0f, 4);
+        drawFloat(contentY, "sector_editor_weapon_muzzle_z", "Muzzle position Z", firing.muzzleSocket.position.z, modalState.weaponMuzzlePositionZInput, -2.0f, 2.0f, 4);
+        drawFloat(contentY, "sector_editor_weapon_muzzle_pitch", "Muzzle pitch", firing.muzzleSocket.rotationDegrees.x, modalState.weaponMuzzlePitchInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_muzzle_yaw", "Muzzle yaw", firing.muzzleSocket.rotationDegrees.y, modalState.weaponMuzzleYawInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_muzzle_roll", "Muzzle roll", firing.muzzleSocket.rotationDegrees.z, modalState.weaponMuzzleRollInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_flash_lifetime", "Flash lifetime", firing.muzzleFlash.lifetimeSeconds, modalState.weaponFlashLifetimeInput, 0.005f, 10.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_flash_size", "Flash size", firing.muzzleFlash.sizeWorld, modalState.weaponFlashSizeInput, 0.005f, 2.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_flash_edge_softness", "Flash edge softness", firing.muzzleFlash.edgeSoftness, modalState.weaponFlashEdgeSoftnessInput, 0.01f, 1.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_light_intensity", "Muzzle-light intensity", firing.muzzleLight.intensity, modalState.weaponLightIntensityInput, 0.0f, 100.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_light_radius", "Muzzle-light radius", firing.muzzleLight.radiusWorld, modalState.weaponLightRadiusInput, 0.05f, 100.0f, 2);
+        drawFloat(contentY, "sector_editor_weapon_light_lifetime", "Muzzle-light lifetime", firing.muzzleLight.lifetimeSeconds, modalState.weaponLightLifetimeInput, 0.005f, 2.0f, 3);
+
+        modalState.draftViewmodelHolsterTransition = ClampFpsViewmodelHolsterTransition(modalState.draftViewmodelHolsterTransition);
+        modalState.draftViewmodelGrip = ClampFpsViewmodelGripCorrection(modalState.draftViewmodelGrip);
+        modalState.draftViewmodelAttachmentLighting = ClampFpsViewmodelAttachmentLighting(modalState.draftViewmodelAttachmentLighting);
+        modalState.draftWeaponFiring = ClampFpsWeaponFiringDefinition(modalState.draftWeaponFiring);
+        engine::EndScrollArea(ui, config, input, scroll, modalState.weaponScroll);
+    };
+
+    if (modalState.activeTab == PreviewSettingsTab::Weapon) {
+        drawWeaponTab();
+    } else if (modalState.activeTab == PreviewSettingsTab::Viewmodel) {
         drawViewmodelTab();
     } else if (modalState.activeTab == PreviewSettingsTab::Fog) {
         drawFogTab();
@@ -530,6 +575,17 @@ void DrawPreviewSettingsModal(
             modalState.viewmodelRollInput = {};
             modalState.viewmodelScaleInput = {};
             modalState.viewmodelFovInput = {};
+        } else if (modalState.activeTab == PreviewSettingsTab::Weapon) {
+            modalState.draftViewmodelHolsterTransition =
+                    modalState.viewmodelHolsterTransitionDefaults;
+            modalState.viewmodelHolsterDurationInput = {};
+            modalState.viewmodelUnholsterDurationInput = {};
+            modalState.viewmodelHiddenTranslationXInput = {};
+            modalState.viewmodelHiddenTranslationYInput = {};
+            modalState.viewmodelHiddenTranslationZInput = {};
+            modalState.viewmodelHiddenPitchInput = {};
+            modalState.viewmodelHiddenYawInput = {};
+            modalState.viewmodelHiddenRollInput = {};
             modalState.draftViewmodelGrip = modalState.viewmodelGripDefaults;
             modalState.viewmodelGripTranslationXInput = {};
             modalState.viewmodelGripTranslationYInput = {};
@@ -543,6 +599,29 @@ void DrawPreviewSettingsModal(
             modalState.viewmodelAttachmentBrightnessInput = {};
             modalState.viewmodelAttachmentMetallicInput = {};
             modalState.viewmodelAttachmentRoughnessInput = {};
+            modalState.draftWeaponFiring = modalState.weaponFiringDefaults;
+            modalState.weaponShotIntervalInput = {};
+            modalState.weaponRecoilTranslationXInput = {};
+            modalState.weaponRecoilTranslationYInput = {};
+            modalState.weaponRecoilTranslationZInput = {};
+            modalState.weaponRecoilPitchInput = {};
+            modalState.weaponRecoilYawInput = {};
+            modalState.weaponRecoilRollInput = {};
+            modalState.weaponRecoilRollVariationInput = {};
+            modalState.weaponRecoilFrequencyInput = {};
+            modalState.weaponRecoilDampingInput = {};
+            modalState.weaponMuzzlePositionXInput = {};
+            modalState.weaponMuzzlePositionYInput = {};
+            modalState.weaponMuzzlePositionZInput = {};
+            modalState.weaponMuzzlePitchInput = {};
+            modalState.weaponMuzzleYawInput = {};
+            modalState.weaponMuzzleRollInput = {};
+            modalState.weaponFlashLifetimeInput = {};
+            modalState.weaponFlashSizeInput = {};
+            modalState.weaponFlashEdgeSoftnessInput = {};
+            modalState.weaponLightIntensityInput = {};
+            modalState.weaponLightRadiusInput = {};
+            modalState.weaponLightLifetimeInput = {};
         } else if (modalState.activeTab == PreviewSettingsTab::Fog) {
             ResetSectorPreviewSettingsModalFogDefaults(modalState);
         } else if (modalState.activeTab == PreviewSettingsTab::Lighting) {

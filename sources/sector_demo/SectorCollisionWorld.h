@@ -41,10 +41,33 @@ struct SectorCollisionLoop {
 struct SectorCollisionSector {
     int sectorId = 0;
     SectorCollisionHeights heights;
+    bool ceilingSolid = true;
     SectorCollisionLoop outerLoop;
     std::vector<SectorCollisionLoop> holeLoops;
     std::vector<SectorCollisionEdge> edges;
     std::vector<int> portalNeighbors;
+};
+
+enum class SectorCollisionRaySurfaceKind {
+    None,
+    Floor,
+    Ceiling,
+    Wall,
+    LowerWall,
+    UpperWall
+};
+
+struct SectorCollisionRayHit {
+    bool hit = false;
+    Vector3 position{};
+    Vector3 normal{};
+    float distance = 0.0f;
+    SectorCollisionRaySurfaceKind surfaceKind =
+            SectorCollisionRaySurfaceKind::None;
+    int sectorId = 0;
+    int lineDefId = 0;
+    int sideDefId = 0;
+    int neighborSectorId = 0;
 };
 
 struct SectorCollisionMoveConfig {
@@ -92,6 +115,10 @@ public:
             const SectorCollisionMoveState& moveState,
             Vector2 desiredDelta,
             const SectorCollisionMoveConfig& config) const;
+    SectorCollisionRayHit Raycast(
+            Vector3 origin,
+            Vector3 direction,
+            float maximumDistance) const;
 
 private:
     bool SectorContainsPoint(const SectorCollisionSector& sector, Vector2 xz) const;

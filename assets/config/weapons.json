@@ -13,6 +13,42 @@
         "innerThicknessPixels": 2.0,
         "outlineThicknessPixels": 1.0
       },
+      "firing": {
+        "shotIntervalSeconds": 0.18,
+        "maximumRangeWorld": 100.0,
+        "recoil": {
+          "translationImpulse": [0.0, 0.0, -0.03],
+          "rotationImpulseDegrees": [-3.0, 0.0, 0.0],
+          "rollVariationDegrees": 0.45,
+          "springFrequencyHz": 8.0,
+          "dampingRatio": 0.82,
+          "maximumTranslation": [0.05, 0.05, 0.08],
+          "maximumRotationDegrees": [8.0, 2.0, 2.0]
+        },
+        "muzzleSocket": {
+          "position": [0.0, 0.035, 0.105],
+          "rotationDegrees": [0.0, 0.0, 0.0]
+        },
+        "muzzleFlash": {
+          "enabled": true,
+          "lifetimeSeconds": 0.055,
+          "sizeWorld": 0.1,
+          "sizeVariation": 0.2,
+          "coreColor": {"r": 255, "g": 255, "b": 245, "a": 255},
+          "hotColor": {"r": 255, "g": 235, "b": 120, "a": 255},
+          "warmColor": {"r": 255, "g": 90, "b": 15, "a": 230},
+          "edgeColor": {"r": 120, "g": 15, "b": 5, "a": 150},
+          "edgeSoftness": 0.35
+        },
+        "muzzleLight": {
+          "enabled": true,
+          "color": {"r": 255, "g": 165, "b": 70, "a": 255},
+          "intensity": 6.0,
+          "radiusWorld": 2.5,
+          "lifetimeSeconds": 0.07,
+          "decayExponent": 2.5
+        }
+      },
       "viewmodel": {
         "modelPath": "assets/models/weapons/pistol_arms.glb",
         "idleAnimation": "Pistol Idle",
@@ -24,6 +60,12 @@
         "rotationDegrees": [0.0, 0.0, 0.0],
         "scale": 1.0,
         "verticalFovDegrees": 65.0,
+        "holsterTransition": {
+          "holsterDurationSeconds": 0.25,
+          "unholsterDurationSeconds": 0.34,
+          "hiddenTranslation": [0.45, -1.75, 0.0],
+          "hiddenRotationDegrees": [13.0, 0.0, -10.0]
+        },
         "brightnessAdjustment": -0.55,
         "materialOverride": {
           "metallicFactor": 0.0,

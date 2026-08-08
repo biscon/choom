@@ -45,7 +45,7 @@ bool ShouldDrawSectorEditorPreviewCrosshair(
 {
     if (!context.preview3DActive
             || context.viewmodel.activeWeaponId.empty()
-            || context.viewmodel.holstered) {
+            || !IsFpsViewmodelReadyForUse(context.viewmodel)) {
         return false;
     }
     const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
