@@ -125,6 +125,9 @@ bool SameSkySettings(const SectorTopologySkySettings& left, const SectorTopology
 bool SameDirectionalLightSettings(
         const SectorTopologyDirectionalLightSettings& left,
         const SectorTopologyDirectionalLightSettings& right);
+bool SameFogSettings(
+        const SectorTopologyFogSettings& left,
+        const SectorTopologyFogSettings& right);
 bool SamePreviewSettings(const SectorPreviewSettings& left, const SectorPreviewSettings& right);
 float Cross(Vector2 a, Vector2 b, Vector2 c);
 float Cross(SectorPoint a, SectorPoint b, SectorPoint c);

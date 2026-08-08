@@ -30,6 +30,59 @@ Vector2 CachedMapToScreen(const SectorEditorTopologyDrawContext& context, Vector
     };
 }
 
+float PickTriangleCross(Vector2 a, Vector2 b, Vector2 point)
+{
+    return (b.x - a.x) * (point.y - a.y)
+            - (b.y - a.y) * (point.x - a.x);
+}
+
+bool PointInOrOnPickTriangle(Vector2 point, Vector2 a, Vector2 b, Vector2 c)
+{
+    constexpr float epsilon = 0.0001f;
+    const float ab = PickTriangleCross(a, b, point);
+    const float bc = PickTriangleCross(b, c, point);
+    const float ca = PickTriangleCross(c, a, point);
+    const bool hasNegative = ab < -epsilon || bc < -epsilon || ca < -epsilon;
+    const bool hasPositive = ab > epsilon || bc > epsilon || ca > epsilon;
+    return !(hasNegative && hasPositive);
+}
+
+float DistanceSquaredToPickSegment(Vector2 point, Vector2 a, Vector2 b)
+{
+    const float dx = b.x - a.x;
+    const float dy = b.y - a.y;
+    const float length2 = dx * dx + dy * dy;
+    if (length2 <= 0.000001f) {
+        const float px = point.x - a.x;
+        const float py = point.y - a.y;
+        return px * px + py * py;
+    }
+
+    const float t = std::clamp(
+            ((point.x - a.x) * dx + (point.y - a.y) * dy) / length2,
+            0.0f,
+            1.0f);
+    const float px = point.x - (a.x + dx * t);
+    const float py = point.y - (a.y + dy * t);
+    return px * px + py * py;
+}
+
+float DistanceSquaredToPickQuad(Vector2 point, const Vector2 (&corners)[4])
+{
+    if (PointInOrOnPickTriangle(point, corners[0], corners[1], corners[2])
+            || PointInOrOnPickTriangle(point, corners[0], corners[2], corners[3])) {
+        return 0.0f;
+    }
+
+    float distance2 = DistanceSquaredToPickSegment(point, corners[0], corners[1]);
+    for (int i = 1; i < 4; ++i) {
+        distance2 = std::min(
+                distance2,
+                DistanceSquaredToPickSegment(point, corners[i], corners[(i + 1) % 4]));
+    }
+    return distance2;
+}
+
 Vector2 AuthoringVertexToMap(const SectorAuthoringVertex& vertex)
 {
     return Vector2{
@@ -166,6 +219,16 @@ bool FindAuthoringDiagnosticPosition(
         }
         return false;
     };
+    const auto findFogVolumePosition = [&]() {
+        if (const SectorAuthoringFogVolume* volume =
+                    FindSectorAuthoringFogVolume(graph, diagnostic.objectId)) {
+            outMap = Vector2{
+                    SectorCoordToVisibleAuthoring(volume->x),
+                    SectorCoordToVisibleAuthoring(volume->y)};
+            return true;
+        }
+        return false;
+    };
 
     switch (diagnostic.kind) {
     case SectorAuthoringDerivationDiagnosticKind::DanglingLine:
@@ -179,6 +242,8 @@ bool FindAuthoringDiagnosticPosition(
     case SectorAuthoringDerivationDiagnosticKind::AmbiguousFaceAnchor:
     case SectorAuthoringDerivationDiagnosticKind::UnresolvedFaceAnchor:
         return findAnchorPosition() || findLinePosition() || findVertexPosition();
+    case SectorAuthoringDerivationDiagnosticKind::UnresolvedFogVolume:
+        return findFogVolumePosition();
     case SectorAuthoringDerivationDiagnosticKind::AuthoringReference:
     case SectorAuthoringDerivationDiagnosticKind::FaceExtraction:
     case SectorAuthoringDerivationDiagnosticKind::TinySliverFace:
@@ -187,7 +252,7 @@ bool FindAuthoringDiagnosticPosition(
         break;
     }
 
-    if (findVertexPosition() || findLinePosition() || findAnchorPosition()) {
+    if (findVertexPosition() || findLinePosition() || findAnchorPosition() || findFogVolumePosition()) {
         return true;
     }
     return false;
@@ -299,6 +364,29 @@ const CachedAuthoringVertexDraw* FindCachedAuthoringVertex(
 }
 
 } // namespace
+
+void UpdateCachedSectorEditorRuntimeObjectDraw(
+        SectorEditorTopologyRenderCache& cache,
+        const SectorPlacedRuntimeObject& object)
+{
+    for (CachedRuntimeObjectDraw& cached : cache.runtimeObjects) {
+        if (cached.objectId != object.id) {
+            continue;
+        }
+        cached.definitionId = !object.kind.empty()
+                ? object.kind
+                : object.definitionId;
+        cached.map = Vector2{object.position.x, object.position.z};
+        cached.yawRadians = object.yawRadians;
+        cached.definitionKnown = object.kind == "billboard"
+                || object.kind == "door"
+                || object.kind == "static_model"
+                || object.kind == "dynamic_model";
+        cached.isDoor = false;
+        cached.doorFootprintValid = false;
+        return;
+    }
+}
 
 bool ShouldDrawLegacyTopologySelectionHighlight(
         bool hasAuthoringGraphData,
@@ -654,7 +742,10 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cached.definitionId = !object.kind.empty() ? object.kind : object.definitionId;
         cached.map = Vector2{object.position.x, object.position.z};
         cached.yawRadians = object.yawRadians;
-        cached.definitionKnown = object.kind == "billboard" || object.kind == "door";
+        cached.definitionKnown = object.kind == "billboard"
+                || object.kind == "door"
+                || object.kind == "static_model"
+                || object.kind == "dynamic_model";
         cached.isDoor = object.kind == "door";
         if (cached.isDoor) {
             const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(map, object.door);
@@ -699,6 +790,42 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
 
     cache.valid = true;
     return cache;
+}
+
+void AppendCachedRuntimeObjectPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates)
+{
+    if (!cache.valid || tolerancePixels < 0.0f) {
+        return;
+    }
+
+    const float tolerance2 = tolerancePixels * tolerancePixels;
+    for (const CachedRuntimeObjectDraw& object : cache.runtimeObjects) {
+        const Vector2 center = CachedMapToScreen(context, object.map);
+        const float centerDx = center.x - screenPoint.x;
+        const float centerDy = center.y - screenPoint.y;
+        float distance2 = centerDx * centerDx + centerDy * centerDy;
+
+        if (object.isDoor && object.doorFootprintValid) {
+            Vector2 corners[4];
+            for (int i = 0; i < 4; ++i) {
+                corners[i] = CachedMapToScreen(context, object.doorCorners[i]);
+            }
+            distance2 = std::min(
+                    distance2,
+                    DistanceSquaredToPickQuad(screenPoint, corners));
+        }
+
+        if (distance2 <= tolerance2) {
+            outCandidates.push_back(SectorEditorPickCandidate{
+                    SectorEditorPickTarget{SectorEditorPickKind::RuntimeObject, object.objectId},
+                    distance2});
+        }
+    }
 }
 
 void DrawCachedTopologySectors(

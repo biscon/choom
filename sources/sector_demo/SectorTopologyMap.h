@@ -41,6 +41,38 @@ struct SectorTopologyDirectionalLightSettings {
     float intensity = 1.0f;
 };
 
+struct SectorTopologyFogSettings {
+    bool enabled = false;
+    Color color = Color{80, 88, 84, 255};
+    float startDistanceWorld = 2.0f;
+    float density = 0.025f;
+    float maxOpacity = 0.65f;
+    float referenceHeightWorld = 1.0f;
+    float heightFalloff = 0.35f;
+    enum class LocalVolumeQuality {
+        Off,
+        Low,
+        Medium,
+        High
+    } localVolumeQuality = LocalVolumeQuality::Medium;
+};
+
+struct SectorCompiledLocalFogVolume {
+    int sourceAuthoringFogVolumeId = -1;
+    int topologySectorId = -1;
+    bool enabled = true;
+    Vector3 centerWorld = {};
+    Vector3 radiiWorld = {1.5f, 0.325f, 1.5f};
+    Color color = Color{105, 116, 110, 255};
+    float density = 0.65f;
+    float maxOpacity = 0.75f;
+    float edgeSoftness = 0.35f;
+    float noiseScaleWorld = 1.0f;
+    float noiseAmount = 0.55f;
+    float flowDirectionDegrees = 0.0f;
+    float flowSpeedWorld = 0.12f;
+};
+
 struct SectorPlacedBillboard {
     std::string spriteAnimationPath;
     Vector2 sizeWorld = {1.0f, 1.0f};
@@ -53,6 +85,36 @@ struct SectorPlacedBillboard {
     std::string leftClip = "Left";
     std::string rightClip = "Right";
     bool playing = true;
+};
+
+struct SectorPlacedStaticModel {
+    std::string modelPath;
+    float rotationXRadians = 0.0f;
+    float rotationZRadians = 0.0f;
+    float heightOffsetWorld = 0.0f;
+    float scale = 1.0f;
+    bool collision = false;
+    // Transient bake input. Refreshed only during explicit model preparation.
+    std::string geometryFingerprint;
+};
+
+enum class SectorDynamicModelShadowMode {
+    None,
+    Contact,
+    ProjectedSilhouette
+};
+
+struct SectorPlacedDynamicModel {
+    std::string modelPath;
+    float rotationXRadians = 0.0f;
+    float rotationZRadians = 0.0f;
+    float heightOffsetWorld = 0.0f;
+    float scale = 1.0f;
+    bool collision = false;
+    std::string animation;
+    bool loop = true;
+    float animationSpeed = 1.0f;
+    SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
 };
 
 enum class SectorDoorMotionType {
@@ -123,6 +185,8 @@ struct SectorPlacedRuntimeObject {
     float yawRadians = 0.0f;
     std::string kind;
     SectorPlacedBillboard billboard;
+    SectorPlacedStaticModel staticModel;
+    SectorPlacedDynamicModel dynamicModel;
     SectorPlacedDoor door;
 };
 
@@ -140,6 +204,8 @@ struct SectorTopologyMap {
     SectorPreviewSettings previewSettings;
     SectorTopologySkySettings skySettings;
     SectorTopologyDirectionalLightSettings directionalLight;
+    SectorTopologyFogSettings fogSettings;
+    std::vector<SectorCompiledLocalFogVolume> compiledLocalFogVolumes;
     SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;
 };
@@ -166,6 +232,8 @@ SectorTopologySkySettings NormalizeSectorTopologySkySettings(SectorTopologySkySe
 SectorTopologyDirectionalLightSettings DefaultSectorTopologyDirectionalLightSettings();
 SectorTopologyDirectionalLightSettings NormalizeSectorTopologyDirectionalLightSettings(
         SectorTopologyDirectionalLightSettings settings);
+SectorTopologyFogSettings DefaultSectorTopologyFogSettings();
+SectorTopologyFogSettings NormalizeSectorTopologyFogSettings(SectorTopologyFogSettings settings);
 
 bool IsValidSectorTopologyId(int id);
 const char* SectorTopologySideKindName(SectorTopologySideKind side);

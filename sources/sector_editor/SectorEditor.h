@@ -11,11 +11,11 @@
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
+#include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogState.h"
 #include "sector_editor/preview/SectorEditorPreviewState.h"
-#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
-#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectDrag.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
@@ -24,11 +24,15 @@
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.h"
+#include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
+#include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
+#include "game/FpsWeaponRegistry.h"
 
 #include <raylib.h>
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,7 +49,9 @@ public:
     void Render(engine::AssetManager& assets);
     void RenderPreview3DShadowMaps(engine::AssetManager& assets);
     void RenderPreview3DScene(engine::EngineContext& context);
+    void RenderPreview3DViewmodel(engine::AssetManager& assets);
     void RenderPreview3DOverlays();
+    void RenderPreview3DHud(Rectangle playableViewport) const;
     void ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
     void RenderUI(
             engine::UIContext& ui,
@@ -88,6 +94,9 @@ private:
     void FinishRuntimeObjectDrag();
     void CancelRuntimeObjectDrag(const char* message);
     void UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt);
+    void BeginFpsViewmodel(engine::AssetManager& assets);
+    void EndFpsViewmodel(engine::AssetManager& assets);
+    void UpdateFpsViewmodel(engine::AssetManager& assets, float dt);
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingAuthoringLine(const char* message);
     void CancelPendingAuthoringRectangle(const char* message);
@@ -110,6 +119,8 @@ private:
     void DrawTopologySelectedLineHighlight() const;
     void DrawTopologySnapCrosshair() const;
     void DrawAuthoringVertexMoveOverlay() const;
+    void DrawAuthoringFogVolumes() const;
+    void DrawAuthoringFogVolumeMoveOverlay() const;
     void DrawLightMoveOverlay() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
@@ -165,6 +176,12 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font);
     void DrawSpritePickerModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
+    void DrawStaticModelPickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
@@ -331,6 +348,8 @@ private:
     bool SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
     SectorEditorMaterialEditingService BuildMaterialEditingService();
     SectorEditorLightEditingService BuildLightEditingService();
+    SectorEditorRuntimeObjectEditingService BuildRuntimeObjectEditingService(
+            SectorEditorSelectionServiceContext* selectionService = nullptr);
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorDocumentLifecycleAccess Lifecycle();
     SectorEditorConstDocumentLifecycleAccess Lifecycle() const;
@@ -353,9 +372,9 @@ private:
     void MarkTopologyDocumentEdited(const char* status);
     bool OpenDeleteSelectedLightConfirmation();
     SectorEditorToolContext BuildToolContext(engine::Input* input);
-    SectorEditorPlacedObjectDragContext BuildRuntimeObjectDragContext();
-    SectorEditorPlacedObjectActionContext BuildRuntimeObjectActionContext();
     void AddRuntimeObjectAt(Vector2 mapPoint);
+    void AddStaticModelAt(Vector2 mapPoint);
+    void AddDynamicModelAt(Vector2 mapPoint);
     void AddDoorAtPortal(Vector2 screenPoint);
     bool DeleteSelectedRuntimeObject();
     bool DeleteRuntimeObjectById(int objectId);
@@ -373,14 +392,23 @@ private:
     ManipulationState manipulationState;
     LightEditingState lightEditingState;
     SectorEditorUiState uiState;
+    RuntimeObjectEditingState runtimeObjectEditingState;
+    RuntimeObjectEditingUiState runtimeObjectEditingUiState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
     MaterialEditingState materialEditingState;
     MaterialEditingUiState materialEditingUiState;
+    FogVolumeEditingUiState fogVolumeEditingUiState;
+    std::optional<SectorEditorAuthoringFogVolumeEditingService> fogVolumeEditingService;
     SectorEditorLightmapBakeController lightmapBake;
     Rectangle canvasRect = {};
     std::string statusText;
     SectorMeshRenderer preview;
+    FpsWeaponRegistry weaponRegistry;
+    FpsApplicationSettings applicationSettings;
+    std::string applicationSettingsPath;
+    std::string weaponRegistryError;
+    std::string applicationSettingsWarning;
     engine::EngineContext* engineContext = nullptr;
     bool initialized = false;
 };

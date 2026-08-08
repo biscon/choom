@@ -3,6 +3,7 @@
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorAuthoringGraph.h"
+#include "sector_demo/SectorTopologyUnits.h"
 
 namespace game {
 
@@ -48,6 +49,7 @@ SectorEditorSelectionTarget MakeRuntimeObjectSelectionTarget(int objectId)
 bool IsAnySectorEditorManipulationActive(const SectorEditorManipulationServiceContext& context)
 {
     return context.manipulationState.authoringVertexDrag.active
+            || context.manipulationState.authoringFogVolumeDrag.active
             || context.lightState.lightDrag.active
             || context.runtimeObjectDrag.active;
 }
@@ -58,6 +60,18 @@ void UpdateActiveSectorEditorManipulation(
 {
     if (context.manipulationState.authoringVertexDrag.active && context.updateAuthoringVertexDrag != nullptr) {
         context.updateAuthoringVertexDrag(context.userData, input);
+    }
+    if (context.manipulationState.authoringFogVolumeDrag.active
+            && context.fogVolumeEditing != nullptr
+            && context.screenToMap
+            && context.snapMapPoint) {
+        const Vector2 snapped = context.snapMapPoint(context.screenToMap(input.MousePosition()));
+        SectorCoord x = 0;
+        SectorCoord y = 0;
+        if (VisibleAuthoringToSectorCoord(snapped.x, x)
+                && VisibleAuthoringToSectorCoord(snapped.y, y)) {
+            context.fogVolumeEditing->UpdateMove(SectorTopologyCoordPoint{x, y});
+        }
     }
     if (context.lightState.lightDrag.active && context.updateLightDrag != nullptr) {
         context.updateLightDrag(context.userData, input);
@@ -77,6 +91,10 @@ void FinishActiveSectorEditorManipulation(SectorEditorManipulationServiceContext
 {
     if (context.manipulationState.authoringVertexDrag.active && context.finishAuthoringVertexDrag != nullptr) {
         context.finishAuthoringVertexDrag(context.userData);
+    }
+    if (context.manipulationState.authoringFogVolumeDrag.active
+            && context.fogVolumeEditing != nullptr) {
+        context.fogVolumeEditing->FinishMove();
     }
     if (context.lightState.lightDrag.active && context.finishLightDrag != nullptr) {
         context.finishLightDrag(context.userData);
@@ -100,6 +118,11 @@ bool CancelFirstActiveSectorEditorManipulation(
 {
     if (context.manipulationState.authoringVertexDrag.active && context.cancelAuthoringVertexDrag != nullptr) {
         context.cancelAuthoringVertexDrag(context.userData, authoringVertexMessage);
+        return true;
+    }
+    if (context.manipulationState.authoringFogVolumeDrag.active
+            && context.fogVolumeEditing != nullptr) {
+        context.fogVolumeEditing->CancelMove(authoringVertexMessage);
         return true;
     }
     if (context.lightState.lightDrag.active && context.cancelLightDrag != nullptr) {
@@ -127,6 +150,10 @@ void CancelActiveSectorEditorManipulation(
 {
     if (context.manipulationState.authoringVertexDrag.active && context.cancelAuthoringVertexDrag != nullptr) {
         context.cancelAuthoringVertexDrag(context.userData, authoringVertexMessage);
+    }
+    if (context.manipulationState.authoringFogVolumeDrag.active
+            && context.fogVolumeEditing != nullptr) {
+        context.fogVolumeEditing->CancelMove(authoringVertexMessage);
     }
     if (context.lightState.lightDrag.active && context.cancelLightDrag != nullptr) {
         context.cancelLightDrag(context.userData, lightMessage);
@@ -227,6 +254,11 @@ void StartSectorEditorSelectedManipulation(
             }
             break;
         }
+        case SectorEditorPickKind::AuthoringFogVolume:
+            if (context.fogVolumeEditing != nullptr) {
+                context.fogVolumeEditing->BeginMove(target.id);
+            }
+            break;
         case SectorEditorPickKind::None:
         case SectorEditorPickKind::AuthoringLine:
         case SectorEditorPickKind::AuthoringFaceAnchor:

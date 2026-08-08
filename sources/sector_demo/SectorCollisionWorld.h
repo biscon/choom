@@ -97,6 +97,10 @@ private:
     bool SectorContainsPoint(const SectorCollisionSector& sector, Vector2 xz) const;
 
     std::vector<SectorCollisionSector> sectors;
+    // ResolveMovement() reuses this queue so footprint portal traversal does not
+    // allocate during normal gameplay. Collision movement queries are main-thread
+    // and non-concurrent, matching the preview controller update.
+    mutable std::vector<int> footprintTraversalSectorIds;
 };
 
 } // namespace game

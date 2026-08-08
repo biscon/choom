@@ -3,6 +3,8 @@
 #include "sector_demo/SectorColor.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorMath.h"
+#include "sector_demo/SectorStaticModelTransform.h"
+#include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorUnits.h"
 
@@ -19,6 +21,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -36,6 +39,7 @@ struct BakeTriangle {
     Vector2 lightmapUv0 = {};
     Vector2 lightmapUv1 = {};
     Vector2 lightmapUv2 = {};
+    int lightmapAtlasIndex = -1;
     SectorGeneratedSurfaceRef surfaceRef;
     int sourceSurfaceIndex = -1;
     int triangleIndex = -1;
@@ -45,6 +49,8 @@ struct RasterHit {
     bool hit = false;
     Vector3 position = {};
     Vector3 normal = {};
+    Vector3 geometricNormal = {};
+    Vector2 uv = {};
     int triangleIndex = -1;
 };
 
@@ -53,6 +59,7 @@ struct RayHit {
     float distance = 0.0f;
     Vector3 normal = {};
     Vector2 lightmapUv = {};
+    int lightmapAtlasIndex = -1;
     int sourceSurfaceIndex = -1;
     int triangleIndex = -1;
     float barycentric0 = 0.0f;
@@ -69,6 +76,7 @@ struct AlphaRayHit {
 };
 
 struct BakeTexel {
+    int atlasIndex = -1;
     int x = 0;
     int y = 0;
     size_t pixelIndex = 0;
@@ -77,6 +85,30 @@ struct BakeTexel {
     int triangleIndex = -1;
     Vector3 position = {};
     Vector3 normal = {};
+    Vector3 geometricNormal = {};
+};
+
+struct SectorLightmapNormalMap {
+    bool valid = false;
+    int width = 0;
+    int height = 0;
+    std::vector<Color> pixels;
+};
+
+class SectorLightmapNormalMapCache {
+public:
+    bool Sample(
+            const SectorTopologyMap& map,
+            const std::string& textureId,
+            Vector2 uv,
+            Vector3& outTangentNormal);
+
+private:
+    const SectorLightmapNormalMap& LoadOrGet(
+            const SectorTopologyMap& map,
+            const std::string& textureId);
+
+    std::unordered_map<std::string, SectorLightmapNormalMap> mapsByPath;
 };
 
 struct LightmapWorldPointLight {
@@ -196,6 +228,93 @@ std::string HashToString(uint64_t hash)
     return buffer;
 }
 
+struct NormalMapFingerprintCacheEntry {
+    uintmax_t fileSize = 0;
+    std::filesystem::file_time_type modifiedTime = {};
+    std::string fingerprint;
+};
+
+std::unordered_map<std::string, NormalMapFingerprintCacheEntry>& NormalMapFingerprintCache()
+{
+    static std::unordered_map<std::string, NormalMapFingerprintCacheEntry> cache;
+    return cache;
+}
+
+std::mutex& NormalMapFingerprintCacheMutex()
+{
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::string ComputeNormalMapFingerprint(const SectorTextureDefinition& texture)
+{
+    const std::string normalMapPath = SectorTextureNormalMapPath(texture.path);
+    if (normalMapPath.empty()) {
+        return "missing";
+    }
+
+    std::error_code pathError;
+    std::filesystem::path resolvedPath = std::filesystem::absolute(
+            ResolveSectorAssetPath(normalMapPath),
+            pathError);
+    if (pathError) {
+        resolvedPath = std::filesystem::path(
+                ResolveSectorAssetPath(normalMapPath));
+        pathError.clear();
+    }
+    resolvedPath = resolvedPath.lexically_normal();
+    if (!std::filesystem::is_regular_file(resolvedPath, pathError)
+            || pathError) {
+        return pathError ? "unreadable" : "missing";
+    }
+    const uintmax_t fileSize = std::filesystem::file_size(
+            resolvedPath,
+            pathError);
+    if (pathError) {
+        return "unreadable";
+    }
+    const std::filesystem::file_time_type modifiedTime =
+            std::filesystem::last_write_time(resolvedPath, pathError);
+    if (pathError) {
+        return "unreadable";
+    }
+
+    const std::string cacheKey = resolvedPath.generic_string();
+    std::lock_guard<std::mutex> lock(NormalMapFingerprintCacheMutex());
+    auto& cache = NormalMapFingerprintCache();
+    const auto cached = cache.find(cacheKey);
+    if (cached != cache.end()
+            && cached->second.fileSize == fileSize
+            && cached->second.modifiedTime == modifiedTime) {
+        return cached->second.fingerprint;
+    }
+
+    std::ifstream input(resolvedPath, std::ios::binary);
+    if (!input) {
+        return "unreadable";
+    }
+    uint64_t hash = 14695981039346656037ull;
+    FnvAppendString(hash, "sector-generated-normal-map-v1");
+    std::array<char, 64 * 1024> buffer{};
+    while (input) {
+        input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        const std::streamsize count = input.gcount();
+        for (std::streamsize i = 0; i < count; ++i) {
+            hash = FnvAppendByte(hash, static_cast<uint8_t>(buffer[static_cast<size_t>(i)]));
+        }
+    }
+    if (!input.eof()) {
+        return "unreadable";
+    }
+
+    const std::string fingerprint = "present:" + HashToString(hash);
+    cache[cacheKey] = NormalMapFingerprintCacheEntry{
+            fileSize,
+            modifiedTime,
+            fingerprint};
+    return fingerprint;
+}
+
 unsigned char FloatToByte(float value)
 {
     return ClampColorByte(value * 255.0f);
@@ -237,6 +356,194 @@ Vector2 Interpolate(Vector2 a, Vector2 b, Vector2 c, float wa, float wb, float w
     };
 }
 
+int WrapPixelIndex(int value, int size)
+{
+    if (size <= 0) {
+        return 0;
+    }
+    const int wrapped = value % size;
+    return wrapped < 0 ? wrapped + size : wrapped;
+}
+
+Vector3 DecodeTangentNormal(Color color)
+{
+    return Vector3{
+            static_cast<float>(color.r) * (2.0f / 255.0f) - 1.0f,
+            static_cast<float>(color.g) * (2.0f / 255.0f) - 1.0f,
+            static_cast<float>(color.b) * (2.0f / 255.0f) - 1.0f};
+}
+
+const SectorLightmapNormalMap& SectorLightmapNormalMapCache::LoadOrGet(
+        const SectorTopologyMap& map,
+        const std::string& textureId)
+{
+    static const SectorLightmapNormalMap missing;
+    const auto textureIt = map.texturesById.find(textureId);
+    if (textureIt == map.texturesById.end()) {
+        return missing;
+    }
+
+    const std::string normalMapPath = SectorTextureNormalMapPath(
+            textureIt->second.path);
+    const std::string resolvedPath = ResolveSectorAssetPath(normalMapPath);
+    auto existing = mapsByPath.find(resolvedPath);
+    if (existing != mapsByPath.end()) {
+        return existing->second;
+    }
+
+    SectorLightmapNormalMap normalMap;
+    std::error_code fileError;
+    if (normalMapPath.empty()
+            || !std::filesystem::is_regular_file(resolvedPath, fileError)
+            || fileError) {
+        return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
+    }
+
+    Image image = LoadImage(resolvedPath.c_str());
+    if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
+        TraceLog(
+                LOG_WARNING,
+                "Sector lightmap normal map could not load '%s'",
+                resolvedPath.c_str());
+        if (image.data != nullptr) {
+            UnloadImage(image);
+        }
+        return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
+    }
+
+    Color* colors = LoadImageColors(image);
+    if (colors == nullptr) {
+        TraceLog(
+                LOG_WARNING,
+                "Sector lightmap normal map could not read pixels from '%s'",
+                resolvedPath.c_str());
+        UnloadImage(image);
+        return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
+    }
+
+    normalMap.valid = true;
+    normalMap.width = image.width;
+    normalMap.height = image.height;
+    normalMap.pixels.assign(
+            colors,
+            colors + static_cast<size_t>(image.width * image.height));
+    UnloadImageColors(colors);
+    UnloadImage(image);
+    return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
+}
+
+bool SectorLightmapNormalMapCache::Sample(
+        const SectorTopologyMap& map,
+        const std::string& textureId,
+        Vector2 uv,
+        Vector3& outTangentNormal)
+{
+    outTangentNormal = Vector3{0.0f, 0.0f, 1.0f};
+    const SectorLightmapNormalMap& normalMap = LoadOrGet(map, textureId);
+    if (!normalMap.valid
+            || normalMap.width <= 0
+            || normalMap.height <= 0
+            || normalMap.pixels.empty()
+            || !std::isfinite(uv.x)
+            || !std::isfinite(uv.y)) {
+        return false;
+    }
+
+    const float wrappedU = uv.x - std::floor(uv.x);
+    const float wrappedV = uv.y - std::floor(uv.y);
+    const float pixelX = wrappedU * static_cast<float>(normalMap.width) - 0.5f;
+    const float pixelY = wrappedV * static_cast<float>(normalMap.height) - 0.5f;
+    const int x0 = static_cast<int>(std::floor(pixelX));
+    const int y0 = static_cast<int>(std::floor(pixelY));
+    const int x1 = x0 + 1;
+    const int y1 = y0 + 1;
+    const float tx = pixelX - std::floor(pixelX);
+    const float ty = pixelY - std::floor(pixelY);
+    const auto sample = [&normalMap](int x, int y) {
+        const int wrappedX = WrapPixelIndex(x, normalMap.width);
+        const int wrappedY = WrapPixelIndex(y, normalMap.height);
+        return DecodeTangentNormal(normalMap.pixels[static_cast<size_t>(
+                wrappedY * normalMap.width + wrappedX)]);
+    };
+    const Vector3 top = Vector3Lerp(sample(x0, y0), sample(x1, y0), tx);
+    const Vector3 bottom = Vector3Lerp(sample(x0, y1), sample(x1, y1), tx);
+    outTangentNormal = Vector3Lerp(top, bottom, ty);
+    return Vector3LengthSqr(outTangentNormal) > BakeEpsilon;
+}
+
+Vector3 TransformTangentNormalToWorld(
+        const SectorGeneratedVertex& vertex0,
+        const SectorGeneratedVertex& vertex1,
+        const SectorGeneratedVertex& vertex2,
+        Vector3 geometricNormal,
+        Vector3 tangentNormal)
+{
+    const Vector3 edge1 = Vector3Subtract(vertex1.position, vertex0.position);
+    const Vector3 edge2 = Vector3Subtract(vertex2.position, vertex0.position);
+    const Vector2 uvEdge1 = Vector2Subtract(vertex1.uv, vertex0.uv);
+    const Vector2 uvEdge2 = Vector2Subtract(vertex2.uv, vertex0.uv);
+    const float determinant = uvEdge1.x * uvEdge2.y - uvEdge1.y * uvEdge2.x;
+    if (std::fabs(determinant) <= BakeEpsilon) {
+        return geometricNormal;
+    }
+
+    const float inverseDeterminant = 1.0f / determinant;
+    Vector3 tangent = Vector3Scale(
+            Vector3Subtract(
+                    Vector3Scale(edge1, uvEdge2.y),
+                    Vector3Scale(edge2, uvEdge1.y)),
+            inverseDeterminant);
+    const Vector3 sourceBitangent = Vector3Scale(
+            Vector3Subtract(
+                    Vector3Scale(edge2, uvEdge1.x),
+                    Vector3Scale(edge1, uvEdge2.x)),
+            inverseDeterminant);
+    tangent = Vector3Subtract(
+            tangent,
+            Vector3Scale(geometricNormal, Vector3DotProduct(tangent, geometricNormal)));
+    if (Vector3LengthSqr(tangent) <= BakeEpsilon
+            || Vector3LengthSqr(sourceBitangent) <= BakeEpsilon) {
+        return geometricNormal;
+    }
+    tangent = Vector3Normalize(tangent);
+    const float handedness = Vector3DotProduct(
+            Vector3CrossProduct(geometricNormal, tangent),
+            sourceBitangent) < 0.0f ? -1.0f : 1.0f;
+    const Vector3 bitangent = Vector3Scale(
+            Vector3Normalize(Vector3CrossProduct(geometricNormal, tangent)),
+            handedness);
+    const Vector3 worldNormal = Vector3Add(
+            Vector3Add(
+                    Vector3Scale(tangent, tangentNormal.x),
+                    Vector3Scale(bitangent, tangentNormal.y)),
+            Vector3Scale(geometricNormal, tangentNormal.z));
+    return Vector3LengthSqr(worldNormal) > BakeEpsilon
+            ? Vector3Normalize(worldNormal)
+            : geometricNormal;
+}
+
+Vector3 ResolveSurfaceShadingNormal(
+        const SectorTopologyMap& map,
+        const SectorGeneratedSurface& surface,
+        const RasterHit& hit,
+        SectorLightmapNormalMapCache& normalMapCache)
+{
+    Vector3 tangentNormal{};
+    if (!normalMapCache.Sample(map, surface.textureId, hit.uv, tangentNormal)) {
+        return hit.geometricNormal;
+    }
+    const size_t vertexIndex = static_cast<size_t>(hit.triangleIndex) * 3u;
+    if (hit.triangleIndex < 0 || vertexIndex + 2u >= surface.vertices.size()) {
+        return hit.geometricNormal;
+    }
+    return TransformTangentNormalToWorld(
+            surface.vertices[vertexIndex + 0u],
+            surface.vertices[vertexIndex + 1u],
+            surface.vertices[vertexIndex + 2u],
+            hit.geometricNormal,
+            tangentNormal);
+}
+
 bool RasterizeSurfacePoint(
         const SectorGeneratedSurface& surface,
         Vector2 localPoint,
@@ -256,10 +563,99 @@ bool RasterizeSurfacePoint(
         outHit.hit = true;
         outHit.position = Interpolate(va.position, vb.position, vc.position, wa, wb, wc);
         outHit.normal = Vector3Normalize(Interpolate(va.normal, vb.normal, vc.normal, wa, wb, wc));
+        outHit.geometricNormal = outHit.normal;
+        outHit.uv = Interpolate(va.uv, vb.uv, vc.uv, wa, wb, wc);
         outHit.triangleIndex = static_cast<int>(i / 3);
         return true;
     }
 
+    return false;
+}
+
+Vector3 TransformStaticModelPosition(
+        Vector3 importedPosition,
+        const SectorStaticModelLightmapObject& object)
+{
+    const Matrix authoredTransform = BuildSectorStaticModelAuthoredTransform(
+            object.worldPosition,
+            object.rotationXRadians,
+            object.yawRadians,
+            object.rotationZRadians,
+            object.scale);
+    return Vector3Transform(importedPosition, authoredTransform);
+}
+
+Vector3 TransformStaticModelNormal(
+        Vector3 importedNormal,
+        const SectorStaticModelLightmapObject& object)
+{
+    const Vector3 rotated = RotateSectorStaticModelDirection(
+            importedNormal,
+            object.rotationXRadians,
+            object.yawRadians,
+            object.rotationZRadians);
+    return Vector3LengthSqr(rotated) > BakeEpsilon
+            ? Vector3Normalize(rotated)
+            : Vector3{0.0f, 1.0f, 0.0f};
+}
+
+bool RasterizeStaticModelMeshPoint(
+        const SectorStaticModelLightmapMesh& mesh,
+        const SectorStaticModelLightmapObject& object,
+        Vector2 localUv,
+        RasterHit& outHit)
+{
+    for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
+        const uint32_t ia = mesh.indices[i];
+        const uint32_t ib = mesh.indices[i + 1];
+        const uint32_t ic = mesh.indices[i + 2];
+        if (ia >= mesh.localLightmapUvs.size()
+                || ib >= mesh.localLightmapUvs.size()
+                || ic >= mesh.localLightmapUvs.size()
+                || ia >= mesh.importedPositions.size()
+                || ib >= mesh.importedPositions.size()
+                || ic >= mesh.importedPositions.size()
+                || ia >= mesh.importedNormals.size()
+                || ib >= mesh.importedNormals.size()
+                || ic >= mesh.importedNormals.size()) {
+            continue;
+        }
+        float wa = 0.0f;
+        float wb = 0.0f;
+        float wc = 0.0f;
+        if (!Barycentric(
+                    localUv,
+                    mesh.localLightmapUvs[ia],
+                    mesh.localLightmapUvs[ib],
+                    mesh.localLightmapUvs[ic],
+                    wa,
+                    wb,
+                    wc)) {
+            continue;
+        }
+        outHit.hit = true;
+        outHit.position = TransformStaticModelPosition(
+                Interpolate(
+                        mesh.importedPositions[ia],
+                        mesh.importedPositions[ib],
+                        mesh.importedPositions[ic],
+                        wa,
+                        wb,
+                        wc),
+                object);
+        outHit.normal = TransformStaticModelNormal(
+                Vector3Normalize(Interpolate(
+                        mesh.importedNormals[ia],
+                        mesh.importedNormals[ib],
+                        mesh.importedNormals[ic],
+                        wa,
+                        wb,
+                        wc)),
+                object);
+        outHit.geometricNormal = outHit.normal;
+        outHit.triangleIndex = static_cast<int>(i / 3);
+        return true;
+    }
     return false;
 }
 
@@ -536,28 +932,90 @@ bool FindRepresentativeProbePoint(
     return false;
 }
 
-Vector3 MakeProbeWorldPosition(
-        SectorTopologyCoordPoint point,
+struct ResolvedObjectProbeLayerHeights {
+    float lowerWorld = 0.0f;
+    float upperWorld = 0.0f;
+    bool hasUpperLayer = false;
+};
+
+ResolvedObjectProbeLayerHeights ResolveObjectProbeLayerHeights(
         const SectorTopologySector& sector,
-        float probeHeightWorld,
+        const SectorBakedObjectLightProbePlacementSettings& settings,
         std::vector<SectorBakedObjectLightProbePlacementDiagnostic>* diagnostics)
 {
     const float floorWorld = SectorAuthoringToWorldDistance(sector.floorZ);
     const float ceilingWorld = SectorAuthoringToWorldDistance(sector.ceilingZ);
-    float y = floorWorld + probeHeightWorld;
-    if (ceilingWorld > floorWorld && y >= ceilingWorld) {
-        y = (floorWorld + ceilingWorld) * 0.5f;
+    const float clearHeight = ceilingWorld - floorWorld;
+    const bool fitsTwoLayers = clearHeight > kObjectProbeSurfaceClearanceWorld * 2.0f
+            && settings.lowerHeightWorld >= kObjectProbeSurfaceClearanceWorld
+            && settings.upperHeightWorld <= clearHeight - kObjectProbeSurfaceClearanceWorld
+            && settings.upperHeightWorld - settings.lowerHeightWorld
+                    >= kObjectProbeMinimumLayerSeparationWorld;
+    if (fitsTwoLayers) {
+        return ResolvedObjectProbeLayerHeights{
+                floorWorld + settings.lowerHeightWorld,
+                floorWorld + settings.upperHeightWorld,
+                true};
+    }
+
+    const bool configuredSingleLayer =
+            std::fabs(settings.upperHeightWorld - settings.lowerHeightWorld)
+                    <= BakeEpsilon
+            && settings.lowerHeightWorld >= kObjectProbeSurfaceClearanceWorld
+            && settings.lowerHeightWorld
+                    <= clearHeight - kObjectProbeSurfaceClearanceWorld;
+    if (configuredSingleLayer) {
+        const float heightWorld = floorWorld + settings.lowerHeightWorld;
         if (diagnostics != nullptr) {
             diagnostics->push_back(SectorBakedObjectLightProbePlacementDiagnostic{
                     sector.id,
-                    "Object probe height clamped to sector midpoint because the ceiling is below the requested probe height"});
+                    "Object probe placement used the configured single layer"});
         }
+        return ResolvedObjectProbeLayerHeights{
+                heightWorld,
+                heightWorld,
+                false};
     }
 
+    const float midpoint = ceilingWorld > floorWorld
+            ? (floorWorld + ceilingWorld) * 0.5f
+            : floorWorld + settings.lowerHeightWorld;
+    if (diagnostics != nullptr) {
+        diagnostics->push_back(SectorBakedObjectLightProbePlacementDiagnostic{
+                sector.id,
+                "Object probe placement used one midpoint layer because the sector cannot safely fit both configured heights"});
+    }
+    return ResolvedObjectProbeLayerHeights{midpoint, midpoint, false};
+}
+
+Vector3 MakeProbeWorldPosition(
+        SectorTopologyCoordPoint point,
+        float heightWorld)
+{
     return Vector3{
             SectorCoordToWorldDistance(point.x),
-            y,
+            heightWorld,
             SectorCoordToWorldDistance(point.y)};
+}
+
+void AppendObjectProbeLayers(
+        std::vector<SectorBakedObjectLightProbe>& probes,
+        int sectorId,
+        SectorTopologyCoordPoint point,
+        const ResolvedObjectProbeLayerHeights& heights)
+{
+    SectorBakedObjectLightProbe lower;
+    lower.sectorId = sectorId;
+    lower.layer = SectorBakedObjectLightProbeLayer::Lower;
+    lower.position = MakeProbeWorldPosition(point, heights.lowerWorld);
+    probes.push_back(lower);
+    if (heights.hasUpperLayer) {
+        SectorBakedObjectLightProbe upper;
+        upper.sectorId = sectorId;
+        upper.layer = SectorBakedObjectLightProbeLayer::Upper;
+        upper.position = MakeProbeWorldPosition(point, heights.upperWorld);
+        probes.push_back(upper);
+    }
 }
 
 float BvhSceneDiagonalWithMargin(const SectorLightmapBvh& bvh)
@@ -964,6 +1422,7 @@ RayHit RaycastBakeTrianglesClosest(
                             tri.lightmapUv0.x * barycentric0 + tri.lightmapUv1.x * barycentric1 + tri.lightmapUv2.x * barycentric2,
                             tri.lightmapUv0.y * barycentric0 + tri.lightmapUv1.y * barycentric1 + tri.lightmapUv2.y * barycentric2
                     };
+                    closest.lightmapAtlasIndex = tri.lightmapAtlasIndex;
                 }
             }
             continue;
@@ -1243,6 +1702,13 @@ Vector3 CosineHemisphereSample(Vector3 normal, int sampleIndex, int sampleCount)
     ));
 }
 
+Vector3 GeometricNormalForHit(const RasterHit& hit)
+{
+    return Vector3LengthSqr(hit.geometricNormal) > BakeEpsilon
+            ? hit.geometricNormal
+            : hit.normal;
+}
+
 Vector3 EvaluateDirectLightSample(
         const SectorTopologyMap& map,
         const LightmapWorldPointLight& light,
@@ -1272,7 +1738,7 @@ Vector3 EvaluateDirectLightSample(
     if (IsOccluded(
                 map,
                 hit.position,
-                hit.normal,
+                GeometricNormalForHit(hit),
                 lightPosition,
                 surfaceRef,
                 surfaceIndex,
@@ -1358,7 +1824,7 @@ Vector3 EvaluateDirectLightSample(
     if (IsOccluded(
                 map,
                 hit.position,
-                hit.normal,
+                GeometricNormalForHit(hit),
                 lightPosition,
                 surfaceRef,
                 surfaceIndex,
@@ -1559,7 +2025,7 @@ Vector3 EvaluateDirectionalLight(
     if (IsDirectionOccluded(
                 map,
                 hit.position,
-                hit.normal,
+                GeometricNormalForHit(hit),
                 light.directionToLight,
                 shadowMaxDistance,
                 surfaceRef,
@@ -1636,16 +2102,25 @@ BakedObjectLightingSample MakeSectorAmbientObjectLightingSample(const SectorTopo
 
 const SectorBakedObjectLightProbeSectorRange* FindProbeSectorRange(
         const SectorBakedObjectLightProbeRuntimeData& probes,
-        int sectorId)
+        int sectorId,
+        SectorBakedObjectLightProbeLayer layer)
 {
     int begin = 0;
     int end = static_cast<int>(probes.sectorRanges.size());
     while (begin < end) {
         const int middle = begin + (end - begin) / 2;
         const SectorBakedObjectLightProbeSectorRange& range = probes.sectorRanges[static_cast<size_t>(middle)];
-        if (range.sectorId < sectorId) {
+        const bool before = range.sectorId < sectorId
+                || (range.sectorId == sectorId
+                    && static_cast<unsigned int>(range.layer)
+                            < static_cast<unsigned int>(layer));
+        const bool after = range.sectorId > sectorId
+                || (range.sectorId == sectorId
+                    && static_cast<unsigned int>(range.layer)
+                            > static_cast<unsigned int>(layer));
+        if (before) {
             begin = middle + 1;
-        } else if (range.sectorId > sectorId) {
+        } else if (after) {
             end = middle;
         } else {
             return &range;
@@ -1679,8 +2154,11 @@ void StreamObjectLightProbeRange(
             continue;
         }
 
-        const float distanceSquared =
-                Vector3DistanceSqr(worldPosition, probes.probes[static_cast<size_t>(probeIndex)].position);
+        const Vector3 probePosition =
+                probes.probes[static_cast<size_t>(probeIndex)].position;
+        const float deltaX = worldPosition.x - probePosition.x;
+        const float deltaZ = worldPosition.z - probePosition.z;
+        const float distanceSquared = deltaX * deltaX + deltaZ * deltaZ;
         if (!std::isfinite(distanceSquared)) {
             continue;
         }
@@ -1715,29 +2193,39 @@ bool HasSelectedObjectLightProbes(const ObjectProbeSelection& selection)
     return selection.selectedCount > 0;
 }
 
-BakedObjectLightingSample SampleSelectedObjectLightProbes(
+struct SelectedObjectProbeLayerSample {
+    BakedObjectLightingSample lighting;
+    float heightWorld = 0.0f;
+};
+
+SelectedObjectProbeLayerSample SampleSelectedObjectLightProbes(
         const SectorBakedObjectLightProbeRuntimeData& probes,
         const ObjectProbeSelection& selection)
 {
     if (selection.selectedCount == 0) {
-        return MakeNeutralObjectLightingSample();
+        return SelectedObjectProbeLayerSample{
+                MakeNeutralObjectLightingSample(), 0.0f};
     }
 
     if (selection.selectedDistanceSquared[0] <= ObjectProbeSelection::kExactProbeDistanceSquared) {
-        return MakeObjectLightingSampleFromCube(
-                probes.probes[static_cast<size_t>(selection.selectedIndices[0])].ambientCube,
-                true);
+        const SectorBakedObjectLightProbe& probe =
+                probes.probes[static_cast<size_t>(selection.selectedIndices[0])];
+        return SelectedObjectProbeLayerSample{
+                MakeObjectLightingSampleFromCube(probe.ambientCube, true),
+                probe.position.y};
     }
 
     BakedObjectLightingSample sample;
     sample.valid = true;
     float totalWeight = 0.0f;
+    float weightedHeight = 0.0f;
     for (int selected = 0; selected < selection.selectedCount; ++selected) {
         const float distance = std::sqrt(selection.selectedDistanceSquared[selected]);
         const float weight = 1.0f / std::max(distance, 0.001f);
         totalWeight += weight;
         const SectorBakedObjectLightProbe& probe =
                 probes.probes[static_cast<size_t>(selection.selectedIndices[selected])];
+        weightedHeight += probe.position.y * weight;
         for (int face = 0; face < 6; ++face) {
             sample.ambientCube[face] = Vector3Add(
                     sample.ambientCube[face],
@@ -1746,24 +2234,16 @@ BakedObjectLightingSample SampleSelectedObjectLightProbes(
     }
 
     if (totalWeight <= 0.0f || !std::isfinite(totalWeight)) {
-        return MakeNeutralObjectLightingSample();
+        return SelectedObjectProbeLayerSample{
+                MakeNeutralObjectLightingSample(), 0.0f};
     }
 
     for (Vector3& face : sample.ambientCube) {
         face = ClampRgb01(Vector3Scale(face, 1.0f / totalWeight));
     }
-    return sample;
-}
-
-BakedObjectLightingSample SampleNearestObjectLightProbes(
-        const SectorBakedObjectLightProbeRuntimeData& probes,
-        Vector3 worldPosition,
-        int begin,
-        int count)
-{
-    ObjectProbeSelection selection;
-    StreamObjectLightProbeRange(probes, worldPosition, begin, count, selection);
-    return SampleSelectedObjectLightProbes(probes, selection);
+    return SelectedObjectProbeLayerSample{
+            sample,
+            weightedHeight / totalWeight};
 }
 
 float DistanceSquaredPointToSegment2(Vector2 point, Vector2 a, Vector2 b)
@@ -2111,7 +2591,10 @@ float BakeAmbientOcclusion(
     return std::clamp(1.0f - strength * averageOcclusion, 0.0f, 1.0f);
 }
 
-std::vector<BakeTriangle> BuildBakeTriangles(const SectorGeneratedGeometry& geometry, const SectorLightmapLayout& layout)
+std::vector<BakeTriangle> BuildBakeTriangles(
+        const SectorGeneratedGeometry& geometry,
+        const SectorLightmapLayout& layout,
+        const SectorStaticModelLightmapData* staticModels = nullptr)
 {
     std::vector<BakeTriangle> triangles;
     for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
@@ -2144,10 +2627,89 @@ std::vector<BakeTriangle> BuildBakeTriangles(const SectorGeneratedGeometry& geom
                     uv0,
                     uv1,
                     uv2,
+                    chart.atlasIndex,
                     surface.ref,
                     static_cast<int>(surfaceIndex),
                     static_cast<int>(i / 3)
             });
+        }
+    }
+    if (staticModels == nullptr) {
+        return triangles;
+    }
+
+    int staticSurfaceIndex = static_cast<int>(geometry.surfaces.size());
+    for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+        if (object.modelIndex < 0
+                || object.modelIndex >= static_cast<int>(staticModels->models.size())) {
+            continue;
+        }
+        const SectorStaticModelLightmapModel& model =
+                staticModels->models[static_cast<size_t>(object.modelIndex)];
+        for (size_t meshIndex = 0; meshIndex < model.meshes.size(); ++meshIndex) {
+            if (meshIndex >= object.meshPlacements.size()) {
+                ++staticSurfaceIndex;
+                continue;
+            }
+            const SectorStaticModelLightmapMesh& mesh = model.meshes[meshIndex];
+            const SectorStaticModelLightmapMeshPlacement& placement =
+                    object.meshPlacements[meshIndex];
+            const SectorGeneratedSurfaceRef surfaceRef{
+                    SectorGeneratedSurfaceKind::Middle,
+                    object.containingSectorId,
+                    -1,
+                    -1,
+                    SectorTopologySideKind::Front};
+            for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
+                const uint32_t ia = mesh.indices[i];
+                const uint32_t ib = mesh.indices[i + 1];
+                const uint32_t ic = mesh.indices[i + 2];
+                if (ia >= mesh.importedPositions.size()
+                        || ib >= mesh.importedPositions.size()
+                        || ic >= mesh.importedPositions.size()
+                        || ia >= mesh.importedNormals.size()
+                        || ib >= mesh.importedNormals.size()
+                        || ic >= mesh.importedNormals.size()
+                        || ia >= mesh.localLightmapUvs.size()
+                        || ib >= mesh.localLightmapUvs.size()
+                        || ic >= mesh.localLightmapUvs.size()) {
+                    continue;
+                }
+                const Vector3 position0 =
+                        TransformStaticModelPosition(mesh.importedPositions[ia], object);
+                const Vector3 position1 =
+                        TransformStaticModelPosition(mesh.importedPositions[ib], object);
+                const Vector3 position2 =
+                        TransformStaticModelPosition(mesh.importedPositions[ic], object);
+                Vector3 normal = Vector3Normalize(Vector3Add(
+                        Vector3Add(
+                                TransformStaticModelNormal(mesh.importedNormals[ia], object),
+                                TransformStaticModelNormal(mesh.importedNormals[ib], object)),
+                        TransformStaticModelNormal(mesh.importedNormals[ic], object)));
+                if (Vector3LengthSqr(normal) <= BakeEpsilon) {
+                    normal = Vector3Normalize(Vector3CrossProduct(
+                            Vector3Subtract(position1, position0),
+                            Vector3Subtract(position2, position0)));
+                }
+                const auto atlasUv = [&placement](Vector2 uv) {
+                    return Vector2{
+                            placement.atlasBias.x + uv.x * placement.atlasScale.x,
+                            placement.atlasBias.y + uv.y * placement.atlasScale.y};
+                };
+                triangles.push_back(BakeTriangle{
+                        position0,
+                        position1,
+                        position2,
+                        normal,
+                        atlasUv(mesh.localLightmapUvs[ia]),
+                        atlasUv(mesh.localLightmapUvs[ib]),
+                        atlasUv(mesh.localLightmapUvs[ic]),
+                        placement.atlasIndex,
+                        surfaceRef,
+                        staticSurfaceIndex,
+                        static_cast<int>(i / 3)});
+            }
+            ++staticSurfaceIndex;
         }
     }
     return triangles;
@@ -2219,11 +2781,15 @@ void DilateChart(
         const SectorLightmapChart& chart,
         std::vector<Color>& pixels,
         std::vector<unsigned char>& valid,
-        int atlasWidth)
+        int atlasWidth,
+        int atlasHeight)
 {
+    const size_t atlasOffset = static_cast<size_t>(chart.atlasIndex)
+            * static_cast<size_t>(atlasWidth)
+            * static_cast<size_t>(atlasHeight);
     for (int y = chart.y; y < chart.y + chart.height; ++y) {
         for (int x = chart.x; x < chart.x + chart.width; ++x) {
-            const size_t index = static_cast<size_t>(y * atlasWidth + x);
+            const size_t index = atlasOffset + static_cast<size_t>(y * atlasWidth + x);
             if (valid[index] != 0) {
                 continue;
             }
@@ -2232,7 +2798,7 @@ void DilateChart(
             Color best = BLACK;
             for (int sy = chart.usableY; sy < chart.usableY + chart.usableHeight; ++sy) {
                 for (int sx = chart.usableX; sx < chart.usableX + chart.usableWidth; ++sx) {
-                    const size_t sourceIndex = static_cast<size_t>(sy * atlasWidth + sx);
+                    const size_t sourceIndex = atlasOffset + static_cast<size_t>(sy * atlasWidth + sx);
                     if (valid[sourceIndex] == 0) {
                         continue;
                     }
@@ -2255,11 +2821,15 @@ void DilateChartFloat(
         const SectorLightmapChart& chart,
         std::vector<Vector3>& values,
         std::vector<unsigned char>& valid,
-        int atlasWidth)
+        int atlasWidth,
+        int atlasHeight)
 {
+    const size_t atlasOffset = static_cast<size_t>(chart.atlasIndex)
+            * static_cast<size_t>(atlasWidth)
+            * static_cast<size_t>(atlasHeight);
     for (int y = chart.y; y < chart.y + chart.height; ++y) {
         for (int x = chart.x; x < chart.x + chart.width; ++x) {
-            const size_t index = static_cast<size_t>(y * atlasWidth + x);
+            const size_t index = atlasOffset + static_cast<size_t>(y * atlasWidth + x);
             if (valid[index] != 0) {
                 continue;
             }
@@ -2268,7 +2838,7 @@ void DilateChartFloat(
             Vector3 best{};
             for (int sy = chart.usableY; sy < chart.usableY + chart.usableHeight; ++sy) {
                 for (int sx = chart.usableX; sx < chart.usableX + chart.usableWidth; ++sx) {
-                    const size_t sourceIndex = static_cast<size_t>(sy * atlasWidth + sx);
+                    const size_t sourceIndex = atlasOffset + static_cast<size_t>(sy * atlasWidth + sx);
                     if (valid[sourceIndex] == 0) {
                         continue;
                     }
@@ -2295,8 +2865,15 @@ Vector3 SampleDirectLightingAtLightmapUv(
         const std::vector<unsigned char>& valid,
         int atlasWidth,
         int atlasHeight,
+        int atlasIndex,
         Vector2 lightmapUv)
 {
+    if (atlasIndex < 0) {
+        return Vector3{};
+    }
+    const size_t atlasOffset = static_cast<size_t>(atlasIndex)
+            * static_cast<size_t>(atlasWidth)
+            * static_cast<size_t>(atlasHeight);
     const float pixelX = std::clamp(lightmapUv.x * static_cast<float>(atlasWidth) - 0.5f, 0.0f, static_cast<float>(atlasWidth - 1));
     const float pixelY = std::clamp(lightmapUv.y * static_cast<float>(atlasHeight) - 0.5f, 0.0f, static_cast<float>(atlasHeight - 1));
     const int x0 = static_cast<int>(std::floor(pixelX));
@@ -2320,7 +2897,7 @@ Vector3 SampleDirectLightingAtLightmapUv(
     Vector3 sum{};
     float weightSum = 0.0f;
     for (const Sample& sample : samples) {
-        const size_t index = static_cast<size_t>(sample.y * atlasWidth + sample.x);
+        const size_t index = atlasOffset + static_cast<size_t>(sample.y * atlasWidth + sample.x);
         if (valid[index] == 0 || sample.weight <= 0.0f) {
             continue;
         }
@@ -2336,7 +2913,7 @@ Vector3 SampleDirectLightingAtLightmapUv(
     for (int radius = 0; radius <= SectorLightmapGutterTexels + 2; ++radius) {
         for (int y = std::max(0, nearestY - radius); y <= std::min(atlasHeight - 1, nearestY + radius); ++y) {
             for (int x = std::max(0, nearestX - radius); x <= std::min(atlasWidth - 1, nearestX + radius); ++x) {
-                const size_t index = static_cast<size_t>(y * atlasWidth + x);
+                const size_t index = atlasOffset + static_cast<size_t>(y * atlasWidth + x);
                 if (valid[index] != 0) {
                     return directLightingFloat[index];
                 }
@@ -2397,6 +2974,7 @@ bool BuildSectorLightmapLayoutFromGeometry(
     int shelfX = 0;
     int shelfY = 0;
     int shelfHeight = 0;
+    int atlasIndex = 0;
 
     for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
         const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
@@ -2420,12 +2998,15 @@ bool BuildSectorLightmapLayoutFromGeometry(
         }
 
         if (shelfY + chartHeight > SectorLightmapAtlasHeight) {
-            outError = "Bake failed: 2048 lightmap atlas is full";
-            return false;
+            ++atlasIndex;
+            shelfX = 0;
+            shelfY = 0;
+            shelfHeight = 0;
         }
 
         SectorLightmapChart chart;
         chart.surfaceIndex = static_cast<int>(surfaceIndex);
+        chart.atlasIndex = atlasIndex;
         chart.x = shelfX;
         chart.y = shelfY;
         chart.width = chartWidth;
@@ -2444,7 +3025,51 @@ bool BuildSectorLightmapLayoutFromGeometry(
         shelfHeight = std::max(shelfHeight, chartHeight);
     }
 
+    outLayout.atlasCount = atlasIndex + 1;
+
     return true;
+}
+
+SectorStaticModelLightmapPackCursor StaticModelPackCursorAfterTopology(
+        const SectorLightmapLayout& layout)
+{
+    SectorStaticModelLightmapPackCursor cursor;
+    cursor.atlasIndex = std::max(0, layout.atlasCount - 1);
+    bool found = false;
+    for (const SectorLightmapChart& chart : layout.charts) {
+        if (chart.surfaceIndex < 0 || chart.width <= 0 || chart.height <= 0) {
+            continue;
+        }
+        if (chart.atlasIndex != cursor.atlasIndex) {
+            continue;
+        }
+        if (!found || chart.y > cursor.shelfY) {
+            cursor.shelfY = chart.y;
+            cursor.shelfX = chart.x + chart.width;
+            cursor.shelfHeight = chart.height;
+            found = true;
+        } else if (chart.y == cursor.shelfY) {
+            cursor.shelfX = std::max(cursor.shelfX, chart.x + chart.width);
+            cursor.shelfHeight = std::max(cursor.shelfHeight, chart.height);
+        }
+    }
+    return cursor;
+}
+
+SectorLightmapChart PlacementAsChart(
+        const SectorStaticModelLightmapMeshPlacement& placement)
+{
+    SectorLightmapChart chart;
+    chart.atlasIndex = placement.atlasIndex;
+    chart.x = placement.x;
+    chart.y = placement.y;
+    chart.width = placement.width;
+    chart.height = placement.height;
+    chart.usableX = placement.usableX;
+    chart.usableY = placement.usableY;
+    chart.usableWidth = placement.usableWidth;
+    chart.usableHeight = placement.usableHeight;
+    return chart;
 }
 
 bool BuildLightmapGeneratedGeometryForBake(
@@ -2513,7 +3138,8 @@ void FnvAppendLightmapBakeConstantsAndSettings(
     FnvAppendFloat(hash, std::clamp(SectorAuthoringToWorldDistance(settings.indirectBounceRadius), 0.05f, 16.0f));
     FnvAppendFloat(hash, std::clamp(settings.indirectBounceStrength, 0.0f, 1.0f));
     FnvAppendFloat(hash, std::clamp(settings.objectProbeSpacingWorld, 0.25f, 128.0f));
-    FnvAppendFloat(hash, std::clamp(settings.objectProbeHeightWorld, 0.0f, 16.0f));
+    FnvAppendFloat(hash, std::clamp(settings.objectProbeLowerHeightWorld, 0.0f, 16.0f));
+    FnvAppendFloat(hash, std::clamp(settings.objectProbeUpperHeightWorld, 0.0f, 16.0f));
 }
 
 void FnvAppendDirectionalLightSettings(
@@ -2577,6 +3203,44 @@ std::vector<std::string> SortedReferencedLightmapTextureIds(const SectorTopology
     }
     std::sort(ids.begin(), ids.end());
     return ids;
+}
+
+void BakeObjectProbeAmbientCubesInScene(
+        const SectorTopologyMap& map,
+        const SectorLightmapBvh& bvh,
+        const std::vector<BakeTriangle>& triangles,
+        const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
+        std::vector<SectorBakedObjectLightProbe>& probes)
+{
+    std::vector<LightmapWorldPointLight> worldLights;
+    worldLights.reserve(map.staticLights.size());
+    for (const SectorTopologyStaticPointLight& light : map.staticLights) {
+        worldLights.push_back(MakeWorldSpaceLight(light));
+    }
+    std::vector<LightmapWorldSpotLight> worldSpotLights;
+    worldSpotLights.reserve(map.staticSpotLights.size());
+    for (const SectorTopologyStaticSpotLight& light : map.staticSpotLights) {
+        worldSpotLights.push_back(MakeWorldSpaceLight(light));
+    }
+    const LightmapWorldDirectionalLight directionalLight =
+            MakeWorldSpaceDirectionalLight(map.directionalLight);
+    const float directionalShadowMaxDistance = BvhSceneDiagonalWithMargin(bvh);
+    SectorLightmapAlphaMaskCache alphaMaskCache;
+    BakeRayStats stats;
+    for (SectorBakedObjectLightProbe& probe : probes) {
+        BakeProbeAmbientCube(
+                map,
+                worldLights,
+                worldSpotLights,
+                directionalLight,
+                directionalShadowMaxDistance,
+                bvh,
+                triangles,
+                alphaOccluders,
+                alphaMaskCache,
+                stats,
+                probe);
+    }
 }
 
 } // namespace
@@ -2715,8 +3379,11 @@ bool BuildSectorBakedObjectLightProbePlacements(
         outError = "Object probe placement failed: probe spacing must be positive";
         return false;
     }
-    if (!std::isfinite(settings.probeHeightWorld) || settings.probeHeightWorld < 0.0f) {
-        outError = "Object probe placement failed: probe height must be non-negative";
+    if (!std::isfinite(settings.lowerHeightWorld)
+            || !std::isfinite(settings.upperHeightWorld)
+            || settings.lowerHeightWorld < 0.0f
+            || settings.upperHeightWorld < settings.lowerHeightWorld) {
+        outError = "Object probe placement failed: layer heights must be finite, non-negative, and ordered";
         return false;
     }
 
@@ -2729,6 +3396,8 @@ bool BuildSectorBakedObjectLightProbePlacements(
 
     const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(map);
     for (const SectorTopologySector& sector : map.sectors) {
+        const ResolvedObjectProbeLayerHeights layerHeights =
+                ResolveObjectProbeLayerHeights(sector, settings, outDiagnostics);
         SectorTopologyLoopSet loops;
         std::vector<SectorTopologyValidationIssue> loopIssues;
         if (!ExtractSectorTopologyLoops(map, indexes, sector.id, loops, &loopIssues)) {
@@ -2784,14 +3453,11 @@ bool BuildSectorBakedObjectLightProbePlacements(
                     continue;
                 }
 
-                SectorBakedObjectLightProbe probe;
-                probe.sectorId = sector.id;
-                probe.position = MakeProbeWorldPosition(
+                AppendObjectProbeLayers(
+                        outProbes,
+                        sector.id,
                         candidate,
-                        sector,
-                        settings.probeHeightWorld,
-                        outDiagnostics);
-                outProbes.push_back(probe);
+                        layerHeights);
             }
         }
 
@@ -2803,14 +3469,11 @@ bool BuildSectorBakedObjectLightProbePlacements(
                 return false;
             }
 
-            SectorBakedObjectLightProbe probe;
-            probe.sectorId = sector.id;
-            probe.position = MakeProbeWorldPosition(
+            AppendObjectProbeLayers(
+                    outProbes,
+                    sector.id,
                     representative,
-                    sector,
-                    settings.probeHeightWorld,
-                    outDiagnostics);
-            outProbes.push_back(probe);
+                    layerHeights);
             if (outDiagnostics != nullptr) {
                 outDiagnostics->push_back(SectorBakedObjectLightProbePlacementDiagnostic{
                         sector.id,
@@ -2888,39 +3551,14 @@ bool BakeSectorBakedObjectLightProbeAmbientCubes(
         return false;
     }
 
-    std::vector<LightmapWorldPointLight> worldLights;
-    worldLights.reserve(map.staticLights.size());
-    for (const SectorTopologyStaticPointLight& light : map.staticLights) {
-        worldLights.push_back(MakeWorldSpaceLight(light));
-    }
-
-    std::vector<LightmapWorldSpotLight> worldSpotLights;
-    worldSpotLights.reserve(map.staticSpotLights.size());
-    for (const SectorTopologyStaticSpotLight& light : map.staticSpotLights) {
-        worldSpotLights.push_back(MakeWorldSpaceLight(light));
-    }
-
-    const LightmapWorldDirectionalLight directionalLight =
-            MakeWorldSpaceDirectionalLight(map.directionalLight);
-    const float directionalShadowMaxDistance = BvhSceneDiagonalWithMargin(bvh);
     const std::vector<SectorLightmapAlphaOccluderTriangle> alphaOccluders =
             CollectSectorLightmapAlphaOccluders(geometry);
-    SectorLightmapAlphaMaskCache alphaMaskCache;
-    BakeRayStats stats;
-    for (SectorBakedObjectLightProbe& probe : probes) {
-        BakeProbeAmbientCube(
-                map,
-                worldLights,
-                worldSpotLights,
-                directionalLight,
-                directionalShadowMaxDistance,
-                bvh,
-                triangles,
-                alphaOccluders,
-                alphaMaskCache,
-                stats,
-                probe);
-    }
+    BakeObjectProbeAmbientCubesInScene(
+            map,
+            bvh,
+            triangles,
+            alphaOccluders,
+            probes);
 
     return true;
 }
@@ -2955,7 +3593,8 @@ bool WriteSectorBakedObjectLightProbeSidecar(
         const std::string& path,
         const std::vector<SectorBakedObjectLightProbe>& probes,
         float probeSpacingWorld,
-        float probeHeightWorld,
+        float probeLowerHeightWorld,
+        float probeUpperHeightWorld,
         std::string& outError)
 {
     outError.clear();
@@ -2963,7 +3602,11 @@ bool WriteSectorBakedObjectLightProbeSidecar(
         outError = "Object probe sidecar write failed: missing output path";
         return false;
     }
-    if (!std::isfinite(probeSpacingWorld) || !std::isfinite(probeHeightWorld)) {
+    if (!std::isfinite(probeSpacingWorld)
+            || !std::isfinite(probeLowerHeightWorld)
+            || !std::isfinite(probeUpperHeightWorld)
+            || probeLowerHeightWorld < 0.0f
+            || probeUpperHeightWorld < probeLowerHeightWorld) {
         outError = "Object probe sidecar write failed: non-finite probe settings";
         return false;
     }
@@ -2973,6 +3616,11 @@ bool WriteSectorBakedObjectLightProbeSidecar(
     }
 
     for (const SectorBakedObjectLightProbe& probe : probes) {
+        if (probe.layer != SectorBakedObjectLightProbeLayer::Lower
+                && probe.layer != SectorBakedObjectLightProbeLayer::Upper) {
+            outError = "Object probe sidecar write failed: invalid probe layer";
+            return false;
+        }
         if (!IsFiniteVector3(probe.position)) {
             outError = "Object probe sidecar write failed: non-finite probe position";
             return false;
@@ -3006,8 +3654,8 @@ bool WriteSectorBakedObjectLightProbeSidecar(
             || !WriteU32LE(output, static_cast<uint32_t>(kSectorBakedObjectLightProbeSidecarVersion))
             || !WriteU32LE(output, static_cast<uint32_t>(probes.size()))
             || !WriteF32LE(output, probeSpacingWorld)
-            || !WriteF32LE(output, probeHeightWorld)
-            || !WriteU32LE(output, 0)
+            || !WriteF32LE(output, probeLowerHeightWorld)
+            || !WriteF32LE(output, probeUpperHeightWorld)
             || !WriteU32LE(output, 0)) {
         outError = "Object probe sidecar write failed: could not write header";
         return false;
@@ -3015,6 +3663,7 @@ bool WriteSectorBakedObjectLightProbeSidecar(
 
     for (const SectorBakedObjectLightProbe& probe : probes) {
         if (!WriteI32LE(output, static_cast<int32_t>(probe.sectorId))
+                || !WriteU32LE(output, static_cast<uint32_t>(probe.layer))
                 || !WriteProbeVector(output, probe.position)) {
             outError = "Object probe sidecar write failed: could not write probe record";
             return false;
@@ -3068,15 +3717,15 @@ bool ReadSectorBakedObjectLightProbeSidecar(
     uint32_t version = 0;
     uint32_t probeCount = 0;
     float probeSpacingWorld = 0.0f;
-    float probeHeightWorld = 0.0f;
-    uint32_t reserved0 = 0;
-    uint32_t reserved1 = 0;
+    float probeLowerHeightWorld = 0.0f;
+    float probeUpperHeightWorld = 0.0f;
+    uint32_t reserved = 0;
     if (!ReadU32LE(input, version)
             || !ReadU32LE(input, probeCount)
             || !ReadF32LE(input, probeSpacingWorld)
-            || !ReadF32LE(input, probeHeightWorld)
-            || !ReadU32LE(input, reserved0)
-            || !ReadU32LE(input, reserved1)) {
+            || !ReadF32LE(input, probeLowerHeightWorld)
+            || !ReadF32LE(input, probeUpperHeightWorld)
+            || !ReadU32LE(input, reserved)) {
         outError = "Object probe sidecar read failed: truncated header";
         return false;
     }
@@ -3085,7 +3734,11 @@ bool ReadSectorBakedObjectLightProbeSidecar(
         outError = "Object probe sidecar read failed: unsupported version";
         return false;
     }
-    if (!std::isfinite(probeSpacingWorld) || !std::isfinite(probeHeightWorld)) {
+    if (!std::isfinite(probeSpacingWorld)
+            || !std::isfinite(probeLowerHeightWorld)
+            || !std::isfinite(probeUpperHeightWorld)
+            || probeLowerHeightWorld < 0.0f
+            || probeUpperHeightWorld < probeLowerHeightWorld) {
         outError = "Object probe sidecar read failed: non-finite probe settings";
         return false;
     }
@@ -3109,6 +3762,16 @@ bool ReadSectorBakedObjectLightProbeSidecar(
             outError = "Object probe sidecar read failed: metadata format mismatch";
             return false;
         }
+        if ((expectedMetadata->probeSpacingWorld > 0.0f
+                    && std::abs(expectedMetadata->probeSpacingWorld
+                            - probeSpacingWorld) > 0.0001f)
+                || std::abs(expectedMetadata->probeLowerHeightWorld
+                        - probeLowerHeightWorld) > 0.0001f
+                || std::abs(expectedMetadata->probeUpperHeightWorld
+                        - probeUpperHeightWorld) > 0.0001f) {
+            outError = "Object probe sidecar read failed: metadata settings mismatch";
+            return false;
+        }
     }
 
     std::vector<SectorBakedObjectLightProbe> probes;
@@ -3116,11 +3779,19 @@ bool ReadSectorBakedObjectLightProbeSidecar(
     for (uint32_t probeIndex = 0; probeIndex < probeCount; ++probeIndex) {
         SectorBakedObjectLightProbe probe;
         int32_t sectorId = 0;
-        if (!ReadI32LE(input, sectorId) || !ReadProbeVector(input, probe.position)) {
+        uint32_t layer = 0;
+        if (!ReadI32LE(input, sectorId)
+                || !ReadU32LE(input, layer)
+                || !ReadProbeVector(input, probe.position)) {
             outError = "Object probe sidecar read failed: truncated probe record";
             return false;
         }
         probe.sectorId = static_cast<int>(sectorId);
+        if (layer > static_cast<uint32_t>(SectorBakedObjectLightProbeLayer::Upper)) {
+            outError = "Object probe sidecar read failed: invalid probe layer";
+            return false;
+        }
+        probe.layer = static_cast<SectorBakedObjectLightProbeLayer>(layer);
         if (!IsFiniteVector3(probe.position)) {
             outError = "Object probe sidecar read failed: non-finite probe position";
             return false;
@@ -3142,7 +3813,8 @@ bool ReadSectorBakedObjectLightProbeSidecar(
     outMetadata.version = static_cast<int>(version);
     outMetadata.count = static_cast<int>(probeCount);
     outMetadata.probeSpacingWorld = probeSpacingWorld;
-    outMetadata.probeHeightWorld = probeHeightWorld;
+    outMetadata.probeLowerHeightWorld = probeLowerHeightWorld;
+    outMetadata.probeUpperHeightWorld = probeUpperHeightWorld;
     outMetadata.format = kSectorBakedObjectLightProbeSidecarFormat;
     outProbes = std::move(probes);
     return true;
@@ -3166,7 +3838,9 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
             || metadata.sourceHash.empty()
             || metadata.count < 0
             || metadata.probeSpacingWorld <= 0.0f
-            || metadata.probeHeightWorld < 0.0f
+            || metadata.probeLowerHeightWorld < 0.0f
+            || metadata.probeUpperHeightWorld
+                    < metadata.probeLowerHeightWorld
             || metadata.format != kSectorBakedObjectLightProbeSidecarFormat) {
         outError = "Object probe runtime load failed: invalid probe metadata";
         return false;
@@ -3188,15 +3862,20 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
     }
 
     std::sort(probes.begin(), probes.end(), [](const SectorBakedObjectLightProbe& a, const SectorBakedObjectLightProbe& b) {
-        return a.sectorId < b.sectorId;
+        if (a.sectorId != b.sectorId) return a.sectorId < b.sectorId;
+        return static_cast<unsigned int>(a.layer)
+                < static_cast<unsigned int>(b.layer);
     });
 
     std::vector<SectorBakedObjectLightProbeSectorRange> sectorRanges;
     sectorRanges.reserve(probes.size());
     for (size_t begin = 0; begin < probes.size();) {
         const int sectorId = probes[begin].sectorId;
+        const SectorBakedObjectLightProbeLayer layer = probes[begin].layer;
         size_t end = begin + 1;
-        while (end < probes.size() && probes[end].sectorId == sectorId) {
+        while (end < probes.size()
+                && probes[end].sectorId == sectorId
+                && probes[end].layer == layer) {
             ++end;
         }
 
@@ -3204,6 +3883,7 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
         range.sectorId = sectorId;
         range.begin = static_cast<int>(begin);
         range.count = static_cast<int>(end - begin);
+        range.layer = layer;
         sectorRanges.push_back(range);
         begin = end;
     }
@@ -3216,17 +3896,89 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
     return true;
 }
 
-BakedObjectLightingSample SampleBakedObjectLighting(
+Vector3 EvaluateBakedObjectAmbientCubeLighting(
+        const BakedObjectLightingSample& sample,
+        Vector3 worldNormal)
+{
+    if (!IsFiniteVector3(worldNormal)
+            || Vector3LengthSqr(worldNormal) <= 0.000001f) {
+        worldNormal = Vector3{0.0f, 1.0f, 0.0f};
+    } else {
+        worldNormal = Vector3Normalize(worldNormal);
+    }
+
+    const Vector3 weights{
+            worldNormal.x * worldNormal.x,
+            worldNormal.y * worldNormal.y,
+            worldNormal.z * worldNormal.z};
+    const Vector3 xLighting = sample.ambientCube[worldNormal.x >= 0.0f ? 0 : 1];
+    const Vector3 yLighting = sample.ambientCube[worldNormal.y >= 0.0f ? 2 : 3];
+    const Vector3 zLighting = sample.ambientCube[worldNormal.z >= 0.0f ? 4 : 5];
+    return Vector3Add(
+            Vector3Add(
+                    Vector3Scale(xLighting, weights.x),
+                    Vector3Scale(yLighting, weights.y)),
+            Vector3Scale(zLighting, weights.z));
+}
+
+BakedObjectLightingSample ResolveBakedObjectLightingVerticalSample(
+        const BakedObjectLightingVerticalSample& sample,
+        float worldHeight)
+{
+    if (!sample.lower.valid && sample.upper.valid) return sample.upper;
+    if (sample.lower.valid && !sample.upper.valid) return sample.lower;
+    const float heightRange = sample.upperHeightWorld - sample.lowerHeightWorld;
+    if (!std::isfinite(heightRange)
+            || heightRange <= 0.0001f
+            || !std::isfinite(worldHeight)) {
+        return sample.lower;
+    }
+
+    const float blend = std::clamp(
+            (worldHeight - sample.lowerHeightWorld) / heightRange,
+            0.0f,
+            1.0f);
+    BakedObjectLightingSample resolved;
+    resolved.valid = sample.lower.valid || sample.upper.valid;
+    for (int face = 0; face < 6; ++face) {
+        resolved.ambientCube[face] = Vector3Lerp(
+                sample.lower.ambientCube[face],
+                sample.upper.ambientCube[face],
+                blend);
+    }
+    return resolved;
+}
+
+BakedObjectLightingVerticalSample SampleBakedObjectLightingVertical(
         const SectorBakedObjectLightProbeRuntimeData& probes,
         Vector3 worldPosition,
         int preferredSectorId,
         const SectorTopologyMap* mapForFallback)
 {
     if (!probes.probes.empty()) {
-        if (const SectorBakedObjectLightProbeSectorRange* range = FindProbeSectorRange(probes, preferredSectorId)) {
-            if (range->count > 0) {
-                ObjectProbeSelection selection;
-                StreamObjectLightProbeRange(probes, worldPosition, range->begin, range->count, selection);
+        const SectorBakedObjectLightProbeSectorRange* preferredLower =
+                FindProbeSectorRange(
+                        probes,
+                        preferredSectorId,
+                        SectorBakedObjectLightProbeLayer::Lower);
+        const SectorBakedObjectLightProbeSectorRange* preferredUpper =
+                FindProbeSectorRange(
+                        probes,
+                        preferredSectorId,
+                        SectorBakedObjectLightProbeLayer::Upper);
+        const bool hasPreferredLayer = preferredLower != nullptr
+                || preferredUpper != nullptr;
+
+        auto sampleLayer = [&](SectorBakedObjectLightProbeLayer layer,
+                                   const SectorBakedObjectLightProbeSectorRange* preferredRange) {
+            ObjectProbeSelection selection;
+            if (preferredRange != nullptr && preferredRange->count > 0) {
+                StreamObjectLightProbeRange(
+                        probes,
+                        worldPosition,
+                        preferredRange->begin,
+                        preferredRange->count,
+                        selection);
 
                 if (mapForFallback != nullptr) {
                     int adjacentSectorIds[kObjectProbeMaxAdjacentBlendSectors] = {};
@@ -3239,7 +3991,10 @@ BakedObjectLightingSample SampleBakedObjectLighting(
                             adjacentSectorCount);
                     for (int index = 0; index < adjacentSectorCount; ++index) {
                         const SectorBakedObjectLightProbeSectorRange* adjacentRange =
-                                FindProbeSectorRange(probes, adjacentSectorIds[index]);
+                                FindProbeSectorRange(
+                                        probes,
+                                        adjacentSectorIds[index],
+                                        layer);
                         if (adjacentRange != nullptr && adjacentRange->count > 0) {
                             StreamObjectLightProbeRange(
                                     probes,
@@ -3250,23 +4005,67 @@ BakedObjectLightingSample SampleBakedObjectLighting(
                         }
                     }
                 }
-
-                if (HasSelectedObjectLightProbes(selection)) {
-                    return SampleSelectedObjectLightProbes(probes, selection);
+            } else if (!hasPreferredLayer) {
+                for (const SectorBakedObjectLightProbeSectorRange& range :
+                        probes.sectorRanges) {
+                    if (range.layer == layer && range.count > 0) {
+                        StreamObjectLightProbeRange(
+                                probes,
+                                worldPosition,
+                                range.begin,
+                                range.count,
+                                selection);
+                    }
                 }
-
-                return SampleNearestObjectLightProbes(probes, worldPosition, range->begin, range->count);
             }
+            return SampleSelectedObjectLightProbes(probes, selection);
+        };
+
+        SelectedObjectProbeLayerSample lower = sampleLayer(
+                SectorBakedObjectLightProbeLayer::Lower,
+                preferredLower);
+        SelectedObjectProbeLayerSample upper = sampleLayer(
+                SectorBakedObjectLightProbeLayer::Upper,
+                preferredUpper);
+        if (!lower.lighting.valid && upper.lighting.valid) lower = upper;
+        if (lower.lighting.valid && !upper.lighting.valid) upper = lower;
+        if (lower.lighting.valid || upper.lighting.valid) {
+            return BakedObjectLightingVerticalSample{
+                    lower.lighting,
+                    upper.lighting,
+                    lower.heightWorld,
+                    upper.heightWorld};
         }
-
-        return SampleNearestObjectLightProbes(probes, worldPosition, 0, static_cast<int>(probes.probes.size()));
     }
 
-    if (mapForFallback != nullptr && FindSectorTopologySector(*mapForFallback, preferredSectorId) != nullptr) {
-        return MakeSectorAmbientObjectLightingSample(*mapForFallback, preferredSectorId);
-    }
+    const BakedObjectLightingSample fallback = mapForFallback != nullptr
+                    && FindSectorTopologySector(
+                            *mapForFallback,
+                            preferredSectorId) != nullptr
+            ? MakeSectorAmbientObjectLightingSample(
+                    *mapForFallback,
+                    preferredSectorId)
+            : MakeNeutralObjectLightingSample();
+    return BakedObjectLightingVerticalSample{
+            fallback,
+            fallback,
+            worldPosition.y,
+            worldPosition.y};
+}
 
-    return MakeNeutralObjectLightingSample();
+BakedObjectLightingSample SampleBakedObjectLighting(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        Vector3 worldPosition,
+        int preferredSectorId,
+        const SectorTopologyMap* mapForFallback)
+{
+    return ResolveBakedObjectLightingVerticalSample(
+            SampleBakedObjectLightingVertical(
+                    probes,
+                    worldPosition,
+                    preferredSectorId,
+                    mapForFallback),
+            worldPosition.y);
 }
 
 std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath)
@@ -3274,6 +4073,37 @@ std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath)
     std::filesystem::path path(mapPath);
     path.replace_extension(".lightmap.png");
     return MakeSectorAssetRelativePath(path.generic_string());
+}
+
+std::string MakeSectorLightmapAtlasPath(
+        const std::string& primaryPath,
+        int atlasIndex)
+{
+    if (atlasIndex <= 0 || primaryPath.empty()) {
+        return primaryPath;
+    }
+    const std::filesystem::path primary(primaryPath);
+    const std::string filename = primary.stem().string()
+            + "." + std::to_string(atlasIndex)
+            + primary.extension().string();
+    return (primary.parent_path() / filename).generic_string();
+}
+
+std::vector<SectorLightmapAtlasMetadata> GetSectorLightmapAtlases(
+        const SectorLightmapMetadata& metadata)
+{
+    std::vector<SectorLightmapAtlasMetadata> atlases;
+    if (!metadata.path.empty()) {
+        atlases.push_back(SectorLightmapAtlasMetadata{
+                metadata.path,
+                metadata.width,
+                metadata.height});
+    }
+    atlases.insert(
+            atlases.end(),
+            metadata.additionalAtlases.begin(),
+            metadata.additionalAtlases.end());
+    return atlases;
 }
 
 std::string MakeSectorObjectProbeSidecarPathForLightmapPath(const std::string& lightmapPath)
@@ -3318,6 +4148,7 @@ template<typename MapT>
 bool BakeSectorLightmapForMap(
         const MapT& map,
         const SectorLightmapLayout& layout,
+        SectorStaticModelLightmapData* staticModels,
         const char* outputPath,
         const SectorLightmapBakeCallbacks& callbacks,
         SectorLightmapBakeResult& outResult,
@@ -3343,18 +4174,70 @@ bool BakeSectorLightmapForMap(
     const auto totalStart = Clock::now();
     const int width = layout.atlasWidth;
     const int height = layout.atlasHeight;
-    const size_t atlasPixelCount = static_cast<size_t>(width * height);
+    int atlasCount = std::max(1, layout.atlasCount);
+    for (const SectorLightmapChart& chart : layout.charts) {
+        if (chart.surfaceIndex >= 0) {
+            if (chart.atlasIndex < 0) {
+                outError = "Bake failed: lightmap chart has no atlas assignment";
+                return false;
+            }
+            atlasCount = std::max(atlasCount, chart.atlasIndex + 1);
+        }
+    }
+    if (staticModels != nullptr) {
+        for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+            for (const SectorStaticModelLightmapMeshPlacement& placement
+                    : object.meshPlacements) {
+                if (placement.atlasIndex < 0) {
+                    outError = "Bake failed: static model lightmap chart has no atlas assignment";
+                    return false;
+                }
+                atlasCount = std::max(atlasCount, placement.atlasIndex + 1);
+            }
+        }
+    }
+    if (width <= 0 || height <= 0
+            || static_cast<size_t>(width) > std::numeric_limits<size_t>::max()
+                    / static_cast<size_t>(height)) {
+        outError = "Bake failed: invalid lightmap atlas dimensions";
+        return false;
+    }
+    const size_t atlasPixelCount = static_cast<size_t>(width)
+            * static_cast<size_t>(height);
+    if (static_cast<size_t>(atlasCount)
+            > std::numeric_limits<size_t>::max() / atlasPixelCount) {
+        outError = "Bake failed: lightmap atlas storage is too large";
+        return false;
+    }
+    const size_t totalPixelCount = atlasPixelCount
+            * static_cast<size_t>(atlasCount);
+    outResult.width = width;
+    outResult.height = height;
+    outResult.atlases.reserve(static_cast<size_t>(atlasCount));
+    for (int atlasIndex = 0; atlasIndex < atlasCount; ++atlasIndex) {
+        outResult.atlases.push_back(SectorLightmapAtlasMetadata{
+                MakeSectorLightmapAtlasPath(outputPath, atlasIndex),
+                width,
+                height});
+    }
+    const auto removeAtlasOutputs = [&]() {
+        for (const SectorLightmapAtlasMetadata& atlas : outResult.atlases) {
+            RemoveFileIfExists(atlas.path);
+        }
+    };
     ReportProgress(callbacks, SectorLightmapBakePhase::Preparing, 0, 1);
-    std::vector<Color> pixels(static_cast<size_t>(width * height), Color{0, 0, 0, 255});
-    std::vector<Vector3> directLightingFloat(atlasPixelCount, Vector3{});
-    std::vector<Vector3> indirectLightingFloat(atlasPixelCount, Vector3{});
-    std::vector<float> ambientOcclusionFloat(atlasPixelCount, 1.0f);
-    std::vector<unsigned char> validChartTexel(atlasPixelCount, 0);
+    std::vector<Color> pixels(totalPixelCount, Color{0, 0, 0, 255});
+    std::vector<Vector3> directLightingFloat(totalPixelCount, Vector3{});
+    std::vector<Vector3> indirectLightingFloat(totalPixelCount, Vector3{});
+    std::vector<float> ambientOcclusionFloat(totalPixelCount, 1.0f);
+    std::vector<unsigned char> validChartTexel(totalPixelCount, 0);
     std::vector<BakeTexel> bakeTexels;
     const std::vector<SectorLightmapAlphaOccluderTriangle> alphaOccluders =
             CollectSectorLightmapAlphaOccluders(geometry);
     SectorLightmapAlphaMaskCache alphaMaskCache;
-    const std::vector<BakeTriangle> triangles = BuildBakeTriangles(geometry, layout);
+    SectorLightmapNormalMapCache normalMapCache;
+    const std::vector<BakeTriangle> triangles =
+            BuildBakeTriangles(geometry, layout, staticModels);
     ReportProgress(callbacks, SectorLightmapBakePhase::BuildingBvh, 0, 1);
     const auto bvhBuildStart = Clock::now();
     SectorLightmapBvh bvh;
@@ -3416,8 +4299,17 @@ bool BakeSectorLightmapForMap(
                     continue;
                 }
 
-                const size_t pixelIndex = static_cast<size_t>(y * width + x);
+                const Vector3 shadingNormal = ResolveSurfaceShadingNormal(
+                        map,
+                        surface,
+                        hit,
+                        normalMapCache);
+
+                const size_t pixelIndex = static_cast<size_t>(chart.atlasIndex)
+                        * atlasPixelCount
+                        + static_cast<size_t>(y * width + x);
                 bakeTexels.push_back(BakeTexel{
+                        chart.atlasIndex,
                         x,
                         y,
                         pixelIndex,
@@ -3425,9 +4317,82 @@ bool BakeSectorLightmapForMap(
                         chart.surfaceIndex,
                         hit.triangleIndex,
                         hit.position,
-                        hit.normal
+                        shadingNormal,
+                        hit.geometricNormal
                 });
                 validChartTexel[pixelIndex] = 1;
+            }
+        }
+    }
+    if (staticModels != nullptr) {
+        int sourceSurfaceIndex = static_cast<int>(geometry.surfaces.size());
+        for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+            if (object.modelIndex < 0
+                    || object.modelIndex
+                            >= static_cast<int>(staticModels->models.size())) {
+                outError = "Bake failed: invalid prepared static model object "
+                        + std::to_string(object.objectId);
+                return false;
+            }
+            const SectorStaticModelLightmapModel& model =
+                    staticModels->models[static_cast<size_t>(object.modelIndex)];
+            for (size_t meshIndex = 0;
+                    meshIndex < model.meshes.size();
+                    ++meshIndex, ++sourceSurfaceIndex) {
+                if (meshIndex >= object.meshPlacements.size()) {
+                    outError = "Bake failed: missing lightmap chart for static model object "
+                            + std::to_string(object.objectId);
+                    return false;
+                }
+                const SectorStaticModelLightmapMesh& mesh =
+                        model.meshes[meshIndex];
+                const SectorStaticModelLightmapMeshPlacement& placement =
+                        object.meshPlacements[meshIndex];
+                allocatedChartRectanglePixels +=
+                        placement.width * placement.height;
+                const SectorGeneratedSurfaceRef surfaceRef{
+                        SectorGeneratedSurfaceKind::Middle,
+                        object.containingSectorId,
+                        -1,
+                        -1,
+                        SectorTopologySideKind::Front};
+                for (int y = placement.usableY;
+                        y < placement.usableY + placement.usableHeight;
+                        ++y) {
+                    for (int x = placement.usableX;
+                            x < placement.usableX + placement.usableWidth;
+                            ++x) {
+                        const Vector2 localUv{
+                                (static_cast<float>(x - placement.usableX) + 0.5f)
+                                        / static_cast<float>(placement.usableWidth),
+                                (static_cast<float>(y - placement.usableY) + 0.5f)
+                                        / static_cast<float>(placement.usableHeight)};
+                        RasterHit hit;
+                        if (!RasterizeStaticModelMeshPoint(
+                                    mesh,
+                                    object,
+                                    localUv,
+                                    hit)) {
+                            continue;
+                        }
+                        const size_t pixelIndex =
+                                static_cast<size_t>(placement.atlasIndex)
+                                        * atlasPixelCount
+                                + static_cast<size_t>(y * width + x);
+                        bakeTexels.push_back(BakeTexel{
+                                placement.atlasIndex,
+                                x,
+                                y,
+                                pixelIndex,
+                                surfaceRef,
+                                sourceSurfaceIndex,
+                                hit.triangleIndex,
+                                hit.position,
+                                hit.normal,
+                                hit.geometricNormal});
+                        validChartTexel[pixelIndex] = 1;
+                    }
+                }
             }
         }
     }
@@ -3445,6 +4410,7 @@ bool BakeSectorLightmapForMap(
             hit.hit = true;
             hit.position = texel.position;
             hit.normal = texel.normal;
+            hit.geometricNormal = texel.geometricNormal;
             hit.triangleIndex = texel.triangleIndex;
 
             Vector3 direct{};
@@ -3515,7 +4481,8 @@ bool BakeSectorLightmapForMap(
             RasterHit hit;
             hit.hit = true;
             hit.position = texel.position;
-            hit.normal = texel.normal;
+            hit.normal = texel.geometricNormal;
+            hit.geometricNormal = texel.geometricNormal;
             hit.triangleIndex = texel.triangleIndex;
             ambientOcclusionFloat[texel.pixelIndex] = BakeAmbientOcclusion(hit, texel.surfaceRef, texel.sourceSurfaceIndex, aoRadius, aoStrength, bvh, triangles, stats);
             ++completedTexels;
@@ -3536,15 +4503,34 @@ bool BakeSectorLightmapForMap(
         std::vector<Vector3> directSampleFloat = directLightingFloat;
         std::vector<unsigned char> directSampleValid = validChartTexel;
         for (const SectorLightmapChart& chart : layout.charts) {
-            DilateChartFloat(chart, directSampleFloat, directSampleValid, width);
+            DilateChartFloat(chart, directSampleFloat, directSampleValid, width, height);
+        }
+        if (staticModels != nullptr) {
+            for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+                for (const SectorStaticModelLightmapMeshPlacement& placement
+                        : object.meshPlacements) {
+                    const SectorLightmapChart chart = PlacementAsChart(placement);
+                    DilateChartFloat(
+                            chart,
+                            directSampleFloat,
+                            directSampleValid,
+                            width,
+                            height);
+                }
+            }
         }
 
         completedTexels = 0;
         for (const BakeTexel& texel : bakeTexels) {
-            const Vector3 origin = Vector3Add(texel.position, Vector3Scale(texel.normal, RayOriginEpsilon));
+            const Vector3 origin = Vector3Add(
+                    texel.position,
+                    Vector3Scale(texel.geometricNormal, RayOriginEpsilon));
             Vector3 gathered{};
             for (int i = 0; i < kIndirectBounceSampleCount; ++i) {
-                const Vector3 direction = CosineHemisphereSample(texel.normal, i, kIndirectBounceSampleCount);
+                const Vector3 direction = CosineHemisphereSample(
+                        texel.geometricNormal,
+                        i,
+                        kIndirectBounceSampleCount);
                 const RayHit rayHit = TraceRay(
                         origin,
                         direction,
@@ -3565,6 +4551,7 @@ bool BakeSectorLightmapForMap(
                         directSampleValid,
                         width,
                         height,
+                        rayHit.lightmapAtlasIndex,
                         rayHit.lightmapUv
                 );
                 const float distanceT = std::clamp(1.0f - rayHit.distance / indirectBounceRadius, 0.0f, 1.0f);
@@ -3589,7 +4576,20 @@ bool BakeSectorLightmapForMap(
     const auto indirectEnd = Clock::now();
 
     const auto exportStart = Clock::now();
-    ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, 0, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
+    size_t staticChartCount = 0;
+    if (staticModels != nullptr) {
+        for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+            staticChartCount += object.meshPlacements.size();
+        }
+    }
+    const uint32_t exportWorkTotal = static_cast<uint32_t>(
+            layout.charts.size() + staticChartCount + bakeTexels.size()
+            + static_cast<size_t>(atlasCount));
+    ReportProgress(
+            callbacks,
+            SectorLightmapBakePhase::DilatingAndEncoding,
+            0,
+            exportWorkTotal);
     std::vector<unsigned char> exportValid = validChartTexel;
     completedTexels = 0;
     for (const BakeTexel& texel : bakeTexels) {
@@ -3605,7 +4605,11 @@ bool BakeSectorLightmapForMap(
         };
         ++completedTexels;
         if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
-            ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, completedTexels, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
+            ReportProgress(
+                    callbacks,
+                    SectorLightmapBakePhase::DilatingAndEncoding,
+                    completedTexels,
+                    exportWorkTotal);
             if (CheckBakeCancelled(callbacks, outError)) {
                 return false;
             }
@@ -3613,20 +4617,39 @@ bool BakeSectorLightmapForMap(
     }
     uint32_t completedExportWork = static_cast<uint32_t>(bakeTexels.size());
     for (const SectorLightmapChart& chart : layout.charts) {
-        DilateChart(chart, pixels, exportValid, width);
+        DilateChart(chart, pixels, exportValid, width, height);
         ++completedExportWork;
-        ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, completedExportWork, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
+        ReportProgress(
+                callbacks,
+                SectorLightmapBakePhase::DilatingAndEncoding,
+                completedExportWork,
+                exportWorkTotal);
         if (CheckBakeCancelled(callbacks, outError)) {
             return false;
         }
     }
-
-    Image image = {};
-    image.data = pixels.data();
-    image.width = width;
-    image.height = height;
-    image.mipmaps = 1;
-    image.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+    if (staticModels != nullptr) {
+        for (const SectorStaticModelLightmapObject& object : staticModels->objects) {
+            for (const SectorStaticModelLightmapMeshPlacement& placement
+                    : object.meshPlacements) {
+                DilateChart(
+                        PlacementAsChart(placement),
+                        pixels,
+                        exportValid,
+                        width,
+                        height);
+                ++completedExportWork;
+                ReportProgress(
+                        callbacks,
+                        SectorLightmapBakePhase::DilatingAndEncoding,
+                        completedExportWork,
+                        exportWorkTotal);
+                if (CheckBakeCancelled(callbacks, outError)) {
+                    return false;
+                }
+            }
+        }
+    }
 
     const std::filesystem::path output(outputPath);
     std::error_code ec;
@@ -3638,25 +4661,62 @@ bool BakeSectorLightmapForMap(
         return false;
     }
 
-    if (!ExportImage(image, outputPath)) {
-        outError = TextFormat("Bake failed: could not export %s", outputPath);
-        return false;
+    for (int atlasIndex = 0; atlasIndex < atlasCount; ++atlasIndex) {
+        Image image = {};
+        image.data = pixels.data()
+                + static_cast<size_t>(atlasIndex) * atlasPixelCount;
+        image.width = width;
+        image.height = height;
+        image.mipmaps = 1;
+        image.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+        const std::string& atlasPath =
+                outResult.atlases[static_cast<size_t>(atlasIndex)].path;
+        if (!ExportImage(image, atlasPath.c_str())) {
+            outError = TextFormat(
+                    "Bake failed: could not export %s",
+                    atlasPath.c_str());
+            removeAtlasOutputs();
+            return false;
+        }
+        ++completedExportWork;
+        ReportProgress(
+                callbacks,
+                SectorLightmapBakePhase::DilatingAndEncoding,
+                completedExportWork,
+                exportWorkTotal);
+        if (CheckBakeCancelled(callbacks, outError)) {
+            removeAtlasOutputs();
+            return false;
+        }
     }
-    ReportProgress(callbacks, SectorLightmapBakePhase::DilatingAndEncoding, static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()), static_cast<uint32_t>(layout.charts.size() + bakeTexels.size()));
+    ReportProgress(
+            callbacks,
+            SectorLightmapBakePhase::DilatingAndEncoding,
+            exportWorkTotal,
+            exportWorkTotal);
     const auto exportEnd = Clock::now();
     if (CheckBakeCancelled(callbacks, outError)) {
-        RemoveFileIfExists(outputPath);
+        removeAtlasOutputs();
         return false;
     }
 
     const float objectProbeSpacingWorld = std::clamp(map.lightmapSettings.objectProbeSpacingWorld, 0.25f, 128.0f);
-    const float objectProbeHeightWorld = std::clamp(map.lightmapSettings.objectProbeHeightWorld, 0.0f, 16.0f);
+    float objectProbeLowerHeightWorld = std::clamp(
+            map.lightmapSettings.objectProbeLowerHeightWorld, 0.0f, 16.0f);
+    float objectProbeUpperHeightWorld = std::clamp(
+            map.lightmapSettings.objectProbeUpperHeightWorld, 0.0f, 16.0f);
+    if (objectProbeLowerHeightWorld > objectProbeUpperHeightWorld) {
+        std::swap(objectProbeLowerHeightWorld, objectProbeUpperHeightWorld);
+    }
     std::vector<SectorBakedObjectLightProbe> objectProbes;
     std::vector<SectorBakedObjectLightProbePlacementDiagnostic> objectProbeDiagnostics;
     const auto objectProbeBakeStart = Clock::now();
     if (!BuildSectorBakedObjectLightProbePlacements(
                 map,
-                SectorBakedObjectLightProbePlacementSettings{objectProbeSpacingWorld, objectProbeHeightWorld},
+                SectorBakedObjectLightProbePlacementSettings{
+                        objectProbeSpacingWorld,
+                        objectProbeLowerHeightWorld,
+                        objectProbeUpperHeightWorld},
                 objectProbes,
                 &objectProbeDiagnostics,
                 outError)) {
@@ -3665,25 +4725,22 @@ bool BakeSectorLightmapForMap(
         } else {
             outError = "Bake failed: " + outError;
         }
-        RemoveFileIfExists(outputPath);
+        removeAtlasOutputs();
         return false;
     }
     if (CheckBakeCancelled(callbacks, outError)) {
-        RemoveFileIfExists(outputPath);
+        removeAtlasOutputs();
         return false;
     }
-    if (!BakeSectorBakedObjectLightProbeAmbientCubes(map, objectProbes, outError)) {
-        if (outError.empty()) {
-            outError = "Bake failed: could not bake object light probes";
-        } else {
-            outError = "Bake failed: " + outError;
-        }
-        RemoveFileIfExists(outputPath);
-        return false;
-    }
+    BakeObjectProbeAmbientCubesInScene(
+            map,
+            bvh,
+            triangles,
+            alphaOccluders,
+            objectProbes);
     const auto objectProbeBakeEnd = Clock::now();
     if (CheckBakeCancelled(callbacks, outError)) {
-        RemoveFileIfExists(outputPath);
+        removeAtlasOutputs();
         return false;
     }
 
@@ -3693,18 +4750,40 @@ bool BakeSectorLightmapForMap(
                 objectProbeSidecarPath,
                 objectProbes,
                 objectProbeSpacingWorld,
-                objectProbeHeightWorld,
+                objectProbeLowerHeightWorld,
+                objectProbeUpperHeightWorld,
                 outError)) {
         if (outError.empty()) {
             outError = "Bake failed: could not write object light probe sidecar";
         } else {
             outError = "Bake failed: " + outError;
         }
-        RemoveFileIfExists(outputPath);
+        removeAtlasOutputs();
         RemoveFileIfExists(objectProbeSidecarPath);
         return false;
     }
     const auto objectProbeSidecarEnd = Clock::now();
+
+    std::string staticModelSidecarPath;
+    if (staticModels != nullptr && !staticModels->objects.empty()) {
+        staticModelSidecarPath =
+                MakeSectorStaticModelSidecarPathForLightmapPath(outputPath);
+        staticModels->sourceHash = ComputeSectorLightmapSourceHash(map);
+        if (!WriteSectorStaticModelLightmapSidecar(
+                    staticModelSidecarPath,
+                    *staticModels,
+                    outError)) {
+            if (outError.empty()) {
+                outError = "Bake failed: could not write static model lightmap sidecar";
+            } else {
+                outError = "Bake failed: " + outError;
+            }
+            removeAtlasOutputs();
+            RemoveFileIfExists(objectProbeSidecarPath);
+            RemoveFileIfExists(staticModelSidecarPath);
+            return false;
+        }
+    }
 
     outResult.width = width;
     outResult.height = height;
@@ -3734,8 +4813,21 @@ bool BakeSectorLightmapForMap(
     outResult.objectProbes.sourceHash = outResult.sourceHash;
     outResult.objectProbes.count = static_cast<int>(objectProbes.size());
     outResult.objectProbes.probeSpacingWorld = objectProbeSpacingWorld;
-    outResult.objectProbes.probeHeightWorld = objectProbeHeightWorld;
+    outResult.objectProbes.probeLowerHeightWorld = objectProbeLowerHeightWorld;
+    outResult.objectProbes.probeUpperHeightWorld = objectProbeUpperHeightWorld;
     outResult.objectProbes.format = kSectorBakedObjectLightProbeSidecarFormat;
+    if (staticModels != nullptr && !staticModels->objects.empty()) {
+        outResult.staticModels.path = staticModelSidecarPath;
+        outResult.staticModels.version =
+                kSectorStaticModelLightmapSidecarVersion;
+        outResult.staticModels.sourceHash = outResult.sourceHash;
+        outResult.staticModels.modelCount =
+                static_cast<int>(staticModels->models.size());
+        outResult.staticModels.objectCount =
+                static_cast<int>(staticModels->objects.size());
+        outResult.staticModels.format =
+                kSectorStaticModelLightmapSidecarFormat;
+    }
     outResult.objectProbePlacementDiagnostics = static_cast<int>(objectProbeDiagnostics.size());
     outResult.bvhBuildSeconds = std::chrono::duration<double>(bvhBuildEnd - bvhBuildStart).count();
     outResult.directLightingSeconds = std::chrono::duration<double>(directEnd - directStart).count();
@@ -3757,7 +4849,18 @@ bool BakeSectorLightmap(
         SectorLightmapBakeResult& outResult,
         std::string& outError)
 {
-    return BakeSectorLightmapForMap(map, layout, outputPath, callbacks, outResult, outError);
+    if (HasAssignedSectorStaticModels(map)) {
+        outError = "Bake failed: assigned static models were not prepared on the main thread";
+        return false;
+    }
+    return BakeSectorLightmapForMap(
+            map,
+            layout,
+            nullptr,
+            outputPath,
+            callbacks,
+            outResult,
+            outError);
 }
 
 bool BakeSectorLightmap(
@@ -3774,13 +4877,37 @@ bool BakeSectorLightmap(
     if (!BuildSectorLightmapLayout(input.mapSnapshot, layout, outError)) {
         return false;
     }
+    SectorStaticModelLightmapData staticModels = input.staticModels;
+    const bool hasAssignedStaticModels =
+            HasAssignedSectorStaticModels(input.mapSnapshot);
+    if (hasAssignedStaticModels && staticModels.objects.empty()) {
+        outError = "Bake failed: assigned static models were not prepared on the main thread";
+        return false;
+    }
+    if (!staticModels.objects.empty()
+            && !PackSectorStaticModelLightmapCharts(
+                    staticModels,
+                    layout.atlasWidth,
+                    layout.atlasHeight,
+                    layout.gutter,
+                    StaticModelPackCursorAfterTopology(layout),
+                    outError)) {
+        return false;
+    }
     ReportProgress(callbacks, SectorLightmapBakePhase::BuildingLayout, 1, 1);
     if (CheckBakeCancelled(callbacks, outError)) {
         return false;
     }
 
     const auto layoutEnd = Clock::now();
-    if (!BakeSectorLightmap(input.mapSnapshot, layout, input.temporaryOutputPath.c_str(), callbacks, outResult, outError)) {
+    if (!BakeSectorLightmapForMap(
+                input.mapSnapshot,
+                layout,
+                staticModels.objects.empty() ? nullptr : &staticModels,
+                input.temporaryOutputPath.c_str(),
+                callbacks,
+                outResult,
+                outError)) {
         return false;
     }
 
@@ -3789,6 +4916,9 @@ bool BakeSectorLightmap(
     if (!input.expectedSourceHash.empty()) {
         outResult.sourceHash = input.expectedSourceHash;
         outResult.objectProbes.sourceHash = input.expectedSourceHash;
+        if (!outResult.staticModels.path.empty()) {
+            outResult.staticModels.sourceHash = input.expectedSourceHash;
+        }
     }
     return true;
 }
@@ -3809,6 +4939,8 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendString(hash, texture.id);
         FnvAppendString(hash, texture.path);
         FnvAppendInt(hash, static_cast<int>(texture.filter));
+        FnvAppendString(hash, SectorTextureNormalMapPath(texture.path));
+        FnvAppendString(hash, ComputeNormalMapFingerprint(texture));
     }
 
     const std::vector<const SectorTopologyVertex*> vertices = SortedLightmapHashRecords(map.vertices);
@@ -3860,6 +4992,45 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendTopologyWallPart(hash, sector->defaultUpper);
     }
 
+    std::vector<const SectorPlacedRuntimeObject*> staticModels;
+    for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
+        if (object.kind == "static_model"
+                && !object.staticModel.modelPath.empty()) {
+            staticModels.push_back(&object);
+        }
+    }
+    std::sort(
+            staticModels.begin(),
+            staticModels.end(),
+            [](const auto* left, const auto* right) {
+                return left->id < right->id;
+            });
+    if (!staticModels.empty()) {
+        FnvAppendString(hash, "static-models");
+        FnvAppendInt(hash, static_cast<int>(staticModels.size()));
+        for (const SectorPlacedRuntimeObject* object : staticModels) {
+            FnvAppendInt(hash, object->id);
+            FnvAppendString(hash, object->staticModel.modelPath);
+            FnvAppendVector3(hash, object->position);
+            FnvAppendFloat(hash, object->yawRadians);
+            if (object->staticModel.rotationXRadians != 0.0f
+                    || object->staticModel.rotationZRadians != 0.0f) {
+                FnvAppendString(hash, "static-model-rotation-xz");
+                FnvAppendFloat(
+                        hash,
+                        object->staticModel.rotationXRadians);
+                FnvAppendFloat(
+                        hash,
+                        object->staticModel.rotationZRadians);
+            }
+            FnvAppendFloat(hash, object->staticModel.heightOffsetWorld);
+            FnvAppendFloat(hash, object->staticModel.scale);
+            FnvAppendString(
+                    hash,
+                    object->staticModel.geometryFingerprint);
+        }
+    }
+
     const std::vector<const SectorTopologyStaticPointLight*> lights = SortedLightmapHashRecords(map.staticLights);
     FnvAppendInt(hash, static_cast<int>(lights.size()));
     for (const SectorTopologyStaticPointLight* light : lights) {
@@ -3907,7 +5078,22 @@ SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map)
         return SectorLightmapStatus::Stale;
     }
 
-    if (!FileExistsResolved(ResolveSectorAssetPath(map.bakedLightmap.path))) {
+    const std::vector<SectorLightmapAtlasMetadata> atlases =
+            GetSectorLightmapAtlases(map.bakedLightmap);
+    if (atlases.empty()) {
+        return SectorLightmapStatus::Stale;
+    }
+    for (const SectorLightmapAtlasMetadata& atlas : atlases) {
+        if (atlas.path.empty() || atlas.width <= 0 || atlas.height <= 0
+                || atlas.width != map.bakedLightmap.width
+                || atlas.height != map.bakedLightmap.height
+                || !FileExistsResolved(ResolveSectorAssetPath(atlas.path))) {
+            return SectorLightmapStatus::Stale;
+        }
+    }
+    if (HasAssignedSectorStaticModels(map)
+            && GetSectorStaticModelLightmapStatus(map)
+                    != SectorLightmapStatus::Valid) {
         return SectorLightmapStatus::Stale;
     }
 
@@ -3925,7 +5111,9 @@ SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(const SectorTopologyMa
             || metadata.sourceHash.empty()
             || metadata.count < 0
             || metadata.probeSpacingWorld <= 0.0f
-            || metadata.probeHeightWorld < 0.0f
+            || metadata.probeLowerHeightWorld < 0.0f
+            || metadata.probeUpperHeightWorld
+                    < metadata.probeLowerHeightWorld
             || metadata.format != kSectorBakedObjectLightProbeSidecarFormat) {
         return SectorLightmapStatus::Stale;
     }

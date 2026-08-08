@@ -20,8 +20,10 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
+#include <filesystem>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace game {
@@ -48,7 +50,7 @@ Vector2 PreviewYawForwardXZ(float yawRadians)
     return Vector2{std::cos(yawRadians), std::sin(yawRadians)};
 }
 
-float VisibilityDebugHorizontalFovRadians(const Camera3D& camera)
+float VisibilityDebugHorizontalFovRadians(const Camera3D& camera, float pitchRadians)
 {
     const int screenWidth = GetScreenWidth();
     const int screenHeight = GetScreenHeight();
@@ -56,7 +58,10 @@ float VisibilityDebugHorizontalFovRadians(const Camera3D& camera)
             ? static_cast<float>(screenWidth) / static_cast<float>(screenHeight)
             : DefaultVisibilityDebugAspect;
     const float verticalFovRadians = camera.fovy * DegreesToRadians;
-    return 2.0f * std::atan(std::tan(verticalFovRadians * 0.5f) * aspect);
+    return ComputeRuntimePortalVisibilityHorizontalFovRadians(
+            verticalFovRadians,
+            aspect,
+            pitchRadians);
 }
 
 const char* SectorLightmapVs = R"(
@@ -101,15 +106,26 @@ in vec4 fragColor;
 uniform sampler2D texture0;
 uniform sampler2D texture1;
 uniform sampler2D decalTexture;
+uniform sampler2D normalTexture;
 uniform float useLightmap;
 uniform float useBakedAmbientOcclusion;
 uniform int hasLightmap;
+uniform int hasNormalMap;
 uniform int alphaTest;
 uniform float alphaCutoff;
 uniform int hasDecal;
 uniform float decalOpacity;
 uniform int decalEmissive;
 uniform vec3 decalTint;
+
+uniform int fogEnabled;
+uniform vec3 fogColor;
+uniform vec3 fogCameraPosition;
+uniform float fogStartDistanceWorld;
+uniform float fogDensity;
+uniform float fogMaxOpacity;
+uniform float fogReferenceHeightWorld;
+uniform float fogHeightFalloff;
 
 #define MAX_DYNAMIC_LIGHTS 8
 #define MAX_DYNAMIC_SHADOW_CASTERS 2
@@ -159,6 +175,37 @@ float SampleShadowMap(int shadowSlot, vec2 uv)
     return shadowSlot == 0 ? texture(shadowMap0, uv).r : texture(shadowMap1, uv).r;
 }
 
+vec3 SurfaceNormal(vec3 geometricNormal)
+{
+    if (hasNormalMap == 0) {
+        return geometricNormal;
+    }
+
+    vec3 positionDx = dFdx(fragWorldPosition);
+    vec3 positionDy = dFdy(fragWorldPosition);
+    vec2 uvDx = dFdx(fragTexCoord);
+    vec2 uvDy = dFdy(fragTexCoord);
+    vec3 positionDyPerpendicular = cross(positionDy, geometricNormal);
+    vec3 positionDxPerpendicular = cross(geometricNormal, positionDx);
+    vec3 tangent = positionDyPerpendicular * uvDx.x
+            + positionDxPerpendicular * uvDy.x;
+    vec3 bitangent = positionDyPerpendicular * uvDx.y
+            + positionDxPerpendicular * uvDy.y;
+    float basisLengthSq = max(dot(tangent, tangent), dot(bitangent, bitangent));
+    if (basisLengthSq <= 0.00000001) {
+        return geometricNormal;
+    }
+
+    float inverseBasisLength = inversesqrt(basisLengthSq);
+    vec3 mappedNormal = texture(normalTexture, fragTexCoord).xyz * 2.0 - 1.0;
+    return SafeNormalize(
+            mat3(
+                    tangent * inverseBasisLength,
+                    bitangent * inverseBasisLength,
+                    geometricNormal) * mappedNormal,
+            geometricNormal);
+}
+
 float DynamicSpotLightShadowVisibility(
         int shadowSlot,
         vec3 worldPosition,
@@ -204,6 +251,22 @@ float DynamicSpotLightShadowVisibility(
     return visible / 12.0;
 }
 
+vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
+{
+    if (fogEnabled == 0 || fogDensity <= 0.0 || fogMaxOpacity <= 0.0) {
+        return surfaceRgb;
+    }
+
+    float fogDistance = max(length(worldPosition - fogCameraPosition) - fogStartDistanceWorld, 0.0);
+    float midpointHeight = (fogCameraPosition.y + worldPosition.y) * 0.5;
+    float heightAboveReference = max(midpointHeight - fogReferenceHeightWorld, 0.0);
+    float heightMultiplier = exp(-heightAboveReference * fogHeightFalloff);
+    float fogAmount = min(
+            1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
+            fogMaxOpacity);
+    return mix(surfaceRgb, fogColor, fogAmount);
+}
+
 void main()
 {
     vec4 baseColor = texture(texture0, fragTexCoord);
@@ -231,7 +294,8 @@ void main()
     }
     vec4 bakedSample = (useLightmap > 0.5 && hasLightmap != 0) ? texture(texture1, fragTexCoord2) : vec4(0.0, 0.0, 0.0, 1.0);
     float aoFactor = (useBakedAmbientOcclusion > 0.5 && hasLightmap != 0) ? bakedSample.a : 1.0;
-    vec3 worldNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
+    vec3 geometricNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
+    vec3 worldNormal = SurfaceNormal(geometricNormal);
     vec3 ambient = fragColor.rgb * aoFactor;
     vec3 bakedDirect = bakedSample.rgb;
     vec3 dynamicDirect = vec3(0.0);
@@ -262,7 +326,7 @@ void main()
                     float visibility = DynamicSpotLightShadowVisibility(
                             shadowSlot,
                             fragWorldPosition,
-                            worldNormal,
+                            geometricNormal,
                             lightDirection);
                     coneAtten *= mix(1.0, visibility, clamp(shadowStrength[shadowSlot], 0.0, 1.0));
                 }
@@ -273,7 +337,8 @@ void main()
     vec3 bakedLighting = clamp(ambient + bakedDirect, 0.0, 1.0);
     vec3 lighting = clamp(bakedLighting + dynamicDirect, 0.0, dynamicLightingClamp);
     vec3 litRgb = surfaceRgb * lighting;
-    finalColor = vec4(mix(litRgb, emissiveDecalRgb, emissiveDecalAlpha), baseColor.a * fragColor.a);
+    vec3 surfaceOutput = mix(litRgb, emissiveDecalRgb, emissiveDecalAlpha);
+    finalColor = vec4(ApplySectorFog(surfaceOutput, fragWorldPosition), baseColor.a * fragColor.a);
 }
 )";
 
@@ -377,6 +442,7 @@ bool LoadPreviewMaterial(
         int& useLightmapLoc,
         int& useBakedAmbientOcclusionLoc,
         int& hasLightmapLoc,
+        int& hasNormalMapLoc,
         int& alphaTestLoc,
         int& alphaCutoffLoc,
         int& hasDecalLoc,
@@ -398,6 +464,7 @@ bool LoadPreviewMaterial(
         int& shadowStrengthLoc,
         int& shadowSoftnessLoc,
         int& dynamicLightingClampLoc,
+        SectorFogShaderLocations& fogShaderLocations,
         std::string& error)
 {
     material = LoadMaterialDefault();
@@ -414,11 +481,13 @@ bool LoadPreviewMaterial(
     material.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(material.shader, "texture0");
     material.shader.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(material.shader, "texture1");
     material.shader.locs[SHADER_LOC_MAP_NORMAL] = GetShaderLocation(material.shader, "decalTexture");
+    material.shader.locs[SHADER_LOC_MAP_HEIGHT] = GetShaderLocation(material.shader, "normalTexture");
     material.shader.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(material.shader, "shadowMap0");
     material.shader.locs[SHADER_LOC_MAP_OCCLUSION] = GetShaderLocation(material.shader, "shadowMap1");
     useLightmapLoc = GetShaderLocation(material.shader, "useLightmap");
     useBakedAmbientOcclusionLoc = GetShaderLocation(material.shader, "useBakedAmbientOcclusion");
     hasLightmapLoc = GetShaderLocation(material.shader, "hasLightmap");
+    hasNormalMapLoc = GetShaderLocation(material.shader, "hasNormalMap");
     alphaTestLoc = GetShaderLocation(material.shader, "alphaTest");
     alphaCutoffLoc = GetShaderLocation(material.shader, "alphaCutoff");
     hasDecalLoc = GetShaderLocation(material.shader, "hasDecal");
@@ -442,6 +511,7 @@ bool LoadPreviewMaterial(
     shadowStrengthLoc = GetShaderLocationArrayBase(material.shader, "shadowStrength");
     shadowSoftnessLoc = GetShaderLocationArrayBase(material.shader, "shadowSoftness");
     dynamicLightingClampLoc = GetShaderLocation(material.shader, "dynamicLightingClamp");
+    fogShaderLocations = GetSectorFogShaderLocations(material.shader);
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
     return true;
@@ -500,6 +570,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
         return false;
     }
     billboardRenderer.ResetDebugState();
+    staticModelRenderer.ResetDebugState();
 
     std::string visibilityError;
     visibilityGraphValid = BuildRuntimeSectorVisibilityGraph(map, visibilityGraph, &visibilityError);
@@ -533,6 +604,22 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 resolvedPath.c_str(),
                 SectorTextureLoadFlags(texture.filter));
         textureHandlesById.emplace(texture.id, handle);
+
+        const std::string normalMapPath = SectorTextureNormalMapPath(texture.path);
+        const std::string resolvedNormalMapPath = ResolveSectorAssetPath(normalMapPath);
+        std::error_code normalMapError;
+        if (!normalMapPath.empty()
+                && std::filesystem::is_regular_file(resolvedNormalMapPath, normalMapError)
+                && !normalMapError) {
+            const std::string normalMapKey = texture.id + "_sector_normal";
+            normalTextureHandlesById.emplace(
+                    texture.id,
+                    assets.RequestTexture(
+                            assetScope,
+                            normalMapKey.c_str(),
+                            resolvedNormalMapPath.c_str(),
+                            SectorTextureLoadFlags(texture.filter)));
+        }
     }
 
     if (ShouldRenderSkyCylinder(map)) {
@@ -542,24 +629,76 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 : TextureForId(skyTexture->id);
         skyRenderer.Rebuild(map, skyTextureHandle);
     }
+    BuildSectorPbrEnvironment(
+            assets,
+            assetScope,
+            map,
+            pbrEnvironment);
 
     SectorLightmapLayout lightmapLayout;
+    const std::vector<SectorLightmapAtlasMetadata> lightmapAtlases =
+            GetSectorLightmapAtlases(map.bakedLightmap);
     const SectorLightmapStatus status = GetSectorLightmapStatus(map);
     lightmapStatus = static_cast<int>(status);
-    const bool useLightmapLayout = status == SectorLightmapStatus::Valid
+    bool useLightmapLayout = status == SectorLightmapStatus::Valid
             && BuildSectorLightmapLayout(map, lightmapLayout, error);
+    if (useLightmapLayout
+            && lightmapLayout.atlasCount
+                    > static_cast<int>(lightmapAtlases.size())) {
+        error = "Baked lightmap metadata does not contain every topology atlas";
+        useLightmapLayout = false;
+        lightmapStatus = static_cast<int>(SectorLightmapStatus::Stale);
+    }
     if (status == SectorLightmapStatus::Valid && !useLightmapLayout) {
         std::fprintf(stderr, "[SectorDemo WARNING] %s\n", error.c_str());
         error.clear();
     }
 
+    SectorStaticModelLightmapData staticModelLightmapData;
+    if (useLightmapLayout && HasAssignedSectorStaticModels(map)) {
+        std::string staticModelError;
+        if (!ReadSectorStaticModelLightmapSidecar(
+                    ResolveSectorAssetPath(
+                            map.bakedLightmap.staticModels.path),
+                    &map.bakedLightmap.staticModels,
+                    staticModelLightmapData,
+                    staticModelError)) {
+            std::fprintf(
+                    stderr,
+                    "[SectorDemo WARNING] Static model lightmap disabled: %s\n",
+                    staticModelError.c_str());
+            useLightmapLayout = false;
+            lightmapStatus =
+                    static_cast<int>(SectorLightmapStatus::Stale);
+            staticModelLightmapData = {};
+        } else if (!AreSectorStaticModelLightmapAtlasIndicesValid(
+                           staticModelLightmapData,
+                           static_cast<int>(lightmapAtlases.size()))) {
+            std::fprintf(
+                    stderr,
+                    "[SectorDemo WARNING] Static model lightmap disabled: atlas index is outside installed metadata\n");
+            useLightmapLayout = false;
+            lightmapStatus =
+                    static_cast<int>(SectorLightmapStatus::Stale);
+            staticModelLightmapData = {};
+        }
+    }
+    staticModelRenderer.SetLightmapData(
+            std::move(staticModelLightmapData));
+
     if (useLightmapLayout) {
-        const std::string resolvedPath = ResolveSectorAssetPath(map.bakedLightmap.path);
-        lightmapTexture = assets.RequestTexture(
-                assetScope,
-                "sector_lightmap_atlas",
-                resolvedPath.c_str(),
-                engine::TextureLoad_BilinearFilter);
+        lightmapTextures.reserve(lightmapAtlases.size());
+        for (size_t atlasIndex = 0; atlasIndex < lightmapAtlases.size(); ++atlasIndex) {
+            const std::string resolvedPath = ResolveSectorAssetPath(
+                    lightmapAtlases[atlasIndex].path);
+            const std::string key = "sector_lightmap_atlas_"
+                    + std::to_string(atlasIndex);
+            lightmapTextures.push_back(assets.RequestTexture(
+                    assetScope,
+                    key.c_str(),
+                    resolvedPath.c_str(),
+                    engine::TextureLoad_BilinearFilter));
+        }
     }
 
     std::string meshError;
@@ -575,8 +714,15 @@ bool SectorMeshRenderer::RebuildRendererResources(
     dynamicLightState.RebuildSources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
+    BuildSectorLightAtmosphereSources(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+            lightAtmosphereSources);
     doorRenderer.ReserveRuntimeDoorCapacity(kSectorRuntimeObjectInitialCapacity);
     runtimeSeconds = 0.0f;
+    localFogRenderer.Shutdown();
+    lightHazeRenderer.Shutdown();
+    lightDustRenderer.Shutdown();
 
     if (!dynamicLightState.EnsureShadowMapResources()) {
         Shutdown(assets);
@@ -590,9 +736,24 @@ bool SectorMeshRenderer::RebuildRendererResources(
         return false;
     }
 
+    if (!dynamicModelShadowRenderer.Load()) {
+        Shutdown(assets);
+        error = "Preview failed: could not load dynamic model shadow renderer";
+        return false;
+    }
+    dynamicModelShadowRenderer.RebuildSources(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
+
     if (!billboardRenderer.Load()) {
         Shutdown(assets);
         error = "Preview failed: could not load billboard cutout shader";
+        return false;
+    }
+
+    if (!staticModelRenderer.Load()) {
+        Shutdown(assets);
+        error = "Preview failed: could not load static model shader";
         return false;
     }
 
@@ -609,6 +770,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 useLightmapLoc,
                 useBakedAmbientOcclusionLoc,
                 hasLightmapLoc,
+                hasNormalMapLoc,
                 alphaTestLoc,
                 alphaCutoffLoc,
                 hasDecalLoc,
@@ -630,6 +792,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 shadowStrengthLoc,
                 shadowSoftnessLoc,
                 dynamicLightingClampLoc,
+                fogShaderLocations,
                 error)) {
         Shutdown(assets);
         return false;
@@ -671,12 +834,17 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     visibilityDebugText.clear();
     renderDebugText.clear();
     billboardRenderer.ResetDebugState();
+    staticModelRenderer.ResetDebugState();
     visibilityLookupWorld = SectorCollisionWorld{};
     visibilityGraphValid = false;
     visibilityLookupWorldValid = false;
     dynamicLightState.Reset();
+    lightAtmosphereSources.clear();
     doorRenderer.ClearPreparedShadowCasters();
     runtimeSeconds = 0.0f;
+    localFogRenderer.Shutdown();
+    lightHazeRenderer.Shutdown();
+    lightDustRenderer.Shutdown();
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
@@ -684,10 +852,12 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
             && !materialLoaded
             && !bloomRenderer.IsLoaded()
             && !billboardRenderer.IsLoaded()
+            && !staticModelRenderer.IsLoaded()
             && !doorRenderer.HasOpaqueResources()
             && !doorRenderer.HasCachedDoorMeshes()
             && !dynamicLightState.HasShadowMapResources()
             && !dynamicLightState.HasShadowMaterial()
+            && !dynamicModelShadowRenderer.IsLoaded()
             && !skyRenderer.IsLoaded()) {
         return;
     }
@@ -695,17 +865,21 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     bloomRenderer.Shutdown();
     dynamicLightState.UnloadShadowMaterial();
     dynamicLightState.UnloadShadowMapResources();
+    dynamicModelShadowRenderer.Shutdown();
     skyRenderer.Shutdown();
+    pbrEnvironment = {};
     doorRenderer.UnloadDoorMeshes();
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
-    lightmapTexture = engine::NullTextureHandle();
+    normalTextureHandlesById.clear();
+    lightmapTextures.clear();
     sectorCount = 0;
 
     if (materialLoaded) {
         material.maps[MATERIAL_MAP_DIFFUSE].texture = defaultMaterialTexture;
         material.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
         material.maps[MATERIAL_MAP_NORMAL].texture = Texture2D{};
+        material.maps[MATERIAL_MAP_HEIGHT].texture = Texture2D{};
         UnloadMaterial(material);
         material = Material{};
         defaultMaterialTexture = Texture2D{};
@@ -718,6 +892,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     }
 
     billboardRenderer.Shutdown();
+    staticModelRenderer.Shutdown();
     doorRenderer.ShutdownOpaqueResources();
 
     if (!engine::IsNull(assetScope)) {
@@ -735,21 +910,32 @@ void SectorMeshRenderer::AdvanceRuntime(float dt)
     }
 }
 
+void SectorMeshRenderer::FinalizeRuntimeObjectResources(
+        engine::AssetManager& assets,
+        engine::World& runtimeObjectWorld)
+{
+    staticModelRenderer.FinalizeResources(
+            assets,
+            runtimeObjectWorld);
+}
+
 void SectorMeshRenderer::Render(
         engine::AssetManager& assets,
         bool useBakedAmbientOcclusion,
         engine::World* runtimeObjectWorld,
-        SectorRuntimeDoorLightingContext doorLighting)
+        SectorRuntimeDoorLightingContext doorLighting,
+        const SectorTopologyFogSettings& fogSettings)
 {
     RenderDynamicSpotLightShadowMaps(assets, runtimeObjectWorld);
-    DrawScene(assets, useBakedAmbientOcclusion, runtimeObjectWorld, doorLighting);
+    DrawScene(assets, useBakedAmbientOcclusion, runtimeObjectWorld, doorLighting, fogSettings);
 }
 
 void SectorMeshRenderer::DrawScene(
         engine::AssetManager& assets,
         bool useBakedAmbientOcclusion,
         engine::World* runtimeObjectWorld,
-        SectorRuntimeDoorLightingContext doorLighting)
+        SectorRuntimeDoorLightingContext doorLighting,
+        const SectorTopologyFogSettings& fogSettings)
 {
     if (!initialized) {
         return;
@@ -758,19 +944,15 @@ void SectorMeshRenderer::DrawScene(
     BeginMode3D(camera);
     skyRenderer.Draw(assets, camera);
 
-    const Texture2D* lightmap = assets.GetTexture(lightmapTexture);
-    float useLightmap = lightmap != nullptr ? 1.0f : 0.0f;
+    const SectorFogRenderContext fogContext =
+            BuildSectorFogRenderContext(fogSettings, camera.position);
+    UploadSectorFogShaderValues(material.shader, fogShaderLocations, fogContext);
+
     float useAo = useBakedAmbientOcclusion ? 1.0f : 0.0f;
-    material.maps[MATERIAL_MAP_SPECULAR].texture = (lightmap != nullptr)
-            ? *lightmap
-            : Texture2D{};
     const Texture2D* shadowMap0 = dynamicLightState.ShadowMapDepthTexture(0);
     const Texture2D* shadowMap1 = dynamicLightState.ShadowMapDepthTexture(1);
     material.maps[MATERIAL_MAP_ROUGHNESS].texture = shadowMap0 != nullptr ? *shadowMap0 : Texture2D{};
     material.maps[MATERIAL_MAP_OCCLUSION].texture = shadowMap1 != nullptr ? *shadowMap1 : Texture2D{};
-    if (useLightmapLoc >= 0) {
-        SetShaderValue(material.shader, useLightmapLoc, &useLightmap, SHADER_UNIFORM_FLOAT);
-    }
     if (useBakedAmbientOcclusionLoc >= 0) {
         SetShaderValue(material.shader, useBakedAmbientOcclusionLoc, &useAo, SHADER_UNIFORM_FLOAT);
     }
@@ -811,13 +993,28 @@ void SectorMeshRenderer::DrawScene(
                 ? *texture
                 : defaultMaterialTexture;
 
+        const Texture2D* normalTexture = assets.GetTexture(
+                NormalTextureForId(batch.textureId));
+
         const Texture2D* decalTexture = nullptr;
         if (!batch.decalTextureId.empty()) {
             decalTexture = assets.GetTexture(TextureForId(batch.decalTextureId));
         }
 
+        const Texture2D* lightmap = batch.lightmapAtlasIndex >= 0
+                && batch.lightmapAtlasIndex
+                        < static_cast<int>(lightmapTextures.size())
+                ? assets.GetTexture(lightmapTextures[
+                        static_cast<size_t>(batch.lightmapAtlasIndex)])
+                : nullptr;
+        const float useLightmap = lightmap != nullptr ? 1.0f : 0.0f;
+        material.maps[MATERIAL_MAP_SPECULAR].texture = lightmap != nullptr
+                ? *lightmap
+                : Texture2D{};
         const int hasDecal = decalTexture != nullptr ? 1 : 0;
-        const int hasLightmap = batch.receivesLightmap ? 1 : 0;
+        const int hasLightmap = batch.receivesLightmap
+                && lightmap != nullptr ? 1 : 0;
+        const int hasNormalMap = normalTexture != nullptr ? 1 : 0;
         const int alphaTest = batch.alphaTest ? 1 : 0;
         const float alphaCutoff = batch.alphaCutoff;
         const float decalOpacity = batch.decalOpacity;
@@ -826,8 +1023,21 @@ void SectorMeshRenderer::DrawScene(
         material.maps[MATERIAL_MAP_NORMAL].texture = (decalTexture != nullptr)
                 ? *decalTexture
                 : Texture2D{};
+        material.maps[MATERIAL_MAP_HEIGHT].texture = (normalTexture != nullptr)
+                ? *normalTexture
+                : Texture2D{};
+        if (useLightmapLoc >= 0) {
+            SetShaderValue(
+                    material.shader,
+                    useLightmapLoc,
+                    &useLightmap,
+                    SHADER_UNIFORM_FLOAT);
+        }
         if (hasLightmapLoc >= 0) {
             SetShaderValue(material.shader, hasLightmapLoc, &hasLightmap, SHADER_UNIFORM_INT);
+        }
+        if (hasNormalMapLoc >= 0) {
+            SetShaderValue(material.shader, hasNormalMapLoc, &hasNormalMap, SHADER_UNIFORM_INT);
         }
         if (alphaTestLoc >= 0) {
             SetShaderValue(material.shader, alphaTestLoc, &alphaTest, SHADER_UNIFORM_INT);
@@ -860,6 +1070,7 @@ void SectorMeshRenderer::DrawScene(
         doorDrawContext.dynamicLighting.shadowUniforms = dynamicLightState.PackShadowUniforms();
         doorDrawContext.dynamicLighting.shadowMaps = dynamicLightState.BuildShadowMapTextures();
         doorDrawContext.dynamicLighting.lightingClamp = DynamicLightingClamp;
+        doorDrawContext.fog = fogContext;
         doorDrawContext.textureResolver.userData = this;
         doorDrawContext.textureResolver.resolve = &SectorMeshRenderer::ResolveShadowCasterTexture;
         doorDrawContext.defaultMaterialTexture = &defaultMaterialTexture;
@@ -867,7 +1078,36 @@ void SectorMeshRenderer::DrawScene(
         doorRenderer.Draw(doorDrawContext);
 
         const SectorBillboardDynamicLightContext billboardLightContext = BuildBillboardDynamicLightContext();
-        billboardRenderer.Draw(assets, *runtimeObjectWorld, camera, billboardLightContext, renderDebugText);
+        staticModelRenderer.Draw(
+                assets,
+                *runtimeObjectWorld,
+                camera,
+                billboardLightContext,
+                fogContext,
+                visibilityResult,
+                lightmapTextures,
+                assets.GetCubemap(pbrEnvironment.cubemap),
+                useBakedAmbientOcclusion,
+                renderDebugText);
+        SectorDynamicModelShadowDrawContext modelShadowContext;
+        modelShadowContext.assets = &assets;
+        modelShadowContext.world = runtimeObjectWorld;
+        modelShadowContext.camera = &camera;
+        modelShadowContext.collisionWorld = visibilityLookupWorldValid
+                ? &visibilityLookupWorld
+                : nullptr;
+        modelShadowContext.visibility = &visibilityResult;
+        modelShadowContext.sectorDrawRecords = &meshes.sectorDrawRecords;
+        modelShadowContext.textureResolverUserData = this;
+        modelShadowContext.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
+        dynamicModelShadowRenderer.Draw(modelShadowContext);
+        billboardRenderer.Draw(
+                assets,
+                *runtimeObjectWorld,
+                camera,
+                billboardLightContext,
+                fogContext,
+                renderDebugText);
     }
     EndMode3D();
 }
@@ -885,6 +1125,7 @@ SectorBillboardDynamicLightContext SectorMeshRenderer::BuildBillboardDynamicLigh
     for (int i = 0; i < context.dynamicLightCount; ++i) {
         const SectorPreviewDynamicPointLightUniform& light =
                 dynamicLightState.SelectedLights()[static_cast<size_t>(i)];
+        context.dynamicLightIds[static_cast<size_t>(i)] = light.lightId;
         context.dynamicLightPositions[static_cast<size_t>(i)] = light.position;
         context.dynamicLightColors[static_cast<size_t>(i)] = light.color;
         context.dynamicLightRadii[static_cast<size_t>(i)] = light.radius;
@@ -900,29 +1141,70 @@ SectorBillboardDynamicLightContext SectorMeshRenderer::BuildBillboardDynamicLigh
     return context;
 }
 
+void SectorMeshRenderer::DrawViewmodel(
+        engine::AssetManager& assets,
+        const engine::ModelAsset& asset,
+        engine::AnimatedModelInstance& instance,
+        const Camera3D& viewmodelCamera,
+        Matrix transform,
+        const engine::ModelAsset* attachmentAsset,
+        Matrix attachmentTransform,
+        const BakedObjectLightingVerticalSample& ambientLighting,
+        const SectorViewmodelLightingContext& lighting,
+        const SectorViewmodelLightingContext& attachmentLighting)
+{
+    BeginMode3D(viewmodelCamera);
+    staticModelRenderer.DrawViewmodel(
+            asset, instance, viewmodelCamera, transform,
+            attachmentAsset, attachmentTransform,
+            BuildBillboardDynamicLightContext(),
+            assets.GetCubemap(pbrEnvironment.cubemap),
+            ambientLighting,
+            lighting,
+            attachmentLighting);
+    EndMode3D();
+}
+
 void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
         engine::AssetManager& assets,
         engine::World* runtimeObjectWorld)
 {
-    if (!dynamicLightState.IsShadowRenderReady()) {
-        return;
+    if (dynamicLightState.IsShadowRenderReady()) {
+        SectorDynamicSpotLightShadowRenderContext context;
+        context.assets = &assets;
+        context.sectorDrawRecords = &meshes.sectorDrawRecords;
+        context.userData = this;
+        context.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
+        doorRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
+        dynamicLightState.RenderShadowMaps(context);
     }
 
-    SectorDynamicSpotLightShadowRenderContext context;
-    context.assets = &assets;
-    context.sectorDrawRecords = &meshes.sectorDrawRecords;
-    context.userData = this;
-    context.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
-    doorRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
-    dynamicLightState.RenderShadowMaps(context);
+    if (runtimeObjectWorld != nullptr && dynamicModelShadowRenderer.IsLoaded()) {
+        SectorDynamicModelShadowDrawContext context;
+        context.assets = &assets;
+        context.world = runtimeObjectWorld;
+        context.camera = &camera;
+        context.collisionWorld = visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr;
+        context.visibility = &visibilityResult;
+        context.sectorDrawRecords = &meshes.sectorDrawRecords;
+        context.textureResolverUserData = this;
+        context.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
+        dynamicModelShadowRenderer.RenderShadowMaps(context);
+    }
 }
 
-void SectorMeshRenderer::ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+void SectorMeshRenderer::ApplyEmissiveDecalBloom(
+        engine::AssetManager& assets,
+        RenderTexture2D& sceneTarget,
+        const SectorTopologyFogSettings& fogSettings)
 {
-    ApplyEmissiveDecalBloomToScene(assets, sceneTarget);
+    ApplyEmissiveDecalBloomToScene(assets, sceneTarget, fogSettings);
 }
 
-void SectorMeshRenderer::ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+void SectorMeshRenderer::ApplyEmissiveDecalBloomToScene(
+        engine::AssetManager& assets,
+        RenderTexture2D& sceneTarget,
+        const SectorTopologyFogSettings& fogSettings)
 {
     bloomRenderer.ApplyEmissiveDecalBloomToScene(
             assets,
@@ -931,7 +1213,45 @@ void SectorMeshRenderer::ApplyEmissiveDecalBloomToScene(engine::AssetManager& as
             meshes.sectorDrawRecords,
             visibilityResult,
             textureHandlesById,
-            sceneTarget);
+            sceneTarget,
+            BuildSectorFogRenderContext(fogSettings, camera.position));
+}
+
+bool SectorMeshRenderer::ApplyLocalFogToScene(
+        RenderTexture2D& sceneTarget,
+        const SectorTopologyMap& map,
+        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes)
+{
+    const SectorBillboardDynamicLightContext dynamicLightContext =
+            BuildBillboardDynamicLightContext();
+    const bool localFogApplied = localFogRenderer.Apply(
+            sceneTarget,
+            map,
+            camera,
+            runtimeSeconds,
+            objectLightProbes,
+            dynamicLightContext);
+    const bool lightHazeApplied = lightHazeRenderer.Apply(
+            sceneTarget,
+            map,
+            camera,
+            runtimeSeconds,
+            objectLightProbes,
+            dynamicLightContext,
+            lightAtmosphereSources,
+            visibilityResult,
+            meshes.sectorReceiverBounds);
+    const bool lightDustApplied = lightDustRenderer.Apply(
+            sceneTarget,
+            map,
+            camera,
+            runtimeSeconds,
+            objectLightProbes,
+            dynamicLightContext,
+            lightAtmosphereSources,
+            visibilityResult,
+            meshes.sectorReceiverBounds);
+    return localFogApplied || lightHazeApplied || lightDustApplied;
 }
 
 SectorViewPose SectorMeshRenderer::Pose() const
@@ -963,6 +1283,13 @@ void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map
     dynamicLightState.RebuildSources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
+    dynamicModelShadowRenderer.RebuildSources(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
+    BuildSectorLightAtmosphereSources(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+            lightAtmosphereSources);
     UpdateVisibilityDebug();
 }
 
@@ -984,7 +1311,7 @@ void SectorMeshRenderer::UpdateVisibilityDebug(
                 visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
                 Vector2{camera.position.x, camera.position.z},
                 PreviewYawForwardXZ(yawRadians),
-                VisibilityDebugHorizontalFovRadians(camera),
+                VisibilityDebugHorizontalFovRadians(camera, pitchRadians),
                 preferredStartSectorId,
                 0,
                 visibilitySeedRadiusWorld,
@@ -1045,6 +1372,15 @@ engine::TextureHandle SectorMeshRenderer::TextureForId(const std::string& textur
         return engine::NullTextureHandle();
     }
 
+    return it->second;
+}
+
+engine::TextureHandle SectorMeshRenderer::NormalTextureForId(const std::string& textureId) const
+{
+    const auto it = normalTextureHandlesById.find(textureId);
+    if (it == normalTextureHandlesById.end()) {
+        return engine::NullTextureHandle();
+    }
     return it->second;
 }
 

@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologySerialization.h"
+#include "sector_demo/SectorStaticModelLightmap.h"
 
 #include <raylib.h>
 
@@ -29,6 +30,16 @@ bool SectorDemo::Init(engine::EngineContext& context, const char* mapPath)
     if (!LoadSectorTopologyMap(mapPath, topologyMap, &error)) {
         std::fprintf(stderr, "[SectorDemo ERROR] %s\n", error.c_str());
         return false;
+    }
+    std::string fingerprintError;
+    if (!RefreshSectorStaticModelGeometryFingerprints(
+                topologyMap,
+                fingerprintError)
+            && !fingerprintError.empty()) {
+        std::fprintf(
+                stderr,
+                "[SectorDemo WARNING] %s\n",
+                fingerprintError.c_str());
     }
 
     ResetSectorRuntimeObjectsForMap(context.world, assets, runtimeObjects, topologyMap);
@@ -97,6 +108,9 @@ void SectorDemo::Update(engine::EngineContext& context, float dt)
                 });
     }
     UpdateSectorRuntimeObjects(context.world, context.assets, runtimeObjects, topologyMap, dt, &playerPosition);
+    preview.FinalizeRuntimeObjectResources(
+            context.assets,
+            context.world);
     preview.AdvanceRuntime(dt);
 
     UpdateSectorFreeflyController(freeflyController, input, dt);
@@ -110,7 +124,8 @@ void SectorDemo::Render(engine::EngineContext& context)
             context.assets,
             true,
             &context.world,
-            SectorRuntimeDoorLightingContext{&runtimeObjects.objectLightProbes, &topologyMap});
+            SectorRuntimeDoorLightingContext{&runtimeObjects.objectLightProbes, &topologyMap},
+            topologyMap.fogSettings);
 }
 
 void SectorDemo::RenderOverlay(engine::AssetManager& assets)
@@ -121,7 +136,7 @@ void SectorDemo::RenderOverlay(engine::AssetManager& assets)
 
     const Vector3 position = preview.Position();
     DrawText("Sector Mesh Demo", 40, 36, 30, RAYWHITE);
-    DrawText("WASD move  |  Mouse look  |  Space/Ctrl up/down  |  F interact  |  F4 dynamic lights  |  F11 cursor toggle", 40, 76, 20, LIGHTGRAY);
+    DrawText("WASD move  |  Mouse look  |  Space/Ctrl up/down  |  F interact  |  F4 dynamic lights  |  F10 borderless  |  F11 cursor", 40, 76, 20, LIGHTGRAY);
     DrawText(
             TextFormat(
                     "pos %.2f %.2f %.2f   sectors %zu   batches %zu   assets %.0f%%",

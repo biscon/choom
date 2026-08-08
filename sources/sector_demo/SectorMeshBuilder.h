@@ -30,6 +30,7 @@ struct SectorMeshBatchVertex {
 
 struct SectorMeshBatchData {
     int sectorId = -1;
+    int lightmapAtlasIndex = -1;
     std::string textureId;
     std::string decalTextureId;
     float decalOpacity = 1.0f;

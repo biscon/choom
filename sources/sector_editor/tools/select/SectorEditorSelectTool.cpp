@@ -65,6 +65,10 @@ bool SelectPickTarget(SectorEditorToolContext& context, SectorEditorPickTarget t
             SelectSectorEditorAuthoringFaceAnchorTarget(selectionContext, target.id);
             return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
                     && context.selectionState.selectedAuthoring.faceAnchorId == target.id;
+        case SectorEditorPickKind::AuthoringFogVolume:
+            SelectSectorEditorAuthoringFogVolumeTarget(selectionContext, target.id);
+            return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FogVolume
+                    && context.selectionState.selectedAuthoring.fogVolumeId == target.id;
         case SectorEditorPickKind::None:
             ClearSectorEditorSelection(selectionContext);
             return true;
@@ -89,6 +93,11 @@ void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
                     target.id);
         } else if (target.kind == SectorEditorPickKind::AuthoringLine) {
             SetHoveredSectorEditorAuthoringLine(
+                    context.authoringGraph,
+                    context.selectionState,
+                    target.id);
+        } else if (target.kind == SectorEditorPickKind::AuthoringFogVolume) {
+            SetHoveredSectorEditorAuthoringFogVolume(
                     context.authoringGraph,
                     context.selectionState,
                     target.id);

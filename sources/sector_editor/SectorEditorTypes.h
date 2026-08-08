@@ -30,7 +30,10 @@ enum class SectorEditorTool {
     AuthoringInsertVertex,
     AuthoringMove,
     RuntimeObject,
+    StaticModel,
+    DynamicModel,
     Door,
+    AuthoringFogVolume,
     StaticLight,
     StaticSpotLight,
     DynamicLight,
@@ -79,7 +82,6 @@ struct SectorEditorState {
     PendingAuthoringLineDraw pendingAuthoringLine;
     PendingAuthoringRectangleDraw pendingAuthoringRectangle;
     PendingAuthoringInsertVertex pendingAuthoringInsertVertex;
-    RuntimeObjectDragState runtimeObjectDrag;
     float defaultSectorFloorZ = 0.0f;
     float defaultSectorCeilingZ = SectorWorldToAuthoringDistance(3.0f);
     std::string defaultFloorTextureId;
@@ -93,11 +95,6 @@ struct SectorEditorState {
     bool showSectorIds = true;
     TexturePickerState texturePicker;
     AddMapTextureState addMapTexture;
-    SectorSpriteMetadataCatalog spriteMetadataCatalog;
-    int billboardMetadataObjectId = -1;
-    std::string billboardMetadataSpriteAnimationPath;
-    bool billboardMetadataInitialRepairAttempted = false;
-    SpritePickerState spritePicker;
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;
@@ -132,6 +129,26 @@ struct SectorEditorUiState {
     engine::UIFloatInputState lightShadowBiasInput;
     engine::UIFloatInputState lightShadowStrengthInput;
     engine::UIFloatInputState lightShadowSoftnessInput;
+    engine::UIFloatInputState lightHazeExtentScaleInput;
+    engine::UIFloatInputState lightHazeDensityInput;
+    engine::UIFloatInputState lightHazeEdgeSoftnessInput;
+    engine::UIFloatInputState lightHazeNoiseAmountInput;
+    engine::UIFloatInputState lightHazeNoiseScaleInput;
+    engine::UIFloatInputState lightHazeFlowDirectionInput;
+    engine::UIFloatInputState lightHazeFlowSpeedInput;
+    engine::UIIntInputState lightHazeRedInput;
+    engine::UIIntInputState lightHazeGreenInput;
+    engine::UIIntInputState lightHazeBlueInput;
+    engine::UIIntInputState lightDustAmountInput;
+    engine::UIFloatInputState lightDustExtentScaleInput;
+    engine::UIFloatInputState lightDustMinimumSizeInput;
+    engine::UIFloatInputState lightDustMaximumSizeInput;
+    engine::UIFloatInputState lightDustOpacityInput;
+    engine::UIFloatInputState lightDustDriftSpeedInput;
+    engine::UIFloatInputState lightDustTurbulenceInput;
+    engine::UIIntInputState lightDustRedInput;
+    engine::UIIntInputState lightDustGreenInput;
+    engine::UIIntInputState lightDustBlueInput;
     engine::UIFloatInputState ambientOcclusionRadiusInput;
     engine::UIFloatInputState ambientOcclusionStrengthInput;
     engine::UIFloatInputState indirectBounceRadiusInput;
@@ -140,21 +157,6 @@ struct SectorEditorUiState {
     engine::UIIntInputState lightRedInput;
     engine::UIIntInputState lightGreenInput;
     engine::UIIntInputState lightBlueInput;
-    engine::UIFloatInputState runtimeObjectXInput;
-    engine::UIFloatInputState runtimeObjectYInput;
-    engine::UIFloatInputState runtimeObjectZInput;
-    engine::UIFloatInputState runtimeObjectYawInput;
-    engine::UIFloatInputState runtimeObjectWidthInput;
-    engine::UIFloatInputState runtimeObjectHeightInput;
-    engine::UIFloatInputState runtimeObjectThicknessInput;
-    engine::UIFloatInputState runtimeObjectNormalOffsetInput;
-    engine::UIFloatInputState runtimeObjectOpenDistanceInput;
-    engine::UIFloatInputState runtimeObjectSpeedInput;
-    engine::UIFloatInputState runtimeObjectInitialOpenFractionInput;
-    engine::UIFloatInputState runtimeObjectAutoOpenDistanceInput;
-    engine::UIFloatInputState runtimeObjectInteractionDistanceInput;
-    engine::UIFloatInputState runtimeObjectOriginXInput;
-    engine::UIFloatInputState runtimeObjectOriginYInput;
     engine::UIScrollState toolsScroll;
     engine::UIScrollState inspectorScroll;
     bool keyboardCaptured = false;

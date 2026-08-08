@@ -71,6 +71,28 @@ struct SectorEditorLightEditingServiceContext {
         engine::UIIntInputState& lightGreenInput;
         engine::UIIntInputState& lightBlueInput;
         InspectorIdUiState& inspectorIdUiState;
+        struct AtmosphereRefs {
+            engine::UIFloatInputState* hazeExtentScaleInput = nullptr;
+            engine::UIFloatInputState* hazeDensityInput = nullptr;
+            engine::UIFloatInputState* hazeEdgeSoftnessInput = nullptr;
+            engine::UIFloatInputState* hazeNoiseAmountInput = nullptr;
+            engine::UIFloatInputState* hazeNoiseScaleInput = nullptr;
+            engine::UIFloatInputState* hazeFlowDirectionInput = nullptr;
+            engine::UIFloatInputState* hazeFlowSpeedInput = nullptr;
+            engine::UIIntInputState* hazeRedInput = nullptr;
+            engine::UIIntInputState* hazeGreenInput = nullptr;
+            engine::UIIntInputState* hazeBlueInput = nullptr;
+            engine::UIIntInputState* dustAmountInput = nullptr;
+            engine::UIFloatInputState* dustExtentScaleInput = nullptr;
+            engine::UIFloatInputState* dustMinimumSizeInput = nullptr;
+            engine::UIFloatInputState* dustMaximumSizeInput = nullptr;
+            engine::UIFloatInputState* dustOpacityInput = nullptr;
+            engine::UIFloatInputState* dustDriftSpeedInput = nullptr;
+            engine::UIFloatInputState* dustTurbulenceInput = nullptr;
+            engine::UIIntInputState* dustRedInput = nullptr;
+            engine::UIIntInputState* dustGreenInput = nullptr;
+            engine::UIIntInputState* dustBlueInput = nullptr;
+        } atmosphere;
     } ui;
     std::string& statusText;
 };
@@ -105,6 +127,9 @@ public:
     bool SetStaticLightRadius(SectorTopologyStaticPointLight& light, float radius);
     bool SetStaticLightSourceRadius(SectorTopologyStaticPointLight& light, float sourceRadius);
     bool SetStaticLightColor(SectorTopologyStaticPointLight& light, Color color);
+    bool SetStaticLightAtmosphere(
+            SectorTopologyStaticPointLight& light,
+            SectorLightAtmosphereSettings settings);
 
     bool SetStaticSpotLightPosition(SectorTopologyStaticSpotLight& light, Vector3 position);
     bool SetStaticSpotLightTarget(SectorTopologyStaticSpotLight& light, Vector3 target);
@@ -114,6 +139,9 @@ public:
     bool SetStaticSpotLightOuterCone(SectorTopologyStaticSpotLight& light, float outerConeDegrees);
     bool SetStaticSpotLightIntensity(SectorTopologyStaticSpotLight& light, float intensity);
     bool SetStaticSpotLightColor(SectorTopologyStaticSpotLight& light, Color color);
+    bool SetStaticSpotLightAtmosphere(
+            SectorTopologyStaticSpotLight& light,
+            SectorLightAtmosphereSettings settings);
 
     bool SetDynamicLightEnabled(SectorTopologyDynamicPointLight& light, bool enabled);
     bool SetDynamicLightFlicker(SectorTopologyDynamicPointLight& light, bool flicker);
@@ -123,6 +151,9 @@ public:
     bool SetDynamicLightIntensity(SectorTopologyDynamicPointLight& light, float intensity);
     bool SetDynamicLightRadius(SectorTopologyDynamicPointLight& light, float radius);
     bool SetDynamicLightColor(SectorTopologyDynamicPointLight& light, Color color);
+    bool SetDynamicLightAtmosphere(
+            SectorTopologyDynamicPointLight& light,
+            SectorLightAtmosphereSettings settings);
 
     bool SetDynamicSpotLightEnabled(SectorTopologyDynamicSpotLight& light, bool enabled);
     bool SetDynamicSpotLightFlicker(SectorTopologyDynamicSpotLight& light, bool flicker);
@@ -140,6 +171,9 @@ public:
     bool SetDynamicSpotLightInnerCone(SectorTopologyDynamicSpotLight& light, float innerConeDegrees);
     bool SetDynamicSpotLightOuterCone(SectorTopologyDynamicSpotLight& light, float outerConeDegrees);
     bool SetDynamicSpotLightColor(SectorTopologyDynamicSpotLight& light, Color color);
+    bool SetDynamicSpotLightAtmosphere(
+            SectorTopologyDynamicSpotLight& light,
+            SectorLightAtmosphereSettings settings);
 
 private:
     void MarkEdited(const char* status);

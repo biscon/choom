@@ -4,6 +4,7 @@
 
 #include <raylib.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <sstream>
 
@@ -11,7 +12,10 @@ namespace game {
 
 std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& result)
 {
-    const double atlasPixels = static_cast<double>(result.width) * static_cast<double>(result.height);
+    const size_t atlasCount = std::max<size_t>(1, result.atlases.size());
+    const double atlasPixels = static_cast<double>(result.width)
+            * static_cast<double>(result.height)
+            * static_cast<double>(atlasCount);
     const double validAtlasOccupancy = atlasPixels > 0.0
             ? (static_cast<double>(result.validChartTexels) / atlasPixels) * 100.0
             : 0.0;
@@ -44,8 +48,9 @@ std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& resul
 
     std::ostringstream report;
     report << "Lightmap bake report\n";
-    report << TextFormat("  Atlas: %d x %d\n", result.width, result.height);
-    report << TextFormat("  Atlas pixels: %llu\n", static_cast<unsigned long long>(static_cast<uint64_t>(result.width) * static_cast<uint64_t>(result.height)));
+    report << TextFormat("  Atlases: %zu\n", atlasCount);
+    report << TextFormat("  Atlas size: %d x %d\n", result.width, result.height);
+    report << TextFormat("  Atlas pixels: %llu\n", static_cast<unsigned long long>(static_cast<uint64_t>(result.width) * static_cast<uint64_t>(result.height) * static_cast<uint64_t>(atlasCount)));
     report << TextFormat("  Valid chart texels: %d\n", result.validChartTexels);
     report << TextFormat("  Valid atlas occupancy: %.2f%%\n", validAtlasOccupancy);
     report << TextFormat("  Allocated chart rectangle pixels: %d\n", result.allocatedChartRectanglePixels);

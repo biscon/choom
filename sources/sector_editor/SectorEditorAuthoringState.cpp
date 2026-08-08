@@ -24,7 +24,8 @@ bool HasAuthoringGraphData(const SectorAuthoringGraph& graph)
     return !graph.vertices.empty()
             || !graph.lines.empty()
             || !graph.lineSides.empty()
-            || !graph.faceAnchors.empty();
+            || !graph.faceAnchors.empty()
+            || !graph.fogVolumes.empty();
 }
 
 namespace {
@@ -45,6 +46,7 @@ void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap
     target.previewSettings = source.previewSettings;
     target.skySettings = source.skySettings;
     target.directionalLight = source.directionalLight;
+    target.fogSettings = source.fogSettings;
     target.lightmapSettings = source.lightmapSettings;
     target.bakedLightmap = source.bakedLightmap;
 }
@@ -1343,6 +1345,16 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringFaceAnchorSelectionTarget(int 
     return target;
 }
 
+SectorAuthoringSelectionTarget MakeSectorAuthoringFogVolumeSelectionTarget(int fogVolumeId)
+{
+    SectorAuthoringSelectionTarget target;
+    if (IsValidSectorAuthoringId(fogVolumeId)) {
+        target.kind = SectorAuthoringSelectionKind::FogVolume;
+        target.fogVolumeId = fogVolumeId;
+    }
+    return target;
+}
+
 bool SectorAuthoringSelectionTargetsEqual(
         SectorAuthoringSelectionTarget lhs,
         SectorAuthoringSelectionTarget rhs)
@@ -1350,7 +1362,8 @@ bool SectorAuthoringSelectionTargetsEqual(
     return lhs.kind == rhs.kind
             && lhs.lineId == rhs.lineId
             && lhs.vertexId == rhs.vertexId
-            && lhs.faceAnchorId == rhs.faceAnchorId;
+            && lhs.faceAnchorId == rhs.faceAnchorId
+            && lhs.fogVolumeId == rhs.fogVolumeId;
 }
 
 bool IsSectorAuthoringSelectionTargetValid(
@@ -1359,19 +1372,28 @@ bool IsSectorAuthoringSelectionTargetValid(
 {
     switch (target.kind) {
     case SectorAuthoringSelectionKind::None:
-        return target.lineId == -1 && target.vertexId == -1 && target.faceAnchorId == -1;
+        return target.lineId == -1 && target.vertexId == -1 && target.faceAnchorId == -1
+                && target.fogVolumeId == -1;
     case SectorAuthoringSelectionKind::Line:
         return target.vertexId == -1
                 && target.faceAnchorId == -1
+                && target.fogVolumeId == -1
                 && FindSectorAuthoringLine(graph, target.lineId) != nullptr;
     case SectorAuthoringSelectionKind::Vertex:
         return target.lineId == -1
                 && target.faceAnchorId == -1
+                && target.fogVolumeId == -1
                 && FindSectorAuthoringVertex(graph, target.vertexId) != nullptr;
     case SectorAuthoringSelectionKind::FaceAnchor:
         return target.lineId == -1
                 && target.vertexId == -1
+                && target.fogVolumeId == -1
                 && FindSectorAuthoringFaceAnchor(graph, target.faceAnchorId) != nullptr;
+    case SectorAuthoringSelectionKind::FogVolume:
+        return target.lineId == -1
+                && target.vertexId == -1
+                && target.faceAnchorId == -1
+                && FindSectorAuthoringFogVolume(graph, target.fogVolumeId) != nullptr;
     }
     return false;
 }
@@ -1429,6 +1451,21 @@ bool SelectSectorEditorAuthoringFaceAnchor(
     return true;
 }
 
+bool SelectSectorEditorAuthoringFogVolume(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int fogVolumeId)
+{
+    const SectorAuthoringSelectionTarget target =
+            MakeSectorAuthoringFogVolumeSelectionTarget(fogVolumeId);
+    if (target.kind != SectorAuthoringSelectionKind::FogVolume
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
+        return false;
+    }
+    selectionState.selectedAuthoring = target;
+    return true;
+}
+
 void ClearSectorEditorAuthoringHover(SelectionState& selectionState)
 {
     selectionState.hoveredAuthoring = EmptyAuthoringSelectionTarget();
@@ -1462,6 +1499,21 @@ bool SetHoveredSectorEditorAuthoringVertex(
         return false;
     }
 
+    selectionState.hoveredAuthoring = target;
+    return true;
+}
+
+bool SetHoveredSectorEditorAuthoringFogVolume(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int fogVolumeId)
+{
+    const SectorAuthoringSelectionTarget target =
+            MakeSectorAuthoringFogVolumeSelectionTarget(fogVolumeId);
+    if (target.kind != SectorAuthoringSelectionKind::FogVolume
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
+        return false;
+    }
     selectionState.hoveredAuthoring = target;
     return true;
 }
@@ -2640,6 +2692,15 @@ SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::AuthoringVertex;
         target.vertexId = selectionState.selectedAuthoring.vertexId;
+        return target;
+    }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FogVolume
+            && FindSectorAuthoringFogVolume(
+                    authoringGraph,
+                    selectionState.selectedAuthoring.fogVolumeId) != nullptr) {
+        SectorEditorInspectorTarget target;
+        target.kind = SectorEditorInspectorTargetKind::AuthoringFogVolume;
+        target.fogVolumeId = selectionState.selectedAuthoring.fogVolumeId;
         return target;
     }
 

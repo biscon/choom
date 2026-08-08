@@ -52,35 +52,6 @@ void AppendRequest(
     }
 }
 
-void OpenSelectedBillboardSpritePickerForInspector(
-        SectorEditorState& state,
-        std::string& statusText,
-        const SectorPlacedRuntimeObject* object)
-{
-    if (object == nullptr || object->kind != "billboard") {
-        statusText = "Select a billboard first.";
-        return;
-    }
-    OpenBillboardSpritePicker(state.spritePicker, object->billboard.spriteAnimationPath);
-}
-
-void OpenSelectedDoorTexturePickerForInspector(
-        SectorEditorState& state,
-        const SectorTopologyMap& topologyMap,
-        const SectorAuthoringGraph& authoringGraph,
-        SectorEditorTextureCatalogService& textureCatalog,
-        std::string& statusText,
-        const SectorPlacedRuntimeObject* object)
-{
-    if (object == nullptr || object->kind != "door") {
-        statusText = "Select a door first.";
-        return;
-    }
-    if (!OpenRuntimeDoorTexturePicker(state, topologyMap, authoringGraph, textureCatalog, object->id)) {
-        statusText = "No door texture target";
-    }
-}
-
 bool TryRenameSelectedDerivedSectorAuthoringNameForInspector(
         SectorEditorState& state,
         SectorEditorDocumentLifecycleAccess lifecycle,
@@ -361,7 +332,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     MaterialEditingUiState& materialUiState = context.materialUiState;
     std::string& statusText = context.statusText;
     SectorEditorSelectionServiceContext& selection = context.selection;
-    SectorEditorPlacedObjectActionContext& placedObjectActions = context.placedObjectActions;
+    SectorEditorRuntimeObjectEditingService& runtimeObjectEditing =
+            context.runtimeObjectEditing;
     SectorEditorMaterialEditingService& materialEditing = context.materialEditing;
     SectorEditorTextureCatalogService& textureCatalog = context.textureCatalog;
     SectorEditorLightEditingService& lightEditing = context.lightEditing;
@@ -375,7 +347,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     auto selectedStaticSpotLight = [&]() { return SelectedSectorEditorTopologyStaticSpotLight(selection); };
     auto selectedDynamicLight = [&]() { return SelectedSectorEditorTopologyDynamicLight(selection); };
     auto selectedDynamicSpotLight = [&]() { return SelectedSectorEditorTopologyDynamicSpotLight(selection); };
-    auto selectedRuntimeObject = [&]() { return SelectedSectorEditorRuntimeObject(selection); };
+    auto selectedRuntimeObject = [&]() {
+        return runtimeObjectEditing.SelectedObject();
+    };
 
     const engine::UIPanelResult panel = engine::BeginPanel(
             ui,
@@ -425,6 +399,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringVertex
             ? FindSectorAuthoringVertex(authoringGraph, inspectorTarget.vertexId)
             : nullptr;
+    const SectorAuthoringFogVolume* selectedAuthoringFogVolume =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringFogVolume
+            ? FindSectorAuthoringFogVolume(authoringGraph, inspectorTarget.fogVolumeId)
+            : nullptr;
     const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
             context.topologyMap,
             selectionState.inspectedTopologyVertexId);
@@ -447,66 +425,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             SectorEditorPanelScrollPaddingPx,
             false);
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
-    const SectorEditorPlacedObjectInspectorCallbacks runtimeObjectInspectorCallbacks{
-            [&]() { return selectedRuntimeObject(); },
-            [&](
-                    const char* status,
-                    const std::function<bool(SectorPlacedRuntimeObject&)>& mutate) {
-                return MutateSelectedSectorEditorPlacedObject(placedObjectActions, status, mutate);
-            },
-            [&]() { OpenSelectedBillboardSpritePickerForInspector(state, statusText, selectedRuntimeObject()); },
-            [&]() {
-                OpenSelectedDoorTexturePickerForInspector(
-                        state,
-                        context.topologyMap,
-                        context.authoringGraph,
-                        textureCatalog,
-                        statusText,
-                        selectedRuntimeObject());
-            },
-            [&]() { OpenSectorEditorDoorTextureSettingsModal(state.doorTextureSettingsModal, selectedRuntimeObject(), statusText); },
-            [&]() {
-                AppendRequest(result, SectorEditorInspectorPanelRequestKind::DeleteSelectedRuntimeObject);
-                return true;
-            },
-            [&](bool& outOpen) {
-                const SectorPlacedRuntimeObject* selectedObject = selectedRuntimeObject();
-                if (selectedObject == nullptr || engineContext == nullptr) {
-                    return false;
-                }
-                for (const SectorPlacedRuntimeObjectEntity& entry : placedObjectActions.runtimeObjects.placedObjectEntities) {
-                    if (entry.placedObjectId != selectedObject->id
-                            || !engineContext->world.IsAlive(entry.entity)
-                            || !engineContext->world.Has<SectorDoorMotion>(entry.entity)) {
-                        continue;
-                    }
-                    const SectorDoorMotion& motion = engineContext->world.Get<SectorDoorMotion>(entry.entity);
-                    outOpen = std::isfinite(motion.targetOpenFraction)
-                            && motion.targetOpenFraction > 0.5f;
-                    return true;
-                }
-                return false;
-            },
-            [&](bool open) {
-                const SectorPlacedRuntimeObject* selectedObject = selectedRuntimeObject();
-                if (selectedObject == nullptr || engineContext == nullptr) {
-                    return;
-                }
-                for (const SectorPlacedRuntimeObjectEntity& entry : placedObjectActions.runtimeObjects.placedObjectEntities) {
-                    if (entry.placedObjectId != selectedObject->id
-                            || !engineContext->world.IsAlive(entry.entity)
-                            || !engineContext->world.Has<SectorDoorMotion>(entry.entity)) {
-                        continue;
-                    }
-                    SectorDoorMotion& motion = engineContext->world.Get<SectorDoorMotion>(entry.entity);
-                    motion.targetOpenFraction = open ? 1.0f : 0.0f;
-                    statusText = open
-                            ? "Door debug runtime target: open"
-                            : "Door debug runtime target: close";
-                    return;
-                }
-            }
-    };
+    bool deleteRuntimeObjectRequested = false;
     const auto inspectorContentHeight = [&]() {
         if (inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringUnavailable) {
             return 120.0f;
@@ -516,11 +435,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     assets,
                     smallFont,
                     smallConfig,
-                    state,
                     context.topologyMap,
-                    placedObjectActions.runtimeObjects,
+                    context.runtimeObjects,
                     engineContext,
-                    runtimeObjectInspectorCallbacks,
+                    runtimeObjectEditing,
+                    context.runtimeObjectEditingState,
                     textureCatalog,
                     scrollContentW,
                     rowH,
@@ -529,13 +448,16 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             return MeasureSectorEditorPlacedObjectInspectorContentHeight(runtimeObjectMeasureContext);
         }
         if (hasSelectedLight) {
-            return StaticLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
+            return StaticLightInspectorContentHeight(
+                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedStaticLight()->atmosphere);
         }
         if (hasSelectedStaticSpotLight) {
-            return StaticSpotLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
+            return StaticSpotLightInspectorContentHeight(
+                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedStaticSpotLight()->atmosphere);
         }
         if (hasSelectedDynamicLight) {
-            return DynamicLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
+            return DynamicLightInspectorContentHeight(
+                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedDynamicLight()->atmosphere);
         }
         if (hasSelectedDynamicSpotLight) {
             const float shadowNoteHeight = MeasureSectorEditorWrappedTextHeight(
@@ -547,7 +469,12 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                             MaxDynamicSpotLightShadowCasters),
                     scrollContentW,
                     2);
-            return DynamicSpotLightInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty(), shadowNoteHeight);
+            return DynamicSpotLightInspectorContentHeight(
+                    rowH,
+                    gap,
+                    !context.inspectorIdUiState.idEditError.empty(),
+                    shadowNoteHeight,
+                    selectedDynamicSpotLight()->atmosphere);
         }
         if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
             return SectorInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
@@ -604,6 +531,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         if (selectedAuthoringVertex != nullptr) {
             return 120.0f;
         }
+        if (selectedAuthoringFogVolume != nullptr) {
+            return 38.0f + (rowH + gap) * 18.0f + 28.0f;
+        }
         return 42.0f;
     };
     const float contentH = inspectorContentHeight();
@@ -659,17 +589,27 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 smallFont,
                 scroll,
                 state,
+                context.authoringGraph,
                 context.topologyMap,
-                placedObjectActions.runtimeObjects,
-                uiState,
+                context.runtimeObjects,
+                context.runtimeObjectEditingUiState,
                 engineContext,
-                runtimeObjectInspectorCallbacks,
+                runtimeObjectEditing,
+                context.runtimeObjectEditingState,
+                context.staticModelPicker,
+                statusText,
+                deleteRuntimeObjectRequested,
                 textureCatalog,
                 contentW,
                 rowH,
                 gap
         };
         DrawSectorEditorPlacedObjectInspector(runtimeObjectInspectorContext);
+        if (deleteRuntimeObjectRequested) {
+            AppendRequest(
+                    result,
+                    SectorEditorInspectorPanelRequestKind::DeleteSelectedRuntimeObject);
+        }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;
@@ -912,6 +852,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     if (hasSelectedLight) {
         bool deleteRequested = false;
         bool bakeRequested = false;
+        bool sourceRefreshRequested = false;
         DrawSelectedStaticLightInspector(
                 ui,
                 config,
@@ -927,12 +868,16 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
-                bakeRequested);
+                bakeRequested,
+                sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
         }
         if (bakeRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
+        }
+        if (sourceRefreshRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
@@ -942,6 +887,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     if (hasSelectedStaticSpotLight) {
         bool deleteRequested = false;
         bool bakeRequested = false;
+        bool sourceRefreshRequested = false;
         DrawSelectedStaticSpotLightInspector(
                 ui,
                 config,
@@ -957,12 +903,16 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
-                bakeRequested);
+                bakeRequested,
+                sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
         }
         if (bakeRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
+        }
+        if (sourceRefreshRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
@@ -971,6 +921,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedDynamicLight) {
         bool deleteRequested = false;
+        bool sourceRefreshRequested = false;
         DrawSelectedDynamicLightInspector(
                 ui,
                 config,
@@ -985,9 +936,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 uiState,
                 context.inspectorIdUiState,
                 lightEditing,
-                deleteRequested);
+                deleteRequested,
+                sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (sourceRefreshRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
@@ -996,6 +951,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedDynamicSpotLight) {
         bool deleteRequested = false;
+        bool sourceRefreshRequested = false;
         DrawSelectedDynamicSpotLightInspector(
                 ui,
                 config,
@@ -1011,9 +967,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 uiState,
                 context.inspectorIdUiState,
                 lightEditing,
-                deleteRequested);
+                deleteRequested,
+                sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (sourceRefreshRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
@@ -2145,6 +2105,149 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                         SectorCoordToVisibleAuthoring(selectedAuthoringVertex->y)),
                 engine::UITextJustify::Left,
                 config.mutedTextColor);
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
+    if (selectedAuthoringFogVolume != nullptr) {
+        SectorEditorAuthoringFogVolumeEditingService& editing = context.fogVolumeEditing;
+        FogVolumeEditingUiState& fogUi = context.fogVolumeUiState;
+        const int fogVolumeId = selectedAuthoringFogVolume->id;
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                TextFormat("Authoring Fog Volume: %d", fogVolumeId),
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+
+        bool enabled = selectedAuthoringFogVolume->enabled;
+        if (engine::Checkbox(
+                    ui, config, input, assets,
+                    "sector_editor_fog_volume_enabled",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font, "Enabled", enabled)) {
+            editing.MutateById(fogVolumeId, "Updated authoring fog volume", [enabled](SectorAuthoringFogVolume& volume) {
+                if (volume.enabled == enabled) return false;
+                volume.enabled = enabled;
+                return true;
+            });
+        }
+        y += rowH + gap;
+
+        const auto drawFloat = [&](const char* id,
+                                   const char* label,
+                                   float current,
+                                   size_t inputIndex,
+                                   float minimum,
+                                   float maximum,
+                                   int decimals,
+                                   float SectorAuthoringFogVolume::*member) {
+            const SectorEditorInspectorNumericRowLayout layout =
+                    BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+            const SectorEditorFloatInputResult value = DrawLabeledFloatInput(
+                    ui, config, input, assets, font,
+                    id, label,
+                    layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right,
+                    current,
+                    fogUi.floatInputs[inputIndex],
+                    minimum, maximum, decimals);
+            if (value.changed && value.value != current) {
+                editing.MutateById(fogVolumeId, "Updated authoring fog volume", [member, value](SectorAuthoringFogVolume& volume) {
+                    if (volume.*member == value.value) return false;
+                    volume.*member = value.value;
+                    return true;
+                });
+            }
+            y += rowH + gap;
+        };
+
+        const auto drawPosition = [&](const char* id, const char* label, bool xAxis, size_t inputIndex) {
+            const float current = xAxis
+                    ? SectorCoordToVisibleAuthoring(selectedAuthoringFogVolume->x)
+                    : SectorCoordToVisibleAuthoring(selectedAuthoringFogVolume->y);
+            const SectorEditorInspectorNumericRowLayout layout =
+                    BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+            const SectorEditorFloatInputResult value = DrawLabeledFloatInput(
+                    ui, config, input, assets, font,
+                    id, label,
+                    layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right,
+                    current,
+                    fogUi.floatInputs[inputIndex],
+                    -8192.0f, 8192.0f, 3);
+            if (value.changed && value.value != current) {
+                SectorCoord coord = 0;
+                if (!VisibleAuthoringToSectorCoord(value.value, coord)) {
+                    statusText = "Fog volume position is outside the authoring coordinate range";
+                } else {
+                    SectorTopologyCoordPoint point{
+                            selectedAuthoringFogVolume->x,
+                            selectedAuthoringFogVolume->y};
+                    if (xAxis) point.x = coord; else point.y = coord;
+                    editing.SetPosition(fogVolumeId, point, "Moved authoring fog volume");
+                }
+            }
+            y += rowH + gap;
+        };
+
+        drawPosition("sector_editor_fog_volume_x", "Center X", true, 0);
+        drawPosition("sector_editor_fog_volume_z", "Center Z", false, 1);
+        drawFloat("sector_editor_fog_volume_bottom", "Bottom offset", selectedAuthoringFogVolume->bottomOffsetWorld, 2, -16.0f, 16.0f, 3, &SectorAuthoringFogVolume::bottomOffsetWorld);
+        drawFloat("sector_editor_fog_volume_radius_x", "Radius X", selectedAuthoringFogVolume->radiusXWorld, 3, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusXWorld);
+        drawFloat("sector_editor_fog_volume_radius_z", "Radius Z", selectedAuthoringFogVolume->radiusZWorld, 4, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusZWorld);
+        drawFloat("sector_editor_fog_volume_height", "Height", selectedAuthoringFogVolume->heightWorld, 5, 0.05f, 32.0f, 3, &SectorAuthoringFogVolume::heightWorld);
+        drawFloat("sector_editor_fog_volume_density", "Density", selectedAuthoringFogVolume->density, 6, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::density);
+        drawFloat("sector_editor_fog_volume_opacity", "Max opacity", selectedAuthoringFogVolume->maxOpacity, 7, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::maxOpacity);
+        drawFloat("sector_editor_fog_volume_softness", "Edge softness", selectedAuthoringFogVolume->edgeSoftness, 8, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::edgeSoftness);
+        drawFloat("sector_editor_fog_volume_noise_scale", "Noise scale", selectedAuthoringFogVolume->noiseScaleWorld, 9, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::noiseScaleWorld);
+        drawFloat("sector_editor_fog_volume_noise_amount", "Noise amount", selectedAuthoringFogVolume->noiseAmount, 10, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::noiseAmount);
+        drawFloat("sector_editor_fog_volume_flow_direction", "Flow direction", selectedAuthoringFogVolume->flowDirectionDegrees, 11, 0.0f, 360.0f, 2, &SectorAuthoringFogVolume::flowDirectionDegrees);
+        drawFloat("sector_editor_fog_volume_flow_speed", "Flow speed", selectedAuthoringFogVolume->flowSpeedWorld, 12, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::flowSpeedWorld);
+
+        for (int channel = 0; channel < 3; ++channel) {
+            const char* labels[] = {"Color R", "Color G", "Color B"};
+            const char* ids[] = {
+                    "sector_editor_fog_volume_color_r",
+                    "sector_editor_fog_volume_color_g",
+                    "sector_editor_fog_volume_color_b"};
+            const unsigned char channels[] = {
+                    selectedAuthoringFogVolume->color.r,
+                    selectedAuthoringFogVolume->color.g,
+                    selectedAuthoringFogVolume->color.b};
+            const SectorEditorInspectorNumericRowLayout layout =
+                    BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+            const SectorEditorIntInputResult value = DrawLabeledIntInput(
+                    ui, config, input, assets, font,
+                    ids[channel], labels[channel],
+                    layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right,
+                    channels[channel],
+                    fogUi.colorInputs[static_cast<size_t>(channel)],
+                    0, 255, 1);
+            if (value.changed && value.value != channels[channel]) {
+                editing.MutateById(fogVolumeId, "Updated authoring fog volume color", [channel, value](SectorAuthoringFogVolume& volume) {
+                    unsigned char* target = channel == 0 ? &volume.color.r : channel == 1 ? &volume.color.g : &volume.color.b;
+                    if (*target == value.value) return false;
+                    *target = static_cast<unsigned char>(value.value);
+                    return true;
+                });
+            }
+            y += rowH + gap;
+        }
+
+        if (engine::Button(
+                    ui, config, input, assets,
+                    "sector_editor_fog_volume_delete",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font, "Delete Fog Volume")) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedFogVolumeConfirmation);
+        }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;

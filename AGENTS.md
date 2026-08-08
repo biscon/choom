@@ -282,6 +282,7 @@ task-scoping rules in the later sections.
 
 ## Codex task behavior for this project
 
+- Do not perform smoke tests/interactive tests with xdotool etc, user will test.
 - Keep changes scoped to the requested task.
 - Avoid unrelated rewrites, renames, style churn, or architecture cleanup during
   feature/bugfix tasks.

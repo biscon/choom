@@ -426,28 +426,6 @@ Matrix BuildSectorDoorShadowCasterModelMatrix(
     return model;
 }
 
-Vector3 EvaluateSectorObjectAmbientCubeLighting(
-        const BakedObjectLightingSample& sample,
-        Vector3 worldNormal)
-{
-    if (Vector3LengthSqr(worldNormal) <= 0.000001f) {
-        worldNormal = Vector3{0.0f, 1.0f, 0.0f};
-    } else {
-        worldNormal = Vector3Normalize(worldNormal);
-    }
-
-    const Vector3 absNormal = Vector3{std::fabs(worldNormal.x), std::fabs(worldNormal.y), std::fabs(worldNormal.z)};
-    int face = 0;
-    if (absNormal.y >= absNormal.x && absNormal.y >= absNormal.z) {
-        face = worldNormal.y >= 0.0f ? 2 : 3;
-    } else if (absNormal.z >= absNormal.x) {
-        face = worldNormal.z >= 0.0f ? 4 : 5;
-    } else {
-        face = worldNormal.x >= 0.0f ? 0 : 1;
-    }
-    return sample.ambientCube[face];
-}
-
 namespace {
 
 Color QuantizeStaticLightingColor(Vector3 lighting)
@@ -499,7 +477,7 @@ bool BuildSectorDoorStaticLightingColors(
                 object.currentSectorId,
                 mapForFallback);
         outColors.push_back(QuantizeStaticLightingColor(
-                EvaluateSectorObjectAmbientCubeLighting(sample, worldNormal)));
+                EvaluateBakedObjectAmbientCubeLighting(sample, worldNormal)));
     }
     return outColors.size() == meshData.vertices.size();
 }
@@ -724,6 +702,25 @@ bool PlayerVerticalIntervalOverlapsDoor(
     const float playerTop = moveState.feetY + config.playerHeight;
     return playerTop > collider.bottom + DoorDynamicCollisionEpsilon
             && playerBottom < collider.top - DoorDynamicCollisionEpsilon;
+}
+
+bool CircleOverlapsDoorObb(
+        Vector2 position,
+        float radius,
+        const SectorDynamicDoorCollider& collider)
+{
+    const Vector2 tangent = NormalizedOrFallback(collider.tangent, Vector2{1.0f, 0.0f});
+    const Vector2 normal = NormalizedOrFallback(collider.normal, Vector2{0.0f, -1.0f});
+    const Vector2 relative = Subtract(position, collider.center);
+    const Vector2 local{
+            Dot(relative, tangent),
+            Dot(relative, normal)};
+    const Vector2 closest{
+            Clamp(local.x, -collider.halfExtents.x, collider.halfExtents.x),
+            Clamp(local.y, -collider.halfExtents.y, collider.halfExtents.y)};
+    const Vector2 delta = Subtract(local, closest);
+    return Dot(delta, delta)
+            <= radius * radius + DoorDynamicCollisionEpsilon;
 }
 
 bool ResolveCircleAgainstDoorObb(
@@ -1211,6 +1208,45 @@ void CollectSectorDoorDynamicColliders(
                         collider.bottom,
                         collider.top});
             });
+}
+
+bool SectorDoorDynamicCollidersAllowPlayerHeight(
+        Vector2 positionXZ,
+        float feetY,
+        float radius,
+        float playerHeight,
+        const std::vector<SectorDynamicDoorCollider>& colliders)
+{
+    if (!IsFiniteVector2(positionXZ)
+            || !std::isfinite(feetY)
+            || !std::isfinite(radius)
+            || !std::isfinite(playerHeight)
+            || radius <= 0.0f
+            || playerHeight <= 0.0f) {
+        return false;
+    }
+
+    const float playerTop = feetY + playerHeight;
+    for (const SectorDynamicDoorCollider& collider : colliders) {
+        if (!IsFiniteVector2(collider.center)
+                || !IsFiniteVector2(collider.tangent)
+                || !IsFiniteVector2(collider.normal)
+                || !IsFiniteVector2(collider.halfExtents)
+                || !std::isfinite(collider.bottom)
+                || !std::isfinite(collider.top)
+                || collider.halfExtents.x <= 0.0f
+                || collider.halfExtents.y <= 0.0f
+                || collider.top <= collider.bottom
+                || !CircleOverlapsDoorObb(positionXZ, radius, collider)) {
+            continue;
+        }
+        if (collider.bottom > feetY + DoorDynamicCollisionEpsilon
+                && playerTop > collider.bottom + DoorDynamicCollisionEpsilon
+                && feetY < collider.top - DoorDynamicCollisionEpsilon) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void CollectSectorDoorDynamicPortalBlockers(

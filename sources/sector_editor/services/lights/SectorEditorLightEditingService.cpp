@@ -75,6 +75,32 @@ void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& 
     uiState.lightShadowBiasInput = engine::UIFloatInputState{};
     uiState.lightShadowStrengthInput = engine::UIFloatInputState{};
     uiState.lightShadowSoftnessInput = engine::UIFloatInputState{};
+    const auto resetFloat = [](engine::UIFloatInputState* state) {
+        if (state != nullptr) *state = engine::UIFloatInputState{};
+    };
+    const auto resetInt = [](engine::UIIntInputState* state) {
+        if (state != nullptr) *state = engine::UIIntInputState{};
+    };
+    resetFloat(uiState.atmosphere.hazeExtentScaleInput);
+    resetFloat(uiState.atmosphere.hazeDensityInput);
+    resetFloat(uiState.atmosphere.hazeEdgeSoftnessInput);
+    resetFloat(uiState.atmosphere.hazeNoiseAmountInput);
+    resetFloat(uiState.atmosphere.hazeNoiseScaleInput);
+    resetFloat(uiState.atmosphere.hazeFlowDirectionInput);
+    resetFloat(uiState.atmosphere.hazeFlowSpeedInput);
+    resetInt(uiState.atmosphere.hazeRedInput);
+    resetInt(uiState.atmosphere.hazeGreenInput);
+    resetInt(uiState.atmosphere.hazeBlueInput);
+    resetInt(uiState.atmosphere.dustAmountInput);
+    resetFloat(uiState.atmosphere.dustExtentScaleInput);
+    resetFloat(uiState.atmosphere.dustMinimumSizeInput);
+    resetFloat(uiState.atmosphere.dustMaximumSizeInput);
+    resetFloat(uiState.atmosphere.dustOpacityInput);
+    resetFloat(uiState.atmosphere.dustDriftSpeedInput);
+    resetFloat(uiState.atmosphere.dustTurbulenceInput);
+    resetInt(uiState.atmosphere.dustRedInput);
+    resetInt(uiState.atmosphere.dustGreenInput);
+    resetInt(uiState.atmosphere.dustBlueInput);
     uiState.lightRedInput = engine::UIIntInputState{};
     uiState.lightGreenInput = engine::UIIntInputState{};
     uiState.lightBlueInput = engine::UIIntInputState{};
@@ -143,7 +169,37 @@ SectorEditorLightMutationResult FinishLightMutationResult(bool changed)
 {
     SectorEditorLightMutationResult result;
     result.changed = changed;
+    result.dynamicLightRendererRefreshNeeded = changed;
     return result;
+}
+
+bool SameAtmosphere(
+        const SectorLightAtmosphereSettings& leftSource,
+        const SectorLightAtmosphereSettings& rightSource)
+{
+    const SectorLightAtmosphereSettings left = NormalizeSectorLightAtmosphereSettings(leftSource);
+    const SectorLightAtmosphereSettings right = NormalizeSectorLightAtmosphereSettings(rightSource);
+    const auto sameColor = [](Color a, Color b) {
+        return a.r == b.r && a.g == b.g && a.b == b.b;
+    };
+    return left.haze.enabled == right.haze.enabled
+            && left.haze.extentScale == right.haze.extentScale
+            && left.haze.density == right.haze.density
+            && sameColor(left.haze.scatteringTint, right.haze.scatteringTint)
+            && left.haze.edgeSoftness == right.haze.edgeSoftness
+            && left.haze.noiseAmount == right.haze.noiseAmount
+            && left.haze.noiseScaleWorld == right.haze.noiseScaleWorld
+            && left.haze.flowDirectionDegrees == right.haze.flowDirectionDegrees
+            && left.haze.flowSpeedWorld == right.haze.flowSpeedWorld
+            && left.dust.enabled == right.dust.enabled
+            && left.dust.amount == right.dust.amount
+            && left.dust.extentScale == right.dust.extentScale
+            && left.dust.minimumSizeWorld == right.dust.minimumSizeWorld
+            && left.dust.maximumSizeWorld == right.dust.maximumSizeWorld
+            && left.dust.opacity == right.dust.opacity
+            && left.dust.driftSpeedWorld == right.dust.driftSpeedWorld
+            && left.dust.turbulenceWorld == right.dust.turbulenceWorld
+            && sameColor(left.dust.scatteringTint, right.dust.scatteringTint);
 }
 
 } // namespace
@@ -330,6 +386,7 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::DeleteSelectedL
     }
 
     result.changed = FinishTopologyActionResult(deleteResult);
+    result.dynamicLightRendererRefreshNeeded = result.changed;
     return result;
 }
 
@@ -607,7 +664,7 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::ApplySpotLightP
 
     SectorEditorLightMutationResult result;
     result.changed = true;
-    result.dynamicLightRendererRefreshNeeded = dynamicLight != nullptr;
+    result.dynamicLightRendererRefreshNeeded = true;
     return result;
 }
 
@@ -695,6 +752,17 @@ bool SectorEditorLightEditingService::SetStaticLightColor(
         return false;
     }
     MarkEdited(TextFormat("Updated static light %d color", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetStaticLightAtmosphere(
+        SectorTopologyStaticPointLight& light,
+        SectorLightAtmosphereSettings settings)
+{
+    settings = NormalizeSectorLightAtmosphereSettings(settings);
+    if (SameAtmosphere(light.atmosphere, settings)) return false;
+    light.atmosphere = settings;
+    MarkEdited(TextFormat("Updated static light %d atmosphere", light.id));
     return true;
 }
 
@@ -793,6 +861,17 @@ bool SectorEditorLightEditingService::SetStaticSpotLightColor(
     return true;
 }
 
+bool SectorEditorLightEditingService::SetStaticSpotLightAtmosphere(
+        SectorTopologyStaticSpotLight& light,
+        SectorLightAtmosphereSettings settings)
+{
+    settings = NormalizeSectorLightAtmosphereSettings(settings);
+    if (SameAtmosphere(light.atmosphere, settings)) return false;
+    light.atmosphere = settings;
+    MarkEdited(TextFormat("Updated static spot %d atmosphere", light.id));
+    return true;
+}
+
 bool SectorEditorLightEditingService::SetDynamicLightEnabled(
         SectorTopologyDynamicPointLight& light,
         bool enabled)
@@ -882,6 +961,17 @@ bool SectorEditorLightEditingService::SetDynamicLightColor(
         return false;
     }
     MarkEdited(TextFormat("Updated dynamic light %d color", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetDynamicLightAtmosphere(
+        SectorTopologyDynamicPointLight& light,
+        SectorLightAtmosphereSettings settings)
+{
+    settings = NormalizeSectorLightAtmosphereSettings(settings);
+    if (SameAtmosphere(light.atmosphere, settings)) return false;
+    light.atmosphere = settings;
+    MarkEdited(TextFormat("Updated dynamic light %d atmosphere", light.id));
     return true;
 }
 
@@ -1069,6 +1159,17 @@ bool SectorEditorLightEditingService::SetDynamicSpotLightColor(
         return false;
     }
     MarkEdited(TextFormat("Updated dynamic spot %d color", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetDynamicSpotLightAtmosphere(
+        SectorTopologyDynamicSpotLight& light,
+        SectorLightAtmosphereSettings settings)
+{
+    settings = NormalizeSectorLightAtmosphereSettings(settings);
+    if (SameAtmosphere(light.atmosphere, settings)) return false;
+    light.atmosphere = settings;
+    MarkEdited(TextFormat("Updated dynamic spot %d atmosphere", light.id));
     return true;
 }
 

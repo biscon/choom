@@ -51,6 +51,15 @@ uniform sampler2D texture0;
 uniform float alphaCutoff;
 uniform vec3 bakedBillboardLighting;
 
+uniform int fogEnabled;
+uniform vec3 fogColor;
+uniform vec3 fogCameraPosition;
+uniform float fogStartDistanceWorld;
+uniform float fogDensity;
+uniform float fogMaxOpacity;
+uniform float fogReferenceHeightWorld;
+uniform float fogHeightFalloff;
+
 #define MAX_DYNAMIC_LIGHTS 8
 #define MAX_DYNAMIC_SHADOW_CASTERS 2
 uniform int dynamicLightCount;
@@ -144,6 +153,22 @@ float DynamicSpotLightShadowVisibility(
     return visible / 12.0;
 }
 
+vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
+{
+    if (fogEnabled == 0 || fogDensity <= 0.0 || fogMaxOpacity <= 0.0) {
+        return surfaceRgb;
+    }
+
+    float fogDistance = max(length(worldPosition - fogCameraPosition) - fogStartDistanceWorld, 0.0);
+    float midpointHeight = (fogCameraPosition.y + worldPosition.y) * 0.5;
+    float heightAboveReference = max(midpointHeight - fogReferenceHeightWorld, 0.0);
+    float heightMultiplier = exp(-heightAboveReference * fogHeightFalloff);
+    float fogAmount = min(
+            1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
+            fogMaxOpacity);
+    return mix(surfaceRgb, fogColor, fogAmount);
+}
+
 void main()
 {
     vec4 sampled = texture(texture0, fragTexCoord);
@@ -192,7 +217,7 @@ void main()
 
     vec3 surfaceRgb = sampled.rgb * fragColor.rgb;
     vec3 lighting = clamp(bakedBillboardLighting + dynamicDirect, 0.0, dynamicLightingClamp);
-    finalColor = vec4(surfaceRgb * lighting, 1.0);
+    finalColor = vec4(ApplySectorFog(surfaceRgb * lighting, fragWorldPosition), 1.0);
 }
 )";
 
@@ -388,6 +413,7 @@ bool SectorBillboardRenderer::Load()
         shadowMap0Loc = -1;
         shadowMap1Loc = -1;
         dynamicLightingClampLoc = -1;
+        fogShaderLocations = SectorFogShaderLocations{};
         shaderLoaded = false;
         return false;
     }
@@ -419,6 +445,7 @@ bool SectorBillboardRenderer::Load()
     shadowMap0Loc = GetShaderLocation(cutoutShader, "shadowMap0");
     shadowMap1Loc = GetShaderLocation(cutoutShader, "shadowMap1");
     dynamicLightingClampLoc = GetShaderLocation(cutoutShader, "dynamicLightingClamp");
+    fogShaderLocations = GetSectorFogShaderLocations(cutoutShader);
     shaderLoaded = true;
     return true;
 }
@@ -449,6 +476,7 @@ void SectorBillboardRenderer::Shutdown()
     shadowMap0Loc = -1;
     shadowMap1Loc = -1;
     dynamicLightingClampLoc = -1;
+    fogShaderLocations = SectorFogShaderLocations{};
     shaderLoaded = false;
 }
 
@@ -466,6 +494,7 @@ void SectorBillboardRenderer::Draw(
         engine::World& runtimeObjectWorld,
         const Camera3D& camera,
         const SectorBillboardDynamicLightContext& dynamicLightContext,
+        const SectorFogRenderContext& fogContext,
         std::string& debugText)
 {
     if (!shaderLoaded || cutoutShader.id == 0) {
@@ -486,6 +515,7 @@ void SectorBillboardRenderer::Draw(
     rlEnableDepthTest();
     rlEnableDepthMask();
     BeginShaderMode(cutoutShader);
+    UploadSectorFogShaderValues(cutoutShader, fogShaderLocations, fogContext);
 
     SectorDynamicLightShaderLocations dynamicLightLocations;
     dynamicLightLocations.dynamicLightCount = dynamicLightCountLoc;

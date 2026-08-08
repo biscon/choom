@@ -9,7 +9,256 @@
 
 namespace game {
 
-float StaticLightInspectorContentHeight(float rowH, float gap, bool hasIdError)
+namespace {
+
+bool SameVector3(Vector3 left, Vector3 right)
+{
+    return left.x == right.x && left.y == right.y && left.z == right.z;
+}
+
+bool SameColor(Color left, Color right)
+{
+    return left.r == right.r && left.g == right.g && left.b == right.b && left.a == right.a;
+}
+
+bool SameLightAtmosphere(
+        const SectorLightAtmosphereSettings& left,
+        const SectorLightAtmosphereSettings& right)
+{
+    const SectorLightAtmosphereSettings a = NormalizeSectorLightAtmosphereSettings(left);
+    const SectorLightAtmosphereSettings b = NormalizeSectorLightAtmosphereSettings(right);
+    return a.haze.enabled == b.haze.enabled
+            && a.haze.extentScale == b.haze.extentScale
+            && a.haze.density == b.haze.density
+            && SameColor(a.haze.scatteringTint, b.haze.scatteringTint)
+            && a.haze.edgeSoftness == b.haze.edgeSoftness
+            && a.haze.noiseAmount == b.haze.noiseAmount
+            && a.haze.noiseScaleWorld == b.haze.noiseScaleWorld
+            && a.haze.flowDirectionDegrees == b.haze.flowDirectionDegrees
+            && a.haze.flowSpeedWorld == b.haze.flowSpeedWorld
+            && a.dust.enabled == b.dust.enabled
+            && a.dust.amount == b.dust.amount
+            && a.dust.extentScale == b.dust.extentScale
+            && a.dust.minimumSizeWorld == b.dust.minimumSizeWorld
+            && a.dust.maximumSizeWorld == b.dust.maximumSizeWorld
+            && a.dust.opacity == b.dust.opacity
+            && a.dust.driftSpeedWorld == b.dust.driftSpeedWorld
+            && a.dust.turbulenceWorld == b.dust.turbulenceWorld
+            && SameColor(a.dust.scatteringTint, b.dust.scatteringTint);
+}
+
+bool AtmosphereSourceChanged(
+        const SectorTopologyStaticPointLight& before,
+        const SectorTopologyStaticPointLight& after)
+{
+    return !SameVector3(before.position, after.position)
+            || before.radius != after.radius
+            || !SameLightAtmosphere(before.atmosphere, after.atmosphere);
+}
+
+bool AtmosphereSourceChanged(
+        const SectorTopologyStaticSpotLight& before,
+        const SectorTopologyStaticSpotLight& after)
+{
+    return !SameVector3(before.position, after.position)
+            || !SameVector3(before.target, after.target)
+            || before.range != after.range
+            || before.outerConeDegrees != after.outerConeDegrees
+            || !SameLightAtmosphere(before.atmosphere, after.atmosphere);
+}
+
+bool AtmosphereSourceChanged(
+        const SectorTopologyDynamicPointLight& before,
+        const SectorTopologyDynamicPointLight& after)
+{
+    return before.enabled != after.enabled
+            || before.flicker != after.flicker
+            || before.flickerSpeed != after.flickerSpeed
+            || before.flickerAmount != after.flickerAmount
+            || !SameVector3(before.position, after.position)
+            || before.intensity != after.intensity
+            || before.radius != after.radius
+            || !SameColor(before.color, after.color)
+            || !SameLightAtmosphere(before.atmosphere, after.atmosphere);
+}
+
+bool AtmosphereSourceChanged(
+        const SectorTopologyDynamicSpotLight& before,
+        const SectorTopologyDynamicSpotLight& after)
+{
+    return before.enabled != after.enabled
+            || before.flicker != after.flicker
+            || before.flickerSpeed != after.flickerSpeed
+            || before.flickerAmount != after.flickerAmount
+            || !SameVector3(before.position, after.position)
+            || !SameVector3(before.target, after.target)
+            || before.intensity != after.intensity
+            || before.range != after.range
+            || before.innerConeDegrees != after.innerConeDegrees
+            || before.outerConeDegrees != after.outerConeDegrees
+            || before.castsShadow != after.castsShadow
+            || before.shadowPriority != after.shadowPriority
+            || before.shadowBias != after.shadowBias
+            || before.shadowStrength != after.shadowStrength
+            || before.shadowSoftness != after.shadowSoftness
+            || !SameColor(before.color, after.color)
+            || !SameLightAtmosphere(before.atmosphere, after.atmosphere);
+}
+
+float LightAtmosphereInspectorContentHeight(
+        float rowH,
+        float gap,
+        const SectorLightAtmosphereSettings& atmosphere)
+{
+    float height = 2.0f * (26.0f + rowH + gap);
+    if (atmosphere.haze.enabled) height += 10.0f * (rowH + gap);
+    if (atmosphere.dust.enabled) height += 10.0f * (rowH + gap);
+    return height;
+}
+
+template<typename ApplyFn>
+void DrawLightAtmosphereInspector(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        float contentW,
+        float rowH,
+        float gap,
+        float& y,
+        SectorLightAtmosphereSettings atmosphere,
+        SectorEditorUiState& uiState,
+        ApplyFn&& apply,
+        bool& sourceRefreshRequested)
+{
+    auto commit = [&]() {
+        atmosphere = NormalizeSectorLightAtmosphereSettings(atmosphere);
+        if (apply(atmosphere)) sourceRefreshRequested = true;
+    };
+    auto drawFloat = [&](const char* id,
+                         const char* label,
+                         float& value,
+                         engine::UIFloatInputState& state,
+                         float minimum,
+                         float maximum,
+                         int decimals) {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                id,
+                label,
+                layout.labelRect,
+                layout.inputRect,
+                engine::UITextJustify::Right,
+                value,
+                state,
+                minimum,
+                maximum,
+                decimals);
+        if (result.changed && result.value != value) {
+            value = result.value;
+            commit();
+        }
+        y += rowH + gap;
+    };
+    auto drawChannel = [&](const char* id,
+                           const char* label,
+                           unsigned char& channel,
+                           engine::UIIntInputState& state) {
+        const float labelWidth = 126.0f;
+        const SectorEditorRgb8InputResult result = DrawRgb8ChannelInput(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                id,
+                label,
+                Rectangle{0.0f, y, labelWidth, rowH},
+                Rectangle{labelWidth, y, contentW - labelWidth, rowH},
+                engine::UITextJustify::Right,
+                channel,
+                state);
+        if (result.changed && result.channel != channel) {
+            channel = result.channel;
+            commit();
+        }
+        y += rowH + gap;
+    };
+
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 22.0f}, font,
+            "Atmosphere: Haze", engine::UITextJustify::Left, config.textColor);
+    y += 26.0f;
+    if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_haze_enabled",
+            Rectangle{0.0f, y, contentW, rowH}, font, "Haze enabled", atmosphere.haze.enabled)) {
+        commit();
+    }
+    y += rowH + gap;
+    if (atmosphere.haze.enabled) {
+        drawFloat("sector_editor_light_haze_extent", "Extent scale:", atmosphere.haze.extentScale,
+                uiState.lightHazeExtentScaleInput, 0.05f, 2.0f, 3);
+        drawFloat("sector_editor_light_haze_density", "Density:", atmosphere.haze.density,
+                uiState.lightHazeDensityInput, 0.0f, 2.0f, 3);
+        drawFloat("sector_editor_light_haze_edge", "Edge softness:", atmosphere.haze.edgeSoftness,
+                uiState.lightHazeEdgeSoftnessInput, 0.01f, 1.0f, 3);
+        drawFloat("sector_editor_light_haze_noise", "Noise amount:", atmosphere.haze.noiseAmount,
+                uiState.lightHazeNoiseAmountInput, 0.0f, 1.0f, 3);
+        drawFloat("sector_editor_light_haze_noise_scale", "Noise scale (m):", atmosphere.haze.noiseScaleWorld,
+                uiState.lightHazeNoiseScaleInput, 0.05f, 16.0f, 3);
+        drawFloat("sector_editor_light_haze_flow_direction", "Flow direction:", atmosphere.haze.flowDirectionDegrees,
+                uiState.lightHazeFlowDirectionInput, -360.0f, 360.0f, 2);
+        drawFloat("sector_editor_light_haze_flow_speed", "Flow speed (m/s):", atmosphere.haze.flowSpeedWorld,
+                uiState.lightHazeFlowSpeedInput, 0.0f, 2.0f, 3);
+        drawChannel("sector_editor_light_haze_r", "Tint R:", atmosphere.haze.scatteringTint.r, uiState.lightHazeRedInput);
+        drawChannel("sector_editor_light_haze_g", "Tint G:", atmosphere.haze.scatteringTint.g, uiState.lightHazeGreenInput);
+        drawChannel("sector_editor_light_haze_b", "Tint B:", atmosphere.haze.scatteringTint.b, uiState.lightHazeBlueInput);
+    }
+
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 22.0f}, font,
+            "Atmosphere: Dust", engine::UITextJustify::Left, config.textColor);
+    y += 26.0f;
+    if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_dust_enabled",
+            Rectangle{0.0f, y, contentW, rowH}, font, "Dust enabled", atmosphere.dust.enabled)) {
+        commit();
+    }
+    y += rowH + gap;
+    if (atmosphere.dust.enabled) {
+        const SectorEditorInspectorNumericRowLayout amountLayout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+        engine::Text(ui, config, assets, amountLayout.labelRect, font, "Amount:",
+                engine::UITextJustify::Right, config.mutedTextColor);
+        const engine::UINumericInputResult amountResult = engine::IntInput(
+                ui, config, input, assets, "sector_editor_light_dust_amount", amountLayout.inputRect,
+                font, atmosphere.dust.amount, uiState.lightDustAmountInput, 0, 128, 1);
+        if (amountResult.changed) commit();
+        y += rowH + gap;
+        drawFloat("sector_editor_light_dust_extent", "Extent scale:", atmosphere.dust.extentScale,
+                uiState.lightDustExtentScaleInput, 0.05f, 2.0f, 3);
+        drawFloat("sector_editor_light_dust_min_size", "Min size (m):", atmosphere.dust.minimumSizeWorld,
+                uiState.lightDustMinimumSizeInput, 0.002f, 0.25f, 3);
+        drawFloat("sector_editor_light_dust_max_size", "Max size (m):", atmosphere.dust.maximumSizeWorld,
+                uiState.lightDustMaximumSizeInput, 0.002f, 0.25f, 3);
+        drawFloat("sector_editor_light_dust_opacity", "Opacity:", atmosphere.dust.opacity,
+                uiState.lightDustOpacityInput, 0.0f, 1.0f, 3);
+        drawFloat("sector_editor_light_dust_drift", "Drift (m/s):", atmosphere.dust.driftSpeedWorld,
+                uiState.lightDustDriftSpeedInput, 0.0f, 0.5f, 3);
+        drawFloat("sector_editor_light_dust_turbulence", "Turbulence:", atmosphere.dust.turbulenceWorld,
+                uiState.lightDustTurbulenceInput, 0.0f, 0.5f, 3);
+        drawChannel("sector_editor_light_dust_r", "Tint R:", atmosphere.dust.scatteringTint.r, uiState.lightDustRedInput);
+        drawChannel("sector_editor_light_dust_g", "Tint G:", atmosphere.dust.scatteringTint.g, uiState.lightDustGreenInput);
+        drawChannel("sector_editor_light_dust_b", "Tint B:", atmosphere.dust.scatteringTint.b, uiState.lightDustBlueInput);
+    }
+}
+
+} // namespace
+
+float StaticLightInspectorContentHeight(float rowH, float gap, bool hasIdError, const SectorLightAtmosphereSettings& atmosphere)
 {
     float height = 38.0f; // Light title.
     height += rowH + gap; // Id.
@@ -20,11 +269,12 @@ float StaticLightInspectorContentHeight(float rowH, float gap, bool hasIdError)
     height += 6.0f * (rowH + gap); // Position/intensity/radius/source radius.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
+    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
     height += rowH + gap; // Bake.
     return height;
 }
 
-float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError)
+float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError, const SectorLightAtmosphereSettings& atmosphere)
 {
     float height = 38.0f; // Light title.
     height += rowH + gap; // Id.
@@ -35,11 +285,12 @@ float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdErr
     height += 12.0f * (rowH + gap); // Position/target/intensity/range/source/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
+    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
     height += rowH + gap; // Bake.
     return height;
 }
 
-float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError)
+float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError, const SectorLightAtmosphereSettings& atmosphere)
 {
     float height = 38.0f; // Light title.
     height += rowH + gap; // Id.
@@ -52,10 +303,11 @@ float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError)
     height += 5.0f * (rowH + gap); // Position/intensity/radius.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
+    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
     return height;
 }
 
-float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError, float shadowNoteHeight)
+float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError, float shadowNoteHeight, const SectorLightAtmosphereSettings& atmosphere)
 {
     float height = 38.0f; // Light title.
     height += rowH + gap; // Id.
@@ -70,6 +322,7 @@ float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdEr
     height += 11.0f * (rowH + gap); // Position/target/intensity/range/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
+    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
     return height;
 }
 
@@ -88,8 +341,10 @@ bool DrawSelectedStaticLightInspector(
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
-        bool& bakeRequested)
+        bool& bakeRequested,
+        bool& sourceRefreshRequested)
 {
+    const SectorTopologyStaticPointLight sourceBefore = light;
     float y = 0.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Static Light: %d", light.id), engine::UITextJustify::Left, config.textColor);
     y += 38.0f;
@@ -229,10 +484,19 @@ bool DrawSelectedStaticLightInspector(
     DrawColorSwatch(config, swatch, light.color, 1.0f);
     y += 36.0f + gap;
 
+    DrawLightAtmosphereInspector(
+            ui, config, input, assets, font, contentW, rowH, gap, y,
+            light.atmosphere, uiState,
+            [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
+                return lightEditing.SetStaticLightAtmosphere(light, settings);
+            },
+            sourceRefreshRequested);
+
     if (engine::Button(ui, config, input, assets, "sector_editor_light_bake", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
         bakeRequested = true;
     }
 
+    sourceRefreshRequested = sourceRefreshRequested || AtmosphereSourceChanged(sourceBefore, light);
     return true;
 }
 
@@ -251,8 +515,10 @@ bool DrawSelectedStaticSpotLightInspector(
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
-        bool& bakeRequested)
+        bool& bakeRequested,
+        bool& sourceRefreshRequested)
 {
+    const SectorTopologyStaticSpotLight sourceBefore = light;
     float y = 0.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Static Spot: %d", light.id), engine::UITextJustify::Left, config.textColor);
     y += 38.0f;
@@ -418,10 +684,19 @@ bool DrawSelectedStaticSpotLightInspector(
     DrawColorSwatch(config, swatch, light.color, 1.0f);
     y += 36.0f + gap;
 
+    DrawLightAtmosphereInspector(
+            ui, config, input, assets, font, contentW, rowH, gap, y,
+            light.atmosphere, uiState,
+            [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
+                return lightEditing.SetStaticSpotLightAtmosphere(light, settings);
+            },
+            sourceRefreshRequested);
+
     if (engine::Button(ui, config, input, assets, "sector_editor_static_spot_light_bake", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
         bakeRequested = true;
     }
 
+    sourceRefreshRequested = sourceRefreshRequested || AtmosphereSourceChanged(sourceBefore, light);
     return true;
 }
 
@@ -439,8 +714,10 @@ bool DrawSelectedDynamicLightInspector(
         SectorEditorUiState& uiState,
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
-        bool& deleteRequested)
+        bool& deleteRequested,
+        bool& sourceRefreshRequested)
 {
+    const SectorTopologyDynamicPointLight sourceBefore = light;
     float y = 0.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Dynamic Light: %d", light.id), engine::UITextJustify::Left, config.textColor);
     y += 38.0f;
@@ -592,7 +869,17 @@ bool DrawSelectedDynamicLightInspector(
             28.0f
     };
     DrawColorSwatch(config, swatch, light.color, light.enabled ? 1.0f : 0.45f);
+    y += 36.0f + gap;
 
+    DrawLightAtmosphereInspector(
+            ui, config, input, assets, font, contentW, rowH, gap, y,
+            light.atmosphere, uiState,
+            [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
+                return lightEditing.SetDynamicLightAtmosphere(light, settings);
+            },
+            sourceRefreshRequested);
+
+    sourceRefreshRequested = sourceRefreshRequested || AtmosphereSourceChanged(sourceBefore, light);
     return true;
 }
 
@@ -611,8 +898,10 @@ bool DrawSelectedDynamicSpotLightInspector(
         SectorEditorUiState& uiState,
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
-        bool& deleteRequested)
+        bool& deleteRequested,
+        bool& sourceRefreshRequested)
 {
+    const SectorTopologyDynamicSpotLight sourceBefore = light;
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
     float y = 0.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, TextFormat("Dynamic Spot: %d", light.id), engine::UITextJustify::Left, config.textColor);
@@ -920,7 +1209,17 @@ bool DrawSelectedDynamicSpotLightInspector(
             28.0f
     };
     DrawColorSwatch(config, swatch, light.color, light.enabled ? 1.0f : 0.45f);
+    y += 36.0f + gap;
 
+    DrawLightAtmosphereInspector(
+            ui, config, input, assets, font, contentW, rowH, gap, y,
+            light.atmosphere, uiState,
+            [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
+                return lightEditing.SetDynamicSpotLightAtmosphere(light, settings);
+            },
+            sourceRefreshRequested);
+
+    sourceRefreshRequested = sourceRefreshRequested || AtmosphereSourceChanged(sourceBefore, light);
     return true;
 }
 

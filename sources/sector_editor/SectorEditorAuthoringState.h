@@ -14,6 +14,7 @@ namespace game {
 SectorAuthoringSelectionTarget MakeSectorAuthoringLineSelectionTarget(int lineId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringVertexSelectionTarget(int vertexId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringFaceAnchorSelectionTarget(int faceAnchorId);
+SectorAuthoringSelectionTarget MakeSectorAuthoringFogVolumeSelectionTarget(int fogVolumeId);
 
 bool SectorAuthoringSelectionTargetsEqual(
         SectorAuthoringSelectionTarget lhs,
@@ -36,6 +37,10 @@ bool SelectSectorEditorAuthoringFaceAnchor(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int faceAnchorId);
+bool SelectSectorEditorAuthoringFogVolume(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int fogVolumeId);
 
 void ClearSectorEditorAuthoringHover(SelectionState& selectionState);
 bool SetHoveredSectorEditorAuthoringLine(
@@ -46,6 +51,10 @@ bool SetHoveredSectorEditorAuthoringVertex(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int vertexId);
+bool SetHoveredSectorEditorAuthoringFogVolume(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int fogVolumeId);
 
 void PruneSectorEditorAuthoringSelectionToGraph(
         const SectorAuthoringGraph& graph,
@@ -236,6 +245,7 @@ enum class SectorEditorInspectorTargetKind {
     AuthoringLine,
     AuthoringFaceAnchor,
     AuthoringVertex,
+    AuthoringFogVolume,
     AuthoringUnavailable,
     LegacyTopology
 };
@@ -245,6 +255,7 @@ struct SectorEditorInspectorTarget {
     int lineId = -1;
     int faceAnchorId = -1;
     int vertexId = -1;
+    int fogVolumeId = -1;
     SectorAuthoringSideId side;
     std::string status;
 };

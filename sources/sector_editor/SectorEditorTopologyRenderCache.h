@@ -10,6 +10,10 @@
 
 namespace game {
 
+void UpdateCachedSectorEditorRuntimeObjectDraw(
+        SectorEditorTopologyRenderCache& cache,
+        const SectorPlacedRuntimeObject& object);
+
 struct SectorEditorTopologyDrawContext {
     Rectangle canvasRect = {};
     Vector2 viewCenter = {};
@@ -40,6 +44,13 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         const SectorAuthoringGraph& authoringGraph,
         const SectorAuthoringDerivationResult& authoringDerivation,
         uint64_t revision);
+
+void AppendCachedRuntimeObjectPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates);
 
 void DrawCachedTopologySectors(
         const SectorEditorTopologyRenderCache& cache,

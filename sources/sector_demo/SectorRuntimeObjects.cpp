@@ -5,6 +5,7 @@
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
+#include "engine/systems/AnimatedModelSystem.h"
 
 #include <cmath>
 #include <cstdio>
@@ -15,15 +16,40 @@
 #include <raymath.h>
 
 namespace game {
+namespace {
+
+SectorObjectLighting SampleSectorObjectLighting(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        Vector3 worldPosition,
+        int preferredSectorId,
+        const SectorTopologyMap* mapForFallback)
+{
+    const BakedObjectLightingVerticalSample vertical =
+            SampleBakedObjectLightingVertical(
+                    probes,
+                    worldPosition,
+                    preferredSectorId,
+                    mapForFallback);
+    return SectorObjectLighting{
+            ResolveBakedObjectLightingVerticalSample(vertical, worldPosition.y),
+            vertical};
+}
+
+} // namespace
 
 
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(14);
+    world.ReserveComponentTypes(19);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
+    world.ReserveComponent<SectorStaticModel>(objectCapacity);
+    world.ReserveComponent<SectorDynamicModel>(objectCapacity);
+    world.ReserveComponent<engine::AnimatedModelInstance>(objectCapacity);
+    world.ReserveComponent<engine::AnimatedModelAnimator>(objectCapacity);
+    world.ReserveComponent<SectorStaticModelCollider>(objectCapacity);
     world.ReserveComponent<SectorBillboardSprite>(objectCapacity);
     world.ReserveComponent<SectorBillboardAnimator>(objectCapacity);
     world.ReserveComponent<SectorBillboardDirectionalClips>(objectCapacity);
@@ -54,6 +80,38 @@ Vector3 PlacedRuntimeObjectAuthoringToWorldPosition(Vector3 authoringPosition)
             SectorAuthoringToWorldDistance(authoringPosition.z)};
 }
 
+Vector3 StaticModelSectorAmbient(
+        const SectorTopologyMap& map,
+        int sectorId)
+{
+    const SectorTopologySector* sector =
+            FindSectorTopologySector(map, sectorId);
+    if (sector == nullptr) {
+        return Vector3{0.15f, 0.15f, 0.15f};
+    }
+    const float scale = std::max(0.0f, sector->ambientIntensity) / 255.0f;
+    return Vector3{
+            static_cast<float>(sector->ambientColor.r) * scale,
+            static_cast<float>(sector->ambientColor.g) * scale,
+            static_cast<float>(sector->ambientColor.b) * scale};
+}
+
+float StaticModelEnvironmentExposure(
+        const SectorTopologyMap& map,
+        int sectorId,
+        Vector3 ambient)
+{
+    const SectorTopologySector* sector =
+            FindSectorTopologySector(map, sectorId);
+    if (sector != nullptr && sector->ceilingSky) {
+        return 1.0f;
+    }
+    const float luminance = ambient.x * 0.2126f
+            + ambient.y * 0.7152f
+            + ambient.z * 0.0722f;
+    return std::clamp(luminance, 0.08f, 0.35f);
+}
+
 void RefreshPlacedRuntimeObjectDiagnostics(
         engine::World& world,
         engine::AssetManager& assets,
@@ -69,6 +127,11 @@ void RefreshPlacedRuntimeObjectDiagnostics(
     size_t singleClipResolvedCount = 0;
     size_t singleClipMissingCount = 0;
     size_t singleClipFallbackCount = 0;
+    size_t modelRequestedCount = 0;
+    size_t modelReadyCount = 0;
+    size_t modelPendingCount = 0;
+    size_t modelFailedCount = 0;
+    size_t modelUnassignedCount = 0;
 
     world.ForEach<SectorObject, SectorBillboardSprite>(
             [&assets,
@@ -123,10 +186,41 @@ void RefreshPlacedRuntimeObjectDiagnostics(
                 }
             });
 
+    world.ForEach<SectorObject, SectorStaticModel>(
+            [&assets,
+             &modelRequestedCount,
+             &modelReadyCount,
+             &modelPendingCount,
+             &modelFailedCount,
+             &modelUnassignedCount](
+                    engine::Entity,
+                    SectorObject&,
+                    SectorStaticModel& staticModel) {
+                if (engine::IsNull(staticModel.model)) {
+                    ++modelUnassignedCount;
+                } else {
+                    ++modelRequestedCount;
+                    if (assets.IsReady(staticModel.model)) {
+                        ++modelReadyCount;
+                    } else if (!assets.IsFinished(staticModel.model)) {
+                        ++modelPendingCount;
+                    } else if (assets.HasFailed(staticModel.model)) {
+                        ++modelFailedCount;
+                    } else {
+                        ++modelPendingCount;
+                    }
+                }
+            });
+
     state.spriteAnimationRequestedCount = requestedCount;
     state.spriteAnimationReadyCount = readyCount;
     state.spriteAnimationPendingCount = pendingCount;
     state.spriteAnimationFailedCount = failedCount;
+    state.staticModelRequestedCount = modelRequestedCount;
+    state.staticModelReadyCount = modelReadyCount;
+    state.staticModelPendingCount = modelPendingCount;
+    state.staticModelFailedCount = modelFailedCount;
+    state.staticModelUnassignedCount = modelUnassignedCount;
     state.directionalClipResolvedCount = clipResolvedCount;
     state.directionalClipMissingCount = clipMissingCount;
     state.directionalClipFallbackCount = clipFallbackCount;
@@ -144,6 +238,14 @@ void RefreshPlacedRuntimeObjectDiagnostics(
             failedCount,
             clipResolvedCount + singleClipResolvedCount,
             clipMissingCount + singleClipMissingCount);
+    if (modelRequestedCount + modelUnassignedCount > 0) {
+        state.placedObjectStatus += TextFormat(
+                " | models %zu ready, %zu pending, %zu failed, %zu unassigned",
+                modelReadyCount,
+                modelPendingCount,
+                modelFailedCount,
+                modelUnassignedCount);
+    }
     if (state.doorObjectCount > 0) {
         state.placedObjectStatus += TextFormat(
                 " | doors %zu valid, %zu invalid anchors",
@@ -159,6 +261,14 @@ void RefreshPlacedRuntimeObjectDiagnostics(
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu door object(s) have invalid anchors",
                 state.invalidDoorAnchorCount);
+    } else if (modelFailedCount > 0) {
+        state.placedObjectWarning = TextFormat(
+                "Runtime object warnings: %zu static model asset(s) failed",
+                modelFailedCount);
+    } else if (modelUnassignedCount > 0) {
+        state.placedObjectWarning = TextFormat(
+                "Runtime object warnings: %zu static model object(s) have no model assigned",
+                modelUnassignedCount);
     } else if (failedCount > 0) {
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu sprite animation asset(s) failed",
@@ -224,8 +334,65 @@ bool EnsureSectorRuntimeObjectAssetScope(
     return true;
 }
 
+void ResolveDynamicModelAnimations(
+        engine::World& world,
+        engine::AssetManager& assets)
+{
+    world.ForEach<SectorDynamicModel, engine::AnimatedModelInstance, engine::AnimatedModelAnimator>(
+            [&assets](
+                    engine::Entity,
+                    SectorDynamicModel& dynamicModel,
+                    engine::AnimatedModelInstance& instance,
+                    engine::AnimatedModelAnimator& animator) {
+                if (dynamicModel.animationResolved) {
+                    return;
+                }
+                const engine::ModelAsset* asset = assets.GetModelAsset(instance.model);
+                if (asset == nullptr) {
+                    return;
+                }
+
+                if (asset->animationCount <= 0 || asset->animations == nullptr) {
+                    dynamicModel.animationResolved = true;
+                    return;
+                }
+
+                uint32_t animationIndex = engine::FindModelAnimationIndex(
+                        *asset,
+                        dynamicModel.requestedAnimation.c_str());
+                if (animationIndex == engine::InvalidModelAnimationIndex) {
+                    animationIndex = 0;
+                    dynamicModel.animationFallback = !dynamicModel.requestedAnimation.empty();
+                    if (dynamicModel.animationFallback) {
+                        std::fprintf(
+                                stderr,
+                                "[SectorRuntimeObjects WARNING] Animation '%s' was not found for dynamic model object %d; using '%s'.\n",
+                                dynamicModel.requestedAnimation.c_str(),
+                                dynamicModel.placedObjectId,
+                                asset->animations[0].name);
+                    }
+                }
+
+                engine::SetAnimatedModelAnimation(animator, animationIndex);
+                if (!animator.loop) {
+                    animator.playing = false;
+                    animator.frame = 0.0f;
+                    animator.poseDirty = true;
+                }
+                dynamicModel.animationResolved = true;
+            });
+}
+
 
 } // namespace
+
+float ComputeSectorModelEnvironmentExposure(
+        const SectorTopologyMap& map,
+        int sectorId)
+{
+    const Vector3 ambient = StaticModelSectorAmbient(map, sectorId);
+    return StaticModelEnvironmentExposure(map, sectorId, ambient);
+}
 
 void EnsureSectorRuntimeObjectWorldReserved(
         engine::World& world,
@@ -325,6 +492,8 @@ void SpawnPlacedRuntimeObjects(
     }
     world.FlushDestroyedEntities();
     state.placedObjectEntities.clear();
+    state.staticModelColliders.clear();
+    state.staticModelColliders.reserve(map.runtimeObjects.size());
     state.placedObjectCount = map.runtimeObjects.size();
     state.spawnedObjectCount = 0;
     state.skippedObjectCount = 0;
@@ -399,11 +568,11 @@ void SpawnPlacedRuntimeObjects(
             const engine::Entity entity = world.CreateEntity();
             world.Add(entity, SectorObjectTransform{worldPosition, SectorDoorAnchorYawRadians(resolved)});
             world.Add(entity, object);
-            world.Add(entity, SectorObjectLighting{SampleBakedObjectLighting(
+            world.Add(entity, SampleSectorObjectLighting(
                     state.objectLightProbes,
                     worldPosition,
                     object.currentSectorId,
-                    &map)});
+                    &map));
             world.Add(entity, SectorDoor{placedObject.id, true});
             world.Add(entity, runtimeAnchor);
             world.Add(entity, runtimeMotion);
@@ -421,6 +590,143 @@ void SpawnPlacedRuntimeObjects(
                     resolved.backSideDefId,
                     placedObject.door.initialOpenFraction <= kSectorDoorPortalBlockEpsilon});
             state.placedObjectEntities.push_back(SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
+            ++spawnedCount;
+            continue;
+        }
+
+        if (placedObject.kind == "static_model") {
+            engine::ModelHandle model = engine::NullModelHandle();
+            if (!placedObject.staticModel.modelPath.empty()) {
+                if (!EnsureSectorRuntimeObjectAssetScope(assets, state)) {
+                    recordWarning(TextFormat("asset scope unavailable for placed object %d", placedObject.id));
+                    ++skippedCount;
+                    continue;
+                }
+                const std::string modelPath = ResolveSectorAssetPath(
+                        placedObject.staticModel.modelPath);
+                model = assets.RequestModel(
+                        state.runtimeObjectAssetScope,
+                        placedObject.staticModel.modelPath.c_str(),
+                        modelPath.c_str());
+                if (engine::IsNull(model)) {
+                    const std::string warning = TextFormat(
+                            "could not request static model '%s' for placed object %d",
+                            placedObject.staticModel.modelPath.c_str(),
+                            placedObject.id);
+                    std::fprintf(stderr, "[SectorRuntimeObjects WARNING] %s\n", warning.c_str());
+                    recordWarning(warning);
+                }
+            }
+
+            Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
+                    placedObject.position);
+            worldPosition.y += placedObject.staticModel.heightOffsetWorld;
+            SectorObject object;
+            if (state.objectSectorLookupWorldValid) {
+                const int foundSectorId =
+                        state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                                Vector2{worldPosition.x, worldPosition.z},
+                                -1);
+                object.currentSectorId = foundSectorId != 0 ? foundSectorId : -1;
+            }
+
+            const engine::Entity entity = world.CreateEntity();
+            world.Add(entity, SectorObjectTransform{
+                    worldPosition,
+                    placedObject.yawRadians,
+                    placedObject.staticModel.rotationXRadians,
+                    placedObject.staticModel.rotationZRadians});
+            world.Add(entity, object);
+            const Vector3 sectorAmbient =
+                    StaticModelSectorAmbient(map, object.currentSectorId);
+            world.Add(entity, SectorStaticModel{
+                    model,
+                    placedObject.id,
+                    sectorAmbient,
+                    placedObject.staticModel.scale,
+                    StaticModelEnvironmentExposure(
+                            map,
+                            object.currentSectorId,
+                            sectorAmbient)});
+            if (placedObject.staticModel.collision) {
+                world.Add(entity, SectorStaticModelCollider{
+                        placedObject.id});
+            }
+            state.placedObjectEntities.push_back(
+                    SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
+            ++spawnedCount;
+            continue;
+        }
+
+        if (placedObject.kind == "dynamic_model") {
+            engine::ModelHandle model = engine::NullModelHandle();
+            if (!placedObject.dynamicModel.modelPath.empty()) {
+                if (!EnsureSectorRuntimeObjectAssetScope(assets, state)) {
+                    recordWarning(TextFormat("asset scope unavailable for placed object %d", placedObject.id));
+                    ++skippedCount;
+                    continue;
+                }
+                const std::string modelPath = ResolveSectorAssetPath(
+                        placedObject.dynamicModel.modelPath);
+                model = assets.RequestModel(
+                        state.runtimeObjectAssetScope,
+                        placedObject.dynamicModel.modelPath.c_str(),
+                        modelPath.c_str(),
+                        engine::ModelLoad_Animations);
+                if (engine::IsNull(model)) {
+                    const std::string warning = TextFormat(
+                            "could not request dynamic model '%s' for placed object %d",
+                            placedObject.dynamicModel.modelPath.c_str(),
+                            placedObject.id);
+                    std::fprintf(stderr, "[SectorRuntimeObjects WARNING] %s\n", warning.c_str());
+                    recordWarning(warning);
+                }
+            }
+
+            Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
+                    placedObject.position);
+            worldPosition.y += placedObject.dynamicModel.heightOffsetWorld;
+            SectorObject object;
+            if (state.objectSectorLookupWorldValid) {
+                const int foundSectorId =
+                        state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                                Vector2{worldPosition.x, worldPosition.z}, -1);
+                object.currentSectorId = foundSectorId != 0 ? foundSectorId : -1;
+            }
+            const Vector3 sectorAmbient = StaticModelSectorAmbient(map, object.currentSectorId);
+
+            const engine::Entity entity = world.CreateEntity();
+            world.Add(entity, SectorObjectTransform{
+                    worldPosition,
+                    placedObject.yawRadians,
+                    placedObject.dynamicModel.rotationXRadians,
+                    placedObject.dynamicModel.rotationZRadians});
+            world.Add(entity, object);
+            world.Add(entity, SampleSectorObjectLighting(
+                    state.objectLightProbes,
+                    worldPosition,
+                    object.currentSectorId,
+                    &map));
+            world.Add(entity, SectorDynamicModel{
+                    placedObject.id,
+                    sectorAmbient,
+                    placedObject.dynamicModel.scale,
+                    StaticModelEnvironmentExposure(map, object.currentSectorId, sectorAmbient),
+                    placedObject.dynamicModel.animation,
+                    false,
+                    false,
+                    placedObject.dynamicModel.shadowMode});
+            world.Add(entity, engine::AnimatedModelInstance{model});
+            engine::AnimatedModelAnimator animator;
+            animator.speed = placedObject.dynamicModel.animationSpeed;
+            animator.loop = placedObject.dynamicModel.loop;
+            animator.playing = placedObject.dynamicModel.loop;
+            world.Add(entity, animator);
+            if (placedObject.dynamicModel.collision) {
+                world.Add(entity, SectorStaticModelCollider{placedObject.id});
+            }
+            state.placedObjectEntities.push_back(
+                    SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
             ++spawnedCount;
             continue;
         }
@@ -485,11 +791,11 @@ void SpawnPlacedRuntimeObjects(
         const engine::Entity entity = world.CreateEntity();
         world.Add(entity, SectorObjectTransform{worldPosition, placedObject.yawRadians});
         world.Add(entity, object);
-        world.Add(entity, SectorObjectLighting{SampleBakedObjectLighting(
+        world.Add(entity, SampleSectorObjectLighting(
                 state.objectLightProbes,
                 worldPosition,
                 object.currentSectorId,
-                &map)});
+                &map));
         world.Add(entity, sprite);
         world.Add(entity, animator);
         if (placedObject.billboard.directional) {
@@ -514,6 +820,9 @@ void SpawnPlacedRuntimeObjects(
     state.spawnedObjectCount = spawnedCount;
     state.skippedObjectCount = skippedCount;
     UpdateSectorDoorDerivedStateSystem(world);
+    ResolveDynamicModelAnimations(world, assets);
+    UpdateSectorStaticModelColliderSystem(world, assets);
+    CollectSectorStaticModelColliders(world, state.staticModelColliders);
     RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
 }
 
@@ -526,11 +835,15 @@ void UpdateSectorRuntimeObjects(
         const Vector3* playerPosition)
 {
     AdvanceSectorBillboardAnimatorSystem(world, dt);
+    ResolveDynamicModelAnimations(world, assets);
+    engine::AnimatedModelSystem(world, assets, dt);
     if (playerPosition != nullptr) {
         UpdateSectorDoorAutoOpenSystem(world, *playerPosition);
     }
     AdvanceSectorDoorMotionSystem(world, dt);
     UpdateSectorDoorDerivedStateSystem(world);
+    UpdateSectorStaticModelColliderSystem(world, assets);
+    CollectSectorStaticModelColliders(world, state.staticModelColliders);
     world.ForEach<SectorBillboardSprite, SectorBillboardDirectionalClips>(
             [&assets](engine::Entity, SectorBillboardSprite& sprite, SectorBillboardDirectionalClips& directionalClips) {
                 if (!directionalClips.resolved) {
@@ -586,7 +899,7 @@ void UpdateSectorObjectBakedLightingSystem(
                     SectorObjectTransform& transform,
                     SectorObject& object,
                     SectorObjectLighting& lighting) {
-                lighting.baked = SampleBakedObjectLighting(
+                lighting = SampleSectorObjectLighting(
                         objectLightProbes,
                         transform.position,
                         object.currentSectorId,

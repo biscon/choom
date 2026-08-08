@@ -5,7 +5,9 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
+#include "sector_editor/tools/doors/SectorEditorDoorModals.h"
 
 #include <raylib.h>
 #include <raymath.h>
@@ -84,9 +86,8 @@ void DrawSectorEditorDoorInspector(
   engine::AssetManager &assets = context.assets;
   const engine::FontHandle font = context.font;
   const engine::FontHandle smallFont = context.smallFont;
-  SectorEditorUiState &uiState = context.uiState;
-  const SectorEditorPlacedObjectInspectorCallbacks &callbacks =
-      context.callbacks;
+  RuntimeObjectEditingUiState &uiState = context.uiState;
+  SectorEditorRuntimeObjectEditingService &editing = context.editing;
   const float contentW = context.contentW;
   const float rowH = context.rowH;
   const float gap = context.gap;
@@ -94,7 +95,7 @@ void DrawSectorEditorDoorInspector(
       SectorEditorSmallFontConfig(config, assets, smallFont);
 
   const SectorPlacedRuntimeObject *selectedObject =
-      callbacks.selectedRuntimeObject();
+      editing.SelectedObject();
   if (selectedObject == nullptr || selectedObject->kind != "door") {
     return;
   }
@@ -132,7 +133,7 @@ void DrawSectorEditorDoorInspector(
             engine::UITextJustify::Left, value, inputState, minValue, maxValue,
             decimals);
         if (result.changed && result.finite && result.value != value) {
-          callbacks.mutateSelectedRuntimeObject(
+          editing.MutateSelected(
               "Updated door properties",
               [applyValue,
                value = result.value](SectorPlacedRuntimeObject &object) {
@@ -146,7 +147,7 @@ void DrawSectorEditorDoorInspector(
       };
 
   drawDoorFloat("sector_editor_door_width", "Width", selectedObject->door.width,
-                uiState.runtimeObjectWidthInput, 0.0f, 100000.0f, 3,
+                uiState.widthInput, 0.0f, 100000.0f, 3,
                 [](SectorPlacedDoor &door, float value) {
                   const float width = std::max(0.0f, value);
                   if (door.width == width) {
@@ -155,13 +156,13 @@ void DrawSectorEditorDoorInspector(
                   door.width = width;
                   return true;
                 });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
 
   drawDoorFloat("sector_editor_door_height", "Height",
-                selectedObject->door.height, uiState.runtimeObjectHeightInput,
+                selectedObject->door.height, uiState.heightInput,
                 0.0f, 100000.0f, 3, [](SectorPlacedDoor &door, float value) {
                   const float height = std::max(0.0f, value);
                   if (door.height == height) {
@@ -170,14 +171,14 @@ void DrawSectorEditorDoorInspector(
                   door.height = height;
                   return true;
                 });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
 
   drawDoorFloat("sector_editor_door_thickness", "Thickness",
                 selectedObject->door.thickness,
-                uiState.runtimeObjectThicknessInput, 0.001f, 100000.0f, 3,
+                uiState.thicknessInput, 0.001f, 100000.0f, 3,
                 [](SectorPlacedDoor &door, float value) {
                   const float thickness = std::max(0.001f, value);
                   if (door.thickness == thickness) {
@@ -186,14 +187,14 @@ void DrawSectorEditorDoorInspector(
                   door.thickness = thickness;
                   return true;
                 });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
 
   drawDoorFloat("sector_editor_door_normal_offset", "Offset",
                 selectedObject->door.normalOffset,
-                uiState.runtimeObjectNormalOffsetInput, -100000.0f, 100000.0f,
+                uiState.normalOffsetInput, -100000.0f, 100000.0f,
                 3, [](SectorPlacedDoor &door, float value) {
                   if (door.normalOffset == value) {
                     return false;
@@ -201,7 +202,7 @@ void DrawSectorEditorDoorInspector(
                   door.normalOffset = value;
                   return true;
                 });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
@@ -218,7 +219,7 @@ void DrawSectorEditorDoorInspector(
                      motionIndex) &&
       motionIndex != previousMotionIndex) {
     const SectorDoorMotionType motion = DoorMotionFromOptionIndex(motionIndex);
-    callbacks.mutateSelectedRuntimeObject(
+    editing.MutateSelected(
         "Updated door motion", [motion](SectorPlacedRuntimeObject &object) {
           if (object.kind != "door" || object.door.motion == motion) {
             return false;
@@ -228,14 +229,14 @@ void DrawSectorEditorDoorInspector(
         });
   }
   y += motionLayout.height + gap;
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
 
   drawDoorFloat("sector_editor_door_open_distance", "Open Dist",
                 selectedObject->door.openDistance,
-                uiState.runtimeObjectOpenDistanceInput, 0.0f, 100000.0f, 3,
+                uiState.openDistanceInput, 0.0f, 100000.0f, 3,
                 [](SectorPlacedDoor &door, float value) {
                   const float distance = std::max(0.0f, value);
                   if (door.openDistance == distance) {
@@ -244,13 +245,13 @@ void DrawSectorEditorDoorInspector(
                   door.openDistance = distance;
                   return true;
                 });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
 
   drawDoorFloat("sector_editor_door_speed", "Speed", selectedObject->door.speed,
-                uiState.runtimeObjectSpeedInput, 0.0f, 100000.0f, 3,
+                uiState.speedInput, 0.0f, 100000.0f, 3,
                 [](SectorPlacedDoor &door, float value) {
                   const float speed = std::max(0.0f, value);
                   if (door.speed == speed) {
@@ -259,14 +260,14 @@ void DrawSectorEditorDoorInspector(
                   door.speed = speed;
                   return true;
                 });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
 
   drawDoorFloat("sector_editor_door_initial_open_fraction", "Initial",
                 selectedObject->door.initialOpenFraction,
-                uiState.runtimeObjectInitialOpenFractionInput, 0.0f, 1.0f, 3,
+                uiState.initialOpenFractionInput, 0.0f, 1.0f, 3,
                 [](SectorPlacedDoor &door, float value) {
                   const float fraction = Clamp(value, 0.0f, 1.0f);
                   if (door.initialOpenFraction == fraction) {
@@ -275,7 +276,7 @@ void DrawSectorEditorDoorInspector(
                   door.initialOpenFraction = fraction;
                   return true;
                 });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
@@ -284,7 +285,7 @@ void DrawSectorEditorDoorInspector(
   if (engine::Checkbox(
           ui, config, input, assets, "sector_editor_door_auto_open",
           Rectangle{0.0f, y, contentW, rowH}, font, "Auto Open", autoOpen)) {
-    callbacks.mutateSelectedRuntimeObject(
+    editing.MutateSelected(
         "Updated door auto-open",
         [autoOpen](SectorPlacedRuntimeObject &object) {
           if (object.kind != "door" || object.door.autoOpen == autoOpen) {
@@ -295,14 +296,14 @@ void DrawSectorEditorDoorInspector(
         });
   }
   y += rowH + gap;
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
 
   drawDoorFloat("sector_editor_door_auto_open_distance", "Auto Dist",
                 selectedObject->door.autoOpenDistance,
-                uiState.runtimeObjectAutoOpenDistanceInput, 0.001f, 100000.0f,
+                uiState.autoOpenDistanceInput, 0.001f, 100000.0f,
                 3, [](SectorPlacedDoor &door, float value) {
                   const float distance = std::max(0.001f, value);
                   if (door.autoOpenDistance == distance) {
@@ -311,14 +312,14 @@ void DrawSectorEditorDoorInspector(
                   door.autoOpenDistance = distance;
                   return true;
                 });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
 
   drawDoorFloat("sector_editor_door_interaction_distance", "Use Dist",
                 selectedObject->door.interactionDistance,
-                uiState.runtimeObjectInteractionDistanceInput, 0.001f,
+                uiState.interactionDistanceInput, 0.001f,
                 100000.0f, 3, [](SectorPlacedDoor &door, float value) {
                   const float distance = std::max(0.001f, value);
                   if (door.interactionDistance == distance) {
@@ -327,14 +328,14 @@ void DrawSectorEditorDoorInspector(
                   door.interactionDistance = distance;
                   return true;
                 });
-  selectedObject = callbacks.selectedRuntimeObject();
+  selectedObject = editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
 
   bool runtimeTargetOpen = false;
   const bool runtimeDoorAvailable =
-      callbacks.selectedDoorRuntimeTargetOpen(runtimeTargetOpen);
+      editing.SelectedDoorRuntimeTargetOpen(runtimeTargetOpen);
   if (engine::Button(
           ui, config, input, assets, "sector_editor_door_debug_target",
           Rectangle{0.0f, y, contentW, rowH}, font,
@@ -342,7 +343,7 @@ void DrawSectorEditorDoorInspector(
                                 : (runtimeTargetOpen ? "Debug Target Close"
                                                      : "Debug Target Open"))) {
     if (runtimeDoorAvailable) {
-      callbacks.setSelectedDoorRuntimeTargetOpen(!runtimeTargetOpen);
+      editing.SetSelectedDoorRuntimeTargetOpen(!runtimeTargetOpen);
     }
   }
   y += rowH + gap;
@@ -368,21 +369,31 @@ void DrawSectorEditorDoorInspector(
   if (engine::Button(
           ui, config, input, assets, "sector_editor_door_pick_texture",
           Rectangle{0.0f, y, contentW, rowH}, font, "Pick Texture")) {
-    callbacks.openDoorTexturePicker();
+    if (!OpenRuntimeDoorTexturePicker(
+            context.state,
+            context.topologyMap,
+            context.authoringGraph,
+            context.textureCatalog,
+            selectedObject->id)) {
+      context.statusText = "No door texture target";
+    }
   }
   y += rowH + gap;
 
   if (engine::Button(
           ui, config, input, assets, "sector_editor_door_uv_settings",
           Rectangle{0.0f, y, contentW, rowH}, font, "UV Settings...")) {
-    callbacks.openDoorTextureSettingsModal();
+    OpenSectorEditorDoorTextureSettingsModal(
+        context.state.doorTextureSettingsModal,
+        selectedObject,
+        context.statusText);
   }
   y += rowH + gap;
 
   if (engine::Button(ui, config, input, assets,
                      "sector_editor_delete_runtime_object",
                      Rectangle{0.0f, y, contentW, rowH}, font, "Delete")) {
-    callbacks.deleteSelectedRuntimeObject();
+    context.deleteRequested = true;
     return;
   }
   return;

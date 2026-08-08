@@ -50,9 +50,9 @@ void DrawPreviewSettingsModal(
 
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 145});
     const Rectangle modal{
-            (EditorWidth - 620.0f) * 0.5f,
+            (EditorWidth - 700.0f) * 0.5f,
             (EditorHeight - 700.0f) * 0.5f,
-            620.0f,
+            700.0f,
             700.0f
     };
     DrawRectangleRec(modal, Color{20, 24, 32, 248});
@@ -62,15 +62,16 @@ void DrawPreviewSettingsModal(
     engine::Text(config, assets, Rectangle{modal.x + 26.0f, y, modal.width - 52.0f, 42.0f}, font, "Preview Settings");
     y += 54.0f;
 
-    const float tabW = 132.0f;
     const float tabH = 38.0f;
+    const std::array<Rectangle, 5> tabRects =
+            BuildSectorPreviewSettingsTabLayout(modal, y, tabH);
     if (engine::ToolButton(
                 ui,
                 config,
                 input,
                 assets,
                 "sector_editor_preview_settings_tab_general",
-                Rectangle{modal.x + 30.0f, y, tabW, tabH},
+                tabRects[0],
                 font,
                 "General",
                 modalState.activeTab == PreviewSettingsTab::General)) {
@@ -82,7 +83,7 @@ void DrawPreviewSettingsModal(
                 input,
                 assets,
                 "sector_editor_preview_settings_tab_sky",
-                Rectangle{modal.x + 30.0f + tabW + 8.0f, y, tabW, tabH},
+                tabRects[1],
                 font,
                 "Sky",
                 modalState.activeTab == PreviewSettingsTab::Sky)) {
@@ -94,11 +95,30 @@ void DrawPreviewSettingsModal(
                 input,
                 assets,
                 "sector_editor_preview_settings_tab_lighting",
-                Rectangle{modal.x + 30.0f + (tabW + 8.0f) * 2.0f, y, tabW, tabH},
+                tabRects[2],
                 font,
                 "Lighting",
                 modalState.activeTab == PreviewSettingsTab::Lighting)) {
         modalState.activeTab = PreviewSettingsTab::Lighting;
+    }
+    if (engine::ToolButton(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_preview_settings_tab_fog",
+                tabRects[3],
+                font,
+                "Fog",
+                modalState.activeTab == PreviewSettingsTab::Fog)) {
+        modalState.activeTab = PreviewSettingsTab::Fog;
+    }
+    if (engine::ToolButton(
+                ui, config, input, assets,
+                "sector_editor_preview_settings_tab_viewmodel",
+                tabRects[4], font, "Arms",
+                modalState.activeTab == PreviewSettingsTab::Viewmodel)) {
+        modalState.activeTab = PreviewSettingsTab::Viewmodel;
     }
     y += tabH + 16.0f;
 
@@ -311,10 +331,19 @@ void DrawPreviewSettingsModal(
                 2);
         drawFloat(
                 contentY,
-                "sector_editor_preview_object_probe_height",
-                "Probe height",
-                modalState.draftLightmapSettings.objectProbeHeightWorld,
-                modalState.objectProbeHeightInput,
+                "sector_editor_preview_object_probe_lower_height",
+                "Lower height",
+                modalState.draftLightmapSettings.objectProbeLowerHeightWorld,
+                modalState.objectProbeLowerHeightInput,
+                0.0f,
+                16.0f,
+                2);
+        drawFloat(
+                contentY,
+                "sector_editor_preview_object_probe_upper_height",
+                "Upper height",
+                modalState.draftLightmapSettings.objectProbeUpperHeightWorld,
+                modalState.objectProbeUpperHeightInput,
                 0.0f,
                 16.0f,
                 2);
@@ -324,7 +353,153 @@ void DrawPreviewSettingsModal(
         engine::EndScrollArea(ui, config, input, scroll, modalState.lightingScroll);
     };
 
-    if (modalState.activeTab == PreviewSettingsTab::Lighting) {
+    auto drawFogTab = [&]() {
+        float contentY = 0.0f;
+        const float contentH = 11.0f * (rowH + gap) + 88.0f;
+        engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+                ui,
+                config,
+                input,
+                "sector_editor_preview_settings_fog_scroll",
+                scrollBounds,
+                Vector2{scrollContentW, contentH},
+                modalState.fogScroll);
+        const float contentW = scroll.viewport.width;
+
+        engine::Text(
+                ui, config, assets,
+                Rectangle{0.0f, contentY, contentW, 24.0f},
+                font, "Local volume quality", engine::UITextJustify::Left, config.textColor);
+        contentY += 28.0f;
+        const float qualityGap = 6.0f;
+        const float qualityWidth = (contentW - qualityGap * 3.0f) * 0.25f;
+        const SectorTopologyFogSettings::LocalVolumeQuality qualities[] = {
+                SectorTopologyFogSettings::LocalVolumeQuality::Off,
+                SectorTopologyFogSettings::LocalVolumeQuality::Low,
+                SectorTopologyFogSettings::LocalVolumeQuality::Medium,
+                SectorTopologyFogSettings::LocalVolumeQuality::High};
+        const char* qualityNames[] = {"Off", "Low", "Medium", "High"};
+        for (int qualityIndex = 0; qualityIndex < 4; ++qualityIndex) {
+            if (engine::ToolButton(
+                        ui, config, input, assets,
+                        TextFormat("sector_editor_preview_local_fog_quality_%d", qualityIndex),
+                        Rectangle{qualityIndex * (qualityWidth + qualityGap), contentY, qualityWidth, rowH},
+                        font,
+                        qualityNames[qualityIndex],
+                        modalState.draftFogSettings.localVolumeQuality == qualities[qualityIndex])) {
+                modalState.draftFogSettings.localVolumeQuality = qualities[qualityIndex];
+            }
+        }
+        contentY += rowH + gap;
+
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_preview_fog_enabled",
+                    Rectangle{0.0f, contentY, contentW, rowH},
+                    font,
+                    "Enabled",
+                    modalState.draftFogSettings.enabled)) {
+            modalState.errorMessage.clear();
+        }
+        contentY += rowH + gap;
+
+        drawFloat(contentY, "sector_editor_preview_fog_start_distance", "Start distance", modalState.draftFogSettings.startDistanceWorld, modalState.fogStartDistanceInput, 0.0f, 512.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_fog_density", "Density", modalState.draftFogSettings.density, modalState.fogDensityInput, 0.0f, 1.0f, 4);
+        drawFloat(contentY, "sector_editor_preview_fog_max_opacity", "Maximum opacity", modalState.draftFogSettings.maxOpacity, modalState.fogMaxOpacityInput, 0.0f, 1.0f, 3);
+        drawFloat(contentY, "sector_editor_preview_fog_reference_height", "Reference height", modalState.draftFogSettings.referenceHeightWorld, modalState.fogReferenceHeightInput, -512.0f, 512.0f, 2);
+        drawFloat(contentY, "sector_editor_preview_fog_height_falloff", "Height falloff", modalState.draftFogSettings.heightFalloff, modalState.fogHeightFalloffInput, 0.0f, 16.0f, 3);
+        modalState.draftFogSettings = NormalizeSectorTopologyFogSettings(modalState.draftFogSettings);
+
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, contentY, contentW, 32.0f},
+                font,
+                "Height falloff 0 produces uniform distance fog.",
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        contentY += 36.0f + gap;
+
+        engine::Text(ui, config, assets, Rectangle{0.0f, contentY, contentW, 34.0f}, font, "Color", engine::UITextJustify::Left, config.textColor);
+        contentY += 38.0f;
+        drawColorChannel(contentY, "sector_editor_preview_fog_r", "R:", modalState.draftFogSettings.color.r, modalState.fogColorRedInput);
+        drawColorChannel(contentY, "sector_editor_preview_fog_g", "G:", modalState.draftFogSettings.color.g, modalState.fogColorGreenInput);
+        drawColorChannel(contentY, "sector_editor_preview_fog_b", "B:", modalState.draftFogSettings.color.b, modalState.fogColorBlueInput);
+        modalState.draftFogSettings.color.a = 255;
+        const Rectangle swatch{
+                scroll.viewport.x + 104.0f,
+                scroll.viewport.y - modalState.fogScroll.offset.y + contentY + 2.0f,
+                std::min(130.0f, contentW - 104.0f),
+                28.0f
+        };
+        DrawColorSwatch(config, swatch, NormalizeSectorTopologyFogSettings(modalState.draftFogSettings).color, 1.0f);
+        contentY += 36.0f + gap;
+
+        engine::EndScrollArea(ui, config, input, scroll, modalState.fogScroll);
+    };
+
+    auto drawViewmodelTab = [&]() {
+        float contentY = 0.0f;
+        const float contentH = 20.0f * (rowH + gap) + 12.0f;
+        engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+                ui, config, input, "sector_editor_preview_settings_viewmodel_scroll",
+                scrollBounds, Vector2{scrollContentW, contentH}, modalState.viewmodelScroll);
+        drawFloat(contentY, "sector_editor_viewmodel_position_x", "Position X (right)", modalState.draftViewmodel.position.x, modalState.viewmodelPositionXInput, -10.0f, 10.0f, 3);
+        drawFloat(contentY, "sector_editor_viewmodel_position_y", "Position Y (up)", modalState.draftViewmodel.position.y, modalState.viewmodelPositionYInput, -10.0f, 10.0f, 3);
+        drawFloat(contentY, "sector_editor_viewmodel_position_z", "Position Z (forward)", modalState.draftViewmodel.position.z, modalState.viewmodelPositionZInput, -10.0f, 10.0f, 3);
+        drawFloat(contentY, "sector_editor_viewmodel_pitch", "Local pitch", modalState.draftViewmodel.rotationDegrees.x, modalState.viewmodelPitchInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_viewmodel_yaw", "Local yaw", modalState.draftViewmodel.rotationDegrees.y, modalState.viewmodelYawInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_viewmodel_roll", "Local roll", modalState.draftViewmodel.rotationDegrees.z, modalState.viewmodelRollInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_viewmodel_scale", "Scale", modalState.draftViewmodel.scale, modalState.viewmodelScaleInput, 0.01f, 10.0f, 3);
+        drawFloat(contentY, "sector_editor_viewmodel_fov", "Vertical FOV", modalState.draftViewmodel.verticalFovDegrees, modalState.viewmodelFovInput, 20.0f, 120.0f, 2);
+        modalState.draftViewmodel = ClampFpsViewmodelPresentation(modalState.draftViewmodel);
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, contentY, scrollContentW, rowH},
+                font,
+                "Weapon grip correction",
+                engine::UITextJustify::Left,
+                config.textColor);
+        contentY += rowH + gap;
+        drawFloat(contentY, "sector_editor_viewmodel_grip_translation_x", "Grip translation X", modalState.draftViewmodelGrip.translation.x, modalState.viewmodelGripTranslationXInput, -1.0f, 1.0f, 4);
+        drawFloat(contentY, "sector_editor_viewmodel_grip_translation_y", "Grip translation Y", modalState.draftViewmodelGrip.translation.y, modalState.viewmodelGripTranslationYInput, -1.0f, 1.0f, 4);
+        drawFloat(contentY, "sector_editor_viewmodel_grip_translation_z", "Grip translation Z", modalState.draftViewmodelGrip.translation.z, modalState.viewmodelGripTranslationZInput, -1.0f, 1.0f, 4);
+        drawFloat(contentY, "sector_editor_viewmodel_grip_pitch", "Grip pitch", modalState.draftViewmodelGrip.rotationDegrees.x, modalState.viewmodelGripPitchInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_viewmodel_grip_yaw", "Grip yaw", modalState.draftViewmodelGrip.rotationDegrees.y, modalState.viewmodelGripYawInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_viewmodel_grip_roll", "Grip roll", modalState.draftViewmodelGrip.rotationDegrees.z, modalState.viewmodelGripRollInput, -360.0f, 360.0f, 2);
+        drawFloat(contentY, "sector_editor_viewmodel_grip_scale", "Grip scale", modalState.draftViewmodelGrip.scale, modalState.viewmodelGripScaleInput, 0.01f, 10.0f, 4);
+        modalState.draftViewmodelGrip = ClampFpsViewmodelGripCorrection(
+                modalState.draftViewmodelGrip);
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, contentY, scrollContentW, rowH},
+                font,
+                "Weapon lighting",
+                engine::UITextJustify::Left,
+                config.textColor);
+        contentY += rowH + gap;
+        drawFloat(contentY, "sector_editor_viewmodel_attachment_brightness", "Pistol brightness", modalState.draftViewmodelAttachmentLighting.brightnessAdjustment, modalState.viewmodelAttachmentBrightnessInput, -1.0f, 1.0f, 3);
+        drawFloat(contentY, "sector_editor_viewmodel_attachment_metallic", "Pistol metallic factor", modalState.draftViewmodelAttachmentLighting.materialOverride.metallicFactor, modalState.viewmodelAttachmentMetallicInput, 0.0f, 1.0f, 3);
+        drawFloat(contentY, "sector_editor_viewmodel_attachment_roughness", "Pistol roughness factor", modalState.draftViewmodelAttachmentLighting.materialOverride.roughnessFactor, modalState.viewmodelAttachmentRoughnessInput, 0.045f, 1.0f, 3);
+        modalState.draftViewmodelAttachmentLighting =
+                ClampFpsViewmodelAttachmentLighting(
+                        modalState.draftViewmodelAttachmentLighting);
+        engine::EndScrollArea(ui, config, input, scroll, modalState.viewmodelScroll);
+    };
+
+    if (modalState.activeTab == PreviewSettingsTab::Viewmodel) {
+        drawViewmodelTab();
+    } else if (modalState.activeTab == PreviewSettingsTab::Fog) {
+        drawFogTab();
+    } else if (modalState.activeTab == PreviewSettingsTab::Lighting) {
         drawLightingTab();
     } else if (modalState.activeTab == PreviewSettingsTab::Sky) {
         drawSkyTab();
@@ -345,7 +520,32 @@ void DrawPreviewSettingsModal(
 
     const float buttonW = 132.0f;
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_reset", Rectangle{modal.x + 30.0f, buttonY, 176.0f, 44.0f}, font, "Reset Defaults")) {
-        if (modalState.activeTab == PreviewSettingsTab::Lighting) {
+        if (modalState.activeTab == PreviewSettingsTab::Viewmodel) {
+            modalState.draftViewmodel = modalState.viewmodelDefaults;
+            modalState.viewmodelPositionXInput = {};
+            modalState.viewmodelPositionYInput = {};
+            modalState.viewmodelPositionZInput = {};
+            modalState.viewmodelPitchInput = {};
+            modalState.viewmodelYawInput = {};
+            modalState.viewmodelRollInput = {};
+            modalState.viewmodelScaleInput = {};
+            modalState.viewmodelFovInput = {};
+            modalState.draftViewmodelGrip = modalState.viewmodelGripDefaults;
+            modalState.viewmodelGripTranslationXInput = {};
+            modalState.viewmodelGripTranslationYInput = {};
+            modalState.viewmodelGripTranslationZInput = {};
+            modalState.viewmodelGripPitchInput = {};
+            modalState.viewmodelGripYawInput = {};
+            modalState.viewmodelGripRollInput = {};
+            modalState.viewmodelGripScaleInput = {};
+            modalState.draftViewmodelAttachmentLighting =
+                    modalState.viewmodelAttachmentLightingDefaults;
+            modalState.viewmodelAttachmentBrightnessInput = {};
+            modalState.viewmodelAttachmentMetallicInput = {};
+            modalState.viewmodelAttachmentRoughnessInput = {};
+        } else if (modalState.activeTab == PreviewSettingsTab::Fog) {
+            ResetSectorPreviewSettingsModalFogDefaults(modalState);
+        } else if (modalState.activeTab == PreviewSettingsTab::Lighting) {
             ResetSectorPreviewSettingsModalLightingDefaults(modalState);
         } else if (modalState.activeTab == PreviewSettingsTab::Sky) {
             modalState.draftSkySettings = DefaultSectorTopologySkySettings();

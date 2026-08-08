@@ -10,7 +10,10 @@
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
-#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
+#include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
+#include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
+#include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
 
 #include <array>
 #include <string>
@@ -26,7 +29,9 @@ enum class SectorEditorInspectorPanelRequestKind {
     BeginAuthoringInsertVertex,
     DeleteSelectedRuntimeObject,
     OpenDeleteSelectedLightConfirmation,
-    BakeLightmaps
+    OpenDeleteSelectedFogVolumeConfirmation,
+    BakeLightmaps,
+    RefreshPreviewLightSources
 };
 
 struct SectorEditorInspectorPanelRequest {
@@ -56,15 +61,21 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorDerivationDocumentAccess derivation;
     SelectionState& selectionState;
     SectorEditorUiState& uiState;
+    RuntimeObjectEditingState& runtimeObjectEditingState;
+    RuntimeObjectEditingUiState& runtimeObjectEditingUiState;
+    SectorRuntimeObjectState& runtimeObjects;
     InspectorIdUiState& inspectorIdUiState;
     MaterialEditingUiState& materialUiState;
+    FogVolumeEditingUiState& fogVolumeUiState;
     std::string& statusText;
 
     SectorEditorSelectionServiceContext& selection;
-    SectorEditorPlacedObjectActionContext& placedObjectActions;
+    SectorEditorRuntimeObjectEditingService& runtimeObjectEditing;
+    SectorEditorStaticModelPickerService& staticModelPicker;
     SectorEditorMaterialEditingService& materialEditing;
     SectorEditorTextureCatalogService& textureCatalog;
     SectorEditorLightEditingService& lightEditing;
+    SectorEditorAuthoringFogVolumeEditingService& fogVolumeEditing;
     engine::EngineContext* engineContext = nullptr;
 };
 

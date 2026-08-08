@@ -50,6 +50,7 @@ void AssetManager::Shutdown()
     }
 
     spriteAnimations.Shutdown();
+    models.ShutdownMainThread();
     fonts.ShutdownMainThread();
     textures.ShutdownMainThread();
 
@@ -79,6 +80,7 @@ AssetScopeHandle AssetManager::CreateScope(const char* name)
 
     textures.OnScopeCreated(handle);
     fonts.OnScopeCreated(handle);
+    models.OnScopeCreated(handle);
     spriteAnimations.OnScopeCreated(handle);
     return handle;
 }
@@ -104,6 +106,7 @@ void AssetManager::UnloadScope(AssetScopeHandle scope)
 
     textures.UnloadScope(scope);
     fonts.UnloadScope(scope);
+    models.UnloadScope(scope);
     spriteAnimations.UnloadScope(scope);
 }
 
@@ -149,6 +152,21 @@ TextureHandle AssetManager::CreateTextureFromImage(
     return textures.CreateTextureFromImage(scope, key, image, flags);
 }
 
+TextureHandle AssetManager::CreateCubemapFromImage(
+        AssetScopeHandle scope,
+        const char* key,
+        const Image& image,
+        int layout)
+{
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (!IsValidScopeNoLock(scope)) {
+            return NullTextureHandle();
+        }
+    }
+    return textures.CreateCubemapFromImage(scope, key, image, layout);
+}
+
 bool AssetManager::IsReady(TextureHandle handle) const
 {
     return textures.IsReady(handle);
@@ -167,6 +185,11 @@ bool AssetManager::HasFailed(TextureHandle handle) const
 const Texture2D* AssetManager::GetTexture(TextureHandle handle) const
 {
     return textures.GetTexture(handle);
+}
+
+const TextureCubemap* AssetManager::GetCubemap(TextureHandle handle) const
+{
+    return textures.GetCubemap(handle);
 }
 
 FontHandle AssetManager::RequestFont(
@@ -204,6 +227,51 @@ bool AssetManager::HasFailed(FontHandle handle) const
 const FontAsset* AssetManager::GetFont(FontHandle handle) const
 {
     return fonts.GetFont(handle);
+}
+
+ModelHandle AssetManager::RequestModel(
+        AssetScopeHandle scope,
+        const char* key,
+        const char* path,
+        ModelLoadFlags flags)
+{
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (!IsValidScopeNoLock(scope)) {
+            return NullModelHandle();
+        }
+    }
+    return models.RequestModel(scope, key, path, flags);
+}
+
+bool AssetManager::IsReady(ModelHandle handle) const
+{
+    return models.IsReady(handle);
+}
+
+bool AssetManager::IsFinished(ModelHandle handle) const
+{
+    return models.IsFinished(handle);
+}
+
+bool AssetManager::HasFailed(ModelHandle handle) const
+{
+    return models.HasFailed(handle);
+}
+
+const Model* AssetManager::GetModel(ModelHandle handle) const
+{
+    return models.GetModel(handle);
+}
+
+const ModelAsset* AssetManager::GetModelAsset(ModelHandle handle) const
+{
+    return models.GetModelAsset(handle);
+}
+
+ModelHandle AssetManager::FindReadyModelByPath(const char* path) const
+{
+    return models.FindReadyModelByPath(path);
 }
 
 SpriteAnimationHandle AssetManager::RequestSpriteAnimation(
@@ -274,6 +342,7 @@ bool AssetManager::IsScopeReady(AssetScopeHandle scope) const
     return IsValidScopeNoLock(scope)
         && textures.IsScopeReady(scope)
         && fonts.IsScopeReady(scope)
+        && models.IsScopeReady(scope)
         && spriteAnimations.IsScopeReady(scope, textures);
 }
 
@@ -283,6 +352,7 @@ bool AssetManager::IsScopeFinished(AssetScopeHandle scope) const
     return IsValidScopeNoLock(scope)
         && textures.IsScopeFinished(scope)
         && fonts.IsScopeFinished(scope)
+        && models.IsScopeFinished(scope)
         && spriteAnimations.IsScopeFinished(scope, textures);
 }
 
@@ -297,6 +367,7 @@ float AssetManager::GetScopeProgress(AssetScopeHandle scope) const
     size_t total = 0;
     textures.GetScopeProgressCounts(scope, finished, total);
     fonts.GetScopeProgress(scope, finished, total);
+    models.GetScopeProgress(scope, finished, total);
     spriteAnimations.GetScopeProgress(scope, textures, finished, total);
 
     if (total == 0) {
@@ -310,6 +381,7 @@ void AssetManager::UpdateMainThread(float maxMilliseconds)
 {
     textures.UpdateMainThread(maxMilliseconds);
     fonts.UpdateMainThread(maxMilliseconds);
+    models.UpdateMainThread(maxMilliseconds);
 }
 
 bool AssetManager::IsValidScopeNoLock(AssetScopeHandle scope) const

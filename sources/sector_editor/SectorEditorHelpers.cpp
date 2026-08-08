@@ -555,7 +555,10 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex";
         case SectorEditorTool::AuthoringMove: return "Move Vertex";
         case SectorEditorTool::RuntimeObject: return "Billboard";
+        case SectorEditorTool::StaticModel: return "3D Prop";
+        case SectorEditorTool::DynamicModel: return "Dynamic Prop";
         case SectorEditorTool::Door: return "Door";
+        case SectorEditorTool::AuthoringFogVolume: return "Fog Volume";
         case SectorEditorTool::StaticLight: return "Static Light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot";
         case SectorEditorTool::DynamicLight: return "Dynamic Light";
@@ -570,6 +573,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
     return tool == SectorEditorTool::AuthoringLine
             || tool == SectorEditorTool::AuthoringRectangle
             || tool == SectorEditorTool::AuthoringInsertVertex
+            || tool == SectorEditorTool::AuthoringFogVolume
             || tool == SectorEditorTool::AuthoringMove;
 }
 
@@ -605,6 +609,7 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
         case SectorEditorPickKind::AuthoringVertex: return "authoring vertex";
         case SectorEditorPickKind::AuthoringLine: return "authoring line";
         case SectorEditorPickKind::AuthoringFaceAnchor: return "authoring face";
+        case SectorEditorPickKind::AuthoringFogVolume: return "fog volume";
     }
     return "unknown";
 }
@@ -625,6 +630,7 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
         case SectorEditorPickKind::StaticSpotLight:
         case SectorEditorPickKind::StaticLight:
         case SectorEditorPickKind::AuthoringVertex:
+        case SectorEditorPickKind::AuthoringFogVolume:
             return target.id >= 0;
         case SectorEditorPickKind::None:
         case SectorEditorPickKind::AuthoringLine:
@@ -1022,6 +1028,8 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::AuthoringInsertVertex: return "Insert Vertex: click an authoring line to split it, right click/Esc cancels";
         case SectorEditorTool::AuthoringMove: return "Move Vertex: hidden; use Select to move selected authoring vertices";
         case SectorEditorTool::RuntimeObject: return "Billboard: click inside a sector to place a billboard marker";
+        case SectorEditorTool::StaticModel: return "3D Prop: click inside a derived sector to place a floor-relative static model";
+        case SectorEditorTool::DynamicModel: return "Dynamic Prop: click inside a derived sector to place an animated model";
         case SectorEditorTool::Door: return "Door: click a two-sided portal line to place a sliding door";
         case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place a baked point light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place a baked spot light";
@@ -1110,6 +1118,25 @@ bool SameDirectionalLightSettings(
             && a.color.b == b.color.b
             && a.color.a == b.color.a
             && a.intensity == b.intensity;
+}
+
+bool SameFogSettings(
+        const SectorTopologyFogSettings& left,
+        const SectorTopologyFogSettings& right)
+{
+    const SectorTopologyFogSettings a = NormalizeSectorTopologyFogSettings(left);
+    const SectorTopologyFogSettings b = NormalizeSectorTopologyFogSettings(right);
+    return a.enabled == b.enabled
+            && a.color.r == b.color.r
+            && a.color.g == b.color.g
+            && a.color.b == b.color.b
+            && a.color.a == b.color.a
+            && a.startDistanceWorld == b.startDistanceWorld
+            && a.density == b.density
+            && a.maxOpacity == b.maxOpacity
+            && a.referenceHeightWorld == b.referenceHeightWorld
+            && a.heightFalloff == b.heightFalloff
+            && a.localVolumeQuality == b.localVolumeQuality;
 }
 
 bool SamePreviewSettings(const SectorPreviewSettings& left, const SectorPreviewSettings& right)

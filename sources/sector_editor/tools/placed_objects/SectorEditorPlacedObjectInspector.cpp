@@ -2,6 +2,8 @@
 
 #include "sector_editor/tools/billboards/SectorEditorBillboardInspector.h"
 #include "sector_editor/tools/doors/SectorEditorDoorInspector.h"
+#include "sector_editor/tools/placed_objects/SectorEditorStaticModelInspector.h"
+#include "sector_editor/tools/placed_objects/SectorEditorDynamicModelInspector.h"
 
 #include <raylib.h>
 
@@ -12,7 +14,7 @@ namespace game {
 float MeasureSectorEditorPlacedObjectInspectorContentHeight(
     const SectorEditorPlacedObjectInspectorMeasureContext &context) {
   const SectorPlacedRuntimeObject *object =
-      context.callbacks.selectedRuntimeObject();
+      context.editing.SelectedObject();
   if (object == nullptr) {
     return 42.0f;
   }
@@ -23,6 +25,12 @@ float MeasureSectorEditorPlacedObjectInspectorContentHeight(
   if (object->kind == "billboard") {
     return MeasureSectorEditorBillboardInspectorContentHeight(context, *object);
   }
+  if (object->kind == "static_model") {
+    return MeasureSectorEditorStaticModelInspectorContentHeight(context, *object);
+  }
+  if (object->kind == "dynamic_model") {
+    return MeasureSectorEditorDynamicModelInspectorContentHeight(context, *object);
+  }
   return 72.0f;
 }
 
@@ -32,14 +40,12 @@ void DrawSectorEditorPlacedObjectInspector(
   const engine::UIConfig &config = context.config;
   engine::AssetManager &assets = context.assets;
   const engine::FontHandle font = context.font;
-  const SectorEditorPlacedObjectInspectorCallbacks &callbacks =
-      context.callbacks;
   const float contentW = context.contentW;
   const float rowH = context.rowH;
 
   float y = 0.0f;
   const SectorPlacedRuntimeObject *selectedObject =
-      callbacks.selectedRuntimeObject();
+      context.editing.SelectedObject();
   if (selectedObject == nullptr) {
     return;
   }
@@ -51,12 +57,16 @@ void DrawSectorEditorPlacedObjectInspector(
 
   const bool isBillboard = selectedObject->kind == "billboard";
   const bool isDoor = selectedObject->kind == "door";
+  const bool isStaticModel = selectedObject->kind == "static_model";
+  const bool isDynamicModel = selectedObject->kind == "dynamic_model";
   engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font,
                isBillboard ? "Type: Billboard"
+               : isStaticModel ? "Type: 3D Prop"
+               : isDynamicModel ? "Type: Dynamic Prop"
                : isDoor    ? "Type: Door"
                            : "Type: Unsupported object",
                engine::UITextJustify::Left,
-               isBillboard || isDoor ? config.mutedTextColor
+               isBillboard || isStaticModel || isDynamicModel || isDoor ? config.mutedTextColor
                                      : config.invalidColor);
   y += 34.0f;
 
@@ -68,11 +78,19 @@ void DrawSectorEditorPlacedObjectInspector(
     DrawSectorEditorBillboardInspector(context, y);
     return;
   }
+  if (isStaticModel) {
+    DrawSectorEditorStaticModelInspector(context, y);
+    return;
+  }
+  if (isDynamicModel) {
+    DrawSectorEditorDynamicModelInspector(context, y);
+    return;
+  }
 
   if (engine::Button(ui, config, context.input, assets,
                      "sector_editor_delete_runtime_object",
                      Rectangle{0.0f, y, contentW, rowH}, font, "Delete")) {
-    callbacks.deleteSelectedRuntimeObject();
+    context.deleteRequested = true;
   }
 }
 

@@ -1,0 +1,44 @@
+#pragma once
+
+#include "engine/assets/ModelAssets.h"
+#include "engine/components/AnimatedModel.h"
+
+namespace engine {
+
+class AssetManager;
+class World;
+
+uint32_t FindModelAnimationIndex(const ModelAsset& asset, const char* name);
+
+// A zero blend duration switches immediately. A positive duration keeps the
+// current clip as the blend source and advances both source and target clips.
+void SetAnimatedModelAnimation(
+        AnimatedModelAnimator& animator,
+        uint32_t animationIndex,
+        float blendDurationSeconds = 0.0f,
+        bool restart = true);
+
+bool SetAnimatedModelAnimationByName(
+        AnimatedModelAnimator& animator,
+        const ModelAsset& asset,
+        const char* name,
+        float blendDurationSeconds = 0.0f,
+        bool restart = true);
+
+// Called during explicit load/finalization, where allocating the per-instance
+// pose buffers is allowed.
+void PrepareAnimatedModelInstancesSystem(World& world, AssetManager& assets);
+
+// Explicit load/finalization helper for presentation models that are not ECS entities.
+bool PrepareAnimatedModelInstance(AnimatedModelInstance& instance, const ModelAsset& asset);
+
+// Normal frame update. This does not allocate and never applies root motion to
+// an entity transform.
+void AnimatedModelSystem(World& world, AssetManager& assets, float dt);
+
+// Returns a shallow view of the shared asset with instance-owned pose pointers.
+Model BuildAnimatedModelPoseView(
+        const ModelAsset& asset,
+        AnimatedModelInstance& instance);
+
+} // namespace engine

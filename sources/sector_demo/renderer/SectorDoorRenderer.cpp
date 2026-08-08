@@ -72,6 +72,15 @@ uniform sampler2D shadowMap1;
 uniform int doorDebugMode;
 uniform vec4 doorTint;
 
+uniform int fogEnabled;
+uniform vec3 fogColor;
+uniform vec3 fogCameraPosition;
+uniform float fogStartDistanceWorld;
+uniform float fogDensity;
+uniform float fogMaxOpacity;
+uniform float fogReferenceHeightWorld;
+uniform float fogHeightFalloff;
+
 #define DOOR_DEBUG_NORMAL 0
 #define DOOR_DEBUG_ALBEDO_ONLY 1
 #define DOOR_DEBUG_BAKED_ONLY 2
@@ -152,6 +161,22 @@ float DynamicSpotLightShadowVisibility(
     return visible / 12.0;
 }
 
+vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
+{
+    if (fogEnabled == 0 || fogDensity <= 0.0 || fogMaxOpacity <= 0.0) {
+        return surfaceRgb;
+    }
+
+    float fogDistance = max(length(worldPosition - fogCameraPosition) - fogStartDistanceWorld, 0.0);
+    float midpointHeight = (fogCameraPosition.y + worldPosition.y) * 0.5;
+    float heightAboveReference = max(midpointHeight - fogReferenceHeightWorld, 0.0);
+    float heightMultiplier = exp(-heightAboveReference * fogHeightFalloff);
+    float fogAmount = min(
+            1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
+            fogMaxOpacity);
+    return mix(surfaceRgb, fogColor, fogAmount);
+}
+
 void main()
 {
     vec3 worldNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
@@ -221,7 +246,8 @@ void main()
     vec4 sampled = texture(texture0, fragTexCoord);
     vec3 surfaceRgb = sampled.rgb;
     vec3 lighting = clamp(staticProbeLighting + dynamicDirect, 0.0, dynamicLightingClamp);
-    finalColor = vec4(surfaceRgb * tint * lighting, sampled.a * doorTint.a);
+    vec3 outputRgb = ApplySectorFog(surfaceRgb * tint * lighting, fragWorldPosition);
+    finalColor = vec4(outputRgb, sampled.a * doorTint.a);
 }
 )";
 
@@ -380,6 +406,7 @@ bool SectorDoorRenderer::LoadOpaqueResources()
     opaqueShaderLocations.dynamicLightingClamp = GetShaderLocation(opaqueShader, "dynamicLightingClamp");
     opaqueShaderLocations.debugMode = GetShaderLocation(opaqueShader, "doorDebugMode");
     opaqueShaderLocations.tint = GetShaderLocation(opaqueShader, "doorTint");
+    opaqueShaderLocations.fog = GetSectorFogShaderLocations(opaqueShader);
     opaqueShaderLoaded = true;
 
     opaqueMaterial = LoadMaterialDefault();
@@ -532,6 +559,10 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
             doorOpaqueMaterial.shader,
             shadowLocations,
             context.dynamicLighting.shadowUniforms);
+    UploadSectorFogShaderValues(
+            doorOpaqueMaterial.shader,
+            doorOpaqueLocations.fog,
+            context.fog);
     const Texture2D* shadowMap0 = context.dynamicLighting.shadowMaps.shadowMap0;
     const Texture2D* shadowMap1 = context.dynamicLighting.shadowMaps.shadowMap1;
     doorOpaqueMaterial.maps[MATERIAL_MAP_ROUGHNESS].texture = shadowMap0 != nullptr ? *shadowMap0 : Texture2D{};

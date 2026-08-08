@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "initialWeaponId": "pistol",
+  "weapons": [
+    {
+      "id": "pistol",
+      "crosshair": {
+        "enabled": true,
+        "innerColor": {"r": 235, "g": 235, "b": 225, "a": 255},
+        "outlineColor": {"r": 0, "g": 0, "b": 0, "a": 220},
+        "centerGapPixels": 4.0,
+        "segmentLengthPixels": 6.0,
+        "innerThicknessPixels": 2.0,
+        "outlineThicknessPixels": 1.0
+      },
+      "viewmodel": {
+        "modelPath": "assets/models/weapons/pistol_arms.glb",
+        "idleAnimation": "Pistol Idle",
+        "sourceFps": 30.0,
+        "firstFrame": 1,
+        "lastFrame": 41,
+        "playbackSpeed": 1.0,
+        "position": [0.0, -1.4, 0.25],
+        "rotationDegrees": [0.0, 0.0, 0.0],
+        "scale": 1.0,
+        "verticalFovDegrees": 65.0,
+        "brightnessAdjustment": -0.55,
+        "materialOverride": {
+          "metallicFactor": 0.0,
+          "roughnessFactor": 0.78,
+          "useMetallicRoughnessTexture": false
+        },
+        "attachment": {
+          "modelPath": "assets/models/weapons/pistol.glb",
+          "boneName": "mixamorig12:RightHand",
+          "translation": [0.020654, 0.037913, -0.149138],
+          "rotationDegrees": [3.058116, 175.482727, 88.187634],
+          "scale": 1.0,
+          "brightnessAdjustment": 0.0,
+          "materialOverride": {
+            "metallicFactor": 0.35,
+            "roughnessFactor": 1.0,
+            "useMetallicRoughnessTexture": true
+          }
+        }
+      }
+    }
+  ]
+}

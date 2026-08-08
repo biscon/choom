@@ -27,5 +27,6 @@ struct SectorTextureBinding {
 
 engine::TextureLoadFlags SectorTextureLoadFlags(SectorTextureFilter filter);
 const char* SectorTextureFilterName(SectorTextureFilter filter);
+std::string SectorTextureNormalMapPath(const std::string& baseTexturePath);
 
 } // namespace game

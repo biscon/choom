@@ -46,7 +46,8 @@ enum class SectorAuthoringSelectionKind {
     None,
     Line,
     Vertex,
-    FaceAnchor
+    FaceAnchor,
+    FogVolume
 };
 
 struct SectorAuthoringSelectionTarget {
@@ -54,6 +55,7 @@ struct SectorAuthoringSelectionTarget {
     int lineId = -1;
     int vertexId = -1;
     int faceAnchorId = -1;
+    int fogVolumeId = -1;
 };
 
 enum class SectorSurfaceKind {
@@ -90,6 +92,16 @@ struct AuthoringVertexDragState {
     std::string errorMessage;
 };
 
+struct AuthoringFogVolumeDragState {
+    bool active = false;
+    int fogVolumeId = -1;
+    SectorTopologyCoordPoint originalPoint = {};
+    SectorTopologyCoordPoint previewPoint = {};
+    bool hasPreviewPoint = false;
+    bool previewResolved = false;
+    std::string errorMessage;
+};
+
 enum class SpotLightHandle {
     Origin,
     Target
@@ -104,7 +116,8 @@ enum class SectorEditorPickKind {
     StaticLight,
     AuthoringVertex,
     AuthoringLine,
-    AuthoringFaceAnchor
+    AuthoringFaceAnchor,
+    AuthoringFogVolume
 };
 
 struct SectorEditorPickTarget {

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -447,6 +448,9 @@ void TestDynamicPortalBlockerTraversal()
             game::TraverseRuntimeSectorVisibility(graph, 10, &closedBlocker);
     Check(blocked.visibleSectorIds.size() == 1 && blocked.visibleSectorIds[0] == 10,
           "matching dynamic blocker prevents directed portal traversal");
+    Check(game::ShouldDrawRuntimeSectorForVisibility(20, unblocked)
+                  && !game::ShouldDrawRuntimeSectorForVisibility(20, blocked),
+          "closed dynamic portal culls runtime objects owned by the hidden sector");
     Check(blocked.traversedPortalLineDefIds.empty(),
           "blocked dynamic portal is not recorded as traversed");
 
@@ -542,6 +546,90 @@ void TestViewYawFacingPortalIncludesNeighbor()
     Check(!result.fallbackDrawAll, "view-facing traversal does not fallback");
     Check(Contains(result.visibleSectorIds, 10) && Contains(result.visibleSectorIds, 20),
           "preview yaw 0 faces positive-X portal and includes neighbor");
+}
+
+void TestPitchAwareHorizontalFov()
+{
+    const float verticalFov = Degrees(75.0f);
+    const float aspect = 16.0f / 9.0f;
+    const float expectedLevelFov =
+            2.0f * std::atan(std::tan(verticalFov * 0.5f) * aspect);
+    const float levelFov = game::ComputeRuntimePortalVisibilityHorizontalFovRadians(
+            verticalFov,
+            aspect,
+            0.0f);
+    Check(Near(levelFov, expectedLevelFov),
+          "level pitch keeps the ordinary perspective horizontal FOV");
+
+    const float pitchedDown = game::ComputeRuntimePortalVisibilityHorizontalFovRadians(
+            verticalFov,
+            aspect,
+            Degrees(-30.0f));
+    const float pitchedUp = game::ComputeRuntimePortalVisibilityHorizontalFovRadians(
+            verticalFov,
+            aspect,
+            Degrees(30.0f));
+    Check(pitchedDown > levelFov,
+          "moderate pitch widens the conservative XZ visibility span");
+    Check(Near(pitchedDown, pitchedUp),
+          "upward and downward pitch widen visibility symmetrically");
+
+    const float steepPitch = game::ComputeRuntimePortalVisibilityHorizontalFovRadians(
+            verticalFov,
+            aspect,
+            Degrees(-60.0f));
+    Check(Near(steepPitch, Pi * 2.0f),
+          "frustum crossing the vertical axis uses a full XZ visibility span");
+
+    Check(Near(
+                  game::ComputeRuntimePortalVisibilityHorizontalFovRadians(
+                          std::numeric_limits<float>::quiet_NaN(),
+                          aspect,
+                          0.0f),
+                  Pi * 2.0f),
+          "invalid pitch-aware FOV input fails open");
+}
+
+void TestSteepPitchIncludesSidePortal()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(MakeSidePortal(), graph, &error),
+          "steep-pitch side-portal graph builds");
+
+    const Vector2 camera = game::SectorCoordToWorldPosition2(32, 32);
+    const Vector2 forward = ForwardFromPreviewYaw(Degrees(-20.0f));
+    const float verticalFov = Degrees(75.0f);
+    const float aspect = 16.0f / 9.0f;
+    const float levelFov = game::ComputeRuntimePortalVisibilityHorizontalFovRadians(
+            verticalFov,
+            aspect,
+            0.0f);
+    const game::RuntimePortalVisibilityResult levelResult =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    nullptr,
+                    camera,
+                    forward,
+                    levelFov,
+                    10);
+    Check(!Contains(levelResult.visibleSectorIds, 20),
+          "level view still culls a side portal outside the screen wedge");
+
+    const float steepPitchFov = game::ComputeRuntimePortalVisibilityHorizontalFovRadians(
+            verticalFov,
+            aspect,
+            Degrees(-60.0f));
+    const game::RuntimePortalVisibilityResult steepPitchResult =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    nullptr,
+                    camera,
+                    forward,
+                    steepPitchFov,
+                    10);
+    Check(Contains(steepPitchResult.visibleSectorIds, 20),
+          "steep downward view keeps a side sector covered by screen-corner rays");
 }
 
 void TestViewYawFacingAwayExcludesNeighbor()
@@ -1136,6 +1224,32 @@ void TestPointLookupVisibilityDebug()
           "outside-map lookup reports fallback reason");
 }
 
+void TestRuntimeSectorDrawVisibilityPolicy()
+{
+    game::RuntimePortalVisibilityResult visible;
+    visible.validStartSector = true;
+    visible.visibleSectorIds = {10, 30};
+    Check(game::ShouldDrawRuntimeSectorForVisibility(10, visible)
+                  && game::ShouldDrawRuntimeSectorForVisibility(30, visible),
+          "runtime sector draw policy includes portal-visible owner sectors");
+    Check(!game::ShouldDrawRuntimeSectorForVisibility(20, visible),
+          "runtime sector draw policy excludes hidden owner sectors");
+    Check(!game::ShouldDrawRuntimeSectorForVisibility(-1, visible)
+                  && !game::ShouldDrawRuntimeSectorForVisibility(0, visible),
+          "runtime sector draw policy excludes unresolved owners during valid visibility");
+
+    game::RuntimePortalVisibilityResult invalidStart;
+    Check(game::ShouldDrawRuntimeSectorForVisibility(20, invalidStart)
+                  && game::ShouldDrawRuntimeSectorForVisibility(-1, invalidStart),
+          "runtime sector draw policy fails open when no start sector is valid");
+
+    game::RuntimePortalVisibilityResult fallback = visible;
+    fallback.fallbackDrawAll = true;
+    Check(game::ShouldDrawRuntimeSectorForVisibility(20, fallback)
+                  && game::ShouldDrawRuntimeSectorForVisibility(-1, fallback),
+          "runtime sector draw policy honors explicit fallback draw-all");
+}
+
 void TestMalformedReferencesFailCleanly()
 {
     SectorTopologyMap map = MakeAdjacent();
@@ -1163,6 +1277,8 @@ int main()
     TestDynamicPortalBlockerMismatchAndUnblockedEntries();
     TestCycleTerminates();
     TestInvalidStartFallback();
+    TestPitchAwareHorizontalFov();
+    TestSteepPitchIncludesSidePortal();
     TestViewYawFacingPortalIncludesNeighbor();
     TestViewYawFacingAwayExcludesNeighbor();
     TestViewSidePortalOutsideFovExcluded();
@@ -1184,6 +1300,7 @@ int main()
     TestViewVerticalValidationIsTolerant();
     TestViewSolidBoundaryDoesNotCreateSeed();
     TestPointLookupVisibilityDebug();
+    TestRuntimeSectorDrawVisibilityPolicy();
     TestMalformedReferencesFailCleanly();
 
     if (failures != 0) {

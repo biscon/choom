@@ -24,6 +24,7 @@ namespace {
 
 struct SectorMeshBatchKey {
     int sectorId = -1;
+    int lightmapAtlasIndex = -1;
     std::string textureId;
     std::string decalTextureId;
     float decalOpacity = 1.0f;
@@ -37,6 +38,7 @@ struct SectorMeshBatchKey {
     bool operator==(const SectorMeshBatchKey& other) const
     {
         return sectorId == other.sectorId
+                && lightmapAtlasIndex == other.lightmapAtlasIndex
                 && textureId == other.textureId
                 && decalTextureId == other.decalTextureId
                 && decalOpacity == other.decalOpacity
@@ -55,6 +57,7 @@ struct SectorMeshBatchKeyHash {
     size_t operator()(const SectorMeshBatchKey& key) const
     {
         const size_t sectorHash = std::hash<int>{}(key.sectorId);
+        const size_t atlasHash = std::hash<int>{}(key.lightmapAtlasIndex);
         const size_t textureHash = std::hash<std::string>{}(key.textureId);
         const size_t decalHash = std::hash<std::string>{}(key.decalTextureId);
         const size_t opacityHash = std::hash<float>{}(key.decalOpacity);
@@ -66,7 +69,8 @@ struct SectorMeshBatchKeyHash {
         const size_t alphaTestHash = std::hash<bool>{}(key.alphaTest);
         const size_t alphaCutoffHash = std::hash<float>{}(key.alphaCutoff);
         const size_t receivesLightmapHash = std::hash<bool>{}(key.receivesLightmap);
-        size_t hash = sectorHash ^ (textureHash + 0x9e3779b9u + (sectorHash << 6u) + (sectorHash >> 2u));
+        size_t hash = sectorHash ^ (atlasHash + 0x9e3779b9u + (sectorHash << 6u) + (sectorHash >> 2u));
+        hash ^= textureHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= decalHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= opacityHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= emissiveHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
@@ -110,6 +114,7 @@ SectorMeshBatchData& BatchForKey(
         std::unordered_map<SectorMeshBatchKey, size_t, SectorMeshBatchKeyHash>& batchIndexByKey,
         std::vector<SectorMeshBatchData>& batches,
         int sectorId,
+        int lightmapAtlasIndex,
         const std::string& textureId,
         const std::string& decalTextureId,
         float decalOpacity,
@@ -123,6 +128,7 @@ SectorMeshBatchData& BatchForKey(
     const bool hasDecal = !decalTextureId.empty();
     const SectorMeshBatchKey key{
             sectorId,
+            lightmapAtlasIndex,
             textureId,
             decalTextureId,
             hasDecal ? UnitOrDefault(decalOpacity, 1.0f) : 1.0f,
@@ -139,6 +145,7 @@ SectorMeshBatchData& BatchForKey(
 
     SectorMeshBatchData batch;
     batch.sectorId = key.sectorId;
+    batch.lightmapAtlasIndex = key.lightmapAtlasIndex;
     batch.textureId = textureId;
     batch.decalTextureId = decalTextureId;
     batch.decalOpacity = key.decalOpacity;
@@ -166,6 +173,17 @@ Vector2 ResolveLightmapUv(
     }
 
     return layout->charts[surfaceIndex].vertexUvs[vertexIndex];
+}
+
+int ResolveLightmapAtlasIndex(
+        const SectorLightmapLayout* layout,
+        size_t surfaceIndex)
+{
+    if (layout == nullptr
+            || surfaceIndex >= layout->charts.size()) {
+        return -1;
+    }
+    return layout->charts[surfaceIndex].atlasIndex;
 }
 
 Mesh CreateMeshFromBatch(const SectorMeshBatchData& batch)
@@ -271,10 +289,14 @@ SectorMeshBatchDataResult BuildSectorMeshBatchDataInternal(
     for (size_t surfaceIndex = 0; surfaceIndex < geometry.surfaces.size(); ++surfaceIndex) {
         const SectorGeneratedSurface& surface = geometry.surfaces[surfaceIndex];
         const int sectorId = groupBySector ? surface.ref.topologySectorId : -1;
+        const int lightmapAtlasIndex = surface.receivesLightmap
+                ? ResolveLightmapAtlasIndex(lightmapLayout, surfaceIndex)
+                : -1;
         SectorMeshBatchData& batch = BatchForKey(
                 batchIndexByKey,
                 result.batches,
                 sectorId,
+                lightmapAtlasIndex,
                 surface.textureId,
                 surface.decalTextureId,
                 surface.decalOpacity,
@@ -316,6 +338,7 @@ SectorMeshBatch MakeUploadedBatch(const SectorMeshBatchData& builder, Mesh mesh)
 {
     SectorMeshBatch batch;
     batch.sectorId = builder.sectorId;
+    batch.lightmapAtlasIndex = builder.lightmapAtlasIndex;
     batch.textureId = builder.textureId;
     batch.decalTextureId = builder.decalTextureId;
     batch.decalOpacity = builder.decalOpacity;
@@ -387,6 +410,7 @@ SectorMeshBuildResult BuildSectorMeshes(
     for (const SectorMeshBatchData& builder : batchData.batches) {
         SectorMeshBatch batch;
         batch.sectorId = builder.sectorId;
+        batch.lightmapAtlasIndex = builder.lightmapAtlasIndex;
         batch.textureId = builder.textureId;
         batch.decalTextureId = builder.decalTextureId;
         batch.decalOpacity = builder.decalOpacity;

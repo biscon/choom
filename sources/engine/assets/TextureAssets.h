@@ -41,10 +41,18 @@ public:
             TextureLoadFlags flags
     );
 
+    TextureHandle CreateCubemapFromImage(
+            AssetScopeHandle scope,
+            const char* key,
+            const Image& image,
+            int layout
+    );
+
     bool IsReady(TextureHandle handle) const;
     bool IsFinished(TextureHandle handle) const;
     bool HasFailed(TextureHandle handle) const;
     const Texture2D* GetTexture(TextureHandle handle) const;
+    const TextureCubemap* GetCubemap(TextureHandle handle) const;
 
     bool IsScopeReady(AssetScopeHandle scope) const;
     bool IsScopeFinished(AssetScopeHandle scope) const;
@@ -79,6 +87,7 @@ private:
         TextureLoadFlags flags = TextureLoad_PointFilter;
         AssetScopeHandle scope;
         Texture2D texture = {};
+        bool cubemap = false;
         std::string error;
     };
 
@@ -98,6 +107,7 @@ private:
     static bool IsTerminal(TextureState state);
     static std::string MakeTextureRequestKey(const char* key, const char* path, TextureLoadFlags flags);
     static std::string MakeGeneratedTextureKey(const char* key, TextureLoadFlags flags);
+    static std::string MakeGeneratedCubemapKey(const char* key);
     static void ApplyTextureLoadFlags(Texture2D& texture, TextureLoadFlags flags);
 
     void QueueTextureUnloadNoLock(TextureHandle handle);

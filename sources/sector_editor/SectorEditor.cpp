@@ -1,6 +1,7 @@
 #include "sector_editor/SectorEditor.h"
 
 #include "engine/input/InputEvents.h"
+#include "engine/systems/AnimatedModelSystem.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
@@ -16,19 +17,15 @@
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlay.h"
+#include "sector_editor/preview/SectorEditorPreviewHudRenderer.h"
 #include "sector_editor/preview/SectorEditorPreviewUvPanel.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
-#include "sector_editor/tools/billboards/SectorEditorBillboardActions.h"
-#include "sector_editor/tools/doors/SectorEditorDoorActions.h"
 #include "sector_editor/tools/doors/SectorEditorDoorModals.h"
 #include "sector_editor/tools/materials/SectorEditorMaterialInspector.h"
 #include "sector_editor/tools/SectorEditorToolModule.h"
-#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectActions.h"
-#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectDrag.h"
-#include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectMoveProvider.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectInspector.h"
 #include "sector_editor/SectorEditorSectorInspector.h"
 #include "sector_editor/SectorEditorTextureModals.h"
@@ -37,6 +34,7 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorVertexInspector.h"
 #include "sector_demo/SectorFpsController.h"
+#include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
@@ -49,6 +47,7 @@
 
 #include <raylib.h>
 #include <raymath.h>
+#include <rlgl.h>
 
 #include <algorithm>
 #include <cctype>
@@ -60,6 +59,7 @@
 #include <filesystem>
 #include <fstream>
 #include <numeric>
+#include <optional>
 #include <sstream>
 #include <system_error>
 #include <utility>
@@ -71,8 +71,45 @@ namespace {
 
 constexpr float SectorEditorPanelScrollPaddingPx = 8.0f;
 
+bool SameOptionalVector3(
+        const std::optional<Vector3>& lhs,
+        const std::optional<Vector3>& rhs)
+{
+    if (lhs.has_value() != rhs.has_value()) return false;
+    return !lhs || (lhs->x == rhs->x && lhs->y == rhs->y && lhs->z == rhs->z);
+}
+
+bool SameViewmodelOverride(
+        const FpsViewmodelPresentationOverride& lhs,
+        const FpsViewmodelPresentationOverride& rhs)
+{
+    return SameOptionalVector3(lhs.position, rhs.position)
+            && SameOptionalVector3(lhs.rotationDegrees, rhs.rotationDegrees)
+            && lhs.scale == rhs.scale
+            && lhs.verticalFovDegrees == rhs.verticalFovDegrees;
+}
+
+bool SameGripCorrectionOverride(
+        const FpsViewmodelGripCorrectionOverride& lhs,
+        const FpsViewmodelGripCorrectionOverride& rhs)
+{
+    return SameOptionalVector3(lhs.translation, rhs.translation)
+            && SameOptionalVector3(lhs.rotationDegrees, rhs.rotationDegrees)
+            && lhs.scale == rhs.scale;
+}
+
+bool SameAttachmentLightingOverride(
+        const FpsViewmodelAttachmentLightingOverride& lhs,
+        const FpsViewmodelAttachmentLightingOverride& rhs)
+{
+    return lhs.brightnessAdjustment == rhs.brightnessAdjustment
+            && lhs.metallicFactor == rhs.metallicFactor
+            && lhs.roughnessFactor == rhs.roughnessFactor;
+}
+
 SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
         SectorEditorUiState& uiState,
+        RuntimeObjectEditingUiState& runtimeObjectUiState,
         InspectorIdUiState& inspectorIdUiState)
 {
     return SectorEditorSelectionUiDependencies{
@@ -98,21 +135,26 @@ SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
             uiState.lightRedInput,
             uiState.lightGreenInput,
             uiState.lightBlueInput,
-            uiState.runtimeObjectXInput,
-            uiState.runtimeObjectYInput,
-            uiState.runtimeObjectZInput,
-            uiState.runtimeObjectYawInput,
-            uiState.runtimeObjectWidthInput,
-            uiState.runtimeObjectHeightInput,
-            uiState.runtimeObjectThicknessInput,
-            uiState.runtimeObjectNormalOffsetInput,
-            uiState.runtimeObjectOpenDistanceInput,
-            uiState.runtimeObjectSpeedInput,
-            uiState.runtimeObjectInitialOpenFractionInput,
-            uiState.runtimeObjectAutoOpenDistanceInput,
-            uiState.runtimeObjectInteractionDistanceInput,
-            uiState.runtimeObjectOriginXInput,
-            uiState.runtimeObjectOriginYInput,
+            runtimeObjectUiState.xInput,
+            runtimeObjectUiState.yInput,
+            runtimeObjectUiState.zInput,
+            runtimeObjectUiState.rotationXInput,
+            runtimeObjectUiState.yawInput,
+            runtimeObjectUiState.rotationZInput,
+            runtimeObjectUiState.heightOffsetInput,
+            runtimeObjectUiState.scaleInput,
+            runtimeObjectUiState.animationSpeedInput,
+            runtimeObjectUiState.widthInput,
+            runtimeObjectUiState.heightInput,
+            runtimeObjectUiState.thicknessInput,
+            runtimeObjectUiState.normalOffsetInput,
+            runtimeObjectUiState.openDistanceInput,
+            runtimeObjectUiState.speedInput,
+            runtimeObjectUiState.initialOpenFractionInput,
+            runtimeObjectUiState.autoOpenDistanceInput,
+            runtimeObjectUiState.interactionDistanceInput,
+            runtimeObjectUiState.originXInput,
+            runtimeObjectUiState.originYInput,
             uiState.inspectorScroll,
             inspectorIdUiState};
 }
@@ -141,6 +183,8 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
         SectorEditorPreviewSelectionState& previewSelectionState,
         SelectionState& selectionState,
         ManipulationState& manipulationState,
+        RuntimeObjectEditingState& runtimeObjectEditingState,
+        RuntimeObjectEditingUiState& runtimeObjectEditingUiState,
         SectorEditorUiState& uiState,
         InspectorIdUiState& inspectorIdUiState,
         MaterialEditingUiState& materialUiState,
@@ -160,8 +204,8 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
             previewSelectionState.selectedSurface3D,
             previewSelectionState.selectedTopologySurface3D,
             manipulationState,
-            state.runtimeObjectDrag,
-            BuildSelectionUiDependencies(uiState, inspectorIdUiState),
+            runtimeObjectEditingState.drag,
+            BuildSelectionUiDependencies(uiState, runtimeObjectEditingUiState, inspectorIdUiState),
             materialUiState,
             statusText,
             userData,
@@ -242,25 +286,6 @@ int64_t LcmClamped(int64_t a, int64_t b)
     return std::max<int64_t>(1, divided * b);
 }
 
-void UpdateCachedRuntimeObjectDraw(
-        SectorEditorTopologyRenderCache& cache,
-        const SectorPlacedRuntimeObject& object)
-{
-    for (CachedRuntimeObjectDraw& cached : cache.runtimeObjects) {
-        if (cached.objectId != object.id) {
-            continue;
-        }
-
-        cached.definitionId = !object.kind.empty() ? object.kind : object.definitionId;
-        cached.map = Vector2{object.position.x, object.position.z};
-        cached.yawRadians = object.yawRadians;
-        cached.definitionKnown = object.kind == "billboard";
-        cached.isDoor = false;
-        cached.doorFootprintValid = false;
-        return;
-    }
-}
-
 int64_t CoordinateSequencePeriod(SectorCoord stepDelta, int64_t snapStep)
 {
     if (snapStep <= 1) {
@@ -279,7 +304,29 @@ bool SectorEditor::Init(engine::EngineContext& context)
     engineContext = &context;
     Shutdown(context);
     engineContext = &context;
+    weaponRegistryError.clear();
+    if (!LoadFpsWeaponRegistry(ASSETS_PATH "config/weapons.json", weaponRegistry, &weaponRegistryError)) {
+        TraceLog(LOG_ERROR, "Weapon registry load failed: %s", weaponRegistryError.c_str());
+        statusText = "Startup failed: " + weaponRegistryError;
+        return false;
+    }
+    applicationSettingsPath = ASSETS_PATH "config/application_settings.json";
+    if (!LoadFpsApplicationSettings(applicationSettingsPath, applicationSettings, &applicationSettingsWarning)) {
+        TraceLog(LOG_WARNING, "Application settings ignored: %s", applicationSettingsWarning.c_str());
+        applicationSettings = {};
+    }
     ResetToBlankMap(context);
+    fogVolumeEditingService.emplace(
+            SectorEditorAuthoringFogVolumeEditingServiceContext{
+                    Lifecycle(),
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    state.topologyRenderRevision,
+                    state.topologyRenderCache,
+                    selectionState,
+                    manipulationState,
+                    statusText});
     return true;
 }
 
@@ -287,6 +334,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
     lightmapBake.Shutdown();
+    EndFpsViewmodel(assets);
     if (initialized
             || previewState.runtime.runtimeObjects.worldReserved
             || !engine::IsNull(previewState.runtime.runtimeObjects.runtimeObjectAssetScope)) {
@@ -299,19 +347,277 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     if (!engine::IsNull(state.addMapTexture.previewScope)) {
         assets.UnloadScope(state.addMapTexture.previewScope);
     }
-    if (!engine::IsNull(state.spritePicker.previewScope)) {
-        assets.UnloadScope(state.spritePicker.previewScope);
+    if (!engine::IsNull(runtimeObjectEditingState.spritePicker.previewScope)) {
+        assets.UnloadScope(runtimeObjectEditingState.spritePicker.previewScope);
     }
     state = SectorEditorState{};
     uiState = SectorEditorUiState{};
+    runtimeObjectEditingState = RuntimeObjectEditingState{};
+    runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     textureCatalogState = TextureCatalogState{};
     lightEditingState = LightEditingState{};
     materialEditingState = MaterialEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
+    fogVolumeEditingUiState = FogVolumeEditingUiState{};
+    fogVolumeEditingService.reset();
     canvasRect = {};
     statusText.clear();
     engineContext = nullptr;
     initialized = false;
+}
+
+void SectorEditor::BeginFpsViewmodel(engine::AssetManager& assets)
+{
+    EndFpsViewmodel(assets);
+    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
+    const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(weaponRegistry, weaponRegistry.initialWeaponId);
+    if (definition == nullptr) {
+        runtime.loadState = FpsViewmodelLoadState::Failed;
+        runtime.error = "Initial weapon definition is unavailable";
+        return;
+    }
+    const auto failAttachmentBecauseArmsFailed = [&runtime]() {
+        if (runtime.attachment.loadState
+                == FpsViewmodelAttachmentLoadState::Failed) {
+            return;
+        }
+        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Failed;
+        runtime.attachment.error =
+                "Arms viewmodel failed before the attachment could be evaluated";
+    };
+    runtime.activeWeaponId = definition->id;
+    runtime.resolvedModelPath = ResolveSectorAssetPath(definition->viewmodel.modelPath);
+    runtime.animationName = definition->viewmodel.idleAnimation;
+    runtime.brightnessAdjustment = definition->viewmodel.brightnessAdjustment;
+    runtime.brightnessMultiplier = FpsViewmodelBrightnessMultiplier(
+            runtime.brightnessAdjustment);
+    runtime.materialOverride = definition->viewmodel.materialOverride;
+    runtime.attachment.resolvedModelPath = ResolveSectorAssetPath(
+            definition->viewmodel.attachment.modelPath);
+    runtime.attachment.configuredBoneName =
+            definition->viewmodel.attachment.boneName;
+    runtime.attachment.gripCorrection = ResolveFpsViewmodelGripCorrection(
+            definition->viewmodel.attachment.gripCorrection,
+            FindFpsViewmodelGripCorrectionOverride(
+                    applicationSettings, definition->id));
+    runtime.attachment.lightingDefaults =
+            definition->viewmodel.attachment.lighting;
+    runtime.attachment.lighting = ResolveFpsViewmodelAttachmentLighting(
+            definition->viewmodel.attachment.lighting,
+            FindFpsViewmodelAttachmentLightingOverride(
+                    applicationSettings, definition->id));
+    runtime.attachment.brightnessMultiplier =
+            FpsViewmodelBrightnessMultiplier(
+                    runtime.attachment.lighting.brightnessAdjustment);
+    runtime.presentation = ResolveFpsViewmodelPresentation(
+            definition->viewmodel.presentation,
+            FindFpsViewmodelOverride(applicationSettings, definition->id));
+    if (state.previewSettingsModal.open) {
+        runtime.presentation = ClampFpsViewmodelPresentation(state.previewSettingsModal.draftViewmodel);
+    }
+    runtime.assetScope = assets.CreateScope("fps_viewmodel");
+    if (engine::IsNull(runtime.assetScope)) {
+        runtime.loadState = FpsViewmodelLoadState::Failed;
+        runtime.error = "Could not create the FPS viewmodel asset scope";
+        failAttachmentBecauseArmsFailed();
+        TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+        return;
+    }
+    runtime.modelInstance.model = assets.RequestModel(
+            runtime.assetScope,
+            ("fps_viewmodel_" + definition->id).c_str(),
+            runtime.resolvedModelPath.c_str(),
+            engine::ModelLoad_Animations);
+    if (engine::IsNull(runtime.modelInstance.model)) {
+        runtime.loadState = FpsViewmodelLoadState::Failed;
+        runtime.error = "Could not request FPS viewmodel asset: " + runtime.resolvedModelPath;
+        failAttachmentBecauseArmsFailed();
+        TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+        return;
+    }
+    runtime.attachment.model = assets.RequestModel(
+            runtime.assetScope,
+            ("fps_viewmodel_attachment_" + definition->id).c_str(),
+            runtime.attachment.resolvedModelPath.c_str(),
+            engine::ModelLoad_None);
+    if (engine::IsNull(runtime.attachment.model)) {
+        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Failed;
+        runtime.attachment.error = "Could not request FPS viewmodel attachment: "
+                + runtime.attachment.resolvedModelPath;
+        TraceLog(LOG_ERROR, "%s", runtime.attachment.error.c_str());
+    } else {
+        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Pending;
+    }
+    runtime.loadState = FpsViewmodelLoadState::Pending;
+}
+
+void SectorEditor::EndFpsViewmodel(engine::AssetManager& assets)
+{
+    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
+    if (!engine::IsNull(runtime.assetScope)) assets.UnloadScope(runtime.assetScope);
+    ResetFpsViewmodelRuntime(runtime);
+}
+
+void SectorEditor::UpdateFpsViewmodel(engine::AssetManager& assets, float dt)
+{
+    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
+    if (runtime.loadState == FpsViewmodelLoadState::Inactive
+            || runtime.loadState == FpsViewmodelLoadState::Failed) return;
+    const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(weaponRegistry, runtime.activeWeaponId);
+    if (definition == nullptr) {
+        runtime.loadState = FpsViewmodelLoadState::Failed;
+        runtime.error = "Active weapon definition disappeared";
+        return;
+    }
+    const auto failAttachmentBecauseArmsFailed = [&runtime]() {
+        if (runtime.attachment.loadState
+                == FpsViewmodelAttachmentLoadState::Failed) {
+            return;
+        }
+        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Failed;
+        runtime.attachment.error =
+                "Arms viewmodel failed before the attachment could be evaluated";
+    };
+    runtime.presentation = ResolveFpsViewmodelPresentation(
+            definition->viewmodel.presentation,
+            FindFpsViewmodelOverride(applicationSettings, definition->id));
+    if (state.previewSettingsModal.open) {
+        runtime.presentation = ClampFpsViewmodelPresentation(state.previewSettingsModal.draftViewmodel);
+    }
+    runtime.attachment.gripCorrection = ResolveFpsViewmodelGripCorrection(
+            definition->viewmodel.attachment.gripCorrection,
+            FindFpsViewmodelGripCorrectionOverride(
+                    applicationSettings, definition->id));
+    if (state.previewSettingsModal.open) {
+        runtime.attachment.gripCorrection = ClampFpsViewmodelGripCorrection(
+                state.previewSettingsModal.draftViewmodelGrip);
+    }
+    runtime.attachment.lighting = ResolveFpsViewmodelAttachmentLighting(
+            definition->viewmodel.attachment.lighting,
+            FindFpsViewmodelAttachmentLightingOverride(
+                    applicationSettings, definition->id));
+    if (state.previewSettingsModal.open) {
+        runtime.attachment.lighting = ClampFpsViewmodelAttachmentLighting(
+                state.previewSettingsModal.draftViewmodelAttachmentLighting);
+    }
+    runtime.attachment.brightnessMultiplier =
+            FpsViewmodelBrightnessMultiplier(
+                    runtime.attachment.lighting.brightnessAdjustment);
+    const engine::ModelAsset* asset = assets.GetModelAsset(runtime.modelInstance.model);
+    if (asset == nullptr) {
+        if (assets.HasFailed(runtime.modelInstance.model)) {
+            runtime.loadState = FpsViewmodelLoadState::Failed;
+            runtime.error = "Failed to load viewmodel model and animations: " + runtime.resolvedModelPath;
+            failAttachmentBecauseArmsFailed();
+            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+        }
+        return;
+    }
+    if (runtime.loadState == FpsViewmodelLoadState::Pending) {
+        runtime.animationIndex = engine::FindModelAnimationIndex(*asset, runtime.animationName.c_str());
+        if (runtime.animationIndex == engine::InvalidModelAnimationIndex) {
+            runtime.loadState = FpsViewmodelLoadState::Failed;
+            runtime.error = "Configured animation '" + runtime.animationName + "' was not found";
+            failAttachmentBecauseArmsFailed();
+            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+            return;
+        }
+        const ModelAnimation& animation = asset->animations[runtime.animationIndex];
+        if (!IsModelAnimationValid(asset->model, animation)) {
+            runtime.loadState = FpsViewmodelLoadState::Failed;
+            runtime.error = "Animation '" + runtime.animationName + "' is incompatible with the model skeleton";
+            failAttachmentBecauseArmsFailed();
+            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+            return;
+        }
+        if (!engine::PrepareAnimatedModelInstance(runtime.modelInstance, *asset)) {
+            runtime.loadState = FpsViewmodelLoadState::Failed;
+            runtime.error = "Viewmodel skeleton cannot use the GPU skinning path";
+            failAttachmentBecauseArmsFailed();
+            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+            return;
+        }
+        runtime.meshCount = asset->model.meshCount;
+        runtime.boneCount = asset->model.skeleton.boneCount;
+        runtime.triangleCount = 0;
+        for (int i = 0; i < asset->model.meshCount; ++i) runtime.triangleCount += asset->model.meshes[i].triangleCount;
+        runtime.loadState = FpsViewmodelLoadState::Ready;
+    }
+
+    if (runtime.attachment.boneResolvedForModel
+            != runtime.modelInstance.model) {
+        runtime.attachment.boneResolvedForModel = runtime.modelInstance.model;
+        runtime.attachment.boneIndex = FindFpsViewmodelBoneIndex(
+                asset->model.skeleton.bones,
+                asset->model.skeleton.boneCount,
+                runtime.attachment.configuredBoneName);
+        runtime.attachment.resolvedBoneName.clear();
+        runtime.attachment.handPoseValid = false;
+        // raylib's glTF loader accumulates every animation keyframe through
+        // BuildPoseFromParentJoints(), so currentPose is already model-space.
+        runtime.attachment.poseSpace = FpsViewmodelBonePoseSpace::Model;
+        if (runtime.attachment.boneIndex < 0) {
+            runtime.attachment.loadState =
+                    FpsViewmodelAttachmentLoadState::Failed;
+            runtime.attachment.error = "Configured attachment bone '"
+                    + runtime.attachment.configuredBoneName
+                    + "' was not found in the arms skeleton";
+            TraceLog(LOG_ERROR, "%s", runtime.attachment.error.c_str());
+        } else {
+            runtime.attachment.resolvedBoneName =
+                    asset->model.skeleton.bones[
+                            runtime.attachment.boneIndex].name;
+        }
+    }
+
+    const engine::ModelAsset* attachmentAsset =
+            assets.GetModelAsset(runtime.attachment.model);
+    if (runtime.attachment.loadState
+                    != FpsViewmodelAttachmentLoadState::Failed
+            && attachmentAsset == nullptr
+            && assets.HasFailed(runtime.attachment.model)) {
+        runtime.attachment.loadState =
+                FpsViewmodelAttachmentLoadState::Failed;
+        runtime.attachment.error = "Failed to load viewmodel attachment: "
+                + runtime.attachment.resolvedModelPath;
+        TraceLog(LOG_ERROR, "%s", runtime.attachment.error.c_str());
+    }
+    if (runtime.attachment.loadState
+                    == FpsViewmodelAttachmentLoadState::Pending
+            && attachmentAsset != nullptr
+            && runtime.attachment.boneIndex >= 0) {
+        runtime.attachment.meshCount = attachmentAsset->model.meshCount;
+        runtime.attachment.materialCount = attachmentAsset->model.materialCount;
+        runtime.attachment.triangleCount = 0;
+        for (int meshIndex = 0;
+                meshIndex < attachmentAsset->model.meshCount;
+                ++meshIndex) {
+            runtime.attachment.triangleCount +=
+                    attachmentAsset->model.meshes[meshIndex].triangleCount;
+        }
+        runtime.attachment.loadState =
+                FpsViewmodelAttachmentLoadState::Ready;
+        runtime.attachment.error.clear();
+    }
+    runtime.sourceFrameCursor = AdvanceFpsViewmodelAnimationCursor(
+            runtime.sourceFrameCursor, dt, definition->viewmodel.sourceFps,
+            definition->viewmodel.playbackSpeed, definition->viewmodel.firstFrame,
+            definition->viewmodel.lastFrame);
+    runtime.raylibFrame = FpsViewmodelCursorToRaylibFrame(
+            runtime.sourceFrameCursor, definition->viewmodel.sourceFps);
+    Model poseModel = engine::BuildAnimatedModelPoseView(*asset, runtime.modelInstance);
+    const ModelAnimation& animation = asset->animations[runtime.animationIndex];
+    UpdateModelAnimationEx(poseModel, animation, runtime.raylibFrame, animation, runtime.raylibFrame, 0.0f);
+    runtime.attachment.handPoseValid = BuildFpsViewmodelBoneModelTransform(
+            runtime.modelInstance.currentPose.data(),
+            asset->model.skeleton.bones,
+            asset->model.skeleton.boneCount,
+            runtime.attachment.boneIndex,
+            runtime.attachment.poseSpace,
+            runtime.attachment.handModelTransform);
+    if (!runtime.attachment.handPoseValid) {
+        runtime.attachment.pistolWorldTransformValid = false;
+    }
 }
 
 void SectorEditor::Update(engine::EngineContext& context, float dt)
@@ -323,19 +629,27 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         CancelLightDrag(nullptr);
         CancelPendingAuthoringLine(nullptr);
         CancelPendingAuthoringRectangle(nullptr);
+        if (fogVolumeEditingService) {
+            fogVolumeEditingService->CancelMove(nullptr);
+        }
         return;
     }
 
     if (state.mode == SectorEditorMode::Preview3D) {
         const Vector3 playerPosition = previewState.controller.freeflyController.pose.position;
         UpdateSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, TopologyMap(), dt, &playerPosition);
+        preview.FinalizeRuntimeObjectResources(
+                assets,
+                context.world);
         previewState.runtime.runtimeObjects.dynamicDoorColliders.clear();
         CollectSectorDoorDynamicColliders(context.world, previewState.runtime.runtimeObjects.dynamicDoorColliders);
         previewState.runtime.runtimeObjects.dynamicPortalBlockers.clear();
         CollectSectorDoorDynamicPortalBlockers(context.world, previewState.runtime.runtimeObjects.dynamicPortalBlockers);
         preview.AdvanceRuntime(dt);
+        UpdateFpsViewmodel(assets, dt);
         const bool hasBlockingModal = state.texturePicker.open
-                || state.spritePicker.open
+                || runtimeObjectEditingState.spritePicker.open
+                || runtimeObjectEditingState.staticModelPicker.open
                 || HasDocumentModalOpen();
         if (hasBlockingModal) {
             return;
@@ -364,8 +678,15 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
     }
 
     canvasRect = BuildCanvasRect();
-    if (state.texturePicker.open || state.addMapTexture.open || state.spritePicker.open || HasDocumentModalOpen()) {
+    if (state.texturePicker.open
+            || state.addMapTexture.open
+            || runtimeObjectEditingState.spritePicker.open
+            || runtimeObjectEditingState.staticModelPicker.open
+            || HasDocumentModalOpen()) {
         return;
+    }
+    if (state.currentTool == SectorEditorTool::Select) {
+        EnsureTopologyRenderCache();
     }
     UpdateHoverAndMouse(input);
     HandleCanvasInput(input, dt);
@@ -425,7 +746,8 @@ void SectorEditor::RenderUI(
         }
         if (!previewState.overlay.previewUiHidden
                 && !state.texturePicker.open
-                && !state.spritePicker.open
+                && !runtimeObjectEditingState.spritePicker.open
+                && !runtimeObjectEditingState.staticModelPicker.open
                 && !state.decalTintModal.open
                 && !state.doorTextureSettingsModal.open
                 && !state.previewSettingsModal.open) {
@@ -442,9 +764,11 @@ void SectorEditor::RenderUI(
         }
         DrawTexturePickerModal(ui, config, input, assets, font);
         DrawSpritePickerModal(ui, config, input, assets, font);
+        DrawStaticModelPickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = ui.focusedId != 0;
         if (state.texturePicker.open
-                || state.spritePicker.open
+                || runtimeObjectEditingState.spritePicker.open
+                || runtimeObjectEditingState.staticModelPicker.open
                 || state.decalTintModal.open
                 || state.doorTextureSettingsModal.open
                 || state.previewSettingsModal.open) {
@@ -510,8 +834,14 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
-    if (state.spritePicker.open) {
+    if (runtimeObjectEditingState.spritePicker.open) {
         DrawSpritePickerModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (runtimeObjectEditingState.staticModelPicker.open) {
+        DrawStaticModelPickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -523,8 +853,13 @@ void SectorEditor::RenderUI(
     DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font);
     DrawSpritePickerModal(ui, config, input, assets, font);
+    DrawStaticModelPickerModal(ui, config, input, assets, font);
     uiState.keyboardCaptured = ui.focusedId != 0;
-    if (state.texturePicker.open || state.addMapTexture.open || state.spritePicker.open || HasDocumentModalOpen()) {
+    if (state.texturePicker.open
+            || state.addMapTexture.open
+            || runtimeObjectEditingState.spritePicker.open
+            || runtimeObjectEditingState.staticModelPicker.open
+            || HasDocumentModalOpen()) {
         uiState.keyboardCaptured = true;
     }
     engine::EndUI(ui, config, input, assets);
@@ -559,6 +894,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
             documentState.derivation.authoringDerivationStatus,
             input,
             canvasRect};
+    context.fogVolumeEditing = fogVolumeEditingService
+            ? &fogVolumeEditingService.value()
+            : nullptr;
     context.currentSnappedSectorPoint = [this]() {
         return CurrentSnappedSectorPoint();
     };
@@ -1177,6 +1515,18 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
+                if (state.currentTool == SectorEditorTool::StaticModel) {
+                    AddStaticModelAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
+                if (state.currentTool == SectorEditorTool::DynamicModel) {
+                    AddDynamicModelAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (state.currentTool == SectorEditorTool::Door) {
                     AddDoorAtPortal(event.mouseClick.releasePosition);
                     engine::ConsumeEvent(event);
@@ -1230,6 +1580,12 @@ SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
             && selectionState.selectedAuthoring.faceAnchorId >= 0) {
         return SectorEditorPickTarget{SectorEditorPickKind::AuthoringFaceAnchor, selectionState.selectedAuthoring.faceAnchorId};
     }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FogVolume
+            && selectionState.selectedAuthoring.fogVolumeId >= 0) {
+        return SectorEditorPickTarget{
+                SectorEditorPickKind::AuthoringFogVolume,
+                selectionState.selectedAuthoring.fogVolumeId};
+    }
     return SectorEditorPickTarget{};
 }
 
@@ -1242,6 +1598,7 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             + TopologyMap().dynamicPointLights.size()
             + TopologyMap().staticSpotLights.size()
             + TopologyMap().staticLights.size()
+            + AuthoringGraph().fogVolumes.size()
             + 3);
 
     const auto addPointCandidate = [&](SectorEditorPickKind kind, int id, Vector2 center) {
@@ -1271,12 +1628,16 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
                 distance2});
     };
 
-    for (const SectorPlacedRuntimeObject& object : TopologyMap().runtimeObjects) {
-        addPointCandidate(
-                SectorEditorPickKind::RuntimeObject,
-                object.id,
-                MapToScreen(Vector2{object.position.x, object.position.z}));
-    }
+    SectorEditorTopologyDrawContext pickContext;
+    pickContext.canvasRect = canvasRect;
+    pickContext.viewCenter = state.viewCenter;
+    pickContext.viewZoom = state.viewZoom;
+    AppendCachedRuntimeObjectPickCandidates(
+            state.topologyRenderCache,
+            pickContext,
+            screenPoint,
+            ScreenLightPickPixels,
+            candidates);
     for (const SectorTopologyDynamicSpotLight& light : TopologyMap().dynamicSpotLights) {
         addSpotCandidate(
                 SectorEditorPickKind::DynamicSpotLight,
@@ -1302,6 +1663,18 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
                 SectorEditorPickKind::StaticLight,
                 light.id,
                 MapToScreen(Vector2{light.position.x, light.position.z}));
+    }
+
+    if (fogVolumeEditingService) {
+        const Vector2 mapPoint = ScreenToMap(screenPoint);
+        const Vector2 tolerancePoint = ScreenToMap(Vector2{screenPoint.x + ScreenLightPickPixels, screenPoint.y});
+        const float tolerance = std::fabs(tolerancePoint.x - mapPoint.x);
+        const int fogVolumeId = fogVolumeEditingService->FindAtMapPoint(mapPoint, tolerance);
+        if (fogVolumeId >= 0) {
+            candidates.push_back(SectorEditorPickCandidate{
+                    SectorEditorPickTarget{SectorEditorPickKind::AuthoringFogVolume, fogVolumeId},
+                    0.0f});
+        }
     }
 
     SectorAuthoringSelectionTarget authoringTarget;
@@ -1567,26 +1940,34 @@ void SectorEditor::CancelLightDrag(const char* message)
 
 void SectorEditor::StartRuntimeObjectDrag(int objectId)
 {
-    SectorEditorPlacedObjectDragContext dragContext = BuildRuntimeObjectDragContext();
-    StartSectorEditorPlacedObjectDrag(dragContext, objectId);
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.BeginDrag(objectId);
 }
 
 void SectorEditor::UpdateRuntimeObjectDrag(engine::Input& input)
 {
-    SectorEditorPlacedObjectDragContext dragContext = BuildRuntimeObjectDragContext();
-    UpdateSectorEditorPlacedObjectDrag(dragContext, input.MousePosition());
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.UpdateDrag(SnapMapPoint(ScreenToMap(input.MousePosition())));
 }
 
 void SectorEditor::FinishRuntimeObjectDrag()
 {
-    SectorEditorPlacedObjectDragContext dragContext = BuildRuntimeObjectDragContext();
-    FinishSectorEditorPlacedObjectDrag(dragContext);
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.FinishDrag();
 }
 
 void SectorEditor::CancelRuntimeObjectDrag(const char* message)
 {
-    SectorEditorPlacedObjectDragContext dragContext = BuildRuntimeObjectDragContext();
-    CancelSectorEditorPlacedObjectDrag(dragContext, message);
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.CancelDrag(message);
 }
 
 void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt)
@@ -1638,6 +2019,15 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     return;
                 }
 
+                if (event.key.key == KEY_H) {
+                    if (ToggleFpsViewmodelHolster(previewState.runtime.viewmodel, true, uiState.keyboardCaptured)) {
+                        statusText = previewState.runtime.viewmodel.holstered
+                                ? "Viewmodel holstered" : "Viewmodel equipped";
+                        engine::ConsumeEvent(event);
+                    }
+                    return;
+                }
+
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
                     CancelSpotLightPilotWithPreviewRestore(nullptr);
                     LeavePreview3D();
@@ -1686,28 +2076,33 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             controllerInput.run = input.IsKeyDown(KEY_LEFT_SHIFT) || input.IsKeyDown(KEY_RIGHT_SHIFT);
             controllerInput.mouseLookEnabled = previewState.controller.freeflyController.mouseLookEnabled;
             controllerInput.mouseDelta = input.MouseDelta();
-            const bool canConsumeGameplayJump =
+            const bool canConsumeGameplayActions =
                     state.mode == SectorEditorMode::Preview3D
                     && previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
                     && !uiState.keyboardCaptured
                     && !state.texturePicker.open
                     && !state.decalTintModal.open
                     && !state.previewSettingsModal.open;
-            if (canConsumeGameplayJump) {
+            if (canConsumeGameplayActions) {
                 input.ForEachEvent(
                         engine::InputEventType::KeyPressed,
                         true,
                         [&controllerInput](engine::InputEvent& event) {
-                            if (event.key.key != KEY_SPACE) {
+                            if (event.key.key == KEY_SPACE) {
+                                controllerInput.jumpPressed = true;
+                            } else if (event.key.key == KEY_LEFT_CONTROL
+                                    || event.key.key == KEY_RIGHT_CONTROL) {
+                                controllerInput.crouchTogglePressed = true;
+                            } else {
                                 return;
                             }
-                            controllerInput.jumpPressed = true;
                             engine::ConsumeEvent(event);
                         }
                 );
             }
             UpdateSectorEditorGameplayPreview(
                     previewState.runtime.runtimeObjects.dynamicDoorColliders,
+                    previewState.runtime.runtimeObjects.staticModelColliders,
                     previewState.collision,
                     previewState.controller,
                     state.previewSettingsModal.open,
@@ -2018,7 +2413,7 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
             AuthoringGraph(),
             manipulationState,
             lightEditingState,
-            state.runtimeObjectDrag,
+            runtimeObjectEditingState.drag,
             statusText};
     context.userData = this;
     context.currentPickSelectionTarget = [](void* userData) {
@@ -2047,25 +2442,10 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
                 outLightId,
                 outHandle);
     };
-    context.placedObjectMoveProvider = &SectorEditorPlacedObjectMoveProvider();
-    context.screenToMap = [this](Vector2 screenPoint) {
-        return ScreenToMap(screenPoint);
-    };
-    context.snapMapPoint = [this](Vector2 mapPoint) {
-        return SnapMapPoint(mapPoint);
-    };
-    context.selectRuntimeObject = [this](int objectId) {
-        SelectRuntimeObject(objectId);
-    };
-    context.updateCachedRuntimeObjectDraw = [this](const SectorPlacedRuntimeObject& object) {
-        UpdateCachedRuntimeObjectDraw(state.topologyRenderCache, object);
-    };
-    context.markTopologyDocumentEdited = [this](const char* status) {
-        MarkTopologyDocumentEdited(status);
-    };
-    context.refreshRuntimeObjectsAfterAuthoringEdit = [this]() {
-        RefreshRuntimeObjectsAfterAuthoringEdit();
-    };
+    context.placedObjectMoveProvider = nullptr;
+    context.fogVolumeEditing = fogVolumeEditingService
+            ? &fogVolumeEditingService.value()
+            : nullptr;
     context.startAuthoringVertexDrag = [](void* userData, int vertexId, SectorTopologyCoordPoint point) {
         static_cast<SectorEditor*>(userData)->StartAuthoringVertexDrag(vertexId, point);
     };
@@ -2115,6 +2495,8 @@ SectorEditorSelectionServiceContext SectorEditor::BuildSelectionServiceContext()
             previewState.selection,
             selectionState,
             manipulationState,
+            runtimeObjectEditingState,
+            runtimeObjectEditingUiState,
             uiState,
             inspectorIdUiState,
             materialEditingUiState,
@@ -2142,6 +2524,8 @@ const SectorTopologySector* SectorEditor::SelectedTopologySector() const
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
+            const_cast<RuntimeObjectEditingState&>(runtimeObjectEditingState),
+            const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
             const_cast<SectorEditorUiState&>(uiState),
             const_cast<InspectorIdUiState&>(inspectorIdUiState),
             const_cast<MaterialEditingUiState&>(materialEditingUiState));
@@ -2164,6 +2548,8 @@ const SectorTopologyVertex* SectorEditor::SelectedTopologyVertex() const
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
+            const_cast<RuntimeObjectEditingState&>(runtimeObjectEditingState),
+            const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
             const_cast<SectorEditorUiState&>(uiState),
             const_cast<InspectorIdUiState&>(inspectorIdUiState),
             const_cast<MaterialEditingUiState&>(materialEditingUiState));
@@ -2186,6 +2572,8 @@ const SectorTopologySideDef* SectorEditor::SelectedTopologySideDef() const
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
+            const_cast<RuntimeObjectEditingState&>(runtimeObjectEditingState),
+            const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
             const_cast<SectorEditorUiState&>(uiState),
             const_cast<InspectorIdUiState&>(inspectorIdUiState),
             const_cast<MaterialEditingUiState&>(materialEditingUiState));
@@ -2208,6 +2596,8 @@ const SectorTopologyLineDef* SectorEditor::SelectedTopologyLineDef() const
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
+            const_cast<RuntimeObjectEditingState&>(runtimeObjectEditingState),
+            const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
             const_cast<SectorEditorUiState&>(uiState),
             const_cast<InspectorIdUiState&>(inspectorIdUiState),
             const_cast<MaterialEditingUiState&>(materialEditingUiState));
@@ -2230,6 +2620,8 @@ const SectorTopologyStaticPointLight* SectorEditor::SelectedTopologyLight() cons
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
+            const_cast<RuntimeObjectEditingState&>(runtimeObjectEditingState),
+            const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
             const_cast<SectorEditorUiState&>(uiState),
             const_cast<InspectorIdUiState&>(inspectorIdUiState),
             const_cast<MaterialEditingUiState&>(materialEditingUiState));
@@ -2252,6 +2644,8 @@ const SectorTopologyStaticSpotLight* SectorEditor::SelectedTopologyStaticSpotLig
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
+            const_cast<RuntimeObjectEditingState&>(runtimeObjectEditingState),
+            const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
             const_cast<SectorEditorUiState&>(uiState),
             const_cast<InspectorIdUiState&>(inspectorIdUiState),
             const_cast<MaterialEditingUiState&>(materialEditingUiState));
@@ -2274,6 +2668,8 @@ const SectorTopologyDynamicPointLight* SectorEditor::SelectedTopologyDynamicLigh
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
+            const_cast<RuntimeObjectEditingState&>(runtimeObjectEditingState),
+            const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
             const_cast<SectorEditorUiState&>(uiState),
             const_cast<InspectorIdUiState&>(inspectorIdUiState),
             const_cast<MaterialEditingUiState&>(materialEditingUiState));
@@ -2296,6 +2692,8 @@ const SectorTopologyDynamicSpotLight* SectorEditor::SelectedTopologyDynamicSpotL
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
+            const_cast<RuntimeObjectEditingState&>(runtimeObjectEditingState),
+            const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
             const_cast<SectorEditorUiState&>(uiState),
             const_cast<InspectorIdUiState&>(inspectorIdUiState),
             const_cast<MaterialEditingUiState&>(materialEditingUiState));
@@ -2318,6 +2716,8 @@ const SectorPlacedRuntimeObject* SectorEditor::SelectedRuntimeObject() const
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
+            const_cast<RuntimeObjectEditingState&>(runtimeObjectEditingState),
+            const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
             const_cast<SectorEditorUiState&>(uiState),
             const_cast<InspectorIdUiState&>(inspectorIdUiState),
             const_cast<MaterialEditingUiState&>(materialEditingUiState));
@@ -2501,93 +2901,83 @@ bool SectorEditor::OpenDeleteSelectedLightConfirmation()
     return true;
 }
 
-SectorEditorPlacedObjectDragContext SectorEditor::BuildRuntimeObjectDragContext()
+SectorEditorRuntimeObjectEditingService
+SectorEditor::BuildRuntimeObjectEditingService(
+        SectorEditorSelectionServiceContext* selectionService)
 {
-    return SectorEditorPlacedObjectDragContext{
-            TopologyMap(),
-            state.runtimeObjectDrag,
-            statusText,
-            [this](Vector2 screenPoint) {
-                return ScreenToMap(screenPoint);
-            },
-            [this](Vector2 mapPoint) {
-                return SnapMapPoint(mapPoint);
-            },
-            [this](int objectId) {
-                SelectRuntimeObject(objectId);
-            },
-            [this](const SectorPlacedRuntimeObject& object) {
-                UpdateCachedRuntimeObjectDraw(state.topologyRenderCache, object);
-            },
-            [this](const char* status) {
-                MarkTopologyDocumentEdited(status);
-            },
-            [this]() {
-                RefreshRuntimeObjectsAfterAuthoringEdit();
-            }};
-}
-
-SectorEditorPlacedObjectActionContext SectorEditor::BuildRuntimeObjectActionContext()
-{
-    return SectorEditorPlacedObjectActionContext{
-            state,
+    return SectorEditorRuntimeObjectEditingService{
+        SectorEditorRuntimeObjectEditingServiceContext{
             TopologyMap(),
             previewState.runtime.runtimeObjects,
+            runtimeObjectEditingState,
+            runtimeObjectEditingUiState,
             selectionState,
+            selectionService,
+            Lifecycle(),
+            state.topologyRenderRevision,
+            state.topologyRenderCache,
             statusText,
             engineContext,
-            [this](Vector2 mapPoint) {
-                return FindTopologySectorAt(mapPoint);
-            },
-            [this](
-                    Vector2 screenPoint,
-                    Vector2 mapPoint,
-                    int& outLineDefId,
-                    int& outSideDefId,
-                    SectorTopologySideKind& outSide,
-                    bool& outPreferredMissing) {
-                return FindTopologyLineNearScreenPoint(
-                        screenPoint,
-                        mapPoint,
-                        outLineDefId,
-                        outSideDefId,
-                        outSide,
-                        outPreferredMissing);
-            },
-            [this](Vector2 screenPoint) {
-                return ScreenToMap(screenPoint);
-            },
-            [this](int objectId) {
-                SelectRuntimeObject(objectId);
-            },
-            [this]() {
-                ClearSelection();
-            },
-            [this]() {
-                ClearStaleTopologySelection();
-            },
-            [this](const char* status) {
-                MarkTopologyDocumentEdited(status);
-            }};
+            IsSectorEditorAuthoringDerivationCurrent(
+                    MakeLiveConstDerivationAccess(documentState.derivation))}};
 }
 
 void SectorEditor::AddRuntimeObjectAt(Vector2 mapPoint)
 {
-    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    AddSectorEditorBillboard(actionContext, mapPoint);
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.AddBillboard(FindTopologySectorAt(mapPoint), mapPoint);
+}
+
+void SectorEditor::AddStaticModelAt(Vector2 mapPoint)
+{
+    EnsureTopologyRenderCache();
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.AddStaticModel(mapPoint);
+}
+
+void SectorEditor::AddDynamicModelAt(Vector2 mapPoint)
+{
+    EnsureTopologyRenderCache();
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.AddDynamicModel(mapPoint);
 }
 
 void SectorEditor::AddDoorAtPortal(Vector2 screenPoint)
 {
-    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    AddSectorEditorDoor(actionContext, screenPoint);
+    const Vector2 mapPoint = ScreenToMap(screenPoint);
+    int lineDefId = -1;
+    int sideDefId = -1;
+    SectorTopologySideKind side = SectorTopologySideKind::Front;
+    bool preferredMissing = false;
+    if (!FindTopologyLineNearScreenPoint(
+                screenPoint,
+                mapPoint,
+                lineDefId,
+                sideDefId,
+                side,
+                preferredMissing)) {
+        statusText = "Door placement failed: click a two-sided portal";
+        return;
+    }
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.AddDoor(lineDefId);
 }
 
 bool SectorEditor::DeleteSelectedRuntimeObject()
 {
-    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    const SectorEditorPlacedObjectDeleteConfirmation confirmation =
-            RequestDeleteSelectedSectorEditorPlacedObject(actionContext);
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    const SectorEditorRuntimeObjectDeleteRequest confirmation =
+            editing.RequestDeleteSelected();
     if (!confirmation.requested) {
         return false;
     }
@@ -2604,22 +2994,27 @@ bool SectorEditor::DeleteSelectedRuntimeObject()
 
 bool SectorEditor::DeleteRuntimeObjectById(int objectId)
 {
-    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    return DeleteSectorEditorPlacedObjectById(actionContext, objectId);
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    return editing.DeleteById(objectId);
 }
 
 bool SectorEditor::MutateSelectedRuntimeObject(
         const char* status,
         const std::function<bool(SectorPlacedRuntimeObject&)>& mutate)
 {
-    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    return MutateSelectedSectorEditorPlacedObject(actionContext, status, mutate);
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    return editing.MutateSelected(status, mutate);
 }
 
 void SectorEditor::RefreshRuntimeObjectsAfterAuthoringEdit()
 {
-    SectorEditorPlacedObjectActionContext actionContext = BuildRuntimeObjectActionContext();
-    RefreshSectorEditorPlacedObjectsAfterAuthoringEdit(actionContext);
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService();
+    editing.RefreshPreviewObjects();
 }
 
 bool SectorEditor::StartLightmapBake()
@@ -2656,8 +3051,27 @@ bool SectorEditor::StartLightmapBake()
     const std::string finalOutputPath = levelPaths.lightmapFilePath.string();
     const std::string temporaryOutputPath = MakeTemporaryLightmapPath(finalOutputPath);
 
+    if (engineContext == nullptr) {
+        statusText = "Bake failed: asset manager is unavailable";
+        return false;
+    }
+    SectorStaticModelLightmapData preparedStaticModels;
+    std::string staticModelError;
+    if (!PrepareSectorStaticModelsForLightmapBake(
+                TopologyMap(),
+                engineContext->assets,
+                {},
+                preparedStaticModels,
+                staticModelError)) {
+        statusText = staticModelError.empty()
+                ? "Bake failed: could not prepare static models"
+                : staticModelError;
+        return false;
+    }
+
     SectorEditorLightmapBakeRequest request;
     request.mapSnapshot = TopologyMap();
+    request.staticModels = std::move(preparedStaticModels);
     request.expectedSourceHash = ComputeSectorLightmapSourceHash(TopologyMap());
     request.finalOutputPath = finalOutputPath;
     request.temporaryOutputPath = temporaryOutputPath;
@@ -2715,7 +3129,15 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     TopologyMap().bakedLightmap.width = installPayload.bakeResult.width;
     TopologyMap().bakedLightmap.height = installPayload.bakeResult.height;
     TopologyMap().bakedLightmap.sourceHash = installPayload.bakeResult.sourceHash;
+    TopologyMap().bakedLightmap.additionalAtlases.clear();
+    if (installPayload.bakeResult.atlases.size() > 1) {
+        TopologyMap().bakedLightmap.additionalAtlases.assign(
+                installPayload.bakeResult.atlases.begin() + 1,
+                installPayload.bakeResult.atlases.end());
+    }
     TopologyMap().bakedLightmap.objectProbes = installPayload.bakeResult.objectProbes;
+    TopologyMap().bakedLightmap.staticModels =
+            installPayload.bakeResult.staticModels;
     Lifecycle().hasUnsavedChanges = true;
     Lifecycle().topologyDocumentDirty = true;
 
@@ -2732,7 +3154,17 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
         }
     }
 
-    statusText = TextFormat("Baked lightmap in %.1fs", result.bakeResult.totalBakeSeconds);
+    const size_t atlasCount = std::max<size_t>(
+            1,
+            installPayload.bakeResult.atlases.size());
+    statusText = atlasCount == 1
+            ? TextFormat(
+                    "Baked lightmap in %.1fs",
+                    result.bakeResult.totalBakeSeconds)
+            : TextFormat(
+                    "Baked %zu lightmap atlases in %.1fs",
+                    atlasCount,
+                    result.bakeResult.totalBakeSeconds);
     return true;
 }
 
@@ -2824,7 +3256,88 @@ void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
             context.assets,
             previewState.overlay.useBakedAmbientOcclusion,
             &context.world,
-            SectorRuntimeDoorLightingContext{&previewState.runtime.runtimeObjects.objectLightProbes, &TopologyMap()});
+            SectorRuntimeDoorLightingContext{&previewState.runtime.runtimeObjects.objectLightProbes, &TopologyMap()},
+            TopologyMap().fogSettings);
+}
+
+void SectorEditor::RenderPreview3DViewmodel(engine::AssetManager& assets)
+{
+    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
+    if (state.mode != SectorEditorMode::Preview3D) return;
+    if (!IsFpsViewmodelRenderable(runtime)) {
+        runtime.attachment.pistolWorldTransformValid = false;
+        return;
+    }
+    const engine::ModelAsset* asset = assets.GetModelAsset(runtime.modelInstance.model);
+    if (asset == nullptr) {
+        runtime.attachment.pistolWorldTransformValid = false;
+        return;
+    }
+
+    const Matrix viewmodelRoot = BuildFpsViewmodelTransform(
+            preview.RenderCamera(), runtime.presentation);
+    const engine::ModelAsset* attachmentAsset = nullptr;
+    if (IsFpsViewmodelAttachmentRenderable(runtime)) {
+        attachmentAsset = assets.GetModelAsset(runtime.attachment.model);
+    }
+    runtime.attachment.pistolWorldTransformValid = attachmentAsset != nullptr;
+    if (runtime.attachment.pistolWorldTransformValid) {
+        runtime.attachment.pistolWorldTransform =
+                BuildFpsViewmodelAttachmentTransform(
+                        viewmodelRoot,
+                        runtime.attachment.handModelTransform,
+                        runtime.attachment.gripCorrection);
+    }
+
+    Camera3D camera = preview.RenderCamera();
+    camera.fovy = runtime.presentation.verticalFovDegrees;
+    const double previousNear = rlGetCullDistanceNear();
+    const double previousFar = rlGetCullDistanceFar();
+    rlSetClipPlanes(0.01, previousFar);
+    const int preferredSectorId = previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
+            ? previewState.controller.fpsControllerState.currentSectorId : 0;
+    runtime.environmentExposure = ComputeSectorModelEnvironmentExposure(
+            TopologyMap(),
+            preferredSectorId);
+    const BakedObjectLightingVerticalSample ambientLighting =
+            SampleBakedObjectLightingVertical(
+            previewState.runtime.runtimeObjects.objectLightProbes,
+            camera.position,
+            preferredSectorId,
+            &TopologyMap());
+    SectorViewmodelLightingContext viewmodelLighting;
+    viewmodelLighting.environmentExposure = runtime.environmentExposure;
+    viewmodelLighting.brightnessMultiplier = runtime.brightnessMultiplier;
+    viewmodelLighting.materialOverrideEnabled = runtime.materialOverride.enabled;
+    viewmodelLighting.metallicFactor = runtime.materialOverride.metallicFactor;
+    viewmodelLighting.roughnessFactor = runtime.materialOverride.roughnessFactor;
+    viewmodelLighting.useMetallicRoughnessTexture =
+            runtime.materialOverride.useMetallicRoughnessTexture;
+    SectorViewmodelLightingContext attachmentLighting;
+    attachmentLighting.environmentExposure = runtime.environmentExposure;
+    attachmentLighting.brightnessMultiplier =
+            runtime.attachment.brightnessMultiplier;
+    attachmentLighting.materialOverrideEnabled =
+            runtime.attachment.lighting.materialOverride.enabled;
+    attachmentLighting.metallicFactor =
+            runtime.attachment.lighting.materialOverride.metallicFactor;
+    attachmentLighting.roughnessFactor =
+            runtime.attachment.lighting.materialOverride.roughnessFactor;
+    attachmentLighting.useMetallicRoughnessTexture =
+            runtime.attachment.lighting.materialOverride
+                    .useMetallicRoughnessTexture;
+    preview.DrawViewmodel(
+            assets,
+            *asset,
+            runtime.modelInstance,
+            camera,
+            viewmodelRoot,
+            attachmentAsset,
+            runtime.attachment.pistolWorldTransform,
+            ambientLighting,
+            viewmodelLighting,
+            attachmentLighting);
+    rlSetClipPlanes(previousNear, previousFar);
 }
 
 void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
@@ -2832,7 +3345,11 @@ void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTextu
     if (state.mode != SectorEditorMode::Preview3D) {
         return;
     }
-    preview.ApplyEmissiveDecalBloomToScene(assets, sceneTarget);
+    preview.ApplyEmissiveDecalBloomToScene(assets, sceneTarget, TopologyMap().fogSettings);
+    preview.ApplyLocalFogToScene(
+            sceneTarget,
+            TopologyMap(),
+            previewState.runtime.runtimeObjects.objectLightProbes);
 }
 
 void SectorEditor::RenderPreview3DOverlays()
@@ -2842,6 +3359,15 @@ void SectorEditor::RenderPreview3DOverlays()
         DrawPreviewSpotLightOverlay();
         DrawPreviewObjectProbeOverlay();
     }
+}
+
+void SectorEditor::RenderPreview3DHud(Rectangle playableViewport) const
+{
+    DrawSectorEditorPreviewHud(SectorEditorPreviewHudContext{
+            state.mode == SectorEditorMode::Preview3D,
+            playableViewport,
+            weaponRegistry,
+            previewState.runtime.viewmodel});
 }
 
 SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectangle viewportRect) const
@@ -2887,13 +3413,14 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
             const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
             derivation.authoringDerivation,
             IsSectorEditorAuthoringDerivationCurrent(derivation),
-            const_cast<RuntimeObjectDragState&>(state.runtimeObjectDrag),
+            const_cast<RuntimeObjectDragState&>(runtimeObjectEditingState.drag),
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             previewState.controller,
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
             BuildSelectionUiDependencies(
                     const_cast<SectorEditorUiState&>(uiState),
+                    const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
                     const_cast<InspectorIdUiState&>(inspectorIdUiState)),
             const_cast<MaterialEditingUiState&>(materialEditingUiState),
             preview);
@@ -2946,11 +3473,14 @@ void SectorEditor::DrawPreviewOverlay(
             derivation.authoringDerivation,
             IsSectorEditorAuthoringDerivationCurrent(derivation),
             Lifecycle().topologyDocumentDirty,
-            state.runtimeObjectDrag,
+            runtimeObjectEditingState.drag,
             previewState,
             selectionState,
             manipulationState,
-            BuildSelectionUiDependencies(uiState, inspectorIdUiState),
+            BuildSelectionUiDependencies(
+                    uiState,
+                    runtimeObjectEditingUiState,
+                    inspectorIdUiState),
             uiState.objectProbeDebugDrawMaxDistanceInput,
             materialEditingUiState,
             lightEditingState,
@@ -3127,6 +3657,7 @@ void SectorEditor::DrawTopologyDocument()
             selectionState.hoveredAuthoring
     };
     DrawCachedTopologySectors(state.topologyRenderCache, drawContext);
+    DrawAuthoringFogVolumes();
 
     if (drawLegacyTopologySelection) {
         DrawTopologySelectedLineHighlight();
@@ -3136,6 +3667,7 @@ void SectorEditor::DrawTopologyDocument()
     DrawCachedAuthoringGraphOverlay(state.topologyRenderCache, drawContext);
     DrawCachedAuthoringDiagnostics(state.topologyRenderCache, drawContext);
     DrawAuthoringVertexMoveOverlay();
+    DrawAuthoringFogVolumeMoveOverlay();
     DrawCachedTopologyStaticLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyStaticSpotLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyDynamicLights(state.topologyRenderCache, drawContext);
@@ -3154,6 +3686,7 @@ void SectorEditor::DrawTopologyDocument()
     drawToolOverlay(SectorEditorTool::AuthoringLine);
     drawToolOverlay(SectorEditorTool::AuthoringRectangle);
     drawToolOverlay(SectorEditorTool::AuthoringInsertVertex);
+    drawToolOverlay(SectorEditorTool::AuthoringFogVolume);
     DrawTopologySnapCrosshair();
 
     if (!state.topologyRenderWarning.empty()) {
@@ -3178,6 +3711,131 @@ void SectorEditor::DrawTopologyDocument()
                 Color{236, 196, 92, 255}
         );
     }
+}
+
+void SectorEditor::DrawAuthoringFogVolumes() const
+{
+    const auto drawVolume = [this](
+            const SectorAuthoringFogVolume& volume,
+            SectorTopologyCoordPoint point,
+            Color outline,
+            bool resolved,
+            bool drawLabel) {
+        const Vector2 mapCenter{
+                SectorCoordToVisibleAuthoring(point.x),
+                SectorCoordToVisibleAuthoring(point.y)};
+        const Vector2 center = MapToScreen(mapCenter);
+        const Vector2 edgeX = MapToScreen(Vector2{
+                mapCenter.x + SectorWorldToAuthoringDistance(volume.radiusXWorld),
+                mapCenter.y});
+        const Vector2 edgeZ = MapToScreen(Vector2{
+                mapCenter.x,
+                mapCenter.y + SectorWorldToAuthoringDistance(volume.radiusZWorld)});
+        const float radiusX = std::max(2.0f, std::fabs(edgeX.x - center.x));
+        const float radiusY = std::max(2.0f, std::fabs(edgeZ.y - center.y));
+        Color fill = volume.enabled ? volume.color : Color{112, 118, 122, 255};
+        fill.a = 46;
+        DrawEllipse(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, fill);
+        DrawEllipseLines(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, outline);
+        const float innerScale = std::clamp(1.0f - volume.edgeSoftness, 0.05f, 1.0f);
+        Color inner = outline;
+        inner.a = 130;
+        DrawEllipseLines(
+                static_cast<int>(center.x),
+                static_cast<int>(center.y),
+                radiusX * innerScale,
+                radiusY * innerScale,
+                inner);
+        if (!resolved) {
+            DrawLineEx(
+                    Vector2{center.x - 8.0f, center.y - 8.0f},
+                    Vector2{center.x + 8.0f, center.y + 8.0f},
+                    2.0f,
+                    Color{240, 82, 82, 255});
+            DrawLineEx(
+                    Vector2{center.x + 8.0f, center.y - 8.0f},
+                    Vector2{center.x - 8.0f, center.y + 8.0f},
+                    2.0f,
+                    Color{240, 82, 82, 255});
+        }
+        if (drawLabel) {
+            DrawText("FG", static_cast<int>(center.x + 7.0f), static_cast<int>(center.y - 18.0f), 14, outline);
+        }
+    };
+
+    for (const SectorAuthoringFogVolume& volume : AuthoringGraph().fogVolumes) {
+        bool resolved = false;
+        for (const SectorAuthoringDerivedFogVolumeMapping& mapping
+                : documentState.derivation.authoringDerivation.mapping.fogVolumes) {
+            if (mapping.authoringFogVolumeId == volume.id) {
+                resolved = mapping.resolved;
+                break;
+            }
+        }
+        const bool selected = selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FogVolume
+                && selectionState.selectedAuthoring.fogVolumeId == volume.id;
+        const bool hovered = selectionState.hoveredAuthoring.kind == SectorAuthoringSelectionKind::FogVolume
+                && selectionState.hoveredAuthoring.fogVolumeId == volume.id;
+        Color outline = !resolved
+                ? Color{240, 82, 82, 255}
+                : !volume.enabled
+                        ? Color{145, 150, 155, 235}
+                        : selected
+                                ? Color{72, 220, 245, 255}
+                                : hovered
+                                        ? Color{244, 192, 70, 255}
+                                        : Color{116, 205, 164, 230};
+        drawVolume(
+                volume,
+                SectorTopologyCoordPoint{volume.x, volume.y},
+                outline,
+                resolved,
+                true);
+    }
+}
+
+void SectorEditor::DrawAuthoringFogVolumeMoveOverlay() const
+{
+    const AuthoringFogVolumeDragState& drag = manipulationState.authoringFogVolumeDrag;
+    if (!drag.active || !drag.hasPreviewPoint) {
+        return;
+    }
+    const SectorAuthoringFogVolume* volume = FindSectorAuthoringFogVolume(AuthoringGraph(), drag.fogVolumeId);
+    if (volume == nullptr) {
+        return;
+    }
+    const Vector2 originalMap{
+            SectorCoordToVisibleAuthoring(drag.originalPoint.x),
+            SectorCoordToVisibleAuthoring(drag.originalPoint.y)};
+    const Vector2 previewMap{
+            SectorCoordToVisibleAuthoring(drag.previewPoint.x),
+            SectorCoordToVisibleAuthoring(drag.previewPoint.y)};
+    const Vector2 original = MapToScreen(originalMap);
+    const Vector2 previewPoint = MapToScreen(previewMap);
+    const Vector2 radiusXPoint = MapToScreen(Vector2{
+            previewMap.x + SectorWorldToAuthoringDistance(volume->radiusXWorld),
+            previewMap.y});
+    const Vector2 radiusZPoint = MapToScreen(Vector2{
+            previewMap.x,
+            previewMap.y + SectorWorldToAuthoringDistance(volume->radiusZWorld)});
+    const float radiusX = std::max(2.0f, std::fabs(radiusXPoint.x - previewPoint.x));
+    const float radiusY = std::max(2.0f, std::fabs(radiusZPoint.y - previewPoint.y));
+    const Color previewColor = drag.previewResolved
+            ? Color{72, 220, 245, 255}
+            : Color{240, 82, 82, 255};
+    DrawLineEx(original, previewPoint, 2.0f, Color{150, 200, 220, 180});
+    DrawEllipseLines(
+            static_cast<int>(original.x),
+            static_cast<int>(original.y),
+            radiusX,
+            radiusY,
+            Color{150, 200, 220, 120});
+    DrawEllipseLines(
+            static_cast<int>(previewPoint.x),
+            static_cast<int>(previewPoint.y),
+            radiusX,
+            radiusY,
+            previewColor);
 }
 
 void SectorEditor::DrawTopologySelectedLineHighlight() const
@@ -3559,8 +4217,8 @@ void SectorEditor::DrawToolsPanel(
     };
     const float toolsContentH =
             sectionLabelH + rowsHeight(4)
-            + separatorH + sectionLabelH + rowsHeight(2)
-            + separatorH + rowsHeight(6)
+            + separatorH + sectionLabelH + rowsHeight(9)
+            + separatorH + rowsHeight(4)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
             + separatorH + rowsHeight(1)
@@ -3646,6 +4304,11 @@ void SectorEditor::DrawToolsPanel(
         if (manipulationState.authoringVertexDrag.active && tool != SectorEditorTool::AuthoringMove) {
             CancelAuthoringVertexDrag("Cancelled authoring vertex move");
         }
+        if (manipulationState.authoringFogVolumeDrag.active
+                && tool != SectorEditorTool::Select
+                && fogVolumeEditingService) {
+            fogVolumeEditingService->CancelMove("Cancelled fog volume move");
+        }
         if (lightEditingState.lightDrag.active
                 && tool != SectorEditorTool::Move
                 && tool != SectorEditorTool::Select
@@ -3674,8 +4337,14 @@ void SectorEditor::DrawToolsPanel(
             }
         } else if (tool == SectorEditorTool::RuntimeObject) {
             statusText = "Billboard: click inside a sector to place a billboard";
+        } else if (tool == SectorEditorTool::StaticModel) {
+            statusText = "3D Prop: click inside a derived sector to place a static model";
+        } else if (tool == SectorEditorTool::DynamicModel) {
+            statusText = "Dynamic Prop: click inside a derived sector to place an animated model";
         } else if (tool == SectorEditorTool::Door) {
             statusText = "Door: click a two-sided portal line";
+        } else if (tool == SectorEditorTool::AuthoringFogVolume) {
+            statusText = "Fog Volume: click strictly inside a sector";
         }
     };
 
@@ -3696,7 +4365,10 @@ void SectorEditor::DrawToolsPanel(
     sectionLabel("Map objects");
     const SectorEditorTool mapTools[] = {
             SectorEditorTool::RuntimeObject,
+            SectorEditorTool::StaticModel,
+            SectorEditorTool::DynamicModel,
             SectorEditorTool::Door,
+            SectorEditorTool::AuthoringFogVolume,
             SectorEditorTool::StaticLight,
             SectorEditorTool::StaticSpotLight,
             SectorEditorTool::DynamicLight,
@@ -3863,7 +4535,11 @@ void SectorEditor::DrawSectorsPanel(
         engine::FontHandle smallFont)
 {
     SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
-    SectorEditorPlacedObjectActionContext placedObjectActions = BuildRuntimeObjectActionContext();
+    SectorEditorRuntimeObjectEditingService runtimeObjectEditing =
+            BuildRuntimeObjectEditingService(&selection);
+    SectorEditorStaticModelPickerService staticModelPicker{
+            runtimeObjectEditingState.staticModelPicker,
+            statusText};
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
@@ -3882,14 +4558,20 @@ void SectorEditor::DrawSectorsPanel(
             MakeLiveDerivationAccess(documentState.derivation),
             selectionState,
             uiState,
+            runtimeObjectEditingState,
+            runtimeObjectEditingUiState,
+            previewState.runtime.runtimeObjects,
             inspectorIdUiState,
             materialEditingUiState,
+            fogVolumeEditingUiState,
             statusText,
             selection,
-            placedObjectActions,
+            runtimeObjectEditing,
+            staticModelPicker,
             materialEditing,
             textureCatalog,
             lightEditing,
+            fogVolumeEditingService.value(),
             engineContext};
     const SectorEditorInspectorPanelResult result = DrawSectorEditorInspectorPanel(context);
     for (int i = 0; i < result.requestCount; ++i) {
@@ -3907,8 +4589,23 @@ void SectorEditor::DrawSectorsPanel(
         case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation:
             OpenDeleteSelectedLightConfirmation();
             break;
+        case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedFogVolumeConfirmation:
+            OpenConfirmation(
+                    "Delete Fog Volume",
+                    "Delete the selected authoring fog volume?",
+                    [this]() {
+                        if (fogVolumeEditingService) {
+                            fogVolumeEditingService->DeleteSelected();
+                        }
+                    });
+            break;
         case SectorEditorInspectorPanelRequestKind::BakeLightmaps:
             StartLightmapBake();
+            break;
+        case SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources:
+            if (state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
+                preview.RefreshDynamicLightSources(TopologyMap());
+            }
             break;
         }
     }
@@ -3967,21 +4664,193 @@ void SectorEditor::DrawSpritePickerModal(
         engine::FontHandle font)
 {
     const SectorEditorSpritePickerCallbacks callbacks{
-            [this, &assets]() { CloseSpritePicker(state.spritePicker, assets); },
+            [this, &assets]() { CloseSpritePicker(runtimeObjectEditingState.spritePicker, assets); },
             [this, &assets]() {
                 ApplySelectedBillboardSpritePickerSelection();
-                CloseSpritePicker(state.spritePicker, assets);
+                CloseSpritePicker(runtimeObjectEditingState.spritePicker, assets);
             },
             [this]() {
-                RefreshSpritePickerScan(state.spritePicker);
-                state.spriteMetadataCatalog.scanned = true;
-                state.spriteMetadataCatalog.scanMessage = state.spritePicker.scanMessage;
-                state.spriteMetadataCatalog.sprites = state.spritePicker.sprites;
+                RefreshSpritePickerScan(runtimeObjectEditingState.spritePicker);
+                runtimeObjectEditingState.spriteMetadataCatalog.scanned = true;
+                runtimeObjectEditingState.spriteMetadataCatalog.scanMessage = runtimeObjectEditingState.spritePicker.scanMessage;
+                runtimeObjectEditingState.spriteMetadataCatalog.sprites = runtimeObjectEditingState.spritePicker.sprites;
             },
-            [this](int spriteIndex) { SelectSpritePickerSprite(state.spritePicker, spriteIndex); },
-            [this, &assets]() { RefreshSpritePickerPreview(state.spritePicker, assets); }
+            [this](int spriteIndex) { SelectSpritePickerSprite(runtimeObjectEditingState.spritePicker, spriteIndex); },
+            [this, &assets]() { RefreshSpritePickerPreview(runtimeObjectEditingState.spritePicker, assets); }
     };
-    game::DrawSpritePickerModal(ui, config, input, assets, font, state.spritePicker, callbacks);
+    game::DrawSpritePickerModal(ui, config, input, assets, font, runtimeObjectEditingState.spritePicker, callbacks);
+}
+
+void SectorEditor::DrawStaticModelPickerModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    SectorEditorStaticModelPickerService picker(
+            runtimeObjectEditingState.staticModelPicker,
+            statusText);
+    StaticModelPickerState& pickerState = picker.State();
+    if (!pickerState.open) {
+        return;
+    }
+    if (!pickerState.scanned) {
+        picker.Refresh();
+    }
+
+    bool cancelRequested = false;
+    bool selectRequested = false;
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [&cancelRequested, &selectRequested](engine::InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE) {
+                    cancelRequested = true;
+                    engine::ConsumeEvent(event);
+                } else if (event.key.key == KEY_ENTER
+                        || event.key.key == KEY_KP_ENTER) {
+                    selectRequested = true;
+                    engine::ConsumeEvent(event);
+                }
+            });
+
+    DrawRectangle(
+            0,
+            0,
+            static_cast<int>(EditorWidth),
+            static_cast<int>(EditorHeight),
+            Color{0, 0, 0, 135});
+    const Rectangle modal{
+            (EditorWidth - 820.0f) * 0.5f,
+            (EditorHeight - 650.0f) * 0.5f,
+            820.0f,
+            650.0f};
+    DrawRectangleRec(modal, Color{20, 24, 32, 245});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+    engine::Text(
+            config,
+            assets,
+            Rectangle{modal.x + 22.0f, modal.y + 18.0f, modal.width - 44.0f, 36.0f},
+            font,
+            pickerState.target == ModelPickerTarget::DynamicModel
+                    ? "Choose Dynamic Prop Model"
+                    : "Choose 3D Prop Model");
+
+    const Rectangle listBounds{
+            modal.x + 22.0f,
+            modal.y + 68.0f,
+            modal.width - 44.0f,
+            450.0f};
+    const float listContentW =
+            ScrollAreaContentWidthForVerticalScrollbar(
+                    listBounds.width,
+                    config,
+                    0.0f,
+                    true);
+    const Vector2 contentSize{
+            listContentW,
+            std::max(
+                    listBounds.height,
+                    config.listItemHeight
+                            * static_cast<float>(pickerState.optionLabels.size()))};
+    engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+            ui,
+            config,
+            input,
+            "sector_editor_static_model_picker_scroll",
+            listBounds,
+            contentSize,
+            pickerState.scroll);
+    if (!pickerState.optionLabels.empty()) {
+        const int previous = pickerState.selectedModelIndex;
+        engine::List(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_static_model_picker_list",
+                Rectangle{0.0f, 0.0f, scroll.viewport.width, contentSize.y},
+                font,
+                pickerState.optionLabels.data(),
+                pickerState.optionLabels.size(),
+                pickerState.selectedModelIndex);
+        if (pickerState.selectedModelIndex != previous) {
+            picker.SelectIndex(pickerState.selectedModelIndex);
+        }
+    }
+    engine::EndScrollArea(ui, config, input, scroll, pickerState.scroll);
+
+    engine::Text(
+            config,
+            assets,
+            Rectangle{
+                    listBounds.x,
+                    listBounds.y + listBounds.height + 8.0f,
+                    listBounds.width,
+                    32.0f},
+            font,
+            pickerState.scanMessage.c_str(),
+            engine::UITextJustify::Left,
+            pickerState.modelPaths.empty()
+                    ? config.invalidColor
+                    : config.mutedTextColor);
+
+    const float buttonY = modal.y + modal.height - 64.0f;
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_static_model_picker_refresh",
+                Rectangle{modal.x + 22.0f, buttonY, 130.0f, 44.0f},
+                font,
+                "Refresh")) {
+        picker.Refresh();
+    }
+    selectRequested = selectRequested || engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_static_model_picker_select",
+            Rectangle{modal.x + modal.width - 322.0f, buttonY, 140.0f, 44.0f},
+            font,
+            "Select");
+    cancelRequested = cancelRequested || engine::Button(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_static_model_picker_cancel",
+            Rectangle{modal.x + modal.width - 162.0f, buttonY, 140.0f, 44.0f},
+            font,
+            "Cancel");
+
+    input.ForEachEvent(
+            engine::InputEventType::Any,
+            true,
+            [](engine::InputEvent& event) {
+                engine::ConsumeEvent(event);
+            });
+    if (cancelRequested) {
+        picker.Close();
+    } else if (selectRequested) {
+        if (!picker.HasSelection()) {
+            statusText = "Select a model first";
+        } else {
+            SectorEditorSelectionServiceContext selection =
+                    BuildSelectionServiceContext();
+            SectorEditorRuntimeObjectEditingService editing =
+                    BuildRuntimeObjectEditingService(&selection);
+            if (pickerState.target == ModelPickerTarget::DynamicModel) {
+                editing.AssignSelectedDynamicModel(picker.SelectedModelPath());
+            } else {
+                editing.AssignSelectedStaticModel(picker.SelectedModelPath());
+            }
+            pickerState.open = false;
+        }
+    }
 }
 
 void SectorEditor::DrawSaveLevelModal(
@@ -4250,14 +5119,20 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     if (!engine::IsNull(state.addMapTexture.previewScope)) {
         assets.UnloadScope(state.addMapTexture.previewScope);
     }
+    if (!engine::IsNull(runtimeObjectEditingState.spritePicker.previewScope)) {
+        assets.UnloadScope(runtimeObjectEditingState.spritePicker.previewScope);
+    }
 
     state = SectorEditorState{};
     manipulationState = ManipulationState{};
     uiState = SectorEditorUiState{};
+    runtimeObjectEditingState = RuntimeObjectEditingState{};
+    runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     textureCatalogState = TextureCatalogState{};
     lightEditingState = LightEditingState{};
     materialEditingState = MaterialEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
+    fogVolumeEditingUiState = FogVolumeEditingUiState{};
     previewState.controller = SectorEditorPreviewControllerState{};
     ResetEditorTopologyDocumentState(
             Lifecycle(),
@@ -4289,7 +5164,13 @@ bool SectorEditor::LoadLevel(
 
     ClearSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects);
     preview.ShutdownRendererResources(assets);
+    if (!engine::IsNull(runtimeObjectEditingState.spritePicker.previewScope)) {
+        assets.UnloadScope(runtimeObjectEditingState.spritePicker.previewScope);
+    }
     CancelAuthoringVertexDrag(nullptr);
+    if (fogVolumeEditingService) {
+        fogVolumeEditingService->CancelMove(nullptr);
+    }
     CancelLightDrag(nullptr);
     bool loadedAuthoringGraph = false;
     bool authoringDerivationCurrent = false;
@@ -4334,6 +5215,13 @@ bool SectorEditor::LoadLevel(
                 MakeLiveDerivationAccess(documentState.derivation),
                 topologyMap);
     }
+    std::string fingerprintError;
+    if (!RefreshSectorStaticModelGeometryFingerprints(
+                topologyMap,
+                fingerprintError)
+            && !fingerprintError.empty()) {
+        TraceLog(LOG_WARNING, "%s", fingerprintError.c_str());
+    }
     InvalidateTopologyRenderCache();
     previewState.controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
@@ -4366,6 +5254,8 @@ bool SectorEditor::LoadLevel(
     selectionState.hoveredTopologyVertexId = -1;
     selectionState.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     manipulationState = ManipulationState{};
+    runtimeObjectEditingState = RuntimeObjectEditingState{};
+    runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     lightEditingState = LightEditingState{};
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     textureCatalog.RefreshDefaultTextureIds();
@@ -4526,6 +5416,13 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
         return false;
     }
 
+    std::string fingerprintError;
+    if (!RefreshSectorStaticModelGeometryFingerprints(
+                TopologyMap(),
+                fingerprintError)
+            && !fingerprintError.empty()) {
+        TraceLog(LOG_WARNING, "%s", fingerprintError.c_str());
+    }
     std::string error;
     if (!preview.RebuildRendererResources(assets, TopologyMap(), "sector_editor_preview", error)) {
         previewState.runtime.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
@@ -4554,6 +5451,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     RefreshPreviewObjectProbeDebugData();
     EnsureSectorRuntimeObjectWorldReserved(context.world, previewState.runtime.runtimeObjects);
     SpawnPlacedRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, TopologyMap());
+    BeginFpsViewmodel(assets);
 
     if (previewState.controller.hasPreviewPose) {
         preview.ApplyRendererPose(previewState.controller.lastPreviewPose);
@@ -4564,6 +5462,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     EnterSectorFreeflyController(previewState.controller.freeflyController);
     preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
     previewState.controller.visualStepOffsetY = 0.0f;
+    ResetSectorFpsCrouch(previewState.controller.fpsControllerState);
     ClearSectorFpsHeadBob(previewState.controller.headBobState);
     ClearSectorFpsLandingDip(previewState.controller.landingDipState);
     previewState.controller.fpsControllerConfig = NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
@@ -4592,10 +5491,12 @@ void SectorEditor::LeavePreview3D()
     previewState.controller.lastPreviewPose = ActivePreviewPose();
     previewState.controller.hasPreviewPose = true;
     previewState.controller.visualStepOffsetY = 0.0f;
+    ResetSectorFpsCrouch(previewState.controller.fpsControllerState);
     ClearSectorFpsHeadBob(previewState.controller.headBobState);
     ClearSectorFpsLandingDip(previewState.controller.landingDipState);
     previewState.controller.previewControlMode = SectorPreviewControlMode::FreeFly;
     state.mode = SectorEditorMode::Edit2D;
+    if (engineContext != nullptr) EndFpsViewmodel(engineContext->assets);
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     LeaveSectorFreeflyController();
@@ -4618,6 +5519,7 @@ void SectorEditor::TogglePreviewControlMode()
                 state.mode == SectorEditorMode::Preview3D,
                 previewState.collision,
                 previewState.controller,
+                previewState.runtime.runtimeObjects.staticModelColliders,
                 preview)) {
         return;
     }
@@ -4745,12 +5647,16 @@ bool SectorEditor::RebuildSectorCollisionWorld()
     return RebuildSectorEditorCollisionWorld(
             TopologyMap(),
             previewState.collision,
-            previewState.controller);
+            previewState.controller,
+            previewState.runtime.runtimeObjects.staticModelColliders);
 }
 
 SectorFpsVerticalContext SectorEditor::BuildGameplayVerticalContext()
 {
-    return BuildSectorEditorGameplayVerticalContext(previewState.collision, previewState.controller);
+    return BuildSectorEditorGameplayVerticalContext(
+            previewState.collision,
+            previewState.controller,
+            previewState.runtime.runtimeObjects.staticModelColliders);
 }
 
 void SectorEditor::RefreshGameplaySectorAndVerticalContext()
@@ -4760,7 +5666,10 @@ void SectorEditor::RefreshGameplaySectorAndVerticalContext()
 
 void SectorEditor::InitializeGameplayVerticalState()
 {
-    InitializeSectorEditorGameplayVerticalState(previewState.collision, previewState.controller);
+    InitializeSectorEditorGameplayVerticalState(
+            previewState.collision,
+            previewState.controller,
+            previewState.runtime.runtimeObjects.staticModelColliders);
 }
 
 void SectorEditor::OpenPreviewSettingsModal()
@@ -4771,8 +5680,32 @@ void SectorEditor::OpenPreviewSettingsModal()
     state.previewSettingsModal.draftSkySettings = NormalizeSectorTopologySkySettings(TopologyMap().skySettings);
     state.previewSettingsModal.draftDirectionalLight =
             NormalizeSectorTopologyDirectionalLightSettings(TopologyMap().directionalLight);
+    state.previewSettingsModal.draftFogSettings =
+            NormalizeSectorTopologyFogSettings(TopologyMap().fogSettings);
     state.previewSettingsModal.draftLightmapSettings =
             NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
+    const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
+            weaponRegistry, weaponRegistry.initialWeaponId);
+    if (weapon != nullptr) {
+        state.previewSettingsModal.viewmodelDefaults = weapon->viewmodel.presentation;
+        state.previewSettingsModal.draftViewmodel = ResolveFpsViewmodelPresentation(
+                weapon->viewmodel.presentation,
+                FindFpsViewmodelOverride(applicationSettings, weapon->id));
+        state.previewSettingsModal.viewmodelGripDefaults =
+                weapon->viewmodel.attachment.gripCorrection;
+        state.previewSettingsModal.draftViewmodelGrip =
+                ResolveFpsViewmodelGripCorrection(
+                        weapon->viewmodel.attachment.gripCorrection,
+                        FindFpsViewmodelGripCorrectionOverride(
+                                applicationSettings, weapon->id));
+        state.previewSettingsModal.viewmodelAttachmentLightingDefaults =
+                weapon->viewmodel.attachment.lighting;
+        state.previewSettingsModal.draftViewmodelAttachmentLighting =
+                ResolveFpsViewmodelAttachmentLighting(
+                        weapon->viewmodel.attachment.lighting,
+                        FindFpsViewmodelAttachmentLightingOverride(
+                                applicationSettings, weapon->id));
+    }
 }
 
 void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
@@ -4792,6 +5725,8 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const SectorTopologyDirectionalLightSettings draftDirectionalLight =
             NormalizeSectorTopologyDirectionalLightSettings(
                     state.previewSettingsModal.draftDirectionalLight);
+    const SectorTopologyFogSettings draftFogSettings =
+            NormalizeSectorTopologyFogSettings(state.previewSettingsModal.draftFogSettings);
     const SectorLightmapBakeSettings draftLightmapSettings =
             NormalizeSectorPreviewObjectProbeSettings(state.previewSettingsModal.draftLightmapSettings);
     const bool previewChanged = !SamePreviewSettings(
@@ -4801,12 +5736,83 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const bool directionalChanged = !SameDirectionalLightSettings(
             TopologyMap().directionalLight,
             draftDirectionalLight);
+    const bool fogChanged = !SameFogSettings(TopologyMap().fogSettings, draftFogSettings);
     const SectorLightmapBakeSettings currentLightmapSettings =
             NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
     const bool objectProbeSettingsChanged =
             currentLightmapSettings.objectProbeSpacingWorld != draftLightmapSettings.objectProbeSpacingWorld
-            || currentLightmapSettings.objectProbeHeightWorld != draftLightmapSettings.objectProbeHeightWorld;
-    if (!previewChanged && !skyChanged && !directionalChanged && !objectProbeSettingsChanged) {
+            || currentLightmapSettings.objectProbeLowerHeightWorld
+                    != draftLightmapSettings.objectProbeLowerHeightWorld
+            || currentLightmapSettings.objectProbeUpperHeightWorld
+                    != draftLightmapSettings.objectProbeUpperHeightWorld;
+    const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(weaponRegistry, weaponRegistry.initialWeaponId);
+    const FpsViewmodelPresentation draftViewmodel = ClampFpsViewmodelPresentation(
+            state.previewSettingsModal.draftViewmodel);
+    const FpsViewmodelPresentation currentViewmodel = weapon != nullptr
+            ? ResolveFpsViewmodelPresentation(weapon->viewmodel.presentation,
+                    FindFpsViewmodelOverride(applicationSettings, weapon->id))
+            : FpsViewmodelPresentation{};
+    const FpsViewmodelPresentationOverride viewmodelOverride = weapon != nullptr
+            ? BuildFpsViewmodelOverride(weapon->viewmodel.presentation, draftViewmodel)
+            : FpsViewmodelPresentationOverride{};
+    const FpsViewmodelPresentationOverride currentOverride = weapon != nullptr
+            ? BuildFpsViewmodelOverride(weapon->viewmodel.presentation, currentViewmodel)
+            : FpsViewmodelPresentationOverride{};
+    const bool viewmodelChanged = weapon != nullptr
+            && !SameViewmodelOverride(viewmodelOverride, currentOverride);
+    const FpsViewmodelGripCorrection draftGrip =
+            ClampFpsViewmodelGripCorrection(
+                    state.previewSettingsModal.draftViewmodelGrip);
+    const FpsViewmodelGripCorrection currentGrip = weapon != nullptr
+            ? ResolveFpsViewmodelGripCorrection(
+                    weapon->viewmodel.attachment.gripCorrection,
+                    FindFpsViewmodelGripCorrectionOverride(
+                            applicationSettings, weapon->id))
+            : FpsViewmodelGripCorrection{};
+    const FpsViewmodelGripCorrectionOverride gripOverride = weapon != nullptr
+            ? BuildFpsViewmodelGripCorrectionOverride(
+                    weapon->viewmodel.attachment.gripCorrection,
+                    draftGrip)
+            : FpsViewmodelGripCorrectionOverride{};
+    const FpsViewmodelGripCorrectionOverride currentGripOverride =
+            weapon != nullptr
+            ? BuildFpsViewmodelGripCorrectionOverride(
+                    weapon->viewmodel.attachment.gripCorrection,
+                    currentGrip)
+            : FpsViewmodelGripCorrectionOverride{};
+    const bool gripChanged = weapon != nullptr
+            && !SameGripCorrectionOverride(
+                    gripOverride, currentGripOverride);
+    const FpsViewmodelAttachmentLighting draftAttachmentLighting =
+            ClampFpsViewmodelAttachmentLighting(
+                    state.previewSettingsModal
+                            .draftViewmodelAttachmentLighting);
+    const FpsViewmodelAttachmentLighting currentAttachmentLighting =
+            weapon != nullptr
+            ? ResolveFpsViewmodelAttachmentLighting(
+                    weapon->viewmodel.attachment.lighting,
+                    FindFpsViewmodelAttachmentLightingOverride(
+                            applicationSettings, weapon->id))
+            : FpsViewmodelAttachmentLighting{};
+    const FpsViewmodelAttachmentLightingOverride attachmentLightingOverride =
+            weapon != nullptr
+            ? BuildFpsViewmodelAttachmentLightingOverride(
+                    weapon->viewmodel.attachment.lighting,
+                    draftAttachmentLighting)
+            : FpsViewmodelAttachmentLightingOverride{};
+    const FpsViewmodelAttachmentLightingOverride
+            currentAttachmentLightingOverride = weapon != nullptr
+            ? BuildFpsViewmodelAttachmentLightingOverride(
+                    weapon->viewmodel.attachment.lighting,
+                    currentAttachmentLighting)
+            : FpsViewmodelAttachmentLightingOverride{};
+    const bool attachmentLightingChanged = weapon != nullptr
+            && !SameAttachmentLightingOverride(
+                    attachmentLightingOverride,
+                    currentAttachmentLightingOverride);
+    if (!previewChanged && !skyChanged && !directionalChanged && !fogChanged
+            && !objectProbeSettingsChanged && !viewmodelChanged && !gripChanged
+            && !attachmentLightingChanged) {
         state.previewSettingsModal = SectorPreviewSettingsModalState{};
         statusText = "Preview settings unchanged";
         return;
@@ -4820,8 +5826,47 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     TopologyMap().previewSettings = draftPreviewSettings;
     TopologyMap().skySettings = draftSkySettings;
     TopologyMap().directionalLight = draftDirectionalLight;
+    ApplySectorPreviewFogSettings(TopologyMap(), draftFogSettings);
     ApplySectorPreviewObjectProbeSettings(TopologyMap(), draftLightmapSettings);
-    MarkTopologyDocumentEdited("Preview settings updated");
+    if ((viewmodelChanged || gripChanged || attachmentLightingChanged)
+            && weapon != nullptr) {
+        if (viewmodelChanged) {
+            if (FpsViewmodelOverrideEmpty(viewmodelOverride)) {
+                ClearFpsViewmodelOverride(applicationSettings, weapon->id);
+            } else {
+                SetFpsViewmodelOverride(
+                        applicationSettings, weapon->id, viewmodelOverride);
+            }
+        }
+        if (gripChanged) {
+            if (FpsViewmodelGripCorrectionOverrideEmpty(gripOverride)) {
+                ClearFpsViewmodelGripCorrectionOverride(
+                        applicationSettings, weapon->id);
+            } else {
+                SetFpsViewmodelGripCorrectionOverride(
+                        applicationSettings, weapon->id, gripOverride);
+            }
+        }
+        if (attachmentLightingChanged) {
+            if (FpsViewmodelAttachmentLightingOverrideEmpty(
+                        attachmentLightingOverride)) {
+                ClearFpsViewmodelAttachmentLightingOverride(
+                        applicationSettings, weapon->id);
+            } else {
+                SetFpsViewmodelAttachmentLightingOverride(
+                        applicationSettings,
+                        weapon->id,
+                        attachmentLightingOverride);
+            }
+        }
+        std::string saveError;
+        if (!SaveFpsApplicationSettings(applicationSettingsPath, applicationSettings, &saveError)) {
+            TraceLog(LOG_WARNING, "Could not persist viewmodel settings: %s", saveError.c_str());
+        }
+    }
+    if (previewChanged || skyChanged || directionalChanged || fogChanged || objectProbeSettingsChanged) {
+        MarkTopologyDocumentEdited("Preview settings updated");
+    }
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
         if (engineContext != nullptr) {
@@ -5373,6 +6418,8 @@ bool SectorEditor::IsValidSurfaceRef(SectorSurfaceRef surface) const
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
+            const_cast<RuntimeObjectEditingState&>(runtimeObjectEditingState),
+            const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
             const_cast<SectorEditorUiState&>(uiState),
             const_cast<InspectorIdUiState&>(inspectorIdUiState),
             const_cast<MaterialEditingUiState&>(materialEditingUiState));
@@ -5399,6 +6446,8 @@ bool SectorEditor::IsValidTopologySurfaceEditTarget(TopologySurfaceEditTarget ta
             const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
             const_cast<SelectionState&>(selectionState),
             const_cast<ManipulationState&>(manipulationState),
+            const_cast<RuntimeObjectEditingState&>(runtimeObjectEditingState),
+            const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
             const_cast<SectorEditorUiState&>(uiState),
             const_cast<InspectorIdUiState&>(inspectorIdUiState),
             const_cast<MaterialEditingUiState&>(materialEditingUiState));
@@ -5554,7 +6603,7 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
                     state.topologyRenderCache,
                     {
                             manipulationState,
-                            state.runtimeObjectDrag,
+                            runtimeObjectEditingState.drag,
                             selectionState.topologySelectionKind,
                             selectionState.selectedTopologySectorId,
                             selectionState.selectedTopologyVertexId,
@@ -5598,6 +6647,28 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
                             uiState.lightGreenInput,
                             uiState.lightBlueInput,
                             inspectorIdUiState,
+                            {
+                                    &uiState.lightHazeExtentScaleInput,
+                                    &uiState.lightHazeDensityInput,
+                                    &uiState.lightHazeEdgeSoftnessInput,
+                                    &uiState.lightHazeNoiseAmountInput,
+                                    &uiState.lightHazeNoiseScaleInput,
+                                    &uiState.lightHazeFlowDirectionInput,
+                                    &uiState.lightHazeFlowSpeedInput,
+                                    &uiState.lightHazeRedInput,
+                                    &uiState.lightHazeGreenInput,
+                                    &uiState.lightHazeBlueInput,
+                                    &uiState.lightDustAmountInput,
+                                    &uiState.lightDustExtentScaleInput,
+                                    &uiState.lightDustMinimumSizeInput,
+                                    &uiState.lightDustMaximumSizeInput,
+                                    &uiState.lightDustOpacityInput,
+                                    &uiState.lightDustDriftSpeedInput,
+                                    &uiState.lightDustTurbulenceInput,
+                                    &uiState.lightDustRedInput,
+                                    &uiState.lightDustGreenInput,
+                                    &uiState.lightDustBlueInput,
+                            },
                     },
                     statusText}};
 }
@@ -5626,6 +6697,13 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
     const SectorSurfaceRef selected = previewState.selection.selectedSurface3D;
     const TopologySurfaceEditTarget selectedTarget = previewState.selection.selectedTopologySurface3D;
 
+    std::string fingerprintError;
+    if (!RefreshSectorStaticModelGeometryFingerprints(
+                TopologyMap(),
+                fingerprintError)
+            && !fingerprintError.empty()) {
+        TraceLog(LOG_WARNING, "%s", fingerprintError.c_str());
+    }
     std::string error;
     if (!preview.RebuildRendererResources(assets, TopologyMap(), "sector_editor_preview", error)) {
         previewState.runtime.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
@@ -5705,13 +6783,13 @@ void SectorEditor::OpenSelectedBillboardSpritePicker()
     }
 
     OpenBillboardSpritePicker(
-            state.spritePicker,
+            runtimeObjectEditingState.spritePicker,
             object->billboard.spriteAnimationPath);
 }
 
 void SectorEditor::ApplySelectedBillboardSpritePickerSelection()
 {
-    const SectorEditorSpritePickerResult selected = SelectedSpritePickerResult(state.spritePicker);
+    const SectorEditorSpritePickerResult selected = SelectedSpritePickerResult(runtimeObjectEditingState.spritePicker);
     if (!selected.valid) {
         statusText = "Select a sprite";
         return;

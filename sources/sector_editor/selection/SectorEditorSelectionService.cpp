@@ -30,7 +30,12 @@ void ResetRuntimeObjectUiState(SectorEditorSelectionUiDependencies& ui)
     ui.runtimeObjectXInput = engine::UIFloatInputState{};
     ui.runtimeObjectYInput = engine::UIFloatInputState{};
     ui.runtimeObjectZInput = engine::UIFloatInputState{};
+    ui.runtimeObjectRotationXInput = engine::UIFloatInputState{};
     ui.runtimeObjectYawInput = engine::UIFloatInputState{};
+    ui.runtimeObjectRotationZInput = engine::UIFloatInputState{};
+    ui.runtimeObjectHeightOffsetInput = engine::UIFloatInputState{};
+    ui.runtimeObjectScaleInput = engine::UIFloatInputState{};
+    ui.runtimeObjectAnimationSpeedInput = engine::UIFloatInputState{};
     ui.runtimeObjectWidthInput = engine::UIFloatInputState{};
     ui.runtimeObjectHeightInput = engine::UIFloatInputState{};
     ui.runtimeObjectThicknessInput = engine::UIFloatInputState{};
@@ -799,6 +804,19 @@ void SelectSectorEditorAuthoringFaceAnchorTarget(SectorEditorSelectionServiceCon
     for (engine::UIFloatInputState& inputState : context.materialUiState.topologySectorUvInputs) {
         inputState = engine::UIFloatInputState{};
     }
+}
+
+void SelectSectorEditorAuthoringFogVolumeTarget(
+        SectorEditorSelectionServiceContext& context,
+        int fogVolumeId)
+{
+    if (FindSectorAuthoringFogVolume(context.authoringGraph, fogVolumeId) == nullptr) {
+        ClearSectorEditorSelection(context);
+        return;
+    }
+    ClearSectorEditorSelection(context);
+    SelectSectorEditorAuthoringFogVolume(context.authoringGraph, context.selectionState, fogVolumeId);
+    context.ui.inspectorScroll.offset = Vector2{};
 }
 
 void SelectSectorEditorSurface3D(SectorEditorSelectionServiceContext& context, SectorSurfaceRef surface)

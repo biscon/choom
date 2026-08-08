@@ -1,10 +1,12 @@
 #pragma once
 
 #include "engine/assets/AssetManager.h"
+#include "engine/components/AnimatedModel.h"
 #include "engine/ecs/World.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
+#include "sector_demo/SectorStaticModelCollision.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -17,6 +19,10 @@ namespace game {
 
 constexpr size_t kSectorRuntimeObjectInitialCapacity = 128;
 
+float ComputeSectorModelEnvironmentExposure(
+        const SectorTopologyMap& map,
+        int sectorId);
+
 struct SectorPlacedRuntimeObjectEntity {
     int placedObjectId = 0;
     engine::Entity entity = engine::NullEntity();
@@ -25,6 +31,8 @@ struct SectorPlacedRuntimeObjectEntity {
 struct SectorObjectTransform {
     Vector3 position = {};
     float yawRadians = 0.0f;
+    float rotationXRadians = 0.0f;
+    float rotationZRadians = 0.0f;
 };
 
 struct SectorObject {
@@ -34,6 +42,26 @@ struct SectorObject {
 
 struct SectorObjectLighting {
     BakedObjectLightingSample baked = {};
+    BakedObjectLightingVerticalSample vertical = {};
+};
+
+struct SectorStaticModel {
+    engine::ModelHandle model = engine::NullModelHandle();
+    int placedObjectId = 0;
+    Vector3 containingSectorAmbient = {0.15f, 0.15f, 0.15f};
+    float scale = 1.0f;
+    float environmentExposure = 0.15f;
+};
+
+struct SectorDynamicModel {
+    int placedObjectId = 0;
+    Vector3 containingSectorAmbient = {0.15f, 0.15f, 0.15f};
+    float scale = 1.0f;
+    float environmentExposure = 0.15f;
+    std::string requestedAnimation;
+    bool animationResolved = false;
+    bool animationFallback = false;
+    SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
 };
 
 } // namespace game
@@ -54,6 +82,7 @@ struct SectorRuntimeObjectState {
     std::vector<SectorPlacedRuntimeObjectEntity> placedObjectEntities;
     std::vector<SectorDoorAnchorDiagnostic> doorAnchorDiagnostics;
     std::vector<SectorDynamicDoorCollider> dynamicDoorColliders;
+    std::vector<SectorStaticModelCollider> staticModelColliders;
     std::vector<RuntimePortalDynamicBlocker> dynamicPortalBlockers;
     size_t placedObjectCount = 0;
     size_t spawnedObjectCount = 0;
@@ -65,6 +94,11 @@ struct SectorRuntimeObjectState {
     size_t spriteAnimationReadyCount = 0;
     size_t spriteAnimationPendingCount = 0;
     size_t spriteAnimationFailedCount = 0;
+    size_t staticModelRequestedCount = 0;
+    size_t staticModelReadyCount = 0;
+    size_t staticModelPendingCount = 0;
+    size_t staticModelFailedCount = 0;
+    size_t staticModelUnassignedCount = 0;
     size_t directionalClipResolvedCount = 0;
     size_t directionalClipMissingCount = 0;
     size_t directionalClipFallbackCount = 0;

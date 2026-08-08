@@ -8,6 +8,7 @@
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyTypes.h"
+#include "game/FpsWeaponRegistry.h"
 
 #include <raylib.h>
 
@@ -30,7 +31,9 @@ enum class TopologyTexturePickerTargetKind {
 enum class PreviewSettingsTab {
     General,
     Sky,
-    Lighting
+    Lighting,
+    Fog,
+    Viewmodel
 };
 
 struct TexturePickerState {
@@ -150,7 +153,14 @@ struct SectorPreviewSettingsModalState {
     SectorFpsControllerConfig draftConfig;
     SectorTopologySkySettings draftSkySettings;
     SectorTopologyDirectionalLightSettings draftDirectionalLight;
+    SectorTopologyFogSettings draftFogSettings;
     SectorLightmapBakeSettings draftLightmapSettings;
+    FpsViewmodelPresentation viewmodelDefaults;
+    FpsViewmodelPresentation draftViewmodel;
+    FpsViewmodelGripCorrection viewmodelGripDefaults;
+    FpsViewmodelGripCorrection draftViewmodelGrip;
+    FpsViewmodelAttachmentLighting viewmodelAttachmentLightingDefaults;
+    FpsViewmodelAttachmentLighting draftViewmodelAttachmentLighting;
     engine::UIFloatInputState walkSpeedInput;
     engine::UIFloatInputState runSpeedInput;
     engine::UIFloatInputState mouseSensitivityInput;
@@ -173,13 +183,42 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState lightDirectionZInput;
     engine::UIFloatInputState lightIntensityInput;
     engine::UIFloatInputState objectProbeSpacingInput;
-    engine::UIFloatInputState objectProbeHeightInput;
+    engine::UIFloatInputState objectProbeLowerHeightInput;
+    engine::UIFloatInputState objectProbeUpperHeightInput;
     engine::UIIntInputState lightColorRedInput;
     engine::UIIntInputState lightColorGreenInput;
     engine::UIIntInputState lightColorBlueInput;
+    engine::UIFloatInputState fogStartDistanceInput;
+    engine::UIFloatInputState fogDensityInput;
+    engine::UIFloatInputState fogMaxOpacityInput;
+    engine::UIFloatInputState fogReferenceHeightInput;
+    engine::UIFloatInputState fogHeightFalloffInput;
+    engine::UIIntInputState fogColorRedInput;
+    engine::UIIntInputState fogColorGreenInput;
+    engine::UIIntInputState fogColorBlueInput;
+    engine::UIFloatInputState viewmodelPositionXInput;
+    engine::UIFloatInputState viewmodelPositionYInput;
+    engine::UIFloatInputState viewmodelPositionZInput;
+    engine::UIFloatInputState viewmodelPitchInput;
+    engine::UIFloatInputState viewmodelYawInput;
+    engine::UIFloatInputState viewmodelRollInput;
+    engine::UIFloatInputState viewmodelScaleInput;
+    engine::UIFloatInputState viewmodelFovInput;
+    engine::UIFloatInputState viewmodelGripTranslationXInput;
+    engine::UIFloatInputState viewmodelGripTranslationYInput;
+    engine::UIFloatInputState viewmodelGripTranslationZInput;
+    engine::UIFloatInputState viewmodelGripPitchInput;
+    engine::UIFloatInputState viewmodelGripYawInput;
+    engine::UIFloatInputState viewmodelGripRollInput;
+    engine::UIFloatInputState viewmodelGripScaleInput;
+    engine::UIFloatInputState viewmodelAttachmentBrightnessInput;
+    engine::UIFloatInputState viewmodelAttachmentMetallicInput;
+    engine::UIFloatInputState viewmodelAttachmentRoughnessInput;
     engine::UIScrollState generalScroll;
     engine::UIScrollState skyScroll;
     engine::UIScrollState lightingScroll;
+    engine::UIScrollState fogScroll;
+    engine::UIScrollState viewmodelScroll;
     std::string errorMessage;
 };
 

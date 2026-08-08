@@ -1,0 +1,80 @@
+#pragma once
+
+#include "sector_editor/SectorEditorDirtyState.h"
+#include "sector_editor/selection/SectorEditorSelectionService.h"
+#include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingState.h"
+#include "sector_demo/SectorRuntimeObjects.h"
+
+#include <functional>
+#include <string>
+
+namespace engine {
+struct EngineContext;
+}
+
+namespace game {
+
+struct SectorEditorRuntimeObjectEditingServiceContext {
+    SectorTopologyMap& map;
+    SectorRuntimeObjectState& runtimeObjects;
+    RuntimeObjectEditingState& editingState;
+    RuntimeObjectEditingUiState& uiState;
+    SelectionState& selectionState;
+    SectorEditorSelectionServiceContext* selectionService = nullptr;
+    SectorEditorDocumentLifecycleAccess lifecycle;
+    uint64_t& topologyRenderRevision;
+    SectorEditorTopologyRenderCache& topologyRenderCache;
+    std::string& statusText;
+    engine::EngineContext* engineContext = nullptr;
+    bool authoringDerivationCurrent = false;
+};
+
+struct SectorEditorRuntimeObjectDeleteRequest {
+    bool requested = false;
+    int objectId = -1;
+    std::string title;
+    std::string message;
+};
+
+class SectorEditorRuntimeObjectEditingService {
+public:
+    explicit SectorEditorRuntimeObjectEditingService(
+            SectorEditorRuntimeObjectEditingServiceContext context);
+
+    SectorPlacedRuntimeObject* SelectedObject();
+    const SectorPlacedRuntimeObject* SelectedObject() const;
+    void SelectObject(int objectId);
+
+    bool AddBillboard(int sectorId, Vector2 mapPoint);
+    bool AddDoor(int lineDefId);
+    bool AddStaticModel(Vector2 mapPoint);
+    bool AddDynamicModel(Vector2 mapPoint);
+    SectorEditorRuntimeObjectDeleteRequest RequestDeleteSelected() const;
+    bool DeleteById(int objectId);
+
+    bool MutateSelected(
+            const char* status,
+            const std::function<bool(SectorPlacedRuntimeObject&)>& mutate);
+    bool AssignSelectedStaticModel(const std::string& modelPath);
+    bool AssignSelectedDynamicModel(const std::string& modelPath);
+    bool SelectedDoorRuntimeTargetOpen(bool& outOpen) const;
+    bool SetSelectedDoorRuntimeTargetOpen(bool open);
+
+    bool BeginDrag(int objectId);
+    void UpdateDrag(Vector2 snappedMapPoint);
+    bool FinishDrag();
+    void CancelDrag(const char* message);
+
+    int FindCachedSectorAt(Vector2 mapPoint, bool* outMultipleMatches = nullptr) const;
+    void RefreshPreviewObjects();
+    void MarkEdited(const char* status);
+
+private:
+    void ResetInspectorUi();
+    void UpdateCachedDraw(const SectorPlacedRuntimeObject& object);
+    void ClearSelection();
+
+    SectorEditorRuntimeObjectEditingServiceContext context_;
+};
+
+} // namespace game

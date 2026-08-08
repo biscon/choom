@@ -3,8 +3,11 @@
 #include "sector_demo/SectorMath.h"
 
 #include <cmath>
+#include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <limits>
+#include <string>
 
 namespace {
 
@@ -119,6 +122,39 @@ void TestColorHelpers()
     Check(color.r == 0 && color.g == 128 && color.b == 255 && color.a == 123, "UnitRgbToColor converts unit rgb with alpha");
 }
 
+void TestJpegImageSupport()
+{
+    const std::string fileName = "sector_utility_jpeg_"
+            + std::to_string(
+                    std::chrono::steady_clock::now()
+                            .time_since_epoch()
+                            .count())
+            + ".jpg";
+    const std::filesystem::path path =
+            std::filesystem::temp_directory_path() / fileName;
+    const std::string pathString = path.string();
+
+    Image source = GenImageColor(4, 4, Color{32, 96, 224, 255});
+    Check(source.data != nullptr, "jpeg test source image generated");
+    const bool exported = source.data != nullptr
+            && ExportImage(source, pathString.c_str());
+    Check(exported, "raylib exports jpeg images when jpeg support is enabled");
+
+    Image loaded{};
+    if (exported) {
+        loaded = LoadImage(pathString.c_str());
+    }
+    Check(loaded.data != nullptr
+                  && loaded.width == 4
+                  && loaded.height == 4,
+          "raylib loads jpeg image data when jpeg support is enabled");
+
+    UnloadImage(loaded);
+    UnloadImage(source);
+    std::error_code removeError;
+    std::filesystem::remove(path, removeError);
+}
+
 } // namespace
 
 int main()
@@ -129,6 +165,7 @@ int main()
     TestStepHelpers();
     TestBoundsHelpers();
     TestColorHelpers();
+    TestJpegImageSupport();
 
     if (failures != 0) {
         std::fprintf(stderr, "%d SectorUtilityTests failure(s)\n", failures);

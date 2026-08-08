@@ -9,6 +9,113 @@
 #include <utility>
 
 namespace game {
+
+namespace {
+
+bool SameRgb(Color a, Color b)
+{
+    return a.r == b.r && a.g == b.g && a.b == b.b;
+}
+
+float FiniteOr(float value, float fallback)
+{
+    return std::isfinite(value) ? value : fallback;
+}
+
+} // namespace
+
+SectorLightHazeSettings NormalizeSectorLightHazeSettings(SectorLightHazeSettings settings)
+{
+    const SectorLightHazeSettings defaults;
+    settings.extentScale = std::clamp(FiniteOr(settings.extentScale, defaults.extentScale), 0.05f, 2.0f);
+    settings.density = std::clamp(FiniteOr(settings.density, defaults.density), 0.0f, 2.0f);
+    settings.edgeSoftness = std::clamp(FiniteOr(settings.edgeSoftness, defaults.edgeSoftness), 0.01f, 1.0f);
+    settings.noiseAmount = std::clamp(FiniteOr(settings.noiseAmount, defaults.noiseAmount), 0.0f, 1.0f);
+    settings.noiseScaleWorld = std::clamp(
+            FiniteOr(settings.noiseScaleWorld, defaults.noiseScaleWorld),
+            0.05f,
+            16.0f);
+    settings.flowDirectionDegrees = std::clamp(
+            FiniteOr(settings.flowDirectionDegrees, defaults.flowDirectionDegrees),
+            -360.0f,
+            360.0f);
+    settings.flowSpeedWorld = std::clamp(
+            FiniteOr(settings.flowSpeedWorld, defaults.flowSpeedWorld),
+            0.0f,
+            2.0f);
+    settings.scatteringTint.a = 255;
+    return settings;
+}
+
+SectorLightDustSettings NormalizeSectorLightDustSettings(SectorLightDustSettings settings)
+{
+    const SectorLightDustSettings defaults;
+    settings.amount = std::clamp(settings.amount, 0, 128);
+    settings.extentScale = std::clamp(FiniteOr(settings.extentScale, defaults.extentScale), 0.05f, 2.0f);
+    settings.minimumSizeWorld = std::clamp(
+            FiniteOr(settings.minimumSizeWorld, defaults.minimumSizeWorld),
+            0.002f,
+            0.25f);
+    settings.maximumSizeWorld = std::clamp(
+            FiniteOr(settings.maximumSizeWorld, defaults.maximumSizeWorld),
+            settings.minimumSizeWorld,
+            0.25f);
+    settings.opacity = std::clamp(FiniteOr(settings.opacity, defaults.opacity), 0.0f, 1.0f);
+    settings.driftSpeedWorld = std::clamp(
+            FiniteOr(settings.driftSpeedWorld, defaults.driftSpeedWorld),
+            0.0f,
+            0.5f);
+    settings.turbulenceWorld = std::clamp(
+            FiniteOr(settings.turbulenceWorld, defaults.turbulenceWorld),
+            0.0f,
+            0.5f);
+    settings.scatteringTint.a = 255;
+    return settings;
+}
+
+SectorLightAtmosphereSettings NormalizeSectorLightAtmosphereSettings(
+        SectorLightAtmosphereSettings settings)
+{
+    settings.haze = NormalizeSectorLightHazeSettings(settings.haze);
+    settings.dust = NormalizeSectorLightDustSettings(settings.dust);
+    return settings;
+}
+
+bool IsDefaultSectorLightHazeSettings(const SectorLightHazeSettings& settings)
+{
+    const SectorLightHazeSettings value = NormalizeSectorLightHazeSettings(settings);
+    const SectorLightHazeSettings defaults;
+    return value.enabled == defaults.enabled
+            && value.extentScale == defaults.extentScale
+            && value.density == defaults.density
+            && SameRgb(value.scatteringTint, defaults.scatteringTint)
+            && value.edgeSoftness == defaults.edgeSoftness
+            && value.noiseAmount == defaults.noiseAmount
+            && value.noiseScaleWorld == defaults.noiseScaleWorld
+            && value.flowDirectionDegrees == defaults.flowDirectionDegrees
+            && value.flowSpeedWorld == defaults.flowSpeedWorld;
+}
+
+bool IsDefaultSectorLightDustSettings(const SectorLightDustSettings& settings)
+{
+    const SectorLightDustSettings value = NormalizeSectorLightDustSettings(settings);
+    const SectorLightDustSettings defaults;
+    return value.enabled == defaults.enabled
+            && value.amount == defaults.amount
+            && value.extentScale == defaults.extentScale
+            && value.minimumSizeWorld == defaults.minimumSizeWorld
+            && value.maximumSizeWorld == defaults.maximumSizeWorld
+            && value.opacity == defaults.opacity
+            && value.driftSpeedWorld == defaults.driftSpeedWorld
+            && value.turbulenceWorld == defaults.turbulenceWorld
+            && SameRgb(value.scatteringTint, defaults.scatteringTint);
+}
+
+bool IsDefaultSectorLightAtmosphereSettings(const SectorLightAtmosphereSettings& settings)
+{
+    return IsDefaultSectorLightHazeSettings(settings.haze)
+            && IsDefaultSectorLightDustSettings(settings.dust);
+}
 namespace {
 
 constexpr float PreviewWalkSpeedMin = 0.1f;
@@ -38,6 +145,16 @@ constexpr float PreviewObjectProbeDebugDrawMaxDistanceMax = 512.0f;
 constexpr float SkyVerticalScaleMin = 0.01f;
 constexpr float SkyVerticalScaleMax = 100.0f;
 constexpr float DirectionalLightMinLengthSqr = 0.000001f;
+constexpr float FogStartDistanceMin = 0.0f;
+constexpr float FogStartDistanceMax = 512.0f;
+constexpr float FogDensityMin = 0.0f;
+constexpr float FogDensityMax = 1.0f;
+constexpr float FogMaxOpacityMin = 0.0f;
+constexpr float FogMaxOpacityMax = 1.0f;
+constexpr float FogReferenceHeightMin = -512.0f;
+constexpr float FogReferenceHeightMax = 512.0f;
+constexpr float FogHeightFalloffMin = 0.0f;
+constexpr float FogHeightFalloffMax = 16.0f;
 constexpr float DoorAnchorSideProbeDistance = 0.001f;
 constexpr float DoorAnchorSideEpsilon = 0.000001f;
 
@@ -185,6 +302,43 @@ SectorPreviewSettings NormalizeSectorPreviewSettings(SectorPreviewSettings setti
             PreviewObjectProbeDebugDrawMaxDistanceMin,
             PreviewObjectProbeDebugDrawMaxDistanceMax,
             defaults.objectProbeDebugDrawMaxDistanceWorld);
+    return settings;
+}
+
+SectorTopologyFogSettings DefaultSectorTopologyFogSettings()
+{
+    return SectorTopologyFogSettings{};
+}
+
+SectorTopologyFogSettings NormalizeSectorTopologyFogSettings(SectorTopologyFogSettings settings)
+{
+    const SectorTopologyFogSettings defaults = DefaultSectorTopologyFogSettings();
+    settings.color.a = 255;
+    settings.startDistanceWorld = ClampFinite(
+            settings.startDistanceWorld,
+            FogStartDistanceMin,
+            FogStartDistanceMax,
+            defaults.startDistanceWorld);
+    settings.density = ClampFinite(
+            settings.density,
+            FogDensityMin,
+            FogDensityMax,
+            defaults.density);
+    settings.maxOpacity = ClampFinite(
+            settings.maxOpacity,
+            FogMaxOpacityMin,
+            FogMaxOpacityMax,
+            defaults.maxOpacity);
+    settings.referenceHeightWorld = ClampFinite(
+            settings.referenceHeightWorld,
+            FogReferenceHeightMin,
+            FogReferenceHeightMax,
+            defaults.referenceHeightWorld);
+    settings.heightFalloff = ClampFinite(
+            settings.heightFalloff,
+            FogHeightFalloffMin,
+            FogHeightFalloffMax,
+            defaults.heightFalloff);
     return settings;
 }
 

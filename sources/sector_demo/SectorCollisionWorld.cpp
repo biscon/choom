@@ -382,6 +382,13 @@ bool ProjectPointToSegmentRange(
     return true;
 }
 
+bool CircleOverlapsSegment(Vector2 center, float radius, Vector2 a, Vector2 b)
+{
+    const Vector2 closest = ClosestPointOnSegment(center, a, b);
+    const float radiusSquared = radius * radius;
+    return DistanceSquared(center, closest) <= radiusSquared + CollisionMoveEpsilon;
+}
+
 } // namespace
 
 Vector2 GetSectorCollisionEdgeInwardNormal(const SectorCollisionEdge& edge)
@@ -395,6 +402,7 @@ bool SectorCollisionWorld::BuildFromTopology(
         std::string* errorMessage)
 {
     sectors.clear();
+    footprintTraversalSectorIds.clear();
     if (errorMessage != nullptr) {
         errorMessage->clear();
     }
@@ -480,6 +488,7 @@ bool SectorCollisionWorld::BuildFromTopology(
     }
 
     sectors = std::move(builtSectors);
+    footprintTraversalSectorIds.assign(sectors.size(), 0);
     return true;
 }
 
@@ -664,65 +673,117 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
         Vector2 remaining = substepDelta;
 
         for (int iteration = 0; iteration < config.maxIterations; ++iteration) {
-            const std::vector<SectorCollisionEdge>* edges = GetSectorEdges(result.currentSectorId);
-            if (edges == nullptr) {
+            if (FindSector(result.currentSectorId) == nullptr
+                    || footprintTraversalSectorIds.empty()) {
                 break;
+            }
+            size_t traversalSectorCount = 1;
+            footprintTraversalSectorIds[0] = result.currentSectorId;
+            for (size_t traversalIndex = 0;
+                    traversalIndex < traversalSectorCount;
+                    ++traversalIndex) {
+                const int traversalSectorId =
+                        footprintTraversalSectorIds[traversalIndex];
+                const std::vector<SectorCollisionEdge>* traversalEdges =
+                        GetSectorEdges(traversalSectorId);
+                if (traversalEdges == nullptr) {
+                    continue;
+                }
+                for (const SectorCollisionEdge& edge : *traversalEdges) {
+                    if (edge.kind != SectorCollisionEdgeKind::Portal
+                            || PortalBlockReasonForMove(
+                                    *this,
+                                    traversalSectorId,
+                                    edge,
+                                    moveState,
+                                    config) != PortalBlockReason::None
+                            || !CircleOverlapsSegment(
+                                    candidate,
+                                    config.radius,
+                                    edge.a,
+                                    edge.b)
+                            || std::find(
+                                    footprintTraversalSectorIds.begin(),
+                                    footprintTraversalSectorIds.begin()
+                                            + traversalSectorCount,
+                                    edge.neighborSectorId)
+                                    != footprintTraversalSectorIds.begin()
+                                            + traversalSectorCount) {
+                        continue;
+                    }
+                    if (traversalSectorCount < footprintTraversalSectorIds.size()) {
+                        footprintTraversalSectorIds[traversalSectorCount++] =
+                                edge.neighborSectorId;
+                    }
+                }
             }
 
             bool changed = false;
-            for (const SectorCollisionEdge& edge : *edges) {
-                PortalBlockReason portalReason = PortalBlockReason::None;
-                bool blocking = edge.kind == SectorCollisionEdgeKind::BlockingWall;
-                if (!blocking) {
-                    portalReason = PortalBlockReasonForMove(
-                            *this,
-                            result.currentSectorId,
-                            edge,
-                            moveState,
-                            config);
-                    blocking = portalReason != PortalBlockReason::None;
-                }
-                if (!blocking) {
+            for (size_t collisionSectorIndex = 0;
+                    collisionSectorIndex < traversalSectorCount;
+                    ++collisionSectorIndex) {
+                const int collisionSectorId =
+                        footprintTraversalSectorIds[collisionSectorIndex];
+                const std::vector<SectorCollisionEdge>* edges =
+                        GetSectorEdges(collisionSectorId);
+                if (edges == nullptr) {
                     continue;
                 }
+                for (const SectorCollisionEdge& edge : *edges) {
+                    PortalBlockReason portalReason = PortalBlockReason::None;
+                    bool blocking = edge.kind == SectorCollisionEdgeKind::BlockingWall;
+                    if (!blocking) {
+                        portalReason = PortalBlockReasonForMove(
+                                *this,
+                                collisionSectorId,
+                                edge,
+                                moveState,
+                                config);
+                        blocking = portalReason != PortalBlockReason::None;
+                    }
+                    if (!blocking) {
+                        continue;
+                    }
 
-                const Vector2 closest = ClosestPointOnSegment(candidate, edge.a, edge.b);
-                const Vector2 separation = Subtract(candidate, closest);
-                const float distanceSquared = LengthSquared(separation);
-                const float radiusSquared = config.radius * config.radius;
-                if (distanceSquared >= radiusSquared - CollisionMoveEpsilon) {
-                    continue;
-                }
+                    const Vector2 closest = ClosestPointOnSegment(candidate, edge.a, edge.b);
+                    const Vector2 separation = Subtract(candidate, closest);
+                    const float distanceSquared = LengthSquared(separation);
+                    const float radiusSquared = config.radius * config.radius;
+                    if (distanceSquared >= radiusSquared - CollisionMoveEpsilon) {
+                        continue;
+                    }
 
-                Vector2 normal = NormalizeOrZero(separation);
-                const Vector2 inward = GetSectorCollisionEdgeInwardNormal(edge);
-                if (Dot(normal, inward) < 0.0f) {
-                    normal = inward;
-                }
-                if (LengthSquared(normal) <= CollisionMoveEpsilon) {
-                    normal = inward;
-                }
-                if (LengthSquared(normal) <= CollisionMoveEpsilon) {
-                    continue;
-                }
-                if (!ShouldApplyRadiusCorrectionForBlockedEdge(portalReason, remaining, inward)) {
-                    continue;
-                }
+                    Vector2 normal = NormalizeOrZero(separation);
+                    const Vector2 inward = GetSectorCollisionEdgeInwardNormal(edge);
+                    if (Dot(normal, inward) < 0.0f) {
+                        normal = inward;
+                    }
+                    if (LengthSquared(normal) <= CollisionMoveEpsilon) {
+                        normal = inward;
+                    }
+                    if (LengthSquared(normal) <= CollisionMoveEpsilon) {
+                        continue;
+                    }
+                    if (!ShouldApplyRadiusCorrectionForBlockedEdge(portalReason, remaining, inward)) {
+                        continue;
+                    }
 
-                const float distance = std::sqrt(std::max(distanceSquared, 0.0f));
-                const float penetration = config.radius - distance + CollisionMoveEpsilon;
-                candidate = Add(candidate, Scale(normal, penetration));
-                const float intoWall = Dot(remaining, normal);
-                if (intoWall < 0.0f) {
-                    remaining = Subtract(remaining, Scale(normal, intoWall));
+                    const float distance = std::sqrt(std::max(distanceSquared, 0.0f));
+                    const float penetration = config.radius - distance + CollisionMoveEpsilon;
+                    candidate = Add(candidate, Scale(normal, penetration));
+                    const float intoWall = Dot(remaining, normal);
+                    if (intoWall < 0.0f) {
+                        remaining = Subtract(remaining, Scale(normal, intoWall));
+                    }
+                    result.hitWall = result.hitWall
+                            || edge.kind == SectorCollisionEdgeKind::BlockingWall
+                            || portalReason == PortalBlockReason::PlayerFlag;
+                    result.blockedByStep =
+                            result.blockedByStep || portalReason == PortalBlockReason::Step;
+                    result.blockedByCeiling =
+                            result.blockedByCeiling || portalReason == PortalBlockReason::Ceiling;
+                    changed = true;
                 }
-                result.hitWall = result.hitWall
-                        || edge.kind == SectorCollisionEdgeKind::BlockingWall
-                        || portalReason == PortalBlockReason::PlayerFlag;
-                result.blockedByStep = result.blockedByStep || portalReason == PortalBlockReason::Step;
-                result.blockedByCeiling =
-                        result.blockedByCeiling || portalReason == PortalBlockReason::Ceiling;
-                changed = true;
             }
 
             if (!changed) {

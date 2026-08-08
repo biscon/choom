@@ -54,6 +54,10 @@ struct RuntimePortalVisibilityResult {
     std::string status;
 };
 
+bool ShouldDrawRuntimeSectorForVisibility(
+        int sectorId,
+        const RuntimePortalVisibilityResult& visibility);
+
 bool BuildRuntimeSectorVisibilityGraph(
         const SectorTopologyMap& map,
         RuntimeSectorVisibilityGraph& outGraph,
@@ -99,6 +103,11 @@ bool IsRuntimePortalDynamicallyBlocked(
         const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers);
 
 float ClampRuntimeVisibilitySeedRadiusWorld(float playerRadiusWorld);
+
+float ComputeRuntimePortalVisibilityHorizontalFovRadians(
+        float verticalFovRadians,
+        float aspectRatio,
+        float pitchRadians);
 
 std::string FormatRuntimePortalVisibilityDebugText(
         const RuntimePortalVisibilityResult& result);

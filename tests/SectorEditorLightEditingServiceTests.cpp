@@ -32,6 +32,12 @@ game::SectorEditorPreviewSelectionState& TestPreviewSelectionState()
     return previewSelectionState;
 }
 
+game::RuntimeObjectDragState& TestRuntimeObjectDragState()
+{
+    static game::RuntimeObjectDragState runtimeObjectDragState;
+    return runtimeObjectDragState;
+}
+
 game::SectorTopologyMap MakeMap()
 {
     game::SectorTopologyMap map;
@@ -55,6 +61,7 @@ game::SectorEditorLightEditingService MakeService(
         game::InspectorIdUiState& inspectorIdUiState,
         std::string& statusText)
 {
+    TestRuntimeObjectDragState() = game::RuntimeObjectDragState{};
     return game::SectorEditorLightEditingService{
             game::SectorEditorLightEditingServiceContext{
                     topologyMap,
@@ -64,7 +71,7 @@ game::SectorEditorLightEditingService MakeService(
                     state.topologyRenderCache,
                     {
                             manipulationState,
-                            state.runtimeObjectDrag,
+                            TestRuntimeObjectDragState(),
                             selectionState.topologySelectionKind,
                             selectionState.selectedTopologySectorId,
                             selectionState.selectedTopologyVertexId,
@@ -185,7 +192,8 @@ void TestAddDynamicLightDirtiesAndSelects()
     const game::SectorEditorLightMutationResult result = service.AddDynamicLight(1, Vector2{4.0f, 5.0f});
 
     Check(result.changed, "add dynamic light reports changed");
-    Check(!result.dynamicLightRendererRefreshNeeded, "add dynamic light does not request renderer refresh");
+    Check(result.dynamicLightRendererRefreshNeeded,
+          "add dynamic light requests preview lighting and atmosphere source refresh");
     Check(documentState.map.topologyMap.dynamicPointLights.size() == 1, "add dynamic light creates light");
     Check(documentState.map.topologyMap.dynamicPointLights.front().enabled, "add dynamic light preserves enabled default");
     Check(selectionState.topologySelectionKind == game::TopologySelectionKind::DynamicLight
@@ -274,7 +282,8 @@ void TestDeleteSelectedDynamicLightDirties()
     const game::SectorEditorLightMutationResult result = service.DeleteSelectedLightConfirmed();
 
     Check(result.changed, "delete selected dynamic light reports changed");
-    Check(!result.dynamicLightRendererRefreshNeeded, "delete selected dynamic light preserves old no-refresh behavior");
+    Check(result.dynamicLightRendererRefreshNeeded,
+          "delete selected dynamic light requests preview lighting and atmosphere source refresh");
     Check(documentState.map.topologyMap.dynamicPointLights.empty(), "delete selected dynamic light removes light");
     CheckDirtyOnce(state, documentState, statusText, "Deleted dynamic light 8");
 }
@@ -427,6 +436,53 @@ void TestSpotLightPilotApplyAndCancelTiming()
     CheckClean(state, documentState, statusText, "Spotlight pilot cancelled");
 }
 
+void TestAtmosphereEditUsesDocumentMutationBoundary()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+    game::SectorTopologyStaticPointLight light;
+    light.id = 12;
+    documentState.map.topologyMap.staticLights.push_back(light);
+    game::SelectionState selectionState;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+
+    game::SectorEditorLightEditingService service = MakeService(
+            state,
+            documentState,
+            documentState.map.topologyMap,
+            TestPreviewSelectionState(),
+            selectionState,
+            manipulationState,
+            lightState,
+            uiState,
+            inspectorIdUiState,
+            statusText);
+    game::SectorLightAtmosphereSettings atmosphere;
+    atmosphere.haze.enabled = true;
+    atmosphere.dust.enabled = true;
+    atmosphere.dust.amount = 35;
+    Check(service.SetStaticLightAtmosphere(
+                  documentState.map.topologyMap.staticLights.front(), atmosphere),
+          "atmosphere edit reports a change");
+    Check(documentState.map.topologyMap.staticLights.front().atmosphere.haze.enabled
+                  && documentState.map.topologyMap.staticLights.front().atmosphere.dust.enabled
+                  && documentState.map.topologyMap.staticLights.front().atmosphere.dust.amount == 35,
+          "atmosphere edit writes normalized light data");
+    CheckDirtyOnce(state, documentState, statusText, "Updated static light 12 atmosphere");
+
+    ResetDirty(state, documentState, statusText);
+    Check(!service.SetStaticLightAtmosphere(
+                  documentState.map.topologyMap.staticLights.front(), atmosphere),
+          "unchanged atmosphere edit reports no change");
+    CheckClean(state, documentState, statusText, "old");
+}
+
 } // namespace
 
 int main()
@@ -439,6 +495,7 @@ int main()
     TestLightDragApplyFinishAndCancelTiming();
     TestLightDragFinishNoOpDoesNotDirty();
     TestSpotLightPilotApplyAndCancelTiming();
+    TestAtmosphereEditUsesDocumentMutationBoundary();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorLightEditingServiceTests failure(s)\n";

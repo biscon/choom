@@ -3,6 +3,7 @@
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmapReport.h"
+#include "sector_demo/SectorStaticModelLightmap.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -17,6 +18,7 @@ namespace game {
 
 struct SectorLightmapChart {
     int surfaceIndex = -1;
+    int atlasIndex = -1;
     int x = 0;
     int y = 0;
     int width = 0;
@@ -31,6 +33,7 @@ struct SectorLightmapChart {
 struct SectorLightmapLayout {
     int atlasWidth = 2048;
     int atlasHeight = 2048;
+    int atlasCount = 1;
     int gutter = 2;
     float texelsPerWorldUnit = 8.0f;
     std::vector<SectorLightmapChart> charts;
@@ -97,6 +100,7 @@ struct SectorLightmapRaycastStats {
 struct SectorLightmapBakeResult {
     int width = 0;
     int height = 0;
+    std::vector<SectorLightmapAtlasMetadata> atlases;
     std::string sourceHash;
     int validChartTexels = 0;
     int allocatedChartRectanglePixels = 0;
@@ -117,6 +121,7 @@ struct SectorLightmapBakeResult {
     SectorLightmapRaycastStats ambientOcclusionStats;
     SectorLightmapRaycastStats indirectBounceStats;
     SectorBakedObjectLightProbeMetadata objectProbes;
+    SectorBakedStaticModelLightmapMetadata staticModels;
     int objectProbePlacementDiagnostics = 0;
     double layoutSeconds = 0.0;
     double bvhBuildSeconds = 0.0;
@@ -156,6 +161,7 @@ struct SectorBakedObjectLightProbePlacementDiagnostic {
 
 struct SectorTopologyLightmapBakeInput {
     SectorTopologyMap mapSnapshot;
+    SectorStaticModelLightmapData staticModels;
     std::string expectedSourceHash;
     std::string finalOutputPath;
     std::string temporaryOutputPath;
@@ -172,12 +178,15 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 10: baked output includes object lighting probe sidecar data.
-constexpr int kSectorLightmapBakeVersion = 10;
-constexpr int kSectorBakedObjectLightProbeSidecarVersion = 1;
-constexpr const char* kSectorBakedObjectLightProbeSidecarFormat = "ambientCubeF32LE";
+// Version 13: baked lightmaps can span multiple fixed-size texture atlases.
+constexpr int kSectorLightmapBakeVersion = 14;
+constexpr int kSectorBakedObjectLightProbeSidecarVersion = 2;
+constexpr const char* kSectorBakedObjectLightProbeSidecarFormat =
+        "layeredAmbientCubeF32LE";
 constexpr float kObjectProbeAdjacentPortalBlendDistanceWorld = 1.0f;
 constexpr int kObjectProbeMaxAdjacentBlendSectors = 8;
+constexpr float kObjectProbeSurfaceClearanceWorld = 0.1f;
+constexpr float kObjectProbeMinimumLayerSeparationWorld = 0.25f;
 constexpr int kDirectSoftShadowSampleCount = 8;
 constexpr int kAmbientOcclusionSampleCount = 12;
 constexpr int kIndirectBounceSampleCount = 8;
@@ -241,7 +250,8 @@ bool WriteSectorBakedObjectLightProbeSidecar(
         const std::string& path,
         const std::vector<SectorBakedObjectLightProbe>& probes,
         float probeSpacingWorld,
-        float probeHeightWorld,
+        float probeLowerHeightWorld,
+        float probeUpperHeightWorld,
         std::string& outError);
 bool ReadSectorBakedObjectLightProbeSidecar(
         const std::string& path,
@@ -253,12 +263,26 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
         const SectorTopologyMap& map,
         SectorBakedObjectLightProbeRuntimeData& outData,
         std::string& outError);
+Vector3 EvaluateBakedObjectAmbientCubeLighting(
+        const BakedObjectLightingSample& sample,
+        Vector3 worldNormal);
 BakedObjectLightingSample SampleBakedObjectLighting(
         const SectorBakedObjectLightProbeRuntimeData& probes,
         Vector3 worldPosition,
         int preferredSectorId,
         const SectorTopologyMap* mapForFallback);
+BakedObjectLightingVerticalSample SampleBakedObjectLightingVertical(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        Vector3 worldPosition,
+        int preferredSectorId,
+        const SectorTopologyMap* mapForFallback);
+BakedObjectLightingSample ResolveBakedObjectLightingVerticalSample(
+        const BakedObjectLightingVerticalSample& sample,
+        float worldHeight);
 std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath);
+std::string MakeSectorLightmapAtlasPath(const std::string& primaryPath, int atlasIndex);
+std::vector<SectorLightmapAtlasMetadata> GetSectorLightmapAtlases(
+        const SectorLightmapMetadata& metadata);
 std::string MakeSectorObjectProbeSidecarPathForLightmapPath(const std::string& lightmapPath);
 
 } // namespace game

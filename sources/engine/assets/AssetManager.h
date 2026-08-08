@@ -3,6 +3,7 @@
 #include "engine/assets/AssetHandles.h"
 #include "engine/assets/FontAssets.h"
 #include "engine/assets/FontLoadFlags.h"
+#include "engine/assets/ModelAssets.h"
 #include "engine/assets/SpriteAnimationAssets.h"
 #include "engine/assets/TextureAssets.h"
 #include "engine/assets/TextureLoadFlags.h"
@@ -50,10 +51,18 @@ public:
             TextureLoadFlags flags = TextureLoad_PointFilter
     );
 
+    TextureHandle CreateCubemapFromImage(
+            AssetScopeHandle scope,
+            const char* key,
+            const Image& image,
+            int layout
+    );
+
     bool IsReady(TextureHandle handle) const;
     bool IsFinished(TextureHandle handle) const;
     bool HasFailed(TextureHandle handle) const;
     const Texture2D* GetTexture(TextureHandle handle) const;
+    const TextureCubemap* GetCubemap(TextureHandle handle) const;
 
     FontHandle RequestFont(
             AssetScopeHandle scope,
@@ -67,6 +76,21 @@ public:
     bool IsFinished(FontHandle handle) const;
     bool HasFailed(FontHandle handle) const;
     const FontAsset* GetFont(FontHandle handle) const;
+
+    ModelHandle RequestModel(
+            AssetScopeHandle scope,
+            const char* key,
+            const char* path,
+            ModelLoadFlags flags = ModelLoad_None);
+
+    bool IsReady(ModelHandle handle) const;
+    bool IsFinished(ModelHandle handle) const;
+    bool HasFailed(ModelHandle handle) const;
+    const Model* GetModel(ModelHandle handle) const;
+    const ModelAsset* GetModelAsset(ModelHandle handle) const;
+    // Returns a borrowed ready asset from any live scope. The handle does not
+    // acquire ownership; callers must consume it immediately on the main thread.
+    ModelHandle FindReadyModelByPath(const char* path) const;
 
     SpriteAnimationHandle RequestSpriteAnimation(
             AssetScopeHandle scope,
@@ -120,6 +144,7 @@ private:
 
     TextureAssets textures;
     FontAssets fonts;
+    ModelAssets models;
     SpriteAnimationAssets spriteAnimations;
 
     std::thread worker;

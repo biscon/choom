@@ -22,6 +22,12 @@ bool Near(float a, float b, float epsilon = 0.0001f)
     return std::fabs(a - b) <= epsilon;
 }
 
+bool Near(Vector2 a, Vector2 b, float epsilon = 0.0001f)
+{
+    return Near(a.x, b.x, epsilon)
+            && Near(a.y, b.y, epsilon);
+}
+
 bool Near(Vector3 a, Vector3 b, float epsilon = 0.0001f)
 {
     return Near(a.x, b.x, epsilon)
@@ -422,6 +428,135 @@ void TestRunAndWalkSpeeds()
     Check(Near(running.feetPosition.x, 12.0f), "run speed is used with run input");
 }
 
+void TestCrouchToggleTransitionAndEffectiveDimensions()
+{
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{2.0f, 3.0f, 4.0f};
+    state.grounded = true;
+    game::SectorFpsControllerConfig config;
+    config.eyeHeight = 1.2f;
+    config.playerHeight = 1.6f;
+
+    Check(game::TryToggleSectorFpsCrouch(state, true),
+          "grounded crouch toggle starts crouching");
+    Check(state.crouchTargeted, "crouch toggle records crouched target");
+    game::UpdateSectorFpsCrouch(
+            state,
+            true,
+            game::DefaultSectorFpsCrouchTransitionDuration() * 0.5f);
+    Check(Near(state.crouchAmount, 0.5f), "crouch transition reaches midpoint by half duration");
+    Check(Near(game::SectorFpsCrouchBlend(state), 0.5f),
+          "crouch transition smoothstep is centered at half duration");
+    game::SectorFpsControllerConfig effective =
+            game::EffectiveSectorFpsControllerConfig(state, config);
+    Check(Near(effective.eyeHeight, 0.975f)
+                  && Near(effective.playerHeight, 1.3f),
+          "mid-crouch smoothly interpolates eye and collider height");
+    Check(Near(state.feetPosition, Vector3{2.0f, 3.0f, 4.0f}),
+          "crouch transition does not move physical feet");
+
+    game::UpdateSectorFpsCrouch(
+            state,
+            true,
+            game::DefaultSectorFpsCrouchTransitionDuration() * 0.5f);
+    effective = game::EffectiveSectorFpsControllerConfig(state, config);
+    Check(Near(state.crouchAmount, 1.0f)
+                  && Near(effective.eyeHeight, 0.75f)
+                  && Near(effective.playerHeight, 1.0f),
+          "full crouch uses derived 62.5 percent dimensions");
+
+    Check(!game::TryToggleSectorFpsCrouch(state, false),
+          "blocked standing request is rejected");
+    Check(state.crouchTargeted && Near(state.crouchAmount, 1.0f),
+          "rejected standing request remains fully crouched");
+    Check(game::TryToggleSectorFpsCrouch(state, true),
+          "clear standing request starts standing transition");
+    game::UpdateSectorFpsCrouch(
+            state,
+            true,
+            game::DefaultSectorFpsCrouchTransitionDuration());
+    Check(!state.crouchTargeted && Near(state.crouchAmount, 0.0f),
+          "standing transition reaches standing endpoint");
+}
+
+void TestCrouchGroundingReversalAndResetRules()
+{
+    game::SectorFpsControllerState state;
+    Check(!game::TryToggleSectorFpsCrouch(state, true),
+          "airborne crouch toggle is ignored");
+    Check(!state.crouchTargeted && Near(state.crouchAmount, 0.0f),
+          "ignored airborne crouch toggle preserves standing state");
+
+    state.grounded = true;
+    state.crouchTargeted = false;
+    state.crouchAmount = 0.5f;
+    game::UpdateSectorFpsCrouch(state, false, 0.01f);
+    Check(state.crouchTargeted && state.crouchAmount > 0.5f,
+          "lost standing clearance reverses transition toward crouched");
+
+    state.crouchAmount = NAN;
+    game::UpdateSectorFpsCrouch(state, true, 0.0f);
+    Check(Near(state.crouchAmount, 1.0f),
+          "non-finite crouch state recovers to its target endpoint");
+    game::ResetSectorFpsCrouch(state);
+    Check(!state.crouchTargeted && Near(state.crouchAmount, 0.0f),
+          "crouch reset restores standing state");
+}
+
+void TestCrouchedMovementSpeedAndVerticalFit()
+{
+    game::SectorFpsControllerConfig config;
+    config.walkSpeed = 6.0f;
+    config.runSpeed = 12.0f;
+    config.eyeHeight = 1.2f;
+    config.playerHeight = 1.6f;
+    game::SectorFpsControllerInput input;
+    input.moveForward = true;
+    input.run = true;
+
+    game::SectorFpsControllerState crouched;
+    crouched.crouchTargeted = true;
+    crouched.crouchAmount = 1.0f;
+    const Vector2 crouchedDelta = game::ComputeSectorFpsHorizontalMovementDelta(
+            crouched,
+            config,
+            input,
+            1.0f);
+    Check(Near(crouchedDelta, Vector2{3.0f, 0.0f}),
+          "fully crouched run input moves at half walking speed");
+
+    game::SectorFpsControllerState midpoint = crouched;
+    midpoint.crouchAmount = 0.5f;
+    const Vector2 midpointDelta = game::ComputeSectorFpsHorizontalMovementDelta(
+            midpoint,
+            config,
+            input,
+            1.0f);
+    Check(Near(midpointDelta, Vector2{7.5f, 0.0f}),
+          "crouch transition smoothly blends running toward crouched speed");
+
+    crouched.grounded = true;
+    const game::SectorFpsVerticalResult crouchedResult =
+            game::UpdateSectorFpsVerticalPhysics(
+                    crouched,
+                    config,
+                    game::SectorFpsVerticalContext{true, 0.0f, 1.2f},
+                    0.0f);
+    Check(!crouchedResult.cannotFit,
+          "crouched effective collider fits beneath a low ceiling");
+
+    game::SectorFpsControllerState standing;
+    standing.grounded = true;
+    const game::SectorFpsVerticalResult standingResult =
+            game::UpdateSectorFpsVerticalPhysics(
+                    standing,
+                    config,
+                    game::SectorFpsVerticalContext{true, 0.0f, 1.2f},
+                    0.0f);
+    Check(standingResult.cannotFit,
+          "standing collider still rejects the same low ceiling");
+}
+
 void TestMouseLookRawDeltaAndPitchClamp()
 {
     game::SectorFpsControllerState state;
@@ -768,6 +903,9 @@ int main()
     TestLandingDipClearTransitions();
     TestForwardMovementIgnoresPitchAndPreservesY();
     TestRunAndWalkSpeeds();
+    TestCrouchToggleTransitionAndEffectiveDimensions();
+    TestCrouchGroundingReversalAndResetRules();
+    TestCrouchedMovementSpeedAndVerticalFit();
     TestMouseLookRawDeltaAndPitchClamp();
     TestConfigNormalization();
     TestJumpStart();

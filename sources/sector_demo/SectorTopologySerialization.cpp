@@ -1,5 +1,7 @@
 #include "sector_demo/SectorTopologySerialization.h"
 
+#include "sector_demo/SectorLightmap.h"
+
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -20,6 +22,8 @@ using Json = nlohmann::ordered_json;
 
 constexpr float Pi = 3.14159265358979323846f;
 constexpr const char* RuntimeObjectKindBillboard = "billboard";
+constexpr const char* RuntimeObjectKindStaticModel = "static_model";
+constexpr const char* RuntimeObjectKindDynamicModel = "dynamic_model";
 constexpr const char* RuntimeObjectKindDoor = "door";
 
 [[noreturn]] void Fail(const std::string& message)
@@ -593,6 +597,76 @@ SectorPlacedBillboard ReadPlacedBillboard(const Json& value, const std::string& 
     return billboard;
 }
 
+SectorPlacedStaticModel ReadPlacedStaticModel(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorPlacedStaticModel staticModel;
+    staticModel.modelPath = ReadOptionalString(value, "modelPath", context, staticModel.modelPath);
+    staticModel.rotationXRadians = DegreesToRadians(ReadOptionalFloat(
+            value,
+            "rotationXDegrees",
+            context,
+            0.0f));
+    staticModel.rotationZRadians = DegreesToRadians(ReadOptionalFloat(
+            value,
+            "rotationZDegrees",
+            context,
+            0.0f));
+    staticModel.heightOffsetWorld = ReadOptionalFloat(
+            value,
+            "heightOffsetWorld",
+            context,
+            staticModel.heightOffsetWorld);
+    staticModel.scale = ReadOptionalPositiveFloat(
+            value,
+            "scale",
+            context,
+            staticModel.scale);
+    staticModel.collision = ReadOptionalBool(
+            value,
+            "collision",
+            context,
+            staticModel.collision);
+    return staticModel;
+}
+
+SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorPlacedDynamicModel model;
+    model.modelPath = ReadOptionalString(value, "modelPath", context, model.modelPath);
+    model.rotationXRadians = DegreesToRadians(ReadOptionalFloat(
+            value, "rotationXDegrees", context, 0.0f));
+    model.rotationZRadians = DegreesToRadians(ReadOptionalFloat(
+            value, "rotationZDegrees", context, 0.0f));
+    model.heightOffsetWorld = ReadOptionalFloat(
+            value, "heightOffsetWorld", context, model.heightOffsetWorld);
+    model.scale = ReadOptionalPositiveFloat(value, "scale", context, model.scale);
+    model.collision = ReadOptionalBool(value, "collision", context, model.collision);
+    model.animation = ReadOptionalString(value, "animation", context, model.animation);
+    model.loop = ReadOptionalBool(value, "loop", context, model.loop);
+    model.animationSpeed = ReadOptionalPositiveFloat(
+            value, "animationSpeed", context, model.animationSpeed);
+    const std::string shadowMode = ReadOptionalString(
+            value, "shadowMode", context, "contact");
+    if (shadowMode == "none") {
+        model.shadowMode = SectorDynamicModelShadowMode::None;
+    } else if (shadowMode == "contact") {
+        model.shadowMode = SectorDynamicModelShadowMode::Contact;
+    } else if (shadowMode == "projected_silhouette") {
+        model.shadowMode = SectorDynamicModelShadowMode::ProjectedSilhouette;
+    } else {
+        Fail(context + ".shadowMode must be 'none', 'contact', or 'projected_silhouette'");
+    }
+    return model;
+}
+
 SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -609,17 +683,25 @@ SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string
         if (object.kind == RuntimeObjectKindBillboard) {
             object.billboard = ReadPlacedBillboard(RequireObjectField(value, "billboard", context),
                     context + ".billboard");
+        } else if (object.kind == RuntimeObjectKindStaticModel) {
+            object.staticModel = ReadPlacedStaticModel(
+                    RequireObjectField(value, "staticModel", context),
+                    context + ".staticModel");
+        } else if (object.kind == RuntimeObjectKindDynamicModel) {
+            object.dynamicModel = ReadPlacedDynamicModel(
+                    RequireObjectField(value, "dynamicModel", context),
+                    context + ".dynamicModel");
         } else if (object.kind == RuntimeObjectKindDoor) {
             object.door = ReadPlacedDoor(RequireObjectField(value, "door", context),
                     context + ".door");
         } else {
-            Fail(context + ".kind must be 'billboard' or 'door'");
+            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
         }
     } else {
         if (value.contains("definitionId")) {
             Fail(context + ".definitionId-only runtime objects are legacy unsupported data; use kind 'billboard'");
         }
-        Fail(context + ".kind must be 'billboard' or 'door'");
+        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
     }
     object.position = ReadVector3(RequireField(value, "position", context), context + ".position");
     object.yawRadians = DegreesToRadians(ReadFloat(value, "yawDegrees", context));
@@ -815,13 +897,45 @@ SectorLightmapBakeSettings ReadLightmapSettings(const Json& value, const std::st
             settings.objectProbeSpacingWorld,
             0.25f,
             128.0f);
-    settings.objectProbeHeightWorld = ReadOptionalClampedFloat(
-            value,
-            "objectProbeHeightWorld",
-            context,
-            settings.objectProbeHeightWorld,
-            0.0f,
-            16.0f);
+    const bool hasLowerHeight = value.find("objectProbeLowerHeightWorld") != value.end();
+    const bool hasUpperHeight = value.find("objectProbeUpperHeightWorld") != value.end();
+    const bool hasLegacyHeight = value.find("objectProbeHeightWorld") != value.end();
+    if (!hasLowerHeight && !hasUpperHeight && hasLegacyHeight) {
+        settings.objectProbeUpperHeightWorld = ReadOptionalClampedFloat(
+                value,
+                "objectProbeHeightWorld",
+                context,
+                settings.objectProbeUpperHeightWorld,
+                0.0f,
+                16.0f);
+        if (settings.objectProbeUpperHeightWorld
+                - settings.objectProbeLowerHeightWorld
+                < kObjectProbeMinimumLayerSeparationWorld) {
+            settings.objectProbeLowerHeightWorld =
+                    settings.objectProbeUpperHeightWorld;
+        }
+    } else {
+        settings.objectProbeLowerHeightWorld = ReadOptionalClampedFloat(
+                value,
+                "objectProbeLowerHeightWorld",
+                context,
+                settings.objectProbeLowerHeightWorld,
+                0.0f,
+                16.0f);
+        settings.objectProbeUpperHeightWorld = ReadOptionalClampedFloat(
+                value,
+                "objectProbeUpperHeightWorld",
+                context,
+                settings.objectProbeUpperHeightWorld,
+                0.0f,
+                16.0f);
+    }
+    if (settings.objectProbeLowerHeightWorld
+            > settings.objectProbeUpperHeightWorld) {
+        std::swap(
+                settings.objectProbeLowerHeightWorld,
+                settings.objectProbeUpperHeightWorld);
+    }
     return settings;
 }
 
@@ -962,6 +1076,64 @@ SectorTopologyDirectionalLightSettings ReadDirectionalLightSettings(
     return NormalizeSectorTopologyDirectionalLightSettings(settings);
 }
 
+SectorTopologyFogSettings ReadFogSettings(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorTopologyFogSettings settings = DefaultSectorTopologyFogSettings();
+    const auto enabledIt = value.find("enabled");
+    if (enabledIt != value.end()) {
+        if (!enabledIt->is_boolean()) {
+            Fail(context + ".enabled must be a boolean");
+        }
+        settings.enabled = enabledIt->get<bool>();
+    }
+    const auto colorIt = value.find("color");
+    if (colorIt != value.end()) {
+        if (!colorIt->is_object()) {
+            Fail(context + ".color must be an object");
+        }
+        const Color defaults = DefaultSectorTopologyFogSettings().color;
+        settings.color = Color{
+                ReadOptionalColorChannel(*colorIt, "r", context + ".color", defaults.r),
+                ReadOptionalColorChannel(*colorIt, "g", context + ".color", defaults.g),
+                ReadOptionalColorChannel(*colorIt, "b", context + ".color", defaults.b),
+                255
+        };
+    }
+    const auto readOptionalFloat = [&](const char* field, float& output) {
+        if (value.find(field) != value.end()) {
+            output = ReadFloat(value, field, context);
+        }
+    };
+    readOptionalFloat("startDistanceWorld", settings.startDistanceWorld);
+    readOptionalFloat("density", settings.density);
+    readOptionalFloat("maxOpacity", settings.maxOpacity);
+    readOptionalFloat("referenceHeightWorld", settings.referenceHeightWorld);
+    readOptionalFloat("heightFalloff", settings.heightFalloff);
+    const auto qualityIt = value.find("localVolumeQuality");
+    if (qualityIt != value.end()) {
+        if (!qualityIt->is_string()) {
+            Fail(context + ".localVolumeQuality must be a string");
+        }
+        const std::string quality = qualityIt->get<std::string>();
+        if (quality == "off") {
+            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Off;
+        } else if (quality == "low") {
+            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Low;
+        } else if (quality == "medium") {
+            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Medium;
+        } else if (quality == "high") {
+            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::High;
+        } else {
+            Fail(context + ".localVolumeQuality must be 'off', 'low', 'medium', or 'high'");
+        }
+    }
+    return NormalizeSectorTopologyFogSettings(settings);
+}
+
 SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
         const Json& value,
         const std::string& context)
@@ -976,7 +1148,18 @@ SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
     metadata.sourceHash = ReadString(value, "sourceHash", context);
     metadata.count = ReadInt(value, "count", context);
     metadata.probeSpacingWorld = ReadFloat(value, "probeSpacingWorld", context);
-    metadata.probeHeightWorld = ReadFloat(value, "probeHeightWorld", context);
+    const auto lowerHeight = value.find("probeLowerHeightWorld");
+    const auto upperHeight = value.find("probeUpperHeightWorld");
+    if (lowerHeight != value.end() && upperHeight != value.end()) {
+        metadata.probeLowerHeightWorld = ReadFloat(
+                value, "probeLowerHeightWorld", context);
+        metadata.probeUpperHeightWorld = ReadFloat(
+                value, "probeUpperHeightWorld", context);
+    } else {
+        const float legacyHeight = ReadFloat(value, "probeHeightWorld", context);
+        metadata.probeLowerHeightWorld = legacyHeight;
+        metadata.probeUpperHeightWorld = legacyHeight;
+    }
     metadata.format = ReadString(value, "format", context);
 
     if (metadata.path.empty()) {
@@ -994,13 +1177,68 @@ SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
     if (metadata.probeSpacingWorld <= 0.0f) {
         Fail(context + ".probeSpacingWorld must be positive");
     }
-    if (metadata.probeHeightWorld < 0.0f) {
-        Fail(context + ".probeHeightWorld must not be negative");
+    if (metadata.probeLowerHeightWorld < 0.0f
+            || metadata.probeUpperHeightWorld
+                    < metadata.probeLowerHeightWorld) {
+        Fail(context + " probe heights must be non-negative and ordered");
     }
     if (metadata.format.empty()) {
         Fail(context + ".format must not be empty");
     }
     return metadata;
+}
+
+SectorBakedStaticModelLightmapMetadata ReadBakedStaticModelLightmapMetadata(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+
+    SectorBakedStaticModelLightmapMetadata metadata;
+    metadata.path = ReadString(value, "path", context);
+    metadata.version = ReadInt(value, "version", context);
+    metadata.sourceHash = ReadString(value, "sourceHash", context);
+    metadata.modelCount = ReadInt(value, "modelCount", context);
+    metadata.objectCount = ReadInt(value, "objectCount", context);
+    metadata.format = ReadString(value, "format", context);
+    if (metadata.path.empty()) {
+        Fail(context + ".path must not be empty");
+    }
+    if (metadata.version <= 0) {
+        Fail(context + ".version must be positive");
+    }
+    if (metadata.sourceHash.empty()) {
+        Fail(context + ".sourceHash must not be empty");
+    }
+    if (metadata.modelCount <= 0 || metadata.objectCount <= 0) {
+        Fail(context + " counts must be positive");
+    }
+    if (metadata.format.empty()) {
+        Fail(context + ".format must not be empty");
+    }
+    return metadata;
+}
+
+SectorLightmapAtlasMetadata ReadLightmapAtlasMetadata(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+    SectorLightmapAtlasMetadata atlas;
+    atlas.path = ReadString(value, "path", context);
+    atlas.width = ReadInt(value, "width", context);
+    atlas.height = ReadInt(value, "height", context);
+    if (atlas.path.empty()) {
+        Fail(context + ".path must not be empty");
+    }
+    if (atlas.width <= 0 || atlas.height <= 0) {
+        Fail(context + " dimensions must be positive");
+    }
+    return atlas;
 }
 
 SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& context)
@@ -1023,10 +1261,42 @@ SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& c
     if (metadata.sourceHash.empty()) {
         Fail(context + ".sourceHash must not be empty");
     }
+    const auto additionalAtlasesIt = value.find("additionalAtlases");
+    if (additionalAtlasesIt != value.end()) {
+        if (!additionalAtlasesIt->is_array()) {
+            Fail(context + ".additionalAtlases must be an array");
+        }
+        for (size_t index = 0; index < additionalAtlasesIt->size(); ++index) {
+            SectorLightmapAtlasMetadata atlas = ReadLightmapAtlasMetadata(
+                    (*additionalAtlasesIt)[index],
+                    context + ".additionalAtlases[" + std::to_string(index) + "]");
+            if (atlas.width != metadata.width
+                    || atlas.height != metadata.height) {
+                Fail(context + ".additionalAtlases dimensions must match the primary atlas");
+            }
+            if (atlas.path == metadata.path
+                    || std::any_of(
+                            metadata.additionalAtlases.begin(),
+                            metadata.additionalAtlases.end(),
+                            [&](const SectorLightmapAtlasMetadata& existing) {
+                                return existing.path == atlas.path;
+                            })) {
+                Fail(context + ".additionalAtlases contains a duplicate path");
+            }
+            metadata.additionalAtlases.push_back(std::move(atlas));
+        }
+    }
     const auto objectProbesIt = value.find("objectProbes");
     if (objectProbesIt != value.end()) {
         metadata.objectProbes =
                 ReadBakedObjectLightProbeMetadata(*objectProbesIt, context + ".objectProbes");
+    }
+    const auto staticModelsIt = value.find("staticModels");
+    if (staticModelsIt != value.end()) {
+        metadata.staticModels =
+                ReadBakedStaticModelLightmapMetadata(
+                        *staticModelsIt,
+                        context + ".staticModels");
     }
     return metadata;
 }
@@ -1266,16 +1536,94 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             {"id", object.id}
     };
     if (object.kind.empty()) {
-        Fail(context + ".kind must be 'billboard' or 'door'");
+        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
     } else {
         if (object.kind == RuntimeObjectKindBillboard) {
             json["kind"] = object.kind;
             json["billboard"] = WritePlacedBillboard(object.billboard, context + ".billboard");
+        } else if (object.kind == RuntimeObjectKindStaticModel) {
+            RequireFinite(
+                    object.staticModel.rotationXRadians,
+                    context + ".staticModel.rotationXRadians");
+            RequireFinite(
+                    object.staticModel.rotationZRadians,
+                    context + ".staticModel.rotationZRadians");
+            const float rotationXDegrees =
+                    RadiansToDegrees(object.staticModel.rotationXRadians);
+            const float rotationZDegrees =
+                    RadiansToDegrees(object.staticModel.rotationZRadians);
+            RequireFinite(
+                    rotationXDegrees,
+                    context + ".staticModel.rotationXDegrees");
+            RequireFinite(
+                    rotationZDegrees,
+                    context + ".staticModel.rotationZDegrees");
+            RequireFinite(object.staticModel.heightOffsetWorld, context + ".staticModel.heightOffsetWorld");
+            if (!std::isfinite(object.staticModel.scale)
+                    || object.staticModel.scale <= 0.0f) {
+                Fail(context + ".staticModel.scale must be a finite positive value");
+            }
+            Json staticModel = Json::object();
+            if (!object.staticModel.modelPath.empty()) {
+                staticModel["modelPath"] = object.staticModel.modelPath;
+            }
+            if (rotationXDegrees != 0.0f) {
+                staticModel["rotationXDegrees"] = rotationXDegrees;
+            }
+            if (rotationZDegrees != 0.0f) {
+                staticModel["rotationZDegrees"] = rotationZDegrees;
+            }
+            if (object.staticModel.heightOffsetWorld != 0.0f) {
+                staticModel["heightOffsetWorld"] = object.staticModel.heightOffsetWorld;
+            }
+            if (object.staticModel.scale != 1.0f) {
+                staticModel["scale"] = object.staticModel.scale;
+            }
+            if (object.staticModel.collision) {
+                staticModel["collision"] = true;
+            }
+            json["kind"] = object.kind;
+            json["staticModel"] = std::move(staticModel);
+        } else if (object.kind == RuntimeObjectKindDynamicModel) {
+            const SectorPlacedDynamicModel& model = object.dynamicModel;
+            RequireFinite(model.rotationXRadians, context + ".dynamicModel.rotationXRadians");
+            RequireFinite(model.rotationZRadians, context + ".dynamicModel.rotationZRadians");
+            RequireFinite(model.heightOffsetWorld, context + ".dynamicModel.heightOffsetWorld");
+            if (!std::isfinite(model.scale) || model.scale <= 0.0f) {
+                Fail(context + ".dynamicModel.scale must be a finite positive value");
+            }
+            if (!std::isfinite(model.animationSpeed) || model.animationSpeed <= 0.0f) {
+                Fail(context + ".dynamicModel.animationSpeed must be a finite positive value");
+            }
+            if (model.shadowMode != SectorDynamicModelShadowMode::None
+                    && model.shadowMode != SectorDynamicModelShadowMode::Contact
+                    && model.shadowMode != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                Fail(context + ".dynamicModel.shadowMode is invalid");
+            }
+            const float rotationXDegrees = RadiansToDegrees(model.rotationXRadians);
+            const float rotationZDegrees = RadiansToDegrees(model.rotationZRadians);
+            Json dynamicModel = Json::object();
+            if (!model.modelPath.empty()) dynamicModel["modelPath"] = model.modelPath;
+            if (rotationXDegrees != 0.0f) dynamicModel["rotationXDegrees"] = rotationXDegrees;
+            if (rotationZDegrees != 0.0f) dynamicModel["rotationZDegrees"] = rotationZDegrees;
+            if (model.heightOffsetWorld != 0.0f) dynamicModel["heightOffsetWorld"] = model.heightOffsetWorld;
+            if (model.scale != 1.0f) dynamicModel["scale"] = model.scale;
+            if (model.collision) dynamicModel["collision"] = true;
+            if (!model.animation.empty()) dynamicModel["animation"] = model.animation;
+            if (!model.loop) dynamicModel["loop"] = false;
+            if (model.animationSpeed != 1.0f) dynamicModel["animationSpeed"] = model.animationSpeed;
+            if (model.shadowMode == SectorDynamicModelShadowMode::None) {
+                dynamicModel["shadowMode"] = "none";
+            } else if (model.shadowMode == SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                dynamicModel["shadowMode"] = "projected_silhouette";
+            }
+            json["kind"] = object.kind;
+            json["dynamicModel"] = std::move(dynamicModel);
         } else if (object.kind == RuntimeObjectKindDoor) {
             json["kind"] = object.kind;
             json["door"] = WritePlacedDoor(object.door);
         } else {
-            Fail(context + ".kind must be 'billboard' or 'door'");
+            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
         }
     }
     json["position"] = WriteVector3(object.position, context + ".position");
@@ -1397,7 +1745,8 @@ Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
                     SectorWorldToAuthoringDistance(16.0f))},
             {"indirectBounceStrength", std::clamp(settings.indirectBounceStrength, 0.0f, 1.0f)},
             {"objectProbeSpacingWorld", std::clamp(settings.objectProbeSpacingWorld, 0.25f, 128.0f)},
-            {"objectProbeHeightWorld", std::clamp(settings.objectProbeHeightWorld, 0.0f, 16.0f)}
+            {"objectProbeLowerHeightWorld", std::clamp(settings.objectProbeLowerHeightWorld, 0.0f, 16.0f)},
+            {"objectProbeUpperHeightWorld", std::clamp(settings.objectProbeUpperHeightWorld, 0.0f, 16.0f)}
     };
 }
 
@@ -1443,6 +1792,79 @@ Json WriteColor(Color color)
             {"b", static_cast<int>(color.b)},
             {"a", static_cast<int>(color.a)}
     };
+}
+
+Json WriteLightHazeSettings(const SectorLightHazeSettings& source)
+{
+    const SectorLightHazeSettings settings = NormalizeSectorLightHazeSettings(source);
+    const SectorLightHazeSettings defaults;
+    Json value = Json::object();
+    if (settings.enabled != defaults.enabled) value["enabled"] = settings.enabled;
+    if (settings.extentScale != defaults.extentScale) value["extentScale"] = settings.extentScale;
+    if (settings.density != defaults.density) value["density"] = settings.density;
+    if (settings.scatteringTint.r != defaults.scatteringTint.r
+            || settings.scatteringTint.g != defaults.scatteringTint.g
+            || settings.scatteringTint.b != defaults.scatteringTint.b) {
+        value["scatteringTint"] = WriteColor(settings.scatteringTint);
+    }
+    if (settings.edgeSoftness != defaults.edgeSoftness) value["edgeSoftness"] = settings.edgeSoftness;
+    if (settings.noiseAmount != defaults.noiseAmount) value["noiseAmount"] = settings.noiseAmount;
+    if (settings.noiseScaleWorld != defaults.noiseScaleWorld) value["noiseScaleWorld"] = settings.noiseScaleWorld;
+    if (settings.flowDirectionDegrees != defaults.flowDirectionDegrees) {
+        value["flowDirectionDegrees"] = settings.flowDirectionDegrees;
+    }
+    if (settings.flowSpeedWorld != defaults.flowSpeedWorld) value["flowSpeedWorld"] = settings.flowSpeedWorld;
+    return value;
+}
+
+Json WriteLightDustSettings(const SectorLightDustSettings& source)
+{
+    const SectorLightDustSettings settings = NormalizeSectorLightDustSettings(source);
+    const SectorLightDustSettings defaults;
+    Json value = Json::object();
+    if (settings.enabled != defaults.enabled) value["enabled"] = settings.enabled;
+    if (settings.amount != defaults.amount) value["amount"] = settings.amount;
+    if (settings.extentScale != defaults.extentScale) value["extentScale"] = settings.extentScale;
+    if (settings.minimumSizeWorld != defaults.minimumSizeWorld) {
+        value["minimumSizeWorld"] = settings.minimumSizeWorld;
+    }
+    if (settings.maximumSizeWorld != defaults.maximumSizeWorld) {
+        value["maximumSizeWorld"] = settings.maximumSizeWorld;
+    }
+    if (settings.opacity != defaults.opacity) value["opacity"] = settings.opacity;
+    if (settings.driftSpeedWorld != defaults.driftSpeedWorld) {
+        value["driftSpeedWorld"] = settings.driftSpeedWorld;
+    }
+    if (settings.turbulenceWorld != defaults.turbulenceWorld) {
+        value["turbulenceWorld"] = settings.turbulenceWorld;
+    }
+    if (settings.scatteringTint.r != defaults.scatteringTint.r
+            || settings.scatteringTint.g != defaults.scatteringTint.g
+            || settings.scatteringTint.b != defaults.scatteringTint.b) {
+        value["scatteringTint"] = WriteColor(settings.scatteringTint);
+    }
+    return value;
+}
+
+Json WriteLightAtmosphereSettings(const SectorLightAtmosphereSettings& source)
+{
+    const SectorLightAtmosphereSettings settings = NormalizeSectorLightAtmosphereSettings(source);
+    Json value = Json::object();
+    if (!IsDefaultSectorLightHazeSettings(settings.haze)) {
+        value["haze"] = WriteLightHazeSettings(settings.haze);
+    }
+    if (!IsDefaultSectorLightDustSettings(settings.dust)) {
+        value["dust"] = WriteLightDustSettings(settings.dust);
+    }
+    return value;
+}
+
+template<typename T>
+void WriteOptionalLightAtmosphere(Json& lightJson, const T& light)
+{
+    if (!IsDefaultSectorLightAtmosphereSettings(light.atmosphere)) {
+        lightJson["atmosphere"] = WriteLightAtmosphereSettings(light.atmosphere);
+    }
 }
 
 template<typename T>
@@ -1518,6 +1940,7 @@ Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const st
     if (shadowSoftness != DynamicSpotLightDefaultShadowSoftness) {
         lightJson["shadowSoftness"] = shadowSoftness;
     }
+    WriteOptionalLightAtmosphere(lightJson, light);
     return lightJson;
 }
 
@@ -1547,6 +1970,7 @@ Json WriteStaticSpotLight(const SectorTopologyStaticSpotLight& light, const std:
     if (outerConeDegrees != 35.0f) {
         lightJson["outerConeDegrees"] = outerConeDegrees;
     }
+    WriteOptionalLightAtmosphere(lightJson, light);
     return lightJson;
 }
 
@@ -1605,6 +2029,62 @@ bool IsDefaultDirectionalLightSettings(const SectorTopologyDirectionalLightSetti
             && normalized.intensity == defaults.intensity;
 }
 
+Json WriteFogSettings(const SectorTopologyFogSettings& settings)
+{
+    RequireFinite(settings.startDistanceWorld, "fogSettings.startDistanceWorld");
+    RequireFinite(settings.density, "fogSettings.density");
+    RequireFinite(settings.maxOpacity, "fogSettings.maxOpacity");
+    RequireFinite(settings.referenceHeightWorld, "fogSettings.referenceHeightWorld");
+    RequireFinite(settings.heightFalloff, "fogSettings.heightFalloff");
+    const SectorTopologyFogSettings normalized = NormalizeSectorTopologyFogSettings(settings);
+    Json result{
+            {"enabled", normalized.enabled},
+            {"color", WriteColor(normalized.color)},
+            {"startDistanceWorld", normalized.startDistanceWorld},
+            {"density", normalized.density},
+            {"maxOpacity", normalized.maxOpacity},
+            {"referenceHeightWorld", normalized.referenceHeightWorld},
+            {"heightFalloff", normalized.heightFalloff}
+    };
+    switch (normalized.localVolumeQuality) {
+        case SectorTopologyFogSettings::LocalVolumeQuality::Off:
+            result["localVolumeQuality"] = "off";
+            break;
+        case SectorTopologyFogSettings::LocalVolumeQuality::Low:
+            result["localVolumeQuality"] = "low";
+            break;
+        case SectorTopologyFogSettings::LocalVolumeQuality::Medium:
+            result["localVolumeQuality"] = "medium";
+            break;
+        case SectorTopologyFogSettings::LocalVolumeQuality::High:
+            result["localVolumeQuality"] = "high";
+            break;
+    }
+    return result;
+}
+
+bool IsDefaultFogSettings(const SectorTopologyFogSettings& settings)
+{
+    RequireFinite(settings.startDistanceWorld, "fogSettings.startDistanceWorld");
+    RequireFinite(settings.density, "fogSettings.density");
+    RequireFinite(settings.maxOpacity, "fogSettings.maxOpacity");
+    RequireFinite(settings.referenceHeightWorld, "fogSettings.referenceHeightWorld");
+    RequireFinite(settings.heightFalloff, "fogSettings.heightFalloff");
+    const SectorTopologyFogSettings normalized = NormalizeSectorTopologyFogSettings(settings);
+    const SectorTopologyFogSettings defaults = DefaultSectorTopologyFogSettings();
+    return normalized.enabled == defaults.enabled
+            && normalized.color.r == defaults.color.r
+            && normalized.color.g == defaults.color.g
+            && normalized.color.b == defaults.color.b
+            && normalized.color.a == defaults.color.a
+            && normalized.startDistanceWorld == defaults.startDistanceWorld
+            && normalized.density == defaults.density
+            && normalized.maxOpacity == defaults.maxOpacity
+            && normalized.referenceHeightWorld == defaults.referenceHeightWorld
+            && normalized.heightFalloff == defaults.heightFalloff
+            && normalized.localVolumeQuality == defaults.localVolumeQuality;
+}
+
 Json WriteBakedObjectLightProbeMetadata(const SectorBakedObjectLightProbeMetadata& metadata)
 {
     return Json{
@@ -1613,13 +2093,41 @@ Json WriteBakedObjectLightProbeMetadata(const SectorBakedObjectLightProbeMetadat
             {"sourceHash", metadata.sourceHash},
             {"count", metadata.count},
             {"probeSpacingWorld", metadata.probeSpacingWorld},
-            {"probeHeightWorld", metadata.probeHeightWorld},
+            {"probeLowerHeightWorld", metadata.probeLowerHeightWorld},
+            {"probeUpperHeightWorld", metadata.probeUpperHeightWorld},
+            {"format", metadata.format}
+    };
+}
+
+Json WriteBakedStaticModelLightmapMetadata(
+        const SectorBakedStaticModelLightmapMetadata& metadata)
+{
+    return Json{
+            {"path", metadata.path},
+            {"version", metadata.version},
+            {"sourceHash", metadata.sourceHash},
+            {"modelCount", metadata.modelCount},
+            {"objectCount", metadata.objectCount},
             {"format", metadata.format}
     };
 }
 
 Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
 {
+    std::vector<std::string> atlasPaths{metadata.path};
+    for (const SectorLightmapAtlasMetadata& atlas : metadata.additionalAtlases) {
+        if (atlas.path.empty() || atlas.width <= 0 || atlas.height <= 0) {
+            Fail("bakedLightmap.additionalAtlases entries must have a path and positive dimensions");
+        }
+        if (atlas.width != metadata.width || atlas.height != metadata.height) {
+            Fail("bakedLightmap.additionalAtlases dimensions must match the primary atlas");
+        }
+        if (std::find(atlasPaths.begin(), atlasPaths.end(), atlas.path)
+                != atlasPaths.end()) {
+            Fail("bakedLightmap.additionalAtlases contains a duplicate path");
+        }
+        atlasPaths.push_back(atlas.path);
+    }
     Json lightmap = Json{
             {"path", metadata.path},
             {"width", metadata.width},
@@ -1628,6 +2136,20 @@ Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
     };
     if (!metadata.objectProbes.path.empty()) {
         lightmap["objectProbes"] = WriteBakedObjectLightProbeMetadata(metadata.objectProbes);
+    }
+    if (!metadata.staticModels.path.empty()) {
+        lightmap["staticModels"] =
+                WriteBakedStaticModelLightmapMetadata(metadata.staticModels);
+    }
+    if (!metadata.additionalAtlases.empty()) {
+        lightmap["additionalAtlases"] = Json::array();
+        for (const SectorLightmapAtlasMetadata& atlas
+                : metadata.additionalAtlases) {
+            lightmap["additionalAtlases"].push_back(Json{
+                    {"path", atlas.path},
+                    {"width", atlas.width},
+                    {"height", atlas.height}});
+        }
     }
     return lightmap;
 }
@@ -1678,14 +2200,46 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
             Fail(objectContext + ".id must be a positive integer");
         }
         if (object.kind.empty()) {
-            Fail(objectContext + ".kind must be 'billboard' or 'door'");
+            Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
         } else {
             if (object.kind == RuntimeObjectKindBillboard) {
                 ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
+            } else if (object.kind == RuntimeObjectKindStaticModel) {
+                if (!std::isfinite(object.staticModel.rotationXRadians)) {
+                    Fail(objectContext + ".staticModel.rotationXRadians must be finite");
+                }
+                if (!std::isfinite(object.staticModel.rotationZRadians)) {
+                    Fail(objectContext + ".staticModel.rotationZRadians must be finite");
+                }
+                if (!std::isfinite(object.staticModel.heightOffsetWorld)) {
+                    Fail(objectContext + ".staticModel.heightOffsetWorld must be finite");
+                }
+                if (!std::isfinite(object.staticModel.scale)
+                        || object.staticModel.scale <= 0.0f) {
+                    Fail(objectContext + ".staticModel.scale must be a finite positive value");
+                }
+            } else if (object.kind == RuntimeObjectKindDynamicModel) {
+                const SectorPlacedDynamicModel& model = object.dynamicModel;
+                if (!std::isfinite(model.rotationXRadians)
+                        || !std::isfinite(model.rotationZRadians)
+                        || !std::isfinite(model.heightOffsetWorld)) {
+                    Fail(objectContext + ".dynamicModel transforms must be finite");
+                }
+                if (!std::isfinite(model.scale) || model.scale <= 0.0f) {
+                    Fail(objectContext + ".dynamicModel.scale must be a finite positive value");
+                }
+                if (!std::isfinite(model.animationSpeed) || model.animationSpeed <= 0.0f) {
+                    Fail(objectContext + ".dynamicModel.animationSpeed must be a finite positive value");
+                }
+                if (model.shadowMode != SectorDynamicModelShadowMode::None
+                        && model.shadowMode != SectorDynamicModelShadowMode::Contact
+                        && model.shadowMode != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                    Fail(objectContext + ".dynamicModel.shadowMode is invalid");
+                }
             } else if (object.kind == RuntimeObjectKindDoor) {
                 ValidatePlacedDoorForSerialization(object.door, objectContext + ".door");
             } else {
-                Fail(objectContext + ".kind must be 'billboard' or 'door'");
+                Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
             }
         }
         if (!std::isfinite(object.position.x)
@@ -1725,6 +2279,99 @@ void ReadTextures(const Json& root, SectorTopologyMap& map)
     }
 }
 
+SectorLightHazeSettings ReadLightHazeSettings(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+    SectorLightHazeSettings settings;
+    settings.enabled = ReadOptionalBool(value, "enabled", context, settings.enabled);
+    settings.extentScale = ReadOptionalClampedFloat(
+            value, "extentScale", context, settings.extentScale, 0.05f, 2.0f);
+    settings.density = ReadOptionalClampedFloat(
+            value, "density", context, settings.density, 0.0f, 2.0f);
+    const auto tintIt = value.find("scatteringTint");
+    if (tintIt != value.end()) {
+        settings.scatteringTint = ReadColor(*tintIt, context + ".scatteringTint");
+    }
+    settings.edgeSoftness = ReadOptionalClampedFloat(
+            value, "edgeSoftness", context, settings.edgeSoftness, 0.01f, 1.0f);
+    settings.noiseAmount = ReadOptionalClampedFloat(
+            value, "noiseAmount", context, settings.noiseAmount, 0.0f, 1.0f);
+    settings.noiseScaleWorld = ReadOptionalClampedFloat(
+            value, "noiseScaleWorld", context, settings.noiseScaleWorld, 0.05f, 16.0f);
+    settings.flowDirectionDegrees = ReadOptionalClampedFloat(
+            value,
+            "flowDirectionDegrees",
+            context,
+            settings.flowDirectionDegrees,
+            -360.0f,
+            360.0f);
+    settings.flowSpeedWorld = ReadOptionalClampedFloat(
+            value, "flowSpeedWorld", context, settings.flowSpeedWorld, 0.0f, 2.0f);
+    return NormalizeSectorLightHazeSettings(settings);
+}
+
+SectorLightDustSettings ReadLightDustSettings(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+    SectorLightDustSettings settings;
+    settings.enabled = ReadOptionalBool(value, "enabled", context, settings.enabled);
+    settings.amount = ReadOptionalClampedInt(value, "amount", context, settings.amount, 0, 128);
+    settings.extentScale = ReadOptionalClampedFloat(
+            value, "extentScale", context, settings.extentScale, 0.05f, 2.0f);
+    settings.minimumSizeWorld = ReadOptionalClampedFloat(
+            value,
+            "minimumSizeWorld",
+            context,
+            settings.minimumSizeWorld,
+            0.002f,
+            0.25f);
+    settings.maximumSizeWorld = ReadOptionalClampedFloat(
+            value,
+            "maximumSizeWorld",
+            context,
+            settings.maximumSizeWorld,
+            0.002f,
+            0.25f);
+    settings.opacity = ReadOptionalClampedFloat(
+            value, "opacity", context, settings.opacity, 0.0f, 1.0f);
+    settings.driftSpeedWorld = ReadOptionalClampedFloat(
+            value, "driftSpeedWorld", context, settings.driftSpeedWorld, 0.0f, 0.5f);
+    settings.turbulenceWorld = ReadOptionalClampedFloat(
+            value, "turbulenceWorld", context, settings.turbulenceWorld, 0.0f, 0.5f);
+    const auto tintIt = value.find("scatteringTint");
+    if (tintIt != value.end()) {
+        settings.scatteringTint = ReadColor(*tintIt, context + ".scatteringTint");
+    }
+    return NormalizeSectorLightDustSettings(settings);
+}
+
+SectorLightAtmosphereSettings ReadOptionalLightAtmosphereSettings(
+        const Json& light,
+        const std::string& context)
+{
+    SectorLightAtmosphereSettings settings;
+    const auto atmosphereIt = light.find("atmosphere");
+    if (atmosphereIt == light.end()) {
+        return settings;
+    }
+    if (!atmosphereIt->is_object()) {
+        Fail(context + ".atmosphere must be an object");
+    }
+    const auto hazeIt = atmosphereIt->find("haze");
+    if (hazeIt != atmosphereIt->end()) {
+        settings.haze = ReadLightHazeSettings(*hazeIt, context + ".atmosphere.haze");
+    }
+    const auto dustIt = atmosphereIt->find("dust");
+    if (dustIt != atmosphereIt->end()) {
+        settings.dust = ReadLightDustSettings(*dustIt, context + ".atmosphere.dust");
+    }
+    return NormalizeSectorLightAtmosphereSettings(settings);
+}
+
 void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBakedLightmap)
 {
     const auto runtimeObjectsIt = root.find("runtimeObjects");
@@ -1759,6 +2406,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             light.sourceRadius = ReadFloat(value, "sourceRadius", context);
             light.intensity = ReadFloat(value, "intensity", context);
             light.color = ReadColor(RequireField(value, "color", context), context + ".color");
+            light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
             map.staticLights.push_back(light);
         }
     }
@@ -1799,6 +2447,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
                     0.0f,
                     179.0f);
             light.outerConeDegrees = std::max(light.outerConeDegrees, light.innerConeDegrees);
+            light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
             map.staticSpotLights.push_back(light);
         }
     }
@@ -1838,6 +2487,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
                     DynamicLightFlickerDefaultAmount,
                     DynamicLightFlickerMinAmount,
                     DynamicLightFlickerMaxAmount);
+            light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
             map.dynamicPointLights.push_back(light);
         }
     }
@@ -1922,6 +2572,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
                     DynamicSpotLightDefaultShadowSoftness,
                     DynamicSpotLightMinShadowSoftness,
                     DynamicSpotLightMaxShadowSoftness);
+            light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
             map.dynamicSpotLights.push_back(light);
         }
     }
@@ -1946,6 +2597,11 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
         map.directionalLight = ReadDirectionalLightSettings(*directionalLightIt, "root.directionalLight");
     }
 
+    const auto fogSettingsIt = root.find("fogSettings");
+    if (fogSettingsIt != root.end()) {
+        map.fogSettings = ReadFogSettings(*fogSettingsIt, "root.fogSettings");
+    }
+
     const auto bakedLightmapIt = root.find("bakedLightmap");
     if (bakedLightmapIt != root.end() && allowBakedLightmap) {
         map.bakedLightmap = ReadBakedLightmap(*bakedLightmapIt, "root.bakedLightmap");
@@ -1954,6 +2610,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
     map.previewSettings = NormalizeSectorPreviewSettings(map.previewSettings);
     map.skySettings = NormalizeSectorTopologySkySettings(map.skySettings);
     map.directionalLight = NormalizeSectorTopologyDirectionalLightSettings(map.directionalLight);
+    map.fogSettings = NormalizeSectorTopologyFogSettings(map.fogSettings);
     ValidateRuntimeObjects(map, "root");
 }
 
@@ -2048,6 +2705,52 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         graph.faceAnchors.push_back(std::move(anchor));
     }
 
+    const auto fogVolumesIt = value.find("fogVolumes");
+    if (fogVolumesIt != value.end()) {
+        if (!fogVolumesIt->is_array()) {
+            Fail("root.authoringGraph.fogVolumes must be an array");
+        }
+        for (size_t i = 0; i < fogVolumesIt->size(); ++i) {
+            const Json& fogJson = (*fogVolumesIt)[i];
+            const std::string context = "root.authoringGraph.fogVolumes[" + std::to_string(i) + "]";
+            if (!fogJson.is_object()) {
+                Fail(context + " must be an object");
+            }
+            SectorAuthoringFogVolume volume;
+            volume.id = ReadInt(fogJson, "id", context);
+            volume.x = ReadCoord(fogJson, "x", context);
+            volume.y = ReadCoord(fogJson, "y", context);
+            volume.enabled = ReadOptionalBool(fogJson, "enabled", context, volume.enabled);
+            volume.bottomOffsetWorld = ReadOptionalFloat(
+                    fogJson, "bottomOffsetWorld", context, volume.bottomOffsetWorld);
+            volume.radiusXWorld = ReadOptionalFloat(fogJson, "radiusXWorld", context, volume.radiusXWorld);
+            volume.radiusZWorld = ReadOptionalFloat(fogJson, "radiusZWorld", context, volume.radiusZWorld);
+            volume.heightWorld = ReadOptionalFloat(fogJson, "heightWorld", context, volume.heightWorld);
+            const auto colorIt = fogJson.find("color");
+            if (colorIt != fogJson.end()) {
+                if (!colorIt->is_object()) {
+                    Fail(context + ".color must be an object");
+                }
+                volume.color = Color{
+                        ReadOptionalColorChannel(*colorIt, "r", context + ".color", volume.color.r),
+                        ReadOptionalColorChannel(*colorIt, "g", context + ".color", volume.color.g),
+                        ReadOptionalColorChannel(*colorIt, "b", context + ".color", volume.color.b),
+                        255};
+            }
+            volume.density = ReadOptionalFloat(fogJson, "density", context, volume.density);
+            volume.maxOpacity = ReadOptionalFloat(fogJson, "maxOpacity", context, volume.maxOpacity);
+            volume.edgeSoftness = ReadOptionalFloat(fogJson, "edgeSoftness", context, volume.edgeSoftness);
+            volume.noiseScaleWorld = ReadOptionalFloat(
+                    fogJson, "noiseScaleWorld", context, volume.noiseScaleWorld);
+            volume.noiseAmount = ReadOptionalFloat(fogJson, "noiseAmount", context, volume.noiseAmount);
+            volume.flowDirectionDegrees = ReadOptionalFloat(
+                    fogJson, "flowDirectionDegrees", context, volume.flowDirectionDegrees);
+            volume.flowSpeedWorld = ReadOptionalFloat(
+                    fogJson, "flowSpeedWorld", context, volume.flowSpeedWorld);
+            graph.fogVolumes.push_back(NormalizeSectorAuthoringFogVolume(volume));
+        }
+    }
+
     return graph;
 }
 
@@ -2066,6 +2769,7 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
     document.derivation.topology.previewSettings = document.mapData.previewSettings;
     document.derivation.topology.skySettings = document.mapData.skySettings;
     document.derivation.topology.directionalLight = document.mapData.directionalLight;
+    document.derivation.topology.fogSettings = document.mapData.fogSettings;
     document.derivation.topology.lightmapSettings = document.mapData.lightmapSettings;
     document.derivation.topology.bakedLightmap = document.mapData.bakedLightmap;
 }
@@ -2136,14 +2840,16 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
         RequireFinite(light->intensity, context + ".intensity");
         RequireFinite(light->radius, context + ".radius");
         RequireFinite(light->sourceRadius, context + ".sourceRadius");
-        root["staticLights"].push_back(Json{
+        Json lightJson{
                 {"id", light->id},
                 {"position", WriteVector3(light->position, context + ".position")},
                 {"radius", light->radius},
                 {"sourceRadius", light->sourceRadius},
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
-        });
+        };
+        WriteOptionalLightAtmosphere(lightJson, *light);
+        root["staticLights"].push_back(std::move(lightJson));
     }
 
     root["staticSpotLights"] = Json::array();
@@ -2168,6 +2874,7 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
             lightJson["enabled"] = false;
         }
         WriteDynamicLightFlickerFields(lightJson, *light, context);
+        WriteOptionalLightAtmosphere(lightJson, *light);
         root["dynamicPointLights"].push_back(std::move(lightJson));
     }
 
@@ -2184,6 +2891,9 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
     }
     if (!IsDefaultDirectionalLightSettings(map.directionalLight)) {
         root["directionalLight"] = WriteDirectionalLightSettings(map.directionalLight);
+    }
+    if (!IsDefaultFogSettings(map.fogSettings)) {
+        root["fogSettings"] = WriteFogSettings(map.fogSettings);
     }
     if (includeBakedLightmap
             && !map.bakedLightmap.path.empty()
@@ -2286,6 +2996,42 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             anchorJson["ceilingDecal"] = WriteDecal(anchor->ceilingDecal, context + ".ceilingDecal");
         }
         graphJson["faceAnchors"].push_back(std::move(anchorJson));
+    }
+
+    if (!graph.fogVolumes.empty()) {
+        graphJson["fogVolumes"] = Json::array();
+        const SectorAuthoringFogVolume defaults;
+        for (const SectorAuthoringFogVolume* source : SortedById(graph.fogVolumes)) {
+            const std::string context = "authoring fog volume " + std::to_string(source->id);
+            RequireFinite(source->bottomOffsetWorld, context + ".bottomOffsetWorld");
+            RequireFinite(source->radiusXWorld, context + ".radiusXWorld");
+            RequireFinite(source->radiusZWorld, context + ".radiusZWorld");
+            RequireFinite(source->heightWorld, context + ".heightWorld");
+            RequireFinite(source->density, context + ".density");
+            RequireFinite(source->maxOpacity, context + ".maxOpacity");
+            RequireFinite(source->edgeSoftness, context + ".edgeSoftness");
+            RequireFinite(source->noiseScaleWorld, context + ".noiseScaleWorld");
+            RequireFinite(source->noiseAmount, context + ".noiseAmount");
+            RequireFinite(source->flowDirectionDegrees, context + ".flowDirectionDegrees");
+            RequireFinite(source->flowSpeedWorld, context + ".flowSpeedWorld");
+            const SectorAuthoringFogVolume volume = NormalizeSectorAuthoringFogVolume(*source);
+            Json fogJson{{"id", volume.id}, {"x", volume.x}, {"y", volume.y}};
+            if (volume.enabled != defaults.enabled) fogJson["enabled"] = volume.enabled;
+            if (volume.bottomOffsetWorld != defaults.bottomOffsetWorld) fogJson["bottomOffsetWorld"] = volume.bottomOffsetWorld;
+            if (volume.radiusXWorld != defaults.radiusXWorld) fogJson["radiusXWorld"] = volume.radiusXWorld;
+            if (volume.radiusZWorld != defaults.radiusZWorld) fogJson["radiusZWorld"] = volume.radiusZWorld;
+            if (volume.heightWorld != defaults.heightWorld) fogJson["heightWorld"] = volume.heightWorld;
+            if (volume.color.r != defaults.color.r || volume.color.g != defaults.color.g
+                    || volume.color.b != defaults.color.b) fogJson["color"] = WriteColor(volume.color);
+            if (volume.density != defaults.density) fogJson["density"] = volume.density;
+            if (volume.maxOpacity != defaults.maxOpacity) fogJson["maxOpacity"] = volume.maxOpacity;
+            if (volume.edgeSoftness != defaults.edgeSoftness) fogJson["edgeSoftness"] = volume.edgeSoftness;
+            if (volume.noiseScaleWorld != defaults.noiseScaleWorld) fogJson["noiseScaleWorld"] = volume.noiseScaleWorld;
+            if (volume.noiseAmount != defaults.noiseAmount) fogJson["noiseAmount"] = volume.noiseAmount;
+            if (volume.flowDirectionDegrees != defaults.flowDirectionDegrees) fogJson["flowDirectionDegrees"] = volume.flowDirectionDegrees;
+            if (volume.flowSpeedWorld != defaults.flowSpeedWorld) fogJson["flowSpeedWorld"] = volume.flowSpeedWorld;
+            graphJson["fogVolumes"].push_back(std::move(fogJson));
+        }
     }
 
     return graphJson;
@@ -2532,14 +3278,16 @@ Json SerializeMap(const SectorTopologyMap& map)
         RequireFinite(light->intensity, context + ".intensity");
         RequireFinite(light->radius, context + ".radius");
         RequireFinite(light->sourceRadius, context + ".sourceRadius");
-        root["staticLights"].push_back(Json{
+        Json lightJson{
                 {"id", light->id},
                 {"position", WriteVector3(light->position, context + ".position")},
                 {"radius", light->radius},
                 {"sourceRadius", light->sourceRadius},
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
-        });
+        };
+        WriteOptionalLightAtmosphere(lightJson, *light);
+        root["staticLights"].push_back(std::move(lightJson));
     }
 
     root["staticSpotLights"] = Json::array();
@@ -2564,6 +3312,7 @@ Json SerializeMap(const SectorTopologyMap& map)
             lightJson["enabled"] = false;
         }
         WriteDynamicLightFlickerFields(lightJson, *light, context);
+        WriteOptionalLightAtmosphere(lightJson, *light);
         root["dynamicPointLights"].push_back(std::move(lightJson));
     }
 
@@ -2580,6 +3329,9 @@ Json SerializeMap(const SectorTopologyMap& map)
     }
     if (!IsDefaultDirectionalLightSettings(map.directionalLight)) {
         root["directionalLight"] = WriteDirectionalLightSettings(map.directionalLight);
+    }
+    if (!IsDefaultFogSettings(map.fogSettings)) {
+        root["fogSettings"] = WriteFogSettings(map.fogSettings);
     }
     if (!map.bakedLightmap.path.empty()
             && map.bakedLightmap.width > 0

@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -122,6 +123,19 @@ size_t CountVisibleObjectProbeDebugMarkers(
     return count;
 }
 
+std::string FormatViewmodelTransform(Matrix value)
+{
+    std::ostringstream output;
+    output << std::fixed << std::setprecision(3)
+           << "[" << value.m0 << ' ' << value.m4 << ' ' << value.m8
+           << " | " << value.m12 << "] "
+           << "[" << value.m1 << ' ' << value.m5 << ' ' << value.m9
+           << " | " << value.m13 << "] "
+           << "[" << value.m2 << ' ' << value.m6 << ' ' << value.m10
+           << " | " << value.m14 << ']';
+    return output.str();
+}
+
 void DrawSpotLightConeRing(
         Vector3 origin,
         Vector3 forward,
@@ -166,7 +180,7 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
 {
     constexpr float x = 32.0f;
     constexpr float y = 32.0f;
-    constexpr float width = 620.0f;
+    constexpr float width = 700.0f;
     constexpr float collapsedHeight = 78.0f;
     constexpr float expandedHeight = 390.0f;
     return Rectangle{
@@ -372,7 +386,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
 
     const bool mouseInteractive = IsPreviewOverlayMouseInteractive(controllerState);
     const bool drawExpanded = overlayState.activePreviewDebugOverlayTab != PreviewDebugOverlayTab::None;
-    const float panelW = 620.0f;
+    const float panelW = 700.0f;
     const float padding = 10.0f;
     const float gap = 6.0f;
     const float stripH = 26.0f;
@@ -428,11 +442,25 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         : (controllerState.fpsControllerState.grounded
                                 ? "grounded"
                                 : (controllerState.fpsControllerState.verticalVelocity > 0.0f ? "jumping" : "falling"));
+                const float crouchAmount = controllerState.fpsControllerState.crouchAmount;
+                const char* stance = crouchAmount >= 0.999f
+                        ? "crouched"
+                        : (crouchAmount <= 0.001f
+                                ? "standing"
+                                : (controllerState.fpsControllerState.crouchTargeted
+                                        ? "crouching"
+                                        : "standing up"));
+                const SectorFpsControllerConfig effectiveConfig =
+                        EffectiveSectorFpsControllerConfig(
+                                controllerState.fpsControllerState,
+                                controllerState.fpsControllerConfig);
                 collisionStatus = TextFormat(
-                        "mode: gameplay collision | sector: %d | vertical: %s / %s | block: %s | radius: %.2f | step: %.2f | jump: %.2f",
+                        "mode: gameplay collision | sector: %d | vertical: %s / %s | stance: %s %.2fm | block: %s | radius: %.2f | step: %.2f | jump: %.2f",
                         controllerState.fpsControllerState.currentSectorId,
                         verticalState,
                         VerticalTransitionName(collisionState.previewVerticalResult.transition),
+                        stance,
+                        effectiveConfig.playerHeight,
                         blockText.c_str(),
                         controllerState.fpsControllerConfig.playerRadius,
                         controllerState.fpsControllerConfig.stepHeight,
@@ -577,15 +605,158 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 }
                 break;
             }
+            case PreviewDebugOverlayTab::Viewmodel: {
+                const FpsViewmodelRuntimeState& vm = context.previewState.runtime.viewmodel;
+                const char* loadState = vm.loadState == FpsViewmodelLoadState::Ready ? "ready"
+                        : vm.loadState == FpsViewmodelLoadState::Pending ? "pending"
+                        : vm.loadState == FpsViewmodelLoadState::Failed ? "failed" : "inactive";
+                addKeyValue("weapon", vm.activeWeaponId.empty() ? "none" : vm.activeWeaponId);
+                addKeyValue("visible", vm.holstered ? "holstered" : "equipped");
+                addKeyValue("load", loadState);
+                addKeyValueStyled("model", vm.resolvedModelPath, smallConfig.mutedTextColor, true);
+                addKeyValue("animation", vm.animationName.empty() ? "none" : vm.animationName);
+                addKeyValue("cursor", TextFormat("source %.3f | raylib %.3f", vm.sourceFrameCursor, vm.raylibFrame));
+                addKeyValue("geometry", TextFormat("meshes %d | triangles %d | bones %d", vm.meshCount, vm.triangleCount, vm.boneCount));
+                addKeyValue("position", TextFormat("%.3f, %.3f, %.3f", vm.presentation.position.x, vm.presentation.position.y, vm.presentation.position.z));
+                addKeyValue("rotation", TextFormat("%.2f, %.2f, %.2f", vm.presentation.rotationDegrees.x, vm.presentation.rotationDegrees.y, vm.presentation.rotationDegrees.z));
+                addKeyValue("projection", TextFormat("scale %.3f | vertical FOV %.2f", vm.presentation.scale, vm.presentation.verticalFovDegrees));
+                addKeyValue("lighting", TextFormat(
+                        "environment %.3f | material override %s",
+                        vm.environmentExposure,
+                        vm.materialOverride.enabled ? "on" : "off"));
+                addKeyValue("brightness", TextFormat(
+                        "adjustment %+.3f | multiplier %.3fx",
+                        vm.brightnessAdjustment,
+                        vm.brightnessMultiplier));
+                if (vm.materialOverride.enabled) {
+                    addKeyValue("material", TextFormat(
+                            "metallic %.3f | roughness %.3f | packed texture %s",
+                            vm.materialOverride.metallicFactor,
+                            vm.materialOverride.roughnessFactor,
+                            vm.materialOverride.useMetallicRoughnessTexture ? "on" : "off"));
+                }
+                const FpsViewmodelAttachmentRuntimeState& attachment =
+                        vm.attachment;
+                const char* attachmentLoadState = attachment.loadState
+                                == FpsViewmodelAttachmentLoadState::Ready
+                        ? "ready"
+                        : attachment.loadState
+                                        == FpsViewmodelAttachmentLoadState::Pending
+                                ? "pending"
+                                : attachment.loadState
+                                                == FpsViewmodelAttachmentLoadState::Failed
+                                        ? "failed"
+                                        : "inactive";
+                addKeyValueStyled(
+                        "pistol model",
+                        attachment.resolvedModelPath.empty()
+                                ? "none"
+                                : attachment.resolvedModelPath,
+                        smallConfig.mutedTextColor,
+                        true);
+                addKeyValue("pistol load", attachmentLoadState);
+                addKeyValue("pistol geometry", TextFormat(
+                        "meshes %d | triangles %d | materials %d",
+                        attachment.meshCount,
+                        attachment.triangleCount,
+                        attachment.materialCount));
+                addKeyValue("pistol lighting default", TextFormat(
+                        "brightness %+.3f | metallic %.3f | roughness %.3f",
+                        attachment.lightingDefaults.brightnessAdjustment,
+                        attachment.lightingDefaults.materialOverride
+                                .metallicFactor,
+                        attachment.lightingDefaults.materialOverride
+                                .roughnessFactor));
+                addKeyValue("pistol lighting effective", TextFormat(
+                        "brightness %+.3f (x%.3f) | metallic %.3f | roughness %.3f | packed texture %s",
+                        attachment.lighting.brightnessAdjustment,
+                        attachment.brightnessMultiplier,
+                        attachment.lighting.materialOverride.metallicFactor,
+                        attachment.lighting.materialOverride.roughnessFactor,
+                        attachment.lighting.materialOverride
+                                        .useMetallicRoughnessTexture
+                                ? "on"
+                                : "off"));
+                addKeyValue("attachment bone", TextFormat(
+                        "configured %s | resolved %s | index %d",
+                        attachment.configuredBoneName.empty()
+                                ? "none"
+                                : attachment.configuredBoneName.c_str(),
+                        attachment.resolvedBoneName.empty()
+                                ? "none"
+                                : attachment.resolvedBoneName.c_str(),
+                        attachment.boneIndex));
+                const char* poseSpace = attachment.poseSpace
+                                == FpsViewmodelBonePoseSpace::Model
+                        ? "model-space"
+                        : attachment.poseSpace == FpsViewmodelBonePoseSpace::Local
+                                ? "local (parent accumulated)"
+                                : "unknown";
+                addKeyValue("pose space", poseSpace);
+                addKeyValue("grip translation", TextFormat(
+                        "%.4f, %.4f, %.4f",
+                        attachment.gripCorrection.translation.x,
+                        attachment.gripCorrection.translation.y,
+                        attachment.gripCorrection.translation.z));
+                addKeyValue("grip rotation", TextFormat(
+                        "%.3f, %.3f, %.3f",
+                        attachment.gripCorrection.rotationDegrees.x,
+                        attachment.gripCorrection.rotationDegrees.y,
+                        attachment.gripCorrection.rotationDegrees.z));
+                addKeyValue("grip scale", TextFormat(
+                        "%.4f", attachment.gripCorrection.scale));
+                if (attachment.handPoseValid) {
+                    addKeyValueStyled(
+                            "hand transform",
+                            FormatViewmodelTransform(
+                                    attachment.handModelTransform),
+                            smallConfig.mutedTextColor,
+                            true);
+                }
+                if (attachment.pistolWorldTransformValid) {
+                    addKeyValueStyled(
+                            "pistol transform",
+                            FormatViewmodelTransform(
+                                    attachment.pistolWorldTransform),
+                            smallConfig.mutedTextColor,
+                            true);
+                }
+                if (!IsFpsViewmodelAttachmentRenderable(vm)) {
+                    const char* reason = vm.holstered
+                            ? "viewmodel is holstered"
+                            : attachment.loadState
+                                            == FpsViewmodelAttachmentLoadState::Pending
+                                    ? "pistol resource or attachment bone is pending"
+                                    : !attachment.error.empty()
+                                            ? attachment.error.c_str()
+                                            : !attachment.handPoseValid
+                                                    ? "current hand pose is unavailable"
+                                                    : "attachment is not ready";
+                    addKeyValueStyled(
+                            "pistol hidden",
+                            reason,
+                            Color{236, 92, 92, 245},
+                            true);
+                }
+                if (!attachment.error.empty()) {
+                    addKeyValueStyled(
+                            "pistol error",
+                            attachment.error,
+                            Color{236, 92, 92, 245},
+                            true);
+                }
+                if (!vm.error.empty()) addKeyValueStyled("error", vm.error, Color{236, 92, 92, 245}, true);
+                break;
+            }
             case PreviewDebugOverlayTab::Controls:
                 if (context.lightState.spotLightPilot.active) {
                     addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down. Unlock cursor with F11 to click Apply or Cancel.");
                 } else if (controllerState.previewControlMode == SectorPreviewControlMode::Gameplay) {
-                    addWrappedLine("movement: WASD move, Space jump, Shift run, mouse look. F11 unlocks cursor for UI tabs.");
+                    addWrappedLine("movement: WASD move, Space jump, Shift run, Ctrl toggle crouch, mouse look. F11 unlocks cursor for UI tabs.");
                 } else {
                     addWrappedLine("movement: WASD move, mouse look, Space/Ctrl up/down. F11 unlocks cursor for UI tabs.");
                 }
-                addWrappedLine("hotkeys: F1 AO, F2 hide/show 3D UI, F3 control mode, F4 dynamic lights, Tab/Esc return to 2D.");
+                addWrappedLine("hotkeys: H holster/equip viewmodel, F1 AO, F2 hide/show 3D UI, F3 control mode, F4 dynamic lights, F10 borderless window, Tab/Esc return to 2D.");
                 break;
             case PreviewDebugOverlayTab::None:
                 break;
@@ -691,13 +862,14 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             {PreviewDebugOverlayTab::Lighting, "sector_editor_preview_tab_lighting", "Lighting"},
             {PreviewDebugOverlayTab::Objects, "sector_editor_preview_tab_objects", "Objects"},
             {PreviewDebugOverlayTab::Probes, "sector_editor_preview_tab_probes", "Probes"},
+            {PreviewDebugOverlayTab::Viewmodel, "sector_editor_preview_tab_viewmodel", "Arms"},
             {PreviewDebugOverlayTab::Controls, "sector_editor_preview_tab_controls", "Controls"},
     };
 
     const float tabY = panel.y + padding + stripH + gap;
     const float tabGap = 6.0f;
-    const float tabW = (contentW - tabGap * 6.0f) / 7.0f;
-    for (int i = 0; i < 7; ++i) {
+    const float tabW = (contentW - tabGap * 7.0f) / 8.0f;
+    for (int i = 0; i < 8; ++i) {
         const Rectangle tabRect{
                 panel.x + padding + static_cast<float>(i) * (tabW + tabGap),
                 tabY,

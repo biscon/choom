@@ -10,7 +10,15 @@
 #include "sector_demo/renderer/SectorBloomRenderer.h"
 #include "sector_demo/renderer/SectorDoorRenderer.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
+#include "sector_demo/renderer/SectorDynamicModelShadowRenderer.h"
+#include "sector_demo/renderer/SectorFog.h"
+#include "sector_demo/renderer/SectorLocalFogRenderer.h"
+#include "sector_demo/renderer/SectorLightAtmosphere.h"
+#include "sector_demo/renderer/SectorLightDustRenderer.h"
+#include "sector_demo/renderer/SectorLightHazeRenderer.h"
 #include "sector_demo/renderer/SectorSkyRenderer.h"
+#include "sector_demo/renderer/SectorPbrEnvironment.h"
+#include "sector_demo/renderer/SectorStaticModelRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
 
@@ -23,6 +31,8 @@
 
 namespace engine {
 class World;
+struct AnimatedModelInstance;
+struct ModelAsset;
 }
 
 namespace game {
@@ -46,11 +56,15 @@ public:
     void ShutdownRendererResources(engine::AssetManager& assets);
 
     void AdvanceRuntime(float dt);
+    void FinalizeRuntimeObjectResources(
+            engine::AssetManager& assets,
+            engine::World& runtimeObjectWorld);
     void Render(
             engine::AssetManager& assets,
             bool useBakedAmbientOcclusion = true,
             engine::World* runtimeObjectWorld = nullptr,
-            SectorRuntimeDoorLightingContext doorLighting = {});
+            SectorRuntimeDoorLightingContext doorLighting = {},
+            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
     void RenderDynamicSpotLightShadowMaps(
             engine::AssetManager& assets,
             engine::World* runtimeObjectWorld = nullptr);
@@ -58,9 +72,31 @@ public:
             engine::AssetManager& assets,
             bool useBakedAmbientOcclusion = true,
             engine::World* runtimeObjectWorld = nullptr,
-            SectorRuntimeDoorLightingContext doorLighting = {});
-    void ApplyEmissiveDecalBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
-    void ApplyEmissiveDecalBloomToScene(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
+            SectorRuntimeDoorLightingContext doorLighting = {},
+            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
+    void ApplyEmissiveDecalBloom(
+            engine::AssetManager& assets,
+            RenderTexture2D& sceneTarget,
+            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
+    void ApplyEmissiveDecalBloomToScene(
+            engine::AssetManager& assets,
+            RenderTexture2D& sceneTarget,
+            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
+    bool ApplyLocalFogToScene(
+            RenderTexture2D& sceneTarget,
+            const SectorTopologyMap& map,
+            const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);
+    void DrawViewmodel(
+            engine::AssetManager& assets,
+            const engine::ModelAsset& asset,
+            engine::AnimatedModelInstance& instance,
+            const Camera3D& viewmodelCamera,
+            Matrix transform,
+            const engine::ModelAsset* attachmentAsset,
+            Matrix attachmentTransform,
+            const BakedObjectLightingVerticalSample& ambientLighting,
+            const SectorViewmodelLightingContext& lighting,
+            const SectorViewmodelLightingContext& attachmentLighting);
 
     bool IsReady() const { return initialized; }
     bool IsRendererReady() const { return IsReady(); }
@@ -109,6 +145,7 @@ public:
 
 private:
     engine::TextureHandle TextureForId(const std::string& textureId) const;
+    engine::TextureHandle NormalTextureForId(const std::string& textureId) const;
     void UpdateCamera();
     SectorBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     static const Texture2D* ResolveShadowCasterTexture(
@@ -127,7 +164,8 @@ private:
     bool visibilityGraphValid = false;
     bool visibilityLookupWorldValid = false;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
-    engine::TextureHandle lightmapTexture = engine::NullTextureHandle();
+    std::unordered_map<std::string, engine::TextureHandle> normalTextureHandlesById;
+    std::vector<engine::TextureHandle> lightmapTextures;
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
     Material material = {};
     Texture2D defaultMaterialTexture = {};
@@ -135,6 +173,7 @@ private:
     int useLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
     int hasLightmapLoc = -1;
+    int hasNormalMapLoc = -1;
     int alphaTestLoc = -1;
     int alphaCutoffLoc = -1;
     int hasDecalLoc = -1;
@@ -160,11 +199,19 @@ private:
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
     int dynamicLightingClampLoc = -1;
+    SectorFogShaderLocations fogShaderLocations;
+    SectorLocalFogRenderer localFogRenderer;
+    SectorLightHazeRenderer lightHazeRenderer;
+    SectorLightDustRenderer lightDustRenderer;
+    std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
+    SectorPbrEnvironment pbrEnvironment;
     SectorBloomRenderer bloomRenderer;
     SectorBillboardRenderer billboardRenderer;
+    SectorStaticModelRenderer staticModelRenderer;
     SectorDoorRenderer doorRenderer;
     SectorDynamicLightingRenderer dynamicLightState;
+    SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
     int lightmapStatus = 0;

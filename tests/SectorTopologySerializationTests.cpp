@@ -307,6 +307,7 @@ game::SectorAuthoringDocument MakeAuthoringDocumentFromMap(const SectorTopologyM
     document.mapData.previewSettings = map.previewSettings;
     document.mapData.skySettings = map.skySettings;
     document.mapData.directionalLight = map.directionalLight;
+    document.mapData.fogSettings = map.fogSettings;
     document.mapData.lightmapSettings = map.lightmapSettings;
     document.mapData.bakedLightmap = map.bakedLightmap;
     document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
@@ -887,6 +888,95 @@ void TestDynamicSpotLightRoundTrip()
           "outer cone widens to inner cone on load");
 }
 
+void TestLightAtmosphereRoundTripAndDefaultOmission()
+{
+    SectorTopologyMap defaults = MakeSquare();
+    defaults.staticLights.push_back(SectorTopologyStaticPointLight{});
+    defaults.staticLights.back().id = 1;
+    defaults.staticSpotLights.push_back(SectorTopologyStaticSpotLight{});
+    defaults.staticSpotLights.back().id = 2;
+    defaults.dynamicPointLights.push_back(SectorTopologyDynamicPointLight{});
+    defaults.dynamicPointLights.back().id = 3;
+    defaults.dynamicSpotLights.push_back(SectorTopologyDynamicSpotLight{});
+    defaults.dynamicSpotLights.back().id = 4;
+    const Json defaultJson = Json::parse(SaveText(defaults));
+    Check(!defaultJson["staticLights"][0].contains("atmosphere")
+                  && !defaultJson["staticSpotLights"][0].contains("atmosphere")
+                  && !defaultJson["dynamicPointLights"][0].contains("atmosphere")
+                  && !defaultJson["dynamicSpotLights"][0].contains("atmosphere"),
+          "default-disabled light atmosphere is omitted for every light variant");
+
+    game::SectorLightAtmosphereSettings atmosphere;
+    atmosphere.haze.enabled = true;
+    atmosphere.haze.extentScale = 0.75f;
+    atmosphere.haze.density = 0.125f;
+    atmosphere.haze.scatteringTint = Color{210, 225, 240, 255};
+    atmosphere.haze.edgeSoftness = 0.45f;
+    atmosphere.haze.noiseAmount = 0.6f;
+    atmosphere.haze.noiseScaleWorld = 2.5f;
+    atmosphere.haze.flowDirectionDegrees = 35.0f;
+    atmosphere.haze.flowSpeedWorld = 0.08f;
+    atmosphere.dust.enabled = true;
+    atmosphere.dust.amount = 47;
+    atmosphere.dust.extentScale = 0.9f;
+    atmosphere.dust.minimumSizeWorld = 0.01f;
+    atmosphere.dust.maximumSizeWorld = 0.04f;
+    atmosphere.dust.opacity = 0.3f;
+    atmosphere.dust.driftSpeedWorld = 0.035f;
+    atmosphere.dust.turbulenceWorld = 0.02f;
+    atmosphere.dust.scatteringTint = Color{255, 235, 200, 255};
+    defaults.staticLights[0].atmosphere = atmosphere;
+    defaults.staticSpotLights[0].atmosphere = atmosphere;
+    defaults.dynamicPointLights[0].atmosphere = atmosphere;
+    defaults.dynamicSpotLights[0].atmosphere = atmosphere;
+
+    const std::string text = SaveText(defaults);
+    const Json saved = Json::parse(text);
+    const bool allVariantsHaveAtmosphere = saved["staticLights"][0].contains("atmosphere")
+            && saved["staticSpotLights"][0].contains("atmosphere")
+            && saved["dynamicPointLights"][0].contains("atmosphere")
+            && saved["dynamicSpotLights"][0].contains("atmosphere");
+    Check(allVariantsHaveAtmosphere,
+          "enabled haze and dust serialize for every light variant");
+    if (allVariantsHaveAtmosphere) {
+        const Json& staticAtmosphere = saved["staticLights"][0]["atmosphere"];
+        Check(staticAtmosphere.contains("haze") && staticAtmosphere.contains("dust"),
+              "enabled atmosphere serializes both haze and dust blocks");
+        if (staticAtmosphere.contains("haze") && staticAtmosphere.contains("dust")) {
+            Check(staticAtmosphere["haze"].value("enabled", false)
+                          && staticAtmosphere["dust"].value("enabled", false),
+                  "enabled haze and dust flags are serialized");
+        }
+    }
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(text, loaded, error), "light atmosphere JSON loads");
+    const auto checkAtmosphere = [](const game::SectorLightAtmosphereSettings& value) {
+        return value.haze.enabled
+                && Near(value.haze.extentScale, 0.75f)
+                && Near(value.haze.density, 0.125f)
+                && value.haze.scatteringTint.r == 210
+                && Near(value.haze.flowDirectionDegrees, 35.0f)
+                && Near(value.haze.flowSpeedWorld, 0.08f)
+                && value.dust.enabled
+                && value.dust.amount == 47
+                && Near(value.dust.extentScale, 0.9f)
+                && Near(value.dust.minimumSizeWorld, 0.01f)
+                && Near(value.dust.maximumSizeWorld, 0.04f)
+                && Near(value.dust.opacity, 0.3f)
+                && value.dust.scatteringTint.g == 235;
+    };
+    Check(loaded.staticLights.size() == 1 && checkAtmosphere(loaded.staticLights[0].atmosphere),
+          "static point atmosphere round-trips");
+    Check(loaded.staticSpotLights.size() == 1 && checkAtmosphere(loaded.staticSpotLights[0].atmosphere),
+          "static spot atmosphere round-trips");
+    Check(loaded.dynamicPointLights.size() == 1 && checkAtmosphere(loaded.dynamicPointLights[0].atmosphere),
+          "dynamic point atmosphere round-trips");
+    Check(loaded.dynamicSpotLights.size() == 1 && checkAtmosphere(loaded.dynamicSpotLights[0].atmosphere),
+          "dynamic spot atmosphere round-trips");
+}
+
 void TestRuntimeObjectsRoundTripAndValidation()
 {
     SectorTopologyMap empty = MakeSquare();
@@ -972,6 +1062,162 @@ void TestRuntimeObjectsRoundTripAndValidation()
     Check(placeholderAuthoringLoaded.mapData.runtimeObjects.size() == 1
                   && placeholderAuthoringLoaded.mapData.runtimeObjects[0].billboard.spriteAnimationPath.empty(),
           "graph-native empty billboard sprite path placeholder survives load");
+
+    SectorTopologyMap staticModelMap = MakeSquare();
+    SectorPlacedRuntimeObject staticModel;
+    staticModel.id = 18;
+    staticModel.kind = "static_model";
+    staticModel.position = Vector3{12.0f, -2.5f, 20.0f};
+    staticModel.yawRadians = 0.5f;
+    staticModel.staticModel.modelPath = "assets/models/props/nested/crate.glb";
+    staticModel.staticModel.rotationXRadians = 0.25f;
+    staticModel.staticModel.rotationZRadians = -0.75f;
+    staticModel.staticModel.heightOffsetWorld = 0.75f;
+    staticModel.staticModel.scale = 1.5f;
+    staticModel.staticModel.collision = true;
+    staticModelMap.runtimeObjects.push_back(staticModel);
+    const Json staticModelSaved = Json::parse(SaveText(staticModelMap));
+    Check(staticModelSaved["runtimeObjects"][0]["kind"] == "static_model"
+                  && staticModelSaved["runtimeObjects"][0]["staticModel"]["modelPath"]
+                             == "assets/models/props/nested/crate.glb"
+                  && Near(
+                          staticModelSaved["runtimeObjects"][0]["staticModel"]["heightOffsetWorld"]
+                                  .get<float>(),
+                          0.75f)
+                  && Near(
+                          staticModelSaved["runtimeObjects"][0]["staticModel"]["scale"]
+                                  .get<float>(),
+                          1.5f)
+                  && Near(
+                          staticModelSaved["runtimeObjects"][0]["staticModel"]["rotationXDegrees"]
+                                  .get<float>(),
+                          0.25f * 180.0f / PI)
+                  && Near(
+                          staticModelSaved["runtimeObjects"][0]["staticModel"]["rotationZDegrees"]
+                                  .get<float>(),
+                          -0.75f * 180.0f / PI)
+                  && staticModelSaved["runtimeObjects"][0]["staticModel"]["collision"]
+                             .get<bool>()
+                  && Near(
+                          staticModelSaved["runtimeObjects"][0]["position"][1].get<float>(),
+                          -2.5f),
+          "static prop save writes model path, height offset, scale, and authored floor height");
+    SectorTopologyMap staticModelLoaded;
+    Check(LoadText(staticModelSaved.dump(), staticModelLoaded, error),
+          "static prop JSON loads");
+    const SectorPlacedRuntimeObject* loadedStaticModel =
+            game::FindSectorPlacedRuntimeObject(staticModelLoaded, 18);
+    Check(loadedStaticModel != nullptr
+                  && loadedStaticModel->kind == "static_model"
+                  && loadedStaticModel->staticModel.modelPath
+                          == "assets/models/props/nested/crate.glb"
+                  && Near(loadedStaticModel->staticModel.heightOffsetWorld, 0.75f)
+                  && Near(loadedStaticModel->staticModel.scale, 1.5f)
+                  && Near(loadedStaticModel->staticModel.rotationXRadians, 0.25f)
+                  && Near(loadedStaticModel->staticModel.rotationZRadians, -0.75f)
+                  && loadedStaticModel->staticModel.collision
+                  && Near(loadedStaticModel->position, Vector3{12.0f, -2.5f, 20.0f})
+                  && Near(loadedStaticModel->yawRadians, 0.5f),
+          "static prop JSON round-trip preserves payload and common transform");
+
+    staticModelMap.runtimeObjects[0].staticModel = game::SectorPlacedStaticModel{};
+    const Json unassignedStaticModelSaved = Json::parse(SaveText(staticModelMap));
+    Check(unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"].is_object()
+                  && unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"].empty(),
+          "unassigned static prop saves an empty payload and omits default fields");
+    SectorTopologyMap unassignedStaticModelLoaded;
+    Check(LoadText(unassignedStaticModelSaved.dump(), unassignedStaticModelLoaded, error),
+          "unassigned static prop with missing optional fields loads");
+    const SectorPlacedRuntimeObject* unassignedStaticModel =
+            game::FindSectorPlacedRuntimeObject(unassignedStaticModelLoaded, 18);
+    Check(unassignedStaticModel != nullptr
+                  && unassignedStaticModel->staticModel.modelPath.empty()
+                  && Near(unassignedStaticModel->staticModel.rotationXRadians, 0.0f)
+                  && Near(unassignedStaticModel->staticModel.rotationZRadians, 0.0f)
+                  && Near(unassignedStaticModel->staticModel.heightOffsetWorld, 0.0f)
+                  && Near(unassignedStaticModel->staticModel.scale, 1.0f)
+                  && !unassignedStaticModel->staticModel.collision,
+          "missing static prop payload fields use backward-compatible defaults");
+
+    Json missingModelPath = staticModelSaved;
+    missingModelPath["runtimeObjects"][0]["staticModel"].erase("modelPath");
+    SectorTopologyMap missingModelPathLoaded;
+    Check(LoadText(missingModelPath.dump(), missingModelPathLoaded, error),
+          "static prop payload without model path loads");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(missingModelPathLoaded, 18);
+    Check(loadedStaticModel != nullptr
+                  && loadedStaticModel->staticModel.modelPath.empty()
+                  && Near(loadedStaticModel->staticModel.heightOffsetWorld, 0.75f),
+          "missing static prop model path defaults empty without losing height offset");
+
+    Json missingRotations = staticModelSaved;
+    missingRotations["runtimeObjects"][0]["staticModel"].erase(
+            "rotationXDegrees");
+    missingRotations["runtimeObjects"][0]["staticModel"].erase(
+            "rotationZDegrees");
+    SectorTopologyMap missingRotationsLoaded;
+    Check(LoadText(missingRotations.dump(), missingRotationsLoaded, error),
+          "legacy static prop payload without X/Z rotations loads");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(
+            missingRotationsLoaded,
+            18);
+    Check(loadedStaticModel != nullptr
+                  && Near(loadedStaticModel->staticModel.rotationXRadians, 0.0f)
+                  && Near(loadedStaticModel->staticModel.rotationZRadians, 0.0f),
+          "missing static prop X/Z rotations default to zero");
+
+    Json missingScale = staticModelSaved;
+    missingScale["runtimeObjects"][0]["staticModel"].erase("scale");
+    SectorTopologyMap missingScaleLoaded;
+    Check(LoadText(missingScale.dump(), missingScaleLoaded, error),
+          "static prop payload without scale loads");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(missingScaleLoaded, 18);
+    Check(loadedStaticModel != nullptr
+                  && Near(loadedStaticModel->staticModel.scale, 1.0f),
+          "missing static prop scale defaults to one");
+
+    Json missingCollision = staticModelSaved;
+    missingCollision["runtimeObjects"][0]["staticModel"].erase("collision");
+    SectorTopologyMap missingCollisionLoaded;
+    Check(LoadText(missingCollision.dump(), missingCollisionLoaded, error),
+          "static prop payload without collision loads");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(
+            missingCollisionLoaded,
+            18);
+    Check(loadedStaticModel != nullptr
+                  && !loadedStaticModel->staticModel.collision,
+          "missing static prop collision defaults off");
+
+    SectorTopologyMap invalidStaticModel = staticModelMap;
+    invalidStaticModel.runtimeObjects[0].staticModel.heightOffsetWorld =
+            std::numeric_limits<float>::infinity();
+    ExpectSaveRejected(
+            invalidStaticModel,
+            "non-finite static prop height offset is rejected on save");
+    invalidStaticModel = staticModelMap;
+    invalidStaticModel.runtimeObjects[0].staticModel.scale = 0.0f;
+    ExpectSaveRejected(
+            invalidStaticModel,
+            "non-positive static prop scale is rejected on save");
+    invalidStaticModel = staticModelMap;
+    invalidStaticModel.runtimeObjects[0].staticModel.rotationXRadians =
+            std::numeric_limits<float>::infinity();
+    ExpectSaveRejected(
+            invalidStaticModel,
+            "non-finite static prop X rotation is rejected on save");
+    invalidStaticModel = staticModelMap;
+    invalidStaticModel.runtimeObjects[0].staticModel.rotationZRadians =
+            std::numeric_limits<float>::max();
+    ExpectSaveRejected(
+            invalidStaticModel,
+            "static prop Z rotation that overflows degrees is rejected on save");
+
+    Json invalidStaticModelRotation = staticModelSaved;
+    invalidStaticModelRotation["runtimeObjects"][0]["staticModel"]
+            ["rotationXDegrees"] = "ninety";
+    ExpectRejected(
+            invalidStaticModelRotation,
+            "non-numeric static prop X rotation is rejected on load");
 
     SectorTopologyMap authoringSource = original;
     game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(authoringSource);
@@ -1384,6 +1630,75 @@ void TestRuntimeObjectsRoundTripAndValidation()
     ExpectRejected(invalidDoor, "missing door payload is rejected");
 }
 
+void TestDynamicModelRoundTripAndDefaultOmission()
+{
+    SectorTopologyMap map = MakeSquare();
+    SectorPlacedRuntimeObject object;
+    object.id = 41;
+    object.kind = "dynamic_model";
+    object.position = Vector3{12.0f, 16.0f, 20.0f};
+    object.yawRadians = 0.5f;
+    object.dynamicModel.modelPath = "assets/models/characters/test.glb";
+    object.dynamicModel.rotationXRadians = 0.25f;
+    object.dynamicModel.rotationZRadians = -0.5f;
+    object.dynamicModel.heightOffsetWorld = 0.75f;
+    object.dynamicModel.scale = 1.5f;
+    object.dynamicModel.collision = true;
+    object.dynamicModel.animation = "Standard Walk";
+    object.dynamicModel.loop = false;
+    object.dynamicModel.animationSpeed = 1.25f;
+    object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+    map.runtimeObjects.push_back(object);
+
+    const Json saved = Json::parse(SaveText(map));
+    const Json& payload = saved["runtimeObjects"][0]["dynamicModel"];
+    Check(saved["runtimeObjects"][0]["kind"] == "dynamic_model"
+                  && payload["modelPath"] == object.dynamicModel.modelPath
+                  && payload["animation"] == "Standard Walk"
+                  && !payload["loop"].get<bool>()
+                  && Near(payload["animationSpeed"].get<float>(), 1.25f)
+                  && payload["shadowMode"] == "projected_silhouette"
+                  && payload["collision"].get<bool>(),
+          "dynamic prop writes model, animation, playback, shadow, and collision fields");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error), "dynamic prop JSON loads");
+    const SectorPlacedRuntimeObject* roundTripped =
+            game::FindSectorPlacedRuntimeObject(loaded, 41);
+    Check(roundTripped != nullptr
+                  && roundTripped->kind == "dynamic_model"
+                  && roundTripped->dynamicModel.modelPath == object.dynamicModel.modelPath
+                  && roundTripped->dynamicModel.animation == "Standard Walk"
+                  && !roundTripped->dynamicModel.loop
+                  && roundTripped->dynamicModel.shadowMode
+                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette
+                  && Near(roundTripped->dynamicModel.animationSpeed, 1.25f)
+                  && Near(roundTripped->dynamicModel.rotationXRadians, 0.25f)
+                  && Near(roundTripped->dynamicModel.rotationZRadians, -0.5f),
+          "dynamic prop fields round-trip");
+
+    map.runtimeObjects[0].dynamicModel = game::SectorPlacedDynamicModel{};
+    const Json defaults = Json::parse(SaveText(map))["runtimeObjects"][0]["dynamicModel"];
+    Check(!defaults.contains("animation")
+                  && !defaults.contains("loop")
+                  && !defaults.contains("animationSpeed")
+                  && !defaults.contains("scale")
+                  && !defaults.contains("shadowMode")
+                  && !defaults.contains("collision"),
+          "dynamic prop default playback, shadow, and transform fields are omitted");
+
+    map.runtimeObjects[0].dynamicModel.shadowMode =
+            game::SectorDynamicModelShadowMode::None;
+    const Json none = Json::parse(SaveText(map))["runtimeObjects"][0]["dynamicModel"];
+    Check(none["shadowMode"] == "none", "dynamic prop writes an explicit disabled shadow mode");
+
+    Json invalid = saved;
+    invalid["runtimeObjects"][0]["dynamicModel"]["shadowMode"] = "cinematic";
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "dynamic prop rejects unknown shadow modes");
+}
+
 void TestRuntimeObjectEditAndDeleteHelpers()
 {
     SectorTopologyMap map = MakeSquare();
@@ -1428,11 +1743,21 @@ void TestLightmapMetadataRoundTrip()
     original.lightmapSettings.indirectBounceRadius = 9.0f;
     original.lightmapSettings.indirectBounceStrength = 0.35f;
     original.lightmapSettings.objectProbeSpacingWorld = 5.5f;
-    original.lightmapSettings.objectProbeHeightWorld = 1.4f;
+    original.lightmapSettings.objectProbeLowerHeightWorld = 0.7f;
+    original.lightmapSettings.objectProbeUpperHeightWorld = 1.4f;
     original.bakedLightmap.path = "assets/levels/test/test.lightmap.png";
     original.bakedLightmap.width = 2048;
     original.bakedLightmap.height = 2048;
     original.bakedLightmap.sourceHash = "abc123";
+    original.bakedLightmap.additionalAtlases = {
+            game::SectorLightmapAtlasMetadata{
+                    "assets/levels/test/test.lightmap.1.png",
+                    2048,
+                    2048},
+            game::SectorLightmapAtlasMetadata{
+                    "assets/levels/test/test.lightmap.2.png",
+                    2048,
+                    2048}};
 
     const std::string text = SaveText(original);
     const Json saved = Json::parse(text);
@@ -1440,6 +1765,11 @@ void TestLightmapMetadataRoundTrip()
     Check(saved["bakedLightmap"].is_object(), "topology baked lightmap metadata is written");
     Check(saved["bakedLightmap"]["path"].get<std::string>() == original.bakedLightmap.path,
           "topology baked lightmap path is serialized");
+    Check(saved["bakedLightmap"]["additionalAtlases"].is_array()
+                  && saved["bakedLightmap"]["additionalAtlases"].size() == 2
+                  && saved["bakedLightmap"]["additionalAtlases"][1]["path"]
+                          == "assets/levels/test/test.lightmap.2.png",
+          "topology additional lightmap atlases are serialized in index order");
 
     SectorTopologyMap loaded;
     std::string error;
@@ -1449,13 +1779,29 @@ void TestLightmapMetadataRoundTrip()
                   && std::fabs(loaded.lightmapSettings.indirectBounceRadius - 9.0f) <= 0.0001f
                   && std::fabs(loaded.lightmapSettings.indirectBounceStrength - 0.35f) <= 0.0001f
                   && Near(loaded.lightmapSettings.objectProbeSpacingWorld, 5.5f)
-                  && Near(loaded.lightmapSettings.objectProbeHeightWorld, 1.4f),
+                  && Near(loaded.lightmapSettings.objectProbeLowerHeightWorld, 0.7f)
+                  && Near(loaded.lightmapSettings.objectProbeUpperHeightWorld, 1.4f),
           "topology lightmap settings round-trip");
     Check(loaded.bakedLightmap.path == original.bakedLightmap.path
                   && loaded.bakedLightmap.width == 2048
                   && loaded.bakedLightmap.height == 2048
-                  && loaded.bakedLightmap.sourceHash == "abc123",
+                  && loaded.bakedLightmap.sourceHash == "abc123"
+                  && loaded.bakedLightmap.additionalAtlases.size() == 2
+                  && loaded.bakedLightmap.additionalAtlases[0].width == 2048,
           "topology baked lightmap metadata round-trips");
+
+    SectorTopologyMap singleAtlas = original;
+    singleAtlas.bakedLightmap.additionalAtlases.clear();
+    const Json singleAtlasSaved = Json::parse(SaveText(singleAtlas));
+    Check(!singleAtlasSaved["bakedLightmap"].contains("additionalAtlases"),
+          "single-atlas metadata omits the optional additional atlas array");
+
+    Json duplicateAtlas = saved;
+    duplicateAtlas["bakedLightmap"]["additionalAtlases"][0]["path"] =
+            original.bakedLightmap.path;
+    SectorTopologyMap rejectedDuplicate;
+    Check(!LoadText(duplicateAtlas.dump(), rejectedDuplicate, error),
+          "duplicate multi-atlas paths are rejected transactionally");
 
     Json withoutLightmap = saved;
     withoutLightmap.erase("lightmapSettings");
@@ -1470,12 +1816,33 @@ void TestLightmapMetadataRoundTrip()
 
     Json oldSettings = saved;
     oldSettings["lightmapSettings"].erase("objectProbeSpacingWorld");
-    oldSettings["lightmapSettings"].erase("objectProbeHeightWorld");
+    oldSettings["lightmapSettings"].erase("objectProbeLowerHeightWorld");
+    oldSettings["lightmapSettings"].erase("objectProbeUpperHeightWorld");
     SectorTopologyMap oldSettingsStyle;
     Check(LoadText(oldSettings.dump(), oldSettingsStyle, error), "old topology lightmap settings load");
     Check(Near(oldSettingsStyle.lightmapSettings.objectProbeSpacingWorld, 4.0f)
-                  && Near(oldSettingsStyle.lightmapSettings.objectProbeHeightWorld, 1.2f),
+                  && Near(oldSettingsStyle.lightmapSettings.objectProbeLowerHeightWorld, 0.6f)
+                  && Near(oldSettingsStyle.lightmapSettings.objectProbeUpperHeightWorld, 1.5f),
           "old topology lightmap settings default object probe settings");
+
+    Json legacyProbeHeight = saved;
+    legacyProbeHeight["lightmapSettings"].erase("objectProbeLowerHeightWorld");
+    legacyProbeHeight["lightmapSettings"].erase("objectProbeUpperHeightWorld");
+    legacyProbeHeight["lightmapSettings"]["objectProbeHeightWorld"] = 1.4f;
+    SectorTopologyMap migratedLegacyHeight;
+    Check(LoadText(legacyProbeHeight.dump(), migratedLegacyHeight, error),
+          "legacy object probe height setting loads");
+    Check(Near(migratedLegacyHeight.lightmapSettings.objectProbeLowerHeightWorld, 0.6f)
+                  && Near(migratedLegacyHeight.lightmapSettings.objectProbeUpperHeightWorld, 1.4f),
+          "legacy object probe height migrates to upper layer with the new lower default");
+
+    legacyProbeHeight["lightmapSettings"]["objectProbeHeightWorld"] = 0.7f;
+    SectorTopologyMap migratedCloseLegacyHeight;
+    Check(LoadText(legacyProbeHeight.dump(), migratedCloseLegacyHeight, error),
+          "legacy close object probe height setting loads");
+    Check(Near(migratedCloseLegacyHeight.lightmapSettings.objectProbeLowerHeightWorld, 0.7f)
+                  && Near(migratedCloseLegacyHeight.lightmapSettings.objectProbeUpperHeightWorld, 0.7f),
+          "legacy object probe height too close to the lower default preserves one layer");
 }
 
 void TestPreviewSettingsRoundTripAndValidation()
@@ -1904,6 +2271,118 @@ void TestDirectionalLightRoundTripAndValidation()
     invalid = saved;
     invalid["directionalLight"]["intensity"] = "bright";
     ExpectRejected(invalid, "wrong-type directional intensity is rejected");
+}
+
+void TestFogSettingsRoundTripAndValidation()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.fogSettings.enabled = true;
+    original.fogSettings.color = Color{12, 34, 56, 128};
+    original.fogSettings.startDistanceWorld = 3.5f;
+    original.fogSettings.density = 0.075f;
+    original.fogSettings.maxOpacity = 0.8f;
+    original.fogSettings.referenceHeightWorld = -2.25f;
+    original.fogSettings.heightFalloff = 1.5f;
+    original.fogSettings.localVolumeQuality =
+            game::SectorTopologyFogSettings::LocalVolumeQuality::High;
+
+    const Json saved = Json::parse(SaveText(original));
+    Check(saved["fogSettings"].is_object(), "non-default fog settings are written");
+    Check(saved["fogSettings"]["enabled"].get<bool>()
+                  && saved["fogSettings"]["color"]["r"].get<int>() == 12
+                  && saved["fogSettings"]["color"]["g"].get<int>() == 34
+                  && saved["fogSettings"]["color"]["b"].get<int>() == 56
+                  && saved["fogSettings"]["color"]["a"].get<int>() == 255
+                  && Near(saved["fogSettings"]["startDistanceWorld"].get<float>(), 3.5f)
+                  && Near(saved["fogSettings"]["density"].get<float>(), 0.075f)
+                  && Near(saved["fogSettings"]["maxOpacity"].get<float>(), 0.8f)
+                  && Near(saved["fogSettings"]["referenceHeightWorld"].get<float>(), -2.25f)
+                  && Near(saved["fogSettings"]["heightFalloff"].get<float>(), 1.5f),
+          "fog settings serialize normalized values");
+    Check(saved["fogSettings"]["localVolumeQuality"] == "high",
+          "local fog quality serializes with preview fog settings");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error), "fog settings JSON loads");
+    Check(loaded.fogSettings.enabled
+                  && loaded.fogSettings.color.r == 12
+                  && loaded.fogSettings.color.g == 34
+                  && loaded.fogSettings.color.b == 56
+                  && loaded.fogSettings.color.a == 255
+                  && Near(loaded.fogSettings.startDistanceWorld, 3.5f)
+                  && Near(loaded.fogSettings.density, 0.075f)
+                  && Near(loaded.fogSettings.maxOpacity, 0.8f)
+                  && Near(loaded.fogSettings.referenceHeightWorld, -2.25f)
+                  && Near(loaded.fogSettings.heightFalloff, 1.5f),
+          "fog settings round-trip");
+    Check(loaded.fogSettings.localVolumeQuality
+                  == game::SectorTopologyFogSettings::LocalVolumeQuality::High,
+          "local fog quality round-trips");
+
+    Json missingFields = saved;
+    for (const char* field : {"enabled", "startDistanceWorld", "density", "maxOpacity",
+                              "referenceHeightWorld", "heightFalloff"}) {
+        missingFields["fogSettings"].erase(field);
+    }
+    Check(LoadText(missingFields.dump(), loaded, error), "omitted fog fields are accepted");
+    const game::SectorTopologyFogSettings defaults = game::DefaultSectorTopologyFogSettings();
+    Check(loaded.fogSettings.enabled == defaults.enabled
+                  && loaded.fogSettings.color.r == 12
+                  && Near(loaded.fogSettings.startDistanceWorld, defaults.startDistanceWorld)
+                  && Near(loaded.fogSettings.density, defaults.density)
+                  && Near(loaded.fogSettings.maxOpacity, defaults.maxOpacity)
+                  && Near(loaded.fogSettings.referenceHeightWorld, defaults.referenceHeightWorld)
+                  && Near(loaded.fogSettings.heightFalloff, defaults.heightFalloff),
+          "omitted fog fields load defaults while present color remains");
+
+    Json withoutFog = saved;
+    withoutFog.erase("fogSettings");
+    Check(LoadText(withoutFog.dump(), loaded, error), "omitted fog settings are accepted");
+    Check(!loaded.fogSettings.enabled
+                  && loaded.fogSettings.color.r == defaults.color.r
+                  && Near(loaded.fogSettings.density, defaults.density),
+          "omitted fog settings load defaults");
+
+    Check(!Json::parse(SaveText(MakeSquare())).contains("fogSettings"),
+          "default fog settings are omitted");
+
+    Json clamped = saved;
+    clamped["fogSettings"]["startDistanceWorld"] = -1.0f;
+    clamped["fogSettings"]["density"] = 2.0f;
+    clamped["fogSettings"]["maxOpacity"] = -1.0f;
+    clamped["fogSettings"]["referenceHeightWorld"] = 999.0f;
+    clamped["fogSettings"]["heightFalloff"] = 99.0f;
+    Check(LoadText(clamped.dump(), loaded, error), "out-of-range fog settings load");
+    Check(Near(loaded.fogSettings.startDistanceWorld, 0.0f)
+                  && Near(loaded.fogSettings.density, 1.0f)
+                  && Near(loaded.fogSettings.maxOpacity, 0.0f)
+                  && Near(loaded.fogSettings.referenceHeightWorld, 512.0f)
+                  && Near(loaded.fogSettings.heightFalloff, 16.0f),
+          "out-of-range fog settings clamp");
+
+    Json invalid = saved;
+    invalid["fogSettings"] = 4;
+    ExpectRejected(invalid, "non-object fog settings are rejected");
+    invalid = saved;
+    invalid["fogSettings"]["enabled"] = "yes";
+    ExpectRejected(invalid, "wrong-type fog enabled is rejected");
+    invalid = saved;
+    invalid["fogSettings"]["color"] = Json::array({1, 2, 3});
+    ExpectRejected(invalid, "wrong-type fog color is rejected");
+    invalid = saved;
+    invalid["fogSettings"]["color"]["r"] = "red";
+    ExpectRejected(invalid, "wrong-type fog color channel is rejected");
+    for (const char* field : {"startDistanceWorld", "density", "maxOpacity",
+                              "referenceHeightWorld", "heightFalloff"}) {
+        invalid = saved;
+        invalid["fogSettings"][field] = "invalid";
+        ExpectRejected(invalid, "wrong-type fog numeric field is rejected");
+    }
+
+    SectorTopologyMap nonFinite = original;
+    nonFinite.fogSettings.density = std::numeric_limits<float>::infinity();
+    ExpectSaveRejected(nonFinite, "non-finite fog settings are rejected on save");
 }
 
 void TestDecalDefaultsAndOmission()
@@ -3128,18 +3607,33 @@ void TestGraphNativeMapLevelRoundTrip()
     source.directionalLight.enabled = true;
     source.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
     source.directionalLight.intensity = 1.5f;
+    source.fogSettings.enabled = true;
+    source.fogSettings.density = 0.125f;
     source.lightmapSettings.ambientOcclusionStrength = 0.25f;
     source.bakedLightmap.path = "assets/levels/test/test.lightmap.png";
     source.bakedLightmap.width = 128;
     source.bakedLightmap.height = 128;
     source.bakedLightmap.sourceHash = "abc123";
+    source.bakedLightmap.additionalAtlases.push_back(
+            game::SectorLightmapAtlasMetadata{
+                    "assets/levels/test/test.lightmap.1.png",
+                    128,
+                    128});
     source.bakedLightmap.objectProbes.path = "assets/levels/test/test.lightmap.object_probes.bin";
     source.bakedLightmap.objectProbes.version = 1;
     source.bakedLightmap.objectProbes.sourceHash = "abc123";
     source.bakedLightmap.objectProbes.count = 7;
     source.bakedLightmap.objectProbes.probeSpacingWorld = 5.5f;
-    source.bakedLightmap.objectProbes.probeHeightWorld = 1.4f;
+    source.bakedLightmap.objectProbes.probeLowerHeightWorld = 0.7f;
+    source.bakedLightmap.objectProbes.probeUpperHeightWorld = 1.4f;
     source.bakedLightmap.objectProbes.format = "ambientCubeF32LE";
+    source.bakedLightmap.staticModels.path =
+            "assets/levels/test/test.lightmap.static_models.bin";
+    source.bakedLightmap.staticModels.version = 1;
+    source.bakedLightmap.staticModels.sourceHash = "abc123";
+    source.bakedLightmap.staticModels.modelCount = 2;
+    source.bakedLightmap.staticModels.objectCount = 5;
+    source.bakedLightmap.staticModels.format = "staticModelUvRemapF32LE";
 
     const game::SectorAuthoringDocument original = MakeAuthoringDocumentFromMap(source);
     const Json saved = Json::parse(SaveAuthoringText(original));
@@ -3171,6 +3665,9 @@ void TestGraphNativeMapLevelRoundTrip()
     Check(saved["skySettings"]["textureId"] == "sky", "graph-native sky settings are persisted");
     Check(saved["directionalLight"]["enabled"] == true,
           "graph-native directional light settings are persisted");
+    Check(saved["fogSettings"]["enabled"] == true
+                  && Near(saved["fogSettings"]["density"].get<float>(), 0.125f),
+          "graph-native fog settings are persisted");
     Check(saved["lightmapSettings"]["ambientOcclusionStrength"] == 0.25f,
           "graph-native bake settings are persisted");
     Check(saved["bakedLightmap"].is_object(), "graph-native baked lightmap metadata is persisted");
@@ -3181,6 +3678,10 @@ void TestGraphNativeMapLevelRoundTrip()
           "graph-native baked lightmap dimensions are persisted");
     Check(saved["bakedLightmap"]["sourceHash"] == "abc123",
           "graph-native baked lightmap source hash is persisted");
+    Check(saved["bakedLightmap"]["additionalAtlases"].size() == 1
+                  && saved["bakedLightmap"]["additionalAtlases"][0]["path"]
+                          == "assets/levels/test/test.lightmap.1.png",
+          "graph-native additional lightmap atlas metadata is persisted");
     Check(saved["bakedLightmap"]["objectProbes"].is_object(),
           "graph-native baked object probe metadata is persisted");
     Check(saved["bakedLightmap"]["objectProbes"]["path"]
@@ -3190,9 +3691,19 @@ void TestGraphNativeMapLevelRoundTrip()
                   && saved["bakedLightmap"]["objectProbes"]["sourceHash"] == "abc123"
                   && saved["bakedLightmap"]["objectProbes"]["count"] == 7
                   && Near(saved["bakedLightmap"]["objectProbes"]["probeSpacingWorld"].get<float>(), 5.5f)
-                  && Near(saved["bakedLightmap"]["objectProbes"]["probeHeightWorld"].get<float>(), 1.4f)
+                  && Near(saved["bakedLightmap"]["objectProbes"]["probeLowerHeightWorld"].get<float>(), 0.7f)
+                  && Near(saved["bakedLightmap"]["objectProbes"]["probeUpperHeightWorld"].get<float>(), 1.4f)
                   && saved["bakedLightmap"]["objectProbes"]["format"] == "ambientCubeF32LE",
           "graph-native baked object probe sidecar metadata is persisted");
+    Check(saved["bakedLightmap"]["staticModels"]["path"]
+                      == "assets/levels/test/test.lightmap.static_models.bin"
+                  && saved["bakedLightmap"]["staticModels"]["version"] == 1
+                  && saved["bakedLightmap"]["staticModels"]["sourceHash"] == "abc123"
+                  && saved["bakedLightmap"]["staticModels"]["modelCount"] == 2
+                  && saved["bakedLightmap"]["staticModels"]["objectCount"] == 5
+                  && saved["bakedLightmap"]["staticModels"]["format"]
+                          == "staticModelUvRemapF32LE",
+          "graph-native baked static model lightmap metadata is persisted");
 
     game::SectorAuthoringDocument loaded;
     std::string error;
@@ -3222,19 +3733,27 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
                   && loaded.mapData.skySettings.textureId == "sky"
                   && loaded.mapData.directionalLight.enabled
+                  && loaded.mapData.fogSettings.enabled
+                  && Near(loaded.mapData.fogSettings.density, 0.125f)
                   && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f)
                   && loaded.mapData.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
                   && loaded.mapData.bakedLightmap.width == 128
                   && loaded.mapData.bakedLightmap.height == 128
                   && loaded.mapData.bakedLightmap.sourceHash == "abc123"
+                  && loaded.mapData.bakedLightmap.additionalAtlases.size() == 1
                   && loaded.mapData.bakedLightmap.objectProbes.path
                           == "assets/levels/test/test.lightmap.object_probes.bin"
                   && loaded.mapData.bakedLightmap.objectProbes.version == 1
                   && loaded.mapData.bakedLightmap.objectProbes.sourceHash == "abc123"
                   && loaded.mapData.bakedLightmap.objectProbes.count == 7
                   && Near(loaded.mapData.bakedLightmap.objectProbes.probeSpacingWorld, 5.5f)
-                  && Near(loaded.mapData.bakedLightmap.objectProbes.probeHeightWorld, 1.4f)
-                  && loaded.mapData.bakedLightmap.objectProbes.format == "ambientCubeF32LE",
+                  && Near(loaded.mapData.bakedLightmap.objectProbes.probeLowerHeightWorld, 0.7f)
+                  && Near(loaded.mapData.bakedLightmap.objectProbes.probeUpperHeightWorld, 1.4f)
+                  && loaded.mapData.bakedLightmap.objectProbes.format == "ambientCubeF32LE"
+                  && loaded.mapData.bakedLightmap.staticModels.path
+                          == "assets/levels/test/test.lightmap.static_models.bin"
+                  && loaded.mapData.bakedLightmap.staticModels.modelCount == 2
+                  && loaded.mapData.bakedLightmap.staticModels.objectCount == 5,
           "graph-native map-level fields round-trip");
     Check(loaded.derivation.success
                   && loaded.derivation.topology.texturesById.count("sky") == 1
@@ -3254,11 +3773,16 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.derivation.topology.dynamicSpotLights[0].shadowStrength, 0.8f)
                   && Near(loaded.derivation.topology.dynamicSpotLights[0].shadowSoftness, 3.0f)
                   && loaded.derivation.topology.skySettings.textureId == "sky"
+                  && loaded.derivation.topology.fogSettings.enabled
+                  && Near(loaded.derivation.topology.fogSettings.density, 0.125f)
                   && loaded.derivation.topology.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
                   && loaded.derivation.topology.bakedLightmap.sourceHash == "abc123"
+                  && loaded.derivation.topology.bakedLightmap.additionalAtlases.size() == 1
                   && loaded.derivation.topology.bakedLightmap.objectProbes.path
                           == "assets/levels/test/test.lightmap.object_probes.bin"
-                  && loaded.derivation.topology.bakedLightmap.objectProbes.count == 7,
+                  && loaded.derivation.topology.bakedLightmap.objectProbes.count == 7
+                  && loaded.derivation.topology.bakedLightmap.staticModels.path
+                          == "assets/levels/test/test.lightmap.static_models.bin",
           "derived topology receives map-level fields after load");
 
     const Json resaved = Json::parse(SaveAuthoringText(loaded));
@@ -3266,8 +3790,21 @@ void TestGraphNativeMapLevelRoundTrip()
                   && resaved["bakedLightmap"]["width"] == saved["bakedLightmap"]["width"]
                   && resaved["bakedLightmap"]["height"] == saved["bakedLightmap"]["height"]
                   && resaved["bakedLightmap"]["sourceHash"] == saved["bakedLightmap"]["sourceHash"]
-                  && resaved["bakedLightmap"]["objectProbes"] == saved["bakedLightmap"]["objectProbes"],
+                  && resaved["bakedLightmap"]["additionalAtlases"] == saved["bakedLightmap"]["additionalAtlases"]
+                  && resaved["bakedLightmap"]["objectProbes"] == saved["bakedLightmap"]["objectProbes"]
+                  && resaved["bakedLightmap"]["staticModels"] == saved["bakedLightmap"]["staticModels"],
           "graph-native save/load/save preserves baked lightmap metadata");
+
+    Json legacyProbeMetadata = saved;
+    legacyProbeMetadata["bakedLightmap"]["objectProbes"].erase("probeLowerHeightWorld");
+    legacyProbeMetadata["bakedLightmap"]["objectProbes"].erase("probeUpperHeightWorld");
+    legacyProbeMetadata["bakedLightmap"]["objectProbes"]["probeHeightWorld"] = 1.4f;
+    game::SectorAuthoringDocument loadedLegacyProbeMetadata;
+    Check(LoadAuthoringText(legacyProbeMetadata.dump(), loadedLegacyProbeMetadata, error),
+          "legacy single-height object probe metadata loads");
+    Check(Near(loadedLegacyProbeMetadata.mapData.bakedLightmap.objectProbes.probeLowerHeightWorld, 1.4f)
+                  && Near(loadedLegacyProbeMetadata.mapData.bakedLightmap.objectProbes.probeUpperHeightWorld, 1.4f),
+          "legacy object probe metadata migrates as a single layer");
 }
 
 void TestGraphNativeLegacyImportPathStillWorks()
@@ -3310,12 +3847,15 @@ int main()
     TestStaticSpotLightRoundTrip();
     TestDynamicPointLightRoundTrip();
     TestDynamicSpotLightRoundTrip();
+    TestLightAtmosphereRoundTripAndDefaultOmission();
     TestRuntimeObjectsRoundTripAndValidation();
+    TestDynamicModelRoundTripAndDefaultOmission();
     TestRuntimeObjectEditAndDeleteHelpers();
     TestLightmapMetadataRoundTrip();
     TestPreviewSettingsRoundTripAndValidation();
     TestSkySettingsRoundTripAndValidation();
     TestDirectionalLightRoundTripAndValidation();
+    TestFogSettingsRoundTripAndValidation();
     TestDecalDefaultsAndOmission();
     TestMiddleDefaultsAndOmission();
     TestMiddleRoundTrip();

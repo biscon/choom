@@ -7,6 +7,7 @@
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "game/FpsViewmodel.h"
 
 #include <string>
 
@@ -50,6 +51,7 @@ struct SectorEditorPreviewCollisionState {
 
 struct SectorEditorPreviewRuntimeState {
     SectorRuntimeObjectState runtimeObjects;
+    FpsViewmodelRuntimeState viewmodel;
 };
 
 struct SectorEditorPreviewState {
