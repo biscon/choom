@@ -363,6 +363,17 @@ bool SectorEditor::Init(engine::EngineContext& context)
                     selectionState,
                     manipulationState,
                     statusText});
+    levelMarkerEditingService.emplace(
+            SectorEditorLevelMarkerEditingServiceContext{
+                    Lifecycle(),
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    state.topologyRenderRevision,
+                    state.topologyRenderCache,
+                    selectionState,
+                    levelMarkerEditingState,
+                    statusText});
     return true;
 }
 
@@ -390,7 +401,10 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     materialEditingState = MaterialEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
+    levelMarkerEditingState = LevelMarkerEditingState{};
+    levelMarkerEditingUiState = LevelMarkerEditingUiState{};
     fogVolumeEditingService.reset();
+    levelMarkerEditingService.reset();
     canvasRect = {};
     statusText.clear();
     engineContext = nullptr;
@@ -517,6 +531,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         CancelPendingAuthoringRectangle(nullptr);
         if (fogVolumeEditingService) {
             fogVolumeEditingService->CancelMove(nullptr);
+        }
+        if (levelMarkerEditingService) {
+            levelMarkerEditingService->CancelMove(nullptr);
         }
         return;
     }
@@ -805,6 +822,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
             canvasRect};
     context.fogVolumeEditing = fogVolumeEditingService
             ? &fogVolumeEditingService.value()
+            : nullptr;
+    context.levelMarkerEditing = levelMarkerEditingService
+            ? &levelMarkerEditingService.value()
             : nullptr;
     context.currentSnappedSectorPoint = [this]() {
         return CurrentSnappedSectorPoint();
@@ -1497,6 +1517,12 @@ SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
                 SectorEditorPickKind::AuthoringFogVolume,
                 selectionState.selectedAuthoring.fogVolumeId};
     }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::LevelMarker
+            && selectionState.selectedAuthoring.levelMarkerId >= 0) {
+        return SectorEditorPickTarget{
+                SectorEditorPickKind::LevelMarker,
+                selectionState.selectedAuthoring.levelMarkerId};
+    }
     return SectorEditorPickTarget{};
 }
 
@@ -1510,6 +1536,7 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             + TopologyMap().staticSpotLights.size()
             + TopologyMap().staticLights.size()
             + AuthoringGraph().fogVolumes.size()
+            + AuthoringGraph().levelMarkers.size()
             + 3);
 
     const auto addPointCandidate = [&](SectorEditorPickKind kind, int id, Vector2 center) {
@@ -1544,6 +1571,12 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
     pickContext.viewCenter = state.viewCenter;
     pickContext.viewZoom = state.viewZoom;
     AppendCachedRuntimeObjectPickCandidates(
+            state.topologyRenderCache,
+            pickContext,
+            screenPoint,
+            ScreenLightPickPixels,
+            candidates);
+    AppendCachedLevelMarkerPickCandidates(
             state.topologyRenderCache,
             pickContext,
             screenPoint,
@@ -2358,6 +2391,9 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
     context.placedObjectMoveProvider = nullptr;
     context.fogVolumeEditing = fogVolumeEditingService
             ? &fogVolumeEditingService.value()
+            : nullptr;
+    context.levelMarkerEditing = levelMarkerEditingService
+            ? &levelMarkerEditingService.value()
             : nullptr;
     context.startAuthoringVertexDrag = [](void* userData, int vertexId, SectorTopologyCoordPoint point) {
         static_cast<SectorEditor*>(userData)->StartAuthoringVertexDrag(vertexId, point);
@@ -3528,6 +3564,10 @@ void SectorEditor::DrawTopologyDocument()
     DrawCachedTopologyDynamicLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyDynamicSpotLights(state.topologyRenderCache, drawContext);
     DrawCachedRuntimeObjects(state.topologyRenderCache, drawContext);
+    DrawCachedLevelMarkers(
+            state.topologyRenderCache,
+            drawContext,
+            levelMarkerEditingService ? &levelMarkerEditingService->Drag() : nullptr);
     DrawLightMoveOverlay();
     const auto drawToolOverlay = [this](SectorEditorTool tool) {
         if (const SectorEditorToolModule* lineModule = FindSectorEditorToolModule(tool)) {
@@ -4072,7 +4112,7 @@ void SectorEditor::DrawToolsPanel(
     };
     const float toolsContentH =
             sectionLabelH + rowsHeight(4)
-            + separatorH + sectionLabelH + rowsHeight(9)
+            + separatorH + sectionLabelH + rowsHeight(10)
             + separatorH + rowsHeight(4)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
@@ -4164,6 +4204,11 @@ void SectorEditor::DrawToolsPanel(
                 && fogVolumeEditingService) {
             fogVolumeEditingService->CancelMove("Cancelled fog volume move");
         }
+        if (levelMarkerEditingService
+                && levelMarkerEditingService->Drag().active
+                && tool != SectorEditorTool::Select) {
+            levelMarkerEditingService->CancelMove("Cancelled Level Marker move");
+        }
         if (lightEditingState.lightDrag.active
                 && tool != SectorEditorTool::Move
                 && tool != SectorEditorTool::Select
@@ -4200,6 +4245,8 @@ void SectorEditor::DrawToolsPanel(
             statusText = "Door: click a two-sided portal line";
         } else if (tool == SectorEditorTool::AuthoringFogVolume) {
             statusText = "Fog Volume: click strictly inside a sector";
+        } else if (tool == SectorEditorTool::LevelMarker) {
+            statusText = "Level Marker: click strictly inside a sector";
         }
     };
 
@@ -4223,6 +4270,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::StaticModel,
             SectorEditorTool::DynamicModel,
             SectorEditorTool::Door,
+            SectorEditorTool::LevelMarker,
             SectorEditorTool::AuthoringFogVolume,
             SectorEditorTool::StaticLight,
             SectorEditorTool::StaticSpotLight,
@@ -4419,6 +4467,7 @@ void SectorEditor::DrawSectorsPanel(
             inspectorIdUiState,
             materialEditingUiState,
             fogVolumeEditingUiState,
+            levelMarkerEditingUiState,
             statusText,
             selection,
             runtimeObjectEditing,
@@ -4427,6 +4476,7 @@ void SectorEditor::DrawSectorsPanel(
             textureCatalog,
             lightEditing,
             fogVolumeEditingService.value(),
+            levelMarkerEditingService.value(),
             engineContext};
     const SectorEditorInspectorPanelResult result = DrawSectorEditorInspectorPanel(context);
     for (int i = 0; i < result.requestCount; ++i) {
@@ -4451,6 +4501,16 @@ void SectorEditor::DrawSectorsPanel(
                     [this]() {
                         if (fogVolumeEditingService) {
                             fogVolumeEditingService->DeleteSelected();
+                        }
+                    });
+            break;
+        case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLevelMarkerConfirmation:
+            OpenConfirmation(
+                    "Delete Level Marker",
+                    "Delete the selected Level Marker?",
+                    [this]() {
+                        if (levelMarkerEditingService) {
+                            levelMarkerEditingService->DeleteSelected();
                         }
                     });
             break;
@@ -4990,6 +5050,8 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     materialEditingState = MaterialEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
+    levelMarkerEditingState = LevelMarkerEditingState{};
+    levelMarkerEditingUiState = LevelMarkerEditingUiState{};
     previewState.controller = SectorEditorPreviewControllerState{};
     ResetEditorTopologyDocumentState(
             Lifecycle(),
@@ -5026,6 +5088,9 @@ bool SectorEditor::LoadLevel(
     CancelAuthoringVertexDrag(nullptr);
     if (fogVolumeEditingService) {
         fogVolumeEditingService->CancelMove(nullptr);
+    }
+    if (levelMarkerEditingService) {
+        levelMarkerEditingService->CancelMove(nullptr);
     }
     CancelLightDrag(nullptr);
     bool loadedAuthoringGraph = false;
@@ -5110,6 +5175,8 @@ bool SectorEditor::LoadLevel(
     selectionState.hoveredTopologyVertexId = -1;
     selectionState.hoveredTopologyVertexPoint = SectorTopologyCoordPoint{};
     manipulationState = ManipulationState{};
+    levelMarkerEditingState = LevelMarkerEditingState{};
+    levelMarkerEditingUiState = LevelMarkerEditingUiState{};
     runtimeObjectEditingState = RuntimeObjectEditingState{};
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     lightEditingState = LightEditingState{};
@@ -5258,6 +5325,12 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 
     CancelAuthoringVertexDrag(nullptr);
     CancelLightDrag(nullptr);
+    if (fogVolumeEditingService) {
+        fogVolumeEditingService->CancelMove(nullptr);
+    }
+    if (levelMarkerEditingService) {
+        levelMarkerEditingService->CancelMove(nullptr);
+    }
     ui.hotId = 0;
     ui.activeId = 0;
     ui.openOptionId = 0;

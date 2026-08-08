@@ -51,6 +51,12 @@ void AppendCachedRuntimeObjectPickCandidates(
         Vector2 screenPoint,
         float tolerancePixels,
         std::vector<SectorEditorPickCandidate>& outCandidates);
+void AppendCachedLevelMarkerPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates);
 
 void DrawCachedTopologySectors(
         const SectorEditorTopologyRenderCache& cache,
@@ -76,6 +82,10 @@ void DrawCachedTopologyDynamicSpotLights(
 void DrawCachedRuntimeObjects(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);
+void DrawCachedLevelMarkers(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        const LevelMarkerDragState* drag = nullptr);
 void DrawCachedAuthoringGraphOverlay(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);

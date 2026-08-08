@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
+#include "sector_demo/SectorUnits.h"
 
 #include <raylib.h>
 
@@ -30,11 +31,12 @@ Vector3 GameplayForward(const SectorEditorPreviewControllerState& controller)
 bool SectorGameSession::StartNew(
         engine::EngineContext& context,
         SectorSceneRuntime& scene,
-        const std::string& requestedLevelName,
+        const SectorLevelEntryRequest& entry,
         const FpsWeaponRegistry& registry,
         const FpsApplicationSettings& settings,
         std::string& error)
 {
+    const std::string& requestedLevelName = entry.levelName;
     const std::string path = ApplicationLevelAssetPath(requestedLevelName);
     if (path.empty()) {
         error = "Invalid first level name '" + requestedLevelName + "'";
@@ -45,6 +47,12 @@ bool SectorGameSession::StartNew(
     if (!LoadSectorRuntimeLevel(path, loaded, error)) {
         return false;
     }
+    const SectorCompiledLevelMarker* entryMarker = nullptr;
+    if (!ResolveSectorLevelEntryMarker(loaded, entry.markerId, entryMarker, error)) {
+        return false;
+    }
+    const std::string resolvedEntryMarkerId =
+            entryMarker != nullptr ? entryMarker->id : std::string{};
     std::string fingerprintError;
     if (!RefreshSectorStaticModelGeometryFingerprints(
                 loaded,
@@ -57,6 +65,9 @@ bool SectorGameSession::StartNew(
     }
 
     topologyMap = std::move(loaded);
+    entryMarker = resolvedEntryMarkerId.empty()
+            ? nullptr
+            : FindSectorCompiledLevelMarker(topologyMap, resolvedEntryMarkerId);
     levelName = requestedLevelName;
     levelPath = path;
     controller = SectorEditorPreviewControllerState{};
@@ -67,10 +78,12 @@ bool SectorGameSession::StartNew(
             controller.freeflyController,
             scene.Renderer().RendererPose());
     controller.previewControlMode = SectorPreviewControlMode::FreeFly;
-    if (!BuildCollisionAndPlayer(scene, true)) {
-        error = collision.sectorCollisionWorldWarning.empty()
-                ? "Could not build the game collision world"
-                : collision.sectorCollisionWorldWarning;
+    if (!BuildCollisionAndPlayer(scene, true, entryMarker, &error)) {
+        if (error.empty()) {
+            error = collision.sectorCollisionWorldWarning.empty()
+                    ? "Could not build the game collision world"
+                    : collision.sectorCollisionWorldWarning;
+        }
         scene.Shutdown(context);
         topologyMap = SectorTopologyMap{};
         levelName.clear();
@@ -268,7 +281,7 @@ bool SectorGameSession::RebuildFromMap(
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
     controller.fpsControllerState = savedPlayer;
-    if (!BuildCollisionAndPlayer(scene, false)) {
+    if (!BuildCollisionAndPlayer(scene, false, nullptr, &error)) {
         error = collision.sectorCollisionWorldWarning.empty()
                 ? "Could not rebuild the game collision world"
                 : collision.sectorCollisionWorldWarning;
@@ -281,7 +294,9 @@ bool SectorGameSession::RebuildFromMap(
 
 bool SectorGameSession::BuildCollisionAndPlayer(
         SectorSceneRuntime& scene,
-        bool initializePlayer)
+        bool initializePlayer,
+        const SectorCompiledLevelMarker* entryMarker,
+        std::string* error)
 {
     SectorRuntimeObjectState& objects = scene.RuntimeObjects();
     if (!RebuildSectorEditorCollisionWorld(
@@ -292,15 +307,33 @@ bool SectorGameSession::BuildCollisionAndPlayer(
         return false;
     }
     if (initializePlayer) {
-        controller.fpsControllerState = SectorFpsControllerStateFromCameraPose(
-                scene.Renderer().RendererPose(),
-                controller.fpsControllerConfig);
+        if (entryMarker != nullptr) {
+            controller.fpsControllerState = SectorFpsControllerState{};
+            controller.fpsControllerState.feetPosition =
+                    SectorAuthoringToWorldPosition(entryMarker->position);
+            controller.fpsControllerState.yawRadians = entryMarker->yawRadians;
+            controller.fpsControllerState.pitchRadians = 0.0f;
+        } else {
+            controller.fpsControllerState = SectorFpsControllerStateFromCameraPose(
+                    scene.Renderer().RendererPose(),
+                    controller.fpsControllerConfig);
+        }
     }
     controller.previewControlMode = SectorPreviewControlMode::Gameplay;
     InitializeSectorEditorGameplayVerticalState(
             collision,
             controller,
             objects.staticModelColliders);
+    if (entryMarker != nullptr
+            && (controller.fpsControllerState.currentSectorId == 0
+                    || !collision.previewVerticalResult.hasSector
+                    || collision.previewVerticalResult.cannotFit)) {
+        if (error != nullptr) {
+            *error = "Level entry marker '" + entryMarker->id
+                    + "' is not a valid player position";
+        }
+        return false;
+    }
     ApplyPlayerPose(scene);
     return true;
 }

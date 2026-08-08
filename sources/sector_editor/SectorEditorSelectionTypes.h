@@ -47,7 +47,8 @@ enum class SectorAuthoringSelectionKind {
     Line,
     Vertex,
     FaceAnchor,
-    FogVolume
+    FogVolume,
+    LevelMarker
 };
 
 struct SectorAuthoringSelectionTarget {
@@ -56,6 +57,7 @@ struct SectorAuthoringSelectionTarget {
     int vertexId = -1;
     int faceAnchorId = -1;
     int fogVolumeId = -1;
+    int levelMarkerId = -1;
 };
 
 enum class SectorSurfaceKind {
@@ -117,7 +119,8 @@ enum class SectorEditorPickKind {
     AuthoringVertex,
     AuthoringLine,
     AuthoringFaceAnchor,
-    AuthoringFogVolume
+    AuthoringFogVolume,
+    LevelMarker
 };
 
 struct SectorEditorPickTarget {
@@ -142,6 +145,15 @@ struct RuntimeObjectDragState {
     int objectId = -1;
     Vector3 originalPosition = {};
     Vector3 snappedPosition = {};
+};
+
+struct LevelMarkerDragState {
+    bool active = false;
+    int markerId = -1;
+    SectorCoord originalX = 0;
+    SectorCoord originalZ = 0;
+    SectorCoord previewX = 0;
+    SectorCoord previewZ = 0;
 };
 
 } // namespace game

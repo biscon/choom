@@ -15,6 +15,7 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
+#include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
@@ -10297,6 +10298,97 @@ void TestRuntimeObjectEditingServicesStayIndependentOfSectorEditor()
           "static prop implementation does not introduce an editor callback bundle");
 }
 
+void TestLevelMarkerAuthoringSelectionCacheAndPicking()
+{
+    game::SectorAuthoringGraph graph = game::ImportSectorTopologyMapToAuthoringGraph(
+            MakeSingleSectorSquareMap());
+    Check(game::AllocateSectorAuthoringLevelMarkerReferenceId(graph) == "default",
+          "first Level Marker receives the default reference ID");
+    graph.levelMarkers.push_back(game::SectorAuthoringLevelMarker{
+            1, "default", 0, 0, 2.0f, 90.0f});
+    Check(game::AllocateSectorAuthoringLevelMarkerId(graph) == 2
+                  && game::AllocateSectorAuthoringLevelMarkerReferenceId(graph) == "marker_1",
+          "later Level Markers receive stable numeric and generated reference IDs");
+    graph.levelMarkers.push_back(game::SectorAuthoringLevelMarker{
+            2, "marker_1", 0, 0, 3.0f, 180.0f});
+    Check(game::ValidateSectorAuthoringGraphReferences(graph).empty(),
+          "valid Level Marker authoring records pass graph validation");
+    Check(game::FindSectorAuthoringLevelMarkerByReferenceId(graph, "default") != nullptr
+                  && game::IsValidSectorAuthoringLevelMarkerReferenceId("return-from_hub")
+                  && !game::IsValidSectorAuthoringLevelMarkerReferenceId("return point"),
+          "Level Marker reference lookup and strict identifier convention work");
+
+    const game::SectorAuthoringDerivationResult derivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(graph);
+    Check(derivation.success && derivation.topology.levelMarkers.size() == 2
+                  && Near(derivation.topology.levelMarkers[0].position.y, 2.0f)
+                  && Near(derivation.topology.levelMarkers[0].yawRadians, PI * 0.5f),
+          "authoring Level Markers compile into runtime marker records");
+
+    game::SectorEditorTopologyRenderCache cache =
+            game::BuildSectorEditorTopologyRenderCache(
+                    derivation.topology,
+                    graph,
+                    derivation,
+                    7);
+    Check(cache.valid && cache.levelMarkers.size() == 2,
+          "2D render cache stores Level Marker draw data");
+    game::SectorEditorTopologyDrawContext drawContext;
+    drawContext.canvasRect = Rectangle{0.0f, 0.0f, 200.0f, 200.0f};
+    drawContext.viewZoom = 1.0f;
+    std::vector<game::SectorEditorPickCandidate> candidates;
+    game::AppendCachedLevelMarkerPickCandidates(
+            cache,
+            drawContext,
+            Vector2{100.0f, 100.0f},
+            12.0f,
+            candidates);
+    Check(candidates.size() == 2,
+          "overlapping Level Markers both participate in click-cycle picking");
+
+    game::SelectionState selection;
+    Check(game::SelectSectorEditorAuthoringLevelMarker(graph, selection, 2)
+                  && selection.selectedAuthoring.kind
+                          == game::SectorAuthoringSelectionKind::LevelMarker
+                  && selection.selectedAuthoring.levelMarkerId == 2,
+          "Level Marker selection helper selects a valid marker");
+    graph.levelMarkers.pop_back();
+    game::PruneSectorEditorAuthoringSelectionToGraph(graph, selection);
+    Check(selection.selectedAuthoring.kind == game::SectorAuthoringSelectionKind::None,
+          "Level Marker selection is pruned after its authoring record is removed");
+}
+
+void TestLevelMarkerModulesStayIndependentOfSectorEditor()
+{
+    std::error_code error;
+    const std::filesystem::path projectRoot =
+            std::filesystem::weakly_canonical(
+                    std::filesystem::path(ASSETS_PATH),
+                    error).parent_path();
+    Check(!error, "Level Marker dependency test resolves project root");
+    const std::string serviceHeader = ReadTextFile(
+            projectRoot / "sources/sector_editor/services/level_markers/"
+                          "SectorEditorLevelMarkerEditingService.h");
+    const std::string serviceSource = ReadTextFile(
+            projectRoot / "sources/sector_editor/services/level_markers/"
+                          "SectorEditorLevelMarkerEditingService.cpp");
+    const std::string toolSource = ReadTextFile(
+            projectRoot / "sources/sector_editor/tools/level_marker/"
+                          "SectorEditorLevelMarkerTool.cpp");
+    const std::string inspectorHeader = ReadTextFile(
+            projectRoot / "sources/sector_editor/inspector/"
+                          "SectorEditorLevelMarkerInspector.h");
+    Check(serviceHeader.find("SectorEditor.h") == std::string::npos
+                  && serviceSource.find("SectorEditor.h") == std::string::npos
+                  && serviceSource.find("SectorEditor::") == std::string::npos
+                  && toolSource.find("SectorEditor.h") == std::string::npos
+                  && inspectorHeader.find("SectorEditor.h") == std::string::npos,
+          "Level Marker service, tool, and inspector do not depend on SectorEditor");
+    Check(serviceHeader.find("Callbacks") == std::string::npos
+                  && inspectorHeader.find("Callbacks") == std::string::npos,
+          "Level Marker modules do not introduce editor callback bundles");
+}
+
 } // namespace
 
 void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
@@ -10429,11 +10521,79 @@ void TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce()
           "fog volume placement fails clearly outside derived faces");
 }
 
+void TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache()
+{
+    game::SectorEditorDocumentState documentState;
+    documentState.authoring.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {160, 0}, {160, 160}, {0, 160}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    documentState.derivation.authoringDerivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(
+                    documentState.authoring.authoringGraph);
+    documentState.map.topologyMap = documentState.derivation.authoringDerivation.topology;
+    documentState.derivation.lastValidAuthoringDerivedTopology = documentState.map.topologyMap;
+    documentState.derivation.authoringDerivationState =
+            game::SectorEditorAuthoringDerivationState::ValidCurrent;
+    documentState.derivation.authoringDerivedTopologyStale = false;
+
+    game::SectorEditorState editorState;
+    editorState.topologyRenderCache.valid = true;
+    game::SelectionState selection;
+    game::LevelMarkerEditingState editingState;
+    std::string status;
+    game::SectorEditorLevelMarkerEditingService editing{
+            game::SectorEditorLevelMarkerEditingServiceContext{
+                    game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                    documentState.map.topologyMap,
+                    documentState.authoring.authoringGraph,
+                    game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                    editorState.topologyRenderRevision,
+                    editorState.topologyRenderCache,
+                    selection,
+                    editingState,
+                    status}};
+
+    Check(editing.Place(Vector2{5.0f, 5.0f}),
+          "Level Marker service places strictly inside a derived sector");
+    Check(documentState.authoring.authoringGraph.levelMarkers.size() == 1
+                  && documentState.authoring.authoringGraph.levelMarkers[0].referenceId == "default"
+                  && documentState.authoring.authoringGraph.levelMarkers[0].x == 80
+                  && documentState.map.topologyMap.levelMarkers.size() == 1,
+          "first placed Level Marker uses default ID and compiles into runtime topology");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && !editorState.topologyRenderCache.valid,
+          "Level Marker placement marks the document dirty and invalidates the 2D cache");
+
+    const int markerId = documentState.authoring.authoringGraph.levelMarkers[0].id;
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    editorState.topologyRenderCache.valid = true;
+    Check(editing.BeginMove(markerId), "Level Marker snapped drag begins");
+    editing.UpdateMove(Vector2{6.0f, 5.0f});
+    Check(documentState.authoring.authoringGraph.levelMarkers[0].x == 80
+                  && !documentState.lifecycle.topologyDocumentDirty,
+          "Level Marker drag preview does not mutate the authoring graph");
+    Check(editing.FinishMove()
+                  && documentState.authoring.authoringGraph.levelMarkers[0].x == 96
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && !editorState.topologyRenderCache.valid,
+          "Level Marker drag commits once at the supplied snapped coordinate");
+    Check(!editing.RenameSelected("bad marker")
+                  && documentState.authoring.authoringGraph.levelMarkers[0].referenceId == "default",
+          "Level Marker service rejects invalid reference IDs");
+    Check(!editing.Place(Vector2{30.0f, 30.0f})
+                  && documentState.authoring.authoringGraph.levelMarkers.size() == 1,
+          "Level Marker placement rejects points outside derived sectors");
+}
+
 int main()
 {
+    TestLevelMarkerAuthoringSelectionCacheAndPicking();
+    TestLevelMarkerModulesStayIndependentOfSectorEditor();
     TestAuthoringFogVolumeDerivationAndUnresolvedWarning();
     TestAuthoringFogVolumeSerializationRoundTrip();
     TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce();
+    TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache();
     TestEmptyGraph();
     TestStablePositiveIdAllocation();
     TestAddVerticesAndLines();

@@ -281,7 +281,7 @@ void GameApplication::StartNewGame(engine::EngineContext& context)
     if (!gameSession.StartNew(
                 context,
                 gameScene,
-                applicationSettings.firstLevel,
+                SectorLevelEntryRequest{applicationSettings.firstLevel, std::nullopt},
                 weaponRegistry,
                 applicationSettings,
                 error)) {

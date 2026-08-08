@@ -87,12 +87,22 @@ struct SectorAuthoringFogVolume {
     float flowSpeedWorld = 0.12f;
 };
 
+struct SectorAuthoringLevelMarker {
+    int id = -1;
+    std::string referenceId;
+    SectorCoord x = 0;
+    SectorCoord z = 0;
+    float y = 0.0f;
+    float orientationDegrees = 0.0f;
+};
+
 struct SectorAuthoringGraph {
     std::vector<SectorAuthoringVertex> vertices;
     std::vector<SectorAuthoringLine> lines;
     std::vector<SectorAuthoringLineSide> lineSides;
     std::vector<SectorAuthoringFaceAnchor> faceAnchors;
     std::vector<SectorAuthoringFogVolume> fogVolumes;
+    std::vector<SectorAuthoringLevelMarker> levelMarkers;
 };
 
 enum class SectorAuthoringValidationSeverity {
@@ -106,7 +116,8 @@ enum class SectorAuthoringObjectKind {
     Line,
     Side,
     FaceAnchor,
-    FogVolume
+    FogVolume,
+    LevelMarker
 };
 
 struct SectorAuthoringValidationIssue {
@@ -312,6 +323,9 @@ int AllocateSectorAuthoringVertexId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringLineId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringFaceAnchorId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringFogVolumeId(const SectorAuthoringGraph& graph);
+int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph);
+std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringGraph& graph);
+bool IsValidSectorAuthoringLevelMarkerReferenceId(const std::string& id);
 
 const SectorAuthoringVertex* FindSectorAuthoringVertex(const SectorAuthoringGraph& graph, int id);
 SectorAuthoringVertex* FindSectorAuthoringVertex(SectorAuthoringGraph& graph, int id);
@@ -336,6 +350,16 @@ const SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(
         int id);
 SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(SectorAuthoringGraph& graph, int id);
 SectorAuthoringFogVolume NormalizeSectorAuthoringFogVolume(SectorAuthoringFogVolume volume);
+
+const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
+        const SectorAuthoringGraph& graph,
+        int id);
+SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
+        SectorAuthoringGraph& graph,
+        int id);
+const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarkerByReferenceId(
+        const SectorAuthoringGraph& graph,
+        const std::string& referenceId);
 
 bool SectorAuthoringSideIdsEqual(SectorAuthoringSideId lhs, SectorAuthoringSideId rhs);
 SectorAuthoringSideId OppositeSectorAuthoringSideId(SectorAuthoringSideId id);

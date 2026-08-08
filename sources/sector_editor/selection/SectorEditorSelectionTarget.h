@@ -19,6 +19,7 @@ enum class SectorEditorSelectionTargetKind {
     AuthoringLine,
     AuthoringFaceAnchor,
     AuthoringFogVolume,
+    AuthoringLevelMarker,
     RuntimeObject,
     StaticLight,
     StaticSpotLight,
@@ -61,6 +62,7 @@ inline bool IsTopologyTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringLine:
         case SectorEditorSelectionTargetKind::AuthoringFaceAnchor:
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
+        case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
         case SectorEditorSelectionTargetKind::RuntimeObject:
         case SectorEditorSelectionTargetKind::StaticLight:
         case SectorEditorSelectionTargetKind::StaticSpotLight:
@@ -79,6 +81,7 @@ inline bool IsAuthoringTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringLine:
         case SectorEditorSelectionTargetKind::AuthoringFaceAnchor:
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
+        case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
             return target.id >= 0;
         case SectorEditorSelectionTargetKind::None:
         case SectorEditorSelectionTargetKind::TopologySector:
@@ -123,6 +126,7 @@ inline bool IsLightTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringLine:
         case SectorEditorSelectionTargetKind::AuthoringFaceAnchor:
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
+        case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
         case SectorEditorSelectionTargetKind::RuntimeObject:
         case SectorEditorSelectionTargetKind::PreviewSurface:
             return false;

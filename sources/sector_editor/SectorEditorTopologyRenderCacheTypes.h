@@ -75,6 +75,13 @@ struct CachedRuntimeObjectDraw {
     Vector2 doorEndpointB = {};
 };
 
+struct CachedAuthoringLevelMarkerDraw {
+    int markerId = -1;
+    std::string referenceId;
+    Vector2 map = {};
+    float orientationDegrees = 0.0f;
+};
+
 struct CachedAuthoringVertexDraw {
     int vertexId = -1;
     SectorTopologyCoordPoint point = {};
@@ -120,6 +127,7 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedTopologyLightDraw> dynamicLights;
     std::vector<CachedTopologySpotLightDraw> dynamicSpotLights;
     std::vector<CachedRuntimeObjectDraw> runtimeObjects;
+    std::vector<CachedAuthoringLevelMarkerDraw> levelMarkers;
     std::vector<CachedAuthoringLineDraw> authoringLines;
     std::vector<CachedAuthoringVertexDraw> authoringVertices;
     std::vector<CachedAuthoringFaceHighlightDraw> authoringFaceHighlights;

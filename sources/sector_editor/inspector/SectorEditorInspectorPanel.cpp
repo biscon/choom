@@ -7,6 +7,7 @@
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorVertexInspector.h"
+#include "sector_editor/inspector/SectorEditorLevelMarkerInspector.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/tools/doors/SectorEditorDoorModals.h"
 #include "sector_editor/tools/materials/SectorEditorMaterialInspector.h"
@@ -403,6 +404,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringFogVolume
             ? FindSectorAuthoringFogVolume(authoringGraph, inspectorTarget.fogVolumeId)
             : nullptr;
+    const SectorAuthoringLevelMarker* selectedLevelMarker =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringLevelMarker
+            ? FindSectorAuthoringLevelMarker(authoringGraph, inspectorTarget.levelMarkerId)
+            : nullptr;
     const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
             context.topologyMap,
             selectionState.inspectedTopologyVertexId);
@@ -533,6 +538,12 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         }
         if (selectedAuthoringFogVolume != nullptr) {
             return 38.0f + (rowH + gap) * 18.0f + 28.0f;
+        }
+        if (selectedLevelMarker != nullptr) {
+            return MeasureSectorEditorLevelMarkerInspectorContentHeight(
+                    context.levelMarkerUiState,
+                    rowH,
+                    gap);
         }
         return 42.0f;
     };
@@ -2247,6 +2258,29 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     Rectangle{0.0f, y, contentW, rowH},
                     font, "Delete Fog Volume")) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedFogVolumeConfirmation);
+        }
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
+    if (selectedLevelMarker != nullptr) {
+        const bool deleteRequested = DrawSectorEditorLevelMarkerInspector(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                contentW,
+                rowH,
+                gap,
+                *selectedLevelMarker,
+                context.levelMarkerUiState,
+                context.levelMarkerEditing);
+        if (deleteRequested) {
+            AppendRequest(
+                    result,
+                    SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLevelMarkerConfirmation);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);

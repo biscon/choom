@@ -1,4 +1,5 @@
 #include "sector_demo/SectorTopologySerialization.h"
+#include "game/SectorLevelLoader.h"
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -3818,6 +3819,78 @@ void TestGraphNativeLegacyImportPathStillWorks()
           "topology-v2 import path preserves basic sector count");
 }
 
+void TestLevelMarkerRoundTripAndEntryResolution()
+{
+    SectorTopologyMap topology = MakeSquare();
+    topology.levelMarkers.push_back(game::SectorCompiledLevelMarker{
+            17, "default", Vector3{3.5f, 4.25f, 5.5f}, 0.75f});
+    topology.levelMarkers.push_back(game::SectorCompiledLevelMarker{
+            18, "return_from_hub", Vector3{8.0f, 2.0f, 9.0f}, -1.25f});
+    std::string error;
+    SectorTopologyMap loadedTopology;
+    Check(LoadText(SaveText(topology), loadedTopology, error),
+          "topology-v2 Level Markers round-trip");
+    Check(loadedTopology.levelMarkers.size() == 2
+                  && loadedTopology.levelMarkers[0].id == "default"
+                  && Near(loadedTopology.levelMarkers[0].position.y, 4.25f)
+                  && Near(loadedTopology.levelMarkers[1].yawRadians, -1.25f),
+          "topology-v2 Level Marker values survive round-trip");
+    Json invalidTopologyMarkers = Json::parse(SaveText(topology));
+    invalidTopologyMarkers["levelMarkers"][1]["id"] = "default";
+    ExpectRejected(
+            invalidTopologyMarkers,
+            "topology-v2 duplicate Level Marker reference IDs are rejected");
+
+    const game::SectorCompiledLevelMarker* resolved = nullptr;
+    Check(game::ResolveSectorLevelEntryMarker(loadedTopology, std::nullopt, resolved, error)
+                  && resolved != nullptr && resolved->id == "default",
+          "implicit level entry resolves the default marker");
+    Check(game::ResolveSectorLevelEntryMarker(
+                  loadedTopology,
+                  std::optional<std::string>{"return_from_hub"},
+                  resolved,
+                  error)
+                  && resolved != nullptr && resolved->id == "return_from_hub",
+          "explicit level entry resolves its requested marker");
+    Check(!game::ResolveSectorLevelEntryMarker(
+                  loadedTopology,
+                  std::optional<std::string>{"missing"},
+                  resolved,
+                  error)
+                  && resolved == nullptr,
+          "missing explicit level entry fails closed");
+    SectorTopologyMap noMarkers = MakeSquare();
+    Check(game::ResolveSectorLevelEntryMarker(noMarkers, std::nullopt, resolved, error)
+                  && resolved == nullptr,
+          "missing implicit default preserves geometry-center fallback");
+
+    game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(MakeSquare());
+    document.graph.levelMarkers.push_back(game::SectorAuthoringLevelMarker{
+            31, "default", 24, 40, 7.5f, 135.0f});
+    document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
+    const Json saved = Json::parse(SaveAuthoringText(document));
+    Check(saved["authoringGraph"].contains("levelMarkers")
+                  && !saved.contains("levelMarkers"),
+          "graph-native Level Markers serialize only in the authoring graph");
+    game::SectorAuthoringDocument loadedDocument;
+    Check(LoadAuthoringText(saved.dump(), loadedDocument, error),
+          "graph-native Level Marker document loads");
+    Check(loadedDocument.graph.levelMarkers.size() == 1
+                  && loadedDocument.graph.levelMarkers[0].referenceId == "default"
+                  && loadedDocument.graph.levelMarkers[0].x == 24
+                  && Near(loadedDocument.graph.levelMarkers[0].orientationDegrees, 135.0f)
+                  && loadedDocument.derivation.topology.levelMarkers.size() == 1
+                  && Near(loadedDocument.derivation.topology.levelMarkers[0].position.x, 1.5f),
+          "graph-native Level Marker authoring and compiled values survive load");
+
+    Json duplicate = saved;
+    duplicate["authoringGraph"]["levelMarkers"].push_back(
+            duplicate["authoringGraph"]["levelMarkers"][0]);
+    duplicate["authoringGraph"]["levelMarkers"][1]["editorId"] = 32;
+    Check(!LoadAuthoringText(duplicate.dump(), loadedDocument, error),
+          "duplicate Level Marker reference IDs are rejected");
+}
+
 void TestFileApi()
 {
     const std::filesystem::path path =
@@ -3880,6 +3953,7 @@ int main()
     TestGraphNativeValidGraphDerivesTopologyAndProperties();
     TestGraphNativeMapLevelRoundTrip();
     TestGraphNativeLegacyImportPathStillWorks();
+    TestLevelMarkerRoundTripAndEntryResolution();
     TestFileApi();
 
     if (failures != 0) {

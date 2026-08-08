@@ -14,6 +14,8 @@
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
+#include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
 
 #include <array>
 #include <string>
@@ -30,6 +32,7 @@ enum class SectorEditorInspectorPanelRequestKind {
     DeleteSelectedRuntimeObject,
     OpenDeleteSelectedLightConfirmation,
     OpenDeleteSelectedFogVolumeConfirmation,
+    OpenDeleteSelectedLevelMarkerConfirmation,
     BakeLightmaps,
     RefreshPreviewLightSources
 };
@@ -67,6 +70,7 @@ struct SectorEditorInspectorPanelContext {
     InspectorIdUiState& inspectorIdUiState;
     MaterialEditingUiState& materialUiState;
     FogVolumeEditingUiState& fogVolumeUiState;
+    LevelMarkerEditingUiState& levelMarkerUiState;
     std::string& statusText;
 
     SectorEditorSelectionServiceContext& selection;
@@ -76,6 +80,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorTextureCatalogService& textureCatalog;
     SectorEditorLightEditingService& lightEditing;
     SectorEditorAuthoringFogVolumeEditingService& fogVolumeEditing;
+    SectorEditorLevelMarkerEditingService& levelMarkerEditing;
     engine::EngineContext* engineContext = nullptr;
 };
 

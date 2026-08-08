@@ -69,6 +69,10 @@ bool SelectPickTarget(SectorEditorToolContext& context, SectorEditorPickTarget t
             SelectSectorEditorAuthoringFogVolumeTarget(selectionContext, target.id);
             return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FogVolume
                     && context.selectionState.selectedAuthoring.fogVolumeId == target.id;
+        case SectorEditorPickKind::LevelMarker:
+            SelectSectorEditorAuthoringLevelMarkerTarget(selectionContext, target.id);
+            return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::LevelMarker
+                    && context.selectionState.selectedAuthoring.levelMarkerId == target.id;
         case SectorEditorPickKind::None:
             ClearSectorEditorSelection(selectionContext);
             return true;
@@ -98,6 +102,11 @@ void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
                     target.id);
         } else if (target.kind == SectorEditorPickKind::AuthoringFogVolume) {
             SetHoveredSectorEditorAuthoringFogVolume(
+                    context.authoringGraph,
+                    context.selectionState,
+                    target.id);
+        } else if (target.kind == SectorEditorPickKind::LevelMarker) {
+            SetHoveredSectorEditorAuthoringLevelMarker(
                     context.authoringGraph,
                     context.selectionState,
                     target.id);

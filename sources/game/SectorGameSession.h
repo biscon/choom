@@ -15,7 +15,7 @@ public:
     bool StartNew(
             engine::EngineContext& context,
             SectorSceneRuntime& scene,
-            const std::string& levelName,
+            const SectorLevelEntryRequest& entry,
             const FpsWeaponRegistry& weaponRegistry,
             const FpsApplicationSettings& applicationSettings,
             std::string& error);
@@ -48,7 +48,11 @@ public:
     }
 
 private:
-    bool BuildCollisionAndPlayer(SectorSceneRuntime& scene, bool initializePlayer);
+    bool BuildCollisionAndPlayer(
+            SectorSceneRuntime& scene,
+            bool initializePlayer,
+            const SectorCompiledLevelMarker* entryMarker,
+            std::string* error = nullptr);
     void ApplyPlayerPose(SectorSceneRuntime& scene);
 
     SectorTopologyMap topologyMap;

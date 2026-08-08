@@ -1210,6 +1210,12 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
           "hash excludes dynamic prop transform, playback, and runtime shadow changes");
 
+    game::SectorTopologyMap markerMap = base;
+    markerMap.levelMarkers.push_back(game::SectorCompiledLevelMarker{
+            1, "default", Vector3{24.0f, 0.0f, 24.0f}, 1.5f});
+    Check(game::ComputeSectorLightmapSourceHash(markerMap) == hash,
+          "hash excludes Level Markers because they do not affect baked geometry or lighting");
+
     game::SectorTopologyMap movedVertex = base;
     movedVertex.vertices[0].x += 1;
     Check(game::ComputeSectorLightmapSourceHash(movedVertex) != hash, "hash changes when vertex coordinate changes");

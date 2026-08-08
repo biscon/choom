@@ -559,6 +559,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::DynamicModel: return "Dynamic Prop";
         case SectorEditorTool::Door: return "Door";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume";
+        case SectorEditorTool::LevelMarker: return "Level Marker";
         case SectorEditorTool::StaticLight: return "Static Light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot";
         case SectorEditorTool::DynamicLight: return "Dynamic Light";
@@ -574,6 +575,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
             || tool == SectorEditorTool::AuthoringRectangle
             || tool == SectorEditorTool::AuthoringInsertVertex
             || tool == SectorEditorTool::AuthoringFogVolume
+            || tool == SectorEditorTool::LevelMarker
             || tool == SectorEditorTool::AuthoringMove;
 }
 
@@ -610,6 +612,7 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
         case SectorEditorPickKind::AuthoringLine: return "authoring line";
         case SectorEditorPickKind::AuthoringFaceAnchor: return "authoring face";
         case SectorEditorPickKind::AuthoringFogVolume: return "fog volume";
+        case SectorEditorPickKind::LevelMarker: return "level marker";
     }
     return "unknown";
 }
@@ -631,6 +634,7 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
         case SectorEditorPickKind::StaticLight:
         case SectorEditorPickKind::AuthoringVertex:
         case SectorEditorPickKind::AuthoringFogVolume:
+        case SectorEditorPickKind::LevelMarker:
             return target.id >= 0;
         case SectorEditorPickKind::None:
         case SectorEditorPickKind::AuthoringLine:
@@ -651,14 +655,16 @@ bool ShouldStartSectorEditorSelectDrag(Vector2 pressPosition, Vector2 currentPos
 int SectorEditorPickPriority(SectorEditorPickKind kind)
 {
     switch (kind) {
-        case SectorEditorPickKind::RuntimeObject: return 0;
-        case SectorEditorPickKind::DynamicSpotLight: return 1;
-        case SectorEditorPickKind::DynamicLight: return 2;
-        case SectorEditorPickKind::StaticSpotLight: return 3;
-        case SectorEditorPickKind::StaticLight: return 4;
-        case SectorEditorPickKind::AuthoringVertex: return 5;
-        case SectorEditorPickKind::AuthoringLine: return 6;
-        case SectorEditorPickKind::AuthoringFaceAnchor: return 7;
+        case SectorEditorPickKind::LevelMarker: return 0;
+        case SectorEditorPickKind::RuntimeObject: return 1;
+        case SectorEditorPickKind::DynamicSpotLight: return 2;
+        case SectorEditorPickKind::DynamicLight: return 3;
+        case SectorEditorPickKind::StaticSpotLight: return 4;
+        case SectorEditorPickKind::StaticLight: return 5;
+        case SectorEditorPickKind::AuthoringVertex: return 6;
+        case SectorEditorPickKind::AuthoringLine: return 7;
+        case SectorEditorPickKind::AuthoringFaceAnchor: return 8;
+        case SectorEditorPickKind::AuthoringFogVolume: return 9;
         case SectorEditorPickKind::None: break;
     }
     return 100;
@@ -1031,10 +1037,12 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::StaticModel: return "3D Prop: click inside a derived sector to place a floor-relative static model";
         case SectorEditorTool::DynamicModel: return "Dynamic Prop: click inside a derived sector to place an animated model";
         case SectorEditorTool::Door: return "Door: click a two-sided portal line to place a sliding door";
+        case SectorEditorTool::AuthoringFogVolume: return "Fog Volume: click strictly inside a sector to place local fog";
         case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place a baked point light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place a baked spot light";
         case SectorEditorTool::DynamicLight: return "Dynamic Light: click inside a sector to place a runtime point light";
         case SectorEditorTool::DynamicSpotLight: return "Dynamic Spot: click inside a sector to place a runtime spot light";
+        case SectorEditorTool::LevelMarker: return "Level Marker: click inside a sector to place a named entry or reference point";
         case SectorEditorTool::Move: return "Legacy move: unavailable in graph-authoritative mode; use Select to move selected primitives";
     }
     return "";

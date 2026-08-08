@@ -15,6 +15,7 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringLineSelectionTarget(int lineId
 SectorAuthoringSelectionTarget MakeSectorAuthoringVertexSelectionTarget(int vertexId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringFaceAnchorSelectionTarget(int faceAnchorId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringFogVolumeSelectionTarget(int fogVolumeId);
+SectorAuthoringSelectionTarget MakeSectorAuthoringLevelMarkerSelectionTarget(int markerId);
 
 bool SectorAuthoringSelectionTargetsEqual(
         SectorAuthoringSelectionTarget lhs,
@@ -41,6 +42,10 @@ bool SelectSectorEditorAuthoringFogVolume(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int fogVolumeId);
+bool SelectSectorEditorAuthoringLevelMarker(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int markerId);
 
 void ClearSectorEditorAuthoringHover(SelectionState& selectionState);
 bool SetHoveredSectorEditorAuthoringLine(
@@ -55,6 +60,10 @@ bool SetHoveredSectorEditorAuthoringFogVolume(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int fogVolumeId);
+bool SetHoveredSectorEditorAuthoringLevelMarker(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int markerId);
 
 void PruneSectorEditorAuthoringSelectionToGraph(
         const SectorAuthoringGraph& graph,
@@ -246,6 +255,7 @@ enum class SectorEditorInspectorTargetKind {
     AuthoringFaceAnchor,
     AuthoringVertex,
     AuthoringFogVolume,
+    AuthoringLevelMarker,
     AuthoringUnavailable,
     LegacyTopology
 };
@@ -256,6 +266,7 @@ struct SectorEditorInspectorTarget {
     int faceAnchorId = -1;
     int vertexId = -1;
     int fogVolumeId = -1;
+    int levelMarkerId = -1;
     SectorAuthoringSideId side;
     std::string status;
 };

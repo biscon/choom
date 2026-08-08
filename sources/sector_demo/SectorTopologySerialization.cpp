@@ -1,6 +1,7 @@
 #include "sector_demo/SectorTopologySerialization.h"
 
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorTopologyUnits.h"
 
 #include "util/json.hpp"
 
@@ -2374,6 +2375,32 @@ SectorLightAtmosphereSettings ReadOptionalLightAtmosphereSettings(
 
 void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBakedLightmap)
 {
+    const auto levelMarkersIt = root.find("levelMarkers");
+    if (levelMarkersIt != root.end()) {
+        if (!levelMarkersIt->is_array()) {
+            Fail("root.levelMarkers must be an array");
+        }
+        for (size_t i = 0; i < levelMarkersIt->size(); ++i) {
+            const Json& value = (*levelMarkersIt)[i];
+            const std::string context = "root.levelMarkers[" + std::to_string(i) + "]";
+            if (!value.is_object()) {
+                Fail(context + " must be an object");
+            }
+            SectorCompiledLevelMarker marker;
+            marker.sourceAuthoringMarkerId = ReadInt(value, "editorId", context);
+            marker.id = ReadString(value, "id", context);
+            marker.position = ReadVector3(RequireField(value, "position", context), context + ".position");
+            SectorCoord exactX = 0;
+            SectorCoord exactZ = 0;
+            if (!VisibleAuthoringToSectorCoord(marker.position.x, exactX)
+                    || !VisibleAuthoringToSectorCoord(marker.position.z, exactZ)) {
+                Fail(context + ".position X/Z must be exact authoring coordinates");
+            }
+            marker.yawRadians = ReadFloat(value, "orientationDegrees", context) * (Pi / 180.0f);
+            map.levelMarkers.push_back(std::move(marker));
+        }
+    }
+
     const auto runtimeObjectsIt = root.find("runtimeObjects");
     if (runtimeObjectsIt != root.end()) {
         if (!runtimeObjectsIt->is_array()) {
@@ -2751,6 +2778,38 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    const auto levelMarkersIt = value.find("levelMarkers");
+    if (levelMarkersIt != value.end()) {
+        if (!levelMarkersIt->is_array()) {
+            Fail("root.authoringGraph.levelMarkers must be an array");
+        }
+        for (size_t i = 0; i < levelMarkersIt->size(); ++i) {
+            const Json& markerJson = (*levelMarkersIt)[i];
+            const std::string context = "root.authoringGraph.levelMarkers[" + std::to_string(i) + "]";
+            if (!markerJson.is_object()) {
+                Fail(context + " must be an object");
+            }
+            SectorAuthoringLevelMarker marker;
+            marker.id = ReadInt(markerJson, "editorId", context);
+            marker.referenceId = ReadString(markerJson, "id", context);
+            marker.x = ReadCoord(markerJson, "x", context);
+            marker.y = ReadFloat(markerJson, "y", context);
+            marker.z = ReadCoord(markerJson, "z", context);
+            marker.orientationDegrees = ReadFloat(markerJson, "orientationDegrees", context);
+            graph.levelMarkers.push_back(std::move(marker));
+        }
+    }
+
+    const std::vector<SectorAuthoringValidationIssue> issues =
+            ValidateSectorAuthoringGraphReferences(graph);
+    const auto markerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
+        return issue.objectKind == SectorAuthoringObjectKind::LevelMarker
+                && issue.severity == SectorAuthoringValidationSeverity::Error;
+    });
+    if (markerError != issues.end()) {
+        Fail("Invalid authoring level marker: " + markerError->message);
+    }
+
     return graph;
 }
 
@@ -3034,6 +3093,30 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         }
     }
 
+    if (!graph.levelMarkers.empty()) {
+        const std::vector<SectorAuthoringValidationIssue> issues =
+                ValidateSectorAuthoringGraphReferences(graph);
+        const auto markerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
+            return issue.objectKind == SectorAuthoringObjectKind::LevelMarker
+                    && issue.severity == SectorAuthoringValidationSeverity::Error;
+        });
+        if (markerError != issues.end()) {
+            Fail("Invalid authoring level marker: " + markerError->message);
+        }
+        graphJson["levelMarkers"] = Json::array();
+        for (const SectorAuthoringLevelMarker* marker : SortedById(graph.levelMarkers)) {
+            RequireFinite(marker->y, "authoring level marker y");
+            RequireFinite(marker->orientationDegrees, "authoring level marker orientationDegrees");
+            graphJson["levelMarkers"].push_back(Json{
+                    {"editorId", marker->id},
+                    {"id", marker->referenceId},
+                    {"x", marker->x},
+                    {"y", marker->y},
+                    {"z", marker->z},
+                    {"orientationDegrees", marker->orientationDegrees}});
+        }
+    }
+
     return graphJson;
 }
 
@@ -3262,6 +3345,25 @@ Json SerializeMap(const SectorTopologyMap& map)
             sectorJson["ceilingSky"] = true;
         }
         root["sectors"].push_back(std::move(sectorJson));
+    }
+
+    if (!map.levelMarkers.empty()) {
+        root["levelMarkers"] = Json::array();
+        std::vector<const SectorCompiledLevelMarker*> markers;
+        markers.reserve(map.levelMarkers.size());
+        for (const SectorCompiledLevelMarker& marker : map.levelMarkers) {
+            markers.push_back(&marker);
+        }
+        std::sort(markers.begin(), markers.end(), [](const auto* left, const auto* right) {
+            return left->sourceAuthoringMarkerId < right->sourceAuthoringMarkerId;
+        });
+        for (const SectorCompiledLevelMarker* marker : markers) {
+            root["levelMarkers"].push_back(Json{
+                    {"editorId", marker->sourceAuthoringMarkerId},
+                    {"id", marker->id},
+                    {"position", WriteVector3(marker->position, "level marker position")},
+                    {"orientationDegrees", marker->yawRadians * (180.0f / Pi)}});
+        }
     }
 
     if (!map.runtimeObjects.empty()) {

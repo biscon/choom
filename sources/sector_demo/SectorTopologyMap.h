@@ -73,6 +73,14 @@ struct SectorCompiledLocalFogVolume {
     float flowSpeedWorld = 0.12f;
 };
 
+// Derived runtime representation of an authoring-owned level marker.
+struct SectorCompiledLevelMarker {
+    int sourceAuthoringMarkerId = -1;
+    std::string id;
+    Vector3 position = {};
+    float yawRadians = 0.0f;
+};
+
 struct SectorPlacedBillboard {
     std::string spriteAnimationPath;
     Vector2 sizeWorld = {1.0f, 1.0f};
@@ -201,6 +209,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologyDynamicPointLight> dynamicPointLights;
     std::vector<SectorTopologyDynamicSpotLight> dynamicSpotLights;
     std::vector<SectorPlacedRuntimeObject> runtimeObjects;
+    std::vector<SectorCompiledLevelMarker> levelMarkers;
     SectorPreviewSettings previewSettings;
     SectorTopologySkySettings skySettings;
     SectorTopologyDirectionalLightSettings directionalLight;
@@ -285,6 +294,10 @@ const SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(const SectorTopol
 SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
 
 bool RemoveSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
+
+const SectorCompiledLevelMarker* FindSectorCompiledLevelMarker(
+        const SectorTopologyMap& map,
+        const std::string& id);
 
 SectorResolvedDoorAnchor ResolveSectorDoorAnchor(
         const SectorTopologyMap& map,

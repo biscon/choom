@@ -27,6 +27,8 @@
 #include "sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
+#include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
 #include "sector_demo/SectorSceneRuntime.h"
 #include "game/FpsWeaponRegistry.h"
 
@@ -410,6 +412,9 @@ private:
     MaterialEditingUiState materialEditingUiState;
     FogVolumeEditingUiState fogVolumeEditingUiState;
     std::optional<SectorEditorAuthoringFogVolumeEditingService> fogVolumeEditingService;
+    LevelMarkerEditingState levelMarkerEditingState;
+    LevelMarkerEditingUiState levelMarkerEditingUiState;
+    std::optional<SectorEditorLevelMarkerEditingService> levelMarkerEditingService;
     SectorEditorLightmapBakeController lightmapBake;
     Rectangle canvasRect = {};
     std::string statusText;

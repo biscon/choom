@@ -5780,6 +5780,16 @@
         "flowDirectionDegrees": 90.0,
         "flowSpeedWorld": 1.0
       }
+    ],
+    "levelMarkers": [
+      {
+        "editorId": 1,
+        "id": "default",
+        "x": 64,
+        "y": 0.0,
+        "z": -128,
+        "orientationDegrees": 90.0
+      }
     ]
   }
 }

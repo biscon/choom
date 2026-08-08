@@ -61,4 +61,27 @@ bool LoadSectorRuntimeLevel(
     return false;
 }
 
+bool ResolveSectorLevelEntryMarker(
+        const SectorTopologyMap& map,
+        const std::optional<std::string>& requestedMarkerId,
+        const SectorCompiledLevelMarker*& outMarker,
+        std::string& error)
+{
+    outMarker = nullptr;
+    const std::string markerId = requestedMarkerId.value_or("default");
+    const SectorCompiledLevelMarker* marker =
+            FindSectorCompiledLevelMarker(map, markerId);
+    if (marker == nullptr) {
+        if (!requestedMarkerId.has_value()) {
+            error.clear();
+            return true;
+        }
+        error = "Level entry marker '" + markerId + "' does not exist";
+        return false;
+    }
+    outMarker = marker;
+    error.clear();
+    return true;
+}
+
 } // namespace game

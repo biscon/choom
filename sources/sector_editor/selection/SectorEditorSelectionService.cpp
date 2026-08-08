@@ -819,6 +819,22 @@ void SelectSectorEditorAuthoringFogVolumeTarget(
     context.ui.inspectorScroll.offset = Vector2{};
 }
 
+void SelectSectorEditorAuthoringLevelMarkerTarget(
+        SectorEditorSelectionServiceContext& context,
+        int levelMarkerId)
+{
+    if (FindSectorAuthoringLevelMarker(context.authoringGraph, levelMarkerId) == nullptr) {
+        ClearSectorEditorSelection(context);
+        return;
+    }
+    ClearSectorEditorSelection(context);
+    SelectSectorEditorAuthoringLevelMarker(
+            context.authoringGraph,
+            context.selectionState,
+            levelMarkerId);
+    context.ui.inspectorScroll.offset = Vector2{};
+}
+
 void SelectSectorEditorSurface3D(SectorEditorSelectionServiceContext& context, SectorSurfaceRef surface)
 {
     const TopologySurfaceEditTarget target = SectorEditorTopologyEditTargetForSurface(surface);

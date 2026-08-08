@@ -279,7 +279,8 @@ enum class SectorTopologyObjectKind {
     SideDef,
     Sector,
     StaticLight,
-    DynamicLight
+    DynamicLight,
+    LevelMarker
 };
 
 struct SectorTopologyValidationIssue {
