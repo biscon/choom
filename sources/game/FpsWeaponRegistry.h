@@ -197,6 +197,7 @@ struct FpsApplicationSettingsEntry {
 
 struct FpsApplicationSettings {
     int version = 1;
+    std::string firstLevel = "hub";
     std::vector<FpsApplicationSettingsEntry> weapons;
 };
 

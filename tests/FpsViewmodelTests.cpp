@@ -1,7 +1,7 @@
 #include "game/FpsViewmodel.h"
 #include "game/FpsWeaponRegistry.h"
-#include "sector_editor/preview/SectorEditorPreviewHudRenderer.h"
-#include "sector_editor/preview/SectorEditorPreviewViewmodelEffectsRenderer.h"
+#include "game/FpsHudRenderer.h"
+#include "game/FpsViewmodelEffectsRenderer.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
 
 #include <raymath.h>
@@ -530,6 +530,7 @@ void SettingsResolutionAndPersistence()
     assert(game::ParseFpsApplicationSettings(
             R"({"version":1,"viewmodelOverrides":{"pistol":{"position":[1,2,3],"scale":2,"holsterTransition":{"holsterDurationSeconds":0.2,"unholsterDurationSeconds":0.4,"hiddenTranslation":[0.5,-2,0.1],"hiddenRotationDegrees":[15,1,-12]},"gripCorrection":{"translation":[0.1,0.2,0.3],"rotationDegrees":[10,20,30],"scale":1.25},"attachmentLighting":{"brightnessAdjustment":0.2,"metallicFactor":0.45,"roughnessFactor":0.8},"firing":{"shotIntervalSeconds":0.2,"recoilTranslationImpulse":[0,0,-0.04],"recoilRotationImpulseDegrees":[-4,0,0],"recoilRollVariationDegrees":0.5,"recoilSpringFrequencyHz":9,"recoilDampingRatio":0.9,"muzzlePosition":[0,0.04,0.11],"muzzleRotationDegrees":[1,2,3],"flashLifetimeSeconds":0.06,"flashSizeWorld":0.12,"flashSizeVariation":0.1,"flashIrregularity":0.7,"flashForwardStretch":2.1,"flashMinimumLobeCount":4,"flashMaximumLobeCount":7,"flashRearSuppression":0.85,"flashEdgeSoftness":0.4,"muzzleLightIntensity":7,"muzzleLightRadiusWorld":3,"muzzleLightLifetimeSeconds":0.08}}}})",
             settings, &error));
+    assert(settings.firstLevel == "hub");
     assert(game::FindFpsViewmodelOverride(settings, "pistol") != nullptr);
     const auto* parsedTransition =
             game::FindFpsViewmodelHolsterTransitionOverride(
@@ -636,10 +637,12 @@ void SettingsResolutionAndPersistence()
                     firingDefaults, effectiveFiring);
     assert(!game::FpsWeaponFiringOverrideEmpty(firingOverride));
     game::SetFpsWeaponFiringOverride(settings, "pistol", firingOverride);
+    settings.firstLevel = "test4";
     const std::filesystem::path path = std::filesystem::temp_directory_path()/"fps_viewmodel_settings_test.json";
     assert(game::SaveFpsApplicationSettings(path.string(), settings, &error));
     game::FpsApplicationSettings loaded;
     assert(game::LoadFpsApplicationSettings(path.string(), loaded, &error));
+    assert(loaded.firstLevel == "test4");
     assert(game::FindFpsViewmodelOverride(loaded, "pistol") != nullptr);
     assert(game::FindFpsViewmodelHolsterTransitionOverride(
             loaded, "pistol") != nullptr);
@@ -691,6 +694,12 @@ void SettingsResolutionAndPersistence()
             loaded, &error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"viewmodelOverrides":{"pistol":{"attachmentLighting":{"metallicFactor":"bad"}}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"firstLevel":"../hub"})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"firstLevel":5})",
             loaded, &error));
 }
 
@@ -1037,8 +1046,8 @@ void CrosshairVisibilityAndLayout()
     runtime.activeWeaponId = "pistol";
 
     const auto visible = [&](bool preview3DActive) {
-        return game::ShouldDrawSectorEditorPreviewCrosshair(
-                game::SectorEditorPreviewHudContext{
+        return game::ShouldDrawFpsCrosshair(
+                game::FpsHudContext{
                         preview3DActive,
                         Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
                         registry,
@@ -1079,14 +1088,14 @@ void CrosshairVisibilityAndLayout()
 
     const game::FpsWeaponCrosshairDefinition& crosshair =
             registry.weapons.front().crosshair;
-    assert(Near(game::SectorEditorPreviewHudScale(
+    assert(Near(game::FpsHudScale(
             Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f}), 1.0f));
-    assert(Near(game::SectorEditorPreviewHudScale(
+    assert(Near(game::FpsHudScale(
             Rectangle{100.0f, 50.0f, 960.0f, 540.0f}), 0.5f));
-    assert(Near(game::SectorEditorPreviewHudScale(
+    assert(Near(game::FpsHudScale(
             Rectangle{0.0f, 0.0f, 3840.0f, 2160.0f}), 2.0f));
 
-    const auto full = game::BuildSectorEditorPreviewCrosshairLayout(
+    const auto full = game::BuildFpsCrosshairLayout(
             crosshair,
             Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
             1.0f);
@@ -1107,12 +1116,12 @@ void CrosshairVisibilityAndLayout()
             4.0f));
 
     const Rectangle oddViewport{13.0f, 17.0f, 1919.0f, 1079.0f};
-    const auto odd = game::BuildSectorEditorPreviewCrosshairLayout(
+    const auto odd = game::BuildFpsCrosshairLayout(
             crosshair, oddViewport, 1.0f);
     assert(Near(odd.center.x, 973.0f));
     assert(Near(odd.center.y, 557.0f));
 
-    const auto half = game::BuildSectorEditorPreviewCrosshairLayout(
+    const auto half = game::BuildFpsCrosshairLayout(
             crosshair,
             Rectangle{100.0f, 50.0f, 960.0f, 540.0f},
             0.5f);
@@ -1120,7 +1129,7 @@ void CrosshairVisibilityAndLayout()
     assert(Near(half.segments[0].inner.width, 3.0f));
     assert(Near(half.segments[0].inner.height, 1.0f));
 
-    const auto twice = game::BuildSectorEditorPreviewCrosshairLayout(
+    const auto twice = game::BuildFpsCrosshairLayout(
             crosshair,
             Rectangle{0.0f, 0.0f, 3840.0f, 2160.0f},
             2.0f);
@@ -1132,7 +1141,7 @@ void CrosshairVisibilityAndLayout()
     runtime.attachment.handModelTransform = MatrixTranslate(10.0f, 20.0f, 30.0f);
     runtime.attachment.pistolWorldTransform = MatrixRotateY(1.25f);
     const auto afterWeaponTransforms =
-            game::BuildSectorEditorPreviewCrosshairLayout(
+            game::BuildFpsCrosshairLayout(
                     crosshair,
                     Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
                     1.0f);
@@ -1224,39 +1233,39 @@ void FiringRuntimeAndTransforms()
     gradient.warmColor = Color{255, 90, 15, 230};
     gradient.edgeColor = Color{120, 15, 5, 150};
     gradient.edgeSoftness = 0.35f;
-    const Color core = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color core = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.0f, 1.0f);
-    const Color hot = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color hot = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.22f, 1.0f);
-    const Color warm = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color warm = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.58f, 1.0f);
-    const Color edge = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color edge = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.82f, 1.0f);
-    const Color boundary = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color boundary = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 1.0f, 1.0f);
     assert(core.r == 255 && core.g == 255 && core.b == 245 && core.a == 255);
     assert(hot.r == 255 && hot.g == 235 && hot.b == 120);
     assert(warm.r == 255 && warm.g == 90 && warm.b == 15);
     assert(edge.r == 120 && edge.g == 15 && edge.b == 5);
     assert(boundary.a == 0);
-    const Color halfLife = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color halfLife = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.0f, 0.5f);
     assert(halfLife.a == 128);
     gradient.edgeSoftness = 0.10f;
-    const Color narrow = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color narrow = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.80f, 1.0f);
     gradient.edgeSoftness = 0.60f;
-    const Color wide = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color wide = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.80f, 1.0f);
     assert(wide.a < narrow.a);
     const auto earlyTemporal =
-            game::EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+            game::EvaluateFpsMuzzleFlashTemporalState(
                     0.005f, 0.033f);
     const auto lateTemporal =
-            game::EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+            game::EvaluateFpsMuzzleFlashTemporalState(
                     0.02475f, 0.033f);
     const auto expiredTemporal =
-            game::EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+            game::EvaluateFpsMuzzleFlashTemporalState(
                     0.033f, 0.033f);
     assert(Near(earlyTemporal.expansionScale, 1.0f));
     assert(Near(earlyTemporal.opacity, 1.0f));
@@ -1471,8 +1480,8 @@ void FiringRuntimeAndTransforms()
     }
     assert(observedDifferentLobeCountOrPhase);
 
-    const game::SectorEditorPreviewMuzzleFlashRibbonAxes axialAxes =
-            game::BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+    const game::FpsMuzzleFlashRibbonAxes axialAxes =
+            game::BuildFpsMuzzleFlashRibbonAxes(
                     Vector3{0.0f, 0.0f, 1.0f},
                     Vector3{1.0f, 0.0f, 0.0f});
     assert(axialAxes.valid);
@@ -1485,8 +1494,8 @@ void FiringRuntimeAndTransforms()
     assert(Near(Vector3DotProduct(
             axialAxes.second, Vector3{0.0f, 0.0f, 1.0f}), 0.0f));
 
-    const game::SectorEditorPreviewMuzzleFlashRibbonAxes fallbackAxes =
-            game::BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+    const game::FpsMuzzleFlashRibbonAxes fallbackAxes =
+            game::BuildFpsMuzzleFlashRibbonAxes(
                     Vector3{0.0f, 1.0f, 0.0f},
                     Vector3{0.0f, 2.0f, 0.0f});
     assert(fallbackAxes.valid);
@@ -1494,7 +1503,7 @@ void FiringRuntimeAndTransforms()
     assert(Near(Vector3Length(fallbackAxes.second), 1.0f));
     assert(Near(Vector3DotProduct(
             fallbackAxes.first, fallbackAxes.second), 0.0f));
-    assert(!game::BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+    assert(!game::BuildFpsMuzzleFlashRibbonAxes(
             Vector3{}, Vector3{1.0f, 0.0f, 0.0f}).valid);
 
     Camera3D shotCamera{};

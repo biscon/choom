@@ -1,7 +1,6 @@
 #include "sector_editor/SectorEditor.h"
 
 #include "engine/input/InputEvents.h"
-#include "engine/systems/AnimatedModelSystem.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
@@ -17,9 +16,7 @@
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlay.h"
-#include "sector_editor/preview/SectorEditorPreviewHudRenderer.h"
 #include "sector_editor/preview/SectorEditorPreviewUvPanel.h"
-#include "sector_editor/preview/SectorEditorPreviewViewmodelEffectsRenderer.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
@@ -35,7 +32,6 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorVertexInspector.h"
 #include "sector_demo/SectorFpsController.h"
-#include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
@@ -48,7 +44,6 @@
 
 #include <raylib.h>
 #include <raymath.h>
-#include <rlgl.h>
 
 #include <algorithm>
 #include <cctype>
@@ -376,12 +371,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     engine::AssetManager& assets = context.assets;
     lightmapBake.Shutdown();
     EndFpsViewmodel(assets);
-    if (initialized
-            || previewState.runtime.runtimeObjects.worldReserved
-            || !engine::IsNull(previewState.runtime.runtimeObjects.runtimeObjectAssetScope)) {
-        ClearSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects);
-    }
-    preview.ShutdownRendererResources(assets);
+    sceneRuntime.Shutdown(context);
     if (!engine::IsNull(textureCatalogState.editorTextureScope)) {
         assets.UnloadScope(textureCatalogState.editorTextureScope);
     }
@@ -409,291 +399,63 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
 
 void SectorEditor::BeginFpsViewmodel(engine::AssetManager& assets)
 {
-    EndFpsViewmodel(assets);
-    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
-    const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(weaponRegistry, weaponRegistry.initialWeaponId);
-    if (definition == nullptr) {
-        runtime.loadState = FpsViewmodelLoadState::Failed;
-        runtime.error = "Initial weapon definition is unavailable";
-        return;
-    }
-    const auto failAttachmentBecauseArmsFailed = [&runtime]() {
-        if (runtime.attachment.loadState
-                == FpsViewmodelAttachmentLoadState::Failed) {
-            return;
-        }
-        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Failed;
-        runtime.attachment.error =
-                "Arms viewmodel failed before the attachment could be evaluated";
-    };
-    runtime.activeWeaponId = definition->id;
-    runtime.resolvedModelPath = ResolveSectorAssetPath(definition->viewmodel.modelPath);
-    runtime.animationName = definition->viewmodel.idleAnimation;
-    runtime.brightnessAdjustment = definition->viewmodel.brightnessAdjustment;
-    runtime.brightnessMultiplier = FpsViewmodelBrightnessMultiplier(
-            runtime.brightnessAdjustment);
-    runtime.materialOverride = definition->viewmodel.materialOverride;
-    runtime.attachment.resolvedModelPath = ResolveSectorAssetPath(
-            definition->viewmodel.attachment.modelPath);
-    runtime.attachment.configuredBoneName =
-            definition->viewmodel.attachment.boneName;
-    runtime.attachment.gripCorrection = ResolveFpsViewmodelGripCorrection(
-            definition->viewmodel.attachment.gripCorrection,
-            FindFpsViewmodelGripCorrectionOverride(
-                    applicationSettings, definition->id));
-    runtime.attachment.lightingDefaults =
-            definition->viewmodel.attachment.lighting;
-    runtime.attachment.lighting = ResolveFpsViewmodelAttachmentLighting(
-            definition->viewmodel.attachment.lighting,
-            FindFpsViewmodelAttachmentLightingOverride(
-                    applicationSettings, definition->id));
-    runtime.attachment.brightnessMultiplier =
-            FpsViewmodelBrightnessMultiplier(
-                    runtime.attachment.lighting.brightnessAdjustment);
-    runtime.presentation = ResolveFpsViewmodelPresentation(
-            definition->viewmodel.presentation,
-            FindFpsViewmodelOverride(applicationSettings, definition->id));
-    runtime.holsterTransition = ResolveFpsViewmodelHolsterTransition(
-            definition->viewmodel.holsterTransition,
-            FindFpsViewmodelHolsterTransitionOverride(
-                    applicationSettings,
-                    definition->id));
-    runtime.holsterPose = EvaluateFpsViewmodelHolsterPose(
-            runtime.holsterTransition,
-            runtime.equipProgress);
-    runtime.firing.definition = ResolveFpsWeaponFiringDefinition(
-            definition->firing,
-            FindFpsWeaponFiringOverride(applicationSettings, definition->id));
-    if (state.previewSettingsModal.open) {
-        runtime.presentation = ClampFpsViewmodelPresentation(state.previewSettingsModal.draftViewmodel);
-    }
-    runtime.assetScope = assets.CreateScope("fps_viewmodel");
-    if (engine::IsNull(runtime.assetScope)) {
-        runtime.loadState = FpsViewmodelLoadState::Failed;
-        runtime.error = "Could not create the FPS viewmodel asset scope";
-        failAttachmentBecauseArmsFailed();
-        TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
-        return;
-    }
-    runtime.modelInstance.model = assets.RequestModel(
-            runtime.assetScope,
-            ("fps_viewmodel_" + definition->id).c_str(),
-            runtime.resolvedModelPath.c_str(),
-            engine::ModelLoad_Animations);
-    if (engine::IsNull(runtime.modelInstance.model)) {
-        runtime.loadState = FpsViewmodelLoadState::Failed;
-        runtime.error = "Could not request FPS viewmodel asset: " + runtime.resolvedModelPath;
-        failAttachmentBecauseArmsFailed();
-        TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
-        return;
-    }
-    runtime.attachment.model = assets.RequestModel(
-            runtime.assetScope,
-            ("fps_viewmodel_attachment_" + definition->id).c_str(),
-            runtime.attachment.resolvedModelPath.c_str(),
-            engine::ModelLoad_None);
-    if (engine::IsNull(runtime.attachment.model)) {
-        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Failed;
-        runtime.attachment.error = "Could not request FPS viewmodel attachment: "
-                + runtime.attachment.resolvedModelPath;
-        TraceLog(LOG_ERROR, "%s", runtime.attachment.error.c_str());
-    } else {
-        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Pending;
-    }
-    runtime.loadState = FpsViewmodelLoadState::Pending;
+    fpsPlayer.Begin(
+            assets,
+            sceneRuntime.Renderer(),
+            weaponRegistry,
+            applicationSettings,
+            "fps_viewmodel");
 }
 
 void SectorEditor::EndFpsViewmodel(engine::AssetManager& assets)
 {
-    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
-    if (!engine::IsNull(runtime.assetScope)) assets.UnloadScope(runtime.assetScope);
-    preview.SetRuntimePointLight(nullptr);
-    ResetFpsViewmodelRuntime(runtime);
+    fpsPlayer.End(assets, sceneRuntime.Renderer());
 }
-
-void SectorEditor::UpdateFpsViewmodel(engine::AssetManager& assets, float dt)
+void SectorEditor::UpdateFpsViewmodel(
+        engine::AssetManager& assets,
+        float dt)
 {
-    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
-    if (runtime.loadState == FpsViewmodelLoadState::Inactive) return;
-    const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(weaponRegistry, runtime.activeWeaponId);
-    if (definition == nullptr) {
-        runtime.loadState = FpsViewmodelLoadState::Failed;
-        runtime.error = "Active weapon definition disappeared";
+    if (!state.previewSettingsModal.open) {
+        fpsPlayer.Update(
+                assets,
+                weaponRegistry,
+                applicationSettings,
+                dt);
         return;
     }
-    runtime.holsterTransition = ResolveFpsViewmodelHolsterTransition(
-            definition->viewmodel.holsterTransition,
-            FindFpsViewmodelHolsterTransitionOverride(
-                    applicationSettings,
-                    definition->id));
-    if (state.previewSettingsModal.open) {
-        runtime.holsterTransition = ClampFpsViewmodelHolsterTransition(
-                state.previewSettingsModal.draftViewmodelHolsterTransition);
-    }
-    AdvanceFpsViewmodelEquipTransition(runtime, dt);
-    runtime.firing.definition = ResolveFpsWeaponFiringDefinition(
-            definition->firing,
-            FindFpsWeaponFiringOverride(applicationSettings, definition->id));
-    if (state.previewSettingsModal.open) {
-        runtime.firing.definition = ClampFpsWeaponFiringDefinition(
-                state.previewSettingsModal.draftWeaponFiring);
-    }
-    AdvanceFpsWeaponFiringRuntime(runtime.firing, dt);
-    if (runtime.loadState == FpsViewmodelLoadState::Failed) return;
-    const auto failAttachmentBecauseArmsFailed = [&runtime]() {
-        if (runtime.attachment.loadState
-                == FpsViewmodelAttachmentLoadState::Failed) {
-            return;
-        }
-        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Failed;
-        runtime.attachment.error =
-                "Arms viewmodel failed before the attachment could be evaluated";
-    };
-    runtime.presentation = ResolveFpsViewmodelPresentation(
-            definition->viewmodel.presentation,
-            FindFpsViewmodelOverride(applicationSettings, definition->id));
-    if (state.previewSettingsModal.open) {
-        runtime.presentation = ClampFpsViewmodelPresentation(state.previewSettingsModal.draftViewmodel);
-    }
-    runtime.attachment.gripCorrection = ResolveFpsViewmodelGripCorrection(
-            definition->viewmodel.attachment.gripCorrection,
-            FindFpsViewmodelGripCorrectionOverride(
-                    applicationSettings, definition->id));
-    if (state.previewSettingsModal.open) {
-        runtime.attachment.gripCorrection = ClampFpsViewmodelGripCorrection(
-                state.previewSettingsModal.draftViewmodelGrip);
-    }
-    runtime.attachment.lighting = ResolveFpsViewmodelAttachmentLighting(
-            definition->viewmodel.attachment.lighting,
-            FindFpsViewmodelAttachmentLightingOverride(
-                    applicationSettings, definition->id));
-    if (state.previewSettingsModal.open) {
-        runtime.attachment.lighting = ClampFpsViewmodelAttachmentLighting(
-                state.previewSettingsModal.draftViewmodelAttachmentLighting);
-    }
-    runtime.attachment.brightnessMultiplier =
-            FpsViewmodelBrightnessMultiplier(
-                    runtime.attachment.lighting.brightnessAdjustment);
-    const engine::ModelAsset* asset = assets.GetModelAsset(runtime.modelInstance.model);
-    if (asset == nullptr) {
-        if (assets.HasFailed(runtime.modelInstance.model)) {
-            runtime.loadState = FpsViewmodelLoadState::Failed;
-            runtime.error = "Failed to load viewmodel model and animations: " + runtime.resolvedModelPath;
-            failAttachmentBecauseArmsFailed();
-            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
-        }
-        return;
-    }
-    if (runtime.loadState == FpsViewmodelLoadState::Pending) {
-        runtime.animationIndex = engine::FindModelAnimationIndex(*asset, runtime.animationName.c_str());
-        if (runtime.animationIndex == engine::InvalidModelAnimationIndex) {
-            runtime.loadState = FpsViewmodelLoadState::Failed;
-            runtime.error = "Configured animation '" + runtime.animationName + "' was not found";
-            failAttachmentBecauseArmsFailed();
-            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
-            return;
-        }
-        const ModelAnimation& animation = asset->animations[runtime.animationIndex];
-        if (!IsModelAnimationValid(asset->model, animation)) {
-            runtime.loadState = FpsViewmodelLoadState::Failed;
-            runtime.error = "Animation '" + runtime.animationName + "' is incompatible with the model skeleton";
-            failAttachmentBecauseArmsFailed();
-            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
-            return;
-        }
-        if (!engine::PrepareAnimatedModelInstance(runtime.modelInstance, *asset)) {
-            runtime.loadState = FpsViewmodelLoadState::Failed;
-            runtime.error = "Viewmodel skeleton cannot use the GPU skinning path";
-            failAttachmentBecauseArmsFailed();
-            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
-            return;
-        }
-        runtime.meshCount = asset->model.meshCount;
-        runtime.boneCount = asset->model.skeleton.boneCount;
-        runtime.triangleCount = 0;
-        for (int i = 0; i < asset->model.meshCount; ++i) runtime.triangleCount += asset->model.meshes[i].triangleCount;
-        runtime.loadState = FpsViewmodelLoadState::Ready;
-    }
 
-    if (runtime.attachment.boneResolvedForModel
-            != runtime.modelInstance.model) {
-        runtime.attachment.boneResolvedForModel = runtime.modelInstance.model;
-        runtime.attachment.boneIndex = FindFpsViewmodelBoneIndex(
-                asset->model.skeleton.bones,
-                asset->model.skeleton.boneCount,
-                runtime.attachment.configuredBoneName);
-        runtime.attachment.resolvedBoneName.clear();
-        runtime.attachment.handPoseValid = false;
-        // raylib's glTF loader accumulates every animation keyframe through
-        // BuildPoseFromParentJoints(), so currentPose is already model-space.
-        runtime.attachment.poseSpace = FpsViewmodelBonePoseSpace::Model;
-        if (runtime.attachment.boneIndex < 0) {
-            runtime.attachment.loadState =
-                    FpsViewmodelAttachmentLoadState::Failed;
-            runtime.attachment.error = "Configured attachment bone '"
-                    + runtime.attachment.configuredBoneName
-                    + "' was not found in the arms skeleton";
-            TraceLog(LOG_ERROR, "%s", runtime.attachment.error.c_str());
-        } else {
-            runtime.attachment.resolvedBoneName =
-                    asset->model.skeleton.bones[
-                            runtime.attachment.boneIndex].name;
-        }
-    }
-
-    const engine::ModelAsset* attachmentAsset =
-            assets.GetModelAsset(runtime.attachment.model);
-    if (runtime.attachment.loadState
-                    != FpsViewmodelAttachmentLoadState::Failed
-            && attachmentAsset == nullptr
-            && assets.HasFailed(runtime.attachment.model)) {
-        runtime.attachment.loadState =
-                FpsViewmodelAttachmentLoadState::Failed;
-        runtime.attachment.error = "Failed to load viewmodel attachment: "
-                + runtime.attachment.resolvedModelPath;
-        TraceLog(LOG_ERROR, "%s", runtime.attachment.error.c_str());
-    }
-    if (runtime.attachment.loadState
-                    == FpsViewmodelAttachmentLoadState::Pending
-            && attachmentAsset != nullptr
-            && runtime.attachment.boneIndex >= 0) {
-        runtime.attachment.meshCount = attachmentAsset->model.meshCount;
-        runtime.attachment.materialCount = attachmentAsset->model.materialCount;
-        runtime.attachment.triangleCount = 0;
-        for (int meshIndex = 0;
-                meshIndex < attachmentAsset->model.meshCount;
-                ++meshIndex) {
-            runtime.attachment.triangleCount +=
-                    attachmentAsset->model.meshes[meshIndex].triangleCount;
-        }
-        runtime.attachment.loadState =
-                FpsViewmodelAttachmentLoadState::Ready;
-        runtime.attachment.error.clear();
-    }
-    runtime.sourceFrameCursor = AdvanceFpsViewmodelAnimationCursor(
-            runtime.sourceFrameCursor, dt, definition->viewmodel.sourceFps,
-            definition->viewmodel.playbackSpeed, definition->viewmodel.firstFrame,
-            definition->viewmodel.lastFrame);
-    runtime.raylibFrame = FpsViewmodelCursorToRaylibFrame(
-            runtime.sourceFrameCursor, definition->viewmodel.sourceFps);
-    Model poseModel = engine::BuildAnimatedModelPoseView(*asset, runtime.modelInstance);
-    const ModelAnimation& animation = asset->animations[runtime.animationIndex];
-    UpdateModelAnimationEx(poseModel, animation, runtime.raylibFrame, animation, runtime.raylibFrame, 0.0f);
-    runtime.attachment.handPoseValid = BuildFpsViewmodelBoneModelTransform(
-            runtime.modelInstance.currentPose.data(),
-            asset->model.skeleton.bones,
-            asset->model.skeleton.boneCount,
-            runtime.attachment.boneIndex,
-            runtime.attachment.poseSpace,
-            runtime.attachment.handModelTransform);
-    if (!runtime.attachment.handPoseValid) {
-        runtime.attachment.pistolWorldTransformValid = false;
-    }
+    const FpsViewmodelPresentation presentation =
+            ClampFpsViewmodelPresentation(
+                    state.previewSettingsModal.draftViewmodel);
+    const FpsViewmodelHolsterTransition holsterTransition =
+            ClampFpsViewmodelHolsterTransition(
+                    state.previewSettingsModal
+                            .draftViewmodelHolsterTransition);
+    const FpsWeaponFiringDefinition firing =
+            ClampFpsWeaponFiringDefinition(
+                    state.previewSettingsModal.draftWeaponFiring);
+    const FpsViewmodelGripCorrection gripCorrection =
+            ClampFpsViewmodelGripCorrection(
+                    state.previewSettingsModal.draftViewmodelGrip);
+    const FpsViewmodelAttachmentLighting attachmentLighting =
+            ClampFpsViewmodelAttachmentLighting(
+                    state.previewSettingsModal
+                            .draftViewmodelAttachmentLighting);
+    const FpsPlayerRuntimeTuning tuning{
+            &presentation,
+            &holsterTransition,
+            &firing,
+            &gripCorrection,
+            &attachmentLighting};
+    fpsPlayer.Update(
+            assets,
+            weaponRegistry,
+            applicationSettings,
+            dt,
+            &tuning);
 }
-
 void SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
 {
-    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
     const bool gameplay3D = state.mode == SectorEditorMode::Preview3D
             && previewState.controller.previewControlMode
                     == SectorPreviewControlMode::Gameplay;
@@ -706,159 +468,44 @@ void SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen();
-    input.ForEachEvent(
-            engine::InputEventType::MouseButtonPressed,
-            true,
-            [this, &runtime, gameplay3D, mouseActive, uiCaptured](
-                    engine::InputEvent& event) {
-                if (event.mouseButton.button != MOUSE_BUTTON_LEFT) return;
-                FpsFireRejectReason reason = FpsFireRejectReason::None;
-                if (!CanFireFpsWeapon(
-                            runtime,
-                            gameplay3D,
-                            mouseActive,
-                            uiCaptured,
-                            &reason)) {
-                    runtime.firing.lastRejectReason = reason;
-                    if (gameplay3D && mouseActive && !uiCaptured) {
-                        engine::ConsumeEvent(event);
-                    }
-                    return;
-                }
-
-                const Camera3D& camera = preview.RenderCamera();
-                Vector3 direction = Vector3Normalize(
-                        Vector3Subtract(camera.target, camera.position));
-                FpsShotResult shot;
-                shot.accepted = true;
-                shot.rayOrigin = camera.position;
-                shot.rayDirection = direction;
-                if (previewState.collision.sectorCollisionWorldValid) {
-                    const SectorCollisionRayHit hit =
-                            previewState.collision.sectorCollisionWorld.Raycast(
-                                    camera.position,
-                                    direction,
-                                    runtime.firing.definition.maximumRangeWorld);
-                    shot.hit = hit.hit;
-                    shot.position = hit.position;
-                    shot.normal = hit.normal;
-                    shot.distance = hit.distance;
-                    shot.sectorId = hit.sectorId;
-                    shot.lineDefId = hit.lineDefId;
-                    shot.sideDefId = hit.sideDefId;
-                    shot.neighborSectorId = hit.neighborSectorId;
-                    switch (hit.surfaceKind) {
-                        case SectorCollisionRaySurfaceKind::Floor: shot.surfaceKind = FpsShotSurfaceKind::Floor; break;
-                        case SectorCollisionRaySurfaceKind::Ceiling: shot.surfaceKind = FpsShotSurfaceKind::Ceiling; break;
-                        case SectorCollisionRaySurfaceKind::Wall: shot.surfaceKind = FpsShotSurfaceKind::Wall; break;
-                        case SectorCollisionRaySurfaceKind::LowerWall: shot.surfaceKind = FpsShotSurfaceKind::LowerWall; break;
-                        case SectorCollisionRaySurfaceKind::UpperWall: shot.surfaceKind = FpsShotSurfaceKind::UpperWall; break;
-                        case SectorCollisionRaySurfaceKind::None: break;
-                    }
-                }
-                FpsMuzzleEmissionCapture emission;
-                const bool attachmentReady = runtime.attachment.handPoseValid
-                        && runtime.attachment.loadState
-                                == FpsViewmodelAttachmentLoadState::Ready;
-                if (attachmentReady) {
-                    const Matrix preShotRoot = BuildFpsViewmodelAnimatedTransform(
-                            camera,
-                            runtime.presentation,
-                            runtime.holsterPose,
-                            runtime.firing.recoil);
-                    const Matrix preShotPistol =
-                            BuildFpsViewmodelAttachmentTransform(
-                                    preShotRoot,
-                                    runtime.attachment.handModelTransform,
-                                    runtime.attachment.gripCorrection);
-                    const Matrix preShotMuzzle = BuildFpsViewmodelMuzzleTransform(
-                            preShotPistol,
-                            runtime.firing.definition.muzzleSocket);
-                    emission = CaptureFpsMuzzleEmission(
-                            preShotMuzzle, camera);
-                }
-                ApplyFpsWeaponShotEffects(runtime.firing, shot, emission);
-                engine::ConsumeEvent(event);
-            });
+    fpsPlayer.HandleFireInput(
+            input,
+            previewState.collision.sectorCollisionWorldValid
+                    ? &previewState.collision.sectorCollisionWorld
+                    : nullptr,
+            sceneRuntime.Renderer(),
+            gameplay3D,
+            mouseActive,
+            uiCaptured);
 }
-
 void SectorEditor::UpdateFpsViewmodelTransformsAndLight()
 {
-    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
-    runtime.firing.viewmodelRootTransform = BuildFpsViewmodelAnimatedTransform(
-            preview.RenderCamera(),
-            runtime.presentation,
-            runtime.holsterPose,
-            runtime.firing.recoil);
-    runtime.firing.viewmodelRootTransformValid = !runtime.activeWeaponId.empty();
-    runtime.attachment.pistolWorldTransformValid =
-            runtime.firing.viewmodelRootTransformValid
-            && runtime.attachment.handPoseValid
-            && runtime.attachment.loadState
-                    == FpsViewmodelAttachmentLoadState::Ready;
-    if (runtime.attachment.pistolWorldTransformValid) {
-        runtime.attachment.pistolWorldTransform =
-                BuildFpsViewmodelAttachmentTransform(
-                        runtime.firing.viewmodelRootTransform,
-                        runtime.attachment.handModelTransform,
-                        runtime.attachment.gripCorrection);
-        runtime.firing.muzzleWorldTransform = BuildFpsViewmodelMuzzleTransform(
-                runtime.attachment.pistolWorldTransform,
-                runtime.firing.definition.muzzleSocket);
-        runtime.firing.muzzleWorldTransformValid = true;
-    } else {
-        runtime.firing.muzzleWorldTransformValid = false;
-    }
-
-    SectorPreviewDynamicPointLightSource source;
-    const float intensity = FpsMuzzleLightCurrentIntensity(runtime.firing.light);
-    if (intensity > 0.0f && runtime.firing.emission.valid) {
-        const Matrix lightTransform = ResolveFpsMuzzleEmissionTransform(
-                runtime.firing.emission,
-                preview.RenderCamera());
-        const Vector3 position = Vector3Transform(
-                Vector3{}, lightTransform);
-        source.lightId = -1;
-        source.ownerSectorId = previewState.collision.sectorCollisionWorldValid
-                ? previewState.collision.sectorCollisionWorld.FindSectorContainingPoint(
-                        Vector2{position.x, position.z})
-                : 0;
-        source.light.lightId = source.lightId;
-        source.light.kind = SectorPreviewDynamicLightKind::Point;
-        source.light.position = position;
-        source.light.color = Vector3{
-                runtime.firing.light.color.r / 255.0f,
-                runtime.firing.light.color.g / 255.0f,
-                runtime.firing.light.color.b / 255.0f};
-        source.light.radius = runtime.firing.light.radiusWorld;
-        source.light.intensity = intensity;
-        source.light.flicker = false;
-        source.light.castsShadow = false;
-        preview.SetRuntimePointLight(&source);
-    } else {
-        preview.SetRuntimePointLight(nullptr);
-    }
+    fpsPlayer.UpdateTransformsAndLight(
+            sceneRuntime.Renderer(),
+            previewState.collision.sectorCollisionWorldValid
+                    ? &previewState.collision.sectorCollisionWorld
+                    : nullptr);
 
     if (previewState.controller.previewControlMode
             == SectorPreviewControlMode::Gameplay) {
-        const SectorFpsControllerConfig config = NormalizeSectorFpsControllerConfig(
-                previewState.controller.fpsControllerConfig);
-        preview.UpdateVisibilityDebug(
+        const SectorFpsControllerConfig config =
+                NormalizeSectorFpsControllerConfig(
+                        previewState.controller.fpsControllerConfig);
+        sceneRuntime.Renderer().UpdateVisibilityDebug(
                 previewState.controller.fpsControllerState.currentSectorId,
                 ClampRuntimeVisibilitySeedRadiusWorld(config.playerRadius),
                 true,
-                &previewState.runtime.runtimeObjects.dynamicPortalBlockers,
+                &sceneRuntime.RuntimeObjects().dynamicPortalBlockers,
                 engineContext != nullptr ? &engineContext->world : nullptr);
     } else {
-        preview.UpdateVisibilityDebug(
+        sceneRuntime.Renderer().UpdateVisibilityDebug(
                 0,
                 0.0f,
                 false,
-                &previewState.runtime.runtimeObjects.dynamicPortalBlockers,
+                &sceneRuntime.RuntimeObjects().dynamicPortalBlockers,
                 engineContext != nullptr ? &engineContext->world : nullptr);
     }
 }
-
 void SectorEditor::Update(engine::EngineContext& context, float dt)
 {
     engine::Input& input = context.input;
@@ -876,15 +523,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
 
     if (state.mode == SectorEditorMode::Preview3D) {
         const Vector3 playerPosition = previewState.controller.freeflyController.pose.position;
-        UpdateSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, TopologyMap(), dt, &playerPosition);
-        preview.FinalizeRuntimeObjectResources(
-                assets,
-                context.world);
-        previewState.runtime.runtimeObjects.dynamicDoorColliders.clear();
-        CollectSectorDoorDynamicColliders(context.world, previewState.runtime.runtimeObjects.dynamicDoorColliders);
-        previewState.runtime.runtimeObjects.dynamicPortalBlockers.clear();
-        CollectSectorDoorDynamicPortalBlockers(context.world, previewState.runtime.runtimeObjects.dynamicPortalBlockers);
-        preview.AdvanceRuntime(dt);
+        sceneRuntime.Update(context, TopologyMap(), dt, &playerPosition);
         UpdateFpsViewmodel(assets, dt);
         const bool hasBlockingModal = state.texturePicker.open
                 || runtimeObjectEditingState.spritePicker.open
@@ -1112,6 +751,32 @@ void SectorEditor::RenderUI(
 bool SectorEditor::IsPreview3DActive() const
 {
     return state.mode == SectorEditorMode::Preview3D;
+}
+
+bool SectorEditor::OpenLevel(
+        engine::EngineContext& context,
+        const std::string& levelName,
+        const std::string& jsonAssetPath)
+{
+    return LoadLevel(context, levelName, jsonAssetPath);
+}
+
+void SectorEditor::SuspendRuntime(engine::EngineContext& context)
+{
+    if (state.mode == SectorEditorMode::Preview3D) {
+        LeavePreview3D();
+    }
+    sceneRuntime.Shutdown(context);
+}
+
+void SectorEditor::RestoreRuntimeObjects(engine::EngineContext& context)
+{
+    sceneRuntime.RefreshMapRuntimeObjects(context, TopologyMap());
+}
+
+const SectorTopologyMap& SectorEditor::CurrentTopologyMap() const
+{
+    return TopologyMap();
 }
 
 Vector2 SectorEditor::MapToScreen(Vector2 map) const
@@ -1517,8 +1182,10 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                             || selectionState.topologySelectionKind != TopologySelectionKind::None
                             || selectionState.selectedAuthoring.kind != SectorAuthoringSelectionKind::None) {
                         ClearSelection();
-                    } else {
+                    } else if (state.currentTool != SectorEditorTool::Select) {
                         state.currentTool = SectorEditorTool::Select;
+                    } else {
+                        return;
                     }
                     engine::ConsumeEvent(event);
                     return;
@@ -2165,7 +1832,7 @@ void SectorEditor::FinishLightDrag()
     const SectorEditorLightMutationResult result = lightEditing.FinishLightDrag();
     lightEditingState.lightDrag = LightDragState{};
     if (result.dynamicLightRendererRefreshNeeded) {
-        preview.RefreshDynamicLightSources(TopologyMap());
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
     }
 }
 
@@ -2175,7 +1842,7 @@ void SectorEditor::CancelLightDrag(const char* message)
         SectorEditorLightEditingService lightEditing = BuildLightEditingService();
         const SectorEditorLightMutationResult result = lightEditing.CancelLightDragData(message);
         if (result.dynamicLightRendererRefreshNeeded) {
-            preview.RefreshDynamicLightSources(TopologyMap());
+            sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
         }
     }
 
@@ -2255,8 +1922,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_F4) {
-                    preview.ToggleDynamicLightingEnabled();
-                    statusText = preview.DynamicLightingEnabled()
+                    sceneRuntime.Renderer().ToggleDynamicLightingEnabled();
+                    statusText = sceneRuntime.Renderer().DynamicLightingEnabled()
                             ? "Dynamic lighting enabled"
                             : "Dynamic lighting disabled";
                     engine::ConsumeEvent(event);
@@ -2264,8 +1931,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_H) {
-                    if (ToggleFpsViewmodelHolster(previewState.runtime.viewmodel, true, uiState.keyboardCaptured)) {
-                        statusText = previewState.runtime.viewmodel.equipState
+                    if (ToggleFpsViewmodelHolster(fpsPlayer.State(), true, uiState.keyboardCaptured)) {
+                        statusText = fpsPlayer.State().equipState
                                         == FpsViewmodelEquipState::Holstering
                                 ? "Viewmodel holstering"
                                 : "Viewmodel unholstering";
@@ -2290,15 +1957,15 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
     if (state.mode == SectorEditorMode::Preview3D) {
         if (previewState.controller.previewControlMode == SectorPreviewControlMode::FreeFly) {
             UpdateSectorFreeflyController(previewState.controller.freeflyController, input, dt);
-            preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
-            preview.UpdateVisibilityDebug(
+            sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
+            sceneRuntime.Renderer().UpdateVisibilityDebug(
                     0,
                     0.0f,
                     false,
-                    &previewState.runtime.runtimeObjects.dynamicPortalBlockers,
+                    &sceneRuntime.RuntimeObjects().dynamicPortalBlockers,
                     &engineContext->world);
         } else {
-            const float previousVisualEyeY = preview.RendererPose().position.y;
+            const float previousVisualEyeY = sceneRuntime.Renderer().RendererPose().position.y;
             input.ForEachEvent(
                     engine::InputEventType::KeyPressed,
                     true,
@@ -2347,8 +2014,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 );
             }
             UpdateSectorEditorGameplayPreview(
-                    previewState.runtime.runtimeObjects.dynamicDoorColliders,
-                    previewState.runtime.runtimeObjects.staticModelColliders,
+                    sceneRuntime.RuntimeObjects().dynamicDoorColliders,
+                    sceneRuntime.RuntimeObjects().staticModelColliders,
                     previewState.collision,
                     previewState.controller,
                     state.previewSettingsModal.open,
@@ -2358,13 +2025,13 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             ApplyGameplayPoseToPreview();
             const SectorFpsControllerConfig normalizedVisibilityConfig =
                     NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
-            preview.UpdateVisibilityDebug(
+            sceneRuntime.Renderer().UpdateVisibilityDebug(
                     previewState.controller.fpsControllerState.currentSectorId,
                     ClampRuntimeVisibilitySeedRadiusWorld(normalizedVisibilityConfig.playerRadius),
                     true,
-                    &previewState.runtime.runtimeObjects.dynamicPortalBlockers,
+                    &sceneRuntime.RuntimeObjects().dynamicPortalBlockers,
                     &engineContext->world);
-            previewState.controller.freeflyController.pose = preview.RendererPose();
+            previewState.controller.freeflyController.pose = sceneRuntime.Renderer().RendererPose();
         }
         UpdatePreview3DSelection(input);
     }
@@ -2373,7 +2040,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
 void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
 {
     if (!initialized
-            || !preview.IsRendererReady()
+            || !sceneRuntime.Renderer().IsRendererReady()
             || previewState.controller.freeflyController.mouseLookEnabled
             || previewState.overlay.previewUiHidden
             || state.texturePicker.open
@@ -3138,10 +2805,10 @@ bool SectorEditor::OpenDeleteSelectedLightConfirmation()
                             previewState.controller.freeflyController,
                             previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
                     previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
-                    preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
+                    sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
                 }
                 if (result.dynamicLightRendererRefreshNeeded) {
-                    preview.RefreshDynamicLightSources(TopologyMap());
+                    sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
                 }
             });
     return true;
@@ -3154,7 +2821,7 @@ SectorEditor::BuildRuntimeObjectEditingService(
     return SectorEditorRuntimeObjectEditingService{
         SectorEditorRuntimeObjectEditingServiceContext{
             TopologyMap(),
-            previewState.runtime.runtimeObjects,
+            sceneRuntime.RuntimeObjects(),
             runtimeObjectEditingState,
             runtimeObjectEditingUiState,
             selectionState,
@@ -3394,7 +3061,7 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
     }
     TraceLog(LOG_INFO, "INFO: Lightmap bake completed asynchronously in %.2fs", result.bakeResult.totalBakeSeconds);
 
-    if (state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
+    if (state.mode == SectorEditorMode::Preview3D && sceneRuntime.Renderer().IsRendererReady()) {
         if (engineContext != nullptr) {
             RebuildPreviewMeshesPreservingView(*engineContext);
         }
@@ -3491,107 +3158,45 @@ void SectorEditor::RenderPreview3DShadowMaps(engine::AssetManager& assets)
     if (state.mode != SectorEditorMode::Preview3D) {
         return;
     }
-    preview.RenderDynamicSpotLightShadowMaps(
-            assets,
-            engineContext != nullptr ? &engineContext->world : nullptr);
+    (void)assets;
+    if (engineContext != nullptr) {
+        sceneRuntime.RenderShadowMaps(*engineContext);
+    }
 }
 
 void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
 {
-    preview.DrawScene(
-            context.assets,
-            previewState.overlay.useBakedAmbientOcclusion,
-            &context.world,
-            SectorRuntimeDoorLightingContext{&previewState.runtime.runtimeObjects.objectLightProbes, &TopologyMap()},
-            TopologyMap().fogSettings);
-}
-
-void SectorEditor::RenderPreview3DViewmodel(engine::AssetManager& assets)
-{
-    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
-    if (state.mode != SectorEditorMode::Preview3D) return;
-    if (!IsFpsViewmodelRenderable(runtime)) {
-        runtime.attachment.pistolWorldTransformValid = false;
-        return;
-    }
-    const engine::ModelAsset* asset = assets.GetModelAsset(runtime.modelInstance.model);
-    if (asset == nullptr) {
-        runtime.attachment.pistolWorldTransformValid = false;
-        return;
-    }
-
-    if (!runtime.firing.viewmodelRootTransformValid) return;
-    const Matrix viewmodelRoot = runtime.firing.viewmodelRootTransform;
-    const engine::ModelAsset* attachmentAsset = nullptr;
-    if (IsFpsViewmodelAttachmentRenderable(runtime)) {
-        attachmentAsset = assets.GetModelAsset(runtime.attachment.model);
-    }
-    runtime.attachment.pistolWorldTransformValid =
-            runtime.attachment.pistolWorldTransformValid
-            && attachmentAsset != nullptr;
-
-    Camera3D camera = preview.RenderCamera();
-    camera.fovy = runtime.presentation.verticalFovDegrees;
-    const double previousNear = rlGetCullDistanceNear();
-    const double previousFar = rlGetCullDistanceFar();
-    rlSetClipPlanes(0.01, previousFar);
-    const int preferredSectorId = previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
-            ? previewState.controller.fpsControllerState.currentSectorId : 0;
-    runtime.environmentExposure = ComputeSectorModelEnvironmentExposure(
+    sceneRuntime.RenderScene(
+            context,
             TopologyMap(),
-            preferredSectorId);
-    const BakedObjectLightingVerticalSample ambientLighting =
-            SampleBakedObjectLightingVertical(
-            previewState.runtime.runtimeObjects.objectLightProbes,
-            camera.position,
-            preferredSectorId,
-            &TopologyMap());
-    SectorViewmodelLightingContext viewmodelLighting;
-    viewmodelLighting.environmentExposure = runtime.environmentExposure;
-    viewmodelLighting.brightnessMultiplier = runtime.brightnessMultiplier;
-    viewmodelLighting.materialOverrideEnabled = runtime.materialOverride.enabled;
-    viewmodelLighting.metallicFactor = runtime.materialOverride.metallicFactor;
-    viewmodelLighting.roughnessFactor = runtime.materialOverride.roughnessFactor;
-    viewmodelLighting.useMetallicRoughnessTexture =
-            runtime.materialOverride.useMetallicRoughnessTexture;
-    SectorViewmodelLightingContext attachmentLighting;
-    attachmentLighting.environmentExposure = runtime.environmentExposure;
-    attachmentLighting.brightnessMultiplier =
-            runtime.attachment.brightnessMultiplier;
-    attachmentLighting.materialOverrideEnabled =
-            runtime.attachment.lighting.materialOverride.enabled;
-    attachmentLighting.metallicFactor =
-            runtime.attachment.lighting.materialOverride.metallicFactor;
-    attachmentLighting.roughnessFactor =
-            runtime.attachment.lighting.materialOverride.roughnessFactor;
-    attachmentLighting.useMetallicRoughnessTexture =
-            runtime.attachment.lighting.materialOverride
-                    .useMetallicRoughnessTexture;
-    preview.DrawViewmodel(
-            assets,
-            *asset,
-            runtime.modelInstance,
-            camera,
-            viewmodelRoot,
-            attachmentAsset,
-            runtime.attachment.pistolWorldTransform,
-            ambientLighting,
-            viewmodelLighting,
-            attachmentLighting);
-    DrawSectorEditorPreviewMuzzleFlash(runtime.firing, camera);
-    rlSetClipPlanes(previousNear, previousFar);
+            previewState.overlay.useBakedAmbientOcclusion);
 }
 
+void SectorEditor::RenderPreview3DViewmodel(
+        engine::AssetManager& assets)
+{
+    if (state.mode != SectorEditorMode::Preview3D) {
+        return;
+    }
+    const int preferredSectorId =
+            previewState.controller.previewControlMode
+                            == SectorPreviewControlMode::Gameplay
+                    ? previewState.controller.fpsControllerState
+                            .currentSectorId
+                    : 0;
+    fpsPlayer.Render(
+            assets,
+            sceneRuntime.Renderer(),
+            TopologyMap(),
+            sceneRuntime.RuntimeObjects(),
+            preferredSectorId);
+}
 void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
 {
     if (state.mode != SectorEditorMode::Preview3D) {
         return;
     }
-    preview.ApplyEmissiveDecalBloomToScene(assets, sceneTarget, TopologyMap().fogSettings);
-    preview.ApplyLocalFogToScene(
-            sceneTarget,
-            TopologyMap(),
-            previewState.runtime.runtimeObjects.objectLightProbes);
+    sceneRuntime.ApplyPostProcessing(assets, sceneTarget, TopologyMap());
 }
 
 void SectorEditor::RenderPreview3DOverlays()
@@ -3605,17 +3210,15 @@ void SectorEditor::RenderPreview3DOverlays()
 
 void SectorEditor::RenderPreview3DHud(Rectangle playableViewport) const
 {
-    DrawSectorEditorPreviewHud(SectorEditorPreviewHudContext{
-            state.mode == SectorEditorMode::Preview3D,
-            playableViewport,
-            weaponRegistry,
-            previewState.runtime.viewmodel});
+    if (state.mode == SectorEditorMode::Preview3D) {
+        fpsPlayer.RenderHud(playableViewport, weaponRegistry);
+    }
 }
 
 SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectangle viewportRect) const
 {
     SectorSurfaceHit best;
-    if (!preview.IsRendererReady()) {
+    if (!sceneRuntime.Renderer().IsRendererReady()) {
         return best;
     }
 
@@ -3625,15 +3228,15 @@ SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectan
     };
     const Ray ray = GetScreenToWorldRayEx(
             localMouse,
-            preview.RenderCamera(),
+            sceneRuntime.Renderer().RenderCamera(),
             static_cast<int>(std::round(viewportRect.width)),
             static_cast<int>(std::round(viewportRect.height))
     );
 
     const SectorGeneratedSurfaceHit hit = PickSectorGeneratedGeometry(
-            preview.RenderedGeometry(),
+            sceneRuntime.Renderer().RenderedGeometry(),
             ray,
-            preview.VisibilityResult(),
+            sceneRuntime.Renderer().VisibilityResult(),
             GeometryEpsilon);
     if (!hit.hit) {
         return best;
@@ -3665,22 +3268,30 @@ void SectorEditor::DrawPreviewSurfaceHighlights() const
                     const_cast<RuntimeObjectEditingUiState&>(runtimeObjectEditingUiState),
                     const_cast<InspectorIdUiState&>(inspectorIdUiState)),
             const_cast<MaterialEditingUiState&>(materialEditingUiState),
-            preview);
+            sceneRuntime.Renderer());
 }
 
 void SectorEditor::DrawPreviewSpotLightOverlay() const
 {
-    DrawSectorEditorPreviewSpotLightOverlay(TopologyMap(), previewState.controller, selectionState, preview);
+    DrawSectorEditorPreviewSpotLightOverlay(
+            TopologyMap(),
+            previewState.controller,
+            selectionState,
+            sceneRuntime.Renderer());
 }
 
 void SectorEditor::DrawPreviewObjectProbeOverlay() const
 {
-    DrawSectorEditorPreviewObjectProbeOverlay(TopologyMap(), previewState, preview);
+    DrawSectorEditorPreviewObjectProbeOverlay(
+            TopologyMap(),
+            previewState,
+            sceneRuntime.RuntimeObjects(),
+            sceneRuntime.Renderer());
 }
 
 void SectorEditor::RefreshPreviewObjectProbeDebugData()
 {
-    RefreshSectorRuntimeObjectMapData(previewState.runtime.runtimeObjects, TopologyMap());
+    RefreshSectorRuntimeObjectMapData(sceneRuntime.RuntimeObjects(), TopologyMap());
 }
 
 bool SectorEditor::IsPreviewOverlayMouseInteractive() const
@@ -3717,6 +3328,8 @@ void SectorEditor::DrawPreviewOverlay(
             Lifecycle().topologyDocumentDirty,
             runtimeObjectEditingState.drag,
             previewState,
+            sceneRuntime.RuntimeObjects(),
+            fpsPlayer.State(),
             selectionState,
             manipulationState,
             BuildSelectionUiDependencies(
@@ -3727,7 +3340,7 @@ void SectorEditor::DrawPreviewOverlay(
             materialEditingUiState,
             lightEditingState,
             statusText,
-            preview};
+            sceneRuntime.Renderer()};
     const SectorEditorPreviewOverlayResult result = DrawSectorEditorPreviewOverlay(overlayContext);
 
     if (result.requestCancelSpotLightPilot) {
@@ -4802,7 +4415,7 @@ void SectorEditor::DrawSectorsPanel(
             uiState,
             runtimeObjectEditingState,
             runtimeObjectEditingUiState,
-            previewState.runtime.runtimeObjects,
+            sceneRuntime.RuntimeObjects(),
             inspectorIdUiState,
             materialEditingUiState,
             fogVolumeEditingUiState,
@@ -4845,8 +4458,8 @@ void SectorEditor::DrawSectorsPanel(
             StartLightmapBake();
             break;
         case SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources:
-            if (state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
-                preview.RefreshDynamicLightSources(TopologyMap());
+            if (state.mode == SectorEditorMode::Preview3D && sceneRuntime.Renderer().IsRendererReady()) {
+                sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
             }
             break;
         }
@@ -5356,8 +4969,7 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
     lightmapBake.Shutdown();
-    ClearSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects);
-    preview.ShutdownRendererResources(assets);
+    sceneRuntime.Shutdown(context);
     if (!engine::IsNull(textureCatalogState.editorTextureScope)) {
         assets.UnloadScope(textureCatalogState.editorTextureScope);
     }
@@ -5407,8 +5019,7 @@ bool SectorEditor::LoadLevel(
         return false;
     }
 
-    ClearSectorRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects);
-    preview.ShutdownRendererResources(assets);
+    sceneRuntime.Shutdown(context);
     if (!engine::IsNull(runtimeObjectEditingState.spritePicker.previewScope)) {
         assets.UnloadScope(runtimeObjectEditingState.spritePicker.previewScope);
     }
@@ -5505,7 +5116,7 @@ bool SectorEditor::LoadLevel(
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
-    ResetSectorRuntimeObjectsForMap(context.world, assets, previewState.runtime.runtimeObjects, topologyMap);
+    sceneRuntime.RefreshMapRuntimeObjects(context, topologyMap);
     if (loadedAuthoringGraph) {
         const char* loadedText = authoringDerivationCurrent
                 ? "Loaded authoring graph"
@@ -5669,12 +5280,12 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
         TraceLog(LOG_WARNING, "%s", fingerprintError.c_str());
     }
     std::string error;
-    if (!preview.RebuildRendererResources(assets, TopologyMap(), "sector_editor_preview", error)) {
-        previewState.runtime.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
-        previewState.runtime.runtimeObjects.objectProbeStatus.clear();
-        previewState.runtime.runtimeObjects.objectSectorLookupWorld = SectorCollisionWorld{};
-        previewState.runtime.runtimeObjects.objectSectorLookupWorldValid = false;
-        previewState.runtime.runtimeObjects.objectSectorLookupWarning.clear();
+    if (!sceneRuntime.Rebuild(context, TopologyMap(), "sector_editor_preview", error)) {
+        sceneRuntime.RuntimeObjects().objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
+        sceneRuntime.RuntimeObjects().objectProbeStatus.clear();
+        sceneRuntime.RuntimeObjects().objectSectorLookupWorld = SectorCollisionWorld{};
+        sceneRuntime.RuntimeObjects().objectSectorLookupWorldValid = false;
+        sceneRuntime.RuntimeObjects().objectSectorLookupWarning.clear();
         previewState.collision.sectorCollisionWorldValid = false;
         previewState.collision.sectorCollisionWorldWarning.clear();
         previewState.collision.previewCollisionSectorId = 0;
@@ -5694,18 +5305,16 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
         return false;
     }
     RefreshPreviewObjectProbeDebugData();
-    EnsureSectorRuntimeObjectWorldReserved(context.world, previewState.runtime.runtimeObjects);
-    SpawnPlacedRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, TopologyMap());
     BeginFpsViewmodel(assets);
 
     if (previewState.controller.hasPreviewPose) {
-        preview.ApplyRendererPose(previewState.controller.lastPreviewPose);
+        sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.lastPreviewPose);
     }
 
     previewState.controller.previewControlMode = SectorPreviewControlMode::FreeFly;
-    ResetSectorFreeflyController(previewState.controller.freeflyController, preview.RendererPose());
+    ResetSectorFreeflyController(previewState.controller.freeflyController, sceneRuntime.Renderer().RendererPose());
     EnterSectorFreeflyController(previewState.controller.freeflyController);
-    preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
+    sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
     previewState.controller.visualStepOffsetY = 0.0f;
     ResetSectorFpsCrouch(previewState.controller.fpsControllerState);
     ClearSectorFpsHeadBob(previewState.controller.headBobState);
@@ -5720,8 +5329,8 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     RebuildSectorCollisionWorld();
     statusText = TextFormat(
             "3D mode rebuilt: %zu batches, %d triangles",
-            preview.BatchCount(),
-            preview.TriangleCount()
+            sceneRuntime.Renderer().BatchCount(),
+            sceneRuntime.Renderer().TriangleCount()
     );
     return true;
 }
@@ -5751,12 +5360,16 @@ void SectorEditor::LeavePreview3D()
 
 SectorViewPose SectorEditor::ActivePreviewPose() const
 {
-    return ActiveSectorEditorPreviewPose(previewState.controller, preview);
+    return ActiveSectorEditorPreviewPose(
+            previewState.controller,
+            sceneRuntime.Renderer());
 }
 
 void SectorEditor::ApplyGameplayPoseToPreview()
 {
-    ApplySectorEditorGameplayPoseToPreview(previewState.controller, preview);
+    ApplySectorEditorGameplayPoseToPreview(
+            previewState.controller,
+            sceneRuntime.Renderer());
 }
 
 void SectorEditor::TogglePreviewControlMode()
@@ -5765,8 +5378,8 @@ void SectorEditor::TogglePreviewControlMode()
                 state.mode == SectorEditorMode::Preview3D,
                 previewState.collision,
                 previewState.controller,
-                previewState.runtime.runtimeObjects.staticModelColliders,
-                preview)) {
+                sceneRuntime.RuntimeObjects().staticModelColliders,
+                sceneRuntime.Renderer())) {
         return;
     }
 
@@ -5821,7 +5434,7 @@ bool SectorEditor::StartSpotLightPilot()
     const SectorViewPose pilotPose = PreviewPoseLookingAt(originWorld, targetWorld);
     ResetSectorFreeflyController(previewState.controller.freeflyController, pilotPose);
     EnterSectorFreeflyController(previewState.controller.freeflyController);
-    preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
+    sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     statusText = pilotKind == SpotLightPilotKind::Static
             ? TextFormat("Piloting static spot %d", lightId)
@@ -5854,10 +5467,10 @@ bool SectorEditor::ApplySpotLightPilotFromPreviewPose()
                 previewState.controller.freeflyController,
                 previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
         previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
-        preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
+        sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {
-        preview.RefreshDynamicLightSources(TopologyMap());
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
     }
     if (result.changed) {
         previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
@@ -5881,10 +5494,10 @@ void SectorEditor::CancelSpotLightPilotWithPreviewRestore(const char* message)
                 previewState.controller.freeflyController,
                 previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
         previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
-        preview.ApplyRendererPose(previewState.controller.freeflyController.pose);
+        sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {
-        preview.RefreshDynamicLightSources(TopologyMap());
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
     }
 }
 
@@ -5894,7 +5507,7 @@ bool SectorEditor::RebuildSectorCollisionWorld()
             TopologyMap(),
             previewState.collision,
             previewState.controller,
-            previewState.runtime.runtimeObjects.staticModelColliders);
+            sceneRuntime.RuntimeObjects().staticModelColliders);
 }
 
 SectorFpsVerticalContext SectorEditor::BuildGameplayVerticalContext()
@@ -5902,7 +5515,7 @@ SectorFpsVerticalContext SectorEditor::BuildGameplayVerticalContext()
     return BuildSectorEditorGameplayVerticalContext(
             previewState.collision,
             previewState.controller,
-            previewState.runtime.runtimeObjects.staticModelColliders);
+            sceneRuntime.RuntimeObjects().staticModelColliders);
 }
 
 void SectorEditor::RefreshGameplaySectorAndVerticalContext()
@@ -5915,7 +5528,7 @@ void SectorEditor::InitializeGameplayVerticalState()
     InitializeSectorEditorGameplayVerticalState(
             previewState.collision,
             previewState.controller,
-            previewState.runtime.runtimeObjects.staticModelColliders);
+            sceneRuntime.RuntimeObjects().staticModelColliders);
 }
 
 void SectorEditor::OpenPreviewSettingsModal()
@@ -6198,14 +5811,14 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     }
     ResetSectorPreviewSettingsModalPreservingView(
             state.previewSettingsModal);
-    if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
+    if (skyChanged && state.mode == SectorEditorMode::Preview3D && sceneRuntime.Renderer().IsRendererReady()) {
         if (engineContext != nullptr) {
             RebuildPreviewMeshesPreservingView(*engineContext);
         }
     }
     if (state.mode == SectorEditorMode::Preview3D
             && previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
-            && preview.IsRendererReady()) {
+            && sceneRuntime.Renderer().IsRendererReady()) {
         previewState.collision.previewVerticalResult = UpdateSectorFpsVerticalPhysics(
                 previewState.controller.fpsControllerState,
                 previewState.controller.fpsControllerConfig,
@@ -6914,7 +6527,7 @@ SectorEditorMaterialEditingService SectorEditor::BuildMaterialEditingService()
                     statusText,
                     [this](engine::AssetManager*) {
                         if (state.mode == SectorEditorMode::Preview3D
-                                && preview.IsRendererReady()
+                                && sceneRuntime.Renderer().IsRendererReady()
                                 && engineContext != nullptr) {
                             return RebuildPreviewMeshesPreservingView(*engineContext);
                         }
@@ -7006,7 +6619,7 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
 bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
-    if (!preview.IsRendererReady()) {
+    if (!sceneRuntime.Renderer().IsRendererReady()) {
         return false;
     }
 
@@ -7022,7 +6635,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
         ClearSectorFpsLandingDip(previewState.controller.landingDipState);
         ApplyGameplayPoseToPreview();
     }
-    const SectorViewPose pose = preview.RendererPose();
+    const SectorViewPose pose = sceneRuntime.Renderer().RendererPose();
     const bool mouseLook = previewState.controller.freeflyController.mouseLookEnabled;
     const SectorSurfaceRef selected = previewState.selection.selectedSurface3D;
     const TopologySurfaceEditTarget selectedTarget = previewState.selection.selectedTopologySurface3D;
@@ -7035,12 +6648,12 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
         TraceLog(LOG_WARNING, "%s", fingerprintError.c_str());
     }
     std::string error;
-    if (!preview.RebuildRendererResources(assets, TopologyMap(), "sector_editor_preview", error)) {
-        previewState.runtime.runtimeObjects.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
-        previewState.runtime.runtimeObjects.objectProbeStatus.clear();
-        previewState.runtime.runtimeObjects.objectSectorLookupWorld = SectorCollisionWorld{};
-        previewState.runtime.runtimeObjects.objectSectorLookupWorldValid = false;
-        previewState.runtime.runtimeObjects.objectSectorLookupWarning.clear();
+    if (!sceneRuntime.Rebuild(context, TopologyMap(), "sector_editor_preview", error)) {
+        sceneRuntime.RuntimeObjects().objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
+        sceneRuntime.RuntimeObjects().objectProbeStatus.clear();
+        sceneRuntime.RuntimeObjects().objectSectorLookupWorld = SectorCollisionWorld{};
+        sceneRuntime.RuntimeObjects().objectSectorLookupWorldValid = false;
+        sceneRuntime.RuntimeObjects().objectSectorLookupWarning.clear();
         previewState.collision.sectorCollisionWorldValid = false;
         previewState.collision.sectorCollisionWorldWarning.clear();
         previewState.collision.previewCollisionSectorId = 0;
@@ -7059,10 +6672,8 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
         return false;
     }
     RefreshPreviewObjectProbeDebugData();
-    EnsureSectorRuntimeObjectWorldReserved(context.world, previewState.runtime.runtimeObjects);
-    SpawnPlacedRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, TopologyMap());
 
-    preview.ApplyRendererPose(pose);
+    sceneRuntime.Renderer().ApplyRendererPose(pose);
     ResetSectorFreeflyController(previewState.controller.freeflyController, pose);
     SetSectorFreeflyMouseLookEnabled(previewState.controller.freeflyController, mouseLook);
     const bool selectedStillValid = IsValidSurfaceRef(selected);

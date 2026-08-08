@@ -105,6 +105,22 @@ bool ValidAssetPath(const std::string& path)
             && (parsed.extension() == ".glb" || parsed.extension() == ".gltf");
 }
 
+bool ValidLevelName(const std::string& name)
+{
+    if (name.empty()) {
+        return false;
+    }
+    for (char ch : name) {
+        const bool asciiLetter = (ch >= 'A' && ch <= 'Z')
+                || (ch >= 'a' && ch <= 'z');
+        const bool asciiDigit = ch >= '0' && ch <= '9';
+        if (!(asciiLetter || asciiDigit || ch == '_' || ch == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void ValidatePresentation(const FpsViewmodelPresentation& value, const std::string& context)
 {
     const float values[] = {value.position.x, value.position.y, value.position.z,
@@ -562,6 +578,16 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
         FpsApplicationSettings parsed;
         parsed.version = Integer(root, "version", "application settings");
         if (parsed.version != 1) Fail("application settings version must be 1");
+        const auto firstLevel = root.find("firstLevel");
+        if (firstLevel != root.end()) {
+            if (!firstLevel->is_string()) {
+                Fail("application settings.firstLevel must be a string");
+            }
+            parsed.firstLevel = firstLevel->get<std::string>();
+            if (!ValidLevelName(parsed.firstLevel)) {
+                Fail("application settings.firstLevel must use only letters, digits, underscore, or dash");
+            }
+        }
         const auto overrides = root.find("viewmodelOverrides");
         if (overrides != root.end()) {
             if (!overrides->is_object()) Fail("application settings.viewmodelOverrides must be an object");
@@ -684,7 +710,11 @@ bool LoadFpsApplicationSettings(const std::string& path, FpsApplicationSettings&
 
 bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSettings& settings, std::string* error)
 {
-    Json root = {{"version", 1}};
+    if (!ValidLevelName(settings.firstLevel)) {
+        SetError(error, "application settings first level is invalid");
+        return false;
+    }
+    Json root = {{"version", 1}, {"firstLevel", settings.firstLevel}};
     Json overrides = Json::object();
     for (const auto& entry : settings.weapons) {
         Json value = Json::object();

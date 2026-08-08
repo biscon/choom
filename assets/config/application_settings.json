@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "firstLevel": "hub",
   "viewmodelOverrides": {
     "pistol": {
       "position": [

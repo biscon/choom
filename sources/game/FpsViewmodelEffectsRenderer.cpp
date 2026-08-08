@@ -1,4 +1,4 @@
-#include "sector_editor/preview/SectorEditorPreviewViewmodelEffectsRenderer.h"
+#include "game/FpsViewmodelEffectsRenderer.h"
 
 #include <raymath.h>
 #include <rlgl.h>
@@ -82,7 +82,7 @@ float RibbonWidthProfile(float normalizedLength)
 
 void EmitRibbon(
         const FpsMuzzleFlashRuntimeState& flash,
-        const SectorEditorPreviewMuzzleFlashTemporalState& temporal,
+        const FpsMuzzleFlashTemporalState& temporal,
         Vector3 origin,
         Vector3 direction,
         Vector3 widthAxis,
@@ -116,10 +116,10 @@ void EmitRibbon(
         const Vector3 secondRight = Vector3Add(
                 secondCenter, Vector3Scale(widthAxis, secondWidth));
         const Color firstCenterColor =
-                EvaluateSectorEditorPreviewMuzzleFlashGradient(
+                EvaluateFpsMuzzleFlashGradient(
                         flash, firstT, temporal.opacity, temporal.warmth);
         const Color secondCenterColor =
-                EvaluateSectorEditorPreviewMuzzleFlashGradient(
+                EvaluateFpsMuzzleFlashGradient(
                         flash, secondT, temporal.opacity, temporal.warmth);
         const Color firstEdgeColor = WithAlpha(firstCenterColor, 0.0f);
         const Color secondEdgeColor = WithAlpha(secondCenterColor, 0.0f);
@@ -148,9 +148,9 @@ void EmitRibbon(
     const Vector3 baseRight = Vector3Add(
             baseCenter, Vector3Scale(widthAxis, baseWidth));
     const Vector3 tip = Vector3Add(origin, Vector3Scale(direction, length));
-    const Color baseColor = EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color baseColor = EvaluateFpsMuzzleFlashGradient(
             flash, baseT, temporal.opacity, temporal.warmth);
-    const Color tipColor = EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color tipColor = EvaluateFpsMuzzleFlashGradient(
             flash, 1.0f, temporal.opacity, temporal.warmth);
     EmitVertex(baseLeft, WithAlpha(baseColor, 0.0f));
     EmitVertex(baseCenter, baseColor);
@@ -162,15 +162,15 @@ void EmitRibbon(
 
 void EmitCrossedRibbon(
         const FpsMuzzleFlashRuntimeState& flash,
-        const SectorEditorPreviewMuzzleFlashTemporalState& temporal,
+        const FpsMuzzleFlashTemporalState& temporal,
         Vector3 origin,
         Vector3 direction,
         Vector3 preferredWidthAxis,
         float length,
         float halfWidth)
 {
-    const SectorEditorPreviewMuzzleFlashRibbonAxes axes =
-            BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+    const FpsMuzzleFlashRibbonAxes axes =
+            BuildFpsMuzzleFlashRibbonAxes(
                     direction, preferredWidthAxis);
     if (!axes.valid) return;
     EmitRibbon(
@@ -183,12 +183,12 @@ void EmitCrossedRibbon(
 
 } // namespace
 
-SectorEditorPreviewMuzzleFlashTemporalState
-EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+FpsMuzzleFlashTemporalState
+EvaluateFpsMuzzleFlashTemporalState(
         float ageSeconds,
         float lifetimeSeconds)
 {
-    SectorEditorPreviewMuzzleFlashTemporalState result;
+    FpsMuzzleFlashTemporalState result;
     if (!(lifetimeSeconds > 0.0f) || !std::isfinite(ageSeconds)) {
         result.normalizedAge = 1.0f;
         result.expansionScale = 1.14f;
@@ -208,7 +208,7 @@ EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
     return result;
 }
 
-Color EvaluateSectorEditorPreviewMuzzleFlashGradient(
+Color EvaluateFpsMuzzleFlashGradient(
         const FpsMuzzleFlashRuntimeState& flash,
         float normalizedRadius,
         float opacity,
@@ -228,12 +228,12 @@ Color EvaluateSectorEditorPreviewMuzzleFlashGradient(
     return result;
 }
 
-SectorEditorPreviewMuzzleFlashRibbonAxes
-BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+FpsMuzzleFlashRibbonAxes
+BuildFpsMuzzleFlashRibbonAxes(
         Vector3 direction,
         Vector3 preferredWidthAxis)
 {
-    SectorEditorPreviewMuzzleFlashRibbonAxes result;
+    FpsMuzzleFlashRibbonAxes result;
     if (Vector3LengthSqr(direction) <= 0.000001f) return result;
     direction = Vector3Normalize(direction);
 
@@ -260,7 +260,7 @@ BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
     return result;
 }
 
-void DrawSectorEditorPreviewMuzzleFlash(
+void DrawFpsMuzzleFlash(
         const FpsWeaponFiringRuntimeState& firing,
         const Camera3D& viewmodelCamera)
 {
@@ -269,8 +269,8 @@ void DrawSectorEditorPreviewMuzzleFlash(
             || !(firing.flash.lifetimeSeconds > 0.0f)) {
         return;
     }
-    const SectorEditorPreviewMuzzleFlashTemporalState temporal =
-            EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+    const FpsMuzzleFlashTemporalState temporal =
+            EvaluateFpsMuzzleFlashTemporalState(
                     firing.flash.ageSeconds,
                     firing.flash.lifetimeSeconds);
     if (temporal.opacity <= 0.0f) return;

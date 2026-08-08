@@ -9,30 +9,30 @@
 
 namespace game {
 
-struct SectorEditorPreviewCrosshairSegmentLayout {
+struct FpsCrosshairSegmentLayout {
     Rectangle outline = {};
     Rectangle inner = {};
 };
 
-struct SectorEditorPreviewCrosshairLayout {
+struct FpsCrosshairLayout {
     Vector2 center = {};
-    std::array<SectorEditorPreviewCrosshairSegmentLayout, 4> segments{};
+    std::array<FpsCrosshairSegmentLayout, 4> segments{};
 };
 
-struct SectorEditorPreviewHudContext {
+struct FpsHudContext {
     bool preview3DActive = false;
     Rectangle playableViewport = {};
     const FpsWeaponRegistry& weaponRegistry;
     const FpsViewmodelRuntimeState& viewmodel;
 };
 
-bool ShouldDrawSectorEditorPreviewCrosshair(
-        const SectorEditorPreviewHudContext& context);
-float SectorEditorPreviewHudScale(Rectangle playableViewport);
-SectorEditorPreviewCrosshairLayout BuildSectorEditorPreviewCrosshairLayout(
+bool ShouldDrawFpsCrosshair(
+        const FpsHudContext& context);
+float FpsHudScale(Rectangle playableViewport);
+FpsCrosshairLayout BuildFpsCrosshairLayout(
         const FpsWeaponCrosshairDefinition& crosshair,
         Rectangle playableViewport,
         float uiScale);
-void DrawSectorEditorPreviewHud(const SectorEditorPreviewHudContext& context);
+void DrawFpsHud(const FpsHudContext& context);
 
 } // namespace game

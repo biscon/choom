@@ -1,6 +1,4 @@
-#include "sector_editor/preview/SectorEditorPreviewHudRenderer.h"
-
-#include "sector_editor/SectorEditorHelpers.h"
+#include "game/FpsHudRenderer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,6 +10,8 @@ constexpr size_t LeftSegment = 0;
 constexpr size_t RightSegment = 1;
 constexpr size_t TopSegment = 2;
 constexpr size_t BottomSegment = 3;
+constexpr float ReferenceWidth = 1920.0f;
+constexpr float ReferenceHeight = 1080.0f;
 
 int ScaledPixels(float authoredPixels, float uiScale)
 {
@@ -40,8 +40,8 @@ Rectangle Inset(Rectangle rectangle, int pixels)
 
 } // namespace
 
-bool ShouldDrawSectorEditorPreviewCrosshair(
-        const SectorEditorPreviewHudContext& context)
+bool ShouldDrawFpsCrosshair(
+        const FpsHudContext& context)
 {
     if (!context.preview3DActive
             || context.viewmodel.activeWeaponId.empty()
@@ -54,7 +54,7 @@ bool ShouldDrawSectorEditorPreviewCrosshair(
     return weapon != nullptr && weapon->crosshair.enabled;
 }
 
-float SectorEditorPreviewHudScale(Rectangle playableViewport)
+float FpsHudScale(Rectangle playableViewport)
 {
     if (!std::isfinite(playableViewport.width)
             || !std::isfinite(playableViewport.height)
@@ -63,16 +63,16 @@ float SectorEditorPreviewHudScale(Rectangle playableViewport)
         return 1.0f;
     }
     return std::min(
-            playableViewport.width / EditorWidth,
-            playableViewport.height / EditorHeight);
+            playableViewport.width / ReferenceWidth,
+            playableViewport.height / ReferenceHeight);
 }
 
-SectorEditorPreviewCrosshairLayout BuildSectorEditorPreviewCrosshairLayout(
+FpsCrosshairLayout BuildFpsCrosshairLayout(
         const FpsWeaponCrosshairDefinition& crosshair,
         Rectangle playableViewport,
         float uiScale)
 {
-    SectorEditorPreviewCrosshairLayout result;
+    FpsCrosshairLayout result;
     const int centerX = static_cast<int>(std::lround(
             playableViewport.x + playableViewport.width * 0.5f));
     const int centerY = static_cast<int>(std::lround(
@@ -119,15 +119,15 @@ SectorEditorPreviewCrosshairLayout BuildSectorEditorPreviewCrosshairLayout(
             outlinedThickness,
             outlinedLength);
 
-    for (SectorEditorPreviewCrosshairSegmentLayout& segment : result.segments) {
+    for (FpsCrosshairSegmentLayout& segment : result.segments) {
         segment.inner = Inset(segment.outline, outlineThickness);
     }
     return result;
 }
 
-void DrawSectorEditorPreviewHud(const SectorEditorPreviewHudContext& context)
+void DrawFpsHud(const FpsHudContext& context)
 {
-    if (!ShouldDrawSectorEditorPreviewCrosshair(context)
+    if (!ShouldDrawFpsCrosshair(context)
             || context.playableViewport.width <= 0.0f
             || context.playableViewport.height <= 0.0f) {
         return;
@@ -137,16 +137,16 @@ void DrawSectorEditorPreviewHud(const SectorEditorPreviewHudContext& context)
             context.viewmodel.activeWeaponId);
     if (weapon == nullptr) return;
 
-    const SectorEditorPreviewCrosshairLayout layout =
-            BuildSectorEditorPreviewCrosshairLayout(
+    const FpsCrosshairLayout layout =
+            BuildFpsCrosshairLayout(
                     weapon->crosshair,
                     context.playableViewport,
-                    SectorEditorPreviewHudScale(context.playableViewport));
-    for (const SectorEditorPreviewCrosshairSegmentLayout& segment
+                    FpsHudScale(context.playableViewport));
+    for (const FpsCrosshairSegmentLayout& segment
             : layout.segments) {
         DrawRectangleRec(segment.outline, weapon->crosshair.outlineColor);
     }
-    for (const SectorEditorPreviewCrosshairSegmentLayout& segment
+    for (const FpsCrosshairSegmentLayout& segment
             : layout.segments) {
         DrawRectangleRec(segment.inner, weapon->crosshair.innerColor);
     }

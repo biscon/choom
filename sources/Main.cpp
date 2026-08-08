@@ -3,7 +3,7 @@
 #include "engine/EngineContext.h"
 #include "engine/assets/FontLoadFlags.h"
 #include "engine/render/FxaaShader.h"
-#include "sector_editor/SectorEditor.h"
+#include "game/GameApplication.h"
 #include "sector_demo/renderer/SectorLocalFogRenderer.h"
 
 #include <cmath>
@@ -92,6 +92,9 @@ int main()
     RenderTexture2D uiTarget = LoadRenderTexture(INTERNAL_WIDTH, INTERNAL_HEIGHT);
     SetTextureFilter(uiTarget.texture, TEXTURE_FILTER_BILINEAR);
 
+    RenderTexture2D menuTarget = LoadRenderTexture(INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    SetTextureFilter(menuTarget.texture, TEXTURE_FILTER_BILINEAR);
+
     Shader fxaaShader{};
     int fxaaTexelSizeLoc = -1;
     if (ENABLE_WORLD_FXAA) {
@@ -108,6 +111,7 @@ int main()
         UnloadRenderTexture(viewmodelTarget);
         UnloadRenderTexture(editorTarget);
         UnloadRenderTexture(uiTarget);
+        UnloadRenderTexture(menuTarget);
     };
 
     engine::EngineContext context;
@@ -154,7 +158,8 @@ int main()
         return 0;
     }
 
-    engine::UIContext ui;
+    engine::UIContext contentUi;
+    engine::UIContext menuUi;
     engine::UIConfig uiConfig;
     uiConfig.overlayBounds = Rectangle{
             0.0f,
@@ -162,8 +167,8 @@ int main()
             static_cast<float>(INTERNAL_WIDTH),
             static_cast<float>(INTERNAL_HEIGHT)
     };
-    game::SectorEditor sectorEditor;
-    if (!sectorEditor.Init(context)) {
+    game::GameApplication application;
+    if (!application.Init(context)) {
         TraceLog(LOG_ERROR, "Engine application initialization failed");
         unloadRenderResources();
         context.assets.Shutdown();
@@ -171,7 +176,17 @@ int main()
         return 1;
     }
 
-    while (!WindowShouldClose())
+    BeginTextureMode(editorTarget);
+    ClearBackground(Color{8, 10, 14, 255});
+    EndTextureMode();
+    BeginTextureMode(uiTarget);
+    ClearBackground(BLANK);
+    EndTextureMode();
+    BeginTextureMode(menuTarget);
+    ClearBackground(BLANK);
+    EndTextureMode();
+
+    while (!WindowShouldClose() && !application.QuitRequested())
     {
         assets.UpdateMainThread(2.0f);
 
@@ -226,35 +241,55 @@ int main()
                     static_cast<float>(INTERNAL_HEIGHT) / dst.height);
         }
 
-        BeginTextureMode(uiTarget);
-        ClearBackground(BLANK);
-        sectorEditor.RenderUI(
-                ui,
-                uiConfig,
-                context.input,
-                assets,
-                uiFont,
-                smallFont
-        );
-        EndTextureMode();
+        if (application.IsMenuOpen()) {
+            BeginTextureMode(menuTarget);
+            ClearBackground(BLANK);
+            application.RenderInteractiveUI(
+                    contentUi,
+                    menuUi,
+                    uiConfig,
+                    context.input,
+                    assets,
+                    uiFont,
+                    smallFont);
+            EndTextureMode();
+        } else {
+            BeginTextureMode(uiTarget);
+            ClearBackground(BLANK);
+            application.RenderInteractiveUI(
+                    contentUi,
+                    menuUi,
+                    uiConfig,
+                    context.input,
+                    assets,
+                    uiFont,
+                    smallFont);
+            EndTextureMode();
+            BeginTextureMode(menuTarget);
+            ClearBackground(BLANK);
+            EndTextureMode();
+        }
 
-        sectorEditor.Update(context, dt);
+        application.Update(context, dt);
 
-        const bool renderPreview3D = sectorEditor.IsPreview3DActive();
-        if (renderPreview3D) {
-            sectorEditor.RenderPreview3DShadowMaps(assets);
+        const game::ApplicationContentKind contentKind =
+                application.BackgroundContentKind();
+        const bool render3D =
+                contentKind == game::ApplicationContentKind::Sector3D;
+        if (application.ShouldRefreshBackground() && render3D) {
+            application.Render3DShadowMaps(context);
 
             BeginTextureMode(worldTarget);
             ClearBackground(Color{8, 10, 14, 255});
-            sectorEditor.RenderPreview3DScene(context);
+            application.Render3DScene(context);
             EndTextureMode();
 
-            sectorEditor.ApplyPreview3DBloom(assets, worldTarget);
+            application.Apply3DPostProcessing(assets, worldTarget);
 
             if (viewmodelTargetReady) {
                 BeginTextureMode(viewmodelTarget);
                 ClearBackground(BLANK);
-                sectorEditor.RenderPreview3DViewmodel(assets);
+                application.Render3DViewmodel(assets);
                 EndTextureMode();
 
                 BeginTextureMode(worldTarget);
@@ -267,12 +302,13 @@ int main()
             }
 
             BeginTextureMode(worldTarget);
-            sectorEditor.RenderPreview3DOverlays();
+            application.Render3DOverlays();
             EndTextureMode();
-        } else {
+        } else if (application.ShouldRefreshBackground()
+                && contentKind == game::ApplicationContentKind::Editor2D) {
             BeginTextureMode(editorTarget);
             ClearBackground(Color{8, 10, 14, 255});
-            sectorEditor.Render(assets);
+            application.Render2D(assets);
             EndTextureMode();
         }
 
@@ -280,7 +316,7 @@ int main()
         BeginDrawing();
         {
             ClearBackground(BLACK);
-            if (renderPreview3D) {
+            if (render3D) {
                 Rectangle worldSrc = GetFullscreenSrcRect(worldTarget.texture);
                 if (useWorldFxaa) {
                     Vector2 texelSize{
@@ -294,21 +330,25 @@ int main()
                 } else {
                     DrawTexturePro(worldTarget.texture, worldSrc, dst, {0,0}, 0.0f, WHITE);
                 }
-            } else {
+            } else if (contentKind == game::ApplicationContentKind::Editor2D) {
                 Rectangle editorSrc = GetFullscreenSrcRect(editorTarget.texture);
                 DrawTexturePro(editorTarget.texture, editorSrc, dst, {0,0}, 0.0f, WHITE);
             }
-            if (renderPreview3D) {
-                sectorEditor.RenderPreview3DHud(dst);
+            if (render3D) {
+                application.Render3DHud(dst);
             }
             Rectangle uiSrc = GetFullscreenSrcRect(uiTarget.texture);
             DrawTexturePro(uiTarget.texture, uiSrc, dst, {0,0}, 0.0f, WHITE);
             DrawFPS(10, 10);
+            if (application.IsMenuOpen()) {
+                Rectangle menuSrc = GetFullscreenSrcRect(menuTarget.texture);
+                DrawTexturePro(menuTarget.texture, menuSrc, dst, {0,0}, 0.0f, WHITE);
+            }
         }
         EndDrawing();
     }
 
-    sectorEditor.Shutdown(context);
+    application.Shutdown(context);
     unloadRenderResources();
     context.assets.Shutdown();
     //ShowCursor();

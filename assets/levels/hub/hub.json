@@ -5779,19 +5779,6 @@
         "noiseAmount": 1.0,
         "flowDirectionDegrees": 90.0,
         "flowSpeedWorld": 1.0
-      },
-      {
-        "id": 4,
-        "x": 0,
-        "y": 352,
-        "bottomOffsetWorld": -0.25,
-        "radiusXWorld": 1.399999976158142,
-        "radiusZWorld": 1.2000000476837158,
-        "heightWorld": 0.5,
-        "density": 1.5,
-        "maxOpacity": 0.5,
-        "edgeSoftness": 1.0,
-        "noiseScaleWorld": 0.10000000149011612
       }
     ]
   }
