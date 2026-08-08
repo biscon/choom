@@ -347,19 +347,28 @@ game::SectorBakedObjectLightProbeRuntimeData MakeProbeRuntimeData()
 {
     game::SectorBakedObjectLightProbeRuntimeData probes;
 
-    game::SectorBakedObjectLightProbe probe;
-    probe.sectorId = 10;
-    probe.position = Vector3{2.0f, 1.0f, 2.0f};
-    for (Vector3& face : probe.ambientCube) {
+    game::SectorBakedObjectLightProbe lower;
+    lower.sectorId = 10;
+    lower.layer = game::SectorBakedObjectLightProbeLayer::Lower;
+    lower.position = Vector3{2.0f, 0.6f, 2.0f};
+    for (Vector3& face : lower.ambientCube) {
         face = Vector3{0.8f, 0.25f, 0.1f};
     }
-    probes.probes.push_back(probe);
+    probes.probes.push_back(lower);
 
-    game::SectorBakedObjectLightProbeSectorRange range;
-    range.sectorId = 10;
-    range.begin = 0;
-    range.count = 1;
-    probes.sectorRanges.push_back(range);
+    game::SectorBakedObjectLightProbe upper;
+    upper.sectorId = 10;
+    upper.layer = game::SectorBakedObjectLightProbeLayer::Upper;
+    upper.position = Vector3{2.0f, 1.5f, 2.0f};
+    for (Vector3& face : upper.ambientCube) {
+        face = Vector3{0.2f, 0.35f, 0.9f};
+    }
+    probes.probes.push_back(upper);
+
+    probes.sectorRanges.push_back(game::SectorBakedObjectLightProbeSectorRange{
+            10, 0, 1, game::SectorBakedObjectLightProbeLayer::Lower});
+    probes.sectorRanges.push_back(game::SectorBakedObjectLightProbeSectorRange{
+            10, 1, 1, game::SectorBakedObjectLightProbeLayer::Upper});
 
     return probes;
 }
@@ -3045,6 +3054,31 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
           "static prop does not acquire billboard render components");
 }
 
+void TestSectorModelEnvironmentExposureFollowsSectorLighting()
+{
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorTopologySector& sector = map.sectors[0];
+    sector.ambientColor = WHITE;
+
+    sector.ambientIntensity = 0.01f;
+    Check(Near(game::ComputeSectorModelEnvironmentExposure(map, sector.id), 0.08f),
+          "model environment exposure clamps very dark indoor sectors");
+
+    sector.ambientIntensity = 0.2f;
+    Check(Near(game::ComputeSectorModelEnvironmentExposure(map, sector.id), 0.2f),
+          "model environment exposure follows indoor sector luminance");
+
+    sector.ambientIntensity = 0.8f;
+    Check(Near(game::ComputeSectorModelEnvironmentExposure(map, sector.id), 0.35f),
+          "model environment exposure clamps bright indoor sectors");
+
+    sector.ceilingSky = true;
+    Check(Near(game::ComputeSectorModelEnvironmentExposure(map, sector.id), 1.0f),
+          "model environment exposure uses full reflections in sky sectors");
+    Check(Near(game::ComputeSectorModelEnvironmentExposure(map, 9999), 0.15f),
+          "model environment exposure uses the neutral missing-sector fallback");
+}
+
 void TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity()
 {
     engine::World world;
@@ -3218,6 +3252,45 @@ void TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures()
                              .texture.id
                           == 0,
           "static prop fallback clears auxiliary material textures when no prop lightmap is valid");
+}
+
+void TestViewmodelMaterialOverrideResolution()
+{
+    float metallicFactor = 0.5f;
+    float roughnessFactor = 0.22f;
+    bool hasMetallicTexture = true;
+    bool hasRoughnessTexture = true;
+    game::SectorViewmodelLightingContext unchanged;
+    Check(Near(unchanged.brightnessMultiplier, 1.0f),
+          "viewmodel lighting context defaults to neutral output brightness");
+    game::ApplySectorViewmodelMaterialOverride(
+            unchanged,
+            metallicFactor,
+            roughnessFactor,
+            hasMetallicTexture,
+            hasRoughnessTexture);
+    Check(Near(metallicFactor, 0.5f)
+                  && Near(roughnessFactor, 0.22f)
+                  && hasMetallicTexture
+                  && hasRoughnessTexture,
+          "disabled viewmodel material override preserves imported material values");
+
+    game::SectorViewmodelLightingContext corrected;
+    corrected.materialOverrideEnabled = true;
+    corrected.metallicFactor = 0.0f;
+    corrected.roughnessFactor = 0.78f;
+    corrected.useMetallicRoughnessTexture = false;
+    game::ApplySectorViewmodelMaterialOverride(
+            corrected,
+            metallicFactor,
+            roughnessFactor,
+            hasMetallicTexture,
+            hasRoughnessTexture);
+    Check(Near(metallicFactor, 0.0f)
+                  && Near(roughnessFactor, 0.78f)
+                  && !hasMetallicTexture
+                  && !hasRoughnessTexture,
+          "viewmodel material override replaces factors and disables the packed texture");
 }
 
 void TestSpawnPlacedDirectionalBillboardCopiesClipNames()
@@ -3767,7 +3840,7 @@ void TestSectorRuntimeObjectBakedLightingSystem()
     engine::World world;
     game::ReserveSectorRuntimeObjectWorld(world, 4);
     const engine::Entity object = world.CreateEntity();
-    world.Add(object, game::SectorObjectTransform{Vector3{2.0f, 1.0f, 2.0f}, 0.0f});
+    world.Add(object, game::SectorObjectTransform{Vector3{2.0f, 1.05f, 2.0f}, 0.0f});
     world.Add(object, game::SectorObject{10, true});
     world.Add(object, game::SectorObjectLighting{});
 
@@ -3776,8 +3849,13 @@ void TestSectorRuntimeObjectBakedLightingSystem()
     const game::SectorObjectLighting& lighting = world.Get<game::SectorObjectLighting>(object);
     Check(lighting.baked.valid,
             "runtime object baked lighting system stores valid probe sample");
-    Check(Near(lighting.baked.ambientCube[0], Vector3{0.8f, 0.25f, 0.1f}),
-            "runtime object baked lighting system stores sampled ambient cube");
+    Check(Near(lighting.baked.ambientCube[0], Vector3{0.5f, 0.3f, 0.5f}),
+            "runtime object baked lighting system resolves its root-height ambient cube");
+    Check(Near(lighting.vertical.lower.ambientCube[0], Vector3{0.8f, 0.25f, 0.1f})
+                  && Near(lighting.vertical.upper.ambientCube[0], Vector3{0.2f, 0.35f, 0.9f})
+                  && Near(lighting.vertical.lowerHeightWorld, 0.6f)
+                  && Near(lighting.vertical.upperHeightWorld, 1.5f),
+            "runtime object baked lighting system retains both layers for per-fragment rendering");
 }
 
 void TestSectorRuntimeObjectBakedLightingFallback()
@@ -3797,6 +3875,8 @@ void TestSectorRuntimeObjectBakedLightingFallback()
             "runtime object baked lighting fallback is marked invalid without loaded probes");
     Check(Near(lighting.baked.ambientCube[0], Vector3{0.15f, 0.15f, 0.15f}),
             "runtime object baked lighting fallback stores neutral ambient cube");
+    Check(Near(lighting.vertical.lower.ambientCube[0], lighting.vertical.upper.ambientCube[0]),
+            "runtime object baked lighting fallback duplicates a safe vertical sample");
 }
 
 void TestSectorRuntimeObjectBakedLightingUsesMapFallback()
@@ -4511,10 +4591,12 @@ int main()
     TestSpawnPlacedRuntimeObjectSkipsMissingBillboardSprite();
     TestSpawnPlacedBillboardCopiesAuthoredPayloadToEcs();
     TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs();
+    TestSectorModelEnvironmentExposureFollowsSectorLighting();
     TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity();
     TestSpawnDynamicModelCopiesPlaybackAndLightingPayload();
     TestAnimatedModelSelectionAndBlendApi();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
+    TestViewmodelMaterialOverrideResolution();
     TestSpawnPlacedDirectionalBillboardCopiesClipNames();
     TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate();
     TestPreviewRuntimeObjectRefreshKeepsAssetScope();

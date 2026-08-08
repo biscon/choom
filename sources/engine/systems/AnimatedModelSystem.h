@@ -29,6 +29,9 @@ bool SetAnimatedModelAnimationByName(
 // pose buffers is allowed.
 void PrepareAnimatedModelInstancesSystem(World& world, AssetManager& assets);
 
+// Explicit load/finalization helper for presentation models that are not ECS entities.
+bool PrepareAnimatedModelInstance(AnimatedModelInstance& instance, const ModelAsset& asset);
+
 // Normal frame update. This does not allocate and never applies root motion to
 // an entity transform.
 void AnimatedModelSystem(World& world, AssetManager& assets, float dt);

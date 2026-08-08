@@ -6710,7 +6710,8 @@ void TestEditorAuthoringSuccessfulDerivationPreservesBakedLightmapMetadata()
     documentState.map.topologyMap.bakedLightmap.objectProbes.sourceHash = "old-hash";
     documentState.map.topologyMap.bakedLightmap.objectProbes.count = 5;
     documentState.map.topologyMap.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
-    documentState.map.topologyMap.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    documentState.map.topologyMap.bakedLightmap.objectProbes.probeLowerHeightWorld = 0.6f;
+    documentState.map.topologyMap.bakedLightmap.objectProbes.probeUpperHeightWorld = 1.2f;
     documentState.map.topologyMap.bakedLightmap.objectProbes.format =
             game::kSectorBakedObjectLightProbeSidecarFormat;
     authoringGraph = MakeGraphFromConnectedLines(
@@ -9643,7 +9644,8 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
             probeMap.bakedLightmap.sourceHash;
     probeMap.bakedLightmap.objectProbes.count = 3;
     probeMap.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
-    probeMap.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    probeMap.bakedLightmap.objectProbes.probeLowerHeightWorld = 0.6f;
+    probeMap.bakedLightmap.objectProbes.probeUpperHeightWorld = 1.2f;
     probeMap.bakedLightmap.objectProbes.format =
             game::kSectorBakedObjectLightProbeSidecarFormat;
 
@@ -9658,7 +9660,8 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && savedObjectProbes["sourceHash"] == probeMap.bakedLightmap.sourceHash
                   && savedObjectProbes["count"] == 3
                   && savedObjectProbes["probeSpacingWorld"] == 4.0f
-                  && savedObjectProbes["probeHeightWorld"] == 1.2f
+                  && savedObjectProbes["probeLowerHeightWorld"] == 0.6f
+                  && savedObjectProbes["probeUpperHeightWorld"] == 1.2f
                   && savedObjectProbes["format"] == game::kSectorBakedObjectLightProbeSidecarFormat,
           "editor graph-native save persists compact object probe metadata");
     Check(!savedObjectProbes.contains("probes") && !savedObjectProbes.contains("payload"),
@@ -9682,7 +9685,8 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                              == probeMap.bakedLightmap.sourceHash
                   && loadedWithProbes.mapData.bakedLightmap.objectProbes.count == 3
                   && Near(loadedWithProbes.mapData.bakedLightmap.objectProbes.probeSpacingWorld, 4.0f)
-                  && Near(loadedWithProbes.mapData.bakedLightmap.objectProbes.probeHeightWorld, 1.2f)
+                  && Near(loadedWithProbes.mapData.bakedLightmap.objectProbes.probeLowerHeightWorld, 0.6f)
+                  && Near(loadedWithProbes.mapData.bakedLightmap.objectProbes.probeUpperHeightWorld, 1.2f)
                   && loadedWithProbes.mapData.bakedLightmap.objectProbes.format
                              == game::kSectorBakedObjectLightProbeSidecarFormat,
           "editor graph-native load preserves object probe metadata");

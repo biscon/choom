@@ -14,15 +14,15 @@
 
 namespace game {
 
-inline std::array<Rectangle, 4> BuildSectorPreviewSettingsTabLayout(
+inline std::array<Rectangle, 5> BuildSectorPreviewSettingsTabLayout(
         Rectangle modal,
         float y,
         float tabHeight)
 {
     constexpr float margin = 30.0f;
     constexpr float gap = 8.0f;
-    const float tabWidth = (modal.width - margin * 2.0f - gap * 3.0f) / 4.0f;
-    std::array<Rectangle, 4> tabs{};
+    const float tabWidth = (modal.width - margin * 2.0f - gap * 4.0f) / 5.0f;
+    std::array<Rectangle, 5> tabs{};
     for (size_t i = 0; i < tabs.size(); ++i) {
         tabs[i] = Rectangle{
                 modal.x + margin + (tabWidth + gap) * static_cast<float>(i),
@@ -38,7 +38,16 @@ inline SectorLightmapBakeSettings NormalizeSectorPreviewObjectProbeSettings(
         SectorLightmapBakeSettings settings)
 {
     settings.objectProbeSpacingWorld = std::clamp(settings.objectProbeSpacingWorld, 0.25f, 128.0f);
-    settings.objectProbeHeightWorld = std::clamp(settings.objectProbeHeightWorld, 0.0f, 16.0f);
+    settings.objectProbeLowerHeightWorld = std::clamp(
+            settings.objectProbeLowerHeightWorld, 0.0f, 16.0f);
+    settings.objectProbeUpperHeightWorld = std::clamp(
+            settings.objectProbeUpperHeightWorld, 0.0f, 16.0f);
+    if (settings.objectProbeLowerHeightWorld
+            > settings.objectProbeUpperHeightWorld) {
+        std::swap(
+                settings.objectProbeLowerHeightWorld,
+                settings.objectProbeUpperHeightWorld);
+    }
     return settings;
 }
 
@@ -52,7 +61,8 @@ inline void ResetSectorPreviewSettingsModalLightingDefaults(
     modalState.lightDirectionZInput = engine::UIFloatInputState{};
     modalState.lightIntensityInput = engine::UIFloatInputState{};
     modalState.objectProbeSpacingInput = engine::UIFloatInputState{};
-    modalState.objectProbeHeightInput = engine::UIFloatInputState{};
+    modalState.objectProbeLowerHeightInput = engine::UIFloatInputState{};
+    modalState.objectProbeUpperHeightInput = engine::UIFloatInputState{};
     modalState.lightColorRedInput = engine::UIIntInputState{};
     modalState.lightColorGreenInput = engine::UIIntInputState{};
     modalState.lightColorBlueInput = engine::UIIntInputState{};
@@ -104,12 +114,18 @@ inline bool ApplySectorPreviewObjectProbeSettings(
     const SectorLightmapBakeSettings normalizedCurrent =
             NormalizeSectorPreviewObjectProbeSettings(map.lightmapSettings);
     if (normalizedCurrent.objectProbeSpacingWorld == normalizedDraft.objectProbeSpacingWorld
-            && normalizedCurrent.objectProbeHeightWorld == normalizedDraft.objectProbeHeightWorld) {
+            && normalizedCurrent.objectProbeLowerHeightWorld
+                    == normalizedDraft.objectProbeLowerHeightWorld
+            && normalizedCurrent.objectProbeUpperHeightWorld
+                    == normalizedDraft.objectProbeUpperHeightWorld) {
         return false;
     }
 
     map.lightmapSettings.objectProbeSpacingWorld = normalizedDraft.objectProbeSpacingWorld;
-    map.lightmapSettings.objectProbeHeightWorld = normalizedDraft.objectProbeHeightWorld;
+    map.lightmapSettings.objectProbeLowerHeightWorld =
+            normalizedDraft.objectProbeLowerHeightWorld;
+    map.lightmapSettings.objectProbeUpperHeightWorld =
+            normalizedDraft.objectProbeUpperHeightWorld;
     return true;
 }
 

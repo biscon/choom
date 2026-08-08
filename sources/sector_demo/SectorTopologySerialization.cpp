@@ -1,5 +1,7 @@
 #include "sector_demo/SectorTopologySerialization.h"
 
+#include "sector_demo/SectorLightmap.h"
+
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -895,13 +897,45 @@ SectorLightmapBakeSettings ReadLightmapSettings(const Json& value, const std::st
             settings.objectProbeSpacingWorld,
             0.25f,
             128.0f);
-    settings.objectProbeHeightWorld = ReadOptionalClampedFloat(
-            value,
-            "objectProbeHeightWorld",
-            context,
-            settings.objectProbeHeightWorld,
-            0.0f,
-            16.0f);
+    const bool hasLowerHeight = value.find("objectProbeLowerHeightWorld") != value.end();
+    const bool hasUpperHeight = value.find("objectProbeUpperHeightWorld") != value.end();
+    const bool hasLegacyHeight = value.find("objectProbeHeightWorld") != value.end();
+    if (!hasLowerHeight && !hasUpperHeight && hasLegacyHeight) {
+        settings.objectProbeUpperHeightWorld = ReadOptionalClampedFloat(
+                value,
+                "objectProbeHeightWorld",
+                context,
+                settings.objectProbeUpperHeightWorld,
+                0.0f,
+                16.0f);
+        if (settings.objectProbeUpperHeightWorld
+                - settings.objectProbeLowerHeightWorld
+                < kObjectProbeMinimumLayerSeparationWorld) {
+            settings.objectProbeLowerHeightWorld =
+                    settings.objectProbeUpperHeightWorld;
+        }
+    } else {
+        settings.objectProbeLowerHeightWorld = ReadOptionalClampedFloat(
+                value,
+                "objectProbeLowerHeightWorld",
+                context,
+                settings.objectProbeLowerHeightWorld,
+                0.0f,
+                16.0f);
+        settings.objectProbeUpperHeightWorld = ReadOptionalClampedFloat(
+                value,
+                "objectProbeUpperHeightWorld",
+                context,
+                settings.objectProbeUpperHeightWorld,
+                0.0f,
+                16.0f);
+    }
+    if (settings.objectProbeLowerHeightWorld
+            > settings.objectProbeUpperHeightWorld) {
+        std::swap(
+                settings.objectProbeLowerHeightWorld,
+                settings.objectProbeUpperHeightWorld);
+    }
     return settings;
 }
 
@@ -1114,7 +1148,18 @@ SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
     metadata.sourceHash = ReadString(value, "sourceHash", context);
     metadata.count = ReadInt(value, "count", context);
     metadata.probeSpacingWorld = ReadFloat(value, "probeSpacingWorld", context);
-    metadata.probeHeightWorld = ReadFloat(value, "probeHeightWorld", context);
+    const auto lowerHeight = value.find("probeLowerHeightWorld");
+    const auto upperHeight = value.find("probeUpperHeightWorld");
+    if (lowerHeight != value.end() && upperHeight != value.end()) {
+        metadata.probeLowerHeightWorld = ReadFloat(
+                value, "probeLowerHeightWorld", context);
+        metadata.probeUpperHeightWorld = ReadFloat(
+                value, "probeUpperHeightWorld", context);
+    } else {
+        const float legacyHeight = ReadFloat(value, "probeHeightWorld", context);
+        metadata.probeLowerHeightWorld = legacyHeight;
+        metadata.probeUpperHeightWorld = legacyHeight;
+    }
     metadata.format = ReadString(value, "format", context);
 
     if (metadata.path.empty()) {
@@ -1132,8 +1177,10 @@ SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
     if (metadata.probeSpacingWorld <= 0.0f) {
         Fail(context + ".probeSpacingWorld must be positive");
     }
-    if (metadata.probeHeightWorld < 0.0f) {
-        Fail(context + ".probeHeightWorld must not be negative");
+    if (metadata.probeLowerHeightWorld < 0.0f
+            || metadata.probeUpperHeightWorld
+                    < metadata.probeLowerHeightWorld) {
+        Fail(context + " probe heights must be non-negative and ordered");
     }
     if (metadata.format.empty()) {
         Fail(context + ".format must not be empty");
@@ -1698,7 +1745,8 @@ Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
                     SectorWorldToAuthoringDistance(16.0f))},
             {"indirectBounceStrength", std::clamp(settings.indirectBounceStrength, 0.0f, 1.0f)},
             {"objectProbeSpacingWorld", std::clamp(settings.objectProbeSpacingWorld, 0.25f, 128.0f)},
-            {"objectProbeHeightWorld", std::clamp(settings.objectProbeHeightWorld, 0.0f, 16.0f)}
+            {"objectProbeLowerHeightWorld", std::clamp(settings.objectProbeLowerHeightWorld, 0.0f, 16.0f)},
+            {"objectProbeUpperHeightWorld", std::clamp(settings.objectProbeUpperHeightWorld, 0.0f, 16.0f)}
     };
 }
 
@@ -2045,7 +2093,8 @@ Json WriteBakedObjectLightProbeMetadata(const SectorBakedObjectLightProbeMetadat
             {"sourceHash", metadata.sourceHash},
             {"count", metadata.count},
             {"probeSpacingWorld", metadata.probeSpacingWorld},
-            {"probeHeightWorld", metadata.probeHeightWorld},
+            {"probeLowerHeightWorld", metadata.probeLowerHeightWorld},
+            {"probeUpperHeightWorld", metadata.probeUpperHeightWorld},
             {"format", metadata.format}
     };
 }

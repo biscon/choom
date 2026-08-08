@@ -179,11 +179,14 @@ constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
 // Version 13: baked lightmaps can span multiple fixed-size texture atlases.
-constexpr int kSectorLightmapBakeVersion = 13;
-constexpr int kSectorBakedObjectLightProbeSidecarVersion = 1;
-constexpr const char* kSectorBakedObjectLightProbeSidecarFormat = "ambientCubeF32LE";
+constexpr int kSectorLightmapBakeVersion = 14;
+constexpr int kSectorBakedObjectLightProbeSidecarVersion = 2;
+constexpr const char* kSectorBakedObjectLightProbeSidecarFormat =
+        "layeredAmbientCubeF32LE";
 constexpr float kObjectProbeAdjacentPortalBlendDistanceWorld = 1.0f;
 constexpr int kObjectProbeMaxAdjacentBlendSectors = 8;
+constexpr float kObjectProbeSurfaceClearanceWorld = 0.1f;
+constexpr float kObjectProbeMinimumLayerSeparationWorld = 0.25f;
 constexpr int kDirectSoftShadowSampleCount = 8;
 constexpr int kAmbientOcclusionSampleCount = 12;
 constexpr int kIndirectBounceSampleCount = 8;
@@ -247,7 +250,8 @@ bool WriteSectorBakedObjectLightProbeSidecar(
         const std::string& path,
         const std::vector<SectorBakedObjectLightProbe>& probes,
         float probeSpacingWorld,
-        float probeHeightWorld,
+        float probeLowerHeightWorld,
+        float probeUpperHeightWorld,
         std::string& outError);
 bool ReadSectorBakedObjectLightProbeSidecar(
         const std::string& path,
@@ -259,11 +263,22 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
         const SectorTopologyMap& map,
         SectorBakedObjectLightProbeRuntimeData& outData,
         std::string& outError);
+Vector3 EvaluateBakedObjectAmbientCubeLighting(
+        const BakedObjectLightingSample& sample,
+        Vector3 worldNormal);
 BakedObjectLightingSample SampleBakedObjectLighting(
         const SectorBakedObjectLightProbeRuntimeData& probes,
         Vector3 worldPosition,
         int preferredSectorId,
         const SectorTopologyMap* mapForFallback);
+BakedObjectLightingVerticalSample SampleBakedObjectLightingVertical(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        Vector3 worldPosition,
+        int preferredSectorId,
+        const SectorTopologyMap* mapForFallback);
+BakedObjectLightingSample ResolveBakedObjectLightingVerticalSample(
+        const BakedObjectLightingVerticalSample& sample,
+        float worldHeight);
 std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath);
 std::string MakeSectorLightmapAtlasPath(const std::string& primaryPath, int atlasIndex);
 std::vector<SectorLightmapAtlasMetadata> GetSectorLightmapAtlases(

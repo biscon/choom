@@ -118,11 +118,16 @@ uniform int hasEmissiveTexture;
 uniform int hasEnvironment;
 uniform vec3 cameraPosition;
 uniform float environmentExposure;
+uniform float outputBrightnessMultiplier;
 uniform vec3 containingSectorAmbient;
 uniform int hasStaticLightmap;
 uniform int useBakedAmbientOcclusion;
 uniform int useObjectProbeLighting;
 uniform vec3 objectAmbientCube[6];
+uniform vec3 objectAmbientCubeUpper[6];
+uniform float objectAmbientCubeLowerHeight;
+uniform float objectAmbientCubeUpperHeight;
+uniform int useVerticalObjectProbeLighting;
 
 uniform int fogEnabled;
 uniform vec3 fogColor;
@@ -221,6 +226,30 @@ float GeometrySmith(vec3 normal, vec3 viewDirection, vec3 lightDirection, float 
 vec3 FresnelSchlick(float cosTheta, vec3 f0)
 {
     return f0 + (1.0 - f0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec3 EvaluateObjectAmbientCube(vec3 normal)
+{
+    vec3 weights = normal * normal;
+    vec3 xLighting = objectAmbientCube[normal.x >= 0.0 ? 0 : 1];
+    vec3 yLighting = objectAmbientCube[normal.y >= 0.0 ? 2 : 3];
+    vec3 zLighting = objectAmbientCube[normal.z >= 0.0 ? 4 : 5];
+    vec3 lowerLighting = xLighting * weights.x
+            + yLighting * weights.y
+            + zLighting * weights.z;
+    if (useVerticalObjectProbeLighting == 0) return lowerLighting;
+
+    vec3 upperXLighting = objectAmbientCubeUpper[normal.x >= 0.0 ? 0 : 1];
+    vec3 upperYLighting = objectAmbientCubeUpper[normal.y >= 0.0 ? 2 : 3];
+    vec3 upperZLighting = objectAmbientCubeUpper[normal.z >= 0.0 ? 4 : 5];
+    vec3 upperLighting = upperXLighting * weights.x
+            + upperYLighting * weights.y
+            + upperZLighting * weights.z;
+    float heightRange = objectAmbientCubeUpperHeight - objectAmbientCubeLowerHeight;
+    float blend = heightRange > 0.0001
+            ? clamp((fragWorldPosition.y - objectAmbientCubeLowerHeight) / heightRange, 0.0, 1.0)
+            : 0.0;
+    return mix(lowerLighting, upperLighting, blend);
 }
 
 vec2 EnvironmentBrdfApprox(float roughness, float ndotv)
@@ -384,14 +413,7 @@ void main()
 
     vec3 staticLighting = containingSectorAmbient;
     if (useObjectProbeLighting != 0) {
-        vec3 absNormal = abs(worldNormal);
-        if (absNormal.y >= absNormal.x && absNormal.y >= absNormal.z) {
-            staticLighting = objectAmbientCube[worldNormal.y >= 0.0 ? 2 : 3];
-        } else if (absNormal.z >= absNormal.x) {
-            staticLighting = objectAmbientCube[worldNormal.z >= 0.0 ? 4 : 5];
-        } else {
-            staticLighting = objectAmbientCube[worldNormal.x >= 0.0 ? 0 : 1];
-        }
+        staticLighting = EvaluateObjectAmbientCube(worldNormal);
     } else if (hasStaticLightmap != 0) {
         vec4 baked = texture(lightmapTexture, fragLightmapTexCoord);
         float ao = useBakedAmbientOcclusion != 0 ? baked.a : 1.0;
@@ -422,7 +444,8 @@ void main()
         emissive *= SrgbToLinear(texture(emissiveTexture, fragTexCoord).rgb);
     }
     vec3 linearColor = min(
-            staticDiffuse + dynamicDirect + environmentSpecular + roughSpecularFloor + emissive,
+            (staticDiffuse + dynamicDirect + environmentSpecular + roughSpecularFloor + emissive)
+                    * outputBrightnessMultiplier,
             vec3(dynamicLightingClamp));
     vec3 outputRgb = LinearToSrgb(AcesToneMap(linearColor));
     finalColor = vec4(ApplySectorFog(outputRgb, fragWorldPosition), 1.0);
@@ -701,6 +724,8 @@ bool SectorStaticModelRenderer::Load()
     hasEmissiveTextureLoc = GetShaderLocation(shader, "hasEmissiveTexture");
     cameraPositionLoc = GetShaderLocation(shader, "cameraPosition");
     environmentExposureLoc = GetShaderLocation(shader, "environmentExposure");
+    outputBrightnessMultiplierLoc =
+            GetShaderLocation(shader, "outputBrightnessMultiplier");
     hasEnvironmentLoc = GetShaderLocation(shader, "hasEnvironment");
     environmentTextureLoc = GetShaderLocation(shader, "environmentTexture");
     lightmapScaleBiasLoc =
@@ -716,7 +741,15 @@ bool SectorStaticModelRenderer::Load()
     for (size_t i = 0; i < objectAmbientCubeLocs.size(); ++i) {
         objectAmbientCubeLocs[i] = GetShaderLocationArrayElement(
                 shader, "objectAmbientCube", i);
+        objectAmbientCubeUpperLocs[i] = GetShaderLocationArrayElement(
+                shader, "objectAmbientCubeUpper", i);
     }
+    objectAmbientCubeLowerHeightLoc =
+            GetShaderLocation(shader, "objectAmbientCubeLowerHeight");
+    objectAmbientCubeUpperHeightLoc =
+            GetShaderLocation(shader, "objectAmbientCubeUpperHeight");
+    useVerticalObjectProbeLightingLoc =
+            GetShaderLocation(shader, "useVerticalObjectProbeLighting");
     useSkinningLoc = GetShaderLocation(shader, "useSkinning");
     lightmapTextureLoc =
             GetShaderLocation(shader, "lightmapTexture");
@@ -783,6 +816,7 @@ void SectorStaticModelRenderer::Shutdown()
     hasEmissiveTextureLoc = -1;
     cameraPositionLoc = -1;
     environmentExposureLoc = -1;
+    outputBrightnessMultiplierLoc = -1;
     hasEnvironmentLoc = -1;
     environmentTextureLoc = -1;
     lightmapScaleBiasLoc = -1;
@@ -791,6 +825,10 @@ void SectorStaticModelRenderer::Shutdown()
     containingSectorAmbientLoc = -1;
     useObjectProbeLightingLoc = -1;
     objectAmbientCubeLocs.fill(-1);
+    objectAmbientCubeUpperLocs.fill(-1);
+    objectAmbientCubeLowerHeightLoc = -1;
+    objectAmbientCubeUpperHeightLoc = -1;
+    useVerticalObjectProbeLightingLoc = -1;
     useSkinningLoc = -1;
     lightmapTextureLoc = -1;
     dynamicLightCountLoc = -1;
@@ -994,6 +1032,14 @@ void SectorStaticModelRenderer::Draw(
                 &hasEnvironment,
                 SHADER_UNIFORM_INT);
     }
+    const float neutralBrightnessMultiplier = 1.0f;
+    if (outputBrightnessMultiplierLoc >= 0) {
+        SetShaderValue(
+                shader,
+                outputBrightnessMultiplierLoc,
+                &neutralBrightnessMultiplier,
+                SHADER_UNIFORM_FLOAT);
+    }
 
     size_t considered = 0;
     size_t drawn = 0;
@@ -1051,9 +1097,13 @@ void SectorStaticModelRenderer::Draw(
                 const Model* model = &modelAsset->model;
 
                 const int useObjectProbe = 0;
+                const int useVerticalObjectProbe = 0;
                 const int useSkinning = 0;
                 if (useObjectProbeLightingLoc >= 0) {
                     SetShaderValue(shader, useObjectProbeLightingLoc, &useObjectProbe, SHADER_UNIFORM_INT);
+                }
+                if (useVerticalObjectProbeLightingLoc >= 0) {
+                    SetShaderValue(shader, useVerticalObjectProbeLightingLoc, &useVerticalObjectProbe, SHADER_UNIFORM_INT);
                 }
                 if (useSkinningLoc >= 0) {
                     SetShaderValue(shader, useSkinningLoc, &useSkinning, SHADER_UNIFORM_INT);
@@ -1275,10 +1325,12 @@ void SectorStaticModelRenderer::Draw(
                         && shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] >= 0;
                 const int useSkinning = canSkin ? 1 : 0;
                 const int useObjectProbe = 1;
+                const int useVerticalObjectProbe = 1;
                 const int noStaticLightmap = 0;
                 const int noBakedAo = 0;
                 if (useSkinningLoc >= 0) SetShaderValue(shader, useSkinningLoc, &useSkinning, SHADER_UNIFORM_INT);
                 if (useObjectProbeLightingLoc >= 0) SetShaderValue(shader, useObjectProbeLightingLoc, &useObjectProbe, SHADER_UNIFORM_INT);
+                if (useVerticalObjectProbeLightingLoc >= 0) SetShaderValue(shader, useVerticalObjectProbeLightingLoc, &useVerticalObjectProbe, SHADER_UNIFORM_INT);
                 if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &noStaticLightmap, SHADER_UNIFORM_INT);
                 if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &noBakedAo, SHADER_UNIFORM_INT);
                 if (containingSectorAmbientLoc >= 0) SetShaderValue(shader, containingSectorAmbientLoc, &dynamicModel.containingSectorAmbient, SHADER_UNIFORM_VEC3);
@@ -1288,10 +1340,19 @@ void SectorStaticModelRenderer::Draw(
                         SetShaderValue(
                                 shader,
                                 objectAmbientCubeLocs[face],
-                                &lighting.baked.ambientCube[face],
+                                &lighting.vertical.lower.ambientCube[face],
+                                SHADER_UNIFORM_VEC3);
+                    }
+                    if (objectAmbientCubeUpperLocs[face] >= 0) {
+                        SetShaderValue(
+                                shader,
+                                objectAmbientCubeUpperLocs[face],
+                                &lighting.vertical.upper.ambientCube[face],
                                 SHADER_UNIFORM_VEC3);
                     }
                 }
+                if (objectAmbientCubeLowerHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeLowerHeightLoc, &lighting.vertical.lowerHeightWorld, SHADER_UNIFORM_FLOAT);
+                if (objectAmbientCubeUpperHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeUpperHeightLoc, &lighting.vertical.upperHeightWorld, SHADER_UNIFORM_FLOAT);
                 if (canSkin) {
                     rlEnableShader(shader.id);
                     rlSetUniformMatrices(
@@ -1374,6 +1435,189 @@ void SectorStaticModelRenderer::Draw(
             considered,
             portalCulled,
             skipped);
+}
+
+void SectorStaticModelRenderer::DrawViewmodel(
+        const engine::ModelAsset& asset,
+        engine::AnimatedModelInstance& instance,
+        const Camera3D& camera,
+        Matrix transform,
+        const engine::ModelAsset* attachmentAsset,
+        Matrix attachmentTransform,
+        const SectorBillboardDynamicLightContext& dynamicLightContext,
+        const TextureCubemap* environment,
+        const BakedObjectLightingVerticalSample& ambientLighting,
+        const SectorViewmodelLightingContext& lighting,
+        const SectorViewmodelLightingContext& attachmentLighting)
+{
+    if (!shaderLoaded || !instance.poseReady || instance.poseFailed) return;
+
+    SectorDynamicLightShaderLocations dynamicLocations{
+            dynamicLightCountLoc, dynamicLightPositionsLoc, dynamicLightColorsLoc,
+            dynamicLightRadiiLoc, dynamicLightIntensitiesLoc, dynamicLightTypesLoc,
+            dynamicLightDirectionsLoc, dynamicLightInnerConeCosLoc,
+            dynamicLightOuterConeCosLoc, dynamicLightingClampLoc};
+    UploadSectorRendererDynamicPointLights(shader, dynamicLocations, dynamicLightContext);
+    SectorDynamicSpotLightShadowShaderLocations shadowLocations;
+    shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
+    shadowLocations.shadowLightMatrices = shadowLightMatrixLocs;
+    shadowLocations.shadowBias = shadowBiasLoc;
+    shadowLocations.shadowStrength = shadowStrengthLoc;
+    shadowLocations.shadowSoftness = shadowSoftnessLoc;
+    UploadSectorRendererDynamicSpotLightShadowUniforms(shader, shadowLocations, dynamicLightContext.shadowUniforms);
+    UploadSectorFogShaderValues(shader, fogShaderLocations, SectorFogRenderContext{});
+    if (cameraPositionLoc >= 0) SetShaderValue(shader, cameraPositionLoc, &camera.position, SHADER_UNIFORM_VEC3);
+    const int hasEnvironment = environment && environment->id != 0 ? 1 : 0;
+    if (hasEnvironmentLoc >= 0) SetShaderValue(shader, hasEnvironmentLoc, &hasEnvironment, SHADER_UNIFORM_INT);
+
+    const int enabled = 1;
+    const int disabled = 0;
+    if (useObjectProbeLightingLoc >= 0) SetShaderValue(shader, useObjectProbeLightingLoc, &enabled, SHADER_UNIFORM_INT);
+    if (useVerticalObjectProbeLightingLoc >= 0) SetShaderValue(shader, useVerticalObjectProbeLightingLoc, &enabled, SHADER_UNIFORM_INT);
+    if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &disabled, SHADER_UNIFORM_INT);
+    if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &disabled, SHADER_UNIFORM_INT);
+    const Vector3 neutralAmbient{0.22f, 0.22f, 0.22f};
+    if (containingSectorAmbientLoc >= 0) SetShaderValue(shader, containingSectorAmbientLoc, &neutralAmbient, SHADER_UNIFORM_VEC3);
+    for (size_t face = 0; face < objectAmbientCubeLocs.size(); ++face) {
+        if (objectAmbientCubeLocs[face] >= 0) SetShaderValue(shader, objectAmbientCubeLocs[face], &ambientLighting.lower.ambientCube[face], SHADER_UNIFORM_VEC3);
+        if (objectAmbientCubeUpperLocs[face] >= 0) SetShaderValue(shader, objectAmbientCubeUpperLocs[face], &ambientLighting.upper.ambientCube[face], SHADER_UNIFORM_VEC3);
+    }
+    if (objectAmbientCubeLowerHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeLowerHeightLoc, &ambientLighting.lowerHeightWorld, SHADER_UNIFORM_FLOAT);
+    if (objectAmbientCubeUpperHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeUpperHeightLoc, &ambientLighting.upperHeightWorld, SHADER_UNIFORM_FLOAT);
+    rlDisableColorBlend();
+    rlDisableBackfaceCulling();
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    const auto drawModel = [this, environment, &dynamicLightContext](
+            const engine::ModelAsset& modelAsset,
+            Model model,
+            Matrix itemTransform,
+            const SectorViewmodelLightingContext& itemLighting) {
+        const int skinningEnabled = 1;
+        const int skinningDisabled = 0;
+        const bool canSkin = model.skeleton.boneCount > 0
+                && model.skeleton.boneCount <= engine::MaxAnimatedModelBones
+                && model.boneMatrices != nullptr
+                && shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] >= 0;
+        if (useSkinningLoc >= 0) {
+            SetShaderValue(
+                    shader,
+                    useSkinningLoc,
+                    canSkin ? &skinningEnabled : &skinningDisabled,
+                    SHADER_UNIFORM_INT);
+        }
+        if (environmentExposureLoc >= 0) {
+            SetShaderValue(
+                    shader,
+                    environmentExposureLoc,
+                    &itemLighting.environmentExposure,
+                    SHADER_UNIFORM_FLOAT);
+        }
+        if (outputBrightnessMultiplierLoc >= 0) {
+            SetShaderValue(
+                    shader,
+                    outputBrightnessMultiplierLoc,
+                    &itemLighting.brightnessMultiplier,
+                    SHADER_UNIFORM_FLOAT);
+        }
+        if (canSkin) {
+            rlEnableShader(shader.id);
+            rlSetUniformMatrices(
+                    shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS],
+                    model.boneMatrices,
+                    model.skeleton.boneCount);
+        }
+
+        const Matrix modelTransform = MatrixMultiply(
+                model.transform, itemTransform);
+        for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
+            if (!model.meshMaterial) continue;
+            const int materialIndex = model.meshMaterial[meshIndex];
+            if (materialIndex < 0 || materialIndex >= model.materialCount) continue;
+            const Material& source = model.materials[materialIndex];
+            if (!source.maps) continue;
+            std::array<MaterialMap, SectorStaticModelMaterialMapCount> maps{};
+            std::copy_n(
+                    source.maps,
+                    SectorStaticModelMaterialMapCount,
+                    maps.begin());
+            ConfigureSectorStaticModelAuxiliaryMaterialMaps(
+                    maps,
+                    nullptr,
+                    false,
+                    environment,
+                    dynamicLightContext.shadowMaps.shadowMap0,
+                    dynamicLightContext.shadowMaps.shadowMap1);
+            Material material = source;
+            material.shader = shader;
+            material.maps = maps.data();
+            engine::ModelMaterialAsset pbr;
+            if (materialIndex < static_cast<int>(modelAsset.materials.size())
+                    && modelAsset.materials[
+                            static_cast<size_t>(materialIndex)].pbrMetallicRoughness) {
+                pbr = modelAsset.materials[static_cast<size_t>(materialIndex)];
+            } else {
+                pbr.baseColorFactor = ColorToNormalizedVector4(
+                        maps[MATERIAL_MAP_DIFFUSE].color);
+                pbr.roughnessFactor = 1.0f;
+                pbr.hasBaseColorTexture =
+                        maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
+            }
+            ApplySectorViewmodelMaterialOverride(
+                    itemLighting,
+                    pbr.metallicFactor,
+                    pbr.roughnessFactor,
+                    pbr.hasMetallicTexture,
+                    pbr.hasRoughnessTexture);
+            if (baseColorFactorLoc >= 0) SetShaderValue(shader, baseColorFactorLoc, &pbr.baseColorFactor, SHADER_UNIFORM_VEC4);
+            if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbr.emissiveFactor, SHADER_UNIFORM_VEC3);
+            if (metallicFactorLoc >= 0) SetShaderValue(shader, metallicFactorLoc, &pbr.metallicFactor, SHADER_UNIFORM_FLOAT);
+            if (roughnessFactorLoc >= 0) SetShaderValue(shader, roughnessFactorLoc, &pbr.roughnessFactor, SHADER_UNIFORM_FLOAT);
+            if (normalScaleLoc >= 0) SetShaderValue(shader, normalScaleLoc, &pbr.normalScale, SHADER_UNIFORM_FLOAT);
+            if (occlusionStrengthLoc >= 0) SetShaderValue(shader, occlusionStrengthLoc, &pbr.occlusionStrength, SHADER_UNIFORM_FLOAT);
+            const int hasBase = pbr.hasBaseColorTexture;
+            const int hasMetal = pbr.hasMetallicTexture;
+            const int hasNormal = pbr.hasNormalTexture;
+            const int hasRough = pbr.hasRoughnessTexture;
+            const int hasOcclusion = pbr.hasOcclusionTexture;
+            const int hasEmissive = pbr.hasEmissiveTexture;
+            if (hasBaseColorTextureLoc >= 0) SetShaderValue(shader, hasBaseColorTextureLoc, &hasBase, SHADER_UNIFORM_INT);
+            if (hasMetallicTextureLoc >= 0) SetShaderValue(shader, hasMetallicTextureLoc, &hasMetal, SHADER_UNIFORM_INT);
+            if (hasNormalTextureLoc >= 0) SetShaderValue(shader, hasNormalTextureLoc, &hasNormal, SHADER_UNIFORM_INT);
+            if (hasRoughnessTextureLoc >= 0) SetShaderValue(shader, hasRoughnessTextureLoc, &hasRough, SHADER_UNIFORM_INT);
+            if (hasOcclusionTextureLoc >= 0) SetShaderValue(shader, hasOcclusionTextureLoc, &hasOcclusion, SHADER_UNIFORM_INT);
+            if (hasEmissiveTextureLoc >= 0) SetShaderValue(shader, hasEmissiveTextureLoc, &hasEmissive, SHADER_UNIFORM_INT);
+            DrawMesh(model.meshes[meshIndex], material, modelTransform);
+        }
+    };
+
+    if (attachmentAsset != nullptr) {
+        drawModel(
+                *attachmentAsset,
+                attachmentAsset->model,
+                attachmentTransform,
+                attachmentLighting);
+    }
+    drawModel(
+            asset,
+            engine::BuildAnimatedModelPoseView(asset, instance),
+            transform,
+            lighting);
+    rlActiveTextureSlot(0);
+    rlSetTexture(0);
+    const float neutralBrightnessMultiplier = 1.0f;
+    if (outputBrightnessMultiplierLoc >= 0) {
+        SetShaderValue(
+                shader,
+                outputBrightnessMultiplierLoc,
+                &neutralBrightnessMultiplier,
+                SHADER_UNIFORM_FLOAT);
+    }
+    rlEnableColorBlend();
+    rlSetBlendMode(BLEND_ALPHA);
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    rlEnableBackfaceCulling();
 }
 
 } // namespace game

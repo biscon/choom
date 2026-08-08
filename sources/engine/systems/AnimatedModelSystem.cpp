@@ -126,30 +126,24 @@ void PrepareAnimatedModelInstancesSystem(World& world, AssetManager& assets)
                     return;
                 }
 
-                const int boneCount = asset->model.skeleton.boneCount;
-                if (boneCount <= 0) {
-                    instance.poseReady = true;
-                    return;
-                }
-                if (boneCount > MaxAnimatedModelBones
-                        || asset->model.skeleton.bindPose == nullptr) {
-                    std::fprintf(
-                            stderr,
-                            "[AnimatedModel WARNING] Model has %d bones; GPU skinning supports at most %d.\n",
-                            boneCount,
-                            MaxAnimatedModelBones);
-                    instance.poseFailed = true;
-                    return;
-                }
-
-                instance.currentPose.assign(
-                        asset->model.skeleton.bindPose,
-                        asset->model.skeleton.bindPose + boneCount);
-                instance.boneMatrices.assign(
-                        static_cast<size_t>(boneCount),
-                        MatrixIdentity());
-                instance.poseReady = true;
+                PrepareAnimatedModelInstance(instance, *asset);
             });
+}
+
+bool PrepareAnimatedModelInstance(AnimatedModelInstance& instance, const ModelAsset& asset)
+{
+    const int boneCount = asset.model.skeleton.boneCount;
+    if (boneCount <= 0) { instance.poseReady = true; return true; }
+    if (boneCount > MaxAnimatedModelBones || asset.model.skeleton.bindPose == nullptr) {
+        std::fprintf(stderr, "[AnimatedModel WARNING] Model has %d bones; GPU skinning supports at most %d.\n",
+                boneCount, MaxAnimatedModelBones);
+        instance.poseFailed = true;
+        return false;
+    }
+    instance.currentPose.assign(asset.model.skeleton.bindPose, asset.model.skeleton.bindPose + boneCount);
+    instance.boneMatrices.assign(static_cast<size_t>(boneCount), MatrixIdentity());
+    instance.poseReady = true;
+    return true;
 }
 
 Model BuildAnimatedModelPoseView(

@@ -265,7 +265,8 @@ void TestPreviewSettingsModalCopiesObjectProbeSettings()
 {
     game::SectorTopologyMap map;
     map.lightmapSettings.objectProbeSpacingWorld = 6.5f;
-    map.lightmapSettings.objectProbeHeightWorld = 2.25f;
+    map.lightmapSettings.objectProbeLowerHeightWorld = 0.75f;
+    map.lightmapSettings.objectProbeUpperHeightWorld = 2.25f;
 
     game::SectorPreviewSettingsModalState modal;
     modal.draftLightmapSettings =
@@ -273,8 +274,9 @@ void TestPreviewSettingsModalCopiesObjectProbeSettings()
 
     Check(Near(modal.draftLightmapSettings.objectProbeSpacingWorld, 6.5f),
           "preview settings modal draft copies object probe spacing");
-    Check(Near(modal.draftLightmapSettings.objectProbeHeightWorld, 2.25f),
-          "preview settings modal draft copies object probe height");
+    Check(Near(modal.draftLightmapSettings.objectProbeLowerHeightWorld, 0.75f)
+                  && Near(modal.draftLightmapSettings.objectProbeUpperHeightWorld, 2.25f),
+          "preview settings modal draft copies layered object probe heights");
 }
 
 void TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash()
@@ -284,15 +286,17 @@ void TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash()
 
     game::SectorLightmapBakeSettings draft = map.lightmapSettings;
     draft.objectProbeSpacingWorld = 5.5f;
-    draft.objectProbeHeightWorld = 1.6f;
+    draft.objectProbeLowerHeightWorld = 0.7f;
+    draft.objectProbeUpperHeightWorld = 1.6f;
 
     const bool changed = game::ApplySectorPreviewObjectProbeSettings(map, draft);
 
     Check(changed, "preview settings modal apply reports changed object probe settings");
     Check(Near(map.lightmapSettings.objectProbeSpacingWorld, 5.5f),
           "preview settings modal apply writes object probe spacing");
-    Check(Near(map.lightmapSettings.objectProbeHeightWorld, 1.6f),
-          "preview settings modal apply writes object probe height");
+    Check(Near(map.lightmapSettings.objectProbeLowerHeightWorld, 0.7f)
+                  && Near(map.lightmapSettings.objectProbeUpperHeightWorld, 1.6f),
+          "preview settings modal apply writes layered object probe heights");
     Check(game::ComputeSectorLightmapSourceHash(map) != originalHash,
           "object probe settings update changes lightmap source hash");
 }
@@ -301,20 +305,38 @@ void TestPreviewSettingsModalResetsObjectProbeDefaults()
 {
     game::SectorPreviewSettingsModalState modal;
     modal.draftLightmapSettings.objectProbeSpacingWorld = 9.0f;
-    modal.draftLightmapSettings.objectProbeHeightWorld = 3.0f;
+    modal.draftLightmapSettings.objectProbeLowerHeightWorld = 3.0f;
+    modal.draftLightmapSettings.objectProbeUpperHeightWorld = 0.2f;
 
     game::ResetSectorPreviewSettingsModalLightingDefaults(modal);
 
     Check(Near(modal.draftLightmapSettings.objectProbeSpacingWorld, 4.0f),
           "preview settings modal reset restores default object probe spacing");
-    Check(Near(modal.draftLightmapSettings.objectProbeHeightWorld, 1.2f),
-          "preview settings modal reset restores default object probe height");
+    Check(Near(modal.draftLightmapSettings.objectProbeLowerHeightWorld, 0.6f)
+                  && Near(modal.draftLightmapSettings.objectProbeUpperHeightWorld, 1.5f),
+          "preview settings modal reset restores layered object probe height defaults");
+}
+
+void TestPreviewSettingsModalNormalizesLayeredProbeSettings()
+{
+    game::SectorLightmapBakeSettings settings;
+    settings.objectProbeSpacingWorld = 0.0f;
+    settings.objectProbeLowerHeightWorld = 20.0f;
+    settings.objectProbeUpperHeightWorld = -3.0f;
+
+    const game::SectorLightmapBakeSettings normalized =
+            game::NormalizeSectorPreviewObjectProbeSettings(settings);
+    Check(Near(normalized.objectProbeSpacingWorld, 0.25f),
+          "preview settings clamps object probe spacing");
+    Check(Near(normalized.objectProbeLowerHeightWorld, 0.0f)
+                  && Near(normalized.objectProbeUpperHeightWorld, 16.0f),
+          "preview settings clamps and orders layered object probe heights");
 }
 
 void TestPreviewSettingsFogTabLayout()
 {
     const Rectangle modal{610.0f, 190.0f, 700.0f, 700.0f};
-    const std::array<Rectangle, 4> tabs =
+    const std::array<Rectangle, 5> tabs =
             game::BuildSectorPreviewSettingsTabLayout(modal, modal.y + 76.0f, 38.0f);
     for (size_t i = 0; i < tabs.size(); ++i) {
         Check(Contains(modal, tabs[i]), "preview settings tab fits inside expanded modal");
@@ -322,8 +344,8 @@ void TestPreviewSettingsFogTabLayout()
             Check(!Overlaps(tabs[i], tabs[j]), "preview settings tabs do not overlap");
         }
     }
-    Check(tabs[3].x + tabs[3].width <= modal.x + modal.width - 30.0f,
-          "fog tab preserves the modal right margin");
+    Check(tabs[4].x + tabs[4].width <= modal.x + modal.width - 30.0f,
+          "viewmodel tab preserves the modal right margin");
 }
 
 void TestPreviewSettingsModalFogDraftApplyAndReset()
@@ -379,6 +401,7 @@ int main()
     TestPreviewSettingsModalCopiesObjectProbeSettings();
     TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash();
     TestPreviewSettingsModalResetsObjectProbeDefaults();
+    TestPreviewSettingsModalNormalizesLayeredProbeSettings();
     TestPreviewSettingsFogTabLayout();
     TestPreviewSettingsModalFogDraftApplyAndReset();
 

@@ -77,6 +77,15 @@ int main()
     }
     SetTextureFilter(worldTarget.texture, TEXTURE_FILTER_BILINEAR);
 
+    // Viewmodels use a separate depth buffer so world geometry cannot clip them.
+    RenderTexture2D viewmodelTarget = LoadRenderTexture(WORLD_TARGET_WIDTH, WORLD_TARGET_HEIGHT);
+    const bool viewmodelTargetReady = viewmodelTarget.id != 0;
+    if (viewmodelTargetReady) {
+        SetTextureFilter(viewmodelTarget.texture, TEXTURE_FILTER_BILINEAR);
+    } else {
+        TraceLog(LOG_WARNING, "PREVIEW: FPS viewmodel render target unavailable; viewmodel rendering disabled");
+    }
+
     RenderTexture2D editorTarget = LoadRenderTexture(INTERNAL_WIDTH, INTERNAL_HEIGHT);
     SetTextureFilter(editorTarget.texture, TEXTURE_FILTER_BILINEAR);
 
@@ -96,6 +105,7 @@ int main()
             UnloadShader(fxaaShader);
         }
         UnloadRenderTexture(worldTarget);
+        UnloadRenderTexture(viewmodelTarget);
         UnloadRenderTexture(editorTarget);
         UnloadRenderTexture(uiTarget);
     };
@@ -153,7 +163,13 @@ int main()
             static_cast<float>(INTERNAL_HEIGHT)
     };
     game::SectorEditor sectorEditor;
-    sectorEditor.Init(context);
+    if (!sectorEditor.Init(context)) {
+        TraceLog(LOG_ERROR, "Engine application initialization failed");
+        unloadRenderResources();
+        context.assets.Shutdown();
+        CloseWindow();
+        return 1;
+    }
 
     while (!WindowShouldClose())
     {
@@ -235,6 +251,21 @@ int main()
 
             sectorEditor.ApplyPreview3DBloom(assets, worldTarget);
 
+            if (viewmodelTargetReady) {
+                BeginTextureMode(viewmodelTarget);
+                ClearBackground(BLANK);
+                sectorEditor.RenderPreview3DViewmodel(assets);
+                EndTextureMode();
+
+                BeginTextureMode(worldTarget);
+                DrawTexturePro(
+                        viewmodelTarget.texture,
+                        GetFullscreenSrcRect(viewmodelTarget.texture),
+                        Rectangle{0.0f, 0.0f, static_cast<float>(WORLD_TARGET_WIDTH), static_cast<float>(WORLD_TARGET_HEIGHT)},
+                        Vector2{}, 0.0f, WHITE);
+                EndTextureMode();
+            }
+
             BeginTextureMode(worldTarget);
             sectorEditor.RenderPreview3DOverlays();
             EndTextureMode();
@@ -266,6 +297,9 @@ int main()
             } else {
                 Rectangle editorSrc = GetFullscreenSrcRect(editorTarget.texture);
                 DrawTexturePro(editorTarget.texture, editorSrc, dst, {0,0}, 0.0f, WHITE);
+            }
+            if (renderPreview3D) {
+                sectorEditor.RenderPreview3DHud(dst);
             }
             Rectangle uiSrc = GetFullscreenSrcRect(uiTarget.texture);
             DrawTexturePro(uiTarget.texture, uiSrc, dst, {0,0}, 0.0f, WHITE);

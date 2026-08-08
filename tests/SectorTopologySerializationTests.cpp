@@ -1743,7 +1743,8 @@ void TestLightmapMetadataRoundTrip()
     original.lightmapSettings.indirectBounceRadius = 9.0f;
     original.lightmapSettings.indirectBounceStrength = 0.35f;
     original.lightmapSettings.objectProbeSpacingWorld = 5.5f;
-    original.lightmapSettings.objectProbeHeightWorld = 1.4f;
+    original.lightmapSettings.objectProbeLowerHeightWorld = 0.7f;
+    original.lightmapSettings.objectProbeUpperHeightWorld = 1.4f;
     original.bakedLightmap.path = "assets/levels/test/test.lightmap.png";
     original.bakedLightmap.width = 2048;
     original.bakedLightmap.height = 2048;
@@ -1778,7 +1779,8 @@ void TestLightmapMetadataRoundTrip()
                   && std::fabs(loaded.lightmapSettings.indirectBounceRadius - 9.0f) <= 0.0001f
                   && std::fabs(loaded.lightmapSettings.indirectBounceStrength - 0.35f) <= 0.0001f
                   && Near(loaded.lightmapSettings.objectProbeSpacingWorld, 5.5f)
-                  && Near(loaded.lightmapSettings.objectProbeHeightWorld, 1.4f),
+                  && Near(loaded.lightmapSettings.objectProbeLowerHeightWorld, 0.7f)
+                  && Near(loaded.lightmapSettings.objectProbeUpperHeightWorld, 1.4f),
           "topology lightmap settings round-trip");
     Check(loaded.bakedLightmap.path == original.bakedLightmap.path
                   && loaded.bakedLightmap.width == 2048
@@ -1814,12 +1816,33 @@ void TestLightmapMetadataRoundTrip()
 
     Json oldSettings = saved;
     oldSettings["lightmapSettings"].erase("objectProbeSpacingWorld");
-    oldSettings["lightmapSettings"].erase("objectProbeHeightWorld");
+    oldSettings["lightmapSettings"].erase("objectProbeLowerHeightWorld");
+    oldSettings["lightmapSettings"].erase("objectProbeUpperHeightWorld");
     SectorTopologyMap oldSettingsStyle;
     Check(LoadText(oldSettings.dump(), oldSettingsStyle, error), "old topology lightmap settings load");
     Check(Near(oldSettingsStyle.lightmapSettings.objectProbeSpacingWorld, 4.0f)
-                  && Near(oldSettingsStyle.lightmapSettings.objectProbeHeightWorld, 1.2f),
+                  && Near(oldSettingsStyle.lightmapSettings.objectProbeLowerHeightWorld, 0.6f)
+                  && Near(oldSettingsStyle.lightmapSettings.objectProbeUpperHeightWorld, 1.5f),
           "old topology lightmap settings default object probe settings");
+
+    Json legacyProbeHeight = saved;
+    legacyProbeHeight["lightmapSettings"].erase("objectProbeLowerHeightWorld");
+    legacyProbeHeight["lightmapSettings"].erase("objectProbeUpperHeightWorld");
+    legacyProbeHeight["lightmapSettings"]["objectProbeHeightWorld"] = 1.4f;
+    SectorTopologyMap migratedLegacyHeight;
+    Check(LoadText(legacyProbeHeight.dump(), migratedLegacyHeight, error),
+          "legacy object probe height setting loads");
+    Check(Near(migratedLegacyHeight.lightmapSettings.objectProbeLowerHeightWorld, 0.6f)
+                  && Near(migratedLegacyHeight.lightmapSettings.objectProbeUpperHeightWorld, 1.4f),
+          "legacy object probe height migrates to upper layer with the new lower default");
+
+    legacyProbeHeight["lightmapSettings"]["objectProbeHeightWorld"] = 0.7f;
+    SectorTopologyMap migratedCloseLegacyHeight;
+    Check(LoadText(legacyProbeHeight.dump(), migratedCloseLegacyHeight, error),
+          "legacy close object probe height setting loads");
+    Check(Near(migratedCloseLegacyHeight.lightmapSettings.objectProbeLowerHeightWorld, 0.7f)
+                  && Near(migratedCloseLegacyHeight.lightmapSettings.objectProbeUpperHeightWorld, 0.7f),
+          "legacy object probe height too close to the lower default preserves one layer");
 }
 
 void TestPreviewSettingsRoundTripAndValidation()
@@ -3601,7 +3624,8 @@ void TestGraphNativeMapLevelRoundTrip()
     source.bakedLightmap.objectProbes.sourceHash = "abc123";
     source.bakedLightmap.objectProbes.count = 7;
     source.bakedLightmap.objectProbes.probeSpacingWorld = 5.5f;
-    source.bakedLightmap.objectProbes.probeHeightWorld = 1.4f;
+    source.bakedLightmap.objectProbes.probeLowerHeightWorld = 0.7f;
+    source.bakedLightmap.objectProbes.probeUpperHeightWorld = 1.4f;
     source.bakedLightmap.objectProbes.format = "ambientCubeF32LE";
     source.bakedLightmap.staticModels.path =
             "assets/levels/test/test.lightmap.static_models.bin";
@@ -3667,7 +3691,8 @@ void TestGraphNativeMapLevelRoundTrip()
                   && saved["bakedLightmap"]["objectProbes"]["sourceHash"] == "abc123"
                   && saved["bakedLightmap"]["objectProbes"]["count"] == 7
                   && Near(saved["bakedLightmap"]["objectProbes"]["probeSpacingWorld"].get<float>(), 5.5f)
-                  && Near(saved["bakedLightmap"]["objectProbes"]["probeHeightWorld"].get<float>(), 1.4f)
+                  && Near(saved["bakedLightmap"]["objectProbes"]["probeLowerHeightWorld"].get<float>(), 0.7f)
+                  && Near(saved["bakedLightmap"]["objectProbes"]["probeUpperHeightWorld"].get<float>(), 1.4f)
                   && saved["bakedLightmap"]["objectProbes"]["format"] == "ambientCubeF32LE",
           "graph-native baked object probe sidecar metadata is persisted");
     Check(saved["bakedLightmap"]["staticModels"]["path"]
@@ -3722,7 +3747,8 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.mapData.bakedLightmap.objectProbes.sourceHash == "abc123"
                   && loaded.mapData.bakedLightmap.objectProbes.count == 7
                   && Near(loaded.mapData.bakedLightmap.objectProbes.probeSpacingWorld, 5.5f)
-                  && Near(loaded.mapData.bakedLightmap.objectProbes.probeHeightWorld, 1.4f)
+                  && Near(loaded.mapData.bakedLightmap.objectProbes.probeLowerHeightWorld, 0.7f)
+                  && Near(loaded.mapData.bakedLightmap.objectProbes.probeUpperHeightWorld, 1.4f)
                   && loaded.mapData.bakedLightmap.objectProbes.format == "ambientCubeF32LE"
                   && loaded.mapData.bakedLightmap.staticModels.path
                           == "assets/levels/test/test.lightmap.static_models.bin"
@@ -3768,6 +3794,17 @@ void TestGraphNativeMapLevelRoundTrip()
                   && resaved["bakedLightmap"]["objectProbes"] == saved["bakedLightmap"]["objectProbes"]
                   && resaved["bakedLightmap"]["staticModels"] == saved["bakedLightmap"]["staticModels"],
           "graph-native save/load/save preserves baked lightmap metadata");
+
+    Json legacyProbeMetadata = saved;
+    legacyProbeMetadata["bakedLightmap"]["objectProbes"].erase("probeLowerHeightWorld");
+    legacyProbeMetadata["bakedLightmap"]["objectProbes"].erase("probeUpperHeightWorld");
+    legacyProbeMetadata["bakedLightmap"]["objectProbes"]["probeHeightWorld"] = 1.4f;
+    game::SectorAuthoringDocument loadedLegacyProbeMetadata;
+    Check(LoadAuthoringText(legacyProbeMetadata.dump(), loadedLegacyProbeMetadata, error),
+          "legacy single-height object probe metadata loads");
+    Check(Near(loadedLegacyProbeMetadata.mapData.bakedLightmap.objectProbes.probeLowerHeightWorld, 1.4f)
+                  && Near(loadedLegacyProbeMetadata.mapData.bakedLightmap.objectProbes.probeUpperHeightWorld, 1.4f),
+          "legacy object probe metadata migrates as a single layer");
 }
 
 void TestGraphNativeLegacyImportPathStillWorks()

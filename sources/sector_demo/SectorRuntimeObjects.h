@@ -19,6 +19,10 @@ namespace game {
 
 constexpr size_t kSectorRuntimeObjectInitialCapacity = 128;
 
+float ComputeSectorModelEnvironmentExposure(
+        const SectorTopologyMap& map,
+        int sectorId);
+
 struct SectorPlacedRuntimeObjectEntity {
     int placedObjectId = 0;
     engine::Entity entity = engine::NullEntity();
@@ -38,6 +42,7 @@ struct SectorObject {
 
 struct SectorObjectLighting {
     BakedObjectLightingSample baked = {};
+    BakedObjectLightingVerticalSample vertical = {};
 };
 
 struct SectorStaticModel {

@@ -27,6 +27,7 @@
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
+#include "game/FpsWeaponRegistry.h"
 
 #include <raylib.h>
 
@@ -48,7 +49,9 @@ public:
     void Render(engine::AssetManager& assets);
     void RenderPreview3DShadowMaps(engine::AssetManager& assets);
     void RenderPreview3DScene(engine::EngineContext& context);
+    void RenderPreview3DViewmodel(engine::AssetManager& assets);
     void RenderPreview3DOverlays();
+    void RenderPreview3DHud(Rectangle playableViewport) const;
     void ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
     void RenderUI(
             engine::UIContext& ui,
@@ -91,6 +94,9 @@ private:
     void FinishRuntimeObjectDrag();
     void CancelRuntimeObjectDrag(const char* message);
     void UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt);
+    void BeginFpsViewmodel(engine::AssetManager& assets);
+    void EndFpsViewmodel(engine::AssetManager& assets);
+    void UpdateFpsViewmodel(engine::AssetManager& assets, float dt);
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingAuthoringLine(const char* message);
     void CancelPendingAuthoringRectangle(const char* message);
@@ -398,6 +404,11 @@ private:
     Rectangle canvasRect = {};
     std::string statusText;
     SectorMeshRenderer preview;
+    FpsWeaponRegistry weaponRegistry;
+    FpsApplicationSettings applicationSettings;
+    std::string applicationSettingsPath;
+    std::string weaponRegistryError;
+    std::string applicationSettingsWarning;
     engine::EngineContext* engineContext = nullptr;
     bool initialized = false;
 };

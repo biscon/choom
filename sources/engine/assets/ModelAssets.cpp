@@ -141,6 +141,7 @@ ParsedModelMaterials ParseModelMaterials(
                 || source.alpha_mode != cgltf_alpha_mode_opaque
                 || source.has_pbr_specular_glossiness
                 || source.has_clearcoat
+                || source.has_specular
                 || source.has_transmission
                 || source.has_volume
                 || source.has_sheen

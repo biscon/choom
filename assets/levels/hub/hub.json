@@ -542,8 +542,9 @@
     "ambientOcclusionStrength": 0.550000011920929,
     "indirectBounceRadius": 32.0,
     "indirectBounceStrength": 0.20000000298023224,
-    "objectProbeSpacingWorld": 4.0,
-    "objectProbeHeightWorld": 1.2000000476837158
+    "objectProbeSpacingWorld": 1.0,
+    "objectProbeLowerHeightWorld": 0.6000000238418579,
+    "objectProbeUpperHeightWorld": 1.2000000476837158
   },
   "previewSettings": {
     "walkSpeed": 4.5,
@@ -593,20 +594,21 @@
     "path": "assets/levels/hub/hub.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "5dfd5882fcb01f20",
+    "sourceHash": "6966bd4a8a1a8b9f",
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
-      "version": 1,
-      "sourceHash": "5dfd5882fcb01f20",
-      "count": 19,
-      "probeSpacingWorld": 4.0,
-      "probeHeightWorld": 1.2000000476837158,
-      "format": "ambientCubeF32LE"
+      "version": 2,
+      "sourceHash": "6966bd4a8a1a8b9f",
+      "count": 277,
+      "probeSpacingWorld": 1.0,
+      "probeLowerHeightWorld": 0.6000000238418579,
+      "probeUpperHeightWorld": 1.2000000476837158,
+      "format": "layeredAmbientCubeF32LE"
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.png.static_models.bin",
       "version": 2,
-      "sourceHash": "5dfd5882fcb01f20",
+      "sourceHash": "6966bd4a8a1a8b9f",
       "modelCount": 8,
       "objectCount": 8,
       "format": "staticModelUvRemapF32LE"

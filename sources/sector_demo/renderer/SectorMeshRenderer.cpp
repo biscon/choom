@@ -1141,6 +1141,30 @@ SectorBillboardDynamicLightContext SectorMeshRenderer::BuildBillboardDynamicLigh
     return context;
 }
 
+void SectorMeshRenderer::DrawViewmodel(
+        engine::AssetManager& assets,
+        const engine::ModelAsset& asset,
+        engine::AnimatedModelInstance& instance,
+        const Camera3D& viewmodelCamera,
+        Matrix transform,
+        const engine::ModelAsset* attachmentAsset,
+        Matrix attachmentTransform,
+        const BakedObjectLightingVerticalSample& ambientLighting,
+        const SectorViewmodelLightingContext& lighting,
+        const SectorViewmodelLightingContext& attachmentLighting)
+{
+    BeginMode3D(viewmodelCamera);
+    staticModelRenderer.DrawViewmodel(
+            asset, instance, viewmodelCamera, transform,
+            attachmentAsset, attachmentTransform,
+            BuildBillboardDynamicLightContext(),
+            assets.GetCubemap(pbrEnvironment.cubemap),
+            ambientLighting,
+            lighting,
+            attachmentLighting);
+    EndMode3D();
+}
+
 void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
         engine::AssetManager& assets,
         engine::World* runtimeObjectWorld)

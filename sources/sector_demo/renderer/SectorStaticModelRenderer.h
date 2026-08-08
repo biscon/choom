@@ -15,6 +15,8 @@
 namespace engine {
 class AssetManager;
 class World;
+struct AnimatedModelInstance;
+struct ModelAsset;
 }
 
 namespace game {
@@ -59,6 +61,33 @@ inline void ConfigureSectorStaticModelAuxiliaryMaterialMaps(
             : Texture2D{};
 }
 
+struct SectorViewmodelLightingContext {
+    float environmentExposure = 0.15f;
+    float brightnessMultiplier = 1.0f;
+    bool materialOverrideEnabled = false;
+    float metallicFactor = 0.0f;
+    float roughnessFactor = 1.0f;
+    bool useMetallicRoughnessTexture = true;
+};
+
+inline void ApplySectorViewmodelMaterialOverride(
+        const SectorViewmodelLightingContext& lighting,
+        float& metallicFactor,
+        float& roughnessFactor,
+        bool& hasMetallicTexture,
+        bool& hasRoughnessTexture)
+{
+    if (!lighting.materialOverrideEnabled) {
+        return;
+    }
+    metallicFactor = lighting.metallicFactor;
+    roughnessFactor = lighting.roughnessFactor;
+    if (!lighting.useMetallicRoughnessTexture) {
+        hasMetallicTexture = false;
+        hasRoughnessTexture = false;
+    }
+}
+
 class SectorStaticModelRenderer {
 public:
     bool Load();
@@ -80,6 +109,19 @@ public:
             const TextureCubemap* environment,
             bool useBakedAmbientOcclusion,
             std::string& renderDebugText);
+
+    void DrawViewmodel(
+            const engine::ModelAsset& asset,
+            engine::AnimatedModelInstance& instance,
+            const Camera3D& camera,
+            Matrix transform,
+            const engine::ModelAsset* attachmentAsset,
+            Matrix attachmentTransform,
+            const SectorBillboardDynamicLightContext& dynamicLightContext,
+            const TextureCubemap* environment,
+            const BakedObjectLightingVerticalSample& ambientLighting,
+            const SectorViewmodelLightingContext& lighting,
+            const SectorViewmodelLightingContext& attachmentLighting);
 
     bool IsLoaded() const { return shaderLoaded; }
 
@@ -112,6 +154,7 @@ private:
     int hasEmissiveTextureLoc = -1;
     int cameraPositionLoc = -1;
     int environmentExposureLoc = -1;
+    int outputBrightnessMultiplierLoc = -1;
     int hasEnvironmentLoc = -1;
     int environmentTextureLoc = -1;
     int lightmapScaleBiasLoc = -1;
@@ -120,6 +163,10 @@ private:
     int containingSectorAmbientLoc = -1;
     int useObjectProbeLightingLoc = -1;
     std::array<int, 6> objectAmbientCubeLocs = {-1, -1, -1, -1, -1, -1};
+    std::array<int, 6> objectAmbientCubeUpperLocs = {-1, -1, -1, -1, -1, -1};
+    int objectAmbientCubeLowerHeightLoc = -1;
+    int objectAmbientCubeUpperHeightLoc = -1;
+    int useVerticalObjectProbeLightingLoc = -1;
     int useSkinningLoc = -1;
     int lightmapTextureLoc = -1;
     int dynamicLightCountLoc = -1;

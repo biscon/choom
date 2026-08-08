@@ -31,6 +31,8 @@
 
 namespace engine {
 class World;
+struct AnimatedModelInstance;
+struct ModelAsset;
 }
 
 namespace game {
@@ -84,6 +86,17 @@ public:
             RenderTexture2D& sceneTarget,
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);
+    void DrawViewmodel(
+            engine::AssetManager& assets,
+            const engine::ModelAsset& asset,
+            engine::AnimatedModelInstance& instance,
+            const Camera3D& viewmodelCamera,
+            Matrix transform,
+            const engine::ModelAsset* attachmentAsset,
+            Matrix attachmentTransform,
+            const BakedObjectLightingVerticalSample& ambientLighting,
+            const SectorViewmodelLightingContext& lighting,
+            const SectorViewmodelLightingContext& attachmentLighting);
 
     bool IsReady() const { return initialized; }
     bool IsRendererReady() const { return IsReady(); }

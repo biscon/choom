@@ -932,28 +932,90 @@ bool FindRepresentativeProbePoint(
     return false;
 }
 
-Vector3 MakeProbeWorldPosition(
-        SectorTopologyCoordPoint point,
+struct ResolvedObjectProbeLayerHeights {
+    float lowerWorld = 0.0f;
+    float upperWorld = 0.0f;
+    bool hasUpperLayer = false;
+};
+
+ResolvedObjectProbeLayerHeights ResolveObjectProbeLayerHeights(
         const SectorTopologySector& sector,
-        float probeHeightWorld,
+        const SectorBakedObjectLightProbePlacementSettings& settings,
         std::vector<SectorBakedObjectLightProbePlacementDiagnostic>* diagnostics)
 {
     const float floorWorld = SectorAuthoringToWorldDistance(sector.floorZ);
     const float ceilingWorld = SectorAuthoringToWorldDistance(sector.ceilingZ);
-    float y = floorWorld + probeHeightWorld;
-    if (ceilingWorld > floorWorld && y >= ceilingWorld) {
-        y = (floorWorld + ceilingWorld) * 0.5f;
+    const float clearHeight = ceilingWorld - floorWorld;
+    const bool fitsTwoLayers = clearHeight > kObjectProbeSurfaceClearanceWorld * 2.0f
+            && settings.lowerHeightWorld >= kObjectProbeSurfaceClearanceWorld
+            && settings.upperHeightWorld <= clearHeight - kObjectProbeSurfaceClearanceWorld
+            && settings.upperHeightWorld - settings.lowerHeightWorld
+                    >= kObjectProbeMinimumLayerSeparationWorld;
+    if (fitsTwoLayers) {
+        return ResolvedObjectProbeLayerHeights{
+                floorWorld + settings.lowerHeightWorld,
+                floorWorld + settings.upperHeightWorld,
+                true};
+    }
+
+    const bool configuredSingleLayer =
+            std::fabs(settings.upperHeightWorld - settings.lowerHeightWorld)
+                    <= BakeEpsilon
+            && settings.lowerHeightWorld >= kObjectProbeSurfaceClearanceWorld
+            && settings.lowerHeightWorld
+                    <= clearHeight - kObjectProbeSurfaceClearanceWorld;
+    if (configuredSingleLayer) {
+        const float heightWorld = floorWorld + settings.lowerHeightWorld;
         if (diagnostics != nullptr) {
             diagnostics->push_back(SectorBakedObjectLightProbePlacementDiagnostic{
                     sector.id,
-                    "Object probe height clamped to sector midpoint because the ceiling is below the requested probe height"});
+                    "Object probe placement used the configured single layer"});
         }
+        return ResolvedObjectProbeLayerHeights{
+                heightWorld,
+                heightWorld,
+                false};
     }
 
+    const float midpoint = ceilingWorld > floorWorld
+            ? (floorWorld + ceilingWorld) * 0.5f
+            : floorWorld + settings.lowerHeightWorld;
+    if (diagnostics != nullptr) {
+        diagnostics->push_back(SectorBakedObjectLightProbePlacementDiagnostic{
+                sector.id,
+                "Object probe placement used one midpoint layer because the sector cannot safely fit both configured heights"});
+    }
+    return ResolvedObjectProbeLayerHeights{midpoint, midpoint, false};
+}
+
+Vector3 MakeProbeWorldPosition(
+        SectorTopologyCoordPoint point,
+        float heightWorld)
+{
     return Vector3{
             SectorCoordToWorldDistance(point.x),
-            y,
+            heightWorld,
             SectorCoordToWorldDistance(point.y)};
+}
+
+void AppendObjectProbeLayers(
+        std::vector<SectorBakedObjectLightProbe>& probes,
+        int sectorId,
+        SectorTopologyCoordPoint point,
+        const ResolvedObjectProbeLayerHeights& heights)
+{
+    SectorBakedObjectLightProbe lower;
+    lower.sectorId = sectorId;
+    lower.layer = SectorBakedObjectLightProbeLayer::Lower;
+    lower.position = MakeProbeWorldPosition(point, heights.lowerWorld);
+    probes.push_back(lower);
+    if (heights.hasUpperLayer) {
+        SectorBakedObjectLightProbe upper;
+        upper.sectorId = sectorId;
+        upper.layer = SectorBakedObjectLightProbeLayer::Upper;
+        upper.position = MakeProbeWorldPosition(point, heights.upperWorld);
+        probes.push_back(upper);
+    }
 }
 
 float BvhSceneDiagonalWithMargin(const SectorLightmapBvh& bvh)
@@ -2040,16 +2102,25 @@ BakedObjectLightingSample MakeSectorAmbientObjectLightingSample(const SectorTopo
 
 const SectorBakedObjectLightProbeSectorRange* FindProbeSectorRange(
         const SectorBakedObjectLightProbeRuntimeData& probes,
-        int sectorId)
+        int sectorId,
+        SectorBakedObjectLightProbeLayer layer)
 {
     int begin = 0;
     int end = static_cast<int>(probes.sectorRanges.size());
     while (begin < end) {
         const int middle = begin + (end - begin) / 2;
         const SectorBakedObjectLightProbeSectorRange& range = probes.sectorRanges[static_cast<size_t>(middle)];
-        if (range.sectorId < sectorId) {
+        const bool before = range.sectorId < sectorId
+                || (range.sectorId == sectorId
+                    && static_cast<unsigned int>(range.layer)
+                            < static_cast<unsigned int>(layer));
+        const bool after = range.sectorId > sectorId
+                || (range.sectorId == sectorId
+                    && static_cast<unsigned int>(range.layer)
+                            > static_cast<unsigned int>(layer));
+        if (before) {
             begin = middle + 1;
-        } else if (range.sectorId > sectorId) {
+        } else if (after) {
             end = middle;
         } else {
             return &range;
@@ -2083,8 +2154,11 @@ void StreamObjectLightProbeRange(
             continue;
         }
 
-        const float distanceSquared =
-                Vector3DistanceSqr(worldPosition, probes.probes[static_cast<size_t>(probeIndex)].position);
+        const Vector3 probePosition =
+                probes.probes[static_cast<size_t>(probeIndex)].position;
+        const float deltaX = worldPosition.x - probePosition.x;
+        const float deltaZ = worldPosition.z - probePosition.z;
+        const float distanceSquared = deltaX * deltaX + deltaZ * deltaZ;
         if (!std::isfinite(distanceSquared)) {
             continue;
         }
@@ -2119,29 +2193,39 @@ bool HasSelectedObjectLightProbes(const ObjectProbeSelection& selection)
     return selection.selectedCount > 0;
 }
 
-BakedObjectLightingSample SampleSelectedObjectLightProbes(
+struct SelectedObjectProbeLayerSample {
+    BakedObjectLightingSample lighting;
+    float heightWorld = 0.0f;
+};
+
+SelectedObjectProbeLayerSample SampleSelectedObjectLightProbes(
         const SectorBakedObjectLightProbeRuntimeData& probes,
         const ObjectProbeSelection& selection)
 {
     if (selection.selectedCount == 0) {
-        return MakeNeutralObjectLightingSample();
+        return SelectedObjectProbeLayerSample{
+                MakeNeutralObjectLightingSample(), 0.0f};
     }
 
     if (selection.selectedDistanceSquared[0] <= ObjectProbeSelection::kExactProbeDistanceSquared) {
-        return MakeObjectLightingSampleFromCube(
-                probes.probes[static_cast<size_t>(selection.selectedIndices[0])].ambientCube,
-                true);
+        const SectorBakedObjectLightProbe& probe =
+                probes.probes[static_cast<size_t>(selection.selectedIndices[0])];
+        return SelectedObjectProbeLayerSample{
+                MakeObjectLightingSampleFromCube(probe.ambientCube, true),
+                probe.position.y};
     }
 
     BakedObjectLightingSample sample;
     sample.valid = true;
     float totalWeight = 0.0f;
+    float weightedHeight = 0.0f;
     for (int selected = 0; selected < selection.selectedCount; ++selected) {
         const float distance = std::sqrt(selection.selectedDistanceSquared[selected]);
         const float weight = 1.0f / std::max(distance, 0.001f);
         totalWeight += weight;
         const SectorBakedObjectLightProbe& probe =
                 probes.probes[static_cast<size_t>(selection.selectedIndices[selected])];
+        weightedHeight += probe.position.y * weight;
         for (int face = 0; face < 6; ++face) {
             sample.ambientCube[face] = Vector3Add(
                     sample.ambientCube[face],
@@ -2150,24 +2234,16 @@ BakedObjectLightingSample SampleSelectedObjectLightProbes(
     }
 
     if (totalWeight <= 0.0f || !std::isfinite(totalWeight)) {
-        return MakeNeutralObjectLightingSample();
+        return SelectedObjectProbeLayerSample{
+                MakeNeutralObjectLightingSample(), 0.0f};
     }
 
     for (Vector3& face : sample.ambientCube) {
         face = ClampRgb01(Vector3Scale(face, 1.0f / totalWeight));
     }
-    return sample;
-}
-
-BakedObjectLightingSample SampleNearestObjectLightProbes(
-        const SectorBakedObjectLightProbeRuntimeData& probes,
-        Vector3 worldPosition,
-        int begin,
-        int count)
-{
-    ObjectProbeSelection selection;
-    StreamObjectLightProbeRange(probes, worldPosition, begin, count, selection);
-    return SampleSelectedObjectLightProbes(probes, selection);
+    return SelectedObjectProbeLayerSample{
+            sample,
+            weightedHeight / totalWeight};
 }
 
 float DistanceSquaredPointToSegment2(Vector2 point, Vector2 a, Vector2 b)
@@ -3062,7 +3138,8 @@ void FnvAppendLightmapBakeConstantsAndSettings(
     FnvAppendFloat(hash, std::clamp(SectorAuthoringToWorldDistance(settings.indirectBounceRadius), 0.05f, 16.0f));
     FnvAppendFloat(hash, std::clamp(settings.indirectBounceStrength, 0.0f, 1.0f));
     FnvAppendFloat(hash, std::clamp(settings.objectProbeSpacingWorld, 0.25f, 128.0f));
-    FnvAppendFloat(hash, std::clamp(settings.objectProbeHeightWorld, 0.0f, 16.0f));
+    FnvAppendFloat(hash, std::clamp(settings.objectProbeLowerHeightWorld, 0.0f, 16.0f));
+    FnvAppendFloat(hash, std::clamp(settings.objectProbeUpperHeightWorld, 0.0f, 16.0f));
 }
 
 void FnvAppendDirectionalLightSettings(
@@ -3302,8 +3379,11 @@ bool BuildSectorBakedObjectLightProbePlacements(
         outError = "Object probe placement failed: probe spacing must be positive";
         return false;
     }
-    if (!std::isfinite(settings.probeHeightWorld) || settings.probeHeightWorld < 0.0f) {
-        outError = "Object probe placement failed: probe height must be non-negative";
+    if (!std::isfinite(settings.lowerHeightWorld)
+            || !std::isfinite(settings.upperHeightWorld)
+            || settings.lowerHeightWorld < 0.0f
+            || settings.upperHeightWorld < settings.lowerHeightWorld) {
+        outError = "Object probe placement failed: layer heights must be finite, non-negative, and ordered";
         return false;
     }
 
@@ -3316,6 +3396,8 @@ bool BuildSectorBakedObjectLightProbePlacements(
 
     const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(map);
     for (const SectorTopologySector& sector : map.sectors) {
+        const ResolvedObjectProbeLayerHeights layerHeights =
+                ResolveObjectProbeLayerHeights(sector, settings, outDiagnostics);
         SectorTopologyLoopSet loops;
         std::vector<SectorTopologyValidationIssue> loopIssues;
         if (!ExtractSectorTopologyLoops(map, indexes, sector.id, loops, &loopIssues)) {
@@ -3371,14 +3453,11 @@ bool BuildSectorBakedObjectLightProbePlacements(
                     continue;
                 }
 
-                SectorBakedObjectLightProbe probe;
-                probe.sectorId = sector.id;
-                probe.position = MakeProbeWorldPosition(
+                AppendObjectProbeLayers(
+                        outProbes,
+                        sector.id,
                         candidate,
-                        sector,
-                        settings.probeHeightWorld,
-                        outDiagnostics);
-                outProbes.push_back(probe);
+                        layerHeights);
             }
         }
 
@@ -3390,14 +3469,11 @@ bool BuildSectorBakedObjectLightProbePlacements(
                 return false;
             }
 
-            SectorBakedObjectLightProbe probe;
-            probe.sectorId = sector.id;
-            probe.position = MakeProbeWorldPosition(
+            AppendObjectProbeLayers(
+                    outProbes,
+                    sector.id,
                     representative,
-                    sector,
-                    settings.probeHeightWorld,
-                    outDiagnostics);
-            outProbes.push_back(probe);
+                    layerHeights);
             if (outDiagnostics != nullptr) {
                 outDiagnostics->push_back(SectorBakedObjectLightProbePlacementDiagnostic{
                         sector.id,
@@ -3517,7 +3593,8 @@ bool WriteSectorBakedObjectLightProbeSidecar(
         const std::string& path,
         const std::vector<SectorBakedObjectLightProbe>& probes,
         float probeSpacingWorld,
-        float probeHeightWorld,
+        float probeLowerHeightWorld,
+        float probeUpperHeightWorld,
         std::string& outError)
 {
     outError.clear();
@@ -3525,7 +3602,11 @@ bool WriteSectorBakedObjectLightProbeSidecar(
         outError = "Object probe sidecar write failed: missing output path";
         return false;
     }
-    if (!std::isfinite(probeSpacingWorld) || !std::isfinite(probeHeightWorld)) {
+    if (!std::isfinite(probeSpacingWorld)
+            || !std::isfinite(probeLowerHeightWorld)
+            || !std::isfinite(probeUpperHeightWorld)
+            || probeLowerHeightWorld < 0.0f
+            || probeUpperHeightWorld < probeLowerHeightWorld) {
         outError = "Object probe sidecar write failed: non-finite probe settings";
         return false;
     }
@@ -3535,6 +3616,11 @@ bool WriteSectorBakedObjectLightProbeSidecar(
     }
 
     for (const SectorBakedObjectLightProbe& probe : probes) {
+        if (probe.layer != SectorBakedObjectLightProbeLayer::Lower
+                && probe.layer != SectorBakedObjectLightProbeLayer::Upper) {
+            outError = "Object probe sidecar write failed: invalid probe layer";
+            return false;
+        }
         if (!IsFiniteVector3(probe.position)) {
             outError = "Object probe sidecar write failed: non-finite probe position";
             return false;
@@ -3568,8 +3654,8 @@ bool WriteSectorBakedObjectLightProbeSidecar(
             || !WriteU32LE(output, static_cast<uint32_t>(kSectorBakedObjectLightProbeSidecarVersion))
             || !WriteU32LE(output, static_cast<uint32_t>(probes.size()))
             || !WriteF32LE(output, probeSpacingWorld)
-            || !WriteF32LE(output, probeHeightWorld)
-            || !WriteU32LE(output, 0)
+            || !WriteF32LE(output, probeLowerHeightWorld)
+            || !WriteF32LE(output, probeUpperHeightWorld)
             || !WriteU32LE(output, 0)) {
         outError = "Object probe sidecar write failed: could not write header";
         return false;
@@ -3577,6 +3663,7 @@ bool WriteSectorBakedObjectLightProbeSidecar(
 
     for (const SectorBakedObjectLightProbe& probe : probes) {
         if (!WriteI32LE(output, static_cast<int32_t>(probe.sectorId))
+                || !WriteU32LE(output, static_cast<uint32_t>(probe.layer))
                 || !WriteProbeVector(output, probe.position)) {
             outError = "Object probe sidecar write failed: could not write probe record";
             return false;
@@ -3630,15 +3717,15 @@ bool ReadSectorBakedObjectLightProbeSidecar(
     uint32_t version = 0;
     uint32_t probeCount = 0;
     float probeSpacingWorld = 0.0f;
-    float probeHeightWorld = 0.0f;
-    uint32_t reserved0 = 0;
-    uint32_t reserved1 = 0;
+    float probeLowerHeightWorld = 0.0f;
+    float probeUpperHeightWorld = 0.0f;
+    uint32_t reserved = 0;
     if (!ReadU32LE(input, version)
             || !ReadU32LE(input, probeCount)
             || !ReadF32LE(input, probeSpacingWorld)
-            || !ReadF32LE(input, probeHeightWorld)
-            || !ReadU32LE(input, reserved0)
-            || !ReadU32LE(input, reserved1)) {
+            || !ReadF32LE(input, probeLowerHeightWorld)
+            || !ReadF32LE(input, probeUpperHeightWorld)
+            || !ReadU32LE(input, reserved)) {
         outError = "Object probe sidecar read failed: truncated header";
         return false;
     }
@@ -3647,7 +3734,11 @@ bool ReadSectorBakedObjectLightProbeSidecar(
         outError = "Object probe sidecar read failed: unsupported version";
         return false;
     }
-    if (!std::isfinite(probeSpacingWorld) || !std::isfinite(probeHeightWorld)) {
+    if (!std::isfinite(probeSpacingWorld)
+            || !std::isfinite(probeLowerHeightWorld)
+            || !std::isfinite(probeUpperHeightWorld)
+            || probeLowerHeightWorld < 0.0f
+            || probeUpperHeightWorld < probeLowerHeightWorld) {
         outError = "Object probe sidecar read failed: non-finite probe settings";
         return false;
     }
@@ -3671,6 +3762,16 @@ bool ReadSectorBakedObjectLightProbeSidecar(
             outError = "Object probe sidecar read failed: metadata format mismatch";
             return false;
         }
+        if ((expectedMetadata->probeSpacingWorld > 0.0f
+                    && std::abs(expectedMetadata->probeSpacingWorld
+                            - probeSpacingWorld) > 0.0001f)
+                || std::abs(expectedMetadata->probeLowerHeightWorld
+                        - probeLowerHeightWorld) > 0.0001f
+                || std::abs(expectedMetadata->probeUpperHeightWorld
+                        - probeUpperHeightWorld) > 0.0001f) {
+            outError = "Object probe sidecar read failed: metadata settings mismatch";
+            return false;
+        }
     }
 
     std::vector<SectorBakedObjectLightProbe> probes;
@@ -3678,11 +3779,19 @@ bool ReadSectorBakedObjectLightProbeSidecar(
     for (uint32_t probeIndex = 0; probeIndex < probeCount; ++probeIndex) {
         SectorBakedObjectLightProbe probe;
         int32_t sectorId = 0;
-        if (!ReadI32LE(input, sectorId) || !ReadProbeVector(input, probe.position)) {
+        uint32_t layer = 0;
+        if (!ReadI32LE(input, sectorId)
+                || !ReadU32LE(input, layer)
+                || !ReadProbeVector(input, probe.position)) {
             outError = "Object probe sidecar read failed: truncated probe record";
             return false;
         }
         probe.sectorId = static_cast<int>(sectorId);
+        if (layer > static_cast<uint32_t>(SectorBakedObjectLightProbeLayer::Upper)) {
+            outError = "Object probe sidecar read failed: invalid probe layer";
+            return false;
+        }
+        probe.layer = static_cast<SectorBakedObjectLightProbeLayer>(layer);
         if (!IsFiniteVector3(probe.position)) {
             outError = "Object probe sidecar read failed: non-finite probe position";
             return false;
@@ -3704,7 +3813,8 @@ bool ReadSectorBakedObjectLightProbeSidecar(
     outMetadata.version = static_cast<int>(version);
     outMetadata.count = static_cast<int>(probeCount);
     outMetadata.probeSpacingWorld = probeSpacingWorld;
-    outMetadata.probeHeightWorld = probeHeightWorld;
+    outMetadata.probeLowerHeightWorld = probeLowerHeightWorld;
+    outMetadata.probeUpperHeightWorld = probeUpperHeightWorld;
     outMetadata.format = kSectorBakedObjectLightProbeSidecarFormat;
     outProbes = std::move(probes);
     return true;
@@ -3728,7 +3838,9 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
             || metadata.sourceHash.empty()
             || metadata.count < 0
             || metadata.probeSpacingWorld <= 0.0f
-            || metadata.probeHeightWorld < 0.0f
+            || metadata.probeLowerHeightWorld < 0.0f
+            || metadata.probeUpperHeightWorld
+                    < metadata.probeLowerHeightWorld
             || metadata.format != kSectorBakedObjectLightProbeSidecarFormat) {
         outError = "Object probe runtime load failed: invalid probe metadata";
         return false;
@@ -3750,15 +3862,20 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
     }
 
     std::sort(probes.begin(), probes.end(), [](const SectorBakedObjectLightProbe& a, const SectorBakedObjectLightProbe& b) {
-        return a.sectorId < b.sectorId;
+        if (a.sectorId != b.sectorId) return a.sectorId < b.sectorId;
+        return static_cast<unsigned int>(a.layer)
+                < static_cast<unsigned int>(b.layer);
     });
 
     std::vector<SectorBakedObjectLightProbeSectorRange> sectorRanges;
     sectorRanges.reserve(probes.size());
     for (size_t begin = 0; begin < probes.size();) {
         const int sectorId = probes[begin].sectorId;
+        const SectorBakedObjectLightProbeLayer layer = probes[begin].layer;
         size_t end = begin + 1;
-        while (end < probes.size() && probes[end].sectorId == sectorId) {
+        while (end < probes.size()
+                && probes[end].sectorId == sectorId
+                && probes[end].layer == layer) {
             ++end;
         }
 
@@ -3766,6 +3883,7 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
         range.sectorId = sectorId;
         range.begin = static_cast<int>(begin);
         range.count = static_cast<int>(end - begin);
+        range.layer = layer;
         sectorRanges.push_back(range);
         begin = end;
     }
@@ -3778,17 +3896,89 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
     return true;
 }
 
-BakedObjectLightingSample SampleBakedObjectLighting(
+Vector3 EvaluateBakedObjectAmbientCubeLighting(
+        const BakedObjectLightingSample& sample,
+        Vector3 worldNormal)
+{
+    if (!IsFiniteVector3(worldNormal)
+            || Vector3LengthSqr(worldNormal) <= 0.000001f) {
+        worldNormal = Vector3{0.0f, 1.0f, 0.0f};
+    } else {
+        worldNormal = Vector3Normalize(worldNormal);
+    }
+
+    const Vector3 weights{
+            worldNormal.x * worldNormal.x,
+            worldNormal.y * worldNormal.y,
+            worldNormal.z * worldNormal.z};
+    const Vector3 xLighting = sample.ambientCube[worldNormal.x >= 0.0f ? 0 : 1];
+    const Vector3 yLighting = sample.ambientCube[worldNormal.y >= 0.0f ? 2 : 3];
+    const Vector3 zLighting = sample.ambientCube[worldNormal.z >= 0.0f ? 4 : 5];
+    return Vector3Add(
+            Vector3Add(
+                    Vector3Scale(xLighting, weights.x),
+                    Vector3Scale(yLighting, weights.y)),
+            Vector3Scale(zLighting, weights.z));
+}
+
+BakedObjectLightingSample ResolveBakedObjectLightingVerticalSample(
+        const BakedObjectLightingVerticalSample& sample,
+        float worldHeight)
+{
+    if (!sample.lower.valid && sample.upper.valid) return sample.upper;
+    if (sample.lower.valid && !sample.upper.valid) return sample.lower;
+    const float heightRange = sample.upperHeightWorld - sample.lowerHeightWorld;
+    if (!std::isfinite(heightRange)
+            || heightRange <= 0.0001f
+            || !std::isfinite(worldHeight)) {
+        return sample.lower;
+    }
+
+    const float blend = std::clamp(
+            (worldHeight - sample.lowerHeightWorld) / heightRange,
+            0.0f,
+            1.0f);
+    BakedObjectLightingSample resolved;
+    resolved.valid = sample.lower.valid || sample.upper.valid;
+    for (int face = 0; face < 6; ++face) {
+        resolved.ambientCube[face] = Vector3Lerp(
+                sample.lower.ambientCube[face],
+                sample.upper.ambientCube[face],
+                blend);
+    }
+    return resolved;
+}
+
+BakedObjectLightingVerticalSample SampleBakedObjectLightingVertical(
         const SectorBakedObjectLightProbeRuntimeData& probes,
         Vector3 worldPosition,
         int preferredSectorId,
         const SectorTopologyMap* mapForFallback)
 {
     if (!probes.probes.empty()) {
-        if (const SectorBakedObjectLightProbeSectorRange* range = FindProbeSectorRange(probes, preferredSectorId)) {
-            if (range->count > 0) {
-                ObjectProbeSelection selection;
-                StreamObjectLightProbeRange(probes, worldPosition, range->begin, range->count, selection);
+        const SectorBakedObjectLightProbeSectorRange* preferredLower =
+                FindProbeSectorRange(
+                        probes,
+                        preferredSectorId,
+                        SectorBakedObjectLightProbeLayer::Lower);
+        const SectorBakedObjectLightProbeSectorRange* preferredUpper =
+                FindProbeSectorRange(
+                        probes,
+                        preferredSectorId,
+                        SectorBakedObjectLightProbeLayer::Upper);
+        const bool hasPreferredLayer = preferredLower != nullptr
+                || preferredUpper != nullptr;
+
+        auto sampleLayer = [&](SectorBakedObjectLightProbeLayer layer,
+                                   const SectorBakedObjectLightProbeSectorRange* preferredRange) {
+            ObjectProbeSelection selection;
+            if (preferredRange != nullptr && preferredRange->count > 0) {
+                StreamObjectLightProbeRange(
+                        probes,
+                        worldPosition,
+                        preferredRange->begin,
+                        preferredRange->count,
+                        selection);
 
                 if (mapForFallback != nullptr) {
                     int adjacentSectorIds[kObjectProbeMaxAdjacentBlendSectors] = {};
@@ -3801,7 +3991,10 @@ BakedObjectLightingSample SampleBakedObjectLighting(
                             adjacentSectorCount);
                     for (int index = 0; index < adjacentSectorCount; ++index) {
                         const SectorBakedObjectLightProbeSectorRange* adjacentRange =
-                                FindProbeSectorRange(probes, adjacentSectorIds[index]);
+                                FindProbeSectorRange(
+                                        probes,
+                                        adjacentSectorIds[index],
+                                        layer);
                         if (adjacentRange != nullptr && adjacentRange->count > 0) {
                             StreamObjectLightProbeRange(
                                     probes,
@@ -3812,23 +4005,67 @@ BakedObjectLightingSample SampleBakedObjectLighting(
                         }
                     }
                 }
-
-                if (HasSelectedObjectLightProbes(selection)) {
-                    return SampleSelectedObjectLightProbes(probes, selection);
+            } else if (!hasPreferredLayer) {
+                for (const SectorBakedObjectLightProbeSectorRange& range :
+                        probes.sectorRanges) {
+                    if (range.layer == layer && range.count > 0) {
+                        StreamObjectLightProbeRange(
+                                probes,
+                                worldPosition,
+                                range.begin,
+                                range.count,
+                                selection);
+                    }
                 }
-
-                return SampleNearestObjectLightProbes(probes, worldPosition, range->begin, range->count);
             }
+            return SampleSelectedObjectLightProbes(probes, selection);
+        };
+
+        SelectedObjectProbeLayerSample lower = sampleLayer(
+                SectorBakedObjectLightProbeLayer::Lower,
+                preferredLower);
+        SelectedObjectProbeLayerSample upper = sampleLayer(
+                SectorBakedObjectLightProbeLayer::Upper,
+                preferredUpper);
+        if (!lower.lighting.valid && upper.lighting.valid) lower = upper;
+        if (lower.lighting.valid && !upper.lighting.valid) upper = lower;
+        if (lower.lighting.valid || upper.lighting.valid) {
+            return BakedObjectLightingVerticalSample{
+                    lower.lighting,
+                    upper.lighting,
+                    lower.heightWorld,
+                    upper.heightWorld};
         }
-
-        return SampleNearestObjectLightProbes(probes, worldPosition, 0, static_cast<int>(probes.probes.size()));
     }
 
-    if (mapForFallback != nullptr && FindSectorTopologySector(*mapForFallback, preferredSectorId) != nullptr) {
-        return MakeSectorAmbientObjectLightingSample(*mapForFallback, preferredSectorId);
-    }
+    const BakedObjectLightingSample fallback = mapForFallback != nullptr
+                    && FindSectorTopologySector(
+                            *mapForFallback,
+                            preferredSectorId) != nullptr
+            ? MakeSectorAmbientObjectLightingSample(
+                    *mapForFallback,
+                    preferredSectorId)
+            : MakeNeutralObjectLightingSample();
+    return BakedObjectLightingVerticalSample{
+            fallback,
+            fallback,
+            worldPosition.y,
+            worldPosition.y};
+}
 
-    return MakeNeutralObjectLightingSample();
+BakedObjectLightingSample SampleBakedObjectLighting(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        Vector3 worldPosition,
+        int preferredSectorId,
+        const SectorTopologyMap* mapForFallback)
+{
+    return ResolveBakedObjectLightingVerticalSample(
+            SampleBakedObjectLightingVertical(
+                    probes,
+                    worldPosition,
+                    preferredSectorId,
+                    mapForFallback),
+            worldPosition.y);
 }
 
 std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath)
@@ -4464,13 +4701,22 @@ bool BakeSectorLightmapForMap(
     }
 
     const float objectProbeSpacingWorld = std::clamp(map.lightmapSettings.objectProbeSpacingWorld, 0.25f, 128.0f);
-    const float objectProbeHeightWorld = std::clamp(map.lightmapSettings.objectProbeHeightWorld, 0.0f, 16.0f);
+    float objectProbeLowerHeightWorld = std::clamp(
+            map.lightmapSettings.objectProbeLowerHeightWorld, 0.0f, 16.0f);
+    float objectProbeUpperHeightWorld = std::clamp(
+            map.lightmapSettings.objectProbeUpperHeightWorld, 0.0f, 16.0f);
+    if (objectProbeLowerHeightWorld > objectProbeUpperHeightWorld) {
+        std::swap(objectProbeLowerHeightWorld, objectProbeUpperHeightWorld);
+    }
     std::vector<SectorBakedObjectLightProbe> objectProbes;
     std::vector<SectorBakedObjectLightProbePlacementDiagnostic> objectProbeDiagnostics;
     const auto objectProbeBakeStart = Clock::now();
     if (!BuildSectorBakedObjectLightProbePlacements(
                 map,
-                SectorBakedObjectLightProbePlacementSettings{objectProbeSpacingWorld, objectProbeHeightWorld},
+                SectorBakedObjectLightProbePlacementSettings{
+                        objectProbeSpacingWorld,
+                        objectProbeLowerHeightWorld,
+                        objectProbeUpperHeightWorld},
                 objectProbes,
                 &objectProbeDiagnostics,
                 outError)) {
@@ -4504,7 +4750,8 @@ bool BakeSectorLightmapForMap(
                 objectProbeSidecarPath,
                 objectProbes,
                 objectProbeSpacingWorld,
-                objectProbeHeightWorld,
+                objectProbeLowerHeightWorld,
+                objectProbeUpperHeightWorld,
                 outError)) {
         if (outError.empty()) {
             outError = "Bake failed: could not write object light probe sidecar";
@@ -4566,7 +4813,8 @@ bool BakeSectorLightmapForMap(
     outResult.objectProbes.sourceHash = outResult.sourceHash;
     outResult.objectProbes.count = static_cast<int>(objectProbes.size());
     outResult.objectProbes.probeSpacingWorld = objectProbeSpacingWorld;
-    outResult.objectProbes.probeHeightWorld = objectProbeHeightWorld;
+    outResult.objectProbes.probeLowerHeightWorld = objectProbeLowerHeightWorld;
+    outResult.objectProbes.probeUpperHeightWorld = objectProbeUpperHeightWorld;
     outResult.objectProbes.format = kSectorBakedObjectLightProbeSidecarFormat;
     if (staticModels != nullptr && !staticModels->objects.empty()) {
         outResult.staticModels.path = staticModelSidecarPath;
@@ -4863,7 +5111,9 @@ SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(const SectorTopologyMa
             || metadata.sourceHash.empty()
             || metadata.count < 0
             || metadata.probeSpacingWorld <= 0.0f
-            || metadata.probeHeightWorld < 0.0f
+            || metadata.probeLowerHeightWorld < 0.0f
+            || metadata.probeUpperHeightWorld
+                    < metadata.probeLowerHeightWorld
             || metadata.format != kSectorBakedObjectLightProbeSidecarFormat) {
         return SectorLightmapStatus::Stale;
     }

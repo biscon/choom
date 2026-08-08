@@ -119,6 +119,16 @@ target_link_libraries(${PROJECT_NAME} PRIVATE xatlas)
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(fps_viewmodel_tests
+            tests/FpsViewmodelTests.cpp
+            sources/game/FpsViewmodel.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/sector_editor/preview/SectorEditorPreviewHudRenderer.cpp
+    )
+    target_include_directories(fps_viewmodel_tests PRIVATE sources)
+    target_link_libraries(fps_viewmodel_tests PRIVATE raylib)
+    add_test(NAME fps_viewmodel COMMAND fps_viewmodel_tests)
+
     add_executable(sector_utility_tests
             tests/SectorUtilityTests.cpp
     )

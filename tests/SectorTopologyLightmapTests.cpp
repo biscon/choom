@@ -255,7 +255,8 @@ game::SectorLightmapBakeAsyncResult MakeInstallTestResult(const std::filesystem:
     result.bakeResult.objectProbes.sourceHash = "stale-probe-hash";
     result.bakeResult.objectProbes.count = 7;
     result.bakeResult.objectProbes.probeSpacingWorld = 4.0f;
-    result.bakeResult.objectProbes.probeHeightWorld = 1.2f;
+    result.bakeResult.objectProbes.probeLowerHeightWorld = 0.6f;
+    result.bakeResult.objectProbes.probeUpperHeightWorld = 1.5f;
     result.bakeResult.objectProbes.format =
             game::kSectorBakedObjectLightProbeSidecarFormat;
     result.bakeResult.totalBakeSeconds = 1.25;
@@ -272,7 +273,8 @@ void WriteInstallTestTemps(const game::SectorLightmapBakeAsyncResult& result)
                   result.bakeResult.objectProbes.path,
                   probes,
                   result.bakeResult.objectProbes.probeSpacingWorld,
-                  result.bakeResult.objectProbes.probeHeightWorld,
+                  result.bakeResult.objectProbes.probeLowerHeightWorld,
+                  result.bakeResult.objectProbes.probeUpperHeightWorld,
                   error),
           "install fixture writes a valid object probe sidecar");
 }
@@ -358,7 +360,8 @@ void TestLightmapBakeInstallBoundaryMissingTempsCleanUp()
                       result.bakeResult.objectProbes.path,
                       probes,
                       result.bakeResult.objectProbes.probeSpacingWorld,
-                      result.bakeResult.objectProbes.probeHeightWorld,
+                      result.bakeResult.objectProbes.probeLowerHeightWorld,
+                      result.bakeResult.objectProbes.probeUpperHeightWorld,
                       error),
               "missing-lightmap fixture writes a valid probe sidecar");
 
@@ -1493,9 +1496,13 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedProbeSettings) != hash,
           "hash changes when object probe spacing changes");
     changedProbeSettings = base;
-    changedProbeSettings.lightmapSettings.objectProbeHeightWorld = 1.6f;
+    changedProbeSettings.lightmapSettings.objectProbeLowerHeightWorld = 0.7f;
     Check(game::ComputeSectorLightmapSourceHash(changedProbeSettings) != hash,
-          "hash changes when object probe height changes");
+          "hash changes when lower object probe height changes");
+    changedProbeSettings = base;
+    changedProbeSettings.lightmapSettings.objectProbeUpperHeightWorld = 1.6f;
+    Check(game::ComputeSectorLightmapSourceHash(changedProbeSettings) != hash,
+          "hash changes when upper object probe height changes");
 }
 
 void TestSourceHashIncludesMiddleTextureData()
@@ -1586,8 +1593,8 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 13,
-          "lightmap bake version is bumped for multi-atlas output");
+    Check(game::kSectorLightmapBakeVersion == 14,
+          "lightmap bake version is bumped for layered object probes");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);
@@ -1618,14 +1625,15 @@ void TestBakeVersionInvalidatesOldLightmaps()
     const std::filesystem::path objectProbePath =
             game::MakeSectorObjectProbeSidecarPathForLightmapPath(lightmapPath.string());
     std::string probeError;
-    Check(game::WriteSectorBakedObjectLightProbeSidecar(objectProbePath.string(), {}, 4.0f, 1.2f, probeError),
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(objectProbePath.string(), {}, 4.0f, 0.6f, 1.5f, probeError),
           "object probe version invalidation sidecar fixture writes");
     map.bakedLightmap.objectProbes.path = objectProbePath.string();
     map.bakedLightmap.objectProbes.version = game::kSectorBakedObjectLightProbeSidecarVersion;
     map.bakedLightmap.objectProbes.sourceHash = map.bakedLightmap.sourceHash;
     map.bakedLightmap.objectProbes.count = 0;
     map.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
-    map.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    map.bakedLightmap.objectProbes.probeLowerHeightWorld = 0.6f;
+    map.bakedLightmap.objectProbes.probeUpperHeightWorld = 1.5f;
     map.bakedLightmap.objectProbes.format = game::kSectorBakedObjectLightProbeSidecarFormat;
     Check(game::GetSectorBakedObjectLightProbeStatus(map) == game::SectorLightmapStatus::Valid,
           "current bake version source hash keeps object probe metadata valid");
@@ -2372,8 +2380,10 @@ std::vector<game::SectorBakedObjectLightProbe> MakeObjectLightProbesForSidecarTe
 {
     std::vector<game::SectorBakedObjectLightProbe> probes(2);
     probes[0].sectorId = 10;
+    probes[0].layer = game::SectorBakedObjectLightProbeLayer::Lower;
     probes[0].position = Vector3{1.0f, 2.0f, 3.0f};
     probes[1].sectorId = -5;
+    probes[1].layer = game::SectorBakedObjectLightProbeLayer::Upper;
     probes[1].position = Vector3{-4.0f, 5.0f, 6.5f};
 
     for (size_t probeIndex = 0; probeIndex < probes.size(); ++probeIndex) {
@@ -2396,7 +2406,7 @@ void TestObjectLightProbeSidecarRoundTrip()
     const std::vector<game::SectorBakedObjectLightProbe> probes = MakeObjectLightProbesForSidecarTest();
 
     std::string error;
-    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 1.2f, error),
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, error),
           "object light probe sidecar writes");
 
     game::SectorBakedObjectLightProbeMetadata expected;
@@ -2412,13 +2422,16 @@ void TestObjectLightProbeSidecarRoundTrip()
                   && metadata.version == game::kSectorBakedObjectLightProbeSidecarVersion
                   && metadata.count == static_cast<int>(probes.size())
                   && Near(metadata.probeSpacingWorld, 4.0f)
-                  && Near(metadata.probeHeightWorld, 1.2f)
+                  && Near(metadata.probeLowerHeightWorld, 0.6f)
+                  && Near(metadata.probeUpperHeightWorld, 1.5f)
                   && metadata.format == game::kSectorBakedObjectLightProbeSidecarFormat,
           "object light probe sidecar metadata is populated");
     Check(loaded.size() == probes.size(), "object light probe sidecar preserves probe count");
     for (size_t probeIndex = 0; probeIndex < probes.size() && probeIndex < loaded.size(); ++probeIndex) {
         Check(loaded[probeIndex].sectorId == probes[probeIndex].sectorId,
               "object light probe sidecar preserves sector id");
+        Check(loaded[probeIndex].layer == probes[probeIndex].layer,
+              "object light probe sidecar preserves layer id");
         Check(SameVector(loaded[probeIndex].position, probes[probeIndex].position),
               "object light probe sidecar preserves position");
         for (int face = 0; face < 6; ++face) {
@@ -2437,7 +2450,7 @@ void TestObjectLightProbeSidecarRejectsInvalidFiles()
     auto writeFixture = [&](const char* name) {
         const std::filesystem::path path = sandbox / name;
         std::string error;
-        Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 1.2f, error),
+        Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, error),
               "object light probe invalid fixture writes");
         return path;
     };
@@ -2456,7 +2469,7 @@ void TestObjectLightProbeSidecarRejectsInvalidFiles()
     Check(readRejected(badMagic, nullptr), "object light probe sidecar rejects bad magic");
 
     const std::filesystem::path badVersion = writeFixture("bad_version.object_probes.bin");
-    PatchByte(badVersion, 4, 2);
+    PatchByte(badVersion, 4, 1);
     Check(readRejected(badVersion, nullptr), "object light probe sidecar rejects bad version");
 
     const std::filesystem::path truncated = writeFixture("truncated.object_probes.bin");
@@ -2464,11 +2477,15 @@ void TestObjectLightProbeSidecarRejectsInvalidFiles()
     Check(readRejected(truncated, nullptr), "object light probe sidecar rejects truncated file");
 
     const std::filesystem::path nonFinite = writeFixture("non_finite.object_probes.bin");
-    PatchByte(nonFinite, 32, 0x00);
-    PatchByte(nonFinite, 33, 0x00);
-    PatchByte(nonFinite, 34, 0x80);
-    PatchByte(nonFinite, 35, 0x7f);
+    PatchByte(nonFinite, 36, 0x00);
+    PatchByte(nonFinite, 37, 0x00);
+    PatchByte(nonFinite, 38, 0x80);
+    PatchByte(nonFinite, 39, 0x7f);
     Check(readRejected(nonFinite, nullptr), "object light probe sidecar rejects non-finite floats");
+
+    const std::filesystem::path badLayer = writeFixture("bad_layer.object_probes.bin");
+    PatchByte(badLayer, 32, 2);
+    Check(readRejected(badLayer, nullptr), "object light probe sidecar rejects unknown layer ids");
 
     const std::filesystem::path mismatch = writeFixture("metadata_mismatch.object_probes.bin");
     game::SectorBakedObjectLightProbeMetadata expected;
@@ -2484,7 +2501,8 @@ void TestObjectLightProbeSidecarRejectsInvalidFiles()
                   (sandbox / "write_non_finite.object_probes.bin").string(),
                   invalid,
                   4.0f,
-                  1.2f,
+                  0.6f,
+                  1.5f,
                   error)
                   && !error.empty(),
           "object light probe sidecar refuses non-finite values on write");
@@ -2506,7 +2524,7 @@ void TestObjectLightProbeRuntimeDataLoadsAndBuildsSectorRanges()
     probes.push_back(thirdProbe);
 
     std::string error;
-    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 1.2f, error),
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, error),
           "runtime object probe sidecar fixture writes");
 
     game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
@@ -2515,7 +2533,8 @@ void TestObjectLightProbeRuntimeDataLoadsAndBuildsSectorRanges()
     map.bakedLightmap.objectProbes.sourceHash = game::ComputeSectorLightmapSourceHash(map);
     map.bakedLightmap.objectProbes.count = static_cast<int>(probes.size());
     map.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
-    map.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    map.bakedLightmap.objectProbes.probeLowerHeightWorld = 0.6f;
+    map.bakedLightmap.objectProbes.probeUpperHeightWorld = 1.5f;
     map.bakedLightmap.objectProbes.format = game::kSectorBakedObjectLightProbeSidecarFormat;
 
     game::SectorBakedObjectLightProbeRuntimeData runtimeData;
@@ -2551,7 +2570,7 @@ void TestObjectLightProbeRuntimeDataRejectsUnavailableInputs()
     const std::vector<game::SectorBakedObjectLightProbe> probes = MakeObjectLightProbesForSidecarTest();
 
     std::string error;
-    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 1.2f, error),
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, error),
           "runtime unavailable object probe fixture writes");
 
     game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
@@ -2560,7 +2579,8 @@ void TestObjectLightProbeRuntimeDataRejectsUnavailableInputs()
     map.bakedLightmap.objectProbes.sourceHash = game::ComputeSectorLightmapSourceHash(map);
     map.bakedLightmap.objectProbes.count = static_cast<int>(probes.size());
     map.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
-    map.bakedLightmap.objectProbes.probeHeightWorld = 1.2f;
+    map.bakedLightmap.objectProbes.probeLowerHeightWorld = 0.6f;
+    map.bakedLightmap.objectProbes.probeUpperHeightWorld = 1.5f;
     map.bakedLightmap.objectProbes.format = game::kSectorBakedObjectLightProbeSidecarFormat;
 
     auto loadRejected = [](const game::SectorTopologyMap& candidate) {
@@ -2581,7 +2601,7 @@ void TestObjectLightProbeRuntimeDataRejectsUnavailableInputs()
     Check(loadRejected(missing), "runtime object probe load handles missing sidecar");
 
     const std::filesystem::path malformedPath = sandbox / "runtime_malformed.object_probes.bin";
-    Check(game::WriteSectorBakedObjectLightProbeSidecar(malformedPath.string(), probes, 4.0f, 1.2f, error),
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(malformedPath.string(), probes, 4.0f, 0.6f, 1.5f, error),
           "runtime malformed object probe fixture writes");
     PatchByte(malformedPath, 0, static_cast<unsigned char>('X'));
     game::SectorTopologyMap malformed = map;
@@ -2592,10 +2612,13 @@ void TestObjectLightProbeRuntimeDataRejectsUnavailableInputs()
 game::SectorBakedObjectLightProbe SamplingProbe(
         int sectorId,
         Vector3 position,
-        Vector3 ambient)
+        Vector3 ambient,
+        game::SectorBakedObjectLightProbeLayer layer =
+                game::SectorBakedObjectLightProbeLayer::Lower)
 {
     game::SectorBakedObjectLightProbe probe;
     probe.sectorId = sectorId;
+    probe.layer = layer;
     probe.position = position;
     for (Vector3& face : probe.ambientCube) {
         face = ambient;
@@ -2607,26 +2630,85 @@ game::SectorBakedObjectLightProbeRuntimeData MakeSamplingRuntimeData(
         std::vector<game::SectorBakedObjectLightProbe> probes)
 {
     std::sort(probes.begin(), probes.end(), [](const auto& a, const auto& b) {
-        return a.sectorId < b.sectorId;
+        return a.sectorId < b.sectorId
+                || (a.sectorId == b.sectorId
+                    && static_cast<unsigned int>(a.layer)
+                            < static_cast<unsigned int>(b.layer));
     });
 
     game::SectorBakedObjectLightProbeRuntimeData data;
     data.probes = std::move(probes);
     for (size_t begin = 0; begin < data.probes.size();) {
         const int sectorId = data.probes[begin].sectorId;
+        const game::SectorBakedObjectLightProbeLayer layer =
+                data.probes[begin].layer;
         size_t end = begin + 1;
-        while (end < data.probes.size() && data.probes[end].sectorId == sectorId) {
+        while (end < data.probes.size()
+                && data.probes[end].sectorId == sectorId
+                && data.probes[end].layer == layer) {
             ++end;
         }
 
         game::SectorBakedObjectLightProbeSectorRange range;
         range.sectorId = sectorId;
+        range.layer = layer;
         range.begin = static_cast<int>(begin);
         range.count = static_cast<int>(end - begin);
         data.sectorRanges.push_back(range);
         begin = end;
     }
     return data;
+}
+
+void TestObjectLightProbeSamplingBlendsHorizontalLayersByWorldHeight()
+{
+    using Layer = game::SectorBakedObjectLightProbeLayer;
+    game::SectorBakedObjectLightProbeRuntimeData data = MakeSamplingRuntimeData({
+            SamplingProbe(10, Vector3{0.0f, 0.6f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}, Layer::Lower),
+            SamplingProbe(10, Vector3{10.0f, 0.6f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}, Layer::Lower),
+            SamplingProbe(10, Vector3{0.0f, 1.5f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}, Layer::Upper),
+            SamplingProbe(10, Vector3{10.0f, 1.5f, 0.0f}, Vector3{1.0f, 1.0f, 1.0f}, Layer::Upper),
+    });
+
+    const game::BakedObjectLightingVerticalSample vertical =
+            game::SampleBakedObjectLightingVertical(
+                    data,
+                    Vector3{5.0f, 1.05f, 0.0f},
+                    10,
+                    nullptr);
+    Check(vertical.lower.valid && vertical.upper.valid,
+          "layered object probe sampling returns both valid layers");
+    Check(SameVector(vertical.lower.ambientCube[0], Vector3{0.5f, 0.5f, 0.0f})
+                  && SameVector(vertical.upper.ambientCube[0], Vector3{0.5f, 0.5f, 1.0f}),
+          "layered object probe sampling interpolates each horizontal grid independently");
+    Check(Near(vertical.lowerHeightWorld, 0.6f)
+                  && Near(vertical.upperHeightWorld, 1.5f),
+          "layered object probe sampling preserves interpolated layer heights");
+
+    const game::BakedObjectLightingSample midpoint =
+            game::ResolveBakedObjectLightingVerticalSample(vertical, 1.05f);
+    Check(SameVector(midpoint.ambientCube[0], Vector3{0.5f, 0.5f, 0.5f}),
+          "layered object probe lighting blends by requested world height");
+    Check(SameVector(
+                  game::ResolveBakedObjectLightingVerticalSample(vertical, -10.0f).ambientCube[0],
+                  vertical.lower.ambientCube[0])
+                  && SameVector(
+                             game::ResolveBakedObjectLightingVerticalSample(vertical, 10.0f).ambientCube[0],
+                             vertical.upper.ambientCube[0]),
+          "layered object probe height blending clamps outside the layer interval");
+
+    game::SectorBakedObjectLightProbeRuntimeData singleLayer = MakeSamplingRuntimeData({
+            SamplingProbe(10, Vector3{2.0f, 0.4f, 2.0f}, Vector3{0.25f, 0.5f, 0.75f}),
+    });
+    const game::BakedObjectLightingVerticalSample duplicated =
+            game::SampleBakedObjectLightingVertical(
+                    singleLayer,
+                    Vector3{2.0f, 1.0f, 2.0f},
+                    10,
+                    nullptr);
+    Check(SameVector(duplicated.lower.ambientCube[0], duplicated.upper.ambientCube[0])
+                  && Near(duplicated.lowerHeightWorld, duplicated.upperHeightWorld),
+          "single-layer sectors duplicate their sample for stable vertical resolution");
 }
 
 void TestObjectLightProbeSamplingInterpolatesAndPrefersSector()
@@ -2887,6 +2969,51 @@ void TestLocalFogProbeLightingReductionInterpolationAndFallback()
     }
 }
 
+void TestObjectAmbientCubeNormalBlending()
+{
+    game::BakedObjectLightingSample cube;
+    cube.ambientCube[0] = Vector3{1.0f, 0.0f, 0.0f};
+    cube.ambientCube[1] = Vector3{0.0f, 1.0f, 0.0f};
+    cube.ambientCube[2] = Vector3{0.0f, 0.0f, 1.0f};
+    cube.ambientCube[3] = Vector3{1.0f, 1.0f, 0.0f};
+    cube.ambientCube[4] = Vector3{1.0f, 0.0f, 1.0f};
+    cube.ambientCube[5] = Vector3{0.0f, 1.0f, 1.0f};
+
+    Check(SameVector(
+                  game::EvaluateBakedObjectAmbientCubeLighting(cube, Vector3{2.0f, 0.0f, 0.0f}),
+                  cube.ambientCube[0]),
+          "ambient cube preserves an axis-aligned positive face");
+    Check(SameVector(
+                  game::EvaluateBakedObjectAmbientCubeLighting(cube, Vector3{0.0f, -3.0f, 0.0f}),
+                  cube.ambientCube[3]),
+          "ambient cube preserves an axis-aligned negative face");
+    Check(SameVector(
+                  game::EvaluateBakedObjectAmbientCubeLighting(cube, Vector3{1.0f, 1.0f, 0.0f}),
+                  Vector3{0.5f, 0.0f, 0.5f}),
+          "ambient cube uses squared normalized weights for diagonal normals");
+
+    const Vector3 xDominant = game::EvaluateBakedObjectAmbientCubeLighting(
+            cube,
+            Vector3{0.71f, 0.70f, 0.0f});
+    const Vector3 yDominant = game::EvaluateBakedObjectAmbientCubeLighting(
+            cube,
+            Vector3{0.70f, 0.71f, 0.0f});
+    Check(Near(xDominant.x, yDominant.x, 0.03f)
+                  && Near(xDominant.z, yDominant.z, 0.03f),
+          "ambient cube remains continuous when the dominant normal axis changes");
+
+    Check(SameVector(
+                  game::EvaluateBakedObjectAmbientCubeLighting(cube, Vector3{}),
+                  cube.ambientCube[2]),
+          "ambient cube degenerate normal falls back to positive Y");
+    Check(SameVector(
+                  game::EvaluateBakedObjectAmbientCubeLighting(
+                          cube,
+                          Vector3{std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f}),
+                  cube.ambientCube[2]),
+          "ambient cube non-finite normal falls back safely");
+}
+
 void TestLightAtmosphereVolumeShapesAndProbeFallback()
 {
     game::SectorTopologyMap sourceMap;
@@ -2985,7 +3112,8 @@ void TestObjectLightProbeBakeWritesSidecarAndStats()
 
     game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
     map.lightmapSettings.objectProbeSpacingWorld = 4.0f;
-    map.lightmapSettings.objectProbeHeightWorld = 1.2f;
+    map.lightmapSettings.objectProbeLowerHeightWorld = 0.6f;
+    map.lightmapSettings.objectProbeUpperHeightWorld = 1.5f;
 
     game::SectorLightmapLayout layout;
     std::string error;
@@ -3002,7 +3130,8 @@ void TestObjectLightProbeBakeWritesSidecarAndStats()
                   && result.objectProbes.sourceHash == result.sourceHash
                   && result.objectProbes.count > 0
                   && Near(result.objectProbes.probeSpacingWorld, 4.0f)
-                  && Near(result.objectProbes.probeHeightWorld, 1.2f)
+                  && Near(result.objectProbes.probeLowerHeightWorld, 0.6f)
+                  && Near(result.objectProbes.probeUpperHeightWorld, 1.5f)
                   && result.objectProbes.format == game::kSectorBakedObjectLightProbeSidecarFormat,
           "phase 3b bake result reports compact object probe metadata");
     Check(result.objectProbeBakeSeconds >= 0.0 && result.objectProbeSidecarWriteSeconds >= 0.0,
@@ -3104,29 +3233,41 @@ void TestObjectLightProbePlacementGridCounts()
 {
     const std::vector<game::SectorBakedObjectLightProbe> corridor =
             BuildObjectProbePlacementsForTest(MakeProbeRectangle(2048, 512));
-    Check(CountProbesForSector(corridor, 10) == 4,
-          "long corridor receives multiple object light probes");
+    Check(CountProbesForSector(corridor, 10) == 8,
+          "long corridor receives two layers of object light probes");
 
     const std::vector<game::SectorBakedObjectLightProbe> room =
             BuildObjectProbePlacementsForTest(MakeProbeRectangle(1024, 1024));
-    Check(CountProbesForSector(room, 10) == 4,
-          "large room receives multiple object light probes");
+    Check(CountProbesForSector(room, 10) == 8,
+          "large room receives two layers of object light probes");
     Check(HasProbeNear(room, 10, 2.0f, 2.0f)
                   && HasProbeNear(room, 10, 6.0f, 2.0f)
                   && HasProbeNear(room, 10, 2.0f, 6.0f)
                   && HasProbeNear(room, 10, 6.0f, 6.0f),
           "object light probe placement converts topology coordinates to world positions");
+    int lowerCount = 0;
+    int upperCount = 0;
     for (const game::SectorBakedObjectLightProbe& probe : room) {
-        Check(Near(probe.position.y, 1.2f), "object light probe uses floor plus default torso height");
+        if (probe.layer == game::SectorBakedObjectLightProbeLayer::Lower) {
+            ++lowerCount;
+            Check(Near(probe.position.y, 0.6f),
+                  "lower object light probe layer uses its floor-relative height");
+        } else {
+            ++upperCount;
+            Check(Near(probe.position.y, 1.5f),
+                  "upper object light probe layer uses its floor-relative height");
+        }
     }
+    Check(lowerCount == 4 && upperCount == 4,
+          "large room receives matching lower and upper probe grids");
 }
 
 void TestObjectLightProbePlacementRejectsConcaveVoid()
 {
     const std::vector<game::SectorBakedObjectLightProbe> probes =
             BuildObjectProbePlacementsForTest(MakeProbeConcaveSector());
-    Check(CountProbesForSector(probes, 10) == 3,
-          "concave sector object light probe placement keeps only interior grid points");
+    Check(CountProbesForSector(probes, 10) == 6,
+          "concave sector layered object light probe placement keeps only interior grid points");
     Check(!HasProbeNear(probes, 10, 6.0f, 6.0f),
           "concave sector object light probe placement rejects AABB points outside the polygon");
 }
@@ -3155,13 +3296,41 @@ void TestObjectLightProbePlacementFallbackAndLowCeiling()
           "low ceiling object light probe height is clamped to sector midpoint");
 
     bool sawFallback = false;
-    bool sawHeightClamp = false;
+    bool sawSingleLayer = false;
     for (const game::SectorBakedObjectLightProbePlacementDiagnostic& diagnostic : diagnostics) {
         sawFallback = sawFallback || diagnostic.message.find("fallback") != std::string::npos;
-        sawHeightClamp = sawHeightClamp || diagnostic.message.find("clamped") != std::string::npos;
+        sawSingleLayer = sawSingleLayer || diagnostic.message.find("midpoint layer") != std::string::npos;
     }
     Check(sawFallback, "object light probe placement records small-sector fallback diagnostic");
-    Check(sawHeightClamp, "object light probe placement records low-ceiling height diagnostic");
+    Check(sawSingleLayer, "object light probe placement records low-ceiling single-layer diagnostic");
+}
+
+void TestObjectLightProbePlacementConfiguredSingleLayerAndValidation()
+{
+    const game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    game::SectorBakedObjectLightProbePlacementSettings settings;
+    settings.lowerHeightWorld = 0.7f;
+    settings.upperHeightWorld = 0.7f;
+    std::vector<game::SectorBakedObjectLightProbe> probes;
+    std::vector<game::SectorBakedObjectLightProbePlacementDiagnostic> diagnostics;
+    std::string error;
+    Check(game::BuildSectorBakedObjectLightProbePlacements(
+                  map, settings, probes, &diagnostics, error),
+          "configured single object probe layer builds");
+    Check(CountProbesForSector(probes, 10) == 4,
+          "configured equal probe heights produce one horizontal layer");
+    for (const game::SectorBakedObjectLightProbe& probe : probes) {
+        Check(probe.layer == game::SectorBakedObjectLightProbeLayer::Lower
+                      && Near(probe.position.y, 0.7f),
+              "configured single layer preserves its requested floor-relative height");
+    }
+
+    settings.lowerHeightWorld = 1.5f;
+    settings.upperHeightWorld = 0.6f;
+    Check(!game::BuildSectorBakedObjectLightProbePlacements(
+                  map, settings, probes, nullptr, error)
+                  && !error.empty() && probes.empty(),
+          "object probe placement rejects reversed layer heights safely");
 }
 
 game::SectorBakedObjectLightProbe MakeProbeAt(Vector3 position, int sectorId = 10)
@@ -3953,6 +4122,7 @@ int main()
     TestObjectLightProbeSidecarRejectsInvalidFiles();
     TestObjectLightProbeRuntimeDataLoadsAndBuildsSectorRanges();
     TestObjectLightProbeRuntimeDataRejectsUnavailableInputs();
+    TestObjectLightProbeSamplingBlendsHorizontalLayersByWorldHeight();
     TestObjectLightProbeSamplingInterpolatesAndPrefersSector();
     TestObjectLightProbeSamplingAdjacentPortalBlending();
     TestObjectLightProbeSamplingAdjacentSectorDeduplicatesSplitPortal();
@@ -3960,6 +4130,7 @@ int main()
     TestObjectLightProbeSamplingDoesNotBlendThroughClosedOrUnavailableAdjacency();
     TestObjectLightProbeSamplingKeepsAllProbeFallbackWithoutPreferredProbes();
     TestObjectLightProbeSamplingFallbacksAndFiniteOutput();
+    TestObjectAmbientCubeNormalBlending();
     TestLocalFogEffectivePathLengthSaturatesGrazingTraversal();
     TestLocalFogProbeLightingReductionInterpolationAndFallback();
     TestLightAtmosphereVolumeShapesAndProbeFallback();
@@ -3969,6 +4140,7 @@ int main()
     TestObjectLightProbePlacementRejectsConcaveVoid();
     TestObjectLightProbePlacementRejectsHoles();
     TestObjectLightProbePlacementFallbackAndLowCeiling();
+    TestObjectLightProbePlacementConfiguredSingleLayerAndValidation();
     TestObjectLightProbePointAndDirectionalLighting();
     TestObjectLightProbeSpotlightCone();
     TestObjectLightProbeOcclusionAndAlphaOcclusion();

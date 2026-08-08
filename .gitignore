@@ -9,4 +9,5 @@ out/
 CMakeSettings.json
 *.lightmap.png
 *.lightmap.object_probes.bin
+*.lightmap.png.static_models.bin
 .venv/

@@ -16,6 +16,26 @@
 #include <raymath.h>
 
 namespace game {
+namespace {
+
+SectorObjectLighting SampleSectorObjectLighting(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        Vector3 worldPosition,
+        int preferredSectorId,
+        const SectorTopologyMap* mapForFallback)
+{
+    const BakedObjectLightingVerticalSample vertical =
+            SampleBakedObjectLightingVertical(
+                    probes,
+                    worldPosition,
+                    preferredSectorId,
+                    mapForFallback);
+    return SectorObjectLighting{
+            ResolveBakedObjectLightingVerticalSample(vertical, worldPosition.y),
+            vertical};
+}
+
+} // namespace
 
 
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
@@ -366,6 +386,14 @@ void ResolveDynamicModelAnimations(
 
 } // namespace
 
+float ComputeSectorModelEnvironmentExposure(
+        const SectorTopologyMap& map,
+        int sectorId)
+{
+    const Vector3 ambient = StaticModelSectorAmbient(map, sectorId);
+    return StaticModelEnvironmentExposure(map, sectorId, ambient);
+}
+
 void EnsureSectorRuntimeObjectWorldReserved(
         engine::World& world,
         SectorRuntimeObjectState& state,
@@ -540,11 +568,11 @@ void SpawnPlacedRuntimeObjects(
             const engine::Entity entity = world.CreateEntity();
             world.Add(entity, SectorObjectTransform{worldPosition, SectorDoorAnchorYawRadians(resolved)});
             world.Add(entity, object);
-            world.Add(entity, SectorObjectLighting{SampleBakedObjectLighting(
+            world.Add(entity, SampleSectorObjectLighting(
                     state.objectLightProbes,
                     worldPosition,
                     object.currentSectorId,
-                    &map)});
+                    &map));
             world.Add(entity, SectorDoor{placedObject.id, true});
             world.Add(entity, runtimeAnchor);
             world.Add(entity, runtimeMotion);
@@ -674,11 +702,11 @@ void SpawnPlacedRuntimeObjects(
                     placedObject.dynamicModel.rotationXRadians,
                     placedObject.dynamicModel.rotationZRadians});
             world.Add(entity, object);
-            world.Add(entity, SectorObjectLighting{SampleBakedObjectLighting(
+            world.Add(entity, SampleSectorObjectLighting(
                     state.objectLightProbes,
                     worldPosition,
                     object.currentSectorId,
-                    &map)});
+                    &map));
             world.Add(entity, SectorDynamicModel{
                     placedObject.id,
                     sectorAmbient,
@@ -763,11 +791,11 @@ void SpawnPlacedRuntimeObjects(
         const engine::Entity entity = world.CreateEntity();
         world.Add(entity, SectorObjectTransform{worldPosition, placedObject.yawRadians});
         world.Add(entity, object);
-        world.Add(entity, SectorObjectLighting{SampleBakedObjectLighting(
+        world.Add(entity, SampleSectorObjectLighting(
                 state.objectLightProbes,
                 worldPosition,
                 object.currentSectorId,
-                &map)});
+                &map));
         world.Add(entity, sprite);
         world.Add(entity, animator);
         if (placedObject.billboard.directional) {
@@ -871,7 +899,7 @@ void UpdateSectorObjectBakedLightingSystem(
                     SectorObjectTransform& transform,
                     SectorObject& object,
                     SectorObjectLighting& lighting) {
-                lighting.baked = SampleBakedObjectLighting(
+                lighting = SampleSectorObjectLighting(
                         objectLightProbes,
                         transform.position,
                         object.currentSectorId,

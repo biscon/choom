@@ -426,28 +426,6 @@ Matrix BuildSectorDoorShadowCasterModelMatrix(
     return model;
 }
 
-Vector3 EvaluateSectorObjectAmbientCubeLighting(
-        const BakedObjectLightingSample& sample,
-        Vector3 worldNormal)
-{
-    if (Vector3LengthSqr(worldNormal) <= 0.000001f) {
-        worldNormal = Vector3{0.0f, 1.0f, 0.0f};
-    } else {
-        worldNormal = Vector3Normalize(worldNormal);
-    }
-
-    const Vector3 absNormal = Vector3{std::fabs(worldNormal.x), std::fabs(worldNormal.y), std::fabs(worldNormal.z)};
-    int face = 0;
-    if (absNormal.y >= absNormal.x && absNormal.y >= absNormal.z) {
-        face = worldNormal.y >= 0.0f ? 2 : 3;
-    } else if (absNormal.z >= absNormal.x) {
-        face = worldNormal.z >= 0.0f ? 4 : 5;
-    } else {
-        face = worldNormal.x >= 0.0f ? 0 : 1;
-    }
-    return sample.ambientCube[face];
-}
-
 namespace {
 
 Color QuantizeStaticLightingColor(Vector3 lighting)
@@ -499,7 +477,7 @@ bool BuildSectorDoorStaticLightingColors(
                 object.currentSectorId,
                 mapForFallback);
         outColors.push_back(QuantizeStaticLightingColor(
-                EvaluateSectorObjectAmbientCubeLighting(sample, worldNormal)));
+                EvaluateBakedObjectAmbientCubeLighting(sample, worldNormal)));
     }
     return outColors.size() == meshData.vertices.size();
 }

@@ -15,18 +15,27 @@ struct SectorLightmapBakeSettings {
     float indirectBounceRadius = SectorWorldToAuthoringDistance(4.0f);
     float indirectBounceStrength = 0.20f;
     float objectProbeSpacingWorld = 4.0f;
-    float objectProbeHeightWorld = 1.2f;
+    float objectProbeLowerHeightWorld = 0.6f;
+    float objectProbeUpperHeightWorld = 1.5f;
+};
+
+enum class SectorBakedObjectLightProbeLayer : unsigned int {
+    Lower = 0,
+    Upper = 1
 };
 
 struct SectorBakedObjectLightProbe {
     int sectorId = 0;
+    SectorBakedObjectLightProbeLayer layer =
+            SectorBakedObjectLightProbeLayer::Lower;
     Vector3 position = {};
     Vector3 ambientCube[6] = {};
 };
 
 struct SectorBakedObjectLightProbePlacementSettings {
     float probeSpacingWorld = 4.0f;
-    float probeHeightWorld = 1.2f;
+    float lowerHeightWorld = 0.6f;
+    float upperHeightWorld = 1.5f;
 };
 
 struct SectorBakedObjectLightProbeMetadata {
@@ -35,7 +44,8 @@ struct SectorBakedObjectLightProbeMetadata {
     std::string sourceHash;
     int count = 0;
     float probeSpacingWorld = 4.0f;
-    float probeHeightWorld = 1.2f;
+    float probeLowerHeightWorld = 0.6f;
+    float probeUpperHeightWorld = 1.5f;
     std::string format;
 };
 
@@ -43,6 +53,8 @@ struct SectorBakedObjectLightProbeSectorRange {
     int sectorId = 0;
     int begin = 0;
     int count = 0;
+    SectorBakedObjectLightProbeLayer layer =
+            SectorBakedObjectLightProbeLayer::Lower;
 };
 
 struct SectorBakedObjectLightProbeRuntimeData {
@@ -54,6 +66,13 @@ struct SectorBakedObjectLightProbeRuntimeData {
 struct BakedObjectLightingSample {
     Vector3 ambientCube[6] = {};
     bool valid = false;
+};
+
+struct BakedObjectLightingVerticalSample {
+    BakedObjectLightingSample lower;
+    BakedObjectLightingSample upper;
+    float lowerHeightWorld = 0.0f;
+    float upperHeightWorld = 0.0f;
 };
 
 struct SectorBakedStaticModelLightmapMetadata {

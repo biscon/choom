@@ -1,6 +1,7 @@
 #include "sector_editor/SectorEditor.h"
 
 #include "engine/input/InputEvents.h"
+#include "engine/systems/AnimatedModelSystem.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
@@ -16,6 +17,7 @@
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlay.h"
+#include "sector_editor/preview/SectorEditorPreviewHudRenderer.h"
 #include "sector_editor/preview/SectorEditorPreviewUvPanel.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
@@ -32,6 +34,7 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorVertexInspector.h"
 #include "sector_demo/SectorFpsController.h"
+#include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorFreeflyController.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
@@ -44,6 +47,7 @@
 
 #include <raylib.h>
 #include <raymath.h>
+#include <rlgl.h>
 
 #include <algorithm>
 #include <cctype>
@@ -55,6 +59,7 @@
 #include <filesystem>
 #include <fstream>
 #include <numeric>
+#include <optional>
 #include <sstream>
 #include <system_error>
 #include <utility>
@@ -65,6 +70,42 @@ namespace game {
 namespace {
 
 constexpr float SectorEditorPanelScrollPaddingPx = 8.0f;
+
+bool SameOptionalVector3(
+        const std::optional<Vector3>& lhs,
+        const std::optional<Vector3>& rhs)
+{
+    if (lhs.has_value() != rhs.has_value()) return false;
+    return !lhs || (lhs->x == rhs->x && lhs->y == rhs->y && lhs->z == rhs->z);
+}
+
+bool SameViewmodelOverride(
+        const FpsViewmodelPresentationOverride& lhs,
+        const FpsViewmodelPresentationOverride& rhs)
+{
+    return SameOptionalVector3(lhs.position, rhs.position)
+            && SameOptionalVector3(lhs.rotationDegrees, rhs.rotationDegrees)
+            && lhs.scale == rhs.scale
+            && lhs.verticalFovDegrees == rhs.verticalFovDegrees;
+}
+
+bool SameGripCorrectionOverride(
+        const FpsViewmodelGripCorrectionOverride& lhs,
+        const FpsViewmodelGripCorrectionOverride& rhs)
+{
+    return SameOptionalVector3(lhs.translation, rhs.translation)
+            && SameOptionalVector3(lhs.rotationDegrees, rhs.rotationDegrees)
+            && lhs.scale == rhs.scale;
+}
+
+bool SameAttachmentLightingOverride(
+        const FpsViewmodelAttachmentLightingOverride& lhs,
+        const FpsViewmodelAttachmentLightingOverride& rhs)
+{
+    return lhs.brightnessAdjustment == rhs.brightnessAdjustment
+            && lhs.metallicFactor == rhs.metallicFactor
+            && lhs.roughnessFactor == rhs.roughnessFactor;
+}
 
 SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
         SectorEditorUiState& uiState,
@@ -263,6 +304,17 @@ bool SectorEditor::Init(engine::EngineContext& context)
     engineContext = &context;
     Shutdown(context);
     engineContext = &context;
+    weaponRegistryError.clear();
+    if (!LoadFpsWeaponRegistry(ASSETS_PATH "config/weapons.json", weaponRegistry, &weaponRegistryError)) {
+        TraceLog(LOG_ERROR, "Weapon registry load failed: %s", weaponRegistryError.c_str());
+        statusText = "Startup failed: " + weaponRegistryError;
+        return false;
+    }
+    applicationSettingsPath = ASSETS_PATH "config/application_settings.json";
+    if (!LoadFpsApplicationSettings(applicationSettingsPath, applicationSettings, &applicationSettingsWarning)) {
+        TraceLog(LOG_WARNING, "Application settings ignored: %s", applicationSettingsWarning.c_str());
+        applicationSettings = {};
+    }
     ResetToBlankMap(context);
     fogVolumeEditingService.emplace(
             SectorEditorAuthoringFogVolumeEditingServiceContext{
@@ -282,6 +334,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
     lightmapBake.Shutdown();
+    EndFpsViewmodel(assets);
     if (initialized
             || previewState.runtime.runtimeObjects.worldReserved
             || !engine::IsNull(previewState.runtime.runtimeObjects.runtimeObjectAssetScope)) {
@@ -313,6 +366,260 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     initialized = false;
 }
 
+void SectorEditor::BeginFpsViewmodel(engine::AssetManager& assets)
+{
+    EndFpsViewmodel(assets);
+    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
+    const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(weaponRegistry, weaponRegistry.initialWeaponId);
+    if (definition == nullptr) {
+        runtime.loadState = FpsViewmodelLoadState::Failed;
+        runtime.error = "Initial weapon definition is unavailable";
+        return;
+    }
+    const auto failAttachmentBecauseArmsFailed = [&runtime]() {
+        if (runtime.attachment.loadState
+                == FpsViewmodelAttachmentLoadState::Failed) {
+            return;
+        }
+        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Failed;
+        runtime.attachment.error =
+                "Arms viewmodel failed before the attachment could be evaluated";
+    };
+    runtime.activeWeaponId = definition->id;
+    runtime.resolvedModelPath = ResolveSectorAssetPath(definition->viewmodel.modelPath);
+    runtime.animationName = definition->viewmodel.idleAnimation;
+    runtime.brightnessAdjustment = definition->viewmodel.brightnessAdjustment;
+    runtime.brightnessMultiplier = FpsViewmodelBrightnessMultiplier(
+            runtime.brightnessAdjustment);
+    runtime.materialOverride = definition->viewmodel.materialOverride;
+    runtime.attachment.resolvedModelPath = ResolveSectorAssetPath(
+            definition->viewmodel.attachment.modelPath);
+    runtime.attachment.configuredBoneName =
+            definition->viewmodel.attachment.boneName;
+    runtime.attachment.gripCorrection = ResolveFpsViewmodelGripCorrection(
+            definition->viewmodel.attachment.gripCorrection,
+            FindFpsViewmodelGripCorrectionOverride(
+                    applicationSettings, definition->id));
+    runtime.attachment.lightingDefaults =
+            definition->viewmodel.attachment.lighting;
+    runtime.attachment.lighting = ResolveFpsViewmodelAttachmentLighting(
+            definition->viewmodel.attachment.lighting,
+            FindFpsViewmodelAttachmentLightingOverride(
+                    applicationSettings, definition->id));
+    runtime.attachment.brightnessMultiplier =
+            FpsViewmodelBrightnessMultiplier(
+                    runtime.attachment.lighting.brightnessAdjustment);
+    runtime.presentation = ResolveFpsViewmodelPresentation(
+            definition->viewmodel.presentation,
+            FindFpsViewmodelOverride(applicationSettings, definition->id));
+    if (state.previewSettingsModal.open) {
+        runtime.presentation = ClampFpsViewmodelPresentation(state.previewSettingsModal.draftViewmodel);
+    }
+    runtime.assetScope = assets.CreateScope("fps_viewmodel");
+    if (engine::IsNull(runtime.assetScope)) {
+        runtime.loadState = FpsViewmodelLoadState::Failed;
+        runtime.error = "Could not create the FPS viewmodel asset scope";
+        failAttachmentBecauseArmsFailed();
+        TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+        return;
+    }
+    runtime.modelInstance.model = assets.RequestModel(
+            runtime.assetScope,
+            ("fps_viewmodel_" + definition->id).c_str(),
+            runtime.resolvedModelPath.c_str(),
+            engine::ModelLoad_Animations);
+    if (engine::IsNull(runtime.modelInstance.model)) {
+        runtime.loadState = FpsViewmodelLoadState::Failed;
+        runtime.error = "Could not request FPS viewmodel asset: " + runtime.resolvedModelPath;
+        failAttachmentBecauseArmsFailed();
+        TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+        return;
+    }
+    runtime.attachment.model = assets.RequestModel(
+            runtime.assetScope,
+            ("fps_viewmodel_attachment_" + definition->id).c_str(),
+            runtime.attachment.resolvedModelPath.c_str(),
+            engine::ModelLoad_None);
+    if (engine::IsNull(runtime.attachment.model)) {
+        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Failed;
+        runtime.attachment.error = "Could not request FPS viewmodel attachment: "
+                + runtime.attachment.resolvedModelPath;
+        TraceLog(LOG_ERROR, "%s", runtime.attachment.error.c_str());
+    } else {
+        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Pending;
+    }
+    runtime.loadState = FpsViewmodelLoadState::Pending;
+}
+
+void SectorEditor::EndFpsViewmodel(engine::AssetManager& assets)
+{
+    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
+    if (!engine::IsNull(runtime.assetScope)) assets.UnloadScope(runtime.assetScope);
+    ResetFpsViewmodelRuntime(runtime);
+}
+
+void SectorEditor::UpdateFpsViewmodel(engine::AssetManager& assets, float dt)
+{
+    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
+    if (runtime.loadState == FpsViewmodelLoadState::Inactive
+            || runtime.loadState == FpsViewmodelLoadState::Failed) return;
+    const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(weaponRegistry, runtime.activeWeaponId);
+    if (definition == nullptr) {
+        runtime.loadState = FpsViewmodelLoadState::Failed;
+        runtime.error = "Active weapon definition disappeared";
+        return;
+    }
+    const auto failAttachmentBecauseArmsFailed = [&runtime]() {
+        if (runtime.attachment.loadState
+                == FpsViewmodelAttachmentLoadState::Failed) {
+            return;
+        }
+        runtime.attachment.loadState = FpsViewmodelAttachmentLoadState::Failed;
+        runtime.attachment.error =
+                "Arms viewmodel failed before the attachment could be evaluated";
+    };
+    runtime.presentation = ResolveFpsViewmodelPresentation(
+            definition->viewmodel.presentation,
+            FindFpsViewmodelOverride(applicationSettings, definition->id));
+    if (state.previewSettingsModal.open) {
+        runtime.presentation = ClampFpsViewmodelPresentation(state.previewSettingsModal.draftViewmodel);
+    }
+    runtime.attachment.gripCorrection = ResolveFpsViewmodelGripCorrection(
+            definition->viewmodel.attachment.gripCorrection,
+            FindFpsViewmodelGripCorrectionOverride(
+                    applicationSettings, definition->id));
+    if (state.previewSettingsModal.open) {
+        runtime.attachment.gripCorrection = ClampFpsViewmodelGripCorrection(
+                state.previewSettingsModal.draftViewmodelGrip);
+    }
+    runtime.attachment.lighting = ResolveFpsViewmodelAttachmentLighting(
+            definition->viewmodel.attachment.lighting,
+            FindFpsViewmodelAttachmentLightingOverride(
+                    applicationSettings, definition->id));
+    if (state.previewSettingsModal.open) {
+        runtime.attachment.lighting = ClampFpsViewmodelAttachmentLighting(
+                state.previewSettingsModal.draftViewmodelAttachmentLighting);
+    }
+    runtime.attachment.brightnessMultiplier =
+            FpsViewmodelBrightnessMultiplier(
+                    runtime.attachment.lighting.brightnessAdjustment);
+    const engine::ModelAsset* asset = assets.GetModelAsset(runtime.modelInstance.model);
+    if (asset == nullptr) {
+        if (assets.HasFailed(runtime.modelInstance.model)) {
+            runtime.loadState = FpsViewmodelLoadState::Failed;
+            runtime.error = "Failed to load viewmodel model and animations: " + runtime.resolvedModelPath;
+            failAttachmentBecauseArmsFailed();
+            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+        }
+        return;
+    }
+    if (runtime.loadState == FpsViewmodelLoadState::Pending) {
+        runtime.animationIndex = engine::FindModelAnimationIndex(*asset, runtime.animationName.c_str());
+        if (runtime.animationIndex == engine::InvalidModelAnimationIndex) {
+            runtime.loadState = FpsViewmodelLoadState::Failed;
+            runtime.error = "Configured animation '" + runtime.animationName + "' was not found";
+            failAttachmentBecauseArmsFailed();
+            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+            return;
+        }
+        const ModelAnimation& animation = asset->animations[runtime.animationIndex];
+        if (!IsModelAnimationValid(asset->model, animation)) {
+            runtime.loadState = FpsViewmodelLoadState::Failed;
+            runtime.error = "Animation '" + runtime.animationName + "' is incompatible with the model skeleton";
+            failAttachmentBecauseArmsFailed();
+            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+            return;
+        }
+        if (!engine::PrepareAnimatedModelInstance(runtime.modelInstance, *asset)) {
+            runtime.loadState = FpsViewmodelLoadState::Failed;
+            runtime.error = "Viewmodel skeleton cannot use the GPU skinning path";
+            failAttachmentBecauseArmsFailed();
+            TraceLog(LOG_ERROR, "%s", runtime.error.c_str());
+            return;
+        }
+        runtime.meshCount = asset->model.meshCount;
+        runtime.boneCount = asset->model.skeleton.boneCount;
+        runtime.triangleCount = 0;
+        for (int i = 0; i < asset->model.meshCount; ++i) runtime.triangleCount += asset->model.meshes[i].triangleCount;
+        runtime.loadState = FpsViewmodelLoadState::Ready;
+    }
+
+    if (runtime.attachment.boneResolvedForModel
+            != runtime.modelInstance.model) {
+        runtime.attachment.boneResolvedForModel = runtime.modelInstance.model;
+        runtime.attachment.boneIndex = FindFpsViewmodelBoneIndex(
+                asset->model.skeleton.bones,
+                asset->model.skeleton.boneCount,
+                runtime.attachment.configuredBoneName);
+        runtime.attachment.resolvedBoneName.clear();
+        runtime.attachment.handPoseValid = false;
+        // raylib's glTF loader accumulates every animation keyframe through
+        // BuildPoseFromParentJoints(), so currentPose is already model-space.
+        runtime.attachment.poseSpace = FpsViewmodelBonePoseSpace::Model;
+        if (runtime.attachment.boneIndex < 0) {
+            runtime.attachment.loadState =
+                    FpsViewmodelAttachmentLoadState::Failed;
+            runtime.attachment.error = "Configured attachment bone '"
+                    + runtime.attachment.configuredBoneName
+                    + "' was not found in the arms skeleton";
+            TraceLog(LOG_ERROR, "%s", runtime.attachment.error.c_str());
+        } else {
+            runtime.attachment.resolvedBoneName =
+                    asset->model.skeleton.bones[
+                            runtime.attachment.boneIndex].name;
+        }
+    }
+
+    const engine::ModelAsset* attachmentAsset =
+            assets.GetModelAsset(runtime.attachment.model);
+    if (runtime.attachment.loadState
+                    != FpsViewmodelAttachmentLoadState::Failed
+            && attachmentAsset == nullptr
+            && assets.HasFailed(runtime.attachment.model)) {
+        runtime.attachment.loadState =
+                FpsViewmodelAttachmentLoadState::Failed;
+        runtime.attachment.error = "Failed to load viewmodel attachment: "
+                + runtime.attachment.resolvedModelPath;
+        TraceLog(LOG_ERROR, "%s", runtime.attachment.error.c_str());
+    }
+    if (runtime.attachment.loadState
+                    == FpsViewmodelAttachmentLoadState::Pending
+            && attachmentAsset != nullptr
+            && runtime.attachment.boneIndex >= 0) {
+        runtime.attachment.meshCount = attachmentAsset->model.meshCount;
+        runtime.attachment.materialCount = attachmentAsset->model.materialCount;
+        runtime.attachment.triangleCount = 0;
+        for (int meshIndex = 0;
+                meshIndex < attachmentAsset->model.meshCount;
+                ++meshIndex) {
+            runtime.attachment.triangleCount +=
+                    attachmentAsset->model.meshes[meshIndex].triangleCount;
+        }
+        runtime.attachment.loadState =
+                FpsViewmodelAttachmentLoadState::Ready;
+        runtime.attachment.error.clear();
+    }
+    runtime.sourceFrameCursor = AdvanceFpsViewmodelAnimationCursor(
+            runtime.sourceFrameCursor, dt, definition->viewmodel.sourceFps,
+            definition->viewmodel.playbackSpeed, definition->viewmodel.firstFrame,
+            definition->viewmodel.lastFrame);
+    runtime.raylibFrame = FpsViewmodelCursorToRaylibFrame(
+            runtime.sourceFrameCursor, definition->viewmodel.sourceFps);
+    Model poseModel = engine::BuildAnimatedModelPoseView(*asset, runtime.modelInstance);
+    const ModelAnimation& animation = asset->animations[runtime.animationIndex];
+    UpdateModelAnimationEx(poseModel, animation, runtime.raylibFrame, animation, runtime.raylibFrame, 0.0f);
+    runtime.attachment.handPoseValid = BuildFpsViewmodelBoneModelTransform(
+            runtime.modelInstance.currentPose.data(),
+            asset->model.skeleton.bones,
+            asset->model.skeleton.boneCount,
+            runtime.attachment.boneIndex,
+            runtime.attachment.poseSpace,
+            runtime.attachment.handModelTransform);
+    if (!runtime.attachment.handPoseValid) {
+        runtime.attachment.pistolWorldTransformValid = false;
+    }
+}
+
 void SectorEditor::Update(engine::EngineContext& context, float dt)
 {
     engine::Input& input = context.input;
@@ -339,6 +646,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         previewState.runtime.runtimeObjects.dynamicPortalBlockers.clear();
         CollectSectorDoorDynamicPortalBlockers(context.world, previewState.runtime.runtimeObjects.dynamicPortalBlockers);
         preview.AdvanceRuntime(dt);
+        UpdateFpsViewmodel(assets, dt);
         const bool hasBlockingModal = state.texturePicker.open
                 || runtimeObjectEditingState.spritePicker.open
                 || runtimeObjectEditingState.staticModelPicker.open
@@ -1711,6 +2019,15 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     return;
                 }
 
+                if (event.key.key == KEY_H) {
+                    if (ToggleFpsViewmodelHolster(previewState.runtime.viewmodel, true, uiState.keyboardCaptured)) {
+                        statusText = previewState.runtime.viewmodel.holstered
+                                ? "Viewmodel holstered" : "Viewmodel equipped";
+                        engine::ConsumeEvent(event);
+                    }
+                    return;
+                }
+
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
                     CancelSpotLightPilotWithPreviewRestore(nullptr);
                     LeavePreview3D();
@@ -2943,6 +3260,86 @@ void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
             TopologyMap().fogSettings);
 }
 
+void SectorEditor::RenderPreview3DViewmodel(engine::AssetManager& assets)
+{
+    FpsViewmodelRuntimeState& runtime = previewState.runtime.viewmodel;
+    if (state.mode != SectorEditorMode::Preview3D) return;
+    if (!IsFpsViewmodelRenderable(runtime)) {
+        runtime.attachment.pistolWorldTransformValid = false;
+        return;
+    }
+    const engine::ModelAsset* asset = assets.GetModelAsset(runtime.modelInstance.model);
+    if (asset == nullptr) {
+        runtime.attachment.pistolWorldTransformValid = false;
+        return;
+    }
+
+    const Matrix viewmodelRoot = BuildFpsViewmodelTransform(
+            preview.RenderCamera(), runtime.presentation);
+    const engine::ModelAsset* attachmentAsset = nullptr;
+    if (IsFpsViewmodelAttachmentRenderable(runtime)) {
+        attachmentAsset = assets.GetModelAsset(runtime.attachment.model);
+    }
+    runtime.attachment.pistolWorldTransformValid = attachmentAsset != nullptr;
+    if (runtime.attachment.pistolWorldTransformValid) {
+        runtime.attachment.pistolWorldTransform =
+                BuildFpsViewmodelAttachmentTransform(
+                        viewmodelRoot,
+                        runtime.attachment.handModelTransform,
+                        runtime.attachment.gripCorrection);
+    }
+
+    Camera3D camera = preview.RenderCamera();
+    camera.fovy = runtime.presentation.verticalFovDegrees;
+    const double previousNear = rlGetCullDistanceNear();
+    const double previousFar = rlGetCullDistanceFar();
+    rlSetClipPlanes(0.01, previousFar);
+    const int preferredSectorId = previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
+            ? previewState.controller.fpsControllerState.currentSectorId : 0;
+    runtime.environmentExposure = ComputeSectorModelEnvironmentExposure(
+            TopologyMap(),
+            preferredSectorId);
+    const BakedObjectLightingVerticalSample ambientLighting =
+            SampleBakedObjectLightingVertical(
+            previewState.runtime.runtimeObjects.objectLightProbes,
+            camera.position,
+            preferredSectorId,
+            &TopologyMap());
+    SectorViewmodelLightingContext viewmodelLighting;
+    viewmodelLighting.environmentExposure = runtime.environmentExposure;
+    viewmodelLighting.brightnessMultiplier = runtime.brightnessMultiplier;
+    viewmodelLighting.materialOverrideEnabled = runtime.materialOverride.enabled;
+    viewmodelLighting.metallicFactor = runtime.materialOverride.metallicFactor;
+    viewmodelLighting.roughnessFactor = runtime.materialOverride.roughnessFactor;
+    viewmodelLighting.useMetallicRoughnessTexture =
+            runtime.materialOverride.useMetallicRoughnessTexture;
+    SectorViewmodelLightingContext attachmentLighting;
+    attachmentLighting.environmentExposure = runtime.environmentExposure;
+    attachmentLighting.brightnessMultiplier =
+            runtime.attachment.brightnessMultiplier;
+    attachmentLighting.materialOverrideEnabled =
+            runtime.attachment.lighting.materialOverride.enabled;
+    attachmentLighting.metallicFactor =
+            runtime.attachment.lighting.materialOverride.metallicFactor;
+    attachmentLighting.roughnessFactor =
+            runtime.attachment.lighting.materialOverride.roughnessFactor;
+    attachmentLighting.useMetallicRoughnessTexture =
+            runtime.attachment.lighting.materialOverride
+                    .useMetallicRoughnessTexture;
+    preview.DrawViewmodel(
+            assets,
+            *asset,
+            runtime.modelInstance,
+            camera,
+            viewmodelRoot,
+            attachmentAsset,
+            runtime.attachment.pistolWorldTransform,
+            ambientLighting,
+            viewmodelLighting,
+            attachmentLighting);
+    rlSetClipPlanes(previousNear, previousFar);
+}
+
 void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
 {
     if (state.mode != SectorEditorMode::Preview3D) {
@@ -2962,6 +3359,15 @@ void SectorEditor::RenderPreview3DOverlays()
         DrawPreviewSpotLightOverlay();
         DrawPreviewObjectProbeOverlay();
     }
+}
+
+void SectorEditor::RenderPreview3DHud(Rectangle playableViewport) const
+{
+    DrawSectorEditorPreviewHud(SectorEditorPreviewHudContext{
+            state.mode == SectorEditorMode::Preview3D,
+            playableViewport,
+            weaponRegistry,
+            previewState.runtime.viewmodel});
 }
 
 SectorSurfaceHit SectorEditor::PickSectorSurface3D(Vector2 mousePosition, Rectangle viewportRect) const
@@ -5045,6 +5451,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     RefreshPreviewObjectProbeDebugData();
     EnsureSectorRuntimeObjectWorldReserved(context.world, previewState.runtime.runtimeObjects);
     SpawnPlacedRuntimeObjects(context.world, assets, previewState.runtime.runtimeObjects, TopologyMap());
+    BeginFpsViewmodel(assets);
 
     if (previewState.controller.hasPreviewPose) {
         preview.ApplyRendererPose(previewState.controller.lastPreviewPose);
@@ -5089,6 +5496,7 @@ void SectorEditor::LeavePreview3D()
     ClearSectorFpsLandingDip(previewState.controller.landingDipState);
     previewState.controller.previewControlMode = SectorPreviewControlMode::FreeFly;
     state.mode = SectorEditorMode::Edit2D;
+    if (engineContext != nullptr) EndFpsViewmodel(engineContext->assets);
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     LeaveSectorFreeflyController();
@@ -5276,6 +5684,28 @@ void SectorEditor::OpenPreviewSettingsModal()
             NormalizeSectorTopologyFogSettings(TopologyMap().fogSettings);
     state.previewSettingsModal.draftLightmapSettings =
             NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
+    const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
+            weaponRegistry, weaponRegistry.initialWeaponId);
+    if (weapon != nullptr) {
+        state.previewSettingsModal.viewmodelDefaults = weapon->viewmodel.presentation;
+        state.previewSettingsModal.draftViewmodel = ResolveFpsViewmodelPresentation(
+                weapon->viewmodel.presentation,
+                FindFpsViewmodelOverride(applicationSettings, weapon->id));
+        state.previewSettingsModal.viewmodelGripDefaults =
+                weapon->viewmodel.attachment.gripCorrection;
+        state.previewSettingsModal.draftViewmodelGrip =
+                ResolveFpsViewmodelGripCorrection(
+                        weapon->viewmodel.attachment.gripCorrection,
+                        FindFpsViewmodelGripCorrectionOverride(
+                                applicationSettings, weapon->id));
+        state.previewSettingsModal.viewmodelAttachmentLightingDefaults =
+                weapon->viewmodel.attachment.lighting;
+        state.previewSettingsModal.draftViewmodelAttachmentLighting =
+                ResolveFpsViewmodelAttachmentLighting(
+                        weapon->viewmodel.attachment.lighting,
+                        FindFpsViewmodelAttachmentLightingOverride(
+                                applicationSettings, weapon->id));
+    }
 }
 
 void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
@@ -5311,9 +5741,78 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
             NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
     const bool objectProbeSettingsChanged =
             currentLightmapSettings.objectProbeSpacingWorld != draftLightmapSettings.objectProbeSpacingWorld
-            || currentLightmapSettings.objectProbeHeightWorld != draftLightmapSettings.objectProbeHeightWorld;
+            || currentLightmapSettings.objectProbeLowerHeightWorld
+                    != draftLightmapSettings.objectProbeLowerHeightWorld
+            || currentLightmapSettings.objectProbeUpperHeightWorld
+                    != draftLightmapSettings.objectProbeUpperHeightWorld;
+    const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(weaponRegistry, weaponRegistry.initialWeaponId);
+    const FpsViewmodelPresentation draftViewmodel = ClampFpsViewmodelPresentation(
+            state.previewSettingsModal.draftViewmodel);
+    const FpsViewmodelPresentation currentViewmodel = weapon != nullptr
+            ? ResolveFpsViewmodelPresentation(weapon->viewmodel.presentation,
+                    FindFpsViewmodelOverride(applicationSettings, weapon->id))
+            : FpsViewmodelPresentation{};
+    const FpsViewmodelPresentationOverride viewmodelOverride = weapon != nullptr
+            ? BuildFpsViewmodelOverride(weapon->viewmodel.presentation, draftViewmodel)
+            : FpsViewmodelPresentationOverride{};
+    const FpsViewmodelPresentationOverride currentOverride = weapon != nullptr
+            ? BuildFpsViewmodelOverride(weapon->viewmodel.presentation, currentViewmodel)
+            : FpsViewmodelPresentationOverride{};
+    const bool viewmodelChanged = weapon != nullptr
+            && !SameViewmodelOverride(viewmodelOverride, currentOverride);
+    const FpsViewmodelGripCorrection draftGrip =
+            ClampFpsViewmodelGripCorrection(
+                    state.previewSettingsModal.draftViewmodelGrip);
+    const FpsViewmodelGripCorrection currentGrip = weapon != nullptr
+            ? ResolveFpsViewmodelGripCorrection(
+                    weapon->viewmodel.attachment.gripCorrection,
+                    FindFpsViewmodelGripCorrectionOverride(
+                            applicationSettings, weapon->id))
+            : FpsViewmodelGripCorrection{};
+    const FpsViewmodelGripCorrectionOverride gripOverride = weapon != nullptr
+            ? BuildFpsViewmodelGripCorrectionOverride(
+                    weapon->viewmodel.attachment.gripCorrection,
+                    draftGrip)
+            : FpsViewmodelGripCorrectionOverride{};
+    const FpsViewmodelGripCorrectionOverride currentGripOverride =
+            weapon != nullptr
+            ? BuildFpsViewmodelGripCorrectionOverride(
+                    weapon->viewmodel.attachment.gripCorrection,
+                    currentGrip)
+            : FpsViewmodelGripCorrectionOverride{};
+    const bool gripChanged = weapon != nullptr
+            && !SameGripCorrectionOverride(
+                    gripOverride, currentGripOverride);
+    const FpsViewmodelAttachmentLighting draftAttachmentLighting =
+            ClampFpsViewmodelAttachmentLighting(
+                    state.previewSettingsModal
+                            .draftViewmodelAttachmentLighting);
+    const FpsViewmodelAttachmentLighting currentAttachmentLighting =
+            weapon != nullptr
+            ? ResolveFpsViewmodelAttachmentLighting(
+                    weapon->viewmodel.attachment.lighting,
+                    FindFpsViewmodelAttachmentLightingOverride(
+                            applicationSettings, weapon->id))
+            : FpsViewmodelAttachmentLighting{};
+    const FpsViewmodelAttachmentLightingOverride attachmentLightingOverride =
+            weapon != nullptr
+            ? BuildFpsViewmodelAttachmentLightingOverride(
+                    weapon->viewmodel.attachment.lighting,
+                    draftAttachmentLighting)
+            : FpsViewmodelAttachmentLightingOverride{};
+    const FpsViewmodelAttachmentLightingOverride
+            currentAttachmentLightingOverride = weapon != nullptr
+            ? BuildFpsViewmodelAttachmentLightingOverride(
+                    weapon->viewmodel.attachment.lighting,
+                    currentAttachmentLighting)
+            : FpsViewmodelAttachmentLightingOverride{};
+    const bool attachmentLightingChanged = weapon != nullptr
+            && !SameAttachmentLightingOverride(
+                    attachmentLightingOverride,
+                    currentAttachmentLightingOverride);
     if (!previewChanged && !skyChanged && !directionalChanged && !fogChanged
-            && !objectProbeSettingsChanged) {
+            && !objectProbeSettingsChanged && !viewmodelChanged && !gripChanged
+            && !attachmentLightingChanged) {
         state.previewSettingsModal = SectorPreviewSettingsModalState{};
         statusText = "Preview settings unchanged";
         return;
@@ -5329,7 +5828,45 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     TopologyMap().directionalLight = draftDirectionalLight;
     ApplySectorPreviewFogSettings(TopologyMap(), draftFogSettings);
     ApplySectorPreviewObjectProbeSettings(TopologyMap(), draftLightmapSettings);
-    MarkTopologyDocumentEdited("Preview settings updated");
+    if ((viewmodelChanged || gripChanged || attachmentLightingChanged)
+            && weapon != nullptr) {
+        if (viewmodelChanged) {
+            if (FpsViewmodelOverrideEmpty(viewmodelOverride)) {
+                ClearFpsViewmodelOverride(applicationSettings, weapon->id);
+            } else {
+                SetFpsViewmodelOverride(
+                        applicationSettings, weapon->id, viewmodelOverride);
+            }
+        }
+        if (gripChanged) {
+            if (FpsViewmodelGripCorrectionOverrideEmpty(gripOverride)) {
+                ClearFpsViewmodelGripCorrectionOverride(
+                        applicationSettings, weapon->id);
+            } else {
+                SetFpsViewmodelGripCorrectionOverride(
+                        applicationSettings, weapon->id, gripOverride);
+            }
+        }
+        if (attachmentLightingChanged) {
+            if (FpsViewmodelAttachmentLightingOverrideEmpty(
+                        attachmentLightingOverride)) {
+                ClearFpsViewmodelAttachmentLightingOverride(
+                        applicationSettings, weapon->id);
+            } else {
+                SetFpsViewmodelAttachmentLightingOverride(
+                        applicationSettings,
+                        weapon->id,
+                        attachmentLightingOverride);
+            }
+        }
+        std::string saveError;
+        if (!SaveFpsApplicationSettings(applicationSettingsPath, applicationSettings, &saveError)) {
+            TraceLog(LOG_WARNING, "Could not persist viewmodel settings: %s", saveError.c_str());
+        }
+    }
+    if (previewChanged || skyChanged || directionalChanged || fogChanged || objectProbeSettingsChanged) {
+        MarkTopologyDocumentEdited("Preview settings updated");
+    }
     state.previewSettingsModal = SectorPreviewSettingsModalState{};
     if (skyChanged && state.mode == SectorEditorMode::Preview3D && preview.IsRendererReady()) {
         if (engineContext != nullptr) {
