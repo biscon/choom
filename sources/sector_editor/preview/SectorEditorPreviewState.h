@@ -31,6 +31,8 @@ struct SectorEditorPreviewControllerState {
     SectorFpsControllerState fpsControllerState;
     float visualStepOffsetY = 0.0f;
     SectorFpsHeadBobState headBobState;
+    SectorFpsFootstepCadenceState footstepCadenceState;
+    SectorFpsFrameEvents frameEvents;
     SectorFpsLandingDipState landingDipState;
     bool hasPreviewPose = false;
     SectorViewPose lastPreviewPose = {};

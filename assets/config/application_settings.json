@@ -1,6 +1,23 @@
 {
   "version": 1,
   "firstLevel": "hub",
+  "footsteps": {
+    "defaultSet": "Tile_Mono",
+    "volume": 0.65,
+    "landingImpactVolumeMultiplier": 1.35
+  },
+  "playerSounds": {
+    "events": {
+      "jump": {
+        "set": "Jump",
+        "volume": 1.0
+      },
+      "land": {
+        "set": "Land",
+        "volume": 1.0
+      }
+    }
+  },
   "viewmodelOverrides": {
     "pistol": {
       "position": [

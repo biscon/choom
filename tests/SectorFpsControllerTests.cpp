@@ -242,6 +242,57 @@ void TestHeadBobVisualOnlyPoseLayer()
     Check(Near(state.feetPosition, originalFeet), "visual pose offsets do not mutate physics feet");
 }
 
+void TestFootstepCadenceUsesResolvedTravel()
+{
+    game::SectorFpsControllerConfig config;
+    config.walkSpeed = 6.0f;
+    config.runSpeed = 12.0f;
+    game::SectorFpsFootstepCadenceState state;
+
+    Check(Near(game::SectorFpsFootstepStrideDistance(config, 6.0f), 1.5f),
+          "walking footstep stride uses walking spacing");
+    Check(Near(game::SectorFpsFootstepStrideDistance(config, 12.0f), 2.4f),
+          "running footstep stride uses running spacing");
+    Check(!game::UpdateSectorFpsFootstepCadence(state, config, true, 1.0f, 6.0f),
+          "partial resolved stride does not trigger a footstep");
+    Check(game::UpdateSectorFpsFootstepCadence(state, config, true, 0.5f, 6.0f),
+          "completed resolved stride triggers one footstep");
+    Check(!game::UpdateSectorFpsFootstepCadence(state, config, true, 0.0f, 6.0f),
+          "stationary frame does not trigger a footstep");
+    Check(game::UpdateSectorFpsFootstepCadence(state, config, true, 10.0f, 6.0f),
+          "large resolved movement emits at most one footstep event");
+    Check(state.accumulatedDistanceWorld < 1.5f,
+          "large resolved movement discards burst-producing complete strides");
+    Check(!game::UpdateSectorFpsFootstepCadence(state, config, false, 2.0f, 6.0f),
+          "inactive or airborne cadence does not trigger");
+    Check(Near(state.accumulatedDistanceWorld, 0.0f),
+          "inactive or airborne cadence resets accumulated travel");
+}
+
+void TestFrameEventsReportSuccessfulJumpAndLanding()
+{
+    game::SectorFpsVerticalResult vertical;
+    game::SectorFpsFrameEvents events = game::BuildSectorFpsFrameEvents(
+            true,
+            vertical);
+    Check(events.jumped, "successful jump is exposed as a frame event");
+    Check(!events.landed, "jump frame does not report a landing");
+
+    vertical.transition = game::SectorFpsVerticalTransition::Landed;
+    vertical.landingImpactSpeed = 7.5f;
+    events = game::BuildSectorFpsFrameEvents(false, vertical);
+    Check(!events.jumped, "non-jump frame clears jump event");
+    Check(events.landed, "landed vertical transition is exposed as a frame event");
+    Check(Near(events.landingImpactSpeed, 7.5f),
+          "landing event preserves impact speed");
+
+    vertical.transition = game::SectorFpsVerticalTransition::SnappedDown;
+    events = game::BuildSectorFpsFrameEvents(false, vertical);
+    Check(!events.landed, "snapped-down floor transition is not an airborne landing");
+    Check(Near(events.landingImpactSpeed, 0.0f),
+          "non-landing transition has no impact speed");
+}
+
 void TestLandingDipAmountCurve()
 {
     constexpr float MinImpact = 0.5f;
@@ -897,6 +948,8 @@ int main()
     TestHeadBobUpdatesFromResolvedMovementOnly();
     TestHeadBobInactiveAndDisabledBehavior();
     TestHeadBobVisualOnlyPoseLayer();
+    TestFootstepCadenceUsesResolvedTravel();
+    TestFrameEventsReportSuccessfulJumpAndLanding();
     TestLandingDipAmountCurve();
     TestLandingDipAmountInvalidInputs();
     TestLandingDipTriggerDecayAndRobustness();

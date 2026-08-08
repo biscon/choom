@@ -1229,6 +1229,10 @@ void TestSourceHashChanges()
     changedSector = base;
     changedSector.sectors[0].ceilingSky = true;
     Check(game::ComputeSectorLightmapSourceHash(changedSector) != hash, "hash changes when sector ceiling sky changes");
+    changedSector = base;
+    changedSector.sectors[0].footstepSet = "DirtRoad_Mono";
+    Check(game::ComputeSectorLightmapSourceHash(changedSector) == hash,
+          "hash excludes runtime-only sector footstep assignments");
 
     game::SectorTopologyMap changedSideDef = base;
     changedSideDef.sideDefs[0].wall.textureId = "alt";
@@ -1460,6 +1464,7 @@ void TestSourceHashChanges()
 
     game::SectorTopologyMap changedAudio = base;
     changedAudio.audioSettings.musicPath = "music/level_theme.ogg";
+    changedAudio.audioSettings.musicVolume = 0.35f;
     changedAudio.audioSettings.soundsById.emplace(
             "door_open", "shared/door_open.wav");
     Check(game::ComputeSectorLightmapSourceHash(changedAudio) == hash,

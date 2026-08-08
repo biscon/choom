@@ -233,6 +233,16 @@ void MarkSectorEditorAuthoringGraphEdited(
         SectorEditorDerivationDocumentAccess derivation,
         const char* status);
 
+bool SetSectorEditorAllSectorLighting(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        float ambientIntensity,
+        Color ambientColor,
+        std::string* outStatus = nullptr);
+
 int FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
         const SectorAuthoringGraph& authoringGraph,
         const SectorAuthoringDerivationResult& authoringDerivation,

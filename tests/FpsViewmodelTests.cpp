@@ -544,9 +544,19 @@ void SettingsResolutionAndPersistence()
 
     game::FpsApplicationSettings settings; std::string error;
     assert(game::ParseFpsApplicationSettings(
-            R"({"version":1,"viewmodelOverrides":{"pistol":{"position":[1,2,3],"scale":2,"holsterTransition":{"holsterDurationSeconds":0.2,"unholsterDurationSeconds":0.4,"hiddenTranslation":[0.5,-2,0.1],"hiddenRotationDegrees":[15,1,-12]},"gripCorrection":{"translation":[0.1,0.2,0.3],"rotationDegrees":[10,20,30],"scale":1.25},"attachmentLighting":{"brightnessAdjustment":0.2,"metallicFactor":0.45,"roughnessFactor":0.8},"firing":{"shotIntervalSeconds":0.2,"recoilTranslationImpulse":[0,0,-0.04],"recoilRotationImpulseDegrees":[-4,0,0],"recoilRollVariationDegrees":0.5,"recoilSpringFrequencyHz":9,"recoilDampingRatio":0.9,"muzzlePosition":[0,0.04,0.11],"muzzleRotationDegrees":[1,2,3],"flashLifetimeSeconds":0.06,"flashSizeWorld":0.12,"flashSizeVariation":0.1,"flashIrregularity":0.7,"flashForwardStretch":2.1,"flashMinimumLobeCount":4,"flashMaximumLobeCount":7,"flashRearSuppression":0.85,"flashEdgeSoftness":0.4,"muzzleLightIntensity":7,"muzzleLightRadiusWorld":3,"muzzleLightLifetimeSeconds":0.08}}}})",
+            R"({"version":1,"footsteps":{"defaultSet":"DirtRoad_Mono","volume":0.7,"landingImpactVolumeMultiplier":1.5},"playerSounds":{"events":{"jump":{"set":"Jump","volume":0.8},"land":{"set":"Land"},"wallImpact":{"set":"future/WallImpact","volume":0.6}}},"viewmodelOverrides":{"pistol":{"position":[1,2,3],"scale":2,"holsterTransition":{"holsterDurationSeconds":0.2,"unholsterDurationSeconds":0.4,"hiddenTranslation":[0.5,-2,0.1],"hiddenRotationDegrees":[15,1,-12]},"gripCorrection":{"translation":[0.1,0.2,0.3],"rotationDegrees":[10,20,30],"scale":1.25},"attachmentLighting":{"brightnessAdjustment":0.2,"metallicFactor":0.45,"roughnessFactor":0.8},"firing":{"shotIntervalSeconds":0.2,"recoilTranslationImpulse":[0,0,-0.04],"recoilRotationImpulseDegrees":[-4,0,0],"recoilRollVariationDegrees":0.5,"recoilSpringFrequencyHz":9,"recoilDampingRatio":0.9,"muzzlePosition":[0,0.04,0.11],"muzzleRotationDegrees":[1,2,3],"flashLifetimeSeconds":0.06,"flashSizeWorld":0.12,"flashSizeVariation":0.1,"flashIrregularity":0.7,"flashForwardStretch":2.1,"flashMinimumLobeCount":4,"flashMaximumLobeCount":7,"flashRearSuppression":0.85,"flashEdgeSoftness":0.4,"muzzleLightIntensity":7,"muzzleLightRadiusWorld":3,"muzzleLightLifetimeSeconds":0.08}}}})",
             settings, &error));
     assert(settings.firstLevel == "hub");
+    assert(settings.footsteps.defaultSet == "DirtRoad_Mono");
+    assert(Near(settings.footsteps.volume, 0.7f));
+    assert(Near(settings.footsteps.landingImpactVolumeMultiplier, 1.5f));
+    assert(settings.playerSounds.events.size() == 3);
+    assert(settings.playerSounds.events[0].id == "jump");
+    assert(settings.playerSounds.events[0].set == "Jump");
+    assert(Near(settings.playerSounds.events[0].volume, 0.8f));
+    assert(settings.playerSounds.events[1].id == "land");
+    assert(Near(settings.playerSounds.events[1].volume, 1.0f));
+    assert(settings.playerSounds.events[2].id == "wallImpact");
     assert(game::FindFpsViewmodelOverride(settings, "pistol") != nullptr);
     const auto* parsedTransition =
             game::FindFpsViewmodelHolsterTransitionOverride(
@@ -659,6 +669,12 @@ void SettingsResolutionAndPersistence()
     game::FpsApplicationSettings loaded;
     assert(game::LoadFpsApplicationSettings(path.string(), loaded, &error));
     assert(loaded.firstLevel == "test4");
+    assert(loaded.footsteps.defaultSet == "DirtRoad_Mono");
+    assert(Near(loaded.footsteps.volume, 0.7f));
+    assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.5f));
+    assert(loaded.playerSounds.events.size() == 3);
+    assert(loaded.playerSounds.events[2].set == "future/WallImpact");
+    assert(Near(loaded.playerSounds.events[2].volume, 0.6f));
     assert(game::FindFpsViewmodelOverride(loaded, "pistol") != nullptr);
     assert(game::FindFpsViewmodelHolsterTransitionOverride(
             loaded, "pistol") != nullptr);
@@ -717,6 +733,44 @@ void SettingsResolutionAndPersistence()
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"firstLevel":5})",
             loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"footsteps":{"defaultSet":"../Tile_Mono"}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"footsteps":{"volume":1.1}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"footsteps":{"volume":"loud"}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"footsteps":{"landingImpactVolumeMultiplier":-0.1}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerSounds":{"events":[]}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerSounds":{"events":{"../jump":{"set":"Jump"}}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerSounds":{"events":{"jump":{"set":"../Jump"}}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerSounds":{"events":{"jump":{"set":"Jump","volume":1.1}}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerSounds":{"events":{"jump":{"volume":0.5}}}})",
+            loaded, &error));
+    assert(game::ParseFpsApplicationSettings(
+            R"({"version":1})",
+            loaded,
+            &error));
+    assert(loaded.footsteps.defaultSet == "Tile_Mono");
+    assert(Near(loaded.footsteps.volume, 0.65f));
+    assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.35f));
+    assert(loaded.playerSounds.events.size() == 2);
+    assert(loaded.playerSounds.events[0].id == "jump");
+    assert(loaded.playerSounds.events[0].set == "Jump");
+    assert(loaded.playerSounds.events[1].id == "land");
 }
 
 void CameraMath()

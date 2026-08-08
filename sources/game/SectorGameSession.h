@@ -3,6 +3,7 @@
 #include "engine/EngineContext.h"
 #include "game/SectorLevelLoader.h"
 #include "game/FpsPlayerRuntime.h"
+#include "game/PlayerAudio.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_demo/SectorSceneRuntime.h"
 
@@ -18,6 +19,7 @@ public:
             const SectorLevelEntryRequest& entry,
             const FpsWeaponRegistry& weaponRegistry,
             const FpsApplicationSettings& applicationSettings,
+            PlayerAudioRuntime& playerAudioRuntime,
             std::string& error);
     void Shutdown(engine::EngineContext& context, SectorSceneRuntime& scene);
 
@@ -65,6 +67,7 @@ private:
     FpsPlayerRuntime fpsPlayer;
     const FpsWeaponRegistry* weaponRegistry = nullptr;
     const FpsApplicationSettings* applicationSettings = nullptr;
+    PlayerAudioRuntime* playerAudio = nullptr;
 };
 
 } // namespace game

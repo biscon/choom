@@ -9,6 +9,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyTypes.h"
 #include "game/FpsWeaponRegistry.h"
+#include "game/FootstepAudio.h"
 
 #include <raylib.h>
 
@@ -55,6 +56,22 @@ struct TexturePickerState {
     engine::UIScrollState scroll;
     std::vector<std::string> textureIds;
     std::vector<const char*> optionLabels;
+};
+
+struct FootstepPickerState {
+    bool open = false;
+    int authoringFaceAnchorId = -1;
+    int selectedSetIndex = -1;
+    engine::UIScrollState scroll;
+    FootstepCatalog catalog;
+    std::vector<std::string> setIds;
+    std::vector<std::string> labelStorage;
+    std::vector<const char*> optionLabels;
+    std::string message;
+    engine::AssetScopeHandle previewScope = engine::NullAssetScopeHandle();
+    LoadedFootstepSet previewSet;
+    FootstepPlaybackState previewPlayback;
+    bool previewPending = false;
 };
 
 struct AddMapTextureState {
@@ -125,6 +142,16 @@ struct ConfirmationModalState {
     std::string title;
     std::string message;
     std::function<void()> onOkay;
+};
+
+struct SectorEditorSetAllModalState {
+    bool open = false;
+    float ambientIntensity = 1.0f;
+    Color ambientColor = WHITE;
+    engine::UIFloatInputState ambientIntensityInput;
+    engine::UIIntInputState ambientRedInput;
+    engine::UIIntInputState ambientGreenInput;
+    engine::UIIntInputState ambientBlueInput;
 };
 
 struct DecalTintModalState {

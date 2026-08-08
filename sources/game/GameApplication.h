@@ -4,6 +4,7 @@
 #include "engine/ui/UI.h"
 #include "game/ApplicationFlow.h"
 #include "game/FpsWeaponRegistry.h"
+#include "game/PlayerAudio.h"
 #include "game/SectorGameSession.h"
 #include "sector_editor/SectorEditor.h"
 
@@ -63,6 +64,7 @@ private:
     SectorSceneRuntime gameScene;
     FpsWeaponRegistry weaponRegistry;
     FpsApplicationSettings applicationSettings;
+    PlayerAudioRuntime playerAudio;
     std::string menuStatus;
     std::optional<MainMenuAction> pendingMenuAction;
     bool editorAttachedToGame = false;

@@ -58,7 +58,10 @@ struct SectorTopologyFogSettings {
 };
 
 struct SectorLevelAudioSettings {
+    static constexpr float DefaultMusicVolume = 0.6f;
+
     std::string musicPath;
+    float musicVolume = DefaultMusicVolume;
     std::unordered_map<std::string, std::string> soundsById;
 };
 

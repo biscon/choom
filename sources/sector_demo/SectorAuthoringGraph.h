@@ -53,6 +53,8 @@ struct SectorAuthoringFaceAnchor {
 
     std::string floorTextureId;
     std::string ceilingTextureId;
+    // Empty uses the application-wide default footstep set.
+    std::string footstepSet;
     bool ceilingSky = false;
 
     SectorTopologyUvSettings floorUv;

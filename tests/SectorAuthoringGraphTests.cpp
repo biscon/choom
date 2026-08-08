@@ -8,6 +8,7 @@
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/SectorEditorSetAllModal.h"
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
@@ -3322,6 +3323,196 @@ void TestEditorAuthoringFaceAnchorInspectorWriteDoesNotDirectlyMutateDerivedTopo
           "failed face anchor inspector write records invalid last-valid state");
     Check(documentState.derivation.authoringDerivedTopologyStale,
           "failed face anchor inspector write leaves derived topology stale");
+}
+
+void TestEditorSetAllModalUsesSelectedSectorLightingAndFallbacks()
+{
+    game::SectorAuthoringGraph graph;
+    game::SectorAuthoringFaceAnchor first;
+    first.id = 200;
+    first.ambientIntensity = 0.25f;
+    first.ambientColor = Color{10, 20, 30, 111};
+    graph.faceAnchors.push_back(first);
+    game::SectorAuthoringFaceAnchor second;
+    second.id = 201;
+    second.ambientIntensity = 0.75f;
+    second.ambientColor = Color{40, 50, 60, 122};
+    graph.faceAnchors.push_back(second);
+    game::SectorAuthoringFaceAnchor voidAnchor;
+    voidAnchor.id = 202;
+    voidAnchor.isVoid = true;
+    voidAnchor.ambientIntensity = 0.5f;
+    voidAnchor.ambientColor = Color{70, 80, 90, 133};
+    graph.faceAnchors.push_back(voidAnchor);
+
+    game::SectorEditorSetAllModalState modal;
+    game::OpenSectorEditorSetAllModal(
+            modal,
+            graph,
+            game::MakeSectorAuthoringFaceAnchorSelectionTarget(201));
+    Check(modal.open
+                  && Near(modal.ambientIntensity, 0.75f)
+                  && modal.ambientColor.r == 40
+                  && modal.ambientColor.g == 50
+                  && modal.ambientColor.b == 60
+                  && modal.ambientColor.a == 255,
+          "Set All modal initializes from the selected non-void sector");
+
+    game::OpenSectorEditorSetAllModal(
+            modal,
+            graph,
+            game::MakeSectorAuthoringFaceAnchorSelectionTarget(202));
+    Check(Near(modal.ambientIntensity, 0.25f)
+                  && modal.ambientColor.r == 10
+                  && modal.ambientColor.g == 20
+                  && modal.ambientColor.b == 30,
+          "Set All modal falls back to the first non-void sector");
+
+    game::OpenSectorEditorSetAllModal(
+            modal,
+            game::SectorAuthoringGraph{},
+            game::SectorAuthoringSelectionTarget{});
+    Check(Near(modal.ambientIntensity, 1.0f)
+                  && modal.ambientColor.r == 255
+                  && modal.ambientColor.g == 255
+                  && modal.ambientColor.b == 255
+                  && modal.ambientColor.a == 255,
+          "Set All modal uses white full-intensity defaults for an empty map");
+}
+
+void TestEditorSetAllSectorLightingUpdatesAllSectorsOnceAndChangesLightmapHash()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorTopologyMap& topologyMap = documentState.map.topologyMap;
+    game::SectorAuthoringGraph& authoringGraph =
+            documentState.authoring.authoringGraph;
+    topologyMap = MakeAdjacentSectorMap();
+    game::InitializeSectorEditorAuthoringStateFromTopology(
+            authoringGraph,
+            game::MakeSectorEditorDerivationDocumentAccess(
+                    documentState.derivation),
+            topologyMap);
+    state.topologyRenderCache.valid = true;
+    const uint64_t originalRevision = state.topologyRenderRevision;
+    const std::string originalHash = game::ComputeSectorLightmapSourceHash(topologyMap);
+
+    std::string status;
+    Check(game::SetSectorEditorAllSectorLighting(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  0.375f,
+                  Color{12, 34, 56, 7},
+                  &status),
+          "Set All sector lighting applies and refreshes valid derived topology");
+
+    for (const game::SectorAuthoringFaceAnchor& anchor : authoringGraph.faceAnchors) {
+        Check(Near(anchor.ambientIntensity, 0.375f)
+                      && anchor.ambientColor.r == 12
+                      && anchor.ambientColor.g == 34
+                      && anchor.ambientColor.b == 56
+                      && anchor.ambientColor.a == 255,
+              "Set All sector lighting updates every non-void authoring sector");
+    }
+    for (const game::SectorTopologySector& sector : topologyMap.sectors) {
+        Check(Near(sector.ambientIntensity, 0.375f)
+                      && sector.ambientColor.r == 12
+                      && sector.ambientColor.g == 34
+                      && sector.ambientColor.b == 56
+                      && sector.ambientColor.a == 255,
+              "Set All sector lighting projects to every derived sector");
+    }
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges,
+          "Set All sector lighting marks the authoring document dirty");
+    Check(!state.topologyRenderCache.valid
+                  && state.topologyRenderRevision == originalRevision + 1,
+          "Set All sector lighting invalidates the 2D topology cache once");
+    Check(game::ComputeSectorLightmapSourceHash(topologyMap) != originalHash,
+          "Set All sector lighting changes the lightmap source hash");
+    Check(status == "Set lighting for 2 sectors.",
+          "Set All sector lighting reports the updated sector count");
+}
+
+void TestEditorSetAllSectorLightingSkipsVoidFacesAndNoOpDoesNotDirty()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorTopologyMap& topologyMap = documentState.map.topologyMap;
+    game::SectorAuthoringGraph& authoringGraph =
+            documentState.authoring.authoringGraph;
+    authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {64, 0}, {128, 0}, {128, 64}, {64, 64}, {0, 64}},
+            {{1, 2}, {2, 5}, {5, 6}, {6, 1}, {2, 3}, {3, 4}, {4, 5}});
+    AddFaceAnchor(authoringGraph, 200, 32, 32, "left-room");
+    AddFaceAnchor(authoringGraph, 201, 96, 32, "void-room");
+    authoringGraph.faceAnchors.back().isVoid = true;
+    authoringGraph.faceAnchors.back().ambientIntensity = 0.6f;
+    authoringGraph.faceAnchors.back().ambientColor = Color{90, 80, 70, 60};
+    Check(game::RefreshSectorEditorAuthoringDerivation(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation)),
+          "Set All void exclusion setup derives valid topology");
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    state.topologyRenderCache.valid = true;
+
+    std::string status;
+    Check(game::SetSectorEditorAllSectorLighting(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  0.2f,
+                  Color{1, 2, 3, 4},
+                  &status),
+          "Set All sector lighting applies when the graph also has a void face");
+    const game::SectorAuthoringFaceAnchor* voidAnchor =
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 201);
+    Check(voidAnchor != nullptr
+                  && Near(voidAnchor->ambientIntensity, 0.6f)
+                  && voidAnchor->ambientColor.r == 90
+                  && voidAnchor->ambientColor.g == 80
+                  && voidAnchor->ambientColor.b == 70
+                  && voidAnchor->ambientColor.a == 60,
+          "Set All sector lighting leaves void face metadata unchanged");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    state.topologyRenderCache.valid = true;
+    const uint64_t revisionAfterApply = state.topologyRenderRevision;
+    Check(game::SetSectorEditorAllSectorLighting(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  0.2f,
+                  Color{1, 2, 3, 255},
+                  &status),
+          "Set All identical sector lighting is a successful no-op");
+    Check(!documentState.lifecycle.topologyDocumentDirty
+                  && !documentState.lifecycle.hasUnsavedChanges
+                  && state.topologyRenderCache.valid
+                  && state.topologyRenderRevision == revisionAfterApply,
+          "Set All identical sector lighting does not dirty or invalidate");
+    Check(status == "All sectors already use this lighting.",
+          "Set All identical sector lighting reports no change");
 }
 
 void TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation()
@@ -10676,6 +10867,9 @@ int main()
     TestEditorAuthoringSuccessfulDerivationUpdatesState();
     TestEditorAuthoringFaceAnchorInspectorWritesProjectAfterDerivation();
     TestEditorAuthoringFaceAnchorInspectorWriteDoesNotDirectlyMutateDerivedTopology();
+    TestEditorSetAllModalUsesSelectedSectorLightingAndFallbacks();
+    TestEditorSetAllSectorLightingUpdatesAllSectorsOnceAndChangesLightmapHash();
+    TestEditorSetAllSectorLightingSkipsVoidFacesAndNoOpDoesNotDirty();
     TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation();
     TestEditorAuthoringSideMaterialInspectorWritesProjectToSplitDerivedSideDefs();
     TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTopology();

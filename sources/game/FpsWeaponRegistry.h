@@ -201,9 +201,29 @@ struct FpsApplicationSettingsEntry {
     FpsWeaponFiringOverride firing;
 };
 
+struct FootstepApplicationSettings {
+    std::string defaultSet = "Tile_Mono";
+    float volume = 0.65f;
+    float landingImpactVolumeMultiplier = 1.35f;
+};
+
+struct PlayerSoundEventSettings {
+    std::string id;
+    std::string set;
+    float volume = 1.0f;
+};
+
+struct PlayerSoundApplicationSettings {
+    std::vector<PlayerSoundEventSettings> events{
+            PlayerSoundEventSettings{"jump", "Jump", 1.0f},
+            PlayerSoundEventSettings{"land", "Land", 1.0f}};
+};
+
 struct FpsApplicationSettings {
     int version = 1;
     std::string firstLevel = "hub";
+    FootstepApplicationSettings footsteps;
+    PlayerSoundApplicationSettings playerSounds;
     std::vector<FpsApplicationSettingsEntry> weapons;
 };
 

@@ -32,6 +32,10 @@ bool GameApplication::Init(engine::EngineContext& context)
         return false;
     }
     RequestFpsWeaponAudioAssets(context.assets, weaponRegistry);
+    RequestPlayerAudioAssets(
+            context.assets,
+            applicationSettings.playerSounds,
+            playerAudio);
     if (!editor.Init(context)) {
         menuStatus = "Editor initialization failed";
         return false;
@@ -52,6 +56,7 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     editor.Shutdown(context);
     flow = ApplicationFlowState{};
     applicationSettings = FpsApplicationSettings{};
+    playerAudio = PlayerAudioRuntime{};
     weaponRegistry = FpsWeaponRegistry{};
     menuStatus.clear();
     pendingMenuAction.reset();
@@ -289,6 +294,7 @@ void GameApplication::StartNewGame(engine::EngineContext& context)
                 SectorLevelEntryRequest{applicationSettings.firstLevel, std::nullopt},
                 weaponRegistry,
                 applicationSettings,
+                playerAudio,
                 error)) {
         menuStatus = error.empty() ? "Could not start a new game" : error;
         return;

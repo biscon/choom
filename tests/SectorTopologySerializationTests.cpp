@@ -2084,6 +2084,7 @@ void TestAudioSettingsRoundTripAndValidation()
 {
     SectorTopologyMap original = MakeSquare();
     original.audioSettings.musicPath = "music/level_theme.ogg";
+    original.audioSettings.musicVolume = 0.35f;
     original.audioSettings.soundsById.emplace(
             "door_open", "shared/doors/open.wav");
     original.audioSettings.soundsById.emplace(
@@ -2092,6 +2093,8 @@ void TestAudioSettingsRoundTripAndValidation()
     const Json saved = Json::parse(SaveText(original));
     Check(saved["audio"]["music"] == "music/level_theme.ogg",
           "level music path is serialized relative to assets/audio");
+    Check(Near(saved["audio"]["musicVolume"].get<float>(), 0.35f),
+          "non-default level music volume is serialized");
     Check(saved["audio"]["sounds"]["door_open"]
                   == "shared/doors/open.wav"
                   && saved["audio"]["sounds"]["alarm"]
@@ -2102,11 +2105,28 @@ void TestAudioSettingsRoundTripAndValidation()
     std::string error;
     Check(LoadText(saved.dump(), loaded, error), "level audio JSON loads");
     Check(loaded.audioSettings.musicPath == "music/level_theme.ogg"
+                  && Near(loaded.audioSettings.musicVolume, 0.35f)
                   && loaded.audioSettings.soundsById.at("door_open")
                   == "shared/doors/open.wav"
                   && loaded.audioSettings.soundsById.at("alarm")
                   == "ambience/alarm.mp3",
           "level audio settings round-trip");
+
+    Json legacy = saved;
+    legacy["audio"].erase("musicVolume");
+    Check(LoadText(legacy.dump(), loaded, error),
+          "level audio without music volume remains compatible");
+    Check(Near(
+                  loaded.audioSettings.musicVolume,
+                  game::SectorLevelAudioSettings::DefaultMusicVolume),
+          "omitted level music volume uses the default");
+
+    SectorTopologyMap defaultVolume = MakeSquare();
+    defaultVolume.audioSettings.musicPath = "music/default_volume.ogg";
+    const Json defaultVolumeSaved = Json::parse(SaveText(defaultVolume));
+    Check(defaultVolumeSaved["audio"].find("musicVolume")
+                  == defaultVolumeSaved["audio"].end(),
+          "default level music volume is omitted on save");
 
     const Json defaults = Json::parse(SaveText(MakeSquare()));
     Check(defaults.find("audio") == defaults.end(),
@@ -2121,10 +2141,22 @@ void TestAudioSettingsRoundTripAndValidation()
     invalid = saved;
     invalid["audio"]["sounds"]["door_open"] = "shared/door.flac";
     ExpectRejected(invalid, "unsupported level sound format is rejected");
+    invalid = saved;
+    invalid["audio"]["musicVolume"] = "loud";
+    ExpectRejected(invalid, "non-numeric level music volume is rejected");
+    invalid = saved;
+    invalid["audio"]["musicVolume"] = -0.01f;
+    ExpectRejected(invalid, "negative level music volume is rejected");
+    invalid = saved;
+    invalid["audio"]["musicVolume"] = 1.01f;
+    ExpectRejected(invalid, "level music volume above one is rejected");
 
     SectorTopologyMap invalidSave = original;
     invalidSave.audioSettings.musicPath = "/absolute/theme.ogg";
     ExpectSaveRejected(invalidSave, "absolute level music path is rejected on save");
+    invalidSave = original;
+    invalidSave.audioSettings.musicVolume = -0.01f;
+    ExpectSaveRejected(invalidSave, "invalid level music volume is rejected on save");
 }
 
 void TestSkySettingsRoundTripAndValidation()
@@ -3652,6 +3684,7 @@ void TestGraphNativeMapLevelRoundTrip()
     });
     source.previewSettings.walkSpeed = 9.0f;
     source.audioSettings.musicPath = "music/graph_theme.ogg";
+    source.audioSettings.musicVolume = 0.4f;
     source.audioSettings.soundsById.emplace(
             "ambient_hum", "ambience/hum.wav");
     source.skySettings.textureId = "sky";
@@ -3715,6 +3748,7 @@ void TestGraphNativeMapLevelRoundTrip()
           "graph-native dynamic spot lights are persisted");
     Check(saved["previewSettings"]["walkSpeed"] == 9.0f, "graph-native preview settings are persisted");
     Check(saved["audio"]["music"] == "music/graph_theme.ogg"
+                  && Near(saved["audio"]["musicVolume"].get<float>(), 0.4f)
                   && saved["audio"]["sounds"]["ambient_hum"]
                   == "ambience/hum.wav",
           "graph-native audio settings are persisted");
@@ -3789,6 +3823,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
                   && loaded.mapData.audioSettings.musicPath
                           == "music/graph_theme.ogg"
+                  && Near(loaded.mapData.audioSettings.musicVolume, 0.4f)
                   && loaded.mapData.audioSettings.soundsById.at("ambient_hum")
                           == "ambience/hum.wav"
                   && loaded.mapData.skySettings.textureId == "sky"
@@ -3818,6 +3853,7 @@ void TestGraphNativeMapLevelRoundTrip()
     Check(loaded.derivation.success
                   && loaded.derivation.topology.audioSettings.musicPath
                           == "music/graph_theme.ogg"
+                  && Near(loaded.derivation.topology.audioSettings.musicVolume, 0.4f)
                   && loaded.derivation.topology.audioSettings.soundsById.at(
                           "ambient_hum") == "ambience/hum.wav"
                   && loaded.derivation.topology.texturesById.count("sky") == 1
@@ -3972,6 +4008,41 @@ void TestFileApi()
     std::filesystem::remove(path, removeError);
 }
 
+void TestFootstepSetRoundTripAndDefaults()
+{
+    SectorTopologyMap map = MakeSquare();
+    map.sectors[0].footstepSet = "DirtRoad_Mono";
+    const Json saved = Json::parse(SaveText(map));
+    Check(saved["sectors"][0]["footstepSet"] == "DirtRoad_Mono",
+          "topology sector footstep override serializes");
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error)
+                  && loaded.sectors[0].footstepSet == "DirtRoad_Mono",
+          "topology sector footstep override round-trips");
+
+    SectorTopologyMap defaults = MakeSquare();
+    const Json defaultSaved = Json::parse(SaveText(defaults));
+    Check(!defaultSaved["sectors"][0].contains("footstepSet"),
+          "default live footstep fallback is omitted from topology JSON");
+    Json invalid = defaultSaved;
+    invalid["sectors"][0]["footstepSet"] = "../Tile_Mono";
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "unsafe topology footstep set IDs are rejected");
+
+    game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(defaults);
+    document.graph.faceAnchors[0].footstepSet = "MetalSteps";
+    document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
+    const Json authoringSaved = Json::parse(SaveAuthoringText(document));
+    Check(authoringSaved["authoringGraph"]["faceAnchors"][0]["footstepSet"] == "MetalSteps",
+          "authoring face footstep override serializes in the source graph");
+    game::SectorAuthoringDocument loadedDocument;
+    Check(LoadAuthoringText(authoringSaved.dump(), loadedDocument, error)
+                  && loadedDocument.graph.faceAnchors[0].footstepSet == "MetalSteps"
+                  && loadedDocument.derivation.topology.sectors[0].footstepSet == "MetalSteps",
+          "authoring face footstep override derives into runtime topology");
+}
+
 } // namespace
 
 int main()
@@ -4018,6 +4089,7 @@ int main()
     TestGraphNativeMapLevelRoundTrip();
     TestGraphNativeLegacyImportPathStillWorks();
     TestLevelMarkerRoundTripAndEntryResolution();
+    TestFootstepSetRoundTripAndDefaults();
     TestFileApi();
 
     if (failures != 0) {

@@ -2649,6 +2649,77 @@ void MarkSectorEditorAuthoringGraphEdited(
     lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
     InvalidateEditorTopologyRenderCache(topologyRenderRevision, topologyRenderCache);
 }
+
+bool SetSectorEditorAllSectorLighting(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        float ambientIntensity,
+        Color ambientColor,
+        std::string* outStatus)
+{
+    ambientIntensity = ClampAmbientIntensity(ambientIntensity);
+    ambientColor.a = 255;
+
+    int sectorCount = 0;
+    bool changed = false;
+    for (SectorAuthoringFaceAnchor& anchor : authoringGraph.faceAnchors) {
+        if (anchor.isVoid) {
+            continue;
+        }
+        ++sectorCount;
+        if (anchor.ambientIntensity == ambientIntensity
+                && anchor.ambientColor.r == ambientColor.r
+                && anchor.ambientColor.g == ambientColor.g
+                && anchor.ambientColor.b == ambientColor.b
+                && anchor.ambientColor.a == ambientColor.a) {
+            continue;
+        }
+        anchor.ambientIntensity = ambientIntensity;
+        anchor.ambientColor = ambientColor;
+        changed = true;
+    }
+
+    if (sectorCount == 0) {
+        if (outStatus != nullptr) {
+            *outStatus = "Set All: no sectors to update.";
+        }
+        return false;
+    }
+    if (!changed) {
+        if (outStatus != nullptr) {
+            *outStatus = "All sectors already use this lighting.";
+        }
+        return true;
+    }
+
+    const std::string successStatus = TextFormat(
+            "Set lighting for %d sector%s.",
+            sectorCount,
+            sectorCount == 1 ? "" : "s");
+    const char* failureStatus =
+            "Set All updated authoring sector lighting; derivation failed.";
+    MarkSectorEditorAuthoringGraphEdited(
+            state,
+            lifecycle,
+            derivation,
+            successStatus.c_str());
+    const bool derivationCurrent = RefreshSectorEditorAuthoringDerivation(
+            state,
+            lifecycle,
+            topologyMap,
+            authoringGraph,
+            derivation,
+            successStatus.c_str(),
+            failureStatus);
+    if (outStatus != nullptr) {
+        *outStatus = derivationCurrent ? successStatus : failureStatus;
+    }
+    return derivationCurrent;
+}
+
 int FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
         const SectorAuthoringGraph& authoringGraph,
         const SectorAuthoringDerivationResult& authoringDerivation,

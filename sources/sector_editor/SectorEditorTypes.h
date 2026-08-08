@@ -95,10 +95,12 @@ struct SectorEditorState {
     bool showAxes = true;
     bool showSectorIds = true;
     TexturePickerState texturePicker;
+    FootstepPickerState footstepPicker;
     AddMapTextureState addMapTexture;
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;
+    SectorEditorSetAllModalState setAllModal;
     DecalTintModalState decalTintModal;
     DoorTextureSettingsModalState doorTextureSettingsModal;
     SectorPreviewSettingsModalState previewSettingsModal;

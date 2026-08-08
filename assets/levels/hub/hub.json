@@ -547,8 +547,8 @@
     "objectProbeUpperHeightWorld": 1.2000000476837158
   },
   "previewSettings": {
-    "walkSpeed": 4.5,
-    "runSpeed": 9.0,
+    "walkSpeed": 2.5,
+    "runSpeed": 5.0,
     "mouseSensitivity": 0.5,
     "eyeHeight": 1.649999976158142,
     "gravity": 25.0,
@@ -557,7 +557,7 @@
     "stepHeight": 0.4000000059604645,
     "jumpHeight": 1.2000000476837158,
     "headBobStrength": 0.019999999552965164,
-    "headBobFrequency": 2.0,
+    "headBobFrequency": 1.25,
     "objectProbeDebugDrawMaxDistanceWorld": 48.0
   },
   "directionalLight": {
@@ -594,11 +594,11 @@
     "path": "assets/levels/hub/hub.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "6966bd4a8a1a8b9f",
+    "sourceHash": "b6598c10e14d7950",
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 2,
-      "sourceHash": "6966bd4a8a1a8b9f",
+      "sourceHash": "b6598c10e14d7950",
       "count": 277,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -608,7 +608,7 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.png.static_models.bin",
       "version": 2,
-      "sourceHash": "6966bd4a8a1a8b9f",
+      "sourceHash": "b6598c10e14d7950",
       "modelCount": 8,
       "objectCount": 8,
       "format": "staticModelUvRemapF32LE"
@@ -4326,7 +4326,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -4402,7 +4402,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -4478,7 +4478,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -4630,7 +4630,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "fortress_stone_512",
           "uv": {
@@ -4706,7 +4706,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -4859,7 +4859,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -5012,7 +5012,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -5088,7 +5088,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -5164,7 +5164,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -5204,6 +5204,7 @@
             ]
           }
         },
+        "footstepSet": "LowMetal_Mono",
         "floorDecal": {
           "textureId": "hub_drain_grate_256",
           "uv": {
@@ -5261,7 +5262,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -5358,7 +5359,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -5398,6 +5399,7 @@
             ]
           }
         },
+        "footstepSet": "LowMetal_Mono",
         "floorDecal": {
           "textureId": "hub_drain_grate_256",
           "uv": {
@@ -5455,7 +5457,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -5531,7 +5533,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -5607,7 +5609,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -5683,7 +5685,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.125,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -5722,7 +5724,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "Rubber"
       }
     ],
     "fogVolumes": [

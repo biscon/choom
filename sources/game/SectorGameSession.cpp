@@ -6,6 +6,7 @@
 
 #include <raylib.h>
 
+#include <algorithm>
 #include <cmath>
 
 namespace game {
@@ -44,6 +45,7 @@ bool SectorGameSession::StartNew(
         const SectorLevelEntryRequest& entry,
         const FpsWeaponRegistry& registry,
         const FpsApplicationSettings& settings,
+        PlayerAudioRuntime& playerAudioRuntime,
         std::string& error)
 {
     const std::string& requestedLevelName = entry.levelName;
@@ -70,7 +72,12 @@ bool SectorGameSession::StartNew(
             && !fingerprintError.empty()) {
         TraceLog(LOG_WARNING, "%s", fingerprintError.c_str());
     }
-    if (!scene.Rebuild(context, loaded, "sector_game", error)) {
+    if (!scene.Rebuild(
+                context,
+                loaded,
+                "sector_game",
+                settings.footsteps.defaultSet,
+                error)) {
         return false;
     }
 
@@ -103,6 +110,7 @@ bool SectorGameSession::StartNew(
     EnterSectorFreeflyController(controller.freeflyController);
     weaponRegistry = &registry;
     applicationSettings = &settings;
+    playerAudio = &playerAudioRuntime;
     fpsPlayer.Begin(
             context.assets,
             scene.Renderer(),
@@ -133,6 +141,7 @@ void SectorGameSession::Shutdown(
     paused = false;
     weaponRegistry = nullptr;
     applicationSettings = nullptr;
+    playerAudio = nullptr;
 }
 
 void SectorGameSession::Pause()
@@ -217,6 +226,39 @@ void SectorGameSession::Update(
             input,
             previousVisualEyeY,
             dt);
+    if (controller.frameEvents.footstep && applicationSettings != nullptr) {
+        scene.PlayFootstepForSector(
+                context,
+                controller.fpsControllerState.currentSectorId,
+                applicationSettings->footsteps.volume);
+    }
+    if (playerAudio != nullptr) {
+        if (controller.frameEvents.jumped) {
+            PlayPlayerSound(
+                    context.assets,
+                    context.audio,
+                    *playerAudio,
+                    "jump");
+        }
+        if (controller.frameEvents.landed) {
+            PlayPlayerSound(
+                    context.assets,
+                    context.audio,
+                    *playerAudio,
+                    "land");
+        }
+    }
+    if (controller.frameEvents.landed && applicationSettings != nullptr) {
+        scene.PlayFootstepForSector(
+                context,
+                controller.fpsControllerState.currentSectorId,
+                std::clamp(
+                        applicationSettings->footsteps.volume
+                                * applicationSettings->footsteps
+                                        .landingImpactVolumeMultiplier,
+                        0.0f,
+                        1.0f));
+    }
     ApplyPlayerPose(scene);
     UpdateAudioListener(context.audio, scene.Renderer().RenderCamera());
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
@@ -287,7 +329,14 @@ bool SectorGameSession::RebuildFromMap(
         return false;
     }
     const SectorFpsControllerState savedPlayer = controller.fpsControllerState;
-    if (!scene.Rebuild(context, map, "sector_game", error)) {
+    if (!scene.Rebuild(
+                context,
+                map,
+                "sector_game",
+                applicationSettings != nullptr
+                        ? applicationSettings->footsteps.defaultSet
+                        : FootstepApplicationSettings{}.defaultSet,
+                error)) {
         return false;
     }
     topologyMap = map;

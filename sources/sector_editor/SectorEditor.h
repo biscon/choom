@@ -17,6 +17,7 @@
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogState.h"
 #include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "game/FpsPlayerRuntime.h"
+#include "game/PlayerAudio.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
@@ -27,6 +28,7 @@
 #include "sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
+#include "sector_editor/services/footsteps/SectorEditorFootstepService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
 #include "sector_demo/SectorSceneRuntime.h"
@@ -169,7 +171,19 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font,
             engine::FontHandle smallFont);
+    void DrawSetAllModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
     void DrawTexturePickerModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
+    void DrawFootstepPickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
@@ -359,6 +373,7 @@ private:
     Rectangle BuildPreviewUvPanelRect() const;
     bool SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
     SectorEditorMaterialEditingService BuildMaterialEditingService();
+    SectorEditorFootstepService BuildFootstepService();
     SectorEditorLightEditingService BuildLightEditingService();
     SectorEditorRuntimeObjectEditingService BuildRuntimeObjectEditingService(
             SectorEditorSelectionServiceContext* selectionService = nullptr);
@@ -422,6 +437,7 @@ private:
     FpsPlayerRuntime fpsPlayer;
     FpsWeaponRegistry weaponRegistry;
     FpsApplicationSettings applicationSettings;
+    PlayerAudioRuntime playerAudio;
     std::string applicationSettingsPath;
     std::string weaponRegistryError;
     std::string applicationSettingsWarning;

@@ -15,6 +15,7 @@
 #include "sector_editor/SectorEditorMaterialModals.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
+#include "sector_editor/SectorEditorSetAllModal.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlay.h"
 #include "sector_editor/preview/SectorEditorPreviewUvPanel.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
@@ -352,6 +353,10 @@ bool SectorEditor::Init(engine::EngineContext& context)
         TraceLog(LOG_WARNING, "Application settings ignored: %s", applicationSettingsWarning.c_str());
         applicationSettings = {};
     }
+    RequestPlayerAudioAssets(
+            context.assets,
+            applicationSettings.playerSounds,
+            playerAudio);
     ResetToBlankMap(context);
     fogVolumeEditingService.emplace(
             SectorEditorAuthoringFogVolumeEditingServiceContext{
@@ -381,6 +386,10 @@ bool SectorEditor::Init(engine::EngineContext& context)
 void SectorEditor::Shutdown(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
+    if (state.footstepPicker.open
+            || !engine::IsNull(state.footstepPicker.previewScope)) {
+        BuildFootstepService().Close();
+    }
     lightmapBake.Shutdown();
     EndFpsViewmodel(assets);
     sceneRuntime.Shutdown(context);
@@ -406,6 +415,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
     fogVolumeEditingService.reset();
     levelMarkerEditingService.reset();
+    playerAudio = PlayerAudioRuntime{};
     canvasRect = {};
     statusText.clear();
     engineContext = nullptr;
@@ -478,6 +488,7 @@ void SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             && previewState.controller.freeflyController.mouseLookEnabled;
     const bool uiCaptured = uiState.keyboardCaptured
             || state.texturePicker.open
+            || state.footstepPicker.open
             || state.decalTintModal.open
             || state.previewSettingsModal.open
             || runtimeObjectEditingState.spritePicker.open
@@ -527,6 +538,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
 {
     engine::Input& input = context.input;
     engine::AssetManager& assets = context.assets;
+    if (state.footstepPicker.open) {
+        BuildFootstepService().UpdatePreview();
+    }
     if (lightmapBake.IsBlocking()) {
         CancelAuthoringVertexDrag(nullptr);
         CancelLightDrag(nullptr);
@@ -546,6 +560,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         sceneRuntime.Update(context, TopologyMap(), dt, &playerPosition);
         UpdateFpsViewmodel(assets, dt);
         const bool hasBlockingModal = state.texturePicker.open
+                || state.footstepPicker.open
                 || runtimeObjectEditingState.spritePicker.open
                 || runtimeObjectEditingState.staticModelPicker.open
                 || HasDocumentModalOpen();
@@ -592,6 +607,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
 
     canvasRect = BuildCanvasRect();
     if (state.texturePicker.open
+            || state.footstepPicker.open
             || state.addMapTexture.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
@@ -659,6 +675,7 @@ void SectorEditor::RenderUI(
         }
         if (!previewState.overlay.previewUiHidden
                 && !state.texturePicker.open
+                && !state.footstepPicker.open
                 && !runtimeObjectEditingState.spritePicker.open
                 && !runtimeObjectEditingState.staticModelPicker.open
                 && !state.decalTintModal.open
@@ -676,10 +693,12 @@ void SectorEditor::RenderUI(
             DrawPreviewSettingsModal(ui, config, input, assets, font);
         }
         DrawTexturePickerModal(ui, config, input, assets, font);
+        DrawFootstepPickerModal(ui, config, input, assets, font);
         DrawSpritePickerModal(ui, config, input, assets, font);
         DrawStaticModelPickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = ui.focusedId != 0;
         if (state.texturePicker.open
+                || state.footstepPicker.open
                 || runtimeObjectEditingState.spritePicker.open
                 || runtimeObjectEditingState.staticModelPicker.open
                 || state.decalTintModal.open
@@ -694,6 +713,12 @@ void SectorEditor::RenderUI(
     engine::BeginUI(ui, input);
     if (lightmapBake.IsBlocking()) {
         DrawLightmapBakeModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (state.setAllModal.open) {
+        DrawSetAllModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -747,6 +772,12 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (state.footstepPicker.open) {
+        DrawFootstepPickerModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (runtimeObjectEditingState.spritePicker.open) {
         DrawSpritePickerModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
@@ -763,12 +794,15 @@ void SectorEditor::RenderUI(
     DrawToolsPanel(ui, config, input, assets, font);
     DrawSectorsPanel(ui, config, input, assets, font, smallFont);
     DrawStatusPanel(ui, config, assets, smallFont);
+    DrawSetAllModal(ui, config, input, assets, font);
     DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font);
+    DrawFootstepPickerModal(ui, config, input, assets, font);
     DrawSpritePickerModal(ui, config, input, assets, font);
     DrawStaticModelPickerModal(ui, config, input, assets, font);
     uiState.keyboardCaptured = ui.focusedId != 0;
     if (state.texturePicker.open
+            || state.footstepPicker.open
             || state.addMapTexture.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
@@ -2068,6 +2102,39 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     controllerInput,
                     previousVisualEyeY,
                     dt);
+            if (previewState.controller.frameEvents.footstep
+                    && engineContext != nullptr) {
+                sceneRuntime.PlayFootstepForSector(
+                        *engineContext,
+                        previewState.controller.fpsControllerState.currentSectorId,
+                        applicationSettings.footsteps.volume);
+            }
+            if (engineContext != nullptr) {
+                if (previewState.controller.frameEvents.jumped) {
+                    PlayPlayerSound(
+                            engineContext->assets,
+                            engineContext->audio,
+                            playerAudio,
+                            "jump");
+                }
+                if (previewState.controller.frameEvents.landed) {
+                    PlayPlayerSound(
+                            engineContext->assets,
+                            engineContext->audio,
+                            playerAudio,
+                            "land");
+                    sceneRuntime.PlayFootstepForSector(
+                            *engineContext,
+                            previewState.controller.fpsControllerState
+                                    .currentSectorId,
+                            std::clamp(
+                                    applicationSettings.footsteps.volume
+                                            * applicationSettings.footsteps
+                                                    .landingImpactVolumeMultiplier,
+                                    0.0f,
+                                    1.0f));
+                }
+            }
             ApplyGameplayPoseToPreview();
             const SectorFpsControllerConfig normalizedVisibilityConfig =
                     NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
@@ -4124,7 +4191,7 @@ void SectorEditor::DrawToolsPanel(
         return static_cast<float>(count) * (rowH + gap);
     };
     const float toolsContentH =
-            sectionLabelH + rowsHeight(4)
+            sectionLabelH + rowsHeight(5)
             + separatorH + sectionLabelH + rowsHeight(10)
             + separatorH + rowsHeight(4)
             + lightmapLabelH + rowsHeight(5)
@@ -4275,6 +4342,21 @@ void SectorEditor::DrawToolsPanel(
             selectTool(tool);
         }
     }
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_set_all",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Set All")) {
+        OpenSectorEditorSetAllModal(
+                state.setAllModal,
+                AuthoringGraph(),
+                selectionState.selectedAuthoring);
+    }
+    y += rowH + gap;
 
     separator();
     sectionLabel("Map objects");
@@ -4457,6 +4539,7 @@ void SectorEditor::DrawSectorsPanel(
             runtimeObjectEditingState.staticModelPicker,
             statusText};
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
+    SectorEditorFootstepService footsteps = BuildFootstepService();
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
     SectorEditorInspectorPanelContext context{
@@ -4486,6 +4569,7 @@ void SectorEditor::DrawSectorsPanel(
             runtimeObjectEditing,
             staticModelPicker,
             materialEditing,
+            footsteps,
             textureCatalog,
             lightEditing,
             fogVolumeEditingService.value(),
@@ -4582,6 +4666,54 @@ void SectorEditor::DrawTexturePickerModal(
             state.texturePicker,
             textureCatalog,
             callbacks);
+}
+
+void SectorEditor::DrawSetAllModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    const SectorEditorSetAllModalCallbacks callbacks{
+            [this]() {
+                state.setAllModal = SectorEditorSetAllModalState{};
+            },
+            [this](float ambientIntensity, Color ambientColor) {
+                std::string status;
+                SetSectorEditorAllSectorLighting(
+                        state,
+                        Lifecycle(),
+                        TopologyMap(),
+                        AuthoringGraph(),
+                        MakeLiveDerivationAccess(documentState.derivation),
+                        ambientIntensity,
+                        ambientColor,
+                        &status);
+                if (!status.empty()) {
+                    statusText = std::move(status);
+                }
+                state.setAllModal = SectorEditorSetAllModalState{};
+            }};
+    DrawSectorEditorSetAllModal(
+            ui,
+            config,
+            input,
+            assets,
+            font,
+            state.setAllModal,
+            callbacks);
+}
+
+void SectorEditor::DrawFootstepPickerModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    if (engineContext == nullptr) return;
+    BuildFootstepService().DrawModal(ui, config, input, assets, font);
 }
 
 void SectorEditor::DrawSpritePickerModal(
@@ -5177,6 +5309,7 @@ bool SectorEditor::LoadLevel(
     state.loadLevelModal = LoadLevelModalState{};
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
+    state.setAllModal = SectorEditorSetAllModalState{};
     state.decalTintModal = DecalTintModalState{};
     state.doorTextureSettingsModal = DoorTextureSettingsModalState{};
     ClearSelection();
@@ -5323,6 +5456,7 @@ bool SectorEditor::HasDocumentModalOpen() const
     return state.saveLevelModal.open
             || state.loadLevelModal.open
             || state.confirmationModal.open
+            || state.setAllModal.open
             || state.decalTintModal.open
             || state.doorTextureSettingsModal.open
             || state.previewSettingsModal.open;
@@ -5366,7 +5500,12 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
         TraceLog(LOG_WARNING, "%s", fingerprintError.c_str());
     }
     std::string error;
-    if (!sceneRuntime.Rebuild(context, TopologyMap(), "sector_editor_preview", error)) {
+    if (!sceneRuntime.Rebuild(
+                context,
+                TopologyMap(),
+                "sector_editor_preview",
+                applicationSettings.footsteps.defaultSet,
+                error)) {
         sceneRuntime.RuntimeObjects().objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
         sceneRuntime.RuntimeObjects().objectProbeStatus.clear();
         sceneRuntime.RuntimeObjects().objectSectorLookupWorld = SectorCollisionWorld{};
@@ -5381,6 +5520,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
         previewState.collision.previewCollisionNoclipFallback = false;
         previewState.controller.visualStepOffsetY = 0.0f;
         ClearSectorFpsHeadBob(previewState.controller.headBobState);
+        ClearSectorFpsFootstepCadence(previewState.controller.footstepCadenceState);
         ClearSectorFpsLandingDip(previewState.controller.landingDipState);
         state.mode = SectorEditorMode::Edit2D;
         if (StartsWith(error, "Preview failed:")) {
@@ -5404,6 +5544,8 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     previewState.controller.visualStepOffsetY = 0.0f;
     ResetSectorFpsCrouch(previewState.controller.fpsControllerState);
     ClearSectorFpsHeadBob(previewState.controller.headBobState);
+    ClearSectorFpsFootstepCadence(previewState.controller.footstepCadenceState);
+    previewState.controller.frameEvents = SectorFpsFrameEvents{};
     ClearSectorFpsLandingDip(previewState.controller.landingDipState);
     previewState.controller.fpsControllerConfig = NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
     state.mode = SectorEditorMode::Preview3D;
@@ -5433,6 +5575,7 @@ void SectorEditor::LeavePreview3D()
     previewState.controller.visualStepOffsetY = 0.0f;
     ResetSectorFpsCrouch(previewState.controller.fpsControllerState);
     ClearSectorFpsHeadBob(previewState.controller.headBobState);
+    ClearSectorFpsFootstepCadence(previewState.controller.footstepCadenceState);
     ClearSectorFpsLandingDip(previewState.controller.landingDipState);
     previewState.controller.previewControlMode = SectorPreviewControlMode::FreeFly;
     state.mode = SectorEditorMode::Edit2D;
@@ -5916,6 +6059,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                 0.0f);
         previewState.controller.visualStepOffsetY = 0.0f;
         ClearSectorFpsHeadBob(previewState.controller.headBobState);
+        ClearSectorFpsFootstepCadence(previewState.controller.footstepCadenceState);
         ClearSectorFpsLandingDip(previewState.controller.landingDipState);
         ApplyGameplayPoseToPreview();
     }
@@ -6625,6 +6769,20 @@ SectorEditorMaterialEditingService SectorEditor::BuildMaterialEditingService()
                     }}};
 }
 
+SectorEditorFootstepService SectorEditor::BuildFootstepService()
+{
+    return SectorEditorFootstepService{
+            SectorEditorFootstepServiceContext{
+                    state,
+                    Lifecycle(),
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    applicationSettings,
+                    statusText,
+                    *engineContext}};
+}
+
 SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
 {
     return SectorEditorLightEditingService{
@@ -6738,7 +6896,12 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
         TraceLog(LOG_WARNING, "%s", fingerprintError.c_str());
     }
     std::string error;
-    if (!sceneRuntime.Rebuild(context, TopologyMap(), "sector_editor_preview", error)) {
+    if (!sceneRuntime.Rebuild(
+                context,
+                TopologyMap(),
+                "sector_editor_preview",
+                applicationSettings.footsteps.defaultSet,
+                error)) {
         sceneRuntime.RuntimeObjects().objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
         sceneRuntime.RuntimeObjects().objectProbeStatus.clear();
         sceneRuntime.RuntimeObjects().objectSectorLookupWorld = SectorCollisionWorld{};

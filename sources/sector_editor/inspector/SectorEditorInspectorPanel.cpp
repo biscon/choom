@@ -1580,6 +1580,42 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Audio", engine::UITextJustify::Left, config.textColor);
+        y += 30.0f;
+        const SectorEditorInspectorTextureRowLayout footstepRow =
+                BuildSectorEditorInspectorTextureRowLayout(
+                        y,
+                        contentW,
+                        gap,
+                        38.0f,
+                        0.0f);
+        const std::string effectiveFootstep = context.footsteps.EffectiveSetId(
+                selectedAuthoringFaceAnchor->footstepSet);
+        engine::Text(ui, config, assets, footstepRow.labelRect, font, "Footsteps:", engine::UITextJustify::Left, config.mutedTextColor);
+        engine::Text(
+                ui,
+                smallConfig,
+                assets,
+                footstepRow.valueRect,
+                smallFont,
+                effectiveFootstep.c_str(),
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_face_pick_footsteps",
+                    footstepRow.pickerButtonRect,
+                    font,
+                    ">")) {
+            context.footsteps.OpenForAuthoringFaceAnchor(faceAnchorId);
+        }
+        y += footstepRow.height + gap;
+
+        engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
+        y += 18.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Lighting", engine::UITextJustify::Left, config.textColor);
         y += 30.0f;
 

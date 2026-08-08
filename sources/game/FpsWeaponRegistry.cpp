@@ -144,6 +144,26 @@ bool ValidLevelName(const std::string& name)
     return true;
 }
 
+bool ValidSoundSetId(const std::string& id)
+{
+    if (id.empty() || id.front() == '/' || id.front() == '\\') return false;
+    std::string segment;
+    for (const char character : id) {
+        if (character == '\\') return false;
+        if (character == '/') {
+            if (segment.empty() || segment == "." || segment == "..") return false;
+            segment.clear();
+            continue;
+        }
+        const unsigned char value = static_cast<unsigned char>(character);
+        if (!std::isalnum(value) && character != '_' && character != '-' && character != '.') {
+            return false;
+        }
+        segment.push_back(character);
+    }
+    return !segment.empty() && segment != "." && segment != "..";
+}
+
 void ValidatePresentation(const FpsViewmodelPresentation& value, const std::string& context)
 {
     const float values[] = {value.position.x, value.position.y, value.position.z,
@@ -621,6 +641,91 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 Fail("application settings.firstLevel must use only letters, digits, underscore, or dash");
             }
         }
+        const auto footsteps = root.find("footsteps");
+        if (footsteps != root.end()) {
+            if (!footsteps->is_object()) {
+                Fail("application settings.footsteps must be an object");
+            }
+            const auto defaultSet = footsteps->find("defaultSet");
+            if (defaultSet != footsteps->end()) {
+                if (!defaultSet->is_string()) {
+                    Fail("application settings.footsteps.defaultSet must be a string");
+                }
+                parsed.footsteps.defaultSet = defaultSet->get<std::string>();
+                if (!ValidSoundSetId(parsed.footsteps.defaultSet)) {
+                    Fail("application settings.footsteps.defaultSet must be a safe relative footstep set id");
+                }
+            }
+            const auto volume = footsteps->find("volume");
+            if (volume != footsteps->end()) {
+                if (!volume->is_number()) {
+                    Fail("application settings.footsteps.volume must be a number");
+                }
+                const double value = volume->get<double>();
+                if (!std::isfinite(value) || value < 0.0 || value > 1.0) {
+                    Fail("application settings.footsteps.volume must be between 0 and 1");
+                }
+                parsed.footsteps.volume = static_cast<float>(value);
+            }
+            const auto impactMultiplier = footsteps->find(
+                    "landingImpactVolumeMultiplier");
+            if (impactMultiplier != footsteps->end()) {
+                if (!impactMultiplier->is_number()) {
+                    Fail("application settings.footsteps.landingImpactVolumeMultiplier must be a number");
+                }
+                const double value = impactMultiplier->get<double>();
+                if (!std::isfinite(value)
+                        || value < 0.0
+                        || value > std::numeric_limits<float>::max()) {
+                    Fail("application settings.footsteps.landingImpactVolumeMultiplier must be non-negative");
+                }
+                parsed.footsteps.landingImpactVolumeMultiplier =
+                        static_cast<float>(value);
+            }
+        }
+        const auto playerSounds = root.find("playerSounds");
+        if (playerSounds != root.end()) {
+            if (!playerSounds->is_object()) {
+                Fail("application settings.playerSounds must be an object");
+            }
+            const auto events = playerSounds->find("events");
+            if (events != playerSounds->end()) {
+                if (!events->is_object()) {
+                    Fail("application settings.playerSounds.events must be an object");
+                }
+                parsed.playerSounds.events.clear();
+                parsed.playerSounds.events.reserve(events->size());
+                for (auto it = events->begin(); it != events->end(); ++it) {
+                    const std::string context =
+                            "application settings.playerSounds.events.'"
+                            + it.key() + "'";
+                    if (!ValidSoundSetId(it.key())) {
+                        Fail(context + " must use a safe event id");
+                    }
+                    if (!it.value().is_object()) {
+                        Fail(context + " must be an object");
+                    }
+                    PlayerSoundEventSettings event;
+                    event.id = it.key();
+                    event.set = String(it.value(), "set", context);
+                    if (!ValidSoundSetId(event.set)) {
+                        Fail(context + ".set must be a safe relative player sound set id");
+                    }
+                    const auto volume = it.value().find("volume");
+                    if (volume != it.value().end()) {
+                        if (!volume->is_number()) {
+                            Fail(context + ".volume must be a number");
+                        }
+                        const double value = volume->get<double>();
+                        if (!std::isfinite(value) || value < 0.0 || value > 1.0) {
+                            Fail(context + ".volume must be between 0 and 1");
+                        }
+                        event.volume = static_cast<float>(value);
+                    }
+                    parsed.playerSounds.events.push_back(std::move(event));
+                }
+            }
+        }
         const auto overrides = root.find("viewmodelOverrides");
         if (overrides != root.end()) {
             if (!overrides->is_object()) Fail("application settings.viewmodelOverrides must be an object");
@@ -747,7 +852,54 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings first level is invalid");
         return false;
     }
-    Json root = {{"version", 1}, {"firstLevel", settings.firstLevel}};
+    if (!ValidSoundSetId(settings.footsteps.defaultSet)) {
+        SetError(error, "application settings default footstep set is invalid");
+        return false;
+    }
+    if (!std::isfinite(settings.footsteps.volume)
+            || settings.footsteps.volume < 0.0f
+            || settings.footsteps.volume > 1.0f) {
+        SetError(error, "application settings footstep volume must be between 0 and 1");
+        return false;
+    }
+    if (!std::isfinite(settings.footsteps.landingImpactVolumeMultiplier)
+            || settings.footsteps.landingImpactVolumeMultiplier < 0.0f) {
+        SetError(error, "application settings landing footstep volume multiplier must be non-negative");
+        return false;
+    }
+    std::unordered_set<std::string> playerSoundEventIds;
+    for (const PlayerSoundEventSettings& event : settings.playerSounds.events) {
+        if (!ValidSoundSetId(event.id)
+                || !ValidSoundSetId(event.set)) {
+            SetError(error, "application settings player sound event has an invalid id or set");
+            return false;
+        }
+        if (!std::isfinite(event.volume)
+                || event.volume < 0.0f
+                || event.volume > 1.0f) {
+            SetError(error, "application settings player sound event volume must be between 0 and 1");
+            return false;
+        }
+        if (!playerSoundEventIds.insert(event.id).second) {
+            SetError(error, "application settings player sound event ids must be unique");
+            return false;
+        }
+    }
+    Json root = {
+            {"version", 1},
+            {"firstLevel", settings.firstLevel},
+            {"footsteps", {
+                    {"defaultSet", settings.footsteps.defaultSet},
+                    {"volume", settings.footsteps.volume},
+                    {"landingImpactVolumeMultiplier",
+                            settings.footsteps.landingImpactVolumeMultiplier}}}};
+    Json playerSoundEvents = Json::object();
+    for (const PlayerSoundEventSettings& event : settings.playerSounds.events) {
+        playerSoundEvents[event.id] = {
+                {"set", event.set},
+                {"volume", event.volume}};
+    }
+    root["playerSounds"] = {{"events", std::move(playerSoundEvents)}};
     Json overrides = Json::object();
     for (const auto& entry : settings.weapons) {
         Json value = Json::object();

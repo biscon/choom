@@ -30,6 +30,11 @@ constexpr const char* RuntimeObjectKindDynamicModel = "dynamic_model";
 constexpr const char* RuntimeObjectKindDoor = "door";
 
 [[noreturn]] void Fail(const std::string& message);
+float ReadOptionalFloat(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        float defaultValue);
 
 bool IsValidAudioPath(const std::string& path)
 {
@@ -53,12 +58,44 @@ bool IsValidAudioPath(const std::string& path)
     return extension == ".ogg" || extension == ".wav" || extension == ".mp3";
 }
 
+bool IsValidFootstepSetId(const std::string& id)
+{
+    if (id.empty() || id.front() == '/' || id.front() == '\\') return false;
+    std::string segment;
+    for (const char character : id) {
+        if (character == '\\') return false;
+        if (character == '/') {
+            if (segment.empty() || segment == "." || segment == "..") return false;
+            segment.clear();
+            continue;
+        }
+        const unsigned char value = static_cast<unsigned char>(character);
+        if (!std::isalnum(value) && character != '_' && character != '-' && character != '.') {
+            return false;
+        }
+        segment.push_back(character);
+    }
+    return !segment.empty() && segment != "." && segment != "..";
+}
+
+void ValidateOptionalFootstepSet(const std::string& id, const std::string& context)
+{
+    if (!id.empty() && !IsValidFootstepSetId(id)) {
+        Fail(context + " must be a safe relative footstep set id");
+    }
+}
+
 void ValidateAudioSettings(
         const SectorLevelAudioSettings& settings,
         const std::string& context)
 {
     if (!settings.musicPath.empty() && !IsValidAudioPath(settings.musicPath)) {
         Fail(context + ".music must be a relative .ogg, .wav, or .mp3 path beneath assets/audio");
+    }
+    if (!std::isfinite(settings.musicVolume)
+            || settings.musicVolume < 0.0f
+            || settings.musicVolume > 1.0f) {
+        Fail(context + ".musicVolume must be a finite number between 0 and 1");
     }
     for (const auto& entry : settings.soundsById) {
         if (entry.first.empty()) {
@@ -81,6 +118,11 @@ void ReadAudioSettings(const Json& value, SectorLevelAudioSettings& settings)
         }
         settings.musicPath = musicIt->get<std::string>();
     }
+    settings.musicVolume = ReadOptionalFloat(
+            value,
+            "musicVolume",
+            "root.audio",
+            settings.musicVolume);
     const auto soundsIt = value.find("sounds");
     if (soundsIt != value.end()) {
         if (!soundsIt->is_object()) Fail("root.audio.sounds must be an object");
@@ -102,7 +144,12 @@ void WriteAudioSettings(Json& root, const SectorLevelAudioSettings& settings)
     ValidateAudioSettings(settings, "root.audio");
     if (settings.musicPath.empty() && settings.soundsById.empty()) return;
     Json audio = Json::object();
-    if (!settings.musicPath.empty()) audio["music"] = settings.musicPath;
+    if (!settings.musicPath.empty()) {
+        audio["music"] = settings.musicPath;
+        if (settings.musicVolume != SectorLevelAudioSettings::DefaultMusicVolume) {
+            audio["musicVolume"] = settings.musicVolume;
+        }
+    }
     if (!settings.soundsById.empty()) {
         audio["sounds"] = Json::object();
         std::vector<std::string> ids;
@@ -2809,6 +2856,8 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         anchor.ceilingZ = ReadFloat(faceAnchors[i], "ceilingZ", context);
         anchor.floorTextureId = ReadString(faceAnchors[i], "floorTextureId", context);
         anchor.ceilingTextureId = ReadString(faceAnchors[i], "ceilingTextureId", context);
+        anchor.footstepSet = ReadOptionalString(faceAnchors[i], "footstepSet", context);
+        ValidateOptionalFootstepSet(anchor.footstepSet, context + ".footstepSet");
         anchor.ceilingSky = ReadOptionalBool(faceAnchors[i], "ceilingSky", context, false);
         anchor.floorUv = ReadUv(RequireField(faceAnchors[i], "floorUv", context), context + ".floorUv");
         anchor.ceilingUv = ReadUv(RequireField(faceAnchors[i], "ceilingUv", context), context + ".ceilingUv");
@@ -3141,6 +3190,10 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         if (anchor->ceilingSky) {
             anchorJson["ceilingSky"] = true;
         }
+        if (!anchor->footstepSet.empty()) {
+            ValidateOptionalFootstepSet(anchor->footstepSet, context + ".footstepSet");
+            anchorJson["footstepSet"] = anchor->footstepSet;
+        }
         if (anchor->isVoid) {
             anchorJson["isVoid"] = true;
         }
@@ -3311,6 +3364,8 @@ SectorTopologyMap ParseMap(const Json& root)
         sector.ceilingZ = ReadFloat(value, "ceilingZ", context);
         sector.floorTextureId = ReadString(value, "floorTextureId", context);
         sector.ceilingTextureId = ReadString(value, "ceilingTextureId", context);
+        sector.footstepSet = ReadOptionalString(value, "footstepSet", context);
+        ValidateOptionalFootstepSet(sector.footstepSet, context + ".footstepSet");
         sector.ceilingSky = ReadOptionalBool(value, "ceilingSky", context, false);
         sector.floorUv = ReadUv(RequireField(value, "floorUv", context), context + ".floorUv");
         sector.ceilingUv = ReadUv(RequireField(value, "ceilingUv", context), context + ".ceilingUv");
@@ -3439,6 +3494,10 @@ Json SerializeMap(const SectorTopologyMap& map)
         }
         if (sector->ceilingSky) {
             sectorJson["ceilingSky"] = true;
+        }
+        if (!sector->footstepSet.empty()) {
+            ValidateOptionalFootstepSet(sector->footstepSet, context + ".footstepSet");
+            sectorJson["footstepSet"] = sector->footstepSet;
         }
         root["sectors"].push_back(std::move(sectorJson));
     }

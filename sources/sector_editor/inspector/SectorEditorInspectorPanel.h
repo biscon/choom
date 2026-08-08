@@ -14,6 +14,7 @@
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
+#include "sector_editor/services/footsteps/SectorEditorFootstepService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
 
@@ -77,6 +78,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorRuntimeObjectEditingService& runtimeObjectEditing;
     SectorEditorStaticModelPickerService& staticModelPicker;
     SectorEditorMaterialEditingService& materialEditing;
+    SectorEditorFootstepService& footsteps;
     SectorEditorTextureCatalogService& textureCatalog;
     SectorEditorLightEditingService& lightEditing;
     SectorEditorAuthoringFogVolumeEditingService& fogVolumeEditing;

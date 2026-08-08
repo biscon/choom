@@ -156,6 +156,8 @@ if(BUILD_TESTING)
             sources/engine/assets/SpriteAnimationAssets.cpp
             sources/engine/assets/TextureAssets.cpp
             sources/engine/audio/AudioSystem.cpp
+            sources/game/FootstepAudio.cpp
+            sources/game/SoundSetAudio.cpp
     )
     target_include_directories(audio_system_tests PRIVATE sources)
     target_link_libraries(audio_system_tests PRIVATE raylib)
