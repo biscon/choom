@@ -286,7 +286,8 @@ void DrawPreviewSettingsModal(
 
     auto drawLightingTab = [&]() {
         float contentY = 0.0f;
-        const float contentH = 11.0f * (rowH + gap) + 122.0f;
+        const float contentH =
+                MeasureSectorPreviewSettingsLightingContentHeight(rowH, gap);
         engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
                 ui,
                 config,
@@ -375,7 +376,8 @@ void DrawPreviewSettingsModal(
 
     auto drawFogTab = [&]() {
         float contentY = 0.0f;
-        const float contentH = 11.0f * (rowH + gap) + 88.0f;
+        const float contentH =
+                MeasureSectorPreviewSettingsFogContentHeight(rowH, gap);
         engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
                 ui,
                 config,

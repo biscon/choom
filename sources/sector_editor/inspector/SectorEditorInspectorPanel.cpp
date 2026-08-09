@@ -224,36 +224,6 @@ float AuthoringLineInspectorContentHeight(
     return height;
 }
 
-float AuthoringFaceInspectorContentHeight(
-        const SectorAuthoringFaceAnchor& anchor,
-        float rowH,
-        float gap,
-        float anchorSummaryHeight)
-{
-    float height = 0.0f;
-    height += 38.0f;
-    height += anchorSummaryHeight;
-    height += (rowH + gap) * 2.0f;
-    height += rowH + gap;
-
-    height += 18.0f;
-    height += 30.0f;
-    height += rowH + gap;
-    height += (rowH + gap) * 3.0f;
-
-    height += 18.0f;
-    height += 30.0f;
-    height += AuthoringInspectorTextureRowTotalHeight(gap) * 5.0f;
-    height += AuthoringInspectorDecalBlockHeight(anchor.floorDecal, rowH, gap, true);
-    height += AuthoringInspectorDecalBlockHeight(anchor.ceilingDecal, rowH, gap, true);
-    height += AuthoringInspectorDecalBlockHeight(anchor.defaultWall.decal, rowH, gap, false);
-    height += AuthoringInspectorDecalBlockHeight(anchor.defaultLower.decal, rowH, gap, false);
-    height += AuthoringInspectorDecalBlockHeight(anchor.defaultUpper.decal, rowH, gap, false);
-    height += rowH + gap;
-    return height;
-}
-
-
 bool DrawTopologySideDefInspector(
         SectorEditorInspectorPanelContext& context,
         engine::UIScrollAreaResult scroll,
@@ -532,7 +502,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                             SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->x),
                             SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->y)),
                     scrollContentW);
-            return AuthoringFaceInspectorContentHeight(*selectedAuthoringFaceAnchor, rowH, gap, anchorSummaryHeight);
+            return MeasureSectorEditorAuthoringFaceInspectorContentHeight(
+                    *selectedAuthoringFaceAnchor,
+                    rowH,
+                    gap,
+                    anchorSummaryHeight);
         }
         if (selectedAuthoringVertex != nullptr) {
             return 120.0f;
@@ -2270,7 +2244,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     selectedAuthoringFogVolume->color.g,
                     selectedAuthoringFogVolume->color.b};
             const SectorEditorInspectorNumericRowLayout layout =
-                    BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+                    BuildSectorEditorInspectorRightIntRowLayout(y, contentW, rowH, gap);
             const SectorEditorIntInputResult value = DrawLabeledIntInput(
                     ui, config, input, assets, font,
                     ids[channel], labels[channel],

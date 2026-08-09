@@ -177,10 +177,13 @@
         "thickness": 0.20000000298023224,
         "normalOffset": -0.125,
         "openDistance": 3.125,
+        "speed": 2.0,
         "autoOpen": true,
         "interactionDistance": 2.0,
         "autoOpenDistance": 2.5,
         "textureId": "industrial_wall_01",
+        "openSoundId": "slidingdoor_03",
+        "closeSoundId": "slidingdoor_03",
         "faceUvs": {
           "front": {
             "scale": [
@@ -544,7 +547,7 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.2000000476837158
+    "objectProbeUpperHeightWorld": 1.5
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -592,27 +595,33 @@
   },
   "audio": {
     "music": "ambience/horror_ambience.wav",
-    "musicVolume": 1.0
+    "musicVolume": 1.0,
+    "sounds": {
+      "slidingdoor_03": {
+        "path": "doors/SlidingDoor_03.wav",
+        "type": "sound"
+      }
+    }
   },
   "bakedLightmap": {
     "path": "assets/levels/hub/hub.lightmap.png",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "b6598c10e14d7950",
+    "sourceHash": "249a62bc0a1dcde4",
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 2,
-      "sourceHash": "b6598c10e14d7950",
+      "sourceHash": "249a62bc0a1dcde4",
       "count": 277,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
-      "probeUpperHeightWorld": 1.2000000476837158,
+      "probeUpperHeightWorld": 1.5,
       "format": "layeredAmbientCubeF32LE"
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.png.static_models.bin",
       "version": 2,
-      "sourceHash": "b6598c10e14d7950",
+      "sourceHash": "249a62bc0a1dcde4",
       "modelCount": 8,
       "objectCount": 8,
       "format": "staticModelUvRemapF32LE"
@@ -5729,7 +5738,7 @@
             ]
           }
         },
-        "footstepSet": "Rubber"
+        "footstepSet": "Glass_Grit_Mono"
       }
     ],
     "fogVolumes": [

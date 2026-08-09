@@ -4,6 +4,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/inspector/SectorEditorInspectorUiState.h"
 #include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
@@ -87,6 +88,52 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorLevelMarkerEditingService& levelMarkerEditing;
     engine::EngineContext* engineContext = nullptr;
 };
+
+inline float MeasureSectorEditorAuthoringFaceInspectorContentHeight(
+        const SectorAuthoringFaceAnchor& anchor,
+        float rowHeight,
+        float gap,
+        float anchorSummaryHeight)
+{
+    const auto decalBlockHeight = [rowHeight, gap](
+            const SectorTopologyDecalLayer& decal,
+            bool includeTintAndFit) {
+        float height = SectorEditorInspectorTextureRowHeight() + gap;
+        if (decal.textureId.empty()) {
+            return height;
+        }
+        height += rowHeight + gap; // Opacity.
+        height += 36.0f + gap; // Emissive.
+        if (decal.emissive) {
+            height += rowHeight + gap; // Bloom.
+        }
+        if (includeTintAndFit) {
+            height += rowHeight + gap; // Tint.
+            height += 36.0f + gap; // Fit/Clear.
+        }
+        return height;
+    };
+
+    float height = 38.0f; // Face title.
+    height += anchorSummaryHeight;
+    height += 4.0f * (rowHeight + gap); // Void, floor, ceiling, and ceiling sky.
+
+    height += 18.0f + 30.0f; // Audio separator/title.
+    height += SectorEditorInspectorTextureRowHeight() + gap; // Footsteps.
+
+    height += 18.0f + 30.0f; // Lighting separator/title.
+    height += 4.0f * (rowHeight + gap); // Intensity and RGB.
+
+    height += 18.0f + 30.0f; // Materials separator/title.
+    height += (SectorEditorInspectorTextureRowHeight() + gap) * 5.0f;
+    height += decalBlockHeight(anchor.floorDecal, true);
+    height += decalBlockHeight(anchor.ceilingDecal, true);
+    height += decalBlockHeight(anchor.defaultWall.decal, false);
+    height += decalBlockHeight(anchor.defaultLower.decal, false);
+    height += decalBlockHeight(anchor.defaultUpper.decal, false);
+    height += rowHeight + gap; // Bottom breathing room.
+    return height;
+}
 
 SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         SectorEditorInspectorPanelContext& context);
