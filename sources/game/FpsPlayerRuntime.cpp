@@ -37,6 +37,7 @@ void FpsPlayerRuntime::Begin(
         }
     };
     state.activeWeaponId = definition->id;
+    cameraRecoilWeaponId = definition->id;
     state.resolvedModelPath = ResolveSectorAssetPath(
             definition->viewmodel.modelPath);
     state.animationName = definition->viewmodel.idleAnimation;
@@ -120,6 +121,7 @@ void FpsPlayerRuntime::End(
     }
     renderer.SetRuntimePointLight(nullptr);
     ResetFpsViewmodelRuntime(state);
+    cameraRecoilWeaponId.clear();
 }
 
 void FpsPlayerRuntime::Update(
@@ -139,6 +141,10 @@ void FpsPlayerRuntime::Update(
         state.loadState = FpsViewmodelLoadState::Failed;
         state.error = "Active weapon definition disappeared";
         return;
+    }
+    if (cameraRecoilWeaponId != state.activeWeaponId) {
+        ResetFpsCameraRecoil(state.firing.cameraRecoil);
+        cameraRecoilWeaponId = state.activeWeaponId;
     }
     state.holsterTransition = ResolveFpsViewmodelHolsterTransition(
             definition->viewmodel.holsterTransition,
@@ -303,7 +309,7 @@ void FpsPlayerRuntime::Update(
             state.attachment.handModelTransform);
 }
 
-void FpsPlayerRuntime::HandleInput(
+bool FpsPlayerRuntime::HandleInput(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::AudioSystem& audio,
@@ -327,7 +333,7 @@ void FpsPlayerRuntime::HandleInput(
                     engine::ConsumeEvent(event);
                 }
             });
-    HandleFireInput(
+    return HandleFireInput(
             input,
             assets,
             audio,
@@ -338,7 +344,7 @@ void FpsPlayerRuntime::HandleInput(
             uiCaptured);
 }
 
-void FpsPlayerRuntime::HandleFireInput(
+bool FpsPlayerRuntime::HandleFireInput(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::AudioSystem& audio,
@@ -348,11 +354,12 @@ void FpsPlayerRuntime::HandleFireInput(
         bool mouseLookActive,
         bool uiCaptured)
 {
+    bool acceptedShot = false;
     input.ForEachEvent(
             engine::InputEventType::MouseButtonPressed,
             true,
             [this, &assets, &audio, collisionWorld, &renderer, gameplayActive,
-                    mouseLookActive, uiCaptured](engine::InputEvent& event) {
+                    mouseLookActive, uiCaptured, &acceptedShot](engine::InputEvent& event) {
                 if (event.mouseButton.button != MOUSE_BUTTON_LEFT) {
                     return;
                 }
@@ -423,6 +430,7 @@ void FpsPlayerRuntime::HandleFireInput(
                             camera);
                 }
                 ApplyFpsWeaponShotEffects(state.firing, shot, emission);
+                acceptedShot = true;
                 audio.PlaySound(
                         assets,
                         state.firing.definition.shootSound,
@@ -434,6 +442,7 @@ void FpsPlayerRuntime::HandleFireInput(
                                 0.0f});
                 engine::ConsumeEvent(event);
             });
+    return acceptedShot;
 }
 
 void FpsPlayerRuntime::UpdateTransformsAndLight(

@@ -128,6 +128,16 @@ bool SameFiringOverride(
             && lhs.recoilRollVariationDegrees == rhs.recoilRollVariationDegrees
             && lhs.recoilSpringFrequencyHz == rhs.recoilSpringFrequencyHz
             && lhs.recoilDampingRatio == rhs.recoilDampingRatio
+            && lhs.cameraRecoilEnabled == rhs.cameraRecoilEnabled
+            && lhs.cameraRecoilPitchKickDegrees == rhs.cameraRecoilPitchKickDegrees
+            && lhs.cameraRecoilPitchVariationDegrees == rhs.cameraRecoilPitchVariationDegrees
+            && lhs.cameraRecoilYawVariationDegrees == rhs.cameraRecoilYawVariationDegrees
+            && lhs.cameraRecoilRollVariationDegrees == rhs.cameraRecoilRollVariationDegrees
+            && lhs.cameraRecoilSpringFrequencyHz == rhs.cameraRecoilSpringFrequencyHz
+            && lhs.cameraRecoilSpringDampingRatio == rhs.cameraRecoilSpringDampingRatio
+            && lhs.cameraRecoilMaxPitchDegrees == rhs.cameraRecoilMaxPitchDegrees
+            && lhs.cameraRecoilMaxYawDegrees == rhs.cameraRecoilMaxYawDegrees
+            && lhs.cameraRecoilMaxRollDegrees == rhs.cameraRecoilMaxRollDegrees
             && SameOptionalVector3(lhs.muzzlePosition, rhs.muzzlePosition)
             && SameOptionalVector3(lhs.muzzleRotationDegrees, rhs.muzzleRotationDegrees)
             && lhs.flashLifetimeSeconds == rhs.flashLifetimeSeconds
@@ -479,7 +489,7 @@ void SectorEditor::UpdateFpsViewmodel(
             dt,
             &tuning);
 }
-void SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
+bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
 {
     const bool gameplay3D = state.mode == SectorEditorMode::Preview3D
             && previewState.controller.previewControlMode
@@ -494,7 +504,7 @@ void SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen();
-    fpsPlayer.HandleFireInput(
+    return fpsPlayer.HandleFireInput(
             input,
             engineContext->assets,
             engineContext->audio,
@@ -565,6 +575,10 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 || runtimeObjectEditingState.staticModelPicker.open
                 || HasDocumentModalOpen();
         if (hasBlockingModal) {
+            if (previewState.controller.previewControlMode
+                    == SectorPreviewControlMode::Gameplay) {
+                ApplyGameplayPoseToPreview();
+            }
             UpdateFpsViewmodelTransformsAndLight();
             const Camera3D& camera = sceneRuntime.Renderer().RenderCamera();
             context.audio.SetListener(engine::AudioListener{
@@ -594,7 +608,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         }
         UpdatePreview3D(input, assets, dt);
         if (state.mode == SectorEditorMode::Preview3D) {
-            ProcessFpsWeaponFire(input);
+            if (ProcessFpsWeaponFire(input)) {
+                ApplyGameplayPoseToPreview();
+            }
             UpdateFpsViewmodelTransformsAndLight();
             const Camera3D& camera = sceneRuntime.Renderer().RenderCamera();
             context.audio.SetListener(engine::AudioListener{
@@ -2144,7 +2160,10 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     true,
                     &sceneRuntime.RuntimeObjects().dynamicPortalBlockers,
                     &engineContext->world);
-            previewState.controller.freeflyController.pose = sceneRuntime.Renderer().RendererPose();
+            previewState.controller.freeflyController.pose =
+                    ActiveSectorEditorPreviewPose(
+                            previewState.controller,
+                            sceneRuntime.Renderer());
         }
         UpdatePreview3DSelection(input);
     }
@@ -5567,6 +5586,7 @@ void SectorEditor::LeavePreview3D()
 {
     CancelSpotLightPilotWithPreviewRestore(nullptr);
     if (previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
         ClearSectorFpsLandingDip(previewState.controller.landingDipState);
         ApplyGameplayPoseToPreview();
     }
@@ -5600,13 +5620,21 @@ SectorViewPose SectorEditor::ActivePreviewPose() const
 
 void SectorEditor::ApplyGameplayPoseToPreview()
 {
-    ApplySectorEditorGameplayPoseToPreview(
-            previewState.controller,
-            sceneRuntime.Renderer());
+    const SectorViewPose basePose = SectorFpsControllerVisualPose(
+            previewState.controller.fpsControllerState,
+            previewState.controller.fpsControllerConfig,
+            previewState.controller.visualStepOffsetY,
+            previewState.controller.headBobState.offset,
+            previewState.controller.landingDipState.offsetY);
+    sceneRuntime.Renderer().ApplyRendererPose(
+            ApplySectorFpsViewRotationOffset(
+                    basePose,
+                    fpsPlayer.State().firing.cameraRecoil.rotationDegrees));
 }
 
 void SectorEditor::TogglePreviewControlMode()
 {
+    ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
     if (!ToggleSectorEditorPreviewControlMode(
                 state.mode == SectorEditorMode::Preview3D,
                 previewState.collision,
@@ -5777,8 +5805,11 @@ void SectorEditor::OpenPreviewSettingsModal()
             NormalizeSectorTopologyFogSettings(TopologyMap().fogSettings);
     state.previewSettingsModal.draftLightmapSettings =
             NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
+    state.previewSettingsModal.weaponId = fpsPlayer.State().activeWeaponId.empty()
+            ? weaponRegistry.initialWeaponId
+            : fpsPlayer.State().activeWeaponId;
     const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
-            weaponRegistry, weaponRegistry.initialWeaponId);
+            weaponRegistry, state.previewSettingsModal.weaponId);
     if (weapon != nullptr) {
         state.previewSettingsModal.viewmodelDefaults = weapon->viewmodel.presentation;
         state.previewSettingsModal.draftViewmodel = ResolveFpsViewmodelPresentation(
@@ -5852,7 +5883,11 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                     != draftLightmapSettings.objectProbeLowerHeightWorld
             || currentLightmapSettings.objectProbeUpperHeightWorld
                     != draftLightmapSettings.objectProbeUpperHeightWorld;
-    const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(weaponRegistry, weaponRegistry.initialWeaponId);
+    const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
+            weaponRegistry,
+            state.previewSettingsModal.weaponId.empty()
+                    ? weaponRegistry.initialWeaponId
+                    : state.previewSettingsModal.weaponId);
     const FpsViewmodelPresentation draftViewmodel = ClampFpsViewmodelPresentation(
             state.previewSettingsModal.draftViewmodel);
     const FpsViewmodelPresentation currentViewmodel = weapon != nullptr
@@ -6880,6 +6915,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
     }
 
     if (previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay) {
+        ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
         ClearSectorFpsLandingDip(previewState.controller.landingDipState);
         ApplyGameplayPoseToPreview();
     }

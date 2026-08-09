@@ -109,6 +109,9 @@ SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
 SectorPreviewSettings SectorPreviewSettingsFromFpsControllerConfig(
         SectorFpsControllerConfig config);
 float ClampSectorFpsPitch(float pitchRadians);
+SectorViewPose ApplySectorFpsViewRotationOffset(
+        SectorViewPose pose,
+        Vector3 rotationOffsetDegrees);
 float SectorFpsCrouchBlend(const SectorFpsControllerState& state);
 bool TryToggleSectorFpsCrouch(
         SectorFpsControllerState& state,

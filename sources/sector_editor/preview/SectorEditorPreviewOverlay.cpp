@@ -818,6 +818,31 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         firing.recoil.rotationDegrees.x,
                         firing.recoil.rotationDegrees.y,
                         firing.recoil.rotationDegrees.z));
+                addKeyValue("camera recoil config", TextFormat(
+                        "%s | kick %.3f +/- %.3f | yaw %.3f | roll %.3f",
+                        firing.definition.cameraRecoil.enabled ? "on" : "off",
+                        firing.definition.cameraRecoil.pitchKickDegrees,
+                        firing.definition.cameraRecoil.pitchVariationDegrees,
+                        firing.definition.cameraRecoil.yawVariationDegrees,
+                        firing.definition.cameraRecoil.rollVariationDegrees));
+                addKeyValue("camera recoil spring", TextFormat(
+                        "%.2f Hz zeta %.2f | max %.2f %.2f %.2f",
+                        firing.definition.cameraRecoil.springFrequencyHz,
+                        firing.definition.cameraRecoil.springDampingRatio,
+                        firing.definition.cameraRecoil.maxPitchDegrees,
+                        firing.definition.cameraRecoil.maxYawDegrees,
+                        firing.definition.cameraRecoil.maxRollDegrees));
+                addKeyValue("camera recoil state", TextFormat(
+                        "R %.3f %.3f %.3f | V %.3f %.3f %.3f | kick %.3f %.3f %.3f",
+                        firing.cameraRecoil.rotationDegrees.x,
+                        firing.cameraRecoil.rotationDegrees.y,
+                        firing.cameraRecoil.rotationDegrees.z,
+                        firing.cameraRecoil.rotationVelocityDegrees.x,
+                        firing.cameraRecoil.rotationVelocityDegrees.y,
+                        firing.cameraRecoil.rotationVelocityDegrees.z,
+                        firing.cameraRecoil.lastKickDegrees.x,
+                        firing.cameraRecoil.lastKickDegrees.y,
+                        firing.cameraRecoil.lastKickDegrees.z));
                 addKeyValue("muzzle effects", TextFormat(
                         "socket %s | flash %s %.3f/%.3f (%.2f) soft %.2f | light %s %.3f",
                         firing.muzzleWorldTransformValid ? "valid" : "invalid",

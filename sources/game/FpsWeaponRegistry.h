@@ -74,6 +74,19 @@ struct FpsWeaponRecoilDefinition {
     Vector3 maximumRotationDegrees{8.0f, 2.0f, 2.0f};
 };
 
+struct FpsWeaponCameraRecoilDefinition {
+    bool enabled = false;
+    float pitchKickDegrees = 0.0f;
+    float pitchVariationDegrees = 0.0f;
+    float yawVariationDegrees = 0.0f;
+    float rollVariationDegrees = 0.0f;
+    float springFrequencyHz = 5.5f;
+    float springDampingRatio = 0.97f;
+    float maxPitchDegrees = 0.0f;
+    float maxYawDegrees = 0.0f;
+    float maxRollDegrees = 0.0f;
+};
+
 struct FpsWeaponMuzzleSocketDefinition {
     Vector3 position{0.0f, 0.035f, 0.105f};
     Vector3 rotationDegrees{0.0f, 0.0f, 0.0f};
@@ -111,6 +124,7 @@ struct FpsWeaponFiringDefinition {
     std::string shootSoundPath;
     engine::SoundHandle shootSound = engine::NullSoundHandle();
     FpsWeaponRecoilDefinition recoil;
+    FpsWeaponCameraRecoilDefinition cameraRecoil;
     FpsWeaponMuzzleSocketDefinition muzzleSocket;
     FpsWeaponMuzzleFlashDefinition muzzleFlash;
     FpsWeaponMuzzleLightDefinition muzzleLight;
@@ -176,6 +190,16 @@ struct FpsWeaponFiringOverride {
     std::optional<float> recoilRollVariationDegrees;
     std::optional<float> recoilSpringFrequencyHz;
     std::optional<float> recoilDampingRatio;
+    std::optional<bool> cameraRecoilEnabled;
+    std::optional<float> cameraRecoilPitchKickDegrees;
+    std::optional<float> cameraRecoilPitchVariationDegrees;
+    std::optional<float> cameraRecoilYawVariationDegrees;
+    std::optional<float> cameraRecoilRollVariationDegrees;
+    std::optional<float> cameraRecoilSpringFrequencyHz;
+    std::optional<float> cameraRecoilSpringDampingRatio;
+    std::optional<float> cameraRecoilMaxPitchDegrees;
+    std::optional<float> cameraRecoilMaxYawDegrees;
+    std::optional<float> cameraRecoilMaxRollDegrees;
     std::optional<Vector3> muzzlePosition;
     std::optional<Vector3> muzzleRotationDegrees;
     std::optional<float> flashLifetimeSeconds;
@@ -355,6 +379,8 @@ FpsWeaponFiringDefinition ResolveFpsWeaponFiringDefinition(
         const FpsWeaponFiringOverride* overrideValue);
 FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
         FpsWeaponFiringDefinition value);
+FpsWeaponCameraRecoilDefinition ClampFpsWeaponCameraRecoilDefinition(
+        FpsWeaponCameraRecoilDefinition value);
 FpsWeaponFiringOverride BuildFpsWeaponFiringOverride(
         const FpsWeaponFiringDefinition& defaults,
         const FpsWeaponFiringDefinition& effective);

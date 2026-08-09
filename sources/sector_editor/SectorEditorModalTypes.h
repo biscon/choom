@@ -178,6 +178,7 @@ struct DoorTextureSettingsModalState {
 struct SectorPreviewSettingsModalState {
     bool open = false;
     PreviewSettingsTab activeTab = PreviewSettingsTab::General;
+    std::string weaponId;
     SectorFpsControllerConfig draftConfig;
     SectorTopologySkySettings draftSkySettings;
     SectorTopologyDirectionalLightSettings draftDirectionalLight;
@@ -236,6 +237,15 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState viewmodelRollInput;
     engine::UIFloatInputState viewmodelScaleInput;
     engine::UIFloatInputState viewmodelFovInput;
+    engine::UIFloatInputState cameraRecoilPitchKickInput;
+    engine::UIFloatInputState cameraRecoilPitchVariationInput;
+    engine::UIFloatInputState cameraRecoilYawVariationInput;
+    engine::UIFloatInputState cameraRecoilRollVariationInput;
+    engine::UIFloatInputState cameraRecoilFrequencyInput;
+    engine::UIFloatInputState cameraRecoilDampingInput;
+    engine::UIFloatInputState cameraRecoilMaxPitchInput;
+    engine::UIFloatInputState cameraRecoilMaxYawInput;
+    engine::UIFloatInputState cameraRecoilMaxRollInput;
     engine::UIFloatInputState viewmodelHolsterDurationInput;
     engine::UIFloatInputState viewmodelUnholsterDurationInput;
     engine::UIFloatInputState viewmodelHiddenTranslationXInput;

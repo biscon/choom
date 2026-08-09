@@ -351,6 +351,15 @@ void ValidateFiring(
             value.recoil.maximumRotationDegrees.x,
             value.recoil.maximumRotationDegrees.y,
             value.recoil.maximumRotationDegrees.z,
+            value.cameraRecoil.pitchKickDegrees,
+            value.cameraRecoil.pitchVariationDegrees,
+            value.cameraRecoil.yawVariationDegrees,
+            value.cameraRecoil.rollVariationDegrees,
+            value.cameraRecoil.springFrequencyHz,
+            value.cameraRecoil.springDampingRatio,
+            value.cameraRecoil.maxPitchDegrees,
+            value.cameraRecoil.maxYawDegrees,
+            value.cameraRecoil.maxRollDegrees,
             value.muzzleSocket.position.x, value.muzzleSocket.position.y,
             value.muzzleSocket.position.z,
             value.muzzleSocket.rotationDegrees.x,
@@ -380,6 +389,17 @@ void ValidateFiring(
             || value.recoil.maximumRotationDegrees.y < 0.0f
             || value.recoil.maximumRotationDegrees.z < 0.0f) {
         Fail(context + ".recoil contains an invalid response or limit");
+    }
+    if (value.cameraRecoil.pitchKickDegrees < 0.0f
+            || value.cameraRecoil.pitchVariationDegrees < 0.0f
+            || value.cameraRecoil.yawVariationDegrees < 0.0f
+            || value.cameraRecoil.rollVariationDegrees < 0.0f
+            || value.cameraRecoil.springFrequencyHz <= 0.0f
+            || value.cameraRecoil.springDampingRatio <= 0.0f
+            || value.cameraRecoil.maxPitchDegrees < 0.0f
+            || value.cameraRecoil.maxYawDegrees < 0.0f
+            || value.cameraRecoil.maxRollDegrees < 0.0f) {
+        Fail(context + ".cameraRecoil contains an invalid kick, response, or limit");
     }
     if (value.muzzleFlash.lifetimeSeconds <= 0.0f
             || value.muzzleFlash.sizeWorld <= 0.0f
@@ -434,6 +454,34 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
     result.recoil.dampingRatio = Number(recoil, "dampingRatio", recoilContext);
     result.recoil.maximumTranslation = Vector(recoil, "maximumTranslation", recoilContext);
     result.recoil.maximumRotationDegrees = Vector(recoil, "maximumRotationDegrees", recoilContext);
+
+    const auto cameraRecoil = object.find("cameraRecoil");
+    if (cameraRecoil != object.end()) {
+        const std::string cameraRecoilContext = context + ".cameraRecoil";
+        if (!cameraRecoil->is_object()) {
+            Fail(cameraRecoilContext + " must be an object");
+        }
+        result.cameraRecoil.enabled = Boolean(
+                *cameraRecoil, "enabled", cameraRecoilContext);
+        result.cameraRecoil.pitchKickDegrees = Number(
+                *cameraRecoil, "pitchKickDegrees", cameraRecoilContext);
+        result.cameraRecoil.pitchVariationDegrees = Number(
+                *cameraRecoil, "pitchVariationDegrees", cameraRecoilContext);
+        result.cameraRecoil.yawVariationDegrees = Number(
+                *cameraRecoil, "yawVariationDegrees", cameraRecoilContext);
+        result.cameraRecoil.rollVariationDegrees = Number(
+                *cameraRecoil, "rollVariationDegrees", cameraRecoilContext);
+        result.cameraRecoil.springFrequencyHz = Number(
+                *cameraRecoil, "springFrequencyHz", cameraRecoilContext);
+        result.cameraRecoil.springDampingRatio = Number(
+                *cameraRecoil, "springDampingRatio", cameraRecoilContext);
+        result.cameraRecoil.maxPitchDegrees = Number(
+                *cameraRecoil, "maxPitchDegrees", cameraRecoilContext);
+        result.cameraRecoil.maxYawDegrees = Number(
+                *cameraRecoil, "maxYawDegrees", cameraRecoilContext);
+        result.cameraRecoil.maxRollDegrees = Number(
+                *cameraRecoil, "maxRollDegrees", cameraRecoilContext);
+    }
 
     const Json& socket = Require(object, "muzzleSocket", context);
     const std::string socketContext = context + ".muzzleSocket";
@@ -494,6 +542,15 @@ std::optional<int> OptionalInteger(const Json& object, const char* name, const s
 {
     if (object.find(name) == object.end()) return std::nullopt;
     return Integer(object, name, context);
+}
+
+std::optional<bool> OptionalBoolean(
+        const Json& object,
+        const char* name,
+        const std::string& context)
+{
+    if (object.find(name) == object.end()) return std::nullopt;
+    return Boolean(object, name, context);
 }
 
 void SetError(std::string* output, const std::string& message) { if (output) *output = message; }
@@ -814,6 +871,16 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                     entry.firing.recoilRollVariationDegrees = OptionalNumber(*firing, "recoilRollVariationDegrees", firingContext);
                     entry.firing.recoilSpringFrequencyHz = OptionalNumber(*firing, "recoilSpringFrequencyHz", firingContext);
                     entry.firing.recoilDampingRatio = OptionalNumber(*firing, "recoilDampingRatio", firingContext);
+                    entry.firing.cameraRecoilEnabled = OptionalBoolean(*firing, "cameraRecoilEnabled", firingContext);
+                    entry.firing.cameraRecoilPitchKickDegrees = OptionalNumber(*firing, "cameraRecoilPitchKickDegrees", firingContext);
+                    entry.firing.cameraRecoilPitchVariationDegrees = OptionalNumber(*firing, "cameraRecoilPitchVariationDegrees", firingContext);
+                    entry.firing.cameraRecoilYawVariationDegrees = OptionalNumber(*firing, "cameraRecoilYawVariationDegrees", firingContext);
+                    entry.firing.cameraRecoilRollVariationDegrees = OptionalNumber(*firing, "cameraRecoilRollVariationDegrees", firingContext);
+                    entry.firing.cameraRecoilSpringFrequencyHz = OptionalNumber(*firing, "cameraRecoilSpringFrequencyHz", firingContext);
+                    entry.firing.cameraRecoilSpringDampingRatio = OptionalNumber(*firing, "cameraRecoilSpringDampingRatio", firingContext);
+                    entry.firing.cameraRecoilMaxPitchDegrees = OptionalNumber(*firing, "cameraRecoilMaxPitchDegrees", firingContext);
+                    entry.firing.cameraRecoilMaxYawDegrees = OptionalNumber(*firing, "cameraRecoilMaxYawDegrees", firingContext);
+                    entry.firing.cameraRecoilMaxRollDegrees = OptionalNumber(*firing, "cameraRecoilMaxRollDegrees", firingContext);
                     entry.firing.muzzlePosition = OptionalVector(*firing, "muzzlePosition", firingContext);
                     entry.firing.muzzleRotationDegrees = OptionalVector(*firing, "muzzleRotationDegrees", firingContext);
                     entry.firing.flashLifetimeSeconds = OptionalNumber(*firing, "flashLifetimeSeconds", firingContext);
@@ -964,6 +1031,16 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         if (entry.firing.recoilRollVariationDegrees) firing["recoilRollVariationDegrees"] = *entry.firing.recoilRollVariationDegrees;
         if (entry.firing.recoilSpringFrequencyHz) firing["recoilSpringFrequencyHz"] = *entry.firing.recoilSpringFrequencyHz;
         if (entry.firing.recoilDampingRatio) firing["recoilDampingRatio"] = *entry.firing.recoilDampingRatio;
+        if (entry.firing.cameraRecoilEnabled) firing["cameraRecoilEnabled"] = *entry.firing.cameraRecoilEnabled;
+        if (entry.firing.cameraRecoilPitchKickDegrees) firing["cameraRecoilPitchKickDegrees"] = *entry.firing.cameraRecoilPitchKickDegrees;
+        if (entry.firing.cameraRecoilPitchVariationDegrees) firing["cameraRecoilPitchVariationDegrees"] = *entry.firing.cameraRecoilPitchVariationDegrees;
+        if (entry.firing.cameraRecoilYawVariationDegrees) firing["cameraRecoilYawVariationDegrees"] = *entry.firing.cameraRecoilYawVariationDegrees;
+        if (entry.firing.cameraRecoilRollVariationDegrees) firing["cameraRecoilRollVariationDegrees"] = *entry.firing.cameraRecoilRollVariationDegrees;
+        if (entry.firing.cameraRecoilSpringFrequencyHz) firing["cameraRecoilSpringFrequencyHz"] = *entry.firing.cameraRecoilSpringFrequencyHz;
+        if (entry.firing.cameraRecoilSpringDampingRatio) firing["cameraRecoilSpringDampingRatio"] = *entry.firing.cameraRecoilSpringDampingRatio;
+        if (entry.firing.cameraRecoilMaxPitchDegrees) firing["cameraRecoilMaxPitchDegrees"] = *entry.firing.cameraRecoilMaxPitchDegrees;
+        if (entry.firing.cameraRecoilMaxYawDegrees) firing["cameraRecoilMaxYawDegrees"] = *entry.firing.cameraRecoilMaxYawDegrees;
+        if (entry.firing.cameraRecoilMaxRollDegrees) firing["cameraRecoilMaxRollDegrees"] = *entry.firing.cameraRecoilMaxRollDegrees;
         if (entry.firing.muzzlePosition) firing["muzzlePosition"] = Vec(*entry.firing.muzzlePosition);
         if (entry.firing.muzzleRotationDegrees) firing["muzzleRotationDegrees"] = Vec(*entry.firing.muzzleRotationDegrees);
         if (entry.firing.flashLifetimeSeconds) firing["flashLifetimeSeconds"] = *entry.firing.flashLifetimeSeconds;
@@ -1495,6 +1572,55 @@ void ClearFpsWeaponFiringOverride(
             }), settings.weapons.end());
 }
 
+FpsWeaponCameraRecoilDefinition ClampFpsWeaponCameraRecoilDefinition(
+        FpsWeaponCameraRecoilDefinition value)
+{
+    const FpsWeaponCameraRecoilDefinition defaults;
+    const auto finiteOr = [](float candidate, float fallback) {
+        return std::isfinite(candidate) ? candidate : fallback;
+    };
+    value.pitchKickDegrees = std::clamp(
+            finiteOr(value.pitchKickDegrees, defaults.pitchKickDegrees),
+            0.0f,
+            45.0f);
+    value.pitchVariationDegrees = std::clamp(
+            finiteOr(value.pitchVariationDegrees,
+                    defaults.pitchVariationDegrees),
+            0.0f,
+            45.0f);
+    value.yawVariationDegrees = std::clamp(
+            finiteOr(value.yawVariationDegrees, defaults.yawVariationDegrees),
+            0.0f,
+            45.0f);
+    value.rollVariationDegrees = std::clamp(
+            finiteOr(value.rollVariationDegrees,
+                    defaults.rollVariationDegrees),
+            0.0f,
+            45.0f);
+    value.springFrequencyHz = std::clamp(
+            finiteOr(value.springFrequencyHz, defaults.springFrequencyHz),
+            0.5f,
+            40.0f);
+    value.springDampingRatio = std::clamp(
+            finiteOr(value.springDampingRatio,
+                    defaults.springDampingRatio),
+            0.1f,
+            3.0f);
+    value.maxPitchDegrees = std::clamp(
+            finiteOr(value.maxPitchDegrees, defaults.maxPitchDegrees),
+            0.0f,
+            90.0f);
+    value.maxYawDegrees = std::clamp(
+            finiteOr(value.maxYawDegrees, defaults.maxYawDegrees),
+            0.0f,
+            90.0f);
+    value.maxRollDegrees = std::clamp(
+            finiteOr(value.maxRollDegrees, defaults.maxRollDegrees),
+            0.0f,
+            90.0f);
+    return value;
+}
+
 FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
         FpsWeaponFiringDefinition value)
 {
@@ -1512,6 +1638,8 @@ FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
     value.recoil.dampingRatio = std::clamp(value.recoil.dampingRatio, 0.1f, 3.0f);
     clampVector(value.recoil.maximumTranslation, 0.0f, 2.0f);
     clampVector(value.recoil.maximumRotationDegrees, 0.0f, 90.0f);
+    value.cameraRecoil = ClampFpsWeaponCameraRecoilDefinition(
+            value.cameraRecoil);
     clampVector(value.muzzleSocket.position, -2.0f, 2.0f);
     clampVector(value.muzzleSocket.rotationDegrees, -360.0f, 360.0f);
     value.muzzleFlash.lifetimeSeconds = std::clamp(value.muzzleFlash.lifetimeSeconds, 0.005f, 60.0f);
@@ -1546,6 +1674,16 @@ FpsWeaponFiringDefinition ResolveFpsWeaponFiringDefinition(
         if (value->recoilRollVariationDegrees) result.recoil.rollVariationDegrees = *value->recoilRollVariationDegrees;
         if (value->recoilSpringFrequencyHz) result.recoil.springFrequencyHz = *value->recoilSpringFrequencyHz;
         if (value->recoilDampingRatio) result.recoil.dampingRatio = *value->recoilDampingRatio;
+        if (value->cameraRecoilEnabled) result.cameraRecoil.enabled = *value->cameraRecoilEnabled;
+        if (value->cameraRecoilPitchKickDegrees) result.cameraRecoil.pitchKickDegrees = *value->cameraRecoilPitchKickDegrees;
+        if (value->cameraRecoilPitchVariationDegrees) result.cameraRecoil.pitchVariationDegrees = *value->cameraRecoilPitchVariationDegrees;
+        if (value->cameraRecoilYawVariationDegrees) result.cameraRecoil.yawVariationDegrees = *value->cameraRecoilYawVariationDegrees;
+        if (value->cameraRecoilRollVariationDegrees) result.cameraRecoil.rollVariationDegrees = *value->cameraRecoilRollVariationDegrees;
+        if (value->cameraRecoilSpringFrequencyHz) result.cameraRecoil.springFrequencyHz = *value->cameraRecoilSpringFrequencyHz;
+        if (value->cameraRecoilSpringDampingRatio) result.cameraRecoil.springDampingRatio = *value->cameraRecoilSpringDampingRatio;
+        if (value->cameraRecoilMaxPitchDegrees) result.cameraRecoil.maxPitchDegrees = *value->cameraRecoilMaxPitchDegrees;
+        if (value->cameraRecoilMaxYawDegrees) result.cameraRecoil.maxYawDegrees = *value->cameraRecoilMaxYawDegrees;
+        if (value->cameraRecoilMaxRollDegrees) result.cameraRecoil.maxRollDegrees = *value->cameraRecoilMaxRollDegrees;
         if (value->muzzlePosition) result.muzzleSocket.position = *value->muzzlePosition;
         if (value->muzzleRotationDegrees) result.muzzleSocket.rotationDegrees = *value->muzzleRotationDegrees;
         if (value->flashLifetimeSeconds) result.muzzleFlash.lifetimeSeconds = *value->flashLifetimeSeconds;
@@ -1576,6 +1714,16 @@ FpsWeaponFiringOverride BuildFpsWeaponFiringOverride(
     if (!NearlyEqual(defaults.recoil.rollVariationDegrees, clean.recoil.rollVariationDegrees)) result.recoilRollVariationDegrees = clean.recoil.rollVariationDegrees;
     if (!NearlyEqual(defaults.recoil.springFrequencyHz, clean.recoil.springFrequencyHz)) result.recoilSpringFrequencyHz = clean.recoil.springFrequencyHz;
     if (!NearlyEqual(defaults.recoil.dampingRatio, clean.recoil.dampingRatio)) result.recoilDampingRatio = clean.recoil.dampingRatio;
+    if (defaults.cameraRecoil.enabled != clean.cameraRecoil.enabled) result.cameraRecoilEnabled = clean.cameraRecoil.enabled;
+    if (!NearlyEqual(defaults.cameraRecoil.pitchKickDegrees, clean.cameraRecoil.pitchKickDegrees)) result.cameraRecoilPitchKickDegrees = clean.cameraRecoil.pitchKickDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.pitchVariationDegrees, clean.cameraRecoil.pitchVariationDegrees)) result.cameraRecoilPitchVariationDegrees = clean.cameraRecoil.pitchVariationDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.yawVariationDegrees, clean.cameraRecoil.yawVariationDegrees)) result.cameraRecoilYawVariationDegrees = clean.cameraRecoil.yawVariationDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.rollVariationDegrees, clean.cameraRecoil.rollVariationDegrees)) result.cameraRecoilRollVariationDegrees = clean.cameraRecoil.rollVariationDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.springFrequencyHz, clean.cameraRecoil.springFrequencyHz)) result.cameraRecoilSpringFrequencyHz = clean.cameraRecoil.springFrequencyHz;
+    if (!NearlyEqual(defaults.cameraRecoil.springDampingRatio, clean.cameraRecoil.springDampingRatio)) result.cameraRecoilSpringDampingRatio = clean.cameraRecoil.springDampingRatio;
+    if (!NearlyEqual(defaults.cameraRecoil.maxPitchDegrees, clean.cameraRecoil.maxPitchDegrees)) result.cameraRecoilMaxPitchDegrees = clean.cameraRecoil.maxPitchDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.maxYawDegrees, clean.cameraRecoil.maxYawDegrees)) result.cameraRecoilMaxYawDegrees = clean.cameraRecoil.maxYawDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.maxRollDegrees, clean.cameraRecoil.maxRollDegrees)) result.cameraRecoilMaxRollDegrees = clean.cameraRecoil.maxRollDegrees;
     if (!Same(defaults.muzzleSocket.position, clean.muzzleSocket.position)) result.muzzlePosition = clean.muzzleSocket.position;
     if (!Same(defaults.muzzleSocket.rotationDegrees, clean.muzzleSocket.rotationDegrees)) result.muzzleRotationDegrees = clean.muzzleSocket.rotationDegrees;
     if (!NearlyEqual(defaults.muzzleFlash.lifetimeSeconds, clean.muzzleFlash.lifetimeSeconds)) result.flashLifetimeSeconds = clean.muzzleFlash.lifetimeSeconds;
@@ -1601,6 +1749,16 @@ bool FpsWeaponFiringOverrideEmpty(const FpsWeaponFiringOverride& value)
             && !value.recoilRollVariationDegrees
             && !value.recoilSpringFrequencyHz
             && !value.recoilDampingRatio
+            && !value.cameraRecoilEnabled
+            && !value.cameraRecoilPitchKickDegrees
+            && !value.cameraRecoilPitchVariationDegrees
+            && !value.cameraRecoilYawVariationDegrees
+            && !value.cameraRecoilRollVariationDegrees
+            && !value.cameraRecoilSpringFrequencyHz
+            && !value.cameraRecoilSpringDampingRatio
+            && !value.cameraRecoilMaxPitchDegrees
+            && !value.cameraRecoilMaxYawDegrees
+            && !value.cameraRecoilMaxRollDegrees
             && !value.muzzlePosition
             && !value.muzzleRotationDegrees
             && !value.flashLifetimeSeconds

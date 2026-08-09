@@ -1261,7 +1261,7 @@ SectorViewPose SectorMeshRenderer::Pose() const
 
 SectorViewPose SectorMeshRenderer::RendererPose() const
 {
-    return SectorViewPose{position, yawRadians, pitchRadians};
+    return SectorViewPose{position, yawRadians, pitchRadians, rollRadians};
 }
 
 void SectorMeshRenderer::ApplyPose(const SectorViewPose& pose)
@@ -1274,6 +1274,7 @@ void SectorMeshRenderer::ApplyRendererPose(const SectorViewPose& pose)
     position = pose.position;
     yawRadians = pose.yawRadians;
     pitchRadians = pose.pitchRadians;
+    rollRadians = pose.rollRadians;
     UpdateCamera();
     UpdateVisibilityDebug();
 }
@@ -1398,16 +1399,12 @@ const Texture2D* SectorMeshRenderer::ResolveShadowCasterTexture(
 
 void SectorMeshRenderer::UpdateCamera()
 {
-    const float cosPitch = std::cos(pitchRadians);
-    const Vector3 look{
-            std::cos(yawRadians) * cosPitch,
-            std::sin(pitchRadians),
-            std::sin(yawRadians) * cosPitch
-    };
+    const SectorViewPose pose{position, yawRadians, pitchRadians, rollRadians};
+    const Vector3 look = SectorViewForward(pose);
 
     camera.position = position;
     camera.target = Vector3Add(position, look);
-    camera.up = Vector3{0.0f, 1.0f, 0.0f};
+    camera.up = SectorViewUp(pose);
 }
 
 } // namespace game

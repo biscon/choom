@@ -39,7 +39,7 @@ public:
             const FpsApplicationSettings& settings,
             float dt,
             const FpsPlayerRuntimeTuning* tuning = nullptr);
-    void HandleInput(
+    bool HandleInput(
             engine::Input& input,
             engine::AssetManager& assets,
             engine::AudioSystem& audio,
@@ -48,7 +48,7 @@ public:
             bool gameplayActive,
             bool mouseLookActive,
             bool uiCaptured);
-    void HandleFireInput(
+    bool HandleFireInput(
             engine::Input& input,
             engine::AssetManager& assets,
             engine::AudioSystem& audio,
@@ -75,6 +75,7 @@ public:
 
 private:
     FpsViewmodelRuntimeState state;
+    std::string cameraRecoilWeaponId;
 };
 
 } // namespace game

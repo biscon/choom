@@ -464,7 +464,7 @@ void DrawPreviewSettingsModal(
 
     auto drawViewmodelTab = [&]() {
         float contentY = 0.0f;
-        const float contentH = 8.0f * (rowH + gap) + 12.0f;
+        const float contentH = 20.0f * (rowH + gap) + 12.0f;
         engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
                 ui, config, input, "sector_editor_preview_settings_viewmodel_scroll",
                 scrollBounds, Vector2{scrollContentW, contentH}, modalState.viewmodelScroll);
@@ -476,7 +476,40 @@ void DrawPreviewSettingsModal(
         drawFloat(contentY, "sector_editor_viewmodel_roll", "Local roll", modalState.draftViewmodel.rotationDegrees.z, modalState.viewmodelRollInput, -360.0f, 360.0f, 2);
         drawFloat(contentY, "sector_editor_viewmodel_scale", "Scale", modalState.draftViewmodel.scale, modalState.viewmodelScaleInput, 0.01f, 10.0f, 3);
         drawFloat(contentY, "sector_editor_viewmodel_fov", "Vertical FOV", modalState.draftViewmodel.verticalFovDegrees, modalState.viewmodelFovInput, 20.0f, 120.0f, 2);
+
+        engine::Text(
+                ui, config, assets,
+                Rectangle{0.0f, contentY, scrollContentW, rowH},
+                font, "Camera recoil", engine::UITextJustify::Left,
+                config.textColor);
+        contentY += rowH + gap;
+        FpsWeaponCameraRecoilDefinition& cameraRecoil =
+                modalState.draftWeaponFiring.cameraRecoil;
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_camera_recoil_enabled",
+                    Rectangle{0.0f, contentY, scrollContentW, rowH},
+                    font,
+                    "Enabled",
+                    cameraRecoil.enabled)) {
+            modalState.errorMessage.clear();
+        }
+        contentY += rowH + gap;
+        drawFloat(contentY, "sector_editor_camera_recoil_pitch_kick", "Pitch kick (degrees)", cameraRecoil.pitchKickDegrees, modalState.cameraRecoilPitchKickInput, 0.0f, 45.0f, 3);
+        drawFloat(contentY, "sector_editor_camera_recoil_pitch_variation", "Pitch variation", cameraRecoil.pitchVariationDegrees, modalState.cameraRecoilPitchVariationInput, 0.0f, 45.0f, 3);
+        drawFloat(contentY, "sector_editor_camera_recoil_yaw_variation", "Yaw variation", cameraRecoil.yawVariationDegrees, modalState.cameraRecoilYawVariationInput, 0.0f, 45.0f, 3);
+        drawFloat(contentY, "sector_editor_camera_recoil_roll_variation", "Roll variation", cameraRecoil.rollVariationDegrees, modalState.cameraRecoilRollVariationInput, 0.0f, 45.0f, 3);
+        drawFloat(contentY, "sector_editor_camera_recoil_frequency", "Spring frequency (Hz)", cameraRecoil.springFrequencyHz, modalState.cameraRecoilFrequencyInput, 0.5f, 40.0f, 2);
+        drawFloat(contentY, "sector_editor_camera_recoil_damping", "Spring damping ratio", cameraRecoil.springDampingRatio, modalState.cameraRecoilDampingInput, 0.1f, 3.0f, 2);
+        drawFloat(contentY, "sector_editor_camera_recoil_max_pitch", "Maximum pitch", cameraRecoil.maxPitchDegrees, modalState.cameraRecoilMaxPitchInput, 0.0f, 90.0f, 2);
+        drawFloat(contentY, "sector_editor_camera_recoil_max_yaw", "Maximum yaw", cameraRecoil.maxYawDegrees, modalState.cameraRecoilMaxYawInput, 0.0f, 90.0f, 2);
+        drawFloat(contentY, "sector_editor_camera_recoil_max_roll", "Maximum roll", cameraRecoil.maxRollDegrees, modalState.cameraRecoilMaxRollInput, 0.0f, 90.0f, 2);
         modalState.draftViewmodel = ClampFpsViewmodelPresentation(modalState.draftViewmodel);
+        modalState.draftWeaponFiring = ClampFpsWeaponFiringDefinition(
+                modalState.draftWeaponFiring);
         engine::EndScrollArea(ui, config, input, scroll, modalState.viewmodelScroll);
     };
 
@@ -586,6 +619,8 @@ void DrawPreviewSettingsModal(
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_reset", Rectangle{modal.x + 30.0f, buttonY, 176.0f, 44.0f}, font, "Reset Defaults")) {
         if (modalState.activeTab == PreviewSettingsTab::Viewmodel) {
             modalState.draftViewmodel = modalState.viewmodelDefaults;
+            modalState.draftWeaponFiring.cameraRecoil =
+                    modalState.weaponFiringDefaults.cameraRecoil;
             modalState.viewmodelPositionXInput = {};
             modalState.viewmodelPositionYInput = {};
             modalState.viewmodelPositionZInput = {};
@@ -594,6 +629,15 @@ void DrawPreviewSettingsModal(
             modalState.viewmodelRollInput = {};
             modalState.viewmodelScaleInput = {};
             modalState.viewmodelFovInput = {};
+            modalState.cameraRecoilPitchKickInput = {};
+            modalState.cameraRecoilPitchVariationInput = {};
+            modalState.cameraRecoilYawVariationInput = {};
+            modalState.cameraRecoilRollVariationInput = {};
+            modalState.cameraRecoilFrequencyInput = {};
+            modalState.cameraRecoilDampingInput = {};
+            modalState.cameraRecoilMaxPitchInput = {};
+            modalState.cameraRecoilMaxYawInput = {};
+            modalState.cameraRecoilMaxRollInput = {};
         } else if (modalState.activeTab == PreviewSettingsTab::Weapon) {
             modalState.draftViewmodelHolsterTransition =
                     modalState.viewmodelHolsterTransitionDefaults;

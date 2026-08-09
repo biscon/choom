@@ -177,6 +177,23 @@ float ClampSectorFpsPitch(float pitchRadians)
     return ClampFinite(pitchRadians, -PitchLimitRadians, PitchLimitRadians, 0.0f);
 }
 
+SectorViewPose ApplySectorFpsViewRotationOffset(
+        SectorViewPose pose,
+        Vector3 rotationOffsetDegrees)
+{
+    const auto finiteOrZero = [](float value) {
+        return std::isfinite(value) ? value : 0.0f;
+    };
+    pose.yawRadians = finiteOrZero(pose.yawRadians)
+            + finiteOrZero(rotationOffsetDegrees.y) * DEG2RAD;
+    pose.pitchRadians = ClampSectorFpsPitch(
+            finiteOrZero(pose.pitchRadians)
+                    + finiteOrZero(rotationOffsetDegrees.x) * DEG2RAD);
+    pose.rollRadians = finiteOrZero(pose.rollRadians)
+            + finiteOrZero(rotationOffsetDegrees.z) * DEG2RAD;
+    return pose;
+}
+
 Vector3 SectorFpsControllerEyePosition(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config)

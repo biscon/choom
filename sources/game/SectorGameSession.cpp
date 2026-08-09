@@ -259,15 +259,17 @@ void SectorGameSession::Update(
                         0.0f,
                         1.0f));
     }
-    ApplyPlayerPose(scene);
-    UpdateAudioListener(context.audio, scene.Renderer().RenderCamera());
+    bool acceptedShot = false;
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
         fpsPlayer.Update(
                 context.assets,
                 *weaponRegistry,
                 *applicationSettings,
                 dt);
-        fpsPlayer.HandleInput(
+    }
+    ApplyPlayerPose(scene);
+    if (weaponRegistry != nullptr && applicationSettings != nullptr) {
+        acceptedShot = fpsPlayer.HandleInput(
                 context.input,
                 context.assets,
                 context.audio,
@@ -278,12 +280,16 @@ void SectorGameSession::Update(
                 true,
                 true,
                 false);
+        if (acceptedShot) {
+            ApplyPlayerPose(scene);
+        }
         fpsPlayer.UpdateTransformsAndLight(
                 scene.Renderer(),
                 collision.sectorCollisionWorldValid
                         ? &collision.sectorCollisionWorld
                         : nullptr);
     }
+    UpdateAudioListener(context.audio, scene.Renderer().RenderCamera());
     const SectorFpsControllerConfig visibilityConfig =
             NormalizeSectorFpsControllerConfig(
                     controller.fpsControllerConfig);
@@ -340,6 +346,7 @@ bool SectorGameSession::RebuildFromMap(
         return false;
     }
     topologyMap = map;
+    ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
     controller.fpsControllerState = savedPlayer;
@@ -402,13 +409,16 @@ bool SectorGameSession::BuildCollisionAndPlayer(
 
 void SectorGameSession::ApplyPlayerPose(SectorSceneRuntime& scene)
 {
-    scene.Renderer().ApplyRendererPose(SectorFpsControllerVisualPose(
+    const SectorViewPose basePose = SectorFpsControllerVisualPose(
             controller.fpsControllerState,
             controller.fpsControllerConfig,
             controller.visualStepOffsetY,
             controller.headBobState.offset,
-            controller.landingDipState.offsetY));
-    controller.freeflyController.pose = scene.Renderer().RendererPose();
+            controller.landingDipState.offsetY);
+    scene.Renderer().ApplyRendererPose(ApplySectorFpsViewRotationOffset(
+            basePose,
+            fpsPlayer.State().firing.cameraRecoil.rotationDegrees));
+    controller.freeflyController.pose = basePose;
 }
 
 } // namespace game

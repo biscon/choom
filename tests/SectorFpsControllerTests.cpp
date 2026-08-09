@@ -242,6 +242,81 @@ void TestHeadBobVisualOnlyPoseLayer()
     Check(Near(state.feetPosition, originalFeet), "visual pose offsets do not mutate physics feet");
 }
 
+void TestCameraRecoilPoseComposition()
+{
+    const game::SectorViewPose base{
+            Vector3{2.0f, 3.0f, 4.0f}, 0.25f, 0.1f, 0.0f};
+    const Vector3 recoilDegrees{0.4f, -0.15f, 0.07f};
+    const game::SectorViewPose effective =
+            game::ApplySectorFpsViewRotationOffset(base, recoilDegrees);
+
+    Check(Near(base.yawRadians, 0.25f)
+                    && Near(base.pitchRadians, 0.1f)
+                    && Near(base.rollRadians, 0.0f),
+          "camera recoil composition leaves base mouse-look pose unchanged");
+    Check(Near(effective.pitchRadians, base.pitchRadians + 0.4f * DEG2RAD),
+          "positive pitch recoil composes as an upward effective-view kick");
+    Check(Near(effective.yawRadians, base.yawRadians - 0.15f * DEG2RAD),
+          "yaw recoil composes into effective aim");
+    Check(Near(effective.rollRadians, 0.07f * DEG2RAD),
+          "roll recoil composes into presentation");
+
+    const game::SectorViewPose withoutRoll =
+            game::ApplySectorFpsViewRotationOffset(
+                    base, Vector3{0.4f, -0.15f, 0.0f});
+    Check(Near(game::SectorViewForward(effective),
+                    game::SectorViewForward(withoutRoll)),
+          "roll recoil does not alter the centre-screen forward ray");
+    Check(!Near(game::SectorViewUp(effective), game::SectorViewUp(withoutRoll)),
+          "roll recoil rotates the rendered camera up vector");
+    Check(Near(Vector3DotProduct(
+                    game::SectorViewForward(effective),
+                    game::SectorViewUp(effective)), 0.0f, 0.0002f),
+          "rolled camera basis remains orthogonal");
+
+    const Vector3 preImpulseDirection = game::SectorViewForward(effective);
+    const game::SectorViewPose nextEffective =
+            game::ApplySectorFpsViewRotationOffset(
+                    base,
+                    Vector3Add(recoilDegrees, Vector3{0.4f, 0.1f, 0.0f}));
+    Check(Near(preImpulseDirection, game::SectorViewForward(effective)),
+          "current shot direction remains the pre-impulse effective direction");
+    Check(!Near(preImpulseDirection, game::SectorViewForward(nextEffective)),
+          "a subsequent shot sees the accumulated recoil direction");
+
+    game::SectorFpsControllerState lookState;
+    lookState.yawRadians = base.yawRadians;
+    lookState.pitchRadians = base.pitchRadians;
+    game::SectorFpsControllerInput lookInput;
+    lookInput.mouseLookEnabled = true;
+    lookInput.mouseDelta = Vector2{5.0f, -3.0f};
+    game::UpdateSectorFpsMouseLook(
+            lookState, game::SectorFpsControllerConfig{}, lookInput);
+    const game::SectorViewPose movedBase = game::SectorFpsControllerPose(
+            lookState, game::SectorFpsControllerConfig{});
+    const game::SectorViewPose movedEffective =
+            game::ApplySectorFpsViewRotationOffset(movedBase, recoilDegrees);
+    Check(!Near(movedEffective.yawRadians, effective.yawRadians)
+                    && !Near(movedEffective.pitchRadians, effective.pitchRadians),
+          "mouse look remains responsive while recoil is active");
+
+    game::SectorViewPose pitchLimit = base;
+    pitchLimit.pitchRadians = game::ClampSectorFpsPitch(1000.0f);
+    const game::SectorViewPose limitedEffective =
+            game::ApplySectorFpsViewRotationOffset(
+                    pitchLimit, Vector3{45.0f, 0.0f, 0.0f});
+    Check(Near(limitedEffective.pitchRadians, pitchLimit.pitchRadians),
+          "effective recoil preserves the existing pitch limit");
+    const game::SectorViewPose finiteEffective =
+            game::ApplySectorFpsViewRotationOffset(
+                    base,
+                    Vector3{NAN, INFINITY, -INFINITY});
+    Check(std::isfinite(finiteEffective.pitchRadians)
+                    && std::isfinite(finiteEffective.yawRadians)
+                    && std::isfinite(finiteEffective.rollRadians),
+          "non-finite recoil offsets cannot corrupt the camera pose");
+}
+
 void TestFootstepCadenceUsesResolvedTravel()
 {
     game::SectorFpsControllerConfig config;
@@ -948,6 +1023,7 @@ int main()
     TestHeadBobUpdatesFromResolvedMovementOnly();
     TestHeadBobInactiveAndDisabledBehavior();
     TestHeadBobVisualOnlyPoseLayer();
+    TestCameraRecoilPoseComposition();
     TestFootstepCadenceUsesResolvedTravel();
     TestFrameEventsReportSuccessfulJumpAndLanding();
     TestLandingDipAmountCurve();

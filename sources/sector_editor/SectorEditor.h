@@ -109,7 +109,7 @@ private:
     void BeginFpsViewmodel(engine::AssetManager& assets);
     void EndFpsViewmodel(engine::AssetManager& assets);
     void UpdateFpsViewmodel(engine::AssetManager& assets, float dt);
-    void ProcessFpsWeaponFire(engine::Input& input);
+    bool ProcessFpsWeaponFire(engine::Input& input);
     void UpdateFpsViewmodelTransformsAndLight();
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingAuthoringLine(const char* message);
