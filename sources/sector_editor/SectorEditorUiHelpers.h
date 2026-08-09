@@ -215,6 +215,8 @@ inline float SectorEditorDoorInspectorContentHeight(
     height += rowH + gap;
     height += rowH + gap;
     height += rowH + gap;
+    height += rowH + gap;
+    height += rowH + gap;
     return height;
 }
 

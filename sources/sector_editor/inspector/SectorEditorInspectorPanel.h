@@ -26,6 +26,7 @@
 namespace game {
 
 class SectorEditorTextureCatalogService;
+class SectorEditorSoundService;
 
 enum class SectorEditorInspectorPanelRequestKind {
     RebuildSectorCollisionWorld,
@@ -80,6 +81,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorMaterialEditingService& materialEditing;
     SectorEditorFootstepService& footsteps;
     SectorEditorTextureCatalogService& textureCatalog;
+    SectorEditorSoundService& sounds;
     SectorEditorLightEditingService& lightEditing;
     SectorEditorAuthoringFogVolumeEditingService& fogVolumeEditing;
     SectorEditorLevelMarkerEditingService& levelMarkerEditing;

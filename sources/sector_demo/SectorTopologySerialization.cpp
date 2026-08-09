@@ -35,6 +35,10 @@ float ReadOptionalFloat(
         const char* field,
         const std::string& context,
         float defaultValue);
+std::string ReadString(
+        const Json& object,
+        const char* field,
+        const std::string& context);
 
 bool IsValidAudioPath(const std::string& path)
 {
@@ -98,14 +102,42 @@ void ValidateAudioSettings(
         Fail(context + ".musicVolume must be a finite number between 0 and 1");
     }
     for (const auto& entry : settings.soundsById) {
+        const SectorSoundDefinition& sound = entry.second;
         if (entry.first.empty()) {
             Fail(context + ".sounds contains an empty sound ID");
         }
-        if (!IsValidAudioPath(entry.second)) {
+        if (sound.id != entry.first) {
+            Fail(context + ".sounds." + entry.first + ".id must match its registry key");
+        }
+        if (!IsValidAudioPath(sound.path)) {
             Fail(context + ".sounds." + entry.first
                     + " must be a relative .ogg, .wav, or .mp3 path beneath assets/audio");
         }
+        if (sound.type != SectorSoundType::Sound
+                && sound.type != SectorSoundType::Music) {
+            Fail(context + ".sounds." + entry.first + ".type is invalid");
+        }
     }
+}
+
+SectorSoundType ReadSoundType(const Json& value, const std::string& context)
+{
+    if (!value.is_string()) {
+        Fail(context + " must be 'sound' or 'music'");
+    }
+    const std::string type = value.get<std::string>();
+    if (type == "sound") return SectorSoundType::Sound;
+    if (type == "music") return SectorSoundType::Music;
+    Fail(context + " must be 'sound' or 'music'");
+}
+
+const char* WriteSoundType(SectorSoundType type)
+{
+    switch (type) {
+        case SectorSoundType::Sound: return "sound";
+        case SectorSoundType::Music: return "music";
+    }
+    Fail("sound type is invalid");
 }
 
 void ReadAudioSettings(const Json& value, SectorLevelAudioSettings& settings)
@@ -127,13 +159,28 @@ void ReadAudioSettings(const Json& value, SectorLevelAudioSettings& settings)
     if (soundsIt != value.end()) {
         if (!soundsIt->is_object()) Fail("root.audio.sounds must be an object");
         for (const auto& entry : soundsIt->items()) {
-            if (entry.key().empty() || !entry.value().is_string()
-                    || entry.value().get<std::string>().empty()) {
-                Fail("root.audio.sounds entries require non-empty IDs and string paths");
+            if (entry.key().empty()) {
+                Fail("root.audio.sounds entries require non-empty IDs");
             }
-            settings.soundsById.emplace(
-                    entry.key(),
-                    entry.value().get<std::string>());
+            SectorSoundDefinition sound;
+            sound.id = entry.key();
+            if (entry.value().is_string()) {
+                sound.path = entry.value().get<std::string>();
+            } else if (entry.value().is_object()) {
+                sound.path = ReadString(entry.value(), "path", "root.audio.sounds." + entry.key());
+                const auto typeIt = entry.value().find("type");
+                if (typeIt != entry.value().end()) {
+                    sound.type = ReadSoundType(
+                            *typeIt,
+                            "root.audio.sounds." + entry.key() + ".type");
+                }
+            } else {
+                Fail("root.audio.sounds entries must be legacy string paths or typed objects");
+            }
+            if (sound.path.empty()) {
+                Fail("root.audio.sounds entries require non-empty paths");
+            }
+            settings.soundsById.emplace(entry.key(), std::move(sound));
         }
     }
     ValidateAudioSettings(settings, "root.audio");
@@ -157,7 +204,11 @@ void WriteAudioSettings(Json& root, const SectorLevelAudioSettings& settings)
         for (const auto& entry : settings.soundsById) ids.push_back(entry.first);
         std::sort(ids.begin(), ids.end());
         for (const std::string& id : ids) {
-            audio["sounds"][id] = settings.soundsById.at(id);
+            const SectorSoundDefinition& sound = settings.soundsById.at(id);
+            audio["sounds"][id] = Json{
+                    {"path", sound.path},
+                    {"type", WriteSoundType(sound.type)}
+            };
         }
     }
     root["audio"] = std::move(audio);
@@ -703,6 +754,8 @@ SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
             context,
             door.autoOpenDistance);
     door.textureId = ReadOptionalString(value, "textureId", context, door.textureId);
+    door.openSoundId = ReadOptionalString(value, "openSoundId", context, door.openSoundId);
+    door.closeSoundId = ReadOptionalString(value, "closeSoundId", context, door.closeSoundId);
     ReadOptionalDoorFaceUvs(value, "faceUvs", context, door.faceUvs);
     ValidatePlacedDoorForSerialization(door, context);
     return door;
@@ -1653,6 +1706,12 @@ Json WritePlacedDoor(const SectorPlacedDoor& door)
     }
     if (!door.textureId.empty()) {
         json["textureId"] = door.textureId;
+    }
+    if (!door.openSoundId.empty()) {
+        json["openSoundId"] = door.openSoundId;
+    }
+    if (!door.closeSoundId.empty()) {
+        json["closeSoundId"] = door.closeSoundId;
     }
     if (!IsDefaultDoorFaceUvSet(door.faceUvs)) {
         json["faceUvs"] = WriteDoorFaceUvSet(door.faceUvs, "door.faceUvs");

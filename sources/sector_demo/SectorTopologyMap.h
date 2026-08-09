@@ -57,12 +57,23 @@ struct SectorTopologyFogSettings {
     } localVolumeQuality = LocalVolumeQuality::Medium;
 };
 
+enum class SectorSoundType {
+    Sound,
+    Music
+};
+
+struct SectorSoundDefinition {
+    std::string id;
+    std::string path;
+    SectorSoundType type = SectorSoundType::Sound;
+};
+
 struct SectorLevelAudioSettings {
     static constexpr float DefaultMusicVolume = 0.6f;
 
     std::string musicPath;
     float musicVolume = DefaultMusicVolume;
-    std::unordered_map<std::string, std::string> soundsById;
+    std::unordered_map<std::string, SectorSoundDefinition> soundsById;
 };
 
 struct SectorCompiledLocalFogVolume {
@@ -166,6 +177,8 @@ struct SectorPlacedDoor {
     float interactionDistance = 1.5f;
     float autoOpenDistance = 2.0f;
     std::string textureId;
+    std::string openSoundId;
+    std::string closeSoundId;
     SectorDoorFaceUvSet faceUvs;
 };
 

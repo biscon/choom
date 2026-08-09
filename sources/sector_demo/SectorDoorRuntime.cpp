@@ -1,5 +1,7 @@
 #include "sector_demo/SectorDoorRuntime.h"
 
+#include "engine/assets/AssetManager.h"
+#include "engine/audio/AudioSystem.h"
 #include "sector_demo/SectorBounds.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMath.h"
@@ -1124,6 +1126,60 @@ void AdvanceSectorDoorMotionSystem(engine::World& world, float dt)
                 } else if (motion.openFraction > motion.targetOpenFraction) {
                     motion.openFraction = std::max(motion.openFraction - fractionStep, motion.targetOpenFraction);
                 }
+            });
+}
+
+SectorDoorAudioEvent UpdateSectorDoorAudioTransition(
+        SectorDoorAudio& audio,
+        const SectorDoorMotion& motion)
+{
+    const bool targetOpen = std::isfinite(motion.targetOpenFraction)
+            && Clamp(motion.targetOpenFraction, 0.0f, 1.0f) > 0.5f;
+    if (targetOpen == audio.targetWasOpen) {
+        return SectorDoorAudioEvent::None;
+    }
+    audio.targetWasOpen = targetOpen;
+    audio.pendingEvent = targetOpen
+            ? SectorDoorAudioEvent::Open
+            : SectorDoorAudioEvent::Close;
+    return audio.pendingEvent;
+}
+
+void UpdateSectorDoorAudioSystem(
+        engine::World& world,
+        engine::AssetManager& assets,
+        engine::AudioSystem& audioSystem)
+{
+    world.ForEach<SectorObjectTransform, SectorDoor, SectorDoorMotion, SectorDoorAudio>(
+            [&assets, &audioSystem](
+                    engine::Entity,
+                    SectorObjectTransform& transform,
+                    SectorDoor& door,
+                    SectorDoorMotion& motion,
+                    SectorDoorAudio& audio) {
+                if (!door.enabled) {
+                    return;
+                }
+                UpdateSectorDoorAudioTransition(audio, motion);
+                if (audio.pendingEvent == SectorDoorAudioEvent::None) {
+                    return;
+                }
+
+                const engine::SoundHandle sound = audio.pendingEvent == SectorDoorAudioEvent::Open
+                        ? audio.openSound
+                        : audio.closeSound;
+                if (engine::IsNull(sound) || assets.HasFailed(sound)) {
+                    audio.pendingEvent = SectorDoorAudioEvent::None;
+                    return;
+                }
+                if (!assets.IsReady(sound)) {
+                    return;
+                }
+
+                engine::PositionalSoundSettings positional;
+                positional.position = transform.position;
+                audioSystem.PlaySoundAt(assets, sound, positional);
+                audio.pendingEvent = SectorDoorAudioEvent::None;
             });
 }
 

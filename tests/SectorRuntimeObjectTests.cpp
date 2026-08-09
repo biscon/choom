@@ -893,6 +893,8 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
     door.interactionDistance = 2.25f;
     door.autoOpenDistance = 3.5f;
     door.textureId = "test_door";
+    door.openSoundId = "door_open";
+    door.closeSoundId = "door_close";
     map.runtimeObjects.push_back(MakePlacedDoor(35, door));
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -920,6 +922,7 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
     Check(world.Has<game::SectorDoor>(entity)
                   && world.Has<game::SectorDoorResolvedAnchor>(entity)
                   && world.Has<game::SectorDoorMotion>(entity)
+                  && world.Has<game::SectorDoorAudio>(entity)
                   && world.Has<game::SectorDoorInteraction>(entity)
                   && world.Has<game::SectorDoorRender>(entity)
                   && world.Has<game::SectorDoorCollider>(entity)
@@ -969,6 +972,15 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
                   && Near(interaction.interactionDistance, 2.25f)
                   && Near(interaction.autoOpenDistance, 3.5f),
             "valid placed door interaction component copies authored interaction settings");
+
+    const game::SectorDoorAudio& audio = world.Get<game::SectorDoorAudio>(entity);
+    Check(audio.openSoundId == "door_open"
+                  && audio.closeSoundId == "door_close"
+                  && engine::IsNull(audio.openSound)
+                  && engine::IsNull(audio.closeSound)
+                  && !audio.targetWasOpen
+                  && audio.pendingEvent == game::SectorDoorAudioEvent::None,
+            "valid placed door audio component copies IDs without loading during spawn");
 
     const game::SectorDoorRender& render = world.Get<game::SectorDoorRender>(entity);
     Check(Near(render.width, 2.0f)
@@ -4528,6 +4540,32 @@ void TestStaticModelColliderLandingUndersideAndWalkOff()
 
 } // namespace
 
+void TestSectorDoorAudioTransitionTracksTargetChanges()
+{
+    game::SectorDoorAudio audio;
+    game::SectorDoorMotion motion;
+
+    Check(game::UpdateSectorDoorAudioTransition(audio, motion)
+                  == game::SectorDoorAudioEvent::None,
+          "door audio does not fire for its initial closed target");
+    motion.targetOpenFraction = 1.0f;
+    Check(game::UpdateSectorDoorAudioTransition(audio, motion)
+                  == game::SectorDoorAudioEvent::Open
+                  && audio.pendingEvent == game::SectorDoorAudioEvent::Open
+                  && audio.targetWasOpen,
+          "door audio queues open when the target changes to open");
+    Check(game::UpdateSectorDoorAudioTransition(audio, motion)
+                  == game::SectorDoorAudioEvent::None
+                  && audio.pendingEvent == game::SectorDoorAudioEvent::Open,
+          "door audio keeps a pending event without retriggering a stable target");
+    motion.targetOpenFraction = 0.0f;
+    Check(game::UpdateSectorDoorAudioTransition(audio, motion)
+                  == game::SectorDoorAudioEvent::Close
+                  && audio.pendingEvent == game::SectorDoorAudioEvent::Close
+                  && !audio.targetWasOpen,
+          "door audio replaces the pending event on a close reversal");
+}
+
 int main()
 {
     TestResolveSectorDoorAnchorValidPortal();
@@ -4567,6 +4605,7 @@ int main()
     TestSpawnPlacedDoorDerivesDefaultOpenDistance();
     TestSectorDoorMotionAdvancesOpenAndClosed();
     TestSectorDoorMotionClampsAndIgnoresZeroSpeed();
+    TestSectorDoorAudioTransitionTracksTargetChanges();
     TestSectorDoorAutoOpenSetsTargetFromPlayerRange();
     TestSectorDoorAutoOpenIgnoresDisabledAndInvalidPlayerPosition();
     TestSectorDoorInteractTogglesNearestManualDoorInFront();

@@ -30,6 +30,7 @@ bool SectorSceneRuntime::Rebuild(
             runtimeObjects,
             map);
     BeginLevelAudio(context, map, assetScopeName, defaultFootstepSet);
+    BindRuntimeObjectAudio(context.world);
     return true;
 }
 
@@ -49,6 +50,7 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
             context.assets,
             runtimeObjects,
             map);
+    BindRuntimeObjectAudio(context.world);
 }
 
 void SectorSceneRuntime::Update(
@@ -65,6 +67,10 @@ void SectorSceneRuntime::Update(
             map,
             dt,
             playerPosition);
+    UpdateSectorDoorAudioSystem(
+            context.world,
+            context.assets,
+            context.audio);
     renderer.FinalizeRuntimeObjectResources(context.assets, context.world);
     runtimeObjects.dynamicDoorColliders.clear();
     CollectSectorDoorDynamicColliders(
@@ -87,18 +93,22 @@ void SectorSceneRuntime::StopLevelAudio(engine::EngineContext& context)
             context.audio.StopSoundAsset(context.assets, sound);
         }
     }
-    if (!engine::IsNull(levelMusic)) {
-        context.audio.StopMusic(context.assets, levelMusic);
+    for (const auto& entry : levelMusicById) {
+        context.audio.StopMusic(context.assets, entry.second);
+    }
+    if (!engine::IsNull(backgroundMusic)) {
+        context.audio.StopMusic(context.assets, backgroundMusic);
     }
     if (!engine::IsNull(audioScope)) {
         context.assets.UnloadScope(audioScope);
     }
     audioScope = engine::NullAssetScopeHandle();
     levelSounds.clear();
+    levelMusicById.clear();
     footstepSets.clear();
     footstepSetBySectorId.clear();
     footstepPlayback = FootstepPlaybackState{};
-    levelMusic = engine::NullMusicHandle();
+    backgroundMusic = engine::NullMusicHandle();
     levelMusicVolume = SectorLevelAudioSettings::DefaultMusicVolume;
     levelMusicStartPending = false;
     levelMusicFailureReported = false;
@@ -150,6 +160,15 @@ engine::SoundHandle SectorSceneRuntime::FindLevelSound(
     const auto found = levelSounds.find(id);
     return found == levelSounds.end()
             ? engine::NullSoundHandle()
+            : found->second;
+}
+
+engine::MusicHandle SectorSceneRuntime::FindLevelMusic(
+        const std::string& id) const
+{
+    const auto found = levelMusicById.find(id);
+    return found == levelMusicById.end()
+            ? engine::NullMusicHandle()
             : found->second;
 }
 
@@ -211,12 +230,21 @@ void SectorSceneRuntime::BeginLevelAudio(
         return;
     }
     levelSounds.reserve(map.audioSettings.soundsById.size());
+    levelMusicById.reserve(map.audioSettings.soundsById.size());
     for (const auto& entry : map.audioSettings.soundsById) {
-        const std::string path = ResolveSectorAudioAssetPath(entry.second);
-        const engine::SoundHandle handle = context.assets.RequestSound(
-                audioScope,
-                path.c_str());
-        if (!engine::IsNull(handle)) levelSounds.emplace(entry.first, handle);
+        const SectorSoundDefinition& definition = entry.second;
+        const std::string path = ResolveSectorAudioAssetPath(definition.path);
+        if (definition.type == SectorSoundType::Music) {
+            const engine::MusicHandle handle = context.assets.RequestMusic(
+                    audioScope,
+                    path.c_str());
+            if (!engine::IsNull(handle)) levelMusicById.emplace(entry.first, handle);
+        } else {
+            const engine::SoundHandle handle = context.assets.RequestSound(
+                    audioScope,
+                    path.c_str());
+            if (!engine::IsNull(handle)) levelSounds.emplace(entry.first, handle);
+        }
     }
     size_t maximumVariationCount = 0;
     size_t maximumSetIdLength = 0;
@@ -245,27 +273,37 @@ void SectorSceneRuntime::BeginLevelAudio(
     if (!map.audioSettings.musicPath.empty()) {
         const std::string path = ResolveSectorAudioAssetPath(
                 map.audioSettings.musicPath);
-        levelMusic = context.assets.RequestMusic(audioScope, path.c_str());
+        backgroundMusic = context.assets.RequestMusic(audioScope, path.c_str());
         levelMusicVolume = map.audioSettings.musicVolume;
-        levelMusicStartPending = !engine::IsNull(levelMusic);
+        levelMusicStartPending = !engine::IsNull(backgroundMusic);
     }
+}
+
+void SectorSceneRuntime::BindRuntimeObjectAudio(engine::World& world)
+{
+    world.ForEach<SectorDoor, SectorDoorAudio>(
+            [this](engine::Entity, SectorDoor&, SectorDoorAudio& audio) {
+                audio.openSound = FindLevelSound(audio.openSoundId);
+                audio.closeSound = FindLevelSound(audio.closeSoundId);
+                audio.pendingEvent = SectorDoorAudioEvent::None;
+            });
 }
 
 void SectorSceneRuntime::UpdateLevelAudio(engine::EngineContext& context)
 {
-    if (!levelMusicStartPending || engine::IsNull(levelMusic)) return;
-    if (context.assets.IsReady(levelMusic)) {
+    if (!levelMusicStartPending || engine::IsNull(backgroundMusic)) return;
+    if (context.assets.IsReady(backgroundMusic)) {
         engine::MusicPlaybackSettings settings;
         settings.volume = levelMusicVolume;
         if (context.audio.PlayMusic(
                     context.assets,
-                    levelMusic,
+                    backgroundMusic,
                     settings)) {
             levelMusicStartPending = false;
         }
         return;
     }
-    if (context.assets.HasFailed(levelMusic)) {
+    if (context.assets.HasFailed(backgroundMusic)) {
         if (!levelMusicFailureReported) {
             TraceLog(LOG_WARNING, "Configured level music failed to load");
             levelMusicFailureReported = true;

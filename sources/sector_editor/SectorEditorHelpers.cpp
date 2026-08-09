@@ -156,6 +156,15 @@ bool HasJsonExtension(const std::filesystem::path& path)
     return extension == ".json";
 }
 
+bool HasAudioExtension(const std::filesystem::path& path)
+{
+    std::string extension = path.extension().string();
+    for (char& ch : extension) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return extension == ".wav" || extension == ".ogg" || extension == ".mp3";
+}
+
 std::string ExtractSpriteClipNameFromFrameName(const std::string& frameName)
 {
     const size_t marker = frameName.find('#');
@@ -295,6 +304,62 @@ std::vector<std::string> ScanAssetImagePngs(std::string& message)
     std::sort(paths.begin(), paths.end());
     if (paths.empty() && message.empty()) {
         message = "No PNG files found under assets/images";
+    }
+    return paths;
+}
+
+std::vector<std::string> ScanAssetAudioFiles(std::string& message)
+{
+    return ScanAssetAudioFiles(std::filesystem::path(ASSETS_PATH), message);
+}
+
+std::vector<std::string> ScanAssetAudioFiles(
+        const std::filesystem::path& assetsRoot,
+        std::string& message)
+{
+    std::vector<std::string> paths;
+    message.clear();
+    const std::filesystem::path audioRoot = assetsRoot / "audio";
+    std::error_code ec;
+    if (!std::filesystem::exists(audioRoot, ec)
+            || !std::filesystem::is_directory(audioRoot, ec)) {
+        message = "assets/audio was not found";
+        return paths;
+    }
+
+    std::filesystem::recursive_directory_iterator it(
+            audioRoot,
+            std::filesystem::directory_options::skip_permission_denied,
+            ec);
+    const std::filesystem::recursive_directory_iterator end;
+    if (ec) {
+        message = TextFormat("Could not scan assets/audio: %s", ec.message().c_str());
+        return paths;
+    }
+
+    for (; it != end; it.increment(ec)) {
+        if (ec) {
+            message = TextFormat("Stopped scan early: %s", ec.message().c_str());
+            break;
+        }
+        const std::filesystem::directory_entry& entry = *it;
+        if (!entry.is_regular_file(ec) || ec || !HasAudioExtension(entry.path())) {
+            ec.clear();
+            continue;
+        }
+        const std::filesystem::path relative = std::filesystem::relative(
+                entry.path(),
+                audioRoot,
+                ec);
+        if (ec) {
+            ec.clear();
+            continue;
+        }
+        paths.push_back(relative.generic_string());
+    }
+    std::sort(paths.begin(), paths.end());
+    if (paths.empty() && message.empty()) {
+        message = "No WAV, OGG, or MP3 files found under assets/audio";
     }
     return paths;
 }
@@ -544,6 +609,12 @@ std::string GeneratedTextureIdBase(const std::string& assetPath)
         id.pop_back();
     }
     return id.empty() ? "texture" : id;
+}
+
+std::string GeneratedSoundIdBase(const std::string& assetPath)
+{
+    std::string id = GeneratedTextureIdBase(assetPath);
+    return id == "texture" ? "sound" : id;
 }
 
 const char* ToolName(SectorEditorTool tool)

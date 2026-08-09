@@ -11,6 +11,7 @@
 namespace game {
 
 class SectorEditorTextureCatalogService;
+class SectorEditorSoundService;
 struct SectorRuntimeObjectState;
 
 struct SectorEditorPlacedObjectInspectorMeasureContext {
@@ -23,6 +24,7 @@ struct SectorEditorPlacedObjectInspectorMeasureContext {
     SectorEditorRuntimeObjectEditingService& editing;
     RuntimeObjectEditingState& editingState;
     SectorEditorTextureCatalogService& textureCatalog;
+    SectorEditorSoundService& sounds;
     float contentW = 0.0f;
     float rowH = 0.0f;
     float gap = 0.0f;
@@ -48,6 +50,7 @@ struct SectorEditorPlacedObjectInspectorContext {
     std::string& statusText;
     bool& deleteRequested;
     SectorEditorTextureCatalogService& textureCatalog;
+    SectorEditorSoundService& sounds;
     float contentW = 0.0f;
     float rowH = 0.0f;
     float gap = 0.0f;

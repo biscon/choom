@@ -12,6 +12,8 @@
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/sounds/SectorEditorSoundCatalogState.h"
+#include "sector_editor/services/sounds/SectorEditorSoundService.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogState.h"
@@ -201,6 +203,16 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawAddMapSoundModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::FontHandle font);
+    void DrawSoundPickerModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::FontHandle font);
     void DrawSpritePickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -377,6 +389,8 @@ private:
     SectorEditorLightEditingService BuildLightEditingService();
     SectorEditorRuntimeObjectEditingService BuildRuntimeObjectEditingService(
             SectorEditorSelectionServiceContext* selectionService = nullptr);
+    SectorEditorSoundService BuildSoundService(
+            SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr);
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorDocumentLifecycleAccess Lifecycle();
     SectorEditorConstDocumentLifecycleAccess Lifecycle() const;
@@ -423,6 +437,7 @@ private:
     RuntimeObjectEditingUiState runtimeObjectEditingUiState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
+    SectorEditorSoundCatalogState soundCatalogState;
     MaterialEditingState materialEditingState;
     MaterialEditingUiState materialEditingUiState;
     FogVolumeEditingUiState fogVolumeEditingUiState;

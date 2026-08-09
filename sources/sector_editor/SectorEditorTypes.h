@@ -97,6 +97,8 @@ struct SectorEditorState {
     TexturePickerState texturePicker;
     FootstepPickerState footstepPicker;
     AddMapTextureState addMapTexture;
+    AddMapSoundState addMapSound;
+    SoundPickerState soundPicker;
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;

@@ -6505,6 +6505,27 @@ void TestEditorMapTextureImportPreservesMapLevelRegistryOnly()
           "texture catalog picker options preserve current texture selection");
 }
 
+void TestAudioScannerFindsSupportedFilesRecursively()
+{
+    const std::filesystem::path assetsRoot = TempDirectoryPath("sector_audio_scan_assets");
+    RecreateTempDirectory(assetsRoot / "audio" / "doors");
+    WriteTextFile(assetsRoot / "audio" / "ambience.ogg", "fixture");
+    WriteTextFile(assetsRoot / "audio" / "doors" / "close.MP3", "fixture");
+    WriteTextFile(assetsRoot / "audio" / "doors" / "open.wav", "fixture");
+    WriteTextFile(assetsRoot / "audio" / "doors" / "ignored.txt", "fixture");
+
+    std::string message;
+    const std::vector<std::string> sounds =
+            game::ScanAssetAudioFiles(assetsRoot, message);
+    Check(sounds == std::vector<std::string>({
+                  "ambience.ogg", "doors/close.MP3", "doors/open.wav"}),
+          "audio scan recursively returns sorted supported files relative to assets/audio");
+    Check(message.empty(), "audio scan leaves message empty when candidates are found");
+
+    std::error_code ec;
+    std::filesystem::remove_all(assetsRoot, ec);
+}
+
 void TestSpriteMetadataScannerFindsNestedJsonAndFrameTagClips()
 {
     const std::filesystem::path assetsRoot = TempDirectoryPath("sector_sprite_scan_tags_assets");
@@ -9499,7 +9520,8 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
     source.audioSettings.musicPath = "ambience/import_theme.wav";
     source.audioSettings.musicVolume = 1.0f;
     source.audioSettings.soundsById.emplace(
-            "import_hum", "ambience/import_hum.ogg");
+            "import_hum", game::SectorSoundDefinition{
+                    "import_hum", "ambience/import_hum.ogg", game::SectorSoundType::Sound});
     std::string topologyText;
     std::string error;
     Check(game::SaveSectorTopologyMapToJsonString(source, topologyText, &error),
@@ -9522,7 +9544,7 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
                       == source.audioSettings.musicPath
                   && Near(documentState.map.topologyMap.audioSettings.musicVolume, 1.0f)
                   && documentState.map.topologyMap.audioSettings.soundsById.at(
-                             "import_hum")
+                             "import_hum").path
                              == "ambience/import_hum.ogg",
           "legacy topology import preserves map-level audio settings");
 
@@ -9537,7 +9559,7 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
     Check(saved.contains("authoringGraph"), "save after topology-v2 import writes authoring graph");
     Check(saved["audio"]["music"] == "ambience/import_theme.wav"
                   && Near(saved["audio"]["musicVolume"].get<float>(), 1.0f)
-                  && saved["audio"]["sounds"]["import_hum"]
+                  && saved["audio"]["sounds"]["import_hum"]["path"]
                              == "ambience/import_hum.ogg",
           "save after topology-v2 import preserves map-level audio settings");
     std::error_code removeError;
@@ -9738,7 +9760,8 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
             "ambience/graph_theme.wav";
     documentState.map.topologyMap.audioSettings.musicVolume = 1.0f;
     documentState.map.topologyMap.audioSettings.soundsById.emplace(
-            "graph_hum", "ambience/graph_hum.ogg");
+            "graph_hum", game::SectorSoundDefinition{
+                    "graph_hum", "ambience/graph_hum.ogg", game::SectorSoundType::Sound});
     documentState.map.topologyMap.lightmapSettings.ambientOcclusionStrength = 0.25f;
     documentState.map.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             44,
@@ -9770,7 +9793,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
           "editor graph-native save persists directional light");
     Check(saved["audio"]["music"] == "ambience/graph_theme.wav"
                   && Near(saved["audio"]["musicVolume"].get<float>(), 1.0f)
-                  && saved["audio"]["sounds"]["graph_hum"]
+                  && saved["audio"]["sounds"]["graph_hum"]["path"]
                              == "ambience/graph_hum.ogg",
           "editor graph-native save persists map-level audio settings");
     Check(saved["lightmapSettings"]["ambientOcclusionStrength"] == 0.25f,
@@ -9805,7 +9828,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && loaded.mapData.audioSettings.musicPath
                              == "ambience/graph_theme.wav"
                   && Near(loaded.mapData.audioSettings.musicVolume, 1.0f)
-                  && loaded.mapData.audioSettings.soundsById.at("graph_hum")
+                  && loaded.mapData.audioSettings.soundsById.at("graph_hum").path
                              == "ambience/graph_hum.ogg"
                   && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f)
                   && loaded.mapData.bakedLightmap.path == lightmapPath.string()
@@ -9831,7 +9854,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                              loadedDocumentState.map.topologyMap.audioSettings.musicVolume,
                              1.0f)
                   && loadedDocumentState.map.topologyMap.audioSettings.soundsById.at(
-                             "graph_hum")
+                             "graph_hum").path
                              == "ambience/graph_hum.ogg"
                   && loadedDocumentState.map.topologyMap.bakedLightmap.path == lightmapPath.string()
                   && loadedDocumentState.map.topologyMap.runtimeObjects.size() == 1
@@ -10975,6 +10998,7 @@ int main()
     TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture();
     TestEditorMapTextureImportPreservesMapLevelRegistryOnly();
     TestSpriteMetadataScannerFindsNestedJsonAndFrameTagClips();
+    TestAudioScannerFindsSupportedFilesRecursively();
     TestSpriteMetadataScannerFallsBackToFrameNamesAndDefaultClip();
     TestSpriteMetadataScannerRejectsMissingSpritesDirectory();
     TestSpritePickerSelectsSpriteMetadata();

@@ -226,6 +226,7 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
+            sources/engine/audio/AudioSystem.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
@@ -397,6 +398,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
+            sources/engine/audio/AudioSystem.cpp
             sources/engine/systems/AnimatedModelSystem.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp

@@ -49,6 +49,7 @@ public:
     const SectorRuntimeObjectState& RuntimeObjects() const { return runtimeObjects; }
     bool IsReady() const { return renderer.IsRendererReady(); }
     engine::SoundHandle FindLevelSound(const std::string& id) const;
+    engine::MusicHandle FindLevelMusic(const std::string& id) const;
     engine::SoundPlaybackHandle PlayFootstepForSector(
             engine::EngineContext& context,
             int sectorId,
@@ -66,15 +67,17 @@ private:
             const char* scopeName,
             const std::string& defaultFootstepSet);
     void UpdateLevelAudio(engine::EngineContext& context);
+    void BindRuntimeObjectAudio(engine::World& world);
 
     SectorMeshRenderer renderer;
     SectorRuntimeObjectState runtimeObjects;
     engine::AssetScopeHandle audioScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::SoundHandle> levelSounds;
+    std::unordered_map<std::string, engine::MusicHandle> levelMusicById;
     std::unordered_map<std::string, LoadedFootstepSet> footstepSets;
     std::unordered_map<int, std::string> footstepSetBySectorId;
     FootstepPlaybackState footstepPlayback;
-    engine::MusicHandle levelMusic = engine::NullMusicHandle();
+    engine::MusicHandle backgroundMusic = engine::NullMusicHandle();
     float levelMusicVolume = SectorLevelAudioSettings::DefaultMusicVolume;
     bool levelMusicStartPending = false;
     bool levelMusicFailureReported = false;

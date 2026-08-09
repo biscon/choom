@@ -446,6 +446,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     runtimeObjectEditing,
                     context.runtimeObjectEditingState,
                     textureCatalog,
+                    context.sounds,
                     scrollContentW,
                     rowH,
                     gap
@@ -611,6 +612,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 statusText,
                 deleteRuntimeObjectRequested,
                 textureCatalog,
+                context.sounds,
                 contentW,
                 rowH,
                 gap

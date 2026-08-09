@@ -207,10 +207,12 @@ void TestDoorInspectorHeightCountsCoreRows()
             + textureStatusHeight + gap
             + rowH + gap
             + rowH + gap
+            + rowH + gap
+            + rowH + gap
             + rowH + gap;
 
     Check(Near(height, expected),
-          "door inspector height includes anchor, core fields, motion, interaction controls, texture status, texture buttons, and delete");
+          "door inspector height includes anchor, core fields, motion, interaction controls, asset status, texture and sound buttons, and delete");
 }
 
 void TestDoorTextureSettingsModalLayoutDoesNotOverlap()

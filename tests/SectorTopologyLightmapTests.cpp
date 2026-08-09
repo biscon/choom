@@ -1466,7 +1466,8 @@ void TestSourceHashChanges()
     changedAudio.audioSettings.musicPath = "music/level_theme.ogg";
     changedAudio.audioSettings.musicVolume = 0.35f;
     changedAudio.audioSettings.soundsById.emplace(
-            "door_open", "shared/door_open.wav");
+            "door_open", game::SectorSoundDefinition{
+                    "door_open", "shared/door_open.wav", game::SectorSoundType::Sound});
     Check(game::ComputeSectorLightmapSourceHash(changedAudio) == hash,
           "hash ignores runtime-only audio settings");
 

@@ -91,6 +91,49 @@ struct AddMapTextureState {
     SectorTextureFilter previewFilter = SectorTextureFilter::Anisotropic8x;
 };
 
+enum class SectorEditorDoorSoundTarget {
+    Open,
+    Close
+};
+
+struct SectorEditorAudioPreviewState {
+    engine::AssetScopeHandle scope = engine::NullAssetScopeHandle();
+    engine::SoundHandle sound = engine::NullSoundHandle();
+    engine::MusicHandle music = engine::NullMusicHandle();
+    engine::SoundPlaybackHandle soundPlayback = engine::NullSoundPlaybackHandle();
+    SectorSoundType type = SectorSoundType::Sound;
+    bool pending = false;
+    std::string key;
+};
+
+struct AddMapSoundState {
+    bool open = false;
+    bool scanned = false;
+    std::string scanMessage;
+    engine::UIScrollState scroll;
+    std::vector<std::string> paths;
+    std::vector<const char*> optionLabels;
+    int selectedPathIndex = -1;
+    char soundIdBuffer[96] = {};
+    SectorSoundType type = SectorSoundType::Sound;
+    std::string validationMessage;
+    std::string previewMessage;
+    SectorEditorAudioPreviewState preview;
+};
+
+struct SoundPickerState {
+    bool open = false;
+    SectorEditorDoorSoundTarget target = SectorEditorDoorSoundTarget::Open;
+    int runtimeObjectId = -1;
+    int selectedSoundIndex = -1;
+    engine::UIScrollState scroll;
+    std::vector<std::string> soundIds;
+    std::vector<std::string> labelStorage;
+    std::vector<const char*> optionLabels;
+    std::string message;
+    SectorEditorAudioPreviewState preview;
+};
+
 struct SectorSpriteMetadata {
     std::string spriteAnimationPath;
     std::string atlasImagePath;
