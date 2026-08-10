@@ -1210,6 +1210,12 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
           "hash excludes dynamic prop transform, playback, and runtime shadow changes");
 
+    game::SectorTopologyMap markerMap = base;
+    markerMap.levelMarkers.push_back(game::SectorCompiledLevelMarker{
+            1, "default", Vector3{24.0f, 0.0f, 24.0f}, 1.5f});
+    Check(game::ComputeSectorLightmapSourceHash(markerMap) == hash,
+          "hash excludes Level Markers because they do not affect baked geometry or lighting");
+
     game::SectorTopologyMap movedVertex = base;
     movedVertex.vertices[0].x += 1;
     Check(game::ComputeSectorLightmapSourceHash(movedVertex) != hash, "hash changes when vertex coordinate changes");
@@ -1223,6 +1229,10 @@ void TestSourceHashChanges()
     changedSector = base;
     changedSector.sectors[0].ceilingSky = true;
     Check(game::ComputeSectorLightmapSourceHash(changedSector) != hash, "hash changes when sector ceiling sky changes");
+    changedSector = base;
+    changedSector.sectors[0].footstepSet = "DirtRoad_Mono";
+    Check(game::ComputeSectorLightmapSourceHash(changedSector) == hash,
+          "hash excludes runtime-only sector footstep assignments");
 
     game::SectorTopologyMap changedSideDef = base;
     changedSideDef.sideDefs[0].wall.textureId = "alt";
@@ -1451,6 +1461,15 @@ void TestSourceHashChanges()
     changedPreview.previewSettings.objectProbeDebugDrawMaxDistanceWorld = 96.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
           "hash ignores object probe debug draw distance");
+
+    game::SectorTopologyMap changedAudio = base;
+    changedAudio.audioSettings.musicPath = "music/level_theme.ogg";
+    changedAudio.audioSettings.musicVolume = 0.35f;
+    changedAudio.audioSettings.soundsById.emplace(
+            "door_open", game::SectorSoundDefinition{
+                    "door_open", "shared/door_open.wav", game::SectorSoundType::Sound});
+    Check(game::ComputeSectorLightmapSourceHash(changedAudio) == hash,
+          "hash ignores runtime-only audio settings");
 
     game::SectorTopologyMap changedSky = base;
     changedSky.skySettings.textureId = "storm_panorama";

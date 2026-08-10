@@ -7,6 +7,7 @@
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorVertexInspector.h"
+#include "sector_editor/inspector/SectorEditorLevelMarkerInspector.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/tools/doors/SectorEditorDoorModals.h"
 #include "sector_editor/tools/materials/SectorEditorMaterialInspector.h"
@@ -223,36 +224,6 @@ float AuthoringLineInspectorContentHeight(
     return height;
 }
 
-float AuthoringFaceInspectorContentHeight(
-        const SectorAuthoringFaceAnchor& anchor,
-        float rowH,
-        float gap,
-        float anchorSummaryHeight)
-{
-    float height = 0.0f;
-    height += 38.0f;
-    height += anchorSummaryHeight;
-    height += (rowH + gap) * 2.0f;
-    height += rowH + gap;
-
-    height += 18.0f;
-    height += 30.0f;
-    height += rowH + gap;
-    height += (rowH + gap) * 3.0f;
-
-    height += 18.0f;
-    height += 30.0f;
-    height += AuthoringInspectorTextureRowTotalHeight(gap) * 5.0f;
-    height += AuthoringInspectorDecalBlockHeight(anchor.floorDecal, rowH, gap, true);
-    height += AuthoringInspectorDecalBlockHeight(anchor.ceilingDecal, rowH, gap, true);
-    height += AuthoringInspectorDecalBlockHeight(anchor.defaultWall.decal, rowH, gap, false);
-    height += AuthoringInspectorDecalBlockHeight(anchor.defaultLower.decal, rowH, gap, false);
-    height += AuthoringInspectorDecalBlockHeight(anchor.defaultUpper.decal, rowH, gap, false);
-    height += rowH + gap;
-    return height;
-}
-
-
 bool DrawTopologySideDefInspector(
         SectorEditorInspectorPanelContext& context,
         engine::UIScrollAreaResult scroll,
@@ -395,6 +366,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringFaceAnchor
             ? FindSectorAuthoringFaceAnchor(authoringGraph, inspectorTarget.faceAnchorId)
             : nullptr;
+    const bool hasMultipleSelectedAuthoringFaces =
+            selectionState.selectedAuthoringFaceAnchorIds.size() > 1;
     const SectorAuthoringVertex* selectedAuthoringVertex =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringVertex
             ? FindSectorAuthoringVertex(authoringGraph, inspectorTarget.vertexId)
@@ -402,6 +375,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     const SectorAuthoringFogVolume* selectedAuthoringFogVolume =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringFogVolume
             ? FindSectorAuthoringFogVolume(authoringGraph, inspectorTarget.fogVolumeId)
+            : nullptr;
+    const SectorAuthoringLevelMarker* selectedLevelMarker =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringLevelMarker
+            ? FindSectorAuthoringLevelMarker(authoringGraph, inspectorTarget.levelMarkerId)
             : nullptr;
     const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
             context.topologyMap,
@@ -441,6 +418,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     runtimeObjectEditing,
                     context.runtimeObjectEditingState,
                     textureCatalog,
+                    context.sounds,
                     scrollContentW,
                     rowH,
                     gap
@@ -516,6 +494,26 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     gap,
                     endpointSummaryHeight);
         }
+        if (selectedAuthoringFaceAnchor != nullptr
+                && hasMultipleSelectedAuthoringFaces) {
+            std::string selectedIds = "Faces: ";
+            for (std::size_t index = 0;
+                    index < selectionState.selectedAuthoringFaceAnchorIds.size();
+                    ++index) {
+                if (index > 0) {
+                    selectedIds += ", ";
+                }
+                selectedIds += std::to_string(
+                        selectionState.selectedAuthoringFaceAnchorIds[index]);
+            }
+            const float idsHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    selectedIds.c_str(),
+                    scrollContentW);
+            return 38.0f + idsHeight + gap + 36.0f + gap;
+        }
         if (selectedAuthoringFaceAnchor != nullptr) {
             const float anchorSummaryHeight = MeasureSectorEditorWrappedTextHeight(
                     smallConfig,
@@ -526,13 +524,23 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                             SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->x),
                             SectorCoordToVisibleAuthoring(selectedAuthoringFaceAnchor->y)),
                     scrollContentW);
-            return AuthoringFaceInspectorContentHeight(*selectedAuthoringFaceAnchor, rowH, gap, anchorSummaryHeight);
+            return MeasureSectorEditorAuthoringFaceInspectorContentHeight(
+                    *selectedAuthoringFaceAnchor,
+                    rowH,
+                    gap,
+                    anchorSummaryHeight);
         }
         if (selectedAuthoringVertex != nullptr) {
-            return 120.0f;
+            return 164.0f;
         }
         if (selectedAuthoringFogVolume != nullptr) {
             return 38.0f + (rowH + gap) * 18.0f + 28.0f;
+        }
+        if (selectedLevelMarker != nullptr) {
+            return MeasureSectorEditorLevelMarkerInspectorContentHeight(
+                    context.levelMarkerUiState,
+                    rowH,
+                    gap);
         }
         return 42.0f;
     };
@@ -600,6 +608,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 statusText,
                 deleteRuntimeObjectRequested,
                 textureCatalog,
+                context.sounds,
                 contentW,
                 rowH,
                 gap
@@ -1432,6 +1441,66 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         return result;
     }
 
+    if (selectedAuthoringFaceAnchor != nullptr
+            && hasMultipleSelectedAuthoringFaces) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                TextFormat(
+                        "Selected Authoring Faces: %d",
+                        static_cast<int>(
+                                selectionState.selectedAuthoringFaceAnchorIds.size())),
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+
+        std::string selectedIds = "Faces: ";
+        for (std::size_t index = 0;
+                index < selectionState.selectedAuthoringFaceAnchorIds.size();
+                ++index) {
+            if (index > 0) {
+                selectedIds += ", ";
+            }
+            selectedIds += std::to_string(
+                    selectionState.selectedAuthoringFaceAnchorIds[index]);
+        }
+        const float idsHeight = MeasureSectorEditorWrappedTextHeight(
+                smallConfig,
+                assets,
+                smallFont,
+                selectedIds.c_str(),
+                contentW);
+        engine::Text(
+                ui,
+                smallConfig,
+                assets,
+                Rectangle{0.0f, y, contentW, idsHeight},
+                smallFont,
+                selectedIds.c_str(),
+                engine::UITextJustify::Left,
+                smallConfig.mutedTextColor,
+                true);
+        y += idsHeight + gap;
+
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_merge_selected_authoring_faces",
+                    Rectangle{0.0f, y, contentW, 36.0f},
+                    font,
+                    "Merge Selected Into...")) {
+            context.authoringFaceMerge.BeginTargetPick();
+        }
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
     if (selectedAuthoringFaceAnchor != nullptr) {
         engine::Text(
                 ui,
@@ -1464,6 +1533,24 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 smallConfig.mutedTextColor,
                 true);
         y += anchorHeight;
+
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_merge_selected_authoring_face",
+                    Rectangle{0.0f, y, contentW, 36.0f},
+                    font,
+                    "Merge Selected Into...")) {
+            if (selectionState.selectedAuthoringFaceAnchorIds.empty()) {
+                SelectSectorEditorAuthoringFaceAnchorTarget(
+                        context.selection,
+                        selectedAuthoringFaceAnchor->id);
+            }
+            context.authoringFaceMerge.BeginTargetPick();
+        }
+        y += 36.0f + gap;
 
         const int faceAnchorId = selectedAuthoringFaceAnchor->id;
         const auto mutateFaceAnchor =
@@ -1566,6 +1653,42 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     });
         }
         y += rowH + gap;
+
+        engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
+        y += 18.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Audio", engine::UITextJustify::Left, config.textColor);
+        y += 30.0f;
+        const SectorEditorInspectorTextureRowLayout footstepRow =
+                BuildSectorEditorInspectorTextureRowLayout(
+                        y,
+                        contentW,
+                        gap,
+                        38.0f,
+                        0.0f);
+        const std::string effectiveFootstep = context.footsteps.EffectiveSetId(
+                selectedAuthoringFaceAnchor->footstepSet);
+        engine::Text(ui, config, assets, footstepRow.labelRect, font, "Footsteps:", engine::UITextJustify::Left, config.mutedTextColor);
+        engine::Text(
+                ui,
+                smallConfig,
+                assets,
+                footstepRow.valueRect,
+                smallFont,
+                effectiveFootstep.c_str(),
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_face_pick_footsteps",
+                    footstepRow.pickerButtonRect,
+                    font,
+                    ">")) {
+            context.footsteps.OpenForAuthoringFaceAnchor(faceAnchorId);
+        }
+        y += footstepRow.height + gap;
 
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
@@ -2105,6 +2228,38 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                         SectorCoordToVisibleAuthoring(selectedAuthoringVertex->y)),
                 engine::UITextJustify::Left,
                 config.mutedTextColor);
+        y += 34.0f;
+
+        int incidentLineCount = 0;
+        for (const SectorAuthoringLine& line : authoringGraph.lines) {
+            if (line.startVertexId == selectedAuthoringVertex->id
+                    || line.endVertexId == selectedAuthoringVertex->id) {
+                ++incidentLineCount;
+            }
+        }
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 30.0f},
+                font,
+                TextFormat("Incident lines: %d", incidentLineCount),
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        y += 34.0f;
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_vertex_delete_or_dissolve",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font,
+                    incidentLineCount == 0 ? "Delete Vertex" : "Dissolve Vertex")) {
+            AppendRequest(
+                    result,
+                    SectorEditorInspectorPanelRequestKind::DeleteSelectedAuthoringVertex);
+        }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;
@@ -2221,7 +2376,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     selectedAuthoringFogVolume->color.g,
                     selectedAuthoringFogVolume->color.b};
             const SectorEditorInspectorNumericRowLayout layout =
-                    BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+                    BuildSectorEditorInspectorRightIntRowLayout(y, contentW, rowH, gap);
             const SectorEditorIntInputResult value = DrawLabeledIntInput(
                     ui, config, input, assets, font,
                     ids[channel], labels[channel],
@@ -2247,6 +2402,29 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     Rectangle{0.0f, y, contentW, rowH},
                     font, "Delete Fog Volume")) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedFogVolumeConfirmation);
+        }
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
+    if (selectedLevelMarker != nullptr) {
+        const bool deleteRequested = DrawSectorEditorLevelMarkerInspector(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                contentW,
+                rowH,
+                gap,
+                *selectedLevelMarker,
+                context.levelMarkerUiState,
+                context.levelMarkerEditing);
+        if (deleteRequested) {
+            AppendRequest(
+                    result,
+                    SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLevelMarkerConfirmation);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);

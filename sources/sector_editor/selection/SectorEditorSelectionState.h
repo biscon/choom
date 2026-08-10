@@ -4,6 +4,8 @@
 #include "sector_editor/SectorEditorSurfaceTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 
+#include <vector>
+
 namespace game {
 
 struct SelectionState {
@@ -22,6 +24,7 @@ struct SelectionState {
     int selectedRuntimeObjectId = -1;
     int inspectedTopologyVertexId = -1;
     SectorAuthoringSelectionTarget selectedAuthoring;
+    std::vector<int> selectedAuthoringFaceAnchorIds;
     int hoveredTopologyLightId = -1;
     int hoveredTopologyStaticSpotLightId = -1;
     int hoveredTopologyDynamicLightId = -1;

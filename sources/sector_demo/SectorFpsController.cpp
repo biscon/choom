@@ -19,6 +19,8 @@ constexpr float VisualStepOffsetEpsilon = 0.0001f;
 constexpr float HeadBobBlendRate = 12.0f;
 constexpr float HeadBobOffsetEpsilon = 0.0001f;
 constexpr float HeadBobPhaseWrap = 100000.0f;
+constexpr float WalkFootstepStrideWorld = 1.5f;
+constexpr float RunFootstepStrideWorld = 2.4f;
 constexpr float MinLandingImpactSpeed = 0.5f;
 constexpr float FullLandingDipImpactSpeed = 12.0f;
 constexpr float MaxLandingDip = 0.45f;
@@ -173,6 +175,23 @@ SectorPreviewSettings SectorPreviewSettingsFromFpsControllerConfig(
 float ClampSectorFpsPitch(float pitchRadians)
 {
     return ClampFinite(pitchRadians, -PitchLimitRadians, PitchLimitRadians, 0.0f);
+}
+
+SectorViewPose ApplySectorFpsViewRotationOffset(
+        SectorViewPose pose,
+        Vector3 rotationOffsetDegrees)
+{
+    const auto finiteOrZero = [](float value) {
+        return std::isfinite(value) ? value : 0.0f;
+    };
+    pose.yawRadians = finiteOrZero(pose.yawRadians)
+            + finiteOrZero(rotationOffsetDegrees.y) * DEG2RAD;
+    pose.pitchRadians = ClampSectorFpsPitch(
+            finiteOrZero(pose.pitchRadians)
+                    + finiteOrZero(rotationOffsetDegrees.x) * DEG2RAD);
+    pose.rollRadians = finiteOrZero(pose.rollRadians)
+            + finiteOrZero(rotationOffsetDegrees.z) * DEG2RAD;
+    return pose;
 }
 
 Vector3 SectorFpsControllerEyePosition(
@@ -368,6 +387,74 @@ void UpdateSectorFpsHeadBob(
     headBob.offset = Vector3Add(
             Vector3Scale(right, lateralBob * headBob.blend),
             Vector3{0.0f, verticalBob * headBob.blend, 0.0f});
+}
+
+void ClearSectorFpsFootstepCadence(SectorFpsFootstepCadenceState& footsteps)
+{
+    footsteps = SectorFpsFootstepCadenceState{};
+}
+
+SectorFpsFrameEvents BuildSectorFpsFrameEvents(
+        bool jumped,
+        const SectorFpsVerticalResult& verticalResult)
+{
+    SectorFpsFrameEvents events;
+    events.jumped = jumped;
+    events.landed = verticalResult.transition
+            == SectorFpsVerticalTransition::Landed;
+    if (events.landed && std::isfinite(verticalResult.landingImpactSpeed)) {
+        events.landingImpactSpeed = std::max(
+                0.0f,
+                verticalResult.landingImpactSpeed);
+    }
+    return events;
+}
+
+float SectorFpsFootstepStrideDistance(
+        const SectorFpsControllerConfig& config,
+        float horizontalSpeed)
+{
+    const SectorFpsControllerConfig normalized = NormalizeSectorFpsControllerConfig(config);
+    const float speed = std::isfinite(horizontalSpeed)
+            ? std::max(0.0f, horizontalSpeed)
+            : 0.0f;
+    const float speedRange = std::max(
+            normalized.runSpeed - normalized.walkSpeed,
+            0.001f);
+    const float running = std::clamp(
+            (speed - normalized.walkSpeed) / speedRange,
+            0.0f,
+            1.0f);
+    return WalkFootstepStrideWorld
+            + (RunFootstepStrideWorld - WalkFootstepStrideWorld) * running;
+}
+
+bool UpdateSectorFpsFootstepCadence(
+        SectorFpsFootstepCadenceState& footsteps,
+        const SectorFpsControllerConfig& config,
+        bool active,
+        float resolvedHorizontalDistance,
+        float horizontalSpeed)
+{
+    if (!active) {
+        ClearSectorFpsFootstepCadence(footsteps);
+        return false;
+    }
+    if (!std::isfinite(footsteps.accumulatedDistanceWorld)
+            || footsteps.accumulatedDistanceWorld < 0.0f) {
+        footsteps.accumulatedDistanceWorld = 0.0f;
+    }
+    if (!std::isfinite(resolvedHorizontalDistance)
+            || resolvedHorizontalDistance <= 0.0001f) {
+        return false;
+    }
+    const float stride = SectorFpsFootstepStrideDistance(config, horizontalSpeed);
+    footsteps.accumulatedDistanceWorld += resolvedHorizontalDistance;
+    if (footsteps.accumulatedDistanceWorld < stride) return false;
+    footsteps.accumulatedDistanceWorld = std::fmod(
+            footsteps.accumulatedDistanceWorld,
+            stride);
+    return true;
 }
 
 void ClearSectorFpsLandingDip(SectorFpsLandingDipState& landingDip)

@@ -4,7 +4,6 @@
 
 #include <raylib.h>
 
-#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <string>
@@ -145,7 +144,12 @@ void DrawSectorEditorStaticModelInspector(
             const std::function<bool(SectorPlacedRuntimeObject&, float)>& apply,
             float minimum = -100000.0f,
             float maximum = 100000.0f) {
-        constexpr float labelW = 104.0f;
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(
+                        y,
+                        contentW,
+                        rowH,
+                        gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 context.ui,
                 context.config,
@@ -154,12 +158,8 @@ void DrawSectorEditorStaticModelInspector(
                 context.font,
                 id,
                 label,
-                Rectangle{0.0f, y, labelW, rowH},
-                Rectangle{
-                        labelW + gap,
-                        y,
-                        std::max(0.0f, contentW - labelW - gap),
-                        rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Left,
                 value,
                 inputState,

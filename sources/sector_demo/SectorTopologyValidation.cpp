@@ -596,6 +596,43 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
     ValidateIds(map.dynamicPointLights, SectorTopologyObjectKind::DynamicLight, issues);
     ValidateIds(map.dynamicSpotLights, SectorTopologyObjectKind::DynamicLight, issues);
 
+    std::unordered_set<int> markerSourceIds;
+    std::unordered_set<std::string> markerReferenceIds;
+    const auto validMarkerReferenceId = [](const std::string& id) {
+        return !id.empty() && id.size() <= 63
+                && std::all_of(id.begin(), id.end(), [](char ch) {
+                    return (ch >= 'A' && ch <= 'Z')
+                            || (ch >= 'a' && ch <= 'z')
+                            || (ch >= '0' && ch <= '9')
+                            || ch == '_'
+                            || ch == '-';
+                });
+    };
+    for (const SectorCompiledLevelMarker& marker : map.levelMarkers) {
+        if (!IsValidSectorTopologyId(marker.sourceAuthoringMarkerId)) {
+            AddIssue(&issues, SectorTopologyObjectKind::LevelMarker,
+                     marker.sourceAuthoringMarkerId, "source authoring ID must be positive");
+        } else if (!markerSourceIds.insert(marker.sourceAuthoringMarkerId).second) {
+            AddIssue(&issues, SectorTopologyObjectKind::LevelMarker,
+                     marker.sourceAuthoringMarkerId, "source authoring ID must be unique");
+        }
+        if (!validMarkerReferenceId(marker.id)) {
+            AddIssue(&issues, SectorTopologyObjectKind::LevelMarker,
+                     marker.sourceAuthoringMarkerId,
+                     "reference ID must contain 1-63 letters, digits, underscores, or dashes");
+        } else if (!markerReferenceIds.insert(marker.id).second) {
+            AddIssue(&issues, SectorTopologyObjectKind::LevelMarker,
+                     marker.sourceAuthoringMarkerId, "reference ID must be unique");
+        }
+        if (!std::isfinite(marker.position.x)
+                || !std::isfinite(marker.position.y)
+                || !std::isfinite(marker.position.z)
+                || !std::isfinite(marker.yawRadians)) {
+            AddIssue(&issues, SectorTopologyObjectKind::LevelMarker,
+                     marker.sourceAuthoringMarkerId, "transform values must be finite");
+        }
+    }
+
     for (const SectorTopologyStaticPointLight& light : map.staticLights) {
         if (!std::isfinite(light.position.x)
                 || !std::isfinite(light.position.y)
@@ -932,6 +969,9 @@ std::string FormatSectorTopologyValidationIssue(
             break;
         case SectorTopologyObjectKind::DynamicLight:
             objectName = "DynamicLight";
+            break;
+        case SectorTopologyObjectKind::LevelMarker:
+            objectName = "LevelMarker";
             break;
     }
 

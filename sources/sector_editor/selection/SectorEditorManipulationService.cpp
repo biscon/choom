@@ -50,6 +50,7 @@ bool IsAnySectorEditorManipulationActive(const SectorEditorManipulationServiceCo
 {
     return context.manipulationState.authoringVertexDrag.active
             || context.manipulationState.authoringFogVolumeDrag.active
+            || (context.levelMarkerEditing != nullptr && context.levelMarkerEditing->Drag().active)
             || context.lightState.lightDrag.active
             || context.runtimeObjectDrag.active;
 }
@@ -73,6 +74,13 @@ void UpdateActiveSectorEditorManipulation(
             context.fogVolumeEditing->UpdateMove(SectorTopologyCoordPoint{x, y});
         }
     }
+    if (context.levelMarkerEditing != nullptr
+            && context.levelMarkerEditing->Drag().active
+            && context.screenToMap
+            && context.snapMapPoint) {
+        context.levelMarkerEditing->UpdateMove(
+                context.snapMapPoint(context.screenToMap(input.MousePosition())));
+    }
     if (context.lightState.lightDrag.active && context.updateLightDrag != nullptr) {
         context.updateLightDrag(context.userData, input);
     }
@@ -95,6 +103,9 @@ void FinishActiveSectorEditorManipulation(SectorEditorManipulationServiceContext
     if (context.manipulationState.authoringFogVolumeDrag.active
             && context.fogVolumeEditing != nullptr) {
         context.fogVolumeEditing->FinishMove();
+    }
+    if (context.levelMarkerEditing != nullptr && context.levelMarkerEditing->Drag().active) {
+        context.levelMarkerEditing->FinishMove();
     }
     if (context.lightState.lightDrag.active && context.finishLightDrag != nullptr) {
         context.finishLightDrag(context.userData);
@@ -123,6 +134,10 @@ bool CancelFirstActiveSectorEditorManipulation(
     if (context.manipulationState.authoringFogVolumeDrag.active
             && context.fogVolumeEditing != nullptr) {
         context.fogVolumeEditing->CancelMove(authoringVertexMessage);
+        return true;
+    }
+    if (context.levelMarkerEditing != nullptr && context.levelMarkerEditing->Drag().active) {
+        context.levelMarkerEditing->CancelMove(authoringVertexMessage);
         return true;
     }
     if (context.lightState.lightDrag.active && context.cancelLightDrag != nullptr) {
@@ -154,6 +169,9 @@ void CancelActiveSectorEditorManipulation(
     if (context.manipulationState.authoringFogVolumeDrag.active
             && context.fogVolumeEditing != nullptr) {
         context.fogVolumeEditing->CancelMove(authoringVertexMessage);
+    }
+    if (context.levelMarkerEditing != nullptr && context.levelMarkerEditing->Drag().active) {
+        context.levelMarkerEditing->CancelMove(authoringVertexMessage);
     }
     if (context.lightState.lightDrag.active && context.cancelLightDrag != nullptr) {
         context.cancelLightDrag(context.userData, lightMessage);
@@ -257,6 +275,11 @@ void StartSectorEditorSelectedManipulation(
         case SectorEditorPickKind::AuthoringFogVolume:
             if (context.fogVolumeEditing != nullptr) {
                 context.fogVolumeEditing->BeginMove(target.id);
+            }
+            break;
+        case SectorEditorPickKind::LevelMarker:
+            if (context.levelMarkerEditing != nullptr) {
+                context.levelMarkerEditing->BeginMove(target.id);
             }
             break;
         case SectorEditorPickKind::None:

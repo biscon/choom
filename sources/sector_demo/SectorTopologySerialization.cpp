@@ -1,13 +1,16 @@
 #include "sector_demo/SectorTopologySerialization.h"
 
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorTopologyUnits.h"
 
 #include "util/json.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <filesystem>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -25,6 +28,191 @@ constexpr const char* RuntimeObjectKindBillboard = "billboard";
 constexpr const char* RuntimeObjectKindStaticModel = "static_model";
 constexpr const char* RuntimeObjectKindDynamicModel = "dynamic_model";
 constexpr const char* RuntimeObjectKindDoor = "door";
+
+[[noreturn]] void Fail(const std::string& message);
+float ReadOptionalFloat(
+        const Json& object,
+        const char* field,
+        const std::string& context,
+        float defaultValue);
+std::string ReadString(
+        const Json& object,
+        const char* field,
+        const std::string& context);
+
+bool IsValidAudioPath(const std::string& path)
+{
+    if (path.empty()) return false;
+    const std::filesystem::path parsed(path);
+    const bool windowsDrivePath = path.size() >= 2
+            && std::isalpha(static_cast<unsigned char>(path[0]))
+            && path[1] == ':';
+    if (parsed.is_absolute()
+            || windowsDrivePath
+            || path.front() == '\\'
+            || path.find('\\') != std::string::npos
+            || path.find("..") != std::string::npos) {
+        return false;
+    }
+    std::string extension = parsed.extension().generic_string();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+            [](unsigned char value) {
+                return static_cast<char>(std::tolower(value));
+            });
+    return extension == ".ogg" || extension == ".wav" || extension == ".mp3";
+}
+
+bool IsValidFootstepSetId(const std::string& id)
+{
+    if (id.empty() || id.front() == '/' || id.front() == '\\') return false;
+    std::string segment;
+    for (const char character : id) {
+        if (character == '\\') return false;
+        if (character == '/') {
+            if (segment.empty() || segment == "." || segment == "..") return false;
+            segment.clear();
+            continue;
+        }
+        const unsigned char value = static_cast<unsigned char>(character);
+        if (!std::isalnum(value) && character != '_' && character != '-' && character != '.') {
+            return false;
+        }
+        segment.push_back(character);
+    }
+    return !segment.empty() && segment != "." && segment != "..";
+}
+
+void ValidateOptionalFootstepSet(const std::string& id, const std::string& context)
+{
+    if (!id.empty() && !IsValidFootstepSetId(id)) {
+        Fail(context + " must be a safe relative footstep set id");
+    }
+}
+
+void ValidateAudioSettings(
+        const SectorLevelAudioSettings& settings,
+        const std::string& context)
+{
+    if (!settings.musicPath.empty() && !IsValidAudioPath(settings.musicPath)) {
+        Fail(context + ".music must be a relative .ogg, .wav, or .mp3 path beneath assets/audio");
+    }
+    if (!std::isfinite(settings.musicVolume)
+            || settings.musicVolume < 0.0f
+            || settings.musicVolume > 1.0f) {
+        Fail(context + ".musicVolume must be a finite number between 0 and 1");
+    }
+    for (const auto& entry : settings.soundsById) {
+        const SectorSoundDefinition& sound = entry.second;
+        if (entry.first.empty()) {
+            Fail(context + ".sounds contains an empty sound ID");
+        }
+        if (sound.id != entry.first) {
+            Fail(context + ".sounds." + entry.first + ".id must match its registry key");
+        }
+        if (!IsValidAudioPath(sound.path)) {
+            Fail(context + ".sounds." + entry.first
+                    + " must be a relative .ogg, .wav, or .mp3 path beneath assets/audio");
+        }
+        if (sound.type != SectorSoundType::Sound
+                && sound.type != SectorSoundType::Music) {
+            Fail(context + ".sounds." + entry.first + ".type is invalid");
+        }
+    }
+}
+
+SectorSoundType ReadSoundType(const Json& value, const std::string& context)
+{
+    if (!value.is_string()) {
+        Fail(context + " must be 'sound' or 'music'");
+    }
+    const std::string type = value.get<std::string>();
+    if (type == "sound") return SectorSoundType::Sound;
+    if (type == "music") return SectorSoundType::Music;
+    Fail(context + " must be 'sound' or 'music'");
+}
+
+const char* WriteSoundType(SectorSoundType type)
+{
+    switch (type) {
+        case SectorSoundType::Sound: return "sound";
+        case SectorSoundType::Music: return "music";
+    }
+    Fail("sound type is invalid");
+}
+
+void ReadAudioSettings(const Json& value, SectorLevelAudioSettings& settings)
+{
+    if (!value.is_object()) Fail("root.audio must be an object");
+    const auto musicIt = value.find("music");
+    if (musicIt != value.end()) {
+        if (!musicIt->is_string() || musicIt->get<std::string>().empty()) {
+            Fail("root.audio.music must be a non-empty string");
+        }
+        settings.musicPath = musicIt->get<std::string>();
+    }
+    settings.musicVolume = ReadOptionalFloat(
+            value,
+            "musicVolume",
+            "root.audio",
+            settings.musicVolume);
+    const auto soundsIt = value.find("sounds");
+    if (soundsIt != value.end()) {
+        if (!soundsIt->is_object()) Fail("root.audio.sounds must be an object");
+        for (const auto& entry : soundsIt->items()) {
+            if (entry.key().empty()) {
+                Fail("root.audio.sounds entries require non-empty IDs");
+            }
+            SectorSoundDefinition sound;
+            sound.id = entry.key();
+            if (entry.value().is_string()) {
+                sound.path = entry.value().get<std::string>();
+            } else if (entry.value().is_object()) {
+                sound.path = ReadString(entry.value(), "path", "root.audio.sounds." + entry.key());
+                const auto typeIt = entry.value().find("type");
+                if (typeIt != entry.value().end()) {
+                    sound.type = ReadSoundType(
+                            *typeIt,
+                            "root.audio.sounds." + entry.key() + ".type");
+                }
+            } else {
+                Fail("root.audio.sounds entries must be legacy string paths or typed objects");
+            }
+            if (sound.path.empty()) {
+                Fail("root.audio.sounds entries require non-empty paths");
+            }
+            settings.soundsById.emplace(entry.key(), std::move(sound));
+        }
+    }
+    ValidateAudioSettings(settings, "root.audio");
+}
+
+void WriteAudioSettings(Json& root, const SectorLevelAudioSettings& settings)
+{
+    ValidateAudioSettings(settings, "root.audio");
+    if (settings.musicPath.empty() && settings.soundsById.empty()) return;
+    Json audio = Json::object();
+    if (!settings.musicPath.empty()) {
+        audio["music"] = settings.musicPath;
+        if (settings.musicVolume != SectorLevelAudioSettings::DefaultMusicVolume) {
+            audio["musicVolume"] = settings.musicVolume;
+        }
+    }
+    if (!settings.soundsById.empty()) {
+        audio["sounds"] = Json::object();
+        std::vector<std::string> ids;
+        ids.reserve(settings.soundsById.size());
+        for (const auto& entry : settings.soundsById) ids.push_back(entry.first);
+        std::sort(ids.begin(), ids.end());
+        for (const std::string& id : ids) {
+            const SectorSoundDefinition& sound = settings.soundsById.at(id);
+            audio["sounds"][id] = Json{
+                    {"path", sound.path},
+                    {"type", WriteSoundType(sound.type)}
+            };
+        }
+    }
+    root["audio"] = std::move(audio);
+}
 
 [[noreturn]] void Fail(const std::string& message)
 {
@@ -566,6 +754,8 @@ SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
             context,
             door.autoOpenDistance);
     door.textureId = ReadOptionalString(value, "textureId", context, door.textureId);
+    door.openSoundId = ReadOptionalString(value, "openSoundId", context, door.openSoundId);
+    door.closeSoundId = ReadOptionalString(value, "closeSoundId", context, door.closeSoundId);
     ReadOptionalDoorFaceUvs(value, "faceUvs", context, door.faceUvs);
     ValidatePlacedDoorForSerialization(door, context);
     return door;
@@ -1517,6 +1707,12 @@ Json WritePlacedDoor(const SectorPlacedDoor& door)
     if (!door.textureId.empty()) {
         json["textureId"] = door.textureId;
     }
+    if (!door.openSoundId.empty()) {
+        json["openSoundId"] = door.openSoundId;
+    }
+    if (!door.closeSoundId.empty()) {
+        json["closeSoundId"] = door.closeSoundId;
+    }
     if (!IsDefaultDoorFaceUvSet(door.faceUvs)) {
         json["faceUvs"] = WriteDoorFaceUvSet(door.faceUvs, "door.faceUvs");
     }
@@ -2170,6 +2366,7 @@ std::vector<const T*> SortedById(const std::vector<T>& values)
 
 void ValidateForSerialization(const SectorTopologyMap& map)
 {
+    ValidateAudioSettings(map.audioSettings, "root.audio");
     const auto issues = ValidateSectorTopologyMap(map);
     const auto error = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
         return issue.severity == SectorTopologyValidationSeverity::Error;
@@ -2181,6 +2378,7 @@ void ValidateForSerialization(const SectorTopologyMap& map)
 
 void ValidateAuthoringMapData(const SectorTopologyMap& map)
 {
+    ValidateAudioSettings(map.audioSettings, "root.audio");
     const auto issues = ValidateSectorTopologyMap(map);
     const auto error = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
         return issue.severity == SectorTopologyValidationSeverity::Error;
@@ -2374,6 +2572,35 @@ SectorLightAtmosphereSettings ReadOptionalLightAtmosphereSettings(
 
 void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBakedLightmap)
 {
+    const auto audioIt = root.find("audio");
+    if (audioIt != root.end()) ReadAudioSettings(*audioIt, map.audioSettings);
+
+    const auto levelMarkersIt = root.find("levelMarkers");
+    if (levelMarkersIt != root.end()) {
+        if (!levelMarkersIt->is_array()) {
+            Fail("root.levelMarkers must be an array");
+        }
+        for (size_t i = 0; i < levelMarkersIt->size(); ++i) {
+            const Json& value = (*levelMarkersIt)[i];
+            const std::string context = "root.levelMarkers[" + std::to_string(i) + "]";
+            if (!value.is_object()) {
+                Fail(context + " must be an object");
+            }
+            SectorCompiledLevelMarker marker;
+            marker.sourceAuthoringMarkerId = ReadInt(value, "editorId", context);
+            marker.id = ReadString(value, "id", context);
+            marker.position = ReadVector3(RequireField(value, "position", context), context + ".position");
+            SectorCoord exactX = 0;
+            SectorCoord exactZ = 0;
+            if (!VisibleAuthoringToSectorCoord(marker.position.x, exactX)
+                    || !VisibleAuthoringToSectorCoord(marker.position.z, exactZ)) {
+                Fail(context + ".position X/Z must be exact authoring coordinates");
+            }
+            marker.yawRadians = ReadFloat(value, "orientationDegrees", context) * (Pi / 180.0f);
+            map.levelMarkers.push_back(std::move(marker));
+        }
+    }
+
     const auto runtimeObjectsIt = root.find("runtimeObjects");
     if (runtimeObjectsIt != root.end()) {
         if (!runtimeObjectsIt->is_array()) {
@@ -2688,6 +2915,8 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         anchor.ceilingZ = ReadFloat(faceAnchors[i], "ceilingZ", context);
         anchor.floorTextureId = ReadString(faceAnchors[i], "floorTextureId", context);
         anchor.ceilingTextureId = ReadString(faceAnchors[i], "ceilingTextureId", context);
+        anchor.footstepSet = ReadOptionalString(faceAnchors[i], "footstepSet", context);
+        ValidateOptionalFootstepSet(anchor.footstepSet, context + ".footstepSet");
         anchor.ceilingSky = ReadOptionalBool(faceAnchors[i], "ceilingSky", context, false);
         anchor.floorUv = ReadUv(RequireField(faceAnchors[i], "floorUv", context), context + ".floorUv");
         anchor.ceilingUv = ReadUv(RequireField(faceAnchors[i], "ceilingUv", context), context + ".ceilingUv");
@@ -2751,6 +2980,38 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    const auto levelMarkersIt = value.find("levelMarkers");
+    if (levelMarkersIt != value.end()) {
+        if (!levelMarkersIt->is_array()) {
+            Fail("root.authoringGraph.levelMarkers must be an array");
+        }
+        for (size_t i = 0; i < levelMarkersIt->size(); ++i) {
+            const Json& markerJson = (*levelMarkersIt)[i];
+            const std::string context = "root.authoringGraph.levelMarkers[" + std::to_string(i) + "]";
+            if (!markerJson.is_object()) {
+                Fail(context + " must be an object");
+            }
+            SectorAuthoringLevelMarker marker;
+            marker.id = ReadInt(markerJson, "editorId", context);
+            marker.referenceId = ReadString(markerJson, "id", context);
+            marker.x = ReadCoord(markerJson, "x", context);
+            marker.y = ReadFloat(markerJson, "y", context);
+            marker.z = ReadCoord(markerJson, "z", context);
+            marker.orientationDegrees = ReadFloat(markerJson, "orientationDegrees", context);
+            graph.levelMarkers.push_back(std::move(marker));
+        }
+    }
+
+    const std::vector<SectorAuthoringValidationIssue> issues =
+            ValidateSectorAuthoringGraphReferences(graph);
+    const auto markerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
+        return issue.objectKind == SectorAuthoringObjectKind::LevelMarker
+                && issue.severity == SectorAuthoringValidationSeverity::Error;
+    });
+    if (markerError != issues.end()) {
+        Fail("Invalid authoring level marker: " + markerError->message);
+    }
+
     return graph;
 }
 
@@ -2770,6 +3031,7 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
     document.derivation.topology.skySettings = document.mapData.skySettings;
     document.derivation.topology.directionalLight = document.mapData.directionalLight;
     document.derivation.topology.fogSettings = document.mapData.fogSettings;
+    document.derivation.topology.audioSettings = document.mapData.audioSettings;
     document.derivation.topology.lightmapSettings = document.mapData.lightmapSettings;
     document.derivation.topology.bakedLightmap = document.mapData.bakedLightmap;
 }
@@ -2895,6 +3157,7 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
     if (!IsDefaultFogSettings(map.fogSettings)) {
         root["fogSettings"] = WriteFogSettings(map.fogSettings);
     }
+    WriteAudioSettings(root, map.audioSettings);
     if (includeBakedLightmap
             && !map.bakedLightmap.path.empty()
             && map.bakedLightmap.width > 0
@@ -2986,6 +3249,10 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         if (anchor->ceilingSky) {
             anchorJson["ceilingSky"] = true;
         }
+        if (!anchor->footstepSet.empty()) {
+            ValidateOptionalFootstepSet(anchor->footstepSet, context + ".footstepSet");
+            anchorJson["footstepSet"] = anchor->footstepSet;
+        }
         if (anchor->isVoid) {
             anchorJson["isVoid"] = true;
         }
@@ -3031,6 +3298,30 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             if (volume.flowDirectionDegrees != defaults.flowDirectionDegrees) fogJson["flowDirectionDegrees"] = volume.flowDirectionDegrees;
             if (volume.flowSpeedWorld != defaults.flowSpeedWorld) fogJson["flowSpeedWorld"] = volume.flowSpeedWorld;
             graphJson["fogVolumes"].push_back(std::move(fogJson));
+        }
+    }
+
+    if (!graph.levelMarkers.empty()) {
+        const std::vector<SectorAuthoringValidationIssue> issues =
+                ValidateSectorAuthoringGraphReferences(graph);
+        const auto markerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
+            return issue.objectKind == SectorAuthoringObjectKind::LevelMarker
+                    && issue.severity == SectorAuthoringValidationSeverity::Error;
+        });
+        if (markerError != issues.end()) {
+            Fail("Invalid authoring level marker: " + markerError->message);
+        }
+        graphJson["levelMarkers"] = Json::array();
+        for (const SectorAuthoringLevelMarker* marker : SortedById(graph.levelMarkers)) {
+            RequireFinite(marker->y, "authoring level marker y");
+            RequireFinite(marker->orientationDegrees, "authoring level marker orientationDegrees");
+            graphJson["levelMarkers"].push_back(Json{
+                    {"editorId", marker->id},
+                    {"id", marker->referenceId},
+                    {"x", marker->x},
+                    {"y", marker->y},
+                    {"z", marker->z},
+                    {"orientationDegrees", marker->orientationDegrees}});
         }
     }
 
@@ -3132,6 +3423,8 @@ SectorTopologyMap ParseMap(const Json& root)
         sector.ceilingZ = ReadFloat(value, "ceilingZ", context);
         sector.floorTextureId = ReadString(value, "floorTextureId", context);
         sector.ceilingTextureId = ReadString(value, "ceilingTextureId", context);
+        sector.footstepSet = ReadOptionalString(value, "footstepSet", context);
+        ValidateOptionalFootstepSet(sector.footstepSet, context + ".footstepSet");
         sector.ceilingSky = ReadOptionalBool(value, "ceilingSky", context, false);
         sector.floorUv = ReadUv(RequireField(value, "floorUv", context), context + ".floorUv");
         sector.ceilingUv = ReadUv(RequireField(value, "ceilingUv", context), context + ".ceilingUv");
@@ -3261,7 +3554,30 @@ Json SerializeMap(const SectorTopologyMap& map)
         if (sector->ceilingSky) {
             sectorJson["ceilingSky"] = true;
         }
+        if (!sector->footstepSet.empty()) {
+            ValidateOptionalFootstepSet(sector->footstepSet, context + ".footstepSet");
+            sectorJson["footstepSet"] = sector->footstepSet;
+        }
         root["sectors"].push_back(std::move(sectorJson));
+    }
+
+    if (!map.levelMarkers.empty()) {
+        root["levelMarkers"] = Json::array();
+        std::vector<const SectorCompiledLevelMarker*> markers;
+        markers.reserve(map.levelMarkers.size());
+        for (const SectorCompiledLevelMarker& marker : map.levelMarkers) {
+            markers.push_back(&marker);
+        }
+        std::sort(markers.begin(), markers.end(), [](const auto* left, const auto* right) {
+            return left->sourceAuthoringMarkerId < right->sourceAuthoringMarkerId;
+        });
+        for (const SectorCompiledLevelMarker* marker : markers) {
+            root["levelMarkers"].push_back(Json{
+                    {"editorId", marker->sourceAuthoringMarkerId},
+                    {"id", marker->id},
+                    {"position", WriteVector3(marker->position, "level marker position")},
+                    {"orientationDegrees", marker->yawRadians * (180.0f / Pi)}});
+        }
     }
 
     if (!map.runtimeObjects.empty()) {
@@ -3333,6 +3649,7 @@ Json SerializeMap(const SectorTopologyMap& map)
     if (!IsDefaultFogSettings(map.fogSettings)) {
         root["fogSettings"] = WriteFogSettings(map.fogSettings);
     }
+    WriteAudioSettings(root, map.audioSettings);
     if (!map.bakedLightmap.path.empty()
             && map.bakedLightmap.width > 0
             && map.bakedLightmap.height > 0

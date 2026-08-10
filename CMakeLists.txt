@@ -140,12 +140,35 @@ target_link_libraries(${PROJECT_NAME} PRIVATE xatlas)
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(application_flow_tests
+            tests/ApplicationFlowTests.cpp
+            sources/game/ApplicationFlow.cpp
+    )
+    target_include_directories(application_flow_tests PRIVATE sources)
+    add_test(NAME application_flow COMMAND application_flow_tests)
+
+    add_executable(audio_system_tests
+            tests/AudioSystemTests.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
+            sources/engine/audio/AudioSystem.cpp
+            sources/game/FootstepAudio.cpp
+            sources/game/SoundSetAudio.cpp
+    )
+    target_include_directories(audio_system_tests PRIVATE sources)
+    target_link_libraries(audio_system_tests PRIVATE raylib)
+    add_test(NAME audio_system COMMAND audio_system_tests)
+
     add_executable(fps_viewmodel_tests
             tests/FpsViewmodelTests.cpp
             sources/game/FpsViewmodel.cpp
             sources/game/FpsWeaponRegistry.cpp
-            sources/sector_editor/preview/SectorEditorPreviewHudRenderer.cpp
-            sources/sector_editor/preview/SectorEditorPreviewViewmodelEffectsRenderer.cpp
+            sources/game/FpsHudRenderer.cpp
+            sources/game/FpsViewmodelEffectsRenderer.cpp
     )
     target_include_directories(fps_viewmodel_tests PRIVATE sources)
     target_link_libraries(fps_viewmodel_tests PRIVATE raylib)
@@ -190,10 +213,13 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorMaterialActions.cpp
             sources/sector_editor/SectorEditorTextureActions.cpp
             sources/sector_editor/selection/SectorEditorSelectionService.cpp
+            sources/sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.cpp
             sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
             sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
+            sources/sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
+            sources/sector_editor/services/runtime_objects/SectorEditorAuthoringDoorReconciliation.cpp
             sources/sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.cpp
             sources/sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.cpp
             sources/sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.cpp
@@ -201,6 +227,8 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
             sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
+            sources/engine/audio/AudioSystem.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
@@ -232,12 +260,15 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_serialization_tests
             tests/SectorTopologySerializationTests.cpp
+            sources/game/SectorLevelLoader.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTopologySerialization.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
     )
     target_include_directories(sector_topology_serialization_tests PRIVATE sources)
+    target_compile_definitions(sector_topology_serialization_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(sector_topology_serialization_tests PRIVATE raylib)
     add_test(NAME sector_topology_serialization COMMAND sector_topology_serialization_tests)
 
@@ -271,6 +302,7 @@ if(BUILD_TESTING)
     add_executable(sector_topology_lightmap_tests
             tests/SectorTopologyLightmapTests.cpp
             sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
@@ -299,6 +331,7 @@ if(BUILD_TESTING)
     add_executable(sector_topology_creation_tests
             tests/SectorTopologyCreationTests.cpp
             sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
@@ -367,8 +400,10 @@ if(BUILD_TESTING)
 
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
+            sources/engine/audio/AudioSystem.cpp
             sources/engine/systems/AnimatedModelSystem.cpp
             sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
@@ -406,6 +441,7 @@ if(BUILD_TESTING)
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
             sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp

@@ -1,7 +1,7 @@
 #include "game/FpsViewmodel.h"
 #include "game/FpsWeaponRegistry.h"
-#include "sector_editor/preview/SectorEditorPreviewHudRenderer.h"
-#include "sector_editor/preview/SectorEditorPreviewViewmodelEffectsRenderer.h"
+#include "game/FpsHudRenderer.h"
+#include "game/FpsViewmodelEffectsRenderer.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
 
 #include <raymath.h>
@@ -23,11 +23,17 @@ constexpr const char* ValidRegistry = R"({
  "centerGapPixels":4,"segmentLengthPixels":6,
  "innerThicknessPixels":2,"outlineThicknessPixels":1},
  "firing":{"shotIntervalSeconds":0.18,"maximumRangeWorld":100,
+ "shootSound":"weapons/pistol/shot_01.ogg",
  "recoil":{"translationImpulse":[0,0,-0.03],
  "rotationImpulseDegrees":[-3,0,0],"rollVariationDegrees":0.45,
  "springFrequencyHz":8,"dampingRatio":0.82,
  "maximumTranslation":[0.05,0.05,0.08],
  "maximumRotationDegrees":[8,2,2]},
+ "cameraRecoil":{"enabled":true,"pitchKickDegrees":0.4,
+ "pitchVariationDegrees":0.08,"yawVariationDegrees":0.15,
+ "rollVariationDegrees":0.07,"springFrequencyHz":5.5,
+ "springDampingRatio":0.97,"maxPitchDegrees":1.25,
+ "maxYawDegrees":0.6,"maxRollDegrees":0.2},
  "muzzleSocket":{"position":[0,0.035,0.105],"rotationDegrees":[0,0,0]},
  "muzzleFlash":{"enabled":true,"lifetimeSeconds":0.033,"sizeWorld":0.1,
  "sizeVariation":0.12,"irregularity":0.65,"forwardStretch":1.8,
@@ -56,6 +62,13 @@ constexpr const char* ValidRegistry = R"({
  "useMetallicRoughnessTexture":true}}}}]})";
 
 bool Near(float a, float b, float tolerance = 0.0002f) { return std::abs(a - b) <= tolerance; }
+
+bool Near(Vector3 a, Vector3 b, float tolerance = 0.0002f)
+{
+    return Near(a.x, b.x, tolerance)
+            && Near(a.y, b.y, tolerance)
+            && Near(a.z, b.z, tolerance);
+}
 
 bool SameRectangle(Rectangle lhs, Rectangle rhs)
 {
@@ -103,8 +116,19 @@ void RegistrySuccess()
     assert(Near(pistol->crosshair.outlineThicknessPixels, 1.0f));
     assert(Near(pistol->firing.shotIntervalSeconds, 0.18f));
     assert(Near(pistol->firing.maximumRangeWorld, 100.0f));
+    assert(pistol->firing.shootSoundPath == "weapons/pistol/shot_01.ogg");
     assert(Near(pistol->firing.recoil.translationImpulse.z, -0.03f));
     assert(Near(pistol->firing.recoil.rotationImpulseDegrees.x, -3.0f));
+    assert(pistol->firing.cameraRecoil.enabled);
+    assert(Near(pistol->firing.cameraRecoil.pitchKickDegrees, 0.4f));
+    assert(Near(pistol->firing.cameraRecoil.pitchVariationDegrees, 0.08f));
+    assert(Near(pistol->firing.cameraRecoil.yawVariationDegrees, 0.15f));
+    assert(Near(pistol->firing.cameraRecoil.rollVariationDegrees, 0.07f));
+    assert(Near(pistol->firing.cameraRecoil.springFrequencyHz, 5.5f));
+    assert(Near(pistol->firing.cameraRecoil.springDampingRatio, 0.97f));
+    assert(Near(pistol->firing.cameraRecoil.maxPitchDegrees, 1.25f));
+    assert(Near(pistol->firing.cameraRecoil.maxYawDegrees, 0.6f));
+    assert(Near(pistol->firing.cameraRecoil.maxRollDegrees, 0.2f));
     assert(Near(pistol->firing.muzzleSocket.position.z, 0.105f));
     assert(Near(pistol->firing.muzzleFlash.lifetimeSeconds, 0.033f));
     assert(Near(pistol->firing.muzzleFlash.sizeVariation, 0.12f));
@@ -221,6 +245,25 @@ void RegistrySuccess()
     assert(noCrosshairPistol && !noCrosshairPistol->crosshair.enabled);
     assert(Near(noCrosshairPistol->crosshair.centerGapPixels, 4.0f));
 
+    std::string withoutCameraRecoil = ValidRegistry;
+    const size_t cameraRecoilBegin = withoutCameraRecoil.find(
+            ",\n \"cameraRecoil\":");
+    const size_t muzzleSocketBegin = withoutCameraRecoil.find(
+            "\n \"muzzleSocket\":", cameraRecoilBegin);
+    assert(cameraRecoilBegin != std::string::npos
+            && muzzleSocketBegin != std::string::npos);
+    withoutCameraRecoil.replace(
+            cameraRecoilBegin,
+            muzzleSocketBegin - cameraRecoilBegin,
+            ",");
+    game::FpsWeaponRegistry legacyCameraRegistry;
+    assert(game::ParseFpsWeaponRegistry(
+            withoutCameraRecoil, legacyCameraRegistry, &error));
+    const auto* legacyCameraPistol = game::FindFpsWeaponDefinition(
+            legacyCameraRegistry, "pistol");
+    assert(legacyCameraPistol
+            && !legacyCameraPistol->firing.cameraRecoil.enabled);
+
     std::string legacyFlash = ValidRegistry;
     const size_t gradientBegin = legacyFlash.find("\"coreColor\"");
     const std::string edgeSoftness = "\"edgeSoftness\":0.35";
@@ -287,9 +330,41 @@ void RegistryValidation()
     ExpectRegistryFailure(value, "shot interval and maximum range");
 
     value = ValidRegistry;
+    value.replace(
+            value.find("weapons/pistol/shot_01.ogg"),
+            std::string("weapons/pistol/shot_01.ogg").size(),
+            "../shot_01.ogg");
+    ExpectRegistryFailure(value, "shootSound");
+
+    value = ValidRegistry;
+    value.replace(
+            value.find("weapons/pistol/shot_01.ogg"),
+            std::string("weapons/pistol/shot_01.ogg").size(),
+            "weapons/pistol/shot_01.flac");
+    ExpectRegistryFailure(value, "shootSound");
+
+    value = ValidRegistry;
     value.replace(value.find("\"springFrequencyHz\":8"), 21,
             "\"springFrequencyHz\":0");
     ExpectRegistryFailure(value, "recoil contains an invalid response");
+
+    value = ValidRegistry;
+    value.replace(value.find("\"springDampingRatio\":0.97"),
+            std::string("\"springDampingRatio\":0.97").size(),
+            "\"springDampingRatio\":0");
+    ExpectRegistryFailure(value, "cameraRecoil contains an invalid kick");
+
+    value = ValidRegistry;
+    value.replace(value.find("\"yawVariationDegrees\":0.15"),
+            std::string("\"yawVariationDegrees\":0.15").size(),
+            "\"yawVariationDegrees\":-1");
+    ExpectRegistryFailure(value, "cameraRecoil contains an invalid kick");
+
+    value = ValidRegistry;
+    value.replace(value.find("\"maxRollDegrees\":0.2"),
+            std::string("\"maxRollDegrees\":0.2").size(),
+            "\"maxRollDegrees\":1e999");
+    ExpectRegistryFailure(value, "overflow");
 
     value = ValidRegistry;
     value.replace(value.find("\"lifetimeSeconds\":0.033"), 23,
@@ -528,8 +603,19 @@ void SettingsResolutionAndPersistence()
 
     game::FpsApplicationSettings settings; std::string error;
     assert(game::ParseFpsApplicationSettings(
-            R"({"version":1,"viewmodelOverrides":{"pistol":{"position":[1,2,3],"scale":2,"holsterTransition":{"holsterDurationSeconds":0.2,"unholsterDurationSeconds":0.4,"hiddenTranslation":[0.5,-2,0.1],"hiddenRotationDegrees":[15,1,-12]},"gripCorrection":{"translation":[0.1,0.2,0.3],"rotationDegrees":[10,20,30],"scale":1.25},"attachmentLighting":{"brightnessAdjustment":0.2,"metallicFactor":0.45,"roughnessFactor":0.8},"firing":{"shotIntervalSeconds":0.2,"recoilTranslationImpulse":[0,0,-0.04],"recoilRotationImpulseDegrees":[-4,0,0],"recoilRollVariationDegrees":0.5,"recoilSpringFrequencyHz":9,"recoilDampingRatio":0.9,"muzzlePosition":[0,0.04,0.11],"muzzleRotationDegrees":[1,2,3],"flashLifetimeSeconds":0.06,"flashSizeWorld":0.12,"flashSizeVariation":0.1,"flashIrregularity":0.7,"flashForwardStretch":2.1,"flashMinimumLobeCount":4,"flashMaximumLobeCount":7,"flashRearSuppression":0.85,"flashEdgeSoftness":0.4,"muzzleLightIntensity":7,"muzzleLightRadiusWorld":3,"muzzleLightLifetimeSeconds":0.08}}}})",
+            R"({"version":1,"footsteps":{"defaultSet":"DirtRoad_Mono","volume":0.7,"landingImpactVolumeMultiplier":1.5},"playerSounds":{"events":{"jump":{"set":"Jump","volume":0.8},"land":{"set":"Land"},"wallImpact":{"set":"future/WallImpact","volume":0.6}}},"viewmodelOverrides":{"pistol":{"position":[1,2,3],"scale":2,"holsterTransition":{"holsterDurationSeconds":0.2,"unholsterDurationSeconds":0.4,"hiddenTranslation":[0.5,-2,0.1],"hiddenRotationDegrees":[15,1,-12]},"gripCorrection":{"translation":[0.1,0.2,0.3],"rotationDegrees":[10,20,30],"scale":1.25},"attachmentLighting":{"brightnessAdjustment":0.2,"metallicFactor":0.45,"roughnessFactor":0.8},"firing":{"shotIntervalSeconds":0.2,"recoilTranslationImpulse":[0,0,-0.04],"recoilRotationImpulseDegrees":[-4,0,0],"recoilRollVariationDegrees":0.5,"recoilSpringFrequencyHz":9,"recoilDampingRatio":0.9,"cameraRecoilEnabled":true,"cameraRecoilPitchKickDegrees":0.55,"cameraRecoilPitchVariationDegrees":0.09,"cameraRecoilYawVariationDegrees":0.16,"cameraRecoilRollVariationDegrees":0.08,"cameraRecoilSpringFrequencyHz":6,"cameraRecoilSpringDampingRatio":1,"cameraRecoilMaxPitchDegrees":1.5,"cameraRecoilMaxYawDegrees":0.7,"cameraRecoilMaxRollDegrees":0.25,"muzzlePosition":[0,0.04,0.11],"muzzleRotationDegrees":[1,2,3],"flashLifetimeSeconds":0.06,"flashSizeWorld":0.12,"flashSizeVariation":0.1,"flashIrregularity":0.7,"flashForwardStretch":2.1,"flashMinimumLobeCount":4,"flashMaximumLobeCount":7,"flashRearSuppression":0.85,"flashEdgeSoftness":0.4,"muzzleLightIntensity":7,"muzzleLightRadiusWorld":3,"muzzleLightLifetimeSeconds":0.08}}}})",
             settings, &error));
+    assert(settings.firstLevel == "hub");
+    assert(settings.footsteps.defaultSet == "DirtRoad_Mono");
+    assert(Near(settings.footsteps.volume, 0.7f));
+    assert(Near(settings.footsteps.landingImpactVolumeMultiplier, 1.5f));
+    assert(settings.playerSounds.events.size() == 3);
+    assert(settings.playerSounds.events[0].id == "jump");
+    assert(settings.playerSounds.events[0].set == "Jump");
+    assert(Near(settings.playerSounds.events[0].volume, 0.8f));
+    assert(settings.playerSounds.events[1].id == "land");
+    assert(Near(settings.playerSounds.events[1].volume, 1.0f));
+    assert(settings.playerSounds.events[2].id == "wallImpact");
     assert(game::FindFpsViewmodelOverride(settings, "pistol") != nullptr);
     const auto* parsedTransition =
             game::FindFpsViewmodelHolsterTransitionOverride(
@@ -556,6 +642,11 @@ void SettingsResolutionAndPersistence()
     assert(parsedFiring != nullptr
             && parsedFiring->shotIntervalSeconds
             && parsedFiring->recoilTranslationImpulse
+            && parsedFiring->cameraRecoilEnabled
+            && *parsedFiring->cameraRecoilEnabled
+            && parsedFiring->cameraRecoilPitchKickDegrees
+            && parsedFiring->cameraRecoilSpringDampingRatio
+            && parsedFiring->cameraRecoilMaxRollDegrees
             && parsedFiring->muzzlePosition
             && parsedFiring->flashSizeVariation
             && parsedFiring->flashIrregularity
@@ -623,6 +714,9 @@ void SettingsResolutionAndPersistence()
     game::FpsWeaponFiringDefinition effectiveFiring = firingDefaults;
     effectiveFiring.shotIntervalSeconds = 0.21f;
     effectiveFiring.recoil.translationImpulse.z = -0.05f;
+    effectiveFiring.cameraRecoil.enabled = true;
+    effectiveFiring.cameraRecoil.pitchKickDegrees = 0.45f;
+    effectiveFiring.cameraRecoil.maxPitchDegrees = 1.4f;
     effectiveFiring.muzzleSocket.position.y = 0.05f;
     effectiveFiring.muzzleFlash.sizeVariation = 0.2f;
     effectiveFiring.muzzleFlash.irregularity = 0.8f;
@@ -636,10 +730,18 @@ void SettingsResolutionAndPersistence()
                     firingDefaults, effectiveFiring);
     assert(!game::FpsWeaponFiringOverrideEmpty(firingOverride));
     game::SetFpsWeaponFiringOverride(settings, "pistol", firingOverride);
+    settings.firstLevel = "test4";
     const std::filesystem::path path = std::filesystem::temp_directory_path()/"fps_viewmodel_settings_test.json";
     assert(game::SaveFpsApplicationSettings(path.string(), settings, &error));
     game::FpsApplicationSettings loaded;
     assert(game::LoadFpsApplicationSettings(path.string(), loaded, &error));
+    assert(loaded.firstLevel == "test4");
+    assert(loaded.footsteps.defaultSet == "DirtRoad_Mono");
+    assert(Near(loaded.footsteps.volume, 0.7f));
+    assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.5f));
+    assert(loaded.playerSounds.events.size() == 3);
+    assert(loaded.playerSounds.events[2].set == "future/WallImpact");
+    assert(Near(loaded.playerSounds.events[2].volume, 0.6f));
     assert(game::FindFpsViewmodelOverride(loaded, "pistol") != nullptr);
     assert(game::FindFpsViewmodelHolsterTransitionOverride(
             loaded, "pistol") != nullptr);
@@ -650,6 +752,11 @@ void SettingsResolutionAndPersistence()
     const auto* loadedFiring = game::FindFpsWeaponFiringOverride(
             loaded, "pistol");
     assert(loadedFiring != nullptr
+            && loadedFiring->cameraRecoilEnabled
+            && *loadedFiring->cameraRecoilEnabled
+            && loadedFiring->cameraRecoilPitchKickDegrees
+            && Near(*loadedFiring->cameraRecoilPitchKickDegrees, 0.45f)
+            && loadedFiring->cameraRecoilMaxPitchDegrees
             && loadedFiring->flashEdgeSoftness
             && loadedFiring->flashSizeVariation
             && loadedFiring->flashIrregularity
@@ -692,6 +799,50 @@ void SettingsResolutionAndPersistence()
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"viewmodelOverrides":{"pistol":{"attachmentLighting":{"metallicFactor":"bad"}}}})",
             loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"firstLevel":"../hub"})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"firstLevel":5})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"footsteps":{"defaultSet":"../Tile_Mono"}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"footsteps":{"volume":1.1}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"footsteps":{"volume":"loud"}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"footsteps":{"landingImpactVolumeMultiplier":-0.1}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerSounds":{"events":[]}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerSounds":{"events":{"../jump":{"set":"Jump"}}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerSounds":{"events":{"jump":{"set":"../Jump"}}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerSounds":{"events":{"jump":{"set":"Jump","volume":1.1}}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerSounds":{"events":{"jump":{"volume":0.5}}}})",
+            loaded, &error));
+    assert(game::ParseFpsApplicationSettings(
+            R"({"version":1})",
+            loaded,
+            &error));
+    assert(loaded.footsteps.defaultSet == "Tile_Mono");
+    assert(Near(loaded.footsteps.volume, 0.65f));
+    assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.35f));
+    assert(loaded.playerSounds.events.size() == 2);
+    assert(loaded.playerSounds.events[0].id == "jump");
+    assert(loaded.playerSounds.events[0].set == "Jump");
+    assert(loaded.playerSounds.events[1].id == "land");
 }
 
 void CameraMath()
@@ -716,6 +867,10 @@ void CameraMath()
 void HolsterTransitionStateAndMath()
 {
     game::FpsViewmodelRuntimeState state;
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstered);
+    assert(Near(state.equipProgress, 0.0f));
+    state.equipState = game::FpsViewmodelEquipState::Equipped;
+    state.equipProgress = 1.0f;
     state.activeWeaponId = "pistol";
     state.loadState = game::FpsViewmodelLoadState::Pending;
     state.holsterTransition.holsterDurationSeconds = 0.25f;
@@ -1035,10 +1190,12 @@ void CrosshairVisibilityAndLayout()
     assert(game::ParseFpsWeaponRegistry(ValidRegistry, registry, &error));
     game::FpsViewmodelRuntimeState runtime;
     runtime.activeWeaponId = "pistol";
+    runtime.equipState = game::FpsViewmodelEquipState::Equipped;
+    runtime.equipProgress = 1.0f;
 
     const auto visible = [&](bool preview3DActive) {
-        return game::ShouldDrawSectorEditorPreviewCrosshair(
-                game::SectorEditorPreviewHudContext{
+        return game::ShouldDrawFpsCrosshair(
+                game::FpsHudContext{
                         preview3DActive,
                         Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
                         registry,
@@ -1079,14 +1236,14 @@ void CrosshairVisibilityAndLayout()
 
     const game::FpsWeaponCrosshairDefinition& crosshair =
             registry.weapons.front().crosshair;
-    assert(Near(game::SectorEditorPreviewHudScale(
+    assert(Near(game::FpsHudScale(
             Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f}), 1.0f));
-    assert(Near(game::SectorEditorPreviewHudScale(
+    assert(Near(game::FpsHudScale(
             Rectangle{100.0f, 50.0f, 960.0f, 540.0f}), 0.5f));
-    assert(Near(game::SectorEditorPreviewHudScale(
+    assert(Near(game::FpsHudScale(
             Rectangle{0.0f, 0.0f, 3840.0f, 2160.0f}), 2.0f));
 
-    const auto full = game::BuildSectorEditorPreviewCrosshairLayout(
+    const auto full = game::BuildFpsCrosshairLayout(
             crosshair,
             Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
             1.0f);
@@ -1107,12 +1264,12 @@ void CrosshairVisibilityAndLayout()
             4.0f));
 
     const Rectangle oddViewport{13.0f, 17.0f, 1919.0f, 1079.0f};
-    const auto odd = game::BuildSectorEditorPreviewCrosshairLayout(
+    const auto odd = game::BuildFpsCrosshairLayout(
             crosshair, oddViewport, 1.0f);
     assert(Near(odd.center.x, 973.0f));
     assert(Near(odd.center.y, 557.0f));
 
-    const auto half = game::BuildSectorEditorPreviewCrosshairLayout(
+    const auto half = game::BuildFpsCrosshairLayout(
             crosshair,
             Rectangle{100.0f, 50.0f, 960.0f, 540.0f},
             0.5f);
@@ -1120,7 +1277,7 @@ void CrosshairVisibilityAndLayout()
     assert(Near(half.segments[0].inner.width, 3.0f));
     assert(Near(half.segments[0].inner.height, 1.0f));
 
-    const auto twice = game::BuildSectorEditorPreviewCrosshairLayout(
+    const auto twice = game::BuildFpsCrosshairLayout(
             crosshair,
             Rectangle{0.0f, 0.0f, 3840.0f, 2160.0f},
             2.0f);
@@ -1132,7 +1289,7 @@ void CrosshairVisibilityAndLayout()
     runtime.attachment.handModelTransform = MatrixTranslate(10.0f, 20.0f, 30.0f);
     runtime.attachment.pistolWorldTransform = MatrixRotateY(1.25f);
     const auto afterWeaponTransforms =
-            game::BuildSectorEditorPreviewCrosshairLayout(
+            game::BuildFpsCrosshairLayout(
                     crosshair,
                     Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
                     1.0f);
@@ -1155,12 +1312,14 @@ void RuntimeStateAndGating()
     assert(Near(state.brightnessMultiplier, 1.0f));
     assert(Near(state.attachment.lighting.brightnessAdjustment, 0.0f));
     assert(Near(state.attachment.brightnessMultiplier, 1.0f));
-    assert(state.equipState == game::FpsViewmodelEquipState::Equipped);
-    assert(Near(state.equipProgress, 1.0f));
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstered);
+    assert(Near(state.equipProgress, 0.0f));
     assert(!game::IsFpsViewmodelReadyForUse(state));
     assert(!game::ToggleFpsViewmodelHolster(state,false,false));
     state.activeWeaponId = "pistol";
     state.loadState=game::FpsViewmodelLoadState::Pending;
+    state.equipState = game::FpsViewmodelEquipState::Equipped;
+    state.equipProgress = 1.0f;
     assert(!game::ToggleFpsViewmodelHolster(state,true,true));
     assert(game::ToggleFpsViewmodelHolster(state,true,false));
     assert(state.equipState == game::FpsViewmodelEquipState::Holstering);
@@ -1204,19 +1363,35 @@ void RuntimeStateAndGating()
     assert(state.attachment.boneIndex == -1);
     assert(Near(state.attachment.lighting.brightnessAdjustment, 0.0f));
     assert(Near(state.attachment.brightnessMultiplier, 1.0f));
-    assert(state.equipState == game::FpsViewmodelEquipState::Equipped);
-    assert(Near(state.equipProgress, 1.0f));
+    assert(state.equipState == game::FpsViewmodelEquipState::Holstered);
+    assert(Near(state.equipProgress, 0.0f));
     assert(!game::IsFpsViewmodelReadyForUse(state));
 }
 
 void FiringRuntimeAndTransforms()
 {
+    const float firstPitch = game::FpsWeaponShotPitch(1, 0x12345678u);
+    const float repeatedPitch = game::FpsWeaponShotPitch(1, 0x12345678u);
+    const float nextPitch = game::FpsWeaponShotPitch(2, 0x12345678u);
+    assert(firstPitch >= 0.96f && firstPitch <= 1.04f);
+    assert(nextPitch >= 0.96f && nextPitch <= 1.04f);
+    assert(Near(firstPitch, repeatedPitch));
+    assert(!Near(firstPitch, nextPitch, 0.000001f));
+
     game::FpsWeaponFiringDefinition clampedDefinition;
     clampedDefinition.muzzleFlash.lifetimeSeconds = 120.0f;
     clampedDefinition.muzzleFlash.edgeSoftness = 2.0f;
+    clampedDefinition.cameraRecoil.pitchKickDegrees =
+            std::numeric_limits<float>::quiet_NaN();
+    clampedDefinition.cameraRecoil.yawVariationDegrees = -2.0f;
+    clampedDefinition.cameraRecoil.springFrequencyHz =
+            std::numeric_limits<float>::infinity();
     clampedDefinition = game::ClampFpsWeaponFiringDefinition(clampedDefinition);
     assert(Near(clampedDefinition.muzzleFlash.lifetimeSeconds, 60.0f));
     assert(Near(clampedDefinition.muzzleFlash.edgeSoftness, 1.0f));
+    assert(Near(clampedDefinition.cameraRecoil.pitchKickDegrees, 0.0f));
+    assert(Near(clampedDefinition.cameraRecoil.yawVariationDegrees, 0.0f));
+    assert(Near(clampedDefinition.cameraRecoil.springFrequencyHz, 5.5f));
 
     game::FpsMuzzleFlashRuntimeState gradient;
     gradient.coreColor = Color{255, 255, 245, 255};
@@ -1224,39 +1399,39 @@ void FiringRuntimeAndTransforms()
     gradient.warmColor = Color{255, 90, 15, 230};
     gradient.edgeColor = Color{120, 15, 5, 150};
     gradient.edgeSoftness = 0.35f;
-    const Color core = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color core = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.0f, 1.0f);
-    const Color hot = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color hot = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.22f, 1.0f);
-    const Color warm = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color warm = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.58f, 1.0f);
-    const Color edge = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color edge = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.82f, 1.0f);
-    const Color boundary = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color boundary = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 1.0f, 1.0f);
     assert(core.r == 255 && core.g == 255 && core.b == 245 && core.a == 255);
     assert(hot.r == 255 && hot.g == 235 && hot.b == 120);
     assert(warm.r == 255 && warm.g == 90 && warm.b == 15);
     assert(edge.r == 120 && edge.g == 15 && edge.b == 5);
     assert(boundary.a == 0);
-    const Color halfLife = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color halfLife = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.0f, 0.5f);
     assert(halfLife.a == 128);
     gradient.edgeSoftness = 0.10f;
-    const Color narrow = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color narrow = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.80f, 1.0f);
     gradient.edgeSoftness = 0.60f;
-    const Color wide = game::EvaluateSectorEditorPreviewMuzzleFlashGradient(
+    const Color wide = game::EvaluateFpsMuzzleFlashGradient(
             gradient, 0.80f, 1.0f);
     assert(wide.a < narrow.a);
     const auto earlyTemporal =
-            game::EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+            game::EvaluateFpsMuzzleFlashTemporalState(
                     0.005f, 0.033f);
     const auto lateTemporal =
-            game::EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+            game::EvaluateFpsMuzzleFlashTemporalState(
                     0.02475f, 0.033f);
     const auto expiredTemporal =
-            game::EvaluateSectorEditorPreviewMuzzleFlashTemporalState(
+            game::EvaluateFpsMuzzleFlashTemporalState(
                     0.033f, 0.033f);
     assert(Near(earlyTemporal.expansionScale, 1.0f));
     assert(Near(earlyTemporal.opacity, 1.0f));
@@ -1300,6 +1475,10 @@ void FiringRuntimeAndTransforms()
     shot.distance = 5.0f;
     shot.sectorId = 7;
     viewmodel.firing.randomState = 12345u;
+    viewmodel.firing.definition.cameraRecoil =
+            game::FpsWeaponCameraRecoilDefinition{
+                    true, 0.4f, 0.08f, 0.15f, 0.07f,
+                    5.5f, 0.97f, 1.25f, 0.6f, 0.2f};
     game::FpsWeaponFiringRuntimeState duplicate = viewmodel.firing;
     game::FpsMuzzleEmissionCapture emission;
     emission.valid = true;
@@ -1314,6 +1493,14 @@ void FiringRuntimeAndTransforms()
     assert(Near(viewmodel.firing.recoil.translation.z, -0.03f));
     assert(Near(viewmodel.firing.recoil.rotationDegrees.z,
             duplicate.recoil.rotationDegrees.z));
+    assert(viewmodel.firing.cameraRecoil.rotationDegrees.x >= 0.32f
+            && viewmodel.firing.cameraRecoil.rotationDegrees.x <= 0.48f);
+    assert(Near(
+            viewmodel.firing.cameraRecoil.rotationDegrees.x,
+            duplicate.cameraRecoil.rotationDegrees.x));
+    assert(Near(viewmodel.firing.lastShot.rayDirection.x, 0.0f)
+            && Near(viewmodel.firing.lastShot.rayDirection.y, 0.0f)
+            && Near(viewmodel.firing.lastShot.rayDirection.z, 1.0f));
     assert(viewmodel.firing.flash.active && viewmodel.firing.light.active);
     assert(viewmodel.firing.flash.coreColor.r == 255);
     assert(Near(viewmodel.firing.flash.edgeSoftness, 0.35f));
@@ -1352,6 +1539,10 @@ void FiringRuntimeAndTransforms()
     assert(Near(viewmodel.firing.recoil.translation.y, 0.0f, 0.0001f));
     assert(Near(viewmodel.firing.recoil.translation.z, 0.0f, 0.0001f));
     assert(Near(viewmodel.firing.recoil.rotationDegrees.x, 0.0f, 0.001f));
+    assert(Near(
+            viewmodel.firing.cameraRecoil.rotationDegrees.x,
+            0.0f,
+            0.001f));
     game::ApplyFpsWeaponShotEffects(viewmodel.firing, shot, emission);
     game::AdvanceFpsWeaponFiringRuntime(viewmodel.firing, 10.0f);
     assert(std::isfinite(viewmodel.firing.recoil.translation.z));
@@ -1471,8 +1662,8 @@ void FiringRuntimeAndTransforms()
     }
     assert(observedDifferentLobeCountOrPhase);
 
-    const game::SectorEditorPreviewMuzzleFlashRibbonAxes axialAxes =
-            game::BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+    const game::FpsMuzzleFlashRibbonAxes axialAxes =
+            game::BuildFpsMuzzleFlashRibbonAxes(
                     Vector3{0.0f, 0.0f, 1.0f},
                     Vector3{1.0f, 0.0f, 0.0f});
     assert(axialAxes.valid);
@@ -1485,8 +1676,8 @@ void FiringRuntimeAndTransforms()
     assert(Near(Vector3DotProduct(
             axialAxes.second, Vector3{0.0f, 0.0f, 1.0f}), 0.0f));
 
-    const game::SectorEditorPreviewMuzzleFlashRibbonAxes fallbackAxes =
-            game::BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+    const game::FpsMuzzleFlashRibbonAxes fallbackAxes =
+            game::BuildFpsMuzzleFlashRibbonAxes(
                     Vector3{0.0f, 1.0f, 0.0f},
                     Vector3{0.0f, 2.0f, 0.0f});
     assert(fallbackAxes.valid);
@@ -1494,7 +1685,7 @@ void FiringRuntimeAndTransforms()
     assert(Near(Vector3Length(fallbackAxes.second), 1.0f));
     assert(Near(Vector3DotProduct(
             fallbackAxes.first, fallbackAxes.second), 0.0f));
-    assert(!game::BuildSectorEditorPreviewMuzzleFlashRibbonAxes(
+    assert(!game::BuildFpsMuzzleFlashRibbonAxes(
             Vector3{}, Vector3{1.0f, 0.0f, 0.0f}).valid);
 
     Camera3D shotCamera{};
@@ -1591,6 +1782,97 @@ void FiringRuntimeAndTransforms()
                     camera, presentation, holster)));
 }
 
+void CameraRecoilRuntime()
+{
+    game::FpsWeaponCameraRecoilDefinition definition{
+            true, 0.4f, 0.08f, 0.15f, 0.07f,
+            5.5f, 0.97f, 1.25f, 0.6f, 0.2f};
+
+    uint32_t randomState = 0x12345678u;
+    for (int shot = 0; shot < 512; ++shot) {
+        const Vector3 kick = game::SampleFpsCameraRecoilKickDegrees(
+                definition, randomState);
+        assert(kick.x >= 0.32f && kick.x <= 0.48f);
+        assert(kick.y >= -0.15f && kick.y <= 0.15f);
+        assert(kick.z >= -0.07f && kick.z <= 0.07f);
+    }
+
+    game::FpsWeaponCameraRecoilDefinition nonDownward = definition;
+    nonDownward.pitchKickDegrees = 0.02f;
+    nonDownward.pitchVariationDegrees = 0.08f;
+    for (int shot = 0; shot < 128; ++shot) {
+        assert(game::SampleFpsCameraRecoilKickDegrees(
+                nonDownward, randomState).x >= 0.0f);
+    }
+
+    game::FpsCameraRecoilRuntimeState accumulated;
+    for (int shot = 0; shot < 32; ++shot) {
+        game::ApplyFpsCameraRecoilImpulse(accumulated, definition);
+        assert(std::fabs(accumulated.rotationDegrees.x)
+                <= definition.maxPitchDegrees);
+        assert(std::fabs(accumulated.rotationDegrees.y)
+                <= definition.maxYawDegrees);
+        assert(std::fabs(accumulated.rotationDegrees.z)
+                <= definition.maxRollDegrees);
+    }
+    assert(Near(
+            accumulated.rotationDegrees.x,
+            definition.maxPitchDegrees));
+
+    game::FpsCameraRecoilRuntimeState sixtyHz;
+    game::FpsCameraRecoilRuntimeState oneTwentyHz;
+    sixtyHz.randomState = 42u;
+    oneTwentyHz.randomState = 42u;
+    game::ApplyFpsCameraRecoilImpulse(sixtyHz, definition);
+    game::ApplyFpsCameraRecoilImpulse(oneTwentyHz, definition);
+    assert(Near(sixtyHz.rotationDegrees.x, oneTwentyHz.rotationDegrees.x));
+    for (int frame = 0; frame < 60; ++frame) {
+        game::AdvanceFpsCameraRecoil(sixtyHz, definition, 1.0f / 60.0f);
+    }
+    for (int frame = 0; frame < 120; ++frame) {
+        game::AdvanceFpsCameraRecoil(
+                oneTwentyHz, definition, 1.0f / 120.0f);
+    }
+    assert(Near(
+            sixtyHz.rotationDegrees.x,
+            oneTwentyHz.rotationDegrees.x,
+            0.002f));
+    assert(Near(sixtyHz.rotationDegrees.x, 0.0f, 0.001f));
+    assert(Near(oneTwentyHz.rotationDegrees.y, 0.0f, 0.001f));
+    assert(Near(oneTwentyHz.rotationDegrees.z, 0.0f, 0.001f));
+
+    game::FpsWeaponCameraRecoilDefinition faster = definition;
+    faster.springFrequencyHz = 11.0f;
+    game::FpsCameraRecoilRuntimeState normalKick;
+    game::FpsCameraRecoilRuntimeState fastKick;
+    normalKick.randomState = 99u;
+    fastKick.randomState = 99u;
+    game::ApplyFpsCameraRecoilImpulse(normalKick, definition);
+    game::ApplyFpsCameraRecoilImpulse(fastKick, faster);
+    assert(Near(normalKick.rotationDegrees.x, fastKick.rotationDegrees.x));
+
+    game::FpsViewmodelRuntimeState gatedViewmodel;
+    gatedViewmodel.activeWeaponId = "pistol";
+    gatedViewmodel.equipState = game::FpsViewmodelEquipState::Equipped;
+    gatedViewmodel.equipProgress = 1.0f;
+    gatedViewmodel.firing.cooldownRemainingSeconds = 0.1f;
+    game::FpsFireRejectReason reason = game::FpsFireRejectReason::None;
+    assert(!game::CanFireFpsWeapon(
+            gatedViewmodel, true, true, false, &reason));
+    assert(reason == game::FpsFireRejectReason::Cooldown);
+    assert(Near(
+            gatedViewmodel.firing.cameraRecoil.rotationDegrees,
+            Vector3{}));
+
+    accumulated.rotationDegrees.x =
+            std::numeric_limits<float>::quiet_NaN();
+    game::AdvanceFpsCameraRecoil(accumulated, definition, 1.0f / 60.0f);
+    assert(std::isfinite(accumulated.rotationDegrees.x));
+    game::ResetFpsCameraRecoil(accumulated);
+    assert(Near(accumulated.rotationDegrees, Vector3{}));
+    assert(Near(accumulated.rotationVelocityDegrees, Vector3{}));
+}
+
 } // namespace
 
 int main()
@@ -1601,5 +1883,6 @@ int main()
     PreparedPistolFrameTwentyFit(); BrightnessMapping();
     MaterialOverrideApplication(); CrosshairVisibilityAndLayout();
     RuntimeStateAndGating(); FiringRuntimeAndTransforms();
+    CameraRecoilRuntime();
     std::cout << "FPS viewmodel tests passed\n";
 }

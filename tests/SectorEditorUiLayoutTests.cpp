@@ -1,5 +1,6 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
+#include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_demo/SectorLightmap.h"
 
 #include <cmath>
@@ -117,6 +118,25 @@ void TestRightNumericRowClamps()
     Check(!Overlaps(layout.labelRect, layout.inputRect), "clamped right numeric label does not overlap input");
 }
 
+void TestInspectorNumericWidthsMatchControlKinds()
+{
+    const game::SectorEditorInspectorNumericRowLayout floatLayout =
+            game::BuildSectorEditorInspectorRightFloatRowLayout(
+                    0.0f, 320.0f, 40.0f, 8.0f);
+    const game::SectorEditorInspectorNumericRowLayout intLayout =
+            game::BuildSectorEditorInspectorRightIntRowLayout(
+                    0.0f, 320.0f, 40.0f, 8.0f);
+
+    Check(Near(floatLayout.inputRect.width, 112.0f),
+          "prop float fields use the compact fixed input width");
+    Check(floatLayout.labelRect.width >= 200.0f,
+          "prop float rows leave room for transform labels");
+    Check(Near(intLayout.inputRect.width, 150.0f),
+          "integer steppers reserve enough width for buttons and value text");
+    Check(intLayout.inputRect.width > floatLayout.inputRect.width,
+          "integer steppers are wider than float fields");
+}
+
 void TestTextureRowHeight()
 {
     Check(Near(game::SectorEditorInspectorTextureRowHeight(), 60.0f),
@@ -207,10 +227,12 @@ void TestDoorInspectorHeightCountsCoreRows()
             + textureStatusHeight + gap
             + rowH + gap
             + rowH + gap
+            + rowH + gap
+            + rowH + gap
             + rowH + gap;
 
     Check(Near(height, expected),
-          "door inspector height includes anchor, core fields, motion, interaction controls, texture status, texture buttons, and delete");
+          "door inspector height includes anchor, core fields, motion, interaction controls, asset status, texture and sound buttons, and delete");
 }
 
 void TestDoorTextureSettingsModalLayoutDoesNotOverlap()
@@ -277,6 +299,59 @@ void TestPreviewSettingsModalCopiesObjectProbeSettings()
     Check(Near(modal.draftLightmapSettings.objectProbeLowerHeightWorld, 0.75f)
                   && Near(modal.draftLightmapSettings.objectProbeUpperHeightWorld, 2.25f),
           "preview settings modal draft copies layered object probe heights");
+}
+
+void TestPreviewSettingsScrollableContentHeightsReachLastControls()
+{
+    const float rowH = 40.0f;
+    const float gap = 12.0f;
+    const float lightingLastControlBottom =
+            11.0f * (rowH + gap)
+            + 3.0f * (8.0f + 38.0f)
+            + 36.0f + gap;
+    const float fogLastControlBottom =
+            10.0f * (rowH + gap)
+            + 28.0f
+            + 36.0f + gap
+            + 38.0f
+            + 36.0f + gap;
+
+    Check(Near(
+                  game::MeasureSectorPreviewSettingsLightingContentHeight(rowH, gap),
+                  lightingLastControlBottom + 12.0f),
+          "lighting scroll reaches object probe upper height with bottom padding");
+    Check(Near(
+                  game::MeasureSectorPreviewSettingsFogContentHeight(rowH, gap),
+                  fogLastControlBottom + 12.0f),
+          "fog scroll reaches the complete color swatch with bottom padding");
+}
+
+void TestAuthoringFaceInspectorHeightIncludesAllSections()
+{
+    const float rowH = 40.0f;
+    const float gap = 8.0f;
+    const float anchorSummaryHeight = 28.0f;
+    game::SectorAuthoringFaceAnchor anchor;
+
+    const float height =
+            game::MeasureSectorEditorAuthoringFaceInspectorContentHeight(
+                    anchor,
+                    rowH,
+                    gap,
+                    anchorSummaryHeight);
+    Check(Near(height, 1434.0f),
+          "authoring face height includes merge, ceiling sky, audio, materials, decals, and padding");
+
+    anchor.floorDecal.textureId = "floor_decal";
+    anchor.floorDecal.emissive = true;
+    const float assignedDecalHeight =
+            game::MeasureSectorEditorAuthoringFaceInspectorContentHeight(
+                    anchor,
+                    rowH,
+                    gap,
+                    anchorSummaryHeight);
+    Check(Near(assignedDecalHeight - height, 232.0f),
+          "authoring face height includes expanded emissive flat decal controls");
 }
 
 void TestPreviewSettingsModalResetPreservesSessionView()
@@ -424,12 +499,15 @@ int main()
     TestRightFloatNumericRow();
     TestRightIntNumericRow();
     TestRightNumericRowClamps();
+    TestInspectorNumericWidthsMatchControlKinds();
     TestTextureRowHeight();
     TestStackedOptionRow();
     TestRuntimeObjectInspectorHeightCountsBillboardRows();
     TestDoorInspectorHeightCountsCoreRows();
     TestDoorTextureSettingsModalLayoutDoesNotOverlap();
     TestPreviewSettingsModalCopiesObjectProbeSettings();
+    TestPreviewSettingsScrollableContentHeightsReachLastControls();
+    TestAuthoringFaceInspectorHeightIncludesAllSections();
     TestPreviewSettingsModalResetPreservesSessionView();
     TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash();
     TestPreviewSettingsModalResetsObjectProbeDefaults();

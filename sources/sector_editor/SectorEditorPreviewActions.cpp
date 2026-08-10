@@ -17,6 +17,8 @@ void ClearPreviewGameplayVisualState(SectorEditorPreviewControllerState& control
 {
     controllerState.visualStepOffsetY = 0.0f;
     ClearSectorFpsHeadBob(controllerState.headBobState);
+    ClearSectorFpsFootstepCadence(controllerState.footstepCadenceState);
+    controllerState.frameEvents = SectorFpsFrameEvents{};
     ClearSectorFpsLandingDip(controllerState.landingDipState);
 }
 
@@ -285,6 +287,7 @@ void UpdateSectorEditorGameplayPreview(
         float previousVisualEyeY,
         float dt)
 {
+    controllerState.frameEvents = SectorFpsFrameEvents{};
     if (!std::isfinite(controllerState.landingDipState.offsetY)) {
         ClearSectorFpsLandingDip(controllerState.landingDipState);
     }
@@ -426,6 +429,9 @@ void UpdateSectorEditorGameplayPreview(
                     controllerState,
                     staticModelColliders),
             dt);
+    controllerState.frameEvents = BuildSectorFpsFrameEvents(
+            startedJump,
+            collisionState.previewVerticalResult);
     if (collisionState.previewCollisionNoclipFallback || !collisionState.previewVerticalResult.hasSector) {
         controllerState.visualStepOffsetY = 0.0f;
         ClearSectorFpsLandingDip(controllerState.landingDipState);
@@ -462,6 +468,12 @@ void UpdateSectorEditorGameplayPreview(
             resolvedHorizontalSpeed,
             controllerState.fpsControllerState.yawRadians,
             dt);
+    controllerState.frameEvents.footstep = UpdateSectorFpsFootstepCadence(
+            controllerState.footstepCadenceState,
+            controllerState.fpsControllerConfig,
+            headBobActive && !controllerState.frameEvents.landed,
+            Vector2Length(resolvedHorizontalMovement),
+            resolvedHorizontalSpeed);
 }
 
 } // namespace game

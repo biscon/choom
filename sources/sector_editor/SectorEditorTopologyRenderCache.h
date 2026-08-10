@@ -37,6 +37,8 @@ struct SectorEditorTopologyDrawContext {
     int hoveredDynamicSpotLightId = -1;
     SectorAuthoringSelectionTarget selectedAuthoring;
     SectorAuthoringSelectionTarget hoveredAuthoring;
+    const std::vector<int>* selectedAuthoringFaceAnchorIds = nullptr;
+    int authoringFaceMergeTargetId = -1;
 };
 
 SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
@@ -46,6 +48,12 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         uint64_t revision);
 
 void AppendCachedRuntimeObjectPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates);
+void AppendCachedLevelMarkerPickCandidates(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,
         Vector2 screenPoint,
@@ -76,6 +84,10 @@ void DrawCachedTopologyDynamicSpotLights(
 void DrawCachedRuntimeObjects(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);
+void DrawCachedLevelMarkers(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        const LevelMarkerDragState* drag = nullptr);
 void DrawCachedAuthoringGraphOverlay(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);

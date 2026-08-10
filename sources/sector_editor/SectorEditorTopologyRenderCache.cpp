@@ -433,9 +433,17 @@ bool ShouldDrawAuthoringFaceSelectionHighlight(
         const SectorEditorTopologyDrawContext& context,
         int faceAnchorId)
 {
+    const bool selected = context.selectedAuthoringFaceAnchorIds != nullptr
+            ? std::find(
+                      context.selectedAuthoringFaceAnchorIds->begin(),
+                      context.selectedAuthoringFaceAnchorIds->end(),
+                      faceAnchorId)
+                    != context.selectedAuthoringFaceAnchorIds->end()
+            : context.selectedAuthoring.kind
+                            == SectorAuthoringSelectionKind::FaceAnchor
+                    && context.selectedAuthoring.faceAnchorId == faceAnchorId;
     return !context.derivedTopologyStale
-            && context.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
-            && context.selectedAuthoring.faceAnchorId == faceAnchorId
+            && selected
             && FindCachedAuthoringFaceHighlight(cache, faceAnchorId) != nullptr;
 }
 
@@ -472,6 +480,18 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
             cached.partialEndpoint = AuthoringVertexToMap(start == nullptr ? *end : *start);
         }
         cache.authoringLines.push_back(cached);
+    }
+
+    cache.levelMarkers.reserve(authoringGraph.levelMarkers.size());
+    for (const SectorAuthoringLevelMarker& marker : authoringGraph.levelMarkers) {
+        CachedAuthoringLevelMarkerDraw cached;
+        cached.markerId = marker.id;
+        cached.referenceId = marker.referenceId;
+        cached.map = Vector2{
+                SectorCoordToVisibleAuthoring(marker.x),
+                SectorCoordToVisibleAuthoring(marker.z)};
+        cached.orientationDegrees = marker.orientationDegrees;
+        cache.levelMarkers.push_back(std::move(cached));
     }
 
     const std::vector<SectorAuthoringValidationIssue> referenceIssues =
@@ -828,6 +848,30 @@ void AppendCachedRuntimeObjectPickCandidates(
     }
 }
 
+void AppendCachedLevelMarkerPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates)
+{
+    if (!cache.valid || tolerancePixels < 0.0f) {
+        return;
+    }
+    const float tolerance2 = tolerancePixels * tolerancePixels;
+    for (const CachedAuthoringLevelMarkerDraw& marker : cache.levelMarkers) {
+        const Vector2 center = CachedMapToScreen(context, marker.map);
+        const float dx = center.x - screenPoint.x;
+        const float dy = center.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 <= tolerance2) {
+            outCandidates.push_back(SectorEditorPickCandidate{
+                    SectorEditorPickTarget{SectorEditorPickKind::LevelMarker, marker.markerId},
+                    distance2});
+        }
+    }
+}
+
 void DrawCachedTopologySectors(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context)
@@ -907,9 +951,10 @@ void DrawCachedAuthoringGraphOverlay(
         if (!highlight.isVoid) {
             continue;
         }
-        const bool selected =
-                context.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
-                && context.selectedAuthoring.faceAnchorId == highlight.faceAnchorId;
+        const bool selected = ShouldDrawAuthoringFaceSelectionHighlight(
+                cache,
+                context,
+                highlight.faceAnchorId);
         if (selected) {
             continue;
         }
@@ -921,19 +966,38 @@ void DrawCachedAuthoringGraphOverlay(
         }
     }
 
-    if (context.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
-            && !context.derivedTopologyStale) {
-        if (const CachedAuthoringFaceHighlightDraw* highlight = FindCachedAuthoringFaceHighlight(
-                    cache,
-                    context.selectedAuthoring.faceAnchorId)) {
-            const Color selectedFaceColor = highlight->isVoid
+    if (!context.derivedTopologyStale) {
+        for (const CachedAuthoringFaceHighlightDraw& highlight
+                : cache.authoringFaceHighlights) {
+            if (!ShouldDrawAuthoringFaceSelectionHighlight(
+                        cache,
+                        context,
+                        highlight.faceAnchorId)) {
+                continue;
+            }
+            const Color selectedFaceColor = highlight.isVoid
                     ? Color{190, 188, 204, 235}
                     : selectedLineColor;
-            for (const CachedTopologyOutlineSegment& segment : highlight->outlineSegments) {
+            for (const CachedTopologyOutlineSegment& segment
+                    : highlight.outlineSegments) {
                 const Vector2 a = CachedMapToScreen(context, segment.a);
                 const Vector2 b = CachedMapToScreen(context, segment.b);
                 DrawLineEx(a, b, 8.0f, lineShadow);
                 DrawLineEx(a, b, 4.0f, selectedFaceColor);
+            }
+        }
+
+        if (const CachedAuthoringFaceHighlightDraw* target =
+                    FindCachedAuthoringFaceHighlight(
+                            cache,
+                            context.authoringFaceMergeTargetId)) {
+            const Color targetColor{100, 226, 150, 255};
+            for (const CachedTopologyOutlineSegment& segment
+                    : target->outlineSegments) {
+                const Vector2 a = CachedMapToScreen(context, segment.a);
+                const Vector2 b = CachedMapToScreen(context, segment.b);
+                DrawLineEx(a, b, 10.0f, lineShadow);
+                DrawLineEx(a, b, 5.0f, targetColor);
             }
         }
     }
@@ -1452,6 +1516,52 @@ void DrawCachedRuntimeObjects(
                     2.0f,
                     outline);
         }
+    }
+}
+
+void DrawCachedLevelMarkers(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        const LevelMarkerDragState* drag)
+{
+    constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
+    const Color outline{28, 18, 40, 255};
+    const Color normal{196, 104, 244, 255};
+    const Color selectedColor{92, 224, 244, 255};
+    const Color hoveredColor{236, 168, 255, 255};
+    for (const CachedAuthoringLevelMarkerDraw& marker : cache.levelMarkers) {
+        Vector2 map = marker.map;
+        if (drag != nullptr && drag->active && drag->markerId == marker.markerId) {
+            map = Vector2{
+                    SectorCoordToVisibleAuthoring(drag->previewX),
+                    SectorCoordToVisibleAuthoring(drag->previewZ)};
+        }
+        const bool selected = context.selectedAuthoring.kind == SectorAuthoringSelectionKind::LevelMarker
+                && context.selectedAuthoring.levelMarkerId == marker.markerId;
+        const bool hovered = context.hoveredAuthoring.kind == SectorAuthoringSelectionKind::LevelMarker
+                && context.hoveredAuthoring.levelMarkerId == marker.markerId;
+        const Color color = selected ? selectedColor : hovered ? hoveredColor : normal;
+        const Vector2 center = CachedMapToScreen(context, map);
+        const float radius = selected ? 9.0f : 7.0f;
+        const Vector2 top{center.x, center.y - radius};
+        const Vector2 right{center.x + radius, center.y};
+        const Vector2 bottom{center.x, center.y + radius};
+        const Vector2 left{center.x - radius, center.y};
+        DrawTriangle(top, right, bottom, color);
+        DrawTriangle(top, bottom, left, color);
+        DrawLineEx(top, right, 2.0f, outline);
+        DrawLineEx(right, bottom, 2.0f, outline);
+        DrawLineEx(bottom, left, 2.0f, outline);
+        DrawLineEx(left, top, 2.0f, outline);
+        DrawCircleV(center, selected ? 2.8f : 2.2f, outline);
+
+        const float radians = marker.orientationDegrees * DegreesToRadians;
+        const Vector2 direction{std::cos(radians), std::sin(radians)};
+        const Vector2 tip{center.x + direction.x * 22.0f, center.y + direction.y * 22.0f};
+        DrawLineEx(center, tip, selected ? 3.0f : 2.0f, color);
+        DrawCircleV(tip, selected ? 3.5f : 3.0f, color);
+        DrawText(marker.referenceId.c_str(), static_cast<int>(center.x + 11.0f),
+                static_cast<int>(center.y - 16.0f), 12, color);
     }
 }
 

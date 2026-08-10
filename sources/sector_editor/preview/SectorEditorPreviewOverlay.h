@@ -3,12 +3,14 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
+#include "game/FpsViewmodel.h"
 #include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
+#include "sector_demo/SectorRuntimeObjects.h"
 
 #include <raylib.h>
 
@@ -33,6 +35,8 @@ struct SectorEditorPreviewOverlayContext {
     bool topologyDocumentDirty = false;
     RuntimeObjectDragState& runtimeObjectDrag;
     SectorEditorPreviewState& previewState;
+    SectorRuntimeObjectState& runtimeObjects;
+    FpsViewmodelRuntimeState& viewmodel;
     SelectionState& selectionState;
     ManipulationState& manipulationState;
     SectorEditorSelectionUiDependencies selectionUi;
@@ -75,6 +79,7 @@ void DrawSectorEditorPreviewSpotLightOverlay(
 void DrawSectorEditorPreviewObjectProbeOverlay(
         const SectorTopologyMap& topologyMap,
         const SectorEditorPreviewState& previewState,
+        const SectorRuntimeObjectState& runtimeObjects,
         const SectorMeshRenderer& preview);
 
 SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(

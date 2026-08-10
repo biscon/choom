@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/assets/AssetHandles.h"
+#include "engine/assets/AudioAssets.h"
 #include "engine/assets/FontAssets.h"
 #include "engine/assets/FontLoadFlags.h"
 #include "engine/assets/ModelAssets.h"
@@ -92,6 +93,19 @@ public:
     // acquire ownership; callers must consume it immediately on the main thread.
     ModelHandle FindReadyModelByPath(const char* path) const;
 
+    SoundHandle RequestSound(AssetScopeHandle scope, const char* path);
+    bool IsReady(SoundHandle handle) const;
+    bool IsFinished(SoundHandle handle) const;
+    bool HasFailed(SoundHandle handle) const;
+    const SoundAsset* GetSound(SoundHandle handle) const;
+    const Sound* GetSoundVoice(SoundHandle handle, size_t voiceIndex) const;
+
+    MusicHandle RequestMusic(AssetScopeHandle scope, const char* path);
+    bool IsReady(MusicHandle handle) const;
+    bool IsFinished(MusicHandle handle) const;
+    bool HasFailed(MusicHandle handle) const;
+    const MusicAsset* GetMusic(MusicHandle handle) const;
+
     SpriteAnimationHandle RequestSpriteAnimation(
             AssetScopeHandle scope,
             const char* key,
@@ -146,6 +160,8 @@ private:
     FontAssets fonts;
     ModelAssets models;
     SpriteAnimationAssets spriteAnimations;
+    SoundAssets sounds;
+    MusicAssets music;
 
     std::thread worker;
     std::atomic<bool> shutdownRequested{false};

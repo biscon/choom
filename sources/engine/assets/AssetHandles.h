@@ -104,6 +104,81 @@ inline bool IsNull(ModelHandle handle)
     return handle.index == UINT32_MAX;
 }
 
+struct SoundHandle {
+    uint32_t index = UINT32_MAX;
+    uint32_t generation = 0;
+};
+
+inline bool operator==(SoundHandle lhs, SoundHandle rhs)
+{
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+inline bool operator!=(SoundHandle lhs, SoundHandle rhs)
+{
+    return !(lhs == rhs);
+}
+
+inline SoundHandle NullSoundHandle()
+{
+    return SoundHandle{};
+}
+
+inline bool IsNull(SoundHandle handle)
+{
+    return handle.index == UINT32_MAX;
+}
+
+struct MusicHandle {
+    uint32_t index = UINT32_MAX;
+    uint32_t generation = 0;
+};
+
+inline bool operator==(MusicHandle lhs, MusicHandle rhs)
+{
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+inline bool operator!=(MusicHandle lhs, MusicHandle rhs)
+{
+    return !(lhs == rhs);
+}
+
+inline MusicHandle NullMusicHandle()
+{
+    return MusicHandle{};
+}
+
+inline bool IsNull(MusicHandle handle)
+{
+    return handle.index == UINT32_MAX;
+}
+
+struct SoundPlaybackHandle {
+    uint32_t index = UINT32_MAX;
+    uint32_t generation = 0;
+};
+
+inline bool operator==(SoundPlaybackHandle lhs, SoundPlaybackHandle rhs)
+{
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+inline bool operator!=(SoundPlaybackHandle lhs, SoundPlaybackHandle rhs)
+{
+    return !(lhs == rhs);
+}
+
+inline SoundPlaybackHandle NullSoundPlaybackHandle()
+{
+    return SoundPlaybackHandle{};
+}
+
+inline bool IsNull(SoundPlaybackHandle handle)
+{
+    return handle.index == UINT32_MAX;
+}
+
 struct AssetScopeHandle {
     uint32_t index = UINT32_MAX;
     uint32_t generation = 0;

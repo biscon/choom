@@ -307,3 +307,4 @@ task-scoping rules in the later sections.
   - `git diff --check`
   - `git diff --stat`
   - `git status --short`
+- When working on the editor, adhere to docs/architecture/sector_editor_architectural_principles.md

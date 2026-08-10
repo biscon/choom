@@ -5,6 +5,7 @@
 #include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <vector>
@@ -15,6 +16,7 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringLineSelectionTarget(int lineId
 SectorAuthoringSelectionTarget MakeSectorAuthoringVertexSelectionTarget(int vertexId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringFaceAnchorSelectionTarget(int faceAnchorId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringFogVolumeSelectionTarget(int fogVolumeId);
+SectorAuthoringSelectionTarget MakeSectorAuthoringLevelMarkerSelectionTarget(int markerId);
 
 bool SectorAuthoringSelectionTargetsEqual(
         SectorAuthoringSelectionTarget lhs,
@@ -25,6 +27,16 @@ bool IsSectorAuthoringSelectionTargetValid(
         SectorAuthoringSelectionTarget target);
 
 void ClearSectorEditorAuthoringSelection(SelectionState& selectionState);
+void ReserveSectorEditorAuthoringFaceSelection(
+        SelectionState& selectionState,
+        std::size_t capacity);
+bool IsSectorEditorAuthoringFaceSelected(
+        const SelectionState& selectionState,
+        int faceAnchorId);
+bool ToggleSectorEditorAuthoringFaceSelection(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int faceAnchorId);
 bool SelectSectorEditorAuthoringLine(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
@@ -41,6 +53,10 @@ bool SelectSectorEditorAuthoringFogVolume(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int fogVolumeId);
+bool SelectSectorEditorAuthoringLevelMarker(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int markerId);
 
 void ClearSectorEditorAuthoringHover(SelectionState& selectionState);
 bool SetHoveredSectorEditorAuthoringLine(
@@ -55,6 +71,10 @@ bool SetHoveredSectorEditorAuthoringFogVolume(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int fogVolumeId);
+bool SetHoveredSectorEditorAuthoringLevelMarker(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int markerId);
 
 void PruneSectorEditorAuthoringSelectionToGraph(
         const SectorAuthoringGraph& graph,
@@ -188,6 +208,18 @@ bool DeleteSectorEditorSelectedAuthoringLine(
         SectorAuthoringGraph& authoringGraph,
         SectorEditorDerivationDocumentAccess derivation,
         SelectionState& selectionState);
+
+bool CommitSectorEditorAuthoringGraphCandidate(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SelectionState& selectionState,
+        SectorAuthoringGraph candidateGraph,
+        SectorAuthoringDerivationResult candidateDerivation,
+        const SectorTopologyMap& candidateMapData,
+        const char* status);
 bool MoveSectorEditorAuthoringVertex(
         SectorEditorState& state,
         SectorEditorDocumentLifecycleAccess lifecycle,
@@ -224,6 +256,16 @@ void MarkSectorEditorAuthoringGraphEdited(
         SectorEditorDerivationDocumentAccess derivation,
         const char* status);
 
+bool SetSectorEditorAllSectorLighting(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        float ambientIntensity,
+        Color ambientColor,
+        std::string* outStatus = nullptr);
+
 int FindSectorEditorAuthoringFaceAnchorIdForTopologySector(
         const SectorAuthoringGraph& authoringGraph,
         const SectorAuthoringDerivationResult& authoringDerivation,
@@ -246,6 +288,7 @@ enum class SectorEditorInspectorTargetKind {
     AuthoringFaceAnchor,
     AuthoringVertex,
     AuthoringFogVolume,
+    AuthoringLevelMarker,
     AuthoringUnavailable,
     LegacyTopology
 };
@@ -256,6 +299,7 @@ struct SectorEditorInspectorTarget {
     int faceAnchorId = -1;
     int vertexId = -1;
     int fogVolumeId = -1;
+    int levelMarkerId = -1;
     SectorAuthoringSideId side;
     std::string status;
 };

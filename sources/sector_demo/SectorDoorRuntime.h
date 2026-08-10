@@ -12,6 +12,11 @@
 #include <string>
 #include <vector>
 
+namespace engine {
+class AssetManager;
+class AudioSystem;
+}
+
 namespace game {
 
 struct SectorObject;
@@ -76,6 +81,21 @@ struct SectorDoorMotion {
     float targetOpenFraction = 0.0f;
     float openDistance = 0.0f;
     float speed = 1.5f;
+};
+
+enum class SectorDoorAudioEvent {
+    None,
+    Open,
+    Close
+};
+
+struct SectorDoorAudio {
+    std::string openSoundId;
+    std::string closeSoundId;
+    engine::SoundHandle openSound = engine::NullSoundHandle();
+    engine::SoundHandle closeSound = engine::NullSoundHandle();
+    bool targetWasOpen = false;
+    SectorDoorAudioEvent pendingEvent = SectorDoorAudioEvent::None;
 };
 
 struct SectorDoorInteraction {
@@ -252,6 +272,15 @@ bool ToggleTargetedSectorDoorInteractionSystem(
         const Vector3& playerForward);
 
 void AdvanceSectorDoorMotionSystem(engine::World& world, float dt);
+
+SectorDoorAudioEvent UpdateSectorDoorAudioTransition(
+        SectorDoorAudio& audio,
+        const SectorDoorMotion& motion);
+
+void UpdateSectorDoorAudioSystem(
+        engine::World& world,
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio);
 
 void UpdateSectorDoorDerivedStateSystem(engine::World& world);
 

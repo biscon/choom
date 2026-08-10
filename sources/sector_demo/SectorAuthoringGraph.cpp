@@ -519,6 +519,7 @@ void CopySectorPropertiesToFaceAnchor(
     anchor.ceilingZ = sector.ceilingZ;
     anchor.floorTextureId = sector.floorTextureId;
     anchor.ceilingTextureId = sector.ceilingTextureId;
+    anchor.footstepSet = sector.footstepSet;
     anchor.ceilingSky = sector.ceilingSky;
     anchor.floorUv = sector.floorUv;
     anchor.ceilingUv = sector.ceilingUv;
@@ -540,6 +541,7 @@ void CopyFaceAnchorPropertiesToTopologySector(
     sector.ceilingZ = anchor.ceilingZ;
     sector.floorTextureId = anchor.floorTextureId;
     sector.ceilingTextureId = anchor.ceilingTextureId;
+    sector.footstepSet = anchor.footstepSet;
     sector.ceilingSky = anchor.ceilingSky;
     sector.floorUv = anchor.floorUv;
     sector.ceilingUv = anchor.ceilingUv;
@@ -1815,6 +1817,40 @@ int AllocateSectorAuthoringFogVolumeId(const SectorAuthoringGraph& graph)
     return AllocateNextId(graph.fogVolumes);
 }
 
+int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph)
+{
+    return AllocateNextId(graph.levelMarkers);
+}
+
+bool IsValidSectorAuthoringLevelMarkerReferenceId(const std::string& id)
+{
+    if (id.empty() || id.size() > 63) {
+        return false;
+    }
+    return std::all_of(id.begin(), id.end(), [](char ch) {
+        return (ch >= 'A' && ch <= 'Z')
+                || (ch >= 'a' && ch <= 'z')
+                || (ch >= '0' && ch <= '9')
+                || ch == '_'
+                || ch == '-';
+    });
+}
+
+std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringGraph& graph)
+{
+    if (graph.levelMarkers.empty()
+            && FindSectorAuthoringLevelMarkerByReferenceId(graph, "default") == nullptr) {
+        return "default";
+    }
+    for (int suffix = 1; suffix < std::numeric_limits<int>::max(); ++suffix) {
+        const std::string candidate = "marker_" + std::to_string(suffix);
+        if (FindSectorAuthoringLevelMarkerByReferenceId(graph, candidate) == nullptr) {
+            return candidate;
+        }
+    }
+    return {};
+}
+
 const SectorAuthoringVertex* FindSectorAuthoringVertex(const SectorAuthoringGraph& graph, int id)
 {
     return FindById(graph.vertices, id);
@@ -1889,6 +1925,32 @@ const SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(
 SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(SectorAuthoringGraph& graph, int id)
 {
     return FindById(graph.fogVolumes, id);
+}
+
+const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
+        const SectorAuthoringGraph& graph,
+        int id)
+{
+    return FindById(graph.levelMarkers, id);
+}
+
+SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
+        SectorAuthoringGraph& graph,
+        int id)
+{
+    return FindById(graph.levelMarkers, id);
+}
+
+const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarkerByReferenceId(
+        const SectorAuthoringGraph& graph,
+        const std::string& referenceId)
+{
+    for (const SectorAuthoringLevelMarker& marker : graph.levelMarkers) {
+        if (marker.referenceId == referenceId) {
+            return &marker;
+        }
+    }
+    return nullptr;
 }
 
 SectorAuthoringFogVolume NormalizeSectorAuthoringFogVolume(SectorAuthoringFogVolume volume)
@@ -2229,6 +2291,29 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
                 || volume.flowSpeedWorld < FogFlowSpeedMin || volume.flowSpeedWorld > FogFlowSpeedMax
                 || volume.bottomOffsetWorld < FogBottomOffsetMin || volume.bottomOffsetWorld > FogBottomOffsetMax) {
             AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Authoring fog volume settings are outside supported ranges");
+        }
+    }
+
+    std::set<int> markerIds;
+    std::set<std::string> markerReferenceIds;
+    for (const SectorAuthoringLevelMarker& marker : graph.levelMarkers) {
+        if (!IsValidSectorAuthoringId(marker.id)) {
+            AddIssue(issues, SectorAuthoringObjectKind::LevelMarker, marker.id,
+                     "Invalid authoring level marker ID");
+        } else if (!markerIds.insert(marker.id).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::LevelMarker, marker.id,
+                     "Duplicate authoring level marker ID");
+        }
+        if (!IsValidSectorAuthoringLevelMarkerReferenceId(marker.referenceId)) {
+            AddIssue(issues, SectorAuthoringObjectKind::LevelMarker, marker.id,
+                     "Level marker reference ID must contain 1-63 letters, digits, underscores, or dashes");
+        } else if (!markerReferenceIds.insert(marker.referenceId).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::LevelMarker, marker.id,
+                     "Duplicate level marker reference ID");
+        }
+        if (!std::isfinite(marker.y) || !std::isfinite(marker.orientationDegrees)) {
+            AddIssue(issues, SectorAuthoringObjectKind::LevelMarker, marker.id,
+                     "Authoring level marker transform must be finite");
         }
     }
 
@@ -2693,6 +2778,20 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
             result.mapping,
             result.diagnostics);
 
+    result.topology.levelMarkers.reserve(graph.levelMarkers.size());
+    constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
+    for (const SectorAuthoringLevelMarker& marker : graph.levelMarkers) {
+        SectorCompiledLevelMarker compiled;
+        compiled.sourceAuthoringMarkerId = marker.id;
+        compiled.id = marker.referenceId;
+        compiled.position = Vector3{
+                SectorCoordToVisibleAuthoring(marker.x),
+                marker.y,
+                SectorCoordToVisibleAuthoring(marker.z)};
+        compiled.yawRadians = marker.orientationDegrees * DegreesToRadians;
+        result.topology.levelMarkers.push_back(std::move(compiled));
+    }
+
     const std::vector<SectorTopologyValidationIssue> topologyIssues =
             ValidateSectorTopologyMap(result.topology);
     for (const SectorTopologyValidationIssue& issue : topologyIssues) {
@@ -2722,6 +2821,7 @@ SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopolog
     graph.lines.reserve(map.lineDefs.size());
     graph.lineSides.reserve(map.sideDefs.size());
     graph.faceAnchors.reserve(map.sectors.size());
+    graph.levelMarkers.reserve(map.levelMarkers.size());
 
     for (const SectorTopologyVertex& topologyVertex : map.vertices) {
         SectorAuthoringVertex vertex;
@@ -2756,6 +2856,27 @@ SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopolog
         CopySectorPropertiesToFaceAnchor(sector, anchor);
         SetFaceAnchorAveragePosition(map, sector, anchor);
         graph.faceAnchors.push_back(anchor);
+    }
+
+
+    constexpr float RadiansToDegrees = 180.0f / 3.14159265358979323846f;
+    for (const SectorCompiledLevelMarker& compiled : map.levelMarkers) {
+        SectorCoord x = 0;
+        SectorCoord z = 0;
+        if (!VisibleAuthoringToSectorCoord(compiled.position.x, x)
+                || !VisibleAuthoringToSectorCoord(compiled.position.z, z)) {
+            continue;
+        }
+        SectorAuthoringLevelMarker marker;
+        marker.id = IsValidSectorAuthoringId(compiled.sourceAuthoringMarkerId)
+                ? compiled.sourceAuthoringMarkerId
+                : AllocateSectorAuthoringLevelMarkerId(graph);
+        marker.referenceId = compiled.id;
+        marker.x = x;
+        marker.z = z;
+        marker.y = compiled.position.y;
+        marker.orientationDegrees = compiled.yawRadians * RadiansToDegrees;
+        graph.levelMarkers.push_back(std::move(marker));
     }
 
     return graph;

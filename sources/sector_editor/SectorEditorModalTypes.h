@@ -9,6 +9,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyTypes.h"
 #include "game/FpsWeaponRegistry.h"
+#include "game/FootstepAudio.h"
 
 #include <raylib.h>
 
@@ -57,6 +58,22 @@ struct TexturePickerState {
     std::vector<const char*> optionLabels;
 };
 
+struct FootstepPickerState {
+    bool open = false;
+    int authoringFaceAnchorId = -1;
+    int selectedSetIndex = -1;
+    engine::UIScrollState scroll;
+    FootstepCatalog catalog;
+    std::vector<std::string> setIds;
+    std::vector<std::string> labelStorage;
+    std::vector<const char*> optionLabels;
+    std::string message;
+    engine::AssetScopeHandle previewScope = engine::NullAssetScopeHandle();
+    LoadedFootstepSet previewSet;
+    FootstepPlaybackState previewPlayback;
+    bool previewPending = false;
+};
+
 struct AddMapTextureState {
     bool open = false;
     bool scanned = false;
@@ -72,6 +89,49 @@ struct AddMapTextureState {
     engine::TextureHandle previewTexture = engine::NullTextureHandle();
     std::string previewPath;
     SectorTextureFilter previewFilter = SectorTextureFilter::Anisotropic8x;
+};
+
+enum class SectorEditorDoorSoundTarget {
+    Open,
+    Close
+};
+
+struct SectorEditorAudioPreviewState {
+    engine::AssetScopeHandle scope = engine::NullAssetScopeHandle();
+    engine::SoundHandle sound = engine::NullSoundHandle();
+    engine::MusicHandle music = engine::NullMusicHandle();
+    engine::SoundPlaybackHandle soundPlayback = engine::NullSoundPlaybackHandle();
+    SectorSoundType type = SectorSoundType::Sound;
+    bool pending = false;
+    std::string key;
+};
+
+struct AddMapSoundState {
+    bool open = false;
+    bool scanned = false;
+    std::string scanMessage;
+    engine::UIScrollState scroll;
+    std::vector<std::string> paths;
+    std::vector<const char*> optionLabels;
+    int selectedPathIndex = -1;
+    char soundIdBuffer[96] = {};
+    SectorSoundType type = SectorSoundType::Sound;
+    std::string validationMessage;
+    std::string previewMessage;
+    SectorEditorAudioPreviewState preview;
+};
+
+struct SoundPickerState {
+    bool open = false;
+    SectorEditorDoorSoundTarget target = SectorEditorDoorSoundTarget::Open;
+    int runtimeObjectId = -1;
+    int selectedSoundIndex = -1;
+    engine::UIScrollState scroll;
+    std::vector<std::string> soundIds;
+    std::vector<std::string> labelStorage;
+    std::vector<const char*> optionLabels;
+    std::string message;
+    SectorEditorAudioPreviewState preview;
 };
 
 struct SectorSpriteMetadata {
@@ -127,6 +187,16 @@ struct ConfirmationModalState {
     std::function<void()> onOkay;
 };
 
+struct SectorEditorSetAllModalState {
+    bool open = false;
+    float ambientIntensity = 1.0f;
+    Color ambientColor = WHITE;
+    engine::UIFloatInputState ambientIntensityInput;
+    engine::UIIntInputState ambientRedInput;
+    engine::UIIntInputState ambientGreenInput;
+    engine::UIIntInputState ambientBlueInput;
+};
+
 struct DecalTintModalState {
     bool open = false;
     TopologySurfaceEditTarget target;
@@ -151,6 +221,7 @@ struct DoorTextureSettingsModalState {
 struct SectorPreviewSettingsModalState {
     bool open = false;
     PreviewSettingsTab activeTab = PreviewSettingsTab::General;
+    std::string weaponId;
     SectorFpsControllerConfig draftConfig;
     SectorTopologySkySettings draftSkySettings;
     SectorTopologyDirectionalLightSettings draftDirectionalLight;
@@ -209,6 +280,15 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState viewmodelRollInput;
     engine::UIFloatInputState viewmodelScaleInput;
     engine::UIFloatInputState viewmodelFovInput;
+    engine::UIFloatInputState cameraRecoilPitchKickInput;
+    engine::UIFloatInputState cameraRecoilPitchVariationInput;
+    engine::UIFloatInputState cameraRecoilYawVariationInput;
+    engine::UIFloatInputState cameraRecoilRollVariationInput;
+    engine::UIFloatInputState cameraRecoilFrequencyInput;
+    engine::UIFloatInputState cameraRecoilDampingInput;
+    engine::UIFloatInputState cameraRecoilMaxPitchInput;
+    engine::UIFloatInputState cameraRecoilMaxYawInput;
+    engine::UIFloatInputState cameraRecoilMaxRollInput;
     engine::UIFloatInputState viewmodelHolsterDurationInput;
     engine::UIFloatInputState viewmodelUnholsterDurationInput;
     engine::UIFloatInputState viewmodelHiddenTranslationXInput;

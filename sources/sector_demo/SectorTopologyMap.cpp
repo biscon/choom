@@ -681,6 +681,18 @@ bool RemoveSectorPlacedRuntimeObject(SectorTopologyMap& map, int id)
     return true;
 }
 
+const SectorCompiledLevelMarker* FindSectorCompiledLevelMarker(
+        const SectorTopologyMap& map,
+        const std::string& id)
+{
+    for (const SectorCompiledLevelMarker& marker : map.levelMarkers) {
+        if (marker.id == id) {
+            return &marker;
+        }
+    }
+    return nullptr;
+}
+
 SectorResolvedDoorAnchor ResolveSectorDoorAnchor(
         const SectorTopologyMap& map,
         const SectorPlacedDoor& door)

@@ -57,6 +57,25 @@ struct SectorTopologyFogSettings {
     } localVolumeQuality = LocalVolumeQuality::Medium;
 };
 
+enum class SectorSoundType {
+    Sound,
+    Music
+};
+
+struct SectorSoundDefinition {
+    std::string id;
+    std::string path;
+    SectorSoundType type = SectorSoundType::Sound;
+};
+
+struct SectorLevelAudioSettings {
+    static constexpr float DefaultMusicVolume = 0.6f;
+
+    std::string musicPath;
+    float musicVolume = DefaultMusicVolume;
+    std::unordered_map<std::string, SectorSoundDefinition> soundsById;
+};
+
 struct SectorCompiledLocalFogVolume {
     int sourceAuthoringFogVolumeId = -1;
     int topologySectorId = -1;
@@ -71,6 +90,14 @@ struct SectorCompiledLocalFogVolume {
     float noiseAmount = 0.55f;
     float flowDirectionDegrees = 0.0f;
     float flowSpeedWorld = 0.12f;
+};
+
+// Derived runtime representation of an authoring-owned level marker.
+struct SectorCompiledLevelMarker {
+    int sourceAuthoringMarkerId = -1;
+    std::string id;
+    Vector3 position = {};
+    float yawRadians = 0.0f;
 };
 
 struct SectorPlacedBillboard {
@@ -150,6 +177,8 @@ struct SectorPlacedDoor {
     float interactionDistance = 1.5f;
     float autoOpenDistance = 2.0f;
     std::string textureId;
+    std::string openSoundId;
+    std::string closeSoundId;
     SectorDoorFaceUvSet faceUvs;
 };
 
@@ -201,10 +230,12 @@ struct SectorTopologyMap {
     std::vector<SectorTopologyDynamicPointLight> dynamicPointLights;
     std::vector<SectorTopologyDynamicSpotLight> dynamicSpotLights;
     std::vector<SectorPlacedRuntimeObject> runtimeObjects;
+    std::vector<SectorCompiledLevelMarker> levelMarkers;
     SectorPreviewSettings previewSettings;
     SectorTopologySkySettings skySettings;
     SectorTopologyDirectionalLightSettings directionalLight;
     SectorTopologyFogSettings fogSettings;
+    SectorLevelAudioSettings audioSettings;
     std::vector<SectorCompiledLocalFogVolume> compiledLocalFogVolumes;
     SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;
@@ -285,6 +316,10 @@ const SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(const SectorTopol
 SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
 
 bool RemoveSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
+
+const SectorCompiledLevelMarker* FindSectorCompiledLevelMarker(
+        const SectorTopologyMap& map,
+        const std::string& id);
 
 SectorResolvedDoorAnchor ResolveSectorDoorAnchor(
         const SectorTopologyMap& map,

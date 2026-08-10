@@ -357,11 +357,12 @@ void DrawSectorEditorPreviewSpotLightOverlay(
 void DrawSectorEditorPreviewObjectProbeOverlay(
         const SectorTopologyMap& topologyMap,
         const SectorEditorPreviewState& previewState,
+        const SectorRuntimeObjectState& runtimeObjects,
         const SectorMeshRenderer& preview)
 {
     if (!preview.IsRendererReady()
             || !previewState.overlay.showObjectProbeDebugOverlay
-            || previewState.runtime.runtimeObjects.objectLightProbes.probes.empty()) {
+            || runtimeObjects.objectLightProbes.probes.empty()) {
         return;
     }
 
@@ -370,7 +371,7 @@ void DrawSectorEditorPreviewObjectProbeOverlay(
     const float maxDistanceWorld = NormalizeSectorPreviewSettings(
             topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
     BeginMode3D(preview.RenderCamera());
-    for (const SectorBakedObjectLightProbe& probe : previewState.runtime.runtimeObjects.objectLightProbes.probes) {
+    for (const SectorBakedObjectLightProbe& probe : runtimeObjects.objectLightProbes.probes) {
         if (!ShouldDrawObjectProbeDebugMarker(referencePosition, probe.position, maxDistanceWorld)) {
             continue;
         }
@@ -567,11 +568,11 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         preview.DoorSkippedCount()));
                 addKeyValue("doors authored/valid", TextFormat(
                         "%zu / %zu",
-                        context.previewState.runtime.runtimeObjects.doorObjectCount,
-                        context.previewState.runtime.runtimeObjects.validDoorAnchorCount));
+                        context.runtimeObjects.doorObjectCount,
+                        context.runtimeObjects.validDoorAnchorCount));
                 break;
             case PreviewDebugOverlayTab::Objects: {
-                const SectorRuntimeObjectState& objects = context.previewState.runtime.runtimeObjects;
+                const SectorRuntimeObjectState& objects = context.runtimeObjects;
                 addKeyValue("placed/spawned/skipped", TextFormat(
                         "%zu / %zu / %zu",
                         objects.placedObjectCount,
@@ -599,28 +600,28 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 break;
             }
             case PreviewDebugOverlayTab::Probes: {
-                const char* objectProbeStatus = context.previewState.runtime.runtimeObjects.objectProbeStatus.empty()
+                const char* objectProbeStatus = context.runtimeObjects.objectProbeStatus.empty()
                         ? "none"
-                        : context.previewState.runtime.runtimeObjects.objectProbeStatus.c_str();
+                        : context.runtimeObjects.objectProbeStatus.c_str();
                 addKeyValueStyled("status", objectProbeStatus, smallConfig.mutedTextColor, true);
-                const size_t totalProbeCount = context.previewState.runtime.runtimeObjects.objectLightProbes.probes.size();
+                const size_t totalProbeCount = context.runtimeObjects.objectLightProbes.probes.size();
                 addKeyValue("probe count", TextFormat("%zu", totalProbeCount));
                 if (overlayState.showObjectProbeDebugOverlay) {
                     const float maxDistanceWorld = NormalizeSectorPreviewSettings(
                             topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
                     const size_t visibleProbeCount = CountVisibleObjectProbeDebugMarkers(
-                            context.previewState.runtime.runtimeObjects.objectLightProbes,
+                            context.runtimeObjects.objectLightProbes,
                             preview.RendererPose().position,
                             maxDistanceWorld);
                     addKeyValue("drawn", TextFormat("%zu / %zu", visibleProbeCount, totalProbeCount));
                 }
-                if (!context.previewState.runtime.runtimeObjects.objectSectorLookupWarning.empty()) {
-                    addKeyValueStyled("lookup warning", context.previewState.runtime.runtimeObjects.objectSectorLookupWarning, Color{236, 92, 92, 245}, true);
+                if (!context.runtimeObjects.objectSectorLookupWarning.empty()) {
+                    addKeyValueStyled("lookup warning", context.runtimeObjects.objectSectorLookupWarning, Color{236, 92, 92, 245}, true);
                 }
                 break;
             }
             case PreviewDebugOverlayTab::Viewmodel: {
-                const FpsViewmodelRuntimeState& vm = context.previewState.runtime.viewmodel;
+                const FpsViewmodelRuntimeState& vm = context.viewmodel;
                 const char* loadState = vm.loadState == FpsViewmodelLoadState::Ready ? "ready"
                         : vm.loadState == FpsViewmodelLoadState::Pending ? "pending"
                         : vm.loadState == FpsViewmodelLoadState::Failed ? "failed" : "inactive";
@@ -817,6 +818,31 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         firing.recoil.rotationDegrees.x,
                         firing.recoil.rotationDegrees.y,
                         firing.recoil.rotationDegrees.z));
+                addKeyValue("camera recoil config", TextFormat(
+                        "%s | kick %.3f +/- %.3f | yaw %.3f | roll %.3f",
+                        firing.definition.cameraRecoil.enabled ? "on" : "off",
+                        firing.definition.cameraRecoil.pitchKickDegrees,
+                        firing.definition.cameraRecoil.pitchVariationDegrees,
+                        firing.definition.cameraRecoil.yawVariationDegrees,
+                        firing.definition.cameraRecoil.rollVariationDegrees));
+                addKeyValue("camera recoil spring", TextFormat(
+                        "%.2f Hz zeta %.2f | max %.2f %.2f %.2f",
+                        firing.definition.cameraRecoil.springFrequencyHz,
+                        firing.definition.cameraRecoil.springDampingRatio,
+                        firing.definition.cameraRecoil.maxPitchDegrees,
+                        firing.definition.cameraRecoil.maxYawDegrees,
+                        firing.definition.cameraRecoil.maxRollDegrees));
+                addKeyValue("camera recoil state", TextFormat(
+                        "R %.3f %.3f %.3f | V %.3f %.3f %.3f | kick %.3f %.3f %.3f",
+                        firing.cameraRecoil.rotationDegrees.x,
+                        firing.cameraRecoil.rotationDegrees.y,
+                        firing.cameraRecoil.rotationDegrees.z,
+                        firing.cameraRecoil.rotationVelocityDegrees.x,
+                        firing.cameraRecoil.rotationVelocityDegrees.y,
+                        firing.cameraRecoil.rotationVelocityDegrees.z,
+                        firing.cameraRecoil.lastKickDegrees.x,
+                        firing.cameraRecoil.lastKickDegrees.y,
+                        firing.cameraRecoil.lastKickDegrees.z));
                 addKeyValue("muzzle effects", TextFormat(
                         "socket %s | flash %s %.3f/%.3f (%.2f) soft %.2f | light %s %.3f",
                         firing.muzzleWorldTransformValid ? "valid" : "invalid",

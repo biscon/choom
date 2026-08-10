@@ -53,6 +53,8 @@ void AssetManager::Shutdown()
     models.ShutdownMainThread();
     fonts.ShutdownMainThread();
     textures.ShutdownMainThread();
+    music.ShutdownMainThread();
+    sounds.ShutdownMainThread();
 
     {
         std::lock_guard<std::mutex> lock(stateMutex);
@@ -82,6 +84,8 @@ AssetScopeHandle AssetManager::CreateScope(const char* name)
     fonts.OnScopeCreated(handle);
     models.OnScopeCreated(handle);
     spriteAnimations.OnScopeCreated(handle);
+    sounds.OnScopeCreated(handle);
+    music.OnScopeCreated(handle);
     return handle;
 }
 
@@ -108,6 +112,8 @@ void AssetManager::UnloadScope(AssetScopeHandle scope)
     fonts.UnloadScope(scope);
     models.UnloadScope(scope);
     spriteAnimations.UnloadScope(scope);
+    sounds.UnloadScope(scope);
+    music.UnloadScope(scope);
 }
 
 TextureHandle AssetManager::RequestTexture(
@@ -274,6 +280,71 @@ ModelHandle AssetManager::FindReadyModelByPath(const char* path) const
     return models.FindReadyModelByPath(path);
 }
 
+SoundHandle AssetManager::RequestSound(AssetScopeHandle scope, const char* path)
+{
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (!IsValidScopeNoLock(scope)) return NullSoundHandle();
+    }
+    return sounds.RequestSound(scope, path);
+}
+
+bool AssetManager::IsReady(SoundHandle handle) const
+{
+    return sounds.IsReady(handle);
+}
+
+bool AssetManager::IsFinished(SoundHandle handle) const
+{
+    return sounds.IsFinished(handle);
+}
+
+bool AssetManager::HasFailed(SoundHandle handle) const
+{
+    return sounds.HasFailed(handle);
+}
+
+const SoundAsset* AssetManager::GetSound(SoundHandle handle) const
+{
+    return sounds.Get(handle);
+}
+
+const Sound* AssetManager::GetSoundVoice(
+        SoundHandle handle,
+        size_t voiceIndex) const
+{
+    return sounds.GetVoice(handle, voiceIndex);
+}
+
+MusicHandle AssetManager::RequestMusic(AssetScopeHandle scope, const char* path)
+{
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (!IsValidScopeNoLock(scope)) return NullMusicHandle();
+    }
+    return music.RequestMusic(scope, path);
+}
+
+bool AssetManager::IsReady(MusicHandle handle) const
+{
+    return music.IsReady(handle);
+}
+
+bool AssetManager::IsFinished(MusicHandle handle) const
+{
+    return music.IsFinished(handle);
+}
+
+bool AssetManager::HasFailed(MusicHandle handle) const
+{
+    return music.HasFailed(handle);
+}
+
+const MusicAsset* AssetManager::GetMusic(MusicHandle handle) const
+{
+    return music.Get(handle);
+}
+
 SpriteAnimationHandle AssetManager::RequestSpriteAnimation(
         AssetScopeHandle scope,
         const char* key,
@@ -343,7 +414,9 @@ bool AssetManager::IsScopeReady(AssetScopeHandle scope) const
         && textures.IsScopeReady(scope)
         && fonts.IsScopeReady(scope)
         && models.IsScopeReady(scope)
-        && spriteAnimations.IsScopeReady(scope, textures);
+        && spriteAnimations.IsScopeReady(scope, textures)
+        && sounds.IsScopeReady(scope)
+        && music.IsScopeReady(scope);
 }
 
 bool AssetManager::IsScopeFinished(AssetScopeHandle scope) const
@@ -353,7 +426,9 @@ bool AssetManager::IsScopeFinished(AssetScopeHandle scope) const
         && textures.IsScopeFinished(scope)
         && fonts.IsScopeFinished(scope)
         && models.IsScopeFinished(scope)
-        && spriteAnimations.IsScopeFinished(scope, textures);
+        && spriteAnimations.IsScopeFinished(scope, textures)
+        && sounds.IsScopeFinished(scope)
+        && music.IsScopeFinished(scope);
 }
 
 float AssetManager::GetScopeProgress(AssetScopeHandle scope) const
@@ -369,6 +444,8 @@ float AssetManager::GetScopeProgress(AssetScopeHandle scope) const
     fonts.GetScopeProgress(scope, finished, total);
     models.GetScopeProgress(scope, finished, total);
     spriteAnimations.GetScopeProgress(scope, textures, finished, total);
+    sounds.GetScopeProgress(scope, finished, total);
+    music.GetScopeProgress(scope, finished, total);
 
     if (total == 0) {
         return 1.0f;
@@ -382,6 +459,8 @@ void AssetManager::UpdateMainThread(float maxMilliseconds)
     textures.UpdateMainThread(maxMilliseconds);
     fonts.UpdateMainThread(maxMilliseconds);
     models.UpdateMainThread(maxMilliseconds);
+    sounds.UpdateMainThread(maxMilliseconds);
+    music.UpdateMainThread(maxMilliseconds);
 }
 
 bool AssetManager::IsValidScopeNoLock(AssetScopeHandle scope) const

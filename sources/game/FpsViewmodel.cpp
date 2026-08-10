@@ -13,6 +13,19 @@ void ResetFpsViewmodelRuntime(FpsViewmodelRuntimeState& state)
     state = {};
 }
 
+float FpsWeaponShotPitch(uint64_t shotSequence, uint32_t randomState)
+{
+    uint32_t value = randomState
+            ^ static_cast<uint32_t>(shotSequence)
+            ^ static_cast<uint32_t>(shotSequence >> 32u)
+            ^ 0x9e3779b9u;
+    value ^= value << 13u;
+    value ^= value >> 17u;
+    value ^= value << 5u;
+    const float unit = static_cast<float>(value & 0xffffu) / 65535.0f;
+    return 0.96f + unit * 0.08f;
+}
+
 bool ToggleFpsViewmodelHolster(FpsViewmodelRuntimeState& state, bool preview3DActive, bool inputSuppressed)
 {
     if (!preview3DActive || inputSuppressed || state.activeWeaponId.empty()) {
@@ -500,7 +513,109 @@ Vector3 ClampMagnitudePerAxis(Vector3 value, Vector3 limits)
     return value;
 }
 
+void ClampSpringAxis(float& offset, float& velocity, float limit)
+{
+    if (!(limit > 0.0f)) {
+        offset = 0.0f;
+        velocity = 0.0f;
+        return;
+    }
+    if (offset > limit) {
+        offset = limit;
+        if (velocity > 0.0f) velocity = 0.0f;
+    } else if (offset < -limit) {
+        offset = -limit;
+        if (velocity < 0.0f) velocity = 0.0f;
+    }
+}
+
 } // namespace
+
+void ResetFpsCameraRecoil(FpsCameraRecoilRuntimeState& state)
+{
+    state = {};
+}
+
+Vector3 SampleFpsCameraRecoilKickDegrees(
+        const FpsWeaponCameraRecoilDefinition& sourceDefinition,
+        uint32_t& randomState)
+{
+    const FpsWeaponCameraRecoilDefinition definition =
+            ClampFpsWeaponCameraRecoilDefinition(sourceDefinition);
+    if (!definition.enabled) return {};
+
+    return Vector3{
+            std::max(
+                    0.0f,
+                    definition.pitchKickDegrees
+                            + NextSignedUnit(randomState)
+                                    * definition.pitchVariationDegrees),
+            NextSignedUnit(randomState) * definition.yawVariationDegrees,
+            NextSignedUnit(randomState) * definition.rollVariationDegrees};
+}
+
+void ApplyFpsCameraRecoilImpulse(
+        FpsCameraRecoilRuntimeState& state,
+        const FpsWeaponCameraRecoilDefinition& sourceDefinition)
+{
+    const FpsWeaponCameraRecoilDefinition definition =
+            ClampFpsWeaponCameraRecoilDefinition(sourceDefinition);
+    if (!definition.enabled) {
+        ResetFpsCameraRecoil(state);
+        return;
+    }
+    if (!Finite(state.rotationDegrees)
+            || !Finite(state.rotationVelocityDegrees)) {
+        ResetFpsCameraRecoil(state);
+    }
+    state.lastKickDegrees = SampleFpsCameraRecoilKickDegrees(
+            definition,
+            state.randomState);
+    state.rotationDegrees = ClampMagnitudePerAxis(
+            Vector3Add(state.rotationDegrees, state.lastKickDegrees),
+            Vector3{
+                    definition.maxPitchDegrees,
+                    definition.maxYawDegrees,
+                    definition.maxRollDegrees});
+}
+
+void AdvanceFpsCameraRecoil(
+        FpsCameraRecoilRuntimeState& state,
+        const FpsWeaponCameraRecoilDefinition& sourceDefinition,
+        float deltaSeconds)
+{
+    const FpsWeaponCameraRecoilDefinition definition =
+            ClampFpsWeaponCameraRecoilDefinition(sourceDefinition);
+    if (!definition.enabled) {
+        ResetFpsCameraRecoil(state);
+        return;
+    }
+    if (!Finite(state.rotationDegrees)
+            || !Finite(state.rotationVelocityDegrees)) {
+        ResetFpsCameraRecoil(state);
+    }
+    const float dt = std::isfinite(deltaSeconds)
+            ? std::clamp(deltaSeconds, 0.0f, 0.25f)
+            : 0.0f;
+    AdvanceSpringVector(
+            state.rotationDegrees,
+            state.rotationVelocityDegrees,
+            definition.springFrequencyHz,
+            definition.springDampingRatio,
+            dt);
+    ClampSpringAxis(
+            state.rotationDegrees.x,
+            state.rotationVelocityDegrees.x,
+            definition.maxPitchDegrees);
+    ClampSpringAxis(
+            state.rotationDegrees.y,
+            state.rotationVelocityDegrees.y,
+            definition.maxYawDegrees);
+    ClampSpringAxis(
+            state.rotationDegrees.z,
+            state.rotationVelocityDegrees.z,
+            definition.maxRollDegrees);
+}
 
 FpsMuzzleFlashShape GenerateFpsMuzzleFlashShape(
         const FpsWeaponMuzzleFlashDefinition& sourceDefinition,
@@ -625,6 +740,10 @@ void AdvanceFpsWeaponFiringRuntime(
             state.definition.recoil.springFrequencyHz,
             state.definition.recoil.dampingRatio,
             springDt);
+    AdvanceFpsCameraRecoil(
+            state.cameraRecoil,
+            state.definition.cameraRecoil,
+            springDt);
 
     const auto advanceLifetime = [fullDt](bool& active, float& age, float lifetime) {
         if (!active) return;
@@ -699,6 +818,9 @@ void ApplyFpsWeaponShotEffects(
     state.recoil.rotationDegrees = ClampMagnitudePerAxis(
             Vector3Add(state.recoil.rotationDegrees, rotationImpulse),
             state.definition.recoil.maximumRotationDegrees);
+    ApplyFpsCameraRecoilImpulse(
+            state.cameraRecoil,
+            state.definition.cameraRecoil);
 }
 
 float FpsMuzzleLightCurrentIntensity(

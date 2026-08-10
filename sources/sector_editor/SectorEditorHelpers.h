@@ -47,6 +47,10 @@ bool StartsWith(const std::string& value, const char* prefix);
 std::string ResolveEditorAssetPath(const std::string& path);
 bool HasPngExtension(const std::filesystem::path& path);
 std::vector<std::string> ScanAssetImagePngs(std::string& message);
+std::vector<std::string> ScanAssetAudioFiles(std::string& message);
+std::vector<std::string> ScanAssetAudioFiles(
+        const std::filesystem::path& assetsRoot,
+        std::string& message);
 std::vector<SectorSpriteMetadata> ScanAssetSpriteAsepriteJsons(std::string& message);
 std::vector<SectorSpriteMetadata> ScanAssetSpriteAsepriteJsons(
         const std::filesystem::path& assetsRoot,
@@ -70,6 +74,7 @@ float LightmapBakeOverallProgress(SectorLightmapBakePhase phase, uint32_t comple
 std::string MakeTemporaryLightmapPath(const std::string& finalOutputPath);
 void DeleteFileIfExists(const std::string& path);
 std::string GeneratedTextureIdBase(const std::string& assetPath);
+std::string GeneratedSoundIdBase(const std::string& assetPath);
 const char* ToolName(SectorEditorTool tool);
 bool IsGraphAuthoringTool(SectorEditorTool tool);
 bool IsLegacyTopologyMutationTool(SectorEditorTool tool);

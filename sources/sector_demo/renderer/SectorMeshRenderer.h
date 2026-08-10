@@ -227,6 +227,7 @@ private:
     Vector3 position = {};
     float yawRadians = 0.0f;
     float pitchRadians = 0.0f;
+    float rollRadians = 0.0f;
 };
 
 } // namespace game

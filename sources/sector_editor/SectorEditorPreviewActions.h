@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_editor/preview/SectorEditorPreviewState.h"
+#include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
 
 #include <vector>

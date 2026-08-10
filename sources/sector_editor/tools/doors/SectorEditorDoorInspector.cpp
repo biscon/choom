@@ -7,6 +7,7 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
+#include "sector_editor/services/sounds/SectorEditorSoundService.h"
 #include "sector_editor/tools/doors/SectorEditorDoorModals.h"
 
 #include <raylib.h>
@@ -44,6 +45,24 @@ SectorDoorMotionType DoorMotionFromOptionIndex(int index) {
   }
 }
 
+std::string DoorSoundStatus(
+    const SectorEditorSoundService &sounds, const char *label,
+    const std::string &id, bool &invalid) {
+  if (id.empty()) {
+    return TextFormat("%s sound: <none>", label);
+  }
+  const SectorSoundDefinition *definition = sounds.Find(id);
+  if (definition == nullptr) {
+    invalid = true;
+    return TextFormat("%s sound missing: %s", label, id.c_str());
+  }
+  if (definition->type != SectorSoundType::Sound) {
+    invalid = true;
+    return TextFormat("%s sound is music: %s", label, id.c_str());
+  }
+  return TextFormat("%s sound: %s", label, id.c_str());
+}
+
 } // namespace
 
 float MeasureSectorEditorDoorInspectorContentHeight(
@@ -71,9 +90,14 @@ float MeasureSectorEditorDoorInspectorContentHeight(
       : textureMissing
           ? TextFormat("Texture missing: %s", object.door.textureId.c_str())
           : TextFormat("Texture: %s", object.door.textureId.c_str());
+  bool soundInvalid = false;
+  const std::string assetStatus = textureStatus + "\n"
+      + DoorSoundStatus(context.sounds, "Open", object.door.openSoundId, soundInvalid)
+      + "\n"
+      + DoorSoundStatus(context.sounds, "Close", object.door.closeSoundId, soundInvalid);
   const float textureStatusHeight = MeasureSectorEditorWrappedTextHeight(
       context.smallConfig, context.assets, context.smallFont,
-      textureStatus.c_str(), context.contentW, 1);
+      assetStatus.c_str(), context.contentW, 3);
   return SectorEditorDoorInspectorContentHeight(
       context.rowH, context.gap, anchorStatusHeight, textureStatusHeight);
 }
@@ -357,12 +381,17 @@ void DrawSectorEditorDoorInspector(
           ? TextFormat("Texture missing: %s",
                        selectedObject->door.textureId.c_str())
           : TextFormat("Texture: %s", selectedObject->door.textureId.c_str());
+  bool soundInvalid = false;
+  const std::string assetStatus = textureStatus + "\n"
+      + DoorSoundStatus(context.sounds, "Open", selectedObject->door.openSoundId, soundInvalid)
+      + "\n"
+      + DoorSoundStatus(context.sounds, "Close", selectedObject->door.closeSoundId, soundInvalid);
   const float textureStatusHeight = MeasureSectorEditorWrappedTextHeight(
-      smallConfig, assets, smallFont, textureStatus.c_str(), contentW, 1);
+      smallConfig, assets, smallFont, assetStatus.c_str(), contentW, 3);
   engine::Text(ui, smallConfig, assets,
                Rectangle{0.0f, y, contentW, textureStatusHeight}, smallFont,
-               textureStatus.c_str(), engine::UITextJustify::Left,
-               textureMissing ? config.invalidColor : config.mutedTextColor,
+               assetStatus.c_str(), engine::UITextJustify::Left,
+               textureMissing || soundInvalid ? config.invalidColor : config.mutedTextColor,
                true);
   y += textureStatusHeight + gap;
 
@@ -376,6 +405,26 @@ void DrawSectorEditorDoorInspector(
             context.textureCatalog,
             selectedObject->id)) {
       context.statusText = "No door texture target";
+    }
+  }
+  y += rowH + gap;
+
+  if (engine::Button(
+          ui, config, input, assets, "sector_editor_door_pick_open_sound",
+          Rectangle{0.0f, y, contentW, rowH}, font, "Pick open sound")) {
+    if (!context.sounds.OpenDoorPicker(
+            selectedObject->id, SectorEditorDoorSoundTarget::Open)) {
+      context.statusText = "No door open sound target";
+    }
+  }
+  y += rowH + gap;
+
+  if (engine::Button(
+          ui, config, input, assets, "sector_editor_door_pick_close_sound",
+          Rectangle{0.0f, y, contentW, rowH}, font, "Pick close sound")) {
+    if (!context.sounds.OpenDoorPicker(
+            selectedObject->id, SectorEditorDoorSoundTarget::Close)) {
+      context.statusText = "No door close sound target";
     }
   }
   y += rowH + gap;

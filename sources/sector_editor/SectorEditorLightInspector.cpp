@@ -230,7 +230,7 @@ void DrawLightAtmosphereInspector(
     y += rowH + gap;
     if (atmosphere.dust.enabled) {
         const SectorEditorInspectorNumericRowLayout amountLayout =
-                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+                BuildSectorEditorInspectorRightIntRowLayout(y, contentW, rowH, gap);
         engine::Text(ui, config, assets, amountLayout.labelRect, font, "Amount:",
                 engine::UITextJustify::Right, config.mutedTextColor);
         const engine::UINumericInputResult amountResult = engine::IntInput(

@@ -6,8 +6,6 @@
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorFreeflyController.h"
-#include "sector_demo/SectorRuntimeObjects.h"
-#include "game/FpsViewmodel.h"
 
 #include <string>
 
@@ -33,6 +31,8 @@ struct SectorEditorPreviewControllerState {
     SectorFpsControllerState fpsControllerState;
     float visualStepOffsetY = 0.0f;
     SectorFpsHeadBobState headBobState;
+    SectorFpsFootstepCadenceState footstepCadenceState;
+    SectorFpsFrameEvents frameEvents;
     SectorFpsLandingDipState landingDipState;
     bool hasPreviewPose = false;
     SectorViewPose lastPreviewPose = {};
@@ -49,17 +49,11 @@ struct SectorEditorPreviewCollisionState {
     bool previewCollisionNoclipFallback = false;
 };
 
-struct SectorEditorPreviewRuntimeState {
-    SectorRuntimeObjectState runtimeObjects;
-    FpsViewmodelRuntimeState viewmodel;
-};
-
 struct SectorEditorPreviewState {
     SectorEditorPreviewOverlayState overlay;
     SectorEditorPreviewSelectionState selection;
     SectorEditorPreviewControllerState controller;
     SectorEditorPreviewCollisionState collision;
-    SectorEditorPreviewRuntimeState runtime;
 };
 
 } // namespace game

@@ -34,6 +34,37 @@ inline std::array<Rectangle, 6> BuildSectorPreviewSettingsTabLayout(
     return tabs;
 }
 
+inline float MeasureSectorPreviewSettingsLightingContentHeight(
+        float rowHeight,
+        float gap)
+{
+    constexpr float sectionLead = 8.0f;
+    constexpr float sectionTitleHeight = 38.0f;
+    constexpr float swatchHeight = 36.0f;
+    constexpr float trailingPadding = 12.0f;
+    return 11.0f * (rowHeight + gap)
+            + 3.0f * (sectionLead + sectionTitleHeight)
+            + swatchHeight + gap
+            + trailingPadding;
+}
+
+inline float MeasureSectorPreviewSettingsFogContentHeight(
+        float rowHeight,
+        float gap)
+{
+    constexpr float qualityTitleHeight = 28.0f;
+    constexpr float noteHeight = 36.0f;
+    constexpr float colorTitleHeight = 38.0f;
+    constexpr float swatchHeight = 36.0f;
+    constexpr float trailingPadding = 12.0f;
+    return 10.0f * (rowHeight + gap)
+            + qualityTitleHeight
+            + noteHeight + gap
+            + colorTitleHeight
+            + swatchHeight + gap
+            + trailingPadding;
+}
+
 inline void ResetSectorPreviewSettingsModalPreservingView(
         SectorPreviewSettingsModalState& modalState)
 {

@@ -156,6 +156,8 @@ struct SectorTopologySector {
 
     std::string floorTextureId;
     std::string ceilingTextureId;
+    // Empty uses the application-wide default footstep set.
+    std::string footstepSet;
     bool ceilingSky = false;
 
     SectorTopologyUvSettings floorUv;
@@ -279,7 +281,8 @@ enum class SectorTopologyObjectKind {
     SideDef,
     Sector,
     StaticLight,
-    DynamicLight
+    DynamicLight,
+    LevelMarker
 };
 
 struct SectorTopologyValidationIssue {

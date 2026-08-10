@@ -34,6 +34,7 @@ enum class SectorEditorTool {
     DynamicModel,
     Door,
     AuthoringFogVolume,
+    LevelMarker,
     StaticLight,
     StaticSpotLight,
     DynamicLight,
@@ -94,10 +95,14 @@ struct SectorEditorState {
     bool showAxes = true;
     bool showSectorIds = true;
     TexturePickerState texturePicker;
+    FootstepPickerState footstepPicker;
     AddMapTextureState addMapTexture;
+    AddMapSoundState addMapSound;
+    SoundPickerState soundPicker;
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;
     ConfirmationModalState confirmationModal;
+    SectorEditorSetAllModalState setAllModal;
     DecalTintModalState decalTintModal;
     DoorTextureSettingsModalState doorTextureSettingsModal;
     SectorPreviewSettingsModalState previewSettingsModal;

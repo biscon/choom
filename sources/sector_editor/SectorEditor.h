@@ -12,10 +12,14 @@
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/sounds/SectorEditorSoundCatalogState.h"
+#include "sector_editor/services/sounds/SectorEditorSoundService.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogState.h"
 #include "sector_editor/preview/SectorEditorPreviewState.h"
+#include "game/FpsPlayerRuntime.h"
+#include "game/PlayerAudio.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
@@ -26,7 +30,11 @@
 #include "sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
-#include "sector_demo/renderer/SectorMeshRenderer.h"
+#include "sector_editor/services/footsteps/SectorEditorFootstepService.h"
+#include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
+#include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
+#include "sector_demo/SectorSceneRuntime.h"
 #include "game/FpsWeaponRegistry.h"
 
 #include <raylib.h>
@@ -61,6 +69,13 @@ public:
             engine::FontHandle font,
             engine::FontHandle smallFont);
     bool IsPreview3DActive() const;
+    bool OpenLevel(
+            engine::EngineContext& context,
+            const std::string& levelName,
+            const std::string& jsonAssetPath);
+    void SuspendRuntime(engine::EngineContext& context);
+    void RestoreRuntimeObjects(engine::EngineContext& context);
+    const SectorTopologyMap& CurrentTopologyMap() const;
 
     Vector2 MapToScreen(Vector2 map) const;
     Vector2 ScreenToMap(Vector2 screen) const;
@@ -97,7 +112,7 @@ private:
     void BeginFpsViewmodel(engine::AssetManager& assets);
     void EndFpsViewmodel(engine::AssetManager& assets);
     void UpdateFpsViewmodel(engine::AssetManager& assets, float dt);
-    void ProcessFpsWeaponFire(engine::Input& input);
+    bool ProcessFpsWeaponFire(engine::Input& input);
     void UpdateFpsViewmodelTransformsAndLight();
     void UpdatePreview3DSelection(engine::Input& input);
     void CancelPendingAuthoringLine(const char* message);
@@ -159,7 +174,19 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font,
             engine::FontHandle smallFont);
+    void DrawSetAllModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
     void DrawTexturePickerModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
+    void DrawFootstepPickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
@@ -176,6 +203,16 @@ private:
             const engine::UIConfig& config,
             engine::Input& input,
             engine::AssetManager& assets,
+            engine::FontHandle font);
+    void DrawAddMapSoundModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::FontHandle font);
+    void DrawSoundPickerModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
             engine::FontHandle font);
     void DrawSpritePickerModal(
             engine::UIContext& ui,
@@ -349,9 +386,12 @@ private:
     Rectangle BuildPreviewUvPanelRect() const;
     bool SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
     SectorEditorMaterialEditingService BuildMaterialEditingService();
+    SectorEditorFootstepService BuildFootstepService();
     SectorEditorLightEditingService BuildLightEditingService();
     SectorEditorRuntimeObjectEditingService BuildRuntimeObjectEditingService(
             SectorEditorSelectionServiceContext* selectionService = nullptr);
+    SectorEditorSoundService BuildSoundService(
+            SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr);
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorDocumentLifecycleAccess Lifecycle();
     SectorEditorConstDocumentLifecycleAccess Lifecycle() const;
@@ -398,16 +438,24 @@ private:
     RuntimeObjectEditingUiState runtimeObjectEditingUiState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
+    SectorEditorSoundCatalogState soundCatalogState;
     MaterialEditingState materialEditingState;
     MaterialEditingUiState materialEditingUiState;
     FogVolumeEditingUiState fogVolumeEditingUiState;
     std::optional<SectorEditorAuthoringFogVolumeEditingService> fogVolumeEditingService;
+    LevelMarkerEditingState levelMarkerEditingState;
+    LevelMarkerEditingUiState levelMarkerEditingUiState;
+    SectorEditorAuthoringFaceMergeState authoringFaceMergeState;
+    std::optional<SectorEditorAuthoringFaceMergeService> authoringFaceMergeService;
+    std::optional<SectorEditorLevelMarkerEditingService> levelMarkerEditingService;
     SectorEditorLightmapBakeController lightmapBake;
     Rectangle canvasRect = {};
     std::string statusText;
-    SectorMeshRenderer preview;
+    SectorSceneRuntime sceneRuntime;
+    FpsPlayerRuntime fpsPlayer;
     FpsWeaponRegistry weaponRegistry;
     FpsApplicationSettings applicationSettings;
+    PlayerAudioRuntime playerAudio;
     std::string applicationSettingsPath;
     std::string weaponRegistryError;
     std::string applicationSettingsWarning;

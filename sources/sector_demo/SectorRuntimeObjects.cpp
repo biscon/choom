@@ -41,7 +41,7 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(19);
+    world.ReserveComponentTypes(20);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
@@ -57,6 +57,7 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<SectorDoor>(objectCapacity);
     world.ReserveComponent<SectorDoorResolvedAnchor>(objectCapacity);
     world.ReserveComponent<SectorDoorMotion>(objectCapacity);
+    world.ReserveComponent<SectorDoorAudio>(objectCapacity);
     world.ReserveComponent<SectorDoorInteraction>(objectCapacity);
     world.ReserveComponent<SectorDoorRender>(objectCapacity);
     world.ReserveComponent<SectorDoorCollider>(objectCapacity);
@@ -576,6 +577,13 @@ void SpawnPlacedRuntimeObjects(
             world.Add(entity, SectorDoor{placedObject.id, true});
             world.Add(entity, runtimeAnchor);
             world.Add(entity, runtimeMotion);
+            world.Add(entity, SectorDoorAudio{
+                    placedObject.door.openSoundId,
+                    placedObject.door.closeSoundId,
+                    engine::NullSoundHandle(),
+                    engine::NullSoundHandle(),
+                    runtimeMotion.targetOpenFraction > 0.5f,
+                    SectorDoorAudioEvent::None});
             world.Add(entity, SectorDoorInteraction{
                     placedObject.door.autoOpen,
                     placedObject.door.interactionDistance,

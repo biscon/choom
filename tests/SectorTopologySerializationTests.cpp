@@ -1,4 +1,5 @@
 #include "sector_demo/SectorTopologySerialization.h"
+#include "game/SectorLevelLoader.h"
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -15,6 +16,8 @@ namespace {
 
 using game::SectorTextureDefinition;
 using game::SectorTextureFilter;
+using game::SectorSoundDefinition;
+using game::SectorSoundType;
 using game::SectorTopologyLineDef;
 using game::SectorTopologyLoopSet;
 using game::SectorTopologyMap;
@@ -188,6 +191,8 @@ SectorPlacedRuntimeObject MakeDoorRuntimeObject(int id)
     object.door.interactionDistance = 1.75f;
     object.door.autoOpenDistance = 2.5f;
     object.door.textureId = "industrial_door";
+    object.door.openSoundId = "door_open";
+    object.door.closeSoundId = "door_close";
     return object;
 }
 
@@ -298,6 +303,7 @@ game::SectorAuthoringDocument MakeAuthoringDocumentFromMap(const SectorTopologyM
 {
     game::SectorAuthoringDocument document;
     document.graph = game::ImportSectorTopologyMapToAuthoringGraph(map);
+    document.mapData.audioSettings = map.audioSettings;
     document.mapData.texturesById = map.texturesById;
     document.mapData.staticLights = map.staticLights;
     document.mapData.staticSpotLights = map.staticSpotLights;
@@ -1406,8 +1412,10 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && savedDoor["autoOpen"].get<bool>()
                   && Near(savedDoor["interactionDistance"].get<float>(), 1.75f)
                   && Near(savedDoor["autoOpenDistance"].get<float>(), 2.5f)
-                  && savedDoor["textureId"].get<std::string>() == "industrial_door",
-          "door payload writes dimensions motion interaction fields and texture ID");
+                  && savedDoor["textureId"].get<std::string>() == "industrial_door"
+                  && savedDoor["openSoundId"].get<std::string>() == "door_open"
+                  && savedDoor["closeSoundId"].get<std::string>() == "door_close",
+          "door payload writes dimensions motion interaction and asset IDs");
     Check(savedDoor["faceUvs"]["front"]["scale"][0].get<float>() == 2.0f
                   && savedDoor["faceUvs"]["front"]["scale"][1].get<float>() == 3.0f
                   && savedDoor["faceUvs"]["front"]["offset"][0].get<float>() == 0.25f
@@ -1446,6 +1454,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && Near(loadedDoor->door.interactionDistance, 1.75f)
                   && Near(loadedDoor->door.autoOpenDistance, 2.5f)
                   && loadedDoor->door.textureId == "industrial_door"
+                  && loadedDoor->door.openSoundId == "door_open"
+                  && loadedDoor->door.closeSoundId == "door_close"
                   && Near(loadedDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].scale, Vector2{2.0f, 3.0f})
                   && Near(loadedDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].offset, Vector2{0.25f, 0.5f})
                   && Near(loadedDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Left)].scale, Vector2{4.0f, 5.0f})
@@ -1479,6 +1489,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
     defaultDoor.door.interactionDistance = 1.5f;
     defaultDoor.door.autoOpenDistance = 2.0f;
     defaultDoor.door.textureId.clear();
+    defaultDoor.door.openSoundId.clear();
+    defaultDoor.door.closeSoundId.clear();
     defaultDoorMap.runtimeObjects.push_back(defaultDoor);
     const Json defaultDoorSaved = Json::parse(SaveText(defaultDoorMap));
     const Json& savedDefaultDoor = defaultDoorSaved["runtimeObjects"][0]["door"];
@@ -1494,6 +1506,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && !savedDefaultDoor.contains("interactionDistance")
                   && !savedDefaultDoor.contains("autoOpenDistance")
                   && !savedDefaultDoor.contains("textureId")
+                  && !savedDefaultDoor.contains("openSoundId")
+                  && !savedDefaultDoor.contains("closeSoundId")
                   && !savedDefaultDoor.contains("faceUvs"),
           "default door payload fields are omitted");
 
@@ -1515,7 +1529,9 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && !loadedDefaultDoor->door.autoOpen
                   && Near(loadedDefaultDoor->door.interactionDistance, 1.5f)
                   && Near(loadedDefaultDoor->door.autoOpenDistance, 2.0f)
-                  && loadedDefaultDoor->door.textureId.empty(),
+                  && loadedDefaultDoor->door.textureId.empty()
+                  && loadedDefaultDoor->door.openSoundId.empty()
+                  && loadedDefaultDoor->door.closeSoundId.empty(),
           "default door payload restores default fields");
 
     SectorTopologyMap mixedMap = MakeSquare();
@@ -2076,6 +2092,104 @@ void TestPreviewSettingsRoundTripAndValidation()
     Check(Near(loaded.previewSettings.headBobFrequency, 0.0f), "low headbob frequency clamps");
     Check(Near(loaded.previewSettings.objectProbeDebugDrawMaxDistanceWorld, 0.0f),
           "low object probe debug draw distance clamps");
+}
+
+void TestAudioSettingsRoundTripAndValidation()
+{
+    SectorTopologyMap original = MakeSquare();
+    original.audioSettings.musicPath = "music/level_theme.ogg";
+    original.audioSettings.musicVolume = 0.35f;
+    original.audioSettings.soundsById.emplace(
+            "door_open", SectorSoundDefinition{
+                    "door_open", "shared/doors/open.wav", SectorSoundType::Sound});
+    original.audioSettings.soundsById.emplace(
+            "alarm", SectorSoundDefinition{
+                    "alarm", "ambience/alarm.mp3", SectorSoundType::Music});
+
+    const Json saved = Json::parse(SaveText(original));
+    Check(saved["audio"]["music"] == "music/level_theme.ogg",
+          "level music path is serialized relative to assets/audio");
+    Check(Near(saved["audio"]["musicVolume"].get<float>(), 0.35f),
+          "non-default level music volume is serialized");
+    Check(saved["audio"]["sounds"]["door_open"]["path"]
+                  == "shared/doors/open.wav"
+                  && saved["audio"]["sounds"]["door_open"]["type"] == "sound"
+                  && saved["audio"]["sounds"]["alarm"]["path"]
+                  == "ambience/alarm.mp3"
+                  && saved["audio"]["sounds"]["alarm"]["type"] == "music",
+          "typed level sounds are serialized");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error), "level audio JSON loads");
+    Check(loaded.audioSettings.musicPath == "music/level_theme.ogg"
+                  && Near(loaded.audioSettings.musicVolume, 0.35f)
+                  && loaded.audioSettings.soundsById.at("door_open").path
+                  == "shared/doors/open.wav"
+                  && loaded.audioSettings.soundsById.at("door_open").type
+                  == SectorSoundType::Sound
+                  && loaded.audioSettings.soundsById.at("alarm").path
+                  == "ambience/alarm.mp3"
+                  && loaded.audioSettings.soundsById.at("alarm").type
+                  == SectorSoundType::Music,
+          "level audio settings round-trip");
+
+    Json legacySounds = saved;
+    legacySounds["audio"]["sounds"]["door_open"] = "shared/doors/open.wav";
+    Check(LoadText(legacySounds.dump(), loaded, error),
+          "legacy string sound registry entry remains compatible");
+    Check(loaded.audioSettings.soundsById.at("door_open").type
+                  == SectorSoundType::Sound,
+          "legacy string sound registry entry defaults to sound type");
+
+    Json legacy = saved;
+    legacy["audio"].erase("musicVolume");
+    Check(LoadText(legacy.dump(), loaded, error),
+          "level audio without music volume remains compatible");
+    Check(Near(
+                  loaded.audioSettings.musicVolume,
+                  game::SectorLevelAudioSettings::DefaultMusicVolume),
+          "omitted level music volume uses the default");
+
+    SectorTopologyMap defaultVolume = MakeSquare();
+    defaultVolume.audioSettings.musicPath = "music/default_volume.ogg";
+    const Json defaultVolumeSaved = Json::parse(SaveText(defaultVolume));
+    Check(defaultVolumeSaved["audio"].find("musicVolume")
+                  == defaultVolumeSaved["audio"].end(),
+          "default level music volume is omitted on save");
+
+    const Json defaults = Json::parse(SaveText(MakeSquare()));
+    Check(defaults.find("audio") == defaults.end(),
+          "empty level audio settings are omitted");
+
+    Json invalid = saved;
+    invalid["audio"] = "music/level_theme.ogg";
+    ExpectRejected(invalid, "non-object level audio is rejected");
+    invalid = saved;
+    invalid["audio"]["music"] = "../outside.ogg";
+    ExpectRejected(invalid, "traversing level music path is rejected");
+    invalid = saved;
+    invalid["audio"]["sounds"]["door_open"] = "shared/door.flac";
+    ExpectRejected(invalid, "unsupported level sound format is rejected");
+    invalid = saved;
+    invalid["audio"]["sounds"]["door_open"]["type"] = "voice";
+    ExpectRejected(invalid, "unknown level sound registry type is rejected");
+    invalid = saved;
+    invalid["audio"]["musicVolume"] = "loud";
+    ExpectRejected(invalid, "non-numeric level music volume is rejected");
+    invalid = saved;
+    invalid["audio"]["musicVolume"] = -0.01f;
+    ExpectRejected(invalid, "negative level music volume is rejected");
+    invalid = saved;
+    invalid["audio"]["musicVolume"] = 1.01f;
+    ExpectRejected(invalid, "level music volume above one is rejected");
+
+    SectorTopologyMap invalidSave = original;
+    invalidSave.audioSettings.musicPath = "/absolute/theme.ogg";
+    ExpectSaveRejected(invalidSave, "absolute level music path is rejected on save");
+    invalidSave = original;
+    invalidSave.audioSettings.musicVolume = -0.01f;
+    ExpectSaveRejected(invalidSave, "invalid level music volume is rejected on save");
 }
 
 void TestSkySettingsRoundTripAndValidation()
@@ -3602,6 +3716,11 @@ void TestGraphNativeMapLevelRoundTrip()
             3.0f
     });
     source.previewSettings.walkSpeed = 9.0f;
+    source.audioSettings.musicPath = "music/graph_theme.ogg";
+    source.audioSettings.musicVolume = 0.4f;
+    source.audioSettings.soundsById.emplace(
+            "ambient_hum", SectorSoundDefinition{
+                    "ambient_hum", "ambience/hum.wav", SectorSoundType::Sound});
     source.skySettings.textureId = "sky";
     source.skySettings.yawOffsetDegrees = 17.0f;
     source.directionalLight.enabled = true;
@@ -3662,6 +3781,11 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(saved["dynamicSpotLights"][0]["shadowSoftness"].get<float>(), 3.0f),
           "graph-native dynamic spot lights are persisted");
     Check(saved["previewSettings"]["walkSpeed"] == 9.0f, "graph-native preview settings are persisted");
+    Check(saved["audio"]["music"] == "music/graph_theme.ogg"
+                  && Near(saved["audio"]["musicVolume"].get<float>(), 0.4f)
+                  && saved["audio"]["sounds"]["ambient_hum"]["path"]
+                  == "ambience/hum.wav",
+          "graph-native audio settings are persisted");
     Check(saved["skySettings"]["textureId"] == "sky", "graph-native sky settings are persisted");
     Check(saved["directionalLight"]["enabled"] == true,
           "graph-native directional light settings are persisted");
@@ -3731,6 +3855,11 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.mapData.dynamicSpotLights[0].shadowStrength, 0.8f)
                   && Near(loaded.mapData.dynamicSpotLights[0].shadowSoftness, 3.0f)
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
+                  && loaded.mapData.audioSettings.musicPath
+                          == "music/graph_theme.ogg"
+                  && Near(loaded.mapData.audioSettings.musicVolume, 0.4f)
+                  && loaded.mapData.audioSettings.soundsById.at("ambient_hum").path
+                          == "ambience/hum.wav"
                   && loaded.mapData.skySettings.textureId == "sky"
                   && loaded.mapData.directionalLight.enabled
                   && loaded.mapData.fogSettings.enabled
@@ -3756,6 +3885,11 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.mapData.bakedLightmap.staticModels.objectCount == 5,
           "graph-native map-level fields round-trip");
     Check(loaded.derivation.success
+                  && loaded.derivation.topology.audioSettings.musicPath
+                          == "music/graph_theme.ogg"
+                  && Near(loaded.derivation.topology.audioSettings.musicVolume, 0.4f)
+                  && loaded.derivation.topology.audioSettings.soundsById.at(
+                          "ambient_hum").path == "ambience/hum.wav"
                   && loaded.derivation.topology.texturesById.count("sky") == 1
                   && loaded.derivation.topology.staticLights.size() == 1
                   && loaded.derivation.topology.staticSpotLights.size() == 1
@@ -3818,6 +3952,78 @@ void TestGraphNativeLegacyImportPathStillWorks()
           "topology-v2 import path preserves basic sector count");
 }
 
+void TestLevelMarkerRoundTripAndEntryResolution()
+{
+    SectorTopologyMap topology = MakeSquare();
+    topology.levelMarkers.push_back(game::SectorCompiledLevelMarker{
+            17, "default", Vector3{3.5f, 4.25f, 5.5f}, 0.75f});
+    topology.levelMarkers.push_back(game::SectorCompiledLevelMarker{
+            18, "return_from_hub", Vector3{8.0f, 2.0f, 9.0f}, -1.25f});
+    std::string error;
+    SectorTopologyMap loadedTopology;
+    Check(LoadText(SaveText(topology), loadedTopology, error),
+          "topology-v2 Level Markers round-trip");
+    Check(loadedTopology.levelMarkers.size() == 2
+                  && loadedTopology.levelMarkers[0].id == "default"
+                  && Near(loadedTopology.levelMarkers[0].position.y, 4.25f)
+                  && Near(loadedTopology.levelMarkers[1].yawRadians, -1.25f),
+          "topology-v2 Level Marker values survive round-trip");
+    Json invalidTopologyMarkers = Json::parse(SaveText(topology));
+    invalidTopologyMarkers["levelMarkers"][1]["id"] = "default";
+    ExpectRejected(
+            invalidTopologyMarkers,
+            "topology-v2 duplicate Level Marker reference IDs are rejected");
+
+    const game::SectorCompiledLevelMarker* resolved = nullptr;
+    Check(game::ResolveSectorLevelEntryMarker(loadedTopology, std::nullopt, resolved, error)
+                  && resolved != nullptr && resolved->id == "default",
+          "implicit level entry resolves the default marker");
+    Check(game::ResolveSectorLevelEntryMarker(
+                  loadedTopology,
+                  std::optional<std::string>{"return_from_hub"},
+                  resolved,
+                  error)
+                  && resolved != nullptr && resolved->id == "return_from_hub",
+          "explicit level entry resolves its requested marker");
+    Check(!game::ResolveSectorLevelEntryMarker(
+                  loadedTopology,
+                  std::optional<std::string>{"missing"},
+                  resolved,
+                  error)
+                  && resolved == nullptr,
+          "missing explicit level entry fails closed");
+    SectorTopologyMap noMarkers = MakeSquare();
+    Check(game::ResolveSectorLevelEntryMarker(noMarkers, std::nullopt, resolved, error)
+                  && resolved == nullptr,
+          "missing implicit default preserves geometry-center fallback");
+
+    game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(MakeSquare());
+    document.graph.levelMarkers.push_back(game::SectorAuthoringLevelMarker{
+            31, "default", 24, 40, 7.5f, 135.0f});
+    document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
+    const Json saved = Json::parse(SaveAuthoringText(document));
+    Check(saved["authoringGraph"].contains("levelMarkers")
+                  && !saved.contains("levelMarkers"),
+          "graph-native Level Markers serialize only in the authoring graph");
+    game::SectorAuthoringDocument loadedDocument;
+    Check(LoadAuthoringText(saved.dump(), loadedDocument, error),
+          "graph-native Level Marker document loads");
+    Check(loadedDocument.graph.levelMarkers.size() == 1
+                  && loadedDocument.graph.levelMarkers[0].referenceId == "default"
+                  && loadedDocument.graph.levelMarkers[0].x == 24
+                  && Near(loadedDocument.graph.levelMarkers[0].orientationDegrees, 135.0f)
+                  && loadedDocument.derivation.topology.levelMarkers.size() == 1
+                  && Near(loadedDocument.derivation.topology.levelMarkers[0].position.x, 1.5f),
+          "graph-native Level Marker authoring and compiled values survive load");
+
+    Json duplicate = saved;
+    duplicate["authoringGraph"]["levelMarkers"].push_back(
+            duplicate["authoringGraph"]["levelMarkers"][0]);
+    duplicate["authoringGraph"]["levelMarkers"][1]["editorId"] = 32;
+    Check(!LoadAuthoringText(duplicate.dump(), loadedDocument, error),
+          "duplicate Level Marker reference IDs are rejected");
+}
+
 void TestFileApi()
 {
     const std::filesystem::path path =
@@ -3834,6 +4040,41 @@ void TestFileApi()
           "file load succeeds");
     Check(loaded.vertices.size() == original.vertices.size(), "file API round-trips map");
     std::filesystem::remove(path, removeError);
+}
+
+void TestFootstepSetRoundTripAndDefaults()
+{
+    SectorTopologyMap map = MakeSquare();
+    map.sectors[0].footstepSet = "DirtRoad_Mono";
+    const Json saved = Json::parse(SaveText(map));
+    Check(saved["sectors"][0]["footstepSet"] == "DirtRoad_Mono",
+          "topology sector footstep override serializes");
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error)
+                  && loaded.sectors[0].footstepSet == "DirtRoad_Mono",
+          "topology sector footstep override round-trips");
+
+    SectorTopologyMap defaults = MakeSquare();
+    const Json defaultSaved = Json::parse(SaveText(defaults));
+    Check(!defaultSaved["sectors"][0].contains("footstepSet"),
+          "default live footstep fallback is omitted from topology JSON");
+    Json invalid = defaultSaved;
+    invalid["sectors"][0]["footstepSet"] = "../Tile_Mono";
+    Check(!LoadText(invalid.dump(), loaded, error),
+          "unsafe topology footstep set IDs are rejected");
+
+    game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(defaults);
+    document.graph.faceAnchors[0].footstepSet = "MetalSteps";
+    document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
+    const Json authoringSaved = Json::parse(SaveAuthoringText(document));
+    Check(authoringSaved["authoringGraph"]["faceAnchors"][0]["footstepSet"] == "MetalSteps",
+          "authoring face footstep override serializes in the source graph");
+    game::SectorAuthoringDocument loadedDocument;
+    Check(LoadAuthoringText(authoringSaved.dump(), loadedDocument, error)
+                  && loadedDocument.graph.faceAnchors[0].footstepSet == "MetalSteps"
+                  && loadedDocument.derivation.topology.sectors[0].footstepSet == "MetalSteps",
+          "authoring face footstep override derives into runtime topology");
 }
 
 } // namespace
@@ -3853,6 +4094,7 @@ int main()
     TestRuntimeObjectEditAndDeleteHelpers();
     TestLightmapMetadataRoundTrip();
     TestPreviewSettingsRoundTripAndValidation();
+    TestAudioSettingsRoundTripAndValidation();
     TestSkySettingsRoundTripAndValidation();
     TestDirectionalLightRoundTripAndValidation();
     TestFogSettingsRoundTripAndValidation();
@@ -3880,6 +4122,8 @@ int main()
     TestGraphNativeValidGraphDerivesTopologyAndProperties();
     TestGraphNativeMapLevelRoundTrip();
     TestGraphNativeLegacyImportPathStillWorks();
+    TestLevelMarkerRoundTripAndEntryResolution();
+    TestFootstepSetRoundTripAndDefaults();
     TestFileApi();
 
     if (failures != 0) {

@@ -77,6 +77,21 @@ struct SectorFpsHeadBobState {
     Vector3 offset = {};
 };
 
+struct SectorFpsFootstepCadenceState {
+    float accumulatedDistanceWorld = 0.0f;
+};
+
+struct SectorFpsFrameEvents {
+    bool footstep = false;
+    bool jumped = false;
+    bool landed = false;
+    float landingImpactSpeed = 0.0f;
+};
+
+SectorFpsFrameEvents BuildSectorFpsFrameEvents(
+        bool jumped,
+        const SectorFpsVerticalResult& verticalResult);
+
 struct SectorFpsLandingDipState {
     float offsetY = 0.0f;
 };
@@ -94,6 +109,9 @@ SectorFpsControllerConfig SectorFpsControllerConfigFromPreviewSettings(
 SectorPreviewSettings SectorPreviewSettingsFromFpsControllerConfig(
         SectorFpsControllerConfig config);
 float ClampSectorFpsPitch(float pitchRadians);
+SectorViewPose ApplySectorFpsViewRotationOffset(
+        SectorViewPose pose,
+        Vector3 rotationOffsetDegrees);
 float SectorFpsCrouchBlend(const SectorFpsControllerState& state);
 bool TryToggleSectorFpsCrouch(
         SectorFpsControllerState& state,
@@ -154,6 +172,16 @@ void UpdateSectorFpsHeadBob(
         float yawRadians,
         float dt,
         float blendRate = DefaultSectorFpsHeadBobBlendRate());
+void ClearSectorFpsFootstepCadence(SectorFpsFootstepCadenceState& footsteps);
+float SectorFpsFootstepStrideDistance(
+        const SectorFpsControllerConfig& config,
+        float horizontalSpeed);
+bool UpdateSectorFpsFootstepCadence(
+        SectorFpsFootstepCadenceState& footsteps,
+        const SectorFpsControllerConfig& config,
+        bool active,
+        float resolvedHorizontalDistance,
+        float horizontalSpeed);
 void ClearSectorFpsLandingDip(SectorFpsLandingDipState& landingDip);
 float ComputeSectorFpsLandingDipAmount(
         float landingImpactSpeed,

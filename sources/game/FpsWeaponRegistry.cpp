@@ -3,6 +3,7 @@
 #include "util/json.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -103,6 +104,64 @@ bool ValidAssetPath(const std::string& path)
             && !parsed.is_absolute()
             && path.find("..") == std::string::npos
             && (parsed.extension() == ".glb" || parsed.extension() == ".gltf");
+}
+
+bool ValidAudioPath(const std::string& path)
+{
+    if (path.empty()) return false;
+    const std::filesystem::path parsed(path);
+    const bool windowsDrivePath = path.size() >= 2
+            && std::isalpha(static_cast<unsigned char>(path[0]))
+            && path[1] == ':';
+    if (parsed.is_absolute()
+            || windowsDrivePath
+            || path.front() == '\\'
+            || path.find('\\') != std::string::npos
+            || path.find("..") != std::string::npos) {
+        return false;
+    }
+    std::string extension = parsed.extension().generic_string();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+            [](unsigned char value) {
+                return static_cast<char>(std::tolower(value));
+            });
+    return extension == ".ogg" || extension == ".wav" || extension == ".mp3";
+}
+
+bool ValidLevelName(const std::string& name)
+{
+    if (name.empty()) {
+        return false;
+    }
+    for (char ch : name) {
+        const bool asciiLetter = (ch >= 'A' && ch <= 'Z')
+                || (ch >= 'a' && ch <= 'z');
+        const bool asciiDigit = ch >= '0' && ch <= '9';
+        if (!(asciiLetter || asciiDigit || ch == '_' || ch == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ValidSoundSetId(const std::string& id)
+{
+    if (id.empty() || id.front() == '/' || id.front() == '\\') return false;
+    std::string segment;
+    for (const char character : id) {
+        if (character == '\\') return false;
+        if (character == '/') {
+            if (segment.empty() || segment == "." || segment == "..") return false;
+            segment.clear();
+            continue;
+        }
+        const unsigned char value = static_cast<unsigned char>(character);
+        if (!std::isalnum(value) && character != '_' && character != '-' && character != '.') {
+            return false;
+        }
+        segment.push_back(character);
+    }
+    return !segment.empty() && segment != "." && segment != "..";
 }
 
 void ValidatePresentation(const FpsViewmodelPresentation& value, const std::string& context)
@@ -292,6 +351,15 @@ void ValidateFiring(
             value.recoil.maximumRotationDegrees.x,
             value.recoil.maximumRotationDegrees.y,
             value.recoil.maximumRotationDegrees.z,
+            value.cameraRecoil.pitchKickDegrees,
+            value.cameraRecoil.pitchVariationDegrees,
+            value.cameraRecoil.yawVariationDegrees,
+            value.cameraRecoil.rollVariationDegrees,
+            value.cameraRecoil.springFrequencyHz,
+            value.cameraRecoil.springDampingRatio,
+            value.cameraRecoil.maxPitchDegrees,
+            value.cameraRecoil.maxYawDegrees,
+            value.cameraRecoil.maxRollDegrees,
             value.muzzleSocket.position.x, value.muzzleSocket.position.y,
             value.muzzleSocket.position.z,
             value.muzzleSocket.rotationDegrees.x,
@@ -321,6 +389,17 @@ void ValidateFiring(
             || value.recoil.maximumRotationDegrees.y < 0.0f
             || value.recoil.maximumRotationDegrees.z < 0.0f) {
         Fail(context + ".recoil contains an invalid response or limit");
+    }
+    if (value.cameraRecoil.pitchKickDegrees < 0.0f
+            || value.cameraRecoil.pitchVariationDegrees < 0.0f
+            || value.cameraRecoil.yawVariationDegrees < 0.0f
+            || value.cameraRecoil.rollVariationDegrees < 0.0f
+            || value.cameraRecoil.springFrequencyHz <= 0.0f
+            || value.cameraRecoil.springDampingRatio <= 0.0f
+            || value.cameraRecoil.maxPitchDegrees < 0.0f
+            || value.cameraRecoil.maxYawDegrees < 0.0f
+            || value.cameraRecoil.maxRollDegrees < 0.0f) {
+        Fail(context + ".cameraRecoil contains an invalid kick, response, or limit");
     }
     if (value.muzzleFlash.lifetimeSeconds <= 0.0f
             || value.muzzleFlash.sizeWorld <= 0.0f
@@ -355,6 +434,16 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
     FpsWeaponFiringDefinition result;
     result.shotIntervalSeconds = Number(object, "shotIntervalSeconds", context);
     result.maximumRangeWorld = Number(object, "maximumRangeWorld", context);
+    const auto shootSound = object.find("shootSound");
+    if (shootSound != object.end()) {
+        if (!shootSound->is_string()) {
+            Fail(context + ".shootSound must be a string");
+        }
+        result.shootSoundPath = shootSound->get<std::string>();
+        if (!ValidAudioPath(result.shootSoundPath)) {
+            Fail(context + ".shootSound must be a relative .ogg, .wav, or .mp3 path beneath assets/audio");
+        }
+    }
 
     const Json& recoil = Require(object, "recoil", context);
     const std::string recoilContext = context + ".recoil";
@@ -365,6 +454,34 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
     result.recoil.dampingRatio = Number(recoil, "dampingRatio", recoilContext);
     result.recoil.maximumTranslation = Vector(recoil, "maximumTranslation", recoilContext);
     result.recoil.maximumRotationDegrees = Vector(recoil, "maximumRotationDegrees", recoilContext);
+
+    const auto cameraRecoil = object.find("cameraRecoil");
+    if (cameraRecoil != object.end()) {
+        const std::string cameraRecoilContext = context + ".cameraRecoil";
+        if (!cameraRecoil->is_object()) {
+            Fail(cameraRecoilContext + " must be an object");
+        }
+        result.cameraRecoil.enabled = Boolean(
+                *cameraRecoil, "enabled", cameraRecoilContext);
+        result.cameraRecoil.pitchKickDegrees = Number(
+                *cameraRecoil, "pitchKickDegrees", cameraRecoilContext);
+        result.cameraRecoil.pitchVariationDegrees = Number(
+                *cameraRecoil, "pitchVariationDegrees", cameraRecoilContext);
+        result.cameraRecoil.yawVariationDegrees = Number(
+                *cameraRecoil, "yawVariationDegrees", cameraRecoilContext);
+        result.cameraRecoil.rollVariationDegrees = Number(
+                *cameraRecoil, "rollVariationDegrees", cameraRecoilContext);
+        result.cameraRecoil.springFrequencyHz = Number(
+                *cameraRecoil, "springFrequencyHz", cameraRecoilContext);
+        result.cameraRecoil.springDampingRatio = Number(
+                *cameraRecoil, "springDampingRatio", cameraRecoilContext);
+        result.cameraRecoil.maxPitchDegrees = Number(
+                *cameraRecoil, "maxPitchDegrees", cameraRecoilContext);
+        result.cameraRecoil.maxYawDegrees = Number(
+                *cameraRecoil, "maxYawDegrees", cameraRecoilContext);
+        result.cameraRecoil.maxRollDegrees = Number(
+                *cameraRecoil, "maxRollDegrees", cameraRecoilContext);
+    }
 
     const Json& socket = Require(object, "muzzleSocket", context);
     const std::string socketContext = context + ".muzzleSocket";
@@ -425,6 +542,15 @@ std::optional<int> OptionalInteger(const Json& object, const char* name, const s
 {
     if (object.find(name) == object.end()) return std::nullopt;
     return Integer(object, name, context);
+}
+
+std::optional<bool> OptionalBoolean(
+        const Json& object,
+        const char* name,
+        const std::string& context)
+{
+    if (object.find(name) == object.end()) return std::nullopt;
+    return Boolean(object, name, context);
 }
 
 void SetError(std::string* output, const std::string& message) { if (output) *output = message; }
@@ -562,6 +688,101 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
         FpsApplicationSettings parsed;
         parsed.version = Integer(root, "version", "application settings");
         if (parsed.version != 1) Fail("application settings version must be 1");
+        const auto firstLevel = root.find("firstLevel");
+        if (firstLevel != root.end()) {
+            if (!firstLevel->is_string()) {
+                Fail("application settings.firstLevel must be a string");
+            }
+            parsed.firstLevel = firstLevel->get<std::string>();
+            if (!ValidLevelName(parsed.firstLevel)) {
+                Fail("application settings.firstLevel must use only letters, digits, underscore, or dash");
+            }
+        }
+        const auto footsteps = root.find("footsteps");
+        if (footsteps != root.end()) {
+            if (!footsteps->is_object()) {
+                Fail("application settings.footsteps must be an object");
+            }
+            const auto defaultSet = footsteps->find("defaultSet");
+            if (defaultSet != footsteps->end()) {
+                if (!defaultSet->is_string()) {
+                    Fail("application settings.footsteps.defaultSet must be a string");
+                }
+                parsed.footsteps.defaultSet = defaultSet->get<std::string>();
+                if (!ValidSoundSetId(parsed.footsteps.defaultSet)) {
+                    Fail("application settings.footsteps.defaultSet must be a safe relative footstep set id");
+                }
+            }
+            const auto volume = footsteps->find("volume");
+            if (volume != footsteps->end()) {
+                if (!volume->is_number()) {
+                    Fail("application settings.footsteps.volume must be a number");
+                }
+                const double value = volume->get<double>();
+                if (!std::isfinite(value) || value < 0.0 || value > 1.0) {
+                    Fail("application settings.footsteps.volume must be between 0 and 1");
+                }
+                parsed.footsteps.volume = static_cast<float>(value);
+            }
+            const auto impactMultiplier = footsteps->find(
+                    "landingImpactVolumeMultiplier");
+            if (impactMultiplier != footsteps->end()) {
+                if (!impactMultiplier->is_number()) {
+                    Fail("application settings.footsteps.landingImpactVolumeMultiplier must be a number");
+                }
+                const double value = impactMultiplier->get<double>();
+                if (!std::isfinite(value)
+                        || value < 0.0
+                        || value > std::numeric_limits<float>::max()) {
+                    Fail("application settings.footsteps.landingImpactVolumeMultiplier must be non-negative");
+                }
+                parsed.footsteps.landingImpactVolumeMultiplier =
+                        static_cast<float>(value);
+            }
+        }
+        const auto playerSounds = root.find("playerSounds");
+        if (playerSounds != root.end()) {
+            if (!playerSounds->is_object()) {
+                Fail("application settings.playerSounds must be an object");
+            }
+            const auto events = playerSounds->find("events");
+            if (events != playerSounds->end()) {
+                if (!events->is_object()) {
+                    Fail("application settings.playerSounds.events must be an object");
+                }
+                parsed.playerSounds.events.clear();
+                parsed.playerSounds.events.reserve(events->size());
+                for (auto it = events->begin(); it != events->end(); ++it) {
+                    const std::string context =
+                            "application settings.playerSounds.events.'"
+                            + it.key() + "'";
+                    if (!ValidSoundSetId(it.key())) {
+                        Fail(context + " must use a safe event id");
+                    }
+                    if (!it.value().is_object()) {
+                        Fail(context + " must be an object");
+                    }
+                    PlayerSoundEventSettings event;
+                    event.id = it.key();
+                    event.set = String(it.value(), "set", context);
+                    if (!ValidSoundSetId(event.set)) {
+                        Fail(context + ".set must be a safe relative player sound set id");
+                    }
+                    const auto volume = it.value().find("volume");
+                    if (volume != it.value().end()) {
+                        if (!volume->is_number()) {
+                            Fail(context + ".volume must be a number");
+                        }
+                        const double value = volume->get<double>();
+                        if (!std::isfinite(value) || value < 0.0 || value > 1.0) {
+                            Fail(context + ".volume must be between 0 and 1");
+                        }
+                        event.volume = static_cast<float>(value);
+                    }
+                    parsed.playerSounds.events.push_back(std::move(event));
+                }
+            }
+        }
         const auto overrides = root.find("viewmodelOverrides");
         if (overrides != root.end()) {
             if (!overrides->is_object()) Fail("application settings.viewmodelOverrides must be an object");
@@ -650,6 +871,16 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                     entry.firing.recoilRollVariationDegrees = OptionalNumber(*firing, "recoilRollVariationDegrees", firingContext);
                     entry.firing.recoilSpringFrequencyHz = OptionalNumber(*firing, "recoilSpringFrequencyHz", firingContext);
                     entry.firing.recoilDampingRatio = OptionalNumber(*firing, "recoilDampingRatio", firingContext);
+                    entry.firing.cameraRecoilEnabled = OptionalBoolean(*firing, "cameraRecoilEnabled", firingContext);
+                    entry.firing.cameraRecoilPitchKickDegrees = OptionalNumber(*firing, "cameraRecoilPitchKickDegrees", firingContext);
+                    entry.firing.cameraRecoilPitchVariationDegrees = OptionalNumber(*firing, "cameraRecoilPitchVariationDegrees", firingContext);
+                    entry.firing.cameraRecoilYawVariationDegrees = OptionalNumber(*firing, "cameraRecoilYawVariationDegrees", firingContext);
+                    entry.firing.cameraRecoilRollVariationDegrees = OptionalNumber(*firing, "cameraRecoilRollVariationDegrees", firingContext);
+                    entry.firing.cameraRecoilSpringFrequencyHz = OptionalNumber(*firing, "cameraRecoilSpringFrequencyHz", firingContext);
+                    entry.firing.cameraRecoilSpringDampingRatio = OptionalNumber(*firing, "cameraRecoilSpringDampingRatio", firingContext);
+                    entry.firing.cameraRecoilMaxPitchDegrees = OptionalNumber(*firing, "cameraRecoilMaxPitchDegrees", firingContext);
+                    entry.firing.cameraRecoilMaxYawDegrees = OptionalNumber(*firing, "cameraRecoilMaxYawDegrees", firingContext);
+                    entry.firing.cameraRecoilMaxRollDegrees = OptionalNumber(*firing, "cameraRecoilMaxRollDegrees", firingContext);
                     entry.firing.muzzlePosition = OptionalVector(*firing, "muzzlePosition", firingContext);
                     entry.firing.muzzleRotationDegrees = OptionalVector(*firing, "muzzleRotationDegrees", firingContext);
                     entry.firing.flashLifetimeSeconds = OptionalNumber(*firing, "flashLifetimeSeconds", firingContext);
@@ -684,7 +915,58 @@ bool LoadFpsApplicationSettings(const std::string& path, FpsApplicationSettings&
 
 bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSettings& settings, std::string* error)
 {
-    Json root = {{"version", 1}};
+    if (!ValidLevelName(settings.firstLevel)) {
+        SetError(error, "application settings first level is invalid");
+        return false;
+    }
+    if (!ValidSoundSetId(settings.footsteps.defaultSet)) {
+        SetError(error, "application settings default footstep set is invalid");
+        return false;
+    }
+    if (!std::isfinite(settings.footsteps.volume)
+            || settings.footsteps.volume < 0.0f
+            || settings.footsteps.volume > 1.0f) {
+        SetError(error, "application settings footstep volume must be between 0 and 1");
+        return false;
+    }
+    if (!std::isfinite(settings.footsteps.landingImpactVolumeMultiplier)
+            || settings.footsteps.landingImpactVolumeMultiplier < 0.0f) {
+        SetError(error, "application settings landing footstep volume multiplier must be non-negative");
+        return false;
+    }
+    std::unordered_set<std::string> playerSoundEventIds;
+    for (const PlayerSoundEventSettings& event : settings.playerSounds.events) {
+        if (!ValidSoundSetId(event.id)
+                || !ValidSoundSetId(event.set)) {
+            SetError(error, "application settings player sound event has an invalid id or set");
+            return false;
+        }
+        if (!std::isfinite(event.volume)
+                || event.volume < 0.0f
+                || event.volume > 1.0f) {
+            SetError(error, "application settings player sound event volume must be between 0 and 1");
+            return false;
+        }
+        if (!playerSoundEventIds.insert(event.id).second) {
+            SetError(error, "application settings player sound event ids must be unique");
+            return false;
+        }
+    }
+    Json root = {
+            {"version", 1},
+            {"firstLevel", settings.firstLevel},
+            {"footsteps", {
+                    {"defaultSet", settings.footsteps.defaultSet},
+                    {"volume", settings.footsteps.volume},
+                    {"landingImpactVolumeMultiplier",
+                            settings.footsteps.landingImpactVolumeMultiplier}}}};
+    Json playerSoundEvents = Json::object();
+    for (const PlayerSoundEventSettings& event : settings.playerSounds.events) {
+        playerSoundEvents[event.id] = {
+                {"set", event.set},
+                {"volume", event.volume}};
+    }
+    root["playerSounds"] = {{"events", std::move(playerSoundEvents)}};
     Json overrides = Json::object();
     for (const auto& entry : settings.weapons) {
         Json value = Json::object();
@@ -749,6 +1031,16 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         if (entry.firing.recoilRollVariationDegrees) firing["recoilRollVariationDegrees"] = *entry.firing.recoilRollVariationDegrees;
         if (entry.firing.recoilSpringFrequencyHz) firing["recoilSpringFrequencyHz"] = *entry.firing.recoilSpringFrequencyHz;
         if (entry.firing.recoilDampingRatio) firing["recoilDampingRatio"] = *entry.firing.recoilDampingRatio;
+        if (entry.firing.cameraRecoilEnabled) firing["cameraRecoilEnabled"] = *entry.firing.cameraRecoilEnabled;
+        if (entry.firing.cameraRecoilPitchKickDegrees) firing["cameraRecoilPitchKickDegrees"] = *entry.firing.cameraRecoilPitchKickDegrees;
+        if (entry.firing.cameraRecoilPitchVariationDegrees) firing["cameraRecoilPitchVariationDegrees"] = *entry.firing.cameraRecoilPitchVariationDegrees;
+        if (entry.firing.cameraRecoilYawVariationDegrees) firing["cameraRecoilYawVariationDegrees"] = *entry.firing.cameraRecoilYawVariationDegrees;
+        if (entry.firing.cameraRecoilRollVariationDegrees) firing["cameraRecoilRollVariationDegrees"] = *entry.firing.cameraRecoilRollVariationDegrees;
+        if (entry.firing.cameraRecoilSpringFrequencyHz) firing["cameraRecoilSpringFrequencyHz"] = *entry.firing.cameraRecoilSpringFrequencyHz;
+        if (entry.firing.cameraRecoilSpringDampingRatio) firing["cameraRecoilSpringDampingRatio"] = *entry.firing.cameraRecoilSpringDampingRatio;
+        if (entry.firing.cameraRecoilMaxPitchDegrees) firing["cameraRecoilMaxPitchDegrees"] = *entry.firing.cameraRecoilMaxPitchDegrees;
+        if (entry.firing.cameraRecoilMaxYawDegrees) firing["cameraRecoilMaxYawDegrees"] = *entry.firing.cameraRecoilMaxYawDegrees;
+        if (entry.firing.cameraRecoilMaxRollDegrees) firing["cameraRecoilMaxRollDegrees"] = *entry.firing.cameraRecoilMaxRollDegrees;
         if (entry.firing.muzzlePosition) firing["muzzlePosition"] = Vec(*entry.firing.muzzlePosition);
         if (entry.firing.muzzleRotationDegrees) firing["muzzleRotationDegrees"] = Vec(*entry.firing.muzzleRotationDegrees);
         if (entry.firing.flashLifetimeSeconds) firing["flashLifetimeSeconds"] = *entry.firing.flashLifetimeSeconds;
@@ -1280,6 +1572,55 @@ void ClearFpsWeaponFiringOverride(
             }), settings.weapons.end());
 }
 
+FpsWeaponCameraRecoilDefinition ClampFpsWeaponCameraRecoilDefinition(
+        FpsWeaponCameraRecoilDefinition value)
+{
+    const FpsWeaponCameraRecoilDefinition defaults;
+    const auto finiteOr = [](float candidate, float fallback) {
+        return std::isfinite(candidate) ? candidate : fallback;
+    };
+    value.pitchKickDegrees = std::clamp(
+            finiteOr(value.pitchKickDegrees, defaults.pitchKickDegrees),
+            0.0f,
+            45.0f);
+    value.pitchVariationDegrees = std::clamp(
+            finiteOr(value.pitchVariationDegrees,
+                    defaults.pitchVariationDegrees),
+            0.0f,
+            45.0f);
+    value.yawVariationDegrees = std::clamp(
+            finiteOr(value.yawVariationDegrees, defaults.yawVariationDegrees),
+            0.0f,
+            45.0f);
+    value.rollVariationDegrees = std::clamp(
+            finiteOr(value.rollVariationDegrees,
+                    defaults.rollVariationDegrees),
+            0.0f,
+            45.0f);
+    value.springFrequencyHz = std::clamp(
+            finiteOr(value.springFrequencyHz, defaults.springFrequencyHz),
+            0.5f,
+            40.0f);
+    value.springDampingRatio = std::clamp(
+            finiteOr(value.springDampingRatio,
+                    defaults.springDampingRatio),
+            0.1f,
+            3.0f);
+    value.maxPitchDegrees = std::clamp(
+            finiteOr(value.maxPitchDegrees, defaults.maxPitchDegrees),
+            0.0f,
+            90.0f);
+    value.maxYawDegrees = std::clamp(
+            finiteOr(value.maxYawDegrees, defaults.maxYawDegrees),
+            0.0f,
+            90.0f);
+    value.maxRollDegrees = std::clamp(
+            finiteOr(value.maxRollDegrees, defaults.maxRollDegrees),
+            0.0f,
+            90.0f);
+    return value;
+}
+
 FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
         FpsWeaponFiringDefinition value)
 {
@@ -1297,6 +1638,8 @@ FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
     value.recoil.dampingRatio = std::clamp(value.recoil.dampingRatio, 0.1f, 3.0f);
     clampVector(value.recoil.maximumTranslation, 0.0f, 2.0f);
     clampVector(value.recoil.maximumRotationDegrees, 0.0f, 90.0f);
+    value.cameraRecoil = ClampFpsWeaponCameraRecoilDefinition(
+            value.cameraRecoil);
     clampVector(value.muzzleSocket.position, -2.0f, 2.0f);
     clampVector(value.muzzleSocket.rotationDegrees, -360.0f, 360.0f);
     value.muzzleFlash.lifetimeSeconds = std::clamp(value.muzzleFlash.lifetimeSeconds, 0.005f, 60.0f);
@@ -1331,6 +1674,16 @@ FpsWeaponFiringDefinition ResolveFpsWeaponFiringDefinition(
         if (value->recoilRollVariationDegrees) result.recoil.rollVariationDegrees = *value->recoilRollVariationDegrees;
         if (value->recoilSpringFrequencyHz) result.recoil.springFrequencyHz = *value->recoilSpringFrequencyHz;
         if (value->recoilDampingRatio) result.recoil.dampingRatio = *value->recoilDampingRatio;
+        if (value->cameraRecoilEnabled) result.cameraRecoil.enabled = *value->cameraRecoilEnabled;
+        if (value->cameraRecoilPitchKickDegrees) result.cameraRecoil.pitchKickDegrees = *value->cameraRecoilPitchKickDegrees;
+        if (value->cameraRecoilPitchVariationDegrees) result.cameraRecoil.pitchVariationDegrees = *value->cameraRecoilPitchVariationDegrees;
+        if (value->cameraRecoilYawVariationDegrees) result.cameraRecoil.yawVariationDegrees = *value->cameraRecoilYawVariationDegrees;
+        if (value->cameraRecoilRollVariationDegrees) result.cameraRecoil.rollVariationDegrees = *value->cameraRecoilRollVariationDegrees;
+        if (value->cameraRecoilSpringFrequencyHz) result.cameraRecoil.springFrequencyHz = *value->cameraRecoilSpringFrequencyHz;
+        if (value->cameraRecoilSpringDampingRatio) result.cameraRecoil.springDampingRatio = *value->cameraRecoilSpringDampingRatio;
+        if (value->cameraRecoilMaxPitchDegrees) result.cameraRecoil.maxPitchDegrees = *value->cameraRecoilMaxPitchDegrees;
+        if (value->cameraRecoilMaxYawDegrees) result.cameraRecoil.maxYawDegrees = *value->cameraRecoilMaxYawDegrees;
+        if (value->cameraRecoilMaxRollDegrees) result.cameraRecoil.maxRollDegrees = *value->cameraRecoilMaxRollDegrees;
         if (value->muzzlePosition) result.muzzleSocket.position = *value->muzzlePosition;
         if (value->muzzleRotationDegrees) result.muzzleSocket.rotationDegrees = *value->muzzleRotationDegrees;
         if (value->flashLifetimeSeconds) result.muzzleFlash.lifetimeSeconds = *value->flashLifetimeSeconds;
@@ -1361,6 +1714,16 @@ FpsWeaponFiringOverride BuildFpsWeaponFiringOverride(
     if (!NearlyEqual(defaults.recoil.rollVariationDegrees, clean.recoil.rollVariationDegrees)) result.recoilRollVariationDegrees = clean.recoil.rollVariationDegrees;
     if (!NearlyEqual(defaults.recoil.springFrequencyHz, clean.recoil.springFrequencyHz)) result.recoilSpringFrequencyHz = clean.recoil.springFrequencyHz;
     if (!NearlyEqual(defaults.recoil.dampingRatio, clean.recoil.dampingRatio)) result.recoilDampingRatio = clean.recoil.dampingRatio;
+    if (defaults.cameraRecoil.enabled != clean.cameraRecoil.enabled) result.cameraRecoilEnabled = clean.cameraRecoil.enabled;
+    if (!NearlyEqual(defaults.cameraRecoil.pitchKickDegrees, clean.cameraRecoil.pitchKickDegrees)) result.cameraRecoilPitchKickDegrees = clean.cameraRecoil.pitchKickDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.pitchVariationDegrees, clean.cameraRecoil.pitchVariationDegrees)) result.cameraRecoilPitchVariationDegrees = clean.cameraRecoil.pitchVariationDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.yawVariationDegrees, clean.cameraRecoil.yawVariationDegrees)) result.cameraRecoilYawVariationDegrees = clean.cameraRecoil.yawVariationDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.rollVariationDegrees, clean.cameraRecoil.rollVariationDegrees)) result.cameraRecoilRollVariationDegrees = clean.cameraRecoil.rollVariationDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.springFrequencyHz, clean.cameraRecoil.springFrequencyHz)) result.cameraRecoilSpringFrequencyHz = clean.cameraRecoil.springFrequencyHz;
+    if (!NearlyEqual(defaults.cameraRecoil.springDampingRatio, clean.cameraRecoil.springDampingRatio)) result.cameraRecoilSpringDampingRatio = clean.cameraRecoil.springDampingRatio;
+    if (!NearlyEqual(defaults.cameraRecoil.maxPitchDegrees, clean.cameraRecoil.maxPitchDegrees)) result.cameraRecoilMaxPitchDegrees = clean.cameraRecoil.maxPitchDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.maxYawDegrees, clean.cameraRecoil.maxYawDegrees)) result.cameraRecoilMaxYawDegrees = clean.cameraRecoil.maxYawDegrees;
+    if (!NearlyEqual(defaults.cameraRecoil.maxRollDegrees, clean.cameraRecoil.maxRollDegrees)) result.cameraRecoilMaxRollDegrees = clean.cameraRecoil.maxRollDegrees;
     if (!Same(defaults.muzzleSocket.position, clean.muzzleSocket.position)) result.muzzlePosition = clean.muzzleSocket.position;
     if (!Same(defaults.muzzleSocket.rotationDegrees, clean.muzzleSocket.rotationDegrees)) result.muzzleRotationDegrees = clean.muzzleSocket.rotationDegrees;
     if (!NearlyEqual(defaults.muzzleFlash.lifetimeSeconds, clean.muzzleFlash.lifetimeSeconds)) result.flashLifetimeSeconds = clean.muzzleFlash.lifetimeSeconds;
@@ -1386,6 +1749,16 @@ bool FpsWeaponFiringOverrideEmpty(const FpsWeaponFiringOverride& value)
             && !value.recoilRollVariationDegrees
             && !value.recoilSpringFrequencyHz
             && !value.recoilDampingRatio
+            && !value.cameraRecoilEnabled
+            && !value.cameraRecoilPitchKickDegrees
+            && !value.cameraRecoilPitchVariationDegrees
+            && !value.cameraRecoilYawVariationDegrees
+            && !value.cameraRecoilRollVariationDegrees
+            && !value.cameraRecoilSpringFrequencyHz
+            && !value.cameraRecoilSpringDampingRatio
+            && !value.cameraRecoilMaxPitchDegrees
+            && !value.cameraRecoilMaxYawDegrees
+            && !value.cameraRecoilMaxRollDegrees
             && !value.muzzlePosition
             && !value.muzzleRotationDegrees
             && !value.flashLifetimeSeconds

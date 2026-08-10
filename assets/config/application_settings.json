@@ -1,5 +1,23 @@
 {
   "version": 1,
+  "firstLevel": "hub",
+  "footsteps": {
+    "defaultSet": "Tile_Mono",
+    "volume": 0.6499999761581421,
+    "landingImpactVolumeMultiplier": 1.350000023841858
+  },
+  "playerSounds": {
+    "events": {
+      "jump": {
+        "set": "Jump",
+        "volume": 1.0
+      },
+      "land": {
+        "set": "Land",
+        "volume": 1.0
+      }
+    }
+  },
   "viewmodelOverrides": {
     "pistol": {
       "position": [
@@ -35,6 +53,12 @@
       "firing": {
         "recoilSpringFrequencyHz": 4.0,
         "recoilDampingRatio": 0.6499999761581421,
+        "cameraRecoilPitchKickDegrees": 2.5,
+        "cameraRecoilPitchVariationDegrees": 0.11999999731779099,
+        "cameraRecoilYawVariationDegrees": 0.25,
+        "cameraRecoilSpringFrequencyHz": 3.5,
+        "cameraRecoilSpringDampingRatio": 0.9200000166893005,
+        "cameraRecoilMaxPitchDegrees": 8.0,
         "muzzlePosition": [
           0.004999999888241291,
           0.05000000074505806,

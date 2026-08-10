@@ -59,8 +59,9 @@ views and maps to world Z for generated 3D geometry.
 
 - `WASD`: pan the 2D view.
 - Mouse wheel over the canvas: zoom.
-- Select tool: click static lights first, then topology linedefs/sidedefs, then
-  sectors. Clicking empty canvas clears selection.
+- Select tool: click editor objects, authoring vertices/lines, and derived
+  authoring faces. Shift-click toggles additional authoring faces; clicking
+  empty canvas clears selection unless Shift is held.
 - Sector tool: draw topology sectors. Finalized sectors reuse exact existing
   vertices and exact endpoint-pair linedefs when possible.
 - Light tool: place a topology static baked light inside the clicked sector.
@@ -72,8 +73,11 @@ views and maps to world Z for generated 3D geometry.
 - `Backspace`: remove the last pending point.
 - Right click or `Escape`: cancel a pending sector, active vertex move, or active
   light move.
-- `Delete`: delete the selected light, or confirm deletion for the selected
-  sector. Direct linedef and sidedef deletion is not available yet.
+- `Delete`: for selected authoring faces, enter `Merge Selected Into...` target
+  picking; for a selected authoring line, delete only when the resulting graph
+  derives valid topology; for an isolated or degree-2 authoring vertex, delete
+  or dissolve it transactionally. Existing light/object deletion behavior is
+  unchanged.
 - `Escape`: clear selection, then return to Select tool.
 - `New`: confirm and reset to a blank topology level.
 - `Load`: select a level under `assets/levels`; unsaved edits require
@@ -467,9 +471,12 @@ Splitting is inspector-driven. It always splits at the exact stored-coordinate
 midpoint and fails if that midpoint is not representable on the integer grid.
 
 Sector deletion, vertex movement, conservative vertex merge, and conservative
-vertex dissolve use copy/validate/commit style topology edits. Direct linedef
-deletion, direct sidedef deletion, standalone vertex deletion, and undo/redo are
-not available yet.
+vertex dissolve use copy/validate/commit style topology edits. Direct topology
+linedef deletion, direct topology sidedef deletion, standalone topology vertex
+deletion, and undo/redo are not available yet. In graph-authoritative editing,
+an isolated authoring vertex can be deleted and a degree-2 authoring vertex can
+be dissolved from the `Authoring Vertex` inspector or with `Delete`. The
+lower-ID incident line survives and connects the two neighboring vertices.
 
 ## 3D Mode
 
@@ -793,6 +800,7 @@ deferred.
 - No normal maps, material maps, PBR material editing, or texture search UI.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.
 - No direct linedef or sidedef deletion.
-- No standalone vertex deletion.
+- No standalone direct-topology vertex deletion; authoring vertices support
+  isolated deletion and degree-2 dissolve.
 - No automatic duplicate linedef or sidedef merge.
 - No arbitrary line cutting or automatic overlap splitting.

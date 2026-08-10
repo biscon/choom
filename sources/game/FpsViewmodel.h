@@ -55,6 +55,13 @@ struct FpsRecoilRuntimeState {
     Vector3 rotationVelocityDegrees{};
 };
 
+struct FpsCameraRecoilRuntimeState {
+    Vector3 rotationDegrees{};
+    Vector3 rotationVelocityDegrees{};
+    Vector3 lastKickDegrees{};
+    uint32_t randomState = 0xa511e9b3u;
+};
+
 struct FpsMuzzleFlashLobe {
     bool visibilityAnchor = false;
     float azimuthRadians = 0.0f;
@@ -113,6 +120,7 @@ struct FpsWeaponFiringRuntimeState {
     FpsShotResult lastShot;
     bool hasLastShot = false;
     FpsRecoilRuntimeState recoil;
+    FpsCameraRecoilRuntimeState cameraRecoil;
     FpsMuzzleFlashRuntimeState flash;
     FpsMuzzleLightRuntimeState light;
     FpsMuzzleEmissionCapture emission;
@@ -162,8 +170,8 @@ struct FpsViewmodelRuntimeState {
     uint32_t animationIndex = engine::InvalidModelAnimationIndex;
     float sourceFrameCursor = 0.0f;
     float raylibFrame = 0.0f;
-    FpsViewmodelEquipState equipState = FpsViewmodelEquipState::Equipped;
-    float equipProgress = 1.0f;
+    FpsViewmodelEquipState equipState = FpsViewmodelEquipState::Holstered;
+    float equipProgress = 0.0f;
     FpsViewmodelHolsterTransition holsterTransition;
     FpsViewmodelHolsterPose holsterPose;
     int meshCount = 0;
@@ -267,7 +275,19 @@ void ApplyFpsWeaponShotEffects(
         FpsWeaponFiringRuntimeState& state,
         const FpsShotResult& shot,
         const FpsMuzzleEmissionCapture& emission);
+void ResetFpsCameraRecoil(FpsCameraRecoilRuntimeState& state);
+Vector3 SampleFpsCameraRecoilKickDegrees(
+        const FpsWeaponCameraRecoilDefinition& definition,
+        uint32_t& randomState);
+void ApplyFpsCameraRecoilImpulse(
+        FpsCameraRecoilRuntimeState& state,
+        const FpsWeaponCameraRecoilDefinition& definition);
+void AdvanceFpsCameraRecoil(
+        FpsCameraRecoilRuntimeState& state,
+        const FpsWeaponCameraRecoilDefinition& definition,
+        float deltaSeconds);
 float FpsMuzzleLightCurrentIntensity(
         const FpsMuzzleLightRuntimeState& state);
+float FpsWeaponShotPitch(uint64_t shotSequence, uint32_t randomState);
 
 } // namespace game

@@ -1,11 +1,15 @@
 #pragma once
 
+#include "engine/assets/AssetHandles.h"
+
 #include <raylib.h>
 
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace engine { class AssetManager; }
 
 namespace game {
 
@@ -70,6 +74,19 @@ struct FpsWeaponRecoilDefinition {
     Vector3 maximumRotationDegrees{8.0f, 2.0f, 2.0f};
 };
 
+struct FpsWeaponCameraRecoilDefinition {
+    bool enabled = false;
+    float pitchKickDegrees = 0.0f;
+    float pitchVariationDegrees = 0.0f;
+    float yawVariationDegrees = 0.0f;
+    float rollVariationDegrees = 0.0f;
+    float springFrequencyHz = 5.5f;
+    float springDampingRatio = 0.97f;
+    float maxPitchDegrees = 0.0f;
+    float maxYawDegrees = 0.0f;
+    float maxRollDegrees = 0.0f;
+};
+
 struct FpsWeaponMuzzleSocketDefinition {
     Vector3 position{0.0f, 0.035f, 0.105f};
     Vector3 rotationDegrees{0.0f, 0.0f, 0.0f};
@@ -104,7 +121,10 @@ struct FpsWeaponMuzzleLightDefinition {
 struct FpsWeaponFiringDefinition {
     float shotIntervalSeconds = 0.18f;
     float maximumRangeWorld = 100.0f;
+    std::string shootSoundPath;
+    engine::SoundHandle shootSound = engine::NullSoundHandle();
     FpsWeaponRecoilDefinition recoil;
+    FpsWeaponCameraRecoilDefinition cameraRecoil;
     FpsWeaponMuzzleSocketDefinition muzzleSocket;
     FpsWeaponMuzzleFlashDefinition muzzleFlash;
     FpsWeaponMuzzleLightDefinition muzzleLight;
@@ -170,6 +190,16 @@ struct FpsWeaponFiringOverride {
     std::optional<float> recoilRollVariationDegrees;
     std::optional<float> recoilSpringFrequencyHz;
     std::optional<float> recoilDampingRatio;
+    std::optional<bool> cameraRecoilEnabled;
+    std::optional<float> cameraRecoilPitchKickDegrees;
+    std::optional<float> cameraRecoilPitchVariationDegrees;
+    std::optional<float> cameraRecoilYawVariationDegrees;
+    std::optional<float> cameraRecoilRollVariationDegrees;
+    std::optional<float> cameraRecoilSpringFrequencyHz;
+    std::optional<float> cameraRecoilSpringDampingRatio;
+    std::optional<float> cameraRecoilMaxPitchDegrees;
+    std::optional<float> cameraRecoilMaxYawDegrees;
+    std::optional<float> cameraRecoilMaxRollDegrees;
     std::optional<Vector3> muzzlePosition;
     std::optional<Vector3> muzzleRotationDegrees;
     std::optional<float> flashLifetimeSeconds;
@@ -195,8 +225,29 @@ struct FpsApplicationSettingsEntry {
     FpsWeaponFiringOverride firing;
 };
 
+struct FootstepApplicationSettings {
+    std::string defaultSet = "Tile_Mono";
+    float volume = 0.65f;
+    float landingImpactVolumeMultiplier = 1.35f;
+};
+
+struct PlayerSoundEventSettings {
+    std::string id;
+    std::string set;
+    float volume = 1.0f;
+};
+
+struct PlayerSoundApplicationSettings {
+    std::vector<PlayerSoundEventSettings> events{
+            PlayerSoundEventSettings{"jump", "Jump", 1.0f},
+            PlayerSoundEventSettings{"land", "Land", 1.0f}};
+};
+
 struct FpsApplicationSettings {
     int version = 1;
+    std::string firstLevel = "hub";
+    FootstepApplicationSettings footsteps;
+    PlayerSoundApplicationSettings playerSounds;
     std::vector<FpsApplicationSettingsEntry> weapons;
 };
 
@@ -208,6 +259,9 @@ bool LoadFpsWeaponRegistry(
         const std::string& path,
         FpsWeaponRegistry& outRegistry,
         std::string* outError = nullptr);
+void RequestFpsWeaponAudioAssets(
+        engine::AssetManager& assets,
+        FpsWeaponRegistry& registry);
 const FpsWeaponDefinition* FindFpsWeaponDefinition(
         const FpsWeaponRegistry& registry,
         std::string_view id);
@@ -325,6 +379,8 @@ FpsWeaponFiringDefinition ResolveFpsWeaponFiringDefinition(
         const FpsWeaponFiringOverride* overrideValue);
 FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
         FpsWeaponFiringDefinition value);
+FpsWeaponCameraRecoilDefinition ClampFpsWeaponCameraRecoilDefinition(
+        FpsWeaponCameraRecoilDefinition value);
 FpsWeaponFiringOverride BuildFpsWeaponFiringOverride(
         const FpsWeaponFiringDefinition& defaults,
         const FpsWeaponFiringDefinition& effective);

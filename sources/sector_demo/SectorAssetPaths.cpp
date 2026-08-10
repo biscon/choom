@@ -25,6 +25,11 @@ std::string ResolveSectorAssetPath(std::string_view pathOrId)
     return std::string(pathOrId);
 }
 
+std::string ResolveSectorAudioAssetPath(std::string_view relativePath)
+{
+    return std::string(ASSETS_PATH "audio/") + std::string(relativePath);
+}
+
 std::string MakeSectorAssetRelativePath(std::string_view filesystemPath)
 {
     const std::filesystem::path assetsRoot = std::filesystem::path(ASSETS_PATH).lexically_normal();
