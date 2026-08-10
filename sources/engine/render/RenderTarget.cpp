@@ -72,6 +72,7 @@ const char* GlInternalFormatName(unsigned int format)
     switch (format) {
         case GL_RGBA8: return "GL_RGBA8";
         case GL_RGBA16F: return "GL_RGBA16F";
+        case GL_RGBA32F: return "GL_RGBA32F";
         default: return "unavailable/other";
     }
 }
@@ -118,7 +119,8 @@ bool ValidateRenderTargetDescriptor(
         return false;
     }
     if (descriptor.colorFormat != RenderTargetColorFormat::Rgba8Unorm
-            && descriptor.colorFormat != RenderTargetColorFormat::Rgba16Float) {
+            && descriptor.colorFormat != RenderTargetColorFormat::Rgba16Float
+            && descriptor.colorFormat != RenderTargetColorFormat::Rgba32Float) {
         SetError(error, "Unsupported render target color format");
         return false;
     }
@@ -151,6 +153,8 @@ int RaylibPixelFormatForRenderTarget(RenderTargetColorFormat format)
             return PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
         case RenderTargetColorFormat::Rgba16Float:
             return PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
+        case RenderTargetColorFormat::Rgba32Float:
+            return PIXELFORMAT_UNCOMPRESSED_R32G32B32A32;
     }
     return 0;
 }
@@ -160,6 +164,7 @@ int RenderTargetColorBytesPerPixel(RenderTargetColorFormat format)
     switch (format) {
         case RenderTargetColorFormat::Rgba8Unorm: return 4;
         case RenderTargetColorFormat::Rgba16Float: return 8;
+        case RenderTargetColorFormat::Rgba32Float: return 16;
     }
     return 0;
 }
@@ -191,6 +196,7 @@ const char* RenderTargetColorFormatName(RenderTargetColorFormat format)
     switch (format) {
         case RenderTargetColorFormat::Rgba8Unorm: return "RGBA8_UNORM";
         case RenderTargetColorFormat::Rgba16Float: return "RGBA16_FLOAT";
+        case RenderTargetColorFormat::Rgba32Float: return "RGBA32_FLOAT";
     }
     return "invalid";
 }

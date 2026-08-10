@@ -346,7 +346,7 @@ const game::SectorMeshBatchData* FindBatch(
         float decalOpacity,
         bool decalEmissive = false,
         Vector3 decalTint = {1.0f, 1.0f, 1.0f},
-        float decalBloomIntensity = 1.0f)
+        float decalEmissiveStrength = 1.0f)
 {
     for (const game::SectorMeshBatchData& batch : result.batches) {
         if (batch.textureId == textureId
@@ -354,7 +354,7 @@ const game::SectorMeshBatchData* FindBatch(
                 && Near(batch.decalOpacity, decalOpacity)
                 && batch.decalEmissive == decalEmissive
                 && Near(batch.decalTint, decalTint)
-                && Near(batch.decalBloomIntensity, decalBloomIntensity)) {
+                && Near(batch.decalEmissiveStrength, decalEmissiveStrength)) {
             return &batch;
         }
     }
@@ -382,7 +382,7 @@ int CountBatches(
         float decalOpacity,
         bool decalEmissive = false,
         Vector3 decalTint = {1.0f, 1.0f, 1.0f},
-        float decalBloomIntensity = 1.0f)
+        float decalEmissiveStrength = 1.0f)
 {
     int count = 0;
     for (const game::SectorMeshBatchData& batch : result.batches) {
@@ -391,7 +391,7 @@ int CountBatches(
                 && Near(batch.decalOpacity, decalOpacity)
                 && batch.decalEmissive == decalEmissive
                 && Near(batch.decalTint, decalTint)
-                && Near(batch.decalBloomIntensity, decalBloomIntensity)) {
+                && Near(batch.decalEmissiveStrength, decalEmissiveStrength)) {
             ++count;
         }
     }
@@ -406,7 +406,7 @@ game::SectorGeneratedSurface MakeBatchTestSurface(
         float xOffset,
         bool decalEmissive = false,
         Vector3 decalTint = {1.0f, 1.0f, 1.0f},
-        float decalBloomIntensity = 1.0f)
+        float decalEmissiveStrength = 1.0f)
 {
     game::SectorGeneratedSurface surface;
     surface.textureId = textureId;
@@ -414,7 +414,7 @@ game::SectorGeneratedSurface MakeBatchTestSurface(
     surface.decalOpacity = decalTextureId[0] == '\0' ? 1.0f : decalOpacity;
     surface.decalEmissive = decalTextureId[0] != '\0' && decalEmissive;
     surface.decalTint = decalTextureId[0] == '\0' ? Vector3{1.0f, 1.0f, 1.0f} : decalTint;
-    surface.decalBloomIntensity = decalTextureId[0] == '\0' ? 1.0f : decalBloomIntensity;
+    surface.decalEmissiveStrength = decalTextureId[0] == '\0' ? 1.0f : decalEmissiveStrength;
     surface.normal = Vector3{0.0f, 1.0f, 0.0f};
     surface.vertices = {
             game::SectorGeneratedVertex{
@@ -608,13 +608,13 @@ void TestDecalMeshBatchData()
     const game::SectorMeshBatchDataResult result = game::BuildSectorMeshBatchData(geometry);
     Check(result.batches.size() == 7, "decal batch key separates base texture by decal settings");
     Check(CountBatches(result, "stone", "poster-a") == 5, "same decal texture with different settings splits batches");
-    Check(CountBatches(result, "stone", "poster-a", 0.6f) == 1, "same base decal opacity and bloom intensity share one batch");
+    Check(CountBatches(result, "stone", "poster-a", 0.6f) == 1, "same base decal opacity and emissive strength share one batch");
     Check(CountBatches(result, "stone", "poster-a", 0.8f) == 1, "different decal opacity creates a separate batch");
     Check(CountBatches(result, "stone", "poster-a", 0.6f, true) == 1, "different decal emissive flag creates a separate batch");
     Check(CountBatches(result, "stone", "poster-a", 0.6f, false, Vector3{1.0f, 0.25f, 0.25f}) == 1,
           "different decal tint creates a separate batch");
     Check(CountBatches(result, "stone", "poster-a", 0.6f, true, Vector3{1.0f, 1.0f, 1.0f}, 3.0f) == 1,
-          "different decal bloom intensity creates a separate batch");
+          "different decal emissive strength creates a separate batch");
     Check(CountBatches(result, "stone", "poster-b") == 1, "different decal texture creates separate batch");
     Check(CountBatches(result, "stone", "") == 1, "missing decals batch with empty decal key");
 
@@ -622,11 +622,11 @@ void TestDecalMeshBatchData()
     const game::SectorMeshBatchData* posterAHighOpacity = FindBatch(result, "stone", "poster-a", 0.8f);
     const game::SectorMeshBatchData* posterAEmissive = FindBatch(result, "stone", "poster-a", 0.6f, true);
     const game::SectorMeshBatchData* posterATinted = FindBatch(result, "stone", "poster-a", 0.6f, false, Vector3{1.0f, 0.25f, 0.25f});
-    const game::SectorMeshBatchData* posterABrightBloom = FindBatch(result, "stone", "poster-a", 0.6f, true, Vector3{1.0f, 1.0f, 1.0f}, 3.0f);
+    const game::SectorMeshBatchData* posterABrightEmission = FindBatch(result, "stone", "poster-a", 0.6f, true, Vector3{1.0f, 1.0f, 1.0f}, 3.0f);
     const game::SectorMeshBatchData* posterB = FindBatch(result, "stone", "poster-b");
     const game::SectorMeshBatchData* noDecal = FindBatch(result, "stone", "");
     Check(posterA != nullptr && posterA->vertices.size() == 9,
-          "same decal batch contains matching poster-a surfaces with default bloom intensity");
+          "same decal batch contains matching poster-a surfaces with default emissive strength");
     Check(posterAHighOpacity != nullptr && posterAHighOpacity->vertices.size() == 3,
           "different opacity poster-a surface is isolated for uniform opacity");
     Check(posterAEmissive != nullptr && posterAEmissive->vertices.size() == 6,
@@ -644,14 +644,14 @@ void TestDecalMeshBatchData()
         Check(!posterA->decalEmissive, "mesh batch stores default decal emissive flag");
         Check(Near(posterA->decalTint, Vector3{1.0f, 1.0f, 1.0f}),
               "mesh batch stores default decal tint");
-        Check(Near(posterA->decalBloomIntensity, 1.0f),
-              "mesh batch canonicalizes default decal bloom intensity");
+        Check(Near(posterA->decalEmissiveStrength, 1.0f),
+              "mesh batch canonicalizes default decal emissive strength");
         Check(Near(posterA->vertices.front().decalUv, Vector2{0.25f, 0.5f}),
               "mesh batch preserves decal UV");
         Check(Near(posterA->vertices.front().decalOpacity, 0.6f),
               "mesh batch preserves decal opacity");
-        Check(Near(posterA->vertices.front().decalBloomIntensity, 1.0f),
-              "mesh batch vertex stores canonicalized decal bloom intensity");
+        Check(Near(posterA->vertices.front().decalEmissiveStrength, 1.0f),
+              "mesh batch vertex stores canonicalized decal emissive strength");
     }
     if (posterAEmissive != nullptr && !posterAEmissive->vertices.empty()) {
         Check(posterAEmissive->decalEmissive, "mesh batch preserves emissive decal flag");
@@ -660,9 +660,9 @@ void TestDecalMeshBatchData()
         Check(Near(posterATinted->decalTint, Vector3{1.0f, 0.25f, 0.25f}),
               "mesh batch preserves decal tint");
     }
-    if (posterABrightBloom != nullptr && !posterABrightBloom->vertices.empty()) {
-        Check(Near(posterABrightBloom->decalBloomIntensity, 3.0f),
-              "mesh batch preserves decal bloom intensity");
+    if (posterABrightEmission != nullptr && !posterABrightEmission->vertices.empty()) {
+        Check(Near(posterABrightEmission->decalEmissiveStrength, 3.0f),
+              "mesh batch preserves decal emissive strength");
     }
     if (noDecal != nullptr && !noDecal->vertices.empty()) {
         Check(noDecal->decalTextureId.empty(), "no-decal batch stores empty decal texture ID");
@@ -671,8 +671,8 @@ void TestDecalMeshBatchData()
         Check(!noDecal->decalEmissive, "no-decal batch stores default emissive flag");
         Check(Near(noDecal->decalTint, Vector3{1.0f, 1.0f, 1.0f}),
               "no-decal batch stores default tint");
-        Check(Near(noDecal->decalBloomIntensity, 1.0f),
-              "no-decal batch stores default bloom intensity");
+        Check(Near(noDecal->decalEmissiveStrength, 1.0f),
+              "no-decal batch stores default emissive strength");
         Check(Near(noDecal->vertices.front().decalOpacity, 1.0f),
               "no-decal batch stores default opacity");
     }
@@ -827,8 +827,8 @@ void TestSectorDrawRecordEmissiveDecalMetadata()
           "emissive decal sector draw record preserves emissive flag");
     Check(record != nullptr && Near(record->decalTint, Vector3{0.5f, 1.0f, 0.25f}),
           "emissive decal sector draw record preserves tint");
-    Check(record != nullptr && Near(record->decalBloomIntensity, 4.0f),
-          "emissive decal sector draw record preserves bloom intensity");
+    Check(record != nullptr && Near(record->decalEmissiveStrength, 4.0f),
+          "emissive decal sector draw record preserves emissive strength");
 }
 
 void TestLightmapParticipationSplitsBatchKey()
@@ -1175,32 +1175,6 @@ void TestSectorReceiverBoundsFromDrawRecords()
           "right receiver bounds min comes from generated draw geometry");
     Check(right != nullptr && Near(right->max, Vector3{1.0f, 3.0f, 0.5f}),
           "right receiver bounds max comes from generated draw geometry");
-}
-
-void TestBloomDrawRecordVisibilitySelection()
-{
-    const std::vector<game::SectorMeshBatch> records = {
-            MakeDrawRecord(10, "wall", "poster", true),
-            MakeDrawRecord(20, "wall", "hidden-poster", true),
-            MakeDrawRecord(30, "wall", "plain-decal", false),
-            MakeDrawRecord(40, "wall", "", true)};
-
-    game::RuntimePortalVisibilityResult visible;
-    visible.validStartSector = true;
-    visible.visibleSectorIds = {10, 30, 40};
-    Check(game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[0], visible),
-          "bloom selection includes visible emissive decal record");
-    Check(!game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[1], visible),
-          "bloom selection uses the same hidden-sector filtering");
-    Check(!game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[2], visible),
-          "bloom selection skips non-emissive decal records");
-    Check(!game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[3], visible),
-          "bloom selection skips records without decal textures");
-
-    game::RuntimePortalVisibilityResult fallback;
-    fallback.fallbackDrawAll = true;
-    Check(game::ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(records[1], fallback),
-          "bloom selection falls back to draw-all visibility");
 }
 
 void TestDynamicPointLightVisibilityCandidateSelection()
@@ -2176,7 +2150,6 @@ int main()
     TestGeneratedSurfaceHighlightVisibilitySelection();
     TestDrawRecordVisibilitySelection();
     TestSectorReceiverBoundsFromDrawRecords();
-    TestBloomDrawRecordVisibilitySelection();
     TestDynamicPointLightVisibilityCandidateSelection();
     TestDynamicPointLightReceiverBoundCandidateSelection();
     TestDoorReceiverBoundsAffectDirectLightsAndShadowSlots();

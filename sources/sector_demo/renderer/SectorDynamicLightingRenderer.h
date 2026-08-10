@@ -50,7 +50,6 @@ struct SectorDynamicLightShaderLocations {
     int dynamicLightDirections = -1;
     int dynamicLightInnerConeCos = -1;
     int dynamicLightOuterConeCos = -1;
-    int dynamicLightingClamp = -1;
 };
 
 struct SectorDynamicSpotLightShadowShaderLocations {
@@ -83,7 +82,6 @@ struct SectorBillboardDynamicLightContext {
     std::array<float, MaxDynamicLights> dynamicLightOuterConeCos{};
     SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms{};
     SectorDynamicShadowMapTextures shadowMaps{};
-    float dynamicLightingClamp = 4.0f;
 };
 
 void UploadSectorRendererDynamicPointLights(

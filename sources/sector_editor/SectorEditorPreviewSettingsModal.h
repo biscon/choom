@@ -42,8 +42,8 @@ inline float MeasureSectorPreviewSettingsLightingContentHeight(
     constexpr float sectionTitleHeight = 38.0f;
     constexpr float swatchHeight = 36.0f;
     constexpr float trailingPadding = 12.0f;
-    return 11.0f * (rowHeight + gap)
-            + 3.0f * (sectionLead + sectionTitleHeight)
+    return 16.0f * (rowHeight + gap)
+            + 4.0f * (sectionLead + sectionTitleHeight)
             + swatchHeight + gap
             + trailingPadding;
 }
@@ -108,6 +108,7 @@ inline void ResetSectorPreviewSettingsModalLightingDefaults(
 {
     modalState.draftDirectionalLight = DefaultSectorTopologyDirectionalLightSettings();
     modalState.draftLightmapSettings = SectorLightmapBakeSettings{};
+    modalState.draftHdrBloom = engine::HdrBloomSettings{};
     modalState.lightDirectionXInput = engine::UIFloatInputState{};
     modalState.lightDirectionYInput = engine::UIFloatInputState{};
     modalState.lightDirectionZInput = engine::UIFloatInputState{};
@@ -115,6 +116,10 @@ inline void ResetSectorPreviewSettingsModalLightingDefaults(
     modalState.objectProbeSpacingInput = engine::UIFloatInputState{};
     modalState.objectProbeLowerHeightInput = engine::UIFloatInputState{};
     modalState.objectProbeUpperHeightInput = engine::UIFloatInputState{};
+    modalState.bloomThresholdInput = {};
+    modalState.bloomSoftKneeInput = {};
+    modalState.bloomIntensityInput = {};
+    modalState.bloomRadiusInput = {};
     modalState.lightColorRedInput = engine::UIIntInputState{};
     modalState.lightColorGreenInput = engine::UIIntInputState{};
     modalState.lightColorBlueInput = engine::UIIntInputState{};

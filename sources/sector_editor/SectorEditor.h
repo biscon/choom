@@ -60,7 +60,15 @@ public:
     void RenderPreview3DViewmodel(engine::AssetManager& assets);
     void RenderPreview3DOverlays();
     void RenderPreview3DHud(Rectangle playableViewport) const;
-    void ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
+    void ApplyPreview3DWorldAtmosphere(engine::RenderTarget& sceneTarget);
+    void ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget);
+    bool CompositePreview3DViewmodel(
+            engine::RenderTarget& sceneTarget,
+            const engine::RenderTarget& viewmodelTarget);
+    const engine::RenderTarget* Preview3DHdrDebugPresentationSource() const
+    {
+        return sceneRuntime.HdrDebugPresentationSource();
+    }
     void RenderUI(
             engine::UIContext& ui,
             const engine::UIConfig& config,

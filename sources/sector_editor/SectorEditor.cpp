@@ -3409,12 +3409,27 @@ void SectorEditor::RenderPreview3DViewmodel(
             sceneRuntime.RuntimeObjects(),
             preferredSectorId);
 }
-void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+void SectorEditor::ApplyPreview3DWorldAtmosphere(engine::RenderTarget& sceneTarget)
 {
     if (state.mode != SectorEditorMode::Preview3D) {
         return;
     }
-    sceneRuntime.ApplyPostProcessing(assets, sceneTarget, TopologyMap());
+    sceneRuntime.ApplyWorldAtmosphere(sceneTarget, TopologyMap());
+}
+
+void SectorEditor::ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget)
+{
+    if (state.mode != SectorEditorMode::Preview3D) {
+        return;
+    }
+    sceneRuntime.ApplyHdrBloom(sceneTarget, applicationSettings.hdrBloom);
+}
+
+bool SectorEditor::CompositePreview3DViewmodel(
+        engine::RenderTarget& sceneTarget,
+        const engine::RenderTarget& viewmodelTarget)
+{
+    return sceneRuntime.CompositeViewmodel(sceneTarget, viewmodelTarget);
 }
 
 void SectorEditor::RenderPreview3DOverlays()
@@ -5949,6 +5964,8 @@ void SectorEditor::OpenPreviewSettingsModal()
             NormalizeSectorTopologyFogSettings(TopologyMap().fogSettings);
     state.previewSettingsModal.draftLightmapSettings =
             NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
+    state.previewSettingsModal.draftHdrBloom =
+            engine::NormalizeHdrBloomSettings(applicationSettings.hdrBloom);
     state.previewSettingsModal.weaponId = fpsPlayer.State().activeWeaponId.empty()
             ? weaponRegistry.initialWeaponId
             : fpsPlayer.State().activeWeaponId;
@@ -6027,6 +6044,15 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                     != draftLightmapSettings.objectProbeLowerHeightWorld
             || currentLightmapSettings.objectProbeUpperHeightWorld
                     != draftLightmapSettings.objectProbeUpperHeightWorld;
+    const engine::HdrBloomSettings draftHdrBloom =
+            engine::NormalizeHdrBloomSettings(state.previewSettingsModal.draftHdrBloom);
+    const engine::HdrBloomSettings currentHdrBloom =
+            engine::NormalizeHdrBloomSettings(applicationSettings.hdrBloom);
+    const bool bloomChanged = draftHdrBloom.enabled != currentHdrBloom.enabled
+            || draftHdrBloom.threshold != currentHdrBloom.threshold
+            || draftHdrBloom.softKnee != currentHdrBloom.softKnee
+            || draftHdrBloom.intensity != currentHdrBloom.intensity
+            || draftHdrBloom.radius != currentHdrBloom.radius;
     const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
             weaponRegistry,
             state.previewSettingsModal.weaponId.empty()
@@ -6143,7 +6169,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     if (!previewChanged && !skyChanged && !directionalChanged && !fogChanged
             && !objectProbeSettingsChanged && !viewmodelChanged && !gripChanged
             && !holsterTransitionChanged && !attachmentLightingChanged
-            && !firingChanged) {
+            && !firingChanged && !bloomChanged) {
         ResetSectorPreviewSettingsModalPreservingView(
                 state.previewSettingsModal);
         statusText = "Preview settings unchanged";
@@ -6160,9 +6186,11 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     TopologyMap().directionalLight = draftDirectionalLight;
     ApplySectorPreviewFogSettings(TopologyMap(), draftFogSettings);
     ApplySectorPreviewObjectProbeSettings(TopologyMap(), draftLightmapSettings);
-    if ((viewmodelChanged || holsterTransitionChanged || gripChanged
-                || attachmentLightingChanged || firingChanged)
-            && weapon != nullptr) {
+    applicationSettings.hdrBloom = draftHdrBloom;
+    const bool weaponApplicationSettingsChanged = viewmodelChanged
+            || holsterTransitionChanged || gripChanged
+            || attachmentLightingChanged || firingChanged;
+    if (weaponApplicationSettingsChanged && weapon != nullptr) {
         if (viewmodelChanged) {
             if (FpsViewmodelOverrideEmpty(viewmodelOverride)) {
                 ClearFpsViewmodelOverride(applicationSettings, weapon->id);
@@ -6213,9 +6241,11 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                         applicationSettings, weapon->id, firingOverride);
             }
         }
+    }
+    if (weaponApplicationSettingsChanged || bloomChanged) {
         std::string saveError;
         if (!SaveFpsApplicationSettings(applicationSettingsPath, applicationSettings, &saveError)) {
-            TraceLog(LOG_WARNING, "Could not persist viewmodel settings: %s", saveError.c_str());
+            TraceLog(LOG_WARNING, "Could not persist application settings: %s", saveError.c_str());
         }
     }
     if (previewChanged || skyChanged || directionalChanged || fogChanged || objectProbeSettingsChanged) {

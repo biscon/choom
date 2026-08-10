@@ -318,7 +318,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
             inputState = engine::UIFloatInputState{};
         }
         materialUiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
-        materialUiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+        materialUiState.topologySideDefDecalEmissiveStrengthInput = engine::UIFloatInputState{};
     }
     const TopologySurfaceEditTarget selectedMaterialTarget{
             TopologyWallPartEditTargetKind(selectionState.selectedTopologyWallPart),
@@ -345,7 +345,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 inputState = engine::UIFloatInputState{};
             }
             materialUiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
-            materialUiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+            materialUiState.topologySideDefDecalEmissiveStrengthInput = engine::UIFloatInputState{};
         }
         if (engine::ToolButton(
                     ui,
@@ -362,7 +362,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 inputState = engine::UIFloatInputState{};
             }
             materialUiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
-            materialUiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+            materialUiState.topologySideDefDecalEmissiveStrengthInput = engine::UIFloatInputState{};
         }
         y += 36.0f + gap;
     }
@@ -550,26 +550,26 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
         y += 36.0f + gap;
 
         if (selectedPart.decal.emissive) {
-            const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+            const SectorEditorFloatInputResult emissiveStrengthResult = DrawLabeledFloatInput(
                     ui,
                     config,
                     input,
                     assets,
                     font,
-                    "sector_editor_topology_sidedef_decal_bloom_intensity",
-                    "Bloom:",
+                    "sector_editor_topology_sidedef_decal_emissive_strength",
+                    "Emissive strength:",
                     Rectangle{0.0f, y, 82.0f, rowH},
                     Rectangle{82.0f, y, contentW - 82.0f, rowH},
                     engine::UITextJustify::Left,
                     selectedPart.decal.bloomIntensity,
-                    materialUiState.topologySideDefDecalBloomIntensityInput,
+                    materialUiState.topologySideDefDecalEmissiveStrengthInput,
                     0.0f,
                     10.0f,
                     3);
-            if (bloomResult.changed && bloomResult.value != selectedPart.decal.bloomIntensity) {
-                materialEditing.ApplyDecalBloomIntensity(
+            if (emissiveStrengthResult.changed && emissiveStrengthResult.value != selectedPart.decal.bloomIntensity) {
+                materialEditing.ApplyDecalEmissiveStrength(
                         selectedMaterialTarget,
-                        bloomResult.value,
+                        emissiveStrengthResult.value,
                         &assets);
             }
             y += rowH + gap;

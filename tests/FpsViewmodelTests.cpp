@@ -36,6 +36,7 @@ constexpr const char* ValidRegistry = R"({
  "maxYawDegrees":0.6,"maxRollDegrees":0.2},
  "muzzleSocket":{"position":[0,0.035,0.105],"rotationDegrees":[0,0,0]},
  "muzzleFlash":{"enabled":true,"lifetimeSeconds":0.033,"sizeWorld":0.1,
+ "radianceStrength":12,
  "sizeVariation":0.12,"irregularity":0.65,"forwardStretch":1.8,
  "minimumLobeCount":5,"maximumLobeCount":8,"rearSuppression":0.9,
  "coreColor":{"r":255,"g":255,"b":245,"a":255},
@@ -131,6 +132,7 @@ void RegistrySuccess()
     assert(Near(pistol->firing.cameraRecoil.maxRollDegrees, 0.2f));
     assert(Near(pistol->firing.muzzleSocket.position.z, 0.105f));
     assert(Near(pistol->firing.muzzleFlash.lifetimeSeconds, 0.033f));
+    assert(Near(pistol->firing.muzzleFlash.radianceStrength, 12.0f));
     assert(Near(pistol->firing.muzzleFlash.sizeVariation, 0.12f));
     assert(Near(pistol->firing.muzzleFlash.irregularity, 0.65f));
     assert(Near(pistol->firing.muzzleFlash.forwardStretch, 1.8f));
@@ -603,11 +605,13 @@ void SettingsResolutionAndPersistence()
 
     game::FpsApplicationSettings settings; std::string error;
     assert(game::ParseFpsApplicationSettings(
-            R"({"version":1,"footsteps":{"defaultSet":"DirtRoad_Mono","volume":0.7,"landingImpactVolumeMultiplier":1.5},"playerSounds":{"events":{"jump":{"set":"Jump","volume":0.8},"land":{"set":"Land"},"wallImpact":{"set":"future/WallImpact","volume":0.6}}},"viewmodelOverrides":{"pistol":{"position":[1,2,3],"scale":2,"holsterTransition":{"holsterDurationSeconds":0.2,"unholsterDurationSeconds":0.4,"hiddenTranslation":[0.5,-2,0.1],"hiddenRotationDegrees":[15,1,-12]},"gripCorrection":{"translation":[0.1,0.2,0.3],"rotationDegrees":[10,20,30],"scale":1.25},"attachmentLighting":{"brightnessAdjustment":0.2,"metallicFactor":0.45,"roughnessFactor":0.8},"firing":{"shotIntervalSeconds":0.2,"recoilTranslationImpulse":[0,0,-0.04],"recoilRotationImpulseDegrees":[-4,0,0],"recoilRollVariationDegrees":0.5,"recoilSpringFrequencyHz":9,"recoilDampingRatio":0.9,"cameraRecoilEnabled":true,"cameraRecoilPitchKickDegrees":0.55,"cameraRecoilPitchVariationDegrees":0.09,"cameraRecoilYawVariationDegrees":0.16,"cameraRecoilRollVariationDegrees":0.08,"cameraRecoilSpringFrequencyHz":6,"cameraRecoilSpringDampingRatio":1,"cameraRecoilMaxPitchDegrees":1.5,"cameraRecoilMaxYawDegrees":0.7,"cameraRecoilMaxRollDegrees":0.25,"muzzlePosition":[0,0.04,0.11],"muzzleRotationDegrees":[1,2,3],"flashLifetimeSeconds":0.06,"flashSizeWorld":0.12,"flashSizeVariation":0.1,"flashIrregularity":0.7,"flashForwardStretch":2.1,"flashMinimumLobeCount":4,"flashMaximumLobeCount":7,"flashRearSuppression":0.85,"flashEdgeSoftness":0.4,"muzzleLightIntensity":7,"muzzleLightRadiusWorld":3,"muzzleLightLifetimeSeconds":0.08}}}})",
+            R"({"version":1,"hdrBloom":{"enabled":true,"threshold":1.25,"softKnee":0.4,"intensity":0.35,"radius":1.5},"footsteps":{"defaultSet":"DirtRoad_Mono","volume":0.7,"landingImpactVolumeMultiplier":1.5},"playerSounds":{"events":{"jump":{"set":"Jump","volume":0.8},"land":{"set":"Land"},"wallImpact":{"set":"future/WallImpact","volume":0.6}}},"viewmodelOverrides":{"pistol":{"position":[1,2,3],"scale":2,"holsterTransition":{"holsterDurationSeconds":0.2,"unholsterDurationSeconds":0.4,"hiddenTranslation":[0.5,-2,0.1],"hiddenRotationDegrees":[15,1,-12]},"gripCorrection":{"translation":[0.1,0.2,0.3],"rotationDegrees":[10,20,30],"scale":1.25},"attachmentLighting":{"brightnessAdjustment":0.2,"metallicFactor":0.45,"roughnessFactor":0.8},"firing":{"shotIntervalSeconds":0.2,"recoilTranslationImpulse":[0,0,-0.04],"recoilRotationImpulseDegrees":[-4,0,0],"recoilRollVariationDegrees":0.5,"recoilSpringFrequencyHz":9,"recoilDampingRatio":0.9,"cameraRecoilEnabled":true,"cameraRecoilPitchKickDegrees":0.55,"cameraRecoilPitchVariationDegrees":0.09,"cameraRecoilYawVariationDegrees":0.16,"cameraRecoilRollVariationDegrees":0.08,"cameraRecoilSpringFrequencyHz":6,"cameraRecoilSpringDampingRatio":1,"cameraRecoilMaxPitchDegrees":1.5,"cameraRecoilMaxYawDegrees":0.7,"cameraRecoilMaxRollDegrees":0.25,"muzzlePosition":[0,0.04,0.11],"muzzleRotationDegrees":[1,2,3],"flashLifetimeSeconds":0.06,"flashSizeWorld":0.12,"flashRadianceStrength":14,"flashSizeVariation":0.1,"flashIrregularity":0.7,"flashForwardStretch":2.1,"flashMinimumLobeCount":4,"flashMaximumLobeCount":7,"flashRearSuppression":0.85,"flashEdgeSoftness":0.4,"muzzleLightIntensity":7,"muzzleLightRadiusWorld":3,"muzzleLightLifetimeSeconds":0.08}}}})",
             settings, &error));
     assert(settings.firstLevel == "hub");
     assert(settings.footsteps.defaultSet == "DirtRoad_Mono");
     assert(Near(settings.footsteps.volume, 0.7f));
+    assert(Near(settings.hdrBloom.threshold,1.25f)
+            && Near(settings.hdrBloom.intensity,0.35f));
     assert(Near(settings.footsteps.landingImpactVolumeMultiplier, 1.5f));
     assert(settings.playerSounds.events.size() == 3);
     assert(settings.playerSounds.events[0].id == "jump");
@@ -649,6 +653,7 @@ void SettingsResolutionAndPersistence()
             && parsedFiring->cameraRecoilMaxRollDegrees
             && parsedFiring->muzzlePosition
             && parsedFiring->flashSizeVariation
+            && parsedFiring->flashRadianceStrength
             && parsedFiring->flashIrregularity
             && parsedFiring->flashForwardStretch
             && parsedFiring->flashMinimumLobeCount
@@ -719,6 +724,7 @@ void SettingsResolutionAndPersistence()
     effectiveFiring.cameraRecoil.maxPitchDegrees = 1.4f;
     effectiveFiring.muzzleSocket.position.y = 0.05f;
     effectiveFiring.muzzleFlash.sizeVariation = 0.2f;
+    effectiveFiring.muzzleFlash.radianceStrength = 18.0f;
     effectiveFiring.muzzleFlash.irregularity = 0.8f;
     effectiveFiring.muzzleFlash.forwardStretch = 2.2f;
     effectiveFiring.muzzleFlash.minimumLobeCount = 4;
@@ -731,11 +737,14 @@ void SettingsResolutionAndPersistence()
     assert(!game::FpsWeaponFiringOverrideEmpty(firingOverride));
     game::SetFpsWeaponFiringOverride(settings, "pistol", firingOverride);
     settings.firstLevel = "test4";
+    settings.hdrBloom={true,2.0f,0.25f,0.5f,2.0f};
     const std::filesystem::path path = std::filesystem::temp_directory_path()/"fps_viewmodel_settings_test.json";
     assert(game::SaveFpsApplicationSettings(path.string(), settings, &error));
     game::FpsApplicationSettings loaded;
     assert(game::LoadFpsApplicationSettings(path.string(), loaded, &error));
     assert(loaded.firstLevel == "test4");
+    assert(Near(loaded.hdrBloom.threshold,2.0f)
+            && Near(loaded.hdrBloom.radius,2.0f));
     assert(loaded.footsteps.defaultSet == "DirtRoad_Mono");
     assert(Near(loaded.footsteps.volume, 0.7f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.5f));
@@ -759,6 +768,7 @@ void SettingsResolutionAndPersistence()
             && loadedFiring->cameraRecoilMaxPitchDegrees
             && loadedFiring->flashEdgeSoftness
             && loadedFiring->flashSizeVariation
+            && loadedFiring->flashRadianceStrength
             && loadedFiring->flashIrregularity
             && loadedFiring->flashForwardStretch
             && loadedFiring->flashMinimumLobeCount
@@ -767,6 +777,7 @@ void SettingsResolutionAndPersistence()
             && *loadedFiring->flashMinimumLobeCount == 4
             && *loadedFiring->flashMaximumLobeCount == 7
             && Near(*loadedFiring->flashEdgeSoftness, 0.6f));
+    assert(Near(*loadedFiring->flashRadianceStrength,18.0f));
     std::error_code ignored; std::filesystem::remove(path, ignored);
     game::ClearFpsViewmodelOverride(loaded, "pistol");
     assert(game::FindFpsViewmodelOverride(loaded, "pistol") == nullptr);
@@ -832,6 +843,8 @@ void SettingsResolutionAndPersistence()
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"playerSounds":{"events":{"jump":{"volume":0.5}}}})",
             loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"hdrBloom":{"threshold":-1}})",loaded,&error));
     assert(game::ParseFpsApplicationSettings(
             R"({"version":1})",
             loaded,

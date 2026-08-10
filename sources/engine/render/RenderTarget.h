@@ -9,7 +9,8 @@ namespace engine {
 
 enum class RenderTargetColorFormat {
     Rgba8Unorm,
-    Rgba16Float
+    Rgba16Float,
+    Rgba32Float
 };
 
 enum class RenderTargetFilter {

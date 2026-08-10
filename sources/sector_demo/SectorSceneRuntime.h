@@ -38,10 +38,19 @@ public:
             engine::EngineContext& context,
             const SectorTopologyMap& map,
             bool useBakedAmbientOcclusion = true);
-    void ApplyPostProcessing(
-            engine::AssetManager& assets,
-            RenderTexture2D& sceneTarget,
+    void ApplyWorldAtmosphere(
+            engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map);
+    void ApplyHdrBloom(
+            engine::RenderTarget& sceneTarget,
+            const engine::HdrBloomSettings& settings);
+    bool CompositeViewmodel(
+            engine::RenderTarget& sceneTarget,
+            const engine::RenderTarget& viewmodelTarget);
+    const engine::RenderTarget* HdrDebugPresentationSource() const
+    {
+        return renderer.HdrDebugPresentationSource();
+    }
 
     SectorMeshRenderer& Renderer() { return renderer; }
     const SectorMeshRenderer& Renderer() const { return renderer; }

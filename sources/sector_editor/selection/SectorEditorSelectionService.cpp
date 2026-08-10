@@ -340,7 +340,7 @@ void ResetSectorEditorSurface3DUiState(SectorEditorSelectionServiceContext& cont
     context.materialUiState.surface3DUvOffsetUInput = engine::UIFloatInputState{};
     context.materialUiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
     context.materialUiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
-    context.materialUiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+    context.materialUiState.surface3DDecalEmissiveStrengthInput = engine::UIFloatInputState{};
 }
 
 void ClearSectorEditorTopologySelectionOnly(SectorEditorSelectionServiceContext& context)

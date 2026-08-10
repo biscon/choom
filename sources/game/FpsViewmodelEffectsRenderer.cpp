@@ -15,6 +15,41 @@ constexpr float HotStop = 0.22f;
 constexpr float WarmStop = 0.58f;
 constexpr float EdgeStop = 0.82f;
 
+const char* MuzzleFlashVs = R"(
+#version 330
+in vec3 vertexPosition;
+in vec4 vertexColor;
+uniform mat4 mvp;
+out vec4 fragColor;
+void main() { fragColor=vertexColor; gl_Position=mvp*vec4(vertexPosition,1.0); }
+)";
+
+const char* MuzzleFlashFs = R"(
+#version 330
+in vec4 fragColor;
+out vec4 finalColor;
+uniform float radianceStrength;
+vec3 srgbToLinear(vec3 c) {
+    vec3 low=c/12.92;
+    vec3 high=pow((c+0.055)/1.055,vec3(2.4));
+    return mix(high,low,lessThanEqual(c,vec3(0.04045)));
+}
+float storeFiniteHalfChannel(float value) {
+    if (isnan(value)) return 0.0;
+    if (isinf(value)) return value > 0.0 ? 65504.0 : 0.0;
+    return min(max(value,0.0),65504.0);
+}
+vec3 storeFiniteHalfRadiance(vec3 value) {
+    return vec3(storeFiniteHalfChannel(value.r),storeFiniteHalfChannel(value.g),
+            storeFiniteHalfChannel(value.b));
+}
+void main() {
+    float coverage=isnan(fragColor.a)||isinf(fragColor.a)?0.0:clamp(fragColor.a,0.0,1.0);
+    vec3 radiance=srgbToLinear(clamp(fragColor.rgb,0.0,1.0))*max(radianceStrength,0.0)*coverage;
+    finalColor=vec4(storeFiniteHalfRadiance(radiance),0.0);
+}
+)";
+
 float Smoothstep(float edge0, float edge1, float value)
 {
     const float width = edge1 - edge0;
@@ -63,8 +98,9 @@ Color GradientColor(
 
 void EmitVertex(Vector3 position, Color color)
 {
-    const Color linear = engine::SrgbColorBytesToLinearSceneUnorm(color);
-    rlColor4ub(linear.r, linear.g, linear.b, linear.a);
+    // Authored byte swatches stay sRGB here and are decoded exactly once by
+    // the HDR muzzle shader after vertex interpolation.
+    rlColor4ub(color.r, color.g, color.b, color.a);
     rlVertex3f(position.x, position.y, position.z);
 }
 
@@ -185,6 +221,21 @@ void EmitCrossedRibbon(
 
 } // namespace
 
+bool LoadFpsMuzzleFlashRenderResources(FpsMuzzleFlashRenderResources& resources)
+{
+    if (resources.shader.id != 0) return true;
+    resources.shader=LoadShaderFromMemory(MuzzleFlashVs,MuzzleFlashFs);
+    if (resources.shader.id == 0) return false;
+    resources.radianceStrengthLoc=GetShaderLocation(resources.shader,"radianceStrength");
+    return resources.radianceStrengthLoc >= 0;
+}
+
+void UnloadFpsMuzzleFlashRenderResources(FpsMuzzleFlashRenderResources& resources)
+{
+    if (resources.shader.id != 0) UnloadShader(resources.shader);
+    resources={};
+}
+
 FpsMuzzleFlashTemporalState
 EvaluateFpsMuzzleFlashTemporalState(
         float ageSeconds,
@@ -263,10 +314,11 @@ BuildFpsMuzzleFlashRibbonAxes(
 }
 
 void DrawFpsMuzzleFlash(
+        FpsMuzzleFlashRenderResources& resources,
         const FpsWeaponFiringRuntimeState& firing,
         const Camera3D& viewmodelCamera)
 {
-    if (!firing.flash.active || !firing.emission.valid
+    if (resources.shader.id == 0 || !firing.flash.active || !firing.emission.valid
             || !(firing.flash.sizeWorld > 0.0f)
             || !(firing.flash.lifetimeSeconds > 0.0f)) {
         return;
@@ -310,8 +362,15 @@ void DrawFpsMuzzleFlash(
             * firing.flash.shape.overallScale
             * temporal.expansionScale;
 
+    rlDrawRenderBatchActive();
     BeginMode3D(viewmodelCamera);
-    BeginBlendMode(BLEND_ADDITIVE);
+    BeginShaderMode(resources.shader);
+    const float strength=std::clamp(
+            std::isfinite(firing.flash.radianceStrength)
+                    ? firing.flash.radianceStrength : 0.0f,
+            0.0f, engine::Rgba16fMaximumFinite);
+    SetShaderValue(resources.shader,resources.radianceStrengthLoc,&strength,SHADER_UNIFORM_FLOAT);
+    BeginBlendMode(BLEND_ADD_COLORS);
     rlEnableDepthTest();
     rlDisableDepthMask();
     rlDisableBackfaceCulling();
@@ -351,6 +410,7 @@ void DrawFpsMuzzleFlash(
     rlColor4ub(255, 255, 255, 255);
     rlEnableBackfaceCulling();
     rlEnableDepthMask();
+    EndShaderMode();
     EndMode3D();
 }
 

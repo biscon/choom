@@ -11,8 +11,6 @@ namespace game {
 
 namespace {
 
-constexpr float DynamicLightingClamp = 4.0f;
-
 const char* SectorSpotLightShadowVs = R"(
 #version 330
 in vec3 vertexPosition;
@@ -97,7 +95,6 @@ void UploadSectorRendererDynamicPointLights(
             : 0;
     SectorBillboardDynamicLightContext context;
     context.dynamicLightCount = lightCount;
-    context.dynamicLightingClamp = DynamicLightingClamp;
     if (lightCount <= 0) {
         UploadSectorRendererDynamicPointLights(shader, locations, context);
         return;
@@ -142,9 +139,6 @@ void UploadSectorRendererDynamicPointLights(
 {
     if (locations.dynamicLightCount >= 0) {
         SetShaderValue(shader, locations.dynamicLightCount, &context.dynamicLightCount, SHADER_UNIFORM_INT);
-    }
-    if (locations.dynamicLightingClamp >= 0) {
-        SetShaderValue(shader, locations.dynamicLightingClamp, &context.dynamicLightingClamp, SHADER_UNIFORM_FLOAT);
     }
     if (context.dynamicLightCount <= 0) {
         return;

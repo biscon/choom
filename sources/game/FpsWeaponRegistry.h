@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/assets/AssetHandles.h"
+#include "engine/render/HdrEffectPolicy.h"
 
 #include <raylib.h>
 
@@ -107,6 +108,7 @@ struct FpsWeaponMuzzleFlashDefinition {
     Color warmColor{255, 90, 15, 230};
     Color edgeColor{120, 15, 5, 150};
     float edgeSoftness = 0.35f;
+    float radianceStrength = 8.0f;
 };
 
 struct FpsWeaponMuzzleLightDefinition {
@@ -211,6 +213,7 @@ struct FpsWeaponFiringOverride {
     std::optional<int> flashMaximumLobeCount;
     std::optional<float> flashRearSuppression;
     std::optional<float> flashEdgeSoftness;
+    std::optional<float> flashRadianceStrength;
     std::optional<float> muzzleLightIntensity;
     std::optional<float> muzzleLightRadiusWorld;
     std::optional<float> muzzleLightLifetimeSeconds;
@@ -248,6 +251,7 @@ struct FpsApplicationSettings {
     std::string firstLevel = "hub";
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
+    engine::HdrBloomSettings hdrBloom;
     std::vector<FpsApplicationSettingsEntry> weapons;
 };
 

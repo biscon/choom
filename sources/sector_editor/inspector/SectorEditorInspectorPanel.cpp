@@ -1350,28 +1350,28 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 y += 36.0f + gap;
 
                                 if (decal.emissive) {
-                                    const SectorEditorInspectorNumericRowLayout bloomLayout =
+                                    const SectorEditorInspectorNumericRowLayout emissiveStrengthLayout =
                                             BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
-                                    const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+                                    const SectorEditorFloatInputResult emissiveStrengthResult = DrawLabeledFloatInput(
                                             ui,
                                             config,
                                             input,
                                             assets,
                                             font,
-                                            TextFormat("%s_%s_decal_bloom", idPrefix, suffix),
-                                            "Bloom:",
-                                            bloomLayout.labelRect,
-                                            bloomLayout.inputRect,
+                                            TextFormat("%s_%s_decal_emissive_strength", idPrefix, suffix),
+                                            "Emissive strength:",
+                                            emissiveStrengthLayout.labelRect,
+                                            emissiveStrengthLayout.inputRect,
                                             engine::UITextJustify::Left,
                                             decal.bloomIntensity,
-                                            materialUiState.topologySideDefDecalBloomIntensityInput,
+                                            materialUiState.topologySideDefDecalEmissiveStrengthInput,
                                             0.0f,
                                             10.0f,
                                             3);
-                                    if (bloomResult.changed && bloomResult.value != decal.bloomIntensity && bloomResult.finite) {
+                                    if (emissiveStrengthResult.changed && emissiveStrengthResult.value != decal.bloomIntensity && emissiveStrengthResult.finite) {
                                         mutateSide(
-                                                "Updated authoring side decal bloom intensity",
-                                                [part, value = bloomResult.value](SectorAuthoringLineSide& side) {
+                                                "Updated authoring side decal emissive strength",
+                                                [part, value = emissiveStrengthResult.value](SectorAuthoringLineSide& side) {
                                                     SectorTopologyDecalLayer& target =
                                                             TopologyWallPartSettingsFor(side, part).decal;
                                                     if (target.textureId.empty() || target.bloomIntensity == value) {
@@ -1946,28 +1946,28 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     y += 36.0f + gap;
 
                     if (decal.emissive) {
-                        const SectorEditorInspectorNumericRowLayout bloomLayout =
+                        const SectorEditorInspectorNumericRowLayout emissiveStrengthLayout =
                                 BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
-                        const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+                        const SectorEditorFloatInputResult emissiveStrengthResult = DrawLabeledFloatInput(
                                 ui,
                                 config,
                                 input,
                                 assets,
                                 font,
                                 TextFormat("%s_bloom", idPrefix),
-                                "Bloom:",
-                                bloomLayout.labelRect,
-                                bloomLayout.inputRect,
+                                "Emissive strength:",
+                                emissiveStrengthLayout.labelRect,
+                                emissiveStrengthLayout.inputRect,
                                 engine::UITextJustify::Left,
                                 decal.bloomIntensity,
-                                materialUiState.topologySectorDecalBloomIntensityInputs[inputIndex],
+                                materialUiState.topologySectorDecalEmissiveStrengthInputs[inputIndex],
                                 0.0f,
                                 10.0f,
                                 3);
-                        if (bloomResult.changed && bloomResult.value != decal.bloomIntensity && bloomResult.finite) {
+                        if (emissiveStrengthResult.changed && emissiveStrengthResult.value != decal.bloomIntensity && emissiveStrengthResult.finite) {
                             mutateFaceAnchor(
-                                    "Updated authoring face decal bloom intensity",
-                                    [field, value = bloomResult.value](SectorAuthoringFaceAnchor& anchor) {
+                                    "Updated authoring face decal emissive strength",
+                                    [field, value = emissiveStrengthResult.value](SectorAuthoringFaceAnchor& anchor) {
                                         SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
                                                 ? &anchor.floorDecal
                                                 : &anchor.ceilingDecal;
@@ -2151,28 +2151,28 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     y += 36.0f + gap;
 
                     if (decal.emissive) {
-                        const SectorEditorInspectorNumericRowLayout bloomLayout =
+                        const SectorEditorInspectorNumericRowLayout emissiveStrengthLayout =
                                 BuildSectorEditorInspectorCompactNumericRowLayout(y, contentW, rowH);
-                        const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+                        const SectorEditorFloatInputResult emissiveStrengthResult = DrawLabeledFloatInput(
                                 ui,
                                 config,
                                 input,
                                 assets,
                                 font,
                                 TextFormat("%s_bloom", idPrefix),
-                                "Bloom:",
-                                bloomLayout.labelRect,
-                                bloomLayout.inputRect,
+                                "Emissive strength:",
+                                emissiveStrengthLayout.labelRect,
+                                emissiveStrengthLayout.inputRect,
                                 engine::UITextJustify::Left,
                                 decal.bloomIntensity,
-                                materialUiState.topologySectorDecalBloomIntensityInputs[inputIndex],
+                                materialUiState.topologySectorDecalEmissiveStrengthInputs[inputIndex],
                                 0.0f,
                                 10.0f,
                                 3);
-                        if (bloomResult.changed && bloomResult.value != decal.bloomIntensity && bloomResult.finite) {
+                        if (emissiveStrengthResult.changed && emissiveStrengthResult.value != decal.bloomIntensity && emissiveStrengthResult.finite) {
                             mutateFaceAnchor(
-                                    "Updated authoring default decal bloom intensity",
-                                    [defaultDecalForField, value = bloomResult.value](SectorAuthoringFaceAnchor& anchor) {
+                                    "Updated authoring default decal emissive strength",
+                                    [defaultDecalForField, value = emissiveStrengthResult.value](SectorAuthoringFaceAnchor& anchor) {
                                         SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
                                         if (target == nullptr || target->textureId.empty() || target->bloomIntensity == value) {
                                             return false;

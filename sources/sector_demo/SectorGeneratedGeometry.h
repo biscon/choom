@@ -46,7 +46,7 @@ struct SectorGeneratedSurface {
     float decalOpacity = 1.0f;
     bool decalEmissive = false;
     Vector3 decalTint = {1.0f, 1.0f, 1.0f};
-    float decalBloomIntensity = 1.0f;
+    float decalEmissiveStrength = 1.0f;
     Vector3 normal = {};
     bool alphaTest = false;
     float alphaCutoff = 0.5f;

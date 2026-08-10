@@ -2,6 +2,7 @@
 #include "engine/assets/TextureAssets.h"
 #include "engine/assets/TextureColorUsage.h"
 #include "engine/render/ColorTransfer.h"
+#include "engine/render/HdrEffectPolicy.h"
 #include "engine/render/RenderColorDiagnostics.h"
 #include "engine/render/RenderTarget.h"
 #include "engine/render/ScenePresentationShader.h"
@@ -199,12 +200,19 @@ void TestRenderTargetMetadata()
                   engine::RenderTargetColorFormat::Rgba16Float)
                   == PIXELFORMAT_UNCOMPRESSED_R16G16B16A16,
           "RGBA16F target maps to real raylib half-float format");
+    Check(engine::RaylibPixelFormatForRenderTarget(
+                  engine::RenderTargetColorFormat::Rgba32Float)
+                  == PIXELFORMAT_UNCOMPRESSED_R32G32B32A32,
+          "shared HDR scratch maps to RGBA32F");
     Check(engine::RenderTargetColorBytesPerPixel(
                   engine::RenderTargetColorFormat::Rgba8Unorm) == 4,
           "RGBA8 target reports four bytes per pixel");
     Check(engine::RenderTargetColorBytesPerPixel(
                   engine::RenderTargetColorFormat::Rgba16Float) == 8,
           "RGBA16F target reports eight bytes per pixel");
+    Check(engine::RenderTargetColorBytesPerPixel(
+                  engine::RenderTargetColorFormat::Rgba32Float) == 16,
+          "RGBA32F target reports sixteen bytes per pixel");
 
     engine::RenderTargetDescriptor descriptor{
             "test-hdr",
@@ -248,6 +256,68 @@ void TestRenderTargetMetadata()
     Check(formatted.find("color-bpp=8") != std::string::npos, "target diagnostic reports color bytes per pixel");
 }
 
+void TestHdrEffectPolicy()
+{
+    using engine::EvaluateHdrBloomPrefilter;
+    engine::HdrBloomSettings settings;
+    engine::HdrBloomSettings invalidSettings;
+    invalidSettings.threshold=std::numeric_limits<float>::quiet_NaN();
+    invalidSettings.softKnee=2.0f;
+    invalidSettings.intensity=-1.0f;
+    invalidSettings.radius=std::numeric_limits<float>::infinity();
+    invalidSettings=engine::NormalizeHdrBloomSettings(invalidSettings);
+    Check(Near(invalidSettings.threshold,1.0f)
+                    && Near(invalidSettings.softKnee,1.0f)
+                    && Near(invalidSettings.intensity,0.0f)
+                    && Near(invalidSettings.radius,1.0f),
+          "bloom settings restore finite defaults and clamp authored domains");
+    Check(engine::SanitizeLinearHdrChannelForRgba16f(42.0f)==42.0f,
+          "finite HDR values below half maximum remain unchanged");
+    Check(engine::SanitizeLinearHdrChannelForRgba16f(70000.0f)==65504.0f,
+          "half storage guard saturates only at the representational maximum");
+    Check(engine::SanitizeLinearHdrChannelForRgba16f(
+                  std::numeric_limits<float>::infinity())==65504.0f
+                  && engine::SanitizeLinearHdrChannelForRgba16f(
+                             -std::numeric_limits<float>::infinity())==0.0f
+                  && engine::SanitizeLinearHdrChannelForRgba16f(
+                             std::numeric_limits<float>::quiet_NaN())==0.0f,
+          "half storage sanitizer has deterministic non-finite policy");
+
+    settings.threshold=0.0f; settings.softKnee=0.5f;
+    Vector3 value=EvaluateHdrBloomPrefilter(Vector3{0.25f,0.0f,0.0f},settings);
+    Check(Near(value.x,0.25f),"zero threshold admits every positive finite value");
+    value=EvaluateHdrBloomPrefilter(Vector3{},settings);
+    Check(Near(value.x,0.0f),"black remains black with zero threshold");
+
+    settings.threshold=1.0f; settings.softKnee=0.0f;
+    Check(Near(EvaluateHdrBloomPrefilter(Vector3{1,1,1},settings).x,0.0f),
+          "hard threshold is stable exactly at threshold");
+    Check(Near(EvaluateHdrBloomPrefilter(Vector3{2,1,0},settings).x,1.0f)
+                    && Near(EvaluateHdrBloomPrefilter(Vector3{2,1,0},settings).y,0.5f),
+          "max-channel hard threshold preserves saturated color ratios");
+
+    settings.softKnee=0.5f;
+    Check(Near(EvaluateHdrBloomPrefilter(Vector3{0.5f,0.5f,0.5f},settings).x,0.0f),
+          "soft knee is zero at its lower edge");
+    Check(Near(EvaluateHdrBloomPrefilter(Vector3{1,1,1},settings).x,0.125f),
+          "soft knee is continuous at threshold");
+    Check(Near(EvaluateHdrBloomPrefilter(Vector3{1.5f,1.5f,1.5f},settings).x,0.5f),
+          "soft knee meets hard excess at its upper edge");
+    settings.threshold=65504.0f;
+    Check(Near(EvaluateHdrBloomPrefilter(Vector3{65504,0,0},settings).x,8188.0f),
+          "threshold near half maximum remains finite and stable");
+
+    const Vector4 atmosphere=engine::CompositeHdrPremultipliedAtmosphere(
+            Vector4{8,4,2,0.7f},Vector4{3,1,0.5f,0.25f});
+    Check(Near(atmosphere.x,9.0f)&&Near(atmosphere.y,4.0f)
+                    && Near(atmosphere.z,2.0f)&&Near(atmosphere.w,0.7f),
+          "premultiplied atmosphere applies scene transmittance plus scattering");
+    const Vector4 bloom=engine::CompositeHdrBloom(
+            Vector4{65000,4,2,0.6f},Vector3{1000,2,1},2.0f);
+    Check(Near(bloom.x,65504.0f)&&Near(bloom.y,8.0f)&&Near(bloom.w,0.6f),
+          "bloom composition preserves scene alpha and uses only half finite guard");
+}
+
 void TestPipelineDiagnosticFormatting()
 {
     engine::GraphicsContextDiagnostics graphics;
@@ -289,6 +359,7 @@ int main()
     TestNeutralToneMapping();
     TestRenderTargetMetadata();
     TestPipelineDiagnosticFormatting();
+    TestHdrEffectPolicy();
 
     if (failures != 0) {
         std::fprintf(stderr, "%d RenderColorFoundationsTests failure(s)\n", failures);

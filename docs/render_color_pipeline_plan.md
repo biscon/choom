@@ -57,23 +57,34 @@ glTF vertex colors remain linear factors and are never sRGB-decoded.
 | 2. Linear HDR world and presentation | Complete | Replace world/viewmodel scene output with linear HDR and one global tone/output pass |
 | 2.1. glTF/PBR lighting diagnosis and correction | Complete | Remove false achromatic indirect light, isolate contributions, and expose reusable PBR diagnostics |
 | 3. HDR baked illumination | Complete | Preserve HDR radiance in lightmaps and illumination probes; update bake conventions and hashes deliberately |
-| 4. Atmosphere, blending, muzzle and bloom | Pending | Promote bounded effect intermediates/radiance to HDR and replace the LDR bloom workaround |
+| 4. Atmosphere, blending, muzzle and bloom | Complete | Promote effect intermediates/radiance to HDR and replace the LDR bloom workaround with scene-wide pre-tone-map bloom |
 | 5. Audit, cleanup, controls and hardening | Pending | Remove obsolete mixed paths, validate platforms, add final controls and regression hardening |
 
 Texture semantics are authoritative metadata and cache identity. Since slice 2,
 generic `SceneSrgb` uploads use sRGB GPU storage and sampling while `LinearData`
 and `DisplaySrgb` retain ordinary linear-format storage.
 
-## Future HDR Bloom Requirement
+## Implemented HDR Bloom Contract
 
-Slice 4 replaces the current LDR decal-specific workaround. Bloom will operate
-on pre-tone-map HDR scene radiance and/or an explicit emissive-radiance
-contribution; accept visible emissive fixtures, models, particles, muzzle
-flashes, and future sources; respect normal scene depth; and use bright HDR
-values with a meaningful threshold instead of LDR intensity/clamp scaling.
-Decal sorting and bloom behavior do not change in slice 1. The render-target
-factory supports arbitrary dimensions and RGBA16F so it can later provide
-quarter-resolution HDR intermediates without prebuilding that pipeline now.
+Slice 4 implements one scene-wide pre-tone-map bloom response. A max-channel
+continuous soft-knee prefilter samples the visible supersampled HDR scene and
+prefilters every full-resolution tap before quarter-resolution averaging, so
+small bright cores can seed bloom before spatial reduction. Three separable
+quarter-resolution `RGBA16F` blur targets retain color; their alpha is always
+zero and never carries bloom energy. The result is added to scene RGB while
+preserving scene alpha, before the existing supersample resolve and global
+neutral presentation pass. HUD, crosshair, menus, ordinary UI, FPS text, and
+depth-tested editor diagnostics are drawn after bloom and cannot seed it.
+
+Threshold zero admits every positive finite scene value. A zero soft knee is a
+stable hard threshold. Threshold is measured by maximum RGB channel in the
+existing exposure-1 linear scene space, deliberately allowing saturated red,
+green, or blue emission to seed bloom without a luminance penalty. Bloom
+enable, threshold, knee, intensity, and radius are validated application
+settings. Bloom sees depth-correct visible emissive decal pixels, per-fragment
+glTF emission (including `KHR_materials_emissive_strength`), muzzle radiance,
+dust, atmosphere, and all other bright scene radiance without source-specific
+blur or whole-model bloom flags.
 
 ## Slice 1 Completion Record
 
@@ -276,7 +287,8 @@ Verification:
 
 Date: 2026-08-10
 
-Status: complete. Slice 4 remains pending.
+Status: complete. Its documented effect-buffer limitation was subsequently
+resolved by Slice 4 without reopening Slice 3.
 
 Artifact and color contract:
 
@@ -347,10 +359,11 @@ Runtime consumers and diagnostics:
   probe selection and interpolation. Billboards no longer upper-clamp combined
   probe/direct radiance. Doors transport probe lighting in a float tangent
   attribute instead of quantized vertex colors.
-- Fog, haze, and dust receive unclamped HDR probe values. Their existing
-  effect-local RGBA8/4.0 accumulation bounds remain a documented Slice 4
-  limitation; Slice 3 does not redesign those buffers. Debug-only bounded color
-  visualizations remain presentation aids rather than illumination transport.
+- Fog, haze, and dust receive unclamped HDR probe values. At Slice 3 completion
+  their effect-local RGBA8/4.0 bounds were deliberately left to Slice 4; Slice
+  4 has now removed those bounds without changing the probe artifacts.
+  Debug-only bounded color visualizations remain presentation aids rather than
+  illumination transport.
 - Bake reports show artifact version/representation, CPU/disk/GPU formats,
   pre-encode and stored ranges, and above-one preservation. PBR diagnostics
   continue to report the chosen static-lightmap/probe/fallback source and now
@@ -372,3 +385,140 @@ Verification:
 - Interactive engine launch, screenshots, and authored production-map rebakes:
   intentionally not performed. Existing maps require rebaking and visual
   validation remains with the user.
+
+## Slice 4 Completion Record
+
+Date: 2026-08-11
+
+Status: complete. Slice 5 remains pending.
+
+Pass graph and target ownership:
+
+- Opaque sector geometry, doors, billboards, and static/dynamic PBR models draw
+  into the original supersampled linear `RGBA16F` world target. The simple
+  distance-fog equation remains integrated in those material shaders. Local
+  fog, light haze, and dust then compose in world space. The isolated
+  `RGBA32F` viewmodel target receives the captured-position muzzle flash first
+  and opaque arms/weapon second, so the weapon depth-correctly occludes the
+  flash without letting world atmosphere fog the viewmodel.
+- Full-scene atmosphere and viewmodel composition write a shared point-filtered
+  `RGBA32F` scratch and commit to the original world color only after a pass
+  completes. No pass samples and writes one texture. The original world depth
+  attachment is never detached or overwritten and remains available to the
+  depth-tested editor diagnostic pass. On every successful step the original
+  world target again owns authoritative normal scene color; an optional-effect
+  failure leaves it unchanged rather than promoting a partial scratch result.
+  At 2880x1620 the shared scratch and isolated viewmodel color each cost about
+  71.2 MiB. `RGBA32F` is deliberate for these same-size transactional/additive
+  work targets: overlapping GPU contributions remain finite float32 until the
+  single guarded world `RGBA16F` commit. The three 720x405 bloom targets remain
+  `RGBA16F` and total about 6.7 MiB, avoiding a full-resolution MRT and keeping
+  recurring blur bandwidth quarter-resolution.
+- Scene-wide bloom runs after viewmodel/muzzle composition and before editor
+  diagnostic lines. The original world target is then supersample-resolved
+  while linear HDR, globally tone-mapped and sRGB-encoded, optionally FXAA
+  filtered, and finally composed with the HUD, crosshair, menus, FPS display,
+  and editor UI. This retains the deliberate Slice 2 resolve/presentation/FXAA
+  order while excluding all ordinary UI and editor lines from bloom.
+
+Finite HDR and atmosphere contracts:
+
+- Every affected `RGBA16F` shader write sanitizes RGB to nonnegative finite
+  radiance. NaN, negative values, and negative infinity become zero; positive
+  infinity and finite overflow saturate only to binary16's maximum finite
+  value, 65504. All finite values below 65504 survive without artistic clamps,
+  normalization, tone mapping, or exposure changes. Alpha is sanitized and
+  bounded independently. This named storage guard replaces neither the removed
+  `dynamicLightingClamp` nor the obsolete `[0,1]` and `4.0` radiance ceilings.
+- Local fog and haze accumulation targets are bilinear/clamp `RGBA16F` at their
+  existing quality-dependent scale. RGB is premultiplied linear in-scattered
+  radiance and alpha is bounded opacity (`1-transmittance`); composition is
+  `scene * (1-alpha) + RGB`. Their depth-aware bilateral upsample and the
+  existing geometry/thickness path-length saturation remain intact. Selected
+  overlapping volumes retain deterministic distance/ID selection and existing
+  capped-opacity integration; Slice 4 adds no general OIT system.
+- Dust is exactly-once sRGB-decoded in its shader, multiplies accepted HDR probe
+  and dynamic-light inputs without an upper artistic clamp, and adds
+  premultiplied radiance with alpha zero into the shared float scratch. The
+  existing soft depth intersection, fog attenuation, placement, animation,
+  emitter limits, and particle shapes remain unchanged.
+
+Bloom, emission, and muzzle integration:
+
+- Bloom uses three bilinear/clamp quarter-resolution `RGBA16F` targets. Its
+  fused 4x4 downsample prefilters each full-resolution scene tap before
+  averaging, retaining compact lamp tubes and muzzle cores without a
+  full-resolution MRT. Three separable Gaussian iterations preserve RGB;
+  bloom alpha is always zero. Composition changes only scene RGB and preserves
+  scene alpha. The shared same-size `RGBA32F` scratch remains point-filtered.
+- The exact max-channel prefilter uses `k=threshold*softKnee`,
+  `q=clamp(brightness-threshold+k,0,2k)`, and
+  `excess=max(q*q/(4k),brightness-threshold,0)`, then scales RGB by
+  `excess/brightness`. Threshold zero admits every positive finite color;
+  black remains zero; knee zero takes a division-free hard-threshold branch.
+  This metric preserves saturated-color ratios and treats a bright individual
+  channel as a bloom source. Threshold, soft knee, intensity, and radius are
+  finite validated application settings in exposure-1 linear scene space.
+- The former decal-specific rerender/blur path is removed. A decal is emissive
+  exactly when its existing emissive flag is set. Its decoded texture/tint and
+  cutout alpha retain normal depth and visibility. Non-emissive decals keep the
+  old base-color mix. Emissive decals use
+  `litBase*(1-coverage) + decodedDecal*emissiveStrength*coverage`; unit strength
+  reproduces the old visible emissive term, while strength never changes
+  alpha, silhouette, cutout, or depth. The existing serialized
+  `bloomIntensity` field is retained without a topology-schema migration but
+  is presented and consumed as decal emissive strength.
+- glTF emission remains per material/per fragment through the existing
+  exactly-once emissive texture decode and numeric emissive factor. Core glTF
+  `KHR_materials_emissive_strength` is loaded, validated, and applied before
+  the finite-half write. Non-emissive model parts are never tagged as bloom
+  sources; they bloom only if their final visible scene radiance crosses the
+  common threshold.
+- Muzzle swatches remain authored sRGB and are decoded once in the HDR muzzle
+  shader. Visible-flash radiance strength is a validated weapon/default and
+  per-weapon application override, distinct from the temporary geometry-light
+  intensity. Existing shape randomization, fire-time transform capture,
+  lifetime, attachment, recoil, cadence, and weapon-registry ownership remain
+  intact. The flash enters the visible viewmodel scene once and therefore
+  contributes to common bloom without a depth-incorrect overlay redraw.
+
+State, diagnostics, and limitations:
+
+- Affected passes flush rlgl batches at framebuffer/shader/blend boundaries,
+  use raylib/rlgl state transitions, disable blending for complete fullscreen
+  replacements, use additive blending only for alpha-zero dust/muzzle
+  radiance, and restore blend, depth-mask, culling, shader, framebuffer, and
+  viewport expectations on success. All resource validation queries happen at
+  creation; resize rebuilds are lazy and allocation-free per steady frame.
+  Failure to validate an HDR target disables only that optional effect for the
+  current dimensions and records the reason; there is no RGBA8 fallback.
+- Cached diagnostics expose active scene/bloom dimensions, actual formats,
+  max-channel threshold/knee/intensity/radius policy, finite-half protection,
+  premultiplied atmosphere semantics, disabled-effect status, and selectable
+  presentation-only scene-before/prefilter/blur/bloom/scene-after views. Debug
+  substitution never overwrites the authoritative world result and uses the
+  normal presentation transform only for inspection.
+- Local transparent volumes retain the existing selected-volume limits and
+  dust remains additive rather than becoming a general transparency solution.
+  No unsupported glTF emissive extension beyond core
+  `KHR_materials_emissive_strength` was added. No HDR-monitor output, exposure
+  control, alternate tone mapper, or production-asset retuning was introduced.
+
+Scope and verification:
+
+- Slice 3 bake algorithms, artifact formats, versions, source hashes,
+  installation policy, and authored lighting are unchanged. The accepted
+  Slice 2.1 PBR direct/indirect/environment routing is unchanged. No topology
+  mutation/cache behavior, collision, sector lookup, physics, camera, recoil,
+  hitscan, damage, cadence, or other gameplay behavior changed.
+- Non-interactive coverage exercises HDR target selection, finite-half
+  sanitization, bloom defaults/domains and exact edge cases, saturated-color
+  max-channel behavior, HDR atmosphere/bloom composition and alpha policy,
+  muzzle/decal/glTF emission routing, obsolete clamp/RGBA8/decal-bloom source
+  guards, and render-pass ordering/UI exclusion.
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: 21/21 passed.
+- `git diff --check`: passed; final diff/stat/status were reviewed in the
+  implementation handoff. Interactive launch, automation, screenshots, and
+  source-model, texture, and authored-map edits were intentionally not
+  performed; visual validation remains with the user.

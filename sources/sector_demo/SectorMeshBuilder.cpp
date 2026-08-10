@@ -30,7 +30,7 @@ struct SectorMeshBatchKey {
     float decalOpacity = 1.0f;
     bool decalEmissive = false;
     Vector3 decalTint = {1.0f, 1.0f, 1.0f};
-    float decalBloomIntensity = 1.0f;
+    float decalEmissiveStrength = 1.0f;
     bool alphaTest = false;
     float alphaCutoff = 0.5f;
     bool receivesLightmap = true;
@@ -46,7 +46,7 @@ struct SectorMeshBatchKey {
                 && decalTint.x == other.decalTint.x
                 && decalTint.y == other.decalTint.y
                 && decalTint.z == other.decalTint.z
-                && decalBloomIntensity == other.decalBloomIntensity
+                && decalEmissiveStrength == other.decalEmissiveStrength
                 && alphaTest == other.alphaTest
                 && alphaCutoff == other.alphaCutoff
                 && receivesLightmap == other.receivesLightmap;
@@ -65,7 +65,7 @@ struct SectorMeshBatchKeyHash {
         const size_t tintXHash = std::hash<float>{}(key.decalTint.x);
         const size_t tintYHash = std::hash<float>{}(key.decalTint.y);
         const size_t tintZHash = std::hash<float>{}(key.decalTint.z);
-        const size_t bloomIntensityHash = std::hash<float>{}(key.decalBloomIntensity);
+        const size_t emissiveStrengthHash = std::hash<float>{}(key.decalEmissiveStrength);
         const size_t alphaTestHash = std::hash<bool>{}(key.alphaTest);
         const size_t alphaCutoffHash = std::hash<float>{}(key.alphaCutoff);
         const size_t receivesLightmapHash = std::hash<bool>{}(key.receivesLightmap);
@@ -77,7 +77,7 @@ struct SectorMeshBatchKeyHash {
         hash ^= tintXHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= tintYHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= tintZHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
-        hash ^= bloomIntensityHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
+        hash ^= emissiveStrengthHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= alphaTestHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= alphaCutoffHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
         hash ^= receivesLightmapHash + 0x9e3779b9u + (hash << 6u) + (hash >> 2u);
@@ -102,7 +102,7 @@ Vector3 UnitRgbOrWhite(Vector3 value)
     };
 }
 
-float DecalBloomIntensityOrDefault(float value)
+float DecalEmissiveStrengthOrDefault(float value)
 {
     if (!std::isfinite(value)) {
         return 1.0f;
@@ -120,7 +120,7 @@ SectorMeshBatchData& BatchForKey(
         float decalOpacity,
         bool decalEmissive,
         Vector3 decalTint,
-        float decalBloomIntensity,
+        float decalEmissiveStrength,
         bool alphaTest,
         float alphaCutoff,
         bool receivesLightmap)
@@ -134,7 +134,7 @@ SectorMeshBatchData& BatchForKey(
             hasDecal ? UnitOrDefault(decalOpacity, 1.0f) : 1.0f,
             hasDecal && decalEmissive,
             hasDecal ? UnitRgbOrWhite(decalTint) : Vector3{1.0f, 1.0f, 1.0f},
-            hasDecal ? DecalBloomIntensityOrDefault(decalBloomIntensity) : 1.0f,
+            hasDecal ? DecalEmissiveStrengthOrDefault(decalEmissiveStrength) : 1.0f,
             alphaTest,
             alphaTest ? UnitOrDefault(alphaCutoff, 0.5f) : 0.5f,
             receivesLightmap};
@@ -151,7 +151,7 @@ SectorMeshBatchData& BatchForKey(
     batch.decalOpacity = key.decalOpacity;
     batch.decalEmissive = key.decalEmissive;
     batch.decalTint = key.decalTint;
-    batch.decalBloomIntensity = key.decalBloomIntensity;
+    batch.decalEmissiveStrength = key.decalEmissiveStrength;
     batch.alphaTest = key.alphaTest;
     batch.alphaCutoff = key.alphaCutoff;
     batch.receivesLightmap = key.receivesLightmap;
@@ -302,7 +302,7 @@ SectorMeshBatchDataResult BuildSectorMeshBatchDataInternal(
                 surface.decalOpacity,
                 surface.decalEmissive,
                 surface.decalTint,
-                surface.decalBloomIntensity,
+                surface.decalEmissiveStrength,
                 surface.alphaTest,
                 surface.alphaCutoff,
                 surface.receivesLightmap);
@@ -318,7 +318,7 @@ SectorMeshBatchDataResult BuildSectorMeshBatchDataInternal(
                     batch.decalOpacity,
                     batch.decalEmissive,
                     batch.decalTint,
-                    batch.decalBloomIntensity,
+                    batch.decalEmissiveStrength,
                     vertex.color
             });
         }
@@ -344,7 +344,7 @@ SectorMeshBatch MakeUploadedBatch(const SectorMeshBatchData& builder, Mesh mesh)
     batch.decalOpacity = builder.decalOpacity;
     batch.decalEmissive = builder.decalEmissive;
     batch.decalTint = builder.decalTint;
-    batch.decalBloomIntensity = builder.decalBloomIntensity;
+    batch.decalEmissiveStrength = builder.decalEmissiveStrength;
     batch.alphaTest = builder.alphaTest;
     batch.alphaCutoff = builder.alphaCutoff;
     batch.receivesLightmap = builder.receivesLightmap;
@@ -416,7 +416,7 @@ SectorMeshBuildResult BuildSectorMeshes(
         batch.decalOpacity = builder.decalOpacity;
         batch.decalEmissive = builder.decalEmissive;
         batch.decalTint = builder.decalTint;
-        batch.decalBloomIntensity = builder.decalBloomIntensity;
+        batch.decalEmissiveStrength = builder.decalEmissiveStrength;
         batch.alphaTest = builder.alphaTest;
         batch.alphaCutoff = builder.alphaCutoff;
         batch.receivesLightmap = builder.receivesLightmap;
@@ -463,15 +463,6 @@ bool ShouldDrawSectorMeshRecordForVisibility(
             visibility.visibleSectorIds.begin(),
             visibility.visibleSectorIds.end(),
             record.sectorId) != visibility.visibleSectorIds.end();
-}
-
-bool ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(
-        const SectorMeshBatch& record,
-        const RuntimePortalVisibilityResult& visibility)
-{
-    return record.decalEmissive
-            && !record.decalTextureId.empty()
-            && ShouldDrawSectorMeshRecordForVisibility(record, visibility);
 }
 
 size_t CountSectorMeshDrawRecordsForVisibility(

@@ -60,7 +60,6 @@ private:
     int shadowSoftnessLoc = -1;
     int shadowMap0Loc = -1;
     int shadowMap1Loc = -1;
-    int dynamicLightingClampLoc = -1;
     SectorFogShaderLocations fogShaderLocations;
     bool shaderLoaded = false;
     bool warningPrinted = false;

@@ -370,6 +370,7 @@ void ValidateFiring(
             value.muzzleFlash.forwardStretch,
             value.muzzleFlash.rearSuppression,
             value.muzzleFlash.edgeSoftness,
+            value.muzzleFlash.radianceStrength,
             value.muzzleLight.intensity,
             value.muzzleLight.radiusWorld, value.muzzleLight.lifetimeSeconds,
             value.muzzleLight.decayExponent};
@@ -417,7 +418,9 @@ void ValidateFiring(
             || value.muzzleFlash.rearSuppression < 0.0f
             || value.muzzleFlash.rearSuppression > 1.0f
             || value.muzzleFlash.edgeSoftness < 0.01f
-            || value.muzzleFlash.edgeSoftness > 1.0f) {
+            || value.muzzleFlash.edgeSoftness > 1.0f
+            || value.muzzleFlash.radianceStrength < 0.0f
+            || value.muzzleFlash.radianceStrength > 64.0f) {
         Fail(context + ".muzzleFlash contains an invalid lifetime, size, shape, lobe range, or edge softness");
     }
     if (value.muzzleLight.intensity < 0.0f
@@ -513,6 +516,10 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
             flashContext + ".edgeColor");
     result.muzzleFlash.edgeSoftness = Number(
             flash, "edgeSoftness", flashContext);
+    if (flash.find("radianceStrength") != flash.end()) {
+        result.muzzleFlash.radianceStrength = Number(
+                flash, "radianceStrength", flashContext);
+    }
 
     const Json& light = Require(object, "muzzleLight", context);
     const std::string lightContext = context + ".muzzleLight";
@@ -697,6 +704,43 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             if (!ValidLevelName(parsed.firstLevel)) {
                 Fail("application settings.firstLevel must use only letters, digits, underscore, or dash");
             }
+        }
+        const auto hdrBloom = root.find("hdrBloom");
+        if (hdrBloom != root.end()) {
+            if (!hdrBloom->is_object()) {
+                Fail("application settings.hdrBloom must be an object");
+            }
+            const auto readBloomNumber = [&](const char* name, float current,
+                                             float minimum, float maximum) {
+                const auto it = hdrBloom->find(name);
+                if (it == hdrBloom->end()) return current;
+                if (!it->is_number()) {
+                    Fail(std::string("application settings.hdrBloom.") + name
+                            + " must be a number");
+                }
+                const double value = it->get<double>();
+                if (!std::isfinite(value) || value < minimum || value > maximum) {
+                    Fail(std::string("application settings.hdrBloom.") + name
+                            + " is outside its finite supported range");
+                }
+                return static_cast<float>(value);
+            };
+            const auto enabled = hdrBloom->find("enabled");
+            if (enabled != hdrBloom->end()) {
+                if (!enabled->is_boolean()) {
+                    Fail("application settings.hdrBloom.enabled must be a boolean");
+                }
+                parsed.hdrBloom.enabled = enabled->get<bool>();
+            }
+            parsed.hdrBloom.threshold = readBloomNumber(
+                    "threshold", parsed.hdrBloom.threshold,
+                    0.0f, engine::Rgba16fMaximumFinite);
+            parsed.hdrBloom.softKnee = readBloomNumber(
+                    "softKnee", parsed.hdrBloom.softKnee, 0.0f, 1.0f);
+            parsed.hdrBloom.intensity = readBloomNumber(
+                    "intensity", parsed.hdrBloom.intensity, 0.0f, 16.0f);
+            parsed.hdrBloom.radius = readBloomNumber(
+                    "radius", parsed.hdrBloom.radius, 0.25f, 4.0f);
         }
         const auto footsteps = root.find("footsteps");
         if (footsteps != root.end()) {
@@ -892,6 +936,7 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                     entry.firing.flashMaximumLobeCount = OptionalInteger(*firing, "flashMaximumLobeCount", firingContext);
                     entry.firing.flashRearSuppression = OptionalNumber(*firing, "flashRearSuppression", firingContext);
                     entry.firing.flashEdgeSoftness = OptionalNumber(*firing, "flashEdgeSoftness", firingContext);
+                    entry.firing.flashRadianceStrength = OptionalNumber(*firing, "flashRadianceStrength", firingContext);
                     entry.firing.muzzleLightIntensity = OptionalNumber(*firing, "muzzleLightIntensity", firingContext);
                     entry.firing.muzzleLightRadiusWorld = OptionalNumber(*firing, "muzzleLightRadiusWorld", firingContext);
                     entry.firing.muzzleLightLifetimeSeconds = OptionalNumber(*firing, "muzzleLightLifetimeSeconds", firingContext);
@@ -960,6 +1005,14 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     {"volume", settings.footsteps.volume},
                     {"landingImpactVolumeMultiplier",
                             settings.footsteps.landingImpactVolumeMultiplier}}}};
+    const engine::HdrBloomSettings hdrBloom =
+            engine::NormalizeHdrBloomSettings(settings.hdrBloom);
+    root["hdrBloom"] = {
+            {"enabled", hdrBloom.enabled},
+            {"threshold", hdrBloom.threshold},
+            {"softKnee", hdrBloom.softKnee},
+            {"intensity", hdrBloom.intensity},
+            {"radius", hdrBloom.radius}};
     Json playerSoundEvents = Json::object();
     for (const PlayerSoundEventSettings& event : settings.playerSounds.events) {
         playerSoundEvents[event.id] = {
@@ -1052,6 +1105,7 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         if (entry.firing.flashMaximumLobeCount) firing["flashMaximumLobeCount"] = *entry.firing.flashMaximumLobeCount;
         if (entry.firing.flashRearSuppression) firing["flashRearSuppression"] = *entry.firing.flashRearSuppression;
         if (entry.firing.flashEdgeSoftness) firing["flashEdgeSoftness"] = *entry.firing.flashEdgeSoftness;
+        if (entry.firing.flashRadianceStrength) firing["flashRadianceStrength"] = *entry.firing.flashRadianceStrength;
         if (entry.firing.muzzleLightIntensity) firing["muzzleLightIntensity"] = *entry.firing.muzzleLightIntensity;
         if (entry.firing.muzzleLightRadiusWorld) firing["muzzleLightRadiusWorld"] = *entry.firing.muzzleLightRadiusWorld;
         if (entry.firing.muzzleLightLifetimeSeconds) firing["muzzleLightLifetimeSeconds"] = *entry.firing.muzzleLightLifetimeSeconds;
@@ -1655,6 +1709,10 @@ FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
             MaxFpsMuzzleFlashLobes);
     value.muzzleFlash.rearSuppression = std::clamp(value.muzzleFlash.rearSuppression, 0.0f, 1.0f);
     value.muzzleFlash.edgeSoftness = std::clamp(value.muzzleFlash.edgeSoftness, 0.01f, 1.0f);
+    value.muzzleFlash.radianceStrength = std::isfinite(
+            value.muzzleFlash.radianceStrength)
+            ? std::clamp(value.muzzleFlash.radianceStrength, 0.0f, 64.0f)
+            : FpsWeaponMuzzleFlashDefinition{}.radianceStrength;
     value.muzzleLight.intensity = std::clamp(value.muzzleLight.intensity, 0.0f, 100.0f);
     value.muzzleLight.radiusWorld = std::clamp(value.muzzleLight.radiusWorld, 0.05f, 100.0f);
     value.muzzleLight.lifetimeSeconds = std::clamp(value.muzzleLight.lifetimeSeconds, 0.005f, 2.0f);
@@ -1695,6 +1753,7 @@ FpsWeaponFiringDefinition ResolveFpsWeaponFiringDefinition(
         if (value->flashMaximumLobeCount) result.muzzleFlash.maximumLobeCount = *value->flashMaximumLobeCount;
         if (value->flashRearSuppression) result.muzzleFlash.rearSuppression = *value->flashRearSuppression;
         if (value->flashEdgeSoftness) result.muzzleFlash.edgeSoftness = *value->flashEdgeSoftness;
+        if (value->flashRadianceStrength) result.muzzleFlash.radianceStrength = *value->flashRadianceStrength;
         if (value->muzzleLightIntensity) result.muzzleLight.intensity = *value->muzzleLightIntensity;
         if (value->muzzleLightRadiusWorld) result.muzzleLight.radiusWorld = *value->muzzleLightRadiusWorld;
         if (value->muzzleLightLifetimeSeconds) result.muzzleLight.lifetimeSeconds = *value->muzzleLightLifetimeSeconds;
@@ -1735,6 +1794,7 @@ FpsWeaponFiringOverride BuildFpsWeaponFiringOverride(
     if (defaults.muzzleFlash.maximumLobeCount != clean.muzzleFlash.maximumLobeCount) result.flashMaximumLobeCount = clean.muzzleFlash.maximumLobeCount;
     if (!NearlyEqual(defaults.muzzleFlash.rearSuppression, clean.muzzleFlash.rearSuppression)) result.flashRearSuppression = clean.muzzleFlash.rearSuppression;
     if (!NearlyEqual(defaults.muzzleFlash.edgeSoftness, clean.muzzleFlash.edgeSoftness)) result.flashEdgeSoftness = clean.muzzleFlash.edgeSoftness;
+    if (!NearlyEqual(defaults.muzzleFlash.radianceStrength, clean.muzzleFlash.radianceStrength)) result.flashRadianceStrength = clean.muzzleFlash.radianceStrength;
     if (!NearlyEqual(defaults.muzzleLight.intensity, clean.muzzleLight.intensity)) result.muzzleLightIntensity = clean.muzzleLight.intensity;
     if (!NearlyEqual(defaults.muzzleLight.radiusWorld, clean.muzzleLight.radiusWorld)) result.muzzleLightRadiusWorld = clean.muzzleLight.radiusWorld;
     if (!NearlyEqual(defaults.muzzleLight.lifetimeSeconds, clean.muzzleLight.lifetimeSeconds)) result.muzzleLightLifetimeSeconds = clean.muzzleLight.lifetimeSeconds;
@@ -1770,6 +1830,7 @@ bool FpsWeaponFiringOverrideEmpty(const FpsWeaponFiringOverride& value)
             && !value.flashMaximumLobeCount
             && !value.flashRearSuppression
             && !value.flashEdgeSoftness
+            && !value.flashRadianceStrength
             && !value.muzzleLightIntensity
             && !value.muzzleLightRadiusWorld
             && !value.muzzleLightLifetimeSeconds;

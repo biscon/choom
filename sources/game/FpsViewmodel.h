@@ -90,6 +90,7 @@ struct FpsMuzzleFlashRuntimeState {
     float ageSeconds = 0.0f;
     float lifetimeSeconds = 0.0f;
     float sizeWorld = 0.0f;
+    float radianceStrength = 1.0f;
     Color coreColor{};
     Color hotColor{};
     Color warmColor{};

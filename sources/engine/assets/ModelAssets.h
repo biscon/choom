@@ -88,6 +88,7 @@ struct ModelMaterialAsset {
     // are linear data. Numeric factors retain glTF-defined conventions.
     Vector4 baseColorFactor = {1.0f, 1.0f, 1.0f, 1.0f};
     Vector3 emissiveFactor = {};
+    float emissiveStrength = 1.0f;
     float metallicFactor = 0.0f;
     float roughnessFactor = 1.0f;
     float normalScale = 1.0f;

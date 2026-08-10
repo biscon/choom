@@ -371,6 +371,29 @@ void DrawPreviewSettingsModal(
         modalState.draftLightmapSettings =
                 NormalizeSectorPreviewObjectProbeSettings(modalState.draftLightmapSettings);
 
+        contentY += 8.0f;
+        engine::Text(ui, config, assets, Rectangle{0.0f, contentY, contentW, 34.0f},
+                font, "Scene-wide HDR bloom", engine::UITextJustify::Left, config.textColor);
+        contentY += 38.0f;
+        engine::Checkbox(ui, config, input, assets,
+                "sector_editor_preview_bloom_enabled",
+                Rectangle{0.0f, contentY, contentW, rowH}, font,
+                "Enabled", modalState.draftHdrBloom.enabled);
+        contentY += rowH + gap;
+        drawFloat(contentY, "sector_editor_preview_bloom_threshold", "Linear threshold",
+                modalState.draftHdrBloom.threshold, modalState.bloomThresholdInput,
+                0.0f, engine::Rgba16fMaximumFinite, 3);
+        drawFloat(contentY, "sector_editor_preview_bloom_knee", "Soft knee",
+                modalState.draftHdrBloom.softKnee, modalState.bloomSoftKneeInput,
+                0.0f, 1.0f, 3);
+        drawFloat(contentY, "sector_editor_preview_bloom_intensity", "Intensity",
+                modalState.draftHdrBloom.intensity, modalState.bloomIntensityInput,
+                0.0f, 16.0f, 3);
+        drawFloat(contentY, "sector_editor_preview_bloom_radius", "Radius",
+                modalState.draftHdrBloom.radius, modalState.bloomRadiusInput,
+                0.25f, 4.0f, 2);
+        modalState.draftHdrBloom = engine::NormalizeHdrBloomSettings(modalState.draftHdrBloom);
+
         engine::EndScrollArea(ui, config, input, scroll, modalState.lightingScroll);
     };
 
@@ -517,7 +540,7 @@ void DrawPreviewSettingsModal(
 
     auto drawWeaponTab = [&]() {
         float contentY = 0.0f;
-        const float contentH = 51.0f * (rowH + gap) + 160.0f;
+        const float contentH = 52.0f * (rowH + gap) + 160.0f;
         engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
                 ui, config, input, "sector_editor_preview_settings_weapon_scroll",
                 scrollBounds, Vector2{scrollContentW, contentH}, modalState.weaponScroll);
@@ -574,6 +597,7 @@ void DrawPreviewSettingsModal(
         drawFloat(contentY, "sector_editor_weapon_muzzle_roll", "Muzzle roll", firing.muzzleSocket.rotationDegrees.z, modalState.weaponMuzzleRollInput, -360.0f, 360.0f, 2);
         drawFloat(contentY, "sector_editor_weapon_flash_lifetime", "Flash lifetime", firing.muzzleFlash.lifetimeSeconds, modalState.weaponFlashLifetimeInput, 0.005f, 60.0f, 3);
         drawFloat(contentY, "sector_editor_weapon_flash_size", "Flash size", firing.muzzleFlash.sizeWorld, modalState.weaponFlashSizeInput, 0.005f, 2.0f, 3);
+        drawFloat(contentY, "sector_editor_weapon_flash_radiance", "Flash radiance strength", firing.muzzleFlash.radianceStrength, modalState.weaponFlashRadianceStrengthInput, 0.0f, 64.0f, 2);
         drawFloat(contentY, "sector_editor_weapon_flash_size_variation", "Flash size variation", firing.muzzleFlash.sizeVariation, modalState.weaponFlashSizeVariationInput, 0.0f, 0.5f, 3);
         drawFloat(contentY, "sector_editor_weapon_flash_irregularity", "Flash irregularity", firing.muzzleFlash.irregularity, modalState.weaponFlashIrregularityInput, 0.0f, 1.0f, 3);
         drawFloat(contentY, "sector_editor_weapon_flash_forward_stretch", "Flash forward stretch", firing.muzzleFlash.forwardStretch, modalState.weaponFlashForwardStretchInput, 1.0f, 4.0f, 2);
@@ -683,6 +707,7 @@ void DrawPreviewSettingsModal(
             modalState.weaponMuzzleRollInput = {};
             modalState.weaponFlashLifetimeInput = {};
             modalState.weaponFlashSizeInput = {};
+            modalState.weaponFlashRadianceStrengthInput = {};
             modalState.weaponFlashSizeVariationInput = {};
             modalState.weaponFlashIrregularityInput = {};
             modalState.weaponFlashForwardStretchInput = {};

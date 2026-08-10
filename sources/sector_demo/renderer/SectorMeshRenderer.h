@@ -74,18 +74,20 @@ public:
             engine::World* runtimeObjectWorld = nullptr,
             SectorRuntimeDoorLightingContext doorLighting = {},
             const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
-    void ApplyEmissiveDecalBloom(
-            engine::AssetManager& assets,
-            RenderTexture2D& sceneTarget,
-            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
-    void ApplyEmissiveDecalBloomToScene(
-            engine::AssetManager& assets,
-            RenderTexture2D& sceneTarget,
-            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
-    bool ApplyLocalFogToScene(
-            RenderTexture2D& sceneTarget,
+    bool ApplyWorldAtmosphere(
+            engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);
+    bool ApplyHdrBloom(
+            engine::RenderTarget& sceneTarget,
+            const engine::HdrBloomSettings& settings);
+    bool CompositeViewmodel(
+            engine::RenderTarget& sceneTarget,
+            const engine::RenderTarget& viewmodelTarget);
+    const engine::RenderTarget* HdrDebugPresentationSource() const
+    {
+        return bloomRenderer.DebugSource();
+    }
     void DrawViewmodel(
             engine::AssetManager& assets,
             const engine::ModelAsset& asset,
@@ -169,8 +171,41 @@ public:
     }
     bool PbrEnvironmentActive() const { return pbrEnvironment.active; }
     bool PbrEnvironmentUsesSky() const { return pbrEnvironment.usedSky; }
+    SectorBloomDebugView BloomDebugView() const { return bloomRenderer.DebugView(); }
+    void SetBloomDebugView(SectorBloomDebugView view) { bloomRenderer.SetDebugView(view); }
+    const SectorBloomDiagnostics& BloomDiagnostics() const
+    {
+        return bloomRenderer.Diagnostics();
+    }
+    const engine::RenderTarget& LocalFogAccumulationTarget() const
+    {
+        return localFogRenderer.AccumulationTarget();
+    }
+    const engine::RenderTarget& HazeAccumulationTarget() const
+    {
+        return lightHazeRenderer.AccumulationTarget();
+    }
+    const std::string& LocalFogAccumulationDiagnostic() const
+    {
+        return localFogRenderer.AccumulationDiagnostic();
+    }
+    const std::string& HazeAccumulationDiagnostic() const
+    {
+        return lightHazeRenderer.AccumulationDiagnostic();
+    }
+    const std::string& DustResourceDiagnostic() const
+    {
+        return lightDustRenderer.ResourceDiagnostic();
+    }
+    const std::string& HdrSceneScratchDiagnostic() const
+    {
+        return hdrSceneScratchDiagnostic;
+    }
 
 private:
+    bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
+    bool EnsureHdrCompositeShader();
+    bool CommitHdrScratch(engine::RenderTarget& sceneTarget);
     engine::TextureHandle TextureForId(const std::string& textureId) const;
     engine::TextureHandle NormalTextureForId(const std::string& textureId) const;
     void UpdateCamera();
@@ -206,6 +241,7 @@ private:
     int hasDecalLoc = -1;
     int decalOpacityLoc = -1;
     int decalEmissiveLoc = -1;
+    int decalEmissiveStrengthLoc = -1;
     int decalTintLoc = -1;
     int dynamicLightCountLoc = -1;
     int dynamicLightPositionsLoc = -1;
@@ -225,7 +261,6 @@ private:
     int shadowBiasLoc = -1;
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
-    int dynamicLightingClampLoc = -1;
     SectorFogShaderLocations fogShaderLocations;
     SectorLocalFogRenderer localFogRenderer;
     SectorLightHazeRenderer lightHazeRenderer;
@@ -234,6 +269,16 @@ private:
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
     SectorBloomRenderer bloomRenderer;
+    engine::RenderTarget hdrSceneScratch;
+    Shader hdrCompositeShader = {};
+    int hdrCompositeSceneLoc = -1;
+    int hdrCompositeSourceLoc = -1;
+    int hdrCompositeModeLoc = -1;
+    bool hdrCompositeShaderFailed = false;
+    std::string hdrSceneScratchError;
+    std::string hdrSceneScratchDiagnostic = "not allocated";
+    int hdrSceneScratchFailedWidth = 0;
+    int hdrSceneScratchFailedHeight = 0;
     SectorBillboardRenderer billboardRenderer;
     SectorStaticModelRenderer staticModelRenderer;
     SectorDoorRenderer doorRenderer;

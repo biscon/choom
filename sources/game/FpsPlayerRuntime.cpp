@@ -20,6 +20,9 @@ void FpsPlayerRuntime::Begin(
         const char* scopeName)
 {
     End(assets, renderer);
+    if (!LoadFpsMuzzleFlashRenderResources(muzzleFlashRenderResources)) {
+        TraceLog(LOG_WARNING, "MUZZLE FLASH: HDR shader unavailable; visible flash disabled");
+    }
     const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(
             registry,
             registry.initialWeaponId);
@@ -121,6 +124,7 @@ void FpsPlayerRuntime::End(
         assets.UnloadScope(state.assetScope);
     }
     renderer.SetRuntimePointLight(nullptr);
+    UnloadFpsMuzzleFlashRenderResources(muzzleFlashRenderResources);
     ResetFpsViewmodelRuntime(state);
     cameraRecoilWeaponId.clear();
 }
@@ -550,6 +554,10 @@ void FpsPlayerRuntime::Render(
             state.attachment.lighting.materialOverride.roughnessFactor,
             state.attachment.lighting.materialOverride
                     .useMetallicRoughnessTexture};
+    // Draw the additive flash first so the subsequently drawn gun can occlude
+    // it with the isolated viewmodel depth buffer. The captured fire-time
+    // transform keeps recoil from clipping the flash origin.
+    DrawFpsMuzzleFlash(muzzleFlashRenderResources, state.firing, camera);
     renderer.DrawViewmodel(
             assets,
             *asset,
@@ -561,7 +569,6 @@ void FpsPlayerRuntime::Render(
             ambientLighting,
             viewmodelLighting,
             attachmentLighting);
-    DrawFpsMuzzleFlash(state.firing, camera);
     rlSetClipPlanes(previousNear, previousFar);
 }
 

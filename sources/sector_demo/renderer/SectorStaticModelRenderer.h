@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetHandles.h"
 #include "engine/assets/ModelAssets.h"
+#include "engine/render/HdrEffectPolicy.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
@@ -133,6 +134,10 @@ inline engine::ModelMaterialAsset NormalizeSectorPbrMaterial(
             ? std::clamp(material.baseColorFactor.w, 0.0f, 1.0f) : 1.0f;
     material.emissiveFactor = SanitizeSectorPbrNonnegative(
             material.emissiveFactor);
+    material.emissiveStrength = std::isfinite(material.emissiveStrength)
+            ? std::clamp(material.emissiveStrength, 0.0f,
+                    engine::Rgba16fMaximumFinite)
+            : 1.0f;
     material.metallicFactor = std::isfinite(material.metallicFactor)
             ? std::clamp(material.metallicFactor, 0.0f, 1.0f) : 0.0f;
     material.roughnessFactor = std::isfinite(material.roughnessFactor)
@@ -332,6 +337,7 @@ private:
     std::vector<CachedModel> cachedModels;
     int baseColorFactorLoc = -1;
     int emissiveFactorLoc = -1;
+    int emissiveStrengthLoc = -1;
     int metallicFactorLoc = -1;
     int roughnessFactorLoc = -1;
     int normalScaleLoc = -1;

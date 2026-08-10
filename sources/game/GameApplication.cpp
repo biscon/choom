@@ -236,18 +236,41 @@ void GameApplication::Render3DOverlays()
     }
 }
 
-void GameApplication::Apply3DPostProcessing(
-        engine::AssetManager& assets,
-        RenderTexture2D& sceneTarget)
+void GameApplication::Apply3DWorldAtmosphere(
+        engine::RenderTarget& sceneTarget)
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
-        gameScene.ApplyPostProcessing(
-                assets,
-                sceneTarget,
-                gameSession.Map());
+        gameScene.ApplyWorldAtmosphere(sceneTarget, gameSession.Map());
     } else {
-        editor.ApplyPreview3DBloom(assets, sceneTarget);
+        editor.ApplyPreview3DWorldAtmosphere(sceneTarget);
     }
+}
+
+void GameApplication::Apply3DHdrBloom(engine::RenderTarget& sceneTarget)
+{
+    if (BackgroundScreen() == ApplicationScreen::Game) {
+        gameScene.ApplyHdrBloom(sceneTarget, applicationSettings.hdrBloom);
+    } else {
+        editor.ApplyPreview3DHdrBloom(sceneTarget);
+    }
+}
+
+bool GameApplication::Composite3DViewmodel(
+        engine::RenderTarget& sceneTarget,
+        const engine::RenderTarget& viewmodelTarget)
+{
+    if (BackgroundScreen() == ApplicationScreen::Game) {
+        return gameScene.CompositeViewmodel(sceneTarget, viewmodelTarget);
+    }
+    return editor.CompositePreview3DViewmodel(sceneTarget, viewmodelTarget);
+}
+
+const engine::RenderTarget* GameApplication::HdrDebugPresentationSource() const
+{
+    if (BackgroundScreen() == ApplicationScreen::Game) {
+        return gameScene.HdrDebugPresentationSource();
+    }
+    return editor.Preview3DHdrDebugPresentationSource();
 }
 
 void GameApplication::Render3DHud(Rectangle playableViewport) const

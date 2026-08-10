@@ -64,9 +64,9 @@ SectorEditorMaterialActionResult ApplySurfaceDecalTintToLayer(
         TopologySurfaceEditTarget target,
         Vector3 tint,
         SectorTopologyDecalLayer& decal);
-SectorEditorMaterialActionResult ApplySurfaceDecalBloomIntensityToLayer(
+SectorEditorMaterialActionResult ApplySurfaceDecalEmissiveStrengthToLayer(
         TopologySurfaceEditTarget target,
-        float bloomIntensity,
+        float emissiveStrength,
         SectorTopologyDecalLayer& decal);
 bool BuildDecalTintModal(
         const SectorTopologyMap& map,

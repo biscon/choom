@@ -11,6 +11,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace game {
@@ -23,6 +24,7 @@ public:
 
     bool Apply(
             RenderTexture2D& sceneTarget,
+            RenderTexture2D& sceneScratch,
             const SectorTopologyMap& map,
             const Camera3D& camera,
             float runtimeSeconds,
@@ -36,6 +38,7 @@ public:
     int EligibleEmitterCount() const { return eligibleEmitterCount; }
     int ActiveEmitterCount() const { return activeEmitterCount; }
     int VisibleParticleCount() const { return visibleParticleCount; }
+    const std::string& ResourceDiagnostic() const { return resourceDiagnostic; }
 
 private:
     struct Emitter {
@@ -78,10 +81,9 @@ private:
         int shadowMap1 = -1;
     };
 
-    bool EnsureResources(int width, int height);
+    bool EnsureResources();
     bool EnsureShader();
     bool EnsureMesh();
-    bool EnsureTarget(int width, int height);
     void ClearBorrowedMaterialTextures();
     void BuildEmitters(
             const SectorTopologyMap& map,
@@ -112,7 +114,6 @@ private:
     Material material = {};
     Texture2D defaultMaterialTexture = {};
     Mesh mesh = {};
-    engine::RenderTarget dustTarget;
     ShaderLocations locations;
     std::array<Emitter, MaxEmitters> emitters{};
     std::array<Particle, MaxParticles> particles{};
@@ -123,13 +124,13 @@ private:
     std::array<unsigned short, MaxParticles * 6> indices{};
     float previousRuntimeSeconds = 0.0f;
     std::uint32_t spawnSequence = 1;
-    int targetWidth = 0;
-    int targetHeight = 0;
     int eligibleEmitterCount = 0;
     int activeEmitterCount = 0;
     int visibleParticleCount = 0;
     bool materialLoaded = false;
     bool warnedUnavailable = false;
+    bool shaderFailed = false;
+    std::string resourceDiagnostic = "not allocated";
 };
 
 } // namespace game

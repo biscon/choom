@@ -157,6 +157,8 @@ void TestViewmodelIsolationAndFiniteHandling()
             std::numeric_limits<float>::quiet_NaN();
     invalidMaterial.emissiveFactor.y =
             std::numeric_limits<float>::infinity();
+    invalidMaterial.emissiveStrength =
+            std::numeric_limits<float>::infinity();
     invalidMaterial.metallicFactor = -1.0f;
     invalidMaterial.roughnessFactor =
             std::numeric_limits<float>::infinity();
@@ -164,10 +166,15 @@ void TestViewmodelIsolationAndFiniteHandling()
     invalidMaterial = game::NormalizeSectorPbrMaterial(invalidMaterial);
     Check(Near(invalidMaterial.baseColorFactor.x, 1.0f)
                     && Near(invalidMaterial.emissiveFactor.y, 0.0f)
+                    && Near(invalidMaterial.emissiveStrength, 1.0f)
                     && Near(invalidMaterial.metallicFactor, 0.0f)
                     && Near(invalidMaterial.roughnessFactor, 1.0f)
                     && Near(invalidMaterial.occlusionStrength, 1.0f),
           "non-finite and out-of-range material inputs are sanitized on CPU");
+    invalidMaterial.emissiveStrength=70000.0f;
+    invalidMaterial=game::NormalizeSectorPbrMaterial(invalidMaterial);
+    Check(Near(invalidMaterial.emissiveStrength,65504.0f),
+          "glTF emissive strength is limited only by finite-half storage");
 
     game::SectorViewmodelLightingContext overrideLighting;
     overrideLighting.materialOverrideEnabled = true;
@@ -303,6 +310,84 @@ void TestBakedHdrConsumersStayUnclamped()
           "baked-light consumers do not tone map or encode output locally");
 }
 
+void TestHdrEffectShaderAndPassPolicies()
+{
+    const std::string bloom=ReadSource(BLOOM_SHADER_SOURCE_PATH);
+    const std::string fog=ReadSource(LOCAL_FOG_SHADER_SOURCE_PATH);
+    const std::string haze=ReadSource(HAZE_SHADER_SOURCE_PATH);
+    const std::string dust=ReadSource(DUST_SHADER_SOURCE_PATH);
+    const std::string muzzle=ReadSource(MUZZLE_SHADER_SOURCE_PATH);
+    const std::string mainGraph=ReadSource(MAIN_RENDER_GRAPH_SOURCE_PATH);
+    const std::string modelAssets=ReadSource(MODEL_ASSET_SOURCE_PATH);
+    Check(!bloom.empty()&&!fog.empty()&&!haze.empty()&&!dust.empty()
+                    &&!muzzle.empty()&&!mainGraph.empty(),
+          "HDR effect policy can read every affected shader and pass graph");
+    Check(bloom.find("Rgba8Unorm")==std::string::npos
+                    && fog.find("Rgba8Unorm")==std::string::npos
+                    && haze.find("Rgba8Unorm")==std::string::npos
+                    && dust.find("Rgba8Unorm")==std::string::npos,
+          "radiance-bearing atmosphere and bloom targets never select RGBA8");
+    Check(fog.find("dynamicLightingClamp")==std::string::npos
+                    && haze.find("dynamicLightingClamp")==std::string::npos
+                    && dust.find("dynamicLightingClamp")==std::string::npos,
+          "obsolete dynamic-light artistic ceilings stay removed from atmosphere");
+    Check(bloom.find("65504.0")!=std::string::npos
+                    && fog.find("65504.0")!=std::string::npos
+                    && haze.find("65504.0")!=std::string::npos
+                    && dust.find("65504.0")!=std::string::npos
+                    && muzzle.find("65504.0")!=std::string::npos,
+          "affected RGBA16F writes retain the named finite-half storage guard");
+    Check(bloom.find("finalColor = vec4(SanitizeLinearHdrForRgba16f(color), 0.0)")
+                    !=std::string::npos
+                    && bloom.find("SafeAlpha(scene.a)")!=std::string::npos,
+          "bloom buffers ignore alpha energy and composition preserves scene alpha");
+    Check(fog.find("* (1.0 - SanitizeOpacity(fog.a))")!=std::string::npos
+                    && fog.find("+ SanitizeIntermediateRadiance(fog.rgb)")!=std::string::npos
+                    && haze.find("*(1.0-SanitizeOpacity(haze.a))")!=std::string::npos
+                    && haze.find("+SanitizeIntermediateRadiance(haze.rgb)")!=std::string::npos,
+          "fog and haze use sanitized premultiplied scattering plus transmittance");
+    Check(muzzle.find("srgbToLinear")!=std::string::npos
+                    && muzzle.find("radianceStrength")!=std::string::npos
+                    && muzzle.find("BeginBlendMode(BLEND_ADD_COLORS)")!=std::string::npos
+                    && muzzle.find("rlDrawRenderBatchActive")!=std::string::npos,
+          "muzzle swatches decode once and add data-driven HDR radiance with synchronized state");
+    Check(modelAssets.find("has_emissive_strength")!=std::string::npos
+                    && ReadSource(PBR_SHADER_SOURCE_PATH).find(
+                               "emissive *= max(emissiveStrength, 0.0)")
+                            !=std::string::npos,
+          "core glTF emissive strength reaches per-fragment HDR emission");
+    Check(ReadSource(PBR_SHADER_SOURCE_PATH).find("wholeModelBloom")
+                    ==std::string::npos,
+          "models are not tagged as whole-object bloom sources");
+    Check(bloom.find("LinearToSrgb")==std::string::npos
+                    && fog.find("LinearToSrgb")==std::string::npos
+                    && haze.find("LinearToSrgb")==std::string::npos
+                    && dust.find("LinearToSrgb")==std::string::npos
+                    && muzzle.find("LinearToSrgb")==std::string::npos
+                    && bloom.find("ToneMap")==std::string::npos,
+          "effect shaders do not tone map or output-encode radiance locally");
+    Check(bloom.find("ApplyEmissiveDecalBloom")==std::string::npos
+                    && ReadSource(SECTOR_SHADER_SOURCE_PATH).find(
+                               "emissiveRadiance * emissiveDecalAlpha")!=std::string::npos
+                    && ReadSource(SECTOR_SHADER_SOURCE_PATH).find(
+                               "surfaceRgb = mix(baseColor.rgb, decalRgb, decalAlpha)")
+                            !=std::string::npos,
+          "decal-only bloom redraw is retired in favor of visible emissive radiance");
+    const std::size_t atmosphere=mainGraph.find("Apply3DWorldAtmosphere");
+    const std::size_t viewmodel=mainGraph.find("Composite3DViewmodel");
+    const std::size_t sceneBloom=mainGraph.find("Apply3DHdrBloom");
+    const std::size_t overlays=mainGraph.find("Render3DOverlays");
+    Check(atmosphere<viewmodel&&viewmodel<sceneBloom&&sceneBloom<overlays,
+          "pass graph orders atmosphere, viewmodel, bloom, then excluded editor overlays");
+    Check(mainGraph.find("Render3DHud")>sceneBloom,
+          "HUD and ordinary UI are downstream of scene-wide bloom");
+    Check(bloom.find("failedForCurrentKey")!=std::string::npos
+                    && bloom.find("rlDrawRenderBatchActive")!=std::string::npos
+                    && bloom.find("rlDisableColorBlend")!=std::string::npos
+                    && bloom.find("rlEnableColorBlend")!=std::string::npos,
+          "optional bloom failure is latched and rlgl blend transitions are synchronized/restored");
+}
+
 } // namespace
 
 int main()
@@ -314,6 +399,7 @@ int main()
     TestEnvironmentEligibility();
     TestRemovedShaderPathsStayRemoved();
     TestBakedHdrConsumersStayUnclamped();
+    TestHdrEffectShaderAndPassPolicies();
     if (failures != 0) {
         std::fprintf(stderr, "%d PBR lighting policy test(s) failed\n", failures);
         return 1;

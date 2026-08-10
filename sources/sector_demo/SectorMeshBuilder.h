@@ -24,7 +24,7 @@ struct SectorMeshBatchVertex {
     float decalOpacity = 1.0f;
     bool decalEmissive = false;
     Vector3 decalTint = {1.0f, 1.0f, 1.0f};
-    float decalBloomIntensity = 1.0f;
+    float decalEmissiveStrength = 1.0f;
     Color color = WHITE;
 };
 
@@ -36,7 +36,7 @@ struct SectorMeshBatchData {
     float decalOpacity = 1.0f;
     bool decalEmissive = false;
     Vector3 decalTint = {1.0f, 1.0f, 1.0f};
-    float decalBloomIntensity = 1.0f;
+    float decalEmissiveStrength = 1.0f;
     bool alphaTest = false;
     float alphaCutoff = 0.5f;
     bool receivesLightmap = true;
@@ -65,9 +65,6 @@ SectorMeshBuildResult BuildSectorMeshes(
         const SectorLightmapLayout* lightmapLayout = nullptr,
         std::string* outError = nullptr);
 bool ShouldDrawSectorMeshRecordForVisibility(
-        const SectorMeshBatch& record,
-        const RuntimePortalVisibilityResult& visibility);
-bool ShouldDrawEmissiveBloomSectorMeshRecordForVisibility(
         const SectorMeshBatch& record,
         const RuntimePortalVisibilityResult& visibility);
 size_t CountSectorMeshDrawRecordsForVisibility(

@@ -21,7 +21,7 @@ float SectorInspectorContentHeight(float rowH, float gap, bool hasIdError)
             + uvSettingsH
             + rowH + gap // Opacity.
             + 36.0f + gap // Emissive.
-            + rowH + gap // Bloom intensity for emissive decals.
+            + rowH + gap // Emissive strength for emissive decals.
             + rowH + gap // Tint.
             + 36.0f + gap; // Fit/Clear decal action row.
     const float defaultWallSectionH = 18.0f + 30.0f + textureRowH + uvSettingsH;
@@ -444,24 +444,24 @@ bool DrawTopologySectorInspector(
         y += 36.0f + gap;
 
         if (decal.emissive) {
-            const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+            const SectorEditorFloatInputResult emissiveStrengthResult = DrawLabeledFloatInput(
                     ui,
                     config,
                     input,
                     assets,
                     font,
-                    TextFormat("%s_decal_bloom_intensity", uvPrefix),
-                    "Bloom:",
+                    TextFormat("%s_decal_emissive_strength", uvPrefix),
+                    "Emissive strength:",
                     Rectangle{0.0f, y, 82.0f, rowH},
                     Rectangle{82.0f, y, contentW - 82.0f, rowH},
                     engine::UITextJustify::Left,
                     decal.bloomIntensity,
-                    materialUiState.topologySectorDecalBloomIntensityInputs[opacityStateIndex],
+                    materialUiState.topologySectorDecalEmissiveStrengthInputs[opacityStateIndex],
                     0.0f,
                     10.0f,
                     3);
-            if (bloomResult.changed && bloomResult.value != decal.bloomIntensity) {
-                materialEditing.ApplyDecalBloomIntensity(target, bloomResult.value, nullptr);
+            if (emissiveStrengthResult.changed && emissiveStrengthResult.value != decal.bloomIntensity) {
+                materialEditing.ApplyDecalEmissiveStrength(target, emissiveStrengthResult.value, nullptr);
             }
             y += rowH + gap;
         }

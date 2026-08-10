@@ -33,7 +33,7 @@ float Dot(Vector3 a, Vector3 b)
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-float DecalBloomIntensityOrDefault(float value)
+float DecalEmissiveStrengthOrDefault(float value)
 {
     if (!std::isfinite(value)) {
         return 1.0f;
@@ -211,9 +211,9 @@ bool BuildTopologyFlatSurface(
     surface.decalOpacity = decal.textureId.empty() ? 1.0f : decal.opacity;
     surface.decalEmissive = !decal.textureId.empty() && decal.emissive;
     surface.decalTint = decal.textureId.empty() ? Vector3{1.0f, 1.0f, 1.0f} : decal.tint;
-    surface.decalBloomIntensity = decal.textureId.empty()
+    surface.decalEmissiveStrength = decal.textureId.empty()
             ? 1.0f
-            : DecalBloomIntensityOrDefault(decal.bloomIntensity);
+            : DecalEmissiveStrengthOrDefault(decal.bloomIntensity);
     surface.normal = normal;
     surface.chartWidth = std::max(maxX - minX, EdgeEpsilon);
     surface.chartHeight = std::max(maxZ - minZ, EdgeEpsilon);
@@ -331,9 +331,9 @@ bool BuildTopologyWallSurface(
     surface.decalTint = settings.decal.textureId.empty()
             ? Vector3{1.0f, 1.0f, 1.0f}
             : settings.decal.tint;
-    surface.decalBloomIntensity = settings.decal.textureId.empty()
+    surface.decalEmissiveStrength = settings.decal.textureId.empty()
             ? 1.0f
-            : DecalBloomIntensityOrDefault(settings.decal.bloomIntensity);
+            : DecalEmissiveStrengthOrDefault(settings.decal.bloomIntensity);
     surface.normal = normal;
     surface.chartWidth = length;
     surface.chartHeight = height;
@@ -399,7 +399,7 @@ bool BuildTopologyMiddleSurface(
     outSurface.decalOpacity = 1.0f;
     outSurface.decalEmissive = false;
     outSurface.decalTint = Vector3{1.0f, 1.0f, 1.0f};
-    outSurface.decalBloomIntensity = 1.0f;
+    outSurface.decalEmissiveStrength = 1.0f;
     outSurface.alphaTest = true;
     outSurface.alphaCutoff = 0.5f;
     outSurface.receivesLightmap = true;

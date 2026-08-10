@@ -252,6 +252,9 @@ ParsedModelMaterials ParseModelMaterials(
                 source.emissive_factor[0],
                 source.emissive_factor[1],
                 source.emissive_factor[2]};
+        material.emissiveStrength = source.has_emissive_strength
+                ? source.emissive_strength.emissive_strength
+                : 1.0f;
         textureSources[MATERIAL_MAP_EMISSION] = TextureSourceKey(
                 data, source.emissive_texture, modelPath);
 

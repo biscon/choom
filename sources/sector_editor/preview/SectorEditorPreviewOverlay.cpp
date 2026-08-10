@@ -662,6 +662,18 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             diagnostic.material.metallicFactor,
                             diagnostic.material.roughnessFactor,
                             diagnostic.material.occlusionStrength));
+                    const bool emissiveEligible =
+                            diagnostic.material.emissiveStrength > 0.0f
+                            && (diagnostic.material.emissiveFactor.x > 0.0f
+                                    || diagnostic.material.emissiveFactor.y > 0.0f
+                                    || diagnostic.material.emissiveFactor.z > 0.0f);
+                    addKeyValue("emissive", TextFormat(
+                            "factor %.2f %.2f %.2f | strength %.2f | scene bloom %s",
+                            diagnostic.material.emissiveFactor.x,
+                            diagnostic.material.emissiveFactor.y,
+                            diagnostic.material.emissiveFactor.z,
+                            diagnostic.material.emissiveStrength,
+                            emissiveEligible ? "eligible per fragment" : "no"));
                 }
                 const SectorPbrDrawDiagnostics& viewmodelDiagnostic =
                         preview.ViewmodelPbrDiagnostics();
@@ -950,7 +962,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         firing.cameraRecoil.lastKickDegrees.y,
                         firing.cameraRecoil.lastKickDegrees.z));
                 addKeyValue("muzzle effects", TextFormat(
-                        "socket %s | flash %s %.3f/%.3f (%.2f) soft %.2f | light %s %.3f",
+                        "socket %s | flash %s %.3f/%.3f (%.2f) soft %.2f radiance %.2f bloom %s | light %s %.3f",
                         firing.muzzleWorldTransformValid ? "valid" : "invalid",
                         firing.flash.active ? "active" : "off",
                         firing.flash.ageSeconds,
@@ -963,6 +975,9 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                                         1.0f)
                                 : 1.0f,
                         firing.flash.edgeSoftness,
+                        firing.flash.radianceStrength,
+                        firing.flash.active && firing.flash.radianceStrength > 0.0f
+                                ? "eligible" : "no",
                         firing.light.active ? "active" : "off",
                         FpsMuzzleLightCurrentIntensity(firing.light)));
                 addKeyValue("flash shape", TextFormat(
@@ -1276,6 +1291,58 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     engine::UITextJustify::Center, smallConfig.mutedTextColor);
         }
         y += rowH + 6.0f;
+
+        const char* bloomViews[] = {
+                "Normal", "Scene Before", "HDR Prefilter", "Blurred Bloom",
+                "Bloom Only", "Scene After"};
+        int bloomView=static_cast<int>(preview.BloomDebugView());
+        engine::Text(smallConfig, assets,
+                Rectangle{panel.x+padding,y,94.0f,rowH},smallFont,"Bloom View",
+                engine::UITextJustify::Left,smallConfig.textColor);
+        const Rectangle bloomViewRect{panel.x+padding+100.0f,y,250.0f,rowH};
+        if(mouseInteractive) {
+            if(engine::Option(ui,smallConfig,input,assets,
+                        "sector_editor_preview_bloom_debug_view",bloomViewRect,
+                        smallFont,bloomViews,sizeof(bloomViews)/sizeof(bloomViews[0]),
+                        bloomView)) {
+                preview.SetBloomDebugView(static_cast<SectorBloomDebugView>(bloomView));
+            }
+        } else {
+            DrawRectangleRec(bloomViewRect,Color{24,30,38,155});
+            DrawRectangleLinesEx(bloomViewRect,config.borderThickness,config.borderColor);
+            engine::Text(smallConfig,assets,bloomViewRect,smallFont,
+                    SectorBloomDebugViewName(preview.BloomDebugView()),
+                    engine::UITextJustify::Center,smallConfig.mutedTextColor);
+        }
+        y+=rowH+6.0f;
+
+        const SectorBloomDiagnostics& bloomDiagnostics=preview.BloomDiagnostics();
+        const char* bloomStatus=TextFormat(
+                "%dx%d -> %dx%d RGBA16F; T %.2f K %.2f I %.2f R %.2f; half guard; %s",
+                bloomDiagnostics.sceneWidth,bloomDiagnostics.sceneHeight,
+                bloomDiagnostics.bloomWidth,bloomDiagnostics.bloomHeight,
+                bloomDiagnostics.settings.threshold,
+                bloomDiagnostics.settings.softKnee,
+                bloomDiagnostics.settings.intensity,
+                bloomDiagnostics.settings.radius,
+                bloomDiagnostics.status.c_str());
+        engine::Text(smallConfig,assets,
+                Rectangle{panel.x+padding,y,contentW,rowH},smallFont,
+                bloomStatus,engine::UITextJustify::Left,
+                bloomDiagnostics.disabled?Color{235,145,110,255}:smallConfig.mutedTextColor);
+        y+=rowH+6.0f;
+
+        const char* atmosphereStatus=TextFormat(
+                "fog=%s; haze=%s; dust=%s; scratch=%s; fog/haze RGB=premul, A=opacity",
+                preview.LocalFogAccumulationDiagnostic().c_str(),
+                preview.HazeAccumulationDiagnostic().c_str(),
+                preview.DustResourceDiagnostic().c_str(),
+                preview.HdrSceneScratchDiagnostic().c_str());
+        engine::Text(smallConfig,assets,
+                Rectangle{panel.x+padding,y,contentW,rowH},smallFont,
+                atmosphereStatus,engine::UITextJustify::Left,
+                smallConfig.mutedTextColor);
+        y+=rowH+6.0f;
 
         const auto drawScalePresets = [&](const char* idPrefix,
                                           const char* label,

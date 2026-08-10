@@ -334,19 +334,28 @@ void SectorSceneRuntime::RenderScene(
             map.fogSettings);
 }
 
-void SectorSceneRuntime::ApplyPostProcessing(
-        engine::AssetManager& assets,
-        RenderTexture2D& sceneTarget,
+void SectorSceneRuntime::ApplyWorldAtmosphere(
+        engine::RenderTarget& sceneTarget,
         const SectorTopologyMap& map)
 {
-    renderer.ApplyEmissiveDecalBloomToScene(
-            assets,
-            sceneTarget,
-            map.fogSettings);
-    renderer.ApplyLocalFogToScene(
+    renderer.ApplyWorldAtmosphere(
             sceneTarget,
             map,
             runtimeObjects.objectLightProbes);
+}
+
+void SectorSceneRuntime::ApplyHdrBloom(
+        engine::RenderTarget& sceneTarget,
+        const engine::HdrBloomSettings& settings)
+{
+    renderer.ApplyHdrBloom(sceneTarget, settings);
+}
+
+bool SectorSceneRuntime::CompositeViewmodel(
+        engine::RenderTarget& sceneTarget,
+        const engine::RenderTarget& viewmodelTarget)
+{
+    return renderer.CompositeViewmodel(sceneTarget, viewmodelTarget);
 }
 
 } // namespace game

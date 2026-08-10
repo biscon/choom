@@ -105,6 +105,7 @@ uniform sampler2D lightmapTexture;
 uniform samplerCube environmentTexture;
 uniform vec4 baseColorFactor;
 uniform vec3 emissiveFactor;
+uniform float emissiveStrength;
 uniform float metallicFactor;
 uniform float roughnessFactor;
 uniform float normalScale;
@@ -443,6 +444,7 @@ void main()
                 texture(emissiveTexture, fragTexCoord).rgb,
                 emissiveTextureHardwareSrgb);
     }
+    emissive *= max(emissiveStrength, 0.0);
     vec3 linearColor = indirectDiffuse
             + directDiffuse
             + directSpecular
@@ -458,14 +460,16 @@ void main()
     else if (pbrDiagnosticMode == 8) linearColor = vec3(metallic, roughness, 0.0);
     else if (pbrDiagnosticMode == 9) linearColor = worldNormal * 0.5 + 0.5;
 
-    // The HDR target has no finite upper ceiling. CPU-side state builders
-    // reject non-finite inputs; this retains only the meaningful radiance
-    // lower bound before the shared presentation pass.
+    // Artistic/display ceilings are forbidden. The final write below applies
+    // only the unavoidable finite RGBA16F storage boundary.
     linearColor = max(linearColor, vec3(0.0));
     if (pbrDiagnosticMode == 0) {
         linearColor *= outputBrightnessMultiplier;
         linearColor = ApplySectorFog(linearColor, fragWorldPosition);
     }
+    linearColor.r = isnan(linearColor.r) ? 0.0 : (isinf(linearColor.r) ? (linearColor.r > 0.0 ? 65504.0 : 0.0) : min(max(linearColor.r, 0.0), 65504.0));
+    linearColor.g = isnan(linearColor.g) ? 0.0 : (isinf(linearColor.g) ? (linearColor.g > 0.0 ? 65504.0 : 0.0) : min(max(linearColor.g, 0.0), 65504.0));
+    linearColor.b = isnan(linearColor.b) ? 0.0 : (isinf(linearColor.b) ? (linearColor.b > 0.0 ? 65504.0 : 0.0) : min(max(linearColor.b, 0.0), 65504.0));
     finalColor = vec4(linearColor, 1.0);
 }
 )";
@@ -769,6 +773,7 @@ bool SectorStaticModelRenderer::Load()
 
     baseColorFactorLoc = GetShaderLocation(shader, "baseColorFactor");
     emissiveFactorLoc = GetShaderLocation(shader, "emissiveFactor");
+    emissiveStrengthLoc = GetShaderLocation(shader, "emissiveStrength");
     metallicFactorLoc = GetShaderLocation(shader, "metallicFactor");
     roughnessFactorLoc = GetShaderLocation(shader, "roughnessFactor");
     normalScaleLoc = GetShaderLocation(shader, "normalScale");
@@ -869,6 +874,7 @@ void SectorStaticModelRenderer::Shutdown()
     shader = {};
     baseColorFactorLoc = -1;
     emissiveFactorLoc = -1;
+    emissiveStrengthLoc = -1;
     metallicFactorLoc = -1;
     roughnessFactorLoc = -1;
     normalScaleLoc = -1;
@@ -1115,7 +1121,6 @@ void SectorStaticModelRenderer::Draw(
     dynamicLocations.dynamicLightDirections = dynamicLightDirectionsLoc;
     dynamicLocations.dynamicLightInnerConeCos = dynamicLightInnerConeCosLoc;
     dynamicLocations.dynamicLightOuterConeCos = dynamicLightOuterConeCosLoc;
-    dynamicLocations.dynamicLightingClamp = -1;
     UploadSectorRendererDynamicPointLights(
             shader,
             dynamicLocations,
@@ -1320,6 +1325,7 @@ void SectorStaticModelRenderer::Draw(
                                 SHADER_UNIFORM_VEC4);
                     }
                     if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbrMaterial.emissiveFactor, SHADER_UNIFORM_VEC3);
+                    if (emissiveStrengthLoc >= 0) SetShaderValue(shader, emissiveStrengthLoc, &pbrMaterial.emissiveStrength, SHADER_UNIFORM_FLOAT);
                     if (metallicFactorLoc >= 0) SetShaderValue(shader, metallicFactorLoc, &pbrMaterial.metallicFactor, SHADER_UNIFORM_FLOAT);
                     if (roughnessFactorLoc >= 0) SetShaderValue(shader, roughnessFactorLoc, &pbrMaterial.roughnessFactor, SHADER_UNIFORM_FLOAT);
                     if (normalScaleLoc >= 0) SetShaderValue(shader, normalScaleLoc, &pbrMaterial.normalScale, SHADER_UNIFORM_FLOAT);
@@ -1525,6 +1531,7 @@ void SectorStaticModelRenderer::Draw(
                     pbrMaterial = NormalizeSectorPbrMaterial(pbrMaterial);
                     if (baseColorFactorLoc >= 0) SetShaderValue(shader, baseColorFactorLoc, &pbrMaterial.baseColorFactor, SHADER_UNIFORM_VEC4);
                     if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbrMaterial.emissiveFactor, SHADER_UNIFORM_VEC3);
+                    if (emissiveStrengthLoc >= 0) SetShaderValue(shader, emissiveStrengthLoc, &pbrMaterial.emissiveStrength, SHADER_UNIFORM_FLOAT);
                     if (metallicFactorLoc >= 0) SetShaderValue(shader, metallicFactorLoc, &pbrMaterial.metallicFactor, SHADER_UNIFORM_FLOAT);
                     if (roughnessFactorLoc >= 0) SetShaderValue(shader, roughnessFactorLoc, &pbrMaterial.roughnessFactor, SHADER_UNIFORM_FLOAT);
                     if (normalScaleLoc >= 0) SetShaderValue(shader, normalScaleLoc, &pbrMaterial.normalScale, SHADER_UNIFORM_FLOAT);
@@ -1607,7 +1614,7 @@ void SectorStaticModelRenderer::DrawViewmodel(
             dynamicLightCountLoc, dynamicLightPositionsLoc, dynamicLightColorsLoc,
             dynamicLightRadiiLoc, dynamicLightIntensitiesLoc, dynamicLightTypesLoc,
             dynamicLightDirectionsLoc, dynamicLightInnerConeCosLoc,
-            dynamicLightOuterConeCosLoc, -1};
+            dynamicLightOuterConeCosLoc};
     UploadSectorRendererDynamicPointLights(shader, dynamicLocations, dynamicLightContext);
     SectorDynamicSpotLightShadowShaderLocations shadowLocations;
     shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
@@ -1722,6 +1729,7 @@ void SectorStaticModelRenderer::DrawViewmodel(
             pbr = NormalizeSectorPbrMaterial(pbr);
             if (baseColorFactorLoc >= 0) SetShaderValue(shader, baseColorFactorLoc, &pbr.baseColorFactor, SHADER_UNIFORM_VEC4);
             if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbr.emissiveFactor, SHADER_UNIFORM_VEC3);
+            if (emissiveStrengthLoc >= 0) SetShaderValue(shader, emissiveStrengthLoc, &pbr.emissiveStrength, SHADER_UNIFORM_FLOAT);
             if (metallicFactorLoc >= 0) SetShaderValue(shader, metallicFactorLoc, &pbr.metallicFactor, SHADER_UNIFORM_FLOAT);
             if (roughnessFactorLoc >= 0) SetShaderValue(shader, roughnessFactorLoc, &pbr.roughnessFactor, SHADER_UNIFORM_FLOAT);
             if (normalScaleLoc >= 0) SetShaderValue(shader, normalScaleLoc, &pbr.normalScale, SHADER_UNIFORM_FLOAT);

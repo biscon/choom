@@ -306,8 +306,8 @@ void TestPreviewSettingsScrollableContentHeightsReachLastControls()
     const float rowH = 40.0f;
     const float gap = 12.0f;
     const float lightingLastControlBottom =
-            11.0f * (rowH + gap)
-            + 3.0f * (8.0f + 38.0f)
+            16.0f * (rowH + gap)
+            + 4.0f * (8.0f + 38.0f)
             + 36.0f + gap;
     const float fogLastControlBottom =
             10.0f * (rowH + gap)
@@ -319,7 +319,7 @@ void TestPreviewSettingsScrollableContentHeightsReachLastControls()
     Check(Near(
                   game::MeasureSectorPreviewSettingsLightingContentHeight(rowH, gap),
                   lightingLastControlBottom + 12.0f),
-          "lighting scroll reaches object probe upper height with bottom padding");
+          "lighting scroll reaches HDR bloom radius with bottom padding");
     Check(Near(
                   game::MeasureSectorPreviewSettingsFogContentHeight(rowH, gap),
                   fogLastControlBottom + 12.0f),

@@ -33,6 +33,19 @@ const char* HazeFs = R"(
 #version 330
 in vec2 fragUv;
 out vec4 finalColor;
+
+float StoreFiniteHalfChannel(float value) {
+    if (isnan(value)) return 0.0;
+    if (isinf(value)) return value > 0.0 ? 65504.0 : 0.0;
+    return min(max(value, 0.0), 65504.0);
+}
+vec3 StoreFiniteHalfRadiance(vec3 value) {
+    return vec3(StoreFiniteHalfChannel(value.r), StoreFiniteHalfChannel(value.g),
+            StoreFiniteHalfChannel(value.b));
+}
+float StoreBoundedAlpha(float value) {
+    return (isnan(value) || isinf(value)) ? 0.0 : clamp(value, 0.0, 1.0);
+}
 uniform sampler2D sceneDepth;
 uniform int volumeCount;
 uniform int marchSteps;
@@ -86,7 +99,6 @@ uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
-uniform float dynamicLightingClamp;
 
 const vec2 kShadowDisk[4] = vec2[4](
     vec2(-0.707, -0.707), vec2(0.707, -0.707),
@@ -197,14 +209,13 @@ void main() {
             bool inside; float boundary; vec3 grid; shapeSample(i,p,inside,boundary,grid); if(!inside) continue;
             vec3 np=p/max(a.w,0.05); np.xz+=flow; float noise=mix(1.0,mix(0.35,1.35,valueNoise(np)),b.x);
             float sampleDepth=a.x*boundary*noise*opticalStep; if(sampleDepth<=0.0) continue;
-            vec3 lighting=clamp(staticLighting(i,grid)+dynamicLighting(p),vec3(0),vec3(dynamicLightingClamp));
+            vec3 lighting=max(staticLighting(i,grid)+dynamicLighting(p),vec3(0));
             volumeDepth+=sampleDepth; volumeWeighted+=hazeColors[i]*lighting*distanceFogTransmittance(p)*sampleDepth; }
         float cap=-log(max(1.0-clamp(a.y,0.0,0.9999),0.0001)); float capped=min(volumeDepth,cap);
         float scale=volumeDepth>0.00001?capped/volumeDepth:0.0; totalDepth+=capped; weighted+=volumeWeighted*scale;
-        if(totalDepth>4.0) break;
     }
     float opacity=1.0-exp(-totalDepth); vec3 color=totalDepth>0.00001?weighted/totalDepth:vec3(0);
-    finalColor=vec4(color,opacity);
+    finalColor=vec4(StoreFiniteHalfRadiance(color*opacity),StoreBoundedAlpha(opacity));
 }
 )";
 
@@ -213,13 +224,29 @@ const char* CompositeFs = R"(
 in vec2 fragUv; out vec4 finalColor;
 uniform sampler2D sceneColor; uniform sampler2D sceneDepth; uniform sampler2D hazeTexture;
 uniform vec2 hazeTexelSize; uniform int bilateralUpsample;
+float SanitizeIntermediateChannel(float value) {
+    if(isnan(value)) return 0.0;
+    if(isinf(value)) return value>0.0?65504.0:0.0;
+    return max(value,0.0);
+}
+vec3 SanitizeIntermediateRadiance(vec3 value) {
+    return vec3(SanitizeIntermediateChannel(value.r),SanitizeIntermediateChannel(value.g),
+            SanitizeIntermediateChannel(value.b));
+}
+float SanitizeOpacity(float value) {
+    return (isnan(value)||isinf(value))?0.0:clamp(value,0.0,1.0);
+}
 void main() {
     vec4 haze=texture(hazeTexture,fragUv);
     if(bilateralUpsample!=0) { float center=texture(sceneDepth,fragUv).r; vec4 sum=vec4(0); float weightSum=0.0;
         for(int y=-1;y<=1;++y) for(int x=-1;x<=1;++x) { vec2 uv=clamp(fragUv+vec2(x,y)*hazeTexelSize,vec2(0),vec2(1));
             float weight=exp(-abs(texture(sceneDepth,uv).r-center)*600.0); sum+=texture(hazeTexture,uv)*weight; weightSum+=weight; }
         haze=sum/max(weightSum,0.0001); }
-    vec4 scene=texture(sceneColor,fragUv); finalColor=vec4(mix(scene.rgb,haze.rgb,haze.a),scene.a);
+    vec4 scene=texture(sceneColor,fragUv);
+    vec3 composed=SanitizeIntermediateRadiance(scene.rgb)*(1.0-SanitizeOpacity(haze.a))
+            +SanitizeIntermediateRadiance(haze.rgb);
+    float sceneAlpha=(isnan(scene.a)||isinf(scene.a))?1.0:clamp(scene.a,0.0,1.0);
+    finalColor=vec4(SanitizeIntermediateRadiance(composed),sceneAlpha);
 }
 )";
 
@@ -241,9 +268,14 @@ bool SameVector(Vector3 a, Vector3 b) { return a.x==b.x&&a.y==b.y&&a.z==b.z; }
 bool SectorLightHazeRenderer::EnsureShaders()
 {
     if (Ready(shader) && Ready(compositeShader)) return true;
+    if(shaderFailed) return false;
     Shutdown();
     shader=LoadShaderFromMemory(FullscreenVs,HazeFs); compositeShader=LoadShaderFromMemory(FullscreenVs,CompositeFs);
-    if(!Ready(shader)||!Ready(compositeShader)) return false;
+    if(!Ready(shader)||!Ready(compositeShader)) {
+        shaderFailed=true;
+        accumulationDiagnostic="disabled: shader unavailable";
+        return false;
+    }
 #define LOC(field, name) locations.field=GetShaderLocation(shader,name)
     LOC(sceneDepth,"sceneDepth"); LOC(volumeCount,"volumeCount"); LOC(marchSteps,"marchSteps");
     LOC(cameraPosition,"cameraPosition"); LOC(cameraForward,"cameraForward"); LOC(cameraRight,"cameraRight");
@@ -270,7 +302,6 @@ bool SectorLightHazeRenderer::EnsureShaders()
     locations.dynamicLights.dynamicLightDirections=ArrayLoc(shader,"dynamicLightDirections");
     locations.dynamicLights.dynamicLightInnerConeCos=ArrayLoc(shader,"dynamicLightInnerConeCos");
     locations.dynamicLights.dynamicLightOuterConeCos=ArrayLoc(shader,"dynamicLightOuterConeCos");
-    locations.dynamicLights.dynamicLightingClamp=GetShaderLocation(shader,"dynamicLightingClamp");
     locations.shadows.dynamicLightShadowSlots=ArrayLoc(shader,"dynamicLightShadowSlots");
     for(std::size_t i=0;i<MaxDynamicSpotLightShadowCasters;++i) locations.shadows.shadowLightMatrices[i]=ArrayElementLoc(shader,"shadowLightMatrices",i);
     locations.shadows.shadowBias=ArrayLoc(shader,"shadowBias"); locations.shadows.shadowStrength=ArrayLoc(shader,"shadowStrength");
@@ -286,26 +317,32 @@ bool SectorLightHazeRenderer::EnsureShaders()
 
 void SectorLightHazeRenderer::ReleaseTargets()
 {
-    engine::UnloadRenderTarget(hazeTarget); engine::UnloadRenderTarget(compositeTarget);
+    engine::UnloadRenderTarget(hazeTarget);
     width=0; height=0; scale=0.0f;
 }
 
 bool SectorLightHazeRenderer::EnsureTargets(int newWidth, int newHeight, float newScale)
 {
-    if(engine::IsRenderTargetReady(hazeTarget)&&engine::IsRenderTargetReady(compositeTarget)&&width==newWidth&&height==newHeight&&scale==newScale) return true;
+    if(engine::IsRenderTargetReady(hazeTarget)&&width==newWidth&&height==newHeight&&scale==newScale) return true;
+    if(failedWidth==newWidth&&failedHeight==newHeight&&failedScale==newScale) return false;
     ReleaseTargets();
     const int targetWidth=std::max(1,static_cast<int>(std::round(newWidth*newScale)));
     const int targetHeight=std::max(1,static_cast<int>(std::round(newHeight*newScale)));
     std::string error;
-    // Haze accumulation is bounded linear RGBA8; the full-scene composite is float.
+    // RGB is premultiplied linear HDR in-scattered radiance; alpha is bounded opacity.
     engine::LoadRenderTarget(engine::RenderTargetDescriptor{"light-haze-accumulation",targetWidth,targetHeight,
-            engine::RenderTargetColorFormat::Rgba8Unorm,engine::RenderTargetFilter::Bilinear,
-            engine::RenderTargetWrap::Repeat,engine::RenderTargetDepthKind::Renderbuffer,1},hazeTarget,&error);
-    engine::LoadRenderTarget(engine::RenderTargetDescriptor{"light-haze-composite",newWidth,newHeight,
-            engine::RenderTargetColorFormat::Rgba16Float,engine::RenderTargetFilter::Point,
-            engine::RenderTargetWrap::Repeat,engine::RenderTargetDepthKind::Renderbuffer,1},compositeTarget,&error);
-    if(!engine::IsRenderTargetReady(hazeTarget)||!engine::IsRenderTargetReady(compositeTarget)) { ReleaseTargets(); return false; }
-    width=newWidth; height=newHeight; scale=newScale; return true;
+            engine::RenderTargetColorFormat::Rgba16Float,engine::RenderTargetFilter::Bilinear,
+            engine::RenderTargetWrap::Clamp,engine::RenderTargetDepthKind::None,1},hazeTarget,&error);
+    if(!engine::IsRenderTargetReady(hazeTarget)) {
+        failedWidth=newWidth; failedHeight=newHeight; failedScale=newScale;
+        ReleaseTargets();
+        accumulationDiagnostic="disabled: "+error;
+        return false;
+    }
+    failedWidth=0; failedHeight=0; failedScale=0.0f;
+    width=newWidth; height=newHeight; scale=newScale;
+    accumulationDiagnostic=engine::FormatRenderTargetDiagnostic(hazeTarget);
+    return true;
 }
 
 void SectorLightHazeRenderer::RefreshProbeIdentity(const SectorTopologyMap& map, const SectorBakedObjectLightProbeRuntimeData& probes)
@@ -338,7 +375,8 @@ const SectorLightHazeStaticLightingSamples& SectorLightHazeRenderer::LightingFor
 }
 
 bool SectorLightHazeRenderer::Apply(
-        RenderTexture2D& sceneTarget, const SectorTopologyMap& map, const Camera3D& camera,
+        RenderTexture2D& sceneTarget, RenderTexture2D& sceneScratch,
+        const SectorTopologyMap& map, const Camera3D& camera,
         float runtimeSeconds, const SectorBakedObjectLightProbeRuntimeData& probes,
         const SectorBillboardDynamicLightContext& dynamicLights,
         const std::vector<SectorLightAtmosphereSource>& sources,
@@ -391,6 +429,7 @@ bool SectorLightHazeRenderer::Apply(
     const SectorTopologyFogSettings& fogSettings=fog.settings;
     const int fogEnabled=fogSettings.enabled?1:0;
     const Vector3 fogColor=engine::SrgbColorBytesToLinearSceneRgb(fogSettings.color);
+    rlDrawRenderBatchActive();
     BeginTextureMode(hazeTarget.native); ClearBackground(BLANK); BeginShaderMode(shader);
     SetShaderValueTexture(shader,locations.sceneDepth,sceneTarget.depth);
     if(locations.shadowMap0>=0&&dynamicLights.shadowMaps.shadowMap0!=nullptr&&dynamicLights.shadowMaps.shadowMap0->id!=0) SetShaderValueTexture(shader,locations.shadowMap0,*dynamicLights.shadowMaps.shadowMap0);
@@ -414,14 +453,16 @@ bool SectorLightHazeRenderer::Apply(
     SetShaderValueV(shader,locations.paramsA,paramsA.data(),SHADER_UNIFORM_VEC4,activeCount); SetShaderValueV(shader,locations.paramsB,paramsB.data(),SHADER_UNIFORM_VEC4,activeCount);
     SetShaderValueV(shader,locations.staticLighting,lighting.data(),SHADER_UNIFORM_VEC3,activeCount*8);
     UploadSectorRendererDynamicPointLights(shader,locations.dynamicLights,dynamicLights); UploadSectorRendererDynamicSpotLightShadowUniforms(shader,locations.shadows,dynamicLights.shadowUniforms);
-    rlDisableColorBlend(); DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(hazeTarget.native.texture),{},0,WHITE); EndShaderMode(); rlEnableColorBlend(); EndTextureMode();
+    rlDisableColorBlend(); DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(hazeTarget.native.texture),{},0,WHITE);
+    rlDrawRenderBatchActive(); EndShaderMode(); rlEnableColorBlend(); EndTextureMode();
     const Vector2 texel{1.0f/hazeTarget.native.texture.width,1.0f/hazeTarget.native.texture.height}; const int bilateral=renderScale<1.0f?1:0;
-    BeginTextureMode(compositeTarget.native); ClearBackground(BLANK); BeginShaderMode(compositeShader);
+    rlDrawRenderBatchActive();
+    BeginTextureMode(sceneScratch); ClearBackground(BLANK); BeginShaderMode(compositeShader);
     SetShaderValueTexture(compositeShader,compositeLocations.sceneColor,sceneTarget.texture); SetShaderValueTexture(compositeShader,compositeLocations.sceneDepth,sceneTarget.depth);
     SetShaderValueTexture(compositeShader,compositeLocations.hazeTexture,hazeTarget.native.texture); SetShaderValue(compositeShader,compositeLocations.hazeTexelSize,&texel,SHADER_UNIFORM_VEC2);
     SetShaderValue(compositeShader,compositeLocations.bilateralUpsample,&bilateral,SHADER_UNIFORM_INT); rlDisableColorBlend();
-    DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(compositeTarget.native.texture),{},0,WHITE); EndShaderMode(); rlEnableColorBlend(); EndTextureMode();
-    BeginTextureMode(sceneTarget); DrawTexturePro(compositeTarget.native.texture,Src(compositeTarget.native.texture),Dst(sceneTarget.texture),{},0,WHITE); EndTextureMode(); return true;
+    DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(sceneScratch.texture),{},0,WHITE);
+    rlDrawRenderBatchActive(); EndShaderMode(); rlEnableColorBlend(); EndTextureMode(); return true;
 }
 
 void SectorLightHazeRenderer::Shutdown()
@@ -429,6 +470,9 @@ void SectorLightHazeRenderer::Shutdown()
     ReleaseTargets(); if(Ready(shader)) UnloadShader(shader); if(Ready(compositeShader)) UnloadShader(compositeShader);
     shader={}; compositeShader={}; locations={}; compositeLocations={}; for(auto& entry:probeCache) entry={};
     cachedProbeData=nullptr; cachedProbeCount=0; cachedProbeHash=0; cachedMapProbeHash=0;
+    failedWidth=0; failedHeight=0; failedScale=0.0f;
+    shaderFailed=false;
+    accumulationDiagnostic="not allocated";
 }
 
 } // namespace game

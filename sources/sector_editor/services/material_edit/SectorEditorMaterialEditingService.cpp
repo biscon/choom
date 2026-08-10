@@ -55,7 +55,7 @@ void ResetSurface3DUi(MaterialEditingUiState& materialUiState)
     materialUiState.surface3DUvOffsetUInput = engine::UIFloatInputState{};
     materialUiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
     materialUiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
-    materialUiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+    materialUiState.surface3DDecalEmissiveStrengthInput = engine::UIFloatInputState{};
 }
 
 bool ValidateUvComponentValue(int component, float value)
@@ -162,13 +162,13 @@ void SectorEditorMaterialEditingService::ApplyMaterialUiResetFlags(
         for (engine::UIFloatInputState& inputState : context_.materialUiState.topologySectorDecalOpacityInputs) {
             inputState = engine::UIFloatInputState{};
         }
-        for (engine::UIFloatInputState& inputState : context_.materialUiState.topologySectorDecalBloomIntensityInputs) {
+        for (engine::UIFloatInputState& inputState : context_.materialUiState.topologySectorDecalEmissiveStrengthInputs) {
             inputState = engine::UIFloatInputState{};
         }
         context_.materialUiState.topologySideDefDecalOpacityInput = engine::UIFloatInputState{};
-        context_.materialUiState.topologySideDefDecalBloomIntensityInput = engine::UIFloatInputState{};
+        context_.materialUiState.topologySideDefDecalEmissiveStrengthInput = engine::UIFloatInputState{};
         context_.materialUiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
-        context_.materialUiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+        context_.materialUiState.surface3DDecalEmissiveStrengthInput = engine::UIFloatInputState{};
     }
     if (result.closeDecalTintModal) {
         context_.decalTintModal = DecalTintModalState{};
@@ -654,22 +654,22 @@ bool SectorEditorMaterialEditingService::ApplyDecalTint(
             });
 }
 
-bool SectorEditorMaterialEditingService::ApplyDecalBloomIntensity(
+bool SectorEditorMaterialEditingService::ApplyDecalEmissiveStrength(
         TopologySurfaceEditTarget target,
-        float bloomIntensity,
+        float emissiveStrength,
         engine::AssetManager* assets)
 {
     return ApplyMaterialAction(
             target,
             assets,
             TopologyMaterialLayer::Decal,
-            [bloomIntensity](SectorEditorAuthoringMaterialTarget& authoringTarget) {
+            [emissiveStrength](SectorEditorAuthoringMaterialTarget& authoringTarget) {
                 if (authoringTarget.decal == nullptr) {
                     return SectorEditorMaterialActionResult{};
                 }
-                return game::ApplySurfaceDecalBloomIntensityToLayer(
+                return game::ApplySurfaceDecalEmissiveStrengthToLayer(
                         authoringTarget.target,
-                        bloomIntensity,
+                        emissiveStrength,
                         *authoringTarget.decal);
             });
 }

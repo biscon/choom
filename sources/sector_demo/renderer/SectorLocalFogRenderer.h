@@ -10,6 +10,7 @@
 
 #include <array>
 #include <cstddef>
+#include <string>
 
 namespace game {
 
@@ -17,6 +18,7 @@ class SectorLocalFogRenderer {
 public:
     bool Apply(
             RenderTexture2D& sceneTarget,
+            RenderTexture2D& sceneScratch,
             const SectorTopologyMap& map,
             const Camera3D& camera,
             float runtimeSeconds,
@@ -26,6 +28,8 @@ public:
 
     int EligibleVolumeCount() const { return eligibleVolumeCount; }
     int ActiveVolumeCount() const { return activeVolumeCount; }
+    const engine::RenderTarget& AccumulationTarget() const { return fogTarget; }
+    const std::string& AccumulationDiagnostic() const { return accumulationDiagnostic; }
 
 private:
     struct AccumulateShaderLocations {
@@ -93,7 +97,7 @@ private:
     AccumulateShaderLocations accumulateLocations;
     CompositeShaderLocations compositeLocations;
     engine::RenderTarget fogTarget;
-    engine::RenderTarget compositeTarget;
+    std::string accumulationDiagnostic = "not allocated";
     std::array<StaticLightingCacheEntry, 16> staticLightingCache{};
     const SectorBakedObjectLightProbe* cachedProbeData = nullptr;
     std::size_t cachedProbeCount = 0;
@@ -102,7 +106,11 @@ private:
     int sceneWidth = 0;
     int sceneHeight = 0;
     float targetScale = 0.0f;
+    int failedWidth = 0;
+    int failedHeight = 0;
+    float failedScale = 0.0f;
     bool warnedUnavailable = false;
+    bool shaderFailed = false;
     bool warnedInvalidProjection = false;
     int eligibleVolumeCount = 0;
     int activeVolumeCount = 0;

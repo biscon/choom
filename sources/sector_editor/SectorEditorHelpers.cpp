@@ -1019,7 +1019,7 @@ Vector3 ClampDecalTint(Vector3 tint)
     };
 }
 
-float ClampDecalBloomIntensity(float value)
+float ClampDecalEmissiveStrength(float value)
 {
     if (!std::isfinite(value)) {
         return 1.0f;

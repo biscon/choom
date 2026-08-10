@@ -33,7 +33,47 @@ namespace {
 
 constexpr float DefaultVisibilityDebugAspect = 16.0f / 9.0f;
 constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
-constexpr float DynamicLightingClamp = 4.0f;
+
+const char* HdrCompositeVs = R"(
+#version 330
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
+out vec2 fragUv;
+uniform mat4 mvp;
+void main() { fragUv=vertexTexCoord; gl_Position=mvp*vec4(vertexPosition,1.0); }
+)";
+
+const char* HdrCompositeFs = R"(
+#version 330
+in vec2 fragUv;
+out vec4 finalColor;
+uniform sampler2D sceneColor;
+uniform sampler2D sourceColor;
+uniform int compositeMode;
+float safeRadianceChannel(float value) {
+    if (isnan(value)) return 0.0;
+    if (isinf(value)) return value > 0.0 ? 65504.0 : 0.0;
+    return max(value,0.0);
+}
+vec3 safeRadiance(vec3 value) {
+    return vec3(safeRadianceChannel(value.r),safeRadianceChannel(value.g),
+            safeRadianceChannel(value.b));
+}
+float safeAlpha(float value) {
+    return (isnan(value)||isinf(value))?1.0:clamp(value,0.0,1.0);
+}
+void main() {
+    vec4 source=texture(sourceColor,fragUv);
+    if (compositeMode == 1) {
+        vec4 scene=texture(sceneColor,fragUv);
+        float coverage=isnan(source.a)||isinf(source.a)?0.0:clamp(source.a,0.0,1.0);
+        finalColor=vec4(safeRadiance(safeRadiance(scene.rgb)*(1.0-coverage)
+                +safeRadiance(source.rgb)),safeAlpha(scene.a));
+        return;
+    }
+    finalColor=vec4(clamp(safeRadiance(source.rgb),vec3(0.0),vec3(65504.0)),safeAlpha(source.a));
+}
+)";
 
 void AppendBillboardRenderDebugText(std::string& renderDebugText, const std::string& billboardText)
 {
@@ -117,6 +157,7 @@ uniform float alphaCutoff;
 uniform int hasDecal;
 uniform float decalOpacity;
 uniform int decalEmissive;
+uniform float decalEmissiveStrength;
 uniform vec3 decalTint;
 
 uniform int fogEnabled;
@@ -146,7 +187,6 @@ uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
-uniform float dynamicLightingClamp;
 
 out vec4 finalColor;
 
@@ -169,6 +209,15 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
 {
     float lengthSq = dot(value, value);
     return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
+}
+
+vec3 StoreFiniteHalfRadiance(vec3 value)
+{
+    vec3 result;
+    result.r = isnan(value.r) ? 0.0 : (isinf(value.r) ? (value.r > 0.0 ? 65504.0 : 0.0) : min(max(value.r, 0.0), 65504.0));
+    result.g = isnan(value.g) ? 0.0 : (isinf(value.g) ? (value.g > 0.0 ? 65504.0 : 0.0) : min(max(value.g, 0.0), 65504.0));
+    result.b = isnan(value.b) ? 0.0 : (isinf(value.b) ? (value.b > 0.0 ? 65504.0 : 0.0) : min(max(value.b, 0.0), 65504.0));
+    return result;
 }
 
 float SampleShadowMap(int shadowSlot, vec2 uv)
@@ -338,8 +387,11 @@ void main()
     vec3 bakedLighting = max(ambient + bakedDirect, vec3(0.0));
     vec3 lighting = max(bakedLighting + dynamicDirect, vec3(0.0));
     vec3 litRgb = surfaceRgb * lighting;
-    vec3 surfaceOutput = mix(litRgb, emissiveDecalRgb, emissiveDecalAlpha);
-    finalColor = vec4(ApplySectorFog(surfaceOutput, fragWorldPosition), baseColor.a * fragColor.a);
+    vec3 emissiveRadiance = emissiveDecalRgb * max(decalEmissiveStrength, 0.0);
+    vec3 surfaceOutput = litRgb * (1.0 - emissiveDecalAlpha)
+            + emissiveRadiance * emissiveDecalAlpha;
+    finalColor = vec4(StoreFiniteHalfRadiance(ApplySectorFog(surfaceOutput, fragWorldPosition)),
+            clamp(baseColor.a * fragColor.a, 0.0, 1.0));
 }
 )";
 
@@ -449,6 +501,7 @@ bool LoadPreviewMaterial(
         int& hasDecalLoc,
         int& decalOpacityLoc,
         int& decalEmissiveLoc,
+        int& decalEmissiveStrengthLoc,
         int& decalTintLoc,
         int& dynamicLightCountLoc,
         int& dynamicLightPositionsLoc,
@@ -464,7 +517,6 @@ bool LoadPreviewMaterial(
         int& shadowBiasLoc,
         int& shadowStrengthLoc,
         int& shadowSoftnessLoc,
-        int& dynamicLightingClampLoc,
         SectorFogShaderLocations& fogShaderLocations,
         std::string& error)
 {
@@ -494,6 +546,7 @@ bool LoadPreviewMaterial(
     hasDecalLoc = GetShaderLocation(material.shader, "hasDecal");
     decalOpacityLoc = GetShaderLocation(material.shader, "decalOpacity");
     decalEmissiveLoc = GetShaderLocation(material.shader, "decalEmissive");
+    decalEmissiveStrengthLoc = GetShaderLocation(material.shader, "decalEmissiveStrength");
     decalTintLoc = GetShaderLocation(material.shader, "decalTint");
     dynamicLightCountLoc = GetShaderLocation(material.shader, "dynamicLightCount");
     dynamicLightPositionsLoc = GetShaderLocationArrayBase(material.shader, "dynamicLightPositions");
@@ -511,7 +564,6 @@ bool LoadPreviewMaterial(
     shadowBiasLoc = GetShaderLocationArrayBase(material.shader, "shadowBias");
     shadowStrengthLoc = GetShaderLocationArrayBase(material.shader, "shadowStrength");
     shadowSoftnessLoc = GetShaderLocationArrayBase(material.shader, "shadowSoftness");
-    dynamicLightingClampLoc = GetShaderLocation(material.shader, "dynamicLightingClamp");
     fogShaderLocations = GetSectorFogShaderLocations(material.shader);
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
@@ -805,6 +857,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 hasDecalLoc,
                 decalOpacityLoc,
                 decalEmissiveLoc,
+                decalEmissiveStrengthLoc,
                 decalTintLoc,
                 dynamicLightCountLoc,
                 dynamicLightPositionsLoc,
@@ -820,7 +873,6 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 shadowBiasLoc,
                 shadowStrengthLoc,
                 shadowSoftnessLoc,
-                dynamicLightingClampLoc,
                 fogShaderLocations,
                 error)) {
         Shutdown(assets);
@@ -880,6 +932,8 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
             && meshes.sectorDrawRecords.empty()
             && !materialLoaded
             && !bloomRenderer.IsLoaded()
+            && hdrCompositeShader.id == 0
+            && !engine::IsRenderTargetReady(hdrSceneScratch)
             && !billboardRenderer.IsLoaded()
             && !staticModelRenderer.IsLoaded()
             && !doorRenderer.HasOpaqueResources()
@@ -892,6 +946,17 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     }
 
     bloomRenderer.Shutdown();
+    if (hdrCompositeShader.id != 0) UnloadShader(hdrCompositeShader);
+    hdrCompositeShader = {};
+    hdrCompositeSceneLoc = -1;
+    hdrCompositeSourceLoc = -1;
+    hdrCompositeModeLoc = -1;
+    hdrCompositeShaderFailed = false;
+    engine::UnloadRenderTarget(hdrSceneScratch);
+    hdrSceneScratchError.clear();
+    hdrSceneScratchDiagnostic = "not allocated";
+    hdrSceneScratchFailedWidth = 0;
+    hdrSceneScratchFailedHeight = 0;
     dynamicLightState.UnloadShadowMaterial();
     dynamicLightState.UnloadShadowMapResources();
     dynamicModelShadowRenderer.Shutdown();
@@ -995,7 +1060,6 @@ void SectorMeshRenderer::DrawScene(
     dynamicLightLocations.dynamicLightDirections = dynamicLightDirectionsLoc;
     dynamicLightLocations.dynamicLightInnerConeCos = dynamicLightInnerConeCosLoc;
     dynamicLightLocations.dynamicLightOuterConeCos = dynamicLightOuterConeCosLoc;
-    dynamicLightLocations.dynamicLightingClamp = dynamicLightingClampLoc;
     UploadSectorRendererDynamicPointLights(
             material.shader,
             dynamicLightLocations,
@@ -1085,6 +1149,10 @@ void SectorMeshRenderer::DrawScene(
         if (decalEmissiveLoc >= 0) {
             SetShaderValue(material.shader, decalEmissiveLoc, &decalEmissive, SHADER_UNIFORM_INT);
         }
+        if (decalEmissiveStrengthLoc >= 0) {
+            const float emissiveStrength = batch.decalEmissiveStrength;
+            SetShaderValue(material.shader, decalEmissiveStrengthLoc, &emissiveStrength, SHADER_UNIFORM_FLOAT);
+        }
         if (decalTintLoc >= 0) {
             SetShaderValue(material.shader, decalTintLoc, &decalTint, SHADER_UNIFORM_VEC3);
         }
@@ -1100,7 +1168,6 @@ void SectorMeshRenderer::DrawScene(
         doorDrawContext.dynamicLighting.selectedLights = &dynamicLightState.SelectedLights();
         doorDrawContext.dynamicLighting.shadowUniforms = dynamicLightState.PackShadowUniforms();
         doorDrawContext.dynamicLighting.shadowMaps = dynamicLightState.BuildShadowMapTextures();
-        doorDrawContext.dynamicLighting.lightingClamp = DynamicLightingClamp;
         doorDrawContext.fog = fogContext;
         doorDrawContext.textureResolver.userData = this;
         doorDrawContext.textureResolver.resolve = &SectorMeshRenderer::ResolveShadowCasterTexture;
@@ -1156,7 +1223,6 @@ SectorBillboardDynamicLightContext SectorMeshRenderer::BuildBillboardDynamicLigh
     context.dynamicLightCount = dynamicLightingEnabled
             ? static_cast<int>(std::min(dynamicLightState.SelectedLights().size(), static_cast<size_t>(MaxDynamicLights)))
             : 0;
-    context.dynamicLightingClamp = DynamicLightingClamp;
     context.shadowUniforms = dynamicLightState.PackShadowUniforms();
     context.shadowMaps = dynamicLightState.BuildShadowMapTextures();
 
@@ -1238,46 +1304,145 @@ void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
     }
 }
 
-void SectorMeshRenderer::ApplyEmissiveDecalBloom(
-        engine::AssetManager& assets,
-        RenderTexture2D& sceneTarget,
-        const SectorTopologyFogSettings& fogSettings)
+bool SectorMeshRenderer::EnsureHdrSceneScratch(
+        const engine::RenderTarget& sceneTarget)
 {
-    ApplyEmissiveDecalBloomToScene(assets, sceneTarget, fogSettings);
+    const int width = sceneTarget.native.texture.width;
+    const int height = sceneTarget.native.texture.height;
+    if (engine::IsRenderTargetReady(hdrSceneScratch)
+            && hdrSceneScratch.native.texture.width == width
+            && hdrSceneScratch.native.texture.height == height) {
+        return true;
+    }
+    if (hdrSceneScratchFailedWidth == width
+            && hdrSceneScratchFailedHeight == height
+            && !hdrSceneScratchError.empty()) {
+        return false;
+    }
+    engine::UnloadRenderTarget(hdrSceneScratch);
+    std::string error;
+    if (!engine::LoadRenderTarget(
+                engine::RenderTargetDescriptor{
+                        "hdr-effect-scene-scratch",
+                        width,
+                        height,
+                        engine::RenderTargetColorFormat::Rgba32Float,
+                        engine::RenderTargetFilter::Point,
+                        engine::RenderTargetWrap::Clamp,
+                        engine::RenderTargetDepthKind::None,
+                        1},
+                hdrSceneScratch,
+                &error)) {
+        hdrSceneScratchError = error;
+        hdrSceneScratchDiagnostic = "disabled: " + error;
+        hdrSceneScratchFailedWidth = width;
+        hdrSceneScratchFailedHeight = height;
+        TraceLog(LOG_WARNING, "HDR EFFECTS: shared RGBA32F scratch unavailable: %s",
+                error.c_str());
+        return false;
+    }
+    hdrSceneScratchError.clear();
+    hdrSceneScratchDiagnostic = engine::FormatRenderTargetDiagnostic(hdrSceneScratch);
+    hdrSceneScratchFailedWidth = 0;
+    hdrSceneScratchFailedHeight = 0;
+    return true;
 }
 
-void SectorMeshRenderer::ApplyEmissiveDecalBloomToScene(
-        engine::AssetManager& assets,
-        RenderTexture2D& sceneTarget,
-        const SectorTopologyFogSettings& fogSettings)
+bool SectorMeshRenderer::EnsureHdrCompositeShader()
 {
-    bloomRenderer.ApplyEmissiveDecalBloomToScene(
-            assets,
-            initialized,
-            camera,
-            meshes.sectorDrawRecords,
-            visibilityResult,
-            textureHandlesById,
-            sceneTarget,
-            BuildSectorFogRenderContext(fogSettings, camera.position));
+    if (hdrCompositeShader.id != 0) return true;
+    if (hdrCompositeShaderFailed) return false;
+    hdrCompositeShader = LoadShaderFromMemory(HdrCompositeVs, HdrCompositeFs);
+    if (hdrCompositeShader.id == 0) { hdrCompositeShaderFailed=true; return false; }
+    hdrCompositeSceneLoc = GetShaderLocation(hdrCompositeShader, "sceneColor");
+    hdrCompositeSourceLoc = GetShaderLocation(hdrCompositeShader, "sourceColor");
+    hdrCompositeModeLoc = GetShaderLocation(hdrCompositeShader, "compositeMode");
+    return hdrCompositeSourceLoc >= 0 && hdrCompositeModeLoc >= 0;
 }
 
-bool SectorMeshRenderer::ApplyLocalFogToScene(
-        RenderTexture2D& sceneTarget,
+bool SectorMeshRenderer::CommitHdrScratch(engine::RenderTarget& sceneTarget)
+{
+    if (!EnsureHdrCompositeShader()) return false;
+    const int mode = 0;
+    rlDrawRenderBatchActive();
+    BeginTextureMode(sceneTarget.native);
+    BeginShaderMode(hdrCompositeShader);
+    SetShaderValueTexture(hdrCompositeShader, hdrCompositeSourceLoc, hdrSceneScratch.native.texture);
+    SetShaderValue(hdrCompositeShader, hdrCompositeModeLoc, &mode, SHADER_UNIFORM_INT);
+    rlDisableColorBlend();
+    DrawTexturePro(
+            hdrSceneScratch.native.texture,
+            Rectangle{0, 0, static_cast<float>(hdrSceneScratch.native.texture.width),
+                    -static_cast<float>(hdrSceneScratch.native.texture.height)},
+            Rectangle{0, 0, static_cast<float>(sceneTarget.native.texture.width),
+                    static_cast<float>(sceneTarget.native.texture.height)},
+            Vector2{}, 0.0f, WHITE);
+    rlDrawRenderBatchActive();
+    rlEnableColorBlend();
+    EndShaderMode();
+    EndTextureMode();
+    return true;
+}
+
+bool SectorMeshRenderer::CompositeViewmodel(
+        engine::RenderTarget& sceneTarget,
+        const engine::RenderTarget& viewmodelTarget)
+{
+    if (!initialized || !EnsureHdrSceneScratch(sceneTarget) || !EnsureHdrCompositeShader()
+            || viewmodelTarget.descriptor.colorFormat
+                    != engine::RenderTargetColorFormat::Rgba32Float) {
+        return false;
+    }
+    const int mode = 1;
+    rlDrawRenderBatchActive();
+    BeginTextureMode(hdrSceneScratch.native);
+    ClearBackground(BLANK);
+    BeginShaderMode(hdrCompositeShader);
+    SetShaderValueTexture(hdrCompositeShader, hdrCompositeSceneLoc, sceneTarget.native.texture);
+    SetShaderValueTexture(hdrCompositeShader, hdrCompositeSourceLoc, viewmodelTarget.native.texture);
+    SetShaderValue(hdrCompositeShader, hdrCompositeModeLoc, &mode, SHADER_UNIFORM_INT);
+    rlDisableColorBlend();
+    DrawTexturePro(
+            sceneTarget.native.texture,
+            Rectangle{0, 0, static_cast<float>(sceneTarget.native.texture.width),
+                    -static_cast<float>(sceneTarget.native.texture.height)},
+            Rectangle{0, 0, static_cast<float>(hdrSceneScratch.native.texture.width),
+                    static_cast<float>(hdrSceneScratch.native.texture.height)},
+            Vector2{}, 0.0f, WHITE);
+    rlDrawRenderBatchActive();
+    rlEnableColorBlend();
+    EndShaderMode();
+    EndTextureMode();
+    return CommitHdrScratch(sceneTarget);
+}
+
+bool SectorMeshRenderer::ApplyWorldAtmosphere(
+        engine::RenderTarget& sceneTarget,
         const SectorTopologyMap& map,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes)
 {
+    if (sceneTarget.descriptor.colorFormat
+                    != engine::RenderTargetColorFormat::Rgba16Float
+            || sceneTarget.actual.depth
+                    != engine::RenderTargetDepthKind::SampleableTexture
+            || !EnsureHdrSceneScratch(sceneTarget)) {
+        return false;
+    }
+    RenderTexture2D& nativeScene = sceneTarget.native;
     const SectorBillboardDynamicLightContext dynamicLightContext =
             BuildBillboardDynamicLightContext();
     const bool localFogApplied = localFogRenderer.Apply(
-            sceneTarget,
+            nativeScene,
+            hdrSceneScratch.native,
             map,
             camera,
             runtimeSeconds,
             objectLightProbes,
             dynamicLightContext);
+    if (localFogApplied && !CommitHdrScratch(sceneTarget)) return false;
     const bool lightHazeApplied = lightHazeRenderer.Apply(
-            sceneTarget,
+            nativeScene,
+            hdrSceneScratch.native,
             map,
             camera,
             runtimeSeconds,
@@ -1286,8 +1451,10 @@ bool SectorMeshRenderer::ApplyLocalFogToScene(
             lightAtmosphereSources,
             visibilityResult,
             meshes.sectorReceiverBounds);
+    if (lightHazeApplied && !CommitHdrScratch(sceneTarget)) return false;
     const bool lightDustApplied = lightDustRenderer.Apply(
-            sceneTarget,
+            nativeScene,
+            hdrSceneScratch.native,
             map,
             camera,
             runtimeSeconds,
@@ -1296,7 +1463,16 @@ bool SectorMeshRenderer::ApplyLocalFogToScene(
             lightAtmosphereSources,
             visibilityResult,
             meshes.sectorReceiverBounds);
+    if (lightDustApplied && !CommitHdrScratch(sceneTarget)) return false;
     return localFogApplied || lightHazeApplied || lightDustApplied;
+}
+
+bool SectorMeshRenderer::ApplyHdrBloom(
+        engine::RenderTarget& sceneTarget,
+        const engine::HdrBloomSettings& settings)
+{
+    return initialized && EnsureHdrSceneScratch(sceneTarget)
+            && bloomRenderer.Apply(sceneTarget, hdrSceneScratch, settings);
 }
 
 SectorViewPose SectorMeshRenderer::Pose() const

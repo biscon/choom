@@ -327,21 +327,21 @@ SectorEditorMaterialActionResult ApplySurfaceDecalTintToLayer(
     return Changed(TextFormat("Set %s decal tint.", TopologyMaterialKindName(target.kind)));
 }
 
-SectorEditorMaterialActionResult ApplySurfaceDecalBloomIntensityToLayer(
+SectorEditorMaterialActionResult ApplySurfaceDecalEmissiveStrengthToLayer(
         TopologySurfaceEditTarget target,
-        float bloomIntensity,
+        float emissiveStrength,
         SectorTopologyDecalLayer& decal)
 {
-    bloomIntensity = ClampDecalBloomIntensity(bloomIntensity);
+    emissiveStrength = ClampDecalEmissiveStrength(emissiveStrength);
     if (decal.textureId.empty()) {
         return Failure("No decal assigned.");
     }
-    if (decal.bloomIntensity == bloomIntensity) {
+    if (decal.bloomIntensity == emissiveStrength) {
         return {};
     }
 
-    decal.bloomIntensity = bloomIntensity;
-    return Changed(TextFormat("Set %s decal bloom intensity.", TopologyMaterialKindName(target.kind)));
+    decal.bloomIntensity = emissiveStrength;
+    return Changed(TextFormat("Set %s decal emissive strength.", TopologyMaterialKindName(target.kind)));
 }
 
 bool BuildDecalTintModal(

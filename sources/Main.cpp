@@ -128,9 +128,9 @@ int main()
                     "viewmodel",
                     WORLD_TARGET_WIDTH,
                     WORLD_TARGET_HEIGHT,
-                    engine::RenderTargetColorFormat::Rgba16Float,
+                    engine::RenderTargetColorFormat::Rgba32Float,
                     engine::RenderTargetFilter::Bilinear,
-                    engine::RenderTargetWrap::Repeat,
+                    engine::RenderTargetWrap::Clamp,
                     engine::RenderTargetDepthKind::Renderbuffer,
                     1},
             viewmodelTargetResource,
@@ -138,7 +138,7 @@ int main()
     RenderTexture2D& viewmodelTarget = engine::NativeRenderTexture(viewmodelTargetResource);
     const bool viewmodelTargetReady = engine::IsRenderTargetReady(viewmodelTargetResource);
     if (!viewmodelTargetReady) {
-        TraceLog(LOG_ERROR, "RENDER: required RGBA16F viewmodel target unavailable: %s", renderTargetError.c_str());
+        TraceLog(LOG_ERROR, "RENDER: required RGBA32F viewmodel target unavailable: %s", renderTargetError.c_str());
         engine::UnloadRenderTarget(worldTargetResource);
         CloseWindow();
         return 1;
@@ -483,7 +483,7 @@ int main()
             application.Render3DScene(context);
             EndTextureMode();
 
-            application.Apply3DPostProcessing(assets, worldTarget);
+            application.Apply3DWorldAtmosphere(worldTargetResource);
 
             if (viewmodelTargetReady) {
                 BeginTextureMode(viewmodelTarget);
@@ -491,14 +491,12 @@ int main()
                 application.Render3DViewmodel(assets);
                 EndTextureMode();
 
-                BeginTextureMode(worldTarget);
-                DrawTexturePro(
-                        viewmodelTarget.texture,
-                        GetFullscreenSrcRect(viewmodelTarget.texture),
-                        Rectangle{0.0f, 0.0f, static_cast<float>(WORLD_TARGET_WIDTH), static_cast<float>(WORLD_TARGET_HEIGHT)},
-                        Vector2{}, 0.0f, WHITE);
-                EndTextureMode();
+                application.Composite3DViewmodel(
+                        worldTargetResource,
+                        viewmodelTargetResource);
             }
+
+            application.Apply3DHdrBloom(worldTargetResource);
 
             BeginTextureMode(worldTarget);
             application.Render3DOverlays();
@@ -509,9 +507,14 @@ int main()
             BeginTextureMode(sceneResolveTarget);
             ClearBackground(BLANK);
             rlDisableColorBlend();
+            const engine::RenderTarget* hdrDebugSource =
+                    application.HdrDebugPresentationSource();
+            const Texture2D linearSceneTexture = hdrDebugSource != nullptr
+                    ? hdrDebugSource->native.texture
+                    : worldTarget.texture;
             DrawTexturePro(
-                    worldTarget.texture,
-                    GetFullscreenSrcRect(worldTarget.texture),
+                    linearSceneTexture,
+                    GetFullscreenSrcRect(linearSceneTexture),
                     Rectangle{0.0f, 0.0f,
                             static_cast<float>(INTERNAL_WIDTH),
                             static_cast<float>(INTERNAL_HEIGHT)},

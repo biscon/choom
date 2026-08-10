@@ -237,6 +237,7 @@ struct SectorPreviewSettingsModalState {
     FpsViewmodelAttachmentLighting draftViewmodelAttachmentLighting;
     FpsWeaponFiringDefinition weaponFiringDefaults;
     FpsWeaponFiringDefinition draftWeaponFiring;
+    engine::HdrBloomSettings draftHdrBloom;
     engine::UIFloatInputState walkSpeedInput;
     engine::UIFloatInputState runSpeedInput;
     engine::UIFloatInputState mouseSensitivityInput;
@@ -261,6 +262,10 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState objectProbeSpacingInput;
     engine::UIFloatInputState objectProbeLowerHeightInput;
     engine::UIFloatInputState objectProbeUpperHeightInput;
+    engine::UIFloatInputState bloomThresholdInput;
+    engine::UIFloatInputState bloomSoftKneeInput;
+    engine::UIFloatInputState bloomIntensityInput;
+    engine::UIFloatInputState bloomRadiusInput;
     engine::UIIntInputState lightColorRedInput;
     engine::UIIntInputState lightColorGreenInput;
     engine::UIIntInputState lightColorBlueInput;
@@ -325,6 +330,7 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState weaponMuzzleRollInput;
     engine::UIFloatInputState weaponFlashLifetimeInput;
     engine::UIFloatInputState weaponFlashSizeInput;
+    engine::UIFloatInputState weaponFlashRadianceStrengthInput;
     engine::UIFloatInputState weaponFlashSizeVariationInput;
     engine::UIFloatInputState weaponFlashIrregularityInput;
     engine::UIFloatInputState weaponFlashForwardStretchInput;

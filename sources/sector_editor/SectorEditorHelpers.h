@@ -113,7 +113,7 @@ bool IsDefaultTopologyUv(SectorTopologyUvSettings uv);
 bool IsWhiteTint(Vector3 tint);
 bool IsValidDecalTint(Vector3 tint);
 Vector3 ClampDecalTint(Vector3 tint);
-float ClampDecalBloomIntensity(float value);
+float ClampDecalEmissiveStrength(float value);
 bool SameTint(Vector3 a, Vector3 b);
 Color DecalTintPreviewColor(Vector3 tint);
 bool IsDefaultDecalLayer(const SectorTopologyDecalLayer& decal);

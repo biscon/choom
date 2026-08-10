@@ -60,7 +60,6 @@ uniform int dynamicLightTypes[MAX_DYNAMIC_LIGHTS];
 uniform vec3 dynamicLightDirections[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
-uniform float dynamicLightingClamp;
 uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
 
 #define MAX_DYNAMIC_SHADOW_CASTERS 2
@@ -111,6 +110,15 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
 {
     float lengthSq = dot(value, value);
     return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
+}
+
+vec3 StoreFiniteHalfRadiance(vec3 value)
+{
+    vec3 result;
+    result.r = isnan(value.r) ? 0.0 : (isinf(value.r) ? (value.r > 0.0 ? 65504.0 : 0.0) : min(max(value.r, 0.0), 65504.0));
+    result.g = isnan(value.g) ? 0.0 : (isinf(value.g) ? (value.g > 0.0 ? 65504.0 : 0.0) : min(max(value.g, 0.0), 65504.0));
+    result.b = isnan(value.b) ? 0.0 : (isinf(value.b) ? (value.b > 0.0 ? 65504.0 : 0.0) : min(max(value.b, 0.0), 65504.0));
+    return result;
 }
 
 float SampleShadowMap(int shadowSlot, vec2 uv)
@@ -241,7 +249,7 @@ void main()
     }
 
     if (doorDebugMode == DOOR_DEBUG_DYNAMIC_ONLY) {
-        finalColor = vec4(clamp(dynamicDirect, 0.0, dynamicLightingClamp) / dynamicLightingClamp, 1.0);
+        finalColor = vec4(max(dynamicDirect, vec3(0.0)) / (vec3(1.0) + max(dynamicDirect, vec3(0.0))), 1.0);
         return;
     }
 
@@ -249,7 +257,7 @@ void main()
     vec3 surfaceRgb = sampled.rgb;
     vec3 lighting = max(staticProbeLighting + dynamicDirect, vec3(0.0));
     vec3 outputRgb = ApplySectorFog(surfaceRgb * tint * lighting, fragWorldPosition);
-    finalColor = vec4(outputRgb, sampled.a * doorTint.a);
+    finalColor = vec4(StoreFiniteHalfRadiance(outputRgb), clamp(sampled.a * doorTint.a, 0.0, 1.0));
 }
 )";
 
@@ -411,7 +419,6 @@ bool SectorDoorRenderer::LoadOpaqueResources()
     opaqueShaderLocations.shadowBias = GetShaderLocationArrayBase(opaqueShader, "shadowBias");
     opaqueShaderLocations.shadowStrength = GetShaderLocationArrayBase(opaqueShader, "shadowStrength");
     opaqueShaderLocations.shadowSoftness = GetShaderLocationArrayBase(opaqueShader, "shadowSoftness");
-    opaqueShaderLocations.dynamicLightingClamp = GetShaderLocation(opaqueShader, "dynamicLightingClamp");
     opaqueShaderLocations.debugMode = GetShaderLocation(opaqueShader, "doorDebugMode");
     opaqueShaderLocations.tint = GetShaderLocation(opaqueShader, "doorTint");
     opaqueShaderLocations.fog = GetSectorFogShaderLocations(opaqueShader);
@@ -545,7 +552,6 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
     dynamicLightLocations.dynamicLightDirections = doorOpaqueLocations.dynamicLightDirections;
     dynamicLightLocations.dynamicLightInnerConeCos = doorOpaqueLocations.dynamicLightInnerConeCos;
     dynamicLightLocations.dynamicLightOuterConeCos = doorOpaqueLocations.dynamicLightOuterConeCos;
-    dynamicLightLocations.dynamicLightingClamp = doorOpaqueLocations.dynamicLightingClamp;
     const std::vector<SectorPreviewDynamicPointLightUniform> emptyDynamicLights;
     const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights =
             context.dynamicLighting.selectedLights != nullptr
