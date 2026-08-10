@@ -337,12 +337,25 @@ bool SectorLightDustRenderer::EnsureMesh()
 
 bool SectorLightDustRenderer::EnsureTarget(int width, int height)
 {
-    if (dustTarget.id != 0 && targetWidth == width && targetHeight == height) return true;
-    if (dustTarget.id != 0) UnloadRenderTexture(dustTarget);
-    dustTarget = LoadRenderTexture(width, height);
-    targetWidth = dustTarget.id != 0 ? width : 0;
-    targetHeight = dustTarget.id != 0 ? height : 0;
-    return dustTarget.id != 0;
+    if (engine::IsRenderTargetReady(dustTarget)
+            && targetWidth == width && targetHeight == height) return true;
+    engine::UnloadRenderTarget(dustTarget);
+    std::string error;
+    engine::LoadRenderTarget(
+            engine::RenderTargetDescriptor{
+                    "light-dust",
+                    width,
+                    height,
+                    engine::RenderTargetColorFormat::Rgba8Unorm,
+                    engine::RenderTargetFilter::Point,
+                    engine::RenderTargetWrap::Repeat,
+                    engine::RenderTargetDepthKind::Renderbuffer,
+                    1},
+            dustTarget,
+            &error);
+    targetWidth = engine::IsRenderTargetReady(dustTarget) ? width : 0;
+    targetHeight = engine::IsRenderTargetReady(dustTarget) ? height : 0;
+    return engine::IsRenderTargetReady(dustTarget);
 }
 
 bool SectorLightDustRenderer::EnsureResources(int width, int height)
@@ -637,7 +650,7 @@ bool SectorLightDustRenderer::Apply(
     UploadSectorRendererDynamicPointLights(shader, locations.dynamicLights, dynamicLights);
     UploadSectorRendererDynamicSpotLightShadowUniforms(shader, locations.shadows, dynamicLights.shadowUniforms);
 
-    BeginTextureMode(dustTarget);
+    BeginTextureMode(dustTarget.native);
     ClearBackground(BLANK);
     BeginMode3D(camera);
     // DustFs already writes premultiplied radiance, so accumulate it without
@@ -656,8 +669,8 @@ bool SectorLightDustRenderer::Apply(
     // The intermediate target also contains premultiplied additive radiance.
     BeginBlendMode(BLEND_ADD_COLORS);
     DrawTexturePro(
-            dustTarget.texture,
-            SourceRectangle(dustTarget.texture),
+            dustTarget.native.texture,
+            SourceRectangle(dustTarget.native.texture),
             DestinationRectangle(sceneTarget.texture),
             Vector2{},
             0.0f,
@@ -669,8 +682,7 @@ bool SectorLightDustRenderer::Apply(
 
 void SectorLightDustRenderer::Shutdown()
 {
-    if (dustTarget.id != 0) UnloadRenderTexture(dustTarget);
-    dustTarget = {};
+    engine::UnloadRenderTarget(dustTarget);
     targetWidth = 0;
     targetHeight = 0;
     if (mesh.vaoId != 0 || mesh.vertices != nullptr) UnloadMesh(mesh);

@@ -2,11 +2,13 @@
 
 #include "engine/EngineContext.h"
 #include "engine/assets/FontLoadFlags.h"
+#include "engine/render/RenderColorDiagnostics.h"
+#include "engine/render/RenderTarget.h"
 #include "engine/render/FxaaShader.h"
 #include "game/GameApplication.h"
-#include "sector_demo/renderer/SectorLocalFogRenderer.h"
 
 #include <cmath>
+#include <string>
 
 static constexpr int INTERNAL_WIDTH = 1920;
 static constexpr int INTERNAL_HEIGHT = 1080;
@@ -67,33 +69,82 @@ int main()
 
     SetExitKey(0);
 
-    RenderTexture2D worldTarget = game::LoadSectorDepthTextureRenderTarget(
-            WORLD_TARGET_WIDTH,
-            WORLD_TARGET_HEIGHT);
-    if (worldTarget.id == 0) {
+    engine::RenderTarget worldTargetResource;
+    std::string renderTargetError;
+    if (!engine::LoadRenderTarget(
+                engine::RenderTargetDescriptor{
+                        "world",
+                        WORLD_TARGET_WIDTH,
+                        WORLD_TARGET_HEIGHT,
+                        engine::RenderTargetColorFormat::Rgba8Unorm,
+                        engine::RenderTargetFilter::Bilinear,
+                        engine::RenderTargetWrap::Repeat,
+                        engine::RenderTargetDepthKind::SampleableTexture,
+                        1},
+                worldTargetResource,
+                &renderTargetError)) {
         TraceLog(LOG_WARNING, "PREVIEW: sampleable depth target unavailable; local fog disabled");
-        worldTarget = LoadRenderTexture(WORLD_TARGET_WIDTH, WORLD_TARGET_HEIGHT);
-        worldTarget.depth.mipmaps = 0;
+        engine::LoadRenderTarget(
+                engine::RenderTargetDescriptor{
+                        "world",
+                        WORLD_TARGET_WIDTH,
+                        WORLD_TARGET_HEIGHT,
+                        engine::RenderTargetColorFormat::Rgba8Unorm,
+                        engine::RenderTargetFilter::Bilinear,
+                        engine::RenderTargetWrap::Repeat,
+                        engine::RenderTargetDepthKind::Renderbuffer,
+                        1},
+                worldTargetResource,
+                &renderTargetError);
+        worldTargetResource.native.depth.mipmaps = 0;
     }
-    SetTextureFilter(worldTarget.texture, TEXTURE_FILTER_BILINEAR);
+    RenderTexture2D& worldTarget = engine::NativeRenderTexture(worldTargetResource);
 
     // Viewmodels use a separate depth buffer so world geometry cannot clip them.
-    RenderTexture2D viewmodelTarget = LoadRenderTexture(WORLD_TARGET_WIDTH, WORLD_TARGET_HEIGHT);
+    engine::RenderTarget viewmodelTargetResource;
+    engine::LoadRenderTarget(
+            engine::RenderTargetDescriptor{
+                    "viewmodel",
+                    WORLD_TARGET_WIDTH,
+                    WORLD_TARGET_HEIGHT,
+                    engine::RenderTargetColorFormat::Rgba8Unorm,
+                    engine::RenderTargetFilter::Bilinear,
+                    engine::RenderTargetWrap::Repeat,
+                    engine::RenderTargetDepthKind::Renderbuffer,
+                    1},
+            viewmodelTargetResource,
+            &renderTargetError);
+    RenderTexture2D& viewmodelTarget = engine::NativeRenderTexture(viewmodelTargetResource);
     const bool viewmodelTargetReady = viewmodelTarget.id != 0;
-    if (viewmodelTargetReady) {
-        SetTextureFilter(viewmodelTarget.texture, TEXTURE_FILTER_BILINEAR);
-    } else {
+    if (!viewmodelTargetReady) {
         TraceLog(LOG_WARNING, "PREVIEW: FPS viewmodel render target unavailable; viewmodel rendering disabled");
     }
 
-    RenderTexture2D editorTarget = LoadRenderTexture(INTERNAL_WIDTH, INTERNAL_HEIGHT);
-    SetTextureFilter(editorTarget.texture, TEXTURE_FILTER_BILINEAR);
-
-    RenderTexture2D uiTarget = LoadRenderTexture(INTERNAL_WIDTH, INTERNAL_HEIGHT);
-    SetTextureFilter(uiTarget.texture, TEXTURE_FILTER_BILINEAR);
-
-    RenderTexture2D menuTarget = LoadRenderTexture(INTERNAL_WIDTH, INTERNAL_HEIGHT);
-    SetTextureFilter(menuTarget.texture, TEXTURE_FILTER_BILINEAR);
+    const auto loadDisplayTarget = [&renderTargetError](
+            const char* name,
+            engine::RenderTarget& target) {
+        return engine::LoadRenderTarget(
+                engine::RenderTargetDescriptor{
+                        name,
+                        INTERNAL_WIDTH,
+                        INTERNAL_HEIGHT,
+                        engine::RenderTargetColorFormat::Rgba8Unorm,
+                        engine::RenderTargetFilter::Bilinear,
+                        engine::RenderTargetWrap::Repeat,
+                        engine::RenderTargetDepthKind::Renderbuffer,
+                        1},
+                target,
+                &renderTargetError);
+    };
+    engine::RenderTarget editorTargetResource;
+    engine::RenderTarget uiTargetResource;
+    engine::RenderTarget menuTargetResource;
+    loadDisplayTarget("editor-2d", editorTargetResource);
+    loadDisplayTarget("ui", uiTargetResource);
+    loadDisplayTarget("menu", menuTargetResource);
+    RenderTexture2D& editorTarget = engine::NativeRenderTexture(editorTargetResource);
+    RenderTexture2D& uiTarget = engine::NativeRenderTexture(uiTargetResource);
+    RenderTexture2D& menuTarget = engine::NativeRenderTexture(menuTargetResource);
 
     Shader fxaaShader{};
     int fxaaTexelSizeLoc = -1;
@@ -102,16 +153,20 @@ int main()
         fxaaTexelSizeLoc = GetShaderLocation(fxaaShader, "texelSize");
     }
     const bool useWorldFxaa = ENABLE_WORLD_FXAA && IsShaderValid(fxaaShader);
+    engine::LogColorPipelineDiagnostics(engine::ColorPipelineRuntimeState{
+            WORLD_RENDER_SCALE,
+            ENABLE_WORLD_FXAA,
+            useWorldFxaa});
 
     const auto unloadRenderResources = [&]() {
         if (IsShaderValid(fxaaShader)) {
             UnloadShader(fxaaShader);
         }
-        UnloadRenderTexture(worldTarget);
-        UnloadRenderTexture(viewmodelTarget);
-        UnloadRenderTexture(editorTarget);
-        UnloadRenderTexture(uiTarget);
-        UnloadRenderTexture(menuTarget);
+        engine::UnloadRenderTarget(worldTargetResource);
+        engine::UnloadRenderTarget(viewmodelTargetResource);
+        engine::UnloadRenderTarget(editorTargetResource);
+        engine::UnloadRenderTarget(uiTargetResource);
+        engine::UnloadRenderTarget(menuTargetResource);
     };
 
     engine::EngineContext context;

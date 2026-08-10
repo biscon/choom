@@ -1,6 +1,7 @@
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 
 #include "engine/assets/AssetManager.h"
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorSkyCylinder.h"
 #include "sector_demo/SectorTopologyMap.h"
@@ -19,19 +20,10 @@ namespace {
 
 constexpr int PbrEnvironmentFaceSize = 256;
 
-float SrgbToLinear(float value)
-{
-    return value <= 0.04045f
-            ? value / 12.92f
-            : std::pow((value + 0.055f) / 1.055f, 2.4f);
-}
-
 unsigned char LinearToSrgbByte(float value)
 {
     value = std::clamp(value, 0.0f, 1.0f);
-    const float encoded = value <= 0.0031308f
-            ? value * 12.92f
-            : 1.055f * std::pow(value, 1.0f / 2.4f) - 0.055f;
+    const float encoded = engine::LinearNormalizedChannelToSrgb(value);
     return static_cast<unsigned char>(std::clamp(encoded * 255.0f + 0.5f, 0.0f, 255.0f));
 }
 
@@ -82,10 +74,10 @@ Color SampleSky(
 Color LinearAverage(Color a, Color b, Color c, Color d)
 {
     const auto average = [](unsigned char av, unsigned char bv, unsigned char cv, unsigned char dv) {
-        const float linear = (SrgbToLinear(static_cast<float>(av) / 255.0f)
-                + SrgbToLinear(static_cast<float>(bv) / 255.0f)
-                + SrgbToLinear(static_cast<float>(cv) / 255.0f)
-                + SrgbToLinear(static_cast<float>(dv) / 255.0f)) * 0.25f;
+        const float linear = (engine::SrgbNormalizedChannelToLinear(static_cast<float>(av) / 255.0f)
+                + engine::SrgbNormalizedChannelToLinear(static_cast<float>(bv) / 255.0f)
+                + engine::SrgbNormalizedChannelToLinear(static_cast<float>(cv) / 255.0f)
+                + engine::SrgbNormalizedChannelToLinear(static_cast<float>(dv) / 255.0f)) * 0.25f;
         return LinearToSrgbByte(linear);
     };
     return Color{
@@ -200,6 +192,7 @@ bool BuildSectorPbrEnvironment(
             scope,
             "sector_pbr_environment",
             cubemapImage,
+            engine::TextureColorUsage::SceneSrgb,
             CUBEMAP_LAYOUT_LINE_VERTICAL);
     UnloadImage(cubemapImage);
     return !engine::IsNull(outEnvironment.cubemap);

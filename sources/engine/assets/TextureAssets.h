@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/assets/AssetHandles.h"
+#include "engine/assets/TextureColorUsage.h"
 #include "engine/assets/TextureLoadFlags.h"
 
 #include <raylib.h>
@@ -21,6 +22,7 @@ public:
         TextureHandle handle;
         bool shouldQueue = false;
         std::string path;
+        TextureColorUsage colorUsage = TextureColorUsage::Count;
         TextureLoadFlags flags = TextureLoad_PointFilter;
     };
 
@@ -31,6 +33,7 @@ public:
             AssetScopeHandle scope,
             const char* key,
             const char* path,
+            TextureColorUsage colorUsage,
             TextureLoadFlags flags
     );
 
@@ -38,6 +41,7 @@ public:
             AssetScopeHandle scope,
             const char* key,
             const Image& image,
+            TextureColorUsage colorUsage,
             TextureLoadFlags flags
     );
 
@@ -45,6 +49,7 @@ public:
             AssetScopeHandle scope,
             const char* key,
             const Image& image,
+            TextureColorUsage colorUsage,
             int layout
     );
 
@@ -62,6 +67,7 @@ public:
     void ProcessTextureRequestOnWorkerThread(
             TextureHandle handle,
             const std::string& path,
+            TextureColorUsage colorUsage,
             TextureLoadFlags flags
     );
 
@@ -84,6 +90,7 @@ private:
         TextureState state = TextureState::Unloaded;
         std::string key;
         std::string path;
+        TextureColorUsage colorUsage = TextureColorUsage::Count;
         TextureLoadFlags flags = TextureLoad_PointFilter;
         AssetScopeHandle scope;
         Texture2D texture = {};
@@ -105,9 +112,18 @@ private:
 
     bool IsValidTextureNoLock(TextureHandle handle) const;
     static bool IsTerminal(TextureState state);
-    static std::string MakeTextureRequestKey(const char* key, const char* path, TextureLoadFlags flags);
-    static std::string MakeGeneratedTextureKey(const char* key, TextureLoadFlags flags);
-    static std::string MakeGeneratedCubemapKey(const char* key);
+    static std::string MakeTextureRequestKey(
+            const char* key,
+            const char* path,
+            TextureColorUsage colorUsage,
+            TextureLoadFlags flags);
+    static std::string MakeGeneratedTextureKey(
+            const char* key,
+            TextureColorUsage colorUsage,
+            TextureLoadFlags flags);
+    static std::string MakeGeneratedCubemapKey(
+            const char* key,
+            TextureColorUsage colorUsage);
     static void ApplyTextureLoadFlags(Texture2D& texture, TextureLoadFlags flags);
 
     void QueueTextureUnloadNoLock(TextureHandle handle);

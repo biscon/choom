@@ -285,17 +285,25 @@ bool SectorLightHazeRenderer::EnsureShaders()
 
 void SectorLightHazeRenderer::ReleaseTargets()
 {
-    if(hazeTarget.id!=0) UnloadRenderTexture(hazeTarget); if(compositeTarget.id!=0) UnloadRenderTexture(compositeTarget);
-    hazeTarget={}; compositeTarget={}; width=0; height=0; scale=0.0f;
+    engine::UnloadRenderTarget(hazeTarget); engine::UnloadRenderTarget(compositeTarget);
+    width=0; height=0; scale=0.0f;
 }
 
 bool SectorLightHazeRenderer::EnsureTargets(int newWidth, int newHeight, float newScale)
 {
-    if(hazeTarget.id!=0&&compositeTarget.id!=0&&width==newWidth&&height==newHeight&&scale==newScale) return true;
-    ReleaseTargets(); hazeTarget=LoadRenderTexture(std::max(1,static_cast<int>(std::round(newWidth*newScale))),
-            std::max(1,static_cast<int>(std::round(newHeight*newScale)))); compositeTarget=LoadRenderTexture(newWidth,newHeight);
-    if(hazeTarget.id==0||compositeTarget.id==0) { ReleaseTargets(); return false; }
-    SetTextureFilter(hazeTarget.texture,TEXTURE_FILTER_BILINEAR); width=newWidth; height=newHeight; scale=newScale; return true;
+    if(engine::IsRenderTargetReady(hazeTarget)&&engine::IsRenderTargetReady(compositeTarget)&&width==newWidth&&height==newHeight&&scale==newScale) return true;
+    ReleaseTargets();
+    const int targetWidth=std::max(1,static_cast<int>(std::round(newWidth*newScale)));
+    const int targetHeight=std::max(1,static_cast<int>(std::round(newHeight*newScale)));
+    std::string error;
+    engine::LoadRenderTarget(engine::RenderTargetDescriptor{"light-haze-accumulation",targetWidth,targetHeight,
+            engine::RenderTargetColorFormat::Rgba8Unorm,engine::RenderTargetFilter::Bilinear,
+            engine::RenderTargetWrap::Repeat,engine::RenderTargetDepthKind::Renderbuffer,1},hazeTarget,&error);
+    engine::LoadRenderTarget(engine::RenderTargetDescriptor{"light-haze-composite",newWidth,newHeight,
+            engine::RenderTargetColorFormat::Rgba8Unorm,engine::RenderTargetFilter::Point,
+            engine::RenderTargetWrap::Repeat,engine::RenderTargetDepthKind::Renderbuffer,1},compositeTarget,&error);
+    if(!engine::IsRenderTargetReady(hazeTarget)||!engine::IsRenderTargetReady(compositeTarget)) { ReleaseTargets(); return false; }
+    width=newWidth; height=newHeight; scale=newScale; return true;
 }
 
 void SectorLightHazeRenderer::RefreshProbeIdentity(const SectorTopologyMap& map, const SectorBakedObjectLightProbeRuntimeData& probes)
@@ -381,7 +389,7 @@ bool SectorLightHazeRenderer::Apply(
     const SectorTopologyFogSettings& fogSettings=fog.settings;
     const int fogEnabled=fogSettings.enabled?1:0;
     const Vector3 fogColor{fogSettings.color.r/255.0f,fogSettings.color.g/255.0f,fogSettings.color.b/255.0f};
-    BeginTextureMode(hazeTarget); ClearBackground(BLANK); BeginShaderMode(shader);
+    BeginTextureMode(hazeTarget.native); ClearBackground(BLANK); BeginShaderMode(shader);
     SetShaderValueTexture(shader,locations.sceneDepth,sceneTarget.depth);
     if(locations.shadowMap0>=0&&dynamicLights.shadowMaps.shadowMap0!=nullptr&&dynamicLights.shadowMaps.shadowMap0->id!=0) SetShaderValueTexture(shader,locations.shadowMap0,*dynamicLights.shadowMaps.shadowMap0);
     if(locations.shadowMap1>=0&&dynamicLights.shadowMaps.shadowMap1!=nullptr&&dynamicLights.shadowMaps.shadowMap1->id!=0) SetShaderValueTexture(shader,locations.shadowMap1,*dynamicLights.shadowMaps.shadowMap1);
@@ -404,14 +412,14 @@ bool SectorLightHazeRenderer::Apply(
     SetShaderValueV(shader,locations.paramsA,paramsA.data(),SHADER_UNIFORM_VEC4,activeCount); SetShaderValueV(shader,locations.paramsB,paramsB.data(),SHADER_UNIFORM_VEC4,activeCount);
     SetShaderValueV(shader,locations.staticLighting,lighting.data(),SHADER_UNIFORM_VEC3,activeCount*8);
     UploadSectorRendererDynamicPointLights(shader,locations.dynamicLights,dynamicLights); UploadSectorRendererDynamicSpotLightShadowUniforms(shader,locations.shadows,dynamicLights.shadowUniforms);
-    rlDisableColorBlend(); DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(hazeTarget.texture),{},0,WHITE); EndShaderMode(); rlEnableColorBlend(); EndTextureMode();
-    const Vector2 texel{1.0f/hazeTarget.texture.width,1.0f/hazeTarget.texture.height}; const int bilateral=renderScale<1.0f?1:0;
-    BeginTextureMode(compositeTarget); ClearBackground(BLANK); BeginShaderMode(compositeShader);
+    rlDisableColorBlend(); DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(hazeTarget.native.texture),{},0,WHITE); EndShaderMode(); rlEnableColorBlend(); EndTextureMode();
+    const Vector2 texel{1.0f/hazeTarget.native.texture.width,1.0f/hazeTarget.native.texture.height}; const int bilateral=renderScale<1.0f?1:0;
+    BeginTextureMode(compositeTarget.native); ClearBackground(BLANK); BeginShaderMode(compositeShader);
     SetShaderValueTexture(compositeShader,compositeLocations.sceneColor,sceneTarget.texture); SetShaderValueTexture(compositeShader,compositeLocations.sceneDepth,sceneTarget.depth);
-    SetShaderValueTexture(compositeShader,compositeLocations.hazeTexture,hazeTarget.texture); SetShaderValue(compositeShader,compositeLocations.hazeTexelSize,&texel,SHADER_UNIFORM_VEC2);
+    SetShaderValueTexture(compositeShader,compositeLocations.hazeTexture,hazeTarget.native.texture); SetShaderValue(compositeShader,compositeLocations.hazeTexelSize,&texel,SHADER_UNIFORM_VEC2);
     SetShaderValue(compositeShader,compositeLocations.bilateralUpsample,&bilateral,SHADER_UNIFORM_INT); rlDisableColorBlend();
-    DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(compositeTarget.texture),{},0,WHITE); EndShaderMode(); rlEnableColorBlend(); EndTextureMode();
-    BeginTextureMode(sceneTarget); DrawTexturePro(compositeTarget.texture,Src(compositeTarget.texture),Dst(sceneTarget.texture),{},0,WHITE); EndTextureMode(); return true;
+    DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(compositeTarget.native.texture),{},0,WHITE); EndShaderMode(); rlEnableColorBlend(); EndTextureMode();
+    BeginTextureMode(sceneTarget); DrawTexturePro(compositeTarget.native.texture,Src(compositeTarget.native.texture),Dst(sceneTarget.texture),{},0,WHITE); EndTextureMode(); return true;
 }
 
 void SectorLightHazeRenderer::Shutdown()

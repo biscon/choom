@@ -41,10 +41,12 @@ TextureAssets::RequestResult TextureAssets::RequestTexture(
         AssetScopeHandle scope,
         const char* key,
         const char* path,
+        TextureColorUsage colorUsage,
         TextureLoadFlags flags)
 {
     RequestResult result;
-    if (key == nullptr || path == nullptr) {
+    if (key == nullptr || path == nullptr
+            || !IsValidTextureRequestDescriptor(colorUsage, flags)) {
         return result;
     }
 
@@ -54,7 +56,8 @@ TextureAssets::RequestResult TextureAssets::RequestTexture(
         return result;
     }
 
-    const std::string requestKey = MakeTextureRequestKey(key, path, flags);
+    const std::string requestKey = MakeTextureRequestKey(
+            key, path, colorUsage, flags);
     TextureScopeData& data = scopeData[scope.index];
     const auto existing = data.textureByRequest.find(requestKey);
     if (existing != data.textureByRequest.end()) {
@@ -67,6 +70,7 @@ TextureAssets::RequestResult TextureAssets::RequestTexture(
     slot.state = TextureState::Queued;
     slot.key = key;
     slot.path = path;
+    slot.colorUsage = colorUsage;
     slot.flags = flags;
     slot.scope = scope;
 
@@ -76,6 +80,7 @@ TextureAssets::RequestResult TextureAssets::RequestTexture(
     result.handle = TextureHandle{index, textureSlots[index].generation};
     result.shouldQueue = true;
     result.path = path;
+    result.colorUsage = colorUsage;
     result.flags = flags;
 
     data.textures.push_back(result.handle);
@@ -88,9 +93,11 @@ TextureHandle TextureAssets::CreateTextureFromImage(
         AssetScopeHandle scope,
         const char* key,
         const Image& image,
+        TextureColorUsage colorUsage,
         TextureLoadFlags flags)
 {
-    if (key == nullptr || image.data == nullptr || image.width <= 0 || image.height <= 0) {
+    if (key == nullptr || image.data == nullptr || image.width <= 0 || image.height <= 0
+            || !IsValidTextureRequestDescriptor(colorUsage, flags)) {
         return NullTextureHandle();
     }
 
@@ -109,7 +116,8 @@ TextureHandle TextureAssets::CreateTextureFromImage(
         return NullTextureHandle();
     }
 
-    const std::string requestKey = MakeGeneratedTextureKey(key, flags);
+    const std::string requestKey = MakeGeneratedTextureKey(
+            key, colorUsage, flags);
     TextureScopeData& data = scopeData[scope.index];
     const auto existing = data.textureByRequest.find(requestKey);
     if (existing != data.textureByRequest.end()) {
@@ -122,6 +130,7 @@ TextureHandle TextureAssets::CreateTextureFromImage(
     slot.state = TextureState::Ready;
     slot.key = key;
     slot.path = "<generated>";
+    slot.colorUsage = colorUsage;
     slot.flags = flags;
     slot.scope = scope;
     slot.texture = uploaded;
@@ -139,13 +148,15 @@ TextureHandle TextureAssets::CreateCubemapFromImage(
         AssetScopeHandle scope,
         const char* key,
         const Image& image,
+        TextureColorUsage colorUsage,
         int layout)
 {
-    if (key == nullptr || image.data == nullptr || image.width <= 0 || image.height <= 0) {
+    if (key == nullptr || image.data == nullptr || image.width <= 0 || image.height <= 0
+            || !IsValidTextureColorUsage(colorUsage)) {
         return NullTextureHandle();
     }
 
-    const std::string requestKey = MakeGeneratedCubemapKey(key);
+    const std::string requestKey = MakeGeneratedCubemapKey(key, colorUsage);
     {
         std::lock_guard<std::mutex> lock(stateMutex);
         if (scope.index >= scopeData.size()) {
@@ -190,6 +201,7 @@ TextureHandle TextureAssets::CreateCubemapFromImage(
     slot.state = TextureState::Ready;
     slot.key = key;
     slot.path = "<generated-cubemap>";
+    slot.colorUsage = colorUsage;
     slot.scope = scope;
     slot.texture = uploaded;
     slot.cubemap = true;
@@ -321,8 +333,12 @@ void TextureAssets::GetScopeProgressCounts(AssetScopeHandle scope, size_t& finis
 void TextureAssets::ProcessTextureRequestOnWorkerThread(
         TextureHandle handle,
         const std::string& path,
+        TextureColorUsage colorUsage,
         TextureLoadFlags flags)
 {
+    if (!IsValidTextureRequestDescriptor(colorUsage, flags)) {
+        return;
+    }
     {
         std::lock_guard<std::mutex> lock(stateMutex);
         if (!IsValidTextureNoLock(handle)
@@ -479,19 +495,33 @@ bool TextureAssets::IsTerminal(TextureState state)
         || state == TextureState::Unloaded;
 }
 
-std::string TextureAssets::MakeTextureRequestKey(const char* key, const char* path, TextureLoadFlags flags)
+std::string TextureAssets::MakeTextureRequestKey(
+        const char* key,
+        const char* path,
+        TextureColorUsage colorUsage,
+        TextureLoadFlags flags)
 {
-    return std::string(key) + "\n" + path + "\n" + std::to_string(static_cast<uint32_t>(flags));
+    return std::string(key) + "\n" + path
+            + "\n" + std::to_string(static_cast<int>(colorUsage))
+            + "\n" + std::to_string(static_cast<uint32_t>(flags));
 }
 
-std::string TextureAssets::MakeGeneratedTextureKey(const char* key, TextureLoadFlags flags)
+std::string TextureAssets::MakeGeneratedTextureKey(
+        const char* key,
+        TextureColorUsage colorUsage,
+        TextureLoadFlags flags)
 {
-    return std::string(key) + "\n<generated>\n" + std::to_string(static_cast<uint32_t>(flags));
+    return std::string(key) + "\n<generated>"
+            + "\n" + std::to_string(static_cast<int>(colorUsage))
+            + "\n" + std::to_string(static_cast<uint32_t>(flags));
 }
 
-std::string TextureAssets::MakeGeneratedCubemapKey(const char* key)
+std::string TextureAssets::MakeGeneratedCubemapKey(
+        const char* key,
+        TextureColorUsage colorUsage)
 {
-    return std::string(key) + "\n<generated-cubemap>";
+    return std::string(key) + "\n<generated-cubemap>"
+            + "\n" + std::to_string(static_cast<int>(colorUsage));
 }
 
 void TextureAssets::ApplyTextureLoadFlags(Texture2D& texture, TextureLoadFlags flags)

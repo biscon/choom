@@ -140,6 +140,18 @@ target_link_libraries(${PROJECT_NAME} PRIVATE xatlas)
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(render_color_foundations_tests
+            tests/RenderColorFoundationsTests.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
+            sources/engine/render/ColorTransfer.cpp
+            sources/engine/render/RenderColorDiagnostics.cpp
+            sources/engine/render/RenderTarget.cpp
+    )
+    target_include_directories(render_color_foundations_tests PRIVATE sources)
+    target_link_libraries(render_color_foundations_tests PRIVATE raylib)
+    add_test(NAME render_color_foundations COMMAND render_color_foundations_tests)
+
     add_executable(application_flow_tests
             tests/ApplicationFlowTests.cpp
             sources/game/ApplicationFlow.cpp

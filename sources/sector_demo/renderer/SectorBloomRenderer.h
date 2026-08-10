@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/assets/AssetHandles.h"
+#include "engine/render/RenderTarget.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/renderer/SectorFog.h"
 
@@ -61,10 +62,10 @@ private:
     int blurDirectionLoc = -1;
     int compositeStrengthLoc = -1;
     int compositeBloomTextureLoc = -1;
-    RenderTexture2D sceneCopy = {};
-    RenderTexture2D source = {};
-    RenderTexture2D blurA = {};
-    RenderTexture2D blurB = {};
+    engine::RenderTarget sceneCopy;
+    engine::RenderTarget source;
+    engine::RenderTarget blurA;
+    engine::RenderTarget blurB;
     int sceneWidth = 0;
     int sceneHeight = 0;
     int targetWidth = 0;

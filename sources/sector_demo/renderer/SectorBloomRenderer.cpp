@@ -244,22 +244,10 @@ void SectorBloomRenderer::Shutdown()
     blurDirectionLoc = -1;
     compositeStrengthLoc = -1;
     compositeBloomTextureLoc = -1;
-    if (sceneCopy.texture.id != 0) {
-        UnloadRenderTexture(sceneCopy);
-        sceneCopy = RenderTexture2D{};
-    }
-    if (source.texture.id != 0) {
-        UnloadRenderTexture(source);
-        source = RenderTexture2D{};
-    }
-    if (blurA.texture.id != 0) {
-        UnloadRenderTexture(blurA);
-        blurA = RenderTexture2D{};
-    }
-    if (blurB.texture.id != 0) {
-        UnloadRenderTexture(blurB);
-        blurB = RenderTexture2D{};
-    }
+    engine::UnloadRenderTarget(sceneCopy);
+    engine::UnloadRenderTarget(source);
+    engine::UnloadRenderTarget(blurA);
+    engine::UnloadRenderTarget(blurB);
     sceneWidth = 0;
     sceneHeight = 0;
     targetWidth = 0;
@@ -283,18 +271,18 @@ void SectorBloomRenderer::ApplyEmissiveDecalBloomToScene(
         return;
     }
 
-    BeginTextureMode(sceneCopy);
+    BeginTextureMode(sceneCopy.native);
     ClearBackground(BLANK);
     DrawTexturePro(
             sceneTarget.texture,
             FullTextureSrcRect(sceneTarget.texture),
-            FullTextureDstRect(sceneCopy.texture),
+            FullTextureDstRect(sceneCopy.native.texture),
             Vector2{0.0f, 0.0f},
             0.0f,
             WHITE);
     EndTextureMode();
 
-    BeginTextureMode(source);
+    BeginTextureMode(source.native);
     ClearBackground(BLANK);
     RenderBloomSource(
             assets,
@@ -305,8 +293,8 @@ void SectorBloomRenderer::ApplyEmissiveDecalBloomToScene(
             fogContext);
     EndTextureMode();
 
-    RenderTexture2D* input = &source;
-    RenderTexture2D* output = &blurA;
+    RenderTexture2D* input = &source.native;
+    RenderTexture2D* output = &blurA.native;
     for (int i = 0; i < BloomIterations; ++i) {
         const Vector2 texelSize{
                 1.0f / static_cast<float>(input->texture.width),
@@ -329,7 +317,7 @@ void SectorBloomRenderer::ApplyEmissiveDecalBloomToScene(
         EndTextureMode();
 
         input = output;
-        output = (output == &blurA) ? &blurB : &blurA;
+        output = (output == &blurA.native) ? &blurB.native : &blurA.native;
         direction = Vector2{0.0f, 1.0f};
         BeginTextureMode(*output);
         ClearBackground(BLANK);
@@ -347,7 +335,7 @@ void SectorBloomRenderer::ApplyEmissiveDecalBloomToScene(
         EndTextureMode();
 
         input = output;
-        output = (output == &blurA) ? &blurB : &blurA;
+        output = (output == &blurA.native) ? &blurB.native : &blurA.native;
     }
 
     BeginTextureMode(sceneTarget);
@@ -356,8 +344,8 @@ void SectorBloomRenderer::ApplyEmissiveDecalBloomToScene(
     BeginShaderMode(compositeShader);
     SetShaderValueTexture(compositeShader, compositeBloomTextureLoc, input->texture);
     DrawTexturePro(
-            sceneCopy.texture,
-            FullTextureSrcRect(sceneCopy.texture),
+            sceneCopy.native.texture,
+            FullTextureSrcRect(sceneCopy.native.texture),
             FullTextureDstRect(sceneTarget.texture),
             Vector2{0.0f, 0.0f},
             0.0f,
@@ -371,10 +359,10 @@ bool SectorBloomRenderer::IsLoaded() const
     return sourceMaterialLoaded
             || IsShaderValid(blurShader)
             || IsShaderValid(compositeShader)
-            || sceneCopy.texture.id != 0
-            || source.texture.id != 0
-            || blurA.texture.id != 0
-            || blurB.texture.id != 0;
+            || engine::IsRenderTargetReady(sceneCopy)
+            || engine::IsRenderTargetReady(source)
+            || engine::IsRenderTargetReady(blurA)
+            || engine::IsRenderTargetReady(blurB);
 }
 
 bool SectorBloomRenderer::EnsureResources(int sceneWidthValue, int sceneHeightValue)
@@ -430,25 +418,45 @@ bool SectorBloomRenderer::EnsureResources(int sceneWidthValue, int sceneHeightVa
         compositeBloomTextureLoc = GetShaderLocation(compositeShader, "bloomTexture");
     }
 
-    if (sceneCopy.texture.id == 0) {
-        sceneCopy = LoadRenderTexture(sceneWidthValue, sceneHeightValue);
-        SetTextureFilter(sceneCopy.texture, TEXTURE_FILTER_BILINEAR);
-        source = LoadRenderTexture(bloomWidth, bloomHeight);
-        blurA = LoadRenderTexture(bloomWidth, bloomHeight);
-        blurB = LoadRenderTexture(bloomWidth, bloomHeight);
-        SetTextureFilter(source.texture, TEXTURE_FILTER_BILINEAR);
-        SetTextureFilter(blurA.texture, TEXTURE_FILTER_BILINEAR);
-        SetTextureFilter(blurB.texture, TEXTURE_FILTER_BILINEAR);
+    if (!engine::IsRenderTargetReady(sceneCopy)) {
+        const auto descriptor = [](const char* name, int width, int height) {
+            return engine::RenderTargetDescriptor{
+                    name,
+                    width,
+                    height,
+                    engine::RenderTargetColorFormat::Rgba8Unorm,
+                    engine::RenderTargetFilter::Bilinear,
+                    engine::RenderTargetWrap::Repeat,
+                    engine::RenderTargetDepthKind::Renderbuffer,
+                    1};
+        };
+        std::string error;
+        engine::LoadRenderTarget(
+                descriptor("bloom-scene-copy", sceneWidthValue, sceneHeightValue),
+                sceneCopy,
+                &error);
+        engine::LoadRenderTarget(
+                descriptor("bloom-source-quarter", bloomWidth, bloomHeight),
+                source,
+                &error);
+        engine::LoadRenderTarget(
+                descriptor("bloom-blur-a-quarter", bloomWidth, bloomHeight),
+                blurA,
+                &error);
+        engine::LoadRenderTarget(
+                descriptor("bloom-blur-b-quarter", bloomWidth, bloomHeight),
+                blurB,
+                &error);
         sceneWidth = sceneWidthValue;
         sceneHeight = sceneHeightValue;
         targetWidth = bloomWidth;
         targetHeight = bloomHeight;
     }
 
-    return sceneCopy.texture.id != 0
-            && source.texture.id != 0
-            && blurA.texture.id != 0
-            && blurB.texture.id != 0;
+    return engine::IsRenderTargetReady(sceneCopy)
+            && engine::IsRenderTargetReady(source)
+            && engine::IsRenderTargetReady(blurA)
+            && engine::IsRenderTargetReady(blurB);
 }
 
 void SectorBloomRenderer::RenderBloomSource(

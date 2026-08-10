@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/render/RenderTarget.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
@@ -11,8 +12,6 @@
 #include <cstddef>
 
 namespace game {
-
-RenderTexture2D LoadSectorDepthTextureRenderTarget(int width, int height);
 
 class SectorLocalFogRenderer {
 public:
@@ -93,8 +92,8 @@ private:
     Shader compositeShader = {};
     AccumulateShaderLocations accumulateLocations;
     CompositeShaderLocations compositeLocations;
-    RenderTexture2D fogTarget = {};
-    RenderTexture2D compositeTarget = {};
+    engine::RenderTarget fogTarget;
+    engine::RenderTarget compositeTarget;
     std::array<StaticLightingCacheEntry, 16> staticLightingCache{};
     const SectorBakedObjectLightProbe* cachedProbeData = nullptr;
     std::size_t cachedProbeCount = 0;

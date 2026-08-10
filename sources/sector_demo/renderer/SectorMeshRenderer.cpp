@@ -602,6 +602,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 assetScope,
                 texture.id.c_str(),
                 resolvedPath.c_str(),
+                engine::TextureColorUsage::SceneSrgb,
                 SectorTextureLoadFlags(texture.filter));
         textureHandlesById.emplace(texture.id, handle);
 
@@ -618,6 +619,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                             assetScope,
                             normalMapKey.c_str(),
                             resolvedNormalMapPath.c_str(),
+                            engine::TextureColorUsage::LinearData,
                             SectorTextureLoadFlags(texture.filter)));
         }
     }
@@ -697,6 +699,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                     assetScope,
                     key.c_str(),
                     resolvedPath.c_str(),
+                    engine::TextureColorUsage::LinearData,
                     engine::TextureLoad_BilinearFilter));
         }
     }

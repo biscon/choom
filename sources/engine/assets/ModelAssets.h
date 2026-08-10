@@ -21,6 +21,10 @@ enum ModelLoadFlags : uint32_t {
 };
 
 struct ModelMaterialAsset {
+    // raylib's glTF textures bypass TextureAssets. Base-color and emissive
+    // textures contain scene-sRGB bytes and are explicitly decoded by the
+    // active model shader. Normal, metallic/roughness, and occlusion channels
+    // are linear data. Numeric factors retain glTF-defined conventions.
     Vector4 baseColorFactor = {1.0f, 1.0f, 1.0f, 1.0f};
     Vector3 emissiveFactor = {};
     float metallicFactor = 0.0f;

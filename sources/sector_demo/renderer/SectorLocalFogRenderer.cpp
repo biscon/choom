@@ -390,33 +390,6 @@ bool SameColor(Color a, Color b)
 
 } // namespace
 
-RenderTexture2D LoadSectorDepthTextureRenderTarget(int width, int height)
-{
-    RenderTexture2D target{};
-    target.id = rlLoadFramebuffer();
-    if (target.id == 0) return target;
-    rlEnableFramebuffer(target.id);
-    target.texture.id = rlLoadTexture(nullptr, width, height, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
-    target.texture.width = width;
-    target.texture.height = height;
-    target.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-    target.texture.mipmaps = 1;
-    target.depth.id = rlLoadTextureDepth(width, height, false);
-    target.depth.width = width;
-    target.depth.height = height;
-    target.depth.format = 19;
-    target.depth.mipmaps = 1;
-    rlFramebufferAttach(target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
-    rlFramebufferAttach(target.id, target.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
-    if (!rlFramebufferComplete(target.id)) {
-        rlDisableFramebuffer();
-        UnloadRenderTexture(target);
-        return RenderTexture2D{};
-    }
-    rlDisableFramebuffer();
-    return target;
-}
-
 bool SectorLocalFogRenderer::EnsureShaders()
 {
     if (ShaderReady(accumulateShader) && ShaderReady(compositeShader)) return true;
@@ -493,10 +466,8 @@ bool SectorLocalFogRenderer::EnsureShaders()
 
 void SectorLocalFogRenderer::ReleaseTargets()
 {
-    if (fogTarget.id != 0) UnloadRenderTexture(fogTarget);
-    if (compositeTarget.id != 0) UnloadRenderTexture(compositeTarget);
-    fogTarget = RenderTexture2D{};
-    compositeTarget = RenderTexture2D{};
+    engine::UnloadRenderTarget(fogTarget);
+    engine::UnloadRenderTarget(compositeTarget);
     sceneWidth = 0;
     sceneHeight = 0;
     targetScale = 0.0f;
@@ -504,18 +475,42 @@ void SectorLocalFogRenderer::ReleaseTargets()
 
 bool SectorLocalFogRenderer::EnsureTargets(int width, int height, float scale)
 {
-    if (fogTarget.id != 0 && compositeTarget.id != 0
+    if (engine::IsRenderTargetReady(fogTarget)
+            && engine::IsRenderTargetReady(compositeTarget)
             && sceneWidth == width && sceneHeight == height && targetScale == scale) return true;
     ReleaseTargets();
     const int fogWidth = std::max(1, static_cast<int>(std::round(width * scale)));
     const int fogHeight = std::max(1, static_cast<int>(std::round(height * scale)));
-    fogTarget = LoadRenderTexture(fogWidth, fogHeight);
-    compositeTarget = LoadRenderTexture(width, height);
-    if (fogTarget.id == 0 || compositeTarget.id == 0) {
+    std::string error;
+    engine::LoadRenderTarget(
+            engine::RenderTargetDescriptor{
+                    "local-fog-accumulation",
+                    fogWidth,
+                    fogHeight,
+                    engine::RenderTargetColorFormat::Rgba8Unorm,
+                    engine::RenderTargetFilter::Bilinear,
+                    engine::RenderTargetWrap::Repeat,
+                    engine::RenderTargetDepthKind::Renderbuffer,
+                    1},
+            fogTarget,
+            &error);
+    engine::LoadRenderTarget(
+            engine::RenderTargetDescriptor{
+                    "local-fog-composite",
+                    width,
+                    height,
+                    engine::RenderTargetColorFormat::Rgba8Unorm,
+                    engine::RenderTargetFilter::Point,
+                    engine::RenderTargetWrap::Repeat,
+                    engine::RenderTargetDepthKind::Renderbuffer,
+                    1},
+            compositeTarget,
+            &error);
+    if (!engine::IsRenderTargetReady(fogTarget)
+            || !engine::IsRenderTargetReady(compositeTarget)) {
         ReleaseTargets();
         return false;
     }
-    SetTextureFilter(fogTarget.texture, TEXTURE_FILTER_BILINEAR);
     sceneWidth = width;
     sceneHeight = height;
     targetScale = scale;
@@ -724,7 +719,7 @@ bool SectorLocalFogRenderer::Apply(
 
     // BeginTextureMode flushes raylib's batch and clears auxiliary sampler bindings,
     // so pass textures must be bound after entering the target.
-    BeginTextureMode(fogTarget);
+    BeginTextureMode(fogTarget.native);
     ClearBackground(BLANK);
     BeginShaderMode(accumulateShader);
     SetShaderValueTexture(accumulateShader, accumulateLocations.sceneDepth, sceneTarget.depth);
@@ -783,30 +778,30 @@ bool SectorLocalFogRenderer::Apply(
             dynamicLightContext.shadowUniforms);
     // Store straight fog color and opacity without framebuffer blending.
     rlDisableColorBlend();
-    DrawTexturePro(sceneTarget.texture, SourceRect(sceneTarget.texture), DestinationRect(fogTarget.texture), Vector2{}, 0.0f, WHITE);
+    DrawTexturePro(sceneTarget.texture, SourceRect(sceneTarget.texture), DestinationRect(fogTarget.native.texture), Vector2{}, 0.0f, WHITE);
     EndShaderMode();
     rlEnableColorBlend();
     EndTextureMode();
 
-    const Vector2 fogTexelSize{1.0f / fogTarget.texture.width, 1.0f / fogTarget.texture.height};
+    const Vector2 fogTexelSize{1.0f / fogTarget.native.texture.width, 1.0f / fogTarget.native.texture.height};
     const int bilateral = scale < 1.0f ? 1 : 0;
-    BeginTextureMode(compositeTarget);
+    BeginTextureMode(compositeTarget.native);
     ClearBackground(BLANK);
     BeginShaderMode(compositeShader);
     SetShaderValueTexture(compositeShader, compositeLocations.sceneColor, sceneTarget.texture);
     SetShaderValueTexture(compositeShader, compositeLocations.sceneDepth, sceneTarget.depth);
-    SetShaderValueTexture(compositeShader, compositeLocations.fogTexture, fogTarget.texture);
+    SetShaderValueTexture(compositeShader, compositeLocations.fogTexture, fogTarget.native.texture);
     SetShaderValue(compositeShader, compositeLocations.fogTexelSize, &fogTexelSize, SHADER_UNIFORM_VEC2);
     SetShaderValue(compositeShader, compositeLocations.bilateralUpsample, &bilateral, SHADER_UNIFORM_INT);
     // The composite shader produces a complete scene pixel, so store it directly.
     rlDisableColorBlend();
-    DrawTexturePro(sceneTarget.texture, SourceRect(sceneTarget.texture), DestinationRect(compositeTarget.texture), Vector2{}, 0.0f, WHITE);
+    DrawTexturePro(sceneTarget.texture, SourceRect(sceneTarget.texture), DestinationRect(compositeTarget.native.texture), Vector2{}, 0.0f, WHITE);
     EndShaderMode();
     rlEnableColorBlend();
     EndTextureMode();
 
     BeginTextureMode(sceneTarget);
-    DrawTexturePro(compositeTarget.texture, SourceRect(compositeTarget.texture), DestinationRect(sceneTarget.texture), Vector2{}, 0.0f, WHITE);
+    DrawTexturePro(compositeTarget.native.texture, SourceRect(compositeTarget.native.texture), DestinationRect(sceneTarget.texture), Vector2{}, 0.0f, WHITE);
     EndTextureMode();
     return true;
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/render/RenderTarget.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -109,8 +110,8 @@ private:
     Shader compositeShader = {};
     ShaderLocations locations;
     CompositeLocations compositeLocations;
-    RenderTexture2D hazeTarget = {};
-    RenderTexture2D compositeTarget = {};
+    engine::RenderTarget hazeTarget;
+    engine::RenderTarget compositeTarget;
     std::array<ProbeCacheEntry, 8> probeCache{};
     const SectorBakedObjectLightProbe* cachedProbeData = nullptr;
     std::size_t cachedProbeCount = 0;

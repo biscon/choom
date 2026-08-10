@@ -60,6 +60,7 @@ public:
             AssetScopeHandle scope,
             const char* key,
             const char* jsonPath,
+            TextureColorUsage atlasColorUsage,
             TextureLoadFlags textureFlags
     );
 
@@ -105,6 +106,7 @@ private:
         SpriteAnimationState state = SpriteAnimationState::Unloaded;
         std::string key;
         std::string jsonPath;
+        TextureColorUsage atlasColorUsage = TextureColorUsage::Count;
         TextureLoadFlags textureFlags = TextureLoad_PointFilter;
         AssetScopeHandle scope;
         SpriteAnimationAsset asset;
@@ -121,6 +123,7 @@ private:
     static std::string MakeRequestKey(
             const char* key,
             const char* jsonPath,
+            TextureColorUsage atlasColorUsage,
             TextureLoadFlags textureFlags
     );
 

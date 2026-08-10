@@ -112,6 +112,7 @@ inline engine::SpriteAnimationHandle RequestSectorBillboardSpriteAnimation(
             scope,
             animationId,
             jsonPath,
+            engine::TextureColorUsage::SceneSrgb,
             engine::TextureLoad_PointFilter);
     sprite.clipIndex = engine::InvalidSpriteClipIndex;
     sprite.source = {};

@@ -24,6 +24,8 @@ enum class FontState {
 };
 
 struct FontAsset {
+    // Font atlases and text colors belong to the display-referred UI path and
+    // intentionally bypass scene decoding and tone mapping.
     Font font = {};
     int pixelSize = 0;
     FontLoadFlags flags = FontLoad_BilinearFilter;

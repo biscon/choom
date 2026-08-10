@@ -489,6 +489,7 @@ void RefreshAddMapTexturePreview(AddMapTextureState& modalState, engine::AssetMa
             modalState.previewScope,
             "selected_preview",
             resolvedPath.c_str(),
+            engine::TextureColorUsage::DisplaySrgb,
             SectorTextureLoadFlags(modalState.filter)
     );
 }
@@ -533,6 +534,7 @@ void RefreshSpritePickerPreview(SpritePickerState& picker, engine::AssetManager&
             picker.previewScope,
             "atlas_preview",
             resolvedPath.c_str(),
+            engine::TextureColorUsage::DisplaySrgb,
             engine::TextureLoad_PointFilter
     );
 }

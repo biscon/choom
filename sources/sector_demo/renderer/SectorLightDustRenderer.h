@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/render/RenderTarget.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -111,7 +112,7 @@ private:
     Material material = {};
     Texture2D defaultMaterialTexture = {};
     Mesh mesh = {};
-    RenderTexture2D dustTarget = {};
+    engine::RenderTarget dustTarget;
     ShaderLocations locations;
     std::array<Emitter, MaxEmitters> emitters{};
     std::array<Particle, MaxParticles> particles{};

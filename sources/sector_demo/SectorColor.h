@@ -19,6 +19,9 @@ inline unsigned char ClampColorByte(float value)
 
 inline Vector3 ColorToUnitRgb(Color color)
 {
+    // Temporary mixed-LDR pipeline behavior: this is raw byte normalization,
+    // not sRGB decoding. Slice 2 narrows/removes runtime scene use; slice 3
+    // updates baking. Do not add a compatibility mode around this helper.
     return Vector3{
             static_cast<float>(color.r) / 255.0f,
             static_cast<float>(color.g) / 255.0f,
