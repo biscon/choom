@@ -366,6 +366,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringFaceAnchor
             ? FindSectorAuthoringFaceAnchor(authoringGraph, inspectorTarget.faceAnchorId)
             : nullptr;
+    const bool hasMultipleSelectedAuthoringFaces =
+            selectionState.selectedAuthoringFaceAnchorIds.size() > 1;
     const SectorAuthoringVertex* selectedAuthoringVertex =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringVertex
             ? FindSectorAuthoringVertex(authoringGraph, inspectorTarget.vertexId)
@@ -492,6 +494,26 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     gap,
                     endpointSummaryHeight);
         }
+        if (selectedAuthoringFaceAnchor != nullptr
+                && hasMultipleSelectedAuthoringFaces) {
+            std::string selectedIds = "Faces: ";
+            for (std::size_t index = 0;
+                    index < selectionState.selectedAuthoringFaceAnchorIds.size();
+                    ++index) {
+                if (index > 0) {
+                    selectedIds += ", ";
+                }
+                selectedIds += std::to_string(
+                        selectionState.selectedAuthoringFaceAnchorIds[index]);
+            }
+            const float idsHeight = MeasureSectorEditorWrappedTextHeight(
+                    smallConfig,
+                    assets,
+                    smallFont,
+                    selectedIds.c_str(),
+                    scrollContentW);
+            return 38.0f + idsHeight + gap + 36.0f + gap;
+        }
         if (selectedAuthoringFaceAnchor != nullptr) {
             const float anchorSummaryHeight = MeasureSectorEditorWrappedTextHeight(
                     smallConfig,
@@ -509,7 +531,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     anchorSummaryHeight);
         }
         if (selectedAuthoringVertex != nullptr) {
-            return 120.0f;
+            return 164.0f;
         }
         if (selectedAuthoringFogVolume != nullptr) {
             return 38.0f + (rowH + gap) * 18.0f + 28.0f;
@@ -1419,6 +1441,66 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         return result;
     }
 
+    if (selectedAuthoringFaceAnchor != nullptr
+            && hasMultipleSelectedAuthoringFaces) {
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 34.0f},
+                font,
+                TextFormat(
+                        "Selected Authoring Faces: %d",
+                        static_cast<int>(
+                                selectionState.selectedAuthoringFaceAnchorIds.size())),
+                engine::UITextJustify::Left,
+                config.textColor);
+        y += 38.0f;
+
+        std::string selectedIds = "Faces: ";
+        for (std::size_t index = 0;
+                index < selectionState.selectedAuthoringFaceAnchorIds.size();
+                ++index) {
+            if (index > 0) {
+                selectedIds += ", ";
+            }
+            selectedIds += std::to_string(
+                    selectionState.selectedAuthoringFaceAnchorIds[index]);
+        }
+        const float idsHeight = MeasureSectorEditorWrappedTextHeight(
+                smallConfig,
+                assets,
+                smallFont,
+                selectedIds.c_str(),
+                contentW);
+        engine::Text(
+                ui,
+                smallConfig,
+                assets,
+                Rectangle{0.0f, y, contentW, idsHeight},
+                smallFont,
+                selectedIds.c_str(),
+                engine::UITextJustify::Left,
+                smallConfig.mutedTextColor,
+                true);
+        y += idsHeight + gap;
+
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_merge_selected_authoring_faces",
+                    Rectangle{0.0f, y, contentW, 36.0f},
+                    font,
+                    "Merge Selected Into...")) {
+            context.authoringFaceMerge.BeginTargetPick();
+        }
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
     if (selectedAuthoringFaceAnchor != nullptr) {
         engine::Text(
                 ui,
@@ -1451,6 +1533,24 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 smallConfig.mutedTextColor,
                 true);
         y += anchorHeight;
+
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_merge_selected_authoring_face",
+                    Rectangle{0.0f, y, contentW, 36.0f},
+                    font,
+                    "Merge Selected Into...")) {
+            if (selectionState.selectedAuthoringFaceAnchorIds.empty()) {
+                SelectSectorEditorAuthoringFaceAnchorTarget(
+                        context.selection,
+                        selectedAuthoringFaceAnchor->id);
+            }
+            context.authoringFaceMerge.BeginTargetPick();
+        }
+        y += 36.0f + gap;
 
         const int faceAnchorId = selectedAuthoringFaceAnchor->id;
         const auto mutateFaceAnchor =
@@ -2128,6 +2228,38 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                         SectorCoordToVisibleAuthoring(selectedAuthoringVertex->y)),
                 engine::UITextJustify::Left,
                 config.mutedTextColor);
+        y += 34.0f;
+
+        int incidentLineCount = 0;
+        for (const SectorAuthoringLine& line : authoringGraph.lines) {
+            if (line.startVertexId == selectedAuthoringVertex->id
+                    || line.endVertexId == selectedAuthoringVertex->id) {
+                ++incidentLineCount;
+            }
+        }
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, y, contentW, 30.0f},
+                font,
+                TextFormat("Incident lines: %d", incidentLineCount),
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+        y += 34.0f;
+        if (engine::Button(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_authoring_vertex_delete_or_dissolve",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font,
+                    incidentLineCount == 0 ? "Delete Vertex" : "Dissolve Vertex")) {
+            AppendRequest(
+                    result,
+                    SectorEditorInspectorPanelRequestKind::DeleteSelectedAuthoringVertex);
+        }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;

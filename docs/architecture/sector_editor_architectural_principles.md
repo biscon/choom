@@ -75,6 +75,18 @@ properties, line flags, or material data.
 - Direct topology mutation is allowed only for derivation, runtime/cache/bake
   outputs, explicit import/migration code, or intentionally topology-owned
   global state.
+- Destructive authoring-geometry edits must build a candidate graph, derive and
+  validate its topology, and commit graph plus derived topology together. A
+  rejected candidate must leave the live graph, topology, dirty state, and
+  render-cache revision unchanged.
+- Removing a face is a merge into an explicitly chosen surviving non-void face.
+  The operation removes source face anchors and only boundaries internal to the
+  selected-plus-survivor region; it must not model face deletion as a sequence
+  of live line and vertex deletions.
+- Dissolving an authoring degree-2 vertex keeps the lower-ID incident line and
+  its authored line/side data, removes the higher-ID line, and connects the two
+  neighboring vertices. Incident portal doors block the operation; unrelated
+  doors must be rebound against the candidate derivation before commit.
 
 ## Derived Topology Read Rules
 

@@ -7,6 +7,7 @@
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 
 #include <raylib.h>
 
@@ -37,6 +38,7 @@ struct SectorEditorToolContext {
     Rectangle canvasRect = {};
     SectorEditorAuthoringFogVolumeEditingService* fogVolumeEditing = nullptr;
     SectorEditorLevelMarkerEditingService* levelMarkerEditing = nullptr;
+    SectorEditorAuthoringFaceMergeService* authoringFaceMerge = nullptr;
 
     std::function<SectorPoint()> currentSnappedSectorPoint;
     std::function<bool(SectorPoint, SectorTopologyCoordPoint&, std::string&)> toTopologyCoordPoint;

@@ -31,6 +31,7 @@
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
 #include "sector_editor/services/footsteps/SectorEditorFootstepService.h"
+#include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
 #include "sector_demo/SectorSceneRuntime.h"
@@ -444,6 +445,8 @@ private:
     std::optional<SectorEditorAuthoringFogVolumeEditingService> fogVolumeEditingService;
     LevelMarkerEditingState levelMarkerEditingState;
     LevelMarkerEditingUiState levelMarkerEditingUiState;
+    SectorEditorAuthoringFaceMergeState authoringFaceMergeState;
+    std::optional<SectorEditorAuthoringFaceMergeService> authoringFaceMergeService;
     std::optional<SectorEditorLevelMarkerEditingService> levelMarkerEditingService;
     SectorEditorLightmapBakeController lightmapBake;
     Rectangle canvasRect = {};

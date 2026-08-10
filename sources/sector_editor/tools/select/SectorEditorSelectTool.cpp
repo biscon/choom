@@ -29,7 +29,10 @@ SectorEditorPickTarget CurrentPickSelectionTarget(SectorEditorToolContext& conte
             : SectorEditorPickTarget{};
 }
 
-bool SelectPickTarget(SectorEditorToolContext& context, SectorEditorPickTarget target)
+bool SelectPickTarget(
+        SectorEditorToolContext& context,
+        SectorEditorPickTarget target,
+        bool additiveFaceSelection)
 {
     if (!context.buildSelectionServiceContext) {
         return false;
@@ -62,6 +65,22 @@ bool SelectPickTarget(SectorEditorToolContext& context, SectorEditorPickTarget t
             return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line
                     && context.selectionState.selectedAuthoring.lineId == target.id;
         case SectorEditorPickKind::AuthoringFaceAnchor:
+            if (additiveFaceSelection) {
+                if (context.selectionState.selectedAuthoring.kind
+                        != SectorAuthoringSelectionKind::FaceAnchor) {
+                    ClearSectorEditorSelection(selectionContext);
+                } else {
+                    ClearSectorEditorTopologySelectionOnly(selectionContext);
+                }
+                ToggleSectorEditorAuthoringFaceSelection(
+                        context.authoringGraph,
+                        context.selectionState,
+                        target.id);
+                return IsSectorEditorAuthoringFaceSelected(
+                                context.selectionState,
+                                target.id)
+                        || context.selectionState.selectedAuthoringFaceAnchorIds.empty();
+            }
             SelectSectorEditorAuthoringFaceAnchorTarget(selectionContext, target.id);
             return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
                     && context.selectionState.selectedAuthoring.faceAnchorId == target.id;
@@ -83,6 +102,14 @@ bool SelectPickTarget(SectorEditorToolContext& context, SectorEditorPickTarget t
 void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
 {
     if (context.input == nullptr) {
+        return;
+    }
+
+    if (context.authoringFaceMerge != nullptr
+            && context.authoringFaceMerge->IsChoosingTarget()) {
+        context.authoringFaceMerge->UpdateTargetHover(
+                context.screenToMap(context.input->MousePosition()));
+        context.selectionState.inspectedTopologyVertexId = -1;
         return;
     }
 
@@ -129,6 +156,11 @@ bool UpdateSelectToolEarly(SectorEditorToolContext& context)
         return false;
     }
 
+    if (context.authoringFaceMerge != nullptr
+            && context.authoringFaceMerge->IsChoosingTarget()) {
+        return false;
+    }
+
     SectorEditorManipulationServiceContext manipulationContext =
             context.buildManipulationServiceContext();
     const bool wasArmed = manipulationContext.manipulationState.selectDragArm.active;
@@ -142,6 +174,11 @@ bool HandleSelectMousePress(SectorEditorToolContext& context, const engine::Inpu
             || !CheckCollisionPointRec(event.mouseButton.position, context.canvasRect)
             || !context.buildManipulationServiceContext) {
         return false;
+    }
+
+    if (context.authoringFaceMerge != nullptr
+            && context.authoringFaceMerge->IsChoosingTarget()) {
+        return true;
     }
 
     SectorEditorManipulationServiceContext manipulationContext =
@@ -167,6 +204,25 @@ bool UpdateSelectTool(SectorEditorToolContext& context)
                     return;
                 }
 
+                if (context.authoringFaceMerge != nullptr
+                        && context.authoringFaceMerge->IsChoosingTarget()) {
+                    const int targetFaceAnchorId =
+                            context.authoringFaceMerge->FindTargetAtMapPoint(
+                                    context.screenToMap(
+                                            event.mouseClick.releasePosition),
+                                    false);
+                    if (targetFaceAnchorId < 0) {
+                        context.statusText =
+                                "Merge Selected Into: click a non-void surviving face";
+                    } else {
+                        context.authoringFaceMerge->RequestMergeAtTarget(
+                                targetFaceAnchorId);
+                    }
+                    engine::ConsumeEvent(event);
+                    handled = true;
+                    return;
+                }
+
                 const std::vector<SectorEditorPickCandidate> candidates =
                         BuildPickCandidates(context, event.mouseClick.releasePosition);
                 int cycleIndex = -1;
@@ -176,7 +232,15 @@ bool UpdateSelectTool(SectorEditorToolContext& context)
                         CurrentPickSelectionTarget(context),
                         &cycleIndex,
                         &cycleCount);
+                const bool additiveFaceSelection =
+                        context.input->IsKeyDown(KEY_LEFT_SHIFT)
+                        || context.input->IsKeyDown(KEY_RIGHT_SHIFT);
                 if (target.kind == SectorEditorPickKind::None) {
+                    if (additiveFaceSelection) {
+                        engine::ConsumeEvent(event);
+                        handled = true;
+                        return;
+                    }
                     if (context.buildSelectionServiceContext) {
                         SectorEditorSelectionServiceContext selectionContext =
                                 context.buildSelectionServiceContext();
@@ -185,9 +249,21 @@ bool UpdateSelectTool(SectorEditorToolContext& context)
                         context.clearSelection();
                     }
                     context.statusText = "Selection cleared";
-                } else if (SelectPickTarget(context, target)) {
+                } else if (SelectPickTarget(
+                                   context,
+                                   target,
+                                   additiveFaceSelection)) {
                     const char* kindName = SectorEditorPickKindName(target.kind);
-                    context.statusText = cycleCount > 1 && cycleIndex >= 0
+                    if (target.kind == SectorEditorPickKind::AuthoringFaceAnchor
+                            && additiveFaceSelection) {
+                        context.statusText = TextFormat(
+                                "Selected %zu authoring face%s",
+                                context.selectionState.selectedAuthoringFaceAnchorIds.size(),
+                                context.selectionState.selectedAuthoringFaceAnchorIds.size() == 1
+                                        ? ""
+                                        : "s");
+                    } else {
+                        context.statusText = cycleCount > 1 && cycleIndex >= 0
                             ? TextFormat(
                                     "Selected %s %d (%d/%d)",
                                     kindName,
@@ -195,6 +271,7 @@ bool UpdateSelectTool(SectorEditorToolContext& context)
                                     cycleIndex + 1,
                                     cycleCount)
                             : TextFormat("Selected %s %d", kindName, target.id);
+                    }
                 }
                 engine::ConsumeEvent(event);
                 handled = true;

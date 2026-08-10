@@ -37,6 +37,8 @@ struct SectorEditorTopologyDrawContext {
     int hoveredDynamicSpotLightId = -1;
     SectorAuthoringSelectionTarget selectedAuthoring;
     SectorAuthoringSelectionTarget hoveredAuthoring;
+    const std::vector<int>* selectedAuthoringFaceAnchorIds = nullptr;
+    int authoringFaceMergeTargetId = -1;
 };
 
 SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(

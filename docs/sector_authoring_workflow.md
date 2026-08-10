@@ -64,9 +64,15 @@ Use authoring tools for normal geometry edits:
 
 - draw authoring lines to create boundaries, cuts, nested loops, and portal
   candidates
-- select authoring lines, vertices, and face anchors in the existing 2D editor
+- select authoring lines, vertices, and face anchors in the existing 2D editor;
+  Shift-click toggles additional authoring faces
 - move authoring vertices instead of moving derived topology vertices
-- delete authoring lines or safe unconnected authoring vertices
+- merge one or more selected faces into an adjacent surviving non-void face
+  with `Merge Selected Into...` (or `Delete`), including selected void faces
+- delete authoring lines only when the candidate graph still derives valid
+  topology; newly orphaned endpoints are pruned automatically
+- delete isolated authoring vertices, or dissolve a degree-2 authoring vertex
+  into one line between its two neighbors with `Delete` or the vertex inspector
 - edit room properties on face anchors
 - edit wall/lower/upper/middle materials on authoring sides
 - edit line flags such as `blocksPlayer` on authoring lines
@@ -99,6 +105,29 @@ Authoring graph mutations that change live topology or visible cached 2D editor
 state should go through the authoring edit/refresh path so document-edited state,
 derivation state, and the 2D topology render cache are invalidated together.
 
+Face merging is transactional. After selecting faces, `Merge Selected Into...`
+enters a target-pick mode; click the non-void face whose properties and anchor
+should survive. The confirmation summarizes removed faces, lines, side records,
+unused vertices, and dependent doors. The editor derives and validates a copied
+candidate before committing. Failure leaves the live document untouched.
+Boundaries against unselected faces remain. Doors on removed portals are
+deleted, doors on surviving portals are rebound, and lights and unrelated
+placed objects remain. Existing baked-lightmap metadata is preserved, but the
+geometry change makes its source hash stale until the next bake.
+
+Authoring vertex dissolve is transactional too. An isolated vertex is removed
+directly from a copied candidate graph. A degree-2 vertex is removed together
+with its higher-ID incident line, while the lower-ID line survives and is
+rewired between the two neighboring vertices. The surviving line keeps its
+flags, special data, wall materials, UVs, and decals; the discarded line's data
+is intentionally dropped. Face anchors auto-follow when necessary. The editor
+rejects degree-1 and branching vertices, collapsed or duplicate replacements,
+invalid/crossing candidates, and any dissolve whose incident portal has a door.
+Doors elsewhere in the map are rebound to the newly derived IDs. Rejection
+leaves the graph, derived topology, dirty state, and 2D render cache unchanged.
+Successful dissolve preserves baked-lightmap metadata while the geometry change
+makes its source hash stale until the next bake.
+
 ## Manual Smoke Suggestions
 
 These checks are for a human running the editor, not for automated Codex GUI
@@ -112,5 +141,11 @@ verification:
   the derived result after valid derivation
 - edit a wall texture or `blocksPlayer` on an authoring side/line and confirm
   the 3D surface or gameplay collision reflects it after derivation
+- Shift-select several enclosed faces, merge them into the surrounding face,
+  and confirm the confirmation counts and resulting single derived face
+- try deleting a required boundary line and confirm the graph remains unchanged
+  with an atomic-rejection status
+- delete one corner of a rectangular authoring face and confirm it becomes a
+  valid triangular face with the replacement line selected
 - confirm retired direct-topology buttons are unavailable or clearly marked
   legacy-only in graph-authoritative mode

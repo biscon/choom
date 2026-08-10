@@ -433,9 +433,17 @@ bool ShouldDrawAuthoringFaceSelectionHighlight(
         const SectorEditorTopologyDrawContext& context,
         int faceAnchorId)
 {
+    const bool selected = context.selectedAuthoringFaceAnchorIds != nullptr
+            ? std::find(
+                      context.selectedAuthoringFaceAnchorIds->begin(),
+                      context.selectedAuthoringFaceAnchorIds->end(),
+                      faceAnchorId)
+                    != context.selectedAuthoringFaceAnchorIds->end()
+            : context.selectedAuthoring.kind
+                            == SectorAuthoringSelectionKind::FaceAnchor
+                    && context.selectedAuthoring.faceAnchorId == faceAnchorId;
     return !context.derivedTopologyStale
-            && context.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
-            && context.selectedAuthoring.faceAnchorId == faceAnchorId
+            && selected
             && FindCachedAuthoringFaceHighlight(cache, faceAnchorId) != nullptr;
 }
 
@@ -943,9 +951,10 @@ void DrawCachedAuthoringGraphOverlay(
         if (!highlight.isVoid) {
             continue;
         }
-        const bool selected =
-                context.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
-                && context.selectedAuthoring.faceAnchorId == highlight.faceAnchorId;
+        const bool selected = ShouldDrawAuthoringFaceSelectionHighlight(
+                cache,
+                context,
+                highlight.faceAnchorId);
         if (selected) {
             continue;
         }
@@ -957,19 +966,38 @@ void DrawCachedAuthoringGraphOverlay(
         }
     }
 
-    if (context.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor
-            && !context.derivedTopologyStale) {
-        if (const CachedAuthoringFaceHighlightDraw* highlight = FindCachedAuthoringFaceHighlight(
-                    cache,
-                    context.selectedAuthoring.faceAnchorId)) {
-            const Color selectedFaceColor = highlight->isVoid
+    if (!context.derivedTopologyStale) {
+        for (const CachedAuthoringFaceHighlightDraw& highlight
+                : cache.authoringFaceHighlights) {
+            if (!ShouldDrawAuthoringFaceSelectionHighlight(
+                        cache,
+                        context,
+                        highlight.faceAnchorId)) {
+                continue;
+            }
+            const Color selectedFaceColor = highlight.isVoid
                     ? Color{190, 188, 204, 235}
                     : selectedLineColor;
-            for (const CachedTopologyOutlineSegment& segment : highlight->outlineSegments) {
+            for (const CachedTopologyOutlineSegment& segment
+                    : highlight.outlineSegments) {
                 const Vector2 a = CachedMapToScreen(context, segment.a);
                 const Vector2 b = CachedMapToScreen(context, segment.b);
                 DrawLineEx(a, b, 8.0f, lineShadow);
                 DrawLineEx(a, b, 4.0f, selectedFaceColor);
+            }
+        }
+
+        if (const CachedAuthoringFaceHighlightDraw* target =
+                    FindCachedAuthoringFaceHighlight(
+                            cache,
+                            context.authoringFaceMergeTargetId)) {
+            const Color targetColor{100, 226, 150, 255};
+            for (const CachedTopologyOutlineSegment& segment
+                    : target->outlineSegments) {
+                const Vector2 a = CachedMapToScreen(context, segment.a);
+                const Vector2 b = CachedMapToScreen(context, segment.b);
+                DrawLineEx(a, b, 10.0f, lineShadow);
+                DrawLineEx(a, b, 5.0f, targetColor);
             }
         }
     }

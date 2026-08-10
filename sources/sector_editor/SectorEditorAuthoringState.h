@@ -5,6 +5,7 @@
 #include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <vector>
@@ -26,6 +27,16 @@ bool IsSectorAuthoringSelectionTargetValid(
         SectorAuthoringSelectionTarget target);
 
 void ClearSectorEditorAuthoringSelection(SelectionState& selectionState);
+void ReserveSectorEditorAuthoringFaceSelection(
+        SelectionState& selectionState,
+        std::size_t capacity);
+bool IsSectorEditorAuthoringFaceSelected(
+        const SelectionState& selectionState,
+        int faceAnchorId);
+bool ToggleSectorEditorAuthoringFaceSelection(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int faceAnchorId);
 bool SelectSectorEditorAuthoringLine(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
@@ -197,6 +208,18 @@ bool DeleteSectorEditorSelectedAuthoringLine(
         SectorAuthoringGraph& authoringGraph,
         SectorEditorDerivationDocumentAccess derivation,
         SelectionState& selectionState);
+
+bool CommitSectorEditorAuthoringGraphCandidate(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SelectionState& selectionState,
+        SectorAuthoringGraph candidateGraph,
+        SectorAuthoringDerivationResult candidateDerivation,
+        const SectorTopologyMap& candidateMapData,
+        const char* status);
 bool MoveSectorEditorAuthoringVertex(
         SectorEditorState& state,
         SectorEditorDocumentLifecycleAccess lifecycle,

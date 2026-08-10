@@ -213,11 +213,13 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorMaterialActions.cpp
             sources/sector_editor/SectorEditorTextureActions.cpp
             sources/sector_editor/selection/SectorEditorSelectionService.cpp
+            sources/sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.cpp
             sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
             sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
             sources/sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
+            sources/sector_editor/services/runtime_objects/SectorEditorAuthoringDoorReconciliation.cpp
             sources/sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.cpp
             sources/sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.cpp
             sources/sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.cpp

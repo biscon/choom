@@ -391,6 +391,16 @@ bool SectorEditor::Init(engine::EngineContext& context)
                     selectionState,
                     levelMarkerEditingState,
                     statusText});
+    authoringFaceMergeService.emplace(
+            SectorEditorAuthoringFaceMergeServiceContext{
+                    state,
+                    Lifecycle(),
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    selectionState,
+                    authoringFaceMergeState,
+                    statusText});
     return true;
 }
 
@@ -428,7 +438,9 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    authoringFaceMergeState = SectorEditorAuthoringFaceMergeState{};
     fogVolumeEditingService.reset();
+    authoringFaceMergeService.reset();
     levelMarkerEditingService.reset();
     playerAudio = PlayerAudioRuntime{};
     canvasRect = {};
@@ -919,6 +931,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
     context.levelMarkerEditing = levelMarkerEditingService
             ? &levelMarkerEditingService.value()
             : nullptr;
+    context.authoringFaceMerge = authoringFaceMergeService
+            ? &authoringFaceMergeService.value()
+            : nullptr;
     context.currentSnappedSectorPoint = [this]() {
         return CurrentSnappedSectorPoint();
     };
@@ -1280,6 +1295,10 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                                 "Cancelled authoring vertex move",
                                 "Cancelled light move",
                                 "Cancelled object move")) {
+                    } else if (authoringFaceMergeService
+                            && authoringFaceMergeService->IsChoosingTarget()) {
+                        authoringFaceMergeService->CancelTargetPick(
+                                "Merge Selected Into cancelled");
                     } else if (state.pendingAuthoringLine.active) {
                         CancelPendingAuthoringLine("Line chain stopped");
                     } else if (state.pendingAuthoringRectangle.active) {
@@ -1305,13 +1324,16 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (event.key.key == KEY_DELETE) {
-                    if (IsGraphAuthoringTool(state.currentTool)) {
+                    if (!selectionState.selectedAuthoringFaceAnchorIds.empty()
+                            && authoringFaceMergeService) {
+                        authoringFaceMergeService->BeginTargetPick();
+                    } else if (IsGraphAuthoringTool(state.currentTool)) {
                         if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line) {
                             DeleteSelectedAuthoringLine();
                         } else if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex) {
                             DeleteSelectedAuthoringVertex();
                         } else {
-                            statusText = "Select an authoring line or isolated authoring vertex to delete.";
+                            statusText = "Select an authoring line or an isolated/degree-2 authoring vertex to delete.";
                         }
                     } else if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Line) {
                         DeleteSelectedAuthoringLine();
@@ -1479,6 +1501,13 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                 }
 
                 if (event.mouseClick.button == MOUSE_RIGHT_BUTTON) {
+                    if (authoringFaceMergeService
+                            && authoringFaceMergeService->IsChoosingTarget()) {
+                        authoringFaceMergeService->CancelTargetPick(
+                                "Merge Selected Into cancelled");
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
                     if (state.pendingAuthoringLine.active) {
                         CancelPendingAuthoringLine("Line chain stopped");
                         engine::ConsumeEvent(event);
@@ -3690,7 +3719,9 @@ void SectorEditor::DrawTopologyDocument()
             selectionState.hoveredTopologyDynamicLightId,
             selectionState.hoveredTopologyDynamicSpotLightId,
             selectionState.selectedAuthoring,
-            selectionState.hoveredAuthoring
+            selectionState.hoveredAuthoring,
+            &selectionState.selectedAuthoringFaceAnchorIds,
+            authoringFaceMergeState.hoveredTargetFaceAnchorId
     };
     DrawCachedTopologySectors(state.topologyRenderCache, drawContext);
     DrawAuthoringFogVolumes();
@@ -4332,6 +4363,11 @@ void SectorEditor::DrawToolsPanel(
             return;
         }
         manipulationState.selectDragArm = SelectDragArmState{};
+        if (authoringFaceMergeService
+                && authoringFaceMergeService->IsChoosingTarget()) {
+            authoringFaceMergeService->CancelTargetPick(
+                    "Merge Selected Into cancelled");
+        }
         if (state.pendingAuthoringLine.active && tool != SectorEditorTool::AuthoringLine) {
             CancelPendingAuthoringLine("Cancelled authoring line");
         }
@@ -4645,6 +4681,7 @@ void SectorEditor::DrawSectorsPanel(
             lightEditing,
             fogVolumeEditingService.value(),
             levelMarkerEditingService.value(),
+            authoringFaceMergeService.value(),
             engineContext};
     const SectorEditorInspectorPanelResult result = DrawSectorEditorInspectorPanel(context);
     for (int i = 0; i < result.requestCount; ++i) {
@@ -4655,6 +4692,9 @@ void SectorEditor::DrawSectorsPanel(
             break;
         case SectorEditorInspectorPanelRequestKind::BeginAuthoringInsertVertex:
             BeginPendingAuthoringInsertVertex(request.lineId);
+            break;
+        case SectorEditorInspectorPanelRequestKind::DeleteSelectedAuthoringVertex:
+            DeleteSelectedAuthoringVertex();
             break;
         case SectorEditorInspectorPanelRequestKind::DeleteSelectedRuntimeObject:
             DeleteSelectedRuntimeObject();
@@ -5212,6 +5252,11 @@ void SectorEditor::DrawStatusPanel(
         selectedLabel = TextFormat("authoring line %d", selectionState.selectedAuthoring.lineId);
     } else if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Vertex) {
         selectedLabel = TextFormat("authoring vertex %d", selectionState.selectedAuthoring.vertexId);
+    } else if (selectionState.selectedAuthoringFaceAnchorIds.size() > 1) {
+        selectedLabel = TextFormat(
+                "%d authoring faces",
+                static_cast<int>(
+                        selectionState.selectedAuthoringFaceAnchorIds.size()));
     } else if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FaceAnchor) {
         selectedLabel = TextFormat("authoring face anchor %d", selectionState.selectedAuthoring.faceAnchorId);
     }
@@ -5225,6 +5270,8 @@ void SectorEditor::DrawStatusPanel(
         pendingText = " | insert vertex";
     } else if (manipulationState.authoringVertexDrag.active) {
         pendingText = " | authoring vertex move";
+    } else if (authoringFaceMergeState.choosingTarget) {
+        pendingText = " | merge target";
     }
     const std::string shortMapPath = Lifecycle().hasCurrentLevelPath
             ? Lifecycle().currentLevelPath
@@ -5306,6 +5353,11 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     textureCatalog.RefreshTextureHandles(assets);
     BuildSoundService().RefreshCatalogHandles();
     initialized = true;
+    authoringFaceMergeState = SectorEditorAuthoringFaceMergeState{};
+    ClearSectorEditorAuthoringSelection(selectionState);
+    ReserveSectorEditorAuthoringFaceSelection(
+            selectionState,
+            AuthoringGraph().faceAnchors.size());
     statusText = "New blank level";
 }
 
@@ -5410,7 +5462,11 @@ bool SectorEditor::LoadLevel(
     state.setAllModal = SectorEditorSetAllModalState{};
     state.decalTintModal = DecalTintModalState{};
     state.doorTextureSettingsModal = DoorTextureSettingsModalState{};
+    authoringFaceMergeState = SectorEditorAuthoringFaceMergeState{};
     ClearSelection();
+    ReserveSectorEditorAuthoringFaceSelection(
+            selectionState,
+            AuthoringGraph().faceAnchors.size());
     selectionState.hoveredTopologyLightId = -1;
     selectionState.hoveredTopologyStaticSpotLightId = -1;
     selectionState.hoveredTopologyDynamicLightId = -1;
@@ -6773,6 +6829,10 @@ void SectorEditor::SelectAuthoringLine(int lineId)
 bool SectorEditor::DeleteSelectedAuthoringLine()
 {
     const int lineId = selectionState.selectedAuthoring.lineId;
+    const bool hadValidSelection =
+            selectionState.selectedAuthoring.kind
+                    == SectorAuthoringSelectionKind::Line
+            && FindSectorAuthoringLine(AuthoringGraph(), lineId) != nullptr;
     if (!DeleteSectorEditorSelectedAuthoringLine(
                 state,
                 Lifecycle(),
@@ -6780,7 +6840,9 @@ bool SectorEditor::DeleteSelectedAuthoringLine()
                 AuthoringGraph(),
                 MakeLiveDerivationAccess(documentState.derivation),
                 selectionState)) {
-        statusText = "Select an authoring line to delete.";
+        statusText = hadValidSelection
+                ? documentState.derivation.authoringDerivationStatus
+                : "Select an authoring line to delete.";
         return false;
     }
 
@@ -6815,7 +6877,7 @@ bool SectorEditor::DeleteSelectedAuthoringVertex()
         const SectorEditorConstDerivationDocumentAccess derivation =
                 MakeLiveConstDerivationAccess(documentState.derivation);
         statusText = derivation.authoringDerivationStatus.empty()
-                ? "Select an isolated authoring vertex to delete."
+                ? "Select an isolated or degree-2 authoring vertex to delete."
                 : derivation.authoringDerivationStatus;
         return false;
     }

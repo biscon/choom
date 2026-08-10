@@ -18,6 +18,7 @@
 #include "sector_editor/services/footsteps/SectorEditorFootstepService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
+#include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 
 #include <array>
 #include <string>
@@ -32,6 +33,7 @@ class SectorEditorSoundService;
 enum class SectorEditorInspectorPanelRequestKind {
     RebuildSectorCollisionWorld,
     BeginAuthoringInsertVertex,
+    DeleteSelectedAuthoringVertex,
     DeleteSelectedRuntimeObject,
     OpenDeleteSelectedLightConfirmation,
     OpenDeleteSelectedFogVolumeConfirmation,
@@ -86,6 +88,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorLightEditingService& lightEditing;
     SectorEditorAuthoringFogVolumeEditingService& fogVolumeEditing;
     SectorEditorLevelMarkerEditingService& levelMarkerEditing;
+    SectorEditorAuthoringFaceMergeService& authoringFaceMerge;
     engine::EngineContext* engineContext = nullptr;
 };
 
@@ -116,6 +119,7 @@ inline float MeasureSectorEditorAuthoringFaceInspectorContentHeight(
 
     float height = 38.0f; // Face title.
     height += anchorSummaryHeight;
+    height += 36.0f + gap; // Merge Selected Into.
     height += 4.0f * (rowHeight + gap); // Void, floor, ceiling, and ceiling sky.
 
     height += 18.0f + 30.0f; // Audio separator/title.

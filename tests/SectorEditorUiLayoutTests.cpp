@@ -339,8 +339,8 @@ void TestAuthoringFaceInspectorHeightIncludesAllSections()
                     rowH,
                     gap,
                     anchorSummaryHeight);
-    Check(Near(height, 1390.0f),
-          "authoring face height includes ceiling sky, audio, materials, decals, and padding");
+    Check(Near(height, 1434.0f),
+          "authoring face height includes merge, ceiling sky, audio, materials, decals, and padding");
 
     anchor.floorDecal.textureId = "floor_decal";
     anchor.floorDecal.emissive = true;

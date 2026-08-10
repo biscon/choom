@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/services/runtime_objects/SectorEditorAuthoringDoorReconciliation.h"
 #include "util/earcut.h"
 
 #include <raylib.h>
@@ -1143,6 +1144,71 @@ bool AllDerivedSectorsHaveUniqueFaceAnchorMappings(
     return true;
 }
 
+bool AllExtractedFacesHaveUniqueFaceAnchorMappings(
+        const SectorAuthoringGraph& graph,
+        const SectorAuthoringDerivationResult& result)
+{
+    for (const SectorAuthoringExtractedFace& face : result.faces.faces) {
+        int matchCount = 0;
+        for (const SectorAuthoringResolvedFaceMapping& mapping
+                : result.mapping.resolvedFaces) {
+            if (mapping.extractedFaceId == face.id
+                    && IsValidSectorAuthoringId(mapping.faceAnchorId)
+                    && FindSectorAuthoringFaceAnchor(
+                               graph,
+                               mapping.faceAnchorId) != nullptr) {
+                ++matchCount;
+            }
+        }
+        if (matchCount != 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool BuildDissolvedFaceAnchorBindings(
+        const std::vector<SectorEditorFaceAnchorBinding>& currentBindings,
+        int survivingLineId,
+        int removedLineId,
+        std::vector<SectorEditorFaceAnchorBinding>& outBindings,
+        std::string& outError)
+{
+    outBindings = currentBindings;
+    outError.clear();
+    for (SectorEditorFaceAnchorBinding& binding : outBindings) {
+        const bool containsSurvivingLine = std::any_of(
+                binding.boundarySides.begin(),
+                binding.boundarySides.end(),
+                [survivingLineId](SectorAuthoringSideId side) {
+                    return side.lineId == survivingLineId;
+                });
+        const bool containsRemovedLine = std::any_of(
+                binding.boundarySides.begin(),
+                binding.boundarySides.end(),
+                [removedLineId](SectorAuthoringSideId side) {
+                    return side.lineId == removedLineId;
+                });
+        if (containsSurvivingLine != containsRemovedLine) {
+            outError =
+                    "Cannot dissolve vertex: its two lines do not bound the same authoring faces";
+            return false;
+        }
+        if (!containsRemovedLine) {
+            continue;
+        }
+        binding.boundarySides.erase(
+                std::remove_if(
+                        binding.boundarySides.begin(),
+                        binding.boundarySides.end(),
+                        [removedLineId](SectorAuthoringSideId side) {
+                            return side.lineId == removedLineId;
+                        }),
+                binding.boundarySides.end());
+    }
+    return true;
+}
+
 void CopyTopologySectorDefaultsToFaceAnchor(
         const SectorTopologySector& sector,
         SectorAuthoringFaceAnchor& anchor)
@@ -1424,6 +1490,57 @@ bool IsSectorAuthoringSelectionTargetValid(
 void ClearSectorEditorAuthoringSelection(SelectionState& selectionState)
 {
     selectionState.selectedAuthoring = EmptyAuthoringSelectionTarget();
+    selectionState.selectedAuthoringFaceAnchorIds.clear();
+}
+
+void ReserveSectorEditorAuthoringFaceSelection(
+        SelectionState& selectionState,
+        std::size_t capacity)
+{
+    constexpr std::size_t MinimumReservedFaceSelectionCapacity = 64;
+    selectionState.selectedAuthoringFaceAnchorIds.reserve(
+            std::max(capacity, MinimumReservedFaceSelectionCapacity));
+}
+
+bool IsSectorEditorAuthoringFaceSelected(
+        const SelectionState& selectionState,
+        int faceAnchorId)
+{
+    return std::find(
+            selectionState.selectedAuthoringFaceAnchorIds.begin(),
+            selectionState.selectedAuthoringFaceAnchorIds.end(),
+            faceAnchorId) != selectionState.selectedAuthoringFaceAnchorIds.end();
+}
+
+bool ToggleSectorEditorAuthoringFaceSelection(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int faceAnchorId)
+{
+    if (FindSectorAuthoringFaceAnchor(graph, faceAnchorId) == nullptr) {
+        return false;
+    }
+
+    auto& selectedIds = selectionState.selectedAuthoringFaceAnchorIds;
+    const auto found = std::find(selectedIds.begin(), selectedIds.end(), faceAnchorId);
+    if (found != selectedIds.end()) {
+        selectedIds.erase(found);
+        if (selectedIds.empty()) {
+            selectionState.selectedAuthoring = EmptyAuthoringSelectionTarget();
+        } else {
+            selectionState.selectedAuthoring =
+                    MakeSectorAuthoringFaceAnchorSelectionTarget(selectedIds.back());
+        }
+        return true;
+    }
+
+    if (selectionState.selectedAuthoring.kind != SectorAuthoringSelectionKind::FaceAnchor) {
+        selectedIds.clear();
+    }
+    selectedIds.push_back(faceAnchorId);
+    selectionState.selectedAuthoring =
+            MakeSectorAuthoringFaceAnchorSelectionTarget(faceAnchorId);
+    return true;
 }
 
 bool SelectSectorEditorAuthoringLine(
@@ -1439,6 +1556,7 @@ bool SelectSectorEditorAuthoringLine(
     }
 
     selectionState.selectedAuthoring = target;
+    selectionState.selectedAuthoringFaceAnchorIds.clear();
     return true;
 }
 
@@ -1455,6 +1573,7 @@ bool SelectSectorEditorAuthoringVertex(
     }
 
     selectionState.selectedAuthoring = target;
+    selectionState.selectedAuthoringFaceAnchorIds.clear();
     return true;
 }
 
@@ -1471,6 +1590,8 @@ bool SelectSectorEditorAuthoringFaceAnchor(
     }
 
     selectionState.selectedAuthoring = target;
+    selectionState.selectedAuthoringFaceAnchorIds.clear();
+    selectionState.selectedAuthoringFaceAnchorIds.push_back(faceAnchorId);
     return true;
 }
 
@@ -1486,6 +1607,7 @@ bool SelectSectorEditorAuthoringFogVolume(
         return false;
     }
     selectionState.selectedAuthoring = target;
+    selectionState.selectedAuthoringFaceAnchorIds.clear();
     return true;
 }
 
@@ -1501,6 +1623,7 @@ bool SelectSectorEditorAuthoringLevelMarker(
         return false;
     }
     selectionState.selectedAuthoring = target;
+    selectionState.selectedAuthoringFaceAnchorIds.clear();
     return true;
 }
 
@@ -1575,8 +1698,22 @@ void PruneSectorEditorAuthoringSelectionToGraph(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState)
 {
+    selectionState.selectedAuthoringFaceAnchorIds.erase(
+            std::remove_if(
+                    selectionState.selectedAuthoringFaceAnchorIds.begin(),
+                    selectionState.selectedAuthoringFaceAnchorIds.end(),
+                    [&graph](int faceAnchorId) {
+                        return FindSectorAuthoringFaceAnchor(graph, faceAnchorId) == nullptr;
+                    }),
+            selectionState.selectedAuthoringFaceAnchorIds.end());
     if (!IsSectorAuthoringSelectionTargetValid(graph, selectionState.selectedAuthoring)) {
-        ClearSectorEditorAuthoringSelection(selectionState);
+        if (!selectionState.selectedAuthoringFaceAnchorIds.empty()) {
+            selectionState.selectedAuthoring =
+                    MakeSectorAuthoringFaceAnchorSelectionTarget(
+                            selectionState.selectedAuthoringFaceAnchorIds.back());
+        } else {
+            ClearSectorEditorAuthoringSelection(selectionState);
+        }
     }
     if (!IsSectorAuthoringSelectionTargetValid(graph, selectionState.hoveredAuthoring)) {
         ClearSectorEditorAuthoringHover(selectionState);
@@ -2513,38 +2650,118 @@ bool DeleteSectorEditorSelectedAuthoringLine(
     }
 
     const int lineId = selectionState.selectedAuthoring.lineId;
-    authoringGraph.lines.erase(
+    SectorAuthoringGraph candidateGraph = authoringGraph;
+    std::set<int> endpointIds;
+    if (const SectorAuthoringLine* line =
+                FindSectorAuthoringLine(candidateGraph, lineId)) {
+        endpointIds.insert(line->startVertexId);
+        endpointIds.insert(line->endVertexId);
+    }
+    candidateGraph.lines.erase(
             std::remove_if(
-                    authoringGraph.lines.begin(),
-                    authoringGraph.lines.end(),
+                    candidateGraph.lines.begin(),
+                    candidateGraph.lines.end(),
                     [lineId](const SectorAuthoringLine& line) {
                         return line.id == lineId;
                     }),
-            authoringGraph.lines.end());
-    authoringGraph.lineSides.erase(
+            candidateGraph.lines.end());
+    candidateGraph.lineSides.erase(
             std::remove_if(
-                    authoringGraph.lineSides.begin(),
-                    authoringGraph.lineSides.end(),
+                    candidateGraph.lineSides.begin(),
+                    candidateGraph.lineSides.end(),
                     [lineId](const SectorAuthoringLineSide& side) {
                         return side.id.lineId == lineId;
                     }),
-            authoringGraph.lineSides.end());
-    PruneSectorEditorAuthoringSelectionToGraph(authoringGraph, selectionState);
-    MarkSectorEditorAuthoringGraphEdited(
-            state,
-            lifecycle,
-            derivation,
-            TextFormat("Deleted authoring line %d", lineId));
-    RefreshSectorEditorAuthoringDerivation(
+            candidateGraph.lineSides.end());
+
+    std::set<int> referencedVertexIds;
+    for (const SectorAuthoringLine& line : candidateGraph.lines) {
+        referencedVertexIds.insert(line.startVertexId);
+        referencedVertexIds.insert(line.endVertexId);
+    }
+    candidateGraph.vertices.erase(
+            std::remove_if(
+                    candidateGraph.vertices.begin(),
+                    candidateGraph.vertices.end(),
+                    [&endpointIds, &referencedVertexIds](
+                            const SectorAuthoringVertex& vertex) {
+                        return endpointIds.find(vertex.id) != endpointIds.end()
+                                && referencedVertexIds.find(vertex.id)
+                                        == referencedVertexIds.end();
+                    }),
+            candidateGraph.vertices.end());
+
+    SectorAuthoringDerivationResult candidateDerivation =
+            DeriveSectorTopologyMapFromAuthoringGraph(candidateGraph);
+    if (!candidateDerivation.success
+            || !AllDerivedSectorsHaveUniqueFaceAnchorMappings(
+                    candidateGraph,
+                    candidateDerivation)) {
+        derivation.authoringDerivationStatus = candidateDerivation.success
+                ? TextFormat(
+                        "Cannot delete authoring line %d: the result leaves a face without exactly one anchor; use Merge Selected Into",
+                        lineId)
+                : BuildAuthoringDerivationFailureStatus(
+                        TextFormat(
+                                "Cannot delete authoring line %d atomically; use Merge Selected Into",
+                                lineId),
+                        candidateDerivation);
+        lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
+        return false;
+    }
+
+    return CommitSectorEditorAuthoringGraphCandidate(
             state,
             lifecycle,
             topologyMap,
             authoringGraph,
             derivation,
-            TextFormat("Deleted authoring line %d; derived topology current", lineId),
-            TextFormat("Deleted authoring line %d; derivation failed", lineId));
+            selectionState,
+            std::move(candidateGraph),
+            std::move(candidateDerivation),
+            topologyMap,
+            TextFormat("Deleted authoring line %d; derived topology current", lineId));
+}
+
+bool CommitSectorEditorAuthoringGraphCandidate(
+        SectorEditorState& state,
+        SectorEditorDocumentLifecycleAccess lifecycle,
+        SectorTopologyMap& topologyMap,
+        SectorAuthoringGraph& authoringGraph,
+        SectorEditorDerivationDocumentAccess derivation,
+        SelectionState& selectionState,
+        SectorAuthoringGraph candidateGraph,
+        SectorAuthoringDerivationResult candidateDerivation,
+        const SectorTopologyMap& candidateMapData,
+        const char* status)
+{
+    if (!candidateDerivation.success) {
+        return false;
+    }
+
+    CopyEditorMapLevelFields(candidateDerivation.topology, candidateMapData);
+    authoringGraph = std::move(candidateGraph);
+    topologyMap = candidateDerivation.topology;
+    derivation.authoringDerivation = std::move(candidateDerivation);
+    derivation.lastValidAuthoringDerivedTopology = topologyMap;
+    derivation.lastValidFaceAnchorBindings =
+            BuildFaceAnchorBindings(derivation.authoringDerivation);
+    derivation.authoringDerivedTopologyStale = false;
+    derivation.authoringDerivationState =
+            SectorEditorAuthoringDerivationState::ValidCurrent;
+    derivation.authoringDerivationStatus = status == nullptr || status[0] == '\0'
+            ? "Authoring graph: derived topology current"
+            : status;
+    lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
+    lifecycle.topologyDocumentDirty = true;
+    lifecycle.hasUnsavedChanges = true;
+    InvalidateEditorTopologyRenderCache(
+            state.topologyRenderRevision,
+            state.topologyRenderCache);
+    PruneSectorEditorAuthoringSelectionToGraph(authoringGraph, selectionState);
     return true;
 }
+
 bool DeleteSectorEditorSelectedAuthoringVertex(
         SectorEditorState& state,
         SectorEditorDocumentLifecycleAccess lifecycle,
@@ -2560,38 +2777,252 @@ bool DeleteSectorEditorSelectedAuthoringVertex(
         return false;
     }
 
+    const auto reject = [&](std::string status) {
+        derivation.authoringDerivationStatus = std::move(status);
+        lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
+        return false;
+    };
     const int vertexId = selectionState.selectedAuthoring.vertexId;
+    std::vector<SectorAuthoringLine> incidentLines;
+    incidentLines.reserve(2);
     for (const SectorAuthoringLine& line : authoringGraph.lines) {
         if (line.startVertexId == vertexId || line.endVertexId == vertexId) {
-            derivation.authoringDerivationStatus =
-                    "Authoring vertex is connected; delete its lines first.";
-            lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
-            return false;
+            incidentLines.push_back(line);
         }
     }
+    if (incidentLines.size() == 1) {
+        return reject(
+                "Cannot dissolve authoring vertex: degree-1 vertices keep their connected line");
+    }
+    if (incidentLines.size() > 2) {
+        return reject(
+                "Cannot dissolve authoring vertex: branching vertices require exactly two incident lines");
+    }
+    if (!IsSectorEditorAuthoringDerivationCurrent(derivation)) {
+        return reject(
+                "Cannot delete authoring vertex: derived topology is not current");
+    }
 
-    authoringGraph.vertices.erase(
+    SectorAuthoringGraph candidateGraph = authoringGraph;
+    int survivingLineId = -1;
+    int removedLineId = -1;
+    std::vector<SectorEditorFaceAnchorBinding> candidateBindings =
+            derivation.lastValidFaceAnchorBindings;
+    if (incidentLines.size() == 2) {
+        std::sort(
+                incidentLines.begin(),
+                incidentLines.end(),
+                [](const SectorAuthoringLine& lhs, const SectorAuthoringLine& rhs) {
+                    return lhs.id < rhs.id;
+                });
+        const SectorAuthoringLine& survivingLine = incidentLines[0];
+        const SectorAuthoringLine& removedLine = incidentLines[1];
+        survivingLineId = survivingLine.id;
+        removedLineId = removedLine.id;
+
+        const auto otherEndpoint = [vertexId](const SectorAuthoringLine& line) {
+            if (line.startVertexId == vertexId && line.endVertexId != vertexId) {
+                return line.endVertexId;
+            }
+            if (line.endVertexId == vertexId && line.startVertexId != vertexId) {
+                return line.startVertexId;
+            }
+            return -1;
+        };
+        const int survivingOtherVertexId = otherEndpoint(survivingLine);
+        const int removedOtherVertexId = otherEndpoint(removedLine);
+        if (!IsValidSectorAuthoringId(survivingOtherVertexId)
+                || !IsValidSectorAuthoringId(removedOtherVertexId)
+                || FindSectorAuthoringVertex(
+                           authoringGraph,
+                           survivingOtherVertexId) == nullptr
+                || FindSectorAuthoringVertex(
+                           authoringGraph,
+                           removedOtherVertexId) == nullptr) {
+            return reject(
+                    "Cannot dissolve authoring vertex: an incident line endpoint is invalid");
+        }
+        if (survivingOtherVertexId == removedOtherVertexId) {
+            return reject(
+                    "Cannot dissolve authoring vertex: replacement line would collapse");
+        }
+        for (const SectorAuthoringLine& line : authoringGraph.lines) {
+            if (line.id == survivingLineId || line.id == removedLineId) {
+                continue;
+            }
+            const bool sameEndpoints =
+                    (line.startVertexId == survivingOtherVertexId
+                            && line.endVertexId == removedOtherVertexId)
+                    || (line.startVertexId == removedOtherVertexId
+                            && line.endVertexId == survivingOtherVertexId);
+            if (sameEndpoints) {
+                return reject(
+                        "Cannot dissolve authoring vertex: replacement line already exists");
+            }
+        }
+
+        std::string bindingError;
+        if (!BuildDissolvedFaceAnchorBindings(
+                    derivation.lastValidFaceAnchorBindings,
+                    survivingLineId,
+                    removedLineId,
+                    candidateBindings,
+                    bindingError)) {
+            return reject(std::move(bindingError));
+        }
+
+        SectorAuthoringLine* candidateSurvivor =
+                FindSectorAuthoringLine(candidateGraph, survivingLineId);
+        if (candidateSurvivor == nullptr) {
+            return reject(
+                    "Cannot dissolve authoring vertex: surviving line is missing");
+        }
+        if (candidateSurvivor->startVertexId == vertexId) {
+            candidateSurvivor->startVertexId = removedOtherVertexId;
+        } else if (candidateSurvivor->endVertexId == vertexId) {
+            candidateSurvivor->endVertexId = removedOtherVertexId;
+        } else {
+            return reject(
+                    "Cannot dissolve authoring vertex: surviving line is no longer incident");
+        }
+        candidateGraph.lines.erase(
+                std::remove_if(
+                        candidateGraph.lines.begin(),
+                        candidateGraph.lines.end(),
+                        [removedLineId](const SectorAuthoringLine& line) {
+                            return line.id == removedLineId;
+                        }),
+                candidateGraph.lines.end());
+        candidateGraph.lineSides.erase(
+                std::remove_if(
+                        candidateGraph.lineSides.begin(),
+                        candidateGraph.lineSides.end(),
+                        [removedLineId](const SectorAuthoringLineSide& side) {
+                            return side.id.lineId == removedLineId;
+                        }),
+                candidateGraph.lineSides.end());
+    }
+
+    candidateGraph.vertices.erase(
             std::remove_if(
-                    authoringGraph.vertices.begin(),
-                    authoringGraph.vertices.end(),
+                    candidateGraph.vertices.begin(),
+                    candidateGraph.vertices.end(),
                     [vertexId](const SectorAuthoringVertex& vertex) {
                         return vertex.id == vertexId;
                     }),
-            authoringGraph.vertices.end());
-    PruneSectorEditorAuthoringSelectionToGraph(authoringGraph, selectionState);
-    MarkSectorEditorAuthoringGraphEdited(
-            state,
-            lifecycle,
-            derivation,
-            TextFormat("Deleted authoring vertex %d", vertexId));
-    RefreshSectorEditorAuthoringDerivation(
-            state,
-            lifecycle,
-            topologyMap,
-            authoringGraph,
-            derivation,
-            TextFormat("Deleted authoring vertex %d; derived topology current", vertexId),
-            TextFormat("Deleted authoring vertex %d; derivation failed", vertexId));
+            candidateGraph.vertices.end());
+
+    SectorAuthoringDerivationResult candidateDerivation =
+            DeriveSectorTopologyMapFromAuthoringGraph(candidateGraph);
+    int relocatedAnchorCount = 0;
+    int repairFailureAnchorId = -1;
+    std::string repairFailureReason;
+    SectorAuthoringGraph repairedGraph;
+    SectorAuthoringDerivationResult repairedDerivation;
+    const FaceAnchorAutoFollowOutcome repairOutcome = TryAutoFollowFaceAnchors(
+            candidateGraph,
+            candidateDerivation,
+            candidateBindings,
+            repairedGraph,
+            repairedDerivation,
+            relocatedAnchorCount,
+            repairFailureAnchorId,
+            repairFailureReason);
+    if (repairOutcome == FaceAnchorAutoFollowOutcome::Repaired) {
+        candidateGraph = std::move(repairedGraph);
+        candidateDerivation = std::move(repairedDerivation);
+    } else if (repairOutcome == FaceAnchorAutoFollowOutcome::Failed) {
+        std::string status = "Cannot dissolve authoring vertex: face-anchor auto-follow failed";
+        if (IsValidSectorAuthoringId(repairFailureAnchorId)) {
+            status += " for anchor " + std::to_string(repairFailureAnchorId);
+        }
+        if (!repairFailureReason.empty()) {
+            status += ": " + repairFailureReason;
+        }
+        return reject(std::move(status));
+    }
+
+    if (!candidateDerivation.success) {
+        return reject(BuildAuthoringDerivationFailureStatus(
+                incidentLines.empty()
+                        ? "Cannot delete isolated authoring vertex atomically"
+                        : "Cannot dissolve authoring vertex atomically",
+                candidateDerivation));
+    }
+    if (!AllExtractedFacesHaveUniqueFaceAnchorMappings(
+                candidateGraph,
+                candidateDerivation)) {
+        return reject(
+                "Cannot dissolve authoring vertex: result leaves a face without exactly one anchor");
+    }
+    if (IsValidSectorAuthoringId(survivingLineId)) {
+        int survivingFragmentCount = 0;
+        for (const SectorAuthoringDerivedLineMapping& mapping
+                : candidateDerivation.mapping.lines) {
+            if (mapping.authoringLineId == survivingLineId) {
+                ++survivingFragmentCount;
+            }
+        }
+        if (survivingFragmentCount != 1) {
+            return reject(
+                    "Cannot dissolve authoring vertex: replacement line crosses or passes through other authoring geometry");
+        }
+    }
+
+    SectorTopologyMap candidateMapData = topologyMap;
+    const std::set<int> removedAuthoringLineIds =
+            IsValidSectorAuthoringId(removedLineId)
+            ? std::set<int>{removedLineId}
+            : std::set<int>{};
+    const std::set<int> rejectDoorAuthoringLineIds =
+            IsValidSectorAuthoringId(survivingLineId)
+            ? std::set<int>{survivingLineId, removedLineId}
+            : std::set<int>{};
+    std::vector<int> removedDoorIds;
+    std::string doorError;
+    if (!ReconcileSectorEditorAuthoringCandidateDoors(
+                topologyMap,
+                derivation.authoringDerivation,
+                candidateDerivation,
+                removedAuthoringLineIds,
+                rejectDoorAuthoringLineIds,
+                candidateMapData,
+                removedDoorIds,
+                doorError)) {
+        return reject(std::move(doorError));
+    }
+
+    std::string successStatus = incidentLines.empty()
+            ? TextFormat("Deleted isolated authoring vertex %d", vertexId)
+            : TextFormat(
+                    "Dissolved authoring vertex %d into line %d",
+                    vertexId,
+                    survivingLineId);
+    if (relocatedAnchorCount > 0) {
+        successStatus += TextFormat(
+                "; auto-followed %d face anchor%s",
+                relocatedAnchorCount,
+                relocatedAnchorCount == 1 ? "" : "s");
+    }
+    if (!CommitSectorEditorAuthoringGraphCandidate(
+                state,
+                lifecycle,
+                topologyMap,
+                authoringGraph,
+                derivation,
+                selectionState,
+                std::move(candidateGraph),
+                std::move(candidateDerivation),
+                candidateMapData,
+                successStatus.c_str())) {
+        return reject("Authoring vertex delete failed during commit");
+    }
+    if (IsValidSectorAuthoringId(survivingLineId)) {
+        SelectSectorEditorAuthoringLine(
+                authoringGraph,
+                selectionState,
+                survivingLineId);
+    }
     return true;
 }
 void InitializeSectorEditorAuthoringStateFromTopology(
