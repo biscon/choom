@@ -102,6 +102,10 @@ struct SectorLightmapBakeResult {
     int height = 0;
     std::vector<SectorLightmapAtlasMetadata> atlases;
     std::string sourceHash;
+    int artifactVersion = 0;
+    std::string artifactFormat;
+    SectorIlluminationStatistics preEncodeAtlasStatistics;
+    SectorIlluminationStatistics storedAtlasStatistics;
     int validChartTexels = 0;
     int allocatedChartRectanglePixels = 0;
     int staticGeometryTriangles = 0;
@@ -170,19 +174,24 @@ struct SectorTopologyLightmapBakeInput {
 
 enum class SectorLightmapStatus {
     None,
+    Missing,
     Valid,
-    Stale
+    Stale,
+    Invalid
 };
 
 constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 13: baked lightmaps can span multiple fixed-size texture atlases.
-constexpr int kSectorLightmapBakeVersion = 14;
-constexpr int kSectorBakedObjectLightProbeSidecarVersion = 2;
+// Version 15: baked illumination is linear HDR end to end.
+constexpr int kSectorLightmapBakeVersion = 15;
+constexpr int kSectorLightmapArtifactVersion = 1;
+constexpr const char* kSectorLightmapArtifactFormat =
+        "rgba16fLinearHdrRgbAoLE";
+constexpr int kSectorBakedObjectLightProbeSidecarVersion = 3;
 constexpr const char* kSectorBakedObjectLightProbeSidecarFormat =
-        "layeredAmbientCubeF32LE";
+        "layeredAmbientCubeLinearHdrF32LE";
 constexpr float kObjectProbeAdjacentPortalBlendDistanceWorld = 1.0f;
 constexpr int kObjectProbeMaxAdjacentBlendSectors = 8;
 constexpr float kObjectProbeSurfaceClearanceWorld = 0.1f;
@@ -252,6 +261,7 @@ bool WriteSectorBakedObjectLightProbeSidecar(
         float probeSpacingWorld,
         float probeLowerHeightWorld,
         float probeUpperHeightWorld,
+        const std::string& sourceHash,
         std::string& outError);
 bool ReadSectorBakedObjectLightProbeSidecar(
         const std::string& path,
@@ -259,6 +269,24 @@ bool ReadSectorBakedObjectLightProbeSidecar(
         std::vector<SectorBakedObjectLightProbe>& outProbes,
         SectorBakedObjectLightProbeMetadata& outMetadata,
         std::string& outError);
+bool WriteSectorLightmapArtifact(
+        const std::string& path,
+        int width,
+        int height,
+        const Vector4* linearRgba,
+        size_t texelCount,
+        const std::string& sourceHash,
+        SectorIlluminationStatistics& outPreEncodeStatistics,
+        SectorIlluminationStatistics& outStoredStatistics,
+        std::string& outError);
+bool ReadSectorLightmapArtifact(
+        const std::string& path,
+        const SectorLightmapMetadata* expectedMetadata,
+        SectorLightmapArtifactData& outData,
+        std::string& outError);
+float SectorLightmapBinary16ToFloat(uint16_t bits);
+uint16_t SectorLightmapFloatToBinary16(float value);
+Vector3 SectorLightmapAuthoredSrgbColorToLinear(Color color);
 bool LoadSectorBakedObjectLightProbeRuntimeData(
         const SectorTopologyMap& map,
         SectorBakedObjectLightProbeRuntimeData& outData,

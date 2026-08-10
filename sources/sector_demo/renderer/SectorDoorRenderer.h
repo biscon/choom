@@ -112,7 +112,7 @@ public:
         float height = 0.0f;
         float thickness = 0.0f;
         SectorDoorFaceUvSet faceUvs;
-        std::vector<Color> staticLightingColors;
+        std::vector<Vector3> staticLightingValues;
         bool seenThisFrame = false;
     };
 

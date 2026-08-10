@@ -1324,6 +1324,35 @@ SectorTopologyFogSettings ReadFogSettings(const Json& value, const std::string& 
     return NormalizeSectorTopologyFogSettings(settings);
 }
 
+SectorIlluminationStatistics ReadIlluminationStatistics(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+    SectorIlluminationStatistics statistics;
+    statistics.rgbMin = ReadVector3(value.at("rgbMin"), context + ".rgbMin");
+    statistics.rgbMax = ReadVector3(value.at("rgbMax"), context + ".rgbMax");
+    statistics.auxiliaryMin = ReadFloat(value, "auxiliaryMin", context);
+    statistics.auxiliaryMax = ReadFloat(value, "auxiliaryMax", context);
+    statistics.sampleCount = value.at("sampleCount").get<uint64_t>();
+    statistics.rgbChannelsAboveOne =
+            value.at("rgbChannelsAboveOne").get<uint64_t>();
+    if (statistics.sampleCount == 0
+            || statistics.rgbMin.x < 0.0f || statistics.rgbMin.y < 0.0f
+            || statistics.rgbMin.z < 0.0f
+            || statistics.rgbMax.x < statistics.rgbMin.x
+            || statistics.rgbMax.y < statistics.rgbMin.y
+            || statistics.rgbMax.z < statistics.rgbMin.z
+            || statistics.auxiliaryMin < 0.0f
+            || statistics.auxiliaryMax < statistics.auxiliaryMin
+            || statistics.auxiliaryMax > 1.0f) {
+        Fail(context + " contains invalid ranges");
+    }
+    return statistics;
+}
+
 SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
         const Json& value,
         const std::string& context)
@@ -1351,6 +1380,11 @@ SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
         metadata.probeUpperHeightWorld = legacyHeight;
     }
     metadata.format = ReadString(value, "format", context);
+    const auto statisticsIt = value.find("storedStatistics");
+    if (statisticsIt != value.end()) {
+        metadata.storedStatistics = ReadIlluminationStatistics(
+                *statisticsIt, context + ".storedStatistics");
+    }
 
     if (metadata.path.empty()) {
         Fail(context + ".path must not be empty");
@@ -1441,7 +1475,20 @@ SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& c
     metadata.path = ReadString(value, "path", context);
     metadata.width = ReadInt(value, "width", context);
     metadata.height = ReadInt(value, "height", context);
+    const auto versionIt = value.find("version");
+    metadata.version = versionIt == value.end()
+            ? 0
+            : ReadInt(value, "version", context);
+    const auto formatIt = value.find("format");
+    metadata.format = formatIt == value.end()
+            ? std::string{}
+            : ReadString(value, "format", context);
     metadata.sourceHash = ReadString(value, "sourceHash", context);
+    const auto storedStatisticsIt = value.find("storedStatistics");
+    if (storedStatisticsIt != value.end()) {
+        metadata.storedStatistics = ReadIlluminationStatistics(
+                *storedStatisticsIt, context + ".storedStatistics");
+    }
     if (metadata.path.empty()) {
         Fail(context + ".path must not be empty");
     }
@@ -2281,9 +2328,11 @@ bool IsDefaultFogSettings(const SectorTopologyFogSettings& settings)
             && normalized.localVolumeQuality == defaults.localVolumeQuality;
 }
 
+Json WriteIlluminationStatistics(const SectorIlluminationStatistics& statistics);
+
 Json WriteBakedObjectLightProbeMetadata(const SectorBakedObjectLightProbeMetadata& metadata)
 {
-    return Json{
+    Json result{
             {"path", metadata.path},
             {"version", metadata.version},
             {"sourceHash", metadata.sourceHash},
@@ -2293,6 +2342,22 @@ Json WriteBakedObjectLightProbeMetadata(const SectorBakedObjectLightProbeMetadat
             {"probeUpperHeightWorld", metadata.probeUpperHeightWorld},
             {"format", metadata.format}
     };
+    if (metadata.storedStatistics.sampleCount > 0) {
+        result["storedStatistics"] =
+                WriteIlluminationStatistics(metadata.storedStatistics);
+    }
+    return result;
+}
+
+Json WriteIlluminationStatistics(const SectorIlluminationStatistics& statistics)
+{
+    return Json{
+            {"rgbMin", WriteVector3(statistics.rgbMin, "illumination statistics rgbMin")},
+            {"rgbMax", WriteVector3(statistics.rgbMax, "illumination statistics rgbMax")},
+            {"auxiliaryMin", statistics.auxiliaryMin},
+            {"auxiliaryMax", statistics.auxiliaryMax},
+            {"sampleCount", statistics.sampleCount},
+            {"rgbChannelsAboveOne", statistics.rgbChannelsAboveOne}};
 }
 
 Json WriteBakedStaticModelLightmapMetadata(
@@ -2328,8 +2393,14 @@ Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
             {"path", metadata.path},
             {"width", metadata.width},
             {"height", metadata.height},
+            {"version", metadata.version},
+            {"format", metadata.format},
             {"sourceHash", metadata.sourceHash}
     };
+    if (metadata.storedStatistics.sampleCount > 0) {
+        lightmap["storedStatistics"] =
+                WriteIlluminationStatistics(metadata.storedStatistics);
+    }
     if (!metadata.objectProbes.path.empty()) {
         lightmap["objectProbes"] = WriteBakedObjectLightProbeMetadata(metadata.objectProbes);
     }

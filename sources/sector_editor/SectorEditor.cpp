@@ -3248,19 +3248,25 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
         statusText = TextFormat("Bake failed: %s", pathError.c_str());
         return false;
     }
-    TopologyMap().bakedLightmap.path = levelPaths.lightmapAssetPath;
-    TopologyMap().bakedLightmap.width = installPayload.bakeResult.width;
-    TopologyMap().bakedLightmap.height = installPayload.bakeResult.height;
-    TopologyMap().bakedLightmap.sourceHash = installPayload.bakeResult.sourceHash;
-    TopologyMap().bakedLightmap.additionalAtlases.clear();
+    SectorLightmapMetadata installedMetadata;
+    installedMetadata.path = levelPaths.lightmapAssetPath;
+    installedMetadata.width = installPayload.bakeResult.width;
+    installedMetadata.height = installPayload.bakeResult.height;
+    installedMetadata.version = installPayload.bakeResult.artifactVersion;
+    installedMetadata.format = installPayload.bakeResult.artifactFormat;
+    installedMetadata.sourceHash = installPayload.bakeResult.sourceHash;
+    installedMetadata.storedStatistics =
+            installPayload.bakeResult.storedAtlasStatistics;
     if (installPayload.bakeResult.atlases.size() > 1) {
-        TopologyMap().bakedLightmap.additionalAtlases.assign(
+        installedMetadata.additionalAtlases.assign(
                 installPayload.bakeResult.atlases.begin() + 1,
                 installPayload.bakeResult.atlases.end());
     }
-    TopologyMap().bakedLightmap.objectProbes = installPayload.bakeResult.objectProbes;
-    TopologyMap().bakedLightmap.staticModels =
+    installedMetadata.objectProbes = installPayload.bakeResult.objectProbes;
+    installedMetadata.staticModels =
             installPayload.bakeResult.staticModels;
+    // Data files are installed and validated before this single metadata publish.
+    TopologyMap().bakedLightmap = std::move(installedMetadata);
     Lifecycle().hasUnsavedChanges = true;
     Lifecycle().topologyDocumentDirty = true;
 

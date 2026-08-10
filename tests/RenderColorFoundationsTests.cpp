@@ -141,6 +141,10 @@ void TestTextureSemantics()
                   TextureColorUsage::SceneSrgb,
                   PIXELFORMAT_UNCOMPRESSED_GRAYSCALE) == 0,
           "unsupported scene-sRGB upload format requires conversion");
+    Check(engine::TextureInternalFormatForColorUsage(
+                  TextureColorUsage::LinearData,
+                  PIXELFORMAT_UNCOMPRESSED_R16G16B16A16) == GL_RGBA16F,
+          "linear HDR baked illumination selects GL_RGBA16F storage");
 
     engine::SpriteAnimationAssets sprites;
     sprites.OnScopeCreated(scope);

@@ -10656,6 +10656,10 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     documentState.map.topologyMap.bakedLightmap.path = lightmapPath.string();
     documentState.map.topologyMap.bakedLightmap.width = 2048;
     documentState.map.topologyMap.bakedLightmap.height = 2048;
+    documentState.map.topologyMap.bakedLightmap.version =
+            game::kSectorLightmapArtifactVersion;
+    documentState.map.topologyMap.bakedLightmap.format =
+            game::kSectorLightmapArtifactFormat;
     documentState.map.topologyMap.bakedLightmap.sourceHash =
             game::ComputeSectorLightmapSourceHash(documentState.map.topologyMap);
 
@@ -10834,8 +10838,8 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     Check(game::GetSectorLightmapStatus(probeMap) == game::SectorLightmapStatus::Valid,
           "missing object probe sidecar does not invalidate surface lightmap status");
     Check(game::GetSectorBakedObjectLightProbeStatus(probeMap)
-                  == game::SectorLightmapStatus::Stale,
-          "object probe status reports missing sidecar as stale");
+                  == game::SectorLightmapStatus::Missing,
+          "object probe status reports missing sidecar distinctly");
 
     std::filesystem::remove(path, removeError);
     std::filesystem::remove(lightmapPath, removeError);

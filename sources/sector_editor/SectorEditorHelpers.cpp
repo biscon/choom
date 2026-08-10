@@ -573,7 +573,7 @@ float LightmapBakeOverallProgress(SectorLightmapBakePhase phase, uint32_t comple
 std::string MakeTemporaryLightmapPath(const std::string& finalOutputPath)
 {
     std::filesystem::path path(finalOutputPath);
-    path.replace_extension(".tmp.png");
+    path.replace_extension(".tmp.bin");
     return path.generic_string();
 }
 

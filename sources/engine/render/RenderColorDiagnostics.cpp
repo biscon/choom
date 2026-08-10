@@ -130,7 +130,7 @@ std::string FormatColorPipelineDiagnostics(
         const ColorPipelineRuntimeState& pipeline)
 {
     std::ostringstream output;
-    output << "COLOR PIPELINE slice-2 (active=linear-HDR, no legacy mode)\n"
+    output << "COLOR PIPELINE slice-3 (active=linear-HDR, no legacy mode)\n"
            << "  platform=" << graphics.platform
            << " build=" << graphics.build
            << " raylib=" << graphics.raylibVersion << "\n"
@@ -152,6 +152,7 @@ std::string FormatColorPipelineDiagnostics(
            << " FXAA=" << (pipeline.fxaaActive ? "active" : (pipeline.fxaaRequested ? "requested-unavailable" : "off")) << "\n"
            << "  resolve=2880x1620 linear RGBA16F -> 1920x1080 linear RGBA16F\n"
            << "  stages=bloom/fog/haze/dust bounded-linear RGBA8 accumulators -> linear HDR scene composites\n"
+           << "  baked=CPU F32 linear -> disk RGBA16F-LE RGB+AO / probe F32-LE -> GPU linear RGBA16F\n"
            << "  tone/output=neutral max-channel curve exposure=1.0 -> exact sRGB RGBA8 -> FXAA/final scale\n"
            << "  models=linear HDR output; glTF color textures manually decoded; no local tone map or encoding";
     return output.str();

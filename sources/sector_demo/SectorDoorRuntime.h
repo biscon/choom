@@ -219,7 +219,7 @@ bool BuildSectorDoorStaticLightingColors(
         const SectorDoorResolvedAnchor& anchor,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap* mapForFallback,
-        std::vector<Color>& outColors);
+        std::vector<Vector3>& outLighting);
 
 bool AppendSectorDoorReceiverBounds(
         const SectorObjectTransform& transform,

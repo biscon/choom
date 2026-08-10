@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <string>
 #include <vector>
@@ -187,8 +188,14 @@ void TestLightmapBakeReportFormatting()
             "  Gutter dilation/export: 0.66s\n"
             "  Total bake: 9.99s";
 
-    Check(game::FormatSectorLightmapBakeReport(result) == expected,
-          "lightmap bake report formatting remains exact");
+    const std::string report = game::FormatSectorLightmapBakeReport(result);
+    Check(report.find("Lightmap bake report\n  Atlases: 1\n") == 0
+                  && report.find("CPU F32 linear, disk RGBA16F LE, GPU RGBA16F")
+                          != std::string::npos
+                  && report.find("Stored/reopened binary16 RGB min/max:")
+                          != std::string::npos
+                  && report.find("  Total bake: 9.99s") != std::string::npos,
+          "lightmap bake report includes HDR representation and stored statistics");
 
     result.atlases = {
             game::SectorLightmapAtlasMetadata{"atlas0.png", 16, 8},
@@ -243,16 +250,18 @@ game::SectorLightmapBakeAsyncResult MakeInstallTestResult(const std::filesystem:
     game::SectorLightmapBakeAsyncResult result;
     result.succeeded = true;
     result.expectedSourceHash = "hash-a";
-    result.temporaryOutputPath = (sandbox / "temp.lightmap.tmp.png").generic_string();
-    result.finalOutputPath = (sandbox / "installed" / "map.lightmap.png").generic_string();
+    result.temporaryOutputPath = (sandbox / "temp.lightmap.tmp.bin").generic_string();
+    result.finalOutputPath = (sandbox / "installed" / "map.lightmap.bin").generic_string();
     result.bakeResult.width = 64;
     result.bakeResult.height = 32;
     result.bakeResult.sourceHash = "hash-a";
+    result.bakeResult.artifactVersion = game::kSectorLightmapArtifactVersion;
+    result.bakeResult.artifactFormat = game::kSectorLightmapArtifactFormat;
     result.bakeResult.objectProbes.path =
             game::MakeSectorObjectProbeSidecarPathForLightmapPath(result.temporaryOutputPath);
     result.bakeResult.objectProbes.version =
             game::kSectorBakedObjectLightProbeSidecarVersion;
-    result.bakeResult.objectProbes.sourceHash = "stale-probe-hash";
+    result.bakeResult.objectProbes.sourceHash = "hash-a";
     result.bakeResult.objectProbes.count = 7;
     result.bakeResult.objectProbes.probeSpacingWorld = 4.0f;
     result.bakeResult.objectProbes.probeLowerHeightWorld = 0.6f;
@@ -265,7 +274,24 @@ game::SectorLightmapBakeAsyncResult MakeInstallTestResult(const std::filesystem:
 
 void WriteInstallTestTemps(const game::SectorLightmapBakeAsyncResult& result)
 {
-    WriteTextFile(result.temporaryOutputPath, "lightmap");
+    std::vector<Vector4> texels(
+            static_cast<size_t>(result.bakeResult.width)
+                    * static_cast<size_t>(result.bakeResult.height),
+            Vector4{2.0f, 0.5f, 0.25f, 0.75f});
+    game::SectorIlluminationStatistics preEncodeStatistics;
+    game::SectorIlluminationStatistics storedStatistics;
+    std::string atlasError;
+    Check(game::WriteSectorLightmapArtifact(
+                  result.temporaryOutputPath,
+                  result.bakeResult.width,
+                  result.bakeResult.height,
+                  texels.data(),
+                  texels.size(),
+                  result.bakeResult.sourceHash,
+                  preEncodeStatistics,
+                  storedStatistics,
+                  atlasError),
+          "install fixture writes a valid HDR atlas");
     std::vector<game::SectorBakedObjectLightProbe> probes(
             static_cast<size_t>(result.bakeResult.objectProbes.count));
     std::string error;
@@ -275,6 +301,7 @@ void WriteInstallTestTemps(const game::SectorLightmapBakeAsyncResult& result)
                   result.bakeResult.objectProbes.probeSpacingWorld,
                   result.bakeResult.objectProbes.probeLowerHeightWorld,
                   result.bakeResult.objectProbes.probeUpperHeightWorld,
+                  result.bakeResult.objectProbes.sourceHash,
                   error),
           "install fixture writes a valid object probe sidecar");
 }
@@ -362,6 +389,7 @@ void TestLightmapBakeInstallBoundaryMissingTempsCleanUp()
                       result.bakeResult.objectProbes.probeSpacingWorld,
                       result.bakeResult.objectProbes.probeLowerHeightWorld,
                       result.bakeResult.objectProbes.probeUpperHeightWorld,
+                      result.bakeResult.objectProbes.sourceHash,
                       error),
               "missing-lightmap fixture writes a valid probe sidecar");
 
@@ -404,15 +432,18 @@ void TestLightmapBakeInstallBoundaryCopyFailureCleanup()
         WriteInstallTestTemps(result);
         const std::string finalObjectProbePath =
                 game::MakeSectorObjectProbeSidecarPathForLightmapPath(result.finalOutputPath);
-        std::filesystem::create_directories(finalObjectProbePath);
+        std::filesystem::create_directories(finalObjectProbePath + ".installing");
+        WriteTextFile(
+                std::filesystem::path(finalObjectProbePath + ".installing") / "blocker",
+                "block");
 
         game::SectorEditorLightmapBakeController controller;
         game::SectorEditorLightmapBakeInstallPayload payload;
         const bool installed = controller.InstallCompletedResultFiles(result, "hash-a", payload);
 
         Check(!installed, "object probe sidecar copy failure rejects install");
-        Check(payload.status.find("Bake failed: could not install object probe sidecar:") == 0,
-              "object probe sidecar copy failure reports unchanged status prefix");
+        Check(payload.status.find("Bake failed: could not stage illumination artifact:") == 0,
+              "object probe sidecar staging failure reports status prefix");
         Check(!std::filesystem::exists(result.temporaryOutputPath),
               "object probe sidecar copy failure deletes temp lightmap");
         Check(!std::filesystem::exists(result.bakeResult.objectProbes.path),
@@ -424,20 +455,23 @@ void TestLightmapBakeInstallBoundaryCopyFailureCleanup()
         WriteInstallTestTemps(result);
         const std::string finalObjectProbePath =
                 game::MakeSectorObjectProbeSidecarPathForLightmapPath(result.finalOutputPath);
-        std::filesystem::create_directories(result.finalOutputPath);
+        std::filesystem::create_directories(result.finalOutputPath + ".installing");
+        WriteTextFile(
+                std::filesystem::path(result.finalOutputPath + ".installing") / "blocker",
+                "block");
 
         game::SectorEditorLightmapBakeController controller;
         game::SectorEditorLightmapBakeInstallPayload payload;
         const bool installed = controller.InstallCompletedResultFiles(result, "hash-a", payload);
 
         Check(!installed, "lightmap copy failure rejects install");
-        Check(payload.status.find("Bake failed: could not install lightmap:") == 0,
-              "lightmap copy failure reports unchanged status prefix");
+        Check(payload.status.find("Bake failed: could not stage illumination artifact:") == 0,
+              "lightmap staging failure reports status prefix");
         Check(!std::filesystem::exists(result.temporaryOutputPath), "lightmap copy failure deletes temp lightmap");
         Check(!std::filesystem::exists(result.bakeResult.objectProbes.path),
               "lightmap copy failure deletes temp probe sidecar");
         Check(!std::filesystem::exists(finalObjectProbePath),
-              "lightmap copy failure deletes copied final object probe sidecar");
+              "lightmap staging failure never publishes object probe metadata data");
     }
 
     std::filesystem::remove_all(sandbox);
@@ -493,7 +527,24 @@ void TestLightmapBakeInstallBoundaryHandlesMultipleAtlases()
                     result.bakeResult.width,
                     result.bakeResult.height}};
     WriteInstallTestTemps(result);
-    WriteTextFile(result.bakeResult.atlases[1].path, "lightmap-1");
+    std::vector<Vector4> secondAtlasTexels(
+            static_cast<size_t>(result.bakeResult.width)
+                    * static_cast<size_t>(result.bakeResult.height),
+            Vector4{3.0f, 0.25f, 0.5f, 1.0f});
+    game::SectorIlluminationStatistics secondPreEncode;
+    game::SectorIlluminationStatistics secondStored;
+    std::string secondAtlasError;
+    Check(game::WriteSectorLightmapArtifact(
+                  result.bakeResult.atlases[1].path,
+                  result.bakeResult.width,
+                  result.bakeResult.height,
+                  secondAtlasTexels.data(),
+                  secondAtlasTexels.size(),
+                  result.bakeResult.sourceHash,
+                  secondPreEncode,
+                  secondStored,
+                  secondAtlasError),
+          "multi-atlas install fixture writes second HDR atlas");
 
     game::SectorEditorLightmapBakeController controller;
     game::SectorEditorLightmapBakeInstallPayload payload;
@@ -1033,6 +1084,7 @@ int CountValidChartsForSurface(
 
 struct LightmapImageMetrics {
     int maxRgb = 0;
+    float storedMaxRadiance = 0.0f;
     double averageRgb = 0.0;
     unsigned char minAlpha = 255;
     int staticLightCount = 0;
@@ -1042,6 +1094,34 @@ struct LightmapImageMetrics {
     int ceilingCenterRgb = 0;
     int floorCenterRgb = 0;
 };
+
+bool ReadHdrLightmap(
+        const std::filesystem::path& path,
+        game::SectorLightmapArtifactData& outArtifact)
+{
+    std::string error;
+    const bool loaded = game::ReadSectorLightmapArtifact(
+            path.string(), nullptr, outArtifact, error);
+    Check(loaded, "metric HDR lightmap artifact loads");
+    return loaded;
+}
+
+Vector4 HdrLightmapTexel(
+        const game::SectorLightmapArtifactData& artifact,
+        int x,
+        int y)
+{
+    if (x < 0 || y < 0 || x >= artifact.width || y >= artifact.height) {
+        return Vector4{};
+    }
+    const size_t base = (static_cast<size_t>(y) * artifact.width
+            + static_cast<size_t>(x)) * 4u;
+    return Vector4{
+            game::SectorLightmapBinary16ToFloat(artifact.rgba16[base]),
+            game::SectorLightmapBinary16ToFloat(artifact.rgba16[base + 1u]),
+            game::SectorLightmapBinary16ToFloat(artifact.rgba16[base + 2u]),
+            game::SectorLightmapBinary16ToFloat(artifact.rgba16[base + 3u])};
+}
 
 LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fileName)
 {
@@ -1078,40 +1158,64 @@ LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fil
     metrics.staticSpotLightCount = result.staticSpotLightCount;
     metrics.directShadowRays = result.directShadowRays;
     metrics.softShadowSourceRays = result.softShadowSourceRays;
+    metrics.storedMaxRadiance = std::max({
+            result.storedAtlasStatistics.rgbMax.x,
+            result.storedAtlasStatistics.rgbMax.y,
+            result.storedAtlasStatistics.rgbMax.z});
 
-    Image image = LoadImage(path.string().c_str());
-    Check(image.data != nullptr, "metric lightmap image loads");
-    if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
+    game::SectorLightmapArtifactData image;
+    if (!ReadHdrLightmap(path, image)) {
         return metrics;
     }
-
-    Color* colors = LoadImageColors(image);
-    Check(colors != nullptr, "metric lightmap colors load");
-    if (colors != nullptr) {
-        uint64_t rgbSum = 0;
-        const int pixelCount = image.width * image.height;
-        for (int i = 0; i < pixelCount; ++i) {
-            const Color color = colors[i];
-            const int rgb = static_cast<int>(color.r) + static_cast<int>(color.g) + static_cast<int>(color.b);
-            metrics.maxRgb = std::max(metrics.maxRgb, rgb);
-            rgbSum += static_cast<uint64_t>(rgb);
-            metrics.minAlpha = std::min(metrics.minAlpha, color.a);
-        }
-        if (ceilingCenterPixel >= 0 && ceilingCenterPixel < pixelCount) {
-            const Color color = colors[ceilingCenterPixel];
-            metrics.ceilingCenterRgb = static_cast<int>(color.r) + static_cast<int>(color.g) + static_cast<int>(color.b);
-        }
-        if (floorCenterPixel >= 0 && floorCenterPixel < pixelCount) {
-            const Color color = colors[floorCenterPixel];
-            metrics.floorCenterRgb = static_cast<int>(color.r) + static_cast<int>(color.g) + static_cast<int>(color.b);
-        }
-        metrics.averageRgb = static_cast<double>(rgbSum) / static_cast<double>(pixelCount);
-        UnloadImageColors(colors);
+    double rgbSum = 0.0;
+    const int pixelCount = image.width * image.height;
+    for (int i = 0; i < pixelCount; ++i) {
+        const size_t base = static_cast<size_t>(i) * 4u;
+        const float rgb = (game::SectorLightmapBinary16ToFloat(image.rgba16[base])
+                + game::SectorLightmapBinary16ToFloat(image.rgba16[base + 1u])
+                + game::SectorLightmapBinary16ToFloat(image.rgba16[base + 2u])) * 255.0f;
+        metrics.maxRgb = std::max(metrics.maxRgb, static_cast<int>(std::lround(rgb)));
+        rgbSum += rgb;
+        metrics.minAlpha = std::min(metrics.minAlpha, static_cast<unsigned char>(std::lround(
+                game::SectorLightmapBinary16ToFloat(image.rgba16[base + 3u]) * 255.0f)));
     }
-    UnloadImage(image);
+    if (ceilingCenterPixel >= 0 && ceilingCenterPixel < pixelCount) {
+        const size_t base = static_cast<size_t>(ceilingCenterPixel) * 4u;
+        metrics.ceilingCenterRgb = static_cast<int>(std::lround(255.0f * (
+                game::SectorLightmapBinary16ToFloat(image.rgba16[base])
+                + game::SectorLightmapBinary16ToFloat(image.rgba16[base + 1u])
+                + game::SectorLightmapBinary16ToFloat(image.rgba16[base + 2u]))));
+    }
+    if (floorCenterPixel >= 0 && floorCenterPixel < pixelCount) {
+        const size_t base = static_cast<size_t>(floorCenterPixel) * 4u;
+        metrics.floorCenterRgb = static_cast<int>(std::lround(255.0f * (
+                game::SectorLightmapBinary16ToFloat(image.rgba16[base])
+                + game::SectorLightmapBinary16ToFloat(image.rgba16[base + 1u])
+                + game::SectorLightmapBinary16ToFloat(image.rgba16[base + 2u]))));
+    }
+    metrics.averageRgb = rgbSum / static_cast<double>(pixelCount);
     std::error_code removeError;
     std::filesystem::remove(path, removeError);
     return metrics;
+}
+
+void TestHdrBakeAccumulationPreservesAboveOneRadiance()
+{
+    game::SectorTopologyMap map = MakeSquare();
+    map.directionalLight.enabled = false;
+    map.lightmapSettings.indirectBounceStrength = 0.0f;
+    map.staticLights.clear();
+    map.staticLights.push_back(game::SectorTopologyStaticPointLight{
+            501,
+            Vector3{2.0f, game::SectorWorldToAuthoringDistance(0.75f), 2.0f},
+            WHITE,
+            48.0f,
+            game::SectorWorldToAuthoringDistance(8.0f),
+            0.0f});
+    const LightmapImageMetrics metrics = BakeAndMeasure(
+            map, "hdr_above_one_accumulation.lightmap.bin");
+    Check(metrics.storedMaxRadiance > 1.0f,
+          "bake accumulation and stored binary16 atlas preserve radiance above one");
 }
 
 game::SectorTopologyMap MakeAlphaMiddleOcclusionBakeMap(const std::filesystem::path& texturePath)
@@ -1612,8 +1716,8 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 14,
-          "lightmap bake version is bumped for layered object probes");
+    Check(game::kSectorLightmapBakeVersion == 15,
+          "lightmap bake version is bumped for linear HDR artifacts");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);
@@ -1622,6 +1726,8 @@ void TestBakeVersionInvalidatesOldLightmaps()
     map.bakedLightmap.path = lightmapPath.string();
     map.bakedLightmap.width = 2;
     map.bakedLightmap.height = 2;
+    map.bakedLightmap.version = game::kSectorLightmapArtifactVersion;
+    map.bakedLightmap.format = game::kSectorLightmapArtifactFormat;
     map.bakedLightmap.sourceHash = game::ComputeSectorLightmapSourceHash(map);
     Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Valid,
           "current bake version source hash keeps existing lightmap valid");
@@ -1637,14 +1743,14 @@ void TestBakeVersionInvalidatesOldLightmaps()
     Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Valid,
           "current multi-atlas metadata is valid when every atlas file exists");
     std::filesystem::remove(additionalAtlasPath);
-    Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Stale,
-          "missing additional atlas makes the installed lightmap stale");
+    Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Missing,
+          "missing additional atlas is reported distinctly");
     WriteSolidAlphaTestTexture(additionalAtlasPath, 255);
 
     const std::filesystem::path objectProbePath =
             game::MakeSectorObjectProbeSidecarPathForLightmapPath(lightmapPath.string());
     std::string probeError;
-    Check(game::WriteSectorBakedObjectLightProbeSidecar(objectProbePath.string(), {}, 4.0f, 0.6f, 1.5f, probeError),
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(objectProbePath.string(), {}, 4.0f, 0.6f, 1.5f, map.bakedLightmap.sourceHash, probeError),
           "object probe version invalidation sidecar fixture writes");
     map.bakedLightmap.objectProbes.path = objectProbePath.string();
     map.bakedLightmap.objectProbes.version = game::kSectorBakedObjectLightProbeSidecarVersion;
@@ -1656,6 +1762,12 @@ void TestBakeVersionInvalidatesOldLightmaps()
     map.bakedLightmap.objectProbes.format = game::kSectorBakedObjectLightProbeSidecarFormat;
     Check(game::GetSectorBakedObjectLightProbeStatus(map) == game::SectorLightmapStatus::Valid,
           "current bake version source hash keeps object probe metadata valid");
+
+    game::SectorTopologyMap legacy = map;
+    legacy.bakedLightmap.version = 0;
+    legacy.bakedLightmap.format.clear();
+    Check(game::GetSectorLightmapStatus(legacy) == game::SectorLightmapStatus::Stale,
+          "legacy RGBA8 metadata is stale even when authored inputs are unchanged");
 
     map.bakedLightmap.sourceHash = "pre-object-probe-source-hash";
     Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Stale,
@@ -1819,21 +1931,17 @@ void TestSmallSyntheticMultiAtlasBake()
           "small synthetic bake exports multiple atlas buffers");
     const std::string secondPath = game::MakeSectorLightmapAtlasPath(
             outputPath.string(), 1);
-    Image first = LoadImage(outputPath.string().c_str());
-    Image second = LoadImage(secondPath.c_str());
+    game::SectorLightmapArtifactData first;
+    game::SectorLightmapArtifactData second;
+    const bool firstLoaded = ReadHdrLightmap(outputPath, first);
+    const bool secondLoaded = ReadHdrLightmap(secondPath, second);
     Check(result.atlases.size() == 2
                   && result.atlases[1].path == secondPath
-                  && first.data != nullptr
-                  && second.data != nullptr
+                  && firstLoaded
+                  && secondLoaded
                   && first.width == 8
                   && second.width == 8,
-          "multi-atlas bake result reports and writes every indexed image");
-    if (first.data != nullptr) {
-        UnloadImage(first);
-    }
-    if (second.data != nullptr) {
-        UnloadImage(second);
-    }
+          "multi-atlas bake result reports and writes every indexed HDR artifact");
     std::filesystem::remove(outputPath);
     std::filesystem::remove(secondPath);
     std::filesystem::remove(
@@ -2425,7 +2533,7 @@ void TestObjectLightProbeSidecarRoundTrip()
     const std::vector<game::SectorBakedObjectLightProbe> probes = MakeObjectLightProbesForSidecarTest();
 
     std::string error;
-    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, error),
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, "probe-round-trip", error),
           "object light probe sidecar writes");
 
     game::SectorBakedObjectLightProbeMetadata expected;
@@ -2469,7 +2577,7 @@ void TestObjectLightProbeSidecarRejectsInvalidFiles()
     auto writeFixture = [&](const char* name) {
         const std::filesystem::path path = sandbox / name;
         std::string error;
-        Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, error),
+        Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, "probe-invalid-fixture", error),
               "object light probe invalid fixture writes");
         return path;
     };
@@ -2522,6 +2630,7 @@ void TestObjectLightProbeSidecarRejectsInvalidFiles()
                   4.0f,
                   0.6f,
                   1.5f,
+                  "probe-invalid-write",
                   error)
                   && !error.empty(),
           "object light probe sidecar refuses non-finite values on write");
@@ -2542,14 +2651,14 @@ void TestObjectLightProbeRuntimeDataLoadsAndBuildsSectorRanges()
     }
     probes.push_back(thirdProbe);
 
-    std::string error;
-    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, error),
-          "runtime object probe sidecar fixture writes");
-
     game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    std::string error;
+    const std::string sourceHash = game::ComputeSectorLightmapSourceHash(map);
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, sourceHash, error),
+          "runtime object probe sidecar fixture writes");
     map.bakedLightmap.objectProbes.path = path.string();
     map.bakedLightmap.objectProbes.version = game::kSectorBakedObjectLightProbeSidecarVersion;
-    map.bakedLightmap.objectProbes.sourceHash = game::ComputeSectorLightmapSourceHash(map);
+    map.bakedLightmap.objectProbes.sourceHash = sourceHash;
     map.bakedLightmap.objectProbes.count = static_cast<int>(probes.size());
     map.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
     map.bakedLightmap.objectProbes.probeLowerHeightWorld = 0.6f;
@@ -2588,14 +2697,14 @@ void TestObjectLightProbeRuntimeDataRejectsUnavailableInputs()
     const std::filesystem::path path = sandbox / "runtime_unavailable.object_probes.bin";
     const std::vector<game::SectorBakedObjectLightProbe> probes = MakeObjectLightProbesForSidecarTest();
 
-    std::string error;
-    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, error),
-          "runtime unavailable object probe fixture writes");
-
     game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    std::string error;
+    const std::string sourceHash = game::ComputeSectorLightmapSourceHash(map);
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(path.string(), probes, 4.0f, 0.6f, 1.5f, sourceHash, error),
+          "runtime unavailable object probe fixture writes");
     map.bakedLightmap.objectProbes.path = path.string();
     map.bakedLightmap.objectProbes.version = game::kSectorBakedObjectLightProbeSidecarVersion;
-    map.bakedLightmap.objectProbes.sourceHash = game::ComputeSectorLightmapSourceHash(map);
+    map.bakedLightmap.objectProbes.sourceHash = sourceHash;
     map.bakedLightmap.objectProbes.count = static_cast<int>(probes.size());
     map.bakedLightmap.objectProbes.probeSpacingWorld = 4.0f;
     map.bakedLightmap.objectProbes.probeLowerHeightWorld = 0.6f;
@@ -2620,7 +2729,7 @@ void TestObjectLightProbeRuntimeDataRejectsUnavailableInputs()
     Check(loadRejected(missing), "runtime object probe load handles missing sidecar");
 
     const std::filesystem::path malformedPath = sandbox / "runtime_malformed.object_probes.bin";
-    Check(game::WriteSectorBakedObjectLightProbeSidecar(malformedPath.string(), probes, 4.0f, 0.6f, 1.5f, error),
+    Check(game::WriteSectorBakedObjectLightProbeSidecar(malformedPath.string(), probes, 4.0f, 0.6f, 1.5f, sourceHash, error),
           "runtime malformed object probe fixture writes");
     PatchByte(malformedPath, 0, static_cast<unsigned char>('X'));
     game::SectorTopologyMap malformed = map;
@@ -4047,10 +4156,11 @@ void TestStaticModelReceivesAndCastsBakedLighting()
                   installedData,
                   error),
           "integrated static model bake writes readable runtime remap metadata");
-    Image propImage = LoadImage(propPath.string().c_str());
-    Check(propImage.data != nullptr,
-          "integrated static model lightmap image loads");
-    if (propImage.data != nullptr
+    game::SectorLightmapArtifactData propImage;
+    const bool propImageLoaded = ReadHdrLightmap(propPath, propImage);
+    Check(propImageLoaded,
+          "integrated static model HDR lightmap loads");
+    if (propImageLoaded
             && !installedData.objects.empty()
             && !installedData.objects[0].meshPlacements.empty()) {
         const auto& placement =
@@ -4061,12 +4171,9 @@ void TestStaticModelReceivesAndCastsBakedLighting()
         const int y = static_cast<int>(std::floor(
                 (placement.atlasBias.y + placement.atlasScale.y * 0.5f)
                 * static_cast<float>(propImage.height)));
-        const Color sample = GetImageColor(propImage, x, y);
-        Check(sample.r + sample.g + sample.b > 30,
+        const Vector4 sample = HdrLightmapTexel(propImage, x, y);
+        Check(sample.x + sample.y + sample.z > 0.1f,
               "static model texels receive baked static direct lighting");
-    }
-    if (propImage.data != nullptr) {
-        UnloadImage(propImage);
     }
 
     game::SectorGeneratedGeometry geometry;
@@ -4082,17 +4189,15 @@ void TestStaticModelReceivesAndCastsBakedLighting()
             break;
         }
     }
-    Color propFloorSample = {};
+    Vector4 propFloorSample = {};
     if (floorSurfaceIndex >= 0
             && floorSurfaceIndex < static_cast<int>(layout.charts.size())) {
         const game::SectorLightmapChart& chart =
                 layout.charts[static_cast<size_t>(floorSurfaceIndex)];
-        Image baked = LoadImage(propPath.string().c_str());
-        propFloorSample = GetImageColor(
-                baked,
+        propFloorSample = HdrLightmapTexel(
+                propImage,
                 chart.usableX + chart.usableWidth / 2,
                 chart.usableY + chart.usableHeight / 2);
-        UnloadImage(baked);
     }
 
     game::SectorTopologyMap baselineMap = map;
@@ -4111,18 +4216,129 @@ void TestStaticModelReceivesAndCastsBakedLighting()
             && floorSurfaceIndex < static_cast<int>(layout.charts.size())) {
         const game::SectorLightmapChart& chart =
                 layout.charts[static_cast<size_t>(floorSurfaceIndex)];
-        Image baked = LoadImage(baselinePath.string().c_str());
-        const Color baselineFloorSample = GetImageColor(
+        game::SectorLightmapArtifactData baked;
+        ReadHdrLightmap(baselinePath, baked);
+        const Vector4 baselineFloorSample = HdrLightmapTexel(
                 baked,
                 chart.usableX + chart.usableWidth / 2,
                 chart.usableY + chart.usableHeight / 2);
-        UnloadImage(baked);
-        Check(baselineFloorSample.r + baselineFloorSample.g
-                          + baselineFloorSample.b
-                      > propFloorSample.r + propFloorSample.g
-                              + propFloorSample.b + 20,
+        Check(baselineFloorSample.x + baselineFloorSample.y
+                          + baselineFloorSample.z
+                      > propFloorSample.x + propFloorSample.y
+                              + propFloorSample.z + 0.05f,
               "opaque double-sided static model triangles cast baked shadows onto sector floors");
     }
+}
+
+void TestHdrArtifactAndBakeColorContract()
+{
+    const Vector3 decoded = game::SectorLightmapAuthoredSrgbColorToLinear(
+            Color{128, 64, 255, 255});
+    Check(Near(decoded.x, 0.2158605f, 0.000001f)
+                  && Near(decoded.y, 0.0512695f, 0.000001f)
+                  && Near(decoded.z, 1.0f, 0.000001f),
+          "authored static-light swatches use exact sRGB-to-linear decoding");
+    Check(game::SectorLightmapFloatToBinary16(1.0f) == 0x3c00u
+                  && game::SectorLightmapFloatToBinary16(2.0f) == 0x4000u
+                  && Near(game::SectorLightmapBinary16ToFloat(0x4500u), 5.0f),
+          "binary16 conversion uses explicit IEEE bit representations");
+
+    game::SectorTopologyMap ambientMap = MakeSquare();
+    game::SectorTopologySector* ambientSector =
+            game::FindSectorTopologySector(ambientMap, 10);
+    Check(ambientSector != nullptr, "ambient color contract fixture has a sector");
+    if (ambientSector != nullptr) {
+        ambientSector->ambientColor = Color{64, 128, 255, 255};
+        ambientSector->ambientIntensity = 0.5f;
+    }
+    const game::BakedObjectLightingSample ambientSample =
+            game::SampleBakedObjectLighting(
+                    game::SectorBakedObjectLightProbeRuntimeData{},
+                    Vector3{},
+                    10,
+                    &ambientMap);
+    const Vector3 ambient = game::EvaluateBakedObjectAmbientCubeLighting(
+            ambientSample, Vector3{0.0f, 1.0f, 0.0f});
+    Check(Near(ambient.x, 32.0f / 255.0f)
+                  && Near(ambient.y, 64.0f / 255.0f)
+                  && Near(ambient.z, 0.5f),
+          "sector ambient remains numeric linear data without sRGB decoding");
+
+    const std::filesystem::path sandbox =
+            Phase01bSandboxDir() / "hdr_artifact_contract";
+    std::filesystem::remove_all(sandbox);
+    std::filesystem::create_directories(sandbox);
+    const std::filesystem::path firstPath = sandbox / "first.lightmap.bin";
+    const std::filesystem::path secondPath = sandbox / "second.lightmap.bin";
+    const std::vector<Vector4> texels{
+            Vector4{4.5f, 2.0f, 0.125f, 0.25f},
+            Vector4{1.25f, 0.0f, 32.0f, 1.0f}};
+    game::SectorIlluminationStatistics firstPre;
+    game::SectorIlluminationStatistics firstStored;
+    game::SectorIlluminationStatistics secondPre;
+    game::SectorIlluminationStatistics secondStored;
+    std::string error;
+    Check(game::WriteSectorLightmapArtifact(
+                  firstPath.string(), 2, 1, texels.data(), texels.size(),
+                  "hdr-contract-hash", firstPre, firstStored, error)
+                  && game::WriteSectorLightmapArtifact(
+                             secondPath.string(), 2, 1, texels.data(), texels.size(),
+                             "hdr-contract-hash", secondPre, secondStored, error),
+          "HDR artifact writer stores and reopens representative radiance");
+    game::SectorLightmapMetadata expected;
+    expected.width = 2;
+    expected.height = 1;
+    expected.version = game::kSectorLightmapArtifactVersion;
+    expected.format = game::kSectorLightmapArtifactFormat;
+    expected.sourceHash = "hdr-contract-hash";
+    game::SectorLightmapArtifactData loaded;
+    Check(game::ReadSectorLightmapArtifact(
+                  firstPath.string(), &expected, loaded, error)
+                  && loaded.rgba16.size() == 8
+                  && Near(HdrLightmapTexel(loaded, 0, 0).x, 4.5f)
+                  && Near(HdrLightmapTexel(loaded, 1, 0).z, 32.0f)
+                  && Near(HdrLightmapTexel(loaded, 0, 0).w, 0.25f)
+                  && loaded.storedStatistics.rgbMax.z > 1.0f
+                  && loaded.storedStatistics.rgbChannelsAboveOne == 4,
+          "HDR artifact round trip preserves above-one RGB and bounded AO");
+    Check(firstPre.rgbMax.z == 32.0f
+                  && firstStored.rgbMax.z == 32.0f
+                  && firstStored.sampleCount == texels.size(),
+          "artifact statistics distinguish pre-encode and reopened stored data");
+
+    auto readBytes = [](const std::filesystem::path& path) {
+        std::ifstream input(path, std::ios::binary);
+        return std::vector<unsigned char>(
+                std::istreambuf_iterator<char>(input),
+                std::istreambuf_iterator<char>());
+    };
+    const std::vector<unsigned char> firstBytes = readBytes(firstPath);
+    const std::vector<unsigned char> secondBytes = readBytes(secondPath);
+    Check(firstBytes == secondBytes
+                  && firstBytes.size() > 8
+                  && firstBytes[0] == 'S' && firstBytes[1] == 'L'
+                  && firstBytes[4] == 1 && firstBytes[5] == 0
+                  && firstBytes[6] == 0 && firstBytes[7] == 0,
+          "HDR artifact output is deterministic with fixed-width little-endian fields");
+
+    const std::filesystem::path corruptPath = sandbox / "corrupt.lightmap.bin";
+    std::filesystem::copy_file(firstPath, corruptPath);
+    PatchByte(corruptPath, static_cast<std::streamoff>(firstBytes.size() - 1u), 0xffu);
+    Check(!game::ReadSectorLightmapArtifact(
+                  corruptPath.string(), &expected, loaded, error),
+          "HDR artifact reader rejects checksum corruption");
+    const std::filesystem::path truncatedPath = sandbox / "truncated.lightmap.bin";
+    std::filesystem::copy_file(firstPath, truncatedPath);
+    TruncateFileByOneByte(truncatedPath);
+    Check(!game::ReadSectorLightmapArtifact(
+                  truncatedPath.string(), &expected, loaded, error),
+          "HDR artifact reader rejects truncated payloads");
+    const std::filesystem::path legacyPath = sandbox / "legacy.lightmap.png";
+    WriteTextFile(legacyPath, "legacy-rgba8");
+    Check(!game::ReadSectorLightmapArtifact(
+                  legacyPath.string(), &expected, loaded, error),
+          "legacy RGBA8 artifacts are rejected rather than reinterpreted");
+    std::filesystem::remove_all(sandbox);
 }
 
 } // namespace
@@ -4172,6 +4388,7 @@ int main()
     TestLayoutSmoke();
     TestTopologyLayoutRollsIntoAdditionalAtlases();
     TestSmallSyntheticMultiAtlasBake();
+    TestHdrBakeAccumulationPreservesAboveOneRadiance();
     TestMiddleSurfacesReceiveLightmapsWithoutOccluding();
     TestAlphaTestMiddleOccluderCollection();
     TestAlphaMaskCacheSampling();
@@ -4185,6 +4402,7 @@ int main()
     TestStaticModelChartPackingAndSidecarLifecycle();
     TestStaticModelFingerprintRefreshAndHashInputs();
     TestStaticModelReceivesAndCastsBakedLighting();
+    TestHdrArtifactAndBakeColorContract();
 
     if (failures != 0) {
         std::fprintf(stderr, "%d sector topology lightmap test(s) failed\n", failures);

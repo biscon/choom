@@ -267,6 +267,42 @@ void TestRemovedShaderPathsStayRemoved()
           "PBR shader does not reintroduce local tone mapping or output transfer");
 }
 
+std::string ReadSource(const char* path)
+{
+    std::ifstream input(path);
+    return std::string(
+            std::istreambuf_iterator<char>(input),
+            std::istreambuf_iterator<char>());
+}
+
+void TestBakedHdrConsumersStayUnclamped()
+{
+    const std::string sector = ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    const std::string door = ReadSource(DOOR_SHADER_SOURCE_PATH);
+    const std::string billboard = ReadSource(BILLBOARD_SHADER_SOURCE_PATH);
+    Check(!sector.empty() && !door.empty() && !billboard.empty(),
+          "baked HDR shader policy can read every active consumer");
+    Check(sector.find("clamp(ambient + bakedDirect, 0.0, 1.0)")
+                    == std::string::npos
+                    && sector.find("clamp(bakedLighting + dynamicDirect")
+                            == std::string::npos,
+          "sector baked illumination has no LDR or finite upper clamp");
+    Check(door.find("clamp(fragColor.rgb, 0.0, 1.0)") == std::string::npos
+                    && door.find("clamp(staticProbeLighting + dynamicDirect")
+                            == std::string::npos,
+          "door probe illumination remains float HDR through composition");
+    Check(billboard.find("clamp(bakedBillboardLighting + dynamicDirect")
+                    == std::string::npos,
+          "billboard probe illumination has no finite upper clamp");
+    Check(sector.find("LinearToSrgb") == std::string::npos
+                    && door.find("LinearToSrgb") == std::string::npos
+                    && billboard.find("LinearToSrgb") == std::string::npos
+                    && sector.find("Aces") == std::string::npos
+                    && door.find("Aces") == std::string::npos
+                    && billboard.find("Aces") == std::string::npos,
+          "baked-light consumers do not tone map or encode output locally");
+}
+
 } // namespace
 
 int main()
@@ -277,6 +313,7 @@ int main()
     TestMaterialTextureSemantics();
     TestEnvironmentEligibility();
     TestRemovedShaderPathsStayRemoved();
+    TestBakedHdrConsumersStayUnclamped();
     if (failures != 0) {
         std::fprintf(stderr, "%d PBR lighting policy test(s) failed\n", failures);
         return 1;

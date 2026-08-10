@@ -227,6 +227,10 @@ unsigned int TextureInternalFormatForColorUsage(
         return 0;
     }
 
+    if (pixelFormat == PIXELFORMAT_UNCOMPRESSED_R16G16B16A16) {
+        return GL_RGBA16F;
+    }
+
     unsigned int internalFormat = 0;
     unsigned int externalFormat = 0;
     unsigned int type = 0;

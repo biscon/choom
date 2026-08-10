@@ -1493,7 +1493,7 @@ void TestSectorDoorStaticLightingColorsSamplePerVertexProbes()
             rightVertex,
             Vector3{0.0f, 0.0f, 1.0f});
 
-    std::vector<Color> colors;
+    std::vector<Vector3> colors;
     const bool built = game::BuildSectorDoorStaticLightingColors(
             mesh,
             transform,
@@ -1506,12 +1506,12 @@ void TestSectorDoorStaticLightingColorsSamplePerVertexProbes()
     Check(built && colors.size() == mesh.vertices.size(),
             "door static lighting helper emits one color per duplicated mesh vertex");
     Check(colors.size() >= 2
-                  && colors[0].r > 240
-                  && colors[0].b < 16
-                  && colors[1].b > 240
-                  && colors[1].r < 16,
+                  && colors[0].x > 0.94f
+                  && colors[0].z < 0.07f
+                  && colors[1].z > 0.94f
+                  && colors[1].x < 0.07f,
             "door static lighting helper samples object probes at individual vertex positions");
-    Check(colors.size() >= 8 && !SameColor(colors[0], colors[4]),
+    Check(colors.size() >= 8 && !Near(colors[0], colors[4]),
             "door duplicated face vertices can receive different static probe colors");
 }
 
@@ -1524,7 +1524,7 @@ void TestSectorDoorStaticLightingColorsFallbackSafely()
     const game::SectorDoorSlabMeshData mesh = game::BuildSectorDoorSlabMeshData(render);
     const game::SectorBakedObjectLightProbeRuntimeData missingProbes;
 
-    std::vector<Color> colors;
+    std::vector<Vector3> colors;
     Check(game::BuildSectorDoorStaticLightingColors(
                   mesh,
                   transform,
@@ -1534,7 +1534,7 @@ void TestSectorDoorStaticLightingColorsFallbackSafely()
                   nullptr,
                   colors),
             "door static lighting helper handles missing probes without a map fallback");
-    Check(!colors.empty() && SameColor(colors[0], Color{38, 38, 38, 255}),
+    Check(!colors.empty() && Near(colors[0], Vector3{0.15f, 0.15f, 0.15f}),
             "door static lighting helper uses neutral fallback without probes or map");
 
     game::SectorTopologyMap map = MakeSquareMap();
@@ -1554,7 +1554,7 @@ void TestSectorDoorStaticLightingColorsFallbackSafely()
                   &map,
                   colors),
             "door static lighting helper handles missing probes with a map fallback");
-    Check(!colors.empty() && SameColor(colors[0], Color{32, 64, 128, 255}),
+    Check(!colors.empty() && Near(colors[0], Vector3{32.0f / 255.0f, 64.0f / 255.0f, 0.5f}),
             "door static lighting helper uses sector ambient fallback when map is supplied");
 }
 
@@ -1572,7 +1572,7 @@ void TestSectorDoorStaticLightingColorsDoNotMutateGeometry()
             Vector3{2.0f, -0.5f, 0.125f},
             Vector3{0.0f, 0.0f, 1.0f});
 
-    std::vector<Color> colors;
+    std::vector<Vector3> colors;
     game::BuildSectorDoorStaticLightingColors(mesh, transform, object, anchor, probes, nullptr, colors);
 
     bool geometryUnchanged = mesh.vertices.size() == before.vertices.size()

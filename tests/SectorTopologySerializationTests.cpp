@@ -1,4 +1,5 @@
 #include "sector_demo/SectorTopologySerialization.h"
+#include "sector_demo/SectorLightmap.h"
 #include "game/SectorLevelLoader.h"
 #include "util/json.hpp"
 
@@ -1764,6 +1765,8 @@ void TestLightmapMetadataRoundTrip()
     original.bakedLightmap.path = "assets/levels/test/test.lightmap.png";
     original.bakedLightmap.width = 2048;
     original.bakedLightmap.height = 2048;
+    original.bakedLightmap.version = game::kSectorLightmapArtifactVersion;
+    original.bakedLightmap.format = game::kSectorLightmapArtifactFormat;
     original.bakedLightmap.sourceHash = "abc123";
     original.bakedLightmap.additionalAtlases = {
             game::SectorLightmapAtlasMetadata{
@@ -1801,6 +1804,8 @@ void TestLightmapMetadataRoundTrip()
     Check(loaded.bakedLightmap.path == original.bakedLightmap.path
                   && loaded.bakedLightmap.width == 2048
                   && loaded.bakedLightmap.height == 2048
+                  && loaded.bakedLightmap.version == game::kSectorLightmapArtifactVersion
+                  && loaded.bakedLightmap.format == game::kSectorLightmapArtifactFormat
                   && loaded.bakedLightmap.sourceHash == "abc123"
                   && loaded.bakedLightmap.additionalAtlases.size() == 2
                   && loaded.bakedLightmap.additionalAtlases[0].width == 2048,
@@ -3732,6 +3737,8 @@ void TestGraphNativeMapLevelRoundTrip()
     source.bakedLightmap.path = "assets/levels/test/test.lightmap.png";
     source.bakedLightmap.width = 128;
     source.bakedLightmap.height = 128;
+    source.bakedLightmap.version = game::kSectorLightmapArtifactVersion;
+    source.bakedLightmap.format = game::kSectorLightmapArtifactFormat;
     source.bakedLightmap.sourceHash = "abc123";
     source.bakedLightmap.additionalAtlases.push_back(
             game::SectorLightmapAtlasMetadata{

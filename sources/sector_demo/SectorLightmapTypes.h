@@ -4,10 +4,20 @@
 
 #include <raylib.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
 namespace game {
+
+struct SectorIlluminationStatistics {
+    Vector3 rgbMin = {};
+    Vector3 rgbMax = {};
+    float auxiliaryMin = 0.0f;
+    float auxiliaryMax = 0.0f;
+    uint64_t sampleCount = 0;
+    uint64_t rgbChannelsAboveOne = 0;
+};
 
 struct SectorLightmapBakeSettings {
     float ambientOcclusionRadius = SectorWorldToAuthoringDistance(1.25f);
@@ -47,6 +57,7 @@ struct SectorBakedObjectLightProbeMetadata {
     float probeLowerHeightWorld = 0.6f;
     float probeUpperHeightWorld = 1.5f;
     std::string format;
+    SectorIlluminationStatistics storedStatistics;
 };
 
 struct SectorBakedObjectLightProbeSectorRange {
@@ -61,6 +72,15 @@ struct SectorBakedObjectLightProbeRuntimeData {
     std::vector<SectorBakedObjectLightProbe> probes;
     std::vector<SectorBakedObjectLightProbeSectorRange> sectorRanges;
     SectorBakedObjectLightProbeMetadata metadata;
+};
+
+struct SectorLightmapArtifactData {
+    int width = 0;
+    int height = 0;
+    std::string sourceHash;
+    // Host-order IEEE 754 binary16 bit patterns, interleaved RGBA.
+    std::vector<uint16_t> rgba16;
+    SectorIlluminationStatistics storedStatistics;
 };
 
 struct BakedObjectLightingSample {
@@ -88,13 +108,17 @@ struct SectorLightmapAtlasMetadata {
     std::string path;
     int width = 0;
     int height = 0;
+    SectorIlluminationStatistics storedStatistics;
 };
 
 struct SectorLightmapMetadata {
     std::string path;
     int width = 0;
     int height = 0;
+    int version = 0;
+    std::string format;
     std::string sourceHash;
+    SectorIlluminationStatistics storedStatistics;
     std::vector<SectorLightmapAtlasMetadata> additionalAtlases;
     SectorBakedObjectLightProbeMetadata objectProbes;
     SectorBakedStaticModelLightmapMetadata staticModels;

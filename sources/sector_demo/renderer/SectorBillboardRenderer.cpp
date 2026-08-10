@@ -217,7 +217,7 @@ void main()
     }
 
     vec3 surfaceRgb = sampled.rgb * fragColor.rgb;
-    vec3 lighting = clamp(bakedBillboardLighting + dynamicDirect, 0.0, dynamicLightingClamp);
+    vec3 lighting = max(bakedBillboardLighting + dynamicDirect, vec3(0.0));
     finalColor = vec4(ApplySectorFog(surfaceRgb * lighting, fragWorldPosition), 1.0);
 }
 )";

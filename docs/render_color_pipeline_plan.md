@@ -18,8 +18,9 @@ to linear before scene lighting once slice 2 activates the new pipeline.
 
 Normal, metallic, roughness, occlusion/AO, scalar material, shadow/depth, noise,
 mask, baked-lightmap, and illumination-probe data is linear numeric data and
-must never receive sRGB decoding. Baked lightmap RGB is linear radiance and its
-alpha is linear AO, even while the current artifact is stored in RGBA8.
+must never receive sRGB decoding. Baked lightmap RGB is linear HDR radiance and
+its alpha is bounded linear AO. Slice 3 stores it as explicit little-endian
+RGBA binary16 and stores probes as explicit little-endian float32.
 
 ### Display-referred sRGB
 
@@ -55,7 +56,7 @@ glTF vertex colors remain linear factors and are never sRGB-decoded.
 | 1. Color/HDR foundations | Complete | Contract, exact transfer helpers, texture semantics, float-target factory, diagnostics, tests |
 | 2. Linear HDR world and presentation | Complete | Replace world/viewmodel scene output with linear HDR and one global tone/output pass |
 | 2.1. glTF/PBR lighting diagnosis and correction | Complete | Remove false achromatic indirect light, isolate contributions, and expose reusable PBR diagnostics |
-| 3. HDR baked illumination | Pending | Preserve HDR radiance in lightmaps and illumination probes; update bake conventions and hashes deliberately |
+| 3. HDR baked illumination | Complete | Preserve HDR radiance in lightmaps and illumination probes; update bake conventions and hashes deliberately |
 | 4. Atmosphere, blending, muzzle and bloom | Pending | Promote bounded effect intermediates/radiance to HDR and replace the LDR bloom workaround |
 | 5. Audit, cleanup, controls and hardening | Pending | Remove obsolete mixed paths, validate platforms, add final controls and regression hardening |
 
@@ -250,6 +251,9 @@ correct, but their brightness/range is not authoritative until Slice 3 promotes
 the artifact formats. No correction was fitted to those old artifacts. The
 unrelated baked black-patch/normal-map shadow issue was not changed.
 
+This historical Slice 2.1 boundary was resolved by Slice 3 without changing
+the accepted PBR routing or composition.
+
 Materially changed systems: glTF model material metadata/finalization, the PBR
 environment lifecycle, static/dynamic/viewmodel PBR shader composition and CPU
 draw-state routing, `SectorMeshRenderer` PBR state exposure, selected-object
@@ -267,3 +271,104 @@ Verification:
 - `git diff --check`: passed.
 - Interactive runtime launch and screenshots: intentionally not performed;
   visual validation is reserved for the user.
+
+## Slice 3 Completion Record
+
+Date: 2026-08-10
+
+Status: complete. Slice 4 remains pending.
+
+Artifact and color contract:
+
+- Sector/world and static-model illumination share a custom
+  `rgba16fLinearHdrRgbAoLE` atlas artifact (`SLMH`, artifact version 1). Bake
+  and interpolation storage is float32. Disk texels are row-major interleaved
+  IEEE binary16 RGBA: linear HDR RGB plus bounded linear AO. Runtime upload is
+  a `PIXELFORMAT_UNCOMPRESSED_R16G16B16A16` image owned by `AssetManager` and
+  stored by OpenGL as linear `GL_RGBA16F`, never an sRGB internal format. A
+  2048x2048 atlas occupies 32 MiB. Binary16 is deterministic and sufficient
+  for baked-light precision; finite positive RGB above 65504 is rejected rather
+  than clipped or encoded as infinity.
+- Object probes use `layeredAmbientCubeLinearHdrF32LE` (`SOPB`, sidecar version
+  3). Probe positions, placement settings, and six-face RGB values remain
+  float32. Static-model UV/remap metadata is version 3 and remains separate
+  from the shared illumination atlas.
+- Every multibyte binary field is fixed-width and explicitly little-endian.
+  Float32 and binary16 are serialized through their integer bit
+  representations; readers reconstruct host values before CPU use or GPU
+  upload. No artifact serializes a native C++ struct or relies on padding or
+  host byte order. Headers carry dimensions/counts, semantic identifiers,
+  source hashes, payload byte counts, and FNV-1a checksums; loaders require
+  exact EOF.
+- Authored static point-, spot-, and directional-light byte swatches receive
+  the exact IEC sRGB-to-linear transfer once when world-space bake lights are
+  built. Sector ambient remains numeric `channel / 255 * intensity` linear
+  data. Intensity, range, attenuation, shadow, AO, normal, mask, and other
+  numeric inputs retain their existing linear meanings.
+- The existing indirect pass does not sample sector diffuse textures, glTF
+  base-color/emissive textures, material factors/colors, or emissive artwork.
+  It samples the already-linear direct-light float buffer and applies distance,
+  facing, cosine, configured strength, and the existing neutral 0.55 bounce
+  albedo. Normal maps and alpha masks remain numeric normal/occlusion inputs.
+  Slice 3 deliberately did not invent colored-surface or emissive bounce.
+
+Validation, versions, and installation:
+
+- `kSectorLightmapBakeVersion` is 15. The source hash now includes explicit
+  Slice 3 HDR/color/format tags, atlas/probe/static-sidecar versions, the
+  exactly-once light-swatch convention, and the retained neutral-bounce model.
+  Geometry, receiver/occluder, texture-data, static-light, static-model, probe,
+  and `ceilingSky` inputs remain included. Preview and sky-visual settings
+  remain excluded. Old RGBA8/PNG metadata cannot satisfy the current version
+  and format and requires a rebake; no compatibility reader or render switch
+  was added.
+- Status reporting distinguishes no metadata, missing data, stale/versioned
+  data, and invalid decoded data. Atlas, probe, and static-model-remap
+  availability are independent. Corrupt, truncated, trailing, checksum-invalid,
+  structurally invalid, non-finite, negative-radiance, invalid-AO, and wrong-hash
+  data fail safely instead of receiving an LDR interpretation.
+- Writers close and reopen artifacts through the production reader. Bake
+  reports retain pre-encode float32 statistics separately from authoritative
+  reopened binary16 atlas statistics; probe statistics likewise come from the
+  reopened float32 payload. Reported minimum/maximum and above-one counts
+  therefore describe stored data.
+- Installation validates temporary files, copies every product to
+  same-directory `.installing` paths, reopens the complete staged set, publishes
+  data files, then reopens the final set. The editor assigns one complete
+  `SectorLightmapMetadata` value only after that succeeds. A failure or crash
+  therefore leaves the previous set, a missing set, a stale hash/version, or an
+  invalid artifact rather than partially publishing new current metadata.
+
+Runtime consumers and diagnostics:
+
+- Sector geometry samples HDR atlases without a baked-light or final-lighting
+  upper clamp. Static PBR models retain the accepted Slice 2.1 incoming-light
+  material modulation. Dynamic PBR models and viewmodels retain float32 HDR
+  probe selection and interpolation. Billboards no longer upper-clamp combined
+  probe/direct radiance. Doors transport probe lighting in a float tangent
+  attribute instead of quantized vertex colors.
+- Fog, haze, and dust receive unclamped HDR probe values. Their existing
+  effect-local RGBA8/4.0 accumulation bounds remain a documented Slice 4
+  limitation; Slice 3 does not redesign those buffers. Debug-only bounded color
+  visualizations remain presentation aids rather than illumination transport.
+- Bake reports show artifact version/representation, CPU/disk/GPU formats,
+  pre-encode and stored ranges, and above-one preservation. PBR diagnostics
+  continue to report the chosen static-lightmap/probe/fallback source and now
+  identify it as linear HDR. Color-pipeline diagnostics identify Slice 3 and
+  the baked representations. Metadata and statistics are gathered at bake/load
+  time without per-frame artifact scans or OpenGL queries.
+
+Verification:
+
+- `cmake --build cmake-build-debug -j2`: passed.
+- `ctest --test-dir cmake-build-debug --output-on-failure`: passed.
+- Focused coverage includes exact authored-light sRGB conversion, unchanged
+  numeric sector ambient, binary16 HDR/AO round trips, explicit little-endian
+  byte layout, deterministic output, stored-payload statistics, probe HDR
+  serialization/interpolation, source-version invalidation, corrupt/truncated/
+  legacy rejection, staged installation, static-model lighting transport,
+  `GL_RGBA16F` selection, and shader policy.
+- `git diff --check`, `git diff --stat`, and `git status --short`: reviewed.
+- Interactive engine launch, screenshots, and authored production-map rebakes:
+  intentionally not performed. Existing maps require rebaking and visual
+  validation remains with the user.

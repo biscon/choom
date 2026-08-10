@@ -613,7 +613,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             diagnostic.placedObjectId,
                             diagnostic.materialIndex));
                     addKeyValue("indirect source", TextFormat(
-                            "%s | probe %s",
+                            "%s | probe %s | linear HDR",
                             SectorPbrIndirectSourceName(
                                     diagnostic.state.indirectSource),
                             diagnostic.state.useObjectProbe ? "valid" : "not selected"));

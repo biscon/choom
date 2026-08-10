@@ -335,8 +335,8 @@ void main()
             dynamicDirect += dynamicLightColors[i] * dynamicLightIntensities[i] * atten * ndotl * coneAtten;
         }
     }
-    vec3 bakedLighting = clamp(ambient + bakedDirect, 0.0, 1.0);
-    vec3 lighting = clamp(bakedLighting + dynamicDirect, 0.0, dynamicLightingClamp);
+    vec3 bakedLighting = max(ambient + bakedDirect, vec3(0.0));
+    vec3 lighting = max(bakedLighting + dynamicDirect, vec3(0.0));
     vec3 litRgb = surfaceRgb * lighting;
     vec3 surfaceOutput = mix(litRgb, emissiveDecalRgb, emissiveDecalAlpha);
     finalColor = vec4(ApplySectorFog(surfaceOutput, fragWorldPosition), baseColor.a * fragColor.a);
@@ -670,9 +670,6 @@ bool SectorMeshRenderer::RebuildRendererResources(
                     stderr,
                     "[SectorDemo WARNING] Static model lightmap disabled: %s\n",
                     staticModelError.c_str());
-            useLightmapLayout = false;
-            lightmapStatus =
-                    static_cast<int>(SectorLightmapStatus::Stale);
             staticModelLightmapData = {};
         } else if (!AreSectorStaticModelLightmapAtlasIndicesValid(
                            staticModelLightmapData,
@@ -680,9 +677,6 @@ bool SectorMeshRenderer::RebuildRendererResources(
             std::fprintf(
                     stderr,
                     "[SectorDemo WARNING] Static model lightmap disabled: atlas index is outside installed metadata\n");
-            useLightmapLayout = false;
-            lightmapStatus =
-                    static_cast<int>(SectorLightmapStatus::Stale);
             staticModelLightmapData = {};
         }
     }
@@ -696,12 +690,43 @@ bool SectorMeshRenderer::RebuildRendererResources(
                     lightmapAtlases[atlasIndex].path);
             const std::string key = "sector_lightmap_atlas_"
                     + std::to_string(atlasIndex);
-            lightmapTextures.push_back(assets.RequestTexture(
+            SectorLightmapArtifactData artifact;
+            std::string artifactError;
+            if (!ReadSectorLightmapArtifact(
+                        resolvedPath,
+                        &map.bakedLightmap,
+                        artifact,
+                        artifactError)) {
+                std::fprintf(stderr,
+                        "[SectorDemo WARNING] HDR lightmap disabled: %s\n",
+                        artifactError.c_str());
+                lightmapTextures.clear();
+                useLightmapLayout = false;
+                lightmapStatus = static_cast<int>(SectorLightmapStatus::Invalid);
+                break;
+            }
+            Image image{};
+            image.data = artifact.rgba16.data();
+            image.width = artifact.width;
+            image.height = artifact.height;
+            image.mipmaps = 1;
+            image.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
+            const engine::TextureHandle texture = assets.CreateTextureFromImage(
                     assetScope,
                     key.c_str(),
-                    resolvedPath.c_str(),
+                    image,
                     engine::TextureColorUsage::LinearData,
-                    engine::TextureLoad_BilinearFilter));
+                    engine::TextureLoad_BilinearFilter);
+            if (engine::IsNull(texture)) {
+                std::fprintf(stderr,
+                        "[SectorDemo WARNING] HDR lightmap GPU upload failed for '%s'\n",
+                        resolvedPath.c_str());
+                lightmapTextures.clear();
+                useLightmapLayout = false;
+                lightmapStatus = static_cast<int>(SectorLightmapStatus::Invalid);
+                break;
+            }
+            lightmapTextures.push_back(texture);
         }
     }
 
