@@ -130,7 +130,7 @@ std::string FormatColorPipelineDiagnostics(
         const ColorPipelineRuntimeState& pipeline)
 {
     std::ostringstream output;
-    output << "COLOR PIPELINE foundations-v1 (active=mixed-LDR, no legacy mode)\n"
+    output << "COLOR PIPELINE slice-2 (active=linear-HDR, no legacy mode)\n"
            << "  platform=" << graphics.platform
            << " build=" << graphics.build
            << " raylib=" << graphics.raylibVersion << "\n"
@@ -150,9 +150,10 @@ std::string FormatColorPipelineDiagnostics(
            << (graphics.framebufferSrgbEnabled ? "enabled" : "disabled") << "\n"
            << "  supersample=" << pipeline.supersampleScale
            << " FXAA=" << (pipeline.fxaaActive ? "active" : (pipeline.fxaaRequested ? "requested-unavailable" : "off")) << "\n"
-           << "  stages=bloom(LDR emissive decals) -> distance/local fog(LDR) -> haze(LDR) -> dust(LDR)\n"
-           << "  tone/output=no global tone map; direct mixed-LDR presentation\n"
-           << "  models=model-local ACES and manual sRGB encoding active";
+           << "  resolve=2880x1620 linear RGBA16F -> 1920x1080 linear RGBA16F\n"
+           << "  stages=bloom/fog/haze/dust bounded-linear RGBA8 accumulators -> linear HDR scene composites\n"
+           << "  tone/output=neutral max-channel curve exposure=1.0 -> exact sRGB RGBA8 -> FXAA/final scale\n"
+           << "  models=linear HDR output; glTF color textures manually decoded; no local tone map or encoding";
     return output.str();
 }
 

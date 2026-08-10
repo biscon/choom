@@ -4,6 +4,10 @@
 #include "engine/render/ColorTransfer.h"
 #include "engine/render/RenderColorDiagnostics.h"
 #include "engine/render/RenderTarget.h"
+#include "engine/render/ScenePresentationShader.h"
+#include "engine/render/ToneMapping.h"
+
+#include <external/glad.h>
 
 #include <cmath>
 #include <cstdio>
@@ -51,6 +55,15 @@ void TestTransferFunctions()
     Check(Near(encoded.y, 128.0f / 255.0f), "representative green round trip");
     Check(Near(encoded.z, 192.0f / 255.0f), "representative blue round trip");
     Check(Near(encoded.w, 0.37f), "linear alpha is preserved without gamma transform");
+
+    const Vector3 normalizedDecoded = engine::SrgbNormalizedRgbToLinearScene(
+            Vector3{0.25f, 0.5f, 0.75f});
+    Check(Near(normalizedDecoded.y, engine::SrgbNormalizedChannelToLinear(0.5f)),
+          "normalized authored tint decodes to linear scene RGB");
+    const Color decodedUnorm = engine::SrgbColorBytesToLinearSceneUnorm(bytes);
+    Check(decodedUnorm.a == bytes.a, "linear vertex/unorm conversion preserves alpha byte");
+    Check(decodedUnorm.r == static_cast<unsigned char>(std::lround(decoded.x * 255.0f)),
+          "linear vertex/unorm conversion quantizes decoded RGB");
 
     constexpr float Values[] = {0.0f, 0.003f, 0.04f, 0.18f, 0.5f, 0.75f, 1.0f};
     for (float value : Values) {
@@ -116,6 +129,18 @@ void TestTextureSemantics()
     Check(scene.handle != data.handle, "different texture semantics do not alias");
     Check(scene.colorUsage == TextureColorUsage::SceneSrgb, "request result retains scene semantic");
     Check(data.colorUsage == TextureColorUsage::LinearData, "request result retains data semantic");
+    Check(engine::TextureInternalFormatForColorUsage(
+                  TextureColorUsage::SceneSrgb,
+                  PIXELFORMAT_UNCOMPRESSED_R8G8B8) == GL_SRGB8,
+          "scene RGB texture semantic selects GL_SRGB8 storage");
+    Check(engine::TextureInternalFormatForColorUsage(
+                  TextureColorUsage::SceneSrgb,
+                  PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) == GL_SRGB8_ALPHA8,
+          "scene RGBA texture semantic selects GL_SRGB8_ALPHA8 storage");
+    Check(engine::TextureInternalFormatForColorUsage(
+                  TextureColorUsage::SceneSrgb,
+                  PIXELFORMAT_UNCOMPRESSED_GRAYSCALE) == 0,
+          "unsupported scene-sRGB upload format requires conversion");
 
     engine::SpriteAnimationAssets sprites;
     sprites.OnScopeCreated(scope);
@@ -132,6 +157,32 @@ void TestTextureSemantics()
             TextureColorUsage::DisplaySrgb,
             engine::TextureLoad_PointFilter);
     Check(sceneSprite.handle != displaySprite.handle, "sprite atlas semantic participates in identity");
+}
+
+void TestNeutralToneMapping()
+{
+    const Vector3 black = engine::ToneMapNeutralMaxChannel(Vector3{});
+    Check(Near(black.x, 0.0f) && Near(black.y, 0.0f) && Near(black.z, 0.0f),
+          "neutral tone map preserves black");
+    const Vector3 mapped = engine::ToneMapNeutralMaxChannel(Vector3{4.0f, 2.0f, 1.0f});
+    Check(Near(mapped.x, 0.8f) && Near(mapped.y, 0.4f) && Near(mapped.z, 0.2f),
+          "neutral tone map scales all channels by the maximum-channel curve");
+    Check(Near(mapped.x / mapped.y, 2.0f) && Near(mapped.y / mapped.z, 2.0f),
+          "neutral tone map preserves channel ratios");
+    const Vector3 safe = engine::ToneMapNeutralMaxChannel(Vector3{
+            -1.0f,
+            std::numeric_limits<float>::infinity(),
+            std::numeric_limits<float>::quiet_NaN()});
+    Check(Near(safe.x, 0.0f) && Near(safe.y, 0.0f) && Near(safe.z, 0.0f),
+          "neutral tone map handles negative and non-finite inputs safely");
+
+    const std::string shader = engine::BuildScenePresentationFragmentShader();
+    Check(shader.find("ToneMapNeutralMaxChannel") != std::string::npos,
+          "presentation shader applies the selected neutral tone curve");
+    Check(shader.find("LinearSceneToDisplaySrgb") != std::string::npos,
+          "presentation shader performs the exact sRGB transfer");
+    Check(shader.find("ACES") == std::string::npos && shader.find("Aces") == std::string::npos,
+          "presentation shader contains no alternate ACES operator");
 }
 
 void TestRenderTargetMetadata()
@@ -216,10 +267,13 @@ void TestPipelineDiagnosticFormatting()
     const std::string formatted = engine::FormatColorPipelineDiagnostics(
             graphics,
             engine::ColorPipelineRuntimeState{1.5f, true, true});
-    Check(formatted.find("active=mixed-LDR") != std::string::npos, "pipeline diagnostic honestly reports mixed LDR");
+    Check(formatted.find("active=linear-HDR") != std::string::npos, "pipeline diagnostic reports linear HDR");
     Check(formatted.find("default-fb rgba=8/8/8/8 encoding=GL_LINEAR") != std::string::npos,
           "pipeline diagnostic formats framebuffer state");
-    Check(formatted.find("model-local ACES") != std::string::npos, "pipeline diagnostic reports model-local tone map");
+    Check(formatted.find("neutral max-channel") != std::string::npos,
+          "pipeline diagnostic reports the fixed neutral global tone curve");
+    Check(formatted.find("no local tone map") != std::string::npos,
+          "pipeline diagnostic reports linear model output");
 }
 
 } // namespace
@@ -228,6 +282,7 @@ int main()
 {
     TestTransferFunctions();
     TestTextureSemantics();
+    TestNeutralToneMapping();
     TestRenderTargetMetadata();
     TestPipelineDiagnosticFormatting();
 

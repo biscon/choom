@@ -1,5 +1,6 @@
 #include "engine/assets/TextureAssets.h"
 
+#include <external/glad.h>
 #include <raylib.h>
 #include <rlgl.h>
 
@@ -10,6 +11,229 @@
 #include <utility>
 
 namespace engine {
+namespace {
+
+struct TextureUploadBindings {
+    int texture2D = 0;
+    int cubemap = 0;
+    int unpackAlignment = 4;
+};
+
+TextureUploadBindings CaptureTextureUploadBindings()
+{
+    TextureUploadBindings bindings;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &bindings.texture2D);
+    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &bindings.cubemap);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &bindings.unpackAlignment);
+    return bindings;
+}
+
+void RestoreTextureUploadBindings(const TextureUploadBindings& bindings)
+{
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(bindings.texture2D));
+    glBindTexture(GL_TEXTURE_CUBE_MAP, static_cast<GLuint>(bindings.cubemap));
+    glPixelStorei(GL_UNPACK_ALIGNMENT, bindings.unpackAlignment);
+}
+
+void ClearGlErrors()
+{
+    while (glGetError() != GL_NO_ERROR) {
+    }
+}
+
+bool IsSrgbUploadPixelFormat(int format)
+{
+    return format == PIXELFORMAT_UNCOMPRESSED_R8G8B8
+            || format == PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+}
+
+Image PrepareSrgbUploadImage(const Image& source, bool& ownsImage)
+{
+    ownsImage = false;
+    if (IsSrgbUploadPixelFormat(source.format)) {
+        return source;
+    }
+
+    Image converted = ImageCopy(source);
+    if (converted.data == nullptr) {
+        return Image{};
+    }
+    ImageFormat(&converted, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    ownsImage = true;
+    return converted;
+}
+
+bool PromoteTextureToSrgb(Texture2D& texture, const Image& image)
+{
+    if (texture.id == 0 || image.data == nullptr
+            || !IsSrgbUploadPixelFormat(image.format)) {
+        return false;
+    }
+
+    const GLenum externalFormat = image.format == PIXELFORMAT_UNCOMPRESSED_R8G8B8
+            ? GL_RGB
+            : GL_RGBA;
+    const GLenum internalFormat = image.format == PIXELFORMAT_UNCOMPRESSED_R8G8B8
+            ? GL_SRGB8
+            : GL_SRGB8_ALPHA8;
+    const TextureUploadBindings bindings = CaptureTextureUploadBindings();
+    glBindTexture(GL_TEXTURE_2D, texture.id);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    ClearGlErrors();
+
+    const auto* pixels = static_cast<const unsigned char*>(image.data);
+    std::size_t offset = 0;
+    int width = image.width;
+    int height = image.height;
+    for (int mip = 0; mip < image.mipmaps; ++mip) {
+        glTexImage2D(
+                GL_TEXTURE_2D,
+                mip,
+                static_cast<GLint>(internalFormat),
+                width,
+                height,
+                0,
+                externalFormat,
+                GL_UNSIGNED_BYTE,
+                pixels + offset);
+        offset += static_cast<std::size_t>(
+                GetPixelDataSize(width, height, image.format));
+        width = std::max(1, width / 2);
+        height = std::max(1, height / 2);
+    }
+
+    int actualFormat = 0;
+    glGetTexLevelParameteriv(
+            GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT, &actualFormat);
+    const bool valid = glGetError() == GL_NO_ERROR
+            && actualFormat == static_cast<int>(internalFormat);
+    RestoreTextureUploadBindings(bindings);
+    return valid;
+}
+
+Texture2D UploadTextureFromImage(
+        const Image& source,
+        TextureColorUsage colorUsage)
+{
+    if (colorUsage != TextureColorUsage::SceneSrgb) {
+        return LoadTextureFromImage(source);
+    }
+
+    bool ownsImage = false;
+    Image uploadImage = PrepareSrgbUploadImage(source, ownsImage);
+    Texture2D texture{};
+    if (uploadImage.data != nullptr) {
+        texture = LoadTextureFromImage(uploadImage);
+        if (!PromoteTextureToSrgb(texture, uploadImage)) {
+            if (texture.id != 0) {
+                UnloadTexture(texture);
+            }
+            texture = {};
+        }
+    }
+    if (ownsImage && uploadImage.data != nullptr) {
+        UnloadImage(uploadImage);
+    }
+    return texture;
+}
+
+TextureCubemap UploadSrgbVerticalCubemap(const Image& source)
+{
+    TextureCubemap cubemap{};
+    if (source.data == nullptr || source.width <= 0
+            || source.height != source.width * 6
+            || !IsSrgbUploadPixelFormat(source.format)) {
+        return cubemap;
+    }
+
+    const GLenum externalFormat = source.format == PIXELFORMAT_UNCOMPRESSED_R8G8B8
+            ? GL_RGB
+            : GL_RGBA;
+    const GLenum internalFormat = source.format == PIXELFORMAT_UNCOMPRESSED_R8G8B8
+            ? GL_SRGB8
+            : GL_SRGB8_ALPHA8;
+    const TextureUploadBindings bindings = CaptureTextureUploadBindings();
+    glGenTextures(1, &cubemap.id);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap.id);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    ClearGlErrors();
+
+    const auto* pixels = static_cast<const unsigned char*>(source.data);
+    std::size_t offset = 0;
+    int size = source.width;
+    for (int mip = 0; mip < source.mipmaps; ++mip) {
+        const std::size_t faceBytes = static_cast<std::size_t>(
+                GetPixelDataSize(size, size, source.format));
+        for (int face = 0; face < 6; ++face) {
+            glTexImage2D(
+                    GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
+                    mip,
+                    static_cast<GLint>(internalFormat),
+                    size,
+                    size,
+                    0,
+                    externalFormat,
+                    GL_UNSIGNED_BYTE,
+                    pixels + offset + faceBytes * static_cast<std::size_t>(face));
+        }
+        offset += faceBytes * 6u;
+        size = std::max(1, size / 2);
+    }
+    glTexParameteri(
+            GL_TEXTURE_CUBE_MAP,
+            GL_TEXTURE_MIN_FILTER,
+            source.mipmaps > 1 ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    int actualFormat = 0;
+    glGetTexLevelParameteriv(
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X,
+            0,
+            GL_TEXTURE_INTERNAL_FORMAT,
+            &actualFormat);
+    const bool valid = glGetError() == GL_NO_ERROR
+            && actualFormat == static_cast<int>(internalFormat);
+    RestoreTextureUploadBindings(bindings);
+    if (!valid) {
+        if (cubemap.id != 0) {
+            rlUnloadTexture(cubemap.id);
+        }
+        return TextureCubemap{};
+    }
+
+    cubemap.width = source.width;
+    cubemap.height = source.width;
+    cubemap.mipmaps = source.mipmaps;
+    cubemap.format = source.format;
+    return cubemap;
+}
+
+} // namespace
+
+unsigned int TextureInternalFormatForColorUsage(
+        TextureColorUsage colorUsage,
+        int pixelFormat)
+{
+    if (colorUsage == TextureColorUsage::SceneSrgb) {
+        if (pixelFormat == PIXELFORMAT_UNCOMPRESSED_R8G8B8) {
+            return GL_SRGB8;
+        }
+        if (pixelFormat == PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
+            return GL_SRGB8_ALPHA8;
+        }
+        return 0;
+    }
+
+    unsigned int internalFormat = 0;
+    unsigned int externalFormat = 0;
+    unsigned int type = 0;
+    rlGetGlTextureFormats(
+            pixelFormat, &internalFormat, &externalFormat, &type);
+    return internalFormat;
+}
 
 void TextureAssets::OnScopeCreated(AssetScopeHandle scope)
 {
@@ -101,7 +325,7 @@ TextureHandle TextureAssets::CreateTextureFromImage(
         return NullTextureHandle();
     }
 
-    Texture2D uploaded = LoadTextureFromImage(image);
+    Texture2D uploaded = UploadTextureFromImage(image, colorUsage);
     if (uploaded.id == 0) {
         std::fprintf(stderr, "[AssetManager WARNING] Texture upload failed for generated texture: %s\n", key);
         return NullTextureHandle();
@@ -168,7 +392,12 @@ TextureHandle TextureAssets::CreateCubemapFromImage(
         }
     }
 
-    TextureCubemap uploaded = LoadTextureCubemap(image, layout);
+    TextureCubemap uploaded = colorUsage == TextureColorUsage::SceneSrgb
+            && layout == CUBEMAP_LAYOUT_LINE_VERTICAL
+            ? UploadSrgbVerticalCubemap(image)
+            : colorUsage == TextureColorUsage::SceneSrgb
+                    ? TextureCubemap{}
+                    : LoadTextureCubemap(image, layout);
     if (uploaded.id == 0) {
         std::fprintf(stderr, "[AssetManager WARNING] Cubemap upload failed for generated texture: %s\n", key);
         return NullTextureHandle();
@@ -394,16 +623,20 @@ void TextureAssets::UpdateMainThread(float maxMilliseconds)
         }
 
         bool shouldUpload = false;
+        TextureColorUsage colorUsage = TextureColorUsage::Count;
         {
             std::lock_guard<std::mutex> lock(stateMutex);
             shouldUpload = IsValidTextureNoLock(payload.handle)
                 && textureSlots[payload.handle.index].state != TextureState::QueuedForUnload;
+            if (shouldUpload) {
+                colorUsage = textureSlots[payload.handle.index].colorUsage;
+            }
         }
 
         Texture2D uploaded = {};
         bool uploadedTexture = false;
         if (shouldUpload && payload.success && payload.image.data != nullptr) {
-            uploaded = LoadTextureFromImage(payload.image);
+            uploaded = UploadTextureFromImage(payload.image, colorUsage);
             uploadedTexture = uploaded.id != 0;
         }
 

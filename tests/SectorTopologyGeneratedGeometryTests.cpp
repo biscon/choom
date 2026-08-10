@@ -239,6 +239,11 @@ void TestSquare()
     Check(ceiling != nullptr && ceiling->vertices.size() == 6, "square has one triangulated ceiling surface");
     Check(floor != nullptr && floor->normal.y == 1.0f, "floor normal points up");
     Check(ceiling != nullptr && ceiling->normal.y == -1.0f, "ceiling normal points down");
+    Check(floor != nullptr && !floor->vertices.empty()
+                  && floor->vertices.front().color.r == 100
+                  && floor->vertices.front().color.g == 80
+                  && floor->vertices.front().color.b == 60,
+          "sector ambient remains a linear numeric vertex value without sRGB decode");
     for (int lineId = 1; lineId <= 4; ++lineId) {
         const auto* wall = FindSurface(geometry, game::SectorGeneratedSurfaceKind::Wall, 10, lineId);
         Check(wall != nullptr, "square wall exists");

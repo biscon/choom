@@ -29,6 +29,21 @@ float LinearNormalizedChannelToSrgb(float linear)
             : 1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f;
 }
 
+Vector3 SrgbNormalizedRgbToLinearScene(Vector3 srgb)
+{
+    return Vector3{
+            SrgbNormalizedChannelToLinear(srgb.x),
+            SrgbNormalizedChannelToLinear(srgb.y),
+            SrgbNormalizedChannelToLinear(srgb.z)};
+}
+
+Vector4 SrgbNormalizedRgbaToLinearScene(Vector4 srgb)
+{
+    const Vector3 rgb = SrgbNormalizedRgbToLinearScene(
+            Vector3{srgb.x, srgb.y, srgb.z});
+    return Vector4{rgb.x, rgb.y, rgb.z, ClampNormalized(srgb.w)};
+}
+
 Vector3 SrgbColorBytesToLinearSceneRgb(Color color)
 {
     constexpr float ByteToNormalized = 1.0f / 255.0f;
@@ -46,6 +61,16 @@ Vector4 SrgbColorBytesToLinearSceneRgba(Color color)
             rgb.y,
             rgb.z,
             static_cast<float>(color.a) / 255.0f};
+}
+
+Color SrgbColorBytesToLinearSceneUnorm(Color color)
+{
+    const Vector4 linear = SrgbColorBytesToLinearSceneRgba(color);
+    const auto byte = [](float value) {
+        return static_cast<unsigned char>(
+                std::lround(ClampNormalized(value) * 255.0f));
+    };
+    return Color{byte(linear.x), byte(linear.y), byte(linear.z), color.a};
 }
 
 Vector3 LinearSceneRgbToDisplaySrgb(Vector3 linearRgb)

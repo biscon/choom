@@ -1,10 +1,14 @@
 #include <raylib.h>
+#include <external/glad.h>
+#include <rlgl.h>
 
 #include "engine/EngineContext.h"
 #include "engine/assets/FontLoadFlags.h"
+#include "engine/render/ColorTransfer.h"
+#include "engine/render/FxaaShader.h"
 #include "engine/render/RenderColorDiagnostics.h"
 #include "engine/render/RenderTarget.h"
-#include "engine/render/FxaaShader.h"
+#include "engine/render/ScenePresentationShader.h"
 #include "game/GameApplication.h"
 
 #include <cmath>
@@ -58,6 +62,14 @@ static Rectangle BuildPresentationRect(float backbufferWidth, float backbufferHe
     return dst;
 }
 
+static void ClearLinearSceneBackground(Color displaySrgbColor)
+{
+    const Vector4 linear = engine::SrgbColorBytesToLinearSceneRgba(displaySrgbColor);
+    rlDrawRenderBatchActive();
+    glClearColor(linear.x, linear.y, linear.z, linear.w);
+    rlClearScreenBuffers();
+}
+
 int main()
 {
     unsigned int flags = 0;
@@ -65,6 +77,8 @@ int main()
     SetConfigFlags(flags);
 
     InitWindow(STARTUP_WINDOW_WIDTH, STARTUP_WINDOW_HEIGHT, "Engine");
+    // Presentation is encoded explicitly by the global presentation shader.
+    glDisable(GL_FRAMEBUFFER_SRGB);
     //HideCursor();
 
     SetExitKey(0);
@@ -76,7 +90,7 @@ int main()
                         "world",
                         WORLD_TARGET_WIDTH,
                         WORLD_TARGET_HEIGHT,
-                        engine::RenderTargetColorFormat::Rgba8Unorm,
+                        engine::RenderTargetColorFormat::Rgba16Float,
                         engine::RenderTargetFilter::Bilinear,
                         engine::RenderTargetWrap::Repeat,
                         engine::RenderTargetDepthKind::SampleableTexture,
@@ -89,16 +103,23 @@ int main()
                         "world",
                         WORLD_TARGET_WIDTH,
                         WORLD_TARGET_HEIGHT,
-                        engine::RenderTargetColorFormat::Rgba8Unorm,
+                        engine::RenderTargetColorFormat::Rgba16Float,
                         engine::RenderTargetFilter::Bilinear,
                         engine::RenderTargetWrap::Repeat,
                         engine::RenderTargetDepthKind::Renderbuffer,
                         1},
                 worldTargetResource,
                 &renderTargetError);
-        worldTargetResource.native.depth.mipmaps = 0;
+        if (engine::IsRenderTargetReady(worldTargetResource)) {
+            worldTargetResource.native.depth.mipmaps = 0;
+        }
     }
     RenderTexture2D& worldTarget = engine::NativeRenderTexture(worldTargetResource);
+    if (!engine::IsRenderTargetReady(worldTargetResource)) {
+        TraceLog(LOG_ERROR, "RENDER: required RGBA16F world target unavailable: %s", renderTargetError.c_str());
+        CloseWindow();
+        return 1;
+    }
 
     // Viewmodels use a separate depth buffer so world geometry cannot clip them.
     engine::RenderTarget viewmodelTargetResource;
@@ -107,7 +128,7 @@ int main()
                     "viewmodel",
                     WORLD_TARGET_WIDTH,
                     WORLD_TARGET_HEIGHT,
-                    engine::RenderTargetColorFormat::Rgba8Unorm,
+                    engine::RenderTargetColorFormat::Rgba16Float,
                     engine::RenderTargetFilter::Bilinear,
                     engine::RenderTargetWrap::Repeat,
                     engine::RenderTargetDepthKind::Renderbuffer,
@@ -115,10 +136,73 @@ int main()
             viewmodelTargetResource,
             &renderTargetError);
     RenderTexture2D& viewmodelTarget = engine::NativeRenderTexture(viewmodelTargetResource);
-    const bool viewmodelTargetReady = viewmodelTarget.id != 0;
+    const bool viewmodelTargetReady = engine::IsRenderTargetReady(viewmodelTargetResource);
     if (!viewmodelTargetReady) {
-        TraceLog(LOG_WARNING, "PREVIEW: FPS viewmodel render target unavailable; viewmodel rendering disabled");
+        TraceLog(LOG_ERROR, "RENDER: required RGBA16F viewmodel target unavailable: %s", renderTargetError.c_str());
+        engine::UnloadRenderTarget(worldTargetResource);
+        CloseWindow();
+        return 1;
     }
+
+    engine::RenderTarget sceneResolveTargetResource;
+    engine::LoadRenderTarget(
+            engine::RenderTargetDescriptor{
+                    "scene-linear-resolve",
+                    INTERNAL_WIDTH,
+                    INTERNAL_HEIGHT,
+                    engine::RenderTargetColorFormat::Rgba16Float,
+                    engine::RenderTargetFilter::Bilinear,
+                    engine::RenderTargetWrap::Clamp,
+                    engine::RenderTargetDepthKind::None,
+                    1},
+            sceneResolveTargetResource,
+            &renderTargetError);
+    engine::RenderTarget scenePresentationTargetResource;
+    engine::LoadRenderTarget(
+            engine::RenderTargetDescriptor{
+                    "scene-srgb-presentation",
+                    INTERNAL_WIDTH,
+                    INTERNAL_HEIGHT,
+                    engine::RenderTargetColorFormat::Rgba8Unorm,
+                    engine::RenderTargetFilter::Bilinear,
+                    engine::RenderTargetWrap::Clamp,
+                    engine::RenderTargetDepthKind::None,
+                    1},
+            scenePresentationTargetResource,
+            &renderTargetError);
+    if (!engine::IsRenderTargetReady(sceneResolveTargetResource)
+            || !engine::IsRenderTargetReady(scenePresentationTargetResource)) {
+        TraceLog(LOG_ERROR, "RENDER: required scene presentation targets unavailable: %s", renderTargetError.c_str());
+        engine::UnloadRenderTarget(worldTargetResource);
+        engine::UnloadRenderTarget(viewmodelTargetResource);
+        engine::UnloadRenderTarget(sceneResolveTargetResource);
+        engine::UnloadRenderTarget(scenePresentationTargetResource);
+        CloseWindow();
+        return 1;
+    }
+    RenderTexture2D& sceneResolveTarget =
+            engine::NativeRenderTexture(sceneResolveTargetResource);
+    RenderTexture2D& scenePresentationTarget =
+            engine::NativeRenderTexture(scenePresentationTargetResource);
+
+    engine::RenderTarget sceneFxaaTargetResource;
+    if (!engine::LoadRenderTarget(
+                engine::RenderTargetDescriptor{
+                        "scene-fxaa",
+                        INTERNAL_WIDTH,
+                        INTERNAL_HEIGHT,
+                        engine::RenderTargetColorFormat::Rgba8Unorm,
+                        engine::RenderTargetFilter::Bilinear,
+                        engine::RenderTargetWrap::Clamp,
+                        engine::RenderTargetDepthKind::None,
+                        1},
+                sceneFxaaTargetResource,
+                &renderTargetError)) {
+        TraceLog(LOG_WARNING, "RENDER: FXAA output target unavailable; FXAA disabled: %s",
+                renderTargetError.c_str());
+    }
+    RenderTexture2D& sceneFxaaTarget =
+            engine::NativeRenderTexture(sceneFxaaTargetResource);
 
     const auto loadDisplayTarget = [&renderTargetError](
             const char* name,
@@ -152,7 +236,28 @@ int main()
         fxaaShader = LoadShaderFromMemory(nullptr, engine::FxaaFragmentShader);
         fxaaTexelSizeLoc = GetShaderLocation(fxaaShader, "texelSize");
     }
-    const bool useWorldFxaa = ENABLE_WORLD_FXAA && IsShaderValid(fxaaShader);
+    const bool useWorldFxaa = ENABLE_WORLD_FXAA
+            && IsShaderValid(fxaaShader)
+            && engine::IsRenderTargetReady(sceneFxaaTargetResource);
+    const std::string scenePresentationFragmentShader =
+            engine::BuildScenePresentationFragmentShader();
+    Shader scenePresentationShader = LoadShaderFromMemory(
+            nullptr,
+            scenePresentationFragmentShader.c_str());
+    if (!IsShaderValid(scenePresentationShader)) {
+        TraceLog(LOG_ERROR, "RENDER: required neutral tone-map/sRGB presentation shader unavailable");
+        if (IsShaderValid(fxaaShader)) UnloadShader(fxaaShader);
+        engine::UnloadRenderTarget(worldTargetResource);
+        engine::UnloadRenderTarget(viewmodelTargetResource);
+        engine::UnloadRenderTarget(sceneResolveTargetResource);
+        engine::UnloadRenderTarget(scenePresentationTargetResource);
+        engine::UnloadRenderTarget(sceneFxaaTargetResource);
+        engine::UnloadRenderTarget(editorTargetResource);
+        engine::UnloadRenderTarget(uiTargetResource);
+        engine::UnloadRenderTarget(menuTargetResource);
+        CloseWindow();
+        return 1;
+    }
     engine::LogColorPipelineDiagnostics(engine::ColorPipelineRuntimeState{
             WORLD_RENDER_SCALE,
             ENABLE_WORLD_FXAA,
@@ -162,8 +267,14 @@ int main()
         if (IsShaderValid(fxaaShader)) {
             UnloadShader(fxaaShader);
         }
+        if (IsShaderValid(scenePresentationShader)) {
+            UnloadShader(scenePresentationShader);
+        }
         engine::UnloadRenderTarget(worldTargetResource);
         engine::UnloadRenderTarget(viewmodelTargetResource);
+        engine::UnloadRenderTarget(sceneResolveTargetResource);
+        engine::UnloadRenderTarget(scenePresentationTargetResource);
+        engine::UnloadRenderTarget(sceneFxaaTargetResource);
         engine::UnloadRenderTarget(editorTargetResource);
         engine::UnloadRenderTarget(uiTargetResource);
         engine::UnloadRenderTarget(menuTargetResource);
@@ -261,6 +372,17 @@ int main()
     BeginTextureMode(menuTarget);
     ClearBackground(BLANK);
     EndTextureMode();
+    BeginTextureMode(sceneResolveTarget);
+    ClearBackground(BLACK);
+    EndTextureMode();
+    BeginTextureMode(scenePresentationTarget);
+    ClearBackground(BLACK);
+    EndTextureMode();
+    if (engine::IsRenderTargetReady(sceneFxaaTargetResource)) {
+        BeginTextureMode(sceneFxaaTarget);
+        ClearBackground(BLACK);
+        EndTextureMode();
+    }
 
     while (!WindowShouldClose() && !application.QuitRequested())
     {
@@ -357,7 +479,7 @@ int main()
             application.Render3DShadowMaps(context);
 
             BeginTextureMode(worldTarget);
-            ClearBackground(Color{8, 10, 14, 255});
+            ClearLinearSceneBackground(Color{8, 10, 14, 255});
             application.Render3DScene(context);
             EndTextureMode();
 
@@ -381,6 +503,61 @@ int main()
             BeginTextureMode(worldTarget);
             application.Render3DOverlays();
             EndTextureMode();
+
+            // Resolve deliberate 1.5x supersampling while the scene is still
+            // linear HDR, then perform the single global display transform.
+            BeginTextureMode(sceneResolveTarget);
+            ClearBackground(BLANK);
+            rlDisableColorBlend();
+            DrawTexturePro(
+                    worldTarget.texture,
+                    GetFullscreenSrcRect(worldTarget.texture),
+                    Rectangle{0.0f, 0.0f,
+                            static_cast<float>(INTERNAL_WIDTH),
+                            static_cast<float>(INTERNAL_HEIGHT)},
+                    Vector2{}, 0.0f, WHITE);
+            rlEnableColorBlend();
+            EndTextureMode();
+
+            BeginTextureMode(scenePresentationTarget);
+            ClearBackground(BLANK);
+            rlDisableColorBlend();
+            BeginShaderMode(scenePresentationShader);
+            DrawTexturePro(
+                    sceneResolveTarget.texture,
+                    GetFullscreenSrcRect(sceneResolveTarget.texture),
+                    Rectangle{0.0f, 0.0f,
+                            static_cast<float>(INTERNAL_WIDTH),
+                            static_cast<float>(INTERNAL_HEIGHT)},
+                    Vector2{}, 0.0f, WHITE);
+            EndShaderMode();
+            rlEnableColorBlend();
+            EndTextureMode();
+
+            if (useWorldFxaa) {
+                const Vector2 texelSize{
+                        1.0f / static_cast<float>(scenePresentationTarget.texture.width),
+                        1.0f / static_cast<float>(scenePresentationTarget.texture.height)};
+                BeginTextureMode(sceneFxaaTarget);
+                ClearBackground(BLANK);
+                rlDisableColorBlend();
+                SetShaderValue(
+                        fxaaShader,
+                        fxaaTexelSizeLoc,
+                        &texelSize,
+                        SHADER_UNIFORM_VEC2);
+                BeginShaderMode(fxaaShader);
+                DrawTexturePro(
+                        scenePresentationTarget.texture,
+                        GetFullscreenSrcRect(scenePresentationTarget.texture),
+                        Rectangle{0.0f, 0.0f,
+                                static_cast<float>(INTERNAL_WIDTH),
+                                static_cast<float>(INTERNAL_HEIGHT)},
+                        Vector2{}, 0.0f, WHITE);
+                EndShaderMode();
+                rlEnableColorBlend();
+                EndTextureMode();
+            }
         } else if (application.ShouldRefreshBackground()
                 && contentKind == game::ApplicationContentKind::Editor2D) {
             BeginTextureMode(editorTarget);
@@ -394,19 +571,11 @@ int main()
         {
             ClearBackground(BLACK);
             if (render3D) {
-                Rectangle worldSrc = GetFullscreenSrcRect(worldTarget.texture);
-                if (useWorldFxaa) {
-                    Vector2 texelSize{
-                            1.0f / static_cast<float>(worldTarget.texture.width),
-                            1.0f / static_cast<float>(worldTarget.texture.height)
-                    };
-                    SetShaderValue(fxaaShader, fxaaTexelSizeLoc, &texelSize, SHADER_UNIFORM_VEC2);
-                    BeginShaderMode(fxaaShader);
-                    DrawTexturePro(worldTarget.texture, worldSrc, dst, {0,0}, 0.0f, WHITE);
-                    EndShaderMode();
-                } else {
-                    DrawTexturePro(worldTarget.texture, worldSrc, dst, {0,0}, 0.0f, WHITE);
-                }
+                const Texture2D& finalSceneTexture = useWorldFxaa
+                        ? sceneFxaaTarget.texture
+                        : scenePresentationTarget.texture;
+                const Rectangle worldSrc = GetFullscreenSrcRect(finalSceneTexture);
+                DrawTexturePro(finalSceneTexture, worldSrc, dst, {0,0}, 0.0f, WHITE);
             } else if (contentKind == game::ApplicationContentKind::Editor2D) {
                 Rectangle editorSrc = GetFullscreenSrcRect(editorTarget.texture);
                 DrawTexturePro(editorTarget.texture, editorSrc, dst, {0,0}, 0.0f, WHITE);

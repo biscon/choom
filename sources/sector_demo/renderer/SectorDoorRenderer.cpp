@@ -1,6 +1,7 @@
 #include "sector_demo/renderer/SectorDoorRenderer.h"
 
 #include "engine/assets/AssetManager.h"
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 
 #include <raylib.h>
@@ -660,11 +661,8 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                 }
 
                 if (doorOpaqueLocations.tint >= 0) {
-                    const Vector4 tint{
-                            static_cast<float>(render.tint.r) / 255.0f,
-                            static_cast<float>(render.tint.g) / 255.0f,
-                            static_cast<float>(render.tint.b) / 255.0f,
-                            static_cast<float>(render.tint.a) / 255.0f};
+                    const Vector4 tint = engine::SrgbColorBytesToLinearSceneRgba(
+                            render.tint);
                     SetShaderValue(doorOpaqueMaterial.shader, doorOpaqueLocations.tint, &tint, SHADER_UNIFORM_VEC4);
                 }
 

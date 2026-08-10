@@ -17,6 +17,7 @@ enum class PreviewDebugOverlayTab {
     Render,
     Visibility,
     Lighting,
+    Pbr,
     Objects,
     Probes,
     Viewmodel,

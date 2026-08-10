@@ -1,5 +1,6 @@
 #include "game/FpsPlayerRuntime.h"
 
+#include "engine/render/ColorTransfer.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorLightmap.h"
@@ -489,10 +490,8 @@ void FpsPlayerRuntime::UpdateTransformsAndLight(
         source.light.lightId = source.lightId;
         source.light.kind = SectorPreviewDynamicLightKind::Point;
         source.light.position = position;
-        source.light.color = Vector3{
-                state.firing.light.color.r / 255.0f,
-                state.firing.light.color.g / 255.0f,
-                state.firing.light.color.b / 255.0f};
+        source.light.color = engine::SrgbColorBytesToLinearSceneRgb(
+                state.firing.light.color);
         source.light.radius = state.firing.light.radiusWorld;
         source.light.intensity = intensity;
         renderer.SetRuntimePointLight(&source);

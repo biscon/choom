@@ -1,5 +1,6 @@
 #include "sector_demo/renderer/SectorLightHazeRenderer.h"
 
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/renderer/SectorFog.h"
 
 #include <raymath.h>
@@ -296,11 +297,12 @@ bool SectorLightHazeRenderer::EnsureTargets(int newWidth, int newHeight, float n
     const int targetWidth=std::max(1,static_cast<int>(std::round(newWidth*newScale)));
     const int targetHeight=std::max(1,static_cast<int>(std::round(newHeight*newScale)));
     std::string error;
+    // Haze accumulation is bounded linear RGBA8; the full-scene composite is float.
     engine::LoadRenderTarget(engine::RenderTargetDescriptor{"light-haze-accumulation",targetWidth,targetHeight,
             engine::RenderTargetColorFormat::Rgba8Unorm,engine::RenderTargetFilter::Bilinear,
             engine::RenderTargetWrap::Repeat,engine::RenderTargetDepthKind::Renderbuffer,1},hazeTarget,&error);
     engine::LoadRenderTarget(engine::RenderTargetDescriptor{"light-haze-composite",newWidth,newHeight,
-            engine::RenderTargetColorFormat::Rgba8Unorm,engine::RenderTargetFilter::Point,
+            engine::RenderTargetColorFormat::Rgba16Float,engine::RenderTargetFilter::Point,
             engine::RenderTargetWrap::Repeat,engine::RenderTargetDepthKind::Renderbuffer,1},compositeTarget,&error);
     if(!engine::IsRenderTargetReady(hazeTarget)||!engine::IsRenderTargetReady(compositeTarget)) { ReleaseTargets(); return false; }
     width=newWidth; height=newHeight; scale=newScale; return true;
@@ -377,7 +379,7 @@ bool SectorLightHazeRenderer::Apply(
         const auto& v=selected[static_cast<std::size_t>(i)]; const auto& h=v.source->atmosphere.haze;
         centers[i]=v.originWorld; directions[i]=v.directionWorld; boundsCenters[i]=v.boundsCenterWorld; boundsRadii[i]=v.boundsRadiusWorld;
         shapes[i]=v.source->shape==SectorLightAtmosphereShape::Cone?1:0; extents[i]=v.extentWorld; coneRadii[i]=v.coneRadiusWorld;
-        colors[i]=Vector3{h.scatteringTint.r/255.0f,h.scatteringTint.g/255.0f,h.scatteringTint.b/255.0f};
+        colors[i]=engine::SrgbColorBytesToLinearSceneRgb(h.scatteringTint);
         paramsA[i]=Vector4{h.density,HazeMaximumOpacity,h.edgeSoftness,h.noiseScaleWorld};
         paramsB[i]=Vector4{h.noiseAmount,h.flowDirectionDegrees*DEG2RAD,h.flowSpeedWorld,0.0f};
         const auto& grid=LightingFor(map,probes,v); for(int j=0;j<8;++j) lighting[static_cast<std::size_t>(i*8+j)]=grid.corners[static_cast<std::size_t>(j)];
@@ -388,7 +390,7 @@ bool SectorLightHazeRenderer::Apply(
     const SectorFogRenderContext fog=BuildSectorFogRenderContext(map.fogSettings,camera.position);
     const SectorTopologyFogSettings& fogSettings=fog.settings;
     const int fogEnabled=fogSettings.enabled?1:0;
-    const Vector3 fogColor{fogSettings.color.r/255.0f,fogSettings.color.g/255.0f,fogSettings.color.b/255.0f};
+    const Vector3 fogColor=engine::SrgbColorBytesToLinearSceneRgb(fogSettings.color);
     BeginTextureMode(hazeTarget.native); ClearBackground(BLANK); BeginShaderMode(shader);
     SetShaderValueTexture(shader,locations.sceneDepth,sceneTarget.depth);
     if(locations.shadowMap0>=0&&dynamicLights.shadowMaps.shadowMap0!=nullptr&&dynamicLights.shadowMaps.shadowMap0->id!=0) SetShaderValueTexture(shader,locations.shadowMap0,*dynamicLights.shadowMaps.shadowMap0);

@@ -1,5 +1,6 @@
 #include "sector_demo/renderer/SectorLightDustRenderer.h"
 
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorLocalFogLighting.h"
@@ -341,6 +342,7 @@ bool SectorLightDustRenderer::EnsureTarget(int width, int height)
             && targetWidth == width && targetHeight == height) return true;
     engine::UnloadRenderTarget(dustTarget);
     std::string error;
+    // Dust stores bounded linear additive radiance until its HDR promotion in slice 4.
     engine::LoadRenderTarget(
             engine::RenderTargetDescriptor{
                     "light-dust",
@@ -539,6 +541,8 @@ int SectorLightDustRenderer::BuildMesh(const Camera3D& camera)
         const float fadeOut = std::clamp((particle.lifetimeSeconds - particle.ageSeconds) / DustFadeSeconds, 0.0f, 1.0f);
         const float opacity = particle.opacity * std::min(fadeIn, fadeOut);
         if (opacity <= 0.001f || visible >= MaxParticles) continue;
+        const Color scatteringTint = engine::SrgbColorBytesToLinearSceneUnorm(
+                particle.scatteringTint);
         const int base = visible * 4;
         for (int corner = 0; corner < 4; ++corner) {
             const Vector3 position = Vector3Add(
@@ -557,9 +561,9 @@ int SectorLightDustRenderer::BuildMesh(const Camera3D& camera)
             normals[vertex3 + 2] = particle.staticLighting.z;
             texcoords[vertex2 + 0] = uv[static_cast<std::size_t>(corner)].x;
             texcoords[vertex2 + 1] = uv[static_cast<std::size_t>(corner)].y;
-            colors[vertex4 + 0] = particle.scatteringTint.r;
-            colors[vertex4 + 1] = particle.scatteringTint.g;
-            colors[vertex4 + 2] = particle.scatteringTint.b;
+            colors[vertex4 + 0] = scatteringTint.r;
+            colors[vertex4 + 1] = scatteringTint.g;
+            colors[vertex4 + 2] = scatteringTint.b;
             colors[vertex4 + 3] = Byte(opacity);
         }
         ++visible;

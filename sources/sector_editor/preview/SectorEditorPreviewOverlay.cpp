@@ -1,5 +1,6 @@
 #include "sector_editor/preview/SectorEditorPreviewOverlay.h"
 
+#include "engine/render/ColorTransfer.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
@@ -28,6 +29,11 @@ struct OverlayLine {
     Color color;
     bool wrap;
 };
+
+Color LinearOverlaySwatch(Color color)
+{
+    return engine::SrgbColorBytesToLinearSceneUnorm(color);
+}
 
 const char* FpsFireRejectReasonLabel(FpsFireRejectReason reason)
 {
@@ -164,6 +170,7 @@ void DrawSpotLightConeRing(
         return;
     }
 
+    color = LinearOverlaySwatch(color);
     constexpr int SegmentCount = 32;
     const float halfAngleRadians = std::clamp(coneDegrees, 0.0f, 179.0f) * DEG2RAD * 0.5f;
     const float radius = std::tan(halfAngleRadians) * range;
@@ -196,7 +203,9 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
     constexpr float y = 32.0f;
     constexpr float width = 700.0f;
     constexpr float collapsedHeight = 78.0f;
-    constexpr float expandedHeight = 390.0f;
+    const float expandedHeight = activeTab == PreviewDebugOverlayTab::Pbr
+            ? 610.0f
+            : 390.0f;
     return Rectangle{
             x,
             y,
@@ -265,9 +274,10 @@ void DrawSectorEditorPreviewSurfaceHighlights(
                 const Vector3 a = Vector3Add(generated.vertices[i + 0].position, offset);
                 const Vector3 b = Vector3Add(generated.vertices[i + 1].position, offset);
                 const Vector3 c = Vector3Add(generated.vertices[i + 2].position, offset);
-                DrawLine3D(a, b, color);
-                DrawLine3D(b, c, color);
-                DrawLine3D(c, a, color);
+                const Color linearColor = LinearOverlaySwatch(color);
+                DrawLine3D(a, b, linearColor);
+                DrawLine3D(b, c, linearColor);
+                DrawLine3D(c, a, linearColor);
             }
         }
         (void)thickness;
@@ -345,10 +355,10 @@ void DrawSectorEditorPreviewSpotLightOverlay(
     const Color innerConeColor = selectedStaticSpotLight ? Color{178, 246, 255, 220} : Color{110, 218, 255, 220};
 
     BeginMode3D(preview.RenderCamera());
-    DrawSphereWires(origin, OriginMarkerRadius, 8, 12, originColor);
-    DrawSphereWires(target, TargetMarkerRadius, 8, 12, targetColor);
-    DrawLine3D(origin, target, directionColor);
-    DrawLine3D(origin, rangeEnd, rangeColor);
+    DrawSphereWires(origin, OriginMarkerRadius, 8, 12, LinearOverlaySwatch(originColor));
+    DrawSphereWires(target, TargetMarkerRadius, 8, 12, LinearOverlaySwatch(targetColor));
+    DrawLine3D(origin, target, LinearOverlaySwatch(directionColor));
+    DrawLine3D(origin, rangeEnd, LinearOverlaySwatch(rangeColor));
     DrawSpotLightConeRing(origin, forward, right, up, range, outerConeDegrees, outerConeColor, true);
     DrawSpotLightConeRing(origin, forward, right, up, range, innerConeDegrees, innerConeColor, false);
     EndMode3D();
@@ -377,7 +387,12 @@ void DrawSectorEditorPreviewObjectProbeOverlay(
         }
         const Color color = ColorFromObjectProbeAmbientCube(probe);
         DrawSphere(probe.position, MarkerRadius, color);
-        DrawSphereWires(probe.position, MarkerRadius * 1.65f, 8, 8, Color{255, 255, 255, 155});
+        DrawSphereWires(
+                probe.position,
+                MarkerRadius * 1.65f,
+                8,
+                8,
+                LinearOverlaySwatch(Color{255, 255, 255, 155}));
     }
     EndMode3D();
 }
@@ -571,6 +586,97 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         context.runtimeObjects.doorObjectCount,
                         context.runtimeObjects.validDoorAnchorCount));
                 break;
+            case PreviewDebugOverlayTab::Pbr: {
+                const SectorPbrContributionSettings settings =
+                        preview.PbrContributionSettings();
+                addKeyValue("mode", SectorPbrDiagnosticModeName(
+                        settings.diagnosticMode));
+                addKeyValue("world scales", TextFormat(
+                        "indirect %.2f | environment specular %.2f",
+                        settings.worldIndirectDiffuseScale,
+                        settings.worldEnvironmentSpecularScale));
+                addKeyValue("environment", preview.PbrEnvironmentActive()
+                        ? (preview.PbrEnvironmentUsesSky()
+                                ? "active real sky (hardware sRGB decode)"
+                                : "active real source")
+                        : "inactive (exactly zero radiance)");
+                const SectorPbrDrawDiagnostics& diagnostic =
+                        preview.WorldPbrDiagnostics();
+                if (!diagnostic.valid) {
+                    addKeyValue("world draw", selectionState.selectedRuntimeObjectId >= 0
+                            ? "selected object has no active PBR draw"
+                            : "no active world-model PBR draw");
+                } else {
+                    addKeyValue("world draw", TextFormat(
+                            "%s | object %d | material %d",
+                            SectorPbrLightingPathName(diagnostic.state.path),
+                            diagnostic.placedObjectId,
+                            diagnostic.materialIndex));
+                    addKeyValue("indirect source", TextFormat(
+                            "%s | probe %s",
+                            SectorPbrIndirectSourceName(
+                                    diagnostic.state.indirectSource),
+                            diagnostic.state.useObjectProbe ? "valid" : "not selected"));
+                    addKeyValue("active state", TextFormat(
+                            "environment %s @ %.3f | override %s | brightness %.3f",
+                            diagnostic.state.environmentActive ? "on" : "off",
+                            diagnostic.state.environmentExposure,
+                            diagnostic.state.materialOverrideActive ? "on" : "off",
+                            diagnostic.state.outputBrightnessMultiplier));
+                    std::ostringstream roles;
+                    for (size_t roleIndex = 0;
+                            roleIndex < engine::ModelMaterialTextureRoleCount;
+                            ++roleIndex) {
+                        const auto role = static_cast<engine::ModelMaterialTextureRole>(
+                                roleIndex);
+                        const engine::ModelMaterialTextureInfo& texture =
+                                diagnostic.material.textureInfo[roleIndex];
+                        if (roleIndex > 0) roles << " | ";
+                        roles << engine::ModelMaterialTextureRoleName(role)
+                              << ':' << (texture.present
+                                      ? "bound"
+                                      : (texture.declared ? "missing" : "none"));
+                        if (texture.present) {
+                            roles << "/0x" << std::hex << texture.internalFormat
+                                  << std::dec << '/';
+                            if (texture.transfer
+                                    == engine::ModelTextureTransfer::ExplicitSrgbDecode) {
+                                roles << (texture.hardwareSrgbDecode
+                                        ? "hardware sRGB"
+                                        : "shader sRGB");
+                            } else {
+                                roles << "raw linear";
+                            }
+                        }
+                    }
+                    addKeyValueStyled(
+                            "textures",
+                            roles.str(),
+                            smallConfig.mutedTextColor,
+                            true);
+                    addKeyValue("factors", TextFormat(
+                            "base %.2f %.2f %.2f | metallic %.2f | roughness %.2f | AO %.2f",
+                            diagnostic.material.baseColorFactor.x,
+                            diagnostic.material.baseColorFactor.y,
+                            diagnostic.material.baseColorFactor.z,
+                            diagnostic.material.metallicFactor,
+                            diagnostic.material.roughnessFactor,
+                            diagnostic.material.occlusionStrength));
+                }
+                const SectorPbrDrawDiagnostics& viewmodelDiagnostic =
+                        preview.ViewmodelPbrDiagnostics();
+                if (viewmodelDiagnostic.valid) {
+                    addKeyValue("viewmodel path", TextFormat(
+                            "%s | brightness %.3f | override %s | world scales isolated",
+                            SectorPbrLightingPathName(
+                                    viewmodelDiagnostic.state.path),
+                            viewmodelDiagnostic.state.outputBrightnessMultiplier,
+                            viewmodelDiagnostic.state.materialOverrideActive
+                                    ? "on" : "off"));
+                }
+                addWrappedLine("AO/metallic/roughness/normals are bounded scene-linear diagnostic values and still pass through the shared HDR presentation transform.");
+                break;
+            }
             case PreviewDebugOverlayTab::Objects: {
                 const SectorRuntimeObjectState& objects = context.runtimeObjects;
                 addKeyValue("placed/spawned/skipped", TextFormat(
@@ -969,6 +1075,9 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
         contentH += rowH + 6.0f;
     }
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Pbr) {
+        contentH += (rowH + 6.0f) * 4.0f;
+    }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
         contentH += rowH + 6.0f;
     }
@@ -1050,6 +1159,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             {PreviewDebugOverlayTab::Render, "sector_editor_preview_tab_render", "Render"},
             {PreviewDebugOverlayTab::Visibility, "sector_editor_preview_tab_visibility", "Visibility"},
             {PreviewDebugOverlayTab::Lighting, "sector_editor_preview_tab_lighting", "Lighting"},
+            {PreviewDebugOverlayTab::Pbr, "sector_editor_preview_tab_pbr", "PBR"},
             {PreviewDebugOverlayTab::Objects, "sector_editor_preview_tab_objects", "Objects"},
             {PreviewDebugOverlayTab::Probes, "sector_editor_preview_tab_probes", "Probes"},
             {PreviewDebugOverlayTab::Viewmodel, "sector_editor_preview_tab_viewmodel", "Arms"},
@@ -1058,8 +1168,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
 
     const float tabY = panel.y + padding + stripH + gap;
     const float tabGap = 6.0f;
-    const float tabW = (contentW - tabGap * 7.0f) / 8.0f;
-    for (int i = 0; i < 8; ++i) {
+    const float tabW = (contentW - tabGap * 8.0f) / 9.0f;
+    for (int i = 0; i < 9; ++i) {
         const Rectangle tabRect{
                 panel.x + padding + static_cast<float>(i) * (tabW + tabGap),
                 tabY,
@@ -1124,6 +1234,116 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     smallFont,
                     SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()),
                     engine::UITextJustify::Center,
+                    smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+    }
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Pbr) {
+        SectorPbrContributionSettings settings = preview.PbrContributionSettings();
+        const char* modeOptions[] = {
+                "Full PBR",
+                "Base Color",
+                "Direct Diffuse",
+                "Direct Specular",
+                "Probe / Indirect Diffuse",
+                "Environment Specular",
+                "Emissive",
+                "Material AO",
+                "Metallic / Roughness",
+                "Shading Normal"};
+        int selectedMode = static_cast<int>(settings.diagnosticMode);
+        engine::Text(smallConfig, assets,
+                Rectangle{panel.x + padding, y, 94.0f, rowH},
+                smallFont, "PBR Output", engine::UITextJustify::Left,
+                smallConfig.textColor);
+        const Rectangle modeRect{panel.x + padding + 100.0f, y, 250.0f, rowH};
+        if (mouseInteractive) {
+            if (engine::Option(
+                        ui, smallConfig, input, assets,
+                        "sector_editor_preview_pbr_diagnostic_mode",
+                        modeRect, smallFont, modeOptions,
+                        sizeof(modeOptions) / sizeof(modeOptions[0]),
+                        selectedMode)) {
+                settings.diagnosticMode = static_cast<SectorPbrDiagnosticMode>(
+                        selectedMode);
+                preview.SetPbrContributionSettings(settings);
+            }
+        } else {
+            DrawRectangleRec(modeRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(modeRect, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, modeRect, smallFont,
+                    SectorPbrDiagnosticModeName(settings.diagnosticMode),
+                    engine::UITextJustify::Center, smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+
+        const auto drawScalePresets = [&](const char* idPrefix,
+                                          const char* label,
+                                          float value,
+                                          bool environmentScale) {
+            engine::Text(smallConfig, assets,
+                    Rectangle{panel.x + padding, y, 132.0f, rowH},
+                    smallFont, label, engine::UITextJustify::Left,
+                    smallConfig.textColor);
+            constexpr float Values[] = {0.0f, 0.25f, 0.5f, 1.0f};
+            constexpr const char* Labels[] = {"0", ".25", ".5", "1"};
+            for (int i = 0; i < 4; ++i) {
+                const Rectangle buttonRect{
+                        panel.x + padding + 138.0f + i * 58.0f,
+                        y,
+                        52.0f,
+                        rowH};
+                const std::string id = std::string(idPrefix) + Labels[i];
+                const bool selected = std::fabs(value - Values[i]) < 0.0001f;
+                if (mouseInteractive) {
+                    if (engine::ToolButton(
+                                ui, smallConfig, input, assets,
+                                id.c_str(), buttonRect, smallFont,
+                                Labels[i], selected)) {
+                        SectorPbrContributionSettings edited =
+                                preview.PbrContributionSettings();
+                        if (environmentScale) {
+                            edited.worldEnvironmentSpecularScale = Values[i];
+                        } else {
+                            edited.worldIndirectDiffuseScale = Values[i];
+                        }
+                        preview.SetPbrContributionSettings(edited);
+                    }
+                } else {
+                    DrawRectangleRec(buttonRect, selected
+                            ? Color{48, 68, 86, 210}
+                            : Color{24, 30, 38, 155});
+                    DrawRectangleLinesEx(buttonRect, config.borderThickness, config.borderColor);
+                    engine::Text(smallConfig, assets, buttonRect, smallFont,
+                            Labels[i], engine::UITextJustify::Center,
+                            smallConfig.mutedTextColor);
+                }
+            }
+            y += rowH + 6.0f;
+        };
+        settings = preview.PbrContributionSettings();
+        drawScalePresets(
+                "sector_editor_preview_pbr_indirect_",
+                "World Indirect",
+                settings.worldIndirectDiffuseScale,
+                false);
+        settings = preview.PbrContributionSettings();
+        drawScalePresets(
+                "sector_editor_preview_pbr_environment_",
+                "World Env Spec",
+                settings.worldEnvironmentSpecularScale,
+                true);
+        const Rectangle resetRect{panel.x + padding, y, 112.0f, rowH};
+        if (mouseInteractive && engine::Button(
+                    ui, smallConfig, input, assets,
+                    "sector_editor_preview_pbr_reset",
+                    resetRect, smallFont, "Reset PBR")) {
+            preview.SetPbrContributionSettings(SectorPbrContributionSettings{});
+        } else if (!mouseInteractive) {
+            DrawRectangleRec(resetRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(resetRect, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, resetRect, smallFont,
+                    "Reset PBR", engine::UITextJustify::Center,
                     smallConfig.mutedTextColor);
         }
         y += rowH + 6.0f;

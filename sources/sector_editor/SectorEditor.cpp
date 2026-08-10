@@ -3376,6 +3376,8 @@ void SectorEditor::RenderPreview3DShadowMaps(engine::AssetManager& assets)
 
 void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
 {
+    sceneRuntime.Renderer().SetPbrDiagnosticSelectedObjectId(
+            selectionState.selectedRuntimeObjectId);
     sceneRuntime.RenderScene(
             context,
             TopologyMap(),

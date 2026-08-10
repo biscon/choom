@@ -48,9 +48,6 @@ Color SampleSky(
         Vector3 direction,
         const SectorTopologySkySettings& settings)
 {
-    if (colors == nullptr || width <= 0 || height <= 0) {
-        return Color{128, 128, 128, 255};
-    }
     const float yaw = settings.yawOffsetDegrees * DEG2RAD;
     const float cosYaw = std::cos(-yaw);
     const float sinYaw = std::sin(-yaw);
@@ -87,9 +84,12 @@ Color LinearAverage(Color a, Color b, Color c, Color d)
             255};
 }
 
-Image BuildCubemapImage(const Image* source, const SectorTopologySkySettings& settings)
+Image BuildCubemapImage(const Image& source, const SectorTopologySkySettings& settings)
 {
-    const Color* sourceColors = source != nullptr ? LoadImageColors(*source) : nullptr;
+    const Color* sourceColors = LoadImageColors(source);
+    if (sourceColors == nullptr) {
+        return Image{};
+    }
     int mipCount = 1;
     for (int size = PbrEnvironmentFaceSize; size > 1; size /= 2) {
         ++mipCount;
@@ -101,20 +101,17 @@ Image BuildCubemapImage(const Image* source, const SectorTopologySkySettings& se
     }
     std::vector<Color> pixels(pixelCount);
     size_t writeOffset = 0;
-    const Color neutral{128, 128, 128, 255};
     for (int face = 0; face < 6; ++face) {
         for (int y = 0; y < PbrEnvironmentFaceSize; ++y) {
             for (int x = 0; x < PbrEnvironmentFaceSize; ++x) {
                 pixels[writeOffset
                         + static_cast<size_t>(face * PbrEnvironmentFaceSize * PbrEnvironmentFaceSize)
-                        + static_cast<size_t>(y * PbrEnvironmentFaceSize + x)] = sourceColors != nullptr
-                        ? SampleSky(
+                        + static_cast<size_t>(y * PbrEnvironmentFaceSize + x)] = SampleSky(
                                 sourceColors,
-                                source->width,
-                                source->height,
+                                source.width,
+                                source.height,
                                 CubemapDirection(face, x, y, PbrEnvironmentFaceSize),
-                                settings)
-                        : neutral;
+                                settings);
             }
         }
     }
@@ -147,9 +144,7 @@ Image BuildCubemapImage(const Image* source, const SectorTopologySkySettings& se
         previousSize = size;
         writeOffset += static_cast<size_t>(size) * static_cast<size_t>(size) * 6u;
     }
-    if (sourceColors != nullptr) {
-        UnloadImageColors(const_cast<Color*>(sourceColors));
-    }
+    UnloadImageColors(const_cast<Color*>(sourceColors));
 
     Image image{};
     image.data = MemAlloc(static_cast<unsigned int>(pixels.size() * sizeof(Color)));
@@ -179,11 +174,15 @@ bool BuildSectorPbrEnvironment(
         source = LoadImage(ResolveSectorAssetPath(skyTexture->path).c_str());
         outEnvironment.usedSky = source.data != nullptr;
     }
-    const SectorTopologySkySettings settings = NormalizeSectorTopologySkySettings(map.skySettings);
-    Image cubemapImage = BuildCubemapImage(source.data != nullptr ? &source : nullptr, settings);
-    if (source.data != nullptr) {
-        UnloadImage(source);
+    if (source.data == nullptr) {
+        // No real environment is different from a neutral environment. Keep
+        // the handle and eligibility clear so map switches cannot retain a
+        // previous sky contribution.
+        return true;
     }
+    const SectorTopologySkySettings settings = NormalizeSectorTopologySkySettings(map.skySettings);
+    Image cubemapImage = BuildCubemapImage(source, settings);
+    UnloadImage(source);
     if (cubemapImage.data == nullptr) {
         std::fprintf(stderr, "[SectorMeshRenderer WARNING] Could not build PBR environment; props will use direct lighting only\n");
         return false;
@@ -195,7 +194,8 @@ bool BuildSectorPbrEnvironment(
             engine::TextureColorUsage::SceneSrgb,
             CUBEMAP_LAYOUT_LINE_VERTICAL);
     UnloadImage(cubemapImage);
-    return !engine::IsNull(outEnvironment.cubemap);
+    outEnvironment.active = !engine::IsNull(outEnvironment.cubemap);
+    return outEnvironment.active;
 }
 
 } // namespace game

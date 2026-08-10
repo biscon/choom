@@ -1,5 +1,6 @@
 #include "sector_demo/renderer/SectorLocalFogRenderer.h"
 
+#include "engine/render/ColorTransfer.h"
 #include <raymath.h>
 #include <rlgl.h>
 
@@ -482,6 +483,8 @@ bool SectorLocalFogRenderer::EnsureTargets(int width, int height, float scale)
     const int fogWidth = std::max(1, static_cast<int>(std::round(width * scale)));
     const int fogHeight = std::max(1, static_cast<int>(std::round(height * scale)));
     std::string error;
+    // Fog accumulation is bounded linear RGBA8; the full-scene composite is
+    // float so applying it cannot clip unrelated HDR scene radiance.
     engine::LoadRenderTarget(
             engine::RenderTargetDescriptor{
                     "local-fog-accumulation",
@@ -499,7 +502,7 @@ bool SectorLocalFogRenderer::EnsureTargets(int width, int height, float scale)
                     "local-fog-composite",
                     width,
                     height,
-                    engine::RenderTargetColorFormat::Rgba8Unorm,
+                    engine::RenderTargetColorFormat::Rgba16Float,
                     engine::RenderTargetFilter::Point,
                     engine::RenderTargetWrap::Repeat,
                     engine::RenderTargetDepthKind::Renderbuffer,
@@ -676,9 +679,11 @@ bool SectorLocalFogRenderer::Apply(
         radii[static_cast<size_t>(i * 3 + 0)] = volume.radiiWorld.x;
         radii[static_cast<size_t>(i * 3 + 1)] = volume.radiiWorld.y;
         radii[static_cast<size_t>(i * 3 + 2)] = volume.radiiWorld.z;
-        colors[static_cast<size_t>(i * 3 + 0)] = volume.color.r / 255.0f;
-        colors[static_cast<size_t>(i * 3 + 1)] = volume.color.g / 255.0f;
-        colors[static_cast<size_t>(i * 3 + 2)] = volume.color.b / 255.0f;
+        const Vector3 linearColor = engine::SrgbColorBytesToLinearSceneRgb(
+                volume.color);
+        colors[static_cast<size_t>(i * 3 + 0)] = linearColor.x;
+        colors[static_cast<size_t>(i * 3 + 1)] = linearColor.y;
+        colors[static_cast<size_t>(i * 3 + 2)] = linearColor.z;
         paramsA[static_cast<size_t>(i * 4 + 0)] = volume.density;
         paramsA[static_cast<size_t>(i * 4 + 1)] = volume.maxOpacity;
         paramsA[static_cast<size_t>(i * 4 + 2)] = volume.edgeSoftness;

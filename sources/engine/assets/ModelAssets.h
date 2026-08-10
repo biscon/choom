@@ -15,6 +15,67 @@
 
 namespace engine {
 
+enum class ModelMaterialTextureRole : uint8_t {
+    BaseColor,
+    Metallic,
+    Normal,
+    Roughness,
+    Occlusion,
+    Emissive,
+    Count
+};
+
+enum class ModelTextureTransfer : uint8_t {
+    LinearData,
+    ExplicitSrgbDecode
+};
+
+constexpr size_t ModelMaterialTextureRoleCount =
+        static_cast<size_t>(ModelMaterialTextureRole::Count);
+
+constexpr int ModelMaterialMapIndex(ModelMaterialTextureRole role)
+{
+    switch (role) {
+        case ModelMaterialTextureRole::BaseColor: return MATERIAL_MAP_ALBEDO;
+        case ModelMaterialTextureRole::Metallic: return MATERIAL_MAP_METALNESS;
+        case ModelMaterialTextureRole::Normal: return MATERIAL_MAP_NORMAL;
+        case ModelMaterialTextureRole::Roughness: return MATERIAL_MAP_ROUGHNESS;
+        case ModelMaterialTextureRole::Occlusion: return MATERIAL_MAP_OCCLUSION;
+        case ModelMaterialTextureRole::Emissive: return MATERIAL_MAP_EMISSION;
+        case ModelMaterialTextureRole::Count: break;
+    }
+    return -1;
+}
+
+constexpr ModelTextureTransfer ModelMaterialTextureTransfer(
+        ModelMaterialTextureRole role)
+{
+    return role == ModelMaterialTextureRole::BaseColor
+                    || role == ModelMaterialTextureRole::Emissive
+            ? ModelTextureTransfer::ExplicitSrgbDecode
+            : ModelTextureTransfer::LinearData;
+}
+
+// glTF metallic-roughness images pack roughness in G and metallic in B.
+// raylib extracts those channels into separate R8 textures before this
+// renderer samples them.
+constexpr int ModelMaterialPackedSourceChannel(ModelMaterialTextureRole role)
+{
+    return role == ModelMaterialTextureRole::Metallic
+            ? 2
+            : (role == ModelMaterialTextureRole::Roughness ? 1 : -1);
+}
+
+const char* ModelMaterialTextureRoleName(ModelMaterialTextureRole role);
+
+struct ModelMaterialTextureInfo {
+    bool declared = false;
+    bool present = false;
+    ModelTextureTransfer transfer = ModelTextureTransfer::LinearData;
+    unsigned int internalFormat = 0;
+    bool hardwareSrgbDecode = false;
+};
+
 enum ModelLoadFlags : uint32_t {
     ModelLoad_None = 0,
     ModelLoad_Animations = 1 << 0
@@ -38,6 +99,8 @@ struct ModelMaterialAsset {
     bool hasRoughnessTexture = false;
     bool hasOcclusionTexture = false;
     bool hasEmissiveTexture = false;
+    std::array<ModelMaterialTextureInfo, ModelMaterialTextureRoleCount>
+            textureInfo = {};
 };
 
 struct ModelAsset {

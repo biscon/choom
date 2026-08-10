@@ -1,5 +1,6 @@
 #include "game/FpsViewmodelEffectsRenderer.h"
 
+#include "engine/render/ColorTransfer.h"
 #include <raymath.h>
 #include <rlgl.h>
 
@@ -62,7 +63,8 @@ Color GradientColor(
 
 void EmitVertex(Vector3 position, Color color)
 {
-    rlColor4ub(color.r, color.g, color.b, color.a);
+    const Color linear = engine::SrgbColorBytesToLinearSceneUnorm(color);
+    rlColor4ub(linear.r, linear.g, linear.b, linear.a);
     rlVertex3f(position.x, position.y, position.z);
 }
 

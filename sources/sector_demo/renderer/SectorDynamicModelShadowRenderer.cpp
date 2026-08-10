@@ -1,6 +1,7 @@
 #include "sector_demo/renderer/SectorDynamicModelShadowRenderer.h"
 
 #include "engine/assets/AssetManager.h"
+#include "engine/render/ColorTransfer.h"
 #include "engine/components/AnimatedModel.h"
 #include "engine/ecs/World.h"
 #include "engine/systems/AnimatedModelSystem.h"
@@ -400,7 +401,7 @@ void SectorDynamicModelShadowRenderer::RebuildSources(
                 : -1;
     };
     const auto color = [](Color value) {
-        return Vector3{value.r / 255.0f, value.g / 255.0f, value.b / 255.0f};
+        return engine::SrgbColorBytesToLinearSceneRgb(value);
     };
     for (const SectorTopologyStaticPointLight& source : map.staticLights) {
         const Vector3 position = SectorAuthoringToWorldPosition(source.position);

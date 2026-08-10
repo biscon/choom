@@ -16,6 +16,10 @@
 
 namespace engine {
 
+unsigned int TextureInternalFormatForColorUsage(
+        TextureColorUsage colorUsage,
+        int pixelFormat);
+
 class TextureAssets {
 public:
     struct RequestResult {

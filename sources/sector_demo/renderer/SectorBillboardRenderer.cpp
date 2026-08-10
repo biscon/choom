@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/assets/SpriteAnimationAssets.h"
 #include "engine/ecs/World.h"
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorBillboardRuntime.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 
@@ -632,7 +633,9 @@ void SectorBillboardRenderer::Draw(
                 rlCheckRenderBatchLimit(4);
                 rlSetTexture(texture->id);
                 rlBegin(RL_QUADS);
-                    rlColor4ub(sprite.tint.r, sprite.tint.g, sprite.tint.b, sprite.tint.a);
+                    const Color tint = engine::SrgbColorBytesToLinearSceneUnorm(
+                            sprite.tint);
+                    rlColor4ub(tint.r, tint.g, tint.b, tint.a);
                     rlTexCoord2f(uvs.bottomLeft.x, uvs.bottomLeft.y);
                     rlVertex3f(quad.bottomLeft.x, quad.bottomLeft.y, quad.bottomLeft.z);
                     rlTexCoord2f(uvs.bottomRight.x, uvs.bottomRight.y);

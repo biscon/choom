@@ -1,6 +1,7 @@
 #include "sector_demo/renderer/SectorBloomRenderer.h"
 
 #include "engine/assets/AssetManager.h"
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorMeshBuilder.h"
 #include "sector_demo/SectorPortalVisibility.h"
 
@@ -154,7 +155,7 @@ void main()
 {
     vec4 scene = texture(texture0, fragTexCoord);
     vec3 bloom = texture(bloomTexture, fragTexCoord).rgb;
-    finalColor = vec4(clamp(scene.rgb + bloom * bloomStrength, 0.0, 1.0), scene.a) * fragColor;
+    finalColor = vec4(scene.rgb + bloom * bloomStrength, scene.a) * fragColor;
 }
 )";
 
@@ -419,32 +420,39 @@ bool SectorBloomRenderer::EnsureResources(int sceneWidthValue, int sceneHeightVa
     }
 
     if (!engine::IsRenderTargetReady(sceneCopy)) {
-        const auto descriptor = [](const char* name, int width, int height) {
+        const auto descriptor = [](const char* name, int width, int height,
+                                   engine::RenderTargetColorFormat format) {
             return engine::RenderTargetDescriptor{
                     name,
                     width,
                     height,
-                    engine::RenderTargetColorFormat::Rgba8Unorm,
+                    format,
                     engine::RenderTargetFilter::Bilinear,
                     engine::RenderTargetWrap::Repeat,
                     engine::RenderTargetDepthKind::Renderbuffer,
                     1};
         };
         std::string error;
+        // The scene copy must preserve HDR. Quarter-resolution bloom buffers
+        // intentionally remain bounded linear RGBA8 until slice 4.
         engine::LoadRenderTarget(
-                descriptor("bloom-scene-copy", sceneWidthValue, sceneHeightValue),
+                descriptor("bloom-scene-copy", sceneWidthValue, sceneHeightValue,
+                        engine::RenderTargetColorFormat::Rgba16Float),
                 sceneCopy,
                 &error);
         engine::LoadRenderTarget(
-                descriptor("bloom-source-quarter", bloomWidth, bloomHeight),
+                descriptor("bloom-source-quarter", bloomWidth, bloomHeight,
+                        engine::RenderTargetColorFormat::Rgba8Unorm),
                 source,
                 &error);
         engine::LoadRenderTarget(
-                descriptor("bloom-blur-a-quarter", bloomWidth, bloomHeight),
+                descriptor("bloom-blur-a-quarter", bloomWidth, bloomHeight,
+                        engine::RenderTargetColorFormat::Rgba8Unorm),
                 blurA,
                 &error);
         engine::LoadRenderTarget(
-                descriptor("bloom-blur-b-quarter", bloomWidth, bloomHeight),
+                descriptor("bloom-blur-b-quarter", bloomWidth, bloomHeight,
+                        engine::RenderTargetColorFormat::Rgba8Unorm),
                 blurB,
                 &error);
         sceneWidth = sceneWidthValue;
@@ -488,7 +496,8 @@ void SectorBloomRenderer::RenderBloomSource(
         const int hasDecal = 1;
         const float decalOpacity = batch.decalOpacity;
         const int decalEmissive = 1;
-        const Vector3 decalTint = batch.decalTint;
+        const Vector3 decalTint = engine::SrgbNormalizedRgbToLinearScene(
+                batch.decalTint);
         const float decalBloomIntensity = batch.decalBloomIntensity;
         sourceMaterial.maps[MATERIAL_MAP_NORMAL].texture = *decalTexture;
         if (hasDecalLoc >= 0) {

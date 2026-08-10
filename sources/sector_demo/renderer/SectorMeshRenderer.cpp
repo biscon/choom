@@ -1,6 +1,7 @@
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 
 #include "engine/assets/TextureLoadFlags.h"
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorBounds.h"
 #include "sector_demo/SectorLightmap.h"
@@ -1022,7 +1023,9 @@ void SectorMeshRenderer::DrawScene(
         const float alphaCutoff = batch.alphaCutoff;
         const float decalOpacity = batch.decalOpacity;
         const int decalEmissive = hasDecal != 0 && batch.decalEmissive ? 1 : 0;
-        const Vector3 decalTint = hasDecal != 0 ? batch.decalTint : Vector3{1.0f, 1.0f, 1.0f};
+        const Vector3 decalTint = hasDecal != 0
+                ? engine::SrgbNormalizedRgbToLinearScene(batch.decalTint)
+                : Vector3{1.0f, 1.0f, 1.0f};
         material.maps[MATERIAL_MAP_NORMAL].texture = (decalTexture != nullptr)
                 ? *decalTexture
                 : Texture2D{};
@@ -1081,6 +1084,13 @@ void SectorMeshRenderer::DrawScene(
         doorRenderer.Draw(doorDrawContext);
 
         const SectorBillboardDynamicLightContext billboardLightContext = BuildBillboardDynamicLightContext();
+        const TextureCubemap* pbrEnvironmentTexture = assets.GetCubemap(
+                pbrEnvironment.cubemap);
+        if (!IsSectorPbrEnvironmentActive(
+                    pbrEnvironment,
+                    pbrEnvironmentTexture)) {
+            pbrEnvironmentTexture = nullptr;
+        }
         staticModelRenderer.Draw(
                 assets,
                 *runtimeObjectWorld,
@@ -1089,7 +1099,7 @@ void SectorMeshRenderer::DrawScene(
                 fogContext,
                 visibilityResult,
                 lightmapTextures,
-                assets.GetCubemap(pbrEnvironment.cubemap),
+                pbrEnvironmentTexture,
                 useBakedAmbientOcclusion,
                 renderDebugText);
         SectorDynamicModelShadowDrawContext modelShadowContext;
@@ -1157,11 +1167,18 @@ void SectorMeshRenderer::DrawViewmodel(
         const SectorViewmodelLightingContext& attachmentLighting)
 {
     BeginMode3D(viewmodelCamera);
+    const TextureCubemap* pbrEnvironmentTexture = assets.GetCubemap(
+            pbrEnvironment.cubemap);
+    if (!IsSectorPbrEnvironmentActive(
+                pbrEnvironment,
+                pbrEnvironmentTexture)) {
+        pbrEnvironmentTexture = nullptr;
+    }
     staticModelRenderer.DrawViewmodel(
             asset, instance, viewmodelCamera, transform,
             attachmentAsset, attachmentTransform,
             BuildBillboardDynamicLightContext(),
-            assets.GetCubemap(pbrEnvironment.cubemap),
+            pbrEnvironmentTexture,
             ambientLighting,
             lighting,
             attachmentLighting);

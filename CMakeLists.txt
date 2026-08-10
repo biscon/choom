@@ -147,6 +147,7 @@ if(BUILD_TESTING)
             sources/engine/render/ColorTransfer.cpp
             sources/engine/render/RenderColorDiagnostics.cpp
             sources/engine/render/RenderTarget.cpp
+            sources/engine/render/ToneMapping.cpp
     )
     target_include_directories(render_color_foundations_tests PRIVATE sources)
     target_link_libraries(render_color_foundations_tests PRIVATE raylib)
@@ -181,10 +182,20 @@ if(BUILD_TESTING)
             sources/game/FpsWeaponRegistry.cpp
             sources/game/FpsHudRenderer.cpp
             sources/game/FpsViewmodelEffectsRenderer.cpp
+            sources/engine/render/ColorTransfer.cpp
     )
     target_include_directories(fps_viewmodel_tests PRIVATE sources)
     target_link_libraries(fps_viewmodel_tests PRIVATE raylib)
     add_test(NAME fps_viewmodel COMMAND fps_viewmodel_tests)
+
+    add_executable(pbr_lighting_policy_tests
+            tests/PbrLightingPolicyTests.cpp
+    )
+    target_include_directories(pbr_lighting_policy_tests PRIVATE sources)
+    target_compile_definitions(pbr_lighting_policy_tests PRIVATE
+            PBR_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorStaticModelRenderer.cpp")
+    target_link_libraries(pbr_lighting_policy_tests PRIVATE raylib)
+    add_test(NAME pbr_lighting_policy COMMAND pbr_lighting_policy_tests)
 
     add_executable(sector_utility_tests
             tests/SectorUtilityTests.cpp
@@ -300,6 +311,7 @@ if(BUILD_TESTING)
             tests/SectorTopologyMeshBuilderTests.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorDynamicPointLightSelection.cpp
+            sources/engine/render/ColorTransfer.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorMeshBuilder.cpp
             sources/sector_demo/SectorTextureTypes.cpp

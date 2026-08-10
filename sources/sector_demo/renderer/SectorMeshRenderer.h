@@ -147,6 +147,28 @@ public:
     size_t DoorConsideredCount() const { return doorRenderer.RenderStats().considered; }
     size_t DoorDrawnCount() const { return doorRenderer.RenderStats().drawn; }
     size_t DoorSkippedCount() const { return doorRenderer.RenderStats().skipped; }
+    SectorPbrContributionSettings PbrContributionSettings() const
+    {
+        return staticModelRenderer.PbrContributionSettings();
+    }
+    void SetPbrContributionSettings(SectorPbrContributionSettings settings)
+    {
+        staticModelRenderer.SetPbrContributionSettings(settings);
+    }
+    void SetPbrDiagnosticSelectedObjectId(int objectId)
+    {
+        staticModelRenderer.SetPbrDiagnosticSelectedObjectId(objectId);
+    }
+    const SectorPbrDrawDiagnostics& WorldPbrDiagnostics() const
+    {
+        return staticModelRenderer.WorldPbrDiagnostics();
+    }
+    const SectorPbrDrawDiagnostics& ViewmodelPbrDiagnostics() const
+    {
+        return staticModelRenderer.ViewmodelPbrDiagnostics();
+    }
+    bool PbrEnvironmentActive() const { return pbrEnvironment.active; }
+    bool PbrEnvironmentUsesSky() const { return pbrEnvironment.usedSky; }
 
 private:
     engine::TextureHandle TextureForId(const std::string& textureId) const;
