@@ -319,8 +319,9 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::string muzzle=ReadSource(MUZZLE_SHADER_SOURCE_PATH);
     const std::string mainGraph=ReadSource(MAIN_RENDER_GRAPH_SOURCE_PATH);
     const std::string modelAssets=ReadSource(MODEL_ASSET_SOURCE_PATH);
+    const std::string dynamicModelShadows=ReadSource(DYNAMIC_MODEL_SHADOW_SOURCE_PATH);
     Check(!bloom.empty()&&!fog.empty()&&!haze.empty()&&!dust.empty()
-                    &&!muzzle.empty()&&!mainGraph.empty(),
+                    &&!muzzle.empty()&&!mainGraph.empty()&&!dynamicModelShadows.empty(),
           "HDR effect policy can read every affected shader and pass graph");
     Check(bloom.find("Rgba8Unorm")==std::string::npos
                     && fog.find("Rgba8Unorm")==std::string::npos
@@ -381,6 +382,50 @@ void TestHdrEffectShaderAndPassPolicies()
           "pass graph orders atmosphere, viewmodel, bloom, then excluded editor overlays");
     Check(mainGraph.find("Render3DHud")>sceneBloom,
           "HUD and ordinary UI are downstream of scene-wide bloom");
+    const std::size_t viewmodelTarget=mainGraph.find("\"viewmodel\"");
+    const std::size_t viewmodelRenderbuffer=mainGraph.find(
+            "RenderTargetDepthKind::Renderbuffer",viewmodelTarget);
+    Check(viewmodelTarget!=std::string::npos
+                    &&viewmodelRenderbuffer!=std::string::npos
+                    &&viewmodelRenderbuffer-viewmodelTarget<500,
+          "isolated viewmodel retains its private renderbuffer depth");
+    const std::string sectorRenderer=ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    Check(sectorRenderer.find("uniform sampler2D sourceDepth")==std::string::npos
+                    &&sectorRenderer.find("float coverage=isnan(source.a)")
+                            !=std::string::npos
+                    &&ReadSource(PBR_SHADER_SOURCE_PATH).find(
+                               "finalColor = vec4(linearColor, 1.0)")
+                            !=std::string::npos,
+          "opaque-alpha PBR viewmodels replace scene RGB without a redundant depth-sampling path");
+    Check(muzzle.find("finalColor=vec4(storeFiniteHalfRadiance(radiance),0.0)")
+                            !=std::string::npos
+                    &&muzzle.find("BeginBlendMode(BLEND_ADD_COLORS)")
+                            !=std::string::npos,
+          "muzzle keeps alpha-zero additive HDR semantics under alpha-based viewmodel composition");
+    const std::size_t rgbOnlyShadowMask=dynamicModelShadows.find(
+            "rlColorMask(true, true, true, false)");
+    const std::size_t projectedShadowDraw=dynamicModelShadows.find(
+            "DrawProjectedShadows(context)",rgbOnlyShadowMask);
+    const std::size_t contactShadowDraw=dynamicModelShadows.find(
+            "DrawContactShadows(context)",projectedShadowDraw);
+    const std::size_t restoredShadowMask=dynamicModelShadows.find(
+            "rlColorMask(true, true, true, true)",contactShadowDraw);
+    Check(dynamicModelShadows.find("rlDrawRenderBatchActive")!=std::string::npos
+                    &&dynamicModelShadows.find("rlActiveTextureSlot(0)")
+                            !=std::string::npos
+                    &&dynamicModelShadows.find("rlEnableColorBlend")
+                            !=std::string::npos
+                    &&dynamicModelShadows.find("rlSetBlendMode(BLEND_ALPHA)")
+                            !=std::string::npos
+                    &&dynamicModelShadows.find("rlEnableDepthMask")
+                            !=std::string::npos
+                    &&dynamicModelShadows.find("rlDisableShader")
+                            !=std::string::npos
+                    &&rgbOnlyShadowMask!=std::string::npos
+                    &&projectedShadowDraw!=std::string::npos
+                    &&contactShadowDraw!=std::string::npos
+                    &&restoredShadowMask!=std::string::npos,
+          "dynamic projected/contact shadows blend RGB without corrupting scene alpha and restore draw state");
     Check(bloom.find("failedForCurrentKey")!=std::string::npos
                     && bloom.find("rlDrawRenderBatchActive")!=std::string::npos
                     && bloom.find("rlDisableColorBlend")!=std::string::npos

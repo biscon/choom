@@ -312,6 +312,14 @@ void TestHdrEffectPolicy()
     Check(Near(atmosphere.x,9.0f)&&Near(atmosphere.y,4.0f)
                     && Near(atmosphere.z,2.0f)&&Near(atmosphere.w,0.7f),
           "premultiplied atmosphere applies scene transmittance plus scattering");
+    const float shadowOpacity=0.3f;
+    const float opaqueSceneAlpha=1.0f;
+    const float ordinaryStraightAlphaResult=
+            shadowOpacity*shadowOpacity
+            +opaqueSceneAlpha*(1.0f-shadowOpacity);
+    Check(Near(ordinaryStraightAlphaResult,0.79f)
+                    &&Near(opaqueSceneAlpha,1.0f),
+          "projected-shadow opacity must blend RGB without writing a shadow-shaped scene-alpha deficit");
     const Vector4 bloom=engine::CompositeHdrBloom(
             Vector4{65000,4,2,0.6f},Vector3{1000,2,1},2.0f);
     Check(Near(bloom.x,65504.0f)&&Near(bloom.y,8.0f)&&Near(bloom.w,0.6f),

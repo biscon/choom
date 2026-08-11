@@ -622,8 +622,10 @@ void SectorDynamicModelShadowRenderer::RenderShadowMaps(
                     posedModel.skeleton.boneCount);
         }
 
+        rlDrawRenderBatchActive();
         BeginTextureMode(slot.target);
         ClearBackground(WHITE);
+        rlDrawRenderBatchActive();
         rlDisableColorBlend();
         rlEnableDepthTest();
         rlEnableDepthMask();
@@ -631,11 +633,23 @@ void SectorDynamicModelShadowRenderer::RenderShadowMaps(
         for (int meshIndex = 0; meshIndex < posedModel.meshCount; ++meshIndex) {
             DrawMesh(posedModel.meshes[meshIndex], casterMaterial, modelTransform);
         }
+        rlDrawRenderBatchActive();
         rlEnableColorBlend();
+        rlSetBlendMode(BLEND_ALPHA);
         EndTextureMode();
         slot.active = true;
         ++activeSlotCount;
     }
+    rlDrawRenderBatchActive();
+    rlDisableShader();
+    rlActiveTextureSlot(0);
+    rlSetTexture(0);
+    rlColorMask(true, true, true, true);
+    rlEnableColorBlend();
+    rlSetBlendMode(BLEND_ALPHA);
+    rlDisableDepthTest();
+    rlEnableDepthMask();
+    rlEnableBackfaceCulling();
 }
 
 bool SectorDynamicModelShadowRenderer::IsObjectAssigned(engine::Entity entity) const
@@ -650,16 +664,35 @@ void SectorDynamicModelShadowRenderer::Draw(
         const SectorDynamicModelShadowDrawContext& context)
 {
     if (!loaded || context.assets == nullptr || context.world == nullptr) return;
+    rlDrawRenderBatchActive();
+    // Shadow alpha is a temporary RGB blend factor. The opaque world target's
+    // alpha must remain unchanged or the shadow mask will survive later HDR
+    // composition and darken the isolated viewmodel at final presentation.
+    rlColorMask(true, true, true, false);
+    rlEnableColorBlend();
+    rlSetBlendMode(BLEND_ALPHA);
+    rlEnableDepthTest();
+    rlDisableDepthMask();
+    rlEnableBackfaceCulling();
     DrawProjectedShadows(context);
     DrawContactShadows(context);
+    rlDrawRenderBatchActive();
+    ResetBorrowedReceiverTextures();
+    rlDisableShader();
+    rlActiveTextureSlot(0);
+    rlSetTexture(0);
+    rlColorMask(true, true, true, true);
+    rlEnableColorBlend();
+    rlSetBlendMode(BLEND_ALPHA);
+    rlEnableDepthTest();
+    rlEnableDepthMask();
+    rlEnableBackfaceCulling();
 }
 
 void SectorDynamicModelShadowRenderer::DrawProjectedShadows(
         const SectorDynamicModelShadowDrawContext& context)
 {
     if (!projectedLoaded || context.sectorDrawRecords == nullptr || context.visibility == nullptr) return;
-    rlDisableDepthMask();
-    rlSetBlendMode(BLEND_ALPHA);
     for (std::size_t i = 0; i < activeSlotCount; ++i) {
         const Slot& slot = slots[i];
         if (!slot.active) continue;
@@ -686,15 +719,12 @@ void SectorDynamicModelShadowRenderer::DrawProjectedShadows(
         }
     }
     ResetBorrowedReceiverTextures();
-    rlEnableDepthMask();
 }
 
 void SectorDynamicModelShadowRenderer::DrawContactShadows(
         const SectorDynamicModelShadowDrawContext& context)
 {
     if (context.collisionWorld == nullptr || context.visibility == nullptr) return;
-    rlDisableDepthMask();
-    rlSetBlendMode(BLEND_ALPHA);
     context.world->ForEach<SectorObjectTransform, SectorObject, SectorDynamicModel, engine::AnimatedModelInstance>(
             [&](engine::Entity entity, SectorObjectTransform& transform, SectorObject& object,
                     SectorDynamicModel& dynamicModel, engine::AnimatedModelInstance& instance) {
@@ -763,7 +793,6 @@ void SectorDynamicModelShadowRenderer::DrawContactShadows(
                                         footprintCenter.z)));
                 DrawMesh(contactMesh, contactMaterial, model);
             });
-    rlEnableDepthMask();
 }
 
 } // namespace game

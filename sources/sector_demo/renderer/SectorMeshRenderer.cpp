@@ -53,7 +53,7 @@ uniform int compositeMode;
 float safeRadianceChannel(float value) {
     if (isnan(value)) return 0.0;
     if (isinf(value)) return value > 0.0 ? 65504.0 : 0.0;
-    return max(value,0.0);
+    return min(max(value,0.0),65504.0);
 }
 vec3 safeRadiance(vec3 value) {
     return vec3(safeRadianceChannel(value.r),safeRadianceChannel(value.g),
@@ -1357,7 +1357,8 @@ bool SectorMeshRenderer::EnsureHdrCompositeShader()
     hdrCompositeSceneLoc = GetShaderLocation(hdrCompositeShader, "sceneColor");
     hdrCompositeSourceLoc = GetShaderLocation(hdrCompositeShader, "sourceColor");
     hdrCompositeModeLoc = GetShaderLocation(hdrCompositeShader, "compositeMode");
-    return hdrCompositeSourceLoc >= 0 && hdrCompositeModeLoc >= 0;
+    return hdrCompositeSceneLoc >= 0 && hdrCompositeSourceLoc >= 0
+            && hdrCompositeModeLoc >= 0;
 }
 
 bool SectorMeshRenderer::CommitHdrScratch(engine::RenderTarget& sceneTarget)

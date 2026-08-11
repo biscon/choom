@@ -350,6 +350,12 @@ Validation, versions, and installation:
   `SectorLightmapMetadata` value only after that succeeds. A failure or crash
   therefore leaves the previous set, a missing set, a stale hash/version, or an
   invalid artifact rather than partially publishing new current metadata.
+- Baked atlas and probe/static-model sidecar payloads are generated local data,
+  ignored by the repository through `*.lightmap.*` and
+  `*.object_probes.bin*`, and are not tracked. Map JSON metadata remains
+  authored and tracked, while a fresh checkout reports missing/stale
+  illumination until the map is rebaked. This repository policy changes
+  neither the Slice 3 artifact formats nor source-hash validity rules.
 
 Runtime consumers and diagnostics:
 
@@ -522,3 +528,26 @@ Scope and verification:
   implementation handoff. Interactive launch, automation, screenshots, and
   source-model, texture, and authored-map edits were intentionally not
   performed; visual validation remains with the user.
+
+### Slice 4 viewmodel ownership follow-up
+
+- Dynamic-model projected and contact shadows remain world receiver passes and
+  still execute before the isolated first-person viewmodel. Their fragment
+  alpha is only a straight-alpha factor for darkening world RGB. The receiver
+  pass disables alpha-channel writes so this temporary opacity cannot create a
+  shadow-shaped deficit in the otherwise opaque world target alpha.
+- The original defect survived viewmodel composition because that composition,
+  HDR resolve, presentation, and FXAA deliberately preserve scene alpha. The
+  final scene was then alpha-composited over the backbuffer, applying the old
+  projected-shadow mask to the already-composed hands and weapon. Preserving
+  destination alpha at the shadow draw fixes the source of that leak. The
+  unsuccessful sampleable-viewmodel-depth workaround was removed; the private
+  renderbuffer depth and opaque-alpha viewmodel contract remain sufficient.
+- The muzzle flash keeps its alpha-zero additive HDR contract, while opaque
+  arms and weapon pixels retain alpha one. The original world depth and
+  authoritative world color remain attached to the supersampled world target.
+- Dynamic-model shadow-map and receiver transitions flush pending rlgl batches
+  and restore the RGBA color mask, texture slot, blend mode, depth test/write,
+  shader, and culling state for the documented caller. No shadow placement,
+  lighting, gameplay, collision, camera, topology, bake format, or source-hash
+  behavior changed.

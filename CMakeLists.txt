@@ -205,6 +205,7 @@ if(BUILD_TESTING)
             HAZE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLightHazeRenderer.cpp"
             DUST_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLightDustRenderer.cpp"
             MUZZLE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/game/FpsViewmodelEffectsRenderer.cpp"
+            DYNAMIC_MODEL_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicModelShadowRenderer.cpp"
             MAIN_RENDER_GRAPH_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/Main.cpp")
     target_link_libraries(pbr_lighting_policy_tests PRIVATE raylib)
     add_test(NAME pbr_lighting_policy COMMAND pbr_lighting_policy_tests)
