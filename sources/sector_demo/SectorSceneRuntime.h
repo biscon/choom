@@ -43,7 +43,8 @@ public:
             const SectorTopologyMap& map);
     void ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
-            const engine::HdrBloomSettings& settings);
+            const engine::HdrBloomSettings& settings,
+            bool presentFromScratch = false);
     bool CompositeViewmodel(
             engine::RenderTarget& sceneTarget,
             const engine::RenderTarget& viewmodelTarget);

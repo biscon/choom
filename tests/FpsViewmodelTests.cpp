@@ -738,6 +738,12 @@ void SettingsResolutionAndPersistence()
     game::SetFpsWeaponFiringOverride(settings, "pistol", firingOverride);
     settings.firstLevel = "test4";
     settings.hdrBloom={true,2.0f,0.25f,0.5f,2.0f};
+    settings.graphics.renderScale = 1.25f;
+    settings.graphics.fxaa = false;
+    settings.graphics.volumetricQualityCap =
+            game::FpsVolumetricQualityCap::Low;
+    settings.graphics.shadowQuality = game::FpsShadowQuality::Medium;
+    settings.graphics.performanceOverlay = true;
     const std::filesystem::path path = std::filesystem::temp_directory_path()/"fps_viewmodel_settings_test.json";
     assert(game::SaveFpsApplicationSettings(path.string(), settings, &error));
     game::FpsApplicationSettings loaded;
@@ -745,6 +751,12 @@ void SettingsResolutionAndPersistence()
     assert(loaded.firstLevel == "test4");
     assert(Near(loaded.hdrBloom.threshold,2.0f)
             && Near(loaded.hdrBloom.radius,2.0f));
+    assert(Near(loaded.graphics.renderScale, 1.25f));
+    assert(!loaded.graphics.fxaa);
+    assert(loaded.graphics.volumetricQualityCap
+            == game::FpsVolumetricQualityCap::Low);
+    assert(loaded.graphics.shadowQuality == game::FpsShadowQuality::Medium);
+    assert(loaded.graphics.performanceOverlay);
     assert(loaded.footsteps.defaultSet == "DirtRoad_Mono");
     assert(Near(loaded.footsteps.volume, 0.7f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.5f));
@@ -845,6 +857,14 @@ void SettingsResolutionAndPersistence()
             loaded, &error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"hdrBloom":{"threshold":-1}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"renderScale":2.1}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"renderScale":"fast"}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"volumetricQualityCap":"ultra"}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"shadowQuality":false}})",loaded,&error));
     assert(game::ParseFpsApplicationSettings(
             R"({"version":1})",
             loaded,

@@ -50,8 +50,22 @@ struct SectorEditorToolContext;
 
 class SectorEditor {
 public:
+    explicit SectorEditor(FpsApplicationSettings& sharedApplicationSettings)
+        : applicationSettings(sharedApplicationSettings) {}
+
     bool Init(engine::EngineContext& context);
     void Shutdown(engine::EngineContext& context);
+    void SetPreviewGraphicsQuality(
+            SectorTopologyFogSettings::LocalVolumeQuality volumetricCap,
+            bool shadowsEnabled,
+            int shadowMapResolution,
+            float projectedShadowIntervalSeconds,
+            int projectedShadowResolution)
+    {
+        sceneRuntime.Renderer().SetGraphicsQuality(
+                volumetricCap, shadowsEnabled, shadowMapResolution,
+                projectedShadowIntervalSeconds, projectedShadowResolution);
+    }
 
     void Update(engine::EngineContext& context, float dt);
     void Render(engine::AssetManager& assets);
@@ -462,11 +476,10 @@ private:
     SectorSceneRuntime sceneRuntime;
     FpsPlayerRuntime fpsPlayer;
     FpsWeaponRegistry weaponRegistry;
-    FpsApplicationSettings applicationSettings;
+    FpsApplicationSettings& applicationSettings;
     PlayerAudioRuntime playerAudio;
     std::string applicationSettingsPath;
     std::string weaponRegistryError;
-    std::string applicationSettingsWarning;
     engine::EngineContext* engineContext = nullptr;
     bool initialized = false;
 };

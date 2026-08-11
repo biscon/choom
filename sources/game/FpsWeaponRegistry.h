@@ -246,14 +246,42 @@ struct PlayerSoundApplicationSettings {
             PlayerSoundEventSettings{"land", "Land", 1.0f}};
 };
 
+enum class FpsVolumetricQualityCap {
+    Off,
+    Low,
+    Medium,
+    High
+};
+
+enum class FpsShadowQuality {
+    Off,
+    Low,
+    Medium,
+    High
+};
+
+struct FpsGraphicsSettings {
+    float renderScale = 1.5f;
+    bool fxaa = true;
+    FpsVolumetricQualityCap volumetricQualityCap =
+            FpsVolumetricQualityCap::High;
+    FpsShadowQuality shadowQuality = FpsShadowQuality::High;
+    bool performanceOverlay = false;
+};
+
 struct FpsApplicationSettings {
     int version = 1;
     std::string firstLevel = "hub";
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
+    FpsGraphicsSettings graphics;
     engine::HdrBloomSettings hdrBloom;
     std::vector<FpsApplicationSettingsEntry> weapons;
 };
+
+const char* FpsVolumetricQualityCapName(FpsVolumetricQualityCap quality);
+const char* FpsShadowQualityName(FpsShadowQuality quality);
+FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings);
 
 bool ParseFpsWeaponRegistry(
         std::string_view jsonText,

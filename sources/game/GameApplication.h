@@ -4,6 +4,7 @@
 #include "engine/ui/UI.h"
 #include "game/ApplicationFlow.h"
 #include "game/FpsWeaponRegistry.h"
+#include "game/GameMainMenu.h"
 #include "game/PlayerAudio.h"
 #include "game/SectorGameSession.h"
 #include "sector_editor/SectorEditor.h"
@@ -21,6 +22,8 @@ enum class ApplicationContentKind {
 
 class GameApplication {
 public:
+    GameApplication() : editor(applicationSettings) {}
+
     bool Init(engine::EngineContext& context);
     void Shutdown(engine::EngineContext& context);
 
@@ -38,6 +41,13 @@ public:
     bool ShouldRefreshBackground() const;
     bool IsMenuOpen() const;
     bool QuitRequested() const { return flow.quitRequested; }
+    const FpsApplicationSettings& ApplicationSettings() const {
+        return applicationSettings;
+    }
+    const FpsApplicationSettings* PendingGraphicsSettings() const;
+    bool CommitPendingGraphicsSettings(std::string& error);
+    void RejectPendingGraphicsSettings(const std::string& error);
+    void TogglePerformanceOverlay();
 
     void Render2D(engine::AssetManager& assets);
     void Render3DShadowMaps(engine::EngineContext& context);
@@ -62,14 +72,18 @@ private:
     ApplicationScreen BackgroundScreen() const;
 
     ApplicationFlowState flow;
+    FpsApplicationSettings applicationSettings;
     SectorEditor editor;
     SectorGameSession gameSession;
     SectorSceneRuntime gameScene;
     FpsWeaponRegistry weaponRegistry;
-    FpsApplicationSettings applicationSettings;
     PlayerAudioRuntime playerAudio;
     std::string menuStatus;
     std::optional<MainMenuAction> pendingMenuAction;
+    std::optional<GameGraphicsSettingsAction> pendingSettingsAction;
+    std::optional<FpsApplicationSettings> pendingGraphicsSettings;
+    FpsApplicationSettings graphicsSettingsDraft;
+    bool graphicsSettingsOpen = false;
     bool editorAttachedToGame = false;
     bool initialized = false;
 };

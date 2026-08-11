@@ -111,6 +111,8 @@ struct SectorRuntimeObjectState {
     std::string objectProbeStatus;
     SectorCollisionWorld objectSectorLookupWorld;
     bool objectSectorLookupWorldValid = false;
+    bool doorSpatialStateChanged = true;
+    bool doorCollisionCacheInitialized = false;
     std::string objectSectorLookupWarning;
     bool worldReserved = false;
 };

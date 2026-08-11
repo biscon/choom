@@ -6,12 +6,43 @@
 
 namespace game {
 
+namespace {
+
+constexpr const char* ApplicationSettingsPath =
+        ASSETS_PATH "config/application_settings.json";
+
+SectorTopologyFogSettings::LocalVolumeQuality VolumetricQuality(
+        FpsVolumetricQualityCap quality)
+{
+    return static_cast<SectorTopologyFogSettings::LocalVolumeQuality>(
+            static_cast<int>(quality));
+}
+
+int ShadowMapResolution(FpsShadowQuality quality)
+{
+    return quality == FpsShadowQuality::Low ? 512 : 1024;
+}
+
+float ProjectedShadowInterval(FpsShadowQuality quality)
+{
+    if (quality == FpsShadowQuality::Low) return 1.0f / 15.0f;
+    if (quality == FpsShadowQuality::Medium) return 1.0f / 30.0f;
+    return 0.0f;
+}
+
+int ProjectedShadowResolution(FpsShadowQuality quality)
+{
+    return quality == FpsShadowQuality::Low ? 128 : 256;
+}
+
+} // namespace
+
 bool GameApplication::Init(engine::EngineContext& context)
 {
     Shutdown(context);
     std::string settingsError;
     if (!LoadFpsApplicationSettings(
-                ASSETS_PATH "config/application_settings.json",
+                ApplicationSettingsPath,
                 applicationSettings,
                 &settingsError)) {
         TraceLog(
@@ -21,6 +52,8 @@ bool GameApplication::Init(engine::EngineContext& context)
         applicationSettings = FpsApplicationSettings{};
         menuStatus = settingsError;
     }
+    applicationSettings.graphics =
+            NormalizeFpsGraphicsSettings(applicationSettings.graphics);
     std::string weaponError;
     if (!LoadFpsWeaponRegistry(
                 ASSETS_PATH "config/weapons.json",
@@ -60,6 +93,10 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     weaponRegistry = FpsWeaponRegistry{};
     menuStatus.clear();
     pendingMenuAction.reset();
+    pendingSettingsAction.reset();
+    pendingGraphicsSettings.reset();
+    graphicsSettingsDraft = FpsApplicationSettings{};
+    graphicsSettingsOpen = false;
     editorAttachedToGame = false;
     initialized = false;
 }
@@ -83,15 +120,24 @@ void GameApplication::RenderInteractiveUI(
                 smallFont);
     }
     if (flow.screen == ApplicationScreen::MainMenu) {
-        pendingMenuAction = DrawGameMainMenu(
-                menuUi,
-                config,
-                input,
-                assets,
-                font,
-                smallFont,
-                flow.gameRunning,
-                menuStatus.c_str());
+        if (graphicsSettingsOpen) {
+            const GameGraphicsSettingsAction action = DrawGameGraphicsSettings(
+                    menuUi, config, input, assets, font, smallFont,
+                    graphicsSettingsDraft, menuStatus.c_str());
+            if (action != GameGraphicsSettingsAction::None) {
+                pendingSettingsAction = action;
+            }
+        } else {
+            pendingMenuAction = DrawGameMainMenu(
+                    menuUi,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    smallFont,
+                    flow.gameRunning,
+                    menuStatus.c_str());
+        }
     }
 }
 
@@ -106,6 +152,30 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         HandleMenuAction(context, action);
         return;
     }
+    if (pendingSettingsAction.has_value()) {
+        const GameGraphicsSettingsAction action = *pendingSettingsAction;
+        pendingSettingsAction.reset();
+        switch (action) {
+            case GameGraphicsSettingsAction::Apply:
+                graphicsSettingsDraft.graphics = NormalizeFpsGraphicsSettings(
+                        graphicsSettingsDraft.graphics);
+                pendingGraphicsSettings = graphicsSettingsDraft;
+                menuStatus.clear();
+                break;
+            case GameGraphicsSettingsAction::Cancel:
+                graphicsSettingsOpen = false;
+                menuStatus.clear();
+                break;
+            case GameGraphicsSettingsAction::Defaults:
+                graphicsSettingsDraft.graphics = FpsGraphicsSettings{};
+                graphicsSettingsDraft.hdrBloom.enabled = true;
+                menuStatus.clear();
+                break;
+            case GameGraphicsSettingsAction::None:
+                break;
+        }
+        return;
+    }
 
     if (flow.screen == ApplicationScreen::MainMenu) {
         context.input.ForEachEvent(
@@ -113,6 +183,13 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
                 true,
                 [this, &context](engine::InputEvent& event) {
                     if (event.key.key != KEY_ESCAPE) {
+                        return;
+                    }
+                    if (graphicsSettingsOpen) {
+                        graphicsSettingsOpen = false;
+                        pendingGraphicsSettings.reset();
+                        menuStatus.clear();
+                        engine::ConsumeEvent(event);
                         return;
                     }
                     const ApplicationScreen destination =
@@ -205,8 +282,20 @@ void GameApplication::Render2D(engine::AssetManager& assets)
 void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
+        gameScene.Renderer().SetGraphicsQuality(
+                VolumetricQuality(applicationSettings.graphics.volumetricQualityCap),
+                applicationSettings.graphics.shadowQuality != FpsShadowQuality::Off,
+                ShadowMapResolution(applicationSettings.graphics.shadowQuality),
+                ProjectedShadowInterval(applicationSettings.graphics.shadowQuality),
+                ProjectedShadowResolution(applicationSettings.graphics.shadowQuality));
         gameScene.RenderShadowMaps(context);
     } else {
+        editor.SetPreviewGraphicsQuality(
+                VolumetricQuality(applicationSettings.graphics.volumetricQualityCap),
+                applicationSettings.graphics.shadowQuality != FpsShadowQuality::Off,
+                ShadowMapResolution(applicationSettings.graphics.shadowQuality),
+                ProjectedShadowInterval(applicationSettings.graphics.shadowQuality),
+                ProjectedShadowResolution(applicationSettings.graphics.shadowQuality));
         editor.RenderPreview3DShadowMaps(context.assets);
     }
 }
@@ -249,7 +338,8 @@ void GameApplication::Apply3DWorldAtmosphere(
 void GameApplication::Apply3DHdrBloom(engine::RenderTarget& sceneTarget)
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
-        gameScene.ApplyHdrBloom(sceneTarget, applicationSettings.hdrBloom);
+        gameScene.ApplyHdrBloom(
+                sceneTarget, applicationSettings.hdrBloom, true);
     } else {
         editor.ApplyPreview3DHdrBloom(sceneTarget);
     }
@@ -295,7 +385,12 @@ void GameApplication::HandleMenuAction(
             break;
         case MainMenuAction::LoadGame:
         case MainMenuAction::SaveGame:
+            break;
         case MainMenuAction::Settings:
+            graphicsSettingsDraft = applicationSettings;
+            pendingGraphicsSettings.reset();
+            graphicsSettingsOpen = true;
+            menuStatus.clear();
             break;
         case MainMenuAction::Editor:
             OpenEditor(context);
@@ -303,6 +398,52 @@ void GameApplication::HandleMenuAction(
         case MainMenuAction::Quit:
             RequestApplicationQuit(flow);
             break;
+    }
+}
+
+const FpsApplicationSettings* GameApplication::PendingGraphicsSettings() const
+{
+    return pendingGraphicsSettings.has_value()
+            ? &*pendingGraphicsSettings
+            : nullptr;
+}
+
+bool GameApplication::CommitPendingGraphicsSettings(std::string& error)
+{
+    if (!pendingGraphicsSettings.has_value()) {
+        error = "No graphics settings apply is pending";
+        return false;
+    }
+    FpsApplicationSettings candidate = *pendingGraphicsSettings;
+    candidate.graphics = NormalizeFpsGraphicsSettings(candidate.graphics);
+    if (!SaveFpsApplicationSettings(ApplicationSettingsPath, candidate, &error)) {
+        menuStatus = error;
+        pendingGraphicsSettings.reset();
+        return false;
+    }
+    applicationSettings = std::move(candidate);
+    graphicsSettingsDraft = applicationSettings;
+    pendingGraphicsSettings.reset();
+    graphicsSettingsOpen = false;
+    menuStatus.clear();
+    return true;
+}
+
+void GameApplication::RejectPendingGraphicsSettings(const std::string& error)
+{
+    pendingGraphicsSettings.reset();
+    menuStatus = error;
+}
+
+void GameApplication::TogglePerformanceOverlay()
+{
+    applicationSettings.graphics.performanceOverlay =
+            !applicationSettings.graphics.performanceOverlay;
+    graphicsSettingsDraft.graphics.performanceOverlay =
+            applicationSettings.graphics.performanceOverlay;
+    std::string error;
+    if (!SaveFpsApplicationSettings(ApplicationSettingsPath, applicationSettings, &error)) {
+        menuStatus = error;
     }
 }
 

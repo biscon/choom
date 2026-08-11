@@ -389,20 +389,23 @@ void TestHdrEffectShaderAndPassPolicies()
                             !=std::string::npos,
           "decal-only bloom redraw is retired in favor of visible emissive radiance");
     const std::size_t atmosphere=mainGraph.find("Apply3DWorldAtmosphere");
-    const std::size_t viewmodel=mainGraph.find("Composite3DViewmodel");
+    const std::size_t viewmodel=mainGraph.find("Render3DViewmodel");
     const std::size_t sceneBloom=mainGraph.find("Apply3DHdrBloom");
     const std::size_t overlays=mainGraph.find("Render3DOverlays");
     Check(atmosphere<viewmodel&&viewmodel<sceneBloom&&sceneBloom<overlays,
           "pass graph orders atmosphere, viewmodel, bloom, then excluded editor overlays");
     Check(mainGraph.find("Render3DHud")>sceneBloom,
           "HUD and ordinary UI are downstream of scene-wide bloom");
-    const std::size_t viewmodelTarget=mainGraph.find("\"viewmodel\"");
-    const std::size_t viewmodelRenderbuffer=mainGraph.find(
-            "RenderTargetDepthKind::Renderbuffer",viewmodelTarget);
-    Check(viewmodelTarget!=std::string::npos
-                    &&viewmodelRenderbuffer!=std::string::npos
-                    &&viewmodelRenderbuffer-viewmodelTarget<500,
-          "isolated viewmodel retains its private renderbuffer depth");
+    Check(mainGraph.find("rlLoadFramebuffer()")!=std::string::npos
+                    &&mainGraph.find("rlLoadTextureDepth(width, height, true)")
+                            !=std::string::npos
+                    &&mainGraph.find("world.native.texture.id")
+                            !=std::string::npos
+                    &&mainGraph.find("glClear(GL_DEPTH_BUFFER_BIT)")
+                            !=std::string::npos
+                    &&mainGraph.find("application.Composite3DViewmodel")
+                            ==std::string::npos,
+          "viewmodel keeps private depth while drawing directly into shared HDR color");
     const std::string sectorRenderer=ReadSource(SECTOR_SHADER_SOURCE_PATH);
     Check(sectorRenderer.find("uniform sampler2D sourceDepth")==std::string::npos
                     &&sectorRenderer.find("float coverage=isnan(source.a)")
@@ -410,12 +413,12 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&ReadSource(PBR_SHADER_SOURCE_PATH).find(
                                "finalColor = vec4(linearColor, 1.0)")
                             !=std::string::npos,
-          "opaque-alpha PBR viewmodels replace scene RGB without a redundant depth-sampling path");
+          "opaque-alpha PBR viewmodels remain compatible with direct HDR-color rendering");
     Check(muzzle.find("finalColor=vec4(storeFiniteHalfRadiance(radiance),0.0)")
                             !=std::string::npos
                     &&muzzle.find("BeginBlendMode(BLEND_ADD_COLORS)")
                             !=std::string::npos,
-          "muzzle keeps alpha-zero additive HDR semantics under alpha-based viewmodel composition");
+          "muzzle keeps alpha-zero additive HDR semantics under direct viewmodel rendering");
     const std::size_t rgbOnlyShadowMask=dynamicModelShadows.find(
             "rlColorMask(true, true, true, false)");
     const std::size_t projectedShadowDraw=dynamicModelShadows.find(

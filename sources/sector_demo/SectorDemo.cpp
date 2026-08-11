@@ -114,7 +114,7 @@ void SectorDemo::Update(engine::EngineContext& context, float dt)
     preview.AdvanceRuntime(dt);
 
     UpdateSectorFreeflyController(freeflyController, input, dt);
-    preview.ApplyRendererPose(freeflyController.pose);
+    preview.ApplyRendererPose(freeflyController.pose, false);
     preview.UpdateVisibilityDebug(0, 0.0f, false, nullptr, &context.world);
 }
 

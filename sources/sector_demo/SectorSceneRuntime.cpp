@@ -72,14 +72,18 @@ void SectorSceneRuntime::Update(
             context.assets,
             context.audio);
     renderer.FinalizeRuntimeObjectResources(context.assets, context.world);
-    runtimeObjects.dynamicDoorColliders.clear();
-    CollectSectorDoorDynamicColliders(
-            context.world,
-            runtimeObjects.dynamicDoorColliders);
-    runtimeObjects.dynamicPortalBlockers.clear();
-    CollectSectorDoorDynamicPortalBlockers(
-            context.world,
-            runtimeObjects.dynamicPortalBlockers);
+    if (runtimeObjects.doorSpatialStateChanged
+            || !runtimeObjects.doorCollisionCacheInitialized) {
+        runtimeObjects.dynamicDoorColliders.clear();
+        CollectSectorDoorDynamicColliders(
+                context.world,
+                runtimeObjects.dynamicDoorColliders);
+        runtimeObjects.dynamicPortalBlockers.clear();
+        CollectSectorDoorDynamicPortalBlockers(
+                context.world,
+                runtimeObjects.dynamicPortalBlockers);
+        runtimeObjects.doorCollisionCacheInitialized = true;
+    }
     renderer.AdvanceRuntime(dt);
 }
 
@@ -346,9 +350,10 @@ void SectorSceneRuntime::ApplyWorldAtmosphere(
 
 void SectorSceneRuntime::ApplyHdrBloom(
         engine::RenderTarget& sceneTarget,
-        const engine::HdrBloomSettings& settings)
+        const engine::HdrBloomSettings& settings,
+        bool presentFromScratch)
 {
-    renderer.ApplyHdrBloom(sceneTarget, settings);
+    renderer.ApplyHdrBloom(sceneTarget, settings, presentFromScratch);
 }
 
 bool SectorSceneRuntime::CompositeViewmodel(

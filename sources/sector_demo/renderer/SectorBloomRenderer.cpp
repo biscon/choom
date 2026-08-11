@@ -113,9 +113,13 @@ float SafeAlpha(float value) {
     return (isnan(value) || isinf(value)) ? 1.0 : clamp(value, 0.0, 1.0);
 }
 void main() {
-    vec4 scene = texture(texture0, fragTexCoord);
     vec3 bloom = texture(bloomTexture, fragTexCoord).rgb;
-    vec3 rgb = bloomOnly != 0 ? bloom * intensity : scene.rgb + bloom * intensity;
+    if (bloomOnly != 0) {
+        finalColor = vec4(SanitizeLinearHdrForRgba16f(bloom * intensity), 0.0);
+        return;
+    }
+    vec4 scene = texture(texture0, fragTexCoord);
+    vec3 rgb = scene.rgb + bloom * intensity;
     finalColor = vec4(SanitizeLinearHdrForRgba16f(rgb), SafeAlpha(scene.a));
 }
 )";
@@ -278,8 +282,6 @@ bool SectorBloomRenderer::Apply(
     }
     if (!EnsureResources(width, height)) return false;
 
-    CopyTexture(sceneTarget.native.texture, sceneScratch.native);
-
     const Vector2 sourceTexelSize{
             1.0f / static_cast<float>(width),
             1.0f / static_cast<float>(height)};
@@ -294,8 +296,8 @@ bool SectorBloomRenderer::Apply(
             &settings.threshold, SHADER_UNIFORM_FLOAT);
     SetShaderValue(prefilterShader, prefilterSoftKneeLoc,
             &settings.softKnee, SHADER_UNIFORM_FLOAT);
-    DrawTexturePro(sceneScratch.native.texture,
-            SourceRect(sceneScratch.native.texture),
+    DrawTexturePro(sceneTarget.native.texture,
+            SourceRect(sceneTarget.native.texture),
             DestinationRect(prefilterTarget.native.texture), Vector2{}, 0.0f, WHITE);
     rlDrawRenderBatchActive();
     EndShaderMode();
@@ -333,7 +335,8 @@ bool SectorBloomRenderer::Apply(
 
     const int bloomOnly = 0;
     rlDrawRenderBatchActive();
-    BeginTextureMode(sceneTarget.native);
+    BeginTextureMode(sceneScratch.native);
+    ClearBackground(BLANK);
     rlDisableColorBlend();
     BeginShaderMode(compositeShader);
     SetShaderValueTexture(compositeShader, compositeBloomTextureLoc, input->texture);
@@ -341,16 +344,16 @@ bool SectorBloomRenderer::Apply(
             &settings.intensity, SHADER_UNIFORM_FLOAT);
     SetShaderValue(compositeShader, compositeBloomOnlyLoc,
             &bloomOnly, SHADER_UNIFORM_INT);
-    DrawTexturePro(sceneScratch.native.texture,
-            SourceRect(sceneScratch.native.texture),
-            DestinationRect(sceneTarget.native.texture), Vector2{}, 0.0f, WHITE);
+    DrawTexturePro(sceneTarget.native.texture,
+            SourceRect(sceneTarget.native.texture),
+            DestinationRect(sceneScratch.native.texture), Vector2{}, 0.0f, WHITE);
     rlDrawRenderBatchActive();
     EndShaderMode();
     rlEnableColorBlend();
     EndTextureMode();
 
     if (debugView == SectorBloomDebugView::SceneBefore) {
-        debugSource = &sceneScratch;
+        debugSource = &sceneTarget;
     } else if (debugView == SectorBloomDebugView::Prefilter
             || debugView == SectorBloomDebugView::BlurredBloom
             || debugView == SectorBloomDebugView::BloomOnly) {
@@ -379,7 +382,6 @@ bool SectorBloomRenderer::Apply(
         EndTextureMode();
         debugSource = &sceneScratch;
     } else if (debugView == SectorBloomDebugView::SceneAfter) {
-        CopyTexture(sceneTarget.native.texture, sceneScratch.native);
         debugSource = &sceneScratch;
     }
     return true;

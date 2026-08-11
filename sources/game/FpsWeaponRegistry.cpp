@@ -569,6 +569,37 @@ Json Vec(Vector3 value) { return Json::array({value.x, value.y, value.z}); }
 
 } // namespace
 
+const char* FpsVolumetricQualityCapName(FpsVolumetricQualityCap quality)
+{
+    switch (quality) {
+        case FpsVolumetricQualityCap::Off: return "off";
+        case FpsVolumetricQualityCap::Low: return "low";
+        case FpsVolumetricQualityCap::Medium: return "medium";
+        case FpsVolumetricQualityCap::High: return "high";
+    }
+    return "high";
+}
+
+const char* FpsShadowQualityName(FpsShadowQuality quality)
+{
+    switch (quality) {
+        case FpsShadowQuality::Off: return "off";
+        case FpsShadowQuality::Low: return "low";
+        case FpsShadowQuality::Medium: return "medium";
+        case FpsShadowQuality::High: return "high";
+    }
+    return "high";
+}
+
+FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings)
+{
+    if (!std::isfinite(settings.renderScale)) {
+        settings.renderScale = 1.5f;
+    }
+    settings.renderScale = std::clamp(settings.renderScale, 0.5f, 2.0f);
+    return settings;
+}
+
 bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, std::string* error)
 {
     try {
@@ -704,6 +735,59 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             if (!ValidLevelName(parsed.firstLevel)) {
                 Fail("application settings.firstLevel must use only letters, digits, underscore, or dash");
             }
+        }
+        const auto graphics = root.find("graphics");
+        if (graphics != root.end()) {
+            if (!graphics->is_object()) {
+                Fail("application settings.graphics must be an object");
+            }
+            const auto renderScale = graphics->find("renderScale");
+            if (renderScale != graphics->end()) {
+                if (!renderScale->is_number()) {
+                    Fail("application settings.graphics.renderScale must be a number");
+                }
+                const double value = renderScale->get<double>();
+                if (!std::isfinite(value) || value < 0.5 || value > 2.0) {
+                    Fail("application settings.graphics.renderScale must be between 0.5 and 2.0");
+                }
+                parsed.graphics.renderScale = static_cast<float>(value);
+            }
+            const auto fxaa = graphics->find("fxaa");
+            if (fxaa != graphics->end()) {
+                if (!fxaa->is_boolean()) {
+                    Fail("application settings.graphics.fxaa must be a boolean");
+                }
+                parsed.graphics.fxaa = fxaa->get<bool>();
+            }
+            const auto performanceOverlay = graphics->find("performanceOverlay");
+            if (performanceOverlay != graphics->end()) {
+                if (!performanceOverlay->is_boolean()) {
+                    Fail("application settings.graphics.performanceOverlay must be a boolean");
+                }
+                parsed.graphics.performanceOverlay = performanceOverlay->get<bool>();
+            }
+            const auto parseQuality = [](const Json& value, const char* context) {
+                if (!value.is_string()) Fail(std::string(context) + " must be a string");
+                const std::string name = value.get<std::string>();
+                if (name == "off") return 0;
+                if (name == "low") return 1;
+                if (name == "medium") return 2;
+                if (name == "high") return 3;
+                Fail(std::string(context) + " must be off, low, medium, or high");
+            };
+            const auto volumetrics = graphics->find("volumetricQualityCap");
+            if (volumetrics != graphics->end()) {
+                parsed.graphics.volumetricQualityCap =
+                        static_cast<FpsVolumetricQualityCap>(parseQuality(
+                                *volumetrics,
+                                "application settings.graphics.volumetricQualityCap"));
+            }
+            const auto shadows = graphics->find("shadowQuality");
+            if (shadows != graphics->end()) {
+                parsed.graphics.shadowQuality = static_cast<FpsShadowQuality>(
+                        parseQuality(*shadows, "application settings.graphics.shadowQuality"));
+            }
+            parsed.graphics = NormalizeFpsGraphicsSettings(parsed.graphics);
         }
         const auto hdrBloom = root.find("hdrBloom");
         if (hdrBloom != root.end()) {
@@ -1005,6 +1089,15 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     {"volume", settings.footsteps.volume},
                     {"landingImpactVolumeMultiplier",
                             settings.footsteps.landingImpactVolumeMultiplier}}}};
+    const FpsGraphicsSettings graphics =
+            NormalizeFpsGraphicsSettings(settings.graphics);
+    root["graphics"] = {
+            {"renderScale", graphics.renderScale},
+            {"fxaa", graphics.fxaa},
+            {"volumetricQualityCap", FpsVolumetricQualityCapName(
+                    graphics.volumetricQualityCap)},
+            {"shadowQuality", FpsShadowQualityName(graphics.shadowQuality)},
+            {"performanceOverlay", graphics.performanceOverlay}};
     const engine::HdrBloomSettings hdrBloom =
             engine::NormalizeHdrBloomSettings(settings.hdrBloom);
     root["hdrBloom"] = {

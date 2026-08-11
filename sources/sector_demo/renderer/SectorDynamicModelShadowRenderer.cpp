@@ -339,8 +339,8 @@ bool SectorDynamicModelShadowRenderer::Load()
 
     for (Slot& slot : slots) {
         slot.target = LoadDepthTarget(
-                DynamicModelProjectedShadowResolution,
-                DynamicModelProjectedShadowResolution);
+                projectedShadowResolution,
+                projectedShadowResolution);
         if (slot.target.id == 0 || slot.target.depth.id == 0) {
             for (Slot& cleanup : slots) UnloadDepthTarget(cleanup.target);
             if (casterMaterial.maps != nullptr) UnloadMaterial(casterMaterial);
@@ -354,6 +354,30 @@ bool SectorDynamicModelShadowRenderer::Load()
     }
     projectedLoaded = true;
     return true;
+}
+
+void SectorDynamicModelShadowRenderer::SetProjectedShadowResolution(
+        int resolution)
+{
+    resolution = std::clamp(resolution, 64, 1024);
+    if (projectedShadowResolution == resolution) {
+        return;
+    }
+    projectedShadowResolution = resolution;
+    if (!loaded) {
+        return;
+    }
+    projectedLoaded = true;
+    for (Slot& slot : slots) {
+        UnloadDepthTarget(slot.target);
+        slot.target = LoadDepthTarget(resolution, resolution);
+        if (slot.target.id == 0 || slot.target.depth.id == 0) {
+            projectedLoaded = false;
+        }
+    }
+    if (!projectedLoaded) {
+        for (Slot& slot : slots) UnloadDepthTarget(slot.target);
+    }
 }
 
 void SectorDynamicModelShadowRenderer::Shutdown()

@@ -80,13 +80,15 @@ public:
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);
     bool ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
-            const engine::HdrBloomSettings& settings);
+            const engine::HdrBloomSettings& settings,
+            bool presentFromScratch = false);
     bool CompositeViewmodel(
             engine::RenderTarget& sceneTarget,
             const engine::RenderTarget& viewmodelTarget);
     const engine::RenderTarget* HdrDebugPresentationSource() const
     {
-        return bloomRenderer.DebugSource();
+        const engine::RenderTarget* debugSource = bloomRenderer.DebugSource();
+        return debugSource != nullptr ? debugSource : hdrPresentationSource;
     }
     void DrawViewmodel(
             engine::AssetManager& assets,
@@ -108,7 +110,9 @@ public:
     SectorViewPose Pose() const;
     SectorViewPose RendererPose() const;
     void ApplyPose(const SectorViewPose& pose);
-    void ApplyRendererPose(const SectorViewPose& pose);
+    void ApplyRendererPose(
+            const SectorViewPose& pose,
+            bool refreshVisibility = true);
     void RefreshDynamicLightSources(const SectorTopologyMap& map);
     void SetRuntimePointLight(
             const SectorPreviewDynamicPointLightSource* light)
@@ -137,6 +141,25 @@ public:
     bool DynamicLightingEnabled() const { return dynamicLightingEnabled; }
     void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
+    void SetGraphicsQuality(
+            SectorTopologyFogSettings::LocalVolumeQuality volumetricCap,
+            bool shadowsEnabled,
+            int shadowMapResolution = DynamicSpotLightShadowMapResolution,
+            float projectedShadowIntervalSeconds = 0.0f,
+            int projectedShadowResolution = DynamicModelProjectedShadowResolution)
+    {
+        volumetricQualityCap = volumetricCap;
+        shadowMapsEnabled = shadowsEnabled;
+        if (shadowsEnabled) {
+            dynamicLightState.SetShadowMapResolution(shadowMapResolution);
+        }
+        dynamicModelShadowIntervalSeconds = std::max(
+                projectedShadowIntervalSeconds, 0.0f);
+        if (shadowsEnabled) {
+            dynamicModelShadowRenderer.SetProjectedShadowResolution(
+                    projectedShadowResolution);
+        }
+    }
     SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorRenderer.DoorLightingDebugMode(); }
     void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorRenderer.SetDoorLightingDebugMode(mode); }
     const std::vector<SectorPreviewDynamicPointLightUniform>& SelectedDynamicLights() const
@@ -204,6 +227,8 @@ public:
 
 private:
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
+    bool EnsureHdrSceneColorView(const engine::RenderTarget& sceneTarget);
+    void UnloadHdrSceneColorView();
     bool EnsureHdrCompositeShader();
     bool CommitHdrScratch(engine::RenderTarget& sceneTarget);
     engine::TextureHandle TextureForId(const std::string& textureId) const;
@@ -270,6 +295,8 @@ private:
     SectorPbrEnvironment pbrEnvironment;
     SectorBloomRenderer bloomRenderer;
     engine::RenderTarget hdrSceneScratch;
+    RenderTexture2D hdrSceneColorView = {};
+    const engine::RenderTarget* hdrPresentationSource = nullptr;
     Shader hdrCompositeShader = {};
     int hdrCompositeSceneLoc = -1;
     int hdrCompositeSourceLoc = -1;
@@ -286,6 +313,11 @@ private:
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
+    SectorTopologyFogSettings::LocalVolumeQuality volumetricQualityCap =
+            SectorTopologyFogSettings::LocalVolumeQuality::High;
+    bool shadowMapsEnabled = true;
+    float dynamicModelShadowIntervalSeconds = 0.0f;
+    float lastDynamicModelShadowRenderSeconds = -1000.0f;
     int lightmapStatus = 0;
     bool initialized = false;
     size_t sectorCount = 0;

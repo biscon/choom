@@ -4,6 +4,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <algorithm>
+#include <cstring>
 #include <raymath.h>
 #include <rlgl.h>
 
@@ -266,6 +267,8 @@ void SectorDynamicLightingRenderer::Reset()
     receiverBounds.clear();
     shadowCasters.clear();
     shadowMatrices.clear();
+    cachedShadowMatrices.clear();
+    shadowMapsCacheValid = false;
 }
 
 void SectorDynamicLightingRenderer::RebuildSources(
@@ -317,10 +320,29 @@ void SectorDynamicLightingRenderer::UpdateSelection(
             selectedLights,
             shadowCasters,
             shadowMatrices);
+    bool matricesMatch = shadowMatrices.size() == cachedShadowMatrices.size();
+    for (std::size_t i = 0; matricesMatch && i < shadowMatrices.size(); ++i) {
+        const auto& current = shadowMatrices[i];
+        const auto& cached = cachedShadowMatrices[i];
+        matricesMatch = current.lightId == cached.lightId
+                && current.shadowSlot == cached.shadowSlot
+                && std::memcmp(&current.lightViewProjection,
+                        &cached.lightViewProjection, sizeof(Matrix)) == 0;
+    }
+    if (!matricesMatch) {
+        shadowMapsCacheValid = false;
+        cachedShadowMatrices.assign(shadowMatrices.begin(), shadowMatrices.end());
+    }
 }
 
-SectorPreviewDynamicSpotLightShadowUniforms SectorDynamicLightingRenderer::PackShadowUniforms() const
+SectorPreviewDynamicSpotLightShadowUniforms SectorDynamicLightingRenderer::PackShadowUniforms(
+        bool enabled) const
 {
+    if (!enabled) {
+        SectorPreviewDynamicSpotLightShadowUniforms result;
+        result.dynamicLightShadowSlots.fill(-1);
+        return result;
+    }
     return PackSectorPreviewDynamicSpotLightShadowUniforms(selectedLights, shadowCasters, shadowMatrices);
 }
 
@@ -332,8 +354,8 @@ bool SectorDynamicLightingRenderer::EnsureShadowMapResources()
         }
 
         shadowMap = LoadDepthOnlyRenderTexture(
-                DynamicSpotLightShadowMapResolution,
-                DynamicSpotLightShadowMapResolution);
+                shadowMapResolution,
+                shadowMapResolution);
         if (shadowMap.id == 0 || shadowMap.depth.id == 0) {
             UnloadShadowMapResources();
             return false;
@@ -343,6 +365,18 @@ bool SectorDynamicLightingRenderer::EnsureShadowMapResources()
     }
 
     return true;
+}
+
+void SectorDynamicLightingRenderer::SetShadowMapResolution(int resolution)
+{
+    resolution = std::clamp(resolution, 256, 2048);
+    if (shadowMapResolution == resolution) {
+        return;
+    }
+    shadowMapResolution = resolution;
+    shadowMapsCacheValid = false;
+    UnloadShadowMapResources();
+    EnsureShadowMapResources();
 }
 
 void SectorDynamicLightingRenderer::UnloadShadowMapResources()
@@ -435,9 +469,13 @@ const Texture2D* SectorDynamicLightingRenderer::ShadowMapDepthTexture(std::size_
     return &shadowMap->depth;
 }
 
-SectorDynamicShadowMapTextures SectorDynamicLightingRenderer::BuildShadowMapTextures() const
+SectorDynamicShadowMapTextures SectorDynamicLightingRenderer::BuildShadowMapTextures(
+        bool enabled) const
 {
     SectorDynamicShadowMapTextures textures;
+    if (!enabled) {
+        return textures;
+    }
     textures.shadowMap0 = ShadowMapDepthTexture(0);
     textures.shadowMap1 = ShadowMapDepthTexture(1);
     return textures;
@@ -452,6 +490,15 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
             || shadowMatrices.empty()) {
         return;
     }
+
+    const bool hasDoorCasters = context.doorShadowCasters != nullptr
+            && !context.doorShadowCasters->empty();
+    if (hasDoorCasters) {
+        shadowMapsCacheValid = false;
+    } else if (shadowMapsCacheValid) {
+        return;
+    }
+    bool cacheable = !hasDoorCasters;
 
     for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : shadowMatrices) {
         if (matrix.shadowSlot < 0) {
@@ -479,6 +526,9 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
             const Texture2D* texture = nullptr;
             if (batch.alphaTest && context.textureResolver != nullptr) {
                 texture = context.textureResolver(context.userData, *context.assets, batch.textureId);
+                if (texture == nullptr || texture->id == 0) {
+                    cacheable = false;
+                }
             }
             shadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = (texture != nullptr)
                     ? *texture
@@ -539,6 +589,7 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
         rlDisableDepthTest();
         EndTextureMode();
     }
+    shadowMapsCacheValid = cacheable;
 }
 
 void SectorDynamicLightingRenderer::ReserveSelectionBuffers()
@@ -553,6 +604,8 @@ void SectorDynamicLightingRenderer::ReserveSelectionBuffers()
     shadowCasters.reserve(MaxDynamicSpotLightShadowCasters);
     shadowMatrices.clear();
     shadowMatrices.reserve(MaxDynamicSpotLightShadowCasters);
+    cachedShadowMatrices.clear();
+    cachedShadowMatrices.reserve(MaxDynamicSpotLightShadowCasters);
 }
 
 void SectorDynamicLightingRenderer::BuildReceiverBounds(

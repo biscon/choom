@@ -6,6 +6,13 @@
     "volume": 0.6499999761581421,
     "landingImpactVolumeMultiplier": 1.350000023841858
   },
+  "graphics": {
+    "renderScale": 1.5,
+    "fxaa": true,
+    "volumetricQualityCap": "high",
+    "shadowQuality": "high",
+    "performanceOverlay": true
+  },
   "hdrBloom": {
     "enabled": true,
     "threshold": 1.0,

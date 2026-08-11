@@ -1076,14 +1076,15 @@ bool ToggleTargetedSectorDoorInteractionSystem(
     return true;
 }
 
-void AdvanceSectorDoorMotionSystem(engine::World& world, float dt)
+bool AdvanceSectorDoorMotionSystem(engine::World& world, float dt)
 {
     if (!std::isfinite(dt) || dt <= 0.0f) {
-        return;
+        return false;
     }
 
+    bool changed = false;
     world.ForEach<SectorDoor, SectorDoorMotion>(
-            [dt](engine::Entity, SectorDoor& door, SectorDoorMotion& motion) {
+            [dt, &changed](engine::Entity, SectorDoor& door, SectorDoorMotion& motion) {
                 if (!door.enabled) {
                     return;
                 }
@@ -1109,12 +1110,15 @@ void AdvanceSectorDoorMotionSystem(engine::World& world, float dt)
                     return;
                 }
 
+                const float previousOpenFraction = motion.openFraction;
                 if (motion.openFraction < motion.targetOpenFraction) {
                     motion.openFraction = std::min(motion.openFraction + fractionStep, motion.targetOpenFraction);
                 } else if (motion.openFraction > motion.targetOpenFraction) {
                     motion.openFraction = std::max(motion.openFraction - fractionStep, motion.targetOpenFraction);
                 }
+                changed = changed || motion.openFraction != previousOpenFraction;
             });
+    return changed;
 }
 
 SectorDoorAudioEvent UpdateSectorDoorAudioTransition(

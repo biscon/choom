@@ -227,7 +227,7 @@ uniform vec2 hazeTexelSize; uniform int bilateralUpsample;
 float SanitizeIntermediateChannel(float value) {
     if(isnan(value)) return 0.0;
     if(isinf(value)) return value>0.0?65504.0:0.0;
-    return max(value,0.0);
+    return min(max(value,0.0),65504.0);
 }
 vec3 SanitizeIntermediateRadiance(vec3 value) {
     return vec3(SanitizeIntermediateChannel(value.r),SanitizeIntermediateChannel(value.g),
@@ -239,7 +239,7 @@ float SanitizeOpacity(float value) {
 void main() {
     vec4 haze=texture(hazeTexture,fragUv);
     if(bilateralUpsample!=0) { float center=texture(sceneDepth,fragUv).r; vec4 sum=vec4(0); float weightSum=0.0;
-        for(int y=-1;y<=1;++y) for(int x=-1;x<=1;++x) { vec2 uv=clamp(fragUv+vec2(x,y)*hazeTexelSize,vec2(0),vec2(1));
+        for(int y=-1;y<=1;++y) for(int x=-1;x<=1;++x) { if(x!=0&&y!=0) continue; vec2 uv=clamp(fragUv+vec2(x,y)*hazeTexelSize,vec2(0),vec2(1));
             float weight=exp(-abs(texture(sceneDepth,uv).r-center)*600.0); sum+=texture(hazeTexture,uv)*weight; weightSum+=weight; }
         haze=sum/max(weightSum,0.0001); }
     vec4 scene=texture(sceneColor,fragUv);
@@ -376,7 +376,9 @@ const SectorLightHazeStaticLightingSamples& SectorLightHazeRenderer::LightingFor
 
 bool SectorLightHazeRenderer::Apply(
         RenderTexture2D& sceneTarget, RenderTexture2D& sceneScratch,
-        const SectorTopologyMap& map, const Camera3D& camera,
+        const SectorTopologyMap& map,
+        SectorTopologyFogSettings::LocalVolumeQuality quality,
+        const Camera3D& camera,
         float runtimeSeconds, const SectorBakedObjectLightProbeRuntimeData& probes,
         const SectorBillboardDynamicLightContext& dynamicLights,
         const std::vector<SectorLightAtmosphereSource>& sources,
@@ -385,13 +387,13 @@ bool SectorLightHazeRenderer::Apply(
 {
     eligibleCount=0; activeCount=0;
     if(sceneTarget.texture.id==0||sceneTarget.depth.id==0
-            ||map.fogSettings.localVolumeQuality==SectorTopologyFogSettings::LocalVolumeQuality::Off) return false;
+            ||quality==SectorTopologyFogSettings::LocalVolumeQuality::Off) return false;
     const float nearPlane=static_cast<float>(rlGetCullDistanceNear()), farPlane=static_cast<float>(rlGetCullDistanceFar());
     if(!std::isfinite(nearPlane)||!std::isfinite(farPlane)||nearPlane<=0.0f||farPlane<=nearPlane) return false;
     const float aspect=static_cast<float>(sceneTarget.texture.width)/std::max(sceneTarget.texture.height,1);
     int cap=4, steps=8; float renderScale=0.5f;
-    if(map.fogSettings.localVolumeQuality==SectorTopologyFogSettings::LocalVolumeQuality::Low) { cap=2; steps=4; renderScale=0.25f; }
-    else if(map.fogSettings.localVolumeQuality==SectorTopologyFogSettings::LocalVolumeQuality::High) { cap=8; steps=12; renderScale=1.0f; }
+    if(quality==SectorTopologyFogSettings::LocalVolumeQuality::Low) { cap=2; steps=4; renderScale=0.25f; }
+    else if(quality==SectorTopologyFogSettings::LocalVolumeQuality::High) { cap=8; steps=12; renderScale=1.0f; }
     std::array<SectorLightAtmosphereVolume,MaxHazeVolumes> selected{}; std::array<float,MaxHazeVolumes> distances{};
     distances.fill(std::numeric_limits<float>::max());
     for(const auto& source:sources) {
@@ -455,7 +457,7 @@ bool SectorLightHazeRenderer::Apply(
     UploadSectorRendererDynamicPointLights(shader,locations.dynamicLights,dynamicLights); UploadSectorRendererDynamicSpotLightShadowUniforms(shader,locations.shadows,dynamicLights.shadowUniforms);
     rlDisableColorBlend(); DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(hazeTarget.native.texture),{},0,WHITE);
     rlDrawRenderBatchActive(); EndShaderMode(); rlEnableColorBlend(); EndTextureMode();
-    const Vector2 texel{1.0f/hazeTarget.native.texture.width,1.0f/hazeTarget.native.texture.height}; const int bilateral=renderScale<1.0f?1:0;
+    const Vector2 texel{1.0f/hazeTarget.native.texture.width,1.0f/hazeTarget.native.texture.height}; const int bilateral=quality==SectorTopologyFogSettings::LocalVolumeQuality::Medium?1:0;
     rlDrawRenderBatchActive();
     BeginTextureMode(sceneScratch); ClearBackground(BLANK); BeginShaderMode(compositeShader);
     SetShaderValueTexture(compositeShader,compositeLocations.sceneColor,sceneTarget.texture); SetShaderValueTexture(compositeShader,compositeLocations.sceneDepth,sceneTarget.depth);

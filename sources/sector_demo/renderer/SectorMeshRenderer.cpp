@@ -804,6 +804,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
     localFogRenderer.Shutdown();
     lightHazeRenderer.Shutdown();
     lightDustRenderer.Shutdown();
+    UnloadHdrSceneColorView();
 
     if (!dynamicLightState.EnsureShadowMapResources()) {
         Shutdown(assets);
@@ -926,6 +927,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     localFogRenderer.Shutdown();
     lightHazeRenderer.Shutdown();
     lightDustRenderer.Shutdown();
+    UnloadHdrSceneColorView();
     if (!initialized
             && engine::IsNull(assetScope)
             && meshes.batches.empty()
@@ -1043,8 +1045,10 @@ void SectorMeshRenderer::DrawScene(
     UploadSectorFogShaderValues(material.shader, fogShaderLocations, fogContext);
 
     float useAo = useBakedAmbientOcclusion ? 1.0f : 0.0f;
-    const Texture2D* shadowMap0 = dynamicLightState.ShadowMapDepthTexture(0);
-    const Texture2D* shadowMap1 = dynamicLightState.ShadowMapDepthTexture(1);
+    const Texture2D* shadowMap0 = shadowMapsEnabled
+            ? dynamicLightState.ShadowMapDepthTexture(0) : nullptr;
+    const Texture2D* shadowMap1 = shadowMapsEnabled
+            ? dynamicLightState.ShadowMapDepthTexture(1) : nullptr;
     material.maps[MATERIAL_MAP_ROUGHNESS].texture = shadowMap0 != nullptr ? *shadowMap0 : Texture2D{};
     material.maps[MATERIAL_MAP_OCCLUSION].texture = shadowMap1 != nullptr ? *shadowMap1 : Texture2D{};
     if (useBakedAmbientOcclusionLoc >= 0) {
@@ -1067,7 +1071,7 @@ void SectorMeshRenderer::DrawScene(
             runtimeSeconds,
             dynamicLightState.SelectedLights());
     const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
-            dynamicLightState.PackShadowUniforms();
+            dynamicLightState.PackShadowUniforms(shadowMapsEnabled);
     SectorDynamicSpotLightShadowShaderLocations shadowLocations;
     shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
     shadowLocations.shadowLightMatrices = shadowLightMatrixLocs;
@@ -1166,7 +1170,8 @@ void SectorMeshRenderer::DrawScene(
         doorDrawContext.dynamicLighting.enabled = dynamicLightingEnabled;
         doorDrawContext.dynamicLighting.runtimeSeconds = runtimeSeconds;
         doorDrawContext.dynamicLighting.selectedLights = &dynamicLightState.SelectedLights();
-        doorDrawContext.dynamicLighting.shadowUniforms = dynamicLightState.PackShadowUniforms();
+        doorDrawContext.dynamicLighting.shadowUniforms =
+                dynamicLightState.PackShadowUniforms(shadowMapsEnabled);
         doorDrawContext.dynamicLighting.shadowMaps = dynamicLightState.BuildShadowMapTextures();
         doorDrawContext.fog = fogContext;
         doorDrawContext.textureResolver.userData = this;
@@ -1223,8 +1228,8 @@ SectorBillboardDynamicLightContext SectorMeshRenderer::BuildBillboardDynamicLigh
     context.dynamicLightCount = dynamicLightingEnabled
             ? static_cast<int>(std::min(dynamicLightState.SelectedLights().size(), static_cast<size_t>(MaxDynamicLights)))
             : 0;
-    context.shadowUniforms = dynamicLightState.PackShadowUniforms();
-    context.shadowMaps = dynamicLightState.BuildShadowMapTextures();
+    context.shadowUniforms = dynamicLightState.PackShadowUniforms(shadowMapsEnabled);
+    context.shadowMaps = dynamicLightState.BuildShadowMapTextures(shadowMapsEnabled);
 
     for (int i = 0; i < context.dynamicLightCount; ++i) {
         const SectorPreviewDynamicPointLightUniform& light =
@@ -1280,6 +1285,9 @@ void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
         engine::AssetManager& assets,
         engine::World* runtimeObjectWorld)
 {
+    if (!shadowMapsEnabled) {
+        return;
+    }
     if (dynamicLightState.IsShadowRenderReady()) {
         SectorDynamicSpotLightShadowRenderContext context;
         context.assets = &assets;
@@ -1290,7 +1298,11 @@ void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
         dynamicLightState.RenderShadowMaps(context);
     }
 
-    if (runtimeObjectWorld != nullptr && dynamicModelShadowRenderer.IsLoaded()) {
+    const bool dynamicModelShadowDue = dynamicModelShadowIntervalSeconds <= 0.0f
+            || runtimeSeconds - lastDynamicModelShadowRenderSeconds
+                    >= dynamicModelShadowIntervalSeconds;
+    if (runtimeObjectWorld != nullptr && dynamicModelShadowRenderer.IsLoaded()
+            && dynamicModelShadowDue) {
         SectorDynamicModelShadowDrawContext context;
         context.assets = &assets;
         context.world = runtimeObjectWorld;
@@ -1301,6 +1313,7 @@ void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
         context.textureResolverUserData = this;
         context.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
         dynamicModelShadowRenderer.RenderShadowMaps(context);
+        lastDynamicModelShadowRenderSeconds = runtimeSeconds;
     }
 }
 
@@ -1346,6 +1359,43 @@ bool SectorMeshRenderer::EnsureHdrSceneScratch(
     hdrSceneScratchFailedWidth = 0;
     hdrSceneScratchFailedHeight = 0;
     return true;
+}
+
+bool SectorMeshRenderer::EnsureHdrSceneColorView(
+        const engine::RenderTarget& sceneTarget)
+{
+    if (hdrSceneColorView.id != 0
+            && hdrSceneColorView.texture.id == sceneTarget.native.texture.id) {
+        return true;
+    }
+    UnloadHdrSceneColorView();
+    hdrSceneColorView.id = rlLoadFramebuffer();
+    hdrSceneColorView.texture = sceneTarget.native.texture;
+    if (hdrSceneColorView.id == 0) {
+        hdrSceneColorView = {};
+        return false;
+    }
+    rlEnableFramebuffer(hdrSceneColorView.id);
+    rlFramebufferAttach(
+            hdrSceneColorView.id,
+            sceneTarget.native.texture.id,
+            RL_ATTACHMENT_COLOR_CHANNEL0,
+            RL_ATTACHMENT_TEXTURE2D,
+            0);
+    const bool complete = rlFramebufferComplete(hdrSceneColorView.id);
+    rlDisableFramebuffer();
+    if (!complete) {
+        UnloadHdrSceneColorView();
+    }
+    return complete;
+}
+
+void SectorMeshRenderer::UnloadHdrSceneColorView()
+{
+    if (hdrSceneColorView.id != 0) {
+        rlUnloadFramebuffer(hdrSceneColorView.id);
+    }
+    hdrSceneColorView = {};
 }
 
 bool SectorMeshRenderer::EnsureHdrCompositeShader()
@@ -1432,27 +1482,53 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
     RenderTexture2D& nativeScene = sceneTarget.native;
     const SectorBillboardDynamicLightContext dynamicLightContext =
             BuildBillboardDynamicLightContext();
+    const auto effectiveVolumetricQuality =
+            static_cast<int>(map.fogSettings.localVolumeQuality)
+                    < static_cast<int>(volumetricQualityCap)
+            ? map.fogSettings.localVolumeQuality
+            : volumetricQualityCap;
     const bool localFogApplied = localFogRenderer.Apply(
             nativeScene,
             hdrSceneScratch.native,
             map,
+            effectiveVolumetricQuality,
             camera,
             runtimeSeconds,
             objectLightProbes,
             dynamicLightContext);
-    if (localFogApplied && !CommitHdrScratch(sceneTarget)) return false;
-    const bool lightHazeApplied = lightHazeRenderer.Apply(
-            nativeScene,
-            hdrSceneScratch.native,
-            map,
-            camera,
-            runtimeSeconds,
-            objectLightProbes,
-            dynamicLightContext,
-            lightAtmosphereSources,
-            visibilityResult,
-            meshes.sectorReceiverBounds);
-    if (lightHazeApplied && !CommitHdrScratch(sceneTarget)) return false;
+    bool lightHazeApplied = false;
+    if (localFogApplied && EnsureHdrSceneColorView(sceneTarget)) {
+        RenderTexture2D foggedScene = hdrSceneScratch.native;
+        foggedScene.depth = nativeScene.depth;
+        lightHazeApplied = lightHazeRenderer.Apply(
+                foggedScene,
+                hdrSceneColorView,
+                map,
+                effectiveVolumetricQuality,
+                camera,
+                runtimeSeconds,
+                objectLightProbes,
+                dynamicLightContext,
+                lightAtmosphereSources,
+                visibilityResult,
+                meshes.sectorReceiverBounds);
+        if (!lightHazeApplied && !CommitHdrScratch(sceneTarget)) return false;
+    } else {
+        if (localFogApplied && !CommitHdrScratch(sceneTarget)) return false;
+        lightHazeApplied = lightHazeRenderer.Apply(
+                nativeScene,
+                hdrSceneScratch.native,
+                map,
+                effectiveVolumetricQuality,
+                camera,
+                runtimeSeconds,
+                objectLightProbes,
+                dynamicLightContext,
+                lightAtmosphereSources,
+                visibilityResult,
+                meshes.sectorReceiverBounds);
+        if (lightHazeApplied && !CommitHdrScratch(sceneTarget)) return false;
+    }
     const bool lightDustApplied = lightDustRenderer.Apply(
             nativeScene,
             hdrSceneScratch.native,
@@ -1464,16 +1540,24 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
             lightAtmosphereSources,
             visibilityResult,
             meshes.sectorReceiverBounds);
-    if (lightDustApplied && !CommitHdrScratch(sceneTarget)) return false;
     return localFogApplied || lightHazeApplied || lightDustApplied;
 }
 
 bool SectorMeshRenderer::ApplyHdrBloom(
         engine::RenderTarget& sceneTarget,
-        const engine::HdrBloomSettings& settings)
+        const engine::HdrBloomSettings& settings,
+        bool presentFromScratch)
 {
-    return initialized && EnsureHdrSceneScratch(sceneTarget)
-            && bloomRenderer.Apply(sceneTarget, hdrSceneScratch, settings);
+    hdrPresentationSource = nullptr;
+    if (!initialized || !EnsureHdrSceneScratch(sceneTarget)
+            || !bloomRenderer.Apply(sceneTarget, hdrSceneScratch, settings)) {
+        return false;
+    }
+    if (presentFromScratch) {
+        hdrPresentationSource = &hdrSceneScratch;
+        return true;
+    }
+    return CommitHdrScratch(sceneTarget);
 }
 
 SectorViewPose SectorMeshRenderer::Pose() const
@@ -1491,14 +1575,18 @@ void SectorMeshRenderer::ApplyPose(const SectorViewPose& pose)
     ApplyRendererPose(pose);
 }
 
-void SectorMeshRenderer::ApplyRendererPose(const SectorViewPose& pose)
+void SectorMeshRenderer::ApplyRendererPose(
+        const SectorViewPose& pose,
+        bool refreshVisibility)
 {
     position = pose.position;
     yawRadians = pose.yawRadians;
     pitchRadians = pose.pitchRadians;
     rollRadians = pose.rollRadians;
     UpdateCamera();
-    UpdateVisibilityDebug();
+    if (refreshVisibility) {
+        UpdateVisibilityDebug();
+    }
 }
 
 void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map)

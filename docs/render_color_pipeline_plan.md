@@ -569,3 +569,61 @@ Scope and verification:
 - This correction changes no topology/cache behavior, lightmap artifacts or
   source hashes, collision, sector lookup, physics, camera, or gameplay
   behavior.
+
+### Slice 4 performance follow-up
+
+Status: implemented; hardware acceptance measurements remain pending.
+
+- Application graphics settings now persist beside the existing application
+  settings. The menu exposes transactional Apply/Cancel controls for render
+  scale, FXAA, the authored-volumetric quality cap, shadow quality, bloom, and
+  the F9 performance overlay. Required supersampled HDR targets are built
+  before the settings file or live target set is changed; allocation failure
+  keeps the previous working targets and settings.
+- The presentation path combines supersample resolve, neutral tone mapping,
+  and display encoding in one texture sample/pass. FXAA runs while drawing the
+  cached presentation texture to the backbuffer, removing the old linear
+  resolve and intermediate FXAA targets and their two full-frame writes.
+- The viewmodel framebuffer now attaches the active world HDR color texture
+  with its own private depth buffer. Viewmodel geometry renders directly into
+  the active scene, eliminating the separate viewmodel color composite and
+  subsequent full-scene commit. Additive dust likewise renders directly into
+  the active HDR scene instead of copying the scene through RGBA32F scratch.
+- Bloom prefilters the active HDR scene directly and writes its finite-guarded
+  composite to the alternate HDR target. Gameplay presentation consumes that
+  target without copying it back; editor preview retains the commit because
+  its post-bloom depth-tested authoring overlays still target world color.
+- Low volumetrics use quarter-resolution accumulation with bilinear upscale;
+  medium uses half resolution and a five-tap depth-aware cross; high retains
+  full resolution. The application cap is combined with the map-authored
+  quality by taking the lower setting, so it never silently raises authored
+  cost. Analytic distance fog and dust remain independent of that cap.
+- When local fog and light haze are both active, their composites now ping-pong
+  through the shared scratch and a color-only world framebuffer view. This
+  removes the intermediate and final full-scene scratch commits while keeping
+  the world depth texture read-only and available to both effects.
+- Static spotlight shadow maps are retained while selected lights/matrices and
+  alpha-caster texture readiness remain unchanged. Door shadow casters keep
+  the cache invalid so moving doors remain correct. Shadow Off disables both
+  spotlight and projected-model shadow work, Low uses 512-pixel spotlight
+  maps and updates projected models at 15 Hz, Medium uses 1024 pixels/30 Hz,
+  and High retains 1024 pixels/every-frame projected updates.
+- Immutable placed objects no longer repeat sector lookup, baked-probe
+  sampling, collider collection, and formatted diagnostic construction during
+  every steady frame. Door collider/portal vectors update when door motion
+  changes. Renderer pose application can defer visibility work so the game
+  and editor steady update perform their explicit visibility update once.
+- The F9 overlay uses delayed, non-blocking OpenGL timer queries plus CPU wall
+  timings for shadows, world, atmosphere, viewmodel, bloom, presentation, and
+  final composition. It is intended to identify the remaining bottleneck on
+  the target GPU without introducing a synchronous query stall.
+- Opening the menu intentionally freezes and reuses the last presentation
+  texture. The scene visible below the menu is cached: shadow maps, geometry,
+  atmosphere, viewmodel, bloom, and presentation are not rerendered. This is
+  why menu FPS is dramatically higher; paused procedural animation contributes
+  some CPU savings, but it is not the primary cause of that jump.
+
+The GTX 3060 release-build acceptance targets remain: fog-off HDR within 15%
+of the main-branch LDR frame time at the matched hub view, and medium authored
+volumetrics adding no more than 1 ms. These figures require the user's hardware
+run and are not inferred from compile/test results.

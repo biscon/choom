@@ -596,6 +596,7 @@ bool SectorLightDustRenderer::Apply(
         const RuntimePortalVisibilityResult& visibility,
         const std::vector<SectorReceiverBounds>& receiverBounds)
 {
+    (void)sceneScratch;
     visibleParticleCount = 0;
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());
@@ -654,21 +655,10 @@ bool SectorLightDustRenderer::Apply(
     UploadSectorRendererDynamicPointLights(shader, locations.dynamicLights, dynamicLights);
     UploadSectorRendererDynamicSpotLightShadowUniforms(shader, locations.shadows, dynamicLights.shadowUniforms);
 
-    // The shared RGBA32F scratch is authoritative only after this complete pass.
-    // Seed it with the current scene, then add premultiplied dust radiance.
+    // Dust is additive and does not need the current scene color, so draw it
+    // directly into the active HDR target while borrowing its depth texture.
     rlDrawRenderBatchActive();
-    BeginTextureMode(sceneScratch);
-    ClearBackground(BLANK);
-    rlDisableColorBlend();
-    DrawTexturePro(
-            sceneTarget.texture,
-            SourceRectangle(sceneTarget.texture),
-            DestinationRectangle(sceneScratch.texture),
-            Vector2{},
-            0.0f,
-            WHITE);
-    rlDrawRenderBatchActive();
-    rlEnableColorBlend();
+    BeginTextureMode(sceneTarget);
     BeginMode3D(camera);
     // DustFs already writes premultiplied radiance, so accumulate it without
     // applying particle alpha again.

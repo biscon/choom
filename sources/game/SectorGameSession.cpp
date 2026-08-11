@@ -417,7 +417,8 @@ void SectorGameSession::ApplyPlayerPose(SectorSceneRuntime& scene)
             controller.landingDipState.offsetY);
     scene.Renderer().ApplyRendererPose(ApplySectorFpsViewRotationOffset(
             basePose,
-            fpsPlayer.State().firing.cameraRecoil.rotationDegrees));
+            fpsPlayer.State().firing.cameraRecoil.rotationDegrees),
+            false);
     controller.freeflyController.pose = basePose;
 }
 

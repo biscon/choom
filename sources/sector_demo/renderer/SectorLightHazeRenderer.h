@@ -23,6 +23,7 @@ public:
             RenderTexture2D& sceneTarget,
             RenderTexture2D& sceneScratch,
             const SectorTopologyMap& map,
+            SectorTopologyFogSettings::LocalVolumeQuality quality,
             const Camera3D& camera,
             float runtimeSeconds,
             const SectorBakedObjectLightProbeRuntimeData& probes,

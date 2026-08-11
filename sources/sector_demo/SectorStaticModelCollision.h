@@ -25,6 +25,11 @@ struct SectorStaticModelCollider {
     Vector2 halfExtents = {};
     float bottom = 0.0f;
     float top = 0.0f;
+    Vector3 resolvedPosition = {};
+    float resolvedYawRadians = 0.0f;
+    float resolvedRotationXRadians = 0.0f;
+    float resolvedRotationZRadians = 0.0f;
+    float resolvedScale = 0.0f;
     bool resolved = false;
     bool failed = false;
 };
@@ -36,7 +41,7 @@ bool BuildSectorStaticModelCollider(
         float scale,
         SectorStaticModelCollider& outCollider);
 
-void UpdateSectorStaticModelColliderSystem(
+bool UpdateSectorStaticModelColliderSystem(
         engine::World& world,
         engine::AssetManager& assets);
 

@@ -274,10 +274,6 @@ bool SectorEditor::Init(engine::EngineContext& context)
     }
     RequestFpsWeaponAudioAssets(context.assets, weaponRegistry);
     applicationSettingsPath = ASSETS_PATH "config/application_settings.json";
-    if (!LoadFpsApplicationSettings(applicationSettingsPath, applicationSettings, &applicationSettingsWarning)) {
-        TraceLog(LOG_WARNING, "Application settings ignored: %s", applicationSettingsWarning.c_str());
-        applicationSettings = {};
-    }
     RequestPlayerAudioAssets(
             context.assets,
             applicationSettings.playerSounds,
@@ -2026,7 +2022,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
     if (state.mode == SectorEditorMode::Preview3D) {
         if (previewState.controller.previewControlMode == SectorPreviewControlMode::FreeFly) {
             UpdateSectorFreeflyController(previewState.controller.freeflyController, input, dt);
-            sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
+            sceneRuntime.Renderer().ApplyRendererPose(
+                    previewState.controller.freeflyController.pose,
+                    false);
             sceneRuntime.Renderer().UpdateVisibilityDebug(
                     0,
                     0.0f,
@@ -5702,7 +5700,8 @@ void SectorEditor::ApplyGameplayPoseToPreview()
     sceneRuntime.Renderer().ApplyRendererPose(
             ApplySectorFpsViewRotationOffset(
                     basePose,
-                    fpsPlayer.State().firing.cameraRecoil.rotationDegrees));
+                    fpsPlayer.State().firing.cameraRecoil.rotationDegrees),
+            false);
 }
 
 void SectorEditor::TogglePreviewControlMode()
