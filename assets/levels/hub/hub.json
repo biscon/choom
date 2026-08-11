@@ -304,7 +304,7 @@
       "kind": "static_model",
       "staticModel": {
         "modelPath": "assets/models/corkevidence_board.glb",
-        "heightOffsetWorld": 1.0,
+        "heightOffsetWorld": 1.2000000476837158,
         "scale": 2.0
       },
       "position": [
@@ -372,6 +372,82 @@
         81.0
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 23,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/pendant_lamp.glb",
+        "heightOffsetWorld": 2.625,
+        "scale": 1.5
+      },
+      "position": [
+        -36.0,
+        0.0,
+        72.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 24,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/pendant_lamp.glb",
+        "heightOffsetWorld": 2.625,
+        "scale": 1.5
+      },
+      "position": [
+        -36.0,
+        0.0,
+        61.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 25,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/furniture/carpet.glb",
+        "heightOffsetWorld": 0.004999999888241291
+      },
+      "position": [
+        -72.0,
+        0.0,
+        65.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 26,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/industrial_light.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 3.390000104904175,
+        "scale": 1.5
+      },
+      "position": [
+        -96.0,
+        0.0,
+        52.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 27,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/industrial_light.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 3.390000104904175,
+        "scale": 1.5
+      },
+      "position": [
+        -72.0,
+        0.0,
+        52.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -517,23 +593,6 @@
       }
     },
     {
-      "id": 8,
-      "position": [
-        -96.0,
-        20.0,
-        52.0
-      ],
-      "radius": 64.0,
-      "sourceRadius": 2.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 245,
-        "b": 225,
-        "a": 255
-      }
-    },
-    {
       "id": 9,
       "position": [
         -146.0,
@@ -548,6 +607,78 @@
         "g": 255,
         "b": 255,
         "a": 255
+      }
+    },
+    {
+      "id": 10,
+      "position": [
+        -96.0,
+        24.0,
+        52.0
+      ],
+      "radius": 48.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 240,
+        "a": 255
+      },
+      "atmosphere": {
+        "haze": {
+          "extentScale": 0.30000001192092896,
+          "density": 0.10000000149011612,
+          "scatteringTint": {
+            "r": 155,
+            "g": 145,
+            "b": 140,
+            "a": 255
+          },
+          "edgeSoftness": 0.5
+        }
+      }
+    },
+    {
+      "id": 11,
+      "position": [
+        -72.0,
+        24.0,
+        52.0
+      ],
+      "radius": 48.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 240,
+        "a": 255
+      },
+      "atmosphere": {
+        "haze": {
+          "extentScale": 0.30000001192092896,
+          "density": 0.10000000149011612,
+          "scatteringTint": {
+            "r": 155,
+            "g": 145,
+            "b": 135,
+            "a": 255
+          },
+          "edgeSoftness": 0.5
+        },
+        "dust": {
+          "amount": 64,
+          "extentScale": 0.25,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.01600000075995922,
+          "scatteringTint": {
+            "r": 255,
+            "g": 245,
+            "b": 240,
+            "a": 255
+          }
+        }
       }
     }
   ],
@@ -684,27 +815,110 @@
           }
         }
       }
-    }
-  ],
-  "dynamicPointLights": [
+    },
     {
-      "id": 1,
+      "id": 5,
       "position": [
-        -64.0,
-        14.399999618530273,
-        56.0
+        -36.0379638671875,
+        20.793149948120117,
+        60.96747589111328
       ],
-      "radius": 64.0,
-      "intensity": 1.0,
+      "target": [
+        -32.10551071166992,
+        -11.602777481079102,
+        60.96747589111328
+      ],
+      "range": 32.0,
+      "sourceRadius": 1.0,
+      "intensity": 4.0,
       "color": {
         "r": 255,
-        "g": 255,
-        "b": 255,
+        "g": 245,
+        "b": 240,
         "a": 255
       },
-      "enabled": false
+      "innerConeDegrees": 25.0,
+      "atmosphere": {
+        "haze": {
+          "enabled": true,
+          "extentScale": 0.6000000238418579,
+          "scatteringTint": {
+            "r": 255,
+            "g": 245,
+            "b": 230,
+            "a": 255
+          },
+          "edgeSoftness": 0.44999998807907104
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.30000001192092896,
+          "minimumSizeWorld": 0.004000000189989805,
+          "maximumSizeWorld": 0.012000000104308128,
+          "opacity": 0.15000000596046448,
+          "scatteringTint": {
+            "r": 255,
+            "g": 245,
+            "b": 230,
+            "a": 255
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "position": [
+        -36.0,
+        20.698347091674805,
+        72.0
+      ],
+      "target": [
+        -32.06818389892578,
+        -11.697576522827148,
+        72.07078552246094
+      ],
+      "range": 32.0,
+      "sourceRadius": 1.0,
+      "intensity": 4.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 240,
+        "a": 255
+      },
+      "innerConeDegrees": 25.0,
+      "atmosphere": {
+        "haze": {
+          "enabled": true,
+          "extentScale": 0.6000000238418579,
+          "scatteringTint": {
+            "r": 255,
+            "g": 245,
+            "b": 230,
+            "a": 255
+          },
+          "edgeSoftness": 0.44999998807907104,
+          "noiseAmount": 0.550000011920929,
+          "noiseScaleWorld": 1.0
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.30000001192092896,
+          "minimumSizeWorld": 0.004000000189989805,
+          "maximumSizeWorld": 0.01600000075995922,
+          "opacity": 0.15000000596046448,
+          "turbulenceWorld": 0.019999999552965164,
+          "scatteringTint": {
+            "r": 255,
+            "g": 245,
+            "b": 230,
+            "a": 255
+          }
+        }
+      }
     }
   ],
+  "dynamicPointLights": [],
   "dynamicSpotLights": [],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
@@ -775,7 +989,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "94b232c7caf36d96",
+    "sourceHash": "f0f10e1aea6a6a10",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -784,18 +998,18 @@
       ],
       "rgbMax": [
         2.216796875,
-        1.4716796875,
-        1.2138671875
+        1.7001953125,
+        1.6220703125
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 1708
+      "rgbChannelsAboveOne": 1853
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "94b232c7caf36d96",
+      "sourceHash": "f0f10e1aea6a6a10",
       "count": 483,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -815,15 +1029,15 @@
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 2898,
-        "rgbChannelsAboveOne": 28
+        "rgbChannelsAboveOne": 41
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "94b232c7caf36d96",
-      "modelCount": 17,
-      "objectCount": 17,
+      "sourceHash": "f0f10e1aea6a6a10",
+      "modelCount": 19,
+      "objectCount": 22,
       "format": "staticModelUvRemapF32LE"
     }
   },
@@ -8055,7 +8269,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.03999999910593033,
+        "ambientIntensity": 0.029999999329447746,
         "defaultWall": {
           "textureId": "brick_repair_512",
           "uv": {
