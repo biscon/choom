@@ -1103,11 +1103,11 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             }
             case PreviewDebugOverlayTab::Controls:
                 if (context.lightState.spotLightPilot.active) {
-                    addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down. Unlock cursor with F11 to click Apply or Cancel.");
+                    addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down, hold Shift for precision movement. Unlock cursor with F11 to click Apply or Cancel.");
                 } else if (controllerState.previewControlMode == SectorPreviewControlMode::Gameplay) {
                     addWrappedLine("movement: WASD move, Space jump, Shift run, Ctrl toggle crouch, mouse look. F11 unlocks cursor for UI tabs.");
                 } else {
-                    addWrappedLine("movement: WASD move, mouse look, Space/Ctrl up/down. F11 unlocks cursor for UI tabs.");
+                    addWrappedLine("movement: WASD move, mouse look, Space/Ctrl up/down, hold Shift for precision movement. F11 unlocks cursor for UI tabs.");
                 }
                 addWrappedLine("hotkeys: left mouse fire, H holster/equip viewmodel, F1 AO, F2 hide/show 3D UI, F3 control mode, F4 dynamic lights, F10 borderless window, Tab/Esc return to 2D.");
                 break;

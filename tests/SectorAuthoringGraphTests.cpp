@@ -6822,6 +6822,15 @@ void TestAudioScannerFindsSupportedFilesRecursively()
                   "ambience.ogg", "doors/close.MP3", "doors/open.wav"}),
           "audio scan recursively returns sorted supported files relative to assets/audio");
     Check(message.empty(), "audio scan leaves message empty when candidates are found");
+    WriteTextFile(assetsRoot / "audio" / "doors" / "latch.ogg", "fixture");
+    const std::vector<std::string> refreshedSounds =
+            game::ScanAssetAudioFiles(assetsRoot, message);
+    Check(refreshedSounds == std::vector<std::string>({
+                  "ambience.ogg",
+                  "doors/close.MP3",
+                  "doors/latch.ogg",
+                  "doors/open.wav"}),
+          "repeated add sound scans discover files copied between dialog openings");
 
     std::error_code ec;
     std::filesystem::remove_all(assetsRoot, ec);
@@ -11262,13 +11271,22 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
                   && picker.SelectedModelPath() == expected[2],
           "static model picker selection returns the chosen asset-relative path");
     picker.Open(expected[0]);
-    Check(state.open && state.selectedModelIndex == 0,
-          "opening an already-scanned picker preselects the supplied current path");
+    Check(state.open && !state.scanned && state.selectedModelIndex == -1,
+          "opening an already-scanned picker invalidates its cached filesystem scan");
+    Check(picker.RefreshFromRoot(root, "assets/models")
+                  && state.scanned
+                  && state.selectedModelIndex == 0,
+          "the opening refresh preselects the supplied current model path");
+    picker.Close();
     WriteTextFile(root / "nested" / "aardvark.glb", "");
+    picker.Open(expected[1]);
+    Check(!state.scanned && state.selectedModelIndex == -1,
+          "reopening the model picker invalidates the previous opening scan");
     Check(picker.RefreshFromRoot(root, "assets/models")
                   && state.modelPaths.size() == 4
-                  && state.modelPaths[1] == "assets/models/nested/aardvark.glb",
-          "static model picker refresh discovers newly added nested models in order");
+                  && state.modelPaths[1] == "assets/models/nested/aardvark.glb"
+                  && picker.SelectedModelPath() == expected[1],
+          "model picker reopening discovers new models and restores the current selection");
     picker.Close();
     Check(!state.open, "static model picker closes on cancel");
 
@@ -11302,6 +11320,16 @@ void TestAddMapTextureScanFiltersAutomaticNormalMaps()
           "add texture scan filters automatic _normal companions and sorts base textures");
     Check(message.empty(),
           "add texture scan reports no warning when importable base textures exist");
+    WriteTextFile(root / "images" / "new_floor.png", "");
+    const std::vector<std::string> refreshedPaths =
+            game::ScanAssetImagePngs(root, message);
+    const std::vector<std::string> refreshedExpected{
+            "assets/images/nested/metal.PNG",
+            "assets/images/nested/normal_warning.png",
+            "assets/images/new_floor.png",
+            "assets/images/stone.png"};
+    Check(refreshedPaths == refreshedExpected,
+          "repeated add texture scans discover files copied between dialog openings");
     Check(game::EditorAssetPathDisplayLabel(
                   paths[0],
                   "assets/images/") == "nested/metal.PNG"

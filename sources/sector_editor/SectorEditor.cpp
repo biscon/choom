@@ -68,6 +68,7 @@ namespace game {
 namespace {
 
 constexpr float SectorEditorPanelScrollPaddingPx = 8.0f;
+constexpr float SectorEditorFreeflyPrecisionMoveScale = 0.1f;
 
 SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
         SectorEditorUiState& uiState,
@@ -2021,7 +2022,13 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
 
     if (state.mode == SectorEditorMode::Preview3D) {
         if (previewState.controller.previewControlMode == SectorPreviewControlMode::FreeFly) {
-            UpdateSectorFreeflyController(previewState.controller.freeflyController, input, dt);
+            const bool precisionMove = input.IsKeyDown(KEY_LEFT_SHIFT)
+                    || input.IsKeyDown(KEY_RIGHT_SHIFT);
+            UpdateSectorFreeflyController(
+                    previewState.controller.freeflyController,
+                    input,
+                    dt,
+                    precisionMove ? SectorEditorFreeflyPrecisionMoveScale : 1.0f);
             sceneRuntime.Renderer().ApplyRendererPose(
                     previewState.controller.freeflyController.pose,
                     false);

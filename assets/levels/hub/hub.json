@@ -289,6 +289,7 @@
       "kind": "static_model",
       "staticModel": {
         "modelPath": "assets/models/office_chair.glb",
+        "scale": 1.149999976158142,
         "collision": true
       },
       "position": [
@@ -335,11 +336,42 @@
         "scale": 1.2000000476837158
       },
       "position": [
-        -76.0,
+        -92.0,
         0.0,
         80.0
       ],
       "yawDegrees": -90.0
+    },
+    {
+      "id": 21,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/desk_lamp_low_poly.glb",
+        "heightOffsetWorld": 0.9700000286102295,
+        "scale": 1.5
+      },
+      "position": [
+        -36.0,
+        0.0,
+        38.0
+      ],
+      "yawDegrees": -65.0
+    },
+    {
+      "id": 22,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/low_poly_sofa.glb",
+        "heightOffsetWorld": 0.25,
+        "scale": 1.5,
+        "collision": true
+      },
+      "position": [
+        -72.0,
+        0.0,
+        81.0
+      ],
+      "yawDegrees": 90.0
     }
   ],
   "staticLights": [
@@ -487,13 +519,13 @@
     {
       "id": 8,
       "position": [
-        -76.0,
+        -96.0,
         20.0,
         52.0
       ],
       "radius": 64.0,
       "sourceRadius": 2.0,
-      "intensity": 3.0,
+      "intensity": 1.0,
       "color": {
         "r": 255,
         "g": 245,
@@ -602,6 +634,56 @@
           }
         }
       }
+    },
+    {
+      "id": 4,
+      "position": [
+        -37.415592193603516,
+        11.870372772216797,
+        38.614540100097656
+      ],
+      "target": [
+        -58.111942291259766,
+        -13.077810287475586,
+        42.384117126464844
+      ],
+      "range": 32.0,
+      "sourceRadius": 0.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 160,
+        "a": 255
+      },
+      "innerConeDegrees": 35.0,
+      "outerConeDegrees": 45.0,
+      "atmosphere": {
+        "haze": {
+          "enabled": true,
+          "extentScale": 0.30000001192092896,
+          "density": 0.05000000074505806,
+          "scatteringTint": {
+            "r": 255,
+            "g": 245,
+            "b": 90,
+            "a": 255
+          },
+          "edgeSoftness": 0.5
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.20000000298023224,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.009999999776482582,
+          "scatteringTint": {
+            "r": 255,
+            "g": 245,
+            "b": 200,
+            "a": 255
+          }
+        }
+      }
     }
   ],
   "dynamicPointLights": [
@@ -693,7 +775,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "043d3180f6680a14",
+    "sourceHash": "94b232c7caf36d96",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -701,19 +783,19 @@
         0.0
       ],
       "rgbMax": [
-        2.2890625,
-        2.08984375,
-        1.72265625
+        2.216796875,
+        1.4716796875,
+        1.2138671875
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 3797
+      "rgbChannelsAboveOne": 1708
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "043d3180f6680a14",
+      "sourceHash": "94b232c7caf36d96",
       "count": 483,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -733,15 +815,15 @@
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 2898,
-        "rgbChannelsAboveOne": 130
+        "rgbChannelsAboveOne": 28
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "043d3180f6680a14",
-      "modelCount": 15,
-      "objectCount": 15,
+      "sourceHash": "94b232c7caf36d96",
+      "modelCount": 17,
+      "objectCount": 17,
       "format": "staticModelUvRemapF32LE"
     }
   },

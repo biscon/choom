@@ -54,7 +54,8 @@ void SetSectorFreeflyMouseLookEnabled(
 void UpdateSectorFreeflyController(
         SectorFreeflyControllerState& state,
         engine::Input& input,
-        float dt)
+        float dt,
+        float moveSpeedScale)
 {
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
@@ -111,7 +112,7 @@ void UpdateSectorFreeflyController(
             movement = Vector3Normalize(movement);
             state.pose.position = Vector3Add(
                     state.pose.position,
-                    Vector3Scale(movement, MoveSpeed * dt));
+                    Vector3Scale(movement, MoveSpeed * moveSpeedScale * dt));
         }
     }
 }

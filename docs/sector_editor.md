@@ -499,7 +499,8 @@ not require saving first, but unsaved changes remain unsaved until `Save`.
 - Overlay tabs and controls are mouse-clickable when the cursor is unlocked with
   `F11`; locked mouse-look mode keeps normal 3D input focused on the preview.
 - In `FreeFly` mouse-look mode: `WASD` move, mouse looks, `Space` moves up,
-  `Ctrl` moves down.
+  `Ctrl` moves down, and holding `Shift` reduces movement speed by 10x for
+  precise positioning.
 - In `Gameplay` mouse-look mode: `WASD` moves horizontally relative to yaw,
   `Space` jumps, mouse looks, and `Shift` uses run speed. Gameplay mode follows
   the current sector floor, applies gravity while airborne, lands on floors,
