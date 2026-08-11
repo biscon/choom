@@ -98,6 +98,14 @@
     "wood_beam_512x128": {
       "path": "assets/images/hub/wood_beam_512x128.png",
       "filter": "anisotropic8x"
+    },
+    "worn_gray_metal_step_512": {
+      "path": "assets/images/worn_gray_metal_step_512.png",
+      "filter": "anisotropic8x"
+    },
+    "worn_white_ceiling_512": {
+      "path": "assets/images/ceilings/worn_white_ceiling_512.png",
+      "filter": "anisotropic8x"
     }
   },
   "runtimeObjects": [
@@ -229,6 +237,109 @@
         105.0
       ],
       "yawDegrees": 180.0
+    },
+    {
+      "id": 13,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/retro_lowpoly_bed.glb",
+        "heightOffsetWorld": 0.2639999985694885,
+        "collision": true
+      },
+      "position": [
+        -105.0,
+        0.0,
+        71.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 15,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/metal_desk.glb",
+        "heightOffsetWorld": 0.5,
+        "collision": true
+      },
+      "position": [
+        -37.0,
+        0.0,
+        43.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 16,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/low_poly_retro_pc.glb",
+        "heightOffsetWorld": 1.0,
+        "scale": 0.30000001192092896,
+        "collision": true
+      },
+      "position": [
+        -39.0,
+        0.0,
+        43.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 17,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/office_chair.glb",
+        "collision": true
+      },
+      "position": [
+        -46.0,
+        0.0,
+        43.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 18,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/corkevidence_board.glb",
+        "heightOffsetWorld": 1.0,
+        "scale": 2.0
+      },
+      "position": [
+        -32.400001525878906,
+        0.0,
+        67.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 19,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/storage_shelves.glb",
+        "collision": true
+      },
+      "position": [
+        -72.0,
+        0.0,
+        27.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 20,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/bookshelf_short_lowpoly.glb",
+        "scale": 1.2000000476837158
+      },
+      "position": [
+        -76.0,
+        0.0,
+        80.0
+      ],
+      "yawDegrees": -90.0
     }
   ],
   "staticLights": [
@@ -305,7 +416,7 @@
       ],
       "radius": 42.0,
       "sourceRadius": 2.0,
-      "intensity": 1.25,
+      "intensity": 1.75,
       "color": {
         "r": 255,
         "g": 225,
@@ -376,13 +487,30 @@
     {
       "id": 8,
       "position": [
-        -72.0,
+        -76.0,
         20.0,
         52.0
       ],
-      "radius": 48.0,
+      "radius": 64.0,
       "sourceRadius": 2.0,
-      "intensity": 1.7000000476837158,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 225,
+        "a": 255
+      }
+    },
+    {
+      "id": 9,
+      "position": [
+        -146.0,
+        17.0,
+        96.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.0,
       "color": {
         "r": 255,
         "g": 255,
@@ -476,7 +604,25 @@
       }
     }
   ],
-  "dynamicPointLights": [],
+  "dynamicPointLights": [
+    {
+      "id": 1,
+      "position": [
+        -64.0,
+        14.399999618530273,
+        56.0
+      ],
+      "radius": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "enabled": false
+    }
+  ],
   "dynamicSpotLights": [],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
@@ -547,7 +693,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "380953ff5e34422f",
+    "sourceHash": "043d3180f6680a14",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -555,20 +701,20 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.4716796875,
-        1.2138671875
+        2.2890625,
+        2.08984375,
+        1.72265625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 1824
+      "rgbChannelsAboveOne": 3797
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "380953ff5e34422f",
-      "count": 523,
+      "sourceHash": "043d3180f6680a14",
+      "count": 483,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -586,18 +732,21 @@
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 3138,
-        "rgbChannelsAboveOne": 42
+        "sampleCount": 2898,
+        "rgbChannelsAboveOne": 130
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "380953ff5e34422f",
-      "modelCount": 8,
-      "objectCount": 8,
+      "sourceHash": "043d3180f6680a14",
+      "modelCount": 15,
+      "objectCount": 15,
       "format": "staticModelUvRemapF32LE"
     }
+  },
+  "editorSettings": {
+    "gridSize": 1
   },
   "authoringGraph": {
     "vertices": [
@@ -1020,6 +1169,26 @@
         "id": 96,
         "x": -640,
         "y": 1328
+      },
+      {
+        "id": 97,
+        "x": -2496,
+        "y": 1360
+      },
+      {
+        "id": 98,
+        "x": -2496,
+        "y": 1728
+      },
+      {
+        "id": 99,
+        "x": -2496,
+        "y": 1328
+      },
+      {
+        "id": 100,
+        "x": -2496,
+        "y": 1760
       }
     ],
     "lines": [
@@ -1335,11 +1504,6 @@
         "endVertexId": 58
       },
       {
-        "id": 93,
-        "startVertexId": 58,
-        "endVertexId": 66
-      },
-      {
         "id": 96,
         "startVertexId": 59,
         "endVertexId": 36
@@ -1490,16 +1654,6 @@
         "endVertexId": 88
       },
       {
-        "id": 160,
-        "startVertexId": 67,
-        "endVertexId": 87
-      },
-      {
-        "id": 162,
-        "startVertexId": 88,
-        "endVertexId": 70
-      },
-      {
         "id": 163,
         "startVertexId": 89,
         "endVertexId": 90
@@ -1530,11 +1684,6 @@
         "endVertexId": 89
       },
       {
-        "id": 169,
-        "startVertexId": 65,
-        "endVertexId": 95
-      },
-      {
         "id": 171,
         "startVertexId": 89,
         "endVertexId": 95
@@ -1553,6 +1702,61 @@
         "id": 174,
         "startVertexId": 94,
         "endVertexId": 96
+      },
+      {
+        "id": 175,
+        "startVertexId": 67,
+        "endVertexId": 97
+      },
+      {
+        "id": 176,
+        "startVertexId": 97,
+        "endVertexId": 87
+      },
+      {
+        "id": 177,
+        "startVertexId": 88,
+        "endVertexId": 98
+      },
+      {
+        "id": 178,
+        "startVertexId": 98,
+        "endVertexId": 70
+      },
+      {
+        "id": 179,
+        "startVertexId": 97,
+        "endVertexId": 98
+      },
+      {
+        "id": 180,
+        "startVertexId": 65,
+        "endVertexId": 99
+      },
+      {
+        "id": 181,
+        "startVertexId": 99,
+        "endVertexId": 95
+      },
+      {
+        "id": 182,
+        "startVertexId": 97,
+        "endVertexId": 99
+      },
+      {
+        "id": 183,
+        "startVertexId": 58,
+        "endVertexId": 100
+      },
+      {
+        "id": 184,
+        "startVertexId": 100,
+        "endVertexId": 66
+      },
+      {
+        "id": 185,
+        "startVertexId": 98,
+        "endVertexId": 100
       }
     ],
     "lineSides": [
@@ -3673,49 +3877,6 @@
         }
       },
       {
-        "lineId": 93,
-        "side": "front",
-        "wall": {
-          "textureId": "fortress_stone_mossy_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -1.6875
-            ]
-          }
-        },
-        "lower": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 96,
         "side": "front",
         "wall": {
@@ -3848,7 +4009,7 @@
         "lineId": 112,
         "side": "back",
         "wall": {
-          "textureId": "fortress_stone_512",
+          "textureId": "dirty_gray_concrete_wall_512",
           "uv": {
             "scale": [
               1.0,
@@ -3856,7 +4017,7 @@
             ],
             "offset": [
               0.0,
-              0.0
+              -0.0
             ]
           }
         },
@@ -4963,92 +5124,6 @@
         }
       },
       {
-        "lineId": 160,
-        "side": "front",
-        "wall": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "lower": {
-          "textureId": "dirty_gray_concrete_wall_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -0.0
-            ]
-          }
-        },
-        "upper": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
-        "lineId": 162,
-        "side": "front",
-        "wall": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "lower": {
-          "textureId": "dirty_gray_concrete_wall_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -0.0
-            ]
-          }
-        },
-        "upper": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 163,
         "side": "front",
         "wall": {
@@ -5307,49 +5382,6 @@
         }
       },
       {
-        "lineId": 169,
-        "side": "front",
-        "wall": {
-          "textureId": "fortress_stone_mossy_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -1.6875
-            ]
-          }
-        },
-        "lower": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 171,
         "side": "back",
         "wall": {
@@ -5504,6 +5536,565 @@
             "offset": [
               0.0,
               0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 175,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 175,
+        "side": "back",
+        "wall": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 176,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 177,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 178,
+        "side": "front",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              -0.25,
+              -0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 178,
+        "side": "back",
+        "wall": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 179,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "step_01_512",
+          "uv": {
+            "scale": [
+              0.695652186870575,
+              8.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 180,
+        "side": "front",
+        "wall": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 181,
+        "side": "front",
+        "wall": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 182,
+        "side": "front",
+        "wall": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 183,
+        "side": "front",
+        "wall": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 184,
+        "side": "front",
+        "wall": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 185,
+        "side": "back",
+        "wall": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "fortress_stone_mossy_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -1.6875
             ]
           }
         },
@@ -6661,7 +7252,7 @@
         "y": 1534,
         "floorZ": -24.0,
         "ceilingZ": 27.0,
-        "floorTextureId": "concrete_floor1",
+        "floorTextureId": "worn_gray_metal_step_512",
         "ceilingTextureId": "concrete_floor1",
         "floorUv": {
           "scale": [
@@ -6689,7 +7280,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -6728,7 +7319,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 16,
@@ -6737,7 +7329,7 @@
         "y": 1438,
         "floorZ": -3.0,
         "ceilingZ": 27.0,
-        "floorTextureId": "concrete_floor1",
+        "floorTextureId": "worn_gray_metal_step_512",
         "ceilingTextureId": "concrete_floor1",
         "floorUv": {
           "scale": [
@@ -6765,7 +7357,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -6804,7 +7396,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 17,
@@ -6813,7 +7406,7 @@
         "y": 1470,
         "floorZ": -6.0,
         "ceilingZ": 27.0,
-        "floorTextureId": "concrete_floor1",
+        "floorTextureId": "worn_gray_metal_step_512",
         "ceilingTextureId": "concrete_floor1",
         "floorUv": {
           "scale": [
@@ -6841,7 +7434,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -6880,7 +7473,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 18,
@@ -6889,7 +7483,7 @@
         "y": 1470,
         "floorZ": -9.0,
         "ceilingZ": 27.0,
-        "floorTextureId": "concrete_floor1",
+        "floorTextureId": "worn_gray_metal_step_512",
         "ceilingTextureId": "concrete_floor1",
         "floorUv": {
           "scale": [
@@ -6917,7 +7511,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -6956,7 +7550,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 19,
@@ -6965,7 +7560,7 @@
         "y": 1470,
         "floorZ": -12.0,
         "ceilingZ": 27.0,
-        "floorTextureId": "concrete_floor1",
+        "floorTextureId": "worn_gray_metal_step_512",
         "ceilingTextureId": "concrete_floor1",
         "floorUv": {
           "scale": [
@@ -6993,7 +7588,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -7032,7 +7627,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 20,
@@ -7041,7 +7637,7 @@
         "y": 1470,
         "floorZ": -15.0,
         "ceilingZ": 27.0,
-        "floorTextureId": "concrete_floor1",
+        "floorTextureId": "worn_gray_metal_step_512",
         "ceilingTextureId": "concrete_floor1",
         "floorUv": {
           "scale": [
@@ -7069,7 +7665,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -7108,7 +7704,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 21,
@@ -7117,7 +7714,7 @@
         "y": 1470,
         "floorZ": -18.0,
         "ceilingZ": 27.0,
-        "floorTextureId": "concrete_floor1",
+        "floorTextureId": "worn_gray_metal_step_512",
         "ceilingTextureId": "concrete_floor1",
         "floorUv": {
           "scale": [
@@ -7145,7 +7742,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -7184,7 +7781,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 22,
@@ -7193,7 +7791,7 @@
         "y": 1470,
         "floorZ": -21.0,
         "ceilingZ": 27.0,
-        "floorTextureId": "concrete_floor1",
+        "floorTextureId": "worn_gray_metal_step_512",
         "ceilingTextureId": "concrete_floor1",
         "floorUv": {
           "scale": [
@@ -7221,7 +7819,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -7260,7 +7858,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "LowMetal_Mono"
       },
       {
         "id": 23,
@@ -7269,7 +7868,7 @@
         "y": 1534,
         "floorZ": -27.0,
         "ceilingZ": 27.0,
-        "floorTextureId": "concrete_floor1",
+        "floorTextureId": "large_industrial_tiles_512",
         "ceilingTextureId": "concrete_floor1",
         "floorUv": {
           "scale": [
@@ -7297,7 +7896,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -7336,7 +7935,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "PavementTiles_Mono"
       },
       {
         "id": 24,
@@ -7346,7 +7946,7 @@
         "floorZ": 0.0,
         "ceilingZ": 27.0,
         "floorTextureId": "large_industrial_tiles_512",
-        "ceilingTextureId": "concrete_floor1",
+        "ceilingTextureId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
             1.0,
@@ -7412,7 +8012,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "PavementTiles_Mono"
       },
       {
         "id": 25,
@@ -7423,6 +8024,235 @@
         "ceilingZ": 22.0,
         "floorTextureId": "concrete_floor1",
         "ceilingTextureId": "concrete_floor1",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.03999999910593033,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 26,
+        "name": "Sector 26",
+        "x": -2529,
+        "y": 1392,
+        "floorZ": -25.0,
+        "ceilingZ": 0.0,
+        "floorTextureId": "worn_gray_metal_step_512",
+        "ceilingTextureId": "dirty_gray_concrete_wall_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.03999999910593033,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "footstepSet": "LowMetal_Mono"
+      },
+      {
+        "id": 27,
+        "name": "Sector 27",
+        "x": -2545,
+        "y": 1342,
+        "floorZ": 27.0,
+        "ceilingZ": 28.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.03999999910593033,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 28,
+        "name": "Sector 28",
+        "x": -2545,
+        "y": 1742,
+        "floorZ": 27.0,
+        "ceilingZ": 28.0,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
         "floorUv": {
           "scale": [
             1.0,

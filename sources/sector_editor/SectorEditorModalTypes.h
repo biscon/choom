@@ -80,6 +80,7 @@ struct AddMapTextureState {
     std::string scanMessage;
     engine::UIScrollState scroll;
     std::vector<std::string> paths;
+    std::vector<std::string> optionLabelStorage;
     std::vector<const char*> optionLabels;
     int selectedPathIndex = -1;
     char textureIdBuffer[96] = {};

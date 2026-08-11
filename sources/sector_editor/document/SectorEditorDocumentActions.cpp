@@ -139,7 +139,8 @@ SectorEditorDocumentFormat DetectSectorEditorDocumentFormat(
 SectorAuthoringDocument BuildSectorAuthoringDocument(
         const SectorAuthoringGraph& authoringGraph,
         const SectorTopologyMap& topologyMap,
-        const SectorAuthoringDerivationResult& authoringDerivation)
+        const SectorAuthoringDerivationResult& authoringDerivation,
+        const SectorAuthoringEditorSettings& editorSettings)
 {
     SectorAuthoringDocument document;
     document.graph = authoringGraph;
@@ -149,6 +150,7 @@ SectorAuthoringDocument BuildSectorAuthoringDocument(
     document.mapData.sideDefs.clear();
     document.mapData.sectors.clear();
     document.derivation = authoringDerivation;
+    document.editorSettings = editorSettings;
     return document;
 }
 
@@ -326,6 +328,7 @@ bool LoadSectorEditorDocumentFromAsset(
         outDocument.format = format;
         outDocument.mapData = std::move(document.mapData);
         outDocument.authoringGraph = std::move(document.graph);
+        outDocument.editorSettings = document.editorSettings;
         errorMessage.clear();
         return true;
     }
@@ -397,6 +400,7 @@ bool SaveSectorEditorAuthoringDocument(
         const SectorAuthoringGraph& authoringGraph,
         const SectorTopologyMap& topologyMap,
         const SectorAuthoringDerivationResult& authoringDerivation,
+        const SectorAuthoringEditorSettings& editorSettings,
         std::string& errorMessage)
 {
     if (!HasAuthoringGraphData(authoringGraph)) {
@@ -405,7 +409,11 @@ bool SaveSectorEditorAuthoringDocument(
     }
 
     const SectorAuthoringDocument document =
-            BuildSectorAuthoringDocument(authoringGraph, topologyMap, authoringDerivation);
+            BuildSectorAuthoringDocument(
+                    authoringGraph,
+                    topologyMap,
+                    authoringDerivation,
+                    editorSettings);
 
     std::string saveError;
     if (!SaveSectorAuthoringDocument(paths.jsonFilePath.string().c_str(), document, &saveError)) {
@@ -423,6 +431,7 @@ bool SaveSectorEditorAuthoringDocument(
         const SectorEditorAuthoringDocumentState& authoring,
         const SectorEditorDocumentMapState& map,
         const SectorEditorDerivationState& derivation,
+        const SectorAuthoringEditorSettings& editorSettings,
         std::string& errorMessage)
 {
     return SaveSectorEditorAuthoringDocument(
@@ -430,6 +439,7 @@ bool SaveSectorEditorAuthoringDocument(
             authoring.authoringGraph,
             map.topologyMap,
             derivation.authoringDerivation,
+            editorSettings,
             errorMessage);
 }
 

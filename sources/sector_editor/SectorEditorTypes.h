@@ -13,6 +13,7 @@
 #include "sector_demo/SectorTopologyCreation.h"
 #include "sector_demo/SectorTopologyEdit.h"
 #include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorTopologySerialization.h"
 
 #include <raylib.h>
 
@@ -75,7 +76,7 @@ struct SectorEditorState {
 
     Vector2 viewCenter = {0.0f, 0.0f};
     float viewZoom = 48.0f;
-    int gridSize = 8;
+    int gridSize = SectorAuthoringEditorGridSizeDefault;
 
     Vector2 snappedMouseMap = {0.0f, 0.0f};
     Vector2 rawMouseMap = {0.0f, 0.0f};

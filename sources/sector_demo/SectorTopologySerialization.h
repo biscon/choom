@@ -7,10 +7,19 @@
 
 namespace game {
 
+inline constexpr int SectorAuthoringEditorGridSizeDefault = 8;
+inline constexpr int SectorAuthoringEditorGridSizeMin = 1;
+inline constexpr int SectorAuthoringEditorGridSizeMax = 64;
+
+struct SectorAuthoringEditorSettings {
+    int gridSize = SectorAuthoringEditorGridSizeDefault;
+};
+
 struct SectorAuthoringDocument {
     SectorAuthoringGraph graph;
     SectorTopologyMap mapData;
     SectorAuthoringDerivationResult derivation;
+    SectorAuthoringEditorSettings editorSettings;
 };
 
 bool LoadSectorTopologyMap(

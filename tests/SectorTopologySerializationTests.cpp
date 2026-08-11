@@ -4084,6 +4084,55 @@ void TestFootstepSetRoundTripAndDefaults()
           "authoring face footstep override derives into runtime topology");
 }
 
+void TestAuthoringEditorSettingsRoundTripAndValidation()
+{
+    game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(MakeSquare());
+    const Json defaultSaved = Json::parse(SaveAuthoringText(document));
+    Check(!defaultSaved.contains("editorSettings"),
+          "default authoring editor settings are omitted");
+
+    game::SectorAuthoringDocument loaded;
+    std::string error;
+    Check(LoadAuthoringText(defaultSaved.dump(), loaded, error)
+                  && loaded.editorSettings.gridSize
+                             == game::SectorAuthoringEditorGridSizeDefault,
+          "missing authoring editor settings use the default grid size");
+
+    document.editorSettings.gridSize = 24;
+    const Json saved = Json::parse(SaveAuthoringText(document));
+    Check(saved["editorSettings"]["gridSize"] == 24,
+          "non-default authoring grid size serializes");
+    Check(LoadAuthoringText(saved.dump(), loaded, error)
+                  && loaded.editorSettings.gridSize == 24,
+          "authoring grid size round-trips");
+
+    Json belowRange = saved;
+    belowRange["editorSettings"]["gridSize"] = 0;
+    Check(LoadAuthoringText(belowRange.dump(), loaded, error)
+                  && loaded.editorSettings.gridSize
+                             == game::SectorAuthoringEditorGridSizeMin,
+          "authoring grid size clamps to the supported minimum");
+
+    Json aboveRange = saved;
+    aboveRange["editorSettings"]["gridSize"] = 1000;
+    Check(LoadAuthoringText(aboveRange.dump(), loaded, error)
+                  && loaded.editorSettings.gridSize
+                             == game::SectorAuthoringEditorGridSizeMax,
+          "authoring grid size clamps to the supported maximum");
+
+    Json invalidGridSize = saved;
+    invalidGridSize["editorSettings"]["gridSize"] = "large";
+    Check(!LoadAuthoringText(invalidGridSize.dump(), loaded, error)
+                  && !error.empty(),
+          "non-integer authoring grid size is rejected");
+
+    Json invalidSettings = saved;
+    invalidSettings["editorSettings"] = Json::array();
+    Check(!LoadAuthoringText(invalidSettings.dump(), loaded, error)
+                  && !error.empty(),
+          "non-object authoring editor settings are rejected");
+}
+
 } // namespace
 
 int main()
@@ -4131,6 +4180,7 @@ int main()
     TestGraphNativeLegacyImportPathStillWorks();
     TestLevelMarkerRoundTripAndEntryResolution();
     TestFootstepSetRoundTripAndDefaults();
+    TestAuthoringEditorSettingsRoundTripAndValidation();
     TestFileApi();
 
     if (failures != 0) {

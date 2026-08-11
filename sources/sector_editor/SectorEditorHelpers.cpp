@@ -1,6 +1,7 @@
 #include "sector_editor/SectorEditorHelpers.h"
 
 #include "sector_demo/SectorColor.h"
+#include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
 #include "util/json.hpp"
@@ -126,6 +127,17 @@ bool StartsWith(const std::string& value, const char* prefix)
 {
     const std::string prefixString(prefix);
     return value.compare(0, prefixString.size(), prefixString) == 0;
+}
+
+std::string EditorAssetPathDisplayLabel(
+        const std::string& assetPath,
+        const std::string& directoryPrefix)
+{
+    if (!directoryPrefix.empty()
+            && assetPath.compare(0, directoryPrefix.size(), directoryPrefix) == 0) {
+        return assetPath.substr(directoryPrefix.size());
+    }
+    return assetPath;
 }
 
 std::string ResolveEditorAssetPath(const std::string& path)
@@ -263,11 +275,18 @@ bool ReadSpriteMetadataJson(
 
 std::vector<std::string> ScanAssetImagePngs(std::string& message)
 {
+    return ScanAssetImagePngs(std::filesystem::path(ASSETS_PATH), message);
+}
+
+std::vector<std::string> ScanAssetImagePngs(
+        const std::filesystem::path& assetsRoot,
+        std::string& message)
+{
     std::vector<std::string> paths;
     message.clear();
 
-    const std::filesystem::path assetsRoot = std::filesystem::path(ASSETS_PATH);
-    const std::filesystem::path imagesRoot = assetsRoot / "images";
+    const std::filesystem::path normalizedAssetsRoot = assetsRoot.lexically_normal();
+    const std::filesystem::path imagesRoot = normalizedAssetsRoot / "images";
     std::error_code ec;
     if (!std::filesystem::exists(imagesRoot, ec) || !std::filesystem::is_directory(imagesRoot, ec)) {
         message = "assets/images was not found";
@@ -292,8 +311,14 @@ std::vector<std::string> ScanAssetImagePngs(std::string& message)
             ec.clear();
             continue;
         }
+        if (IsSectorTextureNormalMapPath(entry.path().filename().string())) {
+            continue;
+        }
 
-        std::filesystem::path relativePath = std::filesystem::relative(entry.path(), assetsRoot, ec);
+        std::filesystem::path relativePath = std::filesystem::relative(
+                entry.path(),
+                normalizedAssetsRoot,
+                ec);
         if (ec) {
             ec.clear();
             continue;
@@ -303,7 +328,7 @@ std::vector<std::string> ScanAssetImagePngs(std::string& message)
 
     std::sort(paths.begin(), paths.end());
     if (paths.empty() && message.empty()) {
-        message = "No PNG files found under assets/images";
+        message = "No importable PNG files found under assets/images";
     }
     return paths;
 }

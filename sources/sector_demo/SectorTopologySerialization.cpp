@@ -398,6 +398,39 @@ int ReadOptionalClampedInt(
     return std::clamp(value, minValue, maxValue);
 }
 
+SectorAuthoringEditorSettings ReadAuthoringEditorSettings(const Json& root)
+{
+    SectorAuthoringEditorSettings settings;
+    const auto settingsIt = root.find("editorSettings");
+    if (settingsIt == root.end()) {
+        return settings;
+    }
+    if (!settingsIt->is_object()) {
+        Fail("root.editorSettings must be an object");
+    }
+    settings.gridSize = ReadOptionalClampedInt(
+            *settingsIt,
+            "gridSize",
+            "root.editorSettings",
+            settings.gridSize,
+            SectorAuthoringEditorGridSizeMin,
+            SectorAuthoringEditorGridSizeMax);
+    return settings;
+}
+
+void WriteAuthoringEditorSettings(
+        Json& root,
+        const SectorAuthoringEditorSettings& source)
+{
+    const int gridSize = std::clamp(
+            source.gridSize,
+            SectorAuthoringEditorGridSizeMin,
+            SectorAuthoringEditorGridSizeMax);
+    if (gridSize != SectorAuthoringEditorGridSizeDefault) {
+        root["editorSettings"] = Json{{"gridSize", gridSize}};
+    }
+}
+
 float ReadOptionalClampedFloat(
         const Json& object,
         const char* field,
@@ -3124,6 +3157,7 @@ SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
     }
 
     SectorAuthoringDocument document;
+    document.editorSettings = ReadAuthoringEditorSettings(root);
     ReadTextures(root, document.mapData);
     ReadMapLevelFields(root, document.mapData, true);
     ValidateAuthoringMapData(document.mapData);
@@ -3409,6 +3443,7 @@ Json SerializeAuthoringDocument(const SectorAuthoringDocument& document)
     root["coordSubdivisions"] = SectorCoordSubdivisions;
     WriteTextureFields(root, document.mapData);
     WriteMapLevelFields(root, document.mapData, true);
+    WriteAuthoringEditorSettings(root, document.editorSettings);
     root["authoringGraph"] = WriteAuthoringGraph(document.graph);
     return root;
 }

@@ -642,7 +642,7 @@ void SectorEditor::RenderUI(
         if (state.previewSettingsModal.open) {
             DrawPreviewSettingsModal(ui, config, input, assets, font);
         }
-        DrawTexturePickerModal(ui, config, input, assets, font);
+        DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
         DrawSoundPickerModal(ui, config, input, font);
         DrawFootstepPickerModal(ui, config, input, assets, font);
         DrawSpritePickerModal(ui, config, input, assets, font);
@@ -707,7 +707,7 @@ void SectorEditor::RenderUI(
     }
     if (state.previewSettingsModal.open) {
         DrawPreviewSettingsModal(ui, config, input, assets, font);
-        DrawTexturePickerModal(ui, config, input, assets, font);
+        DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -725,7 +725,7 @@ void SectorEditor::RenderUI(
         return;
     }
     if (state.texturePicker.open) {
-        DrawTexturePickerModal(ui, config, input, assets, font);
+        DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -761,7 +761,7 @@ void SectorEditor::RenderUI(
     DrawSetAllModal(ui, config, input, assets, font);
     DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawAddMapSoundModal(ui, config, input, font);
-    DrawTexturePickerModal(ui, config, input, assets, font);
+    DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
     DrawSoundPickerModal(ui, config, input, font);
     DrawFootstepPickerModal(ui, config, input, assets, font);
     DrawSpritePickerModal(ui, config, input, assets, font);
@@ -4529,7 +4529,7 @@ void SectorEditor::DrawToolsPanel(
 
     const float gridLabelW = 64.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, gridLabelW, rowH}, font, "Grid", engine::UITextJustify::Left, config.mutedTextColor);
-    engine::IntInput(
+    const engine::UINumericInputResult gridInputResult = engine::IntInput(
             ui,
             config,
             input,
@@ -4539,10 +4539,15 @@ void SectorEditor::DrawToolsPanel(
             font,
             state.gridSize,
             uiState.gridSizeInput,
-            1,
-            64,
+            SectorAuthoringEditorGridSizeMin,
+            SectorAuthoringEditorGridSizeMax,
             1
     );
+    if (gridInputResult.changed) {
+        Lifecycle().hasUnsavedChanges = true;
+        Lifecycle().topologyDocumentDirty = true;
+        statusText = "Updated grid size";
+    }
     y += rowH + gap;
 
     engine::Checkbox(ui, config, input, assets, "sector_editor_show_grid", Rectangle{0.0f, y, contentW, rowH}, font, "Show grid", state.showGrid);
@@ -4717,7 +4722,8 @@ void SectorEditor::DrawTexturePickerModal(
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
 {
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     const SectorEditorTexturePickerServiceCallbacks callbacks{
@@ -4730,6 +4736,7 @@ void SectorEditor::DrawTexturePickerModal(
             input,
             assets,
             font,
+            smallFont,
             state.texturePicker,
             textureCatalog,
             callbacks);
@@ -5295,7 +5302,7 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
             previewState.controller);
     state.viewCenter = Vector2{9.0f, 6.0f};
     state.viewZoom = 48.0f;
-    state.gridSize = 8;
+    state.gridSize = SectorAuthoringEditorGridSizeDefault;
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
@@ -5399,6 +5406,8 @@ bool SectorEditor::LoadLevel(
     Lifecycle().hasCurrentLevelPath = true;
     Lifecycle().hasUnsavedChanges = false;
     state.mode = SectorEditorMode::Edit2D;
+    state.gridSize = loaded.editorSettings.gridSize;
+    uiState.gridSizeInput = engine::UIIntInputState{};
     previewState.controller.hasPreviewPose = false;
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     state.texturePicker = TexturePickerState{};
@@ -5534,6 +5543,7 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
                 documentState.authoring,
                 documentState.map,
                 documentState.derivation,
+                SectorAuthoringEditorSettings{state.gridSize},
                 modal.errorMessage)) {
         statusText = TextFormat("Save failed: %s", savePlan.paths.jsonAssetPath.c_str());
         return false;

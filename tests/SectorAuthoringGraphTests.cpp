@@ -448,6 +448,7 @@ Json SaveEditorStateToJson(
                   authoringGraph,
                   documentState.map.topologyMap,
                   documentState.derivation.authoringDerivation,
+                  game::SectorAuthoringEditorSettings{state.gridSize},
                   error),
           TextFormat("editor authoring save succeeds for %s", fileName));
     Check(error.empty(), "successful editor authoring save clears error");
@@ -466,6 +467,7 @@ game::SectorEditorState MakeEditorStateFromLoadedDocument(
         bool* outDerivationCurrent = nullptr)
 {
     game::SectorEditorState state;
+    state.gridSize = loaded.editorSettings.gridSize;
     game::SelectionState selectionState;
     if (loaded.format == game::SectorEditorDocumentFormat::TopologyV2Import) {
         documentState.map.topologyMap = loaded.mapData;
@@ -10508,6 +10510,7 @@ void TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent()
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
     AddFaceAnchor(graph, 200, 32, 32, "room");
     game::SectorEditorState state;
+    state.gridSize = 24;
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     InitializeEditorStateWithAuthoringGraph(state, documentState, authoringGraph, graph);
@@ -10524,6 +10527,8 @@ void TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent()
             &savedText);
     Check(saved["formatVersion"] == 3, "editor save writes graph-native format version");
     Check(saved["topology"] == "authoringGraph", "editor save writes graph-native topology marker");
+    Check(saved["editorSettings"]["gridSize"] == 24,
+          "editor save writes the current per-map grid size");
     Check(saved.contains("authoringGraph"), "editor save writes authoring graph source");
     Check(saved["authoringGraph"]["faceAnchors"].size() == 1,
           "editor save writes authoring face anchors");
@@ -10542,6 +10547,8 @@ void TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent()
           "graph-native editor document reloads");
     Check(loaded.format == game::SectorEditorDocumentFormat::AuthoringGraph,
           "graph-native reload reports authoring route");
+    Check(loaded.editorSettings.gridSize == 24,
+          "graph-native editor load reads the saved grid size");
     bool current = false;
     game::SectorEditorDocumentState loadedDocumentState;
     game::SectorAuthoringGraph& loadedAuthoringGraph =
@@ -10549,6 +10556,8 @@ void TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent()
     const game::SectorEditorState loadedState =
             MakeEditorStateFromLoadedDocument(loaded, loadedDocumentState, loadedAuthoringGraph, &current);
     Check(current, "valid graph-native reload derives valid/current");
+    Check(loadedState.gridSize == 24,
+          "loaded editor state restores the saved grid size");
     Check(loadedAuthoringGraph.faceAnchors.size() == 1
                   && loadedAuthoringGraph.faceAnchors[0].name == "room",
           "valid graph-native reload preserves face anchor label");
@@ -10636,6 +10645,8 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     const game::SectorEditorState state = MakeEditorStateFromLoadedDocument(loaded, documentState, authoringGraph);
+    Check(state.gridSize == game::SectorAuthoringEditorGridSizeDefault,
+          "legacy topology import uses the default editor grid size");
     Check(game::HasAuthoringGraphData(authoringGraph), "legacy topology import synthesizes authoring graph");
     Check(documentState.derivation.authoringDerivation.success, "legacy topology import derives authoring graph");
     Check(documentState.map.topologyMap.audioSettings.musicPath
@@ -11234,9 +11245,14 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
             "assets/models/nested/deeper/gamma.gLtF"};
     Check(state.modelPaths == expected,
           "static model picker filters formats and sorts normalized asset-relative paths");
-    Check(state.optionLabels.size() == expected.size()
-                  && std::string(state.optionLabels[1]) == expected[1],
-          "static model picker rebuilds stable list labels");
+    const std::vector<std::string> expectedLabels{
+            "alpha.gltf",
+            "nested/beta.GLB",
+            "nested/deeper/gamma.gLtF"};
+    Check(state.optionLabelStorage == expectedLabels
+                  && state.optionLabels.size() == expectedLabels.size()
+                  && std::string(state.optionLabels[1]) == expectedLabels[1],
+          "static model picker omits the shared model root from stable list labels");
     Check(state.selectedModelIndex == 1
                   && picker.SelectedModelPath() == expected[1],
           "static model picker preselects the current assigned model");
@@ -11255,6 +11271,47 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
           "static model picker refresh discovers newly added nested models in order");
     picker.Close();
     Check(!state.open, "static model picker closes on cancel");
+
+    std::filesystem::remove_all(root, error);
+}
+
+void TestAddMapTextureScanFiltersAutomaticNormalMaps()
+{
+    const std::filesystem::path root =
+            TempDirectoryPath("sector_editor_add_texture_scan_test");
+    RecreateTempDirectory(root);
+    std::error_code error;
+    std::filesystem::create_directories(root / "images" / "nested", error);
+    Check(!error, "add texture scan creates nested temporary image directory");
+    WriteTextFile(root / "images" / "stone.png", "");
+    WriteTextFile(root / "images" / "stone_normal.png", "");
+    WriteTextFile(root / "images" / "nested" / "metal.PNG", "");
+    WriteTextFile(root / "images" / "nested" / "metal_normal.PNG", "");
+    WriteTextFile(root / "images" / "nested" / "tiles_normal_512.png", "");
+    WriteTextFile(root / "images" / "nested" / "normal_warning.png", "");
+    WriteTextFile(root / "images" / "readme.txt", "");
+
+    std::string message;
+    const std::vector<std::string> paths =
+            game::ScanAssetImagePngs(root, message);
+    const std::vector<std::string> expected{
+            "assets/images/nested/metal.PNG",
+            "assets/images/nested/normal_warning.png",
+            "assets/images/stone.png"};
+    Check(paths == expected,
+          "add texture scan filters automatic _normal companions and sorts base textures");
+    Check(message.empty(),
+          "add texture scan reports no warning when importable base textures exist");
+    Check(game::EditorAssetPathDisplayLabel(
+                  paths[0],
+                  "assets/images/") == "nested/metal.PNG"
+                  && game::EditorAssetPathDisplayLabel(
+                             "assets/models/characters/TestCharacter.glb",
+                             "assets/models/") == "characters/TestCharacter.glb"
+                  && game::EditorAssetPathDisplayLabel(
+                             "external/images/stone.png",
+                             "assets/images/") == "external/images/stone.png",
+          "asset picker labels omit only their exact shared directory prefix");
 
     std::filesystem::remove_all(root, error);
 }
@@ -12180,6 +12237,7 @@ int main()
     TestEditorGraphNativeMapLevelDataRoundTrip();
     TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation();
     TestStaticModelPickerRecursionFilteringRefreshAndSelection();
+    TestAddMapTextureScanFiltersAutomaticNormalMaps();
     TestStaticModelAssetRequestsDeduplicateAndUnloadByScope();
     TestStaticPropEditingPlacementMutationAndFloorRelativeDrag();
     TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag();

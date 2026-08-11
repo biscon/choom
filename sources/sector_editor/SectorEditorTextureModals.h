@@ -75,6 +75,7 @@ void DrawTexturePickerModal(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         TexturePickerState& picker,
         SectorEditorTextureCatalogService& textureCatalog,
         const SectorEditorTexturePickerCallbacks& callbacks);

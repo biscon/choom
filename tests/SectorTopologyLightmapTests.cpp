@@ -2336,6 +2336,13 @@ void TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting()
           "normal-map convention preserves dotted stems and directories");
     Check(game::SectorTextureNormalMapPath("stone") == "stone_normal",
           "normal-map convention supports extensionless texture paths");
+    Check(game::IsSectorTextureNormalMapPath("assets/images/stone_normal.png")
+                  && game::IsSectorTextureNormalMapPath("stone.wall_normal.PNG")
+                  && game::IsSectorTextureNormalMapPath("stone_normal_512.png")
+                  && !game::IsSectorTextureNormalMapPath("assets/images/normal_stone.png")
+                  && !game::IsSectorTextureNormalMapPath("assets/images/abnormal_stone.png")
+                  && !game::IsSectorTextureNormalMapPath("assets/images/stone.png"),
+          "normal-map convention identifies the automatic filename marker");
 
     const std::filesystem::path flatBasePath = root / "flat_floor.png";
     const std::filesystem::path mappedBasePath = root / "mapped_floor.png";

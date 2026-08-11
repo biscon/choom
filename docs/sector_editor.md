@@ -59,6 +59,8 @@ views and maps to world Z for generated 3D geometry.
 
 - `WASD`: pan the 2D view.
 - Mouse wheel over the canvas: zoom.
+- The numeric `Grid` size controls drawing and snapping and is saved per map;
+  older maps default to `8`.
 - Select tool: click editor objects, authoring vertices/lines, and derived
   authoring faces. Shift-click toggles additional authoring faces; clicking
   empty canvas clears selection unless Shift is held.
@@ -446,7 +448,10 @@ yet, so use the inspector or 3D panel buttons.
 update a texture ID in the map texture table and choose point, bilinear,
 trilinear, or anisotropic 8x filtering. Legacy saved `"bilinear"` texture
 filters load as anisotropic 8x; exact bilinear filtering serializes as
-`"linear"`. It does not copy external files into the project.
+`"linear"`. Companion files with the `_normal` filename marker, including
+names such as `stone_normal.png` and `stone_normal_512.png`, are omitted because
+the renderer and lightmap baker discover them automatically from their base
+texture. The modal does not copy external files into the project.
 
 ## Move, Split, And Delete Tools
 
@@ -797,7 +802,7 @@ deferred.
   glTF/model doors, per-face door UV editing, door sound effects, locks, keys,
   scripts, save-game door state, NPC/pathfinding integration, and door shadow
   casting are deferred.
-- No normal maps, material maps, PBR material editing, or texture search UI.
+- No material maps, PBR material editing, or texture search UI.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.
 - No direct linedef or sidedef deletion.
 - No standalone direct-topology vertex deletion; authoring vertices support
