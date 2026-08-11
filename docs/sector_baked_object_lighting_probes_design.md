@@ -525,14 +525,15 @@ Later options:
 - Directional sprite variants.
 - Per-material controls for how much baked directionality affects the sprite.
 
-## Future 3D Model Usage
+## 3D Model Usage
 
-Recommended model lighting:
+Implemented model lighting:
 
 ```text
 model baked = ambient cube sampled by model normals
 model dynamic = runtime dynamic point/spot lights
-final = material * baked + dynamic contribution
+model static specular = runtime GGX from selected authored static point/spot lights
+final = material * baked + dynamic contribution + static specular
 ```
 
 3D models should not use static world surface lightmaps. They should sample
@@ -540,10 +541,25 @@ object probes per object, per draw, or per coarse model part. Per-vertex probe
 sampling can come later if needed, but per-object sampling is a useful first
 contract.
 
+The ambient cube is intentionally a low-frequency diffuse representation and
+cannot reconstruct sharp, view-dependent metallic highlights. The PBR model
+path therefore reuses authored static-light metadata at runtime for specular
+only. It selects at most four range/cone-overlapping lights per receiver from
+cached sector candidates, filters them by current portal visibility, and
+evaluates the existing GGX BRDF in the model shader. This does not add the
+lights' diffuse term again, perform runtime occlusion raycasts, or allocate
+static shadow maps. Static specular is disabled when the matching probe bake is
+missing, unavailable, or stale, keeping it synchronized with the loaded baked
+diffuse source.
+
 Dynamic spotlight shadow maps can later shadow model dynamic-light contribution.
 That should not change the baked probe data. Billboard dynamic shadow receiving
 is already layered on top of probe lighting and does not modify object probe
 sidecars, bake output, or the lightmap source hash.
+
+The static-specular supplement likewise changes no probe/lightmap file format,
+bake version, or source-hash inputs. Static point and spot light properties were
+already part of the lightmap source hash.
 
 ## Debug and Editor Visualization
 

@@ -98,6 +98,8 @@ public:
             Matrix transform,
             const engine::ModelAsset* attachmentAsset,
             Matrix attachmentTransform,
+            int receiverSectorId,
+            bool objectProbeRuntimeAvailable,
             const BakedObjectLightingVerticalSample& ambientLighting,
             const SectorViewmodelLightingContext& lighting,
             const SectorViewmodelLightingContext& attachmentLighting);
@@ -308,6 +310,7 @@ private:
     int hdrSceneScratchFailedHeight = 0;
     SectorBillboardRenderer billboardRenderer;
     SectorStaticModelRenderer staticModelRenderer;
+    SectorStaticSpecularLightState staticSpecularLightState;
     SectorDoorRenderer doorRenderer;
     SectorDynamicLightingRenderer dynamicLightState;
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
@@ -319,6 +322,8 @@ private:
     float dynamicModelShadowIntervalSeconds = 0.0f;
     float lastDynamicModelShadowRenderSeconds = -1000.0f;
     int lightmapStatus = 0;
+    bool surfaceLightmapBakeCurrent = false;
+    bool objectProbeBakeCurrent = false;
     bool initialized = false;
     size_t sectorCount = 0;
 

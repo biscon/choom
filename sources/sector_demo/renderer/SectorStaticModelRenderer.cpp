@@ -134,6 +134,7 @@ uniform int useVerticalObjectProbeLighting;
 uniform int pbrDiagnosticMode;
 uniform float indirectDiffuseScale;
 uniform float environmentSpecularScale;
+uniform int useStaticSpecularLighting;
 
 uniform int fogEnabled;
 uniform vec3 fogColor;
@@ -162,6 +163,17 @@ uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
+
+#define MAX_STATIC_SPECULAR_LIGHTS 4
+uniform int staticSpecularLightCount;
+uniform vec3 staticSpecularLightPositions[MAX_STATIC_SPECULAR_LIGHTS];
+uniform vec3 staticSpecularLightColors[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightRadii[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightIntensities[MAX_STATIC_SPECULAR_LIGHTS];
+uniform int staticSpecularLightTypes[MAX_STATIC_SPECULAR_LIGHTS];
+uniform vec3 staticSpecularLightDirections[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightInnerConeCos[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightOuterConeCos[MAX_STATIC_SPECULAR_LIGHTS];
 out vec4 finalColor;
 
 const vec2 kPoissonDisk[12] = vec2[12](
@@ -347,7 +359,7 @@ void main()
     vec3 viewDirection = SafeNormalize(cameraPosition - fragWorldPosition, geometricNormal);
     vec3 f0 = mix(vec3(0.04), albedo, metallic);
     vec3 directDiffuse = vec3(0.0);
-    vec3 directSpecular = vec3(0.0);
+    vec3 dynamicDirectSpecular = vec3(0.0);
     for (int i = 0; i < dynamicLightCount && i < MAX_DYNAMIC_LIGHTS; ++i) {
         float radius = dynamicLightRadii[i];
         vec3 toLight = dynamicLightPositions[i] - fragWorldPosition;
@@ -401,7 +413,74 @@ void main()
                         * atten
                         * coneAtten;
                 directDiffuse += diffuseWeight * albedo * radiance * ndotl;
-                directSpecular += specular * radiance * ndotl;
+                dynamicDirectSpecular += specular * radiance * ndotl;
+            }
+        }
+    }
+
+    vec3 staticDirectSpecular = vec3(0.0);
+    if (useStaticSpecularLighting != 0) {
+        for (int i = 0;
+                i < staticSpecularLightCount
+                        && i < MAX_STATIC_SPECULAR_LIGHTS;
+                ++i) {
+            float radius = staticSpecularLightRadii[i];
+            vec3 toLight = staticSpecularLightPositions[i] - fragWorldPosition;
+            float distanceSq = dot(toLight, toLight);
+            if (radius > 0.0 && distanceSq < radius * radius) {
+                float distanceToLight = sqrt(max(distanceSq, 0.0));
+                vec3 lightDirection = distanceToLight > 0.0001
+                        ? toLight / distanceToLight
+                        : worldNormal;
+                float atten = clamp(1.0 - distanceToLight / radius, 0.0, 1.0);
+                atten *= atten;
+                float coneAtten = 1.0;
+                if (staticSpecularLightTypes[i] == 1) {
+                    vec3 spotDirection = SafeNormalize(
+                            staticSpecularLightDirections[i],
+                            vec3(0.0, -1.0, 0.0));
+                    vec3 fragmentDirectionFromLight = distanceToLight > 0.0001
+                            ? -lightDirection
+                            : spotDirection;
+                    float coneDot = dot(
+                            spotDirection,
+                            fragmentDirectionFromLight);
+                    coneAtten = abs(
+                            staticSpecularLightInnerConeCos[i]
+                                    - staticSpecularLightOuterConeCos[i]) > 0.0001
+                            ? smoothstep(
+                                    staticSpecularLightOuterConeCos[i],
+                                    staticSpecularLightInnerConeCos[i],
+                                    coneDot)
+                            : step(
+                                    staticSpecularLightInnerConeCos[i],
+                                    coneDot);
+                }
+                float ndotl = max(dot(worldNormal, lightDirection), 0.0);
+                if (ndotl > 0.0 && coneAtten > 0.0) {
+                    vec3 halfway = SafeNormalize(
+                            viewDirection + lightDirection,
+                            worldNormal);
+                    float distribution = DistributionGgx(
+                            worldNormal, halfway, roughness);
+                    float geometry = GeometrySmith(
+                            worldNormal,
+                            viewDirection,
+                            lightDirection,
+                            roughness);
+                    vec3 fresnel = FresnelSchlick(
+                            max(dot(halfway, viewDirection), 0.0), f0);
+                    vec3 specular = distribution * geometry * fresnel
+                            / max(4.0
+                                    * max(dot(worldNormal, viewDirection), 0.0)
+                                    * ndotl,
+                                    0.001);
+                    vec3 radiance = staticSpecularLightColors[i]
+                            * staticSpecularLightIntensities[i]
+                            * atten
+                            * coneAtten;
+                    staticDirectSpecular += specular * radiance * ndotl;
+                }
             }
         }
     }
@@ -447,12 +526,15 @@ void main()
     emissive *= max(emissiveStrength, 0.0);
     vec3 linearColor = indirectDiffuse
             + directDiffuse
-            + directSpecular
+            + dynamicDirectSpecular
+            + staticDirectSpecular
             + environmentSpecular
             + emissive;
     if (pbrDiagnosticMode == 1) linearColor = albedo;
     else if (pbrDiagnosticMode == 2) linearColor = directDiffuse;
-    else if (pbrDiagnosticMode == 3) linearColor = directSpecular;
+    else if (pbrDiagnosticMode == 3) {
+        linearColor = dynamicDirectSpecular + staticDirectSpecular;
+    }
     else if (pbrDiagnosticMode == 4) linearColor = indirectDiffuse;
     else if (pbrDiagnosticMode == 5) linearColor = environmentSpecular;
     else if (pbrDiagnosticMode == 6) linearColor = emissive;
@@ -846,6 +928,8 @@ bool SectorStaticModelRenderer::Load()
             shader, "indirectDiffuseScale");
     environmentSpecularScaleLoc = GetShaderLocation(
             shader, "environmentSpecularScale");
+    useStaticSpecularLightingLoc = GetShaderLocation(
+            shader, "useStaticSpecularLighting");
     cameraPositionLoc = GetShaderLocation(shader, "cameraPosition");
     environmentExposureLoc = GetShaderLocation(shader, "environmentExposure");
     outputBrightnessMultiplierLoc =
@@ -894,6 +978,7 @@ bool SectorStaticModelRenderer::Load()
     dynamicLightDirectionsLoc = GetShaderLocationArrayBase(shader, "dynamicLightDirections");
     dynamicLightInnerConeCosLoc = GetShaderLocationArrayBase(shader, "dynamicLightInnerConeCos");
     dynamicLightOuterConeCosLoc = GetShaderLocationArrayBase(shader, "dynamicLightOuterConeCos");
+    staticSpecularLocations = GetSectorStaticSpecularShaderLocations(shader);
     dynamicLightShadowSlotsLoc = GetShaderLocationArrayBase(shader, "dynamicLightShadowSlots");
     for (size_t i = 0; i < MaxDynamicSpotLightShadowCasters; ++i) {
         shadowLightMatrixLocs[i] =
@@ -949,6 +1034,7 @@ void SectorStaticModelRenderer::Shutdown()
     diagnosticModeLoc = -1;
     indirectDiffuseScaleLoc = -1;
     environmentSpecularScaleLoc = -1;
+    useStaticSpecularLightingLoc = -1;
     cameraPositionLoc = -1;
     environmentExposureLoc = -1;
     outputBrightnessMultiplierLoc = -1;
@@ -975,6 +1061,7 @@ void SectorStaticModelRenderer::Shutdown()
     dynamicLightDirectionsLoc = -1;
     dynamicLightInnerConeCosLoc = -1;
     dynamicLightOuterConeCosLoc = -1;
+    staticSpecularLocations = SectorStaticSpecularShaderLocations{};
     dynamicLightShadowSlotsLoc = -1;
     shadowLightMatrixLocs.fill(-1);
     shadowBiasLoc = -1;
@@ -1001,9 +1088,11 @@ void SectorStaticModelRenderer::UploadPbrDrawState(
     const int useObjectProbe = state.useObjectProbe ? 1 : 0;
     const int useVerticalProbe = state.useVerticalObjectProbe ? 1 : 0;
     const int hasEnvironment = state.environmentActive ? 1 : 0;
+    const int useStaticSpecular = state.staticSpecularEligible ? 1 : 0;
     if (diagnosticModeLoc >= 0) SetShaderValue(shader, diagnosticModeLoc, &diagnosticMode, SHADER_UNIFORM_INT);
     if (indirectDiffuseScaleLoc >= 0) SetShaderValue(shader, indirectDiffuseScaleLoc, &state.indirectDiffuseScale, SHADER_UNIFORM_FLOAT);
     if (environmentSpecularScaleLoc >= 0) SetShaderValue(shader, environmentSpecularScaleLoc, &state.environmentSpecularScale, SHADER_UNIFORM_FLOAT);
+    if (useStaticSpecularLightingLoc >= 0) SetShaderValue(shader, useStaticSpecularLightingLoc, &useStaticSpecular, SHADER_UNIFORM_INT);
     if (environmentExposureLoc >= 0) SetShaderValue(shader, environmentExposureLoc, &state.environmentExposure, SHADER_UNIFORM_FLOAT);
     if (outputBrightnessMultiplierLoc >= 0) SetShaderValue(shader, outputBrightnessMultiplierLoc, &state.outputBrightnessMultiplier, SHADER_UNIFORM_FLOAT);
     if (hasEnvironmentLoc >= 0) SetShaderValue(shader, hasEnvironmentLoc, &hasEnvironment, SHADER_UNIFORM_INT);
@@ -1028,7 +1117,8 @@ void SectorStaticModelRenderer::RecordPbrDiagnostics(
         engine::ModelHandle model,
         int materialIndex,
         const SectorPbrDrawState& state,
-        const engine::ModelMaterialAsset& material)
+        const engine::ModelMaterialAsset& material,
+        const SectorStaticSpecularLightContext& staticSpecularLights)
 {
     diagnostics.valid = true;
     diagnostics.placedObjectId = placedObjectId;
@@ -1036,6 +1126,7 @@ void SectorStaticModelRenderer::RecordPbrDiagnostics(
     diagnostics.materialIndex = materialIndex;
     diagnostics.state = state;
     diagnostics.material = material;
+    diagnostics.staticSpecularLights = staticSpecularLights;
 }
 
 void SectorStaticModelRenderer::SetLightmapData(
@@ -1158,6 +1249,9 @@ void SectorStaticModelRenderer::Draw(
         engine::World& runtimeObjectWorld,
         const Camera3D& camera,
         const SectorBillboardDynamicLightContext& dynamicLightContext,
+        const SectorStaticSpecularLightState& staticSpecularLights,
+        bool surfaceLightmapBakeCurrent,
+        bool objectProbeBakeCurrent,
         const SectorFogRenderContext& fogContext,
         const RuntimePortalVisibilityResult& visibility,
         const std::vector<engine::TextureHandle>& lightmapTextures,
@@ -1222,10 +1316,12 @@ void SectorStaticModelRenderer::Draw(
             [this,
              &assets,
              &dynamicLightContext,
+             &staticSpecularLights,
              &visibility,
              &lightmapTextures,
              environment,
              environmentActive,
+             surfaceLightmapBakeCurrent,
              useBakedAmbientOcclusion,
              &considered,
              &drawn,
@@ -1311,6 +1407,28 @@ void SectorStaticModelRenderer::Draw(
                                 == static_cast<size_t>(model->meshCount)
                         && lightmapObject->meshPlacements.size()
                                 == static_cast<size_t>(model->meshCount);
+                const SectorReceiverBounds receiverBounds =
+                        modelAsset->hasLocalBounds
+                        ? TransformSectorStaticSpecularReceiverBounds(
+                                modelAsset->localBounds,
+                                authoredTransform,
+                                object.currentSectorId,
+                                transform.position)
+                        : SectorReceiverBounds{
+                                object.currentSectorId,
+                                transform.position,
+                                transform.position};
+                const SectorStaticSpecularLightContext staticSpecularContext =
+                        SelectSectorStaticSpecularLights(
+                                staticSpecularLights,
+                                receiverBounds,
+                                object.currentSectorId,
+                                visibility,
+                                surfaceLightmapBakeCurrent && hasRemapData);
+                UploadSectorStaticSpecularLights(
+                        shader,
+                        staticSpecularLocations,
+                        staticSpecularContext);
 
                 bool drewMesh = false;
                 for (int meshIndex = 0; meshIndex < model->meshCount; ++meshIndex) {
@@ -1429,6 +1547,7 @@ void SectorStaticModelRenderer::Draw(
                             SectorPbrLightingPath::WorldStatic,
                             false,
                             hasRemappedMesh,
+                            surfaceLightmapBakeCurrent,
                             environmentActive,
                             staticModel.environmentExposure,
                             1.0f,
@@ -1446,7 +1565,8 @@ void SectorStaticModelRenderer::Draw(
                                 staticModel.model,
                                 materialIndex,
                                 drawState,
-                                pbrMaterial);
+                                pbrMaterial,
+                                staticSpecularContext);
                     }
                     const Mesh& mesh = hasRemappedMesh
                             ? cached->meshes[static_cast<size_t>(meshIndex)]
@@ -1470,9 +1590,11 @@ void SectorStaticModelRenderer::Draw(
             [this,
              &assets,
              &dynamicLightContext,
+             &staticSpecularLights,
              &visibility,
              environment,
              environmentActive,
+             objectProbeBakeCurrent,
              &considered,
              &drawn,
              &portalCulled,
@@ -1558,6 +1680,30 @@ void SectorStaticModelRenderer::Draw(
                         transform.rotationZRadians,
                         dynamicModel.scale);
                 const Matrix modelTransform = MatrixMultiply(model.transform, authoredTransform);
+                const bool validProbe = lighting.vertical.lower.valid
+                        || lighting.vertical.upper.valid;
+                const SectorReceiverBounds receiverBounds =
+                        modelAsset->hasLocalBounds
+                        ? TransformSectorStaticSpecularReceiverBounds(
+                                modelAsset->localBounds,
+                                authoredTransform,
+                                object.currentSectorId,
+                                transform.position)
+                        : SectorReceiverBounds{
+                                object.currentSectorId,
+                                transform.position,
+                                transform.position};
+                const SectorStaticSpecularLightContext staticSpecularContext =
+                        SelectSectorStaticSpecularLights(
+                                staticSpecularLights,
+                                receiverBounds,
+                                object.currentSectorId,
+                                visibility,
+                                objectProbeBakeCurrent && validProbe);
+                UploadSectorStaticSpecularLights(
+                        shader,
+                        staticSpecularLocations,
+                        staticSpecularContext);
                 bool drewMesh = false;
                 for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
                     if (model.meshMaterial == nullptr) continue;
@@ -1607,12 +1753,11 @@ void SectorStaticModelRenderer::Draw(
                     if (hasRoughnessTextureLoc >= 0) SetShaderValue(shader, hasRoughnessTextureLoc, &hasRoughness, SHADER_UNIFORM_INT);
                     if (hasOcclusionTextureLoc >= 0) SetShaderValue(shader, hasOcclusionTextureLoc, &hasOcclusion, SHADER_UNIFORM_INT);
                     if (hasEmissiveTextureLoc >= 0) SetShaderValue(shader, hasEmissiveTextureLoc, &hasEmissive, SHADER_UNIFORM_INT);
-                    const bool validProbe = lighting.vertical.lower.valid
-                            || lighting.vertical.upper.valid;
                     const SectorPbrDrawState drawState = BuildSectorPbrDrawState(
                             SectorPbrLightingPath::WorldDynamic,
                             validProbe,
                             false,
+                            objectProbeBakeCurrent,
                             environmentActive,
                             dynamicModel.environmentExposure,
                             1.0f,
@@ -1630,7 +1775,8 @@ void SectorStaticModelRenderer::Draw(
                                 instance.model,
                                 materialIndex,
                                 drawState,
-                                pbrMaterial);
+                                pbrMaterial,
+                                staticSpecularContext);
                     }
                     DrawMesh(model.meshes[meshIndex], material, modelTransform);
                     drewMesh = true;
@@ -1662,6 +1808,8 @@ void SectorStaticModelRenderer::DrawViewmodel(
         const engine::ModelAsset* attachmentAsset,
         Matrix attachmentTransform,
         const SectorBillboardDynamicLightContext& dynamicLightContext,
+        const SectorStaticSpecularLightContext& staticSpecularLights,
+        bool objectProbeBakeCurrent,
         const TextureCubemap* environment,
         const BakedObjectLightingVerticalSample& ambientLighting,
         const SectorViewmodelLightingContext& lighting,
@@ -1675,6 +1823,10 @@ void SectorStaticModelRenderer::DrawViewmodel(
             dynamicLightDirectionsLoc, dynamicLightInnerConeCosLoc,
             dynamicLightOuterConeCosLoc};
     UploadSectorRendererDynamicPointLights(shader, dynamicLocations, dynamicLightContext);
+    UploadSectorStaticSpecularLights(
+            shader,
+            staticSpecularLocations,
+            staticSpecularLights);
     SectorDynamicSpotLightShadowShaderLocations shadowLocations;
     shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
     shadowLocations.shadowLightMatrices = shadowLightMatrixLocs;
@@ -1717,6 +1869,8 @@ void SectorStaticModelRenderer::DrawViewmodel(
                             environment,
                             environmentActive,
                             validProbe,
+                            objectProbeBakeCurrent,
+                            &staticSpecularLights,
                             &dynamicLightContext](
             const engine::ModelAsset& modelAsset,
             Model model,
@@ -1809,6 +1963,7 @@ void SectorStaticModelRenderer::DrawViewmodel(
                     path,
                     validProbe,
                     false,
+                    objectProbeBakeCurrent,
                     environmentActive,
                     itemLighting.environmentExposure,
                     itemLighting.brightnessMultiplier,
@@ -1822,7 +1977,8 @@ void SectorStaticModelRenderer::DrawViewmodel(
                     engine::NullModelHandle(),
                     materialIndex,
                     drawState,
-                    pbr);
+                    pbr,
+                    staticSpecularLights);
             DrawMesh(model.meshes[meshIndex], material, modelTransform);
         }
     };

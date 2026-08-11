@@ -69,6 +69,7 @@ void TestIndirectAndEnvironmentRouting()
             true,
             false,
             true,
+            true,
             0.35f,
             7.0f,
             true,
@@ -77,6 +78,8 @@ void TestIndirectAndEnvironmentRouting()
                     && validProbe.useObjectProbe
                     && validProbe.useVerticalObjectProbe,
           "valid dynamic-model probe replaces fallback ambient");
+    Check(validProbe.staticSpecularEligible,
+          "current valid probe enables static-light specular");
     Check(Near(validProbe.indirectDiffuseScale, 0.25f)
                     && Near(validProbe.environmentSpecularScale, 0.5f),
           "world model receives independent contribution scales");
@@ -92,6 +95,7 @@ void TestIndirectAndEnvironmentRouting()
             false,
             false,
             false,
+            false,
             0.35f,
             1.0f,
             false,
@@ -99,12 +103,15 @@ void TestIndirectAndEnvironmentRouting()
     Check(fallback.indirectSource == game::SectorPbrIndirectSource::SectorAmbient
                     && !fallback.useObjectProbe,
           "invalid probe selects sector ambient fallback");
+    Check(!fallback.staticSpecularEligible,
+          "invalid probe disables static-light specular");
     Check(!fallback.environmentActive
                     && Near(fallback.environmentExposure, 0.0f),
           "missing environment contributes exactly zero");
 
     const game::SectorPbrDrawState lightmap = game::BuildSectorPbrDrawState(
             game::SectorPbrLightingPath::WorldStatic,
+            true,
             true,
             true,
             false,
@@ -116,6 +123,22 @@ void TestIndirectAndEnvironmentRouting()
                     == game::SectorPbrIndirectSource::StaticLightmap
                     && !lightmap.useObjectProbe,
           "static lightmap source is explicit and does not stack a probe");
+    Check(lightmap.staticSpecularEligible,
+          "current static lightmap enables static-light specular");
+
+    const game::SectorPbrDrawState staleLightmap =
+            game::BuildSectorPbrDrawState(
+                    game::SectorPbrLightingPath::WorldStatic,
+                    false,
+                    true,
+                    false,
+                    false,
+                    0.0f,
+                    1.0f,
+                    false,
+                    settings);
+    Check(!staleLightmap.staticSpecularEligible,
+          "stale static lightmap disables static-light specular");
 }
 
 void TestViewmodelIsolationAndFiniteHandling()
@@ -127,6 +150,7 @@ void TestViewmodelIsolationAndFiniteHandling()
             game::SectorPbrLightingPath::Viewmodel,
             true,
             false,
+            true,
             true,
             0.2f,
             0.45f,
@@ -141,6 +165,7 @@ void TestViewmodelIsolationAndFiniteHandling()
 
     const game::SectorPbrDrawState invalid = game::BuildSectorPbrDrawState(
             game::SectorPbrLightingPath::ViewmodelAttachment,
+            false,
             false,
             false,
             true,
@@ -286,6 +311,18 @@ void TestRemovedShaderPathsStayRemoved()
                                "            shader,")
                             != std::string::npos,
           "PBR samplers receive fixed units even when optional textures are absent");
+    Check(source.find("#define MAX_STATIC_SPECULAR_LIGHTS 4")
+                    != std::string::npos
+                    && source.find("staticDirectSpecular +=")
+                            != std::string::npos
+                    && source.find(
+                               "+ dynamicDirectSpecular\n"
+                               "            + staticDirectSpecular")
+                            != std::string::npos,
+          "static authored lights contribute through the bounded direct-specular path");
+    Check(source.find("directDiffuse += staticDirectSpecular")
+                    == std::string::npos,
+          "static authored lights do not duplicate baked diffuse lighting");
 }
 
 std::string ReadSource(const char* path)

@@ -187,8 +187,14 @@ struct ConfirmationModalState {
     std::function<void()> onOkay;
 };
 
+enum class SectorEditorSectorLightingScope {
+    Selected,
+    All
+};
+
 struct SectorEditorSetAllModalState {
     bool open = false;
+    SectorEditorSectorLightingScope scope = SectorEditorSectorLightingScope::Selected;
     float ambientIntensity = 1.0f;
     Color ambientColor = WHITE;
     engine::UIFloatInputState ambientIntensityInput;

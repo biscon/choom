@@ -695,6 +695,9 @@ bool SectorMeshRenderer::RebuildRendererResources(
             GetSectorLightmapAtlases(map.bakedLightmap);
     const SectorLightmapStatus status = GetSectorLightmapStatus(map);
     lightmapStatus = static_cast<int>(status);
+    objectProbeBakeCurrent =
+            GetSectorBakedObjectLightProbeStatus(map)
+                    == SectorLightmapStatus::Valid;
     bool useLightmapLayout = status == SectorLightmapStatus::Valid
             && BuildSectorLightmapLayout(map, lightmapLayout, error);
     if (useLightmapLayout
@@ -791,6 +794,15 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 : "Preview failed: " + meshError;
         return false;
     }
+
+    surfaceLightmapBakeCurrent = useLightmapLayout
+            && static_cast<SectorLightmapStatus>(lightmapStatus)
+                    == SectorLightmapStatus::Valid;
+    RebuildSectorStaticSpecularLights(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+            meshes.sectorReceiverBounds,
+            staticSpecularLightState);
 
     dynamicLightState.RebuildSources(
             map,
@@ -921,6 +933,9 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     visibilityGraphValid = false;
     visibilityLookupWorldValid = false;
     dynamicLightState.Reset();
+    ResetSectorStaticSpecularLights(staticSpecularLightState);
+    surfaceLightmapBakeCurrent = false;
+    objectProbeBakeCurrent = false;
     lightAtmosphereSources.clear();
     doorRenderer.ClearPreparedShadowCasters();
     runtimeSeconds = 0.0f;
@@ -1193,6 +1208,11 @@ void SectorMeshRenderer::DrawScene(
                 *runtimeObjectWorld,
                 camera,
                 billboardLightContext,
+                staticSpecularLightState,
+                surfaceLightmapBakeCurrent,
+                objectProbeBakeCurrent
+                        && doorLighting.objectLightProbes != nullptr
+                        && !doorLighting.objectLightProbes->probes.empty(),
                 fogContext,
                 visibilityResult,
                 lightmapTextures,
@@ -1258,6 +1278,8 @@ void SectorMeshRenderer::DrawViewmodel(
         Matrix transform,
         const engine::ModelAsset* attachmentAsset,
         Matrix attachmentTransform,
+        int receiverSectorId,
+        bool objectProbeRuntimeAvailable,
         const BakedObjectLightingVerticalSample& ambientLighting,
         const SectorViewmodelLightingContext& lighting,
         const SectorViewmodelLightingContext& attachmentLighting)
@@ -1270,10 +1292,27 @@ void SectorMeshRenderer::DrawViewmodel(
                 pbrEnvironmentTexture)) {
         pbrEnvironmentTexture = nullptr;
     }
+    const SectorReceiverBounds receiverBounds{
+            receiverSectorId,
+            viewmodelCamera.position,
+            viewmodelCamera.position};
+    const bool validProbe = ambientLighting.lower.valid
+            || ambientLighting.upper.valid;
+    const bool currentProbeForDraw = objectProbeBakeCurrent
+            && objectProbeRuntimeAvailable;
+    const SectorStaticSpecularLightContext staticSpecularContext =
+            SelectSectorStaticSpecularLights(
+                    staticSpecularLightState,
+                    receiverBounds,
+                    receiverSectorId,
+                    visibilityResult,
+                    currentProbeForDraw && validProbe);
     staticModelRenderer.DrawViewmodel(
             asset, instance, viewmodelCamera, transform,
             attachmentAsset, attachmentTransform,
             BuildBillboardDynamicLightContext(),
+            staticSpecularContext,
+            currentProbeForDraw,
             pbrEnvironmentTexture,
             ambientLighting,
             lighting,
@@ -1597,6 +1636,20 @@ void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map
     dynamicModelShadowRenderer.RebuildSources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
+    RebuildSectorStaticSpecularLights(
+            map,
+            visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
+            meshes.sectorReceiverBounds,
+            staticSpecularLightState);
+    const SectorLightmapStatus currentLightmapStatus =
+            GetSectorLightmapStatus(map);
+    lightmapStatus = static_cast<int>(currentLightmapStatus);
+    surfaceLightmapBakeCurrent =
+            currentLightmapStatus == SectorLightmapStatus::Valid
+            && !lightmapTextures.empty();
+    objectProbeBakeCurrent =
+            GetSectorBakedObjectLightProbeStatus(map)
+                    == SectorLightmapStatus::Valid;
     BuildSectorLightAtmosphereSources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,

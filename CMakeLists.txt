@@ -324,6 +324,8 @@ if(BUILD_TESTING)
             tests/SectorTopologyMeshBuilderTests.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorDynamicPointLightSelection.cpp
+            sources/sector_demo/SectorPortalVisibility.cpp
+            sources/sector_demo/renderer/SectorStaticSpecularLighting.cpp
             sources/engine/render/ColorTransfer.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorMeshBuilder.cpp

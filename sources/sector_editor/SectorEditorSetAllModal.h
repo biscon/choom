@@ -7,6 +7,7 @@
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_demo/SectorAuthoringGraph.h"
 
+#include <cstddef>
 #include <functional>
 
 namespace game {
@@ -45,7 +46,7 @@ inline void OpenSectorEditorSetAllModal(
 
 struct SectorEditorSetAllModalCallbacks {
     std::function<void()> close;
-    std::function<void(float, Color)> applySectorLighting;
+    std::function<void(SectorEditorSectorLightingScope, float, Color)> applySectorLighting;
 };
 
 void DrawSectorEditorSetAllModal(
@@ -55,6 +56,7 @@ void DrawSectorEditorSetAllModal(
         engine::AssetManager& assets,
         engine::FontHandle font,
         SectorEditorSetAllModalState& modalState,
+        std::size_t selectedSectorCount,
         const SectorEditorSetAllModalCallbacks& callbacks);
 
 } // namespace game

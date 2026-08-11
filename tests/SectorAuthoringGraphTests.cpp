@@ -3434,6 +3434,7 @@ void TestEditorSetAllModalUsesSelectedSectorLightingAndFallbacks()
             graph,
             game::MakeSectorAuthoringFaceAnchorSelectionTarget(201));
     Check(modal.open
+                  && modal.scope == game::SectorEditorSectorLightingScope::Selected
                   && Near(modal.ambientIntensity, 0.75f)
                   && modal.ambientColor.r == 40
                   && modal.ambientColor.g == 50
@@ -3467,6 +3468,7 @@ void TestEditorSetAllSectorLightingUpdatesAllSectorsOnceAndChangesLightmapHash()
 {
     game::SectorEditorState state;
     game::SectorEditorDocumentState documentState;
+    game::SelectionState selectionState;
     game::SectorTopologyMap& topologyMap = documentState.map.topologyMap;
     game::SectorAuthoringGraph& authoringGraph =
             documentState.authoring.authoringGraph;
@@ -3481,7 +3483,7 @@ void TestEditorSetAllSectorLightingUpdatesAllSectorsOnceAndChangesLightmapHash()
     const std::string originalHash = game::ComputeSectorLightmapSourceHash(topologyMap);
 
     std::string status;
-    Check(game::SetSectorEditorAllSectorLighting(
+    Check(game::SetSectorEditorSectorLighting(
                   state,
                   game::MakeSectorEditorDocumentLifecycleAccess(
                           documentState.lifecycle),
@@ -3489,6 +3491,8 @@ void TestEditorSetAllSectorLightingUpdatesAllSectorsOnceAndChangesLightmapHash()
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(
                           documentState.derivation),
+                  selectionState,
+                  game::SectorEditorSectorLightingScope::All,
                   0.375f,
                   Color{12, 34, 56, 7},
                   &status),
@@ -3526,6 +3530,7 @@ void TestEditorSetAllSectorLightingSkipsVoidFacesAndNoOpDoesNotDirty()
 {
     game::SectorEditorState state;
     game::SectorEditorDocumentState documentState;
+    game::SelectionState selectionState;
     game::SectorTopologyMap& topologyMap = documentState.map.topologyMap;
     game::SectorAuthoringGraph& authoringGraph =
             documentState.authoring.authoringGraph;
@@ -3551,7 +3556,7 @@ void TestEditorSetAllSectorLightingSkipsVoidFacesAndNoOpDoesNotDirty()
     state.topologyRenderCache.valid = true;
 
     std::string status;
-    Check(game::SetSectorEditorAllSectorLighting(
+    Check(game::SetSectorEditorSectorLighting(
                   state,
                   game::MakeSectorEditorDocumentLifecycleAccess(
                           documentState.lifecycle),
@@ -3559,6 +3564,8 @@ void TestEditorSetAllSectorLightingSkipsVoidFacesAndNoOpDoesNotDirty()
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(
                           documentState.derivation),
+                  selectionState,
+                  game::SectorEditorSectorLightingScope::All,
                   0.2f,
                   Color{1, 2, 3, 4},
                   &status),
@@ -3577,7 +3584,7 @@ void TestEditorSetAllSectorLightingSkipsVoidFacesAndNoOpDoesNotDirty()
     documentState.lifecycle.hasUnsavedChanges = false;
     state.topologyRenderCache.valid = true;
     const uint64_t revisionAfterApply = state.topologyRenderRevision;
-    Check(game::SetSectorEditorAllSectorLighting(
+    Check(game::SetSectorEditorSectorLighting(
                   state,
                   game::MakeSectorEditorDocumentLifecycleAccess(
                           documentState.lifecycle),
@@ -3585,6 +3592,8 @@ void TestEditorSetAllSectorLightingSkipsVoidFacesAndNoOpDoesNotDirty()
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(
                           documentState.derivation),
+                  selectionState,
+                  game::SectorEditorSectorLightingScope::All,
                   0.2f,
                   Color{1, 2, 3, 255},
                   &status),
@@ -3596,6 +3605,213 @@ void TestEditorSetAllSectorLightingSkipsVoidFacesAndNoOpDoesNotDirty()
           "Set All identical sector lighting does not dirty or invalidate");
     Check(status == "All sectors already use this lighting.",
           "Set All identical sector lighting reports no change");
+}
+
+void TestEditorSetAllSelectedSectorLightingUsesAuthoringFaceSelection()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorTopologyMap& topologyMap = documentState.map.topologyMap;
+    game::SectorAuthoringGraph& authoringGraph =
+            documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    topologyMap = MakeAdjacentSectorMap();
+    game::InitializeSectorEditorAuthoringStateFromTopology(
+            authoringGraph,
+            game::MakeSectorEditorDerivationDocumentAccess(
+                    documentState.derivation),
+            topologyMap);
+    Check(game::SelectSectorEditorAuthoringFaceAnchor(
+                  authoringGraph,
+                  selectionState,
+                  201),
+          "Set All selected setup selects one authoring face");
+
+    const game::SectorAuthoringFaceAnchor* originalUnselected =
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
+    Check(originalUnselected != nullptr,
+          "Set All selected setup finds the unselected face");
+    if (originalUnselected == nullptr) {
+        return;
+    }
+    const float unselectedIntensity = originalUnselected->ambientIntensity;
+    const Color unselectedColor = originalUnselected->ambientColor;
+    state.topologyRenderCache.valid = true;
+    const uint64_t originalRevision = state.topologyRenderRevision;
+    const std::string originalHash = game::ComputeSectorLightmapSourceHash(topologyMap);
+
+    std::string status;
+    Check(game::SetSectorEditorSectorLighting(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  selectionState,
+                  game::SectorEditorSectorLightingScope::Selected,
+                  0.625f,
+                  Color{21, 43, 65, 7},
+                  &status),
+          "Set All selected lighting applies and refreshes valid derived topology");
+
+    const game::SectorAuthoringFaceAnchor* selected =
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 201);
+    const game::SectorAuthoringFaceAnchor* unselected =
+            game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
+    const game::SectorTopologySector* selectedSector =
+            game::FindSectorTopologySector(topologyMap, 201);
+    const game::SectorTopologySector* unselectedSector =
+            game::FindSectorTopologySector(topologyMap, 200);
+    Check(selected != nullptr
+                  && Near(selected->ambientIntensity, 0.625f)
+                  && selected->ambientColor.r == 21
+                  && selected->ambientColor.g == 43
+                  && selected->ambientColor.b == 65
+                  && selected->ambientColor.a == 255,
+          "Set All selected lighting updates the selected authoring face");
+    Check(unselected != nullptr
+                  && Near(unselected->ambientIntensity, unselectedIntensity)
+                  && unselected->ambientColor.r == unselectedColor.r
+                  && unselected->ambientColor.g == unselectedColor.g
+                  && unselected->ambientColor.b == unselectedColor.b
+                  && unselected->ambientColor.a == unselectedColor.a,
+          "Set All selected lighting leaves unselected authoring faces unchanged");
+    Check(selectedSector != nullptr
+                  && Near(selectedSector->ambientIntensity, 0.625f)
+                  && selectedSector->ambientColor.r == 21
+                  && selectedSector->ambientColor.g == 43
+                  && selectedSector->ambientColor.b == 65
+                  && selectedSector->ambientColor.a == 255,
+          "Set All selected lighting projects to the selected derived sector");
+    Check(unselectedSector != nullptr
+                  && Near(unselectedSector->ambientIntensity, unselectedIntensity)
+                  && unselectedSector->ambientColor.r == unselectedColor.r
+                  && unselectedSector->ambientColor.g == unselectedColor.g
+                  && unselectedSector->ambientColor.b == unselectedColor.b
+                  && unselectedSector->ambientColor.a == unselectedColor.a,
+          "Set All selected lighting leaves unselected derived sectors unchanged");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges,
+          "Set All selected lighting marks the authoring document dirty");
+    Check(!state.topologyRenderCache.valid
+                  && state.topologyRenderRevision == originalRevision + 1,
+          "Set All selected lighting invalidates the 2D topology cache once");
+    Check(game::ComputeSectorLightmapSourceHash(topologyMap) != originalHash,
+          "Set All selected lighting changes the lightmap source hash");
+    Check(status == "Set lighting for 1 selected sector.",
+          "Set All selected lighting reports the selected sector count");
+
+    Check(game::ToggleSectorEditorAuthoringFaceSelection(
+                  authoringGraph,
+                  selectionState,
+                  200)
+                  && selectionState.selectedAuthoringFaceAnchorIds.size() == 2,
+          "Set All selected lighting uses the shared multi-selection set");
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    state.topologyRenderCache.valid = true;
+    const uint64_t multiSelectRevision = state.topologyRenderRevision;
+    Check(game::SetSectorEditorSectorLighting(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  selectionState,
+                  game::SectorEditorSectorLightingScope::Selected,
+                  0.5f,
+                  Color{9, 8, 7, 6},
+                  &status),
+          "Set All selected lighting applies to a multi-selection");
+    for (int faceAnchorId : selectionState.selectedAuthoringFaceAnchorIds) {
+        const game::SectorAuthoringFaceAnchor* anchor =
+                game::FindSectorAuthoringFaceAnchor(authoringGraph, faceAnchorId);
+        Check(anchor != nullptr
+                      && Near(anchor->ambientIntensity, 0.5f)
+                      && anchor->ambientColor.r == 9
+                      && anchor->ambientColor.g == 8
+                      && anchor->ambientColor.b == 7
+                      && anchor->ambientColor.a == 255,
+              "Set All selected lighting updates every multi-selected face");
+    }
+    Check(state.topologyRenderRevision == multiSelectRevision + 1
+                  && status == "Set lighting for 2 selected sectors.",
+          "Set All selected lighting invalidates once and reports the multi-selection count");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    state.topologyRenderCache.valid = true;
+    const uint64_t identicalRevision = state.topologyRenderRevision;
+    Check(game::SetSectorEditorSectorLighting(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  selectionState,
+                  game::SectorEditorSectorLightingScope::Selected,
+                  0.5f,
+                  Color{9, 8, 7, 255},
+                  &status),
+          "Set All identical selected lighting is a successful no-op");
+    Check(!documentState.lifecycle.topologyDocumentDirty
+                  && !documentState.lifecycle.hasUnsavedChanges
+                  && state.topologyRenderCache.valid
+                  && state.topologyRenderRevision == identicalRevision,
+          "Set All identical selected lighting does not dirty or invalidate");
+    Check(status == "Selected sectors already use this lighting.",
+          "Set All identical selected lighting reports no change");
+}
+
+void TestEditorSetAllSelectedSectorLightingEmptySelectionDoesNotDirty()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorTopologyMap& topologyMap = documentState.map.topologyMap;
+    game::SectorAuthoringGraph& authoringGraph =
+            documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    topologyMap = MakeAdjacentSectorMap();
+    game::InitializeSectorEditorAuthoringStateFromTopology(
+            authoringGraph,
+            game::MakeSectorEditorDerivationDocumentAccess(
+                    documentState.derivation),
+            topologyMap);
+    selectionState.selectedAuthoringFaceAnchorIds = {-1, 9999};
+    state.topologyRenderCache.valid = true;
+    const uint64_t originalRevision = state.topologyRenderRevision;
+    const std::string originalHash = game::ComputeSectorLightmapSourceHash(topologyMap);
+
+    std::string status;
+    Check(!game::SetSectorEditorSectorLighting(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  selectionState,
+                  game::SectorEditorSectorLightingScope::Selected,
+                  0.625f,
+                  Color{21, 43, 65, 255},
+                  &status),
+          "Set All selected lighting rejects an empty or stale selection");
+    Check(!documentState.lifecycle.topologyDocumentDirty
+                  && !documentState.lifecycle.hasUnsavedChanges
+                  && state.topologyRenderCache.valid
+                  && state.topologyRenderRevision == originalRevision,
+          "Set All empty selected lighting does not dirty or invalidate");
+    Check(game::ComputeSectorLightmapSourceHash(topologyMap) == originalHash,
+          "Set All empty selected lighting preserves the lightmap source hash");
+    Check(status == "Set All: no selected sectors to update.",
+          "Set All empty selected lighting reports the no-op");
 }
 
 void TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation()
@@ -11820,6 +12036,8 @@ int main()
     TestEditorSetAllModalUsesSelectedSectorLightingAndFallbacks();
     TestEditorSetAllSectorLightingUpdatesAllSectorsOnceAndChangesLightmapHash();
     TestEditorSetAllSectorLightingSkipsVoidFacesAndNoOpDoesNotDirty();
+    TestEditorSetAllSelectedSectorLightingUsesAuthoringFaceSelection();
+    TestEditorSetAllSelectedSectorLightingEmptySelectionDoesNotDirty();
     TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation();
     TestEditorAuthoringSideMaterialInspectorWritesProjectToSplitDerivedSideDefs();
     TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTopology();

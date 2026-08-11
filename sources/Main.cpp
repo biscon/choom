@@ -198,7 +198,7 @@ static void ClearLinearSceneBackground(Color displaySrgbColor)
 int main()
 {
     unsigned int flags = 0;
-    //flags |= FLAG_VSYNC_HINT;
+    flags |= FLAG_VSYNC_HINT;
     SetConfigFlags(flags);
 
     InitWindow(STARTUP_WINDOW_WIDTH, STARTUP_WINDOW_HEIGHT, "Engine");

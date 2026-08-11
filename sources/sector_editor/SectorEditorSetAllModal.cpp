@@ -13,6 +13,7 @@ void DrawSectorEditorSetAllModal(
         engine::AssetManager& assets,
         engine::FontHandle font,
         SectorEditorSetAllModalState& modalState,
+        std::size_t selectedSectorCount,
         const SectorEditorSetAllModalCallbacks& callbacks)
 {
     if (!modalState.open) {
@@ -63,6 +64,30 @@ void DrawSectorEditorSetAllModal(
             engine::UITextJustify::Left,
             config.textColor);
     y += 40.0f;
+
+    engine::Text(
+            config,
+            assets,
+            Rectangle{left, y, labelW, rowH},
+            font,
+            "Apply to:",
+            engine::UITextJustify::Right,
+            config.textColor);
+    const char* scopeOptions[] = {"Selected", "All"};
+    int scopeIndex = static_cast<int>(modalState.scope);
+    engine::Option(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_set_all_scope",
+            Rectangle{left + labelW, y, contentW - labelW, rowH},
+            font,
+            scopeOptions,
+            2,
+            scopeIndex);
+    modalState.scope = static_cast<SectorEditorSectorLightingScope>(scopeIndex);
+    y += rowH + gap;
 
     const SectorEditorFloatInputResult intensityResult = DrawLabeledFloatInput(
             ui,
@@ -122,15 +147,45 @@ void DrawSectorEditorSetAllModal(
 
     const float buttonY = modal.y + modal.height - 68.0f;
     const float buttonW = 150.0f;
-    okayRequested = engine::Button(
-            ui,
-            config,
-            input,
-            assets,
-            "sector_editor_set_all_okay",
-            Rectangle{modal.x + modal.width - buttonW * 2.0f - 38.0f, buttonY, buttonW, 44.0f},
-            font,
-            "Okay");
+    const bool canApply = modalState.scope == SectorEditorSectorLightingScope::All
+            || selectedSectorCount > 0;
+    if (!canApply) {
+        engine::Text(
+                config,
+                assets,
+                Rectangle{left, buttonY - 30.0f, contentW, 24.0f},
+                font,
+                "No sectors selected; choose All or cancel.",
+                engine::UITextJustify::Left,
+                config.mutedTextColor);
+    }
+    const Rectangle okayBounds{
+            modal.x + modal.width - buttonW * 2.0f - 38.0f,
+            buttonY,
+            buttonW,
+            44.0f};
+    if (canApply) {
+        okayRequested = engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_set_all_okay",
+                okayBounds,
+                font,
+                "Okay");
+    } else {
+        DrawRectangleRec(okayBounds, config.disabledColor);
+        DrawRectangleLinesEx(okayBounds, config.borderThickness, config.borderColor);
+        engine::Text(
+                config,
+                assets,
+                okayBounds,
+                font,
+                "Okay",
+                engine::UITextJustify::Center,
+                config.mutedTextColor);
+    }
     cancelRequested = cancelRequested || engine::Button(
             ui,
             config,
@@ -153,6 +208,7 @@ void DrawSectorEditorSetAllModal(
     }
     if (okayRequested && callbacks.applySectorLighting) {
         callbacks.applySectorLighting(
+                modalState.scope,
                 ClampAmbientIntensity(modalState.ambientIntensity),
                 modalState.ambientColor);
     }

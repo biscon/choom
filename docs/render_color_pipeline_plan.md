@@ -627,3 +627,24 @@ The GTX 3060 release-build acceptance targets remain: fog-off HDR within 15%
 of the main-branch LDR frame time at the matched hub view, and medium authored
 volumetrics adding no more than 1 ms. These figures require the user's hardware
 run and are not inferred from compile/test results.
+
+### Static-light specular follow-up
+
+- Authored static point and spot lights now provide a bounded runtime GGX
+  specular term to PBR world models and the first-person viewmodel. Their
+  diffuse contribution remains exclusively in the baked surface lightmap or
+  object-probe ambient cube, so direct diffuse is not counted twice.
+- Each receiver selects at most four range-overlapping lights. Selection uses
+  cached per-sector candidates, current portal visibility, receiver bounds,
+  light intensity/color, distance attenuation, and spotlight cones. The steady
+  draw path uses fixed arrays and performs no raycasts or dynamic allocation.
+- Static specular is eligible only while the receiver's corresponding baked
+  source is current and loaded: a valid surface lightmap for lightmapped static
+  models, or valid object-probe data for dynamic models and the viewmodel.
+  Missing, unavailable, or stale bake data leaves the previous diffuse fallback
+  behavior and contributes no static-light specular.
+- The PBR diagnostic tab reports eligibility, selected count, and authored light
+  IDs for both the selected world model and the viewmodel.
+- This reuses existing authored static-light data. It adds no static shadow map,
+  runtime occlusion ray, topology/schema field, bake artifact, bake version, or
+  source-hash input.

@@ -5,6 +5,7 @@
 #include "engine/render/HdrEffectPolicy.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
+#include "sector_demo/renderer/SectorStaticSpecularLighting.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
 
 #include <raylib.h>
@@ -106,6 +107,7 @@ struct SectorPbrDrawState {
     bool useVerticalObjectProbe = false;
     bool environmentActive = false;
     bool materialOverrideActive = false;
+    bool staticSpecularEligible = false;
 };
 
 inline float SanitizeSectorPbrNonnegative(float value, float fallback = 0.0f)
@@ -153,6 +155,7 @@ inline SectorPbrDrawState BuildSectorPbrDrawState(
         SectorPbrLightingPath path,
         bool validObjectProbe,
         bool hasStaticLightmap,
+        bool staticSpecularBakeCurrent,
         bool environmentActive,
         float environmentExposure,
         float outputBrightnessMultiplier,
@@ -186,6 +189,8 @@ inline SectorPbrDrawState BuildSectorPbrDrawState(
             : (hasStaticLightmap
                     ? SectorPbrIndirectSource::StaticLightmap
                     : SectorPbrIndirectSource::SectorAmbient);
+    state.staticSpecularEligible = staticSpecularBakeCurrent
+            && (state.useObjectProbe || hasStaticLightmap);
     return state;
 }
 
@@ -196,6 +201,7 @@ struct SectorPbrDrawDiagnostics {
     engine::ModelHandle model = engine::NullModelHandle();
     SectorPbrDrawState state;
     engine::ModelMaterialAsset material;
+    SectorStaticSpecularLightContext staticSpecularLights;
 };
 
 inline void ConfigureSectorStaticModelAuxiliaryMaterialMaps(
@@ -268,6 +274,9 @@ public:
             engine::World& runtimeObjectWorld,
             const Camera3D& camera,
             const SectorBillboardDynamicLightContext& dynamicLightContext,
+            const SectorStaticSpecularLightState& staticSpecularLights,
+            bool surfaceLightmapBakeCurrent,
+            bool objectProbeBakeCurrent,
             const SectorFogRenderContext& fogContext,
             const RuntimePortalVisibilityResult& visibility,
             const std::vector<engine::TextureHandle>& lightmapTextures,
@@ -283,6 +292,8 @@ public:
             const engine::ModelAsset* attachmentAsset,
             Matrix attachmentTransform,
             const SectorBillboardDynamicLightContext& dynamicLightContext,
+            const SectorStaticSpecularLightContext& staticSpecularLights,
+            bool objectProbeBakeCurrent,
             const TextureCubemap* environment,
             const BakedObjectLightingVerticalSample& ambientLighting,
             const SectorViewmodelLightingContext& lighting,
@@ -328,7 +339,8 @@ private:
             engine::ModelHandle model,
             int materialIndex,
             const SectorPbrDrawState& state,
-            const engine::ModelMaterialAsset& material);
+            const engine::ModelMaterialAsset& material,
+            const SectorStaticSpecularLightContext& staticSpecularLights);
     const CachedModel* FindCachedModel(
             engine::ModelHandle handle,
             int lightmapModelIndex) const;
@@ -379,6 +391,8 @@ private:
     int dynamicLightDirectionsLoc = -1;
     int dynamicLightInnerConeCosLoc = -1;
     int dynamicLightOuterConeCosLoc = -1;
+    SectorStaticSpecularShaderLocations staticSpecularLocations;
+    int useStaticSpecularLightingLoc = -1;
     int dynamicLightShadowSlotsLoc = -1;
     std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrixLocs = [] {
         std::array<int, MaxDynamicSpotLightShadowCasters> locations{};

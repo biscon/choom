@@ -3082,12 +3082,14 @@ void MarkSectorEditorAuthoringGraphEdited(
     InvalidateEditorTopologyRenderCache(topologyRenderRevision, topologyRenderCache);
 }
 
-bool SetSectorEditorAllSectorLighting(
+bool SetSectorEditorSectorLighting(
         SectorEditorState& state,
         SectorEditorDocumentLifecycleAccess lifecycle,
         SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorDerivationDocumentAccess derivation,
+        const SelectionState& selectionState,
+        SectorEditorSectorLightingScope scope,
         float ambientIntensity,
         Color ambientColor,
         std::string* outStatus)
@@ -3098,7 +3100,11 @@ bool SetSectorEditorAllSectorLighting(
     int sectorCount = 0;
     bool changed = false;
     for (SectorAuthoringFaceAnchor& anchor : authoringGraph.faceAnchors) {
-        if (anchor.isVoid) {
+        if (anchor.isVoid
+                || (scope == SectorEditorSectorLightingScope::Selected
+                        && !IsSectorEditorAuthoringFaceSelected(
+                                selectionState,
+                                anchor.id))) {
             continue;
         }
         ++sectorCount;
@@ -3116,19 +3122,25 @@ bool SetSectorEditorAllSectorLighting(
 
     if (sectorCount == 0) {
         if (outStatus != nullptr) {
-            *outStatus = "Set All: no sectors to update.";
+            *outStatus = scope == SectorEditorSectorLightingScope::Selected
+                    ? "Set All: no selected sectors to update."
+                    : "Set All: no sectors to update.";
         }
         return false;
     }
     if (!changed) {
         if (outStatus != nullptr) {
-            *outStatus = "All sectors already use this lighting.";
+            *outStatus = scope == SectorEditorSectorLightingScope::Selected
+                    ? "Selected sectors already use this lighting."
+                    : "All sectors already use this lighting.";
         }
         return true;
     }
 
     const std::string successStatus = TextFormat(
-            "Set lighting for %d sector%s.",
+            scope == SectorEditorSectorLightingScope::Selected
+                    ? "Set lighting for %d selected sector%s."
+                    : "Set lighting for %d sector%s.",
             sectorCount,
             sectorCount == 1 ? "" : "s");
     const char* failureStatus =

@@ -4,6 +4,11 @@
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 #include "sector_demo/SectorMeshBuilder.h"
 #include "sector_demo/SectorPortalVisibility.h"
+#include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorUnits.h"
+#include "sector_demo/renderer/SectorStaticSpecularLighting.h"
+
+#include <raymath.h>
 
 #include <cmath>
 #include <cstdio>
@@ -2123,6 +2128,124 @@ void TestDynamicPointLightSelectionHysteresis()
           "dynamic light hysteresis does not retain outside-radius old selected light");
 }
 
+void TestStaticSpecularLightRebuildRankingAndCap()
+{
+    game::SectorTopologyMap map;
+    for (int index = 0; index < 6; ++index) {
+        game::SectorTopologyStaticPointLight light;
+        light.id = 101 + index;
+        light.position = game::SectorWorldToAuthoringPosition(
+                Vector3{0.0f, 1.0f, 0.0f});
+        light.color = WHITE;
+        light.intensity = static_cast<float>(index + 1);
+        light.radius = game::SectorWorldToAuthoringDistance(10.0f);
+        map.staticLights.push_back(light);
+    }
+
+    const std::vector<game::SectorReceiverBounds> sectorBounds = {
+            Bounds(
+                    7,
+                    Vector3{-1.0f, 0.0f, -1.0f},
+                    Vector3{1.0f, 2.0f, 1.0f})};
+    game::SectorStaticSpecularLightState state;
+    game::RebuildSectorStaticSpecularLights(
+            map, nullptr, sectorBounds, state);
+    Check(state.sources.size() == 6,
+          "static specular rebuild packs authored point lights");
+    Check(state.sectorCandidates.size() == 1
+                    && state.sectorCandidates[0].sourceIndices.size() == 6,
+          "static specular rebuild precomputes sector overlap candidates");
+    Check(Near(state.sources[0].position, Vector3{0.0f, 1.0f, 0.0f})
+                    && Near(state.sources[0].radius, 10.0f)
+                    && Near(state.sources[0].color, Vector3{1.0f, 1.0f, 1.0f}),
+          "static specular rebuild converts authored units and sRGB color");
+
+    game::RuntimePortalVisibilityResult fallback;
+    fallback.fallbackDrawAll = true;
+    const game::SectorStaticSpecularLightContext selected =
+            game::SelectSectorStaticSpecularLights(
+                    state, sectorBounds[0], 7, fallback, true);
+    Check(selected.lightCount
+                    == static_cast<int>(game::MaxStaticSpecularLights),
+          "static specular selection stays capped at four lights");
+    Check(selected.lightIds[0] == 106
+                    && selected.lightIds[1] == 105
+                    && selected.lightIds[2] == 104
+                    && selected.lightIds[3] == 103,
+          "static specular selection ranks strongest overlapping lights deterministically");
+
+    const game::SectorStaticSpecularLightContext disabled =
+            game::SelectSectorStaticSpecularLights(
+                    state, sectorBounds[0], 7, fallback, false);
+    Check(disabled.lightCount == 0,
+          "static specular validity gate disables selection without allocations");
+}
+
+void TestStaticSpecularSpotConeAndPortalVisibility()
+{
+    game::SectorStaticSpecularLightState state;
+    game::SectorStaticSpecularLightSource visible;
+    visible.lightId = 11;
+    visible.ownerSectorId = 10;
+    visible.position = Vector3{-2.0f, 0.0f, 0.0f};
+    visible.radius = 8.0f;
+    visible.intensity = 1.0f;
+    visible.color = Vector3{1.0f, 1.0f, 1.0f};
+    state.sources.push_back(visible);
+
+    game::SectorStaticSpecularLightSource hidden = visible;
+    hidden.lightId = 12;
+    hidden.ownerSectorId = 20;
+    hidden.intensity = 2.0f;
+    state.sources.push_back(hidden);
+
+    game::SectorStaticSpecularLightSource awaySpot = visible;
+    awaySpot.lightId = 13;
+    awaySpot.kind = game::SectorStaticSpecularLightKind::Spot;
+    awaySpot.direction = Vector3{-1.0f, 0.0f, 0.0f};
+    awaySpot.innerConeCos = std::cos(20.0f * 3.14159265358979323846f / 180.0f);
+    awaySpot.outerConeCos = std::cos(35.0f * 3.14159265358979323846f / 180.0f);
+    state.sources.push_back(awaySpot);
+
+    game::RuntimePortalVisibilityResult visibility;
+    visibility.validStartSector = true;
+    visibility.visibleSectorIds = {10};
+    const game::SectorReceiverBounds receiver = Bounds(
+            10,
+            Vector3{-0.1f, -0.1f, -0.1f},
+            Vector3{0.1f, 0.1f, 0.1f});
+    const game::SectorStaticSpecularLightContext selected =
+            game::SelectSectorStaticSpecularLights(
+                    state, receiver, 10, visibility, true);
+    Check(selected.lightCount == 1 && selected.lightIds[0] == 11,
+          "static specular selection rejects hidden sectors and out-of-cone spotlights");
+
+    visibility.fallbackDrawAll = true;
+    const game::SectorStaticSpecularLightContext fallback =
+            game::SelectSectorStaticSpecularLights(
+                    state, receiver, 10, visibility, true);
+    Check(fallback.lightCount == 2
+                    && fallback.lightIds[0] == 12
+                    && fallback.lightIds[1] == 11,
+          "static specular visibility fallback conservatively considers all sectors");
+}
+
+void TestStaticSpecularReceiverBoundsTransform()
+{
+    const game::SectorReceiverBounds transformed =
+            game::TransformSectorStaticSpecularReceiverBounds(
+                    BoundingBox{
+                            Vector3{-1.0f, -2.0f, -3.0f},
+                            Vector3{1.0f, 2.0f, 3.0f}},
+                    MatrixTranslate(4.0f, 5.0f, 6.0f),
+                    42,
+                    Vector3{});
+    Check(transformed.sectorId == 42
+                    && Near(transformed.min, Vector3{3.0f, 3.0f, 3.0f})
+                    && Near(transformed.max, Vector3{5.0f, 7.0f, 9.0f}),
+          "static specular receiver bounds follow model transforms");
+}
+
 } // namespace
 
 int main()
@@ -2166,6 +2289,9 @@ int main()
     TestDynamicSpotLightFlickerDoesNotAffectSelection();
     TestDynamicPointLightFallbackUsesAllReceiverBounds();
     TestDynamicPointLightSelectionHysteresis();
+    TestStaticSpecularLightRebuildRankingAndCap();
+    TestStaticSpecularSpotConeAndPortalVisibility();
+    TestStaticSpecularReceiverBoundsTransform();
     if (failures == 0) {
         std::puts("Sector topology mesh builder tests passed");
     }

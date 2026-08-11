@@ -566,6 +566,8 @@ void FpsPlayerRuntime::Render(
             state.firing.viewmodelRootTransform,
             attachmentAsset,
             state.attachment.pistolWorldTransform,
+            preferredSectorId,
+            !runtimeObjects.objectLightProbes.probes.empty(),
             ambientLighting,
             viewmodelLighting,
             attachmentLighting);

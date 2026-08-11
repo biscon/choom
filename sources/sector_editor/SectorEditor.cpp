@@ -4746,14 +4746,19 @@ void SectorEditor::DrawSetAllModal(
             [this]() {
                 state.setAllModal = SectorEditorSetAllModalState{};
             },
-            [this](float ambientIntensity, Color ambientColor) {
+            [this](
+                    SectorEditorSectorLightingScope scope,
+                    float ambientIntensity,
+                    Color ambientColor) {
                 std::string status;
-                SetSectorEditorAllSectorLighting(
+                SetSectorEditorSectorLighting(
                         state,
                         Lifecycle(),
                         TopologyMap(),
                         AuthoringGraph(),
                         MakeLiveDerivationAccess(documentState.derivation),
+                        selectionState,
+                        scope,
                         ambientIntensity,
                         ambientColor,
                         &status);
@@ -4762,6 +4767,13 @@ void SectorEditor::DrawSetAllModal(
                 }
                 state.setAllModal = SectorEditorSetAllModalState{};
             }};
+    std::size_t selectedSectorCount = 0;
+    for (const SectorAuthoringFaceAnchor& anchor : AuthoringGraph().faceAnchors) {
+        if (!anchor.isVoid
+                && IsSectorEditorAuthoringFaceSelected(selectionState, anchor.id)) {
+            ++selectedSectorCount;
+        }
+    }
     DrawSectorEditorSetAllModal(
             ui,
             config,
@@ -4769,6 +4781,7 @@ void SectorEditor::DrawSetAllModal(
             assets,
             font,
             state.setAllModal,
+            selectedSectorCount,
             callbacks);
 }
 

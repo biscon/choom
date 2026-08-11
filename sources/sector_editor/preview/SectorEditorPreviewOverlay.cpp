@@ -623,6 +623,26 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             diagnostic.state.environmentExposure,
                             diagnostic.state.materialOverrideActive ? "on" : "off",
                             diagnostic.state.outputBrightnessMultiplier));
+                    std::ostringstream staticSpecular;
+                    staticSpecular
+                            << (diagnostic.state.staticSpecularEligible
+                                    ? "eligible"
+                                    : "disabled")
+                            << " | "
+                            << diagnostic.staticSpecularLights.lightCount
+                            << " selected";
+                    if (diagnostic.staticSpecularLights.lightCount > 0) {
+                        staticSpecular << " | ids ";
+                        for (int lightIndex = 0;
+                                lightIndex < diagnostic.staticSpecularLights.lightCount;
+                                ++lightIndex) {
+                            if (lightIndex > 0) staticSpecular << ',';
+                            staticSpecular
+                                    << diagnostic.staticSpecularLights.lightIds[
+                                            static_cast<size_t>(lightIndex)];
+                        }
+                    }
+                    addKeyValue("static specular", staticSpecular.str());
                     std::ostringstream roles;
                     for (size_t roleIndex = 0;
                             roleIndex < engine::ModelMaterialTextureRoleCount;
@@ -685,6 +705,28 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             viewmodelDiagnostic.state.outputBrightnessMultiplier,
                             viewmodelDiagnostic.state.materialOverrideActive
                                     ? "on" : "off"));
+                    std::ostringstream viewmodelStaticSpecular;
+                    viewmodelStaticSpecular
+                            << (viewmodelDiagnostic.state.staticSpecularEligible
+                                    ? "eligible"
+                                    : "disabled")
+                            << " | "
+                            << viewmodelDiagnostic.staticSpecularLights.lightCount
+                            << " selected";
+                    if (viewmodelDiagnostic.staticSpecularLights.lightCount > 0) {
+                        viewmodelStaticSpecular << " | ids ";
+                        for (int lightIndex = 0;
+                                lightIndex < viewmodelDiagnostic.staticSpecularLights.lightCount;
+                                ++lightIndex) {
+                            if (lightIndex > 0) viewmodelStaticSpecular << ',';
+                            viewmodelStaticSpecular
+                                    << viewmodelDiagnostic.staticSpecularLights.lightIds[
+                                            static_cast<size_t>(lightIndex)];
+                        }
+                    }
+                    addKeyValue(
+                            "viewmodel static specular",
+                            viewmodelStaticSpecular.str());
                 }
                 addWrappedLine("AO/metallic/roughness/normals are bounded scene-linear diagnostic values and still pass through the shared HDR presentation transform.");
                 break;

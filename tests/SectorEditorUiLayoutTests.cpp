@@ -40,6 +40,22 @@ bool Contains(Rectangle outer, Rectangle inner)
             && inner.y + inner.height <= outer.y + outer.height;
 }
 
+void TestModelFilenameExtraction()
+{
+    Check(game::SectorEditorModelFilename(
+                  "assets/models/props/medical_cart.glb")
+                    == "medical_cart.glb",
+          "model filename removes nested asset directories");
+    Check(game::SectorEditorModelFilename("crate.gltf") == "crate.gltf",
+          "model filename preserves a bare filename and extension");
+    Check(game::SectorEditorModelFilename(
+                  "assets\\models\\characters\\guard.glb")
+                    == "guard.glb",
+          "model filename accepts backslash-separated paths");
+    Check(game::SectorEditorModelFilename("").empty(),
+          "empty model path produces an empty filename");
+}
+
 void TestTextureRowWithoutClear()
 {
     const game::SectorEditorInspectorTextureRowLayout layout =
@@ -503,6 +519,7 @@ void TestPreviewSettingsModalFogDraftApplyAndReset()
 
 int main()
 {
+    TestModelFilenameExtraction();
     TestTextureRowWithoutClear();
     TestTextureRowWithClear();
     TestCompactNumericRow();
