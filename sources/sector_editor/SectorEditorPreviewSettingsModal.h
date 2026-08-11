@@ -154,7 +154,8 @@ inline bool ApplySectorPreviewFogSettings(
             && current.density == draft.density
             && current.maxOpacity == draft.maxOpacity
             && current.referenceHeightWorld == draft.referenceHeightWorld
-            && current.heightFalloff == draft.heightFalloff;
+            && current.heightFalloff == draft.heightFalloff
+            && current.localVolumeQuality == draft.localVolumeQuality;
     if (same) {
         return false;
     }

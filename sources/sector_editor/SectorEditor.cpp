@@ -69,92 +69,6 @@ namespace {
 
 constexpr float SectorEditorPanelScrollPaddingPx = 8.0f;
 
-bool SameOptionalVector3(
-        const std::optional<Vector3>& lhs,
-        const std::optional<Vector3>& rhs)
-{
-    if (lhs.has_value() != rhs.has_value()) return false;
-    return !lhs || (lhs->x == rhs->x && lhs->y == rhs->y && lhs->z == rhs->z);
-}
-
-bool SameViewmodelOverride(
-        const FpsViewmodelPresentationOverride& lhs,
-        const FpsViewmodelPresentationOverride& rhs)
-{
-    return SameOptionalVector3(lhs.position, rhs.position)
-            && SameOptionalVector3(lhs.rotationDegrees, rhs.rotationDegrees)
-            && lhs.scale == rhs.scale
-            && lhs.verticalFovDegrees == rhs.verticalFovDegrees;
-}
-
-bool SameHolsterTransitionOverride(
-        const FpsViewmodelHolsterTransitionOverride& lhs,
-        const FpsViewmodelHolsterTransitionOverride& rhs)
-{
-    return lhs.holsterDurationSeconds == rhs.holsterDurationSeconds
-            && lhs.unholsterDurationSeconds == rhs.unholsterDurationSeconds
-            && SameOptionalVector3(
-                    lhs.hiddenTranslation,
-                    rhs.hiddenTranslation)
-            && SameOptionalVector3(
-                    lhs.hiddenRotationDegrees,
-                    rhs.hiddenRotationDegrees);
-}
-
-bool SameGripCorrectionOverride(
-        const FpsViewmodelGripCorrectionOverride& lhs,
-        const FpsViewmodelGripCorrectionOverride& rhs)
-{
-    return SameOptionalVector3(lhs.translation, rhs.translation)
-            && SameOptionalVector3(lhs.rotationDegrees, rhs.rotationDegrees)
-            && lhs.scale == rhs.scale;
-}
-
-bool SameAttachmentLightingOverride(
-        const FpsViewmodelAttachmentLightingOverride& lhs,
-        const FpsViewmodelAttachmentLightingOverride& rhs)
-{
-    return lhs.brightnessAdjustment == rhs.brightnessAdjustment
-            && lhs.metallicFactor == rhs.metallicFactor
-            && lhs.roughnessFactor == rhs.roughnessFactor;
-}
-
-bool SameFiringOverride(
-        const FpsWeaponFiringOverride& lhs,
-        const FpsWeaponFiringOverride& rhs)
-{
-    return lhs.shotIntervalSeconds == rhs.shotIntervalSeconds
-            && SameOptionalVector3(lhs.recoilTranslationImpulse, rhs.recoilTranslationImpulse)
-            && SameOptionalVector3(lhs.recoilRotationImpulseDegrees, rhs.recoilRotationImpulseDegrees)
-            && lhs.recoilRollVariationDegrees == rhs.recoilRollVariationDegrees
-            && lhs.recoilSpringFrequencyHz == rhs.recoilSpringFrequencyHz
-            && lhs.recoilDampingRatio == rhs.recoilDampingRatio
-            && lhs.cameraRecoilEnabled == rhs.cameraRecoilEnabled
-            && lhs.cameraRecoilPitchKickDegrees == rhs.cameraRecoilPitchKickDegrees
-            && lhs.cameraRecoilPitchVariationDegrees == rhs.cameraRecoilPitchVariationDegrees
-            && lhs.cameraRecoilYawVariationDegrees == rhs.cameraRecoilYawVariationDegrees
-            && lhs.cameraRecoilRollVariationDegrees == rhs.cameraRecoilRollVariationDegrees
-            && lhs.cameraRecoilSpringFrequencyHz == rhs.cameraRecoilSpringFrequencyHz
-            && lhs.cameraRecoilSpringDampingRatio == rhs.cameraRecoilSpringDampingRatio
-            && lhs.cameraRecoilMaxPitchDegrees == rhs.cameraRecoilMaxPitchDegrees
-            && lhs.cameraRecoilMaxYawDegrees == rhs.cameraRecoilMaxYawDegrees
-            && lhs.cameraRecoilMaxRollDegrees == rhs.cameraRecoilMaxRollDegrees
-            && SameOptionalVector3(lhs.muzzlePosition, rhs.muzzlePosition)
-            && SameOptionalVector3(lhs.muzzleRotationDegrees, rhs.muzzleRotationDegrees)
-            && lhs.flashLifetimeSeconds == rhs.flashLifetimeSeconds
-            && lhs.flashSizeWorld == rhs.flashSizeWorld
-            && lhs.flashSizeVariation == rhs.flashSizeVariation
-            && lhs.flashIrregularity == rhs.flashIrregularity
-            && lhs.flashForwardStretch == rhs.flashForwardStretch
-            && lhs.flashMinimumLobeCount == rhs.flashMinimumLobeCount
-            && lhs.flashMaximumLobeCount == rhs.flashMaximumLobeCount
-            && lhs.flashRearSuppression == rhs.flashRearSuppression
-            && lhs.flashEdgeSoftness == rhs.flashEdgeSoftness
-            && lhs.muzzleLightIntensity == rhs.muzzleLightIntensity
-            && lhs.muzzleLightRadiusWorld == rhs.muzzleLightRadiusWorld
-            && lhs.muzzleLightLifetimeSeconds == rhs.muzzleLightLifetimeSeconds;
-}
-
 SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
         SectorEditorUiState& uiState,
         RuntimeObjectEditingUiState& runtimeObjectUiState,
@@ -6067,11 +5981,9 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const FpsViewmodelPresentationOverride viewmodelOverride = weapon != nullptr
             ? BuildFpsViewmodelOverride(weapon->viewmodel.presentation, draftViewmodel)
             : FpsViewmodelPresentationOverride{};
-    const FpsViewmodelPresentationOverride currentOverride = weapon != nullptr
-            ? BuildFpsViewmodelOverride(weapon->viewmodel.presentation, currentViewmodel)
-            : FpsViewmodelPresentationOverride{};
     const bool viewmodelChanged = weapon != nullptr
-            && !SameViewmodelOverride(viewmodelOverride, currentOverride);
+            && !FpsViewmodelOverrideEmpty(
+                    BuildFpsViewmodelOverride(currentViewmodel, draftViewmodel));
     const FpsViewmodelHolsterTransition draftHolsterTransition =
             ClampFpsViewmodelHolsterTransition(
                     state.previewSettingsModal
@@ -6090,16 +6002,11 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                     weapon->viewmodel.holsterTransition,
                     draftHolsterTransition)
             : FpsViewmodelHolsterTransitionOverride{};
-    const FpsViewmodelHolsterTransitionOverride
-            currentHolsterTransitionOverride = weapon != nullptr
-            ? BuildFpsViewmodelHolsterTransitionOverride(
-                    weapon->viewmodel.holsterTransition,
-                    currentHolsterTransition)
-            : FpsViewmodelHolsterTransitionOverride{};
     const bool holsterTransitionChanged = weapon != nullptr
-            && !SameHolsterTransitionOverride(
-                    holsterTransitionOverride,
-                    currentHolsterTransitionOverride);
+            && !FpsViewmodelHolsterTransitionOverrideEmpty(
+                    BuildFpsViewmodelHolsterTransitionOverride(
+                            currentHolsterTransition,
+                            draftHolsterTransition));
     const FpsViewmodelGripCorrection draftGrip =
             ClampFpsViewmodelGripCorrection(
                     state.previewSettingsModal.draftViewmodelGrip);
@@ -6114,15 +6021,10 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                     weapon->viewmodel.attachment.gripCorrection,
                     draftGrip)
             : FpsViewmodelGripCorrectionOverride{};
-    const FpsViewmodelGripCorrectionOverride currentGripOverride =
-            weapon != nullptr
-            ? BuildFpsViewmodelGripCorrectionOverride(
-                    weapon->viewmodel.attachment.gripCorrection,
-                    currentGrip)
-            : FpsViewmodelGripCorrectionOverride{};
     const bool gripChanged = weapon != nullptr
-            && !SameGripCorrectionOverride(
-                    gripOverride, currentGripOverride);
+            && !FpsViewmodelGripCorrectionOverrideEmpty(
+                    BuildFpsViewmodelGripCorrectionOverride(
+                            currentGrip, draftGrip));
     const FpsViewmodelAttachmentLighting draftAttachmentLighting =
             ClampFpsViewmodelAttachmentLighting(
                     state.previewSettingsModal
@@ -6140,16 +6042,11 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                     weapon->viewmodel.attachment.lighting,
                     draftAttachmentLighting)
             : FpsViewmodelAttachmentLightingOverride{};
-    const FpsViewmodelAttachmentLightingOverride
-            currentAttachmentLightingOverride = weapon != nullptr
-            ? BuildFpsViewmodelAttachmentLightingOverride(
-                    weapon->viewmodel.attachment.lighting,
-                    currentAttachmentLighting)
-            : FpsViewmodelAttachmentLightingOverride{};
     const bool attachmentLightingChanged = weapon != nullptr
-            && !SameAttachmentLightingOverride(
-                    attachmentLightingOverride,
-                    currentAttachmentLightingOverride);
+            && !FpsViewmodelAttachmentLightingOverrideEmpty(
+                    BuildFpsViewmodelAttachmentLightingOverride(
+                            currentAttachmentLighting,
+                            draftAttachmentLighting));
     const FpsWeaponFiringDefinition draftFiring =
             ClampFpsWeaponFiringDefinition(
                     state.previewSettingsModal.draftWeaponFiring);
@@ -6161,11 +6058,9 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const FpsWeaponFiringOverride firingOverride = weapon != nullptr
             ? BuildFpsWeaponFiringOverride(weapon->firing, draftFiring)
             : FpsWeaponFiringOverride{};
-    const FpsWeaponFiringOverride currentFiringOverride = weapon != nullptr
-            ? BuildFpsWeaponFiringOverride(weapon->firing, currentFiring)
-            : FpsWeaponFiringOverride{};
     const bool firingChanged = weapon != nullptr
-            && !SameFiringOverride(firingOverride, currentFiringOverride);
+            && !FpsWeaponFiringOverrideEmpty(
+                    BuildFpsWeaponFiringOverride(currentFiring, draftFiring));
     if (!previewChanged && !skyChanged && !directionalChanged && !fogChanged
             && !objectProbeSettingsChanged && !viewmodelChanged && !gripChanged
             && !holsterTransitionChanged && !attachmentLightingChanged

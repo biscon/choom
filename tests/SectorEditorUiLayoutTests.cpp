@@ -478,6 +478,16 @@ void TestPreviewSettingsModalFogDraftApplyAndReset()
           "preview settings modal writes normalized fog settings");
     Check(!game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
           "preview settings modal reports unchanged fog settings");
+
+    modal.draftFogSettings.localVolumeQuality =
+            game::SectorTopologyFogSettings::LocalVolumeQuality::High;
+    Check(game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
+          "preview settings modal applies a quality-only fog change");
+    Check(map.fogSettings.localVolumeQuality
+                  == game::SectorTopologyFogSettings::LocalVolumeQuality::High,
+          "preview settings modal writes local fog quality");
+    Check(!game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
+          "preview settings modal reports unchanged local fog quality");
     Check(game::ComputeSectorLightmapSourceHash(map) == lightmapHash,
           "preview fog settings do not change the lightmap source hash");
 

@@ -858,6 +858,155 @@ void SettingsResolutionAndPersistence()
     assert(loaded.playerSounds.events[1].id == "land");
 }
 
+void PreviewSettingsOverrideDeltaCoverage()
+{
+    const auto expectPresentationDelta = [](auto edit) {
+        const game::FpsViewmodelPresentation current;
+        game::FpsViewmodelPresentation draft = current;
+        edit(draft);
+        assert(!game::FpsViewmodelOverrideEmpty(
+                game::BuildFpsViewmodelOverride(current, draft)));
+    };
+    expectPresentationDelta([](auto& value) { value.position.x = 0.25f; });
+    expectPresentationDelta([](auto& value) { value.position.y = 0.25f; });
+    expectPresentationDelta([](auto& value) { value.position.z = 0.25f; });
+    expectPresentationDelta([](auto& value) { value.rotationDegrees.x = 1.0f; });
+    expectPresentationDelta([](auto& value) { value.rotationDegrees.y = 1.0f; });
+    expectPresentationDelta([](auto& value) { value.rotationDegrees.z = 1.0f; });
+    expectPresentationDelta([](auto& value) { value.scale = 1.25f; });
+    expectPresentationDelta([](auto& value) { value.verticalFovDegrees = 75.0f; });
+
+    const auto expectHolsterDelta = [](auto edit) {
+        const game::FpsViewmodelHolsterTransition current;
+        game::FpsViewmodelHolsterTransition draft = current;
+        edit(draft);
+        assert(!game::FpsViewmodelHolsterTransitionOverrideEmpty(
+                game::BuildFpsViewmodelHolsterTransitionOverride(current, draft)));
+    };
+    expectHolsterDelta([](auto& value) { value.holsterDurationSeconds = 0.5f; });
+    expectHolsterDelta([](auto& value) { value.unholsterDurationSeconds = 0.5f; });
+    expectHolsterDelta([](auto& value) { value.hiddenTranslation.x = 0.25f; });
+    expectHolsterDelta([](auto& value) { value.hiddenTranslation.y = 0.25f; });
+    expectHolsterDelta([](auto& value) { value.hiddenTranslation.z = 0.25f; });
+    expectHolsterDelta([](auto& value) { value.hiddenRotationDegrees.x = 1.0f; });
+    expectHolsterDelta([](auto& value) { value.hiddenRotationDegrees.y = 1.0f; });
+    expectHolsterDelta([](auto& value) { value.hiddenRotationDegrees.z = 1.0f; });
+
+    const auto expectGripDelta = [](auto edit) {
+        const game::FpsViewmodelGripCorrection current;
+        game::FpsViewmodelGripCorrection draft = current;
+        edit(draft);
+        assert(!game::FpsViewmodelGripCorrectionOverrideEmpty(
+                game::BuildFpsViewmodelGripCorrectionOverride(current, draft)));
+    };
+    expectGripDelta([](auto& value) { value.translation.x = 0.25f; });
+    expectGripDelta([](auto& value) { value.translation.y = 0.25f; });
+    expectGripDelta([](auto& value) { value.translation.z = 0.25f; });
+    expectGripDelta([](auto& value) { value.rotationDegrees.x = 1.0f; });
+    expectGripDelta([](auto& value) { value.rotationDegrees.y = 1.0f; });
+    expectGripDelta([](auto& value) { value.rotationDegrees.z = 1.0f; });
+    expectGripDelta([](auto& value) { value.scale = 1.25f; });
+
+    const auto expectLightingDelta = [](auto edit) {
+        const game::FpsViewmodelAttachmentLighting current;
+        game::FpsViewmodelAttachmentLighting draft = current;
+        edit(draft);
+        assert(!game::FpsViewmodelAttachmentLightingOverrideEmpty(
+                game::BuildFpsViewmodelAttachmentLightingOverride(current, draft)));
+    };
+    expectLightingDelta([](auto& value) { value.brightnessAdjustment = 0.25f; });
+    expectLightingDelta([](auto& value) {
+        value.materialOverride.metallicFactor = 0.5f;
+    });
+    expectLightingDelta([](auto& value) {
+        value.materialOverride.roughnessFactor = 0.5f;
+    });
+
+    const auto expectFiringDelta = [](auto edit) {
+        const game::FpsWeaponFiringDefinition current;
+        game::FpsWeaponFiringDefinition draft = current;
+        edit(draft);
+        assert(!game::FpsWeaponFiringOverrideEmpty(
+                game::BuildFpsWeaponFiringOverride(current, draft)));
+    };
+    expectFiringDelta([](auto& value) { value.shotIntervalSeconds = 0.25f; });
+    expectFiringDelta([](auto& value) { value.recoil.translationImpulse.x = 0.1f; });
+    expectFiringDelta([](auto& value) { value.recoil.translationImpulse.y = 0.1f; });
+    expectFiringDelta([](auto& value) { value.recoil.translationImpulse.z = -0.1f; });
+    expectFiringDelta([](auto& value) { value.recoil.rotationImpulseDegrees.x = -4.0f; });
+    expectFiringDelta([](auto& value) { value.recoil.rotationImpulseDegrees.y = 1.0f; });
+    expectFiringDelta([](auto& value) { value.recoil.rotationImpulseDegrees.z = 1.0f; });
+    expectFiringDelta([](auto& value) { value.recoil.rollVariationDegrees = 0.75f; });
+    expectFiringDelta([](auto& value) { value.recoil.springFrequencyHz = 9.0f; });
+    expectFiringDelta([](auto& value) { value.recoil.dampingRatio = 1.0f; });
+    expectFiringDelta([](auto& value) { value.cameraRecoil.enabled = true; });
+    expectFiringDelta([](auto& value) { value.cameraRecoil.pitchKickDegrees = 0.5f; });
+    expectFiringDelta([](auto& value) { value.cameraRecoil.pitchVariationDegrees = 0.1f; });
+    expectFiringDelta([](auto& value) { value.cameraRecoil.yawVariationDegrees = 0.1f; });
+    expectFiringDelta([](auto& value) { value.cameraRecoil.rollVariationDegrees = 0.1f; });
+    expectFiringDelta([](auto& value) { value.cameraRecoil.springFrequencyHz = 6.0f; });
+    expectFiringDelta([](auto& value) { value.cameraRecoil.springDampingRatio = 1.1f; });
+    expectFiringDelta([](auto& value) { value.cameraRecoil.maxPitchDegrees = 1.0f; });
+    expectFiringDelta([](auto& value) { value.cameraRecoil.maxYawDegrees = 1.0f; });
+    expectFiringDelta([](auto& value) { value.cameraRecoil.maxRollDegrees = 1.0f; });
+    expectFiringDelta([](auto& value) { value.muzzleSocket.position.x = 0.1f; });
+    expectFiringDelta([](auto& value) { value.muzzleSocket.position.y = 0.1f; });
+    expectFiringDelta([](auto& value) { value.muzzleSocket.position.z = 0.2f; });
+    expectFiringDelta([](auto& value) { value.muzzleSocket.rotationDegrees.x = 1.0f; });
+    expectFiringDelta([](auto& value) { value.muzzleSocket.rotationDegrees.y = 1.0f; });
+    expectFiringDelta([](auto& value) { value.muzzleSocket.rotationDegrees.z = 1.0f; });
+    expectFiringDelta([](auto& value) { value.muzzleFlash.lifetimeSeconds = 0.05f; });
+    expectFiringDelta([](auto& value) { value.muzzleFlash.sizeWorld = 0.15f; });
+    expectFiringDelta([](auto& value) { value.muzzleFlash.radianceStrength = 12.0f; });
+    expectFiringDelta([](auto& value) { value.muzzleFlash.sizeVariation = 0.2f; });
+    expectFiringDelta([](auto& value) { value.muzzleFlash.irregularity = 0.8f; });
+    expectFiringDelta([](auto& value) { value.muzzleFlash.forwardStretch = 2.0f; });
+    expectFiringDelta([](auto& value) { value.muzzleFlash.minimumLobeCount = 4; });
+    expectFiringDelta([](auto& value) { value.muzzleFlash.maximumLobeCount = 9; });
+    expectFiringDelta([](auto& value) { value.muzzleFlash.rearSuppression = 0.8f; });
+    expectFiringDelta([](auto& value) { value.muzzleFlash.edgeSoftness = 0.5f; });
+    expectFiringDelta([](auto& value) { value.muzzleLight.intensity = 8.0f; });
+    expectFiringDelta([](auto& value) { value.muzzleLight.radiusWorld = 3.0f; });
+    expectFiringDelta([](auto& value) { value.muzzleLight.lifetimeSeconds = 0.1f; });
+
+    const game::FpsWeaponFiringDefinition defaults;
+    game::FpsWeaponFiringDefinition radianceOnly = defaults;
+    radianceOnly.muzzleFlash.radianceStrength = 12.0f;
+    const game::FpsWeaponFiringOverride radianceOverride =
+            game::BuildFpsWeaponFiringOverride(defaults, radianceOnly);
+    assert(radianceOverride.flashRadianceStrength
+            && Near(*radianceOverride.flashRadianceStrength, 12.0f));
+    assert(!radianceOverride.flashLifetimeSeconds);
+
+    game::FpsApplicationSettings settings;
+    game::SetFpsWeaponFiringOverride(settings, "pistol", radianceOverride);
+    const std::filesystem::path path = std::filesystem::temp_directory_path()
+            / "fps_preview_radiance_only_settings_test.json";
+    std::string error;
+    assert(game::SaveFpsApplicationSettings(path.string(), settings, &error));
+    game::FpsApplicationSettings loaded;
+    assert(game::LoadFpsApplicationSettings(path.string(), loaded, &error));
+    const game::FpsWeaponFiringOverride* loadedOverride =
+            game::FindFpsWeaponFiringOverride(loaded, "pistol");
+    assert(loadedOverride != nullptr
+            && loadedOverride->flashRadianceStrength
+            && Near(*loadedOverride->flashRadianceStrength, 12.0f)
+            && !loadedOverride->flashLifetimeSeconds);
+    const game::FpsWeaponFiringDefinition resolved =
+            game::ResolveFpsWeaponFiringDefinition(defaults, loadedOverride);
+    assert(Near(resolved.muzzleFlash.radianceStrength, 12.0f));
+    assert(Near(
+            resolved.muzzleFlash.lifetimeSeconds,
+            defaults.muzzleFlash.lifetimeSeconds));
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+
+    assert(!game::FpsWeaponFiringOverrideEmpty(
+            game::BuildFpsWeaponFiringOverride(radianceOnly, defaults)));
+    assert(game::FpsWeaponFiringOverrideEmpty(
+            game::BuildFpsWeaponFiringOverride(defaults, defaults)));
+}
+
 void CameraMath()
 {
     Camera3D camera{}; camera.position={10,20,30}; camera.target={10,20,31}; camera.up={0,1,0};
@@ -1891,6 +2040,7 @@ void CameraRecoilRuntime()
 int main()
 {
     RegistrySuccess(); RegistryValidation(); SettingsResolutionAndPersistence();
+    PreviewSettingsOverrideDeltaCoverage();
     CameraMath(); HolsterTransitionStateAndMath(); AnimationTiming();
     AttachmentMathAndBoneResolution();
     PreparedPistolFrameTwentyFit(); BrightnessMapping();
