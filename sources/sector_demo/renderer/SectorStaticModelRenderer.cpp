@@ -491,6 +491,59 @@ int GetShaderLocationArrayElement(Shader shader, const char* name, size_t index)
     return GetShaderLocation(shader, indexedName.c_str());
 }
 
+void SetShaderSamplerUnit(Shader shader, int location, int textureUnit)
+{
+    if (location >= 0) {
+        SetShaderValue(
+                shader,
+                location,
+                &textureUnit,
+                SHADER_UNIFORM_INT);
+    }
+}
+
+void InitializeSectorPbrSamplerUnits(
+        Shader shader,
+        int lightmapTextureLocation,
+        int environmentTextureLocation,
+        int shadowMap0Location,
+        int shadowMap1Location)
+{
+    constexpr std::array<int, 6> materialTextureUnits{
+            MATERIAL_MAP_ALBEDO,
+            MATERIAL_MAP_METALNESS,
+            MATERIAL_MAP_NORMAL,
+            MATERIAL_MAP_ROUGHNESS,
+            MATERIAL_MAP_OCCLUSION,
+            MATERIAL_MAP_EMISSION};
+    for (int textureUnit : materialTextureUnits) {
+        SetShaderSamplerUnit(
+                shader,
+                shader.locs[SHADER_LOC_MAP_DIFFUSE + textureUnit],
+                textureUnit);
+    }
+    SetShaderSamplerUnit(
+            shader,
+            lightmapTextureLocation,
+            SectorStaticModelLightmapMaterialMap);
+    // A missing environment leaves this sampler active in the linked shader.
+    // Keep its cubemap unit distinct from the default sampler2D unit even when
+    // DrawMesh() has no cubemap texture to bind for the current map.
+    SetShaderSamplerUnit(
+            shader,
+            environmentTextureLocation,
+            SectorStaticModelEnvironmentMaterialMap);
+    SetShaderSamplerUnit(
+            shader,
+            shadowMap0Location,
+            SectorStaticModelShadowMap0MaterialMap);
+    SetShaderSamplerUnit(
+            shader,
+            shadowMap1Location,
+            SectorStaticModelShadowMap1MaterialMap);
+    rlDisableShader();
+}
+
 void AppendStaticModelDebugText(
         std::string& renderDebugText,
         size_t drawn,
@@ -859,6 +912,12 @@ bool SectorStaticModelRenderer::Load()
             SHADER_LOC_MAP_DIFFUSE
                     + SectorStaticModelShadowMap1MaterialMap] =
             shadowMap1Loc;
+    InitializeSectorPbrSamplerUnits(
+            shader,
+            lightmapTextureLoc,
+            environmentTextureLoc,
+            shadowMap0Loc,
+            shadowMap1Loc);
     fogShaderLocations = GetSectorFogShaderLocations(shader);
     shaderLoaded = true;
     return true;

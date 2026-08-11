@@ -240,6 +240,11 @@ void TestMaterialTextureSemantics()
                                ModelMaterialTextureRole::Roughness)
                             == MATERIAL_MAP_ROUGHNESS,
           "split metallic and roughness textures bind their active shader maps");
+    Check(game::SectorStaticModelEnvironmentMaterialMap
+                    == MATERIAL_MAP_CUBEMAP
+                    && game::SectorStaticModelEnvironmentMaterialMap
+                            != MATERIAL_MAP_ALBEDO,
+          "the PBR environment has a dedicated cubemap texture unit");
 }
 
 void TestEnvironmentEligibility()
@@ -272,6 +277,15 @@ void TestRemovedShaderPathsStayRemoved()
     Check(source.find("Aces") == std::string::npos
                     && source.find("LinearToSrgb") == std::string::npos,
           "PBR shader does not reintroduce local tone mapping or output transfer");
+    Check(source.find(
+                      "environmentTextureLocation,\n"
+                      "            SectorStaticModelEnvironmentMaterialMap")
+                            != std::string::npos
+                    && source.find(
+                               "InitializeSectorPbrSamplerUnits(\n"
+                               "            shader,")
+                            != std::string::npos,
+          "PBR samplers receive fixed units even when optional textures are absent");
 }
 
 std::string ReadSource(const char* path)

@@ -553,3 +553,19 @@ Scope and verification:
   shader, and culling state for the documented caller. No shadow placement,
   lighting, gameplay, collision, camera, topology, bake format, or source-hash
   behavior changed.
+
+### Slice 4 AMD/Mesa model-sampler compatibility follow-up
+
+- The shared glTF PBR shader kept an active `samplerCube` environment uniform
+  even when a map had no eligible sky/environment texture. Because raylib only
+  assigned sampler units for present material textures, the absent cubemap
+  sampler retained OpenGL's default unit 0 and aliased the base-color
+  `sampler2D`. NVIDIA accepted this invalid mixed-sampler state, while
+  Mesa/AMD rejected the model draw.
+- Model shader initialization now assigns every active sampler its fixed
+  raylib material-map unit before any draw, including the environment cubemap
+  unit when no cubemap is bound. The no-environment shader branch still
+  contributes exactly zero; no neutral fallback cubemap was restored.
+- This correction changes no topology/cache behavior, lightmap artifacts or
+  source hashes, collision, sector lookup, physics, camera, or gameplay
+  behavior.
