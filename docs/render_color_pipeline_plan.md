@@ -535,7 +535,9 @@ Scope and verification:
   still execute before the isolated first-person viewmodel. Their fragment
   alpha is only a straight-alpha factor for darkening world RGB. The receiver
   pass disables alpha-channel writes so this temporary opacity cannot create a
-  shadow-shaped deficit in the otherwise opaque world target alpha.
+  shadow-shaped deficit in the otherwise opaque world target alpha. Projected
+  silhouettes use a maximum opacity of `0.45` (50 percent stronger than the
+  original `0.30`); contact shadows retain their separate `0.20` opacity.
 - The original defect survived viewmodel composition because that composition,
   HDR resolve, presentation, and FXAA deliberately preserve scene alpha. The
   final scene was then alpha-composited over the backbuffer, applying the old

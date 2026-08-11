@@ -426,6 +426,13 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&contactShadowDraw!=std::string::npos
                     &&restoredShadowMask!=std::string::npos,
           "dynamic projected/contact shadows blend RGB without corrupting scene alpha and restore draw state");
+    Check(dynamicModelShadows.find(
+                      "const float kProjectedShadowOpacity = 0.45")
+                            !=std::string::npos
+                    &&dynamicModelShadows.find(
+                               "distanceFade * 0.30")
+                            ==std::string::npos,
+          "projected silhouette opacity is fifty percent stronger without changing contact shadows");
     Check(bloom.find("failedForCurrentKey")!=std::string::npos
                     && bloom.find("rlDrawRenderBatchActive")!=std::string::npos
                     && bloom.find("rlDisableColorBlend")!=std::string::npos

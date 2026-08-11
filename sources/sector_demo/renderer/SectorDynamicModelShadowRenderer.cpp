@@ -99,6 +99,7 @@ uniform float maximumDistance;
 uniform int alphaTest;
 uniform float alphaCutoff;
 out vec4 finalColor;
+const float kProjectedShadowOpacity = 0.45;
 void main()
 {
     if (alphaTest != 0 && texture(receiverTexture, texCoord).a < alphaCutoff) discard;
@@ -126,7 +127,7 @@ void main()
     float distanceFromCaster = length(worldPosition - casterCenter);
     float fadeStart = maximumDistance * 0.75;
     float distanceFade = 1.0 - smoothstep(fadeStart, maximumDistance, distanceFromCaster);
-    float alpha = visible * facing * distanceFade * 0.30;
+    float alpha = visible * facing * distanceFade * kProjectedShadowOpacity;
     if (alpha <= 0.002) discard;
     finalColor = vec4(0.0, 0.0, 0.0, alpha);
 }
