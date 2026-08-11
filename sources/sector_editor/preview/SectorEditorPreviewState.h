@@ -36,7 +36,7 @@ struct SectorEditorPreviewControllerState {
     SectorFpsLandingDipState landingDipState;
     bool hasPreviewPose = false;
     SectorViewPose lastPreviewPose = {};
-    SpotLightPilotPreviewRestoreState spotLightPilotPreviewRestore;
+    LightPilotPreviewRestoreState lightPilotPreviewRestore;
 };
 
 struct SectorEditorPreviewCollisionState {

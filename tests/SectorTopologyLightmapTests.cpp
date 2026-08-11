@@ -1238,7 +1238,10 @@ game::SectorTopologyMap MakeAlphaMiddleOcclusionBakeMap(const std::filesystem::p
     return map;
 }
 
-LightmapImageMetrics BakeAlphaMiddlePointLight(const std::filesystem::path& texturePath, const char* fileName)
+LightmapImageMetrics BakeAlphaMiddlePointLight(
+        const std::filesystem::path& texturePath,
+        const char* fileName,
+        bool castsShadow = true)
 {
     game::SectorTopologyMap map = MakeAlphaMiddleOcclusionBakeMap(texturePath);
     map.staticLights.clear();
@@ -1252,6 +1255,7 @@ LightmapImageMetrics BakeAlphaMiddlePointLight(const std::filesystem::path& text
             game::SectorWorldToAuthoringDistance(4.0f),
             0.0f
     });
+    map.staticLights.back().castsShadow = castsShadow;
     return BakeAndMeasure(map, fileName);
 }
 
@@ -1262,7 +1266,10 @@ game::SectorTopologyStaticSpotLight MakeStaticSpotlight(
         float outerConeDegrees,
         float sourceRadius = 0.0f);
 
-LightmapImageMetrics BakeAlphaMiddleSpotLight(const std::filesystem::path& texturePath, const char* fileName)
+LightmapImageMetrics BakeAlphaMiddleSpotLight(
+        const std::filesystem::path& texturePath,
+        const char* fileName,
+        bool castsShadow = true)
 {
     game::SectorTopologyMap map = MakeAlphaMiddleOcclusionBakeMap(texturePath);
     map.staticLights.clear();
@@ -1273,6 +1280,7 @@ LightmapImageMetrics BakeAlphaMiddleSpotLight(const std::filesystem::path& textu
             Vector3{2.0f, 0.0f, 2.0f},
             12.0f,
             24.0f));
+    map.staticSpotLights.back().castsShadow = castsShadow;
     return BakeAndMeasure(map, fileName);
 }
 
@@ -1358,6 +1366,13 @@ void TestSourceHashChanges()
     changedLight.staticLights[0].color.r = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) != hash, "hash changes when light color changes");
     changedLight = base;
+    changedLight.staticLights[0].castsShadow = false;
+    Check(game::ComputeSectorLightmapSourceHash(changedLight) != hash,
+          "hash changes when static light shadows are disabled");
+    changedLight.staticLights[0].castsShadow = true;
+    Check(game::ComputeSectorLightmapSourceHash(changedLight) == hash,
+          "default static light shadow state preserves the existing source hash");
+    changedLight = base;
     changedLight.staticLights[0].atmosphere.haze.enabled = true;
     changedLight.staticLights[0].atmosphere.haze.density = 0.25f;
     changedLight.staticLights[0].atmosphere.dust.enabled = true;
@@ -1410,6 +1425,13 @@ void TestSourceHashChanges()
     changedStaticSpotLight.staticSpotLights.front().color.r = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) != staticSpotHash,
           "hash changes when static spot light color changes");
+    changedStaticSpotLight.staticSpotLights.front().color.r = 255;
+    changedStaticSpotLight.staticSpotLights.front().castsShadow = false;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) != staticSpotHash,
+          "hash changes when static spot light shadows are disabled");
+    changedStaticSpotLight.staticSpotLights.front().castsShadow = true;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) == staticSpotHash,
+          "default static spot shadow state preserves the existing source hash");
 
     game::SectorTopologyMap changedDynamicLight = base;
     changedDynamicLight.dynamicPointLights.push_back(game::SectorTopologyDynamicPointLight{
@@ -2225,6 +2247,12 @@ void TestAlphaAwareStaticLightBakePaths()
           "static point light direct bake passes through transparent alpha middle texels");
     Check(pointOpaque.directShadowRays > 0,
           "static point light direct bake tests alpha-aware occlusion rays");
+    const LightmapImageMetrics pointUnshadowed = BakeAlphaMiddlePointLight(
+            opaquePath, "phase02b_point_unshadowed.png", false);
+    Check(pointUnshadowed.floorCenterRgb > pointOpaque.floorCenterRgb + 100,
+          "static point light with shadows disabled illuminates through opaque blockers");
+    Check(pointUnshadowed.directShadowRays == 0,
+          "static point light with shadows disabled casts no direct occlusion rays");
 
     const LightmapImageMetrics spotTransparent =
             BakeAlphaMiddleSpotLight(transparentPath, "phase02b_spot_transparent.png");
@@ -2234,6 +2262,12 @@ void TestAlphaAwareStaticLightBakePaths()
           "static spotlight direct bake passes through transparent alpha middle texels");
     Check(spotOpaque.directShadowRays > 0,
           "static spotlight direct bake tests alpha-aware occlusion rays");
+    const LightmapImageMetrics spotUnshadowed = BakeAlphaMiddleSpotLight(
+            opaquePath, "phase02b_spot_unshadowed.png", false);
+    Check(spotUnshadowed.floorCenterRgb > spotOpaque.floorCenterRgb + 100,
+          "static spotlight with shadows disabled illuminates through opaque blockers");
+    Check(spotUnshadowed.directShadowRays == 0,
+          "static spotlight with shadows disabled casts no direct occlusion rays");
 
     const LightmapImageMetrics directionalOpaque =
             BakeAlphaMiddleDirectionalLight(opaquePath, "phase02b_directional_opaque.png");
@@ -3592,7 +3626,7 @@ void TestObjectLightProbeOcclusionAndAlphaOcclusion()
     WriteSolidAlphaTestTexture(transparentPath, 0);
     WriteSolidAlphaTestTexture(opaquePath, 255);
 
-    auto makeAlphaProbeMap = [](const std::filesystem::path& texturePath) {
+    auto makeAlphaProbeMap = [](const std::filesystem::path& texturePath, bool castsShadow = true) {
         game::SectorTopologyMap map = MakeAlphaMiddleOcclusionBakeMap(texturePath);
         map.staticLights.clear();
         map.staticSpotLights.clear();
@@ -3608,6 +3642,7 @@ void TestObjectLightProbeOcclusionAndAlphaOcclusion()
                 game::SectorWorldToAuthoringDistance(2.0f),
                 0.0f
         });
+        map.staticLights.back().castsShadow = castsShadow;
         return map;
     };
 
@@ -3619,9 +3654,43 @@ void TestObjectLightProbeOcclusionAndAlphaOcclusion()
             BakeObjectProbeLighting(
                     makeAlphaProbeMap(opaquePath),
                     {MakeProbeAt(Vector3{0.25f, 0.25f, 0.25f})});
+    const std::vector<game::SectorBakedObjectLightProbe> unshadowedPoint =
+            BakeObjectProbeLighting(
+                    makeAlphaProbeMap(opaquePath, false),
+                    {MakeProbeAt(Vector3{0.25f, 0.25f, 0.25f})});
     Check(Brightness(transparent.front().ambientCube[0])
                   > Brightness(opaque.front().ambientCube[0]) + 0.2f,
           "alpha-tested transparent middle texels let object probe direct lighting pass");
+    Check(Brightness(unshadowedPoint.front().ambientCube[0])
+                  > Brightness(opaque.front().ambientCube[0]) + 0.2f,
+          "unshadowed static point light contributes through opaque blockers to object probes");
+
+    game::SectorTopologyMap unshadowedSpotMap = MakeAlphaMiddleOcclusionBakeMap(opaquePath);
+    unshadowedSpotMap.staticLights.clear();
+    unshadowedSpotMap.staticSpotLights.clear();
+    unshadowedSpotMap.directionalLight.enabled = false;
+    for (game::SectorTopologySector& sector : unshadowedSpotMap.sectors) {
+        sector.ambientIntensity = 0.0f;
+    }
+    unshadowedSpotMap.staticSpotLights.push_back(game::SectorTopologyStaticSpotLight{
+            205,
+            WorldToAuthoring(Vector3{0.75f, 0.25f, 0.25f}),
+            WorldToAuthoring(Vector3{0.25f, 0.25f, 0.25f}),
+            WHITE,
+            8.0f,
+            game::SectorWorldToAuthoringDistance(2.0f),
+            12.0f,
+            24.0f,
+            0.0f
+    });
+    unshadowedSpotMap.staticSpotLights.back().castsShadow = false;
+    const std::vector<game::SectorBakedObjectLightProbe> unshadowedSpot =
+            BakeObjectProbeLighting(
+                    unshadowedSpotMap,
+                    {MakeProbeAt(Vector3{0.25f, 0.25f, 0.25f})});
+    Check(Brightness(unshadowedSpot.front().ambientCube[0])
+                  > Brightness(opaque.front().ambientCube[0]) + 0.2f,
+          "unshadowed static spotlight contributes through opaque blockers to object probes");
 }
 
 void TestObjectLightProbeAmbientAndDegenerateFiniteOutput()

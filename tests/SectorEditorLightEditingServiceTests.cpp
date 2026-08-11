@@ -242,6 +242,9 @@ void TestDeleteSelectedStaticLightDirtiesAndClearsState()
     lightState.lightDrag.topologyLightId = 7;
     lightState.lightEdit.active = true;
     lightState.lightEdit.topologyLightId = 7;
+    lightState.lightPilot.active = true;
+    lightState.lightPilot.kind = game::LightPilotKind::StaticPoint;
+    lightState.lightPilot.lightId = 7;
     std::string statusText;
     ResetDirty(state, documentState, statusText);
 
@@ -256,6 +259,8 @@ void TestDeleteSelectedStaticLightDirtiesAndClearsState()
           "delete selected static light clears selection");
     Check(selectionState.hoveredTopologyLightId < 0, "delete selected static light clears hover");
     Check(!lightState.lightDrag.active && !lightState.lightEdit.active, "delete selected static light clears drag/edit state");
+    Check(result.previewPoseRestoreNeeded && !lightState.lightPilot.active,
+          "delete selected piloted point light requests preview-pose restoration");
     CheckDirtyOnce(state, documentState, statusText, "Deleted static light 7");
 }
 
@@ -386,18 +391,18 @@ void TestSpotLightPilotApplyAndCancelTiming()
     game::SectorEditorUiState uiState;
     game::InspectorIdUiState inspectorIdUiState;
     game::LightEditingState lightState;
-    lightState.spotLightPilot.active = true;
-    lightState.spotLightPilot.kind = game::SpotLightPilotKind::Dynamic;
-    lightState.spotLightPilot.lightId = 11;
-    lightState.spotLightPilot.originalPosition = light.position;
-    lightState.spotLightPilot.originalTarget = light.target;
+    lightState.lightPilot.active = true;
+    lightState.lightPilot.kind = game::LightPilotKind::DynamicSpot;
+    lightState.lightPilot.lightId = 11;
+    lightState.lightPilot.originalPosition = light.position;
+    lightState.lightPilot.originalTarget = light.target;
     std::string statusText;
     ResetDirty(state, documentState, statusText);
 
     game::SectorEditorLightEditingService service =
             MakeService(state, documentState, documentState.map.topologyMap, TestPreviewSelectionState(), selectionState, manipulationState, lightState, uiState, inspectorIdUiState, statusText);
     const game::SectorEditorLightMutationResult apply =
-            service.ApplySpotLightPilot(Vector3{7.0f, 8.0f, 9.0f}, Vector3{10.0f, 11.0f, 12.0f});
+            service.ApplyLightPilot(Vector3{7.0f, 8.0f, 9.0f}, Vector3{10.0f, 11.0f, 12.0f});
     const game::SectorTopologyDynamicSpotLight* applied =
             game::FindSectorTopologyDynamicSpotLight(documentState.map.topologyMap, 11);
     Check(apply.changed, "dynamic spotlight pilot apply reports changed");
@@ -406,24 +411,24 @@ void TestSpotLightPilotApplyAndCancelTiming()
                   && Near(applied->position.x, 7.0f)
                   && Near(applied->target.z, 12.0f),
           "dynamic spotlight pilot apply mutates data");
-    Check(!lightState.spotLightPilot.active, "dynamic spotlight pilot apply clears pilot state");
+    Check(!lightState.lightPilot.active, "dynamic spotlight pilot apply clears pilot state");
     CheckDirtyOnce(state, documentState, statusText, "Applied dynamic spot 11 pilot pose");
 
     ResetDirty(state, documentState, statusText);
-    lightState.spotLightPilot.active = true;
-    lightState.spotLightPilot.kind = game::SpotLightPilotKind::Dynamic;
-    lightState.spotLightPilot.lightId = 11;
-    lightState.spotLightPilot.originalPosition = Vector3{7.0f, 8.0f, 9.0f};
-    lightState.spotLightPilot.originalTarget = Vector3{10.0f, 11.0f, 12.0f};
-    service.ApplySpotLightPilot(Vector3{13.0f, 14.0f, 15.0f}, Vector3{16.0f, 17.0f, 18.0f});
+    lightState.lightPilot.active = true;
+    lightState.lightPilot.kind = game::LightPilotKind::DynamicSpot;
+    lightState.lightPilot.lightId = 11;
+    lightState.lightPilot.originalPosition = Vector3{7.0f, 8.0f, 9.0f};
+    lightState.lightPilot.originalTarget = Vector3{10.0f, 11.0f, 12.0f};
+    service.ApplyLightPilot(Vector3{13.0f, 14.0f, 15.0f}, Vector3{16.0f, 17.0f, 18.0f});
     ResetDirty(state, documentState, statusText);
-    lightState.spotLightPilot.active = true;
-    lightState.spotLightPilot.kind = game::SpotLightPilotKind::Dynamic;
-    lightState.spotLightPilot.lightId = 11;
-    lightState.spotLightPilot.originalPosition = Vector3{7.0f, 8.0f, 9.0f};
-    lightState.spotLightPilot.originalTarget = Vector3{10.0f, 11.0f, 12.0f};
+    lightState.lightPilot.active = true;
+    lightState.lightPilot.kind = game::LightPilotKind::DynamicSpot;
+    lightState.lightPilot.lightId = 11;
+    lightState.lightPilot.originalPosition = Vector3{7.0f, 8.0f, 9.0f};
+    lightState.lightPilot.originalTarget = Vector3{10.0f, 11.0f, 12.0f};
     const game::SectorEditorLightMutationResult cancel =
-            service.CancelSpotLightPilotData("Spotlight pilot cancelled");
+            service.CancelLightPilotData("Light pilot cancelled");
     const game::SectorTopologyDynamicSpotLight* cancelled =
             game::FindSectorTopologyDynamicSpotLight(documentState.map.topologyMap, 11);
     Check(!cancel.changed, "dynamic spotlight pilot cancel reports unchanged");
@@ -433,7 +438,124 @@ void TestSpotLightPilotApplyAndCancelTiming()
                   && Near(cancelled->position.x, 7.0f)
                   && Near(cancelled->target.z, 12.0f),
           "dynamic spotlight pilot cancel restores original data");
-    CheckClean(state, documentState, statusText, "Spotlight pilot cancelled");
+    CheckClean(state, documentState, statusText, "Light pilot cancelled");
+}
+
+void TestPointLightPilotApplyAndCancelTiming()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+    game::SectorTopologyStaticPointLight staticLight;
+    staticLight.id = 21;
+    staticLight.position = Vector3{1.0f, 2.0f, 3.0f};
+    documentState.map.topologyMap.staticLights.push_back(staticLight);
+    game::SectorTopologyDynamicPointLight dynamicLight;
+    dynamicLight.id = 22;
+    dynamicLight.position = Vector3{4.0f, 5.0f, 6.0f};
+    documentState.map.topologyMap.dynamicPointLights.push_back(dynamicLight);
+    game::SelectionState selectionState;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+
+    game::SectorEditorLightEditingService service =
+            MakeService(state, documentState, documentState.map.topologyMap, TestPreviewSelectionState(), selectionState, manipulationState, lightState, uiState, inspectorIdUiState, statusText);
+    lightState.lightPilot.active = true;
+    lightState.lightPilot.kind = game::LightPilotKind::StaticPoint;
+    lightState.lightPilot.lightId = 21;
+    lightState.lightPilot.originalPosition = staticLight.position;
+    const game::SectorEditorLightMutationResult staticApply =
+            service.ApplyLightPilot(Vector3{7.0f, 8.0f, 9.0f}, Vector3{90.0f, 91.0f, 92.0f});
+    const game::SectorTopologyStaticPointLight* appliedStatic =
+            game::FindSectorTopologyStaticLight(documentState.map.topologyMap, 21);
+    Check(staticApply.changed && staticApply.dynamicLightRendererRefreshNeeded,
+          "static point pilot apply reports change and requests renderer refresh");
+    Check(appliedStatic != nullptr && Near(appliedStatic->position.x, 7.0f)
+                  && Near(appliedStatic->position.y, 8.0f)
+                  && Near(appliedStatic->position.z, 9.0f),
+          "static point pilot apply writes only the supplied position");
+    CheckDirtyOnce(state, documentState, statusText, "Applied static light 21 pilot pose");
+
+    ResetDirty(state, documentState, statusText);
+    lightState.lightPilot.active = true;
+    lightState.lightPilot.kind = game::LightPilotKind::DynamicPoint;
+    lightState.lightPilot.lightId = 22;
+    lightState.lightPilot.originalPosition = dynamicLight.position;
+    const game::SectorEditorLightMutationResult dynamicApply =
+            service.ApplyLightPilot(Vector3{10.0f, 11.0f, 12.0f}, Vector3{93.0f, 94.0f, 95.0f});
+    const game::SectorTopologyDynamicPointLight* appliedDynamic =
+            game::FindSectorTopologyDynamicLight(documentState.map.topologyMap, 22);
+    Check(dynamicApply.changed && dynamicApply.dynamicLightRendererRefreshNeeded,
+          "dynamic point pilot apply reports change and requests renderer refresh");
+    Check(appliedDynamic != nullptr && Near(appliedDynamic->position.x, 10.0f)
+                  && Near(appliedDynamic->position.y, 11.0f)
+                  && Near(appliedDynamic->position.z, 12.0f),
+          "dynamic point pilot apply writes the camera position");
+    CheckDirtyOnce(state, documentState, statusText, "Applied dynamic light 22 pilot pose");
+
+    ResetDirty(state, documentState, statusText);
+    lightState.lightPilot.active = true;
+    lightState.lightPilot.kind = game::LightPilotKind::DynamicPoint;
+    lightState.lightPilot.lightId = 22;
+    lightState.lightPilot.originalPosition = dynamicLight.position;
+    const game::SectorEditorLightMutationResult cancel =
+            service.CancelLightPilotData("Light pilot cancelled");
+    const game::SectorTopologyDynamicPointLight* cancelled =
+            game::FindSectorTopologyDynamicLight(documentState.map.topologyMap, 22);
+    Check(!cancel.changed && cancel.previewPoseRestoreNeeded,
+          "point pilot cancel remains clean and requests preview-pose restoration");
+    Check(cancelled != nullptr && Near(cancelled->position.x, 4.0f)
+                  && Near(cancelled->position.y, 5.0f)
+                  && Near(cancelled->position.z, 6.0f),
+          "point pilot cancel restores the original light position");
+    CheckClean(state, documentState, statusText, "Light pilot cancelled");
+}
+
+void TestStaticShadowEditsUseDocumentMutationBoundary()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+    game::SectorTopologyStaticPointLight point;
+    point.id = 31;
+    documentState.map.topologyMap.staticLights.push_back(point);
+    game::SectorTopologyStaticSpotLight spot;
+    spot.id = 32;
+    documentState.map.topologyMap.staticSpotLights.push_back(spot);
+    game::SelectionState selectionState;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+
+    game::SectorEditorLightEditingService service =
+            MakeService(state, documentState, documentState.map.topologyMap, TestPreviewSelectionState(), selectionState, manipulationState, lightState, uiState, inspectorIdUiState, statusText);
+    Check(service.SetStaticLightCastsShadow(
+                  documentState.map.topologyMap.staticLights.front(), false),
+          "static point shadow edit reports changed");
+    Check(!documentState.map.topologyMap.staticLights.front().castsShadow,
+          "static point shadow edit writes the flag");
+    CheckDirtyOnce(state, documentState, statusText, "Updated static light 31 shadow");
+
+    ResetDirty(state, documentState, statusText);
+    Check(!service.SetStaticLightCastsShadow(
+                  documentState.map.topologyMap.staticLights.front(), false),
+          "unchanged static point shadow edit reports no change");
+    CheckClean(state, documentState, statusText, "old");
+
+    ResetDirty(state, documentState, statusText);
+    Check(service.SetStaticSpotLightCastsShadow(
+                  documentState.map.topologyMap.staticSpotLights.front(), false),
+          "static spot shadow edit reports changed");
+    Check(!documentState.map.topologyMap.staticSpotLights.front().castsShadow,
+          "static spot shadow edit writes the flag");
+    CheckDirtyOnce(state, documentState, statusText, "Updated static spot 32 shadow");
 }
 
 void TestAtmosphereEditUsesDocumentMutationBoundary()
@@ -495,6 +617,8 @@ int main()
     TestLightDragApplyFinishAndCancelTiming();
     TestLightDragFinishNoOpDoesNotDirty();
     TestSpotLightPilotApplyAndCancelTiming();
+    TestPointLightPilotApplyAndCancelTiming();
+    TestStaticShadowEditsUseDocumentMutationBoundary();
     TestAtmosphereEditUsesDocumentMutationBoundary();
 
     if (failures != 0) {

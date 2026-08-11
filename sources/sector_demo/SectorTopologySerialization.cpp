@@ -2246,6 +2246,9 @@ Json WriteStaticSpotLight(const SectorTopologyStaticSpotLight& light, const std:
     if (outerConeDegrees != 35.0f) {
         lightJson["outerConeDegrees"] = outerConeDegrees;
     }
+    if (!light.castsShadow) {
+        lightJson["castsShadow"] = false;
+    }
     WriteOptionalLightAtmosphere(lightJson, light);
     return lightJson;
 }
@@ -2738,6 +2741,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             light.intensity = ReadFloat(value, "intensity", context);
             light.color = ReadColor(RequireField(value, "color", context), context + ".color");
             light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
+            light.castsShadow = ReadOptionalBool(value, "castsShadow", context, true);
             map.staticLights.push_back(light);
         }
     }
@@ -2779,6 +2783,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
                     179.0f);
             light.outerConeDegrees = std::max(light.outerConeDegrees, light.innerConeDegrees);
             light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
+            light.castsShadow = ReadOptionalBool(value, "castsShadow", context, true);
             map.staticSpotLights.push_back(light);
         }
     }
@@ -3215,6 +3220,9 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
         };
+        if (!light->castsShadow) {
+            lightJson["castsShadow"] = false;
+        }
         WriteOptionalLightAtmosphere(lightJson, *light);
         root["staticLights"].push_back(std::move(lightJson));
     }
@@ -3708,6 +3716,9 @@ Json SerializeMap(const SectorTopologyMap& map)
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
         };
+        if (!light->castsShadow) {
+            lightJson["castsShadow"] = false;
+        }
         WriteOptionalLightAtmosphere(lightJson, *light);
         root["staticLights"].push_back(std::move(lightJson));
     }

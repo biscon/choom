@@ -94,12 +94,30 @@ const SectorTopologyStaticSpotLight* SelectedTopologyStaticSpotLight(
             : nullptr;
 }
 
+const SectorTopologyStaticPointLight* SelectedTopologyStaticPointLight(
+        const SectorTopologyMap& topologyMap,
+        const SelectionState& selectionState)
+{
+    return selectionState.topologySelectionKind == TopologySelectionKind::StaticLight
+            ? FindSectorTopologyStaticLight(topologyMap, selectionState.selectedTopologyLightId)
+            : nullptr;
+}
+
 const SectorTopologyDynamicSpotLight* SelectedTopologyDynamicSpotLight(
         const SectorTopologyMap& topologyMap,
         const SelectionState& selectionState)
 {
     return selectionState.topologySelectionKind == TopologySelectionKind::DynamicSpotLight
             ? FindSectorTopologyDynamicSpotLight(topologyMap, selectionState.selectedTopologyDynamicSpotLightId)
+            : nullptr;
+}
+
+const SectorTopologyDynamicPointLight* SelectedTopologyDynamicPointLight(
+        const SectorTopologyMap& topologyMap,
+        const SelectionState& selectionState)
+{
+    return selectionState.topologySelectionKind == TopologySelectionKind::DynamicLight
+            ? FindSectorTopologyDynamicLight(topologyMap, selectionState.selectedTopologyDynamicLightId)
             : nullptr;
 }
 
@@ -1102,7 +1120,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 break;
             }
             case PreviewDebugOverlayTab::Controls:
-                if (context.lightState.spotLightPilot.active) {
+                if (context.lightState.lightPilot.active) {
                     addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down, hold Shift for precision movement. Unlock cursor with F11 to click Apply or Cancel.");
                 } else if (controllerState.previewControlMode == SectorPreviewControlMode::Gameplay) {
                     addWrappedLine("movement: WASD move, Space jump, Shift run, Ctrl toggle crouch, mouse look. F11 unlocks cursor for UI tabs.");
@@ -1146,7 +1164,9 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
-    const bool hasSelectedSpotLight = SelectedTopologyStaticSpotLight(topologyMap, selectionState) != nullptr
+    const bool hasSelectedLight = SelectedTopologyStaticPointLight(topologyMap, selectionState) != nullptr
+            || SelectedTopologyStaticSpotLight(topologyMap, selectionState) != nullptr
+            || SelectedTopologyDynamicPointLight(topologyMap, selectionState) != nullptr
             || SelectedTopologyDynamicSpotLight(topologyMap, selectionState) != nullptr;
     engine::Text(
             smallConfig,
@@ -1154,8 +1174,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             Rectangle{
                     panel.x + padding,
                     panel.y + padding,
-                    mouseInteractive && (context.lightState.spotLightPilot.active
-                            || (hasSelectedSpotLight && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly))
+                    mouseInteractive && (context.lightState.lightPilot.active
+                            || (hasSelectedLight && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly))
                             ? contentW - 170.0f
                             : contentW,
                     stripH},
@@ -1168,17 +1188,17 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     float actionsRight = panel.x + panel.width - padding;
     const float actionY = panel.y + padding - 2.0f;
     if (mouseInteractive) {
-        if (context.lightState.spotLightPilot.active) {
+        if (context.lightState.lightPilot.active) {
             if (engine::Button(
                         ui,
                         smallConfig,
                         input,
                         assets,
-                        "sector_editor_preview_spotlight_pilot_cancel",
+                        "sector_editor_preview_light_pilot_cancel",
                         Rectangle{actionsRight - 72.0f, actionY, 72.0f, 28.0f},
                         smallFont,
                         "Cancel")) {
-                result.requestCancelSpotLightPilot = true;
+                result.requestCancelLightPilot = true;
             }
             actionsRight -= 82.0f;
             if (engine::Button(
@@ -1186,23 +1206,23 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         smallConfig,
                         input,
                         assets,
-                        "sector_editor_preview_spotlight_pilot_apply",
+                        "sector_editor_preview_light_pilot_apply",
                         Rectangle{actionsRight - 66.0f, actionY, 66.0f, 28.0f},
                         smallFont,
                         "Apply")) {
-                result.requestApplySpotLightPilot = true;
+                result.requestApplyLightPilot = true;
             }
-        } else if (hasSelectedSpotLight && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly) {
+        } else if (hasSelectedLight && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly) {
             if (engine::Button(
                         ui,
                         smallConfig,
                         input,
                         assets,
-                        "sector_editor_preview_spotlight_pilot_start",
+                        "sector_editor_preview_light_pilot_start",
                         Rectangle{actionsRight - 92.0f, actionY, 92.0f, 28.0f},
                         smallFont,
                         "Pilot")) {
-                result.requestStartSpotLightPilot = true;
+                result.requestStartLightPilot = true;
             }
         }
     }

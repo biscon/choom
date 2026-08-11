@@ -487,6 +487,15 @@ void TestHdrEffectShaderAndPassPolicies()
                                "distanceFade * 0.30")
                             ==std::string::npos,
           "projected silhouette opacity is fifty percent stronger without changing contact shadows");
+    Check(dynamicModelShadows.find(
+                      "for (const SectorTopologyStaticPointLight& source : map.staticLights) {\n"
+                      "        if (!source.castsShadow) continue;")
+                            !=std::string::npos
+                    &&dynamicModelShadows.find(
+                               "for (const SectorTopologyStaticSpotLight& source : map.staticSpotLights) {\n"
+                               "        if (!source.castsShadow) continue;")
+                            !=std::string::npos,
+          "static point and spot shadow toggles filter projected dynamic-model shadow sources");
     Check(bloom.find("failedForCurrentKey")!=std::string::npos
                     && bloom.find("rlDrawRenderBatchActive")!=std::string::npos
                     && bloom.find("rlDisableColorBlend")!=std::string::npos

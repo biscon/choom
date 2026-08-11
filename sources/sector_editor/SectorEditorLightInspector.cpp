@@ -266,6 +266,7 @@ float StaticLightInspectorContentHeight(float rowH, float gap, bool hasIdError, 
         height += 36.0f;
     }
     height += rowH + gap; // Delete.
+    height += rowH + gap; // Shadow.
     height += 6.0f * (rowH + gap); // Position/intensity/radius/source radius.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
@@ -282,6 +283,7 @@ float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdErr
         height += 36.0f;
     }
     height += rowH + gap; // Delete.
+    height += rowH + gap; // Shadow.
     height += 12.0f * (rowH + gap); // Position/target/intensity/range/source/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
@@ -362,6 +364,23 @@ bool DrawSelectedStaticLightInspector(
     if (engine::Button(ui, config, input, assets, "sector_editor_delete_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
         deleteRequested = true;
         return true;
+    }
+    y += rowH + gap;
+
+    bool castsShadow = light.castsShadow;
+    if (engine::Checkbox(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_static_light_casts_shadow",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Shadow",
+                castsShadow)
+            && castsShadow != light.castsShadow
+            && lightEditing.SetStaticLightCastsShadow(light, castsShadow)) {
+        sourceRefreshRequested = true;
     }
     y += rowH + gap;
 
@@ -536,6 +555,23 @@ bool DrawSelectedStaticSpotLightInspector(
     if (engine::Button(ui, config, input, assets, "sector_editor_delete_static_spot_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
         deleteRequested = true;
         return true;
+    }
+    y += rowH + gap;
+
+    bool castsShadow = light.castsShadow;
+    if (engine::Checkbox(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_static_spot_light_casts_shadow",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Shadow",
+                castsShadow)
+            && castsShadow != light.castsShadow
+            && lightEditing.SetStaticSpotLightCastsShadow(light, castsShadow)) {
+        sourceRefreshRequested = true;
     }
     y += rowH + gap;
 

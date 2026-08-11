@@ -219,6 +219,7 @@ struct SectorTopologyStaticPointLight {
     float radius = SectorWorldToAuthoringDistance(8.0f);
     float sourceRadius = 0.0f;
     SectorLightAtmosphereSettings atmosphere;
+    bool castsShadow = true;
 };
 
 struct SectorTopologyStaticSpotLight {
@@ -232,6 +233,7 @@ struct SectorTopologyStaticSpotLight {
     float outerConeDegrees = 35.0f;
     float sourceRadius = 0.0f;
     SectorLightAtmosphereSettings atmosphere;
+    bool castsShadow = true;
 };
 
 struct SectorTopologyDynamicPointLight {

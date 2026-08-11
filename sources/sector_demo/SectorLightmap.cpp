@@ -118,6 +118,7 @@ struct LightmapWorldPointLight {
     float intensity = 1.0f;
     float radius = 0.0f;
     float sourceRadius = 0.0f;
+    bool castsShadow = true;
 };
 
 struct LightmapWorldSpotLight {
@@ -129,6 +130,7 @@ struct LightmapWorldSpotLight {
     float sourceRadius = 0.0f;
     float innerConeDegrees = 0.0f;
     float outerConeDegrees = 0.0f;
+    bool castsShadow = true;
 };
 
 struct BakeAabb {
@@ -1852,7 +1854,7 @@ Vector3 EvaluateDirectLightSample(
         return Vector3{};
     }
 
-    if (IsOccluded(
+    if (light.castsShadow && IsOccluded(
                 map,
                 hit.position,
                 GeometricNormalForHit(hit),
@@ -1934,7 +1936,7 @@ Vector3 EvaluateDirectLightSample(
         return Vector3{};
     }
 
-    if (IsOccluded(
+    if (light.castsShadow && IsOccluded(
                 map,
                 hit.position,
                 GeometricNormalForHit(hit),
@@ -2636,6 +2638,7 @@ LightmapWorldPointLight MakeWorldSpaceLight(const SectorTopologyStaticPointLight
     light.intensity = authoringLight.intensity;
     light.radius = SectorAuthoringToWorldDistance(authoringLight.radius);
     light.sourceRadius = SectorAuthoringToWorldDistance(authoringLight.sourceRadius);
+    light.castsShadow = authoringLight.castsShadow;
     return light;
 }
 
@@ -2650,6 +2653,7 @@ LightmapWorldSpotLight MakeWorldSpaceLight(const SectorTopologyStaticSpotLight& 
     light.sourceRadius = SectorAuthoringToWorldDistance(authoringLight.sourceRadius);
     light.innerConeDegrees = authoringLight.innerConeDegrees;
     light.outerConeDegrees = authoringLight.outerConeDegrees;
+    light.castsShadow = authoringLight.castsShadow;
     return light;
 }
 
@@ -5554,6 +5558,9 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendFloat(hash, light->intensity);
         FnvAppendFloat(hash, worldLight.radius);
         FnvAppendFloat(hash, std::min(std::clamp(worldLight.sourceRadius, 0.0f, 8.0f), worldLight.radius * 0.5f));
+        if (!light->castsShadow) {
+            FnvAppendString(hash, "no-shadow");
+        }
     }
 
     if (!map.staticSpotLights.empty()) {
@@ -5572,6 +5579,9 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
             FnvAppendFloat(hash, std::min(std::clamp(worldLight.sourceRadius, 0.0f, 8.0f), worldLight.range * 0.5f));
             FnvAppendFloat(hash, worldLight.innerConeDegrees);
             FnvAppendFloat(hash, worldLight.outerConeDegrees);
+            if (!light->castsShadow) {
+                FnvAppendString(hash, "no-shadow");
+            }
         }
     }
 

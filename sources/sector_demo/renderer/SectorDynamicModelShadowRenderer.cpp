@@ -429,6 +429,7 @@ void SectorDynamicModelShadowRenderer::RebuildSources(
         return engine::SrgbColorBytesToLinearSceneRgb(value);
     };
     for (const SectorTopologyStaticPointLight& source : map.staticLights) {
+        if (!source.castsShadow) continue;
         const Vector3 position = SectorAuthoringToWorldPosition(source.position);
         lightSources.push_back(LightSource{source.id, sectorFor(position), LightKind::Point,
                 position, {}, color(source.color), source.intensity,
@@ -453,6 +454,7 @@ void SectorDynamicModelShadowRenderer::RebuildSources(
                 std::cos(outerDegrees * DegreesToRadians)});
     };
     for (const SectorTopologyStaticSpotLight& source : map.staticSpotLights) {
+        if (!source.castsShadow) continue;
         addSpot(source.id, source.position, source.target, source.color, source.intensity,
                 source.range, source.innerConeDegrees, source.outerConeDegrees);
     }

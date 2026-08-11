@@ -153,7 +153,7 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
         MaterialEditingUiState& materialUiState,
         std::string* statusText = nullptr,
         void* userData = nullptr,
-        void (*requestCancelSpotLightPilotWithPreviewRestore)(void*, const char*) = nullptr,
+        void (*requestCancelLightPilotWithPreviewRestore)(void*, const char*) = nullptr,
         LightEditingState* lightState = nullptr)
 {
     SectorEditorAuthoringDocumentAccess authoring =
@@ -172,7 +172,7 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
             materialUiState,
             statusText,
             userData,
-            requestCancelSpotLightPilotWithPreviewRestore,
+            requestCancelLightPilotWithPreviewRestore,
             lightState};
 }
 
@@ -1976,8 +1976,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_F3) {
-                    if (lightEditingState.spotLightPilot.active) {
-                        statusText = "Finish spotlight pilot before changing 3D control mode";
+                    if (lightEditingState.lightPilot.active) {
+                        statusText = "Finish light pilot before changing 3D control mode";
                         engine::ConsumeEvent(event);
                         return;
                     }
@@ -2008,7 +2008,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
-                    CancelSpotLightPilotWithPreviewRestore(nullptr);
+                    CancelLightPilotWithPreviewRestore(nullptr);
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
                 }
@@ -2156,7 +2156,7 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
             || previewState.overlay.previewUiHidden
             || state.texturePicker.open
             || state.soundPicker.open
-            || lightEditingState.spotLightPilot.active) {
+            || lightEditingState.lightPilot.active) {
         previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
         return;
     }
@@ -2531,7 +2531,7 @@ SectorEditorSelectionServiceContext SectorEditor::BuildSelectionServiceContext()
             &statusText,
             this,
             [](void* userData, const char* message) {
-                static_cast<SectorEditor*>(userData)->CancelSpotLightPilotWithPreviewRestore(message);
+                static_cast<SectorEditor*>(userData)->CancelLightPilotWithPreviewRestore(message);
             },
             &lightEditingState);
 }
@@ -2915,11 +2915,11 @@ bool SectorEditor::OpenDeleteSelectedLightConfirmation()
                 if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
                     ResetSectorFreeflyController(
                             previewState.controller.freeflyController,
-                            previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose);
+                            previewState.controller.lightPilotPreviewRestore.originalPreviewPose);
                     SetSectorFreeflyMouseLookEnabled(
                             previewState.controller.freeflyController,
-                            previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
-                    previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+                            previewState.controller.lightPilotPreviewRestore.originalMouseLookEnabled);
+                    previewState.controller.lightPilotPreviewRestore = LightPilotPreviewRestoreState{};
                     sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
                 }
                 if (result.dynamicLightRendererRefreshNeeded) {
@@ -3495,14 +3495,14 @@ void SectorEditor::DrawPreviewOverlay(
             sceneRuntime.Renderer()};
     const SectorEditorPreviewOverlayResult result = DrawSectorEditorPreviewOverlay(overlayContext);
 
-    if (result.requestCancelSpotLightPilot) {
-        CancelSpotLightPilotWithPreviewRestore("Spotlight pilot cancelled");
+    if (result.requestCancelLightPilot) {
+        CancelLightPilotWithPreviewRestore("Light pilot cancelled");
     }
-    if (result.requestApplySpotLightPilot) {
-        ApplySpotLightPilotFromPreviewPose();
+    if (result.requestApplyLightPilot) {
+        ApplyLightPilotFromPreviewPose();
     }
-    if (result.requestStartSpotLightPilot) {
-        StartSpotLightPilot();
+    if (result.requestStartLightPilot) {
+        StartLightPilot();
     }
     if (result.openPreviewSettings) {
         OpenPreviewSettingsModal();
@@ -5685,7 +5685,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 
 void SectorEditor::LeavePreview3D()
 {
-    CancelSpotLightPilotWithPreviewRestore(nullptr);
+    CancelLightPilotWithPreviewRestore(nullptr);
     if (previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay) {
         ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
         ClearSectorFpsLandingDip(previewState.controller.landingDipState);
@@ -5749,69 +5749,91 @@ void SectorEditor::TogglePreviewControlMode()
     statusText = TextFormat("3D control mode: %s", PreviewControlModeName(previewState.controller.previewControlMode));
 }
 
-bool SectorEditor::StartSpotLightPilot()
+bool SectorEditor::StartLightPilot()
 {
     if (state.mode != SectorEditorMode::Preview3D || previewState.controller.previewControlMode != SectorPreviewControlMode::FreeFly) {
-        statusText = "Spotlight pilot requires 3D FreeFly mode";
+        statusText = "Light pilot requires 3D FreeFly mode";
         return false;
     }
 
     int lightId = -1;
-    SpotLightPilotKind pilotKind = SpotLightPilotKind::None;
+    LightPilotKind pilotKind = LightPilotKind::None;
     Vector3 lightPosition = {};
     Vector3 lightTarget = {};
     float lightRange = 0.0f;
-    if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight()) {
+    const char* lightName = nullptr;
+    if (const SectorTopologyStaticPointLight* light = SelectedTopologyLight()) {
         lightId = light->id;
-        pilotKind = SpotLightPilotKind::Static;
+        pilotKind = LightPilotKind::StaticPoint;
+        lightPosition = light->position;
+        lightName = "static light";
+    } else if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight()) {
+        lightId = light->id;
+        pilotKind = LightPilotKind::StaticSpot;
         lightPosition = light->position;
         lightTarget = light->target;
         lightRange = light->range;
+        lightName = "static spot";
+    } else if (const SectorTopologyDynamicPointLight* light = SelectedTopologyDynamicLight()) {
+        lightId = light->id;
+        pilotKind = LightPilotKind::DynamicPoint;
+        lightPosition = light->position;
+        lightName = "dynamic light";
     } else if (const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight()) {
         lightId = light->id;
-        pilotKind = SpotLightPilotKind::Dynamic;
+        pilotKind = LightPilotKind::DynamicSpot;
         lightPosition = light->position;
         lightTarget = light->target;
         lightRange = light->range;
+        lightName = "dynamic spot";
     } else {
-        statusText = "Select a spotlight to pilot";
+        statusText = "Select a light to pilot";
         return false;
     }
 
+    const bool isSpot = pilotKind == LightPilotKind::StaticSpot
+            || pilotKind == LightPilotKind::DynamicSpot;
     const Vector3 originWorld = SectorAuthoringToWorldPosition(lightPosition);
-    const Vector3 targetWorld = SectorAuthoringToWorldPosition(lightTarget);
-    float targetDistanceWorld = Vector3Distance(originWorld, targetWorld);
-    if (!std::isfinite(targetDistanceWorld) || targetDistanceWorld <= 0.01f) {
-        targetDistanceWorld = std::max(SectorAuthoringToWorldDistance(lightRange) * 0.5f, 4.0f);
+    Vector3 targetWorld = {};
+    float targetDistanceWorld = 4.0f;
+    if (isSpot) {
+        targetWorld = SectorAuthoringToWorldPosition(lightTarget);
+        targetDistanceWorld = Vector3Distance(originWorld, targetWorld);
+        if (!std::isfinite(targetDistanceWorld) || targetDistanceWorld <= 0.01f) {
+            targetDistanceWorld = std::max(SectorAuthoringToWorldDistance(lightRange) * 0.5f, 4.0f);
+        }
     }
 
-    lightEditingState.spotLightPilot.active = true;
-    lightEditingState.spotLightPilot.kind = pilotKind;
-    lightEditingState.spotLightPilot.lightId = lightId;
-    lightEditingState.spotLightPilot.originalPosition = lightPosition;
-    lightEditingState.spotLightPilot.originalTarget = lightTarget;
-    previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose = ActivePreviewPose();
-    previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled = previewState.controller.freeflyController.mouseLookEnabled;
-    lightEditingState.spotLightPilot.targetDistanceWorld = targetDistanceWorld;
+    const SectorViewPose originalPreviewPose = ActivePreviewPose();
+    lightEditingState.lightPilot.active = true;
+    lightEditingState.lightPilot.kind = pilotKind;
+    lightEditingState.lightPilot.lightId = lightId;
+    lightEditingState.lightPilot.originalPosition = lightPosition;
+    lightEditingState.lightPilot.originalTarget = lightTarget;
+    previewState.controller.lightPilotPreviewRestore.originalPreviewPose = originalPreviewPose;
+    previewState.controller.lightPilotPreviewRestore.originalMouseLookEnabled = previewState.controller.freeflyController.mouseLookEnabled;
+    lightEditingState.lightPilot.targetDistanceWorld = targetDistanceWorld;
 
-    const SectorViewPose pilotPose = PreviewPoseLookingAt(originWorld, targetWorld);
+    SectorViewPose pilotPose = originalPreviewPose;
+    pilotPose.position = originWorld;
+    if (isSpot) {
+        pilotPose = PreviewPoseLookingAt(originWorld, targetWorld);
+    }
     ResetSectorFreeflyController(previewState.controller.freeflyController, pilotPose);
     EnterSectorFreeflyController(previewState.controller.freeflyController);
     sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
-    statusText = pilotKind == SpotLightPilotKind::Static
-            ? TextFormat("Piloting static spot %d", lightId)
-            : TextFormat("Piloting dynamic spot %d", lightId);
+    statusText = TextFormat("Piloting %s %d", lightName, lightId);
     return true;
 }
 
-bool SectorEditor::ApplySpotLightPilotFromPreviewPose()
+bool SectorEditor::ApplyLightPilotFromPreviewPose()
 {
-    if (!lightEditingState.spotLightPilot.active) {
+    if (!lightEditingState.lightPilot.active) {
         return false;
     }
 
-    const SpotLightPilotLightState pilot = lightEditingState.spotLightPilot;
+    const LightPilotLightState pilot = lightEditingState.lightPilot;
     const SectorViewPose pose = ActivePreviewPose();
     const Vector3 forward = PreviewForwardFromPose(pose);
     const Vector3 targetWorld = Vector3Add(
@@ -5819,44 +5841,44 @@ bool SectorEditor::ApplySpotLightPilotFromPreviewPose()
             Vector3Scale(forward, pilot.targetDistanceWorld));
 
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
-    const SectorEditorLightMutationResult result = lightEditing.ApplySpotLightPilot(
+    const SectorEditorLightMutationResult result = lightEditing.ApplyLightPilot(
             SectorWorldToAuthoringPosition(pose.position),
             SectorWorldToAuthoringPosition(targetWorld));
     if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
         ResetSectorFreeflyController(
                 previewState.controller.freeflyController,
-                previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose);
+                previewState.controller.lightPilotPreviewRestore.originalPreviewPose);
         SetSectorFreeflyMouseLookEnabled(
                 previewState.controller.freeflyController,
-                previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
-        previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+                previewState.controller.lightPilotPreviewRestore.originalMouseLookEnabled);
+        previewState.controller.lightPilotPreviewRestore = LightPilotPreviewRestoreState{};
         sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {
         sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
     }
     if (result.changed) {
-        previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+        previewState.controller.lightPilotPreviewRestore = LightPilotPreviewRestoreState{};
     }
     return result.changed;
 }
 
-void SectorEditor::CancelSpotLightPilotWithPreviewRestore(const char* message)
+void SectorEditor::CancelLightPilotWithPreviewRestore(const char* message)
 {
-    if (!lightEditingState.spotLightPilot.active) {
+    if (!lightEditingState.lightPilot.active) {
         return;
     }
 
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
-    const SectorEditorLightMutationResult result = lightEditing.CancelSpotLightPilotData(message);
+    const SectorEditorLightMutationResult result = lightEditing.CancelLightPilotData(message);
     if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
         ResetSectorFreeflyController(
                 previewState.controller.freeflyController,
-                previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose);
+                previewState.controller.lightPilotPreviewRestore.originalPreviewPose);
         SetSectorFreeflyMouseLookEnabled(
                 previewState.controller.freeflyController,
-                previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
-        previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+                previewState.controller.lightPilotPreviewRestore.originalMouseLookEnabled);
+        previewState.controller.lightPilotPreviewRestore = LightPilotPreviewRestoreState{};
         sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {

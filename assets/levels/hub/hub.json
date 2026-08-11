@@ -680,6 +680,60 @@
           }
         }
       }
+    },
+    {
+      "id": 12,
+      "position": [
+        -37.20322799682617,
+        12.245918273925781,
+        38.43030548095703
+      ],
+      "radius": 2.0,
+      "sourceRadius": 0.5,
+      "intensity": 4.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 240,
+        "a": 255
+      },
+      "castsShadow": false
+    },
+    {
+      "id": 13,
+      "position": [
+        -36.136695861816406,
+        20.76834487915039,
+        60.97492218017578
+      ],
+      "radius": 2.0,
+      "sourceRadius": 0.5,
+      "intensity": 4.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "castsShadow": false
+    },
+    {
+      "id": 14,
+      "position": [
+        -36.0,
+        20.799781799316406,
+        72.0
+      ],
+      "radius": 2.0,
+      "sourceRadius": 0.5,
+      "intensity": 4.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "castsShadow": false
     }
   ],
   "staticSpotLights": [
@@ -842,6 +896,7 @@
         "haze": {
           "enabled": true,
           "extentScale": 0.6000000238418579,
+          "density": 0.02500000037252903,
           "scatteringTint": {
             "r": 255,
             "g": 245,
@@ -891,6 +946,7 @@
         "haze": {
           "enabled": true,
           "extentScale": 0.6000000238418579,
+          "density": 0.02500000037252903,
           "scatteringTint": {
             "r": 255,
             "g": 245,
@@ -989,7 +1045,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "f0f10e1aea6a6a10",
+    "sourceHash": "1276240afbb5fa4c",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -1009,7 +1065,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "f0f10e1aea6a6a10",
+      "sourceHash": "1276240afbb5fa4c",
       "count": 483,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -1035,7 +1091,7 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "f0f10e1aea6a6a10",
+      "sourceHash": "1276240afbb5fa4c",
       "modelCount": 19,
       "objectCount": 22,
       "format": "staticModelUvRemapF32LE"
