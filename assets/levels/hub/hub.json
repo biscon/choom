@@ -237,8 +237,8 @@
         24.0
       ],
       "radius": 32.0,
-      "sourceRadius": 1.0,
-      "intensity": 2.0,
+      "sourceRadius": 4.0,
+      "intensity": 2.5,
       "color": {
         "r": 255,
         "g": 245,
@@ -248,14 +248,15 @@
       "atmosphere": {
         "haze": {
           "enabled": true,
-          "extentScale": 0.30000001192092896,
-          "density": 0.10000000149011612,
+          "extentScale": 0.3499999940395355,
+          "density": 0.019999999552965164,
           "scatteringTint": {
             "r": 210,
             "g": 200,
             "b": 190,
             "a": 255
           },
+          "edgeSoftness": 0.5,
           "noiseAmount": 0.75,
           "noiseScaleWorld": 0.5,
           "flowDirectionDegrees": 90.0,
@@ -267,9 +268,9 @@
           "extentScale": 0.30000001192092896,
           "maximumSizeWorld": 0.014999999664723873,
           "scatteringTint": {
-            "r": 255,
-            "g": 225,
-            "b": 190,
+            "r": 200,
+            "g": 200,
+            "b": 200,
             "a": 255
           }
         }
@@ -294,14 +295,15 @@
       "atmosphere": {
         "haze": {
           "enabled": true,
-          "extentScale": 0.25,
-          "density": 0.10000000149011612,
+          "extentScale": 0.30000001192092896,
+          "density": 0.02500000037252903,
           "scatteringTint": {
             "r": 255,
             "g": 225,
             "b": 100,
             "a": 255
-          }
+          },
+          "edgeSoftness": 0.5
         },
         "dust": {
           "enabled": true,
@@ -336,8 +338,8 @@
       "atmosphere": {
         "haze": {
           "enabled": true,
-          "extentScale": 0.6000000238418579,
-          "density": 0.30000001192092896,
+          "extentScale": 0.3499999940395355,
+          "density": 0.10000000149011612,
           "scatteringTint": {
             "r": 255,
             "g": 50,
@@ -367,7 +369,7 @@
       ],
       "range": 64.0,
       "sourceRadius": 1.0,
-      "intensity": 1.75,
+      "intensity": 3.75,
       "color": {
         "r": 255,
         "g": 245,
@@ -379,7 +381,7 @@
       "atmosphere": {
         "haze": {
           "enabled": true,
-          "density": 0.10000000149011612,
+          "density": 0.009999999776482582,
           "scatteringTint": {
             "r": 200,
             "g": 190,
@@ -486,7 +488,7 @@
       "a": 255
     },
     "startDistanceWorld": 1.5,
-    "density": 0.029999999329447746,
+    "density": 0.009999999776482582,
     "maxOpacity": 0.6499999761581421,
     "referenceHeightWorld": 1.0,
     "heightFalloff": 0.5,
@@ -503,24 +505,58 @@
     }
   },
   "bakedLightmap": {
-    "path": "assets/levels/hub/hub.lightmap.png",
+    "path": "assets/levels/hub/hub.lightmap.bin",
     "width": 2048,
     "height": 2048,
-    "sourceHash": "b2f64ecb1bfe5ded",
+    "version": 1,
+    "format": "rgba16fLinearHdrRgbAoLE",
+    "sourceHash": "763a11c432268811",
+    "storedStatistics": {
+      "rgbMin": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rgbMax": [
+        2.216796875,
+        1.4716796875,
+        1.2138671875
+      ],
+      "auxiliaryMin": 0.45068359375,
+      "auxiliaryMax": 1.0,
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 1668
+    },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
-      "version": 2,
-      "sourceHash": "b2f64ecb1bfe5ded",
+      "version": 3,
+      "sourceHash": "763a11c432268811",
       "count": 285,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
-      "format": "layeredAmbientCubeF32LE"
+      "format": "layeredAmbientCubeLinearHdrF32LE",
+      "storedStatistics": {
+        "rgbMin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rgbMax": [
+          2.4413819313049316,
+          2.232698678970337,
+          1.8481019735336304
+        ],
+        "auxiliaryMin": 0.0,
+        "auxiliaryMax": 0.0,
+        "sampleCount": 1710,
+        "rgbChannelsAboveOne": 36
+      }
     },
     "staticModels": {
-      "path": "assets/levels/hub/hub.lightmap.png.static_models.bin",
-      "version": 2,
-      "sourceHash": "b2f64ecb1bfe5ded",
+      "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
+      "version": 3,
+      "sourceHash": "763a11c432268811",
       "modelCount": 8,
       "objectCount": 8,
       "format": "staticModelUvRemapF32LE"
@@ -3473,7 +3509,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -3549,7 +3585,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -3625,7 +3661,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -3701,7 +3737,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.0,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -3777,7 +3813,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "fortress_stone_512",
           "uv": {
@@ -3853,7 +3889,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -4006,7 +4042,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -4159,7 +4195,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -4235,7 +4271,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "fortress_stone_mossy_512",
           "uv": {
@@ -4311,7 +4347,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -4409,7 +4445,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -4506,7 +4542,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.20000000298023224,
+        "ambientIntensity": 0.03999999910593033,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
