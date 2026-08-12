@@ -1,0 +1,230 @@
+{
+  "formatVersion": 1,
+  "assets": [
+    {
+      "id": "industrial_metal_001",
+      "displayName": "Industrial Metal 001",
+      "leafModelPath": "assets/models/doors/swing/industrial_metal_001_leaf.gltf",
+      "nominalWidth": 0.8712606430053711,
+      "nominalHeight": 1.8821707963943481,
+      "nominalThickness": 0.10339832305908203,
+      "sourcePack": "industrial_metal_doors_pack.glb"
+    },
+    {
+      "id": "industrial_metal_002",
+      "displayName": "Industrial Metal 002",
+      "leafModelPath": "assets/models/doors/swing/industrial_metal_002_leaf.gltf",
+      "nominalWidth": 1.0205974578857422,
+      "nominalHeight": 2.124620199203491,
+      "nominalThickness": 0.11150455474853516,
+      "sourcePack": "industrial_metal_doors_pack.glb"
+    },
+    {
+      "id": "industrial_metal_003",
+      "displayName": "Industrial Metal 003",
+      "leafModelPath": "assets/models/doors/swing/industrial_metal_003_leaf.gltf",
+      "nominalWidth": 0.8712615966796875,
+      "nominalHeight": 1.8821706771850586,
+      "nominalThickness": 0.10339832305908203,
+      "sourcePack": "industrial_metal_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/industrial_metal_003_frame.gltf",
+      "frameOuterWidth": 1.071950912475586,
+      "frameOuterHeight": 1.997563362121582
+    },
+    {
+      "id": "industrial_metal_004",
+      "displayName": "Industrial Metal 004",
+      "leafModelPath": "assets/models/doors/swing/industrial_metal_004_leaf.gltf",
+      "nominalWidth": 0.8712615966796875,
+      "nominalHeight": 1.8821706771850586,
+      "nominalThickness": 0.10339784622192383,
+      "sourcePack": "industrial_metal_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/industrial_metal_004_frame.gltf",
+      "frameOuterWidth": 1.071950912475586,
+      "frameOuterHeight": 1.997563362121582
+    },
+    {
+      "id": "industrial_metal_005",
+      "displayName": "Industrial Metal 005",
+      "leafModelPath": "assets/models/doors/swing/industrial_metal_005_leaf.gltf",
+      "nominalWidth": 0.8712615966796875,
+      "nominalHeight": 1.8821706771850586,
+      "nominalThickness": 0.10339832305908203,
+      "sourcePack": "industrial_metal_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/industrial_metal_005_frame.gltf",
+      "frameOuterWidth": 1.071950912475586,
+      "frameOuterHeight": 1.997563362121582
+    },
+    {
+      "id": "industrial_metal_007",
+      "displayName": "Industrial Metal 007",
+      "leafModelPath": "assets/models/doors/swing/industrial_metal_007_leaf.gltf",
+      "nominalWidth": 0.9979324340820312,
+      "nominalHeight": 2.0378382205963135,
+      "nominalThickness": 0.11194992065429688,
+      "sourcePack": "industrial_metal_doors_pack.glb"
+    },
+    {
+      "id": "wooden_interior_001",
+      "displayName": "Wooden Interior 001",
+      "leafModelPath": "assets/models/doors/swing/wooden_interior_001_leaf.gltf",
+      "nominalWidth": 0.7557764053344727,
+      "nominalHeight": 1.8060166835784912,
+      "nominalThickness": 0.08566230535507202,
+      "sourcePack": "wooden_interior_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/wooden_interior_001_frame.gltf",
+      "frameOuterWidth": 0.8970050811767578,
+      "frameOuterHeight": 1.9396041631698608
+    },
+    {
+      "id": "wooden_interior_002",
+      "displayName": "Wooden Interior 002",
+      "leafModelPath": "assets/models/doors/swing/wooden_interior_002_leaf.gltf",
+      "nominalWidth": 0.7557764053344727,
+      "nominalHeight": 1.8060166835784912,
+      "nominalThickness": 0.0856623649597168,
+      "sourcePack": "wooden_interior_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/wooden_interior_002_frame.gltf",
+      "frameOuterWidth": 0.8970050811767578,
+      "frameOuterHeight": 1.9396041631698608
+    },
+    {
+      "id": "wooden_interior_003",
+      "displayName": "Wooden Interior 003",
+      "leafModelPath": "assets/models/doors/swing/wooden_interior_003_leaf.gltf",
+      "nominalWidth": 0.7557764053344727,
+      "nominalHeight": 1.8060166835784912,
+      "nominalThickness": 0.08566230535507202,
+      "sourcePack": "wooden_interior_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/wooden_interior_003_frame.gltf",
+      "frameOuterWidth": 0.8970050811767578,
+      "frameOuterHeight": 1.9396041631698608
+    },
+    {
+      "id": "wooden_interior_004",
+      "displayName": "Wooden Interior 004",
+      "leafModelPath": "assets/models/doors/swing/wooden_interior_004_leaf.gltf",
+      "nominalWidth": 0.7557764053344727,
+      "nominalHeight": 1.8060166835784912,
+      "nominalThickness": 0.08566230535507202,
+      "sourcePack": "wooden_interior_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/wooden_interior_004_frame.gltf",
+      "frameOuterWidth": 0.8970050811767578,
+      "frameOuterHeight": 1.9396041631698608
+    },
+    {
+      "id": "wooden_interior_005",
+      "displayName": "Wooden Interior 005",
+      "leafModelPath": "assets/models/doors/swing/wooden_interior_005_leaf.gltf",
+      "nominalWidth": 0.7557764053344727,
+      "nominalHeight": 1.8060168027877808,
+      "nominalThickness": 0.08566230535507202,
+      "sourcePack": "wooden_interior_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/wooden_interior_005_frame.gltf",
+      "frameOuterWidth": 0.8970048427581787,
+      "frameOuterHeight": 1.9396041631698608
+    },
+    {
+      "id": "wooden_interior_006",
+      "displayName": "Wooden Interior 006",
+      "leafModelPath": "assets/models/doors/swing/wooden_interior_006_leaf.gltf",
+      "nominalWidth": 0.7557765245437622,
+      "nominalHeight": 1.8060169219970703,
+      "nominalThickness": 0.08566230535507202,
+      "sourcePack": "wooden_interior_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/wooden_interior_006_frame.gltf",
+      "frameOuterWidth": 0.8970047235488892,
+      "frameOuterHeight": 1.9396041631698608
+    },
+    {
+      "id": "wooden_interior_007",
+      "displayName": "Wooden Interior 007",
+      "leafModelPath": "assets/models/doors/swing/wooden_interior_007_leaf.gltf",
+      "nominalWidth": 0.7557764053344727,
+      "nominalHeight": 1.8060166835784912,
+      "nominalThickness": 0.0856623649597168,
+      "sourcePack": "wooden_interior_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/wooden_interior_007_frame.gltf",
+      "frameOuterWidth": 0.897005021572113,
+      "frameOuterHeight": 1.9396041631698608
+    },
+    {
+      "id": "wooden_interior_008",
+      "displayName": "Wooden Interior 008",
+      "leafModelPath": "assets/models/doors/swing/wooden_interior_008_leaf.gltf",
+      "nominalWidth": 0.7557762861251831,
+      "nominalHeight": 1.8060166835784912,
+      "nominalThickness": 0.08566230535507202,
+      "sourcePack": "wooden_interior_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/wooden_interior_008_frame.gltf",
+      "frameOuterWidth": 0.8970048427581787,
+      "frameOuterHeight": 1.9396041631698608
+    },
+    {
+      "id": "wooden_interior_009",
+      "displayName": "Wooden Interior 009",
+      "leafModelPath": "assets/models/doors/swing/wooden_interior_009_leaf.gltf",
+      "nominalWidth": 0.7557762861251831,
+      "nominalHeight": 1.8060166835784912,
+      "nominalThickness": 0.08566230535507202,
+      "sourcePack": "wooden_interior_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/wooden_interior_009_frame.gltf",
+      "frameOuterWidth": 0.8970050811767578,
+      "frameOuterHeight": 1.9396041631698608
+    },
+    {
+      "id": "worn_wooden_001",
+      "displayName": "Worn Wooden 001",
+      "leafModelPath": "assets/models/doors/swing/worn_wooden_001_leaf.gltf",
+      "nominalWidth": 0.7853584289550781,
+      "nominalHeight": 1.8060166835784912,
+      "nominalThickness": 0.10785293579101562,
+      "sourcePack": "worn_wooden_doors_pack.glb"
+    },
+    {
+      "id": "worn_wooden_002",
+      "displayName": "Worn Wooden 002",
+      "leafModelPath": "assets/models/doors/swing/worn_wooden_002_leaf.gltf",
+      "nominalWidth": 0.7557764053344727,
+      "nominalHeight": 1.8060168027877808,
+      "nominalThickness": 0.0856618881225586,
+      "sourcePack": "worn_wooden_doors_pack.glb"
+    },
+    {
+      "id": "worn_wooden_004",
+      "displayName": "Worn Wooden 004",
+      "leafModelPath": "assets/models/doors/swing/worn_wooden_004_leaf.gltf",
+      "nominalWidth": 0.7557764053344727,
+      "nominalHeight": 1.8060168027877808,
+      "nominalThickness": 0.0856623649597168,
+      "sourcePack": "worn_wooden_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/worn_wooden_004_frame.gltf",
+      "frameOuterWidth": 0.8970050811767578,
+      "frameOuterHeight": 1.9396041631698608
+    },
+    {
+      "id": "worn_wooden_005",
+      "displayName": "Worn Wooden 005",
+      "leafModelPath": "assets/models/doors/swing/worn_wooden_005_leaf.gltf",
+      "nominalWidth": 0.7557764053344727,
+      "nominalHeight": 1.8060168027877808,
+      "nominalThickness": 0.0856618881225586,
+      "sourcePack": "worn_wooden_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/worn_wooden_005_frame.gltf",
+      "frameOuterWidth": 0.8970050811767578,
+      "frameOuterHeight": 1.9396041631698608
+    },
+    {
+      "id": "worn_wooden_006",
+      "displayName": "Worn Wooden 006",
+      "leafModelPath": "assets/models/doors/swing/worn_wooden_006_leaf.gltf",
+      "nominalWidth": 0.7557764053344727,
+      "nominalHeight": 1.8060168027877808,
+      "nominalThickness": 0.0856618881225586,
+      "sourcePack": "worn_wooden_doors_pack.glb",
+      "frameModelPath": "assets/models/doors/swing/worn_wooden_006_frame.gltf",
+      "frameOuterWidth": 0.8970050811767578,
+      "frameOuterHeight": 1.9396041631698608
+    }
+  ]
+}

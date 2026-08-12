@@ -1,0 +1,256 @@
+{
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 310,
+      "max": [
+        0.7276654839515686,
+        0.7430726289749146,
+        0.08148558437824249
+      ],
+      "min": [
+        0.5461260080337524,
+        0.6671465635299683,
+        -0.08148562908172607
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 310,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 310,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 310,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 432,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 428,
+      "max": [
+        0.7557763457298279,
+        1.806016445159912,
+        0.0428311713039875
+      ],
+      "min": [
+        -9.313225746154785e-10,
+        1.1920928955078125e-07,
+        -0.04283120855689049
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 428,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 428,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 428,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5123,
+      "count": 708,
+      "type": "SCALAR"
+    }
+  ],
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.39",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 3720,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3720,
+      "byteOffset": 3720,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2480,
+      "byteOffset": 7440,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 4960,
+      "byteOffset": 9920,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 864,
+      "byteOffset": 14880,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 5136,
+      "byteOffset": 15744,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 5136,
+      "byteOffset": 20880,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3424,
+      "byteOffset": 26016,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 6848,
+      "byteOffset": 29440,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1416,
+      "byteOffset": 36288,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 37704,
+      "uri": "wooden_interior_007_leaf.bin"
+    }
+  ],
+  "images": [
+    {
+      "name": "Image_0",
+      "uri": "doors_wood_base_color.png"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "Doors",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 0.8040408492088318
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "LeafAttachment01Mesh",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 0,
+            "TANGENT": 3,
+            "TEXCOORD_0": 2
+          },
+          "indices": 4,
+          "material": 0
+        }
+      ]
+    },
+    {
+      "name": "LeafPanelMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 6,
+            "POSITION": 5,
+            "TANGENT": 8,
+            "TEXCOORD_0": 7
+          },
+          "indices": 9,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "LeafAttachment01"
+    },
+    {
+      "mesh": 1,
+      "name": "LeafPanel"
+    },
+    {
+      "children": [
+        0,
+        1
+      ],
+      "extras": {
+        "asset_part": "leaf",
+        "catalog_id": "wooden_interior_007",
+        "preparation_tool_version": 1,
+        "source_author": "vanillao03 (https://sketchfab.com/vanillao03)",
+        "source_license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source_pack": "wooden_interior_doors_pack.glb",
+        "source_pack_sha256": "1d679dfadb8b5b8d7162eeec816496db6ce05ebae78f7d38b9ca10e983767633",
+        "source_title": "Low-Poly PSX Style Wooden Interior Doors Pack",
+        "source_url": "https://sketchfab.com/3d-models/low-poly-psx-style-wooden-interior-doors-pack-02e442c6d4a24df29624808d058f010a"
+      },
+      "name": "DoorLeaf_wooden_interior_007"
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        2
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    }
+  ]
+}

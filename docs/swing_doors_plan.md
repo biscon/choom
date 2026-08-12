@@ -44,7 +44,7 @@ When executing this plan:
 
 | Slice | Title | Status | Completed |
 |---|---|---|---|
-| 1 | Prepare and verify separated door assets | Not Started | — |
+| 1 | Prepare and verify separated door assets | Completed | 2026-08-12 |
 | 2 | Add door-asset catalog and backward-compatible authored data | Not Started | — |
 | 3 | Add swing kinematics, collision, obstruction handling, and runtime spawning | Not Started | — |
 | 4 | Render model leaves/frames with PBR lighting and dynamic shadows | Not Started | — |
@@ -916,4 +916,49 @@ Append one entry per attempted slice in this format:
 - Remaining follow-up within this plan:
 ```
 
-No slices have been executed yet.
+### 2026-08-12 — Slice 1 — Completed
+
+- Summary: Added a deterministic Blender inspection/preparation/verification
+  tool and generated all 20 catalogued single-leaf styles as 20 separated leaf
+  models plus 15 optional separated frame models. The 35 glTF files reference
+  only two shared external 1024x256 atlas PNGs. Generated the version-1 catalog
+  and source-derived CC-BY-4.0 attribution, retained all three immutable source
+  GLBs, and confirmed their recorded SHA-256 values before and after each tool
+  run.
+- Decisions/deviations folded back into plan: No pairing changes or contract
+  deviations were needed. Wooden door 002 is explicitly excluded from its
+  frame export, and only the closed canonical `Metal Door_007` hierarchy is
+  exported; its rotated duplicate and double-width frame remain deferred in the
+  unchanged source GLB. Blender 5.2 emits the known optional extension-module,
+  MeshOptimizer, and PipeWire diagnostics, but the tool's validations and exit
+  status remain authoritative.
+- Files/modules materially affected: `tools/prepare_swing_door_assets.py`,
+  `assets/models/doors/swing/`, and this plan. Generated output consists of 20
+  leaf `.gltf`/`.bin` pairs, 15 frame `.gltf`/`.bin` pairs, two shared PNGs,
+  `catalog.json`, and `ATTRIBUTION.md`.
+- Automated verification: Blender `inspect`, `prepare`, and `verify` modes all
+  passed; verify cleared and reimported every generated model and checked clean
+  roots, canonical bounds, mesh isolation/counts, opaque materials, UV0,
+  normals, tangents, shared texture URIs, provenance extras, catalog agreement,
+  and attachment rotation. A second `prepare` run followed by a SHA-256 manifest
+  comparison was byte-identical. `cmake --build cmake-build-debug -j2` passed;
+  `ctest --test-dir cmake-build-debug --output-on-failure` passed all 21 tests;
+  `git diff --check`, `git diff --stat`, and `git status --short` passed/reported
+  cleanly as recorded at handoff.
+- Manual verification: No interactive/game smoke test was performed
+  (user-owned). The agent visually inspected the headless front and top-down
+  contact sheets at
+  `build/swing_door_asset_work/contact_sheets/swing_doors_front.png` and
+  `build/swing_door_asset_work/contact_sheets/swing_doors_top.png`; all 20 styles
+  show closed and 55-degree poses around the same hinge marker, attached
+  handles/knobs, and fixed optional frames.
+- Cache invalidation behavior: No topology, editor mutation, or 2D render-cache
+  code changed in this asset-only slice, so no cache invalidation path changed.
+- Lightmap source-hash behavior: No lightmap or runtime schema code changed;
+  prepared model assets remain unused by and excluded from the lightmap source
+  hash until later explicitly scoped slices.
+- Collision/sector lookup/physics behavior: Unchanged; this slice added no
+  runtime, collision, sector lookup, or physics code.
+- Remaining follow-up within this plan: Slices 2 through 6 remain Not Started.
+  The three source pack GLBs remain present for the user to remove only after
+  the complete feature is accepted.

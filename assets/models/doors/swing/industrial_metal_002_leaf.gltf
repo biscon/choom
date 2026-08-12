@@ -1,0 +1,166 @@
+{
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 628,
+      "max": [
+        1.0205973386764526,
+        2.124620199203491,
+        0.0557522289454937
+      ],
+      "min": [
+        -2.3283064365386963e-10,
+        1.1920928955078125e-07,
+        -0.055752161890268326
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 628,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 628,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 628,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 1200,
+      "type": "SCALAR"
+    }
+  ],
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v5.2.39",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 7536,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 7536,
+      "byteOffset": 7536,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 5024,
+      "byteOffset": 15072,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 10048,
+      "byteOffset": 20096,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2400,
+      "byteOffset": 30144,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 32544,
+      "uri": "industrial_metal_002_leaf.bin"
+    }
+  ],
+  "images": [
+    {
+      "name": "Image_0",
+      "uri": "doors_metal_base_color.png"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "Metal_Doors",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 0.8040408492088318
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "LeafPanelMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 0,
+            "TANGENT": 3,
+            "TEXCOORD_0": 2
+          },
+          "indices": 4,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "LeafPanel"
+    },
+    {
+      "children": [
+        0
+      ],
+      "extras": {
+        "asset_part": "leaf",
+        "catalog_id": "industrial_metal_002",
+        "preparation_tool_version": 1,
+        "source_author": "vanillao03 (https://sketchfab.com/vanillao03)",
+        "source_license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source_pack": "industrial_metal_doors_pack.glb",
+        "source_pack_sha256": "bd6cdbc1783313e6199cbdb7ebbff48cb8674f1fdf752a0917933f9c04213adc",
+        "source_title": "Low-Poly PSX Style Industrial Metal Doors Pack",
+        "source_url": "https://sketchfab.com/3d-models/low-poly-psx-style-industrial-metal-doors-pack-4f5561bbc441414587e3650ceae5593a"
+      },
+      "name": "DoorLeaf_industrial_metal_002"
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        1
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    }
+  ]
+}
