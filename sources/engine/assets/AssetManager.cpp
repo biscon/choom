@@ -120,6 +120,7 @@ TextureHandle AssetManager::RequestTexture(
         AssetScopeHandle scope,
         const char* key,
         const char* path,
+        TextureColorUsage colorUsage,
         TextureLoadFlags flags)
 {
     {
@@ -129,12 +130,14 @@ TextureHandle AssetManager::RequestTexture(
         }
     }
 
-    TextureAssets::RequestResult result = textures.RequestTexture(scope, key, path, flags);
+    TextureAssets::RequestResult result = textures.RequestTexture(
+            scope, key, path, colorUsage, flags);
     if (result.shouldQueue) {
         AssetRequest request;
         request.type = AssetRequestType::Texture;
         request.texture = result.handle;
         request.path = result.path;
+        request.textureColorUsage = result.colorUsage;
         request.textureFlags = result.flags;
         EnqueueRequest(std::move(request));
     }
@@ -146,6 +149,7 @@ TextureHandle AssetManager::CreateTextureFromImage(
         AssetScopeHandle scope,
         const char* key,
         const Image& image,
+        TextureColorUsage colorUsage,
         TextureLoadFlags flags)
 {
     {
@@ -155,13 +159,15 @@ TextureHandle AssetManager::CreateTextureFromImage(
         }
     }
 
-    return textures.CreateTextureFromImage(scope, key, image, flags);
+    return textures.CreateTextureFromImage(
+            scope, key, image, colorUsage, flags);
 }
 
 TextureHandle AssetManager::CreateCubemapFromImage(
         AssetScopeHandle scope,
         const char* key,
         const Image& image,
+        TextureColorUsage colorUsage,
         int layout)
 {
     {
@@ -170,7 +176,8 @@ TextureHandle AssetManager::CreateCubemapFromImage(
             return NullTextureHandle();
         }
     }
-    return textures.CreateCubemapFromImage(scope, key, image, layout);
+    return textures.CreateCubemapFromImage(
+            scope, key, image, colorUsage, layout);
 }
 
 bool AssetManager::IsReady(TextureHandle handle) const
@@ -349,6 +356,7 @@ SpriteAnimationHandle AssetManager::RequestSpriteAnimation(
         AssetScopeHandle scope,
         const char* key,
         const char* jsonPath,
+        TextureColorUsage atlasColorUsage,
         TextureLoadFlags textureFlags)
 {
     {
@@ -362,6 +370,7 @@ SpriteAnimationHandle AssetManager::RequestSpriteAnimation(
             scope,
             key,
             jsonPath,
+            atlasColorUsage,
             textureFlags
     );
 
@@ -370,6 +379,7 @@ SpriteAnimationHandle AssetManager::RequestSpriteAnimation(
         request.type = AssetRequestType::SpriteAnimation;
         request.spriteAnimation = result.handle;
         request.path = result.jsonPath;
+        request.textureColorUsage = atlasColorUsage;
         request.textureFlags = textureFlags;
         EnqueueRequest(std::move(request));
     }
@@ -493,6 +503,7 @@ void AssetManager::WorkerLoop()
                 textures.ProcessTextureRequestOnWorkerThread(
                         request.texture,
                         request.path,
+                        request.textureColorUsage,
                         request.textureFlags
                 );
                 break;
@@ -509,6 +520,7 @@ void AssetManager::WorkerLoop()
                         textureRequest.type = AssetRequestType::Texture;
                         textureRequest.texture = result.handle;
                         textureRequest.path = result.path;
+                        textureRequest.textureColorUsage = result.colorUsage;
                         textureRequest.textureFlags = result.flags;
                         EnqueueRequest(std::move(textureRequest));
                     }

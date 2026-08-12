@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/render/RenderTarget.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
@@ -9,16 +10,17 @@
 
 #include <array>
 #include <cstddef>
+#include <string>
 
 namespace game {
-
-RenderTexture2D LoadSectorDepthTextureRenderTarget(int width, int height);
 
 class SectorLocalFogRenderer {
 public:
     bool Apply(
             RenderTexture2D& sceneTarget,
+            RenderTexture2D& sceneScratch,
             const SectorTopologyMap& map,
+            SectorTopologyFogSettings::LocalVolumeQuality quality,
             const Camera3D& camera,
             float runtimeSeconds,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
@@ -27,6 +29,8 @@ public:
 
     int EligibleVolumeCount() const { return eligibleVolumeCount; }
     int ActiveVolumeCount() const { return activeVolumeCount; }
+    const engine::RenderTarget& AccumulationTarget() const { return fogTarget; }
+    const std::string& AccumulationDiagnostic() const { return accumulationDiagnostic; }
 
 private:
     struct AccumulateShaderLocations {
@@ -93,8 +97,8 @@ private:
     Shader compositeShader = {};
     AccumulateShaderLocations accumulateLocations;
     CompositeShaderLocations compositeLocations;
-    RenderTexture2D fogTarget = {};
-    RenderTexture2D compositeTarget = {};
+    engine::RenderTarget fogTarget;
+    std::string accumulationDiagnostic = "not allocated";
     std::array<StaticLightingCacheEntry, 16> staticLightingCache{};
     const SectorBakedObjectLightProbe* cachedProbeData = nullptr;
     std::size_t cachedProbeCount = 0;
@@ -103,7 +107,11 @@ private:
     int sceneWidth = 0;
     int sceneHeight = 0;
     float targetScale = 0.0f;
+    int failedWidth = 0;
+    int failedHeight = 0;
+    float failedScale = 0.0f;
     bool warnedUnavailable = false;
+    bool shaderFailed = false;
     bool warnedInvalidProjection = false;
     int eligibleVolumeCount = 0;
     int activeVolumeCount = 0;

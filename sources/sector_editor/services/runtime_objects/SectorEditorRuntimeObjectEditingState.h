@@ -20,6 +20,7 @@ struct StaticModelPickerState {
     std::string scanMessage;
     engine::UIScrollState scroll;
     std::vector<std::string> modelPaths;
+    std::vector<std::string> optionLabelStorage;
     std::vector<const char*> optionLabels;
     int selectedModelIndex = -1;
     std::string requestedModelPath;

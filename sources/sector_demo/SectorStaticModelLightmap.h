@@ -18,7 +18,7 @@ namespace game {
 
 enum class SectorLightmapStatus;
 
-constexpr int kSectorStaticModelLightmapSidecarVersion = 2;
+constexpr int kSectorStaticModelLightmapSidecarVersion = 3;
 constexpr const char* kSectorStaticModelLightmapSidecarFormat =
         "staticModelUvRemapF32LE";
 

@@ -15,13 +15,13 @@ struct MaterialEditingUiState {
     engine::UIFloatInputState surface3DUvOffsetUInput;
     engine::UIFloatInputState surface3DUvOffsetVInput;
     engine::UIFloatInputState surface3DDecalOpacityInput;
-    engine::UIFloatInputState surface3DDecalBloomIntensityInput;
+    engine::UIFloatInputState surface3DDecalEmissiveStrengthInput;
     engine::UIFloatInputState topologySectorUvInputs[20];
     engine::UIFloatInputState topologySectorDecalOpacityInputs[2];
-    engine::UIFloatInputState topologySectorDecalBloomIntensityInputs[2];
+    engine::UIFloatInputState topologySectorDecalEmissiveStrengthInputs[2];
     engine::UIFloatInputState topologySideDefUvInputs[4];
     engine::UIFloatInputState topologySideDefDecalOpacityInput;
-    engine::UIFloatInputState topologySideDefDecalBloomIntensityInput;
+    engine::UIFloatInputState topologySideDefDecalEmissiveStrengthInput;
 };
 
 } // namespace game

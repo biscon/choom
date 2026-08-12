@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/render/RenderTarget.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -20,7 +21,9 @@ class SectorLightHazeRenderer {
 public:
     bool Apply(
             RenderTexture2D& sceneTarget,
+            RenderTexture2D& sceneScratch,
             const SectorTopologyMap& map,
+            SectorTopologyFogSettings::LocalVolumeQuality quality,
             const Camera3D& camera,
             float runtimeSeconds,
             const SectorBakedObjectLightProbeRuntimeData& probes,
@@ -32,6 +35,8 @@ public:
 
     int EligibleCount() const { return eligibleCount; }
     int ActiveCount() const { return activeCount; }
+    const engine::RenderTarget& AccumulationTarget() const { return hazeTarget; }
+    const std::string& AccumulationDiagnostic() const { return accumulationDiagnostic; }
 
 private:
     struct ShaderLocations {
@@ -109,8 +114,8 @@ private:
     Shader compositeShader = {};
     ShaderLocations locations;
     CompositeLocations compositeLocations;
-    RenderTexture2D hazeTarget = {};
-    RenderTexture2D compositeTarget = {};
+    engine::RenderTarget hazeTarget;
+    std::string accumulationDiagnostic = "not allocated";
     std::array<ProbeCacheEntry, 8> probeCache{};
     const SectorBakedObjectLightProbe* cachedProbeData = nullptr;
     std::size_t cachedProbeCount = 0;
@@ -119,9 +124,13 @@ private:
     int width = 0;
     int height = 0;
     float scale = 0.0f;
+    int failedWidth = 0;
+    int failedHeight = 0;
+    float failedScale = 0.0f;
     int eligibleCount = 0;
     int activeCount = 0;
     bool warnedUnavailable = false;
+    bool shaderFailed = false;
 };
 
 } // namespace game

@@ -398,6 +398,39 @@ int ReadOptionalClampedInt(
     return std::clamp(value, minValue, maxValue);
 }
 
+SectorAuthoringEditorSettings ReadAuthoringEditorSettings(const Json& root)
+{
+    SectorAuthoringEditorSettings settings;
+    const auto settingsIt = root.find("editorSettings");
+    if (settingsIt == root.end()) {
+        return settings;
+    }
+    if (!settingsIt->is_object()) {
+        Fail("root.editorSettings must be an object");
+    }
+    settings.gridSize = ReadOptionalClampedInt(
+            *settingsIt,
+            "gridSize",
+            "root.editorSettings",
+            settings.gridSize,
+            SectorAuthoringEditorGridSizeMin,
+            SectorAuthoringEditorGridSizeMax);
+    return settings;
+}
+
+void WriteAuthoringEditorSettings(
+        Json& root,
+        const SectorAuthoringEditorSettings& source)
+{
+    const int gridSize = std::clamp(
+            source.gridSize,
+            SectorAuthoringEditorGridSizeMin,
+            SectorAuthoringEditorGridSizeMax);
+    if (gridSize != SectorAuthoringEditorGridSizeDefault) {
+        root["editorSettings"] = Json{{"gridSize", gridSize}};
+    }
+}
+
 float ReadOptionalClampedFloat(
         const Json& object,
         const char* field,
@@ -1324,6 +1357,35 @@ SectorTopologyFogSettings ReadFogSettings(const Json& value, const std::string& 
     return NormalizeSectorTopologyFogSettings(settings);
 }
 
+SectorIlluminationStatistics ReadIlluminationStatistics(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+    SectorIlluminationStatistics statistics;
+    statistics.rgbMin = ReadVector3(value.at("rgbMin"), context + ".rgbMin");
+    statistics.rgbMax = ReadVector3(value.at("rgbMax"), context + ".rgbMax");
+    statistics.auxiliaryMin = ReadFloat(value, "auxiliaryMin", context);
+    statistics.auxiliaryMax = ReadFloat(value, "auxiliaryMax", context);
+    statistics.sampleCount = value.at("sampleCount").get<uint64_t>();
+    statistics.rgbChannelsAboveOne =
+            value.at("rgbChannelsAboveOne").get<uint64_t>();
+    if (statistics.sampleCount == 0
+            || statistics.rgbMin.x < 0.0f || statistics.rgbMin.y < 0.0f
+            || statistics.rgbMin.z < 0.0f
+            || statistics.rgbMax.x < statistics.rgbMin.x
+            || statistics.rgbMax.y < statistics.rgbMin.y
+            || statistics.rgbMax.z < statistics.rgbMin.z
+            || statistics.auxiliaryMin < 0.0f
+            || statistics.auxiliaryMax < statistics.auxiliaryMin
+            || statistics.auxiliaryMax > 1.0f) {
+        Fail(context + " contains invalid ranges");
+    }
+    return statistics;
+}
+
 SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
         const Json& value,
         const std::string& context)
@@ -1351,6 +1413,11 @@ SectorBakedObjectLightProbeMetadata ReadBakedObjectLightProbeMetadata(
         metadata.probeUpperHeightWorld = legacyHeight;
     }
     metadata.format = ReadString(value, "format", context);
+    const auto statisticsIt = value.find("storedStatistics");
+    if (statisticsIt != value.end()) {
+        metadata.storedStatistics = ReadIlluminationStatistics(
+                *statisticsIt, context + ".storedStatistics");
+    }
 
     if (metadata.path.empty()) {
         Fail(context + ".path must not be empty");
@@ -1441,7 +1508,20 @@ SectorLightmapMetadata ReadBakedLightmap(const Json& value, const std::string& c
     metadata.path = ReadString(value, "path", context);
     metadata.width = ReadInt(value, "width", context);
     metadata.height = ReadInt(value, "height", context);
+    const auto versionIt = value.find("version");
+    metadata.version = versionIt == value.end()
+            ? 0
+            : ReadInt(value, "version", context);
+    const auto formatIt = value.find("format");
+    metadata.format = formatIt == value.end()
+            ? std::string{}
+            : ReadString(value, "format", context);
     metadata.sourceHash = ReadString(value, "sourceHash", context);
+    const auto storedStatisticsIt = value.find("storedStatistics");
+    if (storedStatisticsIt != value.end()) {
+        metadata.storedStatistics = ReadIlluminationStatistics(
+                *storedStatisticsIt, context + ".storedStatistics");
+    }
     if (metadata.path.empty()) {
         Fail(context + ".path must not be empty");
     }
@@ -2166,6 +2246,9 @@ Json WriteStaticSpotLight(const SectorTopologyStaticSpotLight& light, const std:
     if (outerConeDegrees != 35.0f) {
         lightJson["outerConeDegrees"] = outerConeDegrees;
     }
+    if (!light.castsShadow) {
+        lightJson["castsShadow"] = false;
+    }
     WriteOptionalLightAtmosphere(lightJson, light);
     return lightJson;
 }
@@ -2281,9 +2364,11 @@ bool IsDefaultFogSettings(const SectorTopologyFogSettings& settings)
             && normalized.localVolumeQuality == defaults.localVolumeQuality;
 }
 
+Json WriteIlluminationStatistics(const SectorIlluminationStatistics& statistics);
+
 Json WriteBakedObjectLightProbeMetadata(const SectorBakedObjectLightProbeMetadata& metadata)
 {
-    return Json{
+    Json result{
             {"path", metadata.path},
             {"version", metadata.version},
             {"sourceHash", metadata.sourceHash},
@@ -2293,6 +2378,22 @@ Json WriteBakedObjectLightProbeMetadata(const SectorBakedObjectLightProbeMetadat
             {"probeUpperHeightWorld", metadata.probeUpperHeightWorld},
             {"format", metadata.format}
     };
+    if (metadata.storedStatistics.sampleCount > 0) {
+        result["storedStatistics"] =
+                WriteIlluminationStatistics(metadata.storedStatistics);
+    }
+    return result;
+}
+
+Json WriteIlluminationStatistics(const SectorIlluminationStatistics& statistics)
+{
+    return Json{
+            {"rgbMin", WriteVector3(statistics.rgbMin, "illumination statistics rgbMin")},
+            {"rgbMax", WriteVector3(statistics.rgbMax, "illumination statistics rgbMax")},
+            {"auxiliaryMin", statistics.auxiliaryMin},
+            {"auxiliaryMax", statistics.auxiliaryMax},
+            {"sampleCount", statistics.sampleCount},
+            {"rgbChannelsAboveOne", statistics.rgbChannelsAboveOne}};
 }
 
 Json WriteBakedStaticModelLightmapMetadata(
@@ -2328,8 +2429,14 @@ Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
             {"path", metadata.path},
             {"width", metadata.width},
             {"height", metadata.height},
+            {"version", metadata.version},
+            {"format", metadata.format},
             {"sourceHash", metadata.sourceHash}
     };
+    if (metadata.storedStatistics.sampleCount > 0) {
+        lightmap["storedStatistics"] =
+                WriteIlluminationStatistics(metadata.storedStatistics);
+    }
     if (!metadata.objectProbes.path.empty()) {
         lightmap["objectProbes"] = WriteBakedObjectLightProbeMetadata(metadata.objectProbes);
     }
@@ -2634,6 +2741,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             light.intensity = ReadFloat(value, "intensity", context);
             light.color = ReadColor(RequireField(value, "color", context), context + ".color");
             light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
+            light.castsShadow = ReadOptionalBool(value, "castsShadow", context, true);
             map.staticLights.push_back(light);
         }
     }
@@ -2675,6 +2783,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
                     179.0f);
             light.outerConeDegrees = std::max(light.outerConeDegrees, light.innerConeDegrees);
             light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
+            light.castsShadow = ReadOptionalBool(value, "castsShadow", context, true);
             map.staticSpotLights.push_back(light);
         }
     }
@@ -3053,6 +3162,7 @@ SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
     }
 
     SectorAuthoringDocument document;
+    document.editorSettings = ReadAuthoringEditorSettings(root);
     ReadTextures(root, document.mapData);
     ReadMapLevelFields(root, document.mapData, true);
     ValidateAuthoringMapData(document.mapData);
@@ -3110,6 +3220,9 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
         };
+        if (!light->castsShadow) {
+            lightJson["castsShadow"] = false;
+        }
         WriteOptionalLightAtmosphere(lightJson, *light);
         root["staticLights"].push_back(std::move(lightJson));
     }
@@ -3338,6 +3451,7 @@ Json SerializeAuthoringDocument(const SectorAuthoringDocument& document)
     root["coordSubdivisions"] = SectorCoordSubdivisions;
     WriteTextureFields(root, document.mapData);
     WriteMapLevelFields(root, document.mapData, true);
+    WriteAuthoringEditorSettings(root, document.editorSettings);
     root["authoringGraph"] = WriteAuthoringGraph(document.graph);
     return root;
 }
@@ -3602,6 +3716,9 @@ Json SerializeMap(const SectorTopologyMap& map)
                 {"intensity", light->intensity},
                 {"color", WriteColor(light->color)}
         };
+        if (!light->castsShadow) {
+            lightJson["castsShadow"] = false;
+        }
         WriteOptionalLightAtmosphere(lightJson, *light);
         root["staticLights"].push_back(std::move(lightJson));
     }

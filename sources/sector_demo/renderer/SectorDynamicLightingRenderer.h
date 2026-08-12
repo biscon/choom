@@ -50,7 +50,6 @@ struct SectorDynamicLightShaderLocations {
     int dynamicLightDirections = -1;
     int dynamicLightInnerConeCos = -1;
     int dynamicLightOuterConeCos = -1;
-    int dynamicLightingClamp = -1;
 };
 
 struct SectorDynamicSpotLightShadowShaderLocations {
@@ -83,7 +82,6 @@ struct SectorBillboardDynamicLightContext {
     std::array<float, MaxDynamicLights> dynamicLightOuterConeCos{};
     SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms{};
     SectorDynamicShadowMapTextures shadowMaps{};
-    float dynamicLightingClamp = 4.0f;
 };
 
 void UploadSectorRendererDynamicPointLights(
@@ -123,8 +121,10 @@ public:
 
     size_t SourceCount() const { return sources.size(); }
     size_t CandidateCount() const { return candidates.size(); }
-    SectorPreviewDynamicSpotLightShadowUniforms PackShadowUniforms() const;
+    SectorPreviewDynamicSpotLightShadowUniforms PackShadowUniforms(
+            bool enabled = true) const;
     bool EnsureShadowMapResources();
+    void SetShadowMapResolution(int resolution);
     void UnloadShadowMapResources();
     bool HasShadowMapResources() const;
     bool LoadShadowMaterial();
@@ -134,7 +134,8 @@ public:
     RenderTexture2D* ShadowMap(std::size_t index);
     const RenderTexture2D* ShadowMap(std::size_t index) const;
     const Texture2D* ShadowMapDepthTexture(std::size_t index) const;
-    SectorDynamicShadowMapTextures BuildShadowMapTextures() const;
+    SectorDynamicShadowMapTextures BuildShadowMapTextures(
+            bool enabled = true) const;
     void RenderShadowMaps(const SectorDynamicSpotLightShadowRenderContext& context);
 
 private:
@@ -153,10 +154,13 @@ private:
     std::vector<SectorReceiverBounds> receiverBounds;
     std::vector<SectorPreviewDynamicSpotLightShadowCaster> shadowCasters;
     std::vector<SectorPreviewDynamicSpotLightShadowMatrix> shadowMatrices;
+    std::vector<SectorPreviewDynamicSpotLightShadowMatrix> cachedShadowMatrices;
+    bool shadowMapsCacheValid = false;
     std::array<RenderTexture2D, MaxDynamicSpotLightShadowCasters> shadowMaps{};
     Material shadowMaterial = {};
     Texture2D shadowDefaultTexture = {};
     bool shadowMaterialLoaded = false;
+    int shadowMapResolution = DynamicSpotLightShadowMapResolution;
     int shadowLightViewProjectionLoc = -1;
     int shadowAlphaTestLoc = -1;
     int shadowAlphaCutoffLoc = -1;

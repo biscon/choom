@@ -1,5 +1,6 @@
 #include "sector_demo/renderer/SectorLightDustRenderer.h"
 
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorLocalFogLighting.h"
@@ -48,6 +49,16 @@ in vec3 fragWorldPosition;
 in vec3 fragStaticLighting;
 in vec4 fragParticleColor;
 out vec4 finalColor;
+
+float StoreFiniteHalfChannel(float value) {
+    if (isnan(value)) return 0.0;
+    if (isinf(value)) return value > 0.0 ? 65504.0 : 0.0;
+    return min(max(value, 0.0), 65504.0);
+}
+vec3 StoreFiniteHalfRadiance(vec3 value) {
+    return vec3(StoreFiniteHalfChannel(value.r), StoreFiniteHalfChannel(value.g),
+            StoreFiniteHalfChannel(value.b));
+}
 uniform sampler2D sceneDepth;
 uniform vec2 viewportSize;
 uniform float nearPlane;
@@ -78,7 +89,6 @@ uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
-uniform float dynamicLightingClamp;
 
 const vec2 kShadowDisk[4] = vec2[4](
     vec2(-0.707, -0.707), vec2(0.707, -0.707),
@@ -164,12 +174,15 @@ void main() {
     float particleDistance = linearDepth(gl_FragCoord.z);
     float intersectionFade = clamp((opaqueDistance - particleDistance) / 0.08, 0.0, 1.0);
     if (intersectionFade <= 0.0) discard;
-    vec3 illumination = clamp(fragStaticLighting + dynamicLighting(fragWorldPosition),
-            vec3(0.0), vec3(dynamicLightingClamp));
+    vec3 illumination = max(fragStaticLighting + dynamicLighting(fragWorldPosition), vec3(0.0));
     float opacity = fragParticleColor.a * softMask * intersectionFade;
-    vec3 scattered = fragParticleColor.rgb * illumination *
+    vec3 srgb = fragParticleColor.rgb;
+    vec3 low = srgb / 12.92;
+    vec3 high = pow((srgb + 0.055) / 1.055, vec3(2.4));
+    vec3 authoredLinearTint = mix(high, low, lessThanEqual(srgb, vec3(0.04045)));
+    vec3 scattered = authoredLinearTint * illumination *
             distanceFogTransmittance(fragWorldPosition);
-    finalColor = vec4(scattered * opacity, opacity);
+    finalColor = vec4(StoreFiniteHalfRadiance(scattered * opacity), 0.0);
 }
 )";
 
@@ -257,8 +270,13 @@ Rectangle DestinationRectangle(Texture2D texture)
 bool SectorLightDustRenderer::EnsureShader()
 {
     if (IsShaderReady(shader) && materialLoaded) return true;
+    if (shaderFailed) return false;
     shader = LoadShaderFromMemory(DustVs, DustFs);
-    if (!IsShaderReady(shader)) return false;
+    if (!IsShaderReady(shader)) {
+        shaderFailed = true;
+        resourceDiagnostic = "disabled: shader unavailable";
+        return false;
+    }
     material = LoadMaterialDefault();
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     material.shader = shader;
@@ -285,7 +303,6 @@ bool SectorLightDustRenderer::EnsureShader()
     locations.dynamicLights.dynamicLightDirections = ArrayLocation(shader, "dynamicLightDirections");
     locations.dynamicLights.dynamicLightInnerConeCos = ArrayLocation(shader, "dynamicLightInnerConeCos");
     locations.dynamicLights.dynamicLightOuterConeCos = ArrayLocation(shader, "dynamicLightOuterConeCos");
-    locations.dynamicLights.dynamicLightingClamp = GetShaderLocation(shader, "dynamicLightingClamp");
     locations.shadows.dynamicLightShadowSlots = ArrayLocation(shader, "dynamicLightShadowSlots");
     for (int index = 0; index < MaxDynamicSpotLightShadowCasters; ++index) {
         locations.shadows.shadowLightMatrices[static_cast<std::size_t>(index)] =
@@ -335,19 +352,16 @@ bool SectorLightDustRenderer::EnsureMesh()
     return mesh.vaoId != 0;
 }
 
-bool SectorLightDustRenderer::EnsureTarget(int width, int height)
+bool SectorLightDustRenderer::EnsureResources()
 {
-    if (dustTarget.id != 0 && targetWidth == width && targetHeight == height) return true;
-    if (dustTarget.id != 0) UnloadRenderTexture(dustTarget);
-    dustTarget = LoadRenderTexture(width, height);
-    targetWidth = dustTarget.id != 0 ? width : 0;
-    targetHeight = dustTarget.id != 0 ? height : 0;
-    return dustTarget.id != 0;
-}
-
-bool SectorLightDustRenderer::EnsureResources(int width, int height)
-{
-    return EnsureShader() && EnsureMesh() && EnsureTarget(width, height);
+    if (!EnsureShader() || !EnsureMesh()) {
+        if (resourceDiagnostic == "not allocated") {
+            resourceDiagnostic = "disabled: particle mesh unavailable";
+        }
+        return false;
+    }
+    resourceDiagnostic = "shared RGBA32F scratch; additive RGB, alpha=0";
+    return true;
 }
 
 void SectorLightDustRenderer::ClearBorrowedMaterialTextures()
@@ -526,6 +540,8 @@ int SectorLightDustRenderer::BuildMesh(const Camera3D& camera)
         const float fadeOut = std::clamp((particle.lifetimeSeconds - particle.ageSeconds) / DustFadeSeconds, 0.0f, 1.0f);
         const float opacity = particle.opacity * std::min(fadeIn, fadeOut);
         if (opacity <= 0.001f || visible >= MaxParticles) continue;
+        const Color scatteringTint = engine::SrgbColorBytesToLinearSceneUnorm(
+                particle.scatteringTint);
         const int base = visible * 4;
         for (int corner = 0; corner < 4; ++corner) {
             const Vector3 position = Vector3Add(
@@ -544,9 +560,9 @@ int SectorLightDustRenderer::BuildMesh(const Camera3D& camera)
             normals[vertex3 + 2] = particle.staticLighting.z;
             texcoords[vertex2 + 0] = uv[static_cast<std::size_t>(corner)].x;
             texcoords[vertex2 + 1] = uv[static_cast<std::size_t>(corner)].y;
-            colors[vertex4 + 0] = particle.scatteringTint.r;
-            colors[vertex4 + 1] = particle.scatteringTint.g;
-            colors[vertex4 + 2] = particle.scatteringTint.b;
+            colors[vertex4 + 0] = scatteringTint.r;
+            colors[vertex4 + 1] = scatteringTint.g;
+            colors[vertex4 + 2] = scatteringTint.b;
             colors[vertex4 + 3] = Byte(opacity);
         }
         ++visible;
@@ -570,6 +586,7 @@ int SectorLightDustRenderer::BuildMesh(const Camera3D& camera)
 
 bool SectorLightDustRenderer::Apply(
         RenderTexture2D& sceneTarget,
+        RenderTexture2D& sceneScratch,
         const SectorTopologyMap& map,
         const Camera3D& camera,
         float runtimeSeconds,
@@ -579,6 +596,7 @@ bool SectorLightDustRenderer::Apply(
         const RuntimePortalVisibilityResult& visibility,
         const std::vector<SectorReceiverBounds>& receiverBounds)
 {
+    (void)sceneScratch;
     visibleParticleCount = 0;
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());
@@ -597,7 +615,7 @@ bool SectorLightDustRenderer::Apply(
     previousRuntimeSeconds = runtimeSeconds;
     UpdateParticles(map, probes, dt, runtimeSeconds);
     if (activeEmitterCount <= 0) return false;
-    if (!EnsureResources(sceneTarget.texture.width, sceneTarget.texture.height)) {
+    if (!EnsureResources()) {
         if (!warnedUnavailable) {
             TraceLog(LOG_WARNING, "LIGHT DUST: render resources unavailable; dust disabled");
             warnedUnavailable = true;
@@ -637,8 +655,10 @@ bool SectorLightDustRenderer::Apply(
     UploadSectorRendererDynamicPointLights(shader, locations.dynamicLights, dynamicLights);
     UploadSectorRendererDynamicSpotLightShadowUniforms(shader, locations.shadows, dynamicLights.shadowUniforms);
 
-    BeginTextureMode(dustTarget);
-    ClearBackground(BLANK);
+    // Dust is additive and does not need the current scene color, so draw it
+    // directly into the active HDR target while borrowing its depth texture.
+    rlDrawRenderBatchActive();
+    BeginTextureMode(sceneTarget);
     BeginMode3D(camera);
     // DustFs already writes premultiplied radiance, so accumulate it without
     // applying particle alpha again.
@@ -646,33 +666,17 @@ bool SectorLightDustRenderer::Apply(
     rlEnableDepthTest();
     rlDisableDepthMask();
     DrawMesh(mesh, material, MatrixIdentity());
+    rlDrawRenderBatchActive();
     ClearBorrowedMaterialTextures();
     rlEnableDepthMask();
     EndBlendMode();
     EndMode3D();
-    EndTextureMode();
-
-    BeginTextureMode(sceneTarget);
-    // The intermediate target also contains premultiplied additive radiance.
-    BeginBlendMode(BLEND_ADD_COLORS);
-    DrawTexturePro(
-            dustTarget.texture,
-            SourceRectangle(dustTarget.texture),
-            DestinationRectangle(sceneTarget.texture),
-            Vector2{},
-            0.0f,
-            WHITE);
-    EndBlendMode();
     EndTextureMode();
     return true;
 }
 
 void SectorLightDustRenderer::Shutdown()
 {
-    if (dustTarget.id != 0) UnloadRenderTexture(dustTarget);
-    dustTarget = {};
-    targetWidth = 0;
-    targetHeight = 0;
     if (mesh.vaoId != 0 || mesh.vertices != nullptr) UnloadMesh(mesh);
     mesh = {};
     if (materialLoaded) {
@@ -691,6 +695,8 @@ void SectorLightDustRenderer::Shutdown()
     eligibleEmitterCount = 0;
     activeEmitterCount = 0;
     visibleParticleCount = 0;
+    shaderFailed = false;
+    resourceDiagnostic = "not allocated";
 }
 
 } // namespace game

@@ -56,7 +56,8 @@
           "hotColor": {"r": 255, "g": 235, "b": 120, "a": 255},
           "warmColor": {"r": 255, "g": 90, "b": 15, "a": 230},
           "edgeColor": {"r": 120, "g": 15, "b": 5, "a": 150},
-          "edgeSoftness": 0.35
+          "edgeSoftness": 0.35,
+          "radianceStrength": 8.0
         },
         "muzzleLight": {
           "enabled": true,

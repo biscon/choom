@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/assets/SpriteAnimationAssets.h"
 #include "engine/ecs/World.h"
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorBillboardRuntime.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 
@@ -78,7 +79,6 @@ uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
-uniform float dynamicLightingClamp;
 
 out vec4 finalColor;
 
@@ -101,6 +101,15 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
 {
     float lengthSq = dot(value, value);
     return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
+}
+
+vec3 StoreFiniteHalfRadiance(vec3 value)
+{
+    vec3 result;
+    result.r = isnan(value.r) ? 0.0 : (isinf(value.r) ? (value.r > 0.0 ? 65504.0 : 0.0) : min(max(value.r, 0.0), 65504.0));
+    result.g = isnan(value.g) ? 0.0 : (isinf(value.g) ? (value.g > 0.0 ? 65504.0 : 0.0) : min(max(value.g, 0.0), 65504.0));
+    result.b = isnan(value.b) ? 0.0 : (isinf(value.b) ? (value.b > 0.0 ? 65504.0 : 0.0) : min(max(value.b, 0.0), 65504.0));
+    return result;
 }
 
 float SampleShadowMap(int shadowSlot, vec2 uv)
@@ -216,8 +225,8 @@ void main()
     }
 
     vec3 surfaceRgb = sampled.rgb * fragColor.rgb;
-    vec3 lighting = clamp(bakedBillboardLighting + dynamicDirect, 0.0, dynamicLightingClamp);
-    finalColor = vec4(ApplySectorFog(surfaceRgb * lighting, fragWorldPosition), 1.0);
+    vec3 lighting = max(bakedBillboardLighting + dynamicDirect, vec3(0.0));
+    finalColor = vec4(StoreFiniteHalfRadiance(ApplySectorFog(surfaceRgb * lighting, fragWorldPosition)), 1.0);
 }
 )";
 
@@ -412,7 +421,6 @@ bool SectorBillboardRenderer::Load()
         shadowSoftnessLoc = -1;
         shadowMap0Loc = -1;
         shadowMap1Loc = -1;
-        dynamicLightingClampLoc = -1;
         fogShaderLocations = SectorFogShaderLocations{};
         shaderLoaded = false;
         return false;
@@ -444,7 +452,6 @@ bool SectorBillboardRenderer::Load()
     shadowSoftnessLoc = GetShaderLocationArrayBase(cutoutShader, "shadowSoftness");
     shadowMap0Loc = GetShaderLocation(cutoutShader, "shadowMap0");
     shadowMap1Loc = GetShaderLocation(cutoutShader, "shadowMap1");
-    dynamicLightingClampLoc = GetShaderLocation(cutoutShader, "dynamicLightingClamp");
     fogShaderLocations = GetSectorFogShaderLocations(cutoutShader);
     shaderLoaded = true;
     return true;
@@ -475,7 +482,6 @@ void SectorBillboardRenderer::Shutdown()
     shadowSoftnessLoc = -1;
     shadowMap0Loc = -1;
     shadowMap1Loc = -1;
-    dynamicLightingClampLoc = -1;
     fogShaderLocations = SectorFogShaderLocations{};
     shaderLoaded = false;
 }
@@ -527,7 +533,6 @@ void SectorBillboardRenderer::Draw(
     dynamicLightLocations.dynamicLightDirections = dynamicLightDirectionsLoc;
     dynamicLightLocations.dynamicLightInnerConeCos = dynamicLightInnerConeCosLoc;
     dynamicLightLocations.dynamicLightOuterConeCos = dynamicLightOuterConeCosLoc;
-    dynamicLightLocations.dynamicLightingClamp = dynamicLightingClampLoc;
     UploadSectorRendererDynamicPointLights(cutoutShader, dynamicLightLocations, dynamicLightContext);
     SectorDynamicSpotLightShadowShaderLocations shadowLocations;
     shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
@@ -632,7 +637,9 @@ void SectorBillboardRenderer::Draw(
                 rlCheckRenderBatchLimit(4);
                 rlSetTexture(texture->id);
                 rlBegin(RL_QUADS);
-                    rlColor4ub(sprite.tint.r, sprite.tint.g, sprite.tint.b, sprite.tint.a);
+                    const Color tint = engine::SrgbColorBytesToLinearSceneUnorm(
+                            sprite.tint);
+                    rlColor4ub(tint.r, tint.g, tint.b, tint.a);
                     rlTexCoord2f(uvs.bottomLeft.x, uvs.bottomLeft.y);
                     rlVertex3f(quad.bottomLeft.x, quad.bottomLeft.y, quad.bottomLeft.z);
                     rlTexCoord2f(uvs.bottomRight.x, uvs.bottomRight.y);

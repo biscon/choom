@@ -2,6 +2,8 @@
 
 #include <raylib.h>
 
+#include <cmath>
+
 namespace game {
 
 namespace {
@@ -108,6 +110,125 @@ std::optional<MainMenuAction> DrawGameMainMenu(
     }
     engine::EndUI(ui, config, input, assets);
     return selected;
+}
+
+GameGraphicsSettingsAction DrawGameGraphicsSettings(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont,
+        FpsApplicationSettings& draft,
+        const char* statusText)
+{
+    DrawRectangleRec(config.overlayBounds, Color{0, 0, 0, 128});
+
+    constexpr float panelWidth = 620.0f;
+    constexpr float panelHeight = 650.0f;
+    constexpr float padding = 44.0f;
+    constexpr float rowHeight = 48.0f;
+    const Rectangle panel{
+            config.overlayBounds.x + (config.overlayBounds.width - panelWidth) * 0.5f,
+            config.overlayBounds.y + (config.overlayBounds.height - panelHeight) * 0.5f,
+            panelWidth,
+            panelHeight};
+    DrawRectangleRounded(panel, config.cornerRadius, config.cornerSegments, config.panelColor);
+    DrawRectangleRoundedLinesEx(panel, config.cornerRadius, config.cornerSegments,
+            config.borderThickness, config.borderColor);
+
+    engine::BeginUI(ui, input);
+    engine::Text(config, assets,
+            Rectangle{panel.x + padding, panel.y + 24.0f,
+                    panel.width - padding * 2.0f, 54.0f},
+            font, "Graphics Settings", engine::UITextJustify::Center);
+
+    float y = panel.y + 96.0f;
+    const float labelWidth = 225.0f;
+    const float controlX = panel.x + padding + labelWidth;
+    const float controlWidth = panel.width - padding * 2.0f - labelWidth;
+    const char* renderScaleOptions[] = {"75%", "100%", "125%", "150%", "200%"};
+    const float renderScales[] = {0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
+    int renderScaleIndex = 0;
+    float closest = 100.0f;
+    for (int i = 0; i < 5; ++i) {
+        const float distance = std::fabs(draft.graphics.renderScale - renderScales[i]);
+        if (distance < closest) {
+            closest = distance;
+            renderScaleIndex = i;
+        }
+    }
+    engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
+            smallFont, "Render scale", engine::UITextJustify::Left);
+    if (engine::Option(ui, config, input, assets, "graphics_render_scale",
+                Rectangle{controlX, y, controlWidth, rowHeight}, smallFont,
+                renderScaleOptions, 5, renderScaleIndex)) {
+        draft.graphics.renderScale = renderScales[renderScaleIndex];
+    }
+    y += rowHeight + 14.0f;
+
+    const char* qualityOptions[] = {"Off", "Low", "Medium", "High"};
+    int volumetricQuality = static_cast<int>(draft.graphics.volumetricQualityCap);
+    engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
+            smallFont, "Volumetric quality cap", engine::UITextJustify::Left);
+    if (engine::Option(ui, config, input, assets, "graphics_volumetric_quality",
+                Rectangle{controlX, y, controlWidth, rowHeight}, smallFont,
+                qualityOptions, 4, volumetricQuality)) {
+        draft.graphics.volumetricQualityCap =
+                static_cast<FpsVolumetricQualityCap>(volumetricQuality);
+    }
+    y += rowHeight + 14.0f;
+
+    int shadowQuality = static_cast<int>(draft.graphics.shadowQuality);
+    engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
+            smallFont, "Shadow quality", engine::UITextJustify::Left);
+    if (engine::Option(ui, config, input, assets, "graphics_shadow_quality",
+                Rectangle{controlX, y, controlWidth, rowHeight}, smallFont,
+                qualityOptions, 4, shadowQuality)) {
+        draft.graphics.shadowQuality = static_cast<FpsShadowQuality>(shadowQuality);
+    }
+    y += rowHeight + 14.0f;
+
+    engine::Checkbox(ui, config, input, assets, "graphics_fxaa",
+            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
+            smallFont, "FXAA", draft.graphics.fxaa);
+    y += rowHeight + 8.0f;
+    engine::Checkbox(ui, config, input, assets, "graphics_bloom",
+            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
+            smallFont, "HDR bloom", draft.hdrBloom.enabled);
+    y += rowHeight + 8.0f;
+    engine::Checkbox(ui, config, input, assets, "graphics_performance_overlay",
+            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
+            smallFont, "Performance overlay (F9)", draft.graphics.performanceOverlay);
+    y += rowHeight + 12.0f;
+
+    GameGraphicsSettingsAction result = GameGraphicsSettingsAction::None;
+    const float buttonGap = 10.0f;
+    const float buttonWidth = (panel.width - padding * 2.0f - buttonGap * 2.0f) / 3.0f;
+    if (engine::Button(ui, config, input, assets, "graphics_defaults",
+                Rectangle{panel.x + padding, y, buttonWidth, rowHeight},
+                smallFont, "Defaults")) {
+        result = GameGraphicsSettingsAction::Defaults;
+    }
+    if (engine::Button(ui, config, input, assets, "graphics_cancel",
+                Rectangle{panel.x + padding + buttonWidth + buttonGap, y,
+                        buttonWidth, rowHeight}, smallFont, "Cancel")) {
+        result = GameGraphicsSettingsAction::Cancel;
+    }
+    if (engine::Button(ui, config, input, assets, "graphics_apply",
+                Rectangle{panel.x + padding + (buttonWidth + buttonGap) * 2.0f, y,
+                        buttonWidth, rowHeight}, smallFont, "Apply")) {
+        result = GameGraphicsSettingsAction::Apply;
+    }
+    y += rowHeight + 8.0f;
+    if (statusText != nullptr && statusText[0] != '\0') {
+        engine::Text(config, assets,
+                Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, 42.0f},
+                smallFont, statusText, engine::UITextJustify::Center,
+                config.invalidColor, true);
+    }
+    engine::EndUI(ui, config, input, assets);
+    return result;
 }
 
 } // namespace game

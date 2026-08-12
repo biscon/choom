@@ -1,5 +1,7 @@
 #include "sector_demo/renderer/SectorFog.h"
 
+#include "engine/render/ColorTransfer.h"
+
 namespace game {
 
 SectorFogRenderContext BuildSectorFogRenderContext(
@@ -34,11 +36,7 @@ void UploadSectorFogShaderValues(
     const SectorTopologyFogSettings settings =
             NormalizeSectorTopologyFogSettings(context.settings);
     const int enabled = settings.enabled ? 1 : 0;
-    const Vector3 color{
-            static_cast<float>(settings.color.r) / 255.0f,
-            static_cast<float>(settings.color.g) / 255.0f,
-            static_cast<float>(settings.color.b) / 255.0f
-    };
+    const Vector3 color = engine::SrgbColorBytesToLinearSceneRgb(settings.color);
     if (locations.enabled >= 0) {
         SetShaderValue(shader, locations.enabled, &enabled, SHADER_UNIFORM_INT);
     }

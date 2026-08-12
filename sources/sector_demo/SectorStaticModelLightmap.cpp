@@ -1456,7 +1456,8 @@ bool ReadSectorStaticModelLightmapSidecar(
                 if (!ReadU32(input, mesh.sourceVertexIndices[i])
                         || mesh.sourceVertexIndices[i] >= originalVertexCount
                         || !ReadF32(input, mesh.localLightmapUvs[i].x)
-                        || !ReadF32(input, mesh.localLightmapUvs[i].y)) {
+                        || !ReadF32(input, mesh.localLightmapUvs[i].y)
+                        || !IsFinite(mesh.localLightmapUvs[i])) {
                     outError = "Static model lightmap sidecar read failed: invalid vertex remap";
                     outData = {};
                     return false;
@@ -1500,7 +1501,11 @@ bool ReadSectorStaticModelLightmapSidecar(
                     || !ReadF32(input, placement.atlasScale.x)
                     || !ReadF32(input, placement.atlasScale.y)
                     || !ReadF32(input, placement.atlasBias.x)
-                    || !ReadF32(input, placement.atlasBias.y)) {
+                    || !ReadF32(input, placement.atlasBias.y)
+                    || !IsFinite(placement.atlasScale)
+                    || !IsFinite(placement.atlasBias)
+                    || placement.atlasScale.x < 0.0f
+                    || placement.atlasScale.y < 0.0f) {
                 outError = "Static model lightmap sidecar read failed: invalid placement";
                 outData = {};
                 return false;
@@ -1554,10 +1559,11 @@ SectorLightmapStatus GetSectorStaticModelLightmapStatus(
             || metadata.modelCount <= 0
             || metadata.objectCount <= 0
             || metadata.format != kSectorStaticModelLightmapSidecarFormat
-            || metadata.sourceHash != ComputeSectorLightmapSourceHash(map)
-            || !std::filesystem::exists(
-                    ResolveSectorAssetPath(metadata.path))) {
+            || metadata.sourceHash != ComputeSectorLightmapSourceHash(map)) {
         return SectorLightmapStatus::Stale;
+    }
+    if (!std::filesystem::exists(ResolveSectorAssetPath(metadata.path))) {
+        return SectorLightmapStatus::Missing;
     }
     return SectorLightmapStatus::Valid;
 }

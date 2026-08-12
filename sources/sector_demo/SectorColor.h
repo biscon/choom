@@ -17,14 +17,6 @@ inline unsigned char ClampColorByte(float value)
     return static_cast<unsigned char>(std::clamp(static_cast<int>(std::lround(value)), 0, 255));
 }
 
-inline Vector3 ColorToUnitRgb(Color color)
-{
-    return Vector3{
-            static_cast<float>(color.r) / 255.0f,
-            static_cast<float>(color.g) / 255.0f,
-            static_cast<float>(color.b) / 255.0f};
-}
-
 inline Color UnitRgbToColor(Vector3 rgb, unsigned char alpha = 255)
 {
     return Color{

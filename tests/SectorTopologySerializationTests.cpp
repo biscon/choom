@@ -1,4 +1,5 @@
 #include "sector_demo/SectorTopologySerialization.h"
+#include "sector_demo/SectorLightmap.h"
 #include "game/SectorLevelLoader.h"
 #include "util/json.hpp"
 
@@ -457,6 +458,7 @@ void TestStaticLightRoundTrip()
             64.0f,
             2.0f
     });
+    original.staticLights.back().castsShadow = false;
     original.staticLights.push_back(SectorTopologyStaticPointLight{
             3,
             Vector3{-4.0f, 8.0f, 12.0f},
@@ -476,6 +478,9 @@ void TestStaticLightRoundTrip()
                   && saved["staticLights"][1]["position"][1].get<float>() == 14.0f
                   && saved["staticLights"][1]["position"][2].get<float>() == -9.25f,
           "static light position is saved in authoring coordinates");
+    Check(!saved["staticLights"][0].contains("castsShadow")
+                  && saved["staticLights"][1]["castsShadow"] == false,
+          "static light shadow defaults are omitted and disabled shadows are written");
 
     SectorTopologyMap loaded;
     std::string error;
@@ -492,9 +497,14 @@ void TestStaticLightRoundTrip()
               "round-tripped light preserves color");
         Check(std::fabs(light->intensity - 2.5f) <= 0.0001f
                       && std::fabs(light->radius - 64.0f) <= 0.0001f
-                      && std::fabs(light->sourceRadius - 2.0f) <= 0.0001f,
-              "round-tripped light preserves numeric properties");
+                      && std::fabs(light->sourceRadius - 2.0f) <= 0.0001f
+                      && !light->castsShadow,
+              "round-tripped light preserves numeric and shadow properties");
     }
+    const SectorTopologyStaticPointLight* defaultShadowLight =
+            game::FindSectorTopologyStaticLight(loaded, 3);
+    Check(defaultShadowLight != nullptr && defaultShadowLight->castsShadow,
+          "missing static light shadow field loads enabled");
     Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
           "topology with static lights validates");
 
@@ -519,6 +529,7 @@ void TestStaticSpotLightRoundTrip()
             42.0f,
             1.25f
     });
+    original.staticSpotLights.back().castsShadow = false;
     original.staticSpotLights.push_back(SectorTopologyStaticSpotLight{
             9,
             Vector3{-1.0f, 9.5f, 6.0f},
@@ -543,6 +554,9 @@ void TestStaticSpotLightRoundTrip()
     Check(Near(saved["staticSpotLights"][1]["innerConeDegrees"].get<float>(), 15.0f)
                   && Near(saved["staticSpotLights"][1]["outerConeDegrees"].get<float>(), 42.0f),
           "non-default static spot light cone fields are written");
+    Check(!saved["staticSpotLights"][0].contains("castsShadow")
+                  && saved["staticSpotLights"][1]["castsShadow"] == false,
+          "static spot shadow defaults are omitted and disabled shadows are written");
     Check(!saved["staticSpotLights"][0].contains("enabled")
                   && !saved["staticSpotLights"][0].contains("flicker")
                   && !saved["staticSpotLights"][0].contains("flickerSpeed")
@@ -566,8 +580,9 @@ void TestStaticSpotLightRoundTrip()
                   && Near(savedDefaults["staticSpotLights"][0]["intensity"].get<float>(), 1.0f),
           "default static spot light authoring position target range source radius and intensity are stable");
     Check(!savedDefaults["staticSpotLights"][0].contains("innerConeDegrees")
-                  && !savedDefaults["staticSpotLights"][0].contains("outerConeDegrees"),
-          "default static spot light optional cone fields remain omitted");
+                  && !savedDefaults["staticSpotLights"][0].contains("outerConeDegrees")
+                  && !savedDefaults["staticSpotLights"][0].contains("castsShadow"),
+          "default static spot light optional fields remain omitted");
 
     SectorTopologyMap loaded;
     std::string error;
@@ -585,13 +600,15 @@ void TestStaticSpotLightRoundTrip()
                       && Near(light->range, 24.0f)
                       && Near(light->innerConeDegrees, 15.0f)
                       && Near(light->outerConeDegrees, 42.0f)
-                      && Near(light->sourceRadius, 1.25f),
-              "round-tripped static spot light preserves numeric properties");
+                      && Near(light->sourceRadius, 1.25f)
+                      && !light->castsShadow,
+              "round-tripped static spot light preserves numeric and shadow properties");
     }
     const SectorTopologyStaticSpotLight* coincident =
             game::FindSectorTopologyStaticSpotLight(loaded, 9);
-    Check(coincident != nullptr && Near(coincident->position, coincident->target),
-          "round-tripped static spot light preserves coincident target");
+    Check(coincident != nullptr && Near(coincident->position, coincident->target)
+                  && coincident->castsShadow,
+          "round-tripped static spot light preserves coincident target and missing shadow default");
     Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
           "topology with static spot lights validates");
 
@@ -1764,6 +1781,8 @@ void TestLightmapMetadataRoundTrip()
     original.bakedLightmap.path = "assets/levels/test/test.lightmap.png";
     original.bakedLightmap.width = 2048;
     original.bakedLightmap.height = 2048;
+    original.bakedLightmap.version = game::kSectorLightmapArtifactVersion;
+    original.bakedLightmap.format = game::kSectorLightmapArtifactFormat;
     original.bakedLightmap.sourceHash = "abc123";
     original.bakedLightmap.additionalAtlases = {
             game::SectorLightmapAtlasMetadata{
@@ -1801,6 +1820,8 @@ void TestLightmapMetadataRoundTrip()
     Check(loaded.bakedLightmap.path == original.bakedLightmap.path
                   && loaded.bakedLightmap.width == 2048
                   && loaded.bakedLightmap.height == 2048
+                  && loaded.bakedLightmap.version == game::kSectorLightmapArtifactVersion
+                  && loaded.bakedLightmap.format == game::kSectorLightmapArtifactFormat
                   && loaded.bakedLightmap.sourceHash == "abc123"
                   && loaded.bakedLightmap.additionalAtlases.size() == 2
                   && loaded.bakedLightmap.additionalAtlases[0].width == 2048,
@@ -3066,6 +3087,9 @@ void TestStrictValuesAndValidation()
     changed["staticLights"][0]["sourceRadius"] = 5.0f;
     ExpectRejected(changed, "oversized static light source radius is rejected");
     changed["staticLights"][0]["sourceRadius"] = 1.0f;
+    changed["staticLights"][0]["castsShadow"] = "yes";
+    ExpectRejected(changed, "non-boolean static light castsShadow is rejected");
+    changed["staticLights"][0]["castsShadow"] = true;
     changed["staticLights"][0]["color"]["r"] = 300;
     ExpectRejected(changed, "invalid static light color channel is rejected");
 
@@ -3120,6 +3144,9 @@ void TestStrictValuesAndValidation()
     changed["staticSpotLights"][0]["outerConeDegrees"] = "wider";
     ExpectRejected(changed, "non-number static spot light outer cone is rejected");
     changed["staticSpotLights"][0]["outerConeDegrees"] = 35.0f;
+    changed["staticSpotLights"][0]["castsShadow"] = "yes";
+    ExpectRejected(changed, "non-boolean static spot light castsShadow is rejected");
+    changed["staticSpotLights"][0]["castsShadow"] = true;
     changed["staticSpotLights"][0]["color"]["r"] = 300;
     ExpectRejected(changed, "invalid static spot light color channel is rejected");
 
@@ -3674,6 +3701,7 @@ void TestGraphNativeMapLevelRoundTrip()
             32.0f,
             1.0f
     });
+    source.staticLights.back().castsShadow = false;
     source.staticSpotLights.push_back(SectorTopologyStaticSpotLight{
             12,
             Vector3{2.0f, 3.0f, 4.0f},
@@ -3685,6 +3713,7 @@ void TestGraphNativeMapLevelRoundTrip()
             38.0f,
             0.75f
     });
+    source.staticSpotLights.back().castsShadow = false;
     source.dynamicPointLights.push_back(SectorTopologyDynamicPointLight{
             10,
             Vector3{4.0f, 5.0f, 6.0f},
@@ -3732,6 +3761,8 @@ void TestGraphNativeMapLevelRoundTrip()
     source.bakedLightmap.path = "assets/levels/test/test.lightmap.png";
     source.bakedLightmap.width = 128;
     source.bakedLightmap.height = 128;
+    source.bakedLightmap.version = game::kSectorLightmapArtifactVersion;
+    source.bakedLightmap.format = game::kSectorLightmapArtifactFormat;
     source.bakedLightmap.sourceHash = "abc123";
     source.bakedLightmap.additionalAtlases.push_back(
             game::SectorLightmapAtlasMetadata{
@@ -3757,11 +3788,14 @@ void TestGraphNativeMapLevelRoundTrip()
     const game::SectorAuthoringDocument original = MakeAuthoringDocumentFromMap(source);
     const Json saved = Json::parse(SaveAuthoringText(original));
     Check(saved["textures"].contains("sky"), "graph-native texture registry is persisted");
-    Check(saved["staticLights"][0]["id"] == 9, "graph-native static lights are persisted");
+    Check(saved["staticLights"][0]["id"] == 9
+                  && saved["staticLights"][0]["castsShadow"] == false,
+          "graph-native static lights are persisted");
     Check(saved["staticSpotLights"][0]["id"] == 12
                   && Near(saved["staticSpotLights"][0]["innerConeDegrees"].get<float>(), 16.0f)
                   && Near(saved["staticSpotLights"][0]["outerConeDegrees"].get<float>(), 38.0f)
-                  && Near(saved["staticSpotLights"][0]["sourceRadius"].get<float>(), 0.75f),
+                  && Near(saved["staticSpotLights"][0]["sourceRadius"].get<float>(), 0.75f)
+                  && saved["staticSpotLights"][0]["castsShadow"] == false,
           "graph-native static spot lights are persisted");
     Check(saved["dynamicPointLights"][0]["id"] == 10,
           "graph-native dynamic point lights are persisted");
@@ -3834,11 +3868,13 @@ void TestGraphNativeMapLevelRoundTrip()
     Check(LoadAuthoringText(saved.dump(), loaded, error), "graph-native map-level data loads");
     Check(loaded.mapData.texturesById.count("sky") == 1
                   && loaded.mapData.staticLights.size() == 1
+                  && !loaded.mapData.staticLights[0].castsShadow
                   && loaded.mapData.staticSpotLights.size() == 1
                   && loaded.mapData.staticSpotLights[0].id == 12
                   && Near(loaded.mapData.staticSpotLights[0].innerConeDegrees, 16.0f)
                   && Near(loaded.mapData.staticSpotLights[0].outerConeDegrees, 38.0f)
                   && Near(loaded.mapData.staticSpotLights[0].sourceRadius, 0.75f)
+                  && !loaded.mapData.staticSpotLights[0].castsShadow
                   && loaded.mapData.dynamicPointLights.size() == 1
                   && loaded.mapData.dynamicPointLights[0].flicker
                   && Near(loaded.mapData.dynamicPointLights[0].flickerSpeed, 3.0f)
@@ -3892,8 +3928,10 @@ void TestGraphNativeMapLevelRoundTrip()
                           "ambient_hum").path == "ambience/hum.wav"
                   && loaded.derivation.topology.texturesById.count("sky") == 1
                   && loaded.derivation.topology.staticLights.size() == 1
+                  && !loaded.derivation.topology.staticLights[0].castsShadow
                   && loaded.derivation.topology.staticSpotLights.size() == 1
                   && loaded.derivation.topology.staticSpotLights[0].id == 12
+                  && !loaded.derivation.topology.staticSpotLights[0].castsShadow
                   && loaded.derivation.topology.dynamicPointLights.size() == 1
                   && loaded.derivation.topology.dynamicPointLights[0].flicker
                   && Near(loaded.derivation.topology.dynamicPointLights[0].flickerSpeed, 3.0f)
@@ -4077,6 +4115,55 @@ void TestFootstepSetRoundTripAndDefaults()
           "authoring face footstep override derives into runtime topology");
 }
 
+void TestAuthoringEditorSettingsRoundTripAndValidation()
+{
+    game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(MakeSquare());
+    const Json defaultSaved = Json::parse(SaveAuthoringText(document));
+    Check(!defaultSaved.contains("editorSettings"),
+          "default authoring editor settings are omitted");
+
+    game::SectorAuthoringDocument loaded;
+    std::string error;
+    Check(LoadAuthoringText(defaultSaved.dump(), loaded, error)
+                  && loaded.editorSettings.gridSize
+                             == game::SectorAuthoringEditorGridSizeDefault,
+          "missing authoring editor settings use the default grid size");
+
+    document.editorSettings.gridSize = 24;
+    const Json saved = Json::parse(SaveAuthoringText(document));
+    Check(saved["editorSettings"]["gridSize"] == 24,
+          "non-default authoring grid size serializes");
+    Check(LoadAuthoringText(saved.dump(), loaded, error)
+                  && loaded.editorSettings.gridSize == 24,
+          "authoring grid size round-trips");
+
+    Json belowRange = saved;
+    belowRange["editorSettings"]["gridSize"] = 0;
+    Check(LoadAuthoringText(belowRange.dump(), loaded, error)
+                  && loaded.editorSettings.gridSize
+                             == game::SectorAuthoringEditorGridSizeMin,
+          "authoring grid size clamps to the supported minimum");
+
+    Json aboveRange = saved;
+    aboveRange["editorSettings"]["gridSize"] = 1000;
+    Check(LoadAuthoringText(aboveRange.dump(), loaded, error)
+                  && loaded.editorSettings.gridSize
+                             == game::SectorAuthoringEditorGridSizeMax,
+          "authoring grid size clamps to the supported maximum");
+
+    Json invalidGridSize = saved;
+    invalidGridSize["editorSettings"]["gridSize"] = "large";
+    Check(!LoadAuthoringText(invalidGridSize.dump(), loaded, error)
+                  && !error.empty(),
+          "non-integer authoring grid size is rejected");
+
+    Json invalidSettings = saved;
+    invalidSettings["editorSettings"] = Json::array();
+    Check(!LoadAuthoringText(invalidSettings.dump(), loaded, error)
+                  && !error.empty(),
+          "non-object authoring editor settings are rejected");
+}
+
 } // namespace
 
 int main()
@@ -4124,6 +4211,7 @@ int main()
     TestGraphNativeLegacyImportPathStillWorks();
     TestLevelMarkerRoundTripAndEntryResolution();
     TestFootstepSetRoundTripAndDefaults();
+    TestAuthoringEditorSettingsRoundTripAndValidation();
     TestFileApi();
 
     if (failures != 0) {

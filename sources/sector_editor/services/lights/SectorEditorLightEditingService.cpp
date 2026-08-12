@@ -353,15 +353,19 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::DeleteSelectedL
                     && context_.selection.selectedTopologyDynamicLightId == lightId)
             || (kind == TopologySelectionKind::DynamicSpotLight
                     && context_.selection.selectedTopologyDynamicSpotLightId == lightId)) {
-        if (context_.lightState.spotLightPilot.active
-                && ((kind == TopologySelectionKind::StaticSpotLight
-                             && context_.lightState.spotLightPilot.kind == SpotLightPilotKind::Static)
-                        || (kind == TopologySelectionKind::DynamicSpotLight
-                                && context_.lightState.spotLightPilot.kind == SpotLightPilotKind::Dynamic))
-                && context_.lightState.spotLightPilot.lightId == lightId) {
-            result.restoredSpotLightPilot = context_.lightState.spotLightPilot;
+        const LightPilotKind pilotKind = kind == TopologySelectionKind::StaticLight
+                ? LightPilotKind::StaticPoint
+                : (kind == TopologySelectionKind::StaticSpotLight
+                        ? LightPilotKind::StaticSpot
+                        : (kind == TopologySelectionKind::DynamicLight
+                                ? LightPilotKind::DynamicPoint
+                                : LightPilotKind::DynamicSpot));
+        if (context_.lightState.lightPilot.active
+                && context_.lightState.lightPilot.kind == pilotKind
+                && context_.lightState.lightPilot.lightId == lightId) {
+            result.restoredLightPilot = context_.lightState.lightPilot;
             result.previewPoseRestoreNeeded = true;
-            context_.lightState.spotLightPilot = SpotLightPilotLightState{};
+            context_.lightState.lightPilot = LightPilotLightState{};
         }
         ClearLightSelection(context_.selection, context_.ui);
     }
@@ -627,40 +631,52 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::CancelLightDrag
     return {};
 }
 
-SectorEditorLightMutationResult SectorEditorLightEditingService::ApplySpotLightPilot(
+SectorEditorLightMutationResult SectorEditorLightEditingService::ApplyLightPilot(
         Vector3 position,
         Vector3 target)
 {
-    const SpotLightPilotLightState pilot = context_.lightState.spotLightPilot;
+    const LightPilotLightState pilot = context_.lightState.lightPilot;
     if (!pilot.active) {
         return {};
     }
 
-    SectorTopologyStaticSpotLight* staticLight = pilot.kind == SpotLightPilotKind::Static
+    SectorTopologyStaticPointLight* staticPoint = pilot.kind == LightPilotKind::StaticPoint
+            ? FindSectorTopologyStaticLight(context_.map, pilot.lightId)
+            : nullptr;
+    SectorTopologyStaticSpotLight* staticSpot = pilot.kind == LightPilotKind::StaticSpot
             ? FindSectorTopologyStaticSpotLight(context_.map, pilot.lightId)
             : nullptr;
-    SectorTopologyDynamicSpotLight* dynamicLight = pilot.kind == SpotLightPilotKind::Dynamic
+    SectorTopologyDynamicPointLight* dynamicPoint = pilot.kind == LightPilotKind::DynamicPoint
+            ? FindSectorTopologyDynamicLight(context_.map, pilot.lightId)
+            : nullptr;
+    SectorTopologyDynamicSpotLight* dynamicSpot = pilot.kind == LightPilotKind::DynamicSpot
             ? FindSectorTopologyDynamicSpotLight(context_.map, pilot.lightId)
             : nullptr;
-    if (staticLight == nullptr && dynamicLight == nullptr) {
-        return CancelSpotLightPilotData("Spotlight pilot cancelled: light missing");
+    if (staticPoint == nullptr && staticSpot == nullptr
+            && dynamicPoint == nullptr && dynamicSpot == nullptr) {
+        return CancelLightPilotData("Light pilot cancelled: light missing");
     }
 
-    const int lightId = staticLight != nullptr ? staticLight->id : dynamicLight->id;
-    if (staticLight != nullptr) {
-        staticLight->position = position;
-        staticLight->target = target;
+    const int lightId = pilot.lightId;
+    const char* lightName = nullptr;
+    if (staticPoint != nullptr) {
+        staticPoint->position = position;
+        lightName = "static light";
+    } else if (staticSpot != nullptr) {
+        staticSpot->position = position;
+        staticSpot->target = target;
+        lightName = "static spot";
+    } else if (dynamicPoint != nullptr) {
+        dynamicPoint->position = position;
+        lightName = "dynamic light";
     } else {
-        dynamicLight->position = position;
-        dynamicLight->target = target;
+        dynamicSpot->position = position;
+        dynamicSpot->target = target;
+        lightName = "dynamic spot";
     }
-    context_.lightState.spotLightPilot = SpotLightPilotLightState{};
-    MarkEdited(staticLight != nullptr
-            ? TextFormat("Piloted static spot %d", lightId)
-            : TextFormat("Piloted dynamic spot %d", lightId));
-    context_.statusText = staticLight != nullptr
-            ? TextFormat("Applied static spot %d pilot pose", lightId)
-            : TextFormat("Applied dynamic spot %d pilot pose", lightId);
+    context_.lightState.lightPilot = LightPilotLightState{};
+    MarkEdited(TextFormat("Piloted %s %d", lightName, lightId));
+    context_.statusText = TextFormat("Applied %s %d pilot pose", lightName, lightId);
 
     SectorEditorLightMutationResult result;
     result.changed = true;
@@ -668,27 +684,39 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::ApplySpotLightP
     return result;
 }
 
-SectorEditorLightMutationResult SectorEditorLightEditingService::CancelSpotLightPilotData(const char* message)
+SectorEditorLightMutationResult SectorEditorLightEditingService::CancelLightPilotData(const char* message)
 {
-    if (!context_.lightState.spotLightPilot.active) {
+    if (!context_.lightState.lightPilot.active) {
         return {};
     }
 
     SectorEditorLightMutationResult result;
-    const SpotLightPilotLightState pilot = context_.lightState.spotLightPilot;
-    result.restoredSpotLightPilot = pilot;
+    const LightPilotLightState pilot = context_.lightState.lightPilot;
+    result.restoredLightPilot = pilot;
     result.previewPoseRestoreNeeded = true;
-    context_.lightState.spotLightPilot = SpotLightPilotLightState{};
-    if (pilot.kind == SpotLightPilotKind::Static) {
+    context_.lightState.lightPilot = LightPilotLightState{};
+    if (pilot.kind == LightPilotKind::StaticPoint) {
+        if (SectorTopologyStaticPointLight* light =
+                    FindSectorTopologyStaticLight(context_.map, pilot.lightId)) {
+            light->position = pilot.originalPosition;
+        }
+    } else if (pilot.kind == LightPilotKind::StaticSpot) {
         if (SectorTopologyStaticSpotLight* light =
                     FindSectorTopologyStaticSpotLight(context_.map, pilot.lightId)) {
             light->position = pilot.originalPosition;
             light->target = pilot.originalTarget;
         }
-    } else if (SectorTopologyDynamicSpotLight* light =
-                       FindSectorTopologyDynamicSpotLight(context_.map, pilot.lightId)) {
-        light->position = pilot.originalPosition;
-        light->target = pilot.originalTarget;
+    } else if (pilot.kind == LightPilotKind::DynamicPoint) {
+        if (SectorTopologyDynamicPointLight* light =
+                    FindSectorTopologyDynamicLight(context_.map, pilot.lightId)) {
+            light->position = pilot.originalPosition;
+        }
+    } else if (pilot.kind == LightPilotKind::DynamicSpot) {
+        if (SectorTopologyDynamicSpotLight* light =
+                    FindSectorTopologyDynamicSpotLight(context_.map, pilot.lightId)) {
+            light->position = pilot.originalPosition;
+            light->target = pilot.originalTarget;
+        }
     }
     if (message != nullptr && message[0] != '\0') {
         context_.statusText = message;
@@ -741,6 +769,17 @@ bool SectorEditorLightEditingService::SetStaticLightSourceRadius(
         return false;
     }
     MarkEdited("Updated light source radius");
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetStaticLightCastsShadow(
+        SectorTopologyStaticPointLight& light,
+        bool castsShadow)
+{
+    if (!SetValue(light.castsShadow, castsShadow)) {
+        return false;
+    }
+    MarkEdited(TextFormat("Updated static light %d shadow", light.id));
     return true;
 }
 
@@ -835,6 +874,17 @@ bool SectorEditorLightEditingService::SetStaticSpotLightOuterCone(
         return false;
     }
     MarkEdited(TextFormat("Updated static spot %d", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetStaticSpotLightCastsShadow(
+        SectorTopologyStaticSpotLight& light,
+        bool castsShadow)
+{
+    if (!SetValue(light.castsShadow, castsShadow)) {
+        return false;
+    }
+    MarkEdited(TextFormat("Updated static spot %d shadow", light.id));
     return true;
 }
 

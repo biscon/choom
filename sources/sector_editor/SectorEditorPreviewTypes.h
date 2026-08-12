@@ -17,13 +17,14 @@ enum class PreviewDebugOverlayTab {
     Render,
     Visibility,
     Lighting,
+    Pbr,
     Objects,
     Probes,
     Viewmodel,
     Controls
 };
 
-struct SpotLightPilotPreviewRestoreState {
+struct LightPilotPreviewRestoreState {
     SectorViewPose originalPreviewPose = {};
     bool originalMouseLookEnabled = true;
 };

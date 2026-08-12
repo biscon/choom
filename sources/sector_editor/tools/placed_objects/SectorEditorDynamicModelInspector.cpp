@@ -47,17 +47,18 @@ void DrawSectorEditorDynamicModelInspector(
     const engine::UIConfig smallConfig = SectorEditorSmallFontConfig(
             context.config, context.assets, context.smallFont);
 
-    const std::string pathLabel = object->dynamicModel.modelPath.empty()
-            ? "Model path: <none>"
-            : "Model path: " + object->dynamicModel.modelPath;
+    const std::string_view filename = SectorEditorModelFilename(
+            object->dynamicModel.modelPath);
+    std::string modelLabel = "Model file: ";
+    modelLabel.append(filename.empty() ? "<none>" : filename);
     engine::Text(
             context.ui, smallConfig, context.assets,
             Rectangle{0.0f, y, contentW, 38.0f}, context.smallFont,
-            pathLabel.c_str(), engine::UITextJustify::Left,
+            modelLabel.c_str(), engine::UITextJustify::Left,
             object->dynamicModel.modelPath.empty()
                     ? context.config.invalidColor
                     : context.config.textColor,
-            true);
+            false);
     y += 42.0f;
 
     const engine::AnimatedModelInstance* runtimeInstance = RuntimeModelInstance(

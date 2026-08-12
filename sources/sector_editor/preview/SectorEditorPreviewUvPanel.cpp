@@ -24,7 +24,7 @@ void ResetPreviewSurfaceUi(
     materialUiState.surface3DUvOffsetUInput = engine::UIFloatInputState{};
     materialUiState.surface3DUvOffsetVInput = engine::UIFloatInputState{};
     materialUiState.surface3DDecalOpacityInput = engine::UIFloatInputState{};
-    materialUiState.surface3DDecalBloomIntensityInput = engine::UIFloatInputState{};
+    materialUiState.surface3DDecalEmissiveStrengthInput = engine::UIFloatInputState{};
     previewSelectionState.selectedTopologySurface3D =
             SectorEditorTopologyEditTargetForSurface(previewSelectionState.selectedSurface3D);
 }
@@ -457,24 +457,24 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
                 materialEditing.ApplyDecalOpacity(target, result.value, &assets);
             }
             if (decal->emissive) {
-                const SectorEditorFloatInputResult bloomResult = DrawLabeledFloatInput(
+                const SectorEditorFloatInputResult emissiveStrengthResult = DrawLabeledFloatInput(
                         ui,
                         config,
                         input,
                         assets,
                         font,
-                        "sector_editor_3d_decal_bloom_intensity",
-                        "Bloom",
+                        "sector_editor_3d_decal_emissive_strength",
+                        "Emissive strength",
                         Rectangle{startX + (colW + gap) * 5.0f, inputTop - 28.0f, colW, 24.0f},
                         Rectangle{startX + (colW + gap) * 5.0f, inputTop, colW, 38.0f},
                         engine::UITextJustify::Left,
                         decal->bloomIntensity,
-                        materialUiState.surface3DDecalBloomIntensityInput,
+                        materialUiState.surface3DDecalEmissiveStrengthInput,
                         0.0f,
                         10.0f,
                         3);
-                if (bloomResult.changed && bloomResult.value != decal->bloomIntensity) {
-                    materialEditing.ApplyDecalBloomIntensity(target, bloomResult.value, &assets);
+                if (emissiveStrengthResult.changed && emissiveStrengthResult.value != decal->bloomIntensity) {
+                    materialEditing.ApplyDecalEmissiveStrength(target, emissiveStrengthResult.value, &assets);
                 }
             }
             bool emissive = decal->emissive;

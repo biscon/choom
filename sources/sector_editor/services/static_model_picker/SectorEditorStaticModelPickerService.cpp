@@ -1,5 +1,7 @@
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 
+#include "sector_editor/SectorEditorHelpers.h"
+
 #include <algorithm>
 #include <cctype>
 #include <system_error>
@@ -47,11 +49,8 @@ void SectorEditorStaticModelPickerService::Open(
     state_.open = true;
     state_.requestedModelPath = currentModelPath;
     state_.scroll = engine::UIScrollState{};
-    if (!state_.scanned) {
-        Refresh();
-    } else {
-        RestoreRequestedSelection();
-    }
+    state_.selectedModelIndex = -1;
+    state_.scanned = false;
     statusText_ = target == ModelPickerTarget::DynamicModel
             ? "Choose a dynamic prop model"
             : "Choose a static prop model";
@@ -152,10 +151,16 @@ std::string SectorEditorStaticModelPickerService::SelectedModelPath() const
 
 void SectorEditorStaticModelPickerService::RebuildOptionLabels()
 {
-    state_.optionLabels.clear();
-    state_.optionLabels.reserve(state_.modelPaths.size());
+    state_.optionLabelStorage.clear();
+    state_.optionLabelStorage.reserve(state_.modelPaths.size());
     for (const std::string& path : state_.modelPaths) {
-        state_.optionLabels.push_back(path.c_str());
+        state_.optionLabelStorage.push_back(
+                EditorAssetPathDisplayLabel(path, "assets/models/"));
+    }
+    state_.optionLabels.clear();
+    state_.optionLabels.reserve(state_.optionLabelStorage.size());
+    for (const std::string& label : state_.optionLabelStorage) {
+        state_.optionLabels.push_back(label.c_str());
     }
 }
 

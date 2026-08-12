@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/assets/AssetHandles.h"
+#include "engine/render/HdrEffectPolicy.h"
 
 #include <raylib.h>
 
@@ -107,6 +108,7 @@ struct FpsWeaponMuzzleFlashDefinition {
     Color warmColor{255, 90, 15, 230};
     Color edgeColor{120, 15, 5, 150};
     float edgeSoftness = 0.35f;
+    float radianceStrength = 8.0f;
 };
 
 struct FpsWeaponMuzzleLightDefinition {
@@ -211,6 +213,7 @@ struct FpsWeaponFiringOverride {
     std::optional<int> flashMaximumLobeCount;
     std::optional<float> flashRearSuppression;
     std::optional<float> flashEdgeSoftness;
+    std::optional<float> flashRadianceStrength;
     std::optional<float> muzzleLightIntensity;
     std::optional<float> muzzleLightRadiusWorld;
     std::optional<float> muzzleLightLifetimeSeconds;
@@ -243,13 +246,42 @@ struct PlayerSoundApplicationSettings {
             PlayerSoundEventSettings{"land", "Land", 1.0f}};
 };
 
+enum class FpsVolumetricQualityCap {
+    Off,
+    Low,
+    Medium,
+    High
+};
+
+enum class FpsShadowQuality {
+    Off,
+    Low,
+    Medium,
+    High
+};
+
+struct FpsGraphicsSettings {
+    float renderScale = 1.5f;
+    bool fxaa = true;
+    FpsVolumetricQualityCap volumetricQualityCap =
+            FpsVolumetricQualityCap::High;
+    FpsShadowQuality shadowQuality = FpsShadowQuality::High;
+    bool performanceOverlay = false;
+};
+
 struct FpsApplicationSettings {
     int version = 1;
     std::string firstLevel = "hub";
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
+    FpsGraphicsSettings graphics;
+    engine::HdrBloomSettings hdrBloom;
     std::vector<FpsApplicationSettingsEntry> weapons;
 };
+
+const char* FpsVolumetricQualityCapName(FpsVolumetricQualityCap quality);
+const char* FpsShadowQualityName(FpsShadowQuality quality);
+FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings);
 
 bool ParseFpsWeaponRegistry(
         std::string_view jsonText,

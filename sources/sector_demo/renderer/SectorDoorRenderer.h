@@ -63,7 +63,6 @@ struct SectorDoorDynamicLightContext {
     const std::vector<SectorPreviewDynamicPointLightUniform>* selectedLights = nullptr;
     SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms{};
     SectorDynamicShadowMapTextures shadowMaps{};
-    float lightingClamp = 4.0f;
 };
 
 struct SectorDoorDrawContext {
@@ -97,7 +96,6 @@ struct SectorDoorOpaqueShaderLocations {
     int shadowBias = -1;
     int shadowStrength = -1;
     int shadowSoftness = -1;
-    int dynamicLightingClamp = -1;
     int debugMode = -1;
     int tint = -1;
     SectorFogShaderLocations fog;
@@ -112,7 +110,7 @@ public:
         float height = 0.0f;
         float thickness = 0.0f;
         SectorDoorFaceUvSet faceUvs;
-        std::vector<Color> staticLightingColors;
+        std::vector<Vector3> staticLightingValues;
         bool seenThisFrame = false;
     };
 

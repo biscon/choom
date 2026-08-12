@@ -5,6 +5,7 @@
 #include "engine/ecs/World.h"
 #include "engine/input/Input.h"
 #include "game/FpsViewmodel.h"
+#include "game/FpsViewmodelEffectsRenderer.h"
 #include "game/FpsWeaponRegistry.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorRuntimeObjects.h"
@@ -75,6 +76,7 @@ public:
 
 private:
     FpsViewmodelRuntimeState state;
+    FpsMuzzleFlashRenderResources muzzleFlashRenderResources;
     std::string cameraRecoilWeaponId;
 };
 

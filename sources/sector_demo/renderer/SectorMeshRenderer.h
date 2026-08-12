@@ -74,18 +74,22 @@ public:
             engine::World* runtimeObjectWorld = nullptr,
             SectorRuntimeDoorLightingContext doorLighting = {},
             const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
-    void ApplyEmissiveDecalBloom(
-            engine::AssetManager& assets,
-            RenderTexture2D& sceneTarget,
-            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
-    void ApplyEmissiveDecalBloomToScene(
-            engine::AssetManager& assets,
-            RenderTexture2D& sceneTarget,
-            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
-    bool ApplyLocalFogToScene(
-            RenderTexture2D& sceneTarget,
+    bool ApplyWorldAtmosphere(
+            engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);
+    bool ApplyHdrBloom(
+            engine::RenderTarget& sceneTarget,
+            const engine::HdrBloomSettings& settings,
+            bool presentFromScratch = false);
+    bool CompositeViewmodel(
+            engine::RenderTarget& sceneTarget,
+            const engine::RenderTarget& viewmodelTarget);
+    const engine::RenderTarget* HdrDebugPresentationSource() const
+    {
+        const engine::RenderTarget* debugSource = bloomRenderer.DebugSource();
+        return debugSource != nullptr ? debugSource : hdrPresentationSource;
+    }
     void DrawViewmodel(
             engine::AssetManager& assets,
             const engine::ModelAsset& asset,
@@ -94,6 +98,8 @@ public:
             Matrix transform,
             const engine::ModelAsset* attachmentAsset,
             Matrix attachmentTransform,
+            int receiverSectorId,
+            bool objectProbeRuntimeAvailable,
             const BakedObjectLightingVerticalSample& ambientLighting,
             const SectorViewmodelLightingContext& lighting,
             const SectorViewmodelLightingContext& attachmentLighting);
@@ -106,7 +112,9 @@ public:
     SectorViewPose Pose() const;
     SectorViewPose RendererPose() const;
     void ApplyPose(const SectorViewPose& pose);
-    void ApplyRendererPose(const SectorViewPose& pose);
+    void ApplyRendererPose(
+            const SectorViewPose& pose,
+            bool refreshVisibility = true);
     void RefreshDynamicLightSources(const SectorTopologyMap& map);
     void SetRuntimePointLight(
             const SectorPreviewDynamicPointLightSource* light)
@@ -135,6 +143,25 @@ public:
     bool DynamicLightingEnabled() const { return dynamicLightingEnabled; }
     void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
+    void SetGraphicsQuality(
+            SectorTopologyFogSettings::LocalVolumeQuality volumetricCap,
+            bool shadowsEnabled,
+            int shadowMapResolution = DynamicSpotLightShadowMapResolution,
+            float projectedShadowIntervalSeconds = 0.0f,
+            int projectedShadowResolution = DynamicModelProjectedShadowResolution)
+    {
+        volumetricQualityCap = volumetricCap;
+        shadowMapsEnabled = shadowsEnabled;
+        if (shadowsEnabled) {
+            dynamicLightState.SetShadowMapResolution(shadowMapResolution);
+        }
+        dynamicModelShadowIntervalSeconds = std::max(
+                projectedShadowIntervalSeconds, 0.0f);
+        if (shadowsEnabled) {
+            dynamicModelShadowRenderer.SetProjectedShadowResolution(
+                    projectedShadowResolution);
+        }
+    }
     SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorRenderer.DoorLightingDebugMode(); }
     void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorRenderer.SetDoorLightingDebugMode(mode); }
     const std::vector<SectorPreviewDynamicPointLightUniform>& SelectedDynamicLights() const
@@ -147,8 +174,65 @@ public:
     size_t DoorConsideredCount() const { return doorRenderer.RenderStats().considered; }
     size_t DoorDrawnCount() const { return doorRenderer.RenderStats().drawn; }
     size_t DoorSkippedCount() const { return doorRenderer.RenderStats().skipped; }
+    SectorPbrContributionSettings PbrContributionSettings() const
+    {
+        return staticModelRenderer.PbrContributionSettings();
+    }
+    void SetPbrContributionSettings(SectorPbrContributionSettings settings)
+    {
+        staticModelRenderer.SetPbrContributionSettings(settings);
+    }
+    void SetPbrDiagnosticSelectedObjectId(int objectId)
+    {
+        staticModelRenderer.SetPbrDiagnosticSelectedObjectId(objectId);
+    }
+    const SectorPbrDrawDiagnostics& WorldPbrDiagnostics() const
+    {
+        return staticModelRenderer.WorldPbrDiagnostics();
+    }
+    const SectorPbrDrawDiagnostics& ViewmodelPbrDiagnostics() const
+    {
+        return staticModelRenderer.ViewmodelPbrDiagnostics();
+    }
+    bool PbrEnvironmentActive() const { return pbrEnvironment.active; }
+    bool PbrEnvironmentUsesSky() const { return pbrEnvironment.usedSky; }
+    SectorBloomDebugView BloomDebugView() const { return bloomRenderer.DebugView(); }
+    void SetBloomDebugView(SectorBloomDebugView view) { bloomRenderer.SetDebugView(view); }
+    const SectorBloomDiagnostics& BloomDiagnostics() const
+    {
+        return bloomRenderer.Diagnostics();
+    }
+    const engine::RenderTarget& LocalFogAccumulationTarget() const
+    {
+        return localFogRenderer.AccumulationTarget();
+    }
+    const engine::RenderTarget& HazeAccumulationTarget() const
+    {
+        return lightHazeRenderer.AccumulationTarget();
+    }
+    const std::string& LocalFogAccumulationDiagnostic() const
+    {
+        return localFogRenderer.AccumulationDiagnostic();
+    }
+    const std::string& HazeAccumulationDiagnostic() const
+    {
+        return lightHazeRenderer.AccumulationDiagnostic();
+    }
+    const std::string& DustResourceDiagnostic() const
+    {
+        return lightDustRenderer.ResourceDiagnostic();
+    }
+    const std::string& HdrSceneScratchDiagnostic() const
+    {
+        return hdrSceneScratchDiagnostic;
+    }
 
 private:
+    bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
+    bool EnsureHdrSceneColorView(const engine::RenderTarget& sceneTarget);
+    void UnloadHdrSceneColorView();
+    bool EnsureHdrCompositeShader();
+    bool CommitHdrScratch(engine::RenderTarget& sceneTarget);
     engine::TextureHandle TextureForId(const std::string& textureId) const;
     engine::TextureHandle NormalTextureForId(const std::string& textureId) const;
     void UpdateCamera();
@@ -184,6 +268,7 @@ private:
     int hasDecalLoc = -1;
     int decalOpacityLoc = -1;
     int decalEmissiveLoc = -1;
+    int decalEmissiveStrengthLoc = -1;
     int decalTintLoc = -1;
     int dynamicLightCountLoc = -1;
     int dynamicLightPositionsLoc = -1;
@@ -203,7 +288,6 @@ private:
     int shadowBiasLoc = -1;
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
-    int dynamicLightingClampLoc = -1;
     SectorFogShaderLocations fogShaderLocations;
     SectorLocalFogRenderer localFogRenderer;
     SectorLightHazeRenderer lightHazeRenderer;
@@ -212,14 +296,34 @@ private:
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;
     SectorBloomRenderer bloomRenderer;
+    engine::RenderTarget hdrSceneScratch;
+    RenderTexture2D hdrSceneColorView = {};
+    const engine::RenderTarget* hdrPresentationSource = nullptr;
+    Shader hdrCompositeShader = {};
+    int hdrCompositeSceneLoc = -1;
+    int hdrCompositeSourceLoc = -1;
+    int hdrCompositeModeLoc = -1;
+    bool hdrCompositeShaderFailed = false;
+    std::string hdrSceneScratchError;
+    std::string hdrSceneScratchDiagnostic = "not allocated";
+    int hdrSceneScratchFailedWidth = 0;
+    int hdrSceneScratchFailedHeight = 0;
     SectorBillboardRenderer billboardRenderer;
     SectorStaticModelRenderer staticModelRenderer;
+    SectorStaticSpecularLightState staticSpecularLightState;
     SectorDoorRenderer doorRenderer;
     SectorDynamicLightingRenderer dynamicLightState;
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
+    SectorTopologyFogSettings::LocalVolumeQuality volumetricQualityCap =
+            SectorTopologyFogSettings::LocalVolumeQuality::High;
+    bool shadowMapsEnabled = true;
+    float dynamicModelShadowIntervalSeconds = 0.0f;
+    float lastDynamicModelShadowRenderSeconds = -1000.0f;
     int lightmapStatus = 0;
+    bool surfaceLightmapBakeCurrent = false;
+    bool objectProbeBakeCurrent = false;
     bool initialized = false;
     size_t sectorCount = 0;
 

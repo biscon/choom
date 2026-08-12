@@ -1,13 +1,18 @@
 #pragma once
 
 #include "engine/assets/AssetHandles.h"
+#include "engine/assets/ModelAssets.h"
+#include "engine/render/HdrEffectPolicy.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
+#include "sector_demo/renderer/SectorStaticSpecularLighting.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
 
 #include <raylib.h>
 
 #include <array>
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -32,6 +37,172 @@ constexpr int SectorStaticModelShadowMap0MaterialMap =
         MATERIAL_MAP_BRDF;
 constexpr int SectorStaticModelShadowMap1MaterialMap =
         11;
+
+enum class SectorPbrDiagnosticMode : int {
+    Full = 0,
+    BaseColor,
+    DirectDiffuse,
+    DirectSpecular,
+    IndirectDiffuse,
+    EnvironmentSpecular,
+    Emissive,
+    MaterialOcclusion,
+    MetallicRoughness,
+    ShadingNormal,
+    Count
+};
+
+const char* SectorPbrDiagnosticModeName(SectorPbrDiagnosticMode mode);
+
+enum class SectorPbrLightingPath : int {
+    WorldStatic,
+    WorldDynamic,
+    Viewmodel,
+    ViewmodelAttachment
+};
+
+const char* SectorPbrLightingPathName(SectorPbrLightingPath path);
+
+enum class SectorPbrIndirectSource : int {
+    SectorAmbient,
+    ObjectProbe,
+    StaticLightmap
+};
+
+const char* SectorPbrIndirectSourceName(SectorPbrIndirectSource source);
+
+struct SectorPbrContributionSettings {
+    SectorPbrDiagnosticMode diagnosticMode = SectorPbrDiagnosticMode::Full;
+    float worldIndirectDiffuseScale = 1.0f;
+    float worldEnvironmentSpecularScale = 1.0f;
+};
+
+inline SectorPbrContributionSettings NormalizeSectorPbrContributionSettings(
+        SectorPbrContributionSettings settings)
+{
+    const int mode = static_cast<int>(settings.diagnosticMode);
+    if (mode < 0 || mode >= static_cast<int>(SectorPbrDiagnosticMode::Count)) {
+        settings.diagnosticMode = SectorPbrDiagnosticMode::Full;
+    }
+    settings.worldIndirectDiffuseScale =
+            std::isfinite(settings.worldIndirectDiffuseScale)
+            ? std::clamp(settings.worldIndirectDiffuseScale, 0.0f, 1.0f)
+            : 1.0f;
+    settings.worldEnvironmentSpecularScale =
+            std::isfinite(settings.worldEnvironmentSpecularScale)
+            ? std::clamp(settings.worldEnvironmentSpecularScale, 0.0f, 1.0f)
+            : 1.0f;
+    return settings;
+}
+
+struct SectorPbrDrawState {
+    SectorPbrLightingPath path = SectorPbrLightingPath::WorldStatic;
+    SectorPbrIndirectSource indirectSource = SectorPbrIndirectSource::SectorAmbient;
+    SectorPbrDiagnosticMode diagnosticMode = SectorPbrDiagnosticMode::Full;
+    float indirectDiffuseScale = 1.0f;
+    float environmentSpecularScale = 1.0f;
+    float environmentExposure = 0.0f;
+    float outputBrightnessMultiplier = 1.0f;
+    bool useObjectProbe = false;
+    bool useVerticalObjectProbe = false;
+    bool environmentActive = false;
+    bool materialOverrideActive = false;
+    bool staticSpecularEligible = false;
+};
+
+inline float SanitizeSectorPbrNonnegative(float value, float fallback = 0.0f)
+{
+    return std::isfinite(value) ? std::max(value, 0.0f) : fallback;
+}
+
+inline Vector3 SanitizeSectorPbrNonnegative(Vector3 value)
+{
+    return Vector3{
+            SanitizeSectorPbrNonnegative(value.x),
+            SanitizeSectorPbrNonnegative(value.y),
+            SanitizeSectorPbrNonnegative(value.z)};
+}
+
+inline engine::ModelMaterialAsset NormalizeSectorPbrMaterial(
+        engine::ModelMaterialAsset material)
+{
+    material.baseColorFactor.x = std::isfinite(material.baseColorFactor.x)
+            ? std::clamp(material.baseColorFactor.x, 0.0f, 1.0f) : 1.0f;
+    material.baseColorFactor.y = std::isfinite(material.baseColorFactor.y)
+            ? std::clamp(material.baseColorFactor.y, 0.0f, 1.0f) : 1.0f;
+    material.baseColorFactor.z = std::isfinite(material.baseColorFactor.z)
+            ? std::clamp(material.baseColorFactor.z, 0.0f, 1.0f) : 1.0f;
+    material.baseColorFactor.w = std::isfinite(material.baseColorFactor.w)
+            ? std::clamp(material.baseColorFactor.w, 0.0f, 1.0f) : 1.0f;
+    material.emissiveFactor = SanitizeSectorPbrNonnegative(
+            material.emissiveFactor);
+    material.emissiveStrength = std::isfinite(material.emissiveStrength)
+            ? std::clamp(material.emissiveStrength, 0.0f,
+                    engine::Rgba16fMaximumFinite)
+            : 1.0f;
+    material.metallicFactor = std::isfinite(material.metallicFactor)
+            ? std::clamp(material.metallicFactor, 0.0f, 1.0f) : 0.0f;
+    material.roughnessFactor = std::isfinite(material.roughnessFactor)
+            ? std::clamp(material.roughnessFactor, 0.045f, 1.0f) : 1.0f;
+    material.normalScale = std::isfinite(material.normalScale)
+            ? std::max(material.normalScale, 0.0f) : 1.0f;
+    material.occlusionStrength = std::isfinite(material.occlusionStrength)
+            ? std::clamp(material.occlusionStrength, 0.0f, 1.0f) : 1.0f;
+    return material;
+}
+
+inline SectorPbrDrawState BuildSectorPbrDrawState(
+        SectorPbrLightingPath path,
+        bool validObjectProbe,
+        bool hasStaticLightmap,
+        bool staticSpecularBakeCurrent,
+        bool environmentActive,
+        float environmentExposure,
+        float outputBrightnessMultiplier,
+        bool materialOverrideActive,
+        SectorPbrContributionSettings settings)
+{
+    settings = NormalizeSectorPbrContributionSettings(settings);
+    const bool worldPath = path == SectorPbrLightingPath::WorldStatic
+            || path == SectorPbrLightingPath::WorldDynamic;
+    SectorPbrDrawState state;
+    state.path = path;
+    state.diagnosticMode = settings.diagnosticMode;
+    state.indirectDiffuseScale = worldPath
+            ? settings.worldIndirectDiffuseScale
+            : 1.0f;
+    state.environmentSpecularScale = worldPath
+            ? settings.worldEnvironmentSpecularScale
+            : 1.0f;
+    state.environmentExposure = environmentActive
+            ? SanitizeSectorPbrNonnegative(environmentExposure)
+            : 0.0f;
+    state.outputBrightnessMultiplier = worldPath
+            ? 1.0f
+            : SanitizeSectorPbrNonnegative(outputBrightnessMultiplier, 1.0f);
+    state.environmentActive = environmentActive;
+    state.materialOverrideActive = !worldPath && materialOverrideActive;
+    state.useObjectProbe = validObjectProbe && !hasStaticLightmap;
+    state.useVerticalObjectProbe = state.useObjectProbe;
+    state.indirectSource = state.useObjectProbe
+            ? SectorPbrIndirectSource::ObjectProbe
+            : (hasStaticLightmap
+                    ? SectorPbrIndirectSource::StaticLightmap
+                    : SectorPbrIndirectSource::SectorAmbient);
+    state.staticSpecularEligible = staticSpecularBakeCurrent
+            && (state.useObjectProbe || hasStaticLightmap);
+    return state;
+}
+
+struct SectorPbrDrawDiagnostics {
+    bool valid = false;
+    int placedObjectId = -1;
+    int materialIndex = -1;
+    engine::ModelHandle model = engine::NullModelHandle();
+    SectorPbrDrawState state;
+    engine::ModelMaterialAsset material;
+    SectorStaticSpecularLightContext staticSpecularLights;
+};
 
 inline void ConfigureSectorStaticModelAuxiliaryMaterialMaps(
         std::array<MaterialMap, SectorStaticModelMaterialMapCount>& maps,
@@ -103,6 +274,9 @@ public:
             engine::World& runtimeObjectWorld,
             const Camera3D& camera,
             const SectorBillboardDynamicLightContext& dynamicLightContext,
+            const SectorStaticSpecularLightState& staticSpecularLights,
+            bool surfaceLightmapBakeCurrent,
+            bool objectProbeBakeCurrent,
             const SectorFogRenderContext& fogContext,
             const RuntimePortalVisibilityResult& visibility,
             const std::vector<engine::TextureHandle>& lightmapTextures,
@@ -118,12 +292,34 @@ public:
             const engine::ModelAsset* attachmentAsset,
             Matrix attachmentTransform,
             const SectorBillboardDynamicLightContext& dynamicLightContext,
+            const SectorStaticSpecularLightContext& staticSpecularLights,
+            bool objectProbeBakeCurrent,
             const TextureCubemap* environment,
             const BakedObjectLightingVerticalSample& ambientLighting,
             const SectorViewmodelLightingContext& lighting,
             const SectorViewmodelLightingContext& attachmentLighting);
 
     bool IsLoaded() const { return shaderLoaded; }
+    void SetPbrContributionSettings(SectorPbrContributionSettings settings)
+    {
+        contributionSettings = NormalizeSectorPbrContributionSettings(settings);
+    }
+    SectorPbrContributionSettings PbrContributionSettings() const
+    {
+        return contributionSettings;
+    }
+    void SetPbrDiagnosticSelectedObjectId(int objectId)
+    {
+        diagnosticSelectedObjectId = objectId;
+    }
+    const SectorPbrDrawDiagnostics& WorldPbrDiagnostics() const
+    {
+        return worldDiagnostics;
+    }
+    const SectorPbrDrawDiagnostics& ViewmodelPbrDiagnostics() const
+    {
+        return viewmodelDiagnostics;
+    }
 
 private:
     Shader shader = {};
@@ -134,6 +330,17 @@ private:
     };
 
     void ClearCachedModels();
+    void UploadPbrDrawState(const SectorPbrDrawState& state);
+    void UploadPbrMaterialTransferState(
+            const engine::ModelMaterialAsset& material);
+    void RecordPbrDiagnostics(
+            SectorPbrDrawDiagnostics& diagnostics,
+            int placedObjectId,
+            engine::ModelHandle model,
+            int materialIndex,
+            const SectorPbrDrawState& state,
+            const engine::ModelMaterialAsset& material,
+            const SectorStaticSpecularLightContext& staticSpecularLights);
     const CachedModel* FindCachedModel(
             engine::ModelHandle handle,
             int lightmapModelIndex) const;
@@ -142,6 +349,7 @@ private:
     std::vector<CachedModel> cachedModels;
     int baseColorFactorLoc = -1;
     int emissiveFactorLoc = -1;
+    int emissiveStrengthLoc = -1;
     int metallicFactorLoc = -1;
     int roughnessFactorLoc = -1;
     int normalScaleLoc = -1;
@@ -157,6 +365,11 @@ private:
     int outputBrightnessMultiplierLoc = -1;
     int hasEnvironmentLoc = -1;
     int environmentTextureLoc = -1;
+    int baseColorHardwareSrgbLoc = -1;
+    int emissiveHardwareSrgbLoc = -1;
+    int diagnosticModeLoc = -1;
+    int indirectDiffuseScaleLoc = -1;
+    int environmentSpecularScaleLoc = -1;
     int lightmapScaleBiasLoc = -1;
     int hasStaticLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
@@ -178,6 +391,8 @@ private:
     int dynamicLightDirectionsLoc = -1;
     int dynamicLightInnerConeCosLoc = -1;
     int dynamicLightOuterConeCosLoc = -1;
+    SectorStaticSpecularShaderLocations staticSpecularLocations;
+    int useStaticSpecularLightingLoc = -1;
     int dynamicLightShadowSlotsLoc = -1;
     std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrixLocs = [] {
         std::array<int, MaxDynamicSpotLightShadowCasters> locations{};
@@ -189,8 +404,11 @@ private:
     int shadowSoftnessLoc = -1;
     int shadowMap0Loc = -1;
     int shadowMap1Loc = -1;
-    int dynamicLightingClampLoc = -1;
     SectorFogShaderLocations fogShaderLocations;
+    SectorPbrContributionSettings contributionSettings;
+    SectorPbrDrawDiagnostics worldDiagnostics;
+    SectorPbrDrawDiagnostics viewmodelDiagnostics;
+    int diagnosticSelectedObjectId = -1;
     bool shaderLoaded = false;
     bool warningPrinted = false;
 };

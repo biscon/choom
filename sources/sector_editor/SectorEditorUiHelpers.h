@@ -7,6 +7,7 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <string_view>
 
 namespace game {
 
@@ -18,6 +19,14 @@ inline constexpr float SectorEditorInspectorCompactInputWidth = 104.0f;
 inline constexpr float SectorEditorInspectorFloatInputWidth = 112.0f;
 inline constexpr float SectorEditorInspectorIntInputWidth = 150.0f;
 inline constexpr float SectorEditorInspectorStackedLabelHeight = 26.0f;
+
+inline std::string_view SectorEditorModelFilename(std::string_view modelPath)
+{
+    const size_t separator = modelPath.find_last_of("/\\");
+    return separator == std::string_view::npos
+            ? modelPath
+            : modelPath.substr(separator + 1);
+}
 
 struct SectorEditorInspectorTextureRowLayout {
     Rectangle labelRect = {};

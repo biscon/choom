@@ -848,10 +848,13 @@ void UpdateSectorRuntimeObjects(
     if (playerPosition != nullptr) {
         UpdateSectorDoorAutoOpenSystem(world, *playerPosition);
     }
-    AdvanceSectorDoorMotionSystem(world, dt);
-    UpdateSectorDoorDerivedStateSystem(world);
-    UpdateSectorStaticModelColliderSystem(world, assets);
-    CollectSectorStaticModelColliders(world, state.staticModelColliders);
+    state.doorSpatialStateChanged = AdvanceSectorDoorMotionSystem(world, dt);
+    if (state.doorSpatialStateChanged) {
+        UpdateSectorDoorDerivedStateSystem(world);
+    }
+    if (UpdateSectorStaticModelColliderSystem(world, assets)) {
+        CollectSectorStaticModelColliders(world, state.staticModelColliders);
+    }
     world.ForEach<SectorBillboardSprite, SectorBillboardDirectionalClips>(
             [&assets](engine::Entity, SectorBillboardSprite& sprite, SectorBillboardDirectionalClips& directionalClips) {
                 if (!directionalClips.resolved) {
@@ -875,11 +878,14 @@ void UpdateSectorRuntimeObjects(
                     }
                 }
             });
-    if (state.objectSectorLookupWorldValid) {
-        UpdateSectorObjectCurrentSectorSystem(world, state.objectSectorLookupWorld);
+    // Placed object transforms are immutable between explicit map/object
+    // refreshes. Sector membership and baked probes are assigned at spawn, so
+    // avoid rescanning every object during the steady frame.
+    (void)map;
+    if (state.spriteAnimationPendingCount > 0
+            || state.staticModelPendingCount > 0) {
+        RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
     }
-    UpdateSectorObjectBakedLightingSystem(world, state.objectLightProbes, &map);
-    RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
 }
 
 

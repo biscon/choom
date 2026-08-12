@@ -430,18 +430,6 @@ Matrix BuildSectorDoorShadowCasterModelMatrix(
 
 namespace {
 
-Color QuantizeStaticLightingColor(Vector3 lighting)
-{
-    const auto channel = [](float value) -> unsigned char {
-        if (!std::isfinite(value)) {
-            value = 0.0f;
-        }
-        value = std::clamp(value, 0.0f, 1.0f);
-        return static_cast<unsigned char>(std::round(value * 255.0f));
-    };
-    return Color{channel(lighting.x), channel(lighting.y), channel(lighting.z), 255};
-}
-
 Vector3 TransformDoorLocalDirection(Matrix model, Vector3 localDirection)
 {
     const Vector3 origin = Vector3Transform(Vector3{}, model);
@@ -461,15 +449,15 @@ bool BuildSectorDoorStaticLightingColors(
         const SectorDoorResolvedAnchor& anchor,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap* mapForFallback,
-        std::vector<Color>& outColors)
+        std::vector<Vector3>& outLighting)
 {
-    outColors.clear();
+    outLighting.clear();
     if (meshData.vertices.empty()) {
         return false;
     }
 
     const Matrix model = BuildSectorDoorSlabModelMatrix(transform, anchor);
-    outColors.reserve(meshData.vertices.size());
+    outLighting.reserve(meshData.vertices.size());
     for (const SectorDoorSlabMeshVertex& vertex : meshData.vertices) {
         const Vector3 worldPosition = Vector3Transform(vertex.position, model);
         const Vector3 worldNormal = TransformDoorLocalDirection(model, vertex.normal);
@@ -478,10 +466,10 @@ bool BuildSectorDoorStaticLightingColors(
                 worldPosition,
                 object.currentSectorId,
                 mapForFallback);
-        outColors.push_back(QuantizeStaticLightingColor(
-                EvaluateBakedObjectAmbientCubeLighting(sample, worldNormal)));
+        outLighting.push_back(EvaluateBakedObjectAmbientCubeLighting(
+                sample, worldNormal));
     }
-    return outColors.size() == meshData.vertices.size();
+    return outLighting.size() == meshData.vertices.size();
 }
 
 bool AppendSectorDoorReceiverBounds(
@@ -1088,14 +1076,15 @@ bool ToggleTargetedSectorDoorInteractionSystem(
     return true;
 }
 
-void AdvanceSectorDoorMotionSystem(engine::World& world, float dt)
+bool AdvanceSectorDoorMotionSystem(engine::World& world, float dt)
 {
     if (!std::isfinite(dt) || dt <= 0.0f) {
-        return;
+        return false;
     }
 
+    bool changed = false;
     world.ForEach<SectorDoor, SectorDoorMotion>(
-            [dt](engine::Entity, SectorDoor& door, SectorDoorMotion& motion) {
+            [dt, &changed](engine::Entity, SectorDoor& door, SectorDoorMotion& motion) {
                 if (!door.enabled) {
                     return;
                 }
@@ -1121,12 +1110,15 @@ void AdvanceSectorDoorMotionSystem(engine::World& world, float dt)
                     return;
                 }
 
+                const float previousOpenFraction = motion.openFraction;
                 if (motion.openFraction < motion.targetOpenFraction) {
                     motion.openFraction = std::min(motion.openFraction + fractionStep, motion.targetOpenFraction);
                 } else if (motion.openFraction > motion.targetOpenFraction) {
                     motion.openFraction = std::max(motion.openFraction - fractionStep, motion.targetOpenFraction);
                 }
+                changed = changed || motion.openFraction != previousOpenFraction;
             });
+    return changed;
 }
 
 SectorDoorAudioEvent UpdateSectorDoorAudioTransition(

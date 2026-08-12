@@ -22,6 +22,7 @@
 #include <fstream>
 #include <limits>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -113,21 +114,23 @@ private:
 
 struct LightmapWorldPointLight {
     Vector3 position = {};
-    Color color = WHITE;
+    Vector3 linearColor = {1.0f, 1.0f, 1.0f};
     float intensity = 1.0f;
     float radius = 0.0f;
     float sourceRadius = 0.0f;
+    bool castsShadow = true;
 };
 
 struct LightmapWorldSpotLight {
     Vector3 position = {};
     Vector3 target = {};
-    Color color = WHITE;
+    Vector3 linearColor = {1.0f, 1.0f, 1.0f};
     float intensity = 1.0f;
     float range = 0.0f;
     float sourceRadius = 0.0f;
     float innerConeDegrees = 0.0f;
     float outerConeDegrees = 0.0f;
+    bool castsShadow = true;
 };
 
 struct BakeAabb {
@@ -169,7 +172,7 @@ struct BakeRayStats {
 struct LightmapWorldDirectionalLight {
     bool enabled = false;
     Vector3 directionToLight = {};
-    Color color = WHITE;
+    Vector3 linearColor = {1.0f, 1.0f, 1.0f};
     float intensity = 0.0f;
 };
 
@@ -183,6 +186,12 @@ constexpr int kSectorLightmapAlphaOcclusionIterationLimit = 64;
 constexpr uint32_t kSectorLightmapProgressChunk = 512;
 constexpr float Pi = 3.14159265358979323846f;
 constexpr char kObjectProbeSidecarMagic[4] = {'S', 'O', 'P', 'B'};
+constexpr char kLightmapArtifactMagic[4] = {'S', 'L', 'M', 'H'};
+constexpr uint32_t kLightmapArtifactFixedHeaderBytes = 52;
+constexpr uint32_t kLightmapArtifactChannels = 4;
+constexpr uint32_t kLightmapArtifactEncodingRgbaBinary16 = 1;
+constexpr uint32_t kLightmapArtifactSemanticsLinearHdrRgbAo = 1;
+constexpr uint32_t kObjectProbeFixedHeaderBytes = 48;
 
 bool RayIntersectsTriangle(
         Vector3 origin,
@@ -767,6 +776,23 @@ bool WriteU32LE(std::ostream& output, uint32_t value)
     return output.good();
 }
 
+bool WriteU16LE(std::ostream& output, uint16_t value)
+{
+    const char bytes[2] = {
+            static_cast<char>(value & 0xffu),
+            static_cast<char>((value >> 8u) & 0xffu)};
+    output.write(bytes, sizeof(bytes));
+    return output.good();
+}
+
+bool WriteU64LE(std::ostream& output, uint64_t value)
+{
+    for (unsigned int shift = 0; shift < 64; shift += 8) {
+        output.put(static_cast<char>((value >> shift) & 0xffu));
+    }
+    return output.good();
+}
+
 bool WriteI32LE(std::ostream& output, int32_t value)
 {
     return WriteU32LE(output, static_cast<uint32_t>(value));
@@ -790,6 +816,99 @@ bool ReadU32LE(std::istream& input, uint32_t& outValue)
             | (static_cast<uint32_t>(bytes[2]) << 16u)
             | (static_cast<uint32_t>(bytes[3]) << 24u);
     return true;
+}
+
+bool ReadU16LE(std::istream& input, uint16_t& outValue)
+{
+    unsigned char bytes[2] = {};
+    input.read(reinterpret_cast<char*>(bytes), sizeof(bytes));
+    if (input.gcount() != static_cast<std::streamsize>(sizeof(bytes))) {
+        return false;
+    }
+    outValue = static_cast<uint16_t>(bytes[0])
+            | static_cast<uint16_t>(static_cast<uint16_t>(bytes[1]) << 8u);
+    return true;
+}
+
+bool ReadU64LE(std::istream& input, uint64_t& outValue)
+{
+    unsigned char bytes[8] = {};
+    input.read(reinterpret_cast<char*>(bytes), sizeof(bytes));
+    if (input.gcount() != static_cast<std::streamsize>(sizeof(bytes))) {
+        return false;
+    }
+    outValue = 0;
+    for (unsigned int index = 0; index < 8; ++index) {
+        outValue |= static_cast<uint64_t>(bytes[index]) << (index * 8u);
+    }
+    return true;
+}
+
+uint64_t Fnv1aBytes(const std::vector<uint8_t>& bytes)
+{
+    uint64_t hash = 14695981039346656037ull;
+    for (const uint8_t byte : bytes) {
+        hash = FnvAppendByte(hash, byte);
+    }
+    return hash;
+}
+
+bool StatisticsInitialized(const SectorIlluminationStatistics& statistics)
+{
+    return statistics.sampleCount != 0;
+}
+
+void AccumulateStatistics(
+        SectorIlluminationStatistics& statistics,
+        Vector3 rgb,
+        float auxiliary)
+{
+    if (!StatisticsInitialized(statistics)) {
+        statistics.rgbMin = rgb;
+        statistics.rgbMax = rgb;
+        statistics.auxiliaryMin = auxiliary;
+        statistics.auxiliaryMax = auxiliary;
+    } else {
+        statistics.rgbMin = Vector3{
+                std::min(statistics.rgbMin.x, rgb.x),
+                std::min(statistics.rgbMin.y, rgb.y),
+                std::min(statistics.rgbMin.z, rgb.z)};
+        statistics.rgbMax = Vector3{
+                std::max(statistics.rgbMax.x, rgb.x),
+                std::max(statistics.rgbMax.y, rgb.y),
+                std::max(statistics.rgbMax.z, rgb.z)};
+        statistics.auxiliaryMin = std::min(statistics.auxiliaryMin, auxiliary);
+        statistics.auxiliaryMax = std::max(statistics.auxiliaryMax, auxiliary);
+    }
+    statistics.rgbChannelsAboveOne += static_cast<uint64_t>(rgb.x > 1.0f)
+            + static_cast<uint64_t>(rgb.y > 1.0f)
+            + static_cast<uint64_t>(rgb.z > 1.0f);
+    ++statistics.sampleCount;
+}
+
+void MergeStatistics(
+        SectorIlluminationStatistics& aggregate,
+        const SectorIlluminationStatistics& value)
+{
+    if (value.sampleCount == 0) {
+        return;
+    }
+    if (aggregate.sampleCount == 0) {
+        aggregate = value;
+        return;
+    }
+    aggregate.rgbMin = Vector3{
+            std::min(aggregate.rgbMin.x, value.rgbMin.x),
+            std::min(aggregate.rgbMin.y, value.rgbMin.y),
+            std::min(aggregate.rgbMin.z, value.rgbMin.z)};
+    aggregate.rgbMax = Vector3{
+            std::max(aggregate.rgbMax.x, value.rgbMax.x),
+            std::max(aggregate.rgbMax.y, value.rgbMax.y),
+            std::max(aggregate.rgbMax.z, value.rgbMax.z)};
+    aggregate.auxiliaryMin = std::min(aggregate.auxiliaryMin, value.auxiliaryMin);
+    aggregate.auxiliaryMax = std::max(aggregate.auxiliaryMax, value.auxiliaryMax);
+    aggregate.sampleCount += value.sampleCount;
+    aggregate.rgbChannelsAboveOne += value.rgbChannelsAboveOne;
 }
 
 bool ReadI32LE(std::istream& input, int32_t& outValue)
@@ -1735,7 +1854,7 @@ Vector3 EvaluateDirectLightSample(
         return Vector3{};
     }
 
-    if (IsOccluded(
+    if (light.castsShadow && IsOccluded(
                 map,
                 hit.position,
                 GeometricNormalForHit(hit),
@@ -1755,11 +1874,7 @@ Vector3 EvaluateDirectLightSample(
     const float t = std::clamp(1.0f - distance / light.radius, 0.0f, 1.0f);
     const float attenuation = t * t;
     const float scale = light.intensity * attenuation * lambert;
-    return Vector3{
-            (static_cast<float>(light.color.r) / 255.0f) * scale,
-            (static_cast<float>(light.color.g) / 255.0f) * scale,
-            (static_cast<float>(light.color.b) / 255.0f) * scale
-    };
+    return Vector3Scale(light.linearColor, scale);
 }
 
 float SmoothStep(float edge0, float edge1, float value)
@@ -1821,7 +1936,7 @@ Vector3 EvaluateDirectLightSample(
         return Vector3{};
     }
 
-    if (IsOccluded(
+    if (light.castsShadow && IsOccluded(
                 map,
                 hit.position,
                 GeometricNormalForHit(hit),
@@ -1841,11 +1956,7 @@ Vector3 EvaluateDirectLightSample(
     const float t = std::clamp(1.0f - distance / light.range, 0.0f, 1.0f);
     const float attenuation = t * t;
     const float scale = light.intensity * attenuation * lambert * coneAttenuation;
-    return Vector3{
-            (static_cast<float>(light.color.r) / 255.0f) * scale,
-            (static_cast<float>(light.color.g) / 255.0f) * scale,
-            (static_cast<float>(light.color.b) / 255.0f) * scale
-    };
+    return Vector3Scale(light.linearColor, scale);
 }
 
 Vector3 EvaluateDirectLight(
@@ -2040,19 +2151,15 @@ Vector3 EvaluateDirectionalLight(
     }
 
     const float scale = light.intensity * lambert;
-    return Vector3{
-            (static_cast<float>(light.color.r) / 255.0f) * scale,
-            (static_cast<float>(light.color.g) / 255.0f) * scale,
-            (static_cast<float>(light.color.b) / 255.0f) * scale
-    };
+    return Vector3Scale(light.linearColor, scale);
 }
 
-Vector3 ClampRgb01(Vector3 value)
+Vector3 SanitizeNonNegativeRadiance(Vector3 value)
 {
     return Vector3{
-            std::clamp(value.x, 0.0f, 1.0f),
-            std::clamp(value.y, 0.0f, 1.0f),
-            std::clamp(value.z, 0.0f, 1.0f)};
+            std::isfinite(value.x) ? std::max(value.x, 0.0f) : 0.0f,
+            std::isfinite(value.y) ? std::max(value.y, 0.0f) : 0.0f,
+            std::isfinite(value.z) ? std::max(value.z, 0.0f) : 0.0f};
 }
 
 Vector3 SectorAmbientBaseline(const SectorTopologyMap& map, int sectorId)
@@ -2074,7 +2181,7 @@ BakedObjectLightingSample MakeObjectLightingSampleFromCube(const Vector3 (&ambie
     BakedObjectLightingSample sample;
     sample.valid = valid;
     for (int face = 0; face < 6; ++face) {
-        sample.ambientCube[face] = ClampRgb01(ambientCube[face]);
+        sample.ambientCube[face] = SanitizeNonNegativeRadiance(ambientCube[face]);
     }
     return sample;
 }
@@ -2093,7 +2200,7 @@ BakedObjectLightingSample MakeSectorAmbientObjectLightingSample(const SectorTopo
 {
     BakedObjectLightingSample sample;
     sample.valid = false;
-    const Vector3 ambient = ClampRgb01(SectorAmbientBaseline(map, sectorId));
+    const Vector3 ambient = SanitizeNonNegativeRadiance(SectorAmbientBaseline(map, sectorId));
     for (Vector3& face : sample.ambientCube) {
         face = ambient;
     }
@@ -2239,7 +2346,7 @@ SelectedObjectProbeLayerSample SampleSelectedObjectLightProbes(
     }
 
     for (Vector3& face : sample.ambientCube) {
-        face = ClampRgb01(Vector3Scale(face, 1.0f / totalWeight));
+        face = SanitizeNonNegativeRadiance(Vector3Scale(face, 1.0f / totalWeight));
     }
     return SelectedObjectProbeLayerSample{
             sample,
@@ -2519,7 +2626,7 @@ void BakeProbeAmbientCube(
                         alphaOccluders,
                         alphaMaskCache,
                         stats));
-        probe.ambientCube[face] = ClampRgb01(rgb);
+        probe.ambientCube[face] = SanitizeNonNegativeRadiance(rgb);
     }
 }
 
@@ -2527,10 +2634,11 @@ LightmapWorldPointLight MakeWorldSpaceLight(const SectorTopologyStaticPointLight
 {
     LightmapWorldPointLight light;
     light.position = SectorAuthoringToWorldPosition(authoringLight.position);
-    light.color = authoringLight.color;
+    light.linearColor = SectorLightmapAuthoredSrgbColorToLinear(authoringLight.color);
     light.intensity = authoringLight.intensity;
     light.radius = SectorAuthoringToWorldDistance(authoringLight.radius);
     light.sourceRadius = SectorAuthoringToWorldDistance(authoringLight.sourceRadius);
+    light.castsShadow = authoringLight.castsShadow;
     return light;
 }
 
@@ -2539,12 +2647,13 @@ LightmapWorldSpotLight MakeWorldSpaceLight(const SectorTopologyStaticSpotLight& 
     LightmapWorldSpotLight light;
     light.position = SectorAuthoringToWorldPosition(authoringLight.position);
     light.target = SectorAuthoringToWorldPosition(authoringLight.target);
-    light.color = authoringLight.color;
+    light.linearColor = SectorLightmapAuthoredSrgbColorToLinear(authoringLight.color);
     light.intensity = authoringLight.intensity;
     light.range = SectorAuthoringToWorldDistance(authoringLight.range);
     light.sourceRadius = SectorAuthoringToWorldDistance(authoringLight.sourceRadius);
     light.innerConeDegrees = authoringLight.innerConeDegrees;
     light.outerConeDegrees = authoringLight.outerConeDegrees;
+    light.castsShadow = authoringLight.castsShadow;
     return light;
 }
 
@@ -2556,7 +2665,7 @@ LightmapWorldDirectionalLight MakeWorldSpaceDirectionalLight(
     LightmapWorldDirectionalLight light;
     light.enabled = normalized.enabled;
     light.directionToLight = normalized.directionToLight;
-    light.color = normalized.color;
+    light.linearColor = SectorLightmapAuthoredSrgbColorToLinear(normalized.color);
     light.intensity = normalized.intensity;
     return light;
 }
@@ -2779,7 +2888,7 @@ Color GetPixel(const std::vector<Color>& pixels, int width, int x, int y)
 
 void DilateChart(
         const SectorLightmapChart& chart,
-        std::vector<Color>& pixels,
+        std::vector<Vector4>& pixels,
         std::vector<unsigned char>& valid,
         int atlasWidth,
         int atlasHeight)
@@ -2795,7 +2904,7 @@ void DilateChart(
             }
 
             int bestDistance2 = std::numeric_limits<int>::max();
-            Color best = BLACK;
+            Vector4 best{0.0f, 0.0f, 0.0f, 1.0f};
             for (int sy = chart.usableY; sy < chart.usableY + chart.usableHeight; ++sy) {
                 for (int sx = chart.usableX; sx < chart.usableX + chart.usableWidth; ++sx) {
                     const size_t sourceIndex = atlasOffset + static_cast<size_t>(sy * atlasWidth + sx);
@@ -3123,6 +3232,15 @@ void FnvAppendLightmapBakeConstantsAndSettings(
         uint64_t& hash,
         const SectorLightmapBakeSettings& settings)
 {
+    FnvAppendString(hash, "slice3-linear-hdr-baked-illumination");
+    FnvAppendString(hash, "authored-static-light-swatches-srgb-decode-once");
+    FnvAppendString(hash, kSectorLightmapArtifactFormat);
+    FnvAppendInt(hash, kSectorLightmapArtifactVersion);
+    FnvAppendString(hash, kSectorBakedObjectLightProbeSidecarFormat);
+    FnvAppendInt(hash, kSectorBakedObjectLightProbeSidecarVersion);
+    FnvAppendString(hash, kSectorStaticModelLightmapSidecarFormat);
+    FnvAppendInt(hash, kSectorStaticModelLightmapSidecarVersion);
+    FnvAppendString(hash, "indirect-direct-buffer-neutral-albedo-no-surface-color");
     FnvAppendInt(hash, kSectorLightmapBakeVersion);
     FnvAppendInt(hash, SectorLightmapAtlasWidth);
     FnvAppendInt(hash, SectorLightmapAtlasHeight);
@@ -3244,6 +3362,312 @@ void BakeObjectProbeAmbientCubesInScene(
 }
 
 } // namespace
+
+Vector3 SectorLightmapAuthoredSrgbColorToLinear(Color color)
+{
+    const auto decode = [](unsigned char channel) {
+        const float srgb = static_cast<float>(channel) / 255.0f;
+        return srgb <= 0.04045f
+                ? srgb / 12.92f
+                : std::pow((srgb + 0.055f) / 1.055f, 2.4f);
+    };
+    return Vector3{decode(color.r), decode(color.g), decode(color.b)};
+}
+
+float SectorLightmapBinary16ToFloat(uint16_t bits)
+{
+    const uint32_t sign = static_cast<uint32_t>(bits & 0x8000u) << 16u;
+    int32_t exponent = static_cast<int32_t>((bits >> 10u) & 0x1fu);
+    uint32_t mantissa = bits & 0x03ffu;
+    uint32_t valueBits = 0;
+    if (exponent == 0) {
+        if (mantissa == 0) {
+            valueBits = sign;
+        } else {
+            exponent = 1;
+            while ((mantissa & 0x0400u) == 0) {
+                mantissa <<= 1u;
+                --exponent;
+            }
+            mantissa &= 0x03ffu;
+            valueBits = sign
+                    | (static_cast<uint32_t>(exponent + 112) << 23u)
+                    | (mantissa << 13u);
+        }
+    } else if (exponent == 0x1f) {
+        valueBits = sign | 0x7f800000u | (mantissa << 13u);
+    } else {
+        valueBits = sign
+                | (static_cast<uint32_t>(exponent + 112) << 23u)
+                | (mantissa << 13u);
+    }
+    return FloatFromLittleEndianBits(valueBits);
+}
+
+uint16_t SectorLightmapFloatToBinary16(float value)
+{
+    const uint32_t bits = FloatToLittleEndianBits(value);
+    const uint16_t sign = static_cast<uint16_t>((bits >> 16u) & 0x8000u);
+    const uint32_t exponent = (bits >> 23u) & 0xffu;
+    const uint32_t mantissa = bits & 0x007fffffu;
+    if (exponent == 0xffu) {
+        return static_cast<uint16_t>(sign | 0x7c00u
+                | (mantissa == 0 ? 0u : std::max(1u, mantissa >> 13u)));
+    }
+
+    const int32_t halfExponent = static_cast<int32_t>(exponent) - 127 + 15;
+    if (halfExponent >= 31) {
+        return static_cast<uint16_t>(sign | 0x7c00u);
+    }
+    if (halfExponent <= 0) {
+        if (halfExponent < -10) {
+            return sign;
+        }
+        const uint32_t normalizedMantissa = mantissa | 0x00800000u;
+        const unsigned int shift = static_cast<unsigned int>(14 - halfExponent);
+        uint32_t halfMantissa = normalizedMantissa >> shift;
+        const uint32_t remainderMask = (1u << shift) - 1u;
+        const uint32_t remainder = normalizedMantissa & remainderMask;
+        const uint32_t halfway = 1u << (shift - 1u);
+        if (remainder > halfway
+                || (remainder == halfway && (halfMantissa & 1u) != 0)) {
+            ++halfMantissa;
+        }
+        return static_cast<uint16_t>(sign | halfMantissa);
+    }
+
+    uint32_t halfMantissa = mantissa >> 13u;
+    const uint32_t remainder = mantissa & 0x1fffu;
+    uint32_t encodedExponent = static_cast<uint32_t>(halfExponent);
+    if (remainder > 0x1000u
+            || (remainder == 0x1000u && (halfMantissa & 1u) != 0)) {
+        ++halfMantissa;
+        if (halfMantissa == 0x0400u) {
+            halfMantissa = 0;
+            ++encodedExponent;
+            if (encodedExponent >= 31u) {
+                return static_cast<uint16_t>(sign | 0x7c00u);
+            }
+        }
+    }
+    return static_cast<uint16_t>(sign | (encodedExponent << 10u) | halfMantissa);
+}
+
+bool WriteSectorLightmapArtifact(
+        const std::string& path,
+        int width,
+        int height,
+        const Vector4* linearRgba,
+        size_t texelCount,
+        const std::string& sourceHash,
+        SectorIlluminationStatistics& outPreEncodeStatistics,
+        SectorIlluminationStatistics& outStoredStatistics,
+        std::string& outError)
+{
+    outError.clear();
+    outPreEncodeStatistics = {};
+    outStoredStatistics = {};
+    if (path.empty() || width <= 0 || height <= 0 || linearRgba == nullptr
+            || sourceHash.empty()) {
+        outError = "HDR lightmap write failed: invalid arguments";
+        return false;
+    }
+    const uint64_t expectedTexels = static_cast<uint64_t>(width)
+            * static_cast<uint64_t>(height);
+    if (expectedTexels != texelCount
+            || expectedTexels > std::numeric_limits<uint64_t>::max() / 8u
+            || sourceHash.size() > std::numeric_limits<uint32_t>::max()) {
+        outError = "HDR lightmap write failed: invalid dimensions or source hash";
+        return false;
+    }
+
+    std::vector<uint8_t> payload;
+    payload.reserve(texelCount * 8u);
+    for (size_t index = 0; index < texelCount; ++index) {
+        const Vector4 value = linearRgba[index];
+        const Vector3 rgb{value.x, value.y, value.z};
+        if (!IsFiniteVector3(rgb) || rgb.x < 0.0f || rgb.y < 0.0f
+                || rgb.z < 0.0f || rgb.x > 65504.0f || rgb.y > 65504.0f
+                || rgb.z > 65504.0f || !std::isfinite(value.w)
+                || value.w < 0.0f || value.w > 1.0f) {
+            outError = "HDR lightmap write failed: invalid radiance or AO";
+            return false;
+        }
+        AccumulateStatistics(outPreEncodeStatistics, rgb, value.w);
+        const uint16_t channels[4] = {
+                SectorLightmapFloatToBinary16(value.x),
+                SectorLightmapFloatToBinary16(value.y),
+                SectorLightmapFloatToBinary16(value.z),
+                SectorLightmapFloatToBinary16(value.w)};
+        for (const uint16_t channel : channels) {
+            payload.push_back(static_cast<uint8_t>(channel & 0xffu));
+            payload.push_back(static_cast<uint8_t>((channel >> 8u) & 0xffu));
+        }
+    }
+
+    const std::filesystem::path outputPath(path);
+    std::error_code ec;
+    if (outputPath.has_parent_path()) {
+        std::filesystem::create_directories(outputPath.parent_path(), ec);
+        if (ec) {
+            outError = "HDR lightmap write failed: could not create output directory";
+            return false;
+        }
+    }
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    const uint32_t headerBytes = kLightmapArtifactFixedHeaderBytes
+            + static_cast<uint32_t>(sourceHash.size());
+    output.write(kLightmapArtifactMagic, sizeof(kLightmapArtifactMagic));
+    if (!output.good()
+            || !WriteU32LE(output, kSectorLightmapArtifactVersion)
+            || !WriteU32LE(output, headerBytes)
+            || !WriteU32LE(output, static_cast<uint32_t>(width))
+            || !WriteU32LE(output, static_cast<uint32_t>(height))
+            || !WriteU32LE(output, kLightmapArtifactChannels)
+            || !WriteU32LE(output, kLightmapArtifactEncodingRgbaBinary16)
+            || !WriteU32LE(output, kLightmapArtifactSemanticsLinearHdrRgbAo)
+            || !WriteU32LE(output, static_cast<uint32_t>(sourceHash.size()))
+            || !WriteU64LE(output, static_cast<uint64_t>(payload.size()))
+            || !WriteU64LE(output, Fnv1aBytes(payload))) {
+        outError = "HDR lightmap write failed: header write failed";
+        return false;
+    }
+    output.write(sourceHash.data(), static_cast<std::streamsize>(sourceHash.size()));
+    output.write(reinterpret_cast<const char*>(payload.data()),
+            static_cast<std::streamsize>(payload.size()));
+    output.close();
+    if (!output.good()) {
+        outError = "HDR lightmap write failed: payload write failed";
+        return false;
+    }
+
+    SectorLightmapArtifactData reopened;
+    SectorLightmapMetadata expected;
+    expected.width = width;
+    expected.height = height;
+    expected.version = kSectorLightmapArtifactVersion;
+    expected.format = kSectorLightmapArtifactFormat;
+    expected.sourceHash = sourceHash;
+    if (!ReadSectorLightmapArtifact(path, &expected, reopened, outError)) {
+        outError = "HDR lightmap write verification failed: " + outError;
+        return false;
+    }
+    outStoredStatistics = reopened.storedStatistics;
+    return true;
+}
+
+bool ReadSectorLightmapArtifact(
+        const std::string& path,
+        const SectorLightmapMetadata* expectedMetadata,
+        SectorLightmapArtifactData& outData,
+        std::string& outError)
+{
+    outData = {};
+    outError.clear();
+    std::ifstream input(path, std::ios::binary);
+    if (!input.is_open()) {
+        outError = "HDR lightmap read failed: missing artifact";
+        return false;
+    }
+    char magic[4] = {};
+    input.read(magic, sizeof(magic));
+    uint32_t version = 0;
+    uint32_t headerBytes = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t channels = 0;
+    uint32_t encoding = 0;
+    uint32_t semantics = 0;
+    uint32_t sourceHashBytes = 0;
+    uint64_t payloadBytes = 0;
+    uint64_t payloadChecksum = 0;
+    if (input.gcount() != static_cast<std::streamsize>(sizeof(magic))
+            || !std::equal(std::begin(magic), std::end(magic),
+                    std::begin(kLightmapArtifactMagic))
+            || !ReadU32LE(input, version)
+            || !ReadU32LE(input, headerBytes)
+            || !ReadU32LE(input, width)
+            || !ReadU32LE(input, height)
+            || !ReadU32LE(input, channels)
+            || !ReadU32LE(input, encoding)
+            || !ReadU32LE(input, semantics)
+            || !ReadU32LE(input, sourceHashBytes)
+            || !ReadU64LE(input, payloadBytes)
+            || !ReadU64LE(input, payloadChecksum)) {
+        outError = "HDR lightmap read failed: invalid or truncated header";
+        return false;
+    }
+    if (version != static_cast<uint32_t>(kSectorLightmapArtifactVersion)
+            || headerBytes != kLightmapArtifactFixedHeaderBytes + sourceHashBytes
+            || width == 0 || height == 0 || channels != kLightmapArtifactChannels
+            || encoding != kLightmapArtifactEncodingRgbaBinary16
+            || semantics != kLightmapArtifactSemanticsLinearHdrRgbAo
+            || sourceHashBytes == 0 || sourceHashBytes > 1024u) {
+        outError = "HDR lightmap read failed: unsupported or invalid header";
+        return false;
+    }
+    const uint64_t texelCount = static_cast<uint64_t>(width) * height;
+    if (texelCount > std::numeric_limits<uint64_t>::max() / 8u
+            || payloadBytes != texelCount * 8u
+            || payloadBytes > std::numeric_limits<size_t>::max()) {
+        outError = "HDR lightmap read failed: invalid payload size";
+        return false;
+    }
+    std::string sourceHash(sourceHashBytes, '\0');
+    input.read(sourceHash.data(), static_cast<std::streamsize>(sourceHash.size()));
+    std::vector<uint8_t> payload(static_cast<size_t>(payloadBytes));
+    input.read(reinterpret_cast<char*>(payload.data()),
+            static_cast<std::streamsize>(payload.size()));
+    if (input.gcount() != static_cast<std::streamsize>(payload.size())
+            || input.peek() != std::char_traits<char>::eof()
+            || Fnv1aBytes(payload) != payloadChecksum) {
+        outError = "HDR lightmap read failed: truncated, trailing, or corrupt payload";
+        return false;
+    }
+    if (expectedMetadata != nullptr
+            && ((expectedMetadata->version != 0
+                        && expectedMetadata->version != static_cast<int>(version))
+                || (!expectedMetadata->format.empty()
+                        && expectedMetadata->format != kSectorLightmapArtifactFormat)
+                || (expectedMetadata->width > 0
+                        && expectedMetadata->width != static_cast<int>(width))
+                || (expectedMetadata->height > 0
+                        && expectedMetadata->height != static_cast<int>(height))
+                || (!expectedMetadata->sourceHash.empty()
+                        && expectedMetadata->sourceHash != sourceHash))) {
+        outError = "HDR lightmap read failed: metadata mismatch";
+        return false;
+    }
+
+    outData.width = static_cast<int>(width);
+    outData.height = static_cast<int>(height);
+    outData.sourceHash = std::move(sourceHash);
+    outData.rgba16.resize(static_cast<size_t>(texelCount) * 4u);
+    for (size_t channelIndex = 0; channelIndex < outData.rgba16.size(); ++channelIndex) {
+        const size_t byteIndex = channelIndex * 2u;
+        const uint16_t bits = static_cast<uint16_t>(payload[byteIndex])
+                | static_cast<uint16_t>(
+                        static_cast<uint16_t>(payload[byteIndex + 1u]) << 8u);
+        outData.rgba16[channelIndex] = bits;
+    }
+    for (size_t texelIndex = 0; texelIndex < static_cast<size_t>(texelCount); ++texelIndex) {
+        const size_t base = texelIndex * 4u;
+        const Vector3 rgb{
+                SectorLightmapBinary16ToFloat(outData.rgba16[base]),
+                SectorLightmapBinary16ToFloat(outData.rgba16[base + 1u]),
+                SectorLightmapBinary16ToFloat(outData.rgba16[base + 2u])};
+        const float ao = SectorLightmapBinary16ToFloat(outData.rgba16[base + 3u]);
+        if (!IsFiniteVector3(rgb) || rgb.x < 0.0f || rgb.y < 0.0f
+                || rgb.z < 0.0f || !std::isfinite(ao) || ao < 0.0f
+                || ao > 1.0f) {
+            outData = {};
+            outError = "HDR lightmap read failed: invalid radiance or AO";
+            return false;
+        }
+        AccumulateStatistics(outData.storedStatistics, rgb, ao);
+    }
+    return true;
+}
 
 std::string SectorLightmapAlphaMaskCache::CacheKey(const SectorTopologyMap& map, const std::string& textureId)
 {
@@ -3595,10 +4019,12 @@ bool WriteSectorBakedObjectLightProbeSidecar(
         float probeSpacingWorld,
         float probeLowerHeightWorld,
         float probeUpperHeightWorld,
+        const std::string& sourceHash,
         std::string& outError)
 {
     outError.clear();
-    if (path.empty()) {
+    if (path.empty() || sourceHash.empty()
+            || sourceHash.size() > std::numeric_limits<uint32_t>::max()) {
         outError = "Object probe sidecar write failed: missing output path";
         return false;
     }
@@ -3626,8 +4052,9 @@ bool WriteSectorBakedObjectLightProbeSidecar(
             return false;
         }
         for (const Vector3& cubeFace : probe.ambientCube) {
-            if (!IsFiniteVector3(cubeFace)) {
-                outError = "Object probe sidecar write failed: non-finite ambient cube value";
+            if (!IsFiniteVector3(cubeFace) || cubeFace.x < 0.0f
+                    || cubeFace.y < 0.0f || cubeFace.z < 0.0f) {
+                outError = "Object probe sidecar write failed: invalid ambient cube value";
                 return false;
             }
         }
@@ -3643,45 +4070,59 @@ bool WriteSectorBakedObjectLightProbeSidecar(
         }
     }
 
-    std::ofstream output(path, std::ios::binary);
-    if (!output.is_open()) {
-        outError = "Object probe sidecar write failed: could not open output file";
-        return false;
-    }
-
-    output.write(kObjectProbeSidecarMagic, sizeof(kObjectProbeSidecarMagic));
-    if (!output.good()
-            || !WriteU32LE(output, static_cast<uint32_t>(kSectorBakedObjectLightProbeSidecarVersion))
-            || !WriteU32LE(output, static_cast<uint32_t>(probes.size()))
-            || !WriteF32LE(output, probeSpacingWorld)
-            || !WriteF32LE(output, probeLowerHeightWorld)
-            || !WriteF32LE(output, probeUpperHeightWorld)
-            || !WriteU32LE(output, 0)) {
-        outError = "Object probe sidecar write failed: could not write header";
-        return false;
-    }
-
+    std::ostringstream payload(std::ios::binary);
     for (const SectorBakedObjectLightProbe& probe : probes) {
-        if (!WriteI32LE(output, static_cast<int32_t>(probe.sectorId))
-                || !WriteU32LE(output, static_cast<uint32_t>(probe.layer))
-                || !WriteProbeVector(output, probe.position)) {
+        if (!WriteI32LE(payload, static_cast<int32_t>(probe.sectorId))
+                || !WriteU32LE(payload, static_cast<uint32_t>(probe.layer))
+                || !WriteProbeVector(payload, probe.position)) {
             outError = "Object probe sidecar write failed: could not write probe record";
             return false;
         }
         for (const Vector3& cubeFace : probe.ambientCube) {
-            if (!WriteProbeVector(output, cubeFace)) {
+            if (!WriteProbeVector(payload, cubeFace)) {
                 outError = "Object probe sidecar write failed: could not write probe ambient cube";
                 return false;
             }
         }
     }
-
+    const std::string payloadString = payload.str();
+    const std::vector<uint8_t> payloadBytes(payloadString.begin(), payloadString.end());
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    const uint32_t headerBytes = kObjectProbeFixedHeaderBytes
+            + static_cast<uint32_t>(sourceHash.size());
+    output.write(kObjectProbeSidecarMagic, sizeof(kObjectProbeSidecarMagic));
+    if (!output.good()
+            || !WriteU32LE(output, static_cast<uint32_t>(kSectorBakedObjectLightProbeSidecarVersion))
+            || !WriteU32LE(output, headerBytes)
+            || !WriteU32LE(output, static_cast<uint32_t>(probes.size()))
+            || !WriteF32LE(output, probeSpacingWorld)
+            || !WriteF32LE(output, probeLowerHeightWorld)
+            || !WriteF32LE(output, probeUpperHeightWorld)
+            || !WriteU32LE(output, static_cast<uint32_t>(sourceHash.size()))
+            || !WriteU64LE(output, static_cast<uint64_t>(payloadBytes.size()))
+            || !WriteU64LE(output, Fnv1aBytes(payloadBytes))) {
+        outError = "Object probe sidecar write failed: could not write header";
+        return false;
+    }
+    output.write(sourceHash.data(), static_cast<std::streamsize>(sourceHash.size()));
+    output.write(payloadString.data(), static_cast<std::streamsize>(payloadString.size()));
+    output.close();
     if (!output.good()) {
         outError = "Object probe sidecar write failed: output stream error";
         return false;
     }
-
-    return true;
+    std::vector<SectorBakedObjectLightProbe> reopened;
+    SectorBakedObjectLightProbeMetadata reopenedMetadata;
+    SectorBakedObjectLightProbeMetadata expected;
+    expected.version = kSectorBakedObjectLightProbeSidecarVersion;
+    expected.sourceHash = sourceHash;
+    expected.count = static_cast<int>(probes.size());
+    expected.probeSpacingWorld = probeSpacingWorld;
+    expected.probeLowerHeightWorld = probeLowerHeightWorld;
+    expected.probeUpperHeightWorld = probeUpperHeightWorld;
+    expected.format = kSectorBakedObjectLightProbeSidecarFormat;
+    return ReadSectorBakedObjectLightProbeSidecar(
+            path, &expected, reopened, reopenedMetadata, outError);
 }
 
 bool ReadSectorBakedObjectLightProbeSidecar(
@@ -3715,22 +4156,30 @@ bool ReadSectorBakedObjectLightProbeSidecar(
     }
 
     uint32_t version = 0;
+    uint32_t headerBytes = 0;
     uint32_t probeCount = 0;
     float probeSpacingWorld = 0.0f;
     float probeLowerHeightWorld = 0.0f;
     float probeUpperHeightWorld = 0.0f;
-    uint32_t reserved = 0;
+    uint32_t sourceHashBytes = 0;
+    uint64_t payloadByteCount = 0;
+    uint64_t payloadChecksum = 0;
     if (!ReadU32LE(input, version)
+            || !ReadU32LE(input, headerBytes)
             || !ReadU32LE(input, probeCount)
             || !ReadF32LE(input, probeSpacingWorld)
             || !ReadF32LE(input, probeLowerHeightWorld)
             || !ReadF32LE(input, probeUpperHeightWorld)
-            || !ReadU32LE(input, reserved)) {
+            || !ReadU32LE(input, sourceHashBytes)
+            || !ReadU64LE(input, payloadByteCount)
+            || !ReadU64LE(input, payloadChecksum)) {
         outError = "Object probe sidecar read failed: truncated header";
         return false;
     }
 
-    if (version != static_cast<uint32_t>(kSectorBakedObjectLightProbeSidecarVersion)) {
+    if (version != static_cast<uint32_t>(kSectorBakedObjectLightProbeSidecarVersion)
+            || sourceHashBytes == 0 || sourceHashBytes > 1024u
+            || headerBytes != kObjectProbeFixedHeaderBytes + sourceHashBytes) {
         outError = "Object probe sidecar read failed: unsupported version";
         return false;
     }
@@ -3744,6 +4193,24 @@ bool ReadSectorBakedObjectLightProbeSidecar(
     }
     if (probeCount > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
         outError = "Object probe sidecar read failed: too many probes";
+        return false;
+    }
+    constexpr uint64_t kProbePayloadRecordBytes = 92u;
+    if (payloadByteCount != static_cast<uint64_t>(probeCount)
+                    * kProbePayloadRecordBytes
+            || payloadByteCount > std::numeric_limits<size_t>::max()) {
+        outError = "Object probe sidecar read failed: invalid payload size";
+        return false;
+    }
+    std::string sourceHash(sourceHashBytes, '\0');
+    input.read(sourceHash.data(), static_cast<std::streamsize>(sourceHash.size()));
+    std::vector<uint8_t> payloadBytes(static_cast<size_t>(payloadByteCount));
+    input.read(reinterpret_cast<char*>(payloadBytes.data()),
+            static_cast<std::streamsize>(payloadBytes.size()));
+    if (input.gcount() != static_cast<std::streamsize>(payloadBytes.size())
+            || input.peek() != std::char_traits<char>::eof()
+            || Fnv1aBytes(payloadBytes) != payloadChecksum) {
+        outError = "Object probe sidecar read failed: truncated, trailing, or corrupt payload";
         return false;
     }
     if (expectedMetadata != nullptr) {
@@ -3762,6 +4229,11 @@ bool ReadSectorBakedObjectLightProbeSidecar(
             outError = "Object probe sidecar read failed: metadata format mismatch";
             return false;
         }
+        if (!expectedMetadata->sourceHash.empty()
+                && expectedMetadata->sourceHash != sourceHash) {
+            outError = "Object probe sidecar read failed: metadata source hash mismatch";
+            return false;
+        }
         if ((expectedMetadata->probeSpacingWorld > 0.0f
                     && std::abs(expectedMetadata->probeSpacingWorld
                             - probeSpacingWorld) > 0.0001f)
@@ -3774,15 +4246,17 @@ bool ReadSectorBakedObjectLightProbeSidecar(
         }
     }
 
+    const std::string payloadString(payloadBytes.begin(), payloadBytes.end());
+    std::istringstream payloadInput(payloadString, std::ios::binary);
     std::vector<SectorBakedObjectLightProbe> probes;
     probes.reserve(probeCount);
     for (uint32_t probeIndex = 0; probeIndex < probeCount; ++probeIndex) {
         SectorBakedObjectLightProbe probe;
         int32_t sectorId = 0;
         uint32_t layer = 0;
-        if (!ReadI32LE(input, sectorId)
-                || !ReadU32LE(input, layer)
-                || !ReadProbeVector(input, probe.position)) {
+        if (!ReadI32LE(payloadInput, sectorId)
+                || !ReadU32LE(payloadInput, layer)
+                || !ReadProbeVector(payloadInput, probe.position)) {
             outError = "Object probe sidecar read failed: truncated probe record";
             return false;
         }
@@ -3797,12 +4271,13 @@ bool ReadSectorBakedObjectLightProbeSidecar(
             return false;
         }
         for (Vector3& cubeFace : probe.ambientCube) {
-            if (!ReadProbeVector(input, cubeFace)) {
+            if (!ReadProbeVector(payloadInput, cubeFace)) {
                 outError = "Object probe sidecar read failed: truncated probe ambient cube";
                 return false;
             }
-            if (!IsFiniteVector3(cubeFace)) {
-                outError = "Object probe sidecar read failed: non-finite ambient cube value";
+            if (!IsFiniteVector3(cubeFace) || cubeFace.x < 0.0f
+                    || cubeFace.y < 0.0f || cubeFace.z < 0.0f) {
+                outError = "Object probe sidecar read failed: invalid ambient cube value";
                 return false;
             }
         }
@@ -3811,11 +4286,17 @@ bool ReadSectorBakedObjectLightProbeSidecar(
 
     outMetadata.path = path;
     outMetadata.version = static_cast<int>(version);
+    outMetadata.sourceHash = sourceHash;
     outMetadata.count = static_cast<int>(probeCount);
     outMetadata.probeSpacingWorld = probeSpacingWorld;
     outMetadata.probeLowerHeightWorld = probeLowerHeightWorld;
     outMetadata.probeUpperHeightWorld = probeUpperHeightWorld;
     outMetadata.format = kSectorBakedObjectLightProbeSidecarFormat;
+    for (const SectorBakedObjectLightProbe& probe : probes) {
+        for (const Vector3& cubeFace : probe.ambientCube) {
+            AccumulateStatistics(outMetadata.storedStatistics, cubeFace, 0.0f);
+        }
+    }
     outProbes = std::move(probes);
     return true;
 }
@@ -4071,7 +4552,7 @@ BakedObjectLightingSample SampleBakedObjectLighting(
 std::string MakeSectorLightmapPathForMapPath(const std::string& mapPath)
 {
     std::filesystem::path path(mapPath);
-    path.replace_extension(".lightmap.png");
+    path.replace_extension(".lightmap.bin");
     return MakeSectorAssetRelativePath(path.generic_string());
 }
 
@@ -4226,7 +4707,8 @@ bool BakeSectorLightmapForMap(
         }
     };
     ReportProgress(callbacks, SectorLightmapBakePhase::Preparing, 0, 1);
-    std::vector<Color> pixels(totalPixelCount, Color{0, 0, 0, 255});
+    const std::string artifactSourceHash = ComputeSectorLightmapSourceHash(map);
+    std::vector<Vector4> pixels(totalPixelCount, Vector4{0.0f, 0.0f, 0.0f, 1.0f});
     std::vector<Vector3> directLightingFloat(totalPixelCount, Vector3{});
     std::vector<Vector3> indirectLightingFloat(totalPixelCount, Vector3{});
     std::vector<float> ambientOcclusionFloat(totalPixelCount, 1.0f);
@@ -4593,16 +5075,19 @@ bool BakeSectorLightmapForMap(
     std::vector<unsigned char> exportValid = validChartTexel;
     completedTexels = 0;
     for (const BakeTexel& texel : bakeTexels) {
-        Vector3 finalRgb = Vector3Add(directLightingFloat[texel.pixelIndex], indirectLightingFloat[texel.pixelIndex]);
-        finalRgb.x = std::clamp(finalRgb.x, 0.0f, 1.0f);
-        finalRgb.y = std::clamp(finalRgb.y, 0.0f, 1.0f);
-        finalRgb.z = std::clamp(finalRgb.z, 0.0f, 1.0f);
-        pixels[texel.pixelIndex] = Color{
-                FloatToByte(finalRgb.x),
-                FloatToByte(finalRgb.y),
-                FloatToByte(finalRgb.z),
-                FloatToByte(ambientOcclusionFloat[texel.pixelIndex])
-        };
+        const Vector3 finalRgb = Vector3Add(
+                directLightingFloat[texel.pixelIndex],
+                indirectLightingFloat[texel.pixelIndex]);
+        if (!IsFiniteVector3(finalRgb) || finalRgb.x < 0.0f
+                || finalRgb.y < 0.0f || finalRgb.z < 0.0f) {
+            outError = "Bake failed: non-finite or negative baked radiance";
+            return false;
+        }
+        pixels[texel.pixelIndex] = Vector4{
+                finalRgb.x,
+                finalRgb.y,
+                finalRgb.z,
+                std::clamp(ambientOcclusionFloat[texel.pixelIndex], 0.0f, 1.0f)};
         ++completedTexels;
         if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
             ReportProgress(
@@ -4662,22 +5147,28 @@ bool BakeSectorLightmapForMap(
     }
 
     for (int atlasIndex = 0; atlasIndex < atlasCount; ++atlasIndex) {
-        Image image = {};
-        image.data = pixels.data()
-                + static_cast<size_t>(atlasIndex) * atlasPixelCount;
-        image.width = width;
-        image.height = height;
-        image.mipmaps = 1;
-        image.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
         const std::string& atlasPath =
                 outResult.atlases[static_cast<size_t>(atlasIndex)].path;
-        if (!ExportImage(image, atlasPath.c_str())) {
-            outError = TextFormat(
-                    "Bake failed: could not export %s",
-                    atlasPath.c_str());
+        SectorIlluminationStatistics preEncodeStatistics;
+        SectorIlluminationStatistics storedStatistics;
+        if (!WriteSectorLightmapArtifact(
+                    atlasPath,
+                    width,
+                    height,
+                    pixels.data() + static_cast<size_t>(atlasIndex) * atlasPixelCount,
+                    atlasPixelCount,
+                    artifactSourceHash,
+                    preEncodeStatistics,
+                    storedStatistics,
+                    outError)) {
+            outError = TextFormat("Bake failed: %s", outError.c_str());
             removeAtlasOutputs();
             return false;
         }
+        outResult.atlases[static_cast<size_t>(atlasIndex)].storedStatistics =
+                storedStatistics;
+        MergeStatistics(outResult.preEncodeAtlasStatistics, preEncodeStatistics);
+        MergeStatistics(outResult.storedAtlasStatistics, storedStatistics);
         ++completedExportWork;
         ReportProgress(
                 callbacks,
@@ -4752,6 +5243,7 @@ bool BakeSectorLightmapForMap(
                 objectProbeSpacingWorld,
                 objectProbeLowerHeightWorld,
                 objectProbeUpperHeightWorld,
+                artifactSourceHash,
                 outError)) {
         if (outError.empty()) {
             outError = "Bake failed: could not write object light probe sidecar";
@@ -4762,13 +5254,34 @@ bool BakeSectorLightmapForMap(
         RemoveFileIfExists(objectProbeSidecarPath);
         return false;
     }
+    SectorBakedObjectLightProbeMetadata verifiedProbeMetadata;
+    std::vector<SectorBakedObjectLightProbe> verifiedProbes;
+    SectorBakedObjectLightProbeMetadata expectedProbeMetadata;
+    expectedProbeMetadata.version = kSectorBakedObjectLightProbeSidecarVersion;
+    expectedProbeMetadata.sourceHash = artifactSourceHash;
+    expectedProbeMetadata.count = static_cast<int>(objectProbes.size());
+    expectedProbeMetadata.probeSpacingWorld = objectProbeSpacingWorld;
+    expectedProbeMetadata.probeLowerHeightWorld = objectProbeLowerHeightWorld;
+    expectedProbeMetadata.probeUpperHeightWorld = objectProbeUpperHeightWorld;
+    expectedProbeMetadata.format = kSectorBakedObjectLightProbeSidecarFormat;
+    if (!ReadSectorBakedObjectLightProbeSidecar(
+                objectProbeSidecarPath,
+                &expectedProbeMetadata,
+                verifiedProbes,
+                verifiedProbeMetadata,
+                outError)) {
+        outError = "Bake failed: stored object probe verification failed: " + outError;
+        removeAtlasOutputs();
+        RemoveFileIfExists(objectProbeSidecarPath);
+        return false;
+    }
     const auto objectProbeSidecarEnd = Clock::now();
 
     std::string staticModelSidecarPath;
     if (staticModels != nullptr && !staticModels->objects.empty()) {
         staticModelSidecarPath =
                 MakeSectorStaticModelSidecarPathForLightmapPath(outputPath);
-        staticModels->sourceHash = ComputeSectorLightmapSourceHash(map);
+        staticModels->sourceHash = artifactSourceHash;
         if (!WriteSectorStaticModelLightmapSidecar(
                     staticModelSidecarPath,
                     *staticModels,
@@ -4787,7 +5300,9 @@ bool BakeSectorLightmapForMap(
 
     outResult.width = width;
     outResult.height = height;
-    outResult.sourceHash = ComputeSectorLightmapSourceHash(map);
+    outResult.sourceHash = artifactSourceHash;
+    outResult.artifactVersion = kSectorLightmapArtifactVersion;
+    outResult.artifactFormat = kSectorLightmapArtifactFormat;
     outResult.validChartTexels = static_cast<int>(bakeTexels.size());
     outResult.allocatedChartRectanglePixels = allocatedChartRectanglePixels;
     outResult.staticGeometryTriangles = static_cast<int>(triangles.size());
@@ -4816,6 +5331,8 @@ bool BakeSectorLightmapForMap(
     outResult.objectProbes.probeLowerHeightWorld = objectProbeLowerHeightWorld;
     outResult.objectProbes.probeUpperHeightWorld = objectProbeUpperHeightWorld;
     outResult.objectProbes.format = kSectorBakedObjectLightProbeSidecarFormat;
+    outResult.objectProbes.storedStatistics =
+            verifiedProbeMetadata.storedStatistics;
     if (staticModels != nullptr && !staticModels->objects.empty()) {
         outResult.staticModels.path = staticModelSidecarPath;
         outResult.staticModels.version =
@@ -5041,6 +5558,9 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendFloat(hash, light->intensity);
         FnvAppendFloat(hash, worldLight.radius);
         FnvAppendFloat(hash, std::min(std::clamp(worldLight.sourceRadius, 0.0f, 8.0f), worldLight.radius * 0.5f));
+        if (!light->castsShadow) {
+            FnvAppendString(hash, "no-shadow");
+        }
     }
 
     if (!map.staticSpotLights.empty()) {
@@ -5059,6 +5579,9 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
             FnvAppendFloat(hash, std::min(std::clamp(worldLight.sourceRadius, 0.0f, 8.0f), worldLight.range * 0.5f));
             FnvAppendFloat(hash, worldLight.innerConeDegrees);
             FnvAppendFloat(hash, worldLight.outerConeDegrees);
+            if (!light->castsShadow) {
+                FnvAppendString(hash, "no-shadow");
+            }
         }
     }
 
@@ -5077,6 +5600,10 @@ SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map)
     if (map.bakedLightmap.sourceHash != ComputeSectorLightmapSourceHash(map)) {
         return SectorLightmapStatus::Stale;
     }
+    if (map.bakedLightmap.version != kSectorLightmapArtifactVersion
+            || map.bakedLightmap.format != kSectorLightmapArtifactFormat) {
+        return SectorLightmapStatus::Stale;
+    }
 
     const std::vector<SectorLightmapAtlasMetadata> atlases =
             GetSectorLightmapAtlases(map.bakedLightmap);
@@ -5086,17 +5613,13 @@ SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map)
     for (const SectorLightmapAtlasMetadata& atlas : atlases) {
         if (atlas.path.empty() || atlas.width <= 0 || atlas.height <= 0
                 || atlas.width != map.bakedLightmap.width
-                || atlas.height != map.bakedLightmap.height
-                || !FileExistsResolved(ResolveSectorAssetPath(atlas.path))) {
+                || atlas.height != map.bakedLightmap.height) {
             return SectorLightmapStatus::Stale;
         }
+        if (!FileExistsResolved(ResolveSectorAssetPath(atlas.path))) {
+            return SectorLightmapStatus::Missing;
+        }
     }
-    if (HasAssignedSectorStaticModels(map)
-            && GetSectorStaticModelLightmapStatus(map)
-                    != SectorLightmapStatus::Valid) {
-        return SectorLightmapStatus::Stale;
-    }
-
     return SectorLightmapStatus::Valid;
 }
 
@@ -5123,7 +5646,7 @@ SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(const SectorTopologyMa
     }
 
     if (!FileExistsResolved(ResolveSectorAssetPath(metadata.path))) {
-        return SectorLightmapStatus::Stale;
+        return SectorLightmapStatus::Missing;
     }
 
     return SectorLightmapStatus::Valid;
@@ -5133,8 +5656,10 @@ const char* SectorLightmapStatusText(SectorLightmapStatus status)
 {
     switch (status) {
         case SectorLightmapStatus::None: return "No baked lightmap";
+        case SectorLightmapStatus::Missing: return "Lightmap missing - rebake required";
         case SectorLightmapStatus::Valid: return "Lightmap valid";
         case SectorLightmapStatus::Stale: return "Lightmap stale - rebake required";
+        case SectorLightmapStatus::Invalid: return "Lightmap invalid - rebake required";
     }
     return "No baked lightmap";
 }

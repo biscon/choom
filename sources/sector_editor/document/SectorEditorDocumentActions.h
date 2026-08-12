@@ -4,6 +4,7 @@
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/preview/SectorEditorPreviewState.h"
+#include "sector_demo/SectorTopologySerialization.h"
 
 #include <filesystem>
 #include <functional>
@@ -37,6 +38,7 @@ struct SectorEditorLoadedDocument {
     SectorEditorDocumentFormat format = SectorEditorDocumentFormat::Unknown;
     SectorTopologyMap mapData;
     SectorAuthoringGraph authoringGraph;
+    SectorAuthoringEditorSettings editorSettings;
 };
 
 bool IsValidLevelName(const std::string& name, std::string& error);
@@ -80,12 +82,14 @@ bool SaveSectorEditorAuthoringDocument(
         const SectorAuthoringGraph& authoringGraph,
         const SectorTopologyMap& topologyMap,
         const SectorAuthoringDerivationResult& authoringDerivation,
+        const SectorAuthoringEditorSettings& editorSettings,
         std::string& errorMessage);
 bool SaveSectorEditorAuthoringDocument(
         const LevelPaths& paths,
         const SectorEditorAuthoringDocumentState& authoring,
         const SectorEditorDocumentMapState& map,
         const SectorEditorDerivationState& derivation,
+        const SectorAuthoringEditorSettings& editorSettings,
         std::string& errorMessage);
 
 } // namespace game

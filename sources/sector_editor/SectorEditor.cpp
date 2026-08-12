@@ -68,92 +68,7 @@ namespace game {
 namespace {
 
 constexpr float SectorEditorPanelScrollPaddingPx = 8.0f;
-
-bool SameOptionalVector3(
-        const std::optional<Vector3>& lhs,
-        const std::optional<Vector3>& rhs)
-{
-    if (lhs.has_value() != rhs.has_value()) return false;
-    return !lhs || (lhs->x == rhs->x && lhs->y == rhs->y && lhs->z == rhs->z);
-}
-
-bool SameViewmodelOverride(
-        const FpsViewmodelPresentationOverride& lhs,
-        const FpsViewmodelPresentationOverride& rhs)
-{
-    return SameOptionalVector3(lhs.position, rhs.position)
-            && SameOptionalVector3(lhs.rotationDegrees, rhs.rotationDegrees)
-            && lhs.scale == rhs.scale
-            && lhs.verticalFovDegrees == rhs.verticalFovDegrees;
-}
-
-bool SameHolsterTransitionOverride(
-        const FpsViewmodelHolsterTransitionOverride& lhs,
-        const FpsViewmodelHolsterTransitionOverride& rhs)
-{
-    return lhs.holsterDurationSeconds == rhs.holsterDurationSeconds
-            && lhs.unholsterDurationSeconds == rhs.unholsterDurationSeconds
-            && SameOptionalVector3(
-                    lhs.hiddenTranslation,
-                    rhs.hiddenTranslation)
-            && SameOptionalVector3(
-                    lhs.hiddenRotationDegrees,
-                    rhs.hiddenRotationDegrees);
-}
-
-bool SameGripCorrectionOverride(
-        const FpsViewmodelGripCorrectionOverride& lhs,
-        const FpsViewmodelGripCorrectionOverride& rhs)
-{
-    return SameOptionalVector3(lhs.translation, rhs.translation)
-            && SameOptionalVector3(lhs.rotationDegrees, rhs.rotationDegrees)
-            && lhs.scale == rhs.scale;
-}
-
-bool SameAttachmentLightingOverride(
-        const FpsViewmodelAttachmentLightingOverride& lhs,
-        const FpsViewmodelAttachmentLightingOverride& rhs)
-{
-    return lhs.brightnessAdjustment == rhs.brightnessAdjustment
-            && lhs.metallicFactor == rhs.metallicFactor
-            && lhs.roughnessFactor == rhs.roughnessFactor;
-}
-
-bool SameFiringOverride(
-        const FpsWeaponFiringOverride& lhs,
-        const FpsWeaponFiringOverride& rhs)
-{
-    return lhs.shotIntervalSeconds == rhs.shotIntervalSeconds
-            && SameOptionalVector3(lhs.recoilTranslationImpulse, rhs.recoilTranslationImpulse)
-            && SameOptionalVector3(lhs.recoilRotationImpulseDegrees, rhs.recoilRotationImpulseDegrees)
-            && lhs.recoilRollVariationDegrees == rhs.recoilRollVariationDegrees
-            && lhs.recoilSpringFrequencyHz == rhs.recoilSpringFrequencyHz
-            && lhs.recoilDampingRatio == rhs.recoilDampingRatio
-            && lhs.cameraRecoilEnabled == rhs.cameraRecoilEnabled
-            && lhs.cameraRecoilPitchKickDegrees == rhs.cameraRecoilPitchKickDegrees
-            && lhs.cameraRecoilPitchVariationDegrees == rhs.cameraRecoilPitchVariationDegrees
-            && lhs.cameraRecoilYawVariationDegrees == rhs.cameraRecoilYawVariationDegrees
-            && lhs.cameraRecoilRollVariationDegrees == rhs.cameraRecoilRollVariationDegrees
-            && lhs.cameraRecoilSpringFrequencyHz == rhs.cameraRecoilSpringFrequencyHz
-            && lhs.cameraRecoilSpringDampingRatio == rhs.cameraRecoilSpringDampingRatio
-            && lhs.cameraRecoilMaxPitchDegrees == rhs.cameraRecoilMaxPitchDegrees
-            && lhs.cameraRecoilMaxYawDegrees == rhs.cameraRecoilMaxYawDegrees
-            && lhs.cameraRecoilMaxRollDegrees == rhs.cameraRecoilMaxRollDegrees
-            && SameOptionalVector3(lhs.muzzlePosition, rhs.muzzlePosition)
-            && SameOptionalVector3(lhs.muzzleRotationDegrees, rhs.muzzleRotationDegrees)
-            && lhs.flashLifetimeSeconds == rhs.flashLifetimeSeconds
-            && lhs.flashSizeWorld == rhs.flashSizeWorld
-            && lhs.flashSizeVariation == rhs.flashSizeVariation
-            && lhs.flashIrregularity == rhs.flashIrregularity
-            && lhs.flashForwardStretch == rhs.flashForwardStretch
-            && lhs.flashMinimumLobeCount == rhs.flashMinimumLobeCount
-            && lhs.flashMaximumLobeCount == rhs.flashMaximumLobeCount
-            && lhs.flashRearSuppression == rhs.flashRearSuppression
-            && lhs.flashEdgeSoftness == rhs.flashEdgeSoftness
-            && lhs.muzzleLightIntensity == rhs.muzzleLightIntensity
-            && lhs.muzzleLightRadiusWorld == rhs.muzzleLightRadiusWorld
-            && lhs.muzzleLightLifetimeSeconds == rhs.muzzleLightLifetimeSeconds;
-}
+constexpr float SectorEditorFreeflyPrecisionMoveScale = 0.1f;
 
 SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
         SectorEditorUiState& uiState,
@@ -238,7 +153,7 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
         MaterialEditingUiState& materialUiState,
         std::string* statusText = nullptr,
         void* userData = nullptr,
-        void (*requestCancelSpotLightPilotWithPreviewRestore)(void*, const char*) = nullptr,
+        void (*requestCancelLightPilotWithPreviewRestore)(void*, const char*) = nullptr,
         LightEditingState* lightState = nullptr)
 {
     SectorEditorAuthoringDocumentAccess authoring =
@@ -257,7 +172,7 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
             materialUiState,
             statusText,
             userData,
-            requestCancelSpotLightPilotWithPreviewRestore,
+            requestCancelLightPilotWithPreviewRestore,
             lightState};
 }
 
@@ -360,10 +275,6 @@ bool SectorEditor::Init(engine::EngineContext& context)
     }
     RequestFpsWeaponAudioAssets(context.assets, weaponRegistry);
     applicationSettingsPath = ASSETS_PATH "config/application_settings.json";
-    if (!LoadFpsApplicationSettings(applicationSettingsPath, applicationSettings, &applicationSettingsWarning)) {
-        TraceLog(LOG_WARNING, "Application settings ignored: %s", applicationSettingsWarning.c_str());
-        applicationSettings = {};
-    }
     RequestPlayerAudioAssets(
             context.assets,
             applicationSettings.playerSounds,
@@ -732,7 +643,7 @@ void SectorEditor::RenderUI(
         if (state.previewSettingsModal.open) {
             DrawPreviewSettingsModal(ui, config, input, assets, font);
         }
-        DrawTexturePickerModal(ui, config, input, assets, font);
+        DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
         DrawSoundPickerModal(ui, config, input, font);
         DrawFootstepPickerModal(ui, config, input, assets, font);
         DrawSpritePickerModal(ui, config, input, assets, font);
@@ -797,7 +708,7 @@ void SectorEditor::RenderUI(
     }
     if (state.previewSettingsModal.open) {
         DrawPreviewSettingsModal(ui, config, input, assets, font);
-        DrawTexturePickerModal(ui, config, input, assets, font);
+        DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -815,7 +726,7 @@ void SectorEditor::RenderUI(
         return;
     }
     if (state.texturePicker.open) {
-        DrawTexturePickerModal(ui, config, input, assets, font);
+        DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -851,7 +762,7 @@ void SectorEditor::RenderUI(
     DrawSetAllModal(ui, config, input, assets, font);
     DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawAddMapSoundModal(ui, config, input, font);
-    DrawTexturePickerModal(ui, config, input, assets, font);
+    DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
     DrawSoundPickerModal(ui, config, input, font);
     DrawFootstepPickerModal(ui, config, input, assets, font);
     DrawSpritePickerModal(ui, config, input, assets, font);
@@ -2065,8 +1976,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_F3) {
-                    if (lightEditingState.spotLightPilot.active) {
-                        statusText = "Finish spotlight pilot before changing 3D control mode";
+                    if (lightEditingState.lightPilot.active) {
+                        statusText = "Finish light pilot before changing 3D control mode";
                         engine::ConsumeEvent(event);
                         return;
                     }
@@ -2097,7 +2008,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
-                    CancelSpotLightPilotWithPreviewRestore(nullptr);
+                    CancelLightPilotWithPreviewRestore(nullptr);
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
                 }
@@ -2111,8 +2022,16 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
 
     if (state.mode == SectorEditorMode::Preview3D) {
         if (previewState.controller.previewControlMode == SectorPreviewControlMode::FreeFly) {
-            UpdateSectorFreeflyController(previewState.controller.freeflyController, input, dt);
-            sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
+            const bool precisionMove = input.IsKeyDown(KEY_LEFT_SHIFT)
+                    || input.IsKeyDown(KEY_RIGHT_SHIFT);
+            UpdateSectorFreeflyController(
+                    previewState.controller.freeflyController,
+                    input,
+                    dt,
+                    precisionMove ? SectorEditorFreeflyPrecisionMoveScale : 1.0f);
+            sceneRuntime.Renderer().ApplyRendererPose(
+                    previewState.controller.freeflyController.pose,
+                    false);
             sceneRuntime.Renderer().UpdateVisibilityDebug(
                     0,
                     0.0f,
@@ -2237,7 +2156,7 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
             || previewState.overlay.previewUiHidden
             || state.texturePicker.open
             || state.soundPicker.open
-            || lightEditingState.spotLightPilot.active) {
+            || lightEditingState.lightPilot.active) {
         previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
         return;
     }
@@ -2612,7 +2531,7 @@ SectorEditorSelectionServiceContext SectorEditor::BuildSelectionServiceContext()
             &statusText,
             this,
             [](void* userData, const char* message) {
-                static_cast<SectorEditor*>(userData)->CancelSpotLightPilotWithPreviewRestore(message);
+                static_cast<SectorEditor*>(userData)->CancelLightPilotWithPreviewRestore(message);
             },
             &lightEditingState);
 }
@@ -2996,11 +2915,11 @@ bool SectorEditor::OpenDeleteSelectedLightConfirmation()
                 if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
                     ResetSectorFreeflyController(
                             previewState.controller.freeflyController,
-                            previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose);
+                            previewState.controller.lightPilotPreviewRestore.originalPreviewPose);
                     SetSectorFreeflyMouseLookEnabled(
                             previewState.controller.freeflyController,
-                            previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
-                    previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+                            previewState.controller.lightPilotPreviewRestore.originalMouseLookEnabled);
+                    previewState.controller.lightPilotPreviewRestore = LightPilotPreviewRestoreState{};
                     sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
                 }
                 if (result.dynamicLightRendererRefreshNeeded) {
@@ -3248,19 +3167,25 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
         statusText = TextFormat("Bake failed: %s", pathError.c_str());
         return false;
     }
-    TopologyMap().bakedLightmap.path = levelPaths.lightmapAssetPath;
-    TopologyMap().bakedLightmap.width = installPayload.bakeResult.width;
-    TopologyMap().bakedLightmap.height = installPayload.bakeResult.height;
-    TopologyMap().bakedLightmap.sourceHash = installPayload.bakeResult.sourceHash;
-    TopologyMap().bakedLightmap.additionalAtlases.clear();
+    SectorLightmapMetadata installedMetadata;
+    installedMetadata.path = levelPaths.lightmapAssetPath;
+    installedMetadata.width = installPayload.bakeResult.width;
+    installedMetadata.height = installPayload.bakeResult.height;
+    installedMetadata.version = installPayload.bakeResult.artifactVersion;
+    installedMetadata.format = installPayload.bakeResult.artifactFormat;
+    installedMetadata.sourceHash = installPayload.bakeResult.sourceHash;
+    installedMetadata.storedStatistics =
+            installPayload.bakeResult.storedAtlasStatistics;
     if (installPayload.bakeResult.atlases.size() > 1) {
-        TopologyMap().bakedLightmap.additionalAtlases.assign(
+        installedMetadata.additionalAtlases.assign(
                 installPayload.bakeResult.atlases.begin() + 1,
                 installPayload.bakeResult.atlases.end());
     }
-    TopologyMap().bakedLightmap.objectProbes = installPayload.bakeResult.objectProbes;
-    TopologyMap().bakedLightmap.staticModels =
+    installedMetadata.objectProbes = installPayload.bakeResult.objectProbes;
+    installedMetadata.staticModels =
             installPayload.bakeResult.staticModels;
+    // Data files are installed and validated before this single metadata publish.
+    TopologyMap().bakedLightmap = std::move(installedMetadata);
     Lifecycle().hasUnsavedChanges = true;
     Lifecycle().topologyDocumentDirty = true;
 
@@ -3376,6 +3301,8 @@ void SectorEditor::RenderPreview3DShadowMaps(engine::AssetManager& assets)
 
 void SectorEditor::RenderPreview3DScene(engine::EngineContext& context)
 {
+    sceneRuntime.Renderer().SetPbrDiagnosticSelectedObjectId(
+            selectionState.selectedRuntimeObjectId);
     sceneRuntime.RenderScene(
             context,
             TopologyMap(),
@@ -3401,12 +3328,27 @@ void SectorEditor::RenderPreview3DViewmodel(
             sceneRuntime.RuntimeObjects(),
             preferredSectorId);
 }
-void SectorEditor::ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget)
+void SectorEditor::ApplyPreview3DWorldAtmosphere(engine::RenderTarget& sceneTarget)
 {
     if (state.mode != SectorEditorMode::Preview3D) {
         return;
     }
-    sceneRuntime.ApplyPostProcessing(assets, sceneTarget, TopologyMap());
+    sceneRuntime.ApplyWorldAtmosphere(sceneTarget, TopologyMap());
+}
+
+void SectorEditor::ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget)
+{
+    if (state.mode != SectorEditorMode::Preview3D) {
+        return;
+    }
+    sceneRuntime.ApplyHdrBloom(sceneTarget, applicationSettings.hdrBloom);
+}
+
+bool SectorEditor::CompositePreview3DViewmodel(
+        engine::RenderTarget& sceneTarget,
+        const engine::RenderTarget& viewmodelTarget)
+{
+    return sceneRuntime.CompositeViewmodel(sceneTarget, viewmodelTarget);
 }
 
 void SectorEditor::RenderPreview3DOverlays()
@@ -3553,14 +3495,14 @@ void SectorEditor::DrawPreviewOverlay(
             sceneRuntime.Renderer()};
     const SectorEditorPreviewOverlayResult result = DrawSectorEditorPreviewOverlay(overlayContext);
 
-    if (result.requestCancelSpotLightPilot) {
-        CancelSpotLightPilotWithPreviewRestore("Spotlight pilot cancelled");
+    if (result.requestCancelLightPilot) {
+        CancelLightPilotWithPreviewRestore("Light pilot cancelled");
     }
-    if (result.requestApplySpotLightPilot) {
-        ApplySpotLightPilotFromPreviewPose();
+    if (result.requestApplyLightPilot) {
+        ApplyLightPilotFromPreviewPose();
     }
-    if (result.requestStartSpotLightPilot) {
-        StartSpotLightPilot();
+    if (result.requestStartLightPilot) {
+        StartLightPilot();
     }
     if (result.openPreviewSettings) {
         OpenPreviewSettingsModal();
@@ -4594,7 +4536,7 @@ void SectorEditor::DrawToolsPanel(
 
     const float gridLabelW = 64.0f;
     engine::Text(ui, config, assets, Rectangle{0.0f, y, gridLabelW, rowH}, font, "Grid", engine::UITextJustify::Left, config.mutedTextColor);
-    engine::IntInput(
+    const engine::UINumericInputResult gridInputResult = engine::IntInput(
             ui,
             config,
             input,
@@ -4604,10 +4546,15 @@ void SectorEditor::DrawToolsPanel(
             font,
             state.gridSize,
             uiState.gridSizeInput,
-            1,
-            64,
+            SectorAuthoringEditorGridSizeMin,
+            SectorAuthoringEditorGridSizeMax,
             1
     );
+    if (gridInputResult.changed) {
+        Lifecycle().hasUnsavedChanges = true;
+        Lifecycle().topologyDocumentDirty = true;
+        statusText = "Updated grid size";
+    }
     y += rowH + gap;
 
     engine::Checkbox(ui, config, input, assets, "sector_editor_show_grid", Rectangle{0.0f, y, contentW, rowH}, font, "Show grid", state.showGrid);
@@ -4782,7 +4729,8 @@ void SectorEditor::DrawTexturePickerModal(
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
 {
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     const SectorEditorTexturePickerServiceCallbacks callbacks{
@@ -4795,6 +4743,7 @@ void SectorEditor::DrawTexturePickerModal(
             input,
             assets,
             font,
+            smallFont,
             state.texturePicker,
             textureCatalog,
             callbacks);
@@ -4811,14 +4760,19 @@ void SectorEditor::DrawSetAllModal(
             [this]() {
                 state.setAllModal = SectorEditorSetAllModalState{};
             },
-            [this](float ambientIntensity, Color ambientColor) {
+            [this](
+                    SectorEditorSectorLightingScope scope,
+                    float ambientIntensity,
+                    Color ambientColor) {
                 std::string status;
-                SetSectorEditorAllSectorLighting(
+                SetSectorEditorSectorLighting(
                         state,
                         Lifecycle(),
                         TopologyMap(),
                         AuthoringGraph(),
                         MakeLiveDerivationAccess(documentState.derivation),
+                        selectionState,
+                        scope,
                         ambientIntensity,
                         ambientColor,
                         &status);
@@ -4827,6 +4781,13 @@ void SectorEditor::DrawSetAllModal(
                 }
                 state.setAllModal = SectorEditorSetAllModalState{};
             }};
+    std::size_t selectedSectorCount = 0;
+    for (const SectorAuthoringFaceAnchor& anchor : AuthoringGraph().faceAnchors) {
+        if (!anchor.isVoid
+                && IsSectorEditorAuthoringFaceSelected(selectionState, anchor.id)) {
+            ++selectedSectorCount;
+        }
+    }
     DrawSectorEditorSetAllModal(
             ui,
             config,
@@ -4834,6 +4795,7 @@ void SectorEditor::DrawSetAllModal(
             assets,
             font,
             state.setAllModal,
+            selectedSectorCount,
             callbacks);
 }
 
@@ -5347,7 +5309,7 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
             previewState.controller);
     state.viewCenter = Vector2{9.0f, 6.0f};
     state.viewZoom = 48.0f;
-    state.gridSize = 8;
+    state.gridSize = SectorAuthoringEditorGridSizeDefault;
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
     textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
@@ -5451,6 +5413,8 @@ bool SectorEditor::LoadLevel(
     Lifecycle().hasCurrentLevelPath = true;
     Lifecycle().hasUnsavedChanges = false;
     state.mode = SectorEditorMode::Edit2D;
+    state.gridSize = loaded.editorSettings.gridSize;
+    uiState.gridSizeInput = engine::UIIntInputState{};
     previewState.controller.hasPreviewPose = false;
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     state.texturePicker = TexturePickerState{};
@@ -5586,6 +5550,7 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
                 documentState.authoring,
                 documentState.map,
                 documentState.derivation,
+                SectorAuthoringEditorSettings{state.gridSize},
                 modal.errorMessage)) {
         statusText = TextFormat("Save failed: %s", savePlan.paths.jsonAssetPath.c_str());
         return false;
@@ -5720,7 +5685,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 
 void SectorEditor::LeavePreview3D()
 {
-    CancelSpotLightPilotWithPreviewRestore(nullptr);
+    CancelLightPilotWithPreviewRestore(nullptr);
     if (previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay) {
         ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
         ClearSectorFpsLandingDip(previewState.controller.landingDipState);
@@ -5765,7 +5730,8 @@ void SectorEditor::ApplyGameplayPoseToPreview()
     sceneRuntime.Renderer().ApplyRendererPose(
             ApplySectorFpsViewRotationOffset(
                     basePose,
-                    fpsPlayer.State().firing.cameraRecoil.rotationDegrees));
+                    fpsPlayer.State().firing.cameraRecoil.rotationDegrees),
+            false);
 }
 
 void SectorEditor::TogglePreviewControlMode()
@@ -5783,69 +5749,91 @@ void SectorEditor::TogglePreviewControlMode()
     statusText = TextFormat("3D control mode: %s", PreviewControlModeName(previewState.controller.previewControlMode));
 }
 
-bool SectorEditor::StartSpotLightPilot()
+bool SectorEditor::StartLightPilot()
 {
     if (state.mode != SectorEditorMode::Preview3D || previewState.controller.previewControlMode != SectorPreviewControlMode::FreeFly) {
-        statusText = "Spotlight pilot requires 3D FreeFly mode";
+        statusText = "Light pilot requires 3D FreeFly mode";
         return false;
     }
 
     int lightId = -1;
-    SpotLightPilotKind pilotKind = SpotLightPilotKind::None;
+    LightPilotKind pilotKind = LightPilotKind::None;
     Vector3 lightPosition = {};
     Vector3 lightTarget = {};
     float lightRange = 0.0f;
-    if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight()) {
+    const char* lightName = nullptr;
+    if (const SectorTopologyStaticPointLight* light = SelectedTopologyLight()) {
         lightId = light->id;
-        pilotKind = SpotLightPilotKind::Static;
+        pilotKind = LightPilotKind::StaticPoint;
+        lightPosition = light->position;
+        lightName = "static light";
+    } else if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight()) {
+        lightId = light->id;
+        pilotKind = LightPilotKind::StaticSpot;
         lightPosition = light->position;
         lightTarget = light->target;
         lightRange = light->range;
+        lightName = "static spot";
+    } else if (const SectorTopologyDynamicPointLight* light = SelectedTopologyDynamicLight()) {
+        lightId = light->id;
+        pilotKind = LightPilotKind::DynamicPoint;
+        lightPosition = light->position;
+        lightName = "dynamic light";
     } else if (const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight()) {
         lightId = light->id;
-        pilotKind = SpotLightPilotKind::Dynamic;
+        pilotKind = LightPilotKind::DynamicSpot;
         lightPosition = light->position;
         lightTarget = light->target;
         lightRange = light->range;
+        lightName = "dynamic spot";
     } else {
-        statusText = "Select a spotlight to pilot";
+        statusText = "Select a light to pilot";
         return false;
     }
 
+    const bool isSpot = pilotKind == LightPilotKind::StaticSpot
+            || pilotKind == LightPilotKind::DynamicSpot;
     const Vector3 originWorld = SectorAuthoringToWorldPosition(lightPosition);
-    const Vector3 targetWorld = SectorAuthoringToWorldPosition(lightTarget);
-    float targetDistanceWorld = Vector3Distance(originWorld, targetWorld);
-    if (!std::isfinite(targetDistanceWorld) || targetDistanceWorld <= 0.01f) {
-        targetDistanceWorld = std::max(SectorAuthoringToWorldDistance(lightRange) * 0.5f, 4.0f);
+    Vector3 targetWorld = {};
+    float targetDistanceWorld = 4.0f;
+    if (isSpot) {
+        targetWorld = SectorAuthoringToWorldPosition(lightTarget);
+        targetDistanceWorld = Vector3Distance(originWorld, targetWorld);
+        if (!std::isfinite(targetDistanceWorld) || targetDistanceWorld <= 0.01f) {
+            targetDistanceWorld = std::max(SectorAuthoringToWorldDistance(lightRange) * 0.5f, 4.0f);
+        }
     }
 
-    lightEditingState.spotLightPilot.active = true;
-    lightEditingState.spotLightPilot.kind = pilotKind;
-    lightEditingState.spotLightPilot.lightId = lightId;
-    lightEditingState.spotLightPilot.originalPosition = lightPosition;
-    lightEditingState.spotLightPilot.originalTarget = lightTarget;
-    previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose = ActivePreviewPose();
-    previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled = previewState.controller.freeflyController.mouseLookEnabled;
-    lightEditingState.spotLightPilot.targetDistanceWorld = targetDistanceWorld;
+    const SectorViewPose originalPreviewPose = ActivePreviewPose();
+    lightEditingState.lightPilot.active = true;
+    lightEditingState.lightPilot.kind = pilotKind;
+    lightEditingState.lightPilot.lightId = lightId;
+    lightEditingState.lightPilot.originalPosition = lightPosition;
+    lightEditingState.lightPilot.originalTarget = lightTarget;
+    previewState.controller.lightPilotPreviewRestore.originalPreviewPose = originalPreviewPose;
+    previewState.controller.lightPilotPreviewRestore.originalMouseLookEnabled = previewState.controller.freeflyController.mouseLookEnabled;
+    lightEditingState.lightPilot.targetDistanceWorld = targetDistanceWorld;
 
-    const SectorViewPose pilotPose = PreviewPoseLookingAt(originWorld, targetWorld);
+    SectorViewPose pilotPose = originalPreviewPose;
+    pilotPose.position = originWorld;
+    if (isSpot) {
+        pilotPose = PreviewPoseLookingAt(originWorld, targetWorld);
+    }
     ResetSectorFreeflyController(previewState.controller.freeflyController, pilotPose);
     EnterSectorFreeflyController(previewState.controller.freeflyController);
     sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
-    statusText = pilotKind == SpotLightPilotKind::Static
-            ? TextFormat("Piloting static spot %d", lightId)
-            : TextFormat("Piloting dynamic spot %d", lightId);
+    statusText = TextFormat("Piloting %s %d", lightName, lightId);
     return true;
 }
 
-bool SectorEditor::ApplySpotLightPilotFromPreviewPose()
+bool SectorEditor::ApplyLightPilotFromPreviewPose()
 {
-    if (!lightEditingState.spotLightPilot.active) {
+    if (!lightEditingState.lightPilot.active) {
         return false;
     }
 
-    const SpotLightPilotLightState pilot = lightEditingState.spotLightPilot;
+    const LightPilotLightState pilot = lightEditingState.lightPilot;
     const SectorViewPose pose = ActivePreviewPose();
     const Vector3 forward = PreviewForwardFromPose(pose);
     const Vector3 targetWorld = Vector3Add(
@@ -5853,44 +5841,44 @@ bool SectorEditor::ApplySpotLightPilotFromPreviewPose()
             Vector3Scale(forward, pilot.targetDistanceWorld));
 
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
-    const SectorEditorLightMutationResult result = lightEditing.ApplySpotLightPilot(
+    const SectorEditorLightMutationResult result = lightEditing.ApplyLightPilot(
             SectorWorldToAuthoringPosition(pose.position),
             SectorWorldToAuthoringPosition(targetWorld));
     if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
         ResetSectorFreeflyController(
                 previewState.controller.freeflyController,
-                previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose);
+                previewState.controller.lightPilotPreviewRestore.originalPreviewPose);
         SetSectorFreeflyMouseLookEnabled(
                 previewState.controller.freeflyController,
-                previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
-        previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+                previewState.controller.lightPilotPreviewRestore.originalMouseLookEnabled);
+        previewState.controller.lightPilotPreviewRestore = LightPilotPreviewRestoreState{};
         sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {
         sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
     }
     if (result.changed) {
-        previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+        previewState.controller.lightPilotPreviewRestore = LightPilotPreviewRestoreState{};
     }
     return result.changed;
 }
 
-void SectorEditor::CancelSpotLightPilotWithPreviewRestore(const char* message)
+void SectorEditor::CancelLightPilotWithPreviewRestore(const char* message)
 {
-    if (!lightEditingState.spotLightPilot.active) {
+    if (!lightEditingState.lightPilot.active) {
         return;
     }
 
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
-    const SectorEditorLightMutationResult result = lightEditing.CancelSpotLightPilotData(message);
+    const SectorEditorLightMutationResult result = lightEditing.CancelLightPilotData(message);
     if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
         ResetSectorFreeflyController(
                 previewState.controller.freeflyController,
-                previewState.controller.spotLightPilotPreviewRestore.originalPreviewPose);
+                previewState.controller.lightPilotPreviewRestore.originalPreviewPose);
         SetSectorFreeflyMouseLookEnabled(
                 previewState.controller.freeflyController,
-                previewState.controller.spotLightPilotPreviewRestore.originalMouseLookEnabled);
-        previewState.controller.spotLightPilotPreviewRestore = SpotLightPilotPreviewRestoreState{};
+                previewState.controller.lightPilotPreviewRestore.originalMouseLookEnabled);
+        previewState.controller.lightPilotPreviewRestore = LightPilotPreviewRestoreState{};
         sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
     }
     if (result.dynamicLightRendererRefreshNeeded) {
@@ -5941,6 +5929,8 @@ void SectorEditor::OpenPreviewSettingsModal()
             NormalizeSectorTopologyFogSettings(TopologyMap().fogSettings);
     state.previewSettingsModal.draftLightmapSettings =
             NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
+    state.previewSettingsModal.draftHdrBloom =
+            engine::NormalizeHdrBloomSettings(applicationSettings.hdrBloom);
     state.previewSettingsModal.weaponId = fpsPlayer.State().activeWeaponId.empty()
             ? weaponRegistry.initialWeaponId
             : fpsPlayer.State().activeWeaponId;
@@ -6019,6 +6009,15 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                     != draftLightmapSettings.objectProbeLowerHeightWorld
             || currentLightmapSettings.objectProbeUpperHeightWorld
                     != draftLightmapSettings.objectProbeUpperHeightWorld;
+    const engine::HdrBloomSettings draftHdrBloom =
+            engine::NormalizeHdrBloomSettings(state.previewSettingsModal.draftHdrBloom);
+    const engine::HdrBloomSettings currentHdrBloom =
+            engine::NormalizeHdrBloomSettings(applicationSettings.hdrBloom);
+    const bool bloomChanged = draftHdrBloom.enabled != currentHdrBloom.enabled
+            || draftHdrBloom.threshold != currentHdrBloom.threshold
+            || draftHdrBloom.softKnee != currentHdrBloom.softKnee
+            || draftHdrBloom.intensity != currentHdrBloom.intensity
+            || draftHdrBloom.radius != currentHdrBloom.radius;
     const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
             weaponRegistry,
             state.previewSettingsModal.weaponId.empty()
@@ -6033,11 +6032,9 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const FpsViewmodelPresentationOverride viewmodelOverride = weapon != nullptr
             ? BuildFpsViewmodelOverride(weapon->viewmodel.presentation, draftViewmodel)
             : FpsViewmodelPresentationOverride{};
-    const FpsViewmodelPresentationOverride currentOverride = weapon != nullptr
-            ? BuildFpsViewmodelOverride(weapon->viewmodel.presentation, currentViewmodel)
-            : FpsViewmodelPresentationOverride{};
     const bool viewmodelChanged = weapon != nullptr
-            && !SameViewmodelOverride(viewmodelOverride, currentOverride);
+            && !FpsViewmodelOverrideEmpty(
+                    BuildFpsViewmodelOverride(currentViewmodel, draftViewmodel));
     const FpsViewmodelHolsterTransition draftHolsterTransition =
             ClampFpsViewmodelHolsterTransition(
                     state.previewSettingsModal
@@ -6056,16 +6053,11 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                     weapon->viewmodel.holsterTransition,
                     draftHolsterTransition)
             : FpsViewmodelHolsterTransitionOverride{};
-    const FpsViewmodelHolsterTransitionOverride
-            currentHolsterTransitionOverride = weapon != nullptr
-            ? BuildFpsViewmodelHolsterTransitionOverride(
-                    weapon->viewmodel.holsterTransition,
-                    currentHolsterTransition)
-            : FpsViewmodelHolsterTransitionOverride{};
     const bool holsterTransitionChanged = weapon != nullptr
-            && !SameHolsterTransitionOverride(
-                    holsterTransitionOverride,
-                    currentHolsterTransitionOverride);
+            && !FpsViewmodelHolsterTransitionOverrideEmpty(
+                    BuildFpsViewmodelHolsterTransitionOverride(
+                            currentHolsterTransition,
+                            draftHolsterTransition));
     const FpsViewmodelGripCorrection draftGrip =
             ClampFpsViewmodelGripCorrection(
                     state.previewSettingsModal.draftViewmodelGrip);
@@ -6080,15 +6072,10 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                     weapon->viewmodel.attachment.gripCorrection,
                     draftGrip)
             : FpsViewmodelGripCorrectionOverride{};
-    const FpsViewmodelGripCorrectionOverride currentGripOverride =
-            weapon != nullptr
-            ? BuildFpsViewmodelGripCorrectionOverride(
-                    weapon->viewmodel.attachment.gripCorrection,
-                    currentGrip)
-            : FpsViewmodelGripCorrectionOverride{};
     const bool gripChanged = weapon != nullptr
-            && !SameGripCorrectionOverride(
-                    gripOverride, currentGripOverride);
+            && !FpsViewmodelGripCorrectionOverrideEmpty(
+                    BuildFpsViewmodelGripCorrectionOverride(
+                            currentGrip, draftGrip));
     const FpsViewmodelAttachmentLighting draftAttachmentLighting =
             ClampFpsViewmodelAttachmentLighting(
                     state.previewSettingsModal
@@ -6106,16 +6093,11 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                     weapon->viewmodel.attachment.lighting,
                     draftAttachmentLighting)
             : FpsViewmodelAttachmentLightingOverride{};
-    const FpsViewmodelAttachmentLightingOverride
-            currentAttachmentLightingOverride = weapon != nullptr
-            ? BuildFpsViewmodelAttachmentLightingOverride(
-                    weapon->viewmodel.attachment.lighting,
-                    currentAttachmentLighting)
-            : FpsViewmodelAttachmentLightingOverride{};
     const bool attachmentLightingChanged = weapon != nullptr
-            && !SameAttachmentLightingOverride(
-                    attachmentLightingOverride,
-                    currentAttachmentLightingOverride);
+            && !FpsViewmodelAttachmentLightingOverrideEmpty(
+                    BuildFpsViewmodelAttachmentLightingOverride(
+                            currentAttachmentLighting,
+                            draftAttachmentLighting));
     const FpsWeaponFiringDefinition draftFiring =
             ClampFpsWeaponFiringDefinition(
                     state.previewSettingsModal.draftWeaponFiring);
@@ -6127,15 +6109,13 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const FpsWeaponFiringOverride firingOverride = weapon != nullptr
             ? BuildFpsWeaponFiringOverride(weapon->firing, draftFiring)
             : FpsWeaponFiringOverride{};
-    const FpsWeaponFiringOverride currentFiringOverride = weapon != nullptr
-            ? BuildFpsWeaponFiringOverride(weapon->firing, currentFiring)
-            : FpsWeaponFiringOverride{};
     const bool firingChanged = weapon != nullptr
-            && !SameFiringOverride(firingOverride, currentFiringOverride);
+            && !FpsWeaponFiringOverrideEmpty(
+                    BuildFpsWeaponFiringOverride(currentFiring, draftFiring));
     if (!previewChanged && !skyChanged && !directionalChanged && !fogChanged
             && !objectProbeSettingsChanged && !viewmodelChanged && !gripChanged
             && !holsterTransitionChanged && !attachmentLightingChanged
-            && !firingChanged) {
+            && !firingChanged && !bloomChanged) {
         ResetSectorPreviewSettingsModalPreservingView(
                 state.previewSettingsModal);
         statusText = "Preview settings unchanged";
@@ -6152,9 +6132,11 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     TopologyMap().directionalLight = draftDirectionalLight;
     ApplySectorPreviewFogSettings(TopologyMap(), draftFogSettings);
     ApplySectorPreviewObjectProbeSettings(TopologyMap(), draftLightmapSettings);
-    if ((viewmodelChanged || holsterTransitionChanged || gripChanged
-                || attachmentLightingChanged || firingChanged)
-            && weapon != nullptr) {
+    applicationSettings.hdrBloom = draftHdrBloom;
+    const bool weaponApplicationSettingsChanged = viewmodelChanged
+            || holsterTransitionChanged || gripChanged
+            || attachmentLightingChanged || firingChanged;
+    if (weaponApplicationSettingsChanged && weapon != nullptr) {
         if (viewmodelChanged) {
             if (FpsViewmodelOverrideEmpty(viewmodelOverride)) {
                 ClearFpsViewmodelOverride(applicationSettings, weapon->id);
@@ -6205,9 +6187,11 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
                         applicationSettings, weapon->id, firingOverride);
             }
         }
+    }
+    if (weaponApplicationSettingsChanged || bloomChanged) {
         std::string saveError;
         if (!SaveFpsApplicationSettings(applicationSettingsPath, applicationSettings, &saveError)) {
-            TraceLog(LOG_WARNING, "Could not persist viewmodel settings: %s", saveError.c_str());
+            TraceLog(LOG_WARNING, "Could not persist application settings: %s", saveError.c_str());
         }
     }
     if (previewChanged || skyChanged || directionalChanged || fogChanged || objectProbeSettingsChanged) {

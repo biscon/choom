@@ -44,9 +44,15 @@ Vector2 SectorPointToVector2(SectorPoint point);
 SectorPoint Vector2ToSectorPoint(Vector2 point);
 bool Contains(Rectangle bounds, Vector2 point);
 bool StartsWith(const std::string& value, const char* prefix);
+std::string EditorAssetPathDisplayLabel(
+        const std::string& assetPath,
+        const std::string& directoryPrefix);
 std::string ResolveEditorAssetPath(const std::string& path);
 bool HasPngExtension(const std::filesystem::path& path);
 std::vector<std::string> ScanAssetImagePngs(std::string& message);
+std::vector<std::string> ScanAssetImagePngs(
+        const std::filesystem::path& assetsRoot,
+        std::string& message);
 std::vector<std::string> ScanAssetAudioFiles(std::string& message);
 std::vector<std::string> ScanAssetAudioFiles(
         const std::filesystem::path& assetsRoot,
@@ -113,7 +119,7 @@ bool IsDefaultTopologyUv(SectorTopologyUvSettings uv);
 bool IsWhiteTint(Vector3 tint);
 bool IsValidDecalTint(Vector3 tint);
 Vector3 ClampDecalTint(Vector3 tint);
-float ClampDecalBloomIntensity(float value);
+float ClampDecalEmissiveStrength(float value);
 bool SameTint(Vector3 a, Vector3 b);
 Color DecalTintPreviewColor(Vector3 tint);
 bool IsDefaultDecalLayer(const SectorTopologyDecalLayer& decal);

@@ -6,10 +6,12 @@
 
 namespace game {
 
-enum class SpotLightPilotKind {
+enum class LightPilotKind {
     None,
-    Static,
-    Dynamic
+    StaticPoint,
+    StaticSpot,
+    DynamicPoint,
+    DynamicSpot
 };
 
 struct LightDragState {
@@ -28,9 +30,9 @@ struct LightEditTransactionState {
     Vector3 originalTarget = {};
 };
 
-struct SpotLightPilotLightState {
+struct LightPilotLightState {
     bool active = false;
-    SpotLightPilotKind kind = SpotLightPilotKind::None;
+    LightPilotKind kind = LightPilotKind::None;
     int lightId = -1;
     Vector3 originalPosition = {};
     Vector3 originalTarget = {};
@@ -40,7 +42,7 @@ struct SpotLightPilotLightState {
 struct LightEditingState {
     LightDragState lightDrag;
     LightEditTransactionState lightEdit;
-    SpotLightPilotLightState spotLightPilot;
+    LightPilotLightState lightPilot;
 };
 
 } // namespace game

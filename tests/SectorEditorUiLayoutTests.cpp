@@ -40,6 +40,22 @@ bool Contains(Rectangle outer, Rectangle inner)
             && inner.y + inner.height <= outer.y + outer.height;
 }
 
+void TestModelFilenameExtraction()
+{
+    Check(game::SectorEditorModelFilename(
+                  "assets/models/props/medical_cart.glb")
+                    == "medical_cart.glb",
+          "model filename removes nested asset directories");
+    Check(game::SectorEditorModelFilename("crate.gltf") == "crate.gltf",
+          "model filename preserves a bare filename and extension");
+    Check(game::SectorEditorModelFilename(
+                  "assets\\models\\characters\\guard.glb")
+                    == "guard.glb",
+          "model filename accepts backslash-separated paths");
+    Check(game::SectorEditorModelFilename("").empty(),
+          "empty model path produces an empty filename");
+}
+
 void TestTextureRowWithoutClear()
 {
     const game::SectorEditorInspectorTextureRowLayout layout =
@@ -306,8 +322,8 @@ void TestPreviewSettingsScrollableContentHeightsReachLastControls()
     const float rowH = 40.0f;
     const float gap = 12.0f;
     const float lightingLastControlBottom =
-            11.0f * (rowH + gap)
-            + 3.0f * (8.0f + 38.0f)
+            16.0f * (rowH + gap)
+            + 4.0f * (8.0f + 38.0f)
             + 36.0f + gap;
     const float fogLastControlBottom =
             10.0f * (rowH + gap)
@@ -319,7 +335,7 @@ void TestPreviewSettingsScrollableContentHeightsReachLastControls()
     Check(Near(
                   game::MeasureSectorPreviewSettingsLightingContentHeight(rowH, gap),
                   lightingLastControlBottom + 12.0f),
-          "lighting scroll reaches object probe upper height with bottom padding");
+          "lighting scroll reaches HDR bloom radius with bottom padding");
     Check(Near(
                   game::MeasureSectorPreviewSettingsFogContentHeight(rowH, gap),
                   fogLastControlBottom + 12.0f),
@@ -478,6 +494,16 @@ void TestPreviewSettingsModalFogDraftApplyAndReset()
           "preview settings modal writes normalized fog settings");
     Check(!game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
           "preview settings modal reports unchanged fog settings");
+
+    modal.draftFogSettings.localVolumeQuality =
+            game::SectorTopologyFogSettings::LocalVolumeQuality::High;
+    Check(game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
+          "preview settings modal applies a quality-only fog change");
+    Check(map.fogSettings.localVolumeQuality
+                  == game::SectorTopologyFogSettings::LocalVolumeQuality::High,
+          "preview settings modal writes local fog quality");
+    Check(!game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
+          "preview settings modal reports unchanged local fog quality");
     Check(game::ComputeSectorLightmapSourceHash(map) == lightmapHash,
           "preview fog settings do not change the lightmap source hash");
 
@@ -493,6 +519,7 @@ void TestPreviewSettingsModalFogDraftApplyAndReset()
 
 int main()
 {
+    TestModelFilenameExtraction();
     TestTextureRowWithoutClear();
     TestTextureRowWithClear();
     TestCompactNumericRow();

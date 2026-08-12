@@ -105,6 +105,7 @@ uniform sampler2D lightmapTexture;
 uniform samplerCube environmentTexture;
 uniform vec4 baseColorFactor;
 uniform vec3 emissiveFactor;
+uniform float emissiveStrength;
 uniform float metallicFactor;
 uniform float roughnessFactor;
 uniform float normalScale;
@@ -115,6 +116,8 @@ uniform int hasNormalTexture;
 uniform int hasRoughnessTexture;
 uniform int hasOcclusionTexture;
 uniform int hasEmissiveTexture;
+uniform int baseColorTextureHardwareSrgb;
+uniform int emissiveTextureHardwareSrgb;
 uniform int hasEnvironment;
 uniform vec3 cameraPosition;
 uniform float environmentExposure;
@@ -128,6 +131,10 @@ uniform vec3 objectAmbientCubeUpper[6];
 uniform float objectAmbientCubeLowerHeight;
 uniform float objectAmbientCubeUpperHeight;
 uniform int useVerticalObjectProbeLighting;
+uniform int pbrDiagnosticMode;
+uniform float indirectDiffuseScale;
+uniform float environmentSpecularScale;
+uniform int useStaticSpecularLighting;
 
 uniform int fogEnabled;
 uniform vec3 fogColor;
@@ -156,8 +163,17 @@ uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
-uniform float dynamicLightingClamp;
 
+#define MAX_STATIC_SPECULAR_LIGHTS 4
+uniform int staticSpecularLightCount;
+uniform vec3 staticSpecularLightPositions[MAX_STATIC_SPECULAR_LIGHTS];
+uniform vec3 staticSpecularLightColors[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightRadii[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightIntensities[MAX_STATIC_SPECULAR_LIGHTS];
+uniform int staticSpecularLightTypes[MAX_STATIC_SPECULAR_LIGHTS];
+uniform vec3 staticSpecularLightDirections[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightInnerConeCos[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightOuterConeCos[MAX_STATIC_SPECULAR_LIGHTS];
 out vec4 finalColor;
 
 const vec2 kPoissonDisk[12] = vec2[12](
@@ -183,22 +199,9 @@ vec3 SrgbToLinear(vec3 value)
     return mix(high, low, cutoff);
 }
 
-vec3 LinearToSrgb(vec3 value)
+vec3 DecodeColorTexture(vec3 value, int hardwareSrgb)
 {
-    value = max(value, vec3(0.0));
-    bvec3 cutoff = lessThanEqual(value, vec3(0.0031308));
-    vec3 low = value * 12.92;
-    vec3 high = 1.055 * pow(value, vec3(1.0 / 2.4)) - 0.055;
-    return mix(high, low, cutoff);
-}
-
-vec3 AcesToneMap(vec3 value)
-{
-    return clamp(
-            (value * (2.51 * value + 0.03))
-                    / (value * (2.43 * value + 0.59) + 0.14),
-            0.0,
-            1.0);
+    return hardwareSrgb != 0 ? value : SrgbToLinear(value);
 }
 
 float DistributionGgx(vec3 normal, vec3 halfway, float roughness)
@@ -339,7 +342,9 @@ void main()
     vec4 sampledBase = hasBaseColorTexture != 0
             ? texture(baseColorTexture, fragTexCoord)
             : vec4(1.0);
-    vec3 albedo = SrgbToLinear(sampledBase.rgb)
+    vec3 albedo = DecodeColorTexture(
+            sampledBase.rgb,
+            baseColorTextureHardwareSrgb)
             * baseColorFactor.rgb
             * fragColor.rgb;
     float metallic = clamp(metallicFactor
@@ -353,7 +358,8 @@ void main()
             : 1.0;
     vec3 viewDirection = SafeNormalize(cameraPosition - fragWorldPosition, geometricNormal);
     vec3 f0 = mix(vec3(0.04), albedo, metallic);
-    vec3 dynamicDirect = vec3(0.0);
+    vec3 directDiffuse = vec3(0.0);
+    vec3 dynamicDirectSpecular = vec3(0.0);
     for (int i = 0; i < dynamicLightCount && i < MAX_DYNAMIC_LIGHTS; ++i) {
         float radius = dynamicLightRadii[i];
         vec3 toLight = dynamicLightPositions[i] - fragWorldPosition;
@@ -406,7 +412,75 @@ void main()
                         * dynamicLightIntensities[i]
                         * atten
                         * coneAtten;
-                dynamicDirect += (diffuseWeight * albedo + specular) * radiance * ndotl;
+                directDiffuse += diffuseWeight * albedo * radiance * ndotl;
+                dynamicDirectSpecular += specular * radiance * ndotl;
+            }
+        }
+    }
+
+    vec3 staticDirectSpecular = vec3(0.0);
+    if (useStaticSpecularLighting != 0) {
+        for (int i = 0;
+                i < staticSpecularLightCount
+                        && i < MAX_STATIC_SPECULAR_LIGHTS;
+                ++i) {
+            float radius = staticSpecularLightRadii[i];
+            vec3 toLight = staticSpecularLightPositions[i] - fragWorldPosition;
+            float distanceSq = dot(toLight, toLight);
+            if (radius > 0.0 && distanceSq < radius * radius) {
+                float distanceToLight = sqrt(max(distanceSq, 0.0));
+                vec3 lightDirection = distanceToLight > 0.0001
+                        ? toLight / distanceToLight
+                        : worldNormal;
+                float atten = clamp(1.0 - distanceToLight / radius, 0.0, 1.0);
+                atten *= atten;
+                float coneAtten = 1.0;
+                if (staticSpecularLightTypes[i] == 1) {
+                    vec3 spotDirection = SafeNormalize(
+                            staticSpecularLightDirections[i],
+                            vec3(0.0, -1.0, 0.0));
+                    vec3 fragmentDirectionFromLight = distanceToLight > 0.0001
+                            ? -lightDirection
+                            : spotDirection;
+                    float coneDot = dot(
+                            spotDirection,
+                            fragmentDirectionFromLight);
+                    coneAtten = abs(
+                            staticSpecularLightInnerConeCos[i]
+                                    - staticSpecularLightOuterConeCos[i]) > 0.0001
+                            ? smoothstep(
+                                    staticSpecularLightOuterConeCos[i],
+                                    staticSpecularLightInnerConeCos[i],
+                                    coneDot)
+                            : step(
+                                    staticSpecularLightInnerConeCos[i],
+                                    coneDot);
+                }
+                float ndotl = max(dot(worldNormal, lightDirection), 0.0);
+                if (ndotl > 0.0 && coneAtten > 0.0) {
+                    vec3 halfway = SafeNormalize(
+                            viewDirection + lightDirection,
+                            worldNormal);
+                    float distribution = DistributionGgx(
+                            worldNormal, halfway, roughness);
+                    float geometry = GeometrySmith(
+                            worldNormal,
+                            viewDirection,
+                            lightDirection,
+                            roughness);
+                    vec3 fresnel = FresnelSchlick(
+                            max(dot(halfway, viewDirection), 0.0), f0);
+                    vec3 specular = distribution * geometry * fresnel
+                            / max(4.0
+                                    * max(dot(worldNormal, viewDirection), 0.0)
+                                    * ndotl,
+                                    0.001);
+                    vec3 radiance = staticSpecularLightColors[i]
+                            * staticSpecularLightIntensities[i]
+                            * atten
+                            * coneAtten;
+                    staticDirectSpecular += specular * radiance * ndotl;
+                }
             }
         }
     }
@@ -419,36 +493,66 @@ void main()
         float ao = useBakedAmbientOcclusion != 0 ? baked.a : 1.0;
         staticLighting = containingSectorAmbient * ao + baked.rgb;
     }
-    vec3 staticDiffuse = albedo * (1.0 - metallic) * staticLighting * materialAo;
+    // Probe, fallback ambient, and lightmap RGB are incoming diffuse
+    // illumination. They never enter final radiance without the material's
+    // diffuse base-color, non-metal, AO, and renderer scale.
+    vec3 indirectDiffuse = albedo
+            * (1.0 - metallic)
+            * staticLighting
+            * materialAo
+            * indirectDiffuseScale;
     vec3 environmentSpecular = vec3(0.0);
     if (hasEnvironment != 0) {
         vec3 reflected = reflect(-viewDirection, worldNormal);
-        vec3 environment = SrgbToLinear(textureLod(
+        vec3 environment = textureLod(
                 environmentTexture,
                 reflected,
-                roughness * 8.0).rgb);
+                roughness * 8.0).rgb;
         vec2 environmentBrdf = EnvironmentBrdfApprox(
                 roughness,
                 max(dot(worldNormal, viewDirection), 0.0));
         environmentSpecular = environment
                 * (f0 * environmentBrdf.x + environmentBrdf.y)
                 * environmentExposure
+                * environmentSpecularScale
                 * materialAo;
     }
-    vec3 roughSpecularFloor = f0
-            * staticLighting
-            * mix(0.12, 0.42, roughness)
-            * materialAo;
     vec3 emissive = emissiveFactor;
     if (hasEmissiveTexture != 0) {
-        emissive *= SrgbToLinear(texture(emissiveTexture, fragTexCoord).rgb);
+        emissive *= DecodeColorTexture(
+                texture(emissiveTexture, fragTexCoord).rgb,
+                emissiveTextureHardwareSrgb);
     }
-    vec3 linearColor = min(
-            (staticDiffuse + dynamicDirect + environmentSpecular + roughSpecularFloor + emissive)
-                    * outputBrightnessMultiplier,
-            vec3(dynamicLightingClamp));
-    vec3 outputRgb = LinearToSrgb(AcesToneMap(linearColor));
-    finalColor = vec4(ApplySectorFog(outputRgb, fragWorldPosition), 1.0);
+    emissive *= max(emissiveStrength, 0.0);
+    vec3 linearColor = indirectDiffuse
+            + directDiffuse
+            + dynamicDirectSpecular
+            + staticDirectSpecular
+            + environmentSpecular
+            + emissive;
+    if (pbrDiagnosticMode == 1) linearColor = albedo;
+    else if (pbrDiagnosticMode == 2) linearColor = directDiffuse;
+    else if (pbrDiagnosticMode == 3) {
+        linearColor = dynamicDirectSpecular + staticDirectSpecular;
+    }
+    else if (pbrDiagnosticMode == 4) linearColor = indirectDiffuse;
+    else if (pbrDiagnosticMode == 5) linearColor = environmentSpecular;
+    else if (pbrDiagnosticMode == 6) linearColor = emissive;
+    else if (pbrDiagnosticMode == 7) linearColor = vec3(materialAo);
+    else if (pbrDiagnosticMode == 8) linearColor = vec3(metallic, roughness, 0.0);
+    else if (pbrDiagnosticMode == 9) linearColor = worldNormal * 0.5 + 0.5;
+
+    // Artistic/display ceilings are forbidden. The final write below applies
+    // only the unavoidable finite RGBA16F storage boundary.
+    linearColor = max(linearColor, vec3(0.0));
+    if (pbrDiagnosticMode == 0) {
+        linearColor *= outputBrightnessMultiplier;
+        linearColor = ApplySectorFog(linearColor, fragWorldPosition);
+    }
+    linearColor.r = isnan(linearColor.r) ? 0.0 : (isinf(linearColor.r) ? (linearColor.r > 0.0 ? 65504.0 : 0.0) : min(max(linearColor.r, 0.0), 65504.0));
+    linearColor.g = isnan(linearColor.g) ? 0.0 : (isinf(linearColor.g) ? (linearColor.g > 0.0 ? 65504.0 : 0.0) : min(max(linearColor.g, 0.0), 65504.0));
+    linearColor.b = isnan(linearColor.b) ? 0.0 : (isinf(linearColor.b) ? (linearColor.b > 0.0 ? 65504.0 : 0.0) : min(max(linearColor.b, 0.0), 65504.0));
+    finalColor = vec4(linearColor, 1.0);
 }
 )";
 
@@ -467,6 +571,59 @@ int GetShaderLocationArrayElement(Shader shader, const char* name, size_t index)
     const std::string indexedName = std::string(name)
             + "[" + std::to_string(index) + "]";
     return GetShaderLocation(shader, indexedName.c_str());
+}
+
+void SetShaderSamplerUnit(Shader shader, int location, int textureUnit)
+{
+    if (location >= 0) {
+        SetShaderValue(
+                shader,
+                location,
+                &textureUnit,
+                SHADER_UNIFORM_INT);
+    }
+}
+
+void InitializeSectorPbrSamplerUnits(
+        Shader shader,
+        int lightmapTextureLocation,
+        int environmentTextureLocation,
+        int shadowMap0Location,
+        int shadowMap1Location)
+{
+    constexpr std::array<int, 6> materialTextureUnits{
+            MATERIAL_MAP_ALBEDO,
+            MATERIAL_MAP_METALNESS,
+            MATERIAL_MAP_NORMAL,
+            MATERIAL_MAP_ROUGHNESS,
+            MATERIAL_MAP_OCCLUSION,
+            MATERIAL_MAP_EMISSION};
+    for (int textureUnit : materialTextureUnits) {
+        SetShaderSamplerUnit(
+                shader,
+                shader.locs[SHADER_LOC_MAP_DIFFUSE + textureUnit],
+                textureUnit);
+    }
+    SetShaderSamplerUnit(
+            shader,
+            lightmapTextureLocation,
+            SectorStaticModelLightmapMaterialMap);
+    // A missing environment leaves this sampler active in the linked shader.
+    // Keep its cubemap unit distinct from the default sampler2D unit even when
+    // DrawMesh() has no cubemap texture to bind for the current map.
+    SetShaderSamplerUnit(
+            shader,
+            environmentTextureLocation,
+            SectorStaticModelEnvironmentMaterialMap);
+    SetShaderSamplerUnit(
+            shader,
+            shadowMap0Location,
+            SectorStaticModelShadowMap0MaterialMap);
+    SetShaderSamplerUnit(
+            shader,
+            shadowMap1Location,
+            SectorStaticModelShadowMap1MaterialMap);
+    rlDisableShader();
 }
 
 void AppendStaticModelDebugText(
@@ -673,6 +830,45 @@ bool BuildRemappedMesh(
 
 } // namespace
 
+const char* SectorPbrDiagnosticModeName(SectorPbrDiagnosticMode mode)
+{
+    switch (mode) {
+        case SectorPbrDiagnosticMode::Full: return "Full PBR";
+        case SectorPbrDiagnosticMode::BaseColor: return "Base Color";
+        case SectorPbrDiagnosticMode::DirectDiffuse: return "Direct Diffuse";
+        case SectorPbrDiagnosticMode::DirectSpecular: return "Direct Specular";
+        case SectorPbrDiagnosticMode::IndirectDiffuse: return "Probe / Indirect Diffuse";
+        case SectorPbrDiagnosticMode::EnvironmentSpecular: return "Environment Specular";
+        case SectorPbrDiagnosticMode::Emissive: return "Emissive";
+        case SectorPbrDiagnosticMode::MaterialOcclusion: return "Material AO";
+        case SectorPbrDiagnosticMode::MetallicRoughness: return "Metallic / Roughness";
+        case SectorPbrDiagnosticMode::ShadingNormal: return "Shading Normal";
+        case SectorPbrDiagnosticMode::Count: break;
+    }
+    return "Full PBR";
+}
+
+const char* SectorPbrLightingPathName(SectorPbrLightingPath path)
+{
+    switch (path) {
+        case SectorPbrLightingPath::WorldStatic: return "world static model";
+        case SectorPbrLightingPath::WorldDynamic: return "world dynamic model";
+        case SectorPbrLightingPath::Viewmodel: return "viewmodel arms";
+        case SectorPbrLightingPath::ViewmodelAttachment: return "viewmodel attachment";
+    }
+    return "unknown";
+}
+
+const char* SectorPbrIndirectSourceName(SectorPbrIndirectSource source)
+{
+    switch (source) {
+        case SectorPbrIndirectSource::SectorAmbient: return "sector ambient fallback";
+        case SectorPbrIndirectSource::ObjectProbe: return "object probe";
+        case SectorPbrIndirectSource::StaticLightmap: return "static model lightmap";
+    }
+    return "unknown";
+}
+
 bool SectorStaticModelRenderer::Load()
 {
     shader = LoadShaderFromMemory(SectorStaticModelVs, SectorStaticModelFs);
@@ -712,6 +908,7 @@ bool SectorStaticModelRenderer::Load()
 
     baseColorFactorLoc = GetShaderLocation(shader, "baseColorFactor");
     emissiveFactorLoc = GetShaderLocation(shader, "emissiveFactor");
+    emissiveStrengthLoc = GetShaderLocation(shader, "emissiveStrength");
     metallicFactorLoc = GetShaderLocation(shader, "metallicFactor");
     roughnessFactorLoc = GetShaderLocation(shader, "roughnessFactor");
     normalScaleLoc = GetShaderLocation(shader, "normalScale");
@@ -722,6 +919,17 @@ bool SectorStaticModelRenderer::Load()
     hasRoughnessTextureLoc = GetShaderLocation(shader, "hasRoughnessTexture");
     hasOcclusionTextureLoc = GetShaderLocation(shader, "hasOcclusionTexture");
     hasEmissiveTextureLoc = GetShaderLocation(shader, "hasEmissiveTexture");
+    baseColorHardwareSrgbLoc = GetShaderLocation(
+            shader, "baseColorTextureHardwareSrgb");
+    emissiveHardwareSrgbLoc = GetShaderLocation(
+            shader, "emissiveTextureHardwareSrgb");
+    diagnosticModeLoc = GetShaderLocation(shader, "pbrDiagnosticMode");
+    indirectDiffuseScaleLoc = GetShaderLocation(
+            shader, "indirectDiffuseScale");
+    environmentSpecularScaleLoc = GetShaderLocation(
+            shader, "environmentSpecularScale");
+    useStaticSpecularLightingLoc = GetShaderLocation(
+            shader, "useStaticSpecularLighting");
     cameraPositionLoc = GetShaderLocation(shader, "cameraPosition");
     environmentExposureLoc = GetShaderLocation(shader, "environmentExposure");
     outputBrightnessMultiplierLoc =
@@ -770,6 +978,7 @@ bool SectorStaticModelRenderer::Load()
     dynamicLightDirectionsLoc = GetShaderLocationArrayBase(shader, "dynamicLightDirections");
     dynamicLightInnerConeCosLoc = GetShaderLocationArrayBase(shader, "dynamicLightInnerConeCos");
     dynamicLightOuterConeCosLoc = GetShaderLocationArrayBase(shader, "dynamicLightOuterConeCos");
+    staticSpecularLocations = GetSectorStaticSpecularShaderLocations(shader);
     dynamicLightShadowSlotsLoc = GetShaderLocationArrayBase(shader, "dynamicLightShadowSlots");
     for (size_t i = 0; i < MaxDynamicSpotLightShadowCasters; ++i) {
         shadowLightMatrixLocs[i] =
@@ -788,7 +997,12 @@ bool SectorStaticModelRenderer::Load()
             SHADER_LOC_MAP_DIFFUSE
                     + SectorStaticModelShadowMap1MaterialMap] =
             shadowMap1Loc;
-    dynamicLightingClampLoc = GetShaderLocation(shader, "dynamicLightingClamp");
+    InitializeSectorPbrSamplerUnits(
+            shader,
+            lightmapTextureLoc,
+            environmentTextureLoc,
+            shadowMap0Loc,
+            shadowMap1Loc);
     fogShaderLocations = GetSectorFogShaderLocations(shader);
     shaderLoaded = true;
     return true;
@@ -804,6 +1018,7 @@ void SectorStaticModelRenderer::Shutdown()
     shader = {};
     baseColorFactorLoc = -1;
     emissiveFactorLoc = -1;
+    emissiveStrengthLoc = -1;
     metallicFactorLoc = -1;
     roughnessFactorLoc = -1;
     normalScaleLoc = -1;
@@ -814,6 +1029,12 @@ void SectorStaticModelRenderer::Shutdown()
     hasRoughnessTextureLoc = -1;
     hasOcclusionTextureLoc = -1;
     hasEmissiveTextureLoc = -1;
+    baseColorHardwareSrgbLoc = -1;
+    emissiveHardwareSrgbLoc = -1;
+    diagnosticModeLoc = -1;
+    indirectDiffuseScaleLoc = -1;
+    environmentSpecularScaleLoc = -1;
+    useStaticSpecularLightingLoc = -1;
     cameraPositionLoc = -1;
     environmentExposureLoc = -1;
     outputBrightnessMultiplierLoc = -1;
@@ -840,6 +1061,7 @@ void SectorStaticModelRenderer::Shutdown()
     dynamicLightDirectionsLoc = -1;
     dynamicLightInnerConeCosLoc = -1;
     dynamicLightOuterConeCosLoc = -1;
+    staticSpecularLocations = SectorStaticSpecularShaderLocations{};
     dynamicLightShadowSlotsLoc = -1;
     shadowLightMatrixLocs.fill(-1);
     shadowBiasLoc = -1;
@@ -847,7 +1069,6 @@ void SectorStaticModelRenderer::Shutdown()
     shadowSoftnessLoc = -1;
     shadowMap0Loc = -1;
     shadowMap1Loc = -1;
-    dynamicLightingClampLoc = -1;
     fogShaderLocations = SectorFogShaderLocations{};
     shaderLoaded = false;
     warningPrinted = false;
@@ -856,6 +1077,56 @@ void SectorStaticModelRenderer::Shutdown()
 void SectorStaticModelRenderer::ResetDebugState()
 {
     warningPrinted = false;
+    worldDiagnostics = {};
+    viewmodelDiagnostics = {};
+}
+
+void SectorStaticModelRenderer::UploadPbrDrawState(
+        const SectorPbrDrawState& state)
+{
+    const int diagnosticMode = static_cast<int>(state.diagnosticMode);
+    const int useObjectProbe = state.useObjectProbe ? 1 : 0;
+    const int useVerticalProbe = state.useVerticalObjectProbe ? 1 : 0;
+    const int hasEnvironment = state.environmentActive ? 1 : 0;
+    const int useStaticSpecular = state.staticSpecularEligible ? 1 : 0;
+    if (diagnosticModeLoc >= 0) SetShaderValue(shader, diagnosticModeLoc, &diagnosticMode, SHADER_UNIFORM_INT);
+    if (indirectDiffuseScaleLoc >= 0) SetShaderValue(shader, indirectDiffuseScaleLoc, &state.indirectDiffuseScale, SHADER_UNIFORM_FLOAT);
+    if (environmentSpecularScaleLoc >= 0) SetShaderValue(shader, environmentSpecularScaleLoc, &state.environmentSpecularScale, SHADER_UNIFORM_FLOAT);
+    if (useStaticSpecularLightingLoc >= 0) SetShaderValue(shader, useStaticSpecularLightingLoc, &useStaticSpecular, SHADER_UNIFORM_INT);
+    if (environmentExposureLoc >= 0) SetShaderValue(shader, environmentExposureLoc, &state.environmentExposure, SHADER_UNIFORM_FLOAT);
+    if (outputBrightnessMultiplierLoc >= 0) SetShaderValue(shader, outputBrightnessMultiplierLoc, &state.outputBrightnessMultiplier, SHADER_UNIFORM_FLOAT);
+    if (hasEnvironmentLoc >= 0) SetShaderValue(shader, hasEnvironmentLoc, &hasEnvironment, SHADER_UNIFORM_INT);
+    if (useObjectProbeLightingLoc >= 0) SetShaderValue(shader, useObjectProbeLightingLoc, &useObjectProbe, SHADER_UNIFORM_INT);
+    if (useVerticalObjectProbeLightingLoc >= 0) SetShaderValue(shader, useVerticalObjectProbeLightingLoc, &useVerticalProbe, SHADER_UNIFORM_INT);
+}
+
+void SectorStaticModelRenderer::UploadPbrMaterialTransferState(
+        const engine::ModelMaterialAsset& material)
+{
+    const int baseHardwareSrgb = material.textureInfo[static_cast<size_t>(
+            engine::ModelMaterialTextureRole::BaseColor)].hardwareSrgbDecode ? 1 : 0;
+    const int emissiveHardwareSrgb = material.textureInfo[static_cast<size_t>(
+            engine::ModelMaterialTextureRole::Emissive)].hardwareSrgbDecode ? 1 : 0;
+    if (baseColorHardwareSrgbLoc >= 0) SetShaderValue(shader, baseColorHardwareSrgbLoc, &baseHardwareSrgb, SHADER_UNIFORM_INT);
+    if (emissiveHardwareSrgbLoc >= 0) SetShaderValue(shader, emissiveHardwareSrgbLoc, &emissiveHardwareSrgb, SHADER_UNIFORM_INT);
+}
+
+void SectorStaticModelRenderer::RecordPbrDiagnostics(
+        SectorPbrDrawDiagnostics& diagnostics,
+        int placedObjectId,
+        engine::ModelHandle model,
+        int materialIndex,
+        const SectorPbrDrawState& state,
+        const engine::ModelMaterialAsset& material,
+        const SectorStaticSpecularLightContext& staticSpecularLights)
+{
+    diagnostics.valid = true;
+    diagnostics.placedObjectId = placedObjectId;
+    diagnostics.model = model;
+    diagnostics.materialIndex = materialIndex;
+    diagnostics.state = state;
+    diagnostics.material = material;
+    diagnostics.staticSpecularLights = staticSpecularLights;
 }
 
 void SectorStaticModelRenderer::SetLightmapData(
@@ -978,6 +1249,9 @@ void SectorStaticModelRenderer::Draw(
         engine::World& runtimeObjectWorld,
         const Camera3D& camera,
         const SectorBillboardDynamicLightContext& dynamicLightContext,
+        const SectorStaticSpecularLightState& staticSpecularLights,
+        bool surfaceLightmapBakeCurrent,
+        bool objectProbeBakeCurrent,
         const SectorFogRenderContext& fogContext,
         const RuntimePortalVisibilityResult& visibility,
         const std::vector<engine::TextureHandle>& lightmapTextures,
@@ -1000,7 +1274,6 @@ void SectorStaticModelRenderer::Draw(
     dynamicLocations.dynamicLightDirections = dynamicLightDirectionsLoc;
     dynamicLocations.dynamicLightInnerConeCos = dynamicLightInnerConeCosLoc;
     dynamicLocations.dynamicLightOuterConeCos = dynamicLightOuterConeCosLoc;
-    dynamicLocations.dynamicLightingClamp = dynamicLightingClampLoc;
     UploadSectorRendererDynamicPointLights(
             shader,
             dynamicLocations,
@@ -1024,22 +1297,8 @@ void SectorStaticModelRenderer::Draw(
                 &camera.position,
                 SHADER_UNIFORM_VEC3);
     }
-    const int hasEnvironment = environment != nullptr && environment->id != 0 ? 1 : 0;
-    if (hasEnvironmentLoc >= 0) {
-        SetShaderValue(
-                shader,
-                hasEnvironmentLoc,
-                &hasEnvironment,
-                SHADER_UNIFORM_INT);
-    }
-    const float neutralBrightnessMultiplier = 1.0f;
-    if (outputBrightnessMultiplierLoc >= 0) {
-        SetShaderValue(
-                shader,
-                outputBrightnessMultiplierLoc,
-                &neutralBrightnessMultiplier,
-                SHADER_UNIFORM_FLOAT);
-    }
+    const bool environmentActive = environment != nullptr && environment->id != 0;
+    worldDiagnostics = {};
 
     size_t considered = 0;
     size_t drawn = 0;
@@ -1057,9 +1316,12 @@ void SectorStaticModelRenderer::Draw(
             [this,
              &assets,
              &dynamicLightContext,
+             &staticSpecularLights,
              &visibility,
              &lightmapTextures,
              environment,
+             environmentActive,
+             surfaceLightmapBakeCurrent,
              useBakedAmbientOcclusion,
              &considered,
              &drawn,
@@ -1096,32 +1358,19 @@ void SectorStaticModelRenderer::Draw(
                 }
                 const Model* model = &modelAsset->model;
 
-                const int useObjectProbe = 0;
-                const int useVerticalObjectProbe = 0;
                 const int useSkinning = 0;
-                if (useObjectProbeLightingLoc >= 0) {
-                    SetShaderValue(shader, useObjectProbeLightingLoc, &useObjectProbe, SHADER_UNIFORM_INT);
-                }
-                if (useVerticalObjectProbeLightingLoc >= 0) {
-                    SetShaderValue(shader, useVerticalObjectProbeLightingLoc, &useVerticalObjectProbe, SHADER_UNIFORM_INT);
-                }
                 if (useSkinningLoc >= 0) {
                     SetShaderValue(shader, useSkinningLoc, &useSkinning, SHADER_UNIFORM_INT);
                 }
 
                 if (containingSectorAmbientLoc >= 0) {
+                    const Vector3 ambient = SanitizeSectorPbrNonnegative(
+                            staticModel.containingSectorAmbient);
                     SetShaderValue(
                             shader,
                             containingSectorAmbientLoc,
-                            &staticModel.containingSectorAmbient,
+                            &ambient,
                             SHADER_UNIFORM_VEC3);
-                }
-                if (environmentExposureLoc >= 0) {
-                    SetShaderValue(
-                            shader,
-                            environmentExposureLoc,
-                            &staticModel.environmentExposure,
-                            SHADER_UNIFORM_FLOAT);
                 }
                 const int useAo = useBakedAmbientOcclusion ? 1 : 0;
                 if (useBakedAmbientOcclusionLoc >= 0) {
@@ -1158,6 +1407,28 @@ void SectorStaticModelRenderer::Draw(
                                 == static_cast<size_t>(model->meshCount)
                         && lightmapObject->meshPlacements.size()
                                 == static_cast<size_t>(model->meshCount);
+                const SectorReceiverBounds receiverBounds =
+                        modelAsset->hasLocalBounds
+                        ? TransformSectorStaticSpecularReceiverBounds(
+                                modelAsset->localBounds,
+                                authoredTransform,
+                                object.currentSectorId,
+                                transform.position)
+                        : SectorReceiverBounds{
+                                object.currentSectorId,
+                                transform.position,
+                                transform.position};
+                const SectorStaticSpecularLightContext staticSpecularContext =
+                        SelectSectorStaticSpecularLights(
+                                staticSpecularLights,
+                                receiverBounds,
+                                object.currentSectorId,
+                                visibility,
+                                surfaceLightmapBakeCurrent && hasRemapData);
+                UploadSectorStaticSpecularLights(
+                        shader,
+                        staticSpecularLocations,
+                        staticSpecularContext);
 
                 bool drewMesh = false;
                 for (int meshIndex = 0; meshIndex < model->meshCount; ++meshIndex) {
@@ -1222,6 +1493,7 @@ void SectorStaticModelRenderer::Draw(
                         pbrMaterial.hasBaseColorTexture =
                                 maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
                     }
+                    pbrMaterial = NormalizeSectorPbrMaterial(pbrMaterial);
                     if (baseColorFactorLoc >= 0) {
                         SetShaderValue(
                                 shader,
@@ -1230,6 +1502,7 @@ void SectorStaticModelRenderer::Draw(
                                 SHADER_UNIFORM_VEC4);
                     }
                     if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbrMaterial.emissiveFactor, SHADER_UNIFORM_VEC3);
+                    if (emissiveStrengthLoc >= 0) SetShaderValue(shader, emissiveStrengthLoc, &pbrMaterial.emissiveStrength, SHADER_UNIFORM_FLOAT);
                     if (metallicFactorLoc >= 0) SetShaderValue(shader, metallicFactorLoc, &pbrMaterial.metallicFactor, SHADER_UNIFORM_FLOAT);
                     if (roughnessFactorLoc >= 0) SetShaderValue(shader, roughnessFactorLoc, &pbrMaterial.roughnessFactor, SHADER_UNIFORM_FLOAT);
                     if (normalScaleLoc >= 0) SetShaderValue(shader, normalScaleLoc, &pbrMaterial.normalScale, SHADER_UNIFORM_FLOAT);
@@ -1270,6 +1543,31 @@ void SectorStaticModelRenderer::Draw(
                                 &scaleBias,
                                 SHADER_UNIFORM_VEC4);
                     }
+                    const SectorPbrDrawState drawState = BuildSectorPbrDrawState(
+                            SectorPbrLightingPath::WorldStatic,
+                            false,
+                            hasRemappedMesh,
+                            surfaceLightmapBakeCurrent,
+                            environmentActive,
+                            staticModel.environmentExposure,
+                            1.0f,
+                            false,
+                            contributionSettings);
+                    UploadPbrDrawState(drawState);
+                    UploadPbrMaterialTransferState(pbrMaterial);
+                    if (!worldDiagnostics.valid
+                            && (staticModel.placedObjectId
+                                            == diagnosticSelectedObjectId
+                                    || diagnosticSelectedObjectId < 0)) {
+                        RecordPbrDiagnostics(
+                                worldDiagnostics,
+                                staticModel.placedObjectId,
+                                staticModel.model,
+                                materialIndex,
+                                drawState,
+                                pbrMaterial,
+                                staticSpecularContext);
+                    }
                     const Mesh& mesh = hasRemappedMesh
                             ? cached->meshes[static_cast<size_t>(meshIndex)]
                             : model->meshes[meshIndex];
@@ -1292,8 +1590,11 @@ void SectorStaticModelRenderer::Draw(
             [this,
              &assets,
              &dynamicLightContext,
+             &staticSpecularLights,
              &visibility,
              environment,
+             environmentActive,
+             objectProbeBakeCurrent,
              &considered,
              &drawn,
              &portalCulled,
@@ -1324,35 +1625,46 @@ void SectorStaticModelRenderer::Draw(
                         && model.boneMatrices != nullptr
                         && shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] >= 0;
                 const int useSkinning = canSkin ? 1 : 0;
-                const int useObjectProbe = 1;
-                const int useVerticalObjectProbe = 1;
                 const int noStaticLightmap = 0;
                 const int noBakedAo = 0;
                 if (useSkinningLoc >= 0) SetShaderValue(shader, useSkinningLoc, &useSkinning, SHADER_UNIFORM_INT);
-                if (useObjectProbeLightingLoc >= 0) SetShaderValue(shader, useObjectProbeLightingLoc, &useObjectProbe, SHADER_UNIFORM_INT);
-                if (useVerticalObjectProbeLightingLoc >= 0) SetShaderValue(shader, useVerticalObjectProbeLightingLoc, &useVerticalObjectProbe, SHADER_UNIFORM_INT);
                 if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &noStaticLightmap, SHADER_UNIFORM_INT);
                 if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &noBakedAo, SHADER_UNIFORM_INT);
-                if (containingSectorAmbientLoc >= 0) SetShaderValue(shader, containingSectorAmbientLoc, &dynamicModel.containingSectorAmbient, SHADER_UNIFORM_VEC3);
-                if (environmentExposureLoc >= 0) SetShaderValue(shader, environmentExposureLoc, &dynamicModel.environmentExposure, SHADER_UNIFORM_FLOAT);
+                if (containingSectorAmbientLoc >= 0) {
+                    const Vector3 ambient = SanitizeSectorPbrNonnegative(
+                            dynamicModel.containingSectorAmbient);
+                    SetShaderValue(shader, containingSectorAmbientLoc, &ambient, SHADER_UNIFORM_VEC3);
+                }
                 for (size_t face = 0; face < objectAmbientCubeLocs.size(); ++face) {
-                    if (objectAmbientCubeLocs[face] >= 0) {
+                if (objectAmbientCubeLocs[face] >= 0) {
+                        const Vector3 lowerAmbient =
+                                SanitizeSectorPbrNonnegative(
+                                        lighting.vertical.lower.ambientCube[face]);
                         SetShaderValue(
                                 shader,
                                 objectAmbientCubeLocs[face],
-                                &lighting.vertical.lower.ambientCube[face],
+                                &lowerAmbient,
                                 SHADER_UNIFORM_VEC3);
                     }
                     if (objectAmbientCubeUpperLocs[face] >= 0) {
+                        const Vector3 upperAmbient =
+                                SanitizeSectorPbrNonnegative(
+                                        lighting.vertical.upper.ambientCube[face]);
                         SetShaderValue(
                                 shader,
                                 objectAmbientCubeUpperLocs[face],
-                                &lighting.vertical.upper.ambientCube[face],
+                                &upperAmbient,
                                 SHADER_UNIFORM_VEC3);
                     }
                 }
-                if (objectAmbientCubeLowerHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeLowerHeightLoc, &lighting.vertical.lowerHeightWorld, SHADER_UNIFORM_FLOAT);
-                if (objectAmbientCubeUpperHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeUpperHeightLoc, &lighting.vertical.upperHeightWorld, SHADER_UNIFORM_FLOAT);
+                const float lowerProbeHeight = std::isfinite(
+                        lighting.vertical.lowerHeightWorld)
+                        ? lighting.vertical.lowerHeightWorld : 0.0f;
+                const float upperProbeHeight = std::isfinite(
+                        lighting.vertical.upperHeightWorld)
+                        ? lighting.vertical.upperHeightWorld : lowerProbeHeight;
+                if (objectAmbientCubeLowerHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeLowerHeightLoc, &lowerProbeHeight, SHADER_UNIFORM_FLOAT);
+                if (objectAmbientCubeUpperHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeUpperHeightLoc, &upperProbeHeight, SHADER_UNIFORM_FLOAT);
                 if (canSkin) {
                     rlEnableShader(shader.id);
                     rlSetUniformMatrices(
@@ -1368,6 +1680,30 @@ void SectorStaticModelRenderer::Draw(
                         transform.rotationZRadians,
                         dynamicModel.scale);
                 const Matrix modelTransform = MatrixMultiply(model.transform, authoredTransform);
+                const bool validProbe = lighting.vertical.lower.valid
+                        || lighting.vertical.upper.valid;
+                const SectorReceiverBounds receiverBounds =
+                        modelAsset->hasLocalBounds
+                        ? TransformSectorStaticSpecularReceiverBounds(
+                                modelAsset->localBounds,
+                                authoredTransform,
+                                object.currentSectorId,
+                                transform.position)
+                        : SectorReceiverBounds{
+                                object.currentSectorId,
+                                transform.position,
+                                transform.position};
+                const SectorStaticSpecularLightContext staticSpecularContext =
+                        SelectSectorStaticSpecularLights(
+                                staticSpecularLights,
+                                receiverBounds,
+                                object.currentSectorId,
+                                visibility,
+                                objectProbeBakeCurrent && validProbe);
+                UploadSectorStaticSpecularLights(
+                        shader,
+                        staticSpecularLocations,
+                        staticSpecularContext);
                 bool drewMesh = false;
                 for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
                     if (model.meshMaterial == nullptr) continue;
@@ -1397,8 +1733,10 @@ void SectorStaticModelRenderer::Draw(
                         pbrMaterial.roughnessFactor = 1.0f;
                         pbrMaterial.hasBaseColorTexture = maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
                     }
+                    pbrMaterial = NormalizeSectorPbrMaterial(pbrMaterial);
                     if (baseColorFactorLoc >= 0) SetShaderValue(shader, baseColorFactorLoc, &pbrMaterial.baseColorFactor, SHADER_UNIFORM_VEC4);
                     if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbrMaterial.emissiveFactor, SHADER_UNIFORM_VEC3);
+                    if (emissiveStrengthLoc >= 0) SetShaderValue(shader, emissiveStrengthLoc, &pbrMaterial.emissiveStrength, SHADER_UNIFORM_FLOAT);
                     if (metallicFactorLoc >= 0) SetShaderValue(shader, metallicFactorLoc, &pbrMaterial.metallicFactor, SHADER_UNIFORM_FLOAT);
                     if (roughnessFactorLoc >= 0) SetShaderValue(shader, roughnessFactorLoc, &pbrMaterial.roughnessFactor, SHADER_UNIFORM_FLOAT);
                     if (normalScaleLoc >= 0) SetShaderValue(shader, normalScaleLoc, &pbrMaterial.normalScale, SHADER_UNIFORM_FLOAT);
@@ -1415,6 +1753,31 @@ void SectorStaticModelRenderer::Draw(
                     if (hasRoughnessTextureLoc >= 0) SetShaderValue(shader, hasRoughnessTextureLoc, &hasRoughness, SHADER_UNIFORM_INT);
                     if (hasOcclusionTextureLoc >= 0) SetShaderValue(shader, hasOcclusionTextureLoc, &hasOcclusion, SHADER_UNIFORM_INT);
                     if (hasEmissiveTextureLoc >= 0) SetShaderValue(shader, hasEmissiveTextureLoc, &hasEmissive, SHADER_UNIFORM_INT);
+                    const SectorPbrDrawState drawState = BuildSectorPbrDrawState(
+                            SectorPbrLightingPath::WorldDynamic,
+                            validProbe,
+                            false,
+                            objectProbeBakeCurrent,
+                            environmentActive,
+                            dynamicModel.environmentExposure,
+                            1.0f,
+                            false,
+                            contributionSettings);
+                    UploadPbrDrawState(drawState);
+                    UploadPbrMaterialTransferState(pbrMaterial);
+                    if (!worldDiagnostics.valid
+                            && (dynamicModel.placedObjectId
+                                            == diagnosticSelectedObjectId
+                                    || diagnosticSelectedObjectId < 0)) {
+                        RecordPbrDiagnostics(
+                                worldDiagnostics,
+                                dynamicModel.placedObjectId,
+                                instance.model,
+                                materialIndex,
+                                drawState,
+                                pbrMaterial,
+                                staticSpecularContext);
+                    }
                     DrawMesh(model.meshes[meshIndex], material, modelTransform);
                     drewMesh = true;
                 }
@@ -1445,6 +1808,8 @@ void SectorStaticModelRenderer::DrawViewmodel(
         const engine::ModelAsset* attachmentAsset,
         Matrix attachmentTransform,
         const SectorBillboardDynamicLightContext& dynamicLightContext,
+        const SectorStaticSpecularLightContext& staticSpecularLights,
+        bool objectProbeBakeCurrent,
         const TextureCubemap* environment,
         const BakedObjectLightingVerticalSample& ambientLighting,
         const SectorViewmodelLightingContext& lighting,
@@ -1456,8 +1821,12 @@ void SectorStaticModelRenderer::DrawViewmodel(
             dynamicLightCountLoc, dynamicLightPositionsLoc, dynamicLightColorsLoc,
             dynamicLightRadiiLoc, dynamicLightIntensitiesLoc, dynamicLightTypesLoc,
             dynamicLightDirectionsLoc, dynamicLightInnerConeCosLoc,
-            dynamicLightOuterConeCosLoc, dynamicLightingClampLoc};
+            dynamicLightOuterConeCosLoc};
     UploadSectorRendererDynamicPointLights(shader, dynamicLocations, dynamicLightContext);
+    UploadSectorStaticSpecularLights(
+            shader,
+            staticSpecularLocations,
+            staticSpecularLights);
     SectorDynamicSpotLightShadowShaderLocations shadowLocations;
     shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
     shadowLocations.shadowLightMatrices = shadowLightMatrixLocs;
@@ -1467,32 +1836,47 @@ void SectorStaticModelRenderer::DrawViewmodel(
     UploadSectorRendererDynamicSpotLightShadowUniforms(shader, shadowLocations, dynamicLightContext.shadowUniforms);
     UploadSectorFogShaderValues(shader, fogShaderLocations, SectorFogRenderContext{});
     if (cameraPositionLoc >= 0) SetShaderValue(shader, cameraPositionLoc, &camera.position, SHADER_UNIFORM_VEC3);
-    const int hasEnvironment = environment && environment->id != 0 ? 1 : 0;
-    if (hasEnvironmentLoc >= 0) SetShaderValue(shader, hasEnvironmentLoc, &hasEnvironment, SHADER_UNIFORM_INT);
+    const bool environmentActive = environment && environment->id != 0;
+    viewmodelDiagnostics = {};
 
-    const int enabled = 1;
     const int disabled = 0;
-    if (useObjectProbeLightingLoc >= 0) SetShaderValue(shader, useObjectProbeLightingLoc, &enabled, SHADER_UNIFORM_INT);
-    if (useVerticalObjectProbeLightingLoc >= 0) SetShaderValue(shader, useVerticalObjectProbeLightingLoc, &enabled, SHADER_UNIFORM_INT);
     if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &disabled, SHADER_UNIFORM_INT);
     if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &disabled, SHADER_UNIFORM_INT);
-    const Vector3 neutralAmbient{0.22f, 0.22f, 0.22f};
-    if (containingSectorAmbientLoc >= 0) SetShaderValue(shader, containingSectorAmbientLoc, &neutralAmbient, SHADER_UNIFORM_VEC3);
+    const Vector3 fallbackAmbient = SanitizeSectorPbrNonnegative(
+            ambientLighting.lower.ambientCube[2]);
+    if (containingSectorAmbientLoc >= 0) SetShaderValue(shader, containingSectorAmbientLoc, &fallbackAmbient, SHADER_UNIFORM_VEC3);
     for (size_t face = 0; face < objectAmbientCubeLocs.size(); ++face) {
-        if (objectAmbientCubeLocs[face] >= 0) SetShaderValue(shader, objectAmbientCubeLocs[face], &ambientLighting.lower.ambientCube[face], SHADER_UNIFORM_VEC3);
-        if (objectAmbientCubeUpperLocs[face] >= 0) SetShaderValue(shader, objectAmbientCubeUpperLocs[face], &ambientLighting.upper.ambientCube[face], SHADER_UNIFORM_VEC3);
+        const Vector3 lowerAmbient = SanitizeSectorPbrNonnegative(
+                ambientLighting.lower.ambientCube[face]);
+        const Vector3 upperAmbient = SanitizeSectorPbrNonnegative(
+                ambientLighting.upper.ambientCube[face]);
+        if (objectAmbientCubeLocs[face] >= 0) SetShaderValue(shader, objectAmbientCubeLocs[face], &lowerAmbient, SHADER_UNIFORM_VEC3);
+        if (objectAmbientCubeUpperLocs[face] >= 0) SetShaderValue(shader, objectAmbientCubeUpperLocs[face], &upperAmbient, SHADER_UNIFORM_VEC3);
     }
-    if (objectAmbientCubeLowerHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeLowerHeightLoc, &ambientLighting.lowerHeightWorld, SHADER_UNIFORM_FLOAT);
-    if (objectAmbientCubeUpperHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeUpperHeightLoc, &ambientLighting.upperHeightWorld, SHADER_UNIFORM_FLOAT);
+    const float lowerProbeHeight = std::isfinite(ambientLighting.lowerHeightWorld)
+            ? ambientLighting.lowerHeightWorld : 0.0f;
+    const float upperProbeHeight = std::isfinite(ambientLighting.upperHeightWorld)
+            ? ambientLighting.upperHeightWorld : lowerProbeHeight;
+    if (objectAmbientCubeLowerHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeLowerHeightLoc, &lowerProbeHeight, SHADER_UNIFORM_FLOAT);
+    if (objectAmbientCubeUpperHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeUpperHeightLoc, &upperProbeHeight, SHADER_UNIFORM_FLOAT);
     rlDisableColorBlend();
     rlDisableBackfaceCulling();
     rlEnableDepthTest();
     rlEnableDepthMask();
-    const auto drawModel = [this, environment, &dynamicLightContext](
+    const bool validProbe = ambientLighting.lower.valid
+            || ambientLighting.upper.valid;
+    const auto drawModel = [this,
+                            environment,
+                            environmentActive,
+                            validProbe,
+                            objectProbeBakeCurrent,
+                            &staticSpecularLights,
+                            &dynamicLightContext](
             const engine::ModelAsset& modelAsset,
             Model model,
             Matrix itemTransform,
-            const SectorViewmodelLightingContext& itemLighting) {
+            const SectorViewmodelLightingContext& itemLighting,
+            SectorPbrLightingPath path) {
         const int skinningEnabled = 1;
         const int skinningDisabled = 0;
         const bool canSkin = model.skeleton.boneCount > 0
@@ -1505,20 +1889,6 @@ void SectorStaticModelRenderer::DrawViewmodel(
                     useSkinningLoc,
                     canSkin ? &skinningEnabled : &skinningDisabled,
                     SHADER_UNIFORM_INT);
-        }
-        if (environmentExposureLoc >= 0) {
-            SetShaderValue(
-                    shader,
-                    environmentExposureLoc,
-                    &itemLighting.environmentExposure,
-                    SHADER_UNIFORM_FLOAT);
-        }
-        if (outputBrightnessMultiplierLoc >= 0) {
-            SetShaderValue(
-                    shader,
-                    outputBrightnessMultiplierLoc,
-                    &itemLighting.brightnessMultiplier,
-                    SHADER_UNIFORM_FLOAT);
         }
         if (canSkin) {
             rlEnableShader(shader.id);
@@ -1569,8 +1939,10 @@ void SectorStaticModelRenderer::DrawViewmodel(
                     pbr.roughnessFactor,
                     pbr.hasMetallicTexture,
                     pbr.hasRoughnessTexture);
+            pbr = NormalizeSectorPbrMaterial(pbr);
             if (baseColorFactorLoc >= 0) SetShaderValue(shader, baseColorFactorLoc, &pbr.baseColorFactor, SHADER_UNIFORM_VEC4);
             if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbr.emissiveFactor, SHADER_UNIFORM_VEC3);
+            if (emissiveStrengthLoc >= 0) SetShaderValue(shader, emissiveStrengthLoc, &pbr.emissiveStrength, SHADER_UNIFORM_FLOAT);
             if (metallicFactorLoc >= 0) SetShaderValue(shader, metallicFactorLoc, &pbr.metallicFactor, SHADER_UNIFORM_FLOAT);
             if (roughnessFactorLoc >= 0) SetShaderValue(shader, roughnessFactorLoc, &pbr.roughnessFactor, SHADER_UNIFORM_FLOAT);
             if (normalScaleLoc >= 0) SetShaderValue(shader, normalScaleLoc, &pbr.normalScale, SHADER_UNIFORM_FLOAT);
@@ -1587,6 +1959,26 @@ void SectorStaticModelRenderer::DrawViewmodel(
             if (hasRoughnessTextureLoc >= 0) SetShaderValue(shader, hasRoughnessTextureLoc, &hasRough, SHADER_UNIFORM_INT);
             if (hasOcclusionTextureLoc >= 0) SetShaderValue(shader, hasOcclusionTextureLoc, &hasOcclusion, SHADER_UNIFORM_INT);
             if (hasEmissiveTextureLoc >= 0) SetShaderValue(shader, hasEmissiveTextureLoc, &hasEmissive, SHADER_UNIFORM_INT);
+            const SectorPbrDrawState drawState = BuildSectorPbrDrawState(
+                    path,
+                    validProbe,
+                    false,
+                    objectProbeBakeCurrent,
+                    environmentActive,
+                    itemLighting.environmentExposure,
+                    itemLighting.brightnessMultiplier,
+                    itemLighting.materialOverrideEnabled,
+                    contributionSettings);
+            UploadPbrDrawState(drawState);
+            UploadPbrMaterialTransferState(pbr);
+            RecordPbrDiagnostics(
+                    viewmodelDiagnostics,
+                    -1,
+                    engine::NullModelHandle(),
+                    materialIndex,
+                    drawState,
+                    pbr,
+                    staticSpecularLights);
             DrawMesh(model.meshes[meshIndex], material, modelTransform);
         }
     };
@@ -1596,23 +1988,17 @@ void SectorStaticModelRenderer::DrawViewmodel(
                 *attachmentAsset,
                 attachmentAsset->model,
                 attachmentTransform,
-                attachmentLighting);
+                attachmentLighting,
+                SectorPbrLightingPath::ViewmodelAttachment);
     }
     drawModel(
             asset,
             engine::BuildAnimatedModelPoseView(asset, instance),
             transform,
-            lighting);
+            lighting,
+            SectorPbrLightingPath::Viewmodel);
     rlActiveTextureSlot(0);
     rlSetTexture(0);
-    const float neutralBrightnessMultiplier = 1.0f;
-    if (outputBrightnessMultiplierLoc >= 0) {
-        SetShaderValue(
-                shader,
-                outputBrightnessMultiplierLoc,
-                &neutralBrightnessMultiplier,
-                SHADER_UNIFORM_FLOAT);
-    }
     rlEnableColorBlend();
     rlSetBlendMode(BLEND_ALPHA);
     rlEnableDepthTest();

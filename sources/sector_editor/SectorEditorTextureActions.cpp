@@ -47,10 +47,16 @@ std::string ChooseBillboardClipName(
 void RefreshAddMapTextureScan(AddMapTextureState& modalState)
 {
     modalState.paths = ScanAssetImagePngs(modalState.scanMessage);
-    modalState.optionLabels.clear();
-    modalState.optionLabels.reserve(modalState.paths.size());
+    modalState.optionLabelStorage.clear();
+    modalState.optionLabelStorage.reserve(modalState.paths.size());
     for (const std::string& path : modalState.paths) {
-        modalState.optionLabels.push_back(path.c_str());
+        modalState.optionLabelStorage.push_back(
+                EditorAssetPathDisplayLabel(path, "assets/images/"));
+    }
+    modalState.optionLabels.clear();
+    modalState.optionLabels.reserve(modalState.optionLabelStorage.size());
+    for (const std::string& label : modalState.optionLabelStorage) {
+        modalState.optionLabels.push_back(label.c_str());
     }
     modalState.scanned = true;
     modalState.selectedPathIndex = modalState.paths.empty() ? -1 : 0;

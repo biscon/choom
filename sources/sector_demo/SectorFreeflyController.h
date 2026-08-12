@@ -22,6 +22,7 @@ void SetSectorFreeflyMouseLookEnabled(
 void UpdateSectorFreeflyController(
         SectorFreeflyControllerState& state,
         engine::Input& input,
-        float dt);
+        float dt,
+        float moveSpeedScale);
 
 } // namespace game

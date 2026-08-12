@@ -41,6 +41,7 @@ inline void DrawSectorEditorTexturePickerModal(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         TexturePickerState& picker,
         SectorEditorTextureCatalogService& textureCatalog,
         const SectorEditorTexturePickerServiceCallbacks& callbacks)
@@ -50,7 +51,16 @@ inline void DrawSectorEditorTexturePickerModal(
             callbacks.applySelection,
             callbacks.currentTextureForTarget
     };
-    DrawTexturePickerModal(ui, config, input, assets, font, picker, textureCatalog, modalCallbacks);
+    DrawTexturePickerModal(
+            ui,
+            config,
+            input,
+            assets,
+            font,
+            smallFont,
+            picker,
+            textureCatalog,
+            modalCallbacks);
 }
 
 } // namespace game

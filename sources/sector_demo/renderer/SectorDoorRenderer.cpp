@@ -1,6 +1,7 @@
 #include "sector_demo/renderer/SectorDoorRenderer.h"
 
 #include "engine/assets/AssetManager.h"
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 
 #include <raylib.h>
@@ -18,6 +19,7 @@ const char* SectorDoorOpaqueVs = R"(
 in vec3 vertexPosition;
 in vec3 vertexNormal;
 in vec2 vertexTexCoord;
+in vec4 vertexTangent;
 in vec4 vertexColor;
 
 uniform mat4 mvp;
@@ -34,7 +36,7 @@ void main()
     fragTexCoord = vertexTexCoord;
     fragWorldPosition = (matModel * vec4(vertexPosition, 1.0)).xyz;
     fragWorldNormal = normalize((matNormal * vec4(vertexNormal, 0.0)).xyz);
-    fragColor = vertexColor;
+    fragColor = vec4(vertexTangent.xyz, 1.0);
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }
 )";
@@ -58,7 +60,6 @@ uniform int dynamicLightTypes[MAX_DYNAMIC_LIGHTS];
 uniform vec3 dynamicLightDirections[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
-uniform float dynamicLightingClamp;
 uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
 
 #define MAX_DYNAMIC_SHADOW_CASTERS 2
@@ -109,6 +110,15 @@ vec3 SafeNormalize(vec3 value, vec3 fallback)
 {
     float lengthSq = dot(value, value);
     return lengthSq > 0.00000001 ? value * inversesqrt(lengthSq) : fallback;
+}
+
+vec3 StoreFiniteHalfRadiance(vec3 value)
+{
+    vec3 result;
+    result.r = isnan(value.r) ? 0.0 : (isinf(value.r) ? (value.r > 0.0 ? 65504.0 : 0.0) : min(max(value.r, 0.0), 65504.0));
+    result.g = isnan(value.g) ? 0.0 : (isinf(value.g) ? (value.g > 0.0 ? 65504.0 : 0.0) : min(max(value.g, 0.0), 65504.0));
+    result.b = isnan(value.b) ? 0.0 : (isinf(value.b) ? (value.b > 0.0 ? 65504.0 : 0.0) : min(max(value.b, 0.0), 65504.0));
+    return result;
 }
 
 float SampleShadowMap(int shadowSlot, vec2 uv)
@@ -180,7 +190,7 @@ vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
 void main()
 {
     vec3 worldNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
-    vec3 staticProbeLighting = clamp(fragColor.rgb, 0.0, 1.0);
+    vec3 staticProbeLighting = max(fragColor.rgb, vec3(0.0));
     vec3 tint = clamp(doorTint.rgb, 0.0, 1.0);
 
     if (doorDebugMode == DOOR_DEBUG_NORMAL_VISUALIZE) {
@@ -239,15 +249,15 @@ void main()
     }
 
     if (doorDebugMode == DOOR_DEBUG_DYNAMIC_ONLY) {
-        finalColor = vec4(clamp(dynamicDirect, 0.0, dynamicLightingClamp) / dynamicLightingClamp, 1.0);
+        finalColor = vec4(max(dynamicDirect, vec3(0.0)) / (vec3(1.0) + max(dynamicDirect, vec3(0.0))), 1.0);
         return;
     }
 
     vec4 sampled = texture(texture0, fragTexCoord);
     vec3 surfaceRgb = sampled.rgb;
-    vec3 lighting = clamp(staticProbeLighting + dynamicDirect, 0.0, dynamicLightingClamp);
+    vec3 lighting = max(staticProbeLighting + dynamicDirect, vec3(0.0));
     vec3 outputRgb = ApplySectorFog(surfaceRgb * tint * lighting, fragWorldPosition);
-    finalColor = vec4(outputRgb, sampled.a * doorTint.a);
+    finalColor = vec4(StoreFiniteHalfRadiance(outputRgb), clamp(sampled.a * doorTint.a, 0.0, 1.0));
 }
 )";
 
@@ -284,12 +294,14 @@ Mesh CreateDoorSlabMesh(const SectorDoorSlabMeshData& data)
     mesh.vertices = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 3 * sizeof(float))));
     mesh.normals = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 3 * sizeof(float))));
     mesh.texcoords = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 2 * sizeof(float))));
+    mesh.tangents = static_cast<float*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 4 * sizeof(float))));
     mesh.colors = static_cast<unsigned char*>(MemAlloc(static_cast<unsigned int>(mesh.vertexCount * 4 * sizeof(unsigned char))));
     mesh.indices = static_cast<unsigned short*>(MemAlloc(static_cast<unsigned int>(data.indices.size() * sizeof(unsigned short))));
 
     if (mesh.vertices == nullptr
             || mesh.normals == nullptr
             || mesh.texcoords == nullptr
+            || mesh.tangents == nullptr
             || mesh.colors == nullptr
             || mesh.indices == nullptr) {
         std::fprintf(stderr, "[SectorDemo ERROR] Failed to allocate door slab mesh data\n");
@@ -307,6 +319,10 @@ Mesh CreateDoorSlabMesh(const SectorDoorSlabMeshData& data)
         mesh.normals[i * 3 + 2] = vertex.normal.z;
         mesh.texcoords[i * 2 + 0] = vertex.uv.x;
         mesh.texcoords[i * 2 + 1] = vertex.uv.y;
+        mesh.tangents[i * 4 + 0] = 1.0f;
+        mesh.tangents[i * 4 + 1] = 1.0f;
+        mesh.tangents[i * 4 + 2] = 1.0f;
+        mesh.tangents[i * 4 + 3] = 1.0f;
         mesh.colors[i * 4 + 0] = vertex.color.r;
         mesh.colors[i * 4 + 1] = vertex.color.g;
         mesh.colors[i * 4 + 2] = vertex.color.b;
@@ -403,7 +419,6 @@ bool SectorDoorRenderer::LoadOpaqueResources()
     opaqueShaderLocations.shadowBias = GetShaderLocationArrayBase(opaqueShader, "shadowBias");
     opaqueShaderLocations.shadowStrength = GetShaderLocationArrayBase(opaqueShader, "shadowStrength");
     opaqueShaderLocations.shadowSoftness = GetShaderLocationArrayBase(opaqueShader, "shadowSoftness");
-    opaqueShaderLocations.dynamicLightingClamp = GetShaderLocation(opaqueShader, "dynamicLightingClamp");
     opaqueShaderLocations.debugMode = GetShaderLocation(opaqueShader, "doorDebugMode");
     opaqueShaderLocations.tint = GetShaderLocation(opaqueShader, "doorTint");
     opaqueShaderLocations.fog = GetSectorFogShaderLocations(opaqueShader);
@@ -537,7 +552,6 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
     dynamicLightLocations.dynamicLightDirections = doorOpaqueLocations.dynamicLightDirections;
     dynamicLightLocations.dynamicLightInnerConeCos = doorOpaqueLocations.dynamicLightInnerConeCos;
     dynamicLightLocations.dynamicLightOuterConeCos = doorOpaqueLocations.dynamicLightOuterConeCos;
-    dynamicLightLocations.dynamicLightingClamp = doorOpaqueLocations.dynamicLightingClamp;
     const std::vector<SectorPreviewDynamicPointLightUniform> emptyDynamicLights;
     const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights =
             context.dynamicLighting.selectedLights != nullptr
@@ -637,34 +651,31 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                             anchor,
                             objectLightProbes,
                             context.lighting.mapForFallback,
-                            cacheEntry->staticLightingColors)) {
-                    cacheEntry->staticLightingColors.assign(
+                            cacheEntry->staticLightingValues)) {
+                    cacheEntry->staticLightingValues.assign(
                             static_cast<size_t>(cacheEntry->mesh.vertexCount),
-                            WHITE);
+                            Vector3{1.0f, 1.0f, 1.0f});
                 }
-                if (cacheEntry->mesh.colors != nullptr
-                        && cacheEntry->staticLightingColors.size() == static_cast<size_t>(cacheEntry->mesh.vertexCount)) {
+                if (cacheEntry->mesh.tangents != nullptr
+                        && cacheEntry->staticLightingValues.size() == static_cast<size_t>(cacheEntry->mesh.vertexCount)) {
                     for (int i = 0; i < cacheEntry->mesh.vertexCount; ++i) {
-                        const Color color = cacheEntry->staticLightingColors[static_cast<size_t>(i)];
-                        cacheEntry->mesh.colors[i * 4 + 0] = color.r;
-                        cacheEntry->mesh.colors[i * 4 + 1] = color.g;
-                        cacheEntry->mesh.colors[i * 4 + 2] = color.b;
-                        cacheEntry->mesh.colors[i * 4 + 3] = color.a;
+                        const Vector3 lighting = cacheEntry->staticLightingValues[static_cast<size_t>(i)];
+                        cacheEntry->mesh.tangents[i * 4 + 0] = lighting.x;
+                        cacheEntry->mesh.tangents[i * 4 + 1] = lighting.y;
+                        cacheEntry->mesh.tangents[i * 4 + 2] = lighting.z;
+                        cacheEntry->mesh.tangents[i * 4 + 3] = 1.0f;
                     }
                     UpdateMeshBuffer(
                             cacheEntry->mesh,
-                            RL_DEFAULT_SHADER_ATTRIB_LOCATION_COLOR,
-                            cacheEntry->mesh.colors,
-                            cacheEntry->mesh.vertexCount * 4 * static_cast<int>(sizeof(unsigned char)),
+                            RL_DEFAULT_SHADER_ATTRIB_LOCATION_TANGENT,
+                            cacheEntry->mesh.tangents,
+                            cacheEntry->mesh.vertexCount * 4 * static_cast<int>(sizeof(float)),
                             0);
                 }
 
                 if (doorOpaqueLocations.tint >= 0) {
-                    const Vector4 tint{
-                            static_cast<float>(render.tint.r) / 255.0f,
-                            static_cast<float>(render.tint.g) / 255.0f,
-                            static_cast<float>(render.tint.b) / 255.0f,
-                            static_cast<float>(render.tint.a) / 255.0f};
+                    const Vector4 tint = engine::SrgbColorBytesToLinearSceneRgba(
+                            render.tint);
                     SetShaderValue(doorOpaqueMaterial.shader, doorOpaqueLocations.tint, &tint, SHADER_UNIFORM_VEC4);
                 }
 

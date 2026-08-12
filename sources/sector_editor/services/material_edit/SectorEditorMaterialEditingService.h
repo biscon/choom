@@ -77,9 +77,9 @@ public:
     bool ApplyDecalOpacity(TopologySurfaceEditTarget target, float opacity, engine::AssetManager* assets);
     bool ApplyDecalEmissive(TopologySurfaceEditTarget target, bool emissive, engine::AssetManager* assets);
     bool ApplyDecalTint(TopologySurfaceEditTarget target, Vector3 tint, engine::AssetManager* assets);
-    bool ApplyDecalBloomIntensity(
+    bool ApplyDecalEmissiveStrength(
             TopologySurfaceEditTarget target,
-            float bloomIntensity,
+            float emissiveStrength,
             engine::AssetManager* assets);
     bool OpenDecalTintModal(TopologySurfaceEditTarget target);
 

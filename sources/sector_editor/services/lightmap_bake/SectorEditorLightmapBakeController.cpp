@@ -8,6 +8,7 @@
 
 #include <filesystem>
 #include <system_error>
+#include <utility>
 
 namespace game {
 
@@ -329,6 +330,25 @@ bool SectorEditorLightmapBakeController::InstallCompletedResultFiles(
                 + validationError;
         return false;
     }
+    SectorLightmapMetadata expectedAtlasMetadata;
+    expectedAtlasMetadata.width = result.bakeResult.width;
+    expectedAtlasMetadata.height = result.bakeResult.height;
+    expectedAtlasMetadata.version = result.bakeResult.artifactVersion;
+    expectedAtlasMetadata.format = result.bakeResult.artifactFormat;
+    expectedAtlasMetadata.sourceHash = result.bakeResult.sourceHash;
+    for (const SectorLightmapAtlasMetadata& atlas : temporaryAtlases) {
+        SectorLightmapArtifactData validatedAtlas;
+        if (!ReadSectorLightmapArtifact(
+                    atlas.path,
+                    &expectedAtlasMetadata,
+                    validatedAtlas,
+                    validationError)) {
+            cleanupTemps();
+            outPayload.status = "Bake failed: invalid HDR lightmap atlas: "
+                    + validationError;
+            return false;
+        }
+    }
     if (!temporaryStaticModelPath.empty()) {
         SectorStaticModelLightmapData validatedStaticModels;
         if (!ReadSectorStaticModelLightmapSidecar(
@@ -369,57 +389,138 @@ bool SectorEditorLightmapBakeController::InstallCompletedResultFiles(
             ? std::string{}
             : MakeSectorStaticModelSidecarPathForLightmapPath(
                     result.finalOutputPath);
-    if (!temporaryStaticModelPath.empty()) {
-        std::filesystem::copy_file(
-                temporaryStaticModelPath,
-                finalStaticModelPath,
-                std::filesystem::copy_options::overwrite_existing,
-                ec);
-        if (ec) {
-            cleanupTemps();
-            outPayload.status =
-                    TextFormat(
-                            "Bake failed: could not install static model lightmap sidecar: %s",
-                            ec.message().c_str());
-            return false;
-        }
+    std::vector<std::pair<std::string, std::string>> stagedFiles;
+    stagedFiles.reserve(temporaryAtlases.size() + 2u);
+    for (size_t atlasIndex = 0; atlasIndex < temporaryAtlases.size(); ++atlasIndex) {
+        stagedFiles.emplace_back(
+                temporaryAtlases[atlasIndex].path,
+                finalLightmapPaths[atlasIndex] + ".installing");
     }
-    std::filesystem::copy_file(
+    stagedFiles.emplace_back(
             temporaryObjectProbePath,
-            finalObjectProbePath,
-            std::filesystem::copy_options::overwrite_existing,
-            ec
-    );
-    if (ec) {
-        cleanupTemps();
-        DeleteFileIfExists(finalStaticModelPath);
-        outPayload.status = TextFormat(
-                "Bake failed: could not install object probe sidecar: %s",
-                ec.message().c_str());
-        return false;
+            finalObjectProbePath + ".installing");
+    if (!temporaryStaticModelPath.empty()) {
+        stagedFiles.emplace_back(
+                temporaryStaticModelPath,
+                finalStaticModelPath + ".installing");
     }
-    std::vector<std::string> copiedLightmapPaths;
-    for (size_t reverseIndex = temporaryAtlases.size(); reverseIndex > 0; --reverseIndex) {
-        const size_t atlasIndex = reverseIndex - 1;
+    const auto cleanupStages = [&]() {
+        for (const auto& staged : stagedFiles) {
+            DeleteFileIfExists(staged.second);
+        }
+    };
+    cleanupStages();
+    for (const auto& staged : stagedFiles) {
         ec.clear();
         std::filesystem::copy_file(
-                temporaryAtlases[atlasIndex].path,
-                finalLightmapPaths[atlasIndex],
+                staged.first,
+                staged.second,
                 std::filesystem::copy_options::overwrite_existing,
                 ec);
         if (ec) {
+            cleanupStages();
             cleanupTemps();
-            DeleteFileIfExists(finalObjectProbePath);
-            DeleteFileIfExists(finalStaticModelPath);
-            for (const std::string& copiedPath : copiedLightmapPaths) {
-                DeleteFileIfExists(copiedPath);
-            }
             outPayload.status = TextFormat(
-                    "Bake failed: could not install lightmap: %s",
+                    "Bake failed: could not stage illumination artifact: %s",
                     ec.message().c_str());
             return false;
         }
-        copiedLightmapPaths.push_back(finalLightmapPaths[atlasIndex]);
+    }
+    for (size_t atlasIndex = 0; atlasIndex < temporaryAtlases.size(); ++atlasIndex) {
+        SectorLightmapArtifactData validatedAtlas;
+        if (!ReadSectorLightmapArtifact(
+                    finalLightmapPaths[atlasIndex] + ".installing",
+                    &expectedAtlasMetadata,
+                    validatedAtlas,
+                    validationError)) {
+            cleanupStages();
+            cleanupTemps();
+            outPayload.status = "Bake failed: staged HDR atlas validation failed: "
+                    + validationError;
+            return false;
+        }
+    }
+    if (!ReadSectorBakedObjectLightProbeSidecar(
+                finalObjectProbePath + ".installing",
+                &result.bakeResult.objectProbes,
+                validatedProbes,
+                validatedProbeMetadata,
+                validationError)) {
+        cleanupStages();
+        cleanupTemps();
+        outPayload.status = "Bake failed: staged probe validation failed: "
+                + validationError;
+        return false;
+    }
+    if (!temporaryStaticModelPath.empty()) {
+        SectorStaticModelLightmapData validatedStaticModels;
+        if (!ReadSectorStaticModelLightmapSidecar(
+                    finalStaticModelPath + ".installing",
+                    &result.bakeResult.staticModels,
+                    validatedStaticModels,
+                    validationError)) {
+            cleanupStages();
+            cleanupTemps();
+            outPayload.status = "Bake failed: staged static-model validation failed: "
+                    + validationError;
+            return false;
+        }
+    }
+
+    for (const auto& staged : stagedFiles) {
+        std::string finalDataPath = staged.second;
+        finalDataPath.resize(finalDataPath.size() - std::string(".installing").size());
+        ec.clear();
+        std::filesystem::remove(finalDataPath, ec);
+        ec.clear();
+        std::filesystem::rename(staged.second, finalDataPath, ec);
+        if (ec) {
+            cleanupStages();
+            cleanupTemps();
+            outPayload.status = TextFormat(
+                    "Bake failed: could not publish illumination artifact: %s",
+                    ec.message().c_str());
+            return false;
+        }
+    }
+
+    // Reopen the published data set before derived topology metadata is exposed.
+    for (const std::string& finalAtlasPath : finalLightmapPaths) {
+        SectorLightmapArtifactData validatedAtlas;
+        if (!ReadSectorLightmapArtifact(
+                    finalAtlasPath,
+                    &expectedAtlasMetadata,
+                    validatedAtlas,
+                    validationError)) {
+            cleanupTemps();
+            outPayload.status = "Bake failed: published HDR atlas validation failed: "
+                    + validationError;
+            return false;
+        }
+    }
+    if (!ReadSectorBakedObjectLightProbeSidecar(
+                finalObjectProbePath,
+                &result.bakeResult.objectProbes,
+                validatedProbes,
+                validatedProbeMetadata,
+                validationError)) {
+        cleanupTemps();
+        outPayload.status = "Bake failed: published probe validation failed: "
+                + validationError;
+        return false;
+    }
+    if (!finalStaticModelPath.empty()) {
+        SectorStaticModelLightmapData validatedStaticModels;
+        if (!ReadSectorStaticModelLightmapSidecar(
+                    finalStaticModelPath,
+                    &result.bakeResult.staticModels,
+                    validatedStaticModels,
+                    validationError)) {
+            cleanupTemps();
+            outPayload.status = "Bake failed: published static-model validation failed: "
+                    + validationError;
+            return false;
+        }
     }
     cleanupTemps();
 
@@ -432,7 +533,8 @@ bool SectorEditorLightmapBakeController::InstallCompletedResultFiles(
         outPayload.bakeResult.atlases.push_back(SectorLightmapAtlasMetadata{
                 MakeSectorAssetRelativePath(finalLightmapPaths[atlasIndex]),
                 temporaryAtlases[atlasIndex].width,
-                temporaryAtlases[atlasIndex].height});
+                temporaryAtlases[atlasIndex].height,
+                temporaryAtlases[atlasIndex].storedStatistics});
     }
     outPayload.finalObjectProbePath = finalObjectProbePath;
     outPayload.finalObjectProbeAssetPath = MakeSectorAssetRelativePath(finalObjectProbePath);

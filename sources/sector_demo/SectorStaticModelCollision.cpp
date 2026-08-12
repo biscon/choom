@@ -442,21 +442,27 @@ bool BuildSectorStaticModelCollider(
             (maximumZ - minimumZ) * 0.5f};
     outCollider.bottom = minimumY;
     outCollider.top = maximumY;
+    outCollider.resolvedPosition = transform.position;
+    outCollider.resolvedYawRadians = transform.yawRadians;
+    outCollider.resolvedRotationXRadians = transform.rotationXRadians;
+    outCollider.resolvedRotationZRadians = transform.rotationZRadians;
+    outCollider.resolvedScale = scale;
     outCollider.resolved = true;
     outCollider.resolved = IsValidCollider(outCollider);
     outCollider.failed = !outCollider.resolved;
     return outCollider.resolved;
 }
 
-void UpdateSectorStaticModelColliderSystem(
+bool UpdateSectorStaticModelColliderSystem(
         engine::World& world,
         engine::AssetManager& assets)
 {
+    bool changed = false;
     world.ForEach<
             SectorObjectTransform,
             SectorStaticModel,
             SectorStaticModelCollider>(
-            [&assets](
+            [&assets, &changed](
                     engine::Entity,
                     SectorObjectTransform& transform,
                     SectorStaticModel& staticModel,
@@ -466,6 +472,7 @@ void UpdateSectorStaticModelColliderSystem(
                 }
                 if (engine::IsNull(staticModel.model)) {
                     collider.failed = true;
+                    changed = true;
                     return;
                 }
                 const engine::ModelAsset* asset =
@@ -473,9 +480,11 @@ void UpdateSectorStaticModelColliderSystem(
                 if (asset == nullptr) {
                     if (assets.HasFailed(staticModel.model)) {
                         collider.failed = true;
+                        changed = true;
                     }
                     return;
                 }
+                changed = true;
                 if (!asset->hasLocalBounds
                         || !BuildSectorStaticModelCollider(
                                 staticModel.placedObjectId,
@@ -484,6 +493,7 @@ void UpdateSectorStaticModelColliderSystem(
                                 staticModel.scale,
                                 collider)) {
                     collider.failed = true;
+                    changed = true;
                     std::fprintf(
                             stderr,
                             "[SectorRuntimeObjects WARNING] Static model object %d has no valid collision bounds\n",
@@ -498,24 +508,40 @@ void UpdateSectorStaticModelColliderSystem(
             SectorDynamicModel,
             engine::AnimatedModelInstance,
             SectorStaticModelCollider>(
-            [&assets](
+            [&assets, &changed](
                     engine::Entity,
                     SectorObjectTransform& transform,
                     SectorDynamicModel& dynamicModel,
                     engine::AnimatedModelInstance& instance,
                     SectorStaticModelCollider& collider) {
                 if (collider.failed || engine::IsNull(instance.model)) {
-                    collider.failed = true;
+                    if (!collider.failed) {
+                        collider.failed = true;
+                        changed = true;
+                    }
                     return;
                 }
                 const engine::ModelAsset* asset = assets.GetModelAsset(instance.model);
                 if (asset == nullptr) {
                     if (assets.HasFailed(instance.model)) {
                         collider.failed = true;
+                        changed = true;
                     }
                     return;
                 }
+                const bool transformUnchanged = collider.resolved
+                        && collider.resolvedPosition.x == transform.position.x
+                        && collider.resolvedPosition.y == transform.position.y
+                        && collider.resolvedPosition.z == transform.position.z
+                        && collider.resolvedYawRadians == transform.yawRadians
+                        && collider.resolvedRotationXRadians == transform.rotationXRadians
+                        && collider.resolvedRotationZRadians == transform.rotationZRadians
+                        && collider.resolvedScale == dynamicModel.scale;
+                if (transformUnchanged) {
+                    return;
+                }
                 collider.resolved = false;
+                changed = true;
                 if (!asset->hasLocalBounds
                         || !BuildSectorStaticModelCollider(
                                 dynamicModel.placedObjectId,
@@ -530,6 +556,7 @@ void UpdateSectorStaticModelColliderSystem(
                             dynamicModel.placedObjectId);
                 }
             });
+    return changed;
 }
 
 void CollectSectorStaticModelColliders(

@@ -7,7 +7,7 @@ bin/
 build/
 out/
 CMakeSettings.json
-*.lightmap.png
-*.lightmap.object_probes.bin
-*.lightmap.png.static_models.bin
+# Generated baked-illumination atlases, probe/static-model sidecars, and staging files.
+*.lightmap.*
+*.object_probes.bin*
 .venv/

@@ -72,14 +72,18 @@ void SectorSceneRuntime::Update(
             context.assets,
             context.audio);
     renderer.FinalizeRuntimeObjectResources(context.assets, context.world);
-    runtimeObjects.dynamicDoorColliders.clear();
-    CollectSectorDoorDynamicColliders(
-            context.world,
-            runtimeObjects.dynamicDoorColliders);
-    runtimeObjects.dynamicPortalBlockers.clear();
-    CollectSectorDoorDynamicPortalBlockers(
-            context.world,
-            runtimeObjects.dynamicPortalBlockers);
+    if (runtimeObjects.doorSpatialStateChanged
+            || !runtimeObjects.doorCollisionCacheInitialized) {
+        runtimeObjects.dynamicDoorColliders.clear();
+        CollectSectorDoorDynamicColliders(
+                context.world,
+                runtimeObjects.dynamicDoorColliders);
+        runtimeObjects.dynamicPortalBlockers.clear();
+        CollectSectorDoorDynamicPortalBlockers(
+                context.world,
+                runtimeObjects.dynamicPortalBlockers);
+        runtimeObjects.doorCollisionCacheInitialized = true;
+    }
     renderer.AdvanceRuntime(dt);
 }
 
@@ -334,19 +338,29 @@ void SectorSceneRuntime::RenderScene(
             map.fogSettings);
 }
 
-void SectorSceneRuntime::ApplyPostProcessing(
-        engine::AssetManager& assets,
-        RenderTexture2D& sceneTarget,
+void SectorSceneRuntime::ApplyWorldAtmosphere(
+        engine::RenderTarget& sceneTarget,
         const SectorTopologyMap& map)
 {
-    renderer.ApplyEmissiveDecalBloomToScene(
-            assets,
-            sceneTarget,
-            map.fogSettings);
-    renderer.ApplyLocalFogToScene(
+    renderer.ApplyWorldAtmosphere(
             sceneTarget,
             map,
             runtimeObjects.objectLightProbes);
+}
+
+void SectorSceneRuntime::ApplyHdrBloom(
+        engine::RenderTarget& sceneTarget,
+        const engine::HdrBloomSettings& settings,
+        bool presentFromScratch)
+{
+    renderer.ApplyHdrBloom(sceneTarget, settings, presentFromScratch);
+}
+
+bool SectorSceneRuntime::CompositeViewmodel(
+        engine::RenderTarget& sceneTarget,
+        const engine::RenderTarget& viewmodelTarget)
+{
+    return renderer.CompositeViewmodel(sceneTarget, viewmodelTarget);
 }
 
 } // namespace game

@@ -1,6 +1,7 @@
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 
 #include "engine/assets/AssetManager.h"
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorSkyCylinder.h"
 #include "sector_demo/SectorTopologyMap.h"
 
@@ -150,7 +151,8 @@ void SectorSkyRenderer::DrawSkyCylinder(const Texture2D& texture, const Camera3D
     rlDisableDepthMask();
     DrawMesh(skyCylinderMesh, skyMaterial, transform);
     skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = skyDefaultMaterialTexture;
-    skyMaterial.maps[MATERIAL_MAP_DIFFUSE].color = skyTopCapColor;
+    skyMaterial.maps[MATERIAL_MAP_DIFFUSE].color =
+            engine::SrgbColorBytesToLinearSceneUnorm(skyTopCapColor);
     DrawMesh(skyTopCapMesh, skyMaterial, transform);
     skyMaterial.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
     skyMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = texture;

@@ -1,5 +1,6 @@
 #include "game/FpsPlayerRuntime.h"
 
+#include "engine/render/ColorTransfer.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorLightmap.h"
@@ -19,6 +20,9 @@ void FpsPlayerRuntime::Begin(
         const char* scopeName)
 {
     End(assets, renderer);
+    if (!LoadFpsMuzzleFlashRenderResources(muzzleFlashRenderResources)) {
+        TraceLog(LOG_WARNING, "MUZZLE FLASH: HDR shader unavailable; visible flash disabled");
+    }
     const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(
             registry,
             registry.initialWeaponId);
@@ -120,6 +124,7 @@ void FpsPlayerRuntime::End(
         assets.UnloadScope(state.assetScope);
     }
     renderer.SetRuntimePointLight(nullptr);
+    UnloadFpsMuzzleFlashRenderResources(muzzleFlashRenderResources);
     ResetFpsViewmodelRuntime(state);
     cameraRecoilWeaponId.clear();
 }
@@ -489,10 +494,8 @@ void FpsPlayerRuntime::UpdateTransformsAndLight(
         source.light.lightId = source.lightId;
         source.light.kind = SectorPreviewDynamicLightKind::Point;
         source.light.position = position;
-        source.light.color = Vector3{
-                state.firing.light.color.r / 255.0f,
-                state.firing.light.color.g / 255.0f,
-                state.firing.light.color.b / 255.0f};
+        source.light.color = engine::SrgbColorBytesToLinearSceneRgb(
+                state.firing.light.color);
         source.light.radius = state.firing.light.radiusWorld;
         source.light.intensity = intensity;
         renderer.SetRuntimePointLight(&source);
@@ -551,6 +554,10 @@ void FpsPlayerRuntime::Render(
             state.attachment.lighting.materialOverride.roughnessFactor,
             state.attachment.lighting.materialOverride
                     .useMetallicRoughnessTexture};
+    // Draw the additive flash first so the subsequently drawn gun can occlude
+    // it with the isolated viewmodel depth buffer. The captured fire-time
+    // transform keeps recoil from clipping the flash origin.
+    DrawFpsMuzzleFlash(muzzleFlashRenderResources, state.firing, camera);
     renderer.DrawViewmodel(
             assets,
             *asset,
@@ -559,10 +566,11 @@ void FpsPlayerRuntime::Render(
             state.firing.viewmodelRootTransform,
             attachmentAsset,
             state.attachment.pistolWorldTransform,
+            preferredSectorId,
+            !runtimeObjects.objectLightProbes.probes.empty(),
             ambientLighting,
             viewmodelLighting,
             attachmentLighting);
-    DrawFpsMuzzleFlash(state.firing, camera);
     rlSetClipPlanes(previousNear, previousFar);
 }
 

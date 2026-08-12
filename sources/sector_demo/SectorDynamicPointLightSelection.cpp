@@ -1,8 +1,8 @@
 #include "sector_demo/SectorDynamicPointLightSelection.h"
 
+#include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorBounds.h"
 #include "sector_demo/SectorCollisionWorld.h"
-#include "sector_demo/SectorColor.h"
 #include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTopologyTypes.h"
@@ -321,7 +321,7 @@ bool MakeSectorPreviewDynamicPointLightUniform(
     outLight.kind = SectorPreviewDynamicLightKind::Point;
     outLight.position = SectorAuthoringToWorldPosition(light.position);
     outLight.direction = Vector3{0.0f, -1.0f, 0.0f};
-    outLight.color = ColorToUnitRgb(light.color);
+    outLight.color = engine::SrgbColorBytesToLinearSceneRgb(light.color);
     outLight.radius = SectorAuthoringToWorldDistance(light.radius);
     outLight.innerConeCos = -1.0f;
     outLight.outerConeCos = -1.0f;
@@ -373,7 +373,7 @@ bool MakeSectorPreviewDynamicSpotLightUniform(
     outLight.kind = SectorPreviewDynamicLightKind::Spot;
     outLight.position = worldPosition;
     outLight.direction = direction;
-    outLight.color = ColorToUnitRgb(light.color);
+    outLight.color = engine::SrgbColorBytesToLinearSceneRgb(light.color);
     outLight.radius = SectorAuthoringToWorldDistance(light.range);
     outLight.innerConeCos = ConeCosine(innerDegrees);
     outLight.outerConeCos = ConeCosine(outerDegrees);

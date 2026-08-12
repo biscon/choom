@@ -417,12 +417,12 @@ void SectorEditorSoundService::DrawAddModal(
 
     engine::AssetManager& assets = context_.engineContext.assets;
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 135});
-    const Rectangle modal{(EditorWidth - 880.0f) * 0.5f, (EditorHeight - 660.0f) * 0.5f, 880.0f, 660.0f};
+    const Rectangle modal{(EditorWidth - 1100.0f) * 0.5f, (EditorHeight - 660.0f) * 0.5f, 1100.0f, 660.0f};
     DrawRectangleRec(modal, Color{20, 24, 32, 245});
     DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
     engine::Text(config, assets, Rectangle{modal.x + 22.0f, modal.y + 18.0f, modal.width - 44.0f, 36.0f}, font, "Add Map Sound");
 
-    const Rectangle listBounds{modal.x + 22.0f, modal.y + 68.0f, 390.0f, 470.0f};
+    const Rectangle listBounds{modal.x + 22.0f, modal.y + 68.0f, 610.0f, 470.0f};
     const Vector2 contentSize{
             ScrollContentWidth(listBounds.width, config),
             std::max(listBounds.height, config.listItemHeight * static_cast<float>(modalState.optionLabels.size()))};
@@ -448,7 +448,7 @@ void SectorEditorSoundService::DrawAddModal(
                 modalState.paths.empty() ? config.invalidColor : config.mutedTextColor);
     }
 
-    const float rightX = modal.x + 438.0f;
+    const float rightX = modal.x + 658.0f;
     float y = modal.y + 82.0f;
     const std::string path = modalState.selectedPathIndex >= 0
             && modalState.selectedPathIndex < static_cast<int>(modalState.paths.size())

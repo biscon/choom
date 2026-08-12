@@ -113,8 +113,6 @@ void TestBoundsHelpers()
 
 void TestColorHelpers()
 {
-    Check(Near(game::ColorToUnitRgb(Color{0, 128, 255, 42}), Vector3{0.0f, 128.0f / 255.0f, 1.0f}),
-            "ColorToUnitRgb converts byte channels");
     Check(game::ClampColorByte(-2.0f) == 0, "ClampColorByte clamps negative values");
     Check(game::ClampColorByte(300.0f) == 255, "ClampColorByte clamps high values");
     Check(game::ClampColorByte(127.6f) == 128, "ClampColorByte rounds before clamping");

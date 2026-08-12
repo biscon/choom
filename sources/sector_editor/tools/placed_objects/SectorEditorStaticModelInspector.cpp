@@ -85,21 +85,22 @@ void DrawSectorEditorStaticModelInspector(
                     context.config,
                     context.assets,
                     context.smallFont);
-    const std::string pathLabel = object->staticModel.modelPath.empty()
-            ? "Model path: <none>"
-            : "Model path: " + object->staticModel.modelPath;
+    const std::string_view filename = SectorEditorModelFilename(
+            object->staticModel.modelPath);
+    std::string modelLabel = "Model file: ";
+    modelLabel.append(filename.empty() ? "<none>" : filename);
     engine::Text(
             context.ui,
             smallConfig,
             context.assets,
             Rectangle{0.0f, y, contentW, 38.0f},
             context.smallFont,
-            pathLabel.c_str(),
+            modelLabel.c_str(),
             engine::UITextJustify::Left,
             object->staticModel.modelPath.empty()
                     ? context.config.invalidColor
                     : context.config.textColor,
-            true);
+            false);
     y += 42.0f;
     const StaticModelPreviewStatusText modelStatus =
             ModelStatus(

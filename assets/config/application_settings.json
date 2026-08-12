@@ -6,6 +6,20 @@
     "volume": 0.6499999761581421,
     "landingImpactVolumeMultiplier": 1.350000023841858
   },
+  "graphics": {
+    "renderScale": 1.5,
+    "fxaa": true,
+    "volumetricQualityCap": "high",
+    "shadowQuality": "high",
+    "performanceOverlay": false
+  },
+  "hdrBloom": {
+    "enabled": true,
+    "threshold": 1.0,
+    "softKnee": 0.5,
+    "intensity": 0.25,
+    "radius": 1.0
+  },
   "playerSounds": {
     "events": {
       "jump": {
@@ -64,8 +78,9 @@
           0.05000000074505806,
           0.12999999523162842
         ],
-        "flashLifetimeSeconds": 0.07500000298023224,
-        "flashSizeWorld": 0.12999999523162842,
+        "flashLifetimeSeconds": 0.07599999755620956,
+        "flashEdgeSoftness": 0.800000011920929,
+        "flashRadianceStrength": 16.0,
         "muzzleLightIntensity": 8.0,
         "muzzleLightRadiusWorld": 3.0,
         "muzzleLightLifetimeSeconds": 0.08500000089406967

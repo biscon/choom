@@ -88,6 +88,7 @@ void SectorEditorTextureCatalogService::RefreshTextureHandles(engine::AssetManag
                         context_.textureState.editorTextureScope,
                         texture->id.c_str(),
                         resolvedPath.c_str(),
+                        engine::TextureColorUsage::DisplaySrgb,
                         SectorTextureLoadFlags(texture->filter)
                 )
         );

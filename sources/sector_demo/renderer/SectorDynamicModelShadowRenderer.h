@@ -48,6 +48,7 @@ public:
     void RebuildSources(const SectorTopologyMap& map, const SectorCollisionWorld* collisionWorld);
     void RenderShadowMaps(const SectorDynamicModelShadowDrawContext& context);
     void Draw(const SectorDynamicModelShadowDrawContext& context);
+    void SetProjectedShadowResolution(int resolution);
 
     bool IsLoaded() const { return loaded; }
     std::size_t ActiveProjectedShadowCount() const { return activeSlotCount; }
@@ -110,6 +111,7 @@ private:
     Vector3 fallbackDirectionToLight = {-0.35f, 0.80f, -0.25f};
     bool loaded = false;
     bool projectedLoaded = false;
+    int projectedShadowResolution = DynamicModelProjectedShadowResolution;
     std::size_t activeSlotCount = 0;
     int casterUseSkinningLoc = -1;
     int casterLightViewProjectionLoc = -1;

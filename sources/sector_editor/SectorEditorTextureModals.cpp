@@ -3,6 +3,7 @@
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_demo/SectorTextureTypes.h"
 
@@ -16,6 +17,14 @@ float ScrollAreaContentWidthForVerticalScrollbar(float boundsWidth, const engine
 {
     const float clientWidth = std::max(0.0f, boundsWidth - config.borderThickness * 2.0f);
     return std::max(0.0f, clientWidth - config.scrollbarSize - engine::DefaultScrollAreaPaddingPx * 2.0f);
+}
+
+float WrappedTextHeightForLines(const engine::UIConfig& config, int lineCount)
+{
+    const int clampedLineCount = std::max(1, lineCount);
+    return config.paddingY * 2.0f
+            + config.fontSize * static_cast<float>(clampedLineCount)
+            + config.textSpacing * static_cast<float>(clampedLineCount - 1);
 }
 
 } // namespace
@@ -55,9 +64,9 @@ void DrawAddMapTextureModal(
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 135});
 
     const Rectangle modal{
-            (EditorWidth - 880.0f) * 0.5f,
+            (EditorWidth - 1100.0f) * 0.5f,
             (EditorHeight - 660.0f) * 0.5f,
-            880.0f,
+            1100.0f,
             660.0f
     };
     DrawRectangleRec(modal, Color{20, 24, 32, 245});
@@ -67,7 +76,7 @@ void DrawAddMapTextureModal(
     engine::Text(config, assets, Rectangle{modal.x + 22.0f, y, modal.width - 44.0f, 36.0f}, font, "Add Map Texture");
     y += 50.0f;
 
-    const Rectangle listBounds{modal.x + 22.0f, y, 380.0f, 470.0f};
+    const Rectangle listBounds{modal.x + 22.0f, y, 600.0f, 470.0f};
     const float listContentW = ScrollAreaContentWidthForVerticalScrollbar(listBounds.width, config);
     const Vector2 contentSize{
             listContentW,
@@ -114,7 +123,7 @@ void DrawAddMapTextureModal(
         );
     }
 
-    const float rightX = modal.x + 430.0f;
+    const float rightX = modal.x + 650.0f;
     y = modal.y + 68.0f;
     const Rectangle previewBounds{rightX, y, 410.0f, 260.0f};
     engine::Image(config, assets, previewBounds, modalState.previewTexture);
@@ -190,6 +199,7 @@ void DrawTexturePickerModal(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         TexturePickerState& picker,
         SectorEditorTextureCatalogService& textureCatalog,
         const SectorEditorTexturePickerCallbacks& callbacks)
@@ -218,9 +228,9 @@ void DrawTexturePickerModal(
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 135});
 
     const Rectangle modal{
-            (EditorWidth - 820.0f) * 0.5f,
+            (EditorWidth - 1025.0f) * 0.5f,
             (EditorHeight - 620.0f) * 0.5f,
-            820.0f,
+            1025.0f,
             620.0f
     };
     DrawRectangleRec(modal, Color{20, 24, 32, 245});
@@ -235,7 +245,7 @@ void DrawTexturePickerModal(
             TextFormat("Pick %s", TopologyPickerTargetLabel(picker)));
     y += 50.0f;
 
-    const Rectangle listBounds{modal.x + 22.0f, y, 350.0f, 420.0f};
+    const Rectangle listBounds{modal.x + 22.0f, y, 555.0f, 530.0f};
     const float listContentW = ScrollAreaContentWidthForVerticalScrollbar(listBounds.width, config);
     const Vector2 contentSize{
             listContentW,
@@ -274,15 +284,38 @@ void DrawTexturePickerModal(
         previewTextureId = callbacks.currentTextureForTarget();
     }
 
-    const Rectangle previewBounds{modal.x + 402.0f, y, 376.0f, 300.0f};
+    const float rightX = modal.x + 607.0f;
+    const float rightWidth = 376.0f;
+    const Rectangle previewBounds{rightX, y, rightWidth, 300.0f};
     engine::Image(config, assets, previewBounds, textureCatalog.TextureHandleForId(previewTextureId));
     y += 316.0f;
 
     const SectorTextureDefinition* previewTexture = textureCatalog.FindTexture(previewTextureId);
     const std::string path = previewTexture == nullptr ? std::string{} : previewTexture->path;
-    engine::Text(config, assets, Rectangle{modal.x + 402.0f, y, 376.0f, 34.0f}, font, TextFormat("Id: %s", previewTextureId.empty() ? "<none>" : previewTextureId.c_str()), engine::UITextJustify::Left, config.textColor);
-    y += 38.0f;
-    engine::Text(config, assets, Rectangle{modal.x + 402.0f, y, 376.0f, 72.0f}, font, TextFormat("Path: %s", path.empty() ? "<sector default>" : path.c_str()), engine::UITextJustify::Left, config.mutedTextColor);
+    const float idHeight = WrappedTextHeightForLines(config, 2);
+    engine::Text(
+            config,
+            assets,
+            Rectangle{rightX, y, rightWidth, idHeight},
+            font,
+            TextFormat("Id: %s", previewTextureId.empty() ? "<none>" : previewTextureId.c_str()),
+            engine::UITextJustify::Left,
+            config.textColor,
+            true);
+    y += idHeight + 4.0f;
+
+    const engine::UIConfig smallConfig =
+            SectorEditorSmallFontConfig(config, assets, smallFont);
+    const float pathHeight = WrappedTextHeightForLines(smallConfig, 2);
+    engine::Text(
+            smallConfig,
+            assets,
+            Rectangle{rightX, y, rightWidth, pathHeight},
+            smallFont,
+            TextFormat("Path: %s", path.empty() ? "<sector default>" : path.c_str()),
+            engine::UITextJustify::Left,
+            smallConfig.mutedTextColor,
+            true);
 
     const float buttonY = modal.y + modal.height - 64.0f;
     const float buttonW = 150.0f;
@@ -489,6 +522,7 @@ void RefreshAddMapTexturePreview(AddMapTextureState& modalState, engine::AssetMa
             modalState.previewScope,
             "selected_preview",
             resolvedPath.c_str(),
+            engine::TextureColorUsage::DisplaySrgb,
             SectorTextureLoadFlags(modalState.filter)
     );
 }
@@ -533,6 +567,7 @@ void RefreshSpritePickerPreview(SpritePickerState& picker, engine::AssetManager&
             picker.previewScope,
             "atlas_preview",
             resolvedPath.c_str(),
+            engine::TextureColorUsage::DisplaySrgb,
             engine::TextureLoad_PointFilter
     );
 }

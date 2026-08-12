@@ -140,6 +140,20 @@ target_link_libraries(${PROJECT_NAME} PRIVATE xatlas)
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(render_color_foundations_tests
+            tests/RenderColorFoundationsTests.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
+            sources/engine/render/ColorTransfer.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
+            sources/engine/render/RenderColorDiagnostics.cpp
+            sources/engine/render/RenderTarget.cpp
+            sources/engine/render/ToneMapping.cpp
+    )
+    target_include_directories(render_color_foundations_tests PRIVATE sources)
+    target_link_libraries(render_color_foundations_tests PRIVATE raylib)
+    add_test(NAME render_color_foundations COMMAND render_color_foundations_tests)
+
     add_executable(application_flow_tests
             tests/ApplicationFlowTests.cpp
             sources/game/ApplicationFlow.cpp
@@ -169,10 +183,32 @@ if(BUILD_TESTING)
             sources/game/FpsWeaponRegistry.cpp
             sources/game/FpsHudRenderer.cpp
             sources/game/FpsViewmodelEffectsRenderer.cpp
+            sources/engine/render/ColorTransfer.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
     )
     target_include_directories(fps_viewmodel_tests PRIVATE sources)
     target_link_libraries(fps_viewmodel_tests PRIVATE raylib)
     add_test(NAME fps_viewmodel COMMAND fps_viewmodel_tests)
+
+    add_executable(pbr_lighting_policy_tests
+            tests/PbrLightingPolicyTests.cpp
+    )
+    target_include_directories(pbr_lighting_policy_tests PRIVATE sources)
+    target_compile_definitions(pbr_lighting_policy_tests PRIVATE
+            PBR_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorStaticModelRenderer.cpp"
+            MODEL_ASSET_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/engine/assets/ModelAssets.cpp"
+            SECTOR_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorMeshRenderer.cpp"
+            DOOR_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDoorRenderer.cpp"
+            BILLBOARD_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBillboardRenderer.cpp"
+            BLOOM_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBloomRenderer.cpp"
+            LOCAL_FOG_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLocalFogRenderer.cpp"
+            HAZE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLightHazeRenderer.cpp"
+            DUST_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLightDustRenderer.cpp"
+            MUZZLE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/game/FpsViewmodelEffectsRenderer.cpp"
+            DYNAMIC_MODEL_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicModelShadowRenderer.cpp"
+            MAIN_RENDER_GRAPH_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/Main.cpp")
+    target_link_libraries(pbr_lighting_policy_tests PRIVATE raylib)
+    add_test(NAME pbr_lighting_policy COMMAND pbr_lighting_policy_tests)
 
     add_executable(sector_utility_tests
             tests/SectorUtilityTests.cpp
@@ -288,6 +324,9 @@ if(BUILD_TESTING)
             tests/SectorTopologyMeshBuilderTests.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorDynamicPointLightSelection.cpp
+            sources/sector_demo/SectorPortalVisibility.cpp
+            sources/sector_demo/renderer/SectorStaticSpecularLighting.cpp
+            sources/engine/render/ColorTransfer.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorMeshBuilder.cpp
             sources/sector_demo/SectorTextureTypes.cpp

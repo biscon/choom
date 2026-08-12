@@ -1,5 +1,6 @@
 #include "sector_demo/renderer/SectorLocalFogRenderer.h"
 
+#include "engine/render/ColorTransfer.h"
 #include <raymath.h>
 #include <rlgl.h>
 
@@ -32,6 +33,19 @@ const char* AccumulateFs = R"(
 #version 330
 in vec2 fragUv;
 out vec4 finalColor;
+
+float StoreFiniteHalfChannel(float value) {
+    if (isnan(value)) return 0.0;
+    if (isinf(value)) return value > 0.0 ? 65504.0 : 0.0;
+    return min(max(value, 0.0), 65504.0);
+}
+vec3 StoreFiniteHalfRadiance(vec3 value) {
+    return vec3(StoreFiniteHalfChannel(value.r), StoreFiniteHalfChannel(value.g),
+            StoreFiniteHalfChannel(value.b));
+}
+float StoreBoundedAlpha(float value) {
+    return (isnan(value) || isinf(value)) ? 0.0 : clamp(value, 0.0, 1.0);
+}
 uniform sampler2D sceneDepth;
 uniform int volumeCount;
 uniform int marchSteps;
@@ -73,7 +87,6 @@ uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
-uniform float dynamicLightingClamp;
 
 const vec2 kFogShadowDisk[4] = vec2[4](
     vec2(-0.707, -0.707),
@@ -294,10 +307,9 @@ void main() {
             float sampleOpticalDepth = paramsA.x * boundary * noise * effectiveStepLength;
             if (sampleOpticalDepth <= 0.0) continue;
             vec3 staticLighting = interpolateStaticLighting(volumeIndex, local.xz);
-            vec3 sampleLighting = clamp(
+            vec3 sampleLighting = max(
                     staticLighting + evaluateDynamicLighting(position),
-                    vec3(0.0),
-                    vec3(dynamicLightingClamp));
+                    vec3(0.0));
             volumeOpticalDepth += sampleOpticalDepth;
             volumeWeightedScattering += fogColors[volumeIndex]
                     * sampleLighting
@@ -313,7 +325,8 @@ void main() {
     }
     float opacity = 1.0 - exp(-totalOpticalDepth);
     vec3 color = totalOpticalDepth > 0.00001 ? weightedColor / totalOpticalDepth : vec3(0.0);
-    finalColor = vec4(color, opacity);
+    vec3 premultipliedRadiance = StoreFiniteHalfRadiance(color * opacity);
+    finalColor = vec4(premultipliedRadiance, StoreBoundedAlpha(opacity));
 }
 )";
 
@@ -327,6 +340,20 @@ uniform sampler2D fogTexture;
 uniform vec2 fogTexelSize;
 uniform int bilateralUpsample;
 
+float SanitizeIntermediateChannel(float value) {
+    if (isnan(value)) return 0.0;
+    if (isinf(value)) return value > 0.0 ? 65504.0 : 0.0;
+    return max(value, 0.0);
+}
+vec3 SanitizeIntermediateRadiance(vec3 value) {
+    return vec3(SanitizeIntermediateChannel(value.r),
+            SanitizeIntermediateChannel(value.g),
+            SanitizeIntermediateChannel(value.b));
+}
+float SanitizeOpacity(float value) {
+    return (isnan(value) || isinf(value)) ? 0.0 : clamp(value, 0.0, 1.0);
+}
+
 void main() {
     vec4 fog = texture(fogTexture, fragUv);
     if (bilateralUpsample != 0) {
@@ -335,6 +362,7 @@ void main() {
         float totalWeight = 0.0;
         for (int y = -1; y <= 1; ++y) {
             for (int x = -1; x <= 1; ++x) {
+                if (x != 0 && y != 0) continue;
                 vec2 sampleUv = clamp(fragUv + vec2(x, y) * fogTexelSize, vec2(0.0), vec2(1.0));
                 float sampleDepth = texture(sceneDepth, sampleUv).r;
                 float weight = exp(-abs(sampleDepth - centerDepth) * 600.0);
@@ -345,7 +373,12 @@ void main() {
         fog = accumulated / max(totalWeight, 0.0001);
     }
     vec4 scene = texture(sceneColor, fragUv);
-    finalColor = vec4(mix(scene.rgb, fog.rgb, fog.a), scene.a);
+    vec3 composed = SanitizeIntermediateRadiance(scene.rgb)
+            * (1.0 - SanitizeOpacity(fog.a))
+            + SanitizeIntermediateRadiance(fog.rgb);
+    composed = SanitizeIntermediateRadiance(composed);
+    finalColor = vec4(composed,
+            (isnan(scene.a) || isinf(scene.a)) ? 1.0 : clamp(scene.a, 0.0, 1.0));
 }
 )";
 
@@ -390,40 +423,18 @@ bool SameColor(Color a, Color b)
 
 } // namespace
 
-RenderTexture2D LoadSectorDepthTextureRenderTarget(int width, int height)
-{
-    RenderTexture2D target{};
-    target.id = rlLoadFramebuffer();
-    if (target.id == 0) return target;
-    rlEnableFramebuffer(target.id);
-    target.texture.id = rlLoadTexture(nullptr, width, height, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
-    target.texture.width = width;
-    target.texture.height = height;
-    target.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-    target.texture.mipmaps = 1;
-    target.depth.id = rlLoadTextureDepth(width, height, false);
-    target.depth.width = width;
-    target.depth.height = height;
-    target.depth.format = 19;
-    target.depth.mipmaps = 1;
-    rlFramebufferAttach(target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
-    rlFramebufferAttach(target.id, target.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
-    if (!rlFramebufferComplete(target.id)) {
-        rlDisableFramebuffer();
-        UnloadRenderTexture(target);
-        return RenderTexture2D{};
-    }
-    rlDisableFramebuffer();
-    return target;
-}
-
 bool SectorLocalFogRenderer::EnsureShaders()
 {
     if (ShaderReady(accumulateShader) && ShaderReady(compositeShader)) return true;
+    if (shaderFailed) return false;
     Shutdown();
     accumulateShader = LoadShaderFromMemory(FullscreenVs, AccumulateFs);
     compositeShader = LoadShaderFromMemory(FullscreenVs, CompositeFs);
-    if (!ShaderReady(accumulateShader) || !ShaderReady(compositeShader)) return false;
+    if (!ShaderReady(accumulateShader) || !ShaderReady(compositeShader)) {
+        shaderFailed = true;
+        accumulationDiagnostic = "disabled: shader unavailable";
+        return false;
+    }
 
     accumulateLocations.sceneDepth = GetShaderLocation(accumulateShader, "sceneDepth");
     accumulateLocations.volumeCount = GetShaderLocation(accumulateShader, "volumeCount");
@@ -466,8 +477,6 @@ bool SectorLocalFogRenderer::EnsureShaders()
             GetShaderLocationArrayBase(accumulateShader, "dynamicLightInnerConeCos");
     accumulateLocations.dynamicLights.dynamicLightOuterConeCos =
             GetShaderLocationArrayBase(accumulateShader, "dynamicLightOuterConeCos");
-    accumulateLocations.dynamicLights.dynamicLightingClamp =
-            GetShaderLocation(accumulateShader, "dynamicLightingClamp");
     accumulateLocations.dynamicShadows.dynamicLightShadowSlots =
             GetShaderLocationArrayBase(accumulateShader, "dynamicLightShadowSlots");
     for (std::size_t index = 0; index < MaxDynamicSpotLightShadowCasters; ++index) {
@@ -493,10 +502,7 @@ bool SectorLocalFogRenderer::EnsureShaders()
 
 void SectorLocalFogRenderer::ReleaseTargets()
 {
-    if (fogTarget.id != 0) UnloadRenderTexture(fogTarget);
-    if (compositeTarget.id != 0) UnloadRenderTexture(compositeTarget);
-    fogTarget = RenderTexture2D{};
-    compositeTarget = RenderTexture2D{};
+    engine::UnloadRenderTarget(fogTarget);
     sceneWidth = 0;
     sceneHeight = 0;
     targetScale = 0.0f;
@@ -504,21 +510,42 @@ void SectorLocalFogRenderer::ReleaseTargets()
 
 bool SectorLocalFogRenderer::EnsureTargets(int width, int height, float scale)
 {
-    if (fogTarget.id != 0 && compositeTarget.id != 0
+    if (engine::IsRenderTargetReady(fogTarget)
             && sceneWidth == width && sceneHeight == height && targetScale == scale) return true;
+    if (failedWidth == width && failedHeight == height && failedScale == scale) return false;
     ReleaseTargets();
     const int fogWidth = std::max(1, static_cast<int>(std::round(width * scale)));
     const int fogHeight = std::max(1, static_cast<int>(std::round(height * scale)));
-    fogTarget = LoadRenderTexture(fogWidth, fogHeight);
-    compositeTarget = LoadRenderTexture(width, height);
-    if (fogTarget.id == 0 || compositeTarget.id == 0) {
+    std::string error;
+    // RGB is premultiplied linear HDR in-scattered radiance; alpha is bounded
+    // opacity (one minus transmittance).
+    engine::LoadRenderTarget(
+            engine::RenderTargetDescriptor{
+                    "local-fog-accumulation",
+                    fogWidth,
+                    fogHeight,
+                    engine::RenderTargetColorFormat::Rgba16Float,
+                    engine::RenderTargetFilter::Bilinear,
+                    engine::RenderTargetWrap::Clamp,
+                    engine::RenderTargetDepthKind::None,
+                    1},
+            fogTarget,
+            &error);
+    if (!engine::IsRenderTargetReady(fogTarget)) {
+        failedWidth = width;
+        failedHeight = height;
+        failedScale = scale;
         ReleaseTargets();
+        accumulationDiagnostic = "disabled: " + error;
         return false;
     }
-    SetTextureFilter(fogTarget.texture, TEXTURE_FILTER_BILINEAR);
+    failedWidth = 0;
+    failedHeight = 0;
+    failedScale = 0.0f;
     sceneWidth = width;
     sceneHeight = height;
     targetScale = scale;
+    accumulationDiagnostic = engine::FormatRenderTargetDiagnostic(fogTarget);
     return true;
 }
 
@@ -596,7 +623,9 @@ const SectorLocalFogStaticLightingSamples& SectorLocalFogRenderer::StaticLightin
 
 bool SectorLocalFogRenderer::Apply(
         RenderTexture2D& sceneTarget,
+        RenderTexture2D& sceneScratch,
         const SectorTopologyMap& map,
+        SectorTopologyFogSettings::LocalVolumeQuality quality,
         const Camera3D& camera,
         float runtimeSeconds,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
@@ -605,7 +634,7 @@ bool SectorLocalFogRenderer::Apply(
     eligibleVolumeCount = 0;
     activeVolumeCount = 0;
     if (sceneTarget.texture.id == 0 || sceneTarget.depth.id == 0 || sceneTarget.depth.mipmaps <= 0
-            || map.fogSettings.localVolumeQuality == SectorTopologyFogSettings::LocalVolumeQuality::Off) return false;
+            || quality == SectorTopologyFogSettings::LocalVolumeQuality::Off) return false;
 
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());
@@ -625,9 +654,9 @@ bool SectorLocalFogRenderer::Apply(
     float scale = 0.5f;
     int steps = 8;
     int cap = 8;
-    if (map.fogSettings.localVolumeQuality == SectorTopologyFogSettings::LocalVolumeQuality::Low) {
+    if (quality == SectorTopologyFogSettings::LocalVolumeQuality::Low) {
         scale = 0.25f; steps = 4; cap = 4;
-    } else if (map.fogSettings.localVolumeQuality == SectorTopologyFogSettings::LocalVolumeQuality::High) {
+    } else if (quality == SectorTopologyFogSettings::LocalVolumeQuality::High) {
         scale = 1.0f; steps = 12; cap = 16;
     }
     if (!EnsureShaders() || !EnsureTargets(sceneTarget.texture.width, sceneTarget.texture.height, scale)) {
@@ -681,9 +710,11 @@ bool SectorLocalFogRenderer::Apply(
         radii[static_cast<size_t>(i * 3 + 0)] = volume.radiiWorld.x;
         radii[static_cast<size_t>(i * 3 + 1)] = volume.radiiWorld.y;
         radii[static_cast<size_t>(i * 3 + 2)] = volume.radiiWorld.z;
-        colors[static_cast<size_t>(i * 3 + 0)] = volume.color.r / 255.0f;
-        colors[static_cast<size_t>(i * 3 + 1)] = volume.color.g / 255.0f;
-        colors[static_cast<size_t>(i * 3 + 2)] = volume.color.b / 255.0f;
+        const Vector3 linearColor = engine::SrgbColorBytesToLinearSceneRgb(
+                volume.color);
+        colors[static_cast<size_t>(i * 3 + 0)] = linearColor.x;
+        colors[static_cast<size_t>(i * 3 + 1)] = linearColor.y;
+        colors[static_cast<size_t>(i * 3 + 2)] = linearColor.z;
         paramsA[static_cast<size_t>(i * 4 + 0)] = volume.density;
         paramsA[static_cast<size_t>(i * 4 + 1)] = volume.maxOpacity;
         paramsA[static_cast<size_t>(i * 4 + 2)] = volume.edgeSoftness;
@@ -722,9 +753,10 @@ bool SectorLocalFogRenderer::Apply(
             LocalFogPathLimitSettings.saturationPower};
     const float probeFootprintFraction = SectorLocalFogProbeFootprintFraction;
 
-    // BeginTextureMode flushes raylib's batch and clears auxiliary sampler bindings,
-    // so pass textures must be bound after entering the target.
-    BeginTextureMode(fogTarget);
+    // Entering the target clears auxiliary sampler bindings, so pass textures
+    // must be bound afterward. Flush explicitly before framebuffer/state changes.
+    rlDrawRenderBatchActive();
+    BeginTextureMode(fogTarget.native);
     ClearBackground(BLANK);
     BeginShaderMode(accumulateShader);
     SetShaderValueTexture(accumulateShader, accumulateLocations.sceneDepth, sceneTarget.depth);
@@ -781,33 +813,34 @@ bool SectorLocalFogRenderer::Apply(
             accumulateShader,
             accumulateLocations.dynamicShadows,
             dynamicLightContext.shadowUniforms);
-    // Store straight fog color and opacity without framebuffer blending.
+    // Store premultiplied scattering and opacity without framebuffer blending.
     rlDisableColorBlend();
-    DrawTexturePro(sceneTarget.texture, SourceRect(sceneTarget.texture), DestinationRect(fogTarget.texture), Vector2{}, 0.0f, WHITE);
+    DrawTexturePro(sceneTarget.texture, SourceRect(sceneTarget.texture), DestinationRect(fogTarget.native.texture), Vector2{}, 0.0f, WHITE);
+    rlDrawRenderBatchActive();
     EndShaderMode();
     rlEnableColorBlend();
     EndTextureMode();
 
-    const Vector2 fogTexelSize{1.0f / fogTarget.texture.width, 1.0f / fogTarget.texture.height};
-    const int bilateral = scale < 1.0f ? 1 : 0;
-    BeginTextureMode(compositeTarget);
+    const Vector2 fogTexelSize{1.0f / fogTarget.native.texture.width, 1.0f / fogTarget.native.texture.height};
+    const int bilateral = quality ==
+            SectorTopologyFogSettings::LocalVolumeQuality::Medium ? 1 : 0;
+    rlDrawRenderBatchActive();
+    BeginTextureMode(sceneScratch);
     ClearBackground(BLANK);
     BeginShaderMode(compositeShader);
     SetShaderValueTexture(compositeShader, compositeLocations.sceneColor, sceneTarget.texture);
     SetShaderValueTexture(compositeShader, compositeLocations.sceneDepth, sceneTarget.depth);
-    SetShaderValueTexture(compositeShader, compositeLocations.fogTexture, fogTarget.texture);
+    SetShaderValueTexture(compositeShader, compositeLocations.fogTexture, fogTarget.native.texture);
     SetShaderValue(compositeShader, compositeLocations.fogTexelSize, &fogTexelSize, SHADER_UNIFORM_VEC2);
     SetShaderValue(compositeShader, compositeLocations.bilateralUpsample, &bilateral, SHADER_UNIFORM_INT);
     // The composite shader produces a complete scene pixel, so store it directly.
     rlDisableColorBlend();
-    DrawTexturePro(sceneTarget.texture, SourceRect(sceneTarget.texture), DestinationRect(compositeTarget.texture), Vector2{}, 0.0f, WHITE);
+    DrawTexturePro(sceneTarget.texture, SourceRect(sceneTarget.texture), DestinationRect(sceneScratch.texture), Vector2{}, 0.0f, WHITE);
+    rlDrawRenderBatchActive();
     EndShaderMode();
     rlEnableColorBlend();
     EndTextureMode();
 
-    BeginTextureMode(sceneTarget);
-    DrawTexturePro(compositeTarget.texture, SourceRect(compositeTarget.texture), DestinationRect(sceneTarget.texture), Vector2{}, 0.0f, WHITE);
-    EndTextureMode();
     return true;
 }
 
@@ -825,6 +858,11 @@ void SectorLocalFogRenderer::Shutdown()
     cachedProbeCount = 0;
     cachedProbeSourceHashValue = 0;
     cachedMapProbeSourceHashValue = 0;
+    failedWidth = 0;
+    failedHeight = 0;
+    failedScale = 0.0f;
+    shaderFailed = false;
+    accumulationDiagnostic = "not allocated";
 }
 
 } // namespace game

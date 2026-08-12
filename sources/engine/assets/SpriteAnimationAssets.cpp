@@ -293,10 +293,12 @@ SpriteAnimationAssets::RequestResult SpriteAnimationAssets::RequestSpriteAnimati
         AssetScopeHandle scope,
         const char* key,
         const char* jsonPath,
+        TextureColorUsage atlasColorUsage,
         TextureLoadFlags textureFlags)
 {
     RequestResult result;
-    if (key == nullptr || jsonPath == nullptr) {
+    if (key == nullptr || jsonPath == nullptr
+            || !IsValidTextureRequestDescriptor(atlasColorUsage, textureFlags)) {
         return result;
     }
 
@@ -305,7 +307,8 @@ SpriteAnimationAssets::RequestResult SpriteAnimationAssets::RequestSpriteAnimati
         return result;
     }
 
-    const std::string requestKey = MakeRequestKey(key, jsonPath, textureFlags);
+    const std::string requestKey = MakeRequestKey(
+            key, jsonPath, atlasColorUsage, textureFlags);
     SpriteAnimationScopeData& data = scopeData[scope.index];
     const auto existing = data.animationByRequest.find(requestKey);
     if (existing != data.animationByRequest.end()) {
@@ -318,6 +321,7 @@ SpriteAnimationAssets::RequestResult SpriteAnimationAssets::RequestSpriteAnimati
     slot.state = SpriteAnimationState::Queued;
     slot.key = key;
     slot.jsonPath = jsonPath;
+    slot.atlasColorUsage = atlasColorUsage;
     slot.textureFlags = textureFlags;
     slot.scope = scope;
 
@@ -554,6 +558,7 @@ TextureAssets::RequestResult SpriteAnimationAssets::ProcessSpriteAnimationReques
     }
 
     std::string textureKey;
+    TextureColorUsage atlasColorUsage = TextureColorUsage::Count;
     TextureLoadFlags textureFlags = TextureLoad_PointFilter;
     AssetScopeHandle scope = NullAssetScopeHandle();
     {
@@ -565,6 +570,7 @@ TextureAssets::RequestResult SpriteAnimationAssets::ProcessSpriteAnimationReques
 
         const SpriteAnimationSlot& slot = animationSlots[handle.index];
         textureKey = slot.key;
+        atlasColorUsage = slot.atlasColorUsage;
         textureFlags = slot.textureFlags;
         scope = slot.scope;
     }
@@ -573,6 +579,7 @@ TextureAssets::RequestResult SpriteAnimationAssets::ProcessSpriteAnimationReques
             scope,
             textureKey.c_str(),
             atlasPath.c_str(),
+            atlasColorUsage,
             textureFlags
     );
 
@@ -649,10 +656,12 @@ bool SpriteAnimationAssets::IsTerminal(SpriteAnimationState state)
 std::string SpriteAnimationAssets::MakeRequestKey(
         const char* key,
         const char* jsonPath,
+        TextureColorUsage atlasColorUsage,
         TextureLoadFlags textureFlags)
 {
     return std::string(key)
         + "\n" + jsonPath
+        + "\n" + std::to_string(static_cast<int>(atlasColorUsage))
         + "\n" + std::to_string(static_cast<uint32_t>(textureFlags));
 }
 

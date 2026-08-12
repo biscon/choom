@@ -777,6 +777,7 @@ void ApplyFpsWeaponShotEffects(
         state.flash.ageSeconds = 0.0f;
         state.flash.lifetimeSeconds = state.definition.muzzleFlash.lifetimeSeconds;
         state.flash.sizeWorld = state.definition.muzzleFlash.sizeWorld;
+        state.flash.radianceStrength = state.definition.muzzleFlash.radianceStrength;
         state.flash.coreColor = state.definition.muzzleFlash.coreColor;
         state.flash.hotColor = state.definition.muzzleFlash.hotColor;
         state.flash.warmColor = state.definition.muzzleFlash.warmColor;

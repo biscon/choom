@@ -50,8 +50,22 @@ struct SectorEditorToolContext;
 
 class SectorEditor {
 public:
+    explicit SectorEditor(FpsApplicationSettings& sharedApplicationSettings)
+        : applicationSettings(sharedApplicationSettings) {}
+
     bool Init(engine::EngineContext& context);
     void Shutdown(engine::EngineContext& context);
+    void SetPreviewGraphicsQuality(
+            SectorTopologyFogSettings::LocalVolumeQuality volumetricCap,
+            bool shadowsEnabled,
+            int shadowMapResolution,
+            float projectedShadowIntervalSeconds,
+            int projectedShadowResolution)
+    {
+        sceneRuntime.Renderer().SetGraphicsQuality(
+                volumetricCap, shadowsEnabled, shadowMapResolution,
+                projectedShadowIntervalSeconds, projectedShadowResolution);
+    }
 
     void Update(engine::EngineContext& context, float dt);
     void Render(engine::AssetManager& assets);
@@ -60,7 +74,15 @@ public:
     void RenderPreview3DViewmodel(engine::AssetManager& assets);
     void RenderPreview3DOverlays();
     void RenderPreview3DHud(Rectangle playableViewport) const;
-    void ApplyPreview3DBloom(engine::AssetManager& assets, RenderTexture2D& sceneTarget);
+    void ApplyPreview3DWorldAtmosphere(engine::RenderTarget& sceneTarget);
+    void ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget);
+    bool CompositePreview3DViewmodel(
+            engine::RenderTarget& sceneTarget,
+            const engine::RenderTarget& viewmodelTarget);
+    const engine::RenderTarget* Preview3DHdrDebugPresentationSource() const
+    {
+        return sceneRuntime.HdrDebugPresentationSource();
+    }
     void RenderUI(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -185,7 +207,8 @@ private:
             const engine::UIConfig& config,
             engine::Input& input,
             engine::AssetManager& assets,
-            engine::FontHandle font);
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawFootstepPickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -325,9 +348,9 @@ private:
     SectorViewPose ActivePreviewPose() const;
     void ApplyGameplayPoseToPreview();
     void TogglePreviewControlMode();
-    bool StartSpotLightPilot();
-    bool ApplySpotLightPilotFromPreviewPose();
-    void CancelSpotLightPilotWithPreviewRestore(const char* message);
+    bool StartLightPilot();
+    bool ApplyLightPilotFromPreviewPose();
+    void CancelLightPilotWithPreviewRestore(const char* message);
     bool RebuildSectorCollisionWorld();
     SectorFpsVerticalContext BuildGameplayVerticalContext();
     void RefreshGameplaySectorAndVerticalContext();
@@ -454,11 +477,10 @@ private:
     SectorSceneRuntime sceneRuntime;
     FpsPlayerRuntime fpsPlayer;
     FpsWeaponRegistry weaponRegistry;
-    FpsApplicationSettings applicationSettings;
+    FpsApplicationSettings& applicationSettings;
     PlayerAudioRuntime playerAudio;
     std::string applicationSettingsPath;
     std::string weaponRegistryError;
-    std::string applicationSettingsWarning;
     engine::EngineContext* engineContext = nullptr;
     bool initialized = false;
 };

@@ -19,6 +19,14 @@ struct FpsMuzzleFlashRibbonAxes {
     Vector3 second{};
 };
 
+struct FpsMuzzleFlashRenderResources {
+    Shader shader{};
+    int radianceStrengthLoc = -1;
+};
+
+bool LoadFpsMuzzleFlashRenderResources(FpsMuzzleFlashRenderResources& resources);
+void UnloadFpsMuzzleFlashRenderResources(FpsMuzzleFlashRenderResources& resources);
+
 FpsMuzzleFlashTemporalState
 EvaluateFpsMuzzleFlashTemporalState(
         float ageSeconds,
@@ -36,6 +44,7 @@ BuildFpsMuzzleFlashRibbonAxes(
         Vector3 preferredWidthAxis);
 
 void DrawFpsMuzzleFlash(
+        FpsMuzzleFlashRenderResources& resources,
         const FpsWeaponFiringRuntimeState& firing,
         const Camera3D& viewmodelCamera);
 

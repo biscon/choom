@@ -1,6 +1,7 @@
 #include "engine/assets/ModelAssets.h"
 
 #include <external/cgltf.h>
+#include <external/glad.h>
 #include <rlgl.h>
 #include <raymath.h>
 
@@ -21,12 +22,129 @@ namespace {
 
 constexpr int RaylibMaterialMapCount = 12;
 constexpr int PbrMaterialMapCount = 6;
+static_assert(PbrMaterialMapCount == static_cast<int>(ModelMaterialTextureRoleCount));
 
 struct ParsedModelMaterials {
     std::vector<ModelMaterialAsset> materials;
     std::vector<std::array<std::string, PbrMaterialMapCount>> textureSources;
     bool hasUnsupportedMaterial = false;
 };
+
+bool ModelMaterialHasTextureRole(
+        const ModelMaterialAsset& material,
+        ModelMaterialTextureRole role)
+{
+    switch (role) {
+        case ModelMaterialTextureRole::BaseColor: return material.hasBaseColorTexture;
+        case ModelMaterialTextureRole::Metallic: return material.hasMetallicTexture;
+        case ModelMaterialTextureRole::Normal: return material.hasNormalTexture;
+        case ModelMaterialTextureRole::Roughness: return material.hasRoughnessTexture;
+        case ModelMaterialTextureRole::Occlusion: return material.hasOcclusionTexture;
+        case ModelMaterialTextureRole::Emissive: return material.hasEmissiveTexture;
+        case ModelMaterialTextureRole::Count: break;
+    }
+    return false;
+}
+
+void SetModelMaterialHasTextureRole(
+        ModelMaterialAsset& material,
+        ModelMaterialTextureRole role,
+        bool present)
+{
+    switch (role) {
+        case ModelMaterialTextureRole::BaseColor: material.hasBaseColorTexture = present; return;
+        case ModelMaterialTextureRole::Metallic: material.hasMetallicTexture = present; return;
+        case ModelMaterialTextureRole::Normal: material.hasNormalTexture = present; return;
+        case ModelMaterialTextureRole::Roughness: material.hasRoughnessTexture = present; return;
+        case ModelMaterialTextureRole::Occlusion: material.hasOcclusionTexture = present; return;
+        case ModelMaterialTextureRole::Emissive: material.hasEmissiveTexture = present; return;
+        case ModelMaterialTextureRole::Count: return;
+    }
+}
+
+bool IsHardwareSrgbInternalFormat(unsigned int format)
+{
+    return format == GL_SRGB8 || format == GL_SRGB8_ALPHA8;
+}
+
+unsigned int QueryTextureInternalFormat(Texture2D texture)
+{
+    if (texture.id == 0 || texture.id == rlGetTextureIdDefault()) {
+        return 0;
+    }
+    int previousBinding = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousBinding);
+    while (glGetError() != GL_NO_ERROR) {
+    }
+    glBindTexture(GL_TEXTURE_2D, texture.id);
+    int actualFormat = 0;
+    glGetTexLevelParameteriv(
+            GL_TEXTURE_2D,
+            0,
+            GL_TEXTURE_INTERNAL_FORMAT,
+            &actualFormat);
+    const bool valid = glGetError() == GL_NO_ERROR;
+    glBindTexture(GL_TEXTURE_2D, static_cast<unsigned int>(previousBinding));
+    return valid && actualFormat > 0
+            ? static_cast<unsigned int>(actualFormat)
+            : 0;
+}
+
+void PopulateModelMaterialTextureInfo(
+        const std::string& path,
+        const Model& model,
+        std::vector<ModelMaterialAsset>& materials)
+{
+    const int count = std::min(
+            model.materialCount,
+            static_cast<int>(materials.size()));
+    for (int materialIndex = 0; materialIndex < count; ++materialIndex) {
+        if (model.materials == nullptr
+                || model.materials[materialIndex].maps == nullptr) {
+            continue;
+        }
+        ModelMaterialAsset& material = materials[static_cast<size_t>(materialIndex)];
+        for (size_t roleIndex = 0;
+                roleIndex < ModelMaterialTextureRoleCount;
+                ++roleIndex) {
+            const auto role = static_cast<ModelMaterialTextureRole>(roleIndex);
+            ModelMaterialTextureInfo& info = material.textureInfo[roleIndex];
+            info.declared = ModelMaterialHasTextureRole(material, role);
+            info.transfer = ModelMaterialTextureTransfer(role);
+            if (!info.declared) {
+                continue;
+            }
+            const int mapIndex = ModelMaterialMapIndex(role);
+            const Texture2D texture = model.materials[materialIndex]
+                                              .maps[mapIndex]
+                                              .texture;
+            info.present = texture.id != 0
+                    && texture.id != rlGetTextureIdDefault();
+            SetModelMaterialHasTextureRole(material, role, info.present);
+            if (!info.present) {
+                std::fprintf(
+                        stderr,
+                        "[AssetManager WARNING] glTF %s texture was declared but is not bound (material %d): %s\n",
+                        ModelMaterialTextureRoleName(role),
+                        materialIndex,
+                        path.c_str());
+                continue;
+            }
+            info.internalFormat = QueryTextureInternalFormat(texture);
+            info.hardwareSrgbDecode = IsHardwareSrgbInternalFormat(
+                    info.internalFormat);
+            if (info.transfer == ModelTextureTransfer::LinearData
+                    && info.hardwareSrgbDecode) {
+                std::fprintf(
+                        stderr,
+                        "[AssetManager WARNING] glTF %s texture unexpectedly uses hardware-sRGB storage (material %d): %s\n",
+                        ModelMaterialTextureRoleName(role),
+                        materialIndex,
+                        path.c_str());
+            }
+        }
+    }
+}
 
 const cgltf_image* ImageForTexture(const cgltf_texture* texture)
 {
@@ -134,6 +252,9 @@ ParsedModelMaterials ParseModelMaterials(
                 source.emissive_factor[0],
                 source.emissive_factor[1],
                 source.emissive_factor[2]};
+        material.emissiveStrength = source.has_emissive_strength
+                ? source.emissive_strength.emissive_strength
+                : 1.0f;
         textureSources[MATERIAL_MAP_EMISSION] = TextureSourceKey(
                 data, source.emissive_texture, modelPath);
 
@@ -550,6 +671,10 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                             scope.sharedTextureBySource.emplace(sourceKey, texture);
                         }
                     }
+                    PopulateModelMaterialTextureInfo(
+                            path,
+                            loaded,
+                            parsed.materials);
                     slot.asset.model = loaded;
                     slot.asset.animations = loadedAnimations;
                     slot.asset.animationCount = loadedAnimationCount;
@@ -581,6 +706,20 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
     }
 
     UnloadReadyModels();
+}
+
+const char* ModelMaterialTextureRoleName(ModelMaterialTextureRole role)
+{
+    switch (role) {
+        case ModelMaterialTextureRole::BaseColor: return "base color";
+        case ModelMaterialTextureRole::Metallic: return "metallic (B->R)";
+        case ModelMaterialTextureRole::Normal: return "normal";
+        case ModelMaterialTextureRole::Roughness: return "roughness (G->R)";
+        case ModelMaterialTextureRole::Occlusion: return "occlusion";
+        case ModelMaterialTextureRole::Emissive: return "emissive";
+        case ModelMaterialTextureRole::Count: break;
+    }
+    return "unknown";
 }
 
 void ModelAssets::UnloadScope(AssetScopeHandle scope)

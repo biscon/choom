@@ -256,12 +256,14 @@ void MarkSectorEditorAuthoringGraphEdited(
         SectorEditorDerivationDocumentAccess derivation,
         const char* status);
 
-bool SetSectorEditorAllSectorLighting(
+bool SetSectorEditorSectorLighting(
         SectorEditorState& state,
         SectorEditorDocumentLifecycleAccess lifecycle,
         SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorDerivationDocumentAccess derivation,
+        const SelectionState& selectionState,
+        SectorEditorSectorLightingScope scope,
         float ambientIntensity,
         Color ambientColor,
         std::string* outStatus = nullptr);

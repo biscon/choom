@@ -219,7 +219,7 @@ bool BuildSectorDoorStaticLightingColors(
         const SectorDoorResolvedAnchor& anchor,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap* mapForFallback,
-        std::vector<Color>& outColors);
+        std::vector<Vector3>& outLighting);
 
 bool AppendSectorDoorReceiverBounds(
         const SectorObjectTransform& transform,
@@ -271,7 +271,7 @@ bool ToggleTargetedSectorDoorInteractionSystem(
         const Vector3& playerPosition,
         const Vector3& playerForward);
 
-void AdvanceSectorDoorMotionSystem(engine::World& world, float dt);
+bool AdvanceSectorDoorMotionSystem(engine::World& world, float dt);
 
 SectorDoorAudioEvent UpdateSectorDoorAudioTransition(
         SectorDoorAudio& audio,

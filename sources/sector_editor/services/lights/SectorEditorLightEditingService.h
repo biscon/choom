@@ -101,7 +101,7 @@ struct SectorEditorLightMutationResult {
     bool changed = false;
     bool dynamicLightRendererRefreshNeeded = false;
     bool previewPoseRestoreNeeded = false;
-    SpotLightPilotLightState restoredSpotLightPilot;
+    LightPilotLightState restoredLightPilot;
 };
 
 class SectorEditorLightEditingService {
@@ -119,13 +119,14 @@ public:
     SectorEditorLightMutationResult FinishLightDrag();
     SectorEditorLightMutationResult CancelLightDragData(const char* message);
 
-    SectorEditorLightMutationResult ApplySpotLightPilot(Vector3 position, Vector3 target);
-    SectorEditorLightMutationResult CancelSpotLightPilotData(const char* message);
+    SectorEditorLightMutationResult ApplyLightPilot(Vector3 position, Vector3 target);
+    SectorEditorLightMutationResult CancelLightPilotData(const char* message);
 
     bool SetStaticLightPosition(SectorTopologyStaticPointLight& light, Vector3 position);
     bool SetStaticLightIntensity(SectorTopologyStaticPointLight& light, float intensity);
     bool SetStaticLightRadius(SectorTopologyStaticPointLight& light, float radius);
     bool SetStaticLightSourceRadius(SectorTopologyStaticPointLight& light, float sourceRadius);
+    bool SetStaticLightCastsShadow(SectorTopologyStaticPointLight& light, bool castsShadow);
     bool SetStaticLightColor(SectorTopologyStaticPointLight& light, Color color);
     bool SetStaticLightAtmosphere(
             SectorTopologyStaticPointLight& light,
@@ -137,6 +138,7 @@ public:
     bool SetStaticSpotLightSourceRadius(SectorTopologyStaticSpotLight& light, float sourceRadius);
     bool SetStaticSpotLightInnerCone(SectorTopologyStaticSpotLight& light, float innerConeDegrees);
     bool SetStaticSpotLightOuterCone(SectorTopologyStaticSpotLight& light, float outerConeDegrees);
+    bool SetStaticSpotLightCastsShadow(SectorTopologyStaticSpotLight& light, bool castsShadow);
     bool SetStaticSpotLightIntensity(SectorTopologyStaticSpotLight& light, float intensity);
     bool SetStaticSpotLightColor(SectorTopologyStaticSpotLight& light, Color color);
     bool SetStaticSpotLightAtmosphere(

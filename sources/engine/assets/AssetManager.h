@@ -7,6 +7,7 @@
 #include "engine/assets/ModelAssets.h"
 #include "engine/assets/SpriteAnimationAssets.h"
 #include "engine/assets/TextureAssets.h"
+#include "engine/assets/TextureColorUsage.h"
 #include "engine/assets/TextureLoadFlags.h"
 
 #include <raylib.h>
@@ -42,6 +43,7 @@ public:
             AssetScopeHandle scope,
             const char* key,
             const char* path,
+            TextureColorUsage colorUsage,
             TextureLoadFlags flags = TextureLoad_PointFilter
     );
 
@@ -49,6 +51,7 @@ public:
             AssetScopeHandle scope,
             const char* key,
             const Image& image,
+            TextureColorUsage colorUsage,
             TextureLoadFlags flags = TextureLoad_PointFilter
     );
 
@@ -56,6 +59,7 @@ public:
             AssetScopeHandle scope,
             const char* key,
             const Image& image,
+            TextureColorUsage colorUsage,
             int layout
     );
 
@@ -110,6 +114,7 @@ public:
             AssetScopeHandle scope,
             const char* key,
             const char* jsonPath,
+            TextureColorUsage atlasColorUsage,
             TextureLoadFlags textureFlags = TextureLoad_PointFilter
     );
 
@@ -138,6 +143,7 @@ private:
         TextureHandle texture;
         SpriteAnimationHandle spriteAnimation;
         std::string path;
+        TextureColorUsage textureColorUsage = TextureColorUsage::Count;
         TextureLoadFlags textureFlags = TextureLoad_PointFilter;
     };
 

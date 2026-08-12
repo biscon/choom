@@ -80,6 +80,7 @@ struct AddMapTextureState {
     std::string scanMessage;
     engine::UIScrollState scroll;
     std::vector<std::string> paths;
+    std::vector<std::string> optionLabelStorage;
     std::vector<const char*> optionLabels;
     int selectedPathIndex = -1;
     char textureIdBuffer[96] = {};
@@ -187,8 +188,14 @@ struct ConfirmationModalState {
     std::function<void()> onOkay;
 };
 
+enum class SectorEditorSectorLightingScope {
+    Selected,
+    All
+};
+
 struct SectorEditorSetAllModalState {
     bool open = false;
+    SectorEditorSectorLightingScope scope = SectorEditorSectorLightingScope::Selected;
     float ambientIntensity = 1.0f;
     Color ambientColor = WHITE;
     engine::UIFloatInputState ambientIntensityInput;
@@ -237,6 +244,7 @@ struct SectorPreviewSettingsModalState {
     FpsViewmodelAttachmentLighting draftViewmodelAttachmentLighting;
     FpsWeaponFiringDefinition weaponFiringDefaults;
     FpsWeaponFiringDefinition draftWeaponFiring;
+    engine::HdrBloomSettings draftHdrBloom;
     engine::UIFloatInputState walkSpeedInput;
     engine::UIFloatInputState runSpeedInput;
     engine::UIFloatInputState mouseSensitivityInput;
@@ -261,6 +269,10 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState objectProbeSpacingInput;
     engine::UIFloatInputState objectProbeLowerHeightInput;
     engine::UIFloatInputState objectProbeUpperHeightInput;
+    engine::UIFloatInputState bloomThresholdInput;
+    engine::UIFloatInputState bloomSoftKneeInput;
+    engine::UIFloatInputState bloomIntensityInput;
+    engine::UIFloatInputState bloomRadiusInput;
     engine::UIIntInputState lightColorRedInput;
     engine::UIIntInputState lightColorGreenInput;
     engine::UIIntInputState lightColorBlueInput;
@@ -325,6 +337,7 @@ struct SectorPreviewSettingsModalState {
     engine::UIFloatInputState weaponMuzzleRollInput;
     engine::UIFloatInputState weaponFlashLifetimeInput;
     engine::UIFloatInputState weaponFlashSizeInput;
+    engine::UIFloatInputState weaponFlashRadianceStrengthInput;
     engine::UIFloatInputState weaponFlashSizeVariationInput;
     engine::UIFloatInputState weaponFlashIrregularityInput;
     engine::UIFloatInputState weaponFlashForwardStretchInput;

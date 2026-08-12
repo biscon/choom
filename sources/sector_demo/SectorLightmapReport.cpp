@@ -50,6 +50,30 @@ std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& resul
     report << "Lightmap bake report\n";
     report << TextFormat("  Atlases: %zu\n", atlasCount);
     report << TextFormat("  Atlas size: %d x %d\n", result.width, result.height);
+    report << TextFormat(
+            "  Artifact: v%d %s (CPU F32 linear, disk RGBA16F LE, GPU RGBA16F)\n",
+            result.artifactVersion,
+            result.artifactFormat.c_str());
+    const auto appendIlluminationStatistics = [&report](
+            const char* label,
+            const SectorIlluminationStatistics& statistics) {
+        report << TextFormat(
+                "  %s RGB min/max: (%.5f %.5f %.5f) / (%.5f %.5f %.5f), above-one channels: %llu\n",
+                label,
+                statistics.rgbMin.x,
+                statistics.rgbMin.y,
+                statistics.rgbMin.z,
+                statistics.rgbMax.x,
+                statistics.rgbMax.y,
+                statistics.rgbMax.z,
+                static_cast<unsigned long long>(statistics.rgbChannelsAboveOne));
+    };
+    appendIlluminationStatistics(
+            "Pre-encode F32",
+            result.preEncodeAtlasStatistics);
+    appendIlluminationStatistics(
+            "Stored/reopened binary16",
+            result.storedAtlasStatistics);
     report << TextFormat("  Atlas pixels: %llu\n", static_cast<unsigned long long>(static_cast<uint64_t>(result.width) * static_cast<uint64_t>(result.height) * static_cast<uint64_t>(atlasCount)));
     report << TextFormat("  Valid chart texels: %d\n", result.validChartTexels);
     report << TextFormat("  Valid atlas occupancy: %.2f%%\n", validAtlasOccupancy);
@@ -68,6 +92,9 @@ std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& resul
             result.staticLightCount - result.staticSpotLightCount,
             result.staticSpotLightCount);
     report << TextFormat("  Object light probes: %d\n", result.objectProbes.count);
+    appendIlluminationStatistics(
+            "Stored/reopened probe F32",
+            result.objectProbes.storedStatistics);
     report << TextFormat("  Object probe placement diagnostics: %d\n", result.objectProbePlacementDiagnostics);
     if (!result.objectProbes.path.empty()) {
         report << TextFormat("  Object probe sidecar: %s\n", result.objectProbes.path.c_str());
