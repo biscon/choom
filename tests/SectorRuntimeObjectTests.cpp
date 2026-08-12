@@ -963,8 +963,8 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
     Check(motion.motion == game::SectorDoorMotionType::SlideRight
                   && Near(motion.openFraction, 0.25f)
                   && Near(motion.targetOpenFraction, 0.25f)
-                  && Near(motion.openDistance, 1.75f)
-                  && Near(motion.speed, 2.5f),
+                  && Near(motion.travelAmount, 1.75f)
+                  && Near(motion.travelSpeed, 2.5f),
             "valid placed door motion component copies authored initial motion state");
 
     const game::SectorDoorInteraction& interaction = world.Get<game::SectorDoorInteraction>(entity);
@@ -1036,7 +1036,7 @@ void TestSpawnPlacedDoorRefreshDoesNotDuplicate()
             "placed door spawn refresh uses edited authored initial fraction");
 }
 
-void TestUnknownModelSwingDoorUsesClosedProceduralFallback()
+void TestUnknownModelSwingDoorUsesAnimatedProceduralFallback()
 {
     engine::World world;
     engine::AssetManager assets;
@@ -1064,7 +1064,7 @@ void TestUnknownModelSwingDoorUsesClosedProceduralFallback()
     Check(CountDoorObjects(world) == 1 && state.spawnedObjectCount == 1,
           "unknown model style still spawns a procedural door entity");
     Check(engine::IsNull(state.runtimeObjectAssetScope),
-          "slice 2 model fallback requests no GPU model assets");
+          "unknown model style does not create an asset scope");
 
     const engine::Entity entity = state.placedObjectEntities[0].entity;
     const game::SectorDoorMotion& motion = world.Get<game::SectorDoorMotion>(entity);
@@ -1072,20 +1072,25 @@ void TestUnknownModelSwingDoorUsesClosedProceduralFallback()
             world.Get<game::SectorDoorPortalBlocker>(entity);
     const game::SectorDoorRender& render = world.Get<game::SectorDoorRender>(entity);
     Check(motion.motion == game::SectorDoorMotionType::Swing
-                  && Near(motion.openFraction, 0.0f)
-                  && Near(motion.targetOpenFraction, 0.0f)
-                  && Near(motion.openDistance, 0.0f)
-                  && Near(motion.speed, 0.0f)
-                  && blocker.blocksPortal,
-          "unknown model swing fallback is frozen closed and blocks portal visibility");
+                  && Near(motion.openFraction, 0.75f)
+                  && Near(motion.targetOpenFraction, 0.75f)
+                  && Near(motion.travelAmount, 90.0f * DEG2RAD)
+                  && Near(motion.travelSpeed, 90.0f * DEG2RAD)
+                  && !blocker.blocksPortal,
+          "unknown model swing fallback honors authored motion and portal state");
     Check(Near(render.width, 0.5f)
                   && Near(render.height, 1.5f)
                   && Near(render.thickness, 0.25f),
           "unknown model fallback uses resolved target slab dimensions");
 
+    Check(world.Has<game::SectorDoorModelRender>(entity)
+                  && world.Get<game::SectorDoorModelRender>(entity).fallbackReason
+                          == game::SectorDoorModelFallbackReason::MissingCatalogAsset,
+          "unknown style retains explicit model fallback state on the swing entity");
+
     game::UpdateSectorRuntimeObjects(world, assets, state, map, 1.0f);
-    Check(Near(world.Get<game::SectorDoorMotion>(entity).openFraction, 0.0f),
-          "steady runtime update cannot accidentally apply slide motion to swing fallback");
+    Check(Near(world.Get<game::SectorDoorMotion>(entity).openFraction, 0.75f),
+          "steady runtime update leaves a swing fallback at its stable target");
 }
 
 void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
@@ -1125,10 +1130,36 @@ void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
                   && Near(render.height, expectedFit.actualHeight)
                   && Near(render.thickness, expectedFit.actualThickness),
           "known model fallback slab uses one catalog-derived uniform scale");
-    Check(state.doorFallbackDiagnostics.size() == 1
-                  && state.doorFallbackDiagnostics[0].message.find("fit: valid")
-                          != std::string::npos,
-          "known model fallback diagnostic includes fit status");
+    Check(state.doorFallbackDiagnostics.empty()
+                  && state.doorFallbackCount == 0
+                  && world.Has<game::SectorDoorModelRender>(entity)
+                  && !engine::IsNull(world.Get<game::SectorDoorModelRender>(entity).leafModel)
+                  && world.Get<game::SectorDoorModelRender>(entity).frameDeclared
+                  && !engine::IsNull(world.Get<game::SectorDoorModelRender>(entity).frameModel)
+                  && Near(world.Get<game::SectorDoorModelRender>(entity).effectiveScale,
+                          expectedFit.effectiveScale),
+          "known model style requests its leaf and optional frame and stores its uniform fit");
+    const game::SectorDoorResolvedAnchor& runtimeAnchor =
+            world.Get<game::SectorDoorResolvedAnchor>(entity);
+    const game::SectorDoorModelRender& model =
+            world.Get<game::SectorDoorModelRender>(entity);
+    const Vector3 expectedHinge{
+            runtimeAnchor.endpointA.x,
+            runtimeAnchor.openBottom,
+            runtimeAnchor.endpointA.y};
+    const Vector3 expectedFrameOrigin{
+            runtimeAnchor.midpoint.x,
+            runtimeAnchor.openBottom,
+            runtimeAnchor.midpoint.y};
+    Check(Near(Vector3Transform(Vector3{}, model.leafMatrix), expectedHinge)
+                  && Near(Vector3Transform(Vector3{}, model.frameMatrix), expectedFrameOrigin),
+          "spawned model swing stores canonical moving-leaf and fixed-frame matrices");
+    std::vector<game::SectorReceiverBounds> receiverBounds;
+    game::CollectSectorDoorReceiverBounds(world, receiverBounds);
+    Check(receiverBounds.size() == 2
+                  && receiverBounds[0].max.y
+                          >= runtimeAnchor.openBottom + render.height,
+          "spawned model swing contributes analytic leaf/frame receiver fallback bounds to both adjacent sectors");
 }
 
 void TestRetainedCatalogFailureDoesNotBlockOtherDoors()
@@ -1176,7 +1207,40 @@ void TestRetainedCatalogFailureDoesNotBlockOtherDoors()
           "catalog failure preserves existing slide state while model fallback stays closed");
 }
 
-void TestProceduralSwingDoorUsesClosedFallbackWithoutCatalogStyle()
+void TestNullSwingDoorLeafRequestKeepsRuntimeFallback()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    game::SectorPlacedDoor door = MakeDoorOnPortal();
+    door.visual = game::SectorDoorVisualType::Model;
+    door.modelAssetId = "wooden_interior_001";
+    door.motion = game::SectorDoorMotionType::Swing;
+    door.initialOpenFraction = 0.5f;
+    map.runtimeObjects.push_back(MakePlacedDoor(42, door));
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    const size_t assetIndex = state.swingDoorCatalog.assetIndexById[door.modelAssetId];
+    state.swingDoorCatalog.assets[assetIndex].leafModelPath.clear();
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    const game::SectorDoorModelRender& model =
+            world.Get<game::SectorDoorModelRender>(entity);
+    Check(CountDoorObjects(world) == 1
+                  && engine::IsNull(model.leafModel)
+                  && model.fallbackReason
+                          == game::SectorDoorModelFallbackReason::LeafRequestFailed
+                  && state.doorFallbackCount == 1
+                  && state.doorFallbackDiagnostics.size() == 1,
+          "null model handle keeps the swing entity and records one stable procedural fallback diagnostic");
+    Check(Near(world.Get<game::SectorDoorMotion>(entity).openFraction, 0.5f)
+                  && !world.Get<game::SectorDoorPortalBlocker>(entity).blocksPortal,
+          "null model handle does not disable swing kinematics or force the portal closed");
+}
+
+void TestProceduralSwingDoorRunsWithoutCatalogStyle()
 {
     engine::World world;
     engine::AssetManager assets;
@@ -1191,11 +1255,13 @@ void TestProceduralSwingDoorUsesClosedFallbackWithoutCatalogStyle()
     game::SpawnPlacedRuntimeObjects(world, assets, state, map);
 
     const engine::Entity entity = state.placedObjectEntities[0].entity;
-    Check(state.doorFallbackCount == 1
-                  && state.doorFallbackDiagnostics[0].modelAssetId.empty()
-                  && Near(world.Get<game::SectorDoorMotion>(entity).openFraction, 0.0f)
-                  && world.Get<game::SectorDoorPortalBlocker>(entity).blocksPortal,
-          "procedural swing record also fails closed without requiring a catalog style");
+    Check(state.doorFallbackCount == 0
+                  && state.doorFallbackDiagnostics.empty()
+                  && Near(world.Get<game::SectorDoorMotion>(entity).openFraction, 1.0f)
+                  && !world.Get<game::SectorDoorPortalBlocker>(entity).blocksPortal
+                  && world.Has<game::SectorDoorModelRender>(entity)
+                  && !world.Get<game::SectorDoorModelRender>(entity).modelVisualRequested,
+          "procedural swing works without requiring a catalog style");
 }
 
 void TestSectorDoorSlabGeometryIsFiniteAndStable()
@@ -1564,7 +1630,7 @@ void TestSectorDoorSlabModelMatrixPreservesResolvedBasis()
         const game::SectorObjectTransform& transform = world.Get<game::SectorObjectTransform>(entity);
         const game::SectorDoorResolvedAnchor& anchor = world.Get<game::SectorDoorResolvedAnchor>(entity);
         const game::SectorDoorRender& render = world.Get<game::SectorDoorRender>(entity);
-        const Matrix model = game::BuildSectorDoorSlabModelMatrix(transform, anchor);
+        const Matrix model = game::BuildSectorDoorSlabModelMatrix(transform, anchor, render);
 
         const Vector3 origin = Vector3Transform(Vector3{}, model);
         const Vector3 localX = Vector3Subtract(Vector3Transform(Vector3{1.0f, 0.0f, 0.0f}, model), origin);
@@ -1646,7 +1712,7 @@ void TestSectorDoorStaticLightingColorsSamplePerVertexProbes()
     const game::SectorDoorResolvedAnchor anchor = MakeStaticLightingDoorAnchor();
     const game::SectorDoorRender render = MakeStaticLightingDoorRender();
     const game::SectorDoorSlabMeshData mesh = game::BuildSectorDoorSlabMeshData(render);
-    const Matrix model = game::BuildSectorDoorSlabModelMatrix(transform, anchor);
+    const Matrix model = game::BuildSectorDoorSlabModelMatrix(transform, anchor, render);
     const Vector3 leftVertex = Vector3Transform(mesh.vertices[0].position, model);
     const Vector3 rightVertex = Vector3Transform(mesh.vertices[1].position, model);
     const game::SectorBakedObjectLightProbeRuntimeData probes = MakeDoorProbeRuntimeData(
@@ -1661,6 +1727,7 @@ void TestSectorDoorStaticLightingColorsSamplePerVertexProbes()
             transform,
             object,
             anchor,
+            render,
             probes,
             nullptr,
             colors);
@@ -1692,6 +1759,7 @@ void TestSectorDoorStaticLightingColorsFallbackSafely()
                   transform,
                   object,
                   anchor,
+                  render,
                   missingProbes,
                   nullptr,
                   colors),
@@ -1712,6 +1780,7 @@ void TestSectorDoorStaticLightingColorsFallbackSafely()
                   transform,
                   object,
                   anchor,
+                  render,
                   missingProbes,
                   &map,
                   colors),
@@ -1735,7 +1804,8 @@ void TestSectorDoorStaticLightingColorsDoNotMutateGeometry()
             Vector3{0.0f, 0.0f, 1.0f});
 
     std::vector<Vector3> colors;
-    game::BuildSectorDoorStaticLightingColors(mesh, transform, object, anchor, probes, nullptr, colors);
+    game::BuildSectorDoorStaticLightingColors(
+            mesh, transform, object, anchor, render, probes, nullptr, colors);
 
     bool geometryUnchanged = mesh.vertices.size() == before.vertices.size()
             && mesh.indices.size() == before.indices.size();
@@ -2024,9 +2094,9 @@ void TestSpawnPlacedDoorDerivesDefaultOpenDistance()
             "default open distance fixture spawns both doors");
     const engine::Entity verticalEntity = state.placedObjectEntities[0].entity;
     const engine::Entity horizontalEntity = state.placedObjectEntities[1].entity;
-    Check(Near(world.Get<game::SectorDoorMotion>(verticalEntity).openDistance, 1.5f),
+    Check(Near(world.Get<game::SectorDoorMotion>(verticalEntity).travelAmount, 1.5f),
             "vertical door derives default open distance from portal height");
-    Check(Near(world.Get<game::SectorDoorMotion>(horizontalEntity).openDistance, 0.5f),
+    Check(Near(world.Get<game::SectorDoorMotion>(horizontalEntity).travelAmount, 0.5f),
             "horizontal door derives default open distance from portal width");
 }
 
@@ -2064,7 +2134,7 @@ void TestSectorDoorMotionAdvancesOpenAndClosed()
 void TestSectorDoorMotionClampsAndIgnoresZeroSpeed()
 {
     engine::World world;
-    game::ReserveSectorRuntimeObjectWorld(world, 3);
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
 
     const engine::Entity clamped = world.CreateEntity();
     world.Add(clamped, game::SectorDoor{1, true});
@@ -2093,6 +2163,17 @@ void TestSectorDoorMotionClampsAndIgnoresZeroSpeed()
             1.0f,
             4.0f});
 
+    const engine::Entity zeroAngularSpeed = world.CreateEntity();
+    world.Add(zeroAngularSpeed, game::SectorDoor{4, true});
+    world.Add(zeroAngularSpeed, game::SectorDoorMotion{
+            game::SectorDoorMotionType::Swing,
+            0.25f,
+            1.0f,
+            90.0f * DEG2RAD,
+            0.0f,
+            game::SectorDoorHinge::Start,
+            game::SectorDoorSwingSide::Front});
+
     game::AdvanceSectorDoorMotionSystem(world, 0.5f);
     Check(Near(world.Get<game::SectorDoorMotion>(clamped).openFraction, 1.0f)
                   && Near(world.Get<game::SectorDoorMotion>(clamped).targetOpenFraction, 1.0f),
@@ -2101,6 +2182,8 @@ void TestSectorDoorMotionClampsAndIgnoresZeroSpeed()
             "door motion with zero speed does not advance");
     Check(Near(world.Get<game::SectorDoorMotion>(disabled).openFraction, 0.25f),
             "disabled door motion does not advance");
+    Check(Near(world.Get<game::SectorDoorMotion>(zeroAngularSpeed).openFraction, 0.25f),
+            "swing door with zero angular speed does not advance");
 
     game::AdvanceSectorDoorMotionSystem(world, -1.0f);
     Check(Near(world.Get<game::SectorDoorMotion>(clamped).openFraction, 1.0f),
@@ -2442,6 +2525,314 @@ engine::Entity AddHorizontalDoorForDerivedState(
     world.Add(entity, game::SectorDoorCollider{});
     world.Add(entity, game::SectorDoorPortalBlocker{3, 10, 20, 3, 8, true});
     return entity;
+}
+
+engine::Entity AddSwingDoorForDerivedState(
+        engine::World& world,
+        const game::SectorDoorResolvedAnchor& anchor,
+        game::SectorDoorHinge hinge,
+        game::SectorDoorSwingSide swingSide,
+        float openFraction,
+        float targetOpenFraction)
+{
+    game::SectorDoorRender render;
+    render.width = anchor.portalWidth;
+    render.height = anchor.portalHeight;
+    render.thickness = 0.1f;
+    render.normalOffset = 0.05f;
+    render.visible = true;
+
+    game::SectorDoorModelRender model;
+    model.effectiveScale = 1.0f;
+    model.actualWidth = render.width;
+    model.actualHeight = render.height;
+    model.actualThickness = render.thickness;
+
+    const engine::Entity entity = world.CreateEntity();
+    world.Add(entity, game::SectorObjectTransform{});
+    world.Add(entity, game::SectorDoor{77, true});
+    world.Add(entity, anchor);
+    world.Add(entity, game::SectorDoorMotion{
+            game::SectorDoorMotionType::Swing,
+            openFraction,
+            targetOpenFraction,
+            90.0f * DEG2RAD,
+            90.0f * DEG2RAD,
+            hinge,
+            swingSide});
+    world.Add(entity, render);
+    world.Add(entity, game::SectorDoorCollider{});
+    world.Add(entity, game::SectorDoorPortalBlocker{
+            anchor.lineDefId,
+            anchor.frontSectorId,
+            anchor.backSectorId,
+            anchor.frontSideDefId,
+            anchor.backSideDefId,
+            true});
+    world.Add(entity, model);
+    return entity;
+}
+
+void TestSectorSwingDoorCanonicalPoseKeepsHingesAndChoosesSide()
+{
+    const game::SectorTopologyMap verticalMap = MakeDoorPortalMap();
+    const game::SectorTopologyMap horizontalMap = MakeHorizontalDoorPortalMap();
+    const game::SectorTopologyMap reversedMap = MakeReversedDoorPortalMap();
+    const game::SectorDoorResolvedAnchor anchors[] = {
+            game::ToSectorRuntimeDoorAnchor(game::ResolveSectorDoorAnchor(
+                    verticalMap, MakeDoorOnPortal())),
+            game::ToSectorRuntimeDoorAnchor(game::ResolveSectorDoorAnchor(
+                    horizontalMap, MakeDoorOnHorizontalPortal())),
+            game::ToSectorRuntimeDoorAnchor(game::ResolveSectorDoorAnchor(
+                    reversedMap, MakeDoorOnReversedPortal()))};
+
+    for (const game::SectorDoorResolvedAnchor& anchor : anchors) {
+        for (game::SectorDoorHinge hinge : {
+                     game::SectorDoorHinge::Start,
+                     game::SectorDoorHinge::End}) {
+            game::SectorDoorRender render;
+            render.width = anchor.portalWidth;
+            render.height = anchor.portalHeight;
+            render.thickness = 0.1f;
+            render.normalOffset = 0.075f;
+            game::SectorDoorMotion motion{
+                    game::SectorDoorMotionType::Swing,
+                    0.0f,
+                    1.0f,
+                    90.0f * DEG2RAD,
+                    90.0f * DEG2RAD,
+                    hinge,
+                    game::SectorDoorSwingSide::Front};
+            const Vector2 endpoint = hinge == game::SectorDoorHinge::Start
+                    ? anchor.endpointA
+                    : anchor.endpointB;
+            const Vector3 expectedHinge{
+                    endpoint.x + anchor.normal.x * render.normalOffset,
+                    anchor.openBottom,
+                    endpoint.y + anchor.normal.y * render.normalOffset};
+            for (float fraction : {0.0f, 0.5f, 1.0f}) {
+                const game::SectorDoorSwingPose pose = game::BuildSectorDoorSwingPose(
+                        anchor, motion, render, 1.0f, fraction);
+                Check(Near(pose.hingePosition, expectedHinge)
+                              && Near(Vector3Transform(Vector3{}, pose.leafMatrix), expectedHinge),
+                      "swing pose keeps the selected hinge fixed for every portal orientation and fraction");
+            }
+
+            const game::SectorDoorSwingPose closed = game::BuildSectorDoorSwingPose(
+                    anchor, motion, render, 1.0f, 0.0f);
+            const game::SectorDoorSwingPose front = game::BuildSectorDoorSwingPose(
+                    anchor, motion, render, 1.0f, 1.0f);
+            motion.swingSide = game::SectorDoorSwingSide::Back;
+            const game::SectorDoorSwingPose back = game::BuildSectorDoorSwingPose(
+                    anchor, motion, render, 1.0f, 1.0f);
+            const Vector2 frontDisplacement{
+                    front.center.x - closed.center.x,
+                    front.center.z - closed.center.z};
+            const Vector2 backDisplacement{
+                    back.center.x - closed.center.x,
+                    back.center.z - closed.center.z};
+            Check(Vector2DotProduct(frontDisplacement, anchor.normal) < 0.0f
+                          && Vector2DotProduct(backDisplacement, anchor.normal) > 0.0f,
+                  "front and back swing choices move the leaf center to the requested portal side");
+        }
+    }
+}
+
+void TestSectorSwingDoorDerivedMatricesAndColliderAgree()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const game::SectorDoorResolvedAnchor anchor = MakeRuntimeDoorAnchorForDerivedState();
+    const engine::Entity entity = AddSwingDoorForDerivedState(
+            world,
+            anchor,
+            game::SectorDoorHinge::End,
+            game::SectorDoorSwingSide::Back,
+            0.5f,
+            0.5f);
+    game::SectorDoorModelRender& model = world.Get<game::SectorDoorModelRender>(entity);
+    model.effectiveScale = 2.0f;
+    model.nominalWidth = anchor.portalWidth * 0.5f;
+    model.nominalHeight = anchor.portalHeight * 0.5f;
+
+    game::UpdateSectorDoorDerivedStateSystem(world);
+
+    const game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(entity);
+    const game::SectorDoorRender& render = world.Get<game::SectorDoorRender>(entity);
+    const game::SectorDoorCollider& collider = world.Get<game::SectorDoorCollider>(entity);
+    const game::SectorDoorModelRender& derivedModel =
+            world.Get<game::SectorDoorModelRender>(entity);
+    const Matrix slabMatrix = game::BuildSectorDoorSlabModelMatrix(
+            transform, anchor, render);
+    const Vector3 modelPanelCenter = Vector3Transform(
+            Vector3{
+                    derivedModel.nominalWidth * 0.5f,
+                    derivedModel.nominalHeight * 0.5f,
+                    0.0f},
+            derivedModel.leafMatrix);
+    Check(Near(modelPanelCenter, transform.position)
+                  && Near(Vector3Transform(Vector3{}, slabMatrix), transform.position)
+                  && Near(collider.center, Vector2{transform.position.x, transform.position.z}),
+          "half-open model matrix, procedural slab matrix, transform, and collider share one center");
+    Check(Near(collider.tangent, render.widthAxis)
+                  && Near(collider.normal, render.thicknessAxis)
+                  && Near(collider.bottom, anchor.openBottom)
+                  && Near(collider.top, anchor.openBottom + render.height),
+          "half-open model and procedural representations share collider axes and vertical interval");
+    Check(!world.Get<game::SectorDoorPortalBlocker>(entity).blocksPortal,
+          "partly open swing door conservatively unblocks portal visibility");
+
+    game::SectorDoorMotion& motion = world.Get<game::SectorDoorMotion>(entity);
+    motion.openFraction = game::kSectorDoorPortalBlockEpsilon;
+    game::UpdateSectorDoorDerivedStateSystem(world);
+    Check(world.Get<game::SectorDoorPortalBlocker>(entity).blocksPortal,
+          "swing door remains visibility-blocking at the closed epsilon");
+    motion.openFraction = game::kSectorDoorPortalBlockEpsilon + 0.0001f;
+    game::UpdateSectorDoorDerivedStateSystem(world);
+    Check(!world.Get<game::SectorDoorPortalBlocker>(entity).blocksPortal,
+          "swing door stops visibility blocking beyond the closed epsilon");
+}
+
+void TestSectorSwingDoorFullyOpenClearsApertureButStillCollides()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const game::SectorDoorResolvedAnchor anchor = MakeRuntimeDoorAnchorForDerivedState();
+    const engine::Entity entity = AddSwingDoorForDerivedState(
+            world,
+            anchor,
+            game::SectorDoorHinge::Start,
+            game::SectorDoorSwingSide::Front,
+            1.0f,
+            1.0f);
+    game::UpdateSectorDoorDerivedStateSystem(world);
+    std::vector<game::SectorDynamicDoorCollider> colliders;
+    game::CollectSectorDoorDynamicColliders(world, colliders);
+    Check(colliders.size() == 1,
+          "fully open swing leaf retains one active physical OBB");
+
+    const Vector2 normal = anchor.normal;
+    const game::SectorCollisionMoveState doorwayStart{
+            Vector2{
+                    anchor.midpoint.x - normal.x * 0.4f,
+                    anchor.midpoint.y - normal.y * 0.4f},
+            anchor.openBottom,
+            anchor.frontSectorId,
+            true};
+    const game::SectorCollisionMoveResult doorwayStatic{
+            Vector2{
+                    anchor.midpoint.x + normal.x * 0.4f,
+                    anchor.midpoint.y + normal.y * 0.4f},
+            anchor.backSectorId,
+            false,
+            false,
+            false};
+    const game::SectorCollisionMoveResult throughDoor =
+            game::ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                    doorwayStart,
+                    doorwayStatic,
+                    game::SectorCollisionMoveConfig{0.02f, 1.0f, 0.25f, 4},
+                    colliders);
+    Check(!throughDoor.hitWall && throughDoor.currentSectorId == anchor.backSectorId,
+          "fully open fitted swing leaf clears the center of the portal aperture");
+
+    const game::SectorDoorCollider& physical = world.Get<game::SectorDoorCollider>(entity);
+    const game::SectorCollisionMoveState leafStart{
+            Vector2{
+                    physical.center.x - physical.tangent.x * anchor.portalWidth,
+                    physical.center.y - physical.tangent.y * anchor.portalWidth},
+            anchor.openBottom,
+            anchor.frontSectorId,
+            true};
+    const game::SectorCollisionMoveResult leafStatic{
+            physical.center,
+            anchor.frontSectorId,
+            false,
+            false,
+            false};
+    const game::SectorCollisionMoveResult intoLeaf =
+            game::ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                    leafStart,
+                    leafStatic,
+                    game::SectorCollisionMoveConfig{0.05f, 1.0f, 0.25f, 4},
+                    colliders);
+    Check(intoLeaf.hitWall,
+          "fully open swing leaf still blocks movement at its rotated physical location");
+}
+
+void TestSectorSwingDoorClosingSweepReopensWithoutTunneling()
+{
+    const game::SectorDoorResolvedAnchor anchor = MakeRuntimeDoorAnchorForDerivedState();
+    const auto runClosingStep = [&anchor](Vector3 obstaclePosition, bool expectBlocked) {
+        engine::World world;
+        game::ReserveSectorRuntimeObjectWorld(world, 1);
+        const engine::Entity entity = AddSwingDoorForDerivedState(
+                world,
+                anchor,
+                game::SectorDoorHinge::Start,
+                game::SectorDoorSwingSide::Front,
+                1.0f,
+                0.0f);
+        const game::SectorDoorPlayerObstacle obstacle{
+                obstaclePosition,
+                0.08f,
+                1.0f};
+        const bool changed = game::AdvanceSectorDoorMotionSystem(
+                world, 2.0f, &obstacle);
+        const game::SectorDoorMotion& motion = world.Get<game::SectorDoorMotion>(entity);
+        if (expectBlocked) {
+            Check(changed
+                          && Near(motion.openFraction, 1.0f)
+                          && Near(motion.targetOpenFraction, 1.0f),
+                  "closing swing obstruction preserves the previous fraction and retargets open");
+        } else {
+            Check(changed
+                          && Near(motion.openFraction, 0.0f)
+                          && Near(motion.targetOpenFraction, 0.0f),
+                  "closing swing advances when the player cylinder does not overlap its sweep");
+        }
+        return motion;
+    };
+
+    game::SectorDoorRender render;
+    render.width = anchor.portalWidth;
+    render.height = anchor.portalHeight;
+    render.thickness = 0.1f;
+    render.normalOffset = 0.05f;
+    const game::SectorDoorMotion poseMotion{
+            game::SectorDoorMotionType::Swing,
+            1.0f,
+            0.0f,
+            90.0f * DEG2RAD,
+            90.0f * DEG2RAD,
+            game::SectorDoorHinge::Start,
+            game::SectorDoorSwingSide::Front};
+    const game::SectorDoorSwingPose current = game::BuildSectorDoorSwingPose(
+            anchor, poseMotion, render, 1.0f, 1.0f);
+    const game::SectorDoorSwingPose intermediate = game::BuildSectorDoorSwingPose(
+            anchor, poseMotion, render, 1.0f, 0.5f);
+    const game::SectorDoorSwingPose candidate = game::BuildSectorDoorSwingPose(
+            anchor, poseMotion, render, 1.0f, 0.0f);
+
+    runClosingStep(Vector3{current.center.x, anchor.openBottom, current.center.z}, true);
+    const game::SectorDoorMotion blockedMotion = runClosingStep(
+            Vector3{intermediate.center.x, anchor.openBottom, intermediate.center.z},
+            true);
+    runClosingStep(Vector3{candidate.center.x, anchor.openBottom, candidate.center.z}, true);
+    runClosingStep(Vector3{100.0f, anchor.openBottom, 100.0f}, false);
+    runClosingStep(Vector3{
+            intermediate.center.x,
+            anchor.openTop + 1.0f,
+            intermediate.center.z}, false);
+
+    game::SectorDoorAudio audio;
+    audio.targetWasOpen = false;
+    Check(game::UpdateSectorDoorAudioTransition(audio, blockedMotion)
+                          == game::SectorDoorAudioEvent::Open
+                  && game::UpdateSectorDoorAudioTransition(audio, blockedMotion)
+                          == game::SectorDoorAudioEvent::None,
+          "obstruction reversal creates one open audio transition without per-frame retriggering");
 }
 
 void TestSectorDoorDerivedStateUpdatesTransformAndCollider()
@@ -4748,10 +5139,11 @@ int main()
     TestSpawnPlacedRuntimeObjectSkipsInvalidDoorAnchorWithDiagnostics();
     TestSpawnPlacedDoorCopiesResolvedPayloadToEcs();
     TestSpawnPlacedDoorRefreshDoesNotDuplicate();
-    TestUnknownModelSwingDoorUsesClosedProceduralFallback();
+    TestUnknownModelSwingDoorUsesAnimatedProceduralFallback();
     TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions();
     TestRetainedCatalogFailureDoesNotBlockOtherDoors();
-    TestProceduralSwingDoorUsesClosedFallbackWithoutCatalogStyle();
+    TestNullSwingDoorLeafRequestKeepsRuntimeFallback();
+    TestProceduralSwingDoorRunsWithoutCatalogStyle();
     TestSectorDoorSlabGeometryIsFiniteAndStable();
     TestSectorDoorSlabMeshDataHasStableAttributes();
     TestSectorDoorFaceUvsAffectOnlySelectedFace();
@@ -4768,6 +5160,10 @@ int main()
     TestSectorDoorShadowCasterCollectionSkipsNonRenderableDoors();
     TestSectorDoorShadowCasterUsesAnimatedTransform();
     TestSectorDoorHorizontalSlideMotionUsesResolvedTangent();
+    TestSectorSwingDoorCanonicalPoseKeepsHingesAndChoosesSide();
+    TestSectorSwingDoorDerivedMatricesAndColliderAgree();
+    TestSectorSwingDoorFullyOpenClearsApertureButStillCollides();
+    TestSectorSwingDoorClosingSweepReopensWithoutTunneling();
     TestSpawnPlacedDoorDerivesDefaultOpenDistance();
     TestSectorDoorMotionAdvancesOpenAndClosed();
     TestSectorDoorMotionClampsAndIgnoresZeroSpeed();

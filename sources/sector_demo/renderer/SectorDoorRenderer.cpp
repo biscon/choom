@@ -649,6 +649,7 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                             transform,
                             object,
                             anchor,
+                            render,
                             objectLightProbes,
                             context.lighting.mapForFallback,
                             cacheEntry->staticLightingValues)) {
@@ -684,7 +685,7 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                 DrawMesh(
                         cacheEntry->mesh,
                         doorOpaqueMaterial,
-                        BuildSectorDoorSlabModelMatrix(transform, anchor));
+                        BuildSectorDoorSlabModelMatrix(transform, anchor, render));
                 ++drawnCount;
             });
 

@@ -46,7 +46,7 @@ When executing this plan:
 |---|---|---|---|
 | 1 | Prepare and verify separated door assets | Completed | 2026-08-12 |
 | 2 | Add door-asset catalog and backward-compatible authored data | Completed | 2026-08-12 |
-| 3 | Add swing kinematics, collision, obstruction handling, and runtime spawning | Not Started | — |
+| 3 | Add swing kinematics, collision, obstruction handling, and runtime spawning | Completed | 2026-08-12 |
 | 4 | Render model leaves/frames with PBR lighting and dynamic shadows | Not Started | — |
 | 5 | Add editor authoring, diagnostics, cached 2D footprint, and picking | Not Started | — |
 | 6 | Integration hardening, documentation, and acceptance coverage | Not Started | — |
@@ -1001,4 +1001,51 @@ Append one entry per attempted slice in this format:
   closed active procedural OBB and portal blocker with zero travel rather than
   receiving an incorrect slide transform.
 - Remaining follow-up within this plan: Slices 3 through 6 remain Not Started.
+  The three source pack GLBs remain present and untouched.
+
+### 2026-08-12 — Slice 3 — Completed
+
+- Summary: Added the reserved model-door runtime component, explicit runtime
+  travel units, canonical Start/End and Front/Back swing poses, uniformly
+  fitted leaf/optional-frame model requests in the existing runtime-object
+  asset scope, rotating procedural fallback slabs, analytic receiver bounds,
+  full-range dynamic OBB collision, and bounded five-degree swept player
+  obstruction sampling. Closing obstruction preserves the previous fraction,
+  retargets fully open, and never pushes the player. Existing portal-based
+  auto-open, interaction, audio transition, and conservative visibility policy
+  remain in place.
+- Decisions/deviations folded back into plan: No contract deviations were
+  needed. Angular sweep samples interpolate the eased physical angle directly,
+  rather than normalized fraction, so adjacent samples remain no more than five
+  degrees apart. Valid requested models intentionally keep drawing the
+  procedural rotating slab until Slice 4 adds the PBR model traversal; missing
+  catalog entries, invalid fits, asset-scope failures, and null leaf handles
+  retain explicit fallback state without skipping the door entity.
+- Files/modules materially affected: `SectorDoorRuntime`,
+  `SectorRuntimeObjects`/`SectorSceneRuntime`, game-session and editor-preview
+  runtime update inputs, the procedural door transform call sites, focused
+  runtime-object tests, and this plan.
+- Automated verification: `cmake --build cmake-build-debug -j2` passed;
+  `ctest --test-dir cmake-build-debug --output-on-failure` passed all 22 tests;
+  `git diff --check`, `git diff --stat`, and `git status --short` passed/reported
+  cleanly apart from the three intentionally retained untracked source GLBs.
+  Focused coverage includes vertical, horizontal, and reversed portals; both
+  hinges and swing sides; matrix/collider agreement; open-leaf collision and
+  aperture clearance; portal-block epsilon; current, candidate, and
+  intermediate swept obstruction; vertical non-overlap; large-dt sampling;
+  null-handle fallback; zero angular speed; and single audio reversal.
+- Manual verification: Not performed (user-owned).
+- Cache invalidation behavior: No authored topology/runtime-object mutation or
+  2D render-cache path changed in this runtime-only slice. Existing editor door
+  mutations still use the normal document-edited/cache invalidation path.
+- Lightmap source-hash behavior: Unchanged. Model/swing door fields, requested
+  leaf/frame assets, runtime matrices, and analytic receiver bounds remain
+  excluded from static lightmap geometry and `ComputeSectorLightmapSourceHash()`.
+- Collision/sector lookup/physics behavior: Only dynamic swing-door/player
+  collision and closing obstruction behavior changed. Static topology
+  collision, sector lookup, step handling, and general player physics are
+  unchanged; render triangles are not used for collision.
+- Remaining follow-up within this plan: Slices 4 through 6 remain Not Started.
+  PBR leaf/frame rendering, true model shadow casters/ready-model bounds, editor
+  authoring/cache visuals, and integration hardening remain explicitly deferred.
   The three source pack GLBs remain present and untouched.

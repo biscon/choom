@@ -166,7 +166,8 @@ void UpdateSectorRuntimeObjects(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map,
         float dt,
-        const Vector3* playerPosition = nullptr);
+        const Vector3* playerPosition = nullptr,
+        const SectorDoorPlayerObstacle* playerObstacle = nullptr);
 
 void UpdateSectorObjectCurrentSectorSystem(
         engine::World& world,

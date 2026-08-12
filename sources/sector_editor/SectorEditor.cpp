@@ -497,7 +497,26 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
 
     if (state.mode == SectorEditorMode::Preview3D) {
         const Vector3 playerPosition = previewState.controller.freeflyController.pose.position;
-        sceneRuntime.Update(context, TopologyMap(), dt, &playerPosition);
+        SectorDoorPlayerObstacle playerObstacle;
+        const SectorDoorPlayerObstacle* playerObstaclePtr = nullptr;
+        if (previewState.controller.previewControlMode
+                == SectorPreviewControlMode::Gameplay) {
+            const SectorFpsControllerConfig obstacleConfig =
+                    EffectiveSectorFpsControllerConfig(
+                            previewState.controller.fpsControllerState,
+                            previewState.controller.fpsControllerConfig);
+            playerObstacle = SectorDoorPlayerObstacle{
+                    previewState.controller.fpsControllerState.feetPosition,
+                    obstacleConfig.playerRadius,
+                    obstacleConfig.playerHeight};
+            playerObstaclePtr = &playerObstacle;
+        }
+        sceneRuntime.Update(
+                context,
+                TopologyMap(),
+                dt,
+                &playerPosition,
+                playerObstaclePtr);
         UpdateFpsViewmodel(assets, dt);
         const bool hasBlockingModal = state.texturePicker.open
                 || state.soundPicker.open
