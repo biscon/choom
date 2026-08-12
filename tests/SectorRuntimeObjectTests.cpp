@@ -5119,6 +5119,142 @@ void TestSectorDoorAudioTransitionTracksTargetChanges()
           "door audio replaces the pending event on a close reversal");
 }
 
+void TestSectorDoorModelDrawPolicyTransitions()
+{
+    game::SectorDoorModelRender model;
+    Check(game::ResolveSectorDoorModelDrawPolicy(model, false, false).drawProcedural,
+          "procedural door model state draws the fallback slab");
+
+    model.modelVisualRequested = true;
+    model.catalogResolved = true;
+    model.fallbackReason = game::SectorDoorModelFallbackReason::None;
+    model.leafModel = engine::ModelHandle{1, 1};
+    model.frameModel = engine::ModelHandle{2, 1};
+    model.frameDeclared = true;
+    game::SectorDoorModelDrawPolicy policy =
+            game::ResolveSectorDoorModelDrawPolicy(model, false, false);
+    Check(policy.drawProcedural && !policy.drawLeaf && !policy.drawFrame,
+          "pending model leaf keeps the procedural fallback visible");
+
+    model.leafReady = true;
+    policy = game::ResolveSectorDoorModelDrawPolicy(model, true, false);
+    Check(!policy.drawProcedural && policy.drawLeaf && !policy.drawFrame,
+          "ready leaf replaces the fallback independently of its frame");
+
+    model.frameReady = true;
+    policy = game::ResolveSectorDoorModelDrawPolicy(model, true, true);
+    Check(!policy.drawProcedural && policy.drawLeaf && policy.drawFrame,
+          "ready leaf and frame are both model-render eligible");
+
+    model.leafReady = false;
+    model.leafFailed = true;
+    policy = game::ResolveSectorDoorModelDrawPolicy(model, false, true);
+    Check(policy.drawProcedural && !policy.drawLeaf && policy.drawFrame,
+          "failed leaf keeps the slab while an independently ready frame remains visible");
+
+    model.leafReady = true;
+    model.leafFailed = false;
+    model.frameFailed = true;
+    policy = game::ResolveSectorDoorModelDrawPolicy(model, true, false);
+    Check(!policy.drawProcedural && policy.drawLeaf && !policy.drawFrame,
+          "failed frame never hides a ready model leaf");
+}
+
+void TestSectorDoorModelVisibilityUsesEitherAdjacentSector()
+{
+    game::SectorDoorResolvedAnchor anchor;
+    anchor.frontSectorId = 10;
+    anchor.backSectorId = 20;
+    game::RuntimePortalVisibilityResult visibility;
+    visibility.validStartSector = true;
+    visibility.visibleSectorIds = {10};
+    Check(game::ShouldDrawSectorDoorForVisibility(anchor, visibility),
+          "model door is visible from its front adjacent sector");
+    visibility.visibleSectorIds = {20};
+    Check(game::ShouldDrawSectorDoorForVisibility(anchor, visibility),
+          "model door is visible from its back adjacent sector");
+    visibility.visibleSectorIds = {30};
+    Check(!game::ShouldDrawSectorDoorForVisibility(anchor, visibility),
+          "model door is culled when neither adjacent sector is visible");
+    visibility.fallbackDrawAll = true;
+    Check(game::ShouldDrawSectorDoorForVisibility(anchor, visibility),
+          "fallback visibility conservatively includes model doors");
+}
+
+void TestSectorDoorModelBoundsAndLightingSectorHelpers()
+{
+    const BoundingBox local{
+            Vector3{0.0f, 0.0f, -0.25f},
+            Vector3{1.0f, 2.0f, 0.25f}};
+    const BoundingBox moved = game::TransformSectorDoorModelBounds(
+            local, MatrixTranslate(3.0f, 4.0f, 5.0f));
+    Check(Near(moved.min, Vector3{3.0f, 4.0f, 4.75f})
+                  && Near(moved.max, Vector3{4.0f, 6.0f, 5.25f}),
+          "model door bounds transform all local AABB corners");
+    const BoundingBox combined = game::UnionSectorDoorModelBounds(
+            moved,
+            BoundingBox{Vector3{2.0f, 3.0f, 5.0f}, Vector3{3.5f, 7.0f, 8.0f}});
+    Check(Near(combined.min, Vector3{2.0f, 3.0f, 4.75f})
+                  && Near(combined.max, Vector3{4.0f, 7.0f, 8.0f}),
+          "model door receiver bounds union leaf and frame extents");
+
+    game::SectorDoorResolvedAnchor anchor;
+    anchor.frontSectorId = 10;
+    anchor.backSectorId = 20;
+    anchor.midpoint = Vector2{1.0f, 2.0f};
+    anchor.normal = Vector2{0.0f, 1.0f};
+    Check(game::ResolveSectorDoorAdjacentLightingSector(
+                  anchor, Vector3{1.0f, 0.0f, 3.0f}, 20) == 20,
+          "door lighting keeps a collision lookup result in an adjacent sector");
+    Check(game::ResolveSectorDoorAdjacentLightingSector(
+                  anchor, Vector3{1.0f, 0.0f, 3.0f}, 99) == 20,
+          "door lighting falls back to the back sector from leaf position");
+    Check(game::ResolveSectorDoorAdjacentLightingSector(
+                  anchor, Vector3{1.0f, 0.0f, 1.0f}, 0) == 10,
+          "door lighting falls back to the front sector from leaf position");
+}
+
+void TestSectorDoorModelShadowCasterMatrices()
+{
+    game::SectorObject object;
+    game::SectorDoor door{91, true};
+    game::SectorDoorRender render;
+    render.visible = true;
+    game::SectorDoorModelRender model;
+    model.leafModel = engine::ModelHandle{3, 1};
+    model.frameModel = engine::ModelHandle{4, 1};
+    model.leafMatrix = MatrixTranslate(1.0f, 2.0f, 3.0f);
+    model.frameMatrix = MatrixTranslate(4.0f, 5.0f, 6.0f);
+    std::vector<game::SectorDoorModelShadowCaster> casters;
+    const bool appended = game::AppendSectorDoorModelShadowCasters(
+            engine::Entity{7, 1},
+            object,
+            door,
+            render,
+            model,
+            game::SectorDoorModelDrawPolicy{false, true, true},
+            casters);
+    Check(appended && casters.size() == 2,
+          "ready leaf and frame append one model shadow caster each");
+    Check(casters[0].model == model.leafModel
+                  && NearTranslation(casters[0].transform, Vector3{1.0f, 2.0f, 3.0f})
+                  && casters[1].model == model.frameModel
+                  && NearTranslation(casters[1].transform, Vector3{4.0f, 5.0f, 6.0f}),
+          "model shadow casters preserve the canonical leaf and frame matrices");
+
+    casters.clear();
+    game::AppendSectorDoorModelShadowCasters(
+            engine::Entity{7, 1},
+            object,
+            door,
+            render,
+            model,
+            game::SectorDoorModelDrawPolicy{true, false, true},
+            casters);
+    Check(casters.size() == 1 && casters[0].model == model.frameModel,
+          "fallback slab state emits only independently drawable model frame casters");
+}
+
 int main()
 {
     TestResolveSectorDoorAnchorValidPortal();
@@ -5168,6 +5304,10 @@ int main()
     TestSectorDoorMotionAdvancesOpenAndClosed();
     TestSectorDoorMotionClampsAndIgnoresZeroSpeed();
     TestSectorDoorAudioTransitionTracksTargetChanges();
+    TestSectorDoorModelDrawPolicyTransitions();
+    TestSectorDoorModelVisibilityUsesEitherAdjacentSector();
+    TestSectorDoorModelBoundsAndLightingSectorHelpers();
+    TestSectorDoorModelShadowCasterMatrices();
     TestSectorDoorAutoOpenSetsTargetFromPlayerRange();
     TestSectorDoorAutoOpenIgnoresDisabledAndInvalidPlayerPosition();
     TestSectorDoorInteractTogglesNearestManualDoorInFront();

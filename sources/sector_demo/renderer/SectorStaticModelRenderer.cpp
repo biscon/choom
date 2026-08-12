@@ -1244,6 +1244,159 @@ void SectorStaticModelRenderer::FinalizeResources(
             });
 }
 
+bool SectorStaticModelRenderer::DrawWorldDynamicModel(
+        const engine::ModelAsset& modelAsset,
+        const Model& model,
+        engine::ModelHandle modelHandle,
+        Matrix modelTransform,
+        int placedObjectId,
+        int receiverSectorId,
+        const SectorReceiverBounds& receiverBounds,
+        Vector3 containingSectorAmbient,
+        float environmentExposure,
+        const BakedObjectLightingVerticalSample& lighting,
+        const SectorBillboardDynamicLightContext& dynamicLightContext,
+        const SectorStaticSpecularLightState& staticSpecularLights,
+        const RuntimePortalVisibilityResult& visibility,
+        bool objectProbeBakeCurrent,
+        const TextureCubemap* environment,
+        bool allowSkinning)
+{
+    const bool canSkin = allowSkinning
+            && model.skeleton.boneCount > 0
+            && model.skeleton.boneCount <= engine::MaxAnimatedModelBones
+            && model.boneMatrices != nullptr
+            && shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] >= 0;
+    const int useSkinning = canSkin ? 1 : 0;
+    const int noStaticLightmap = 0;
+    const int noBakedAo = 0;
+    if (useSkinningLoc >= 0) SetShaderValue(shader, useSkinningLoc, &useSkinning, SHADER_UNIFORM_INT);
+    if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &noStaticLightmap, SHADER_UNIFORM_INT);
+    if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &noBakedAo, SHADER_UNIFORM_INT);
+    if (containingSectorAmbientLoc >= 0) {
+        const Vector3 ambient = SanitizeSectorPbrNonnegative(containingSectorAmbient);
+        SetShaderValue(shader, containingSectorAmbientLoc, &ambient, SHADER_UNIFORM_VEC3);
+    }
+    for (size_t face = 0; face < objectAmbientCubeLocs.size(); ++face) {
+        if (objectAmbientCubeLocs[face] >= 0) {
+            const Vector3 lowerAmbient = SanitizeSectorPbrNonnegative(
+                    lighting.lower.ambientCube[face]);
+            SetShaderValue(shader, objectAmbientCubeLocs[face], &lowerAmbient, SHADER_UNIFORM_VEC3);
+        }
+        if (objectAmbientCubeUpperLocs[face] >= 0) {
+            const Vector3 upperAmbient = SanitizeSectorPbrNonnegative(
+                    lighting.upper.ambientCube[face]);
+            SetShaderValue(shader, objectAmbientCubeUpperLocs[face], &upperAmbient, SHADER_UNIFORM_VEC3);
+        }
+    }
+    const float lowerProbeHeight = std::isfinite(lighting.lowerHeightWorld)
+            ? lighting.lowerHeightWorld : 0.0f;
+    const float upperProbeHeight = std::isfinite(lighting.upperHeightWorld)
+            ? lighting.upperHeightWorld : lowerProbeHeight;
+    if (objectAmbientCubeLowerHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeLowerHeightLoc, &lowerProbeHeight, SHADER_UNIFORM_FLOAT);
+    if (objectAmbientCubeUpperHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeUpperHeightLoc, &upperProbeHeight, SHADER_UNIFORM_FLOAT);
+    if (canSkin) {
+        rlEnableShader(shader.id);
+        rlSetUniformMatrices(
+                shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS],
+                model.boneMatrices,
+                model.skeleton.boneCount);
+    }
+
+    const bool validProbe = lighting.lower.valid || lighting.upper.valid;
+    const SectorStaticSpecularLightContext staticSpecularContext =
+            SelectSectorStaticSpecularLights(
+                    staticSpecularLights,
+                    receiverBounds,
+                    receiverSectorId,
+                    visibility,
+                    objectProbeBakeCurrent && validProbe);
+    UploadSectorStaticSpecularLights(
+            shader, staticSpecularLocations, staticSpecularContext);
+
+    const bool environmentActive = environment != nullptr && environment->id != 0;
+    bool drewMesh = false;
+    for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
+        if (model.meshMaterial == nullptr) continue;
+        const int materialIndex = model.meshMaterial[meshIndex];
+        if (materialIndex < 0 || materialIndex >= model.materialCount) continue;
+        const Material& source = model.materials[materialIndex];
+        if (source.maps == nullptr) continue;
+
+        std::array<MaterialMap, SectorStaticModelMaterialMapCount> maps{};
+        std::copy_n(source.maps, SectorStaticModelMaterialMapCount, maps.begin());
+        ConfigureSectorStaticModelAuxiliaryMaterialMaps(
+                maps,
+                nullptr,
+                false,
+                environment,
+                dynamicLightContext.shadowMaps.shadowMap0,
+                dynamicLightContext.shadowMaps.shadowMap1);
+        Material material = source;
+        material.shader = shader;
+        material.maps = maps.data();
+        engine::ModelMaterialAsset pbrMaterial;
+        if (materialIndex < static_cast<int>(modelAsset.materials.size())
+                && modelAsset.materials[static_cast<size_t>(materialIndex)]
+                           .pbrMetallicRoughness) {
+            pbrMaterial = modelAsset.materials[static_cast<size_t>(materialIndex)];
+        } else {
+            pbrMaterial.baseColorFactor = ColorToNormalizedVector4(
+                    maps[MATERIAL_MAP_DIFFUSE].color);
+            pbrMaterial.roughnessFactor = 1.0f;
+            pbrMaterial.hasBaseColorTexture =
+                    maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
+        }
+        pbrMaterial = NormalizeSectorPbrMaterial(pbrMaterial);
+        if (baseColorFactorLoc >= 0) SetShaderValue(shader, baseColorFactorLoc, &pbrMaterial.baseColorFactor, SHADER_UNIFORM_VEC4);
+        if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbrMaterial.emissiveFactor, SHADER_UNIFORM_VEC3);
+        if (emissiveStrengthLoc >= 0) SetShaderValue(shader, emissiveStrengthLoc, &pbrMaterial.emissiveStrength, SHADER_UNIFORM_FLOAT);
+        if (metallicFactorLoc >= 0) SetShaderValue(shader, metallicFactorLoc, &pbrMaterial.metallicFactor, SHADER_UNIFORM_FLOAT);
+        if (roughnessFactorLoc >= 0) SetShaderValue(shader, roughnessFactorLoc, &pbrMaterial.roughnessFactor, SHADER_UNIFORM_FLOAT);
+        if (normalScaleLoc >= 0) SetShaderValue(shader, normalScaleLoc, &pbrMaterial.normalScale, SHADER_UNIFORM_FLOAT);
+        if (occlusionStrengthLoc >= 0) SetShaderValue(shader, occlusionStrengthLoc, &pbrMaterial.occlusionStrength, SHADER_UNIFORM_FLOAT);
+        const int hasBase = pbrMaterial.hasBaseColorTexture ? 1 : 0;
+        const int hasMetal = pbrMaterial.hasMetallicTexture ? 1 : 0;
+        const int hasNormal = pbrMaterial.hasNormalTexture ? 1 : 0;
+        const int hasRoughness = pbrMaterial.hasRoughnessTexture ? 1 : 0;
+        const int hasOcclusion = pbrMaterial.hasOcclusionTexture ? 1 : 0;
+        const int hasEmissive = pbrMaterial.hasEmissiveTexture ? 1 : 0;
+        if (hasBaseColorTextureLoc >= 0) SetShaderValue(shader, hasBaseColorTextureLoc, &hasBase, SHADER_UNIFORM_INT);
+        if (hasMetallicTextureLoc >= 0) SetShaderValue(shader, hasMetallicTextureLoc, &hasMetal, SHADER_UNIFORM_INT);
+        if (hasNormalTextureLoc >= 0) SetShaderValue(shader, hasNormalTextureLoc, &hasNormal, SHADER_UNIFORM_INT);
+        if (hasRoughnessTextureLoc >= 0) SetShaderValue(shader, hasRoughnessTextureLoc, &hasRoughness, SHADER_UNIFORM_INT);
+        if (hasOcclusionTextureLoc >= 0) SetShaderValue(shader, hasOcclusionTextureLoc, &hasOcclusion, SHADER_UNIFORM_INT);
+        if (hasEmissiveTextureLoc >= 0) SetShaderValue(shader, hasEmissiveTextureLoc, &hasEmissive, SHADER_UNIFORM_INT);
+        const SectorPbrDrawState drawState = BuildSectorPbrDrawState(
+                SectorPbrLightingPath::WorldDynamic,
+                validProbe,
+                false,
+                objectProbeBakeCurrent,
+                environmentActive,
+                environmentExposure,
+                1.0f,
+                false,
+                contributionSettings);
+        UploadPbrDrawState(drawState);
+        UploadPbrMaterialTransferState(pbrMaterial);
+        if (!worldDiagnostics.valid
+                && (placedObjectId == diagnosticSelectedObjectId
+                        || diagnosticSelectedObjectId < 0)) {
+            RecordPbrDiagnostics(
+                    worldDiagnostics,
+                    placedObjectId,
+                    modelHandle,
+                    materialIndex,
+                    drawState,
+                    pbrMaterial,
+                    staticSpecularContext);
+        }
+        DrawMesh(model.meshes[meshIndex], material, modelTransform);
+        drewMesh = true;
+    }
+    return drewMesh;
+}
+
 void SectorStaticModelRenderer::Draw(
         engine::AssetManager& assets,
         engine::World& runtimeObjectWorld,
@@ -1593,7 +1746,6 @@ void SectorStaticModelRenderer::Draw(
              &staticSpecularLights,
              &visibility,
              environment,
-             environmentActive,
              objectProbeBakeCurrent,
              &considered,
              &drawn,
@@ -1620,59 +1772,6 @@ void SectorStaticModelRenderer::Draw(
                     return;
                 }
                 Model model = engine::BuildAnimatedModelPoseView(*modelAsset, instance);
-                const bool canSkin = model.skeleton.boneCount > 0
-                        && model.skeleton.boneCount <= engine::MaxAnimatedModelBones
-                        && model.boneMatrices != nullptr
-                        && shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] >= 0;
-                const int useSkinning = canSkin ? 1 : 0;
-                const int noStaticLightmap = 0;
-                const int noBakedAo = 0;
-                if (useSkinningLoc >= 0) SetShaderValue(shader, useSkinningLoc, &useSkinning, SHADER_UNIFORM_INT);
-                if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &noStaticLightmap, SHADER_UNIFORM_INT);
-                if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &noBakedAo, SHADER_UNIFORM_INT);
-                if (containingSectorAmbientLoc >= 0) {
-                    const Vector3 ambient = SanitizeSectorPbrNonnegative(
-                            dynamicModel.containingSectorAmbient);
-                    SetShaderValue(shader, containingSectorAmbientLoc, &ambient, SHADER_UNIFORM_VEC3);
-                }
-                for (size_t face = 0; face < objectAmbientCubeLocs.size(); ++face) {
-                if (objectAmbientCubeLocs[face] >= 0) {
-                        const Vector3 lowerAmbient =
-                                SanitizeSectorPbrNonnegative(
-                                        lighting.vertical.lower.ambientCube[face]);
-                        SetShaderValue(
-                                shader,
-                                objectAmbientCubeLocs[face],
-                                &lowerAmbient,
-                                SHADER_UNIFORM_VEC3);
-                    }
-                    if (objectAmbientCubeUpperLocs[face] >= 0) {
-                        const Vector3 upperAmbient =
-                                SanitizeSectorPbrNonnegative(
-                                        lighting.vertical.upper.ambientCube[face]);
-                        SetShaderValue(
-                                shader,
-                                objectAmbientCubeUpperLocs[face],
-                                &upperAmbient,
-                                SHADER_UNIFORM_VEC3);
-                    }
-                }
-                const float lowerProbeHeight = std::isfinite(
-                        lighting.vertical.lowerHeightWorld)
-                        ? lighting.vertical.lowerHeightWorld : 0.0f;
-                const float upperProbeHeight = std::isfinite(
-                        lighting.vertical.upperHeightWorld)
-                        ? lighting.vertical.upperHeightWorld : lowerProbeHeight;
-                if (objectAmbientCubeLowerHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeLowerHeightLoc, &lowerProbeHeight, SHADER_UNIFORM_FLOAT);
-                if (objectAmbientCubeUpperHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeUpperHeightLoc, &upperProbeHeight, SHADER_UNIFORM_FLOAT);
-                if (canSkin) {
-                    rlEnableShader(shader.id);
-                    rlSetUniformMatrices(
-                            shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS],
-                            model.boneMatrices,
-                            model.skeleton.boneCount);
-                }
-
                 const Matrix authoredTransform = BuildSectorStaticModelAuthoredTransform(
                         transform.position,
                         transform.rotationXRadians,
@@ -1680,8 +1779,6 @@ void SectorStaticModelRenderer::Draw(
                         transform.rotationZRadians,
                         dynamicModel.scale);
                 const Matrix modelTransform = MatrixMultiply(model.transform, authoredTransform);
-                const bool validProbe = lighting.vertical.lower.valid
-                        || lighting.vertical.upper.valid;
                 const SectorReceiverBounds receiverBounds =
                         modelAsset->hasLocalBounds
                         ? TransformSectorStaticSpecularReceiverBounds(
@@ -1693,95 +1790,124 @@ void SectorStaticModelRenderer::Draw(
                                 object.currentSectorId,
                                 transform.position,
                                 transform.position};
-                const SectorStaticSpecularLightContext staticSpecularContext =
-                        SelectSectorStaticSpecularLights(
-                                staticSpecularLights,
-                                receiverBounds,
-                                object.currentSectorId,
-                                visibility,
-                                objectProbeBakeCurrent && validProbe);
-                UploadSectorStaticSpecularLights(
-                        shader,
-                        staticSpecularLocations,
-                        staticSpecularContext);
-                bool drewMesh = false;
-                for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
-                    if (model.meshMaterial == nullptr) continue;
-                    const int materialIndex = model.meshMaterial[meshIndex];
-                    if (materialIndex < 0 || materialIndex >= model.materialCount) continue;
-                    const Material& source = model.materials[materialIndex];
-                    if (source.maps == nullptr) continue;
-
-                    std::array<MaterialMap, SectorStaticModelMaterialMapCount> maps{};
-                    std::copy_n(source.maps, SectorStaticModelMaterialMapCount, maps.begin());
-                    ConfigureSectorStaticModelAuxiliaryMaterialMaps(
-                            maps,
-                            nullptr,
-                            false,
-                            environment,
-                            dynamicLightContext.shadowMaps.shadowMap0,
-                            dynamicLightContext.shadowMaps.shadowMap1);
-                    Material material = source;
-                    material.shader = shader;
-                    material.maps = maps.data();
-                    engine::ModelMaterialAsset pbrMaterial;
-                    if (materialIndex < static_cast<int>(modelAsset->materials.size())
-                            && modelAsset->materials[static_cast<size_t>(materialIndex)].pbrMetallicRoughness) {
-                        pbrMaterial = modelAsset->materials[static_cast<size_t>(materialIndex)];
-                    } else {
-                        pbrMaterial.baseColorFactor = ColorToNormalizedVector4(maps[MATERIAL_MAP_DIFFUSE].color);
-                        pbrMaterial.roughnessFactor = 1.0f;
-                        pbrMaterial.hasBaseColorTexture = maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
-                    }
-                    pbrMaterial = NormalizeSectorPbrMaterial(pbrMaterial);
-                    if (baseColorFactorLoc >= 0) SetShaderValue(shader, baseColorFactorLoc, &pbrMaterial.baseColorFactor, SHADER_UNIFORM_VEC4);
-                    if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbrMaterial.emissiveFactor, SHADER_UNIFORM_VEC3);
-                    if (emissiveStrengthLoc >= 0) SetShaderValue(shader, emissiveStrengthLoc, &pbrMaterial.emissiveStrength, SHADER_UNIFORM_FLOAT);
-                    if (metallicFactorLoc >= 0) SetShaderValue(shader, metallicFactorLoc, &pbrMaterial.metallicFactor, SHADER_UNIFORM_FLOAT);
-                    if (roughnessFactorLoc >= 0) SetShaderValue(shader, roughnessFactorLoc, &pbrMaterial.roughnessFactor, SHADER_UNIFORM_FLOAT);
-                    if (normalScaleLoc >= 0) SetShaderValue(shader, normalScaleLoc, &pbrMaterial.normalScale, SHADER_UNIFORM_FLOAT);
-                    if (occlusionStrengthLoc >= 0) SetShaderValue(shader, occlusionStrengthLoc, &pbrMaterial.occlusionStrength, SHADER_UNIFORM_FLOAT);
-                    const int hasBase = pbrMaterial.hasBaseColorTexture ? 1 : 0;
-                    const int hasMetal = pbrMaterial.hasMetallicTexture ? 1 : 0;
-                    const int hasNormal = pbrMaterial.hasNormalTexture ? 1 : 0;
-                    const int hasRoughness = pbrMaterial.hasRoughnessTexture ? 1 : 0;
-                    const int hasOcclusion = pbrMaterial.hasOcclusionTexture ? 1 : 0;
-                    const int hasEmissive = pbrMaterial.hasEmissiveTexture ? 1 : 0;
-                    if (hasBaseColorTextureLoc >= 0) SetShaderValue(shader, hasBaseColorTextureLoc, &hasBase, SHADER_UNIFORM_INT);
-                    if (hasMetallicTextureLoc >= 0) SetShaderValue(shader, hasMetallicTextureLoc, &hasMetal, SHADER_UNIFORM_INT);
-                    if (hasNormalTextureLoc >= 0) SetShaderValue(shader, hasNormalTextureLoc, &hasNormal, SHADER_UNIFORM_INT);
-                    if (hasRoughnessTextureLoc >= 0) SetShaderValue(shader, hasRoughnessTextureLoc, &hasRoughness, SHADER_UNIFORM_INT);
-                    if (hasOcclusionTextureLoc >= 0) SetShaderValue(shader, hasOcclusionTextureLoc, &hasOcclusion, SHADER_UNIFORM_INT);
-                    if (hasEmissiveTextureLoc >= 0) SetShaderValue(shader, hasEmissiveTextureLoc, &hasEmissive, SHADER_UNIFORM_INT);
-                    const SectorPbrDrawState drawState = BuildSectorPbrDrawState(
-                            SectorPbrLightingPath::WorldDynamic,
-                            validProbe,
-                            false,
-                            objectProbeBakeCurrent,
-                            environmentActive,
-                            dynamicModel.environmentExposure,
-                            1.0f,
-                            false,
-                            contributionSettings);
-                    UploadPbrDrawState(drawState);
-                    UploadPbrMaterialTransferState(pbrMaterial);
-                    if (!worldDiagnostics.valid
-                            && (dynamicModel.placedObjectId
-                                            == diagnosticSelectedObjectId
-                                    || diagnosticSelectedObjectId < 0)) {
-                        RecordPbrDiagnostics(
-                                worldDiagnostics,
-                                dynamicModel.placedObjectId,
-                                instance.model,
-                                materialIndex,
-                                drawState,
-                                pbrMaterial,
-                                staticSpecularContext);
-                    }
-                    DrawMesh(model.meshes[meshIndex], material, modelTransform);
-                    drewMesh = true;
-                }
+                const bool drewMesh = DrawWorldDynamicModel(
+                        *modelAsset,
+                        model,
+                        instance.model,
+                        modelTransform,
+                        dynamicModel.placedObjectId,
+                        object.currentSectorId,
+                        receiverBounds,
+                        dynamicModel.containingSectorAmbient,
+                        dynamicModel.environmentExposure,
+                        lighting.vertical,
+                        dynamicLightContext,
+                        staticSpecularLights,
+                        visibility,
+                        objectProbeBakeCurrent,
+                        environment,
+                        true);
                 if (drewMesh) ++drawn;
+                else ++skipped;
+            });
+
+    runtimeObjectWorld.ForEach<
+            SectorObject,
+            SectorObjectLighting,
+            SectorDoor,
+            SectorDoorResolvedAnchor,
+            SectorDoorRender,
+            SectorDoorModelRender>(
+            [this,
+             &assets,
+             &dynamicLightContext,
+             &staticSpecularLights,
+             &visibility,
+             environment,
+             objectProbeBakeCurrent,
+             &considered,
+             &drawn,
+             &portalCulled,
+             &skipped](
+                    engine::Entity,
+                    SectorObject& object,
+                    SectorObjectLighting& lighting,
+                    SectorDoor& door,
+                    SectorDoorResolvedAnchor& anchor,
+                    SectorDoorRender& render,
+                    SectorDoorModelRender& modelRender) {
+                if (!modelRender.modelVisualRequested) {
+                    return;
+                }
+                ++considered;
+                if (!ShouldDrawSectorDoorForVisibility(anchor, visibility)) {
+                    ++portalCulled;
+                    return;
+                }
+                if (!object.visible || !door.enabled || !render.visible) {
+                    ++skipped;
+                    return;
+                }
+                const engine::ModelAsset* leafAsset =
+                        assets.GetModelAsset(modelRender.leafModel);
+                const engine::ModelAsset* frameAsset =
+                        assets.GetModelAsset(modelRender.frameModel);
+                const SectorDoorModelDrawPolicy policy =
+                        ResolveSectorDoorModelDrawPolicy(
+                                modelRender,
+                                leafAsset != nullptr,
+                                frameAsset != nullptr);
+                if (!policy.drawLeaf && !policy.drawFrame) {
+                    ++skipped;
+                    return;
+                }
+
+                const SectorReceiverBounds receiverBounds{
+                        object.currentSectorId,
+                        modelRender.receiverBounds.min,
+                        modelRender.receiverBounds.max};
+                bool drewDoorMesh = false;
+                if (policy.drawLeaf) {
+                    const Model& leaf = leafAsset->model;
+                    drewDoorMesh = DrawWorldDynamicModel(
+                            *leafAsset,
+                            leaf,
+                            modelRender.leafModel,
+                            MatrixMultiply(leaf.transform, modelRender.leafMatrix),
+                            door.placedObjectId,
+                            object.currentSectorId,
+                            receiverBounds,
+                            modelRender.containingSectorAmbient,
+                            modelRender.environmentExposure,
+                            lighting.vertical,
+                            dynamicLightContext,
+                            staticSpecularLights,
+                            visibility,
+                            objectProbeBakeCurrent,
+                            environment,
+                            false) || drewDoorMesh;
+                }
+                if (policy.drawFrame) {
+                    const Model& frame = frameAsset->model;
+                    drewDoorMesh = DrawWorldDynamicModel(
+                            *frameAsset,
+                            frame,
+                            modelRender.frameModel,
+                            MatrixMultiply(frame.transform, modelRender.frameMatrix),
+                            door.placedObjectId,
+                            object.currentSectorId,
+                            receiverBounds,
+                            modelRender.containingSectorAmbient,
+                            modelRender.environmentExposure,
+                            lighting.vertical,
+                            dynamicLightContext,
+                            staticSpecularLights,
+                            visibility,
+                            objectProbeBakeCurrent,
+                            environment,
+                            false) || drewDoorMesh;
+                }
+                if (drewDoorMesh) ++drawn;
                 else ++skipped;
             });
 

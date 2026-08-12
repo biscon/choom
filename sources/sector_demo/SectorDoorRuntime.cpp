@@ -576,7 +576,7 @@ void CollectSectorDoorReceiverBounds(
                 if (motion.motion == SectorDoorMotionType::Swing
                         && world.Has<SectorDoorModelRender>(entity)) {
                     const BoundingBox bounds = world.Get<SectorDoorModelRender>(entity)
-                            .analyticReceiverBounds;
+                            .receiverBounds;
                     if (object.visible
                             && door.enabled
                             && render.visible
@@ -596,6 +596,150 @@ void CollectSectorDoorReceiverBounds(
                     }
                 }
                 AppendSectorDoorReceiverBounds(transform, object, door, anchor, render, outBounds);
+            });
+}
+
+SectorDoorModelDrawPolicy ResolveSectorDoorModelDrawPolicy(
+        const SectorDoorModelRender& model,
+        bool leafAssetAvailable,
+        bool frameAssetAvailable)
+{
+    SectorDoorModelDrawPolicy policy;
+    const bool validRequest = model.modelVisualRequested
+            && model.catalogResolved;
+    policy.drawLeaf = validRequest
+            && !engine::IsNull(model.leafModel)
+            && model.leafReady
+            && !model.leafFailed
+            && leafAssetAvailable;
+    policy.drawFrame = validRequest
+            && model.frameDeclared
+            && !engine::IsNull(model.frameModel)
+            && model.frameReady
+            && !model.frameFailed
+            && frameAssetAvailable;
+    policy.drawProcedural = !policy.drawLeaf;
+    return policy;
+}
+
+bool ShouldDrawSectorDoorForVisibility(
+        const SectorDoorResolvedAnchor& anchor,
+        const RuntimePortalVisibilityResult& visibility)
+{
+    if (!visibility.validStartSector || visibility.fallbackDrawAll) {
+        return true;
+    }
+    const auto visible = [&visibility](int sectorId) {
+        return sectorId > 0
+                && std::binary_search(
+                        visibility.visibleSectorIds.begin(),
+                        visibility.visibleSectorIds.end(),
+                        sectorId);
+    };
+    return visible(anchor.frontSectorId) || visible(anchor.backSectorId);
+}
+
+int ResolveSectorDoorAdjacentLightingSector(
+        const SectorDoorResolvedAnchor& anchor,
+        Vector3 leafCenter,
+        int containingSectorId)
+{
+    if (containingSectorId == anchor.frontSectorId
+            || containingSectorId == anchor.backSectorId) {
+        return containingSectorId;
+    }
+    const Vector2 displacement{
+            leafCenter.x - anchor.midpoint.x,
+            leafCenter.z - anchor.midpoint.y};
+    const float side = Vector2DotProduct(displacement, anchor.normal);
+    if (side > 0.0f && anchor.backSectorId > 0) {
+        return anchor.backSectorId;
+    }
+    if (anchor.frontSectorId > 0) {
+        return anchor.frontSectorId;
+    }
+    return anchor.backSectorId;
+}
+
+BoundingBox TransformSectorDoorModelBounds(
+        BoundingBox localBounds,
+        Matrix transform)
+{
+    SectorAabb3 bounds = EmptySectorAabb3();
+    for (float x : {localBounds.min.x, localBounds.max.x}) {
+        for (float y : {localBounds.min.y, localBounds.max.y}) {
+            for (float z : {localBounds.min.z, localBounds.max.z}) {
+                const Vector3 point = Vector3Transform(Vector3{x, y, z}, transform);
+                if (IsFiniteVector3(point)) {
+                    ExpandSectorAabb3(bounds, point);
+                }
+            }
+        }
+    }
+    return BoundingBox{bounds.min, bounds.max};
+}
+
+BoundingBox UnionSectorDoorModelBounds(
+        BoundingBox first,
+        BoundingBox second)
+{
+    return BoundingBox{
+            Vector3{
+                    std::min(first.min.x, second.min.x),
+                    std::min(first.min.y, second.min.y),
+                    std::min(first.min.z, second.min.z)},
+            Vector3{
+                    std::max(first.max.x, second.max.x),
+                    std::max(first.max.y, second.max.y),
+                    std::max(first.max.z, second.max.z)}};
+}
+
+bool AppendSectorDoorModelShadowCasters(
+        engine::Entity entity,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorRender& render,
+        const SectorDoorModelRender& model,
+        const SectorDoorModelDrawPolicy& policy,
+        std::vector<SectorDoorModelShadowCaster>& outCasters)
+{
+    if (!object.visible || !door.enabled || !render.visible) {
+        return false;
+    }
+    const std::size_t beginIndex = outCasters.size();
+    if (policy.drawLeaf) {
+        outCasters.push_back(SectorDoorModelShadowCaster{
+                door.placedObjectId, entity, model.leafModel, model.leafMatrix});
+    }
+    if (policy.drawFrame) {
+        outCasters.push_back(SectorDoorModelShadowCaster{
+                door.placedObjectId, entity, model.frameModel, model.frameMatrix});
+    }
+    return outCasters.size() > beginIndex;
+}
+
+void CollectSectorDoorModelShadowCasters(
+        engine::World& world,
+        engine::AssetManager& assets,
+        std::vector<SectorDoorModelShadowCaster>& outCasters)
+{
+    world.ForEach<SectorObject, SectorDoor, SectorDoorRender, SectorDoorModelRender>(
+            [&assets, &outCasters](
+                    engine::Entity entity,
+                    SectorObject& object,
+                    SectorDoor& door,
+                    SectorDoorRender& render,
+                    SectorDoorModelRender& model) {
+                if (!object.visible || !door.enabled || !render.visible) {
+                    return;
+                }
+                const engine::ModelAsset* leaf = assets.GetModelAsset(model.leafModel);
+                const engine::ModelAsset* frame = assets.GetModelAsset(model.frameModel);
+                const SectorDoorModelDrawPolicy policy =
+                        ResolveSectorDoorModelDrawPolicy(
+                                model, leaf != nullptr, frame != nullptr);
+                AppendSectorDoorModelShadowCasters(
+                        entity, object, door, render, model, policy, outCasters);
             });
 }
 
@@ -1413,17 +1557,38 @@ bool RefreshSectorDoorModelReadinessSystem(
                         && !engine::IsNull(model.frameModel)
                         && assets.IsReady(model.frameModel);
                 const bool frameFailed = model.frameDeclared
-                        && !engine::IsNull(model.frameModel)
-                        && assets.HasFailed(model.frameModel);
+                        && model.catalogResolved
+                        && model.fallbackReason
+                                != SectorDoorModelFallbackReason::AssetScopeUnavailable
+                        && (engine::IsNull(model.frameModel)
+                                || assets.HasFailed(model.frameModel));
+                const engine::ModelAsset* leafAsset = leafReady
+                        ? assets.GetModelAsset(model.leafModel) : nullptr;
+                const engine::ModelAsset* frameAsset = frameReady
+                        ? assets.GetModelAsset(model.frameModel) : nullptr;
+                const bool leafBoundsReady = leafAsset != nullptr
+                        && leafAsset->hasLocalBounds;
+                const bool frameBoundsReady = frameAsset != nullptr
+                        && frameAsset->hasLocalBounds;
                 changed = changed
                         || leafReady != model.leafReady
                         || leafFailed != model.leafFailed
                         || frameReady != model.frameReady
-                        || frameFailed != model.frameFailed;
+                        || frameFailed != model.frameFailed
+                        || leafBoundsReady != model.leafBoundsReady
+                        || frameBoundsReady != model.frameBoundsReady;
                 model.leafReady = leafReady;
                 model.leafFailed = leafFailed;
                 model.frameReady = frameReady;
                 model.frameFailed = frameFailed;
+                model.leafBoundsReady = leafBoundsReady;
+                model.frameBoundsReady = frameBoundsReady;
+                if (leafBoundsReady) {
+                    model.leafLocalBounds = leafAsset->localBounds;
+                }
+                if (frameBoundsReady) {
+                    model.frameLocalBounds = frameAsset->localBounds;
+                }
             });
     return changed;
 }
@@ -1580,6 +1745,21 @@ void UpdateSectorDoorDerivedStateSystem(engine::World& world)
                             boundsMax.z = std::max(boundsMax.z, frameCenter.z + frameExtentZ);
                         }
                         model.analyticReceiverBounds = BoundingBox{boundsMin, boundsMax};
+                        model.receiverBounds = model.analyticReceiverBounds;
+                        if (model.leafBoundsReady) {
+                            model.receiverBounds = UnionSectorDoorModelBounds(
+                                    model.receiverBounds,
+                                    TransformSectorDoorModelBounds(
+                                            model.leafLocalBounds,
+                                            model.leafMatrix));
+                        }
+                        if (model.frameBoundsReady) {
+                            model.receiverBounds = UnionSectorDoorModelBounds(
+                                    model.receiverBounds,
+                                    TransformSectorDoorModelBounds(
+                                            model.frameLocalBounds,
+                                            model.frameMatrix));
+                        }
                     }
                 } else {
                     const Vector3 center = Vector3Add(

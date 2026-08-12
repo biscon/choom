@@ -323,6 +323,15 @@ void TestRemovedShaderPathsStayRemoved()
     Check(source.find("directDiffuse += staticDirectSpecular")
                     == std::string::npos,
           "static authored lights do not duplicate baked diffuse lighting");
+    Check(source.find("DrawWorldDynamicModel(") != std::string::npos
+                    && source.find("SectorDoorModelRender& modelRender")
+                            != std::string::npos
+                    && source.find(
+                               "SectorPbrLightingPath::WorldDynamic,\n"
+                               "                validProbe,\n"
+                               "                false,")
+                            != std::string::npos,
+          "dynamic props and model doors share the non-lightmapped world PBR draw helper");
 }
 
 std::string ReadSource(const char* path)

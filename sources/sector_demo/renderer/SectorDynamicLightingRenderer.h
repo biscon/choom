@@ -19,6 +19,7 @@ namespace game {
 
 struct SectorTopologyMap;
 struct SectorDoorShadowCaster;
+struct SectorDoorModelShadowCaster;
 
 struct SectorDynamicSpotLightShadowRenderContext {
     using TextureResolver = const Texture2D* (*)(
@@ -34,6 +35,7 @@ struct SectorDynamicSpotLightShadowRenderContext {
     engine::AssetManager* assets = nullptr;
     const std::vector<SectorMeshBatch>* sectorDrawRecords = nullptr;
     const std::vector<SectorDoorShadowCaster>* doorShadowCasters = nullptr;
+    const std::vector<SectorDoorModelShadowCaster>* doorModelShadowCasters = nullptr;
     void* userData = nullptr;
     void* doorMeshResolverUserData = nullptr;
     TextureResolver textureResolver = nullptr;

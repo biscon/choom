@@ -47,7 +47,7 @@ When executing this plan:
 | 1 | Prepare and verify separated door assets | Completed | 2026-08-12 |
 | 2 | Add door-asset catalog and backward-compatible authored data | Completed | 2026-08-12 |
 | 3 | Add swing kinematics, collision, obstruction handling, and runtime spawning | Completed | 2026-08-12 |
-| 4 | Render model leaves/frames with PBR lighting and dynamic shadows | Not Started | — |
+| 4 | Render model leaves/frames with PBR lighting and dynamic shadows | Completed | 2026-08-12 |
 | 5 | Add editor authoring, diagnostics, cached 2D footprint, and picking | Not Started | — |
 | 6 | Integration hardening, documentation, and acceptance coverage | Not Started | — |
 
@@ -1049,3 +1049,52 @@ Append one entry per attempted slice in this format:
   PBR leaf/frame rendering, true model shadow casters/ready-model bounds, editor
   authoring/cache visuals, and integration hardening remain explicitly deferred.
   The three source pack GLBs remain present and untouched.
+
+### 2026-08-12 — Slice 4 — Completed
+
+- Summary: Ready swing-door leaves and optional frames now render through the
+  existing world-dynamic PBR path with the same glTF material maps, object-probe
+  or sector-ambient fallback, static specular selection, dynamic point/spot
+  lights, spotlight shadow receiving, fog, and environment reflections as
+  other world models. The procedural slab remains visible until a valid leaf is
+  ready; a frame is independently eligible and never controls leaf fallback.
+- Decisions/deviations folded back into plan: The existing dynamic-model
+  per-material path was extracted into one focused renderer helper and reused
+  for doors. Door render policy is a pure CPU helper shared by visible and
+  shadow passes. Ready model bounds expand, rather than replace, analytic
+  catalog bounds so pending/invalid metadata remains conservative. Declared
+  frame failures are diagnosed once while leaving a ready leaf visible.
+- Runtime/shadow behavior: Leaf and frame use their canonical ECS matrices for
+  visible rendering and opaque spotlight shadow casting. Procedural casters are
+  suppressed only with a ready valid leaf. Any procedural or model door caster
+  preserves the existing non-cacheable spotlight-shadow policy. Model requests
+  remain spawn/load-only and readiness/bounds are finalized from the existing
+  main-thread asset lifecycle.
+- Lighting/visibility behavior: A door is visibility-eligible from either
+  adjacent sector. Its probe and adjacent-sector fallback lighting resample at
+  spawn and only when swing spatial state changes; the fixed frame shares that
+  sample. Receiver bounds union transformed ready leaf/frame model bounds and
+  are published for both adjacent sectors.
+- Automated verification: `cmake --build cmake-build-debug -j2` passed;
+  `ctest --test-dir cmake-build-debug --output-on-failure` passed all 22 tests;
+  `git diff --check`, `git diff --stat`, and `git status --short` passed/reported
+  cleanly apart from the three intentionally retained untracked source GLBs.
+  Focused CPU coverage includes adjacent-sector visibility, pending/failed/
+  ready fallback transitions, independent frame behavior, transformed/unioned
+  bounds, adjacent lighting-sector selection, canonical leaf/frame shadow
+  matrices, and shared non-lightmapped world-dynamic PBR policy.
+- Manual verification: Not performed (user-owned).
+- Cache invalidation behavior: No authored topology mutation or 2D render-cache
+  path changed. Existing editor mutations still use the normal document-edited
+  invalidation route.
+- Lightmap source-hash behavior: Unchanged. Model leaves/frames remain runtime
+  probe-lit receivers and dynamic casters only; they add no static charts,
+  baked occlusion, geometry sidecars, or source-hash inputs. Existing explicit
+  swing/model door hash-exclusion coverage remains green.
+- Collision/sector lookup/physics behavior: Door collision, portal blocking,
+  sector lookup implementation, step handling, and player physics are
+  unchanged. Render meshes are not used for collision; the Slice 3 dynamic OBB
+  remains authoritative.
+- Remaining follow-up within this plan: Slices 5 and 6 remain Not Started.
+  Editor authoring/cache visuals and final integration hardening remain
+  deferred. The three source pack GLBs remain present and untouched.

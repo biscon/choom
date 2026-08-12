@@ -1,5 +1,6 @@
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 
+#include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorTopologyMap.h"
 
@@ -493,12 +494,14 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
 
     const bool hasDoorCasters = context.doorShadowCasters != nullptr
             && !context.doorShadowCasters->empty();
-    if (hasDoorCasters) {
+    const bool hasDoorModelCasters = context.doorModelShadowCasters != nullptr
+            && !context.doorModelShadowCasters->empty();
+    if (hasDoorCasters || hasDoorModelCasters) {
         shadowMapsCacheValid = false;
     } else if (shadowMapsCacheValid) {
         return;
     }
-    bool cacheable = !hasDoorCasters;
+    bool cacheable = !hasDoorCasters && !hasDoorModelCasters;
 
     for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : shadowMatrices) {
         if (matrix.shadowSlot < 0) {
@@ -583,6 +586,28 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                         doorWidth,
                         doorHeight);
                 DrawMesh(*doorMesh, shadowMaterial, shadowModel);
+            }
+        }
+        if (context.doorModelShadowCasters != nullptr) {
+            for (const SectorDoorModelShadowCaster& caster
+                    : *context.doorModelShadowCasters) {
+                const engine::ModelAsset* asset =
+                        context.assets->GetModelAsset(caster.model);
+                if (asset == nullptr) {
+                    continue;
+                }
+                const Model& model = asset->model;
+                const Matrix modelTransform = MatrixMultiply(
+                        model.transform, caster.transform);
+                for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
+                    if (model.meshes[meshIndex].vertexCount <= 0) {
+                        continue;
+                    }
+                    DrawMesh(
+                            model.meshes[meshIndex],
+                            shadowMaterial,
+                            modelTransform);
+                }
             }
         }
         shadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = shadowDefaultTexture;

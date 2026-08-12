@@ -374,6 +374,8 @@ void SectorDoorRenderer::ReserveRuntimeDoorCapacity(size_t capacity)
     doorMeshCache.reserve(capacity);
     runtimeDoorShadowCasters.clear();
     runtimeDoorShadowCasters.reserve(capacity);
+    runtimeDoorModelShadowCasters.clear();
+    runtimeDoorModelShadowCasters.reserve(capacity * 2);
 }
 
 void SectorDoorRenderer::ResetOpaqueShaderLocations()
@@ -447,12 +449,15 @@ void SectorDoorRenderer::ShutdownOpaqueResources()
     }
 }
 
-void SectorDoorRenderer::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld)
+void SectorDoorRenderer::PrepareRuntimeDoorMeshes(
+        engine::AssetManager& assets,
+        engine::World& runtimeObjectWorld)
 {
     for (auto& entry : doorMeshCache) {
         entry.second.seenThisFrame = false;
     }
     runtimeDoorShadowCasters.clear();
+    runtimeDoorModelShadowCasters.clear();
 
     runtimeObjectWorld.ForEach<
             SectorObjectTransform,
@@ -460,13 +465,25 @@ void SectorDoorRenderer::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWo
             SectorDoor,
             SectorDoorResolvedAnchor,
             SectorDoorRender>(
-            [this](
+            [this, &assets, &runtimeObjectWorld](
                     engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObject& object,
                     SectorDoor& door,
                     SectorDoorResolvedAnchor& anchor,
                     SectorDoorRender& render) {
+                if (runtimeObjectWorld.Has<SectorDoorModelRender>(entity)) {
+                    const SectorDoorModelRender& model =
+                            runtimeObjectWorld.Get<SectorDoorModelRender>(entity);
+                    const SectorDoorModelDrawPolicy policy =
+                            ResolveSectorDoorModelDrawPolicy(
+                                    model,
+                                    assets.GetModelAsset(model.leafModel) != nullptr,
+                                    assets.GetModelAsset(model.frameModel) != nullptr);
+                    if (!policy.drawProcedural) {
+                        return;
+                    }
+                }
                 if (!AppendSectorDoorShadowCaster(
                             entity,
                             transform,
@@ -498,6 +515,9 @@ void SectorDoorRenderer::PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWo
                 }
             });
 
+    CollectSectorDoorModelShadowCasters(
+            runtimeObjectWorld, assets, runtimeDoorModelShadowCasters);
+
     for (auto it = doorMeshCache.begin(); it != doorMeshCache.end();) {
         if (!it->second.seenThisFrame) {
             if (it->second.mesh.vertexCount > 0) {
@@ -527,7 +547,7 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
     Material& doorOpaqueMaterial = OpaqueMaterial();
     const Texture2D& doorOpaqueDefaultMaterialTexture = OpaqueDefaultMaterialTexture();
     const SectorDoorOpaqueShaderLocations& doorOpaqueLocations = OpaqueShaderLocations();
-    PrepareRuntimeDoorMeshes(*context.runtimeObjectWorld);
+    PrepareRuntimeDoorMeshes(*context.assets, *context.runtimeObjectWorld);
 
     size_t consideredCount = 0;
     size_t drawnCount = 0;
@@ -614,6 +634,19 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                 if (!object.visible || !door.enabled || !render.visible) {
                     ++skippedCount;
                     return;
+                }
+                if (context.runtimeObjectWorld->Has<SectorDoorModelRender>(entity)) {
+                    const SectorDoorModelRender& model =
+                            context.runtimeObjectWorld->Get<SectorDoorModelRender>(entity);
+                    const SectorDoorModelDrawPolicy policy =
+                            ResolveSectorDoorModelDrawPolicy(
+                                    model,
+                                    context.assets->GetModelAsset(model.leafModel) != nullptr,
+                                    context.assets->GetModelAsset(model.frameModel) != nullptr);
+                    if (!policy.drawProcedural) {
+                        ++skippedCount;
+                        return;
+                    }
                 }
                 if (render.width <= 0.0f || render.height <= 0.0f || render.thickness <= 0.0f) {
                     ++skippedCount;
@@ -721,12 +754,17 @@ void SectorDoorRenderer::PrepareShadowRenderContext(
         engine::World* runtimeObjectWorld)
 {
     if (runtimeObjectWorld != nullptr) {
-        PrepareRuntimeDoorMeshes(*runtimeObjectWorld);
+        if (context.assets != nullptr) {
+            PrepareRuntimeDoorMeshes(*context.assets, *runtimeObjectWorld);
+        } else {
+            ClearPreparedShadowCasters();
+        }
     } else {
         ClearPreparedShadowCasters();
     }
 
     context.doorShadowCasters = &ShadowCasters();
+    context.doorModelShadowCasters = &runtimeDoorModelShadowCasters;
     context.doorMeshResolverUserData = this;
     context.doorMeshResolver = &SectorDoorRenderer::ResolveDoorShadowCasterMesh;
 }
@@ -734,6 +772,7 @@ void SectorDoorRenderer::PrepareShadowRenderContext(
 void SectorDoorRenderer::ClearPreparedShadowCasters()
 {
     runtimeDoorShadowCasters.clear();
+    runtimeDoorModelShadowCasters.clear();
 }
 
 void SectorDoorRenderer::UnloadDoorMeshes()
@@ -746,6 +785,7 @@ void SectorDoorRenderer::UnloadDoorMeshes()
     }
     doorMeshCache.clear();
     runtimeDoorShadowCasters.clear();
+    runtimeDoorModelShadowCasters.clear();
 }
 
 SectorDoorRenderer::DoorMeshCacheEntry* SectorDoorRenderer::FindMutableDoorMesh(int placedObjectId)

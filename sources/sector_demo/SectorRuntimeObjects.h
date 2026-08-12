@@ -24,6 +24,10 @@ float ComputeSectorModelEnvironmentExposure(
         const SectorTopologyMap& map,
         int sectorId);
 
+Vector3 ComputeSectorModelAmbient(
+        const SectorTopologyMap& map,
+        int sectorId);
+
 struct SectorPlacedRuntimeObjectEntity {
     int placedObjectId = 0;
     engine::Entity entity = engine::NullEntity();
@@ -100,6 +104,7 @@ struct SectorRuntimeObjectState {
     size_t validDoorAnchorCount = 0;
     size_t invalidDoorAnchorCount = 0;
     size_t doorFallbackCount = 0;
+    size_t doorFrameFailureCount = 0;
     size_t spriteAnimationRequestedCount = 0;
     size_t spriteAnimationReadyCount = 0;
     size_t spriteAnimationPendingCount = 0;

@@ -252,10 +252,11 @@ void RefreshPlacedRuntimeObjectDiagnostics(
     }
     if (state.doorObjectCount > 0) {
         state.placedObjectStatus += TextFormat(
-                " | doors %zu valid, %zu invalid anchors, %zu fallback",
+                " | doors %zu valid, %zu invalid anchors, %zu fallback, %zu frame failures",
                 state.validDoorAnchorCount,
                 state.invalidDoorAnchorCount,
-                state.doorFallbackCount);
+                state.doorFallbackCount,
+                state.doorFrameFailureCount);
     }
 
     if (state.invalidDoorAnchorCount > 0) {
@@ -268,6 +269,10 @@ void RefreshPlacedRuntimeObjectDiagnostics(
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu door object(s) use procedural fallback",
                 state.doorFallbackCount);
+    } else if (state.doorFrameFailureCount > 0) {
+        state.placedObjectWarning = TextFormat(
+                "Runtime object warnings: %zu door frame model asset(s) failed",
+                state.doorFrameFailureCount);
     } else if (modelFailedCount > 0) {
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu static model asset(s) failed",
@@ -362,6 +367,7 @@ void RefreshDoorFallbackDiagnostics(
 {
     state.doorFallbackDiagnostics.clear();
     state.doorFallbackCount = 0;
+    state.doorFrameFailureCount = 0;
 
     for (const SectorPlacedRuntimeObject& placedObject : map.runtimeObjects) {
         if (placedObject.kind != "door"
@@ -477,6 +483,98 @@ void ResolveDynamicModelAnimations(
             });
 }
 
+void UpdateSectorDoorModelLighting(
+        engine::World& world,
+        const SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map)
+{
+    world.ForEach<
+            SectorObjectTransform,
+            SectorObject,
+            SectorObjectLighting,
+            SectorDoorResolvedAnchor,
+            SectorDoorModelRender>(
+            [&state, &map](
+                    engine::Entity,
+                    SectorObjectTransform& transform,
+                    SectorObject& object,
+                    SectorObjectLighting& lighting,
+                    SectorDoorResolvedAnchor& anchor,
+                    SectorDoorModelRender& model) {
+                int containingSectorId = 0;
+                if (state.objectSectorLookupWorldValid) {
+                    containingSectorId =
+                            state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                                    Vector2{transform.position.x, transform.position.z},
+                                    object.currentSectorId);
+                }
+                object.currentSectorId = ResolveSectorDoorAdjacentLightingSector(
+                        anchor, transform.position, containingSectorId);
+                lighting = SampleSectorObjectLighting(
+                        state.objectLightProbes,
+                        transform.position,
+                        object.currentSectorId,
+                        &map);
+                model.containingSectorAmbient = StaticModelSectorAmbient(
+                        map, object.currentSectorId);
+                model.environmentExposure = StaticModelEnvironmentExposure(
+                        map,
+                        object.currentSectorId,
+                        model.containingSectorAmbient);
+            });
+}
+
+bool RefreshSectorDoorModelFailureDiagnostics(
+        engine::World& world,
+        SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map)
+{
+    bool changed = false;
+    world.ForEach<SectorDoor, SectorDoorModelRender>(
+            [&state, &map, &changed](
+                    engine::Entity,
+                    SectorDoor& door,
+                    SectorDoorModelRender& model) {
+                if (!model.modelVisualRequested) {
+                    return;
+                }
+                const SectorPlacedRuntimeObject* placed =
+                        FindSectorPlacedRuntimeObject(map, door.placedObjectId);
+                const std::string modelAssetId = placed != nullptr
+                        ? placed->door.modelAssetId : std::string{};
+                if (model.leafFailed && !model.leafFailureReported) {
+                    model.leafFailureReported = true;
+                    state.doorFallbackDiagnostics.push_back(SectorDoorFallbackDiagnostic{
+                            door.placedObjectId,
+                            modelAssetId,
+                            TextFormat(
+                                    "door object %d model style '%s' leaf asset failed; using procedural fallback",
+                                    door.placedObjectId,
+                                    modelAssetId.c_str())});
+                    ++state.doorFallbackCount;
+                    changed = true;
+                }
+                if (model.frameFailed && !model.frameFailureReported) {
+                    model.frameFailureReported = true;
+                    state.doorFallbackDiagnostics.push_back(SectorDoorFallbackDiagnostic{
+                            door.placedObjectId,
+                            modelAssetId,
+                            TextFormat(
+                                    "door object %d model style '%s' frame asset failed; drawing the leaf without its frame",
+                                    door.placedObjectId,
+                                    modelAssetId.c_str())});
+                    ++state.doorFrameFailureCount;
+                    std::fprintf(
+                            stderr,
+                            "[SectorRuntimeObjects WARNING] Door object %d model style '%s' frame asset failed; drawing the leaf without its frame\n",
+                            door.placedObjectId,
+                            modelAssetId.c_str());
+                    changed = true;
+                }
+            });
+    return changed;
+}
+
 
 } // namespace
 
@@ -486,6 +584,13 @@ float ComputeSectorModelEnvironmentExposure(
 {
     const Vector3 ambient = StaticModelSectorAmbient(map, sectorId);
     return StaticModelEnvironmentExposure(map, sectorId, ambient);
+}
+
+Vector3 ComputeSectorModelAmbient(
+        const SectorTopologyMap& map,
+        int sectorId)
+{
+    return StaticModelSectorAmbient(map, sectorId);
 }
 
 void EnsureSectorRuntimeObjectWorldReserved(
@@ -766,10 +871,17 @@ void SpawnPlacedRuntimeObjects(
                 const int foundSectorId = state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
                         Vector2{worldPosition.x, worldPosition.z},
                         resolved.frontSectorId);
-                object.currentSectorId = foundSectorId != 0 ? foundSectorId : resolved.frontSectorId;
+                object.currentSectorId = ResolveSectorDoorAdjacentLightingSector(
+                        runtimeAnchor, worldPosition, foundSectorId);
             } else {
                 object.currentSectorId = resolved.frontSectorId;
             }
+            modelRender.containingSectorAmbient = StaticModelSectorAmbient(
+                    map, object.currentSectorId);
+            modelRender.environmentExposure = StaticModelEnvironmentExposure(
+                    map,
+                    object.currentSectorId,
+                    modelRender.containingSectorAmbient);
 
             const engine::Entity entity = world.CreateEntity();
             world.Add(entity, SectorObjectTransform{worldPosition, SectorDoorAnchorYawRadians(resolved)});
@@ -1065,7 +1177,17 @@ void UpdateSectorRuntimeObjects(
     if (UpdateSectorStaticModelColliderSystem(world, assets)) {
         CollectSectorStaticModelColliders(world, state.staticModelColliders);
     }
-    RefreshSectorDoorModelReadinessSystem(world, assets);
+    const bool doorModelReadinessChanged =
+            RefreshSectorDoorModelReadinessSystem(world, assets);
+    if (doorModelReadinessChanged) {
+        UpdateSectorDoorDerivedStateSystem(world);
+    }
+    if (state.doorSpatialStateChanged) {
+        UpdateSectorDoorModelLighting(world, state, map);
+    }
+    if (RefreshSectorDoorModelFailureDiagnostics(world, state, map)) {
+        RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
+    }
     world.ForEach<SectorBillboardSprite, SectorBillboardDirectionalClips>(
             [&assets](engine::Entity, SectorBillboardSprite& sprite, SectorBillboardDirectionalClips& directionalClips) {
                 if (!directionalClips.resolved) {

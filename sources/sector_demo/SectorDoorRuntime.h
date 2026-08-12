@@ -52,6 +52,13 @@ struct SectorDoorShadowCaster {
     float thickness = 0.0f;
 };
 
+struct SectorDoorModelShadowCaster {
+    int placedObjectId = 0;
+    engine::Entity entity = engine::NullEntity();
+    engine::ModelHandle model = engine::NullModelHandle();
+    Matrix transform = {};
+};
+
 struct SectorDoor {
     int placedObjectId = 0;
     bool enabled = true;
@@ -148,6 +155,11 @@ struct SectorDoorModelRender {
     Matrix leafMatrix = {};
     Matrix frameMatrix = {};
     BoundingBox analyticReceiverBounds = {};
+    BoundingBox receiverBounds = {};
+    BoundingBox leafLocalBounds = {};
+    BoundingBox frameLocalBounds = {};
+    Vector3 containingSectorAmbient = {0.15f, 0.15f, 0.15f};
+    float environmentExposure = 0.15f;
     SectorDoorModelFallbackReason fallbackReason =
             SectorDoorModelFallbackReason::ProceduralVisual;
     bool modelVisualRequested = false;
@@ -157,6 +169,16 @@ struct SectorDoorModelRender {
     bool leafFailed = false;
     bool frameReady = false;
     bool frameFailed = false;
+    bool leafBoundsReady = false;
+    bool frameBoundsReady = false;
+    bool leafFailureReported = false;
+    bool frameFailureReported = false;
+};
+
+struct SectorDoorModelDrawPolicy {
+    bool drawProcedural = true;
+    bool drawLeaf = false;
+    bool drawFrame = false;
 };
 
 struct SectorDoorPlayerObstacle {
@@ -295,6 +317,42 @@ bool AppendSectorDoorReceiverBounds(
 void CollectSectorDoorReceiverBounds(
         engine::World& world,
         std::vector<SectorReceiverBounds>& outBounds);
+
+SectorDoorModelDrawPolicy ResolveSectorDoorModelDrawPolicy(
+        const SectorDoorModelRender& model,
+        bool leafAssetAvailable,
+        bool frameAssetAvailable);
+
+bool ShouldDrawSectorDoorForVisibility(
+        const SectorDoorResolvedAnchor& anchor,
+        const RuntimePortalVisibilityResult& visibility);
+
+int ResolveSectorDoorAdjacentLightingSector(
+        const SectorDoorResolvedAnchor& anchor,
+        Vector3 leafCenter,
+        int containingSectorId);
+
+BoundingBox TransformSectorDoorModelBounds(
+        BoundingBox localBounds,
+        Matrix transform);
+
+BoundingBox UnionSectorDoorModelBounds(
+        BoundingBox first,
+        BoundingBox second);
+
+void CollectSectorDoorModelShadowCasters(
+        engine::World& world,
+        engine::AssetManager& assets,
+        std::vector<SectorDoorModelShadowCaster>& outCasters);
+
+bool AppendSectorDoorModelShadowCasters(
+        engine::Entity entity,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorRender& render,
+        const SectorDoorModelRender& model,
+        const SectorDoorModelDrawPolicy& policy,
+        std::vector<SectorDoorModelShadowCaster>& outCasters);
 
 bool AppendSectorDoorShadowCaster(
         engine::Entity entity,

@@ -341,6 +341,23 @@ private:
             const SectorPbrDrawState& state,
             const engine::ModelMaterialAsset& material,
             const SectorStaticSpecularLightContext& staticSpecularLights);
+    bool DrawWorldDynamicModel(
+            const engine::ModelAsset& modelAsset,
+            const Model& model,
+            engine::ModelHandle modelHandle,
+            Matrix modelTransform,
+            int placedObjectId,
+            int receiverSectorId,
+            const SectorReceiverBounds& receiverBounds,
+            Vector3 containingSectorAmbient,
+            float environmentExposure,
+            const BakedObjectLightingVerticalSample& lighting,
+            const SectorBillboardDynamicLightContext& dynamicLightContext,
+            const SectorStaticSpecularLightState& staticSpecularLights,
+            const RuntimePortalVisibilityResult& visibility,
+            bool objectProbeBakeCurrent,
+            const TextureCubemap* environment,
+            bool allowSkinning);
     const CachedModel* FindCachedModel(
             engine::ModelHandle handle,
             int lightmapModelIndex) const;
