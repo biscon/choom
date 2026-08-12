@@ -48,7 +48,7 @@ When executing this plan:
 | 2 | Add door-asset catalog and backward-compatible authored data | Completed | 2026-08-12 |
 | 3 | Add swing kinematics, collision, obstruction handling, and runtime spawning | Completed | 2026-08-12 |
 | 4 | Render model leaves/frames with PBR lighting and dynamic shadows | Completed | 2026-08-12 |
-| 5 | Add editor authoring, diagnostics, cached 2D footprint, and picking | Not Started | — |
+| 5 | Add editor authoring, diagnostics, cached 2D footprint, and picking | Completed | 2026-08-12 |
 | 6 | Integration hardening, documentation, and acceptance coverage | Not Started | — |
 
 ## Goal And Acceptance Criteria
@@ -1098,3 +1098,52 @@ Append one entry per attempted slice in this format:
 - Remaining follow-up within this plan: Slices 5 and 6 remain Not Started.
   Editor authoring/cache visuals and final integration hardening remain
   deferred. The three source pack GLBs remain present and untouched.
+
+### 2026-08-12 — Slice 5 — Completed
+
+- Summary: Added complete conditional door authoring for Procedural and Model
+  visuals, catalog-backed stable style selection, uniform fit controls, swing
+  motion/hinge/side/angle/speed controls, runtime readiness and fit diagnostics,
+  and preserved procedural texture/UV controls. Switching to Model initializes
+  the documented first-style swing defaults without changing aperture,
+  interaction, sound, or initial-fraction fields.
+- Decisions/deviations folded back into plan: The already parsed catalog is now
+  loaded for blank 2D documents as an explicit load phase, not only after a 3D
+  runtime rebuild. A monotonic catalog revision survives runtime clearing and
+  makes cached 2D data stale after any catalog reload. The style list caches
+  labels/IDs in catalog order and retains a non-authored choose-style entry for
+  missing saved IDs. No catalog schema or map JSON changes were needed.
+- Cached 2D behavior: Cache construction receives the loaded catalog and its
+  revision explicitly. Swing doors reuse the canonical runtime fit and pose
+  helpers to cache the exact closed leaf, selected hinge, full-open outline/free
+  edge, and signed arc. Front/Back guides use distinct colors; only the solid
+  closed quad participates in picking. Missing/invalid catalog metadata keeps a
+  deterministic authored-dimension fallback footprint and marks it invalid.
+- Automated verification: `cmake --build cmake-build-debug -j2` passed;
+  `ctest --test-dir cmake-build-debug --output-on-failure` passed all 22 tests.
+  Focused coverage includes all conditional inspector heights, model default
+  initialization and field preservation, style-only changes, per-field dirty/
+  revision invalidation, preview ECS refresh, catalog-revision staleness,
+  fitted Start/End footprints, Front/Back guides, missing-style fallback,
+  multi-zoom closed-leaf picking, and guide-only pick rejection.
+- Manual verification: Not performed (user-owned).
+- Cache invalidation behavior: Visual, style, fit, scale, target aperture,
+  offset, motion, hinge, swing side, angle, speed, interaction, sound, and other
+  inspector-authored changes all use
+  `SectorEditorRuntimeObjectEditingService::MutateSelected()`. Door creation and
+  deletion retain `AddDoor()`/`DeleteById()`. These paths call
+  `MarkSectorEditorTopologyDocumentEdited()` through the runtime-object editing
+  service, invalidate the 2D cache, and refresh preview ECS objects;
+  over-invalidation is retained. Runtime debug target changes remain ECS-only
+  and do not dirty or invalidate. Catalog revision changes independently force
+  cache rebuild; texture catalog changes remain excluded from this cache.
+- Lightmap source-hash behavior: Unchanged. Model/swing door authoring fields,
+  catalog revision, cached guides, and model assets remain excluded from static
+  lightmap geometry and `ComputeSectorLightmapSourceHash()`.
+- Collision/sector lookup/physics behavior: Unchanged. This slice only adds
+  editor authoring, diagnostics, cache data, drawing, and picking; the Slice 3
+  runtime swing OBB remains authoritative and render/cache shapes are not used
+  for gameplay collision.
+- Remaining follow-up within this plan: Slice 6 remains Not Started. Integration
+  hardening and final acceptance coverage remain deferred. The three source
+  pack GLBs remain present and untouched.

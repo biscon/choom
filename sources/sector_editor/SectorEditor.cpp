@@ -3630,15 +3630,22 @@ void SectorEditor::InvalidateTopologyRenderCache()
 
 void SectorEditor::EnsureTopologyRenderCache()
 {
-    if (!state.topologyRenderCache.valid
-            || state.topologyRenderCache.revision != state.topologyRenderRevision) {
+    const SectorRuntimeObjectState& runtimeObjects = sceneRuntime.RuntimeObjects();
+    if (!IsSectorEditorTopologyRenderCacheCurrent(
+                state.topologyRenderCache,
+                state.topologyRenderRevision,
+                runtimeObjects.swingDoorCatalogRevision)) {
         const SectorEditorConstDerivationDocumentAccess derivation =
                 MakeLiveConstDerivationAccess(documentState.derivation);
         state.topologyRenderCache = BuildSectorEditorTopologyRenderCache(
                 TopologyMap(),
                 AuthoringGraph(),
                 derivation.authoringDerivation,
-                state.topologyRenderRevision);
+                state.topologyRenderRevision,
+                runtimeObjects.swingDoorCatalogLoaded
+                        ? &runtimeObjects.swingDoorCatalog
+                        : nullptr,
+                runtimeObjects.swingDoorCatalogRevision);
         state.topologyRenderWarning = state.topologyRenderCache.warning;
     }
 }
@@ -5333,6 +5340,7 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
     BuildSoundService().RefreshCatalogHandles();
+    ReloadSectorSwingDoorCatalog(sceneRuntime.RuntimeObjects());
     initialized = true;
     authoringFaceMergeState = SectorEditorAuthoringFaceMergeState{};
     ClearSectorEditorAuthoringSelection(selectionState);

@@ -1,6 +1,7 @@
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
 
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
 #include "util/earcut.h"
@@ -363,6 +364,152 @@ const CachedAuthoringVertexDraw* FindCachedAuthoringVertex(
     return nullptr;
 }
 
+Vector2 DoorWorldToCachedMap(Vector2 world)
+{
+    return Vector2{
+            SectorWorldToAuthoringDistance(world.x),
+            SectorWorldToAuthoringDistance(world.y)};
+}
+
+void SetCachedDoorCorners(
+        Vector2 center,
+        Vector2 widthAxis,
+        Vector2 thicknessAxis,
+        float width,
+        float thickness,
+        Vector2 (&outCorners)[4])
+{
+    const float halfWidth = SectorWorldToAuthoringDistance(width) * 0.5f;
+    const float halfThickness = SectorWorldToAuthoringDistance(thickness) * 0.5f;
+    center = DoorWorldToCachedMap(center);
+    outCorners[0] = Vector2{
+            center.x - widthAxis.x * halfWidth - thicknessAxis.x * halfThickness,
+            center.y - widthAxis.y * halfWidth - thicknessAxis.y * halfThickness};
+    outCorners[1] = Vector2{
+            center.x + widthAxis.x * halfWidth - thicknessAxis.x * halfThickness,
+            center.y + widthAxis.y * halfWidth - thicknessAxis.y * halfThickness};
+    outCorners[2] = Vector2{
+            center.x + widthAxis.x * halfWidth + thicknessAxis.x * halfThickness,
+            center.y + widthAxis.y * halfWidth + thicknessAxis.y * halfThickness};
+    outCorners[3] = Vector2{
+            center.x - widthAxis.x * halfWidth + thicknessAxis.x * halfThickness,
+            center.y - widthAxis.y * halfWidth + thicknessAxis.y * halfThickness};
+}
+
+void PopulateCachedDoorDraw(
+        const SectorTopologyMap& map,
+        const SectorPlacedRuntimeObject& object,
+        const SectorSwingDoorCatalog* swingDoorCatalog,
+        CachedRuntimeObjectDraw& cached)
+{
+    cached.isDoor = true;
+    cached.doorModelMetadataValid = true;
+    const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(map, object.door);
+    if (!resolved.valid) {
+        cached.definitionKnown = false;
+        return;
+    }
+
+    cached.doorEndpointA = DoorWorldToCachedMap(resolved.endpointA);
+    cached.doorEndpointB = DoorWorldToCachedMap(resolved.endpointB);
+
+    float width = resolved.width;
+    float height = resolved.height;
+    float thickness = object.door.thickness;
+    float effectiveScale = 1.0f;
+    if (object.door.visual == SectorDoorVisualType::Model) {
+        cached.doorModelMetadataValid = false;
+        SectorSwingDoorCatalogAsset asset;
+        if (swingDoorCatalog != nullptr
+                && FindSectorSwingDoorCatalogAsset(
+                        *swingDoorCatalog, object.door.modelAssetId, asset)) {
+            const SectorSwingDoorFitResult fit = ComputeSectorSwingDoorFit(
+                    asset,
+                    resolved.width,
+                    resolved.height,
+                    object.door.modelFit,
+                    object.door.modelScale);
+            if (fit.status != SectorSwingDoorFitStatus::InvalidInput) {
+                width = fit.actualWidth;
+                height = fit.actualHeight;
+                thickness = fit.actualThickness;
+                effectiveScale = fit.effectiveScale;
+                cached.doorModelMetadataValid = true;
+            }
+        }
+    }
+
+    const SectorDoorResolvedAnchor runtimeAnchor = ToSectorRuntimeDoorAnchor(resolved);
+    const SectorDoorRender runtimeRender{
+            width,
+            height,
+            thickness,
+            object.door.normalOffset,
+            {},
+            {},
+            WHITE,
+            true};
+    if (object.door.motion == SectorDoorMotionType::Swing) {
+        const SectorDoorMotion runtimeMotion{
+                SectorDoorMotionType::Swing,
+                0.0f,
+                0.0f,
+                object.door.openAngleDegrees * DEG2RAD,
+                object.door.angularSpeedDegrees * DEG2RAD,
+                object.door.hinge,
+                object.door.swingSide};
+        const SectorDoorSwingPose closed = BuildSectorDoorSwingPose(
+                runtimeAnchor, runtimeMotion, runtimeRender, effectiveScale, 0.0f);
+        const SectorDoorSwingPose open = BuildSectorDoorSwingPose(
+                runtimeAnchor, runtimeMotion, runtimeRender, effectiveScale, 1.0f);
+        SetCachedDoorCorners(
+                Vector2{closed.center.x, closed.center.z},
+                closed.widthAxis,
+                closed.thicknessAxis,
+                width,
+                thickness,
+                cached.doorCorners);
+        SetCachedDoorCorners(
+                Vector2{open.center.x, open.center.z},
+                open.widthAxis,
+                open.thicknessAxis,
+                width,
+                thickness,
+                cached.doorOpenCorners);
+        cached.map = DoorWorldToCachedMap(Vector2{closed.center.x, closed.center.z});
+        cached.doorHinge = DoorWorldToCachedMap(
+                Vector2{closed.hingePosition.x, closed.hingePosition.z});
+        cached.doorOpenFreeEdge = DoorWorldToCachedMap(Vector2{
+                open.hingePosition.x + open.widthAxis.x * width,
+                open.hingePosition.z + open.widthAxis.y * width});
+        cached.doorSwingArcRadius = SectorWorldToAuthoringDistance(width);
+        cached.doorSwingArcStartRadians = std::atan2(
+                closed.widthAxis.y, closed.widthAxis.x);
+        cached.doorSwingArcSweepRadians = open.angleRadians;
+        cached.doorSwingIntoBack = object.door.swingSide == SectorDoorSwingSide::Back;
+        cached.doorSwingGuideValid = std::isfinite(cached.doorSwingArcRadius)
+                && cached.doorSwingArcRadius > 0.0f
+                && std::isfinite(cached.doorSwingArcStartRadians)
+                && std::isfinite(cached.doorSwingArcSweepRadians);
+    } else {
+        const Vector2 midpoint{
+                resolved.midpoint.x + resolved.normal.x * object.door.normalOffset,
+                resolved.midpoint.y + resolved.normal.y * object.door.normalOffset};
+        SetCachedDoorCorners(
+                midpoint,
+                resolved.tangent,
+                resolved.normal,
+                width,
+                thickness,
+                cached.doorCorners);
+        cached.map = DoorWorldToCachedMap(midpoint);
+    }
+    cached.doorFootprintValid = std::isfinite(width)
+            && width > 0.0f
+            && std::isfinite(thickness)
+            && thickness > 0.0f;
+}
+
 } // namespace
 
 void UpdateCachedSectorEditorRuntimeObjectDraw(
@@ -382,7 +529,7 @@ void UpdateCachedSectorEditorRuntimeObjectDraw(
                 || object.kind == "door"
                 || object.kind == "static_model"
                 || object.kind == "dynamic_model";
-        cached.isDoor = false;
+        cached.isDoor = object.kind == "door";
         cached.doorFootprintValid = false;
         return;
     }
@@ -451,10 +598,13 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         const SectorTopologyMap& map,
         const SectorAuthoringGraph& authoringGraph,
         const SectorAuthoringDerivationResult& authoringDerivation,
-        uint64_t revision)
+        uint64_t revision,
+        const SectorSwingDoorCatalog* swingDoorCatalog,
+        uint64_t swingDoorCatalogRevision)
 {
     SectorEditorTopologyRenderCache cache;
     cache.revision = revision;
+    cache.swingDoorCatalogRevision = swingDoorCatalogRevision;
 
     cache.authoringVertices.reserve(authoringGraph.vertices.size());
     for (const SectorAuthoringVertex& vertex : authoringGraph.vertices) {
@@ -768,42 +918,7 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
                 || object.kind == "dynamic_model";
         cached.isDoor = object.kind == "door";
         if (cached.isDoor) {
-            const SectorResolvedDoorAnchor resolved = ResolveSectorDoorAnchor(map, object.door);
-            if (resolved.valid) {
-                const float halfWidth = SectorWorldToAuthoringDistance(resolved.width) * 0.5f;
-                const float halfThickness = SectorWorldToAuthoringDistance(object.door.thickness) * 0.5f;
-                const float normalOffset = SectorWorldToAuthoringDistance(object.door.normalOffset);
-                const Vector2 midpoint{
-                        SectorWorldToAuthoringDistance(resolved.midpoint.x),
-                        SectorWorldToAuthoringDistance(resolved.midpoint.y)};
-                const Vector2 tangent{resolved.tangent.x, resolved.tangent.y};
-                const Vector2 normal{resolved.normal.x, resolved.normal.y};
-                const Vector2 center{
-                        midpoint.x + normal.x * normalOffset,
-                        midpoint.y + normal.y * normalOffset};
-                cached.map = center;
-                cached.doorEndpointA = Vector2{
-                        SectorWorldToAuthoringDistance(resolved.endpointA.x),
-                        SectorWorldToAuthoringDistance(resolved.endpointA.y)};
-                cached.doorEndpointB = Vector2{
-                        SectorWorldToAuthoringDistance(resolved.endpointB.x),
-                        SectorWorldToAuthoringDistance(resolved.endpointB.y)};
-                cached.doorCorners[0] = Vector2{
-                        center.x - tangent.x * halfWidth - normal.x * halfThickness,
-                        center.y - tangent.y * halfWidth - normal.y * halfThickness};
-                cached.doorCorners[1] = Vector2{
-                        center.x + tangent.x * halfWidth - normal.x * halfThickness,
-                        center.y + tangent.y * halfWidth - normal.y * halfThickness};
-                cached.doorCorners[2] = Vector2{
-                        center.x + tangent.x * halfWidth + normal.x * halfThickness,
-                        center.y + tangent.y * halfWidth + normal.y * halfThickness};
-                cached.doorCorners[3] = Vector2{
-                        center.x - tangent.x * halfWidth + normal.x * halfThickness,
-                        center.y - tangent.y * halfWidth + normal.y * halfThickness};
-                cached.doorFootprintValid = true;
-            } else {
-                cached.definitionKnown = false;
-            }
+            PopulateCachedDoorDraw(map, object, swingDoorCatalog, cached);
         }
         cache.runtimeObjects.push_back(cached);
     }
@@ -835,9 +950,7 @@ void AppendCachedRuntimeObjectPickCandidates(
             for (int i = 0; i < 4; ++i) {
                 corners[i] = CachedMapToScreen(context, object.doorCorners[i]);
             }
-            distance2 = std::min(
-                    distance2,
-                    DistanceSquaredToPickQuad(screenPoint, corners));
+            distance2 = DistanceSquaredToPickQuad(screenPoint, corners);
         }
 
         if (distance2 <= tolerance2) {
@@ -1460,12 +1573,57 @@ void DrawCachedRuntimeObjects(
     for (const CachedRuntimeObjectDraw& object : cache.runtimeObjects) {
         const Vector2 center = CachedMapToScreen(context, object.map);
         const bool selected = object.objectId == context.selectedRuntimeObjectId;
-        const Color fill = !object.definitionKnown
+        const Color fill = !object.definitionKnown || !object.doorModelMetadataValid
                 ? missingFill
                 : selected ? selectedFill : objectFill;
 
         const float radius = selected ? 8.0f : 6.0f;
         if (object.isDoor && object.doorFootprintValid) {
+            const Color guideColor = object.doorSwingIntoBack
+                    ? Color{95, 166, 255, 185}
+                    : Color{255, 174, 72, 185};
+            if (object.doorSwingGuideValid) {
+                const Vector2 open0 = CachedMapToScreen(context, object.doorOpenCorners[0]);
+                const Vector2 open1 = CachedMapToScreen(context, object.doorOpenCorners[1]);
+                const Vector2 open2 = CachedMapToScreen(context, object.doorOpenCorners[2]);
+                const Vector2 open3 = CachedMapToScreen(context, object.doorOpenCorners[3]);
+                DrawLineEx(open0, open1, 1.5f, guideColor);
+                DrawLineEx(open1, open2, 1.5f, guideColor);
+                DrawLineEx(open2, open3, 1.5f, guideColor);
+                DrawLineEx(open3, open0, 1.5f, guideColor);
+
+                const int arcSegments = std::clamp(
+                        static_cast<int>(std::ceil(
+                                std::fabs(object.doorSwingArcSweepRadians)
+                                / (5.0f * DEG2RAD))),
+                        1,
+                        34);
+                Vector2 previousMap{
+                        object.doorHinge.x
+                                + std::cos(object.doorSwingArcStartRadians)
+                                        * object.doorSwingArcRadius,
+                        object.doorHinge.y
+                                + std::sin(object.doorSwingArcStartRadians)
+                                        * object.doorSwingArcRadius};
+                for (int segment = 1; segment <= arcSegments; ++segment) {
+                    const float fraction = static_cast<float>(segment)
+                            / static_cast<float>(arcSegments);
+                    const float angle = object.doorSwingArcStartRadians
+                            + object.doorSwingArcSweepRadians * fraction;
+                    const Vector2 currentMap{
+                            object.doorHinge.x
+                                    + std::cos(angle) * object.doorSwingArcRadius,
+                            object.doorHinge.y
+                                    + std::sin(angle) * object.doorSwingArcRadius};
+                    DrawLineEx(
+                            CachedMapToScreen(context, previousMap),
+                            CachedMapToScreen(context, currentMap),
+                            selected ? 2.0f : 1.5f,
+                            guideColor);
+                    previousMap = currentMap;
+                }
+            }
+
             const Vector2 c0 = CachedMapToScreen(context, object.doorCorners[0]);
             const Vector2 c1 = CachedMapToScreen(context, object.doorCorners[1]);
             const Vector2 c2 = CachedMapToScreen(context, object.doorCorners[2]);
@@ -1486,6 +1644,11 @@ void DrawCachedRuntimeObjects(
                     CachedMapToScreen(context, object.doorEndpointB),
                     selected ? 3.0f : 2.0f,
                     activeDoorLine);
+            if (object.doorSwingGuideValid) {
+                const Vector2 hinge = CachedMapToScreen(context, object.doorHinge);
+                DrawCircleV(hinge, selected ? 6.0f : 5.0f, outline);
+                DrawCircleV(hinge, selected ? 3.5f : 3.0f, guideColor);
+            }
         }
 
         DrawCircleV(center, radius + 3.0f, outline);

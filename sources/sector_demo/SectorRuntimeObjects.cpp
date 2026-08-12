@@ -334,8 +334,9 @@ void RefreshDoorAnchorDiagnostics(
     }
 }
 
-void LoadSwingDoorCatalog(SectorRuntimeObjectState& state)
+void ReloadSwingDoorCatalogData(SectorRuntimeObjectState& state)
 {
+    ++state.swingDoorCatalogRevision;
     state.swingDoorCatalog = SectorSwingDoorCatalog{};
     state.swingDoorCatalogLoaded = false;
     state.swingDoorCatalogStatus.clear();
@@ -628,15 +629,22 @@ void ClearSectorRuntimeObjects(
     }
 
     const bool keepReservation = state.worldReserved;
+    const uint64_t keepSwingDoorCatalogRevision = state.swingDoorCatalogRevision;
     state = SectorRuntimeObjectState{};
     state.worldReserved = keepReservation;
+    state.swingDoorCatalogRevision = keepSwingDoorCatalogRevision;
+}
+
+void ReloadSectorSwingDoorCatalog(SectorRuntimeObjectState& state)
+{
+    ReloadSwingDoorCatalogData(state);
 }
 
 void RefreshSectorRuntimeObjectMapData(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map)
 {
-    LoadSwingDoorCatalog(state);
+    ReloadSwingDoorCatalogData(state);
     RefreshDoorAnchorDiagnostics(state, map);
     RefreshDoorFallbackDiagnostics(state, map);
 

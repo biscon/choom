@@ -13,6 +13,7 @@
 #include <raylib.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -123,6 +124,7 @@ struct SectorRuntimeObjectState {
     std::string placedObjectStatus;
     std::string placedObjectWarning;
     bool swingDoorCatalogLoaded = false;
+    uint64_t swingDoorCatalogRevision = 0;
     std::string swingDoorCatalogStatus;
     std::string swingDoorCatalogWarning;
     SectorBakedObjectLightProbeRuntimeData objectLightProbes;
@@ -152,6 +154,8 @@ void ClearSectorRuntimeObjects(
 void RefreshSectorRuntimeObjectMapData(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map);
+
+void ReloadSectorSwingDoorCatalog(SectorRuntimeObjectState& state);
 
 void ResetSectorRuntimeObjectsForMap(
         engine::World& world,
