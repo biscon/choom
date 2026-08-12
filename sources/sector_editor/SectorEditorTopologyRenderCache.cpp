@@ -417,6 +417,9 @@ void PopulateCachedDoorDraw(
     float height = resolved.height;
     float thickness = object.door.thickness;
     float effectiveScale = 1.0f;
+    float leafHingeToFrameCenter = 0.0f;
+    float leafBottomOffset = 0.0f;
+    bool alignLeafToFrame = false;
     if (object.door.visual == SectorDoorVisualType::Model) {
         cached.doorModelMetadataValid = false;
         SectorSwingDoorCatalogAsset asset;
@@ -434,13 +437,20 @@ void PopulateCachedDoorDraw(
                 height = fit.actualHeight;
                 thickness = fit.actualThickness;
                 effectiveScale = fit.effectiveScale;
+                if (asset.hasFrame) {
+                    leafHingeToFrameCenter = asset.leafHingeToFrameCenter
+                            * fit.effectiveScale;
+                    leafBottomOffset = asset.leafBottomOffset
+                            * fit.effectiveScale;
+                    alignLeafToFrame = true;
+                }
                 cached.doorModelMetadataValid = true;
             }
         }
     }
 
     const SectorDoorResolvedAnchor runtimeAnchor = ToSectorRuntimeDoorAnchor(resolved);
-    const SectorDoorRender runtimeRender{
+    SectorDoorRender runtimeRender{
             width,
             height,
             thickness,
@@ -449,6 +459,9 @@ void PopulateCachedDoorDraw(
             {},
             WHITE,
             true};
+    runtimeRender.leafHingeToFrameCenter = leafHingeToFrameCenter;
+    runtimeRender.leafBottomOffset = leafBottomOffset;
+    runtimeRender.alignLeafToFrame = alignLeafToFrame;
     if (object.door.motion == SectorDoorMotionType::Swing) {
         const SectorDoorMotion runtimeMotion{
                 SectorDoorMotionType::Swing,

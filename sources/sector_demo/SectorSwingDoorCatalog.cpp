@@ -143,7 +143,8 @@ bool ParseSectorSwingDoorCatalogJson(
                     value,
                     {"id", "displayName", "leafModelPath", "frameModelPath",
                      "nominalWidth", "nominalHeight", "nominalThickness",
-                     "frameOuterWidth", "frameOuterHeight", "sourcePack"},
+                     "frameOuterWidth", "frameOuterHeight",
+                     "leafHingeToFrameCenter", "leafBottomOffset", "sourcePack"},
                     context);
 
             SectorSwingDoorCatalogAsset asset;
@@ -164,8 +165,16 @@ bool ParseSectorSwingDoorCatalogJson(
             const bool hasFramePath = value.contains("frameModelPath");
             const bool hasFrameWidth = value.contains("frameOuterWidth");
             const bool hasFrameHeight = value.contains("frameOuterHeight");
+            const bool hasHingeAlignment = value.contains("leafHingeToFrameCenter");
+            const bool hasBottomAlignment = value.contains("leafBottomOffset");
             if (hasFramePath != hasFrameWidth || hasFramePath != hasFrameHeight) {
                 Fail(context + " frameModelPath, frameOuterWidth, and frameOuterHeight must be provided together");
+            }
+            if (hasHingeAlignment != hasBottomAlignment) {
+                Fail(context + " leafHingeToFrameCenter and leafBottomOffset must be provided together");
+            }
+            if (hasHingeAlignment && !hasFramePath) {
+                Fail(context + " leaf/frame alignment requires frame metadata");
             }
             asset.hasFrame = hasFramePath;
             if (asset.hasFrame) {
@@ -174,6 +183,35 @@ bool ParseSectorSwingDoorCatalogJson(
                 asset.frameOuterHeight = ReadPositiveFloat(value, "frameOuterHeight", context);
                 if (!IsValidModelPath(asset.frameModelPath)) {
                     Fail(context + ".frameModelPath must be a normalized .gltf path inside assets/models/doors/swing/");
+                }
+                asset.hasFrameAlignment = hasHingeAlignment;
+                asset.leafHingeToFrameCenter = hasHingeAlignment
+                        ? ReadPositiveFloat(value, "leafHingeToFrameCenter", context)
+                        : asset.nominalWidth * 0.5f;
+                if (hasBottomAlignment) {
+                    const Json& bottomOffset = RequireField(
+                            value, "leafBottomOffset", context);
+                    if (!bottomOffset.is_number()) {
+                        Fail(context + ".leafBottomOffset must be a number");
+                    }
+                    const double number = bottomOffset.get<double>();
+                    if (!std::isfinite(number)
+                            || number < 0.0
+                            || number > std::numeric_limits<float>::max()) {
+                        Fail(context + ".leafBottomOffset must be a finite non-negative float");
+                    }
+                    asset.leafBottomOffset = static_cast<float>(number);
+                }
+
+                constexpr float containmentEpsilon = 0.0001f;
+                const float leafLeft = -asset.leafHingeToFrameCenter;
+                const float leafRight = asset.nominalWidth
+                        - asset.leafHingeToFrameCenter;
+                if (leafLeft < -asset.frameOuterWidth * 0.5f - containmentEpsilon
+                        || leafRight > asset.frameOuterWidth * 0.5f + containmentEpsilon
+                        || asset.leafBottomOffset + asset.nominalHeight
+                                > asset.frameOuterHeight + containmentEpsilon) {
+                    Fail(context + " nominal leaf bounds must fit inside the paired frame bounds");
                 }
             }
 
@@ -245,17 +283,27 @@ SectorSwingDoorFitResult ComputeSectorSwingDoorFit(
         return result;
     }
 
+    const float fitWidth = asset.hasFrame
+            ? asset.frameOuterWidth
+            : asset.nominalWidth;
+    const float fitHeight = asset.hasFrame
+            ? asset.frameOuterHeight
+            : asset.nominalHeight;
+    if (!IsFinitePositive(fitWidth) || !IsFinitePositive(fitHeight)) {
+        return result;
+    }
+
     switch (fit) {
         case SectorDoorModelFit::Manual:
             result.effectiveScale = modelScale;
             break;
         case SectorDoorModelFit::FitWidth:
-            result.effectiveScale = (targetWidth / asset.nominalWidth) * modelScale;
+            result.effectiveScale = (targetWidth / fitWidth) * modelScale;
             break;
         case SectorDoorModelFit::FitInside:
             result.effectiveScale = std::min(
-                    targetWidth / asset.nominalWidth,
-                    targetHeight / asset.nominalHeight) * modelScale;
+                    targetWidth / fitWidth,
+                    targetHeight / fitHeight) * modelScale;
             break;
         default:
             return result;
@@ -264,12 +312,16 @@ SectorSwingDoorFitResult ComputeSectorSwingDoorFit(
     result.actualWidth = asset.nominalWidth * result.effectiveScale;
     result.actualHeight = asset.nominalHeight * result.effectiveScale;
     result.actualThickness = asset.nominalThickness * result.effectiveScale;
-    result.widthGap = targetWidth - result.actualWidth;
-    result.heightGap = targetHeight - result.actualHeight;
+    result.assemblyWidth = fitWidth * result.effectiveScale;
+    result.assemblyHeight = fitHeight * result.effectiveScale;
+    result.widthGap = targetWidth - result.assemblyWidth;
+    result.heightGap = targetHeight - result.assemblyHeight;
     if (!IsFinitePositive(result.effectiveScale)
             || !IsFinitePositive(result.actualWidth)
             || !IsFinitePositive(result.actualHeight)
             || !IsFinitePositive(result.actualThickness)
+            || !IsFinitePositive(result.assemblyWidth)
+            || !IsFinitePositive(result.assemblyHeight)
             || !std::isfinite(result.widthGap)
             || !std::isfinite(result.heightGap)) {
         return SectorSwingDoorFitResult{};

@@ -49,7 +49,7 @@ When executing this plan:
 | 3 | Add swing kinematics, collision, obstruction handling, and runtime spawning | Completed | 2026-08-12 |
 | 4 | Render model leaves/frames with PBR lighting and dynamic shadows | Completed | 2026-08-12 |
 | 5 | Add editor authoring, diagnostics, cached 2D footprint, and picking | Completed | 2026-08-12 |
-| 6 | Integration hardening, documentation, and acceptance coverage | Not Started | — |
+| 6 | Integration hardening, documentation, and acceptance coverage | Completed | 2026-08-12 |
 
 ## Goal And Acceptance Criteria
 
@@ -348,6 +348,8 @@ Each output obeys this engine-space model convention after raylib reimport:
       "nominalThickness": 0.0857,
       "frameOuterWidth": 0.8970,
       "frameOuterHeight": 1.9396,
+      "leafHingeToFrameCenter": 0.3800,
+      "leafBottomOffset": 0.0424,
       "sourcePack": "wooden_interior_doors_pack.glb"
     }
   ]
@@ -356,9 +358,12 @@ Each output obeys this engine-space model convention after raylib reimport:
 
 The numeric example is illustrative. The tool writes full finite measured
 values. `frameModelPath`, `frameOuterWidth`, and `frameOuterHeight` are optional
-together. IDs are stable and unique. Paths are repository asset paths using `/`.
+together. `leafHingeToFrameCenter` and `leafBottomOffset` are an optional pair
+for framed styles; legacy framed entries default to a centered, bottom-aligned
+leaf. IDs are stable and unique. Paths are repository asset paths using `/`.
 Reject unknown versions, duplicate/empty IDs, missing paths, non-positive/non-
-finite nominal dimensions, half-present frame metadata, and paths outside
+finite nominal dimensions, half-present frame/alignment metadata, alignment
+that places the nominal leaf outside its frame, and paths outside
 `assets/models/doors/swing/`.
 
 ### Authored map data
@@ -398,16 +403,20 @@ Backward compatibility and omission rules:
 ### Uniform fitting
 
 Given catalog nominal leaf width `W`, height `H`, resolved target door width
-`Tw`, target height `Th`, and authored `modelScale` multiplier `M`:
+`Tw`, target height `Th`, and authored `modelScale` multiplier `M`, let `Fw` and
+`Fh` be the optional frame outer dimensions. Use `Aw/Ah = Fw/Fh` for a framed
+style and `Aw/Ah = W/H` for a frameless style:
 
 ```text
 manual:     effectiveScale = M
-fit_width:  effectiveScale = (Tw / W) * M
-fit_inside: effectiveScale = min(Tw / W, Th / H) * M
+fit_width:  effectiveScale = (Tw / Aw) * M
+fit_inside: effectiveScale = min(Tw / Aw, Th / Ah) * M
 
 actualWidth     = W * effectiveScale
 actualHeight    = H * effectiveScale
 actualThickness = nominalThickness * effectiveScale
+assemblyWidth   = Aw * effectiveScale
+assemblyHeight  = Ah * effectiveScale
 ```
 
 Never compute independent X/Y/Z scale. Reject/fallback when any input or result
@@ -419,9 +428,12 @@ must report actual dimensions and gaps/overflow so the author can choose a
 better portal or asset. Wide portals require authored wall geometry or the
 deferred double-door feature; do not stretch a single leaf.
 
-The catalog's nominal panel bounds drive fit and collision. Handle protrusions
-and frame outer trim affect render/receiver bounds but not leaf fit or the
-player-blocking OBB.
+The catalog's nominal panel bounds drive leaf collision. Frame outer bounds
+drive fitting and gap/overflow diagnostics for framed styles. Handle
+protrusions affect render/receiver bounds but not the player-blocking OBB.
+Generated framed entries also store the source leaf hinge-to-frame-center and
+leaf-bottom offsets. Runtime/editor poses preserve those offsets while keeping
+the frame centered at the target aperture.
 
 ### Runtime components and transforms
 
@@ -1147,3 +1159,142 @@ Append one entry per attempted slice in this format:
 - Remaining follow-up within this plan: Slice 6 remains Not Started. Integration
   hardening and final acceptance coverage remain deferred. The three source
   pack GLBs remain present and untouched.
+
+### 2026-08-12 — Slice 6 — Completed
+
+- Summary: Completed the cross-subsystem audit and final acceptance coverage.
+  Mixed procedural vertical/left/right sliders and model swing doors now have
+  one integration fixture covering partial-open state, pending-to-ready CPU
+  render/bounds policy, auto-open, manual interaction, repeated entity refresh,
+  invalid-style fallback and recovery, asset-scope unload, and scene rebuild.
+  Mixed-map serialization coverage locks all four motion values and old default
+  omission behavior. Updated the sector-editor documentation for authored
+  fields/defaults, uniform fitting, obstruction/fallback behavior, PBR lighting,
+  dynamic shadows, and current limitations.
+- Decisions/deviations folded back into plan: No product, topology-schema, or
+  public runtime API changes were needed. Runtime diagnostics now reserve from
+  the loaded object count and skip map/string work after failures are reported.
+  Renderer door/shadow and dynamic-light receiver-bound buffers reserve from
+  the loaded runtime-object count before steady rendering, closing the audited
+  vector-growth gap. Switches/defaults, ECS component registration, selection
+  refresh, shadow-cache policy, and renderer shutdown paths required no further
+  behavior changes.
+- Files/modules materially affected: Runtime-object diagnostics/lifecycle,
+  dynamic-light and door-renderer reservation setup, focused runtime and
+  serialization tests, `docs/sector_editor.md`, and this plan.
+- Automated verification: `ALSOFT_DRIVERS=null blender --background
+  --factory-startup --python tools/prepare_swing_door_assets.py -- --mode verify`
+  passed all 20 catalogued styles and regenerated the diagnostic verification
+  report/contact sheets; Blender emitted its known optional `cattrs` add-on
+  warning. `cmake --build cmake-build-debug -j2` passed;
+  `ctest --test-dir cmake-build-debug --output-on-failure` passed all 22 tests;
+  focused runtime-object and serialization tests passed; `git diff --check`,
+  `git diff --stat`, and `git status --short` passed/reported as recorded at
+  handoff.
+- Manual verification: Not performed (user-owned). The nine-item Slice 6 smoke
+  checklist above remains the acceptance checklist for the user.
+- Cache invalidation behavior: No topology mutation implementation changed in
+  this slice. Topology-map runtime-object authoring edits continue through
+  `SectorEditorRuntimeObjectEditingService` and the normal document-edited path,
+  which invalidates the derived 2D cache and refreshes preview ECS objects.
+  Catalog revision changes continue to make cached 2D door data stale; runtime
+  debug target changes remain ECS-only.
+- Lightmap source-hash behavior: Unchanged and covered by the existing tests.
+  Model door fields/assets remain excluded from static receiver charts, baked
+  occluders, geometry sidecars, and `ComputeSectorLightmapSourceHash()`; model
+  leaves/frames remain probe/dynamic-lit runtime visuals and dynamic casters.
+- Collision/sector lookup/physics behavior: No new collision changes were made
+  in this slice. Across the feature, only dynamic swing-door/player collision
+  and closing obstruction behavior changed. Static topology collision, sector
+  lookup, step handling, and general player physics remain unchanged.
+- Remaining follow-up within this plan: None. All six slices are completed.
+  Manual GUI acceptance remains user-owned, and the three downloaded source
+  pack GLBs remain present and untouched for user-directed removal only after
+  acceptance.
+
+### 2026-08-12 — Post-Slice 6 Framed Fit/Alignment Correction — Completed
+
+- Summary: Corrected framed model fitting after hub screenshots showed the
+  model assembly vertically misaligned with its target aperture. `Fit Width`
+  now uses frame outer width and `Fit Inside` uses frame outer width/height for
+  framed styles; Manual reports assembly overflow. Frameless styles retain
+  leaf-based fitting and every mode remains uniformly scaled.
+- Asset/runtime behavior: The preparation tool and generated catalog now retain
+  the measured source leaf hinge-to-frame-center and leaf-bottom offsets for
+  all 15 framed styles. Runtime and cached editor poses keep the frame centered
+  at `openBottom`, inset either hinge relative to that frame, and apply the
+  preserved bottom offset to the leaf, procedural fallback, OBB, obstruction
+  sweep, model bounds, shadows, and receiver bounds. The three immutable source
+  GLBs and prepared mesh geometry were not changed.
+- Automated verification: Blender preparation and verification passed all 20
+  styles; the known optional `cattrs` add-on warning remained non-fatal. Both
+  regenerated front/top contact sheets were inspected for closed pairing and
+  partly-open hinge attachment. `cmake --build cmake-build-debug -j2` passed and
+  `ctest --test-dir cmake-build-debug --output-on-failure` passed all 22 tests,
+  including focused assembly-fit, hub-aperture, paired-pose, editor-cache,
+  collision, and swept-obstruction coverage. `git diff --check` passed.
+- Cache invalidation behavior: No topology mutation path changed. Door authoring
+  continues to use the document-edited/cache-invalidating service path, and the
+  existing catalog revision invalidates cached 2D door footprints when catalog
+  metadata changes.
+- Lightmap source-hash behavior: Unchanged. Catalog alignment, model fitting,
+  frames, leaves, and their runtime transforms remain excluded from static
+  lightmap geometry and `ComputeSectorLightmapSourceHash()`.
+- Collision/sector lookup/physics behavior: The dynamic swing leaf OBB and
+  closing obstruction sweep now follow the corrected visible framed-leaf inset
+  and vertical interval. Static topology collision, sector lookup, step
+  handling, and general player physics are unchanged.
+
+### 2026-08-12 — Dynamic Door Sweep-and-Slide Correction — Completed
+
+- Dynamic door movement now uses continuous player-circle versus oriented-box
+  contact, advances to the earliest face or rounded-corner impact, and projects
+  only the into-door portion out of the remaining displacement. Diagonal,
+  tangent, and rotated-leaf contacts therefore slide like topology walls and
+  model props instead of rolling the whole frame movement back to its start.
+- Thin-door tunneling prevention and starting-overlap recovery remain active.
+  A physical door hit still preserves the player's starting sector when a
+  static portal traversal had occurred; clear crossings and vertical
+  non-overlap retain the static collision result.
+- Cache invalidation behavior: Unchanged. No topology or authoring mutation path
+  changed.
+- Lightmap source-hash behavior: Unchanged. Door collision response remains
+  runtime-only and does not affect baked inputs.
+- Collision/sector lookup/physics behavior: Only dynamic door/player horizontal
+  collision response changed. Door shapes and vertical intervals, static
+  topology collision, prop collision, sector lookup rules, step handling, and
+  general controller physics are unchanged.
+
+### 2026-08-12 — Closed-Door Portal Boundary Rendering Correction — Completed
+
+- Closed doors remain terminal dynamic portal-visibility blockers, but a
+  view-facing blocked portal now retains the immediately adjacent sector in a
+  separate static-boundary set. Static meshes and generated-surface picking use
+  that set to fill floor/ceiling gaps exposed by framed or normally offset door
+  geometry without adding the adjacent sector to ordinary visibility.
+- Boundary sectors are never queued for recursive traversal. Runtime objects,
+  door visibility, dynamic/static light selection, light atmosphere, and other
+  sector-owned content continue to use only the ordinary visible-sector set.
+  A sector reached through an alternate open route is promoted to ordinary
+  visibility and removed from the boundary-only set.
+- Cache invalidation behavior: Unchanged. No topology or authoring mutation path
+  changed; visibility results remain derived runtime renderer state.
+- Lightmap source-hash behavior: Unchanged. The correction selects existing
+  baked/static geometry for drawing and does not change bake inputs or output.
+- Collision/sector lookup/physics behavior: Unchanged. Door collision, sector
+  lookup, portal movement rules, and controller physics are unaffected.
+
+### 2026-08-12 — Swing-Door Close Sound Timing — Completed
+
+- Swing-door close sounds now remain pending while the leaf closes and play on
+  the first runtime update where the leaf reaches its fully closed pose. Open
+  sounds and all sliding-door sound timing retain their existing behavior.
+- Reopening or obstruction reversal replaces a pending swing close sound with
+  the normal open event, preventing a stale frame-impact sound after reversal.
+- Cache invalidation behavior: Unchanged. No topology or authoring mutation path
+  changed.
+- Lightmap source-hash behavior: Unchanged. Door audio timing is runtime-only
+  and does not affect baked inputs.
+- Collision/sector lookup/physics behavior: Unchanged. The adjustment only
+  gates audio dispatch and does not alter door motion, collision, sector lookup,
+  obstruction handling, or player physics.

@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorTopologyMap.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -46,6 +47,10 @@ struct RuntimePortalVisibilityResult {
     int startSectorId = -1;
     std::vector<int> startSectorIds;
     std::vector<int> visibleSectorIds;
+    // Static geometry immediately behind a visible dynamically blocked portal.
+    // These sectors are terminal: they are drawn/pickable but do not expose
+    // runtime objects, lights, atmosphere, or further portal traversal.
+    std::vector<int> boundarySurfaceSectorIds;
     std::vector<int> traversedPortalLineDefIds;
     size_t totalSectorCount = 0;
     bool validStartSector = false;
@@ -54,9 +59,39 @@ struct RuntimePortalVisibilityResult {
     std::string status;
 };
 
-bool ShouldDrawRuntimeSectorForVisibility(
+inline bool ShouldDrawRuntimeSectorForVisibility(
         int sectorId,
-        const RuntimePortalVisibilityResult& visibility);
+        const RuntimePortalVisibilityResult& visibility)
+{
+    if (!visibility.validStartSector || visibility.fallbackDrawAll) {
+        return true;
+    }
+    if (sectorId <= 0) {
+        return false;
+    }
+    return std::binary_search(
+            visibility.visibleSectorIds.begin(),
+            visibility.visibleSectorIds.end(),
+            sectorId);
+}
+
+inline bool ShouldDrawRuntimeSectorGeometryForVisibility(
+        int sectorId,
+        const RuntimePortalVisibilityResult& visibility)
+{
+    if (ShouldDrawRuntimeSectorForVisibility(sectorId, visibility)) {
+        return true;
+    }
+    if (!visibility.validStartSector
+            || visibility.fallbackDrawAll
+            || sectorId <= 0) {
+        return false;
+    }
+    return std::binary_search(
+            visibility.boundarySurfaceSectorIds.begin(),
+            visibility.boundarySurfaceSectorIds.end(),
+            sectorId);
+}
 
 bool BuildRuntimeSectorVisibilityGraph(
         const SectorTopologyMap& map,

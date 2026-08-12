@@ -807,11 +807,17 @@ bool SectorMeshRenderer::RebuildRendererResources(
     dynamicLightState.RebuildSources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr);
+    const size_t runtimeObjectCapacity = std::max(
+            kSectorRuntimeObjectInitialCapacity,
+            map.runtimeObjects.size());
+    dynamicLightState.ReserveReceiverBoundsCapacity(
+            meshes.sectorReceiverBounds.size(),
+            runtimeObjectCapacity);
     BuildSectorLightAtmosphereSources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
             lightAtmosphereSources);
-    doorRenderer.ReserveRuntimeDoorCapacity(kSectorRuntimeObjectInitialCapacity);
+    doorRenderer.ReserveRuntimeDoorCapacity(runtimeObjectCapacity);
     runtimeSeconds = 0.0f;
     localFogRenderer.Shutdown();
     lightHazeRenderer.Shutdown();

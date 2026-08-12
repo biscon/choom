@@ -29,7 +29,9 @@
       "sourcePack": "industrial_metal_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/industrial_metal_003_frame.gltf",
       "frameOuterWidth": 1.071950912475586,
-      "frameOuterHeight": 1.997563362121582
+      "frameOuterHeight": 1.997563362121582,
+      "leafHingeToFrameCenter": 0.42152881622314453,
+      "leafBottomOffset": 1.4901161193847656e-08
     },
     {
       "id": "industrial_metal_004",
@@ -41,7 +43,9 @@
       "sourcePack": "industrial_metal_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/industrial_metal_004_frame.gltf",
       "frameOuterWidth": 1.071950912475586,
-      "frameOuterHeight": 1.997563362121582
+      "frameOuterHeight": 1.997563362121582,
+      "leafHingeToFrameCenter": 0.43062686920166016,
+      "leafBottomOffset": 1.471489667892456e-07
     },
     {
       "id": "industrial_metal_005",
@@ -53,7 +57,9 @@
       "sourcePack": "industrial_metal_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/industrial_metal_005_frame.gltf",
       "frameOuterWidth": 1.071950912475586,
-      "frameOuterHeight": 1.997563362121582
+      "frameOuterHeight": 1.997563362121582,
+      "leafHingeToFrameCenter": 0.41155147552490234,
+      "leafBottomOffset": 1.4901161193847656e-08
     },
     {
       "id": "industrial_metal_007",
@@ -74,7 +80,9 @@
       "sourcePack": "wooden_interior_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/wooden_interior_001_frame.gltf",
       "frameOuterWidth": 0.8970050811767578,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.38004302978515625,
+      "leafBottomOffset": 0.042447220999747515
     },
     {
       "id": "wooden_interior_002",
@@ -86,7 +94,9 @@
       "sourcePack": "wooden_interior_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/wooden_interior_002_frame.gltf",
       "frameOuterWidth": 0.8970050811767578,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.38004350662231445,
+      "leafBottomOffset": 0.04244728060439229
     },
     {
       "id": "wooden_interior_003",
@@ -98,7 +108,9 @@
       "sourcePack": "wooden_interior_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/wooden_interior_003_frame.gltf",
       "frameOuterWidth": 0.8970050811767578,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.38004255294799805,
+      "leafBottomOffset": 0.042447220999747515
     },
     {
       "id": "wooden_interior_004",
@@ -110,7 +122,9 @@
       "sourcePack": "wooden_interior_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/wooden_interior_004_frame.gltf",
       "frameOuterWidth": 0.8970050811767578,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.38004398345947266,
+      "leafBottomOffset": 0.042447220999747515
     },
     {
       "id": "wooden_interior_005",
@@ -122,7 +136,9 @@
       "sourcePack": "wooden_interior_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/wooden_interior_005_frame.gltf",
       "frameOuterWidth": 0.8970048427581787,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.3800431489944458,
+      "leafBottomOffset": 0.04244716139510274
     },
     {
       "id": "wooden_interior_006",
@@ -134,7 +150,9 @@
       "sourcePack": "wooden_interior_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/wooden_interior_006_frame.gltf",
       "frameOuterWidth": 0.8970047235488892,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.38273221254348755,
+      "leafBottomOffset": 0.04244716139510274
     },
     {
       "id": "wooden_interior_007",
@@ -146,7 +164,9 @@
       "sourcePack": "wooden_interior_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/wooden_interior_007_frame.gltf",
       "frameOuterWidth": 0.897005021572113,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.37973183393478394,
+      "leafBottomOffset": 0.042447220999747515
     },
     {
       "id": "wooden_interior_008",
@@ -158,7 +178,9 @@
       "sourcePack": "wooden_interior_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/wooden_interior_008_frame.gltf",
       "frameOuterWidth": 0.8970048427581787,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.37426328659057617,
+      "leafBottomOffset": 0.042447220999747515
     },
     {
       "id": "wooden_interior_009",
@@ -170,7 +192,9 @@
       "sourcePack": "wooden_interior_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/wooden_interior_009_frame.gltf",
       "frameOuterWidth": 0.8970050811767578,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.3800429105758667,
+      "leafBottomOffset": 0.042447220999747515
     },
     {
       "id": "worn_wooden_001",
@@ -200,7 +224,9 @@
       "sourcePack": "worn_wooden_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/worn_wooden_004_frame.gltf",
       "frameOuterWidth": 0.8970050811767578,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.38004112243652344,
+      "leafBottomOffset": 0.042447220999747515
     },
     {
       "id": "worn_wooden_005",
@@ -212,7 +238,9 @@
       "sourcePack": "worn_wooden_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/worn_wooden_005_frame.gltf",
       "frameOuterWidth": 0.8970050811767578,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.38004350662231445,
+      "leafBottomOffset": 0.042447101790457964
     },
     {
       "id": "worn_wooden_006",
@@ -224,7 +252,9 @@
       "sourcePack": "worn_wooden_doors_pack.glb",
       "frameModelPath": "assets/models/doors/swing/worn_wooden_006_frame.gltf",
       "frameOuterWidth": 0.8970050811767578,
-      "frameOuterHeight": 1.9396041631698608
+      "frameOuterHeight": 1.9396041631698608,
+      "leafHingeToFrameCenter": 0.38004302978515625,
+      "leafBottomOffset": 0.042447101790457964
     }
   ]
 }

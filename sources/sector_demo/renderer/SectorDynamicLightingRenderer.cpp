@@ -281,6 +281,14 @@ void SectorDynamicLightingRenderer::RebuildSources(
     ReserveSelectionBuffers();
 }
 
+void SectorDynamicLightingRenderer::ReserveReceiverBoundsCapacity(
+        size_t sectorCapacity,
+        size_t runtimeObjectCapacity)
+{
+    receiverBounds.clear();
+    receiverBounds.reserve(sectorCapacity + runtimeObjectCapacity * 2);
+}
+
 void SectorDynamicLightingRenderer::SetRuntimePointLight(
         const SectorPreviewDynamicPointLightSource* light)
 {
@@ -638,7 +646,6 @@ void SectorDynamicLightingRenderer::BuildReceiverBounds(
         engine::World* runtimeObjectWorld)
 {
     receiverBounds.clear();
-    receiverBounds.reserve(sectorReceiverBounds.size());
     receiverBounds.insert(receiverBounds.end(), sectorReceiverBounds.begin(), sectorReceiverBounds.end());
     if (runtimeObjectWorld != nullptr) {
         CollectSectorDoorReceiverBounds(*runtimeObjectWorld, receiverBounds);

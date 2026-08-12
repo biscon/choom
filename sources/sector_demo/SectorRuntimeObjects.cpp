@@ -305,6 +305,7 @@ void RefreshDoorAnchorDiagnostics(
         const SectorTopologyMap& map)
 {
     state.doorAnchorDiagnostics.clear();
+    state.doorAnchorDiagnostics.reserve(map.runtimeObjects.size());
     state.doorObjectCount = 0;
     state.validDoorAnchorCount = 0;
     state.invalidDoorAnchorCount = 0;
@@ -367,6 +368,7 @@ void RefreshDoorFallbackDiagnostics(
         const SectorTopologyMap& map)
 {
     state.doorFallbackDiagnostics.clear();
+    state.doorFallbackDiagnostics.reserve(map.runtimeObjects.size());
     state.doorFallbackCount = 0;
     state.doorFrameFailureCount = 0;
 
@@ -539,11 +541,18 @@ bool RefreshSectorDoorModelFailureDiagnostics(
                 if (!model.modelVisualRequested) {
                     return;
                 }
+                const bool reportLeafFailure =
+                        model.leafFailed && !model.leafFailureReported;
+                const bool reportFrameFailure =
+                        model.frameFailed && !model.frameFailureReported;
+                if (!reportLeafFailure && !reportFrameFailure) {
+                    return;
+                }
                 const SectorPlacedRuntimeObject* placed =
                         FindSectorPlacedRuntimeObject(map, door.placedObjectId);
                 const std::string modelAssetId = placed != nullptr
                         ? placed->door.modelAssetId : std::string{};
-                if (model.leafFailed && !model.leafFailureReported) {
+                if (reportLeafFailure) {
                     model.leafFailureReported = true;
                     state.doorFallbackDiagnostics.push_back(SectorDoorFallbackDiagnostic{
                             door.placedObjectId,
@@ -555,7 +564,7 @@ bool RefreshSectorDoorModelFailureDiagnostics(
                     ++state.doorFallbackCount;
                     changed = true;
                 }
-                if (model.frameFailed && !model.frameFailureReported) {
+                if (reportFrameFailure) {
                     model.frameFailureReported = true;
                     state.doorFallbackDiagnostics.push_back(SectorDoorFallbackDiagnostic{
                             door.placedObjectId,
@@ -613,7 +622,9 @@ void ClearSectorRuntimeObjects(
         SectorRuntimeObjectState& state)
 {
     std::vector<engine::Entity> sectorObjects;
-    sectorObjects.reserve(kSectorRuntimeObjectInitialCapacity);
+    sectorObjects.reserve(std::max(
+            kSectorRuntimeObjectInitialCapacity,
+            state.placedObjectEntities.size()));
     world.ForEach<SectorObject>(
             [&sectorObjects](engine::Entity entity, SectorObject&) {
                 sectorObjects.push_back(entity);
@@ -795,6 +806,9 @@ void SpawnPlacedRuntimeObjects(
                         modelRender.frameDeclared = catalogAsset.hasFrame;
                         modelRender.frameOuterWidth = catalogAsset.frameOuterWidth;
                         modelRender.frameOuterHeight = catalogAsset.frameOuterHeight;
+                        modelRender.leafHingeToFrameCenter =
+                                catalogAsset.leafHingeToFrameCenter;
+                        modelRender.leafBottomOffset = catalogAsset.leafBottomOffset;
                         modelRender.fallbackReason = SectorDoorModelFallbackReason::None;
 
                         if (!EnsureSectorRuntimeObjectAssetScope(assets, state)) {
@@ -855,7 +869,7 @@ void SpawnPlacedRuntimeObjects(
                             : placedObject.door.speed,
                     placedObject.door.hinge,
                     placedObject.door.swingSide};
-            const SectorDoorRender runtimeRender{
+            SectorDoorRender runtimeRender{
                     fallbackWidth,
                     fallbackHeight,
                     fallbackThickness,
@@ -864,6 +878,14 @@ void SpawnPlacedRuntimeObjects(
                     placedObject.door.faceUvs,
                     WHITE,
                     true};
+            if (modelRender.catalogResolved && modelRender.frameDeclared) {
+                runtimeRender.leafHingeToFrameCenter =
+                        modelRender.leafHingeToFrameCenter
+                        * modelRender.effectiveScale;
+                runtimeRender.leafBottomOffset = modelRender.leafBottomOffset
+                        * modelRender.effectiveScale;
+                runtimeRender.alignLeafToFrame = true;
+            }
             const Vector3 worldPosition = placedObject.door.motion == SectorDoorMotionType::Swing
                     ? BuildSectorDoorSwingPose(
                             runtimeAnchor,

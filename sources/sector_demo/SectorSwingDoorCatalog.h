@@ -24,7 +24,10 @@ struct SectorSwingDoorCatalogAsset {
     float nominalThickness = 0.0f;
     float frameOuterWidth = 0.0f;
     float frameOuterHeight = 0.0f;
+    float leafHingeToFrameCenter = 0.0f;
+    float leafBottomOffset = 0.0f;
     bool hasFrame = false;
+    bool hasFrameAlignment = false;
 };
 
 struct SectorSwingDoorCatalog {
@@ -47,6 +50,8 @@ struct SectorSwingDoorFitResult {
     float actualWidth = 0.0f;
     float actualHeight = 0.0f;
     float actualThickness = 0.0f;
+    float assemblyWidth = 0.0f;
+    float assemblyHeight = 0.0f;
     float widthGap = 0.0f;
     float heightGap = 0.0f;
 };

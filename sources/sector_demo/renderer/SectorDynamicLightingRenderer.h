@@ -107,6 +107,9 @@ class SectorDynamicLightingRenderer {
 public:
     void Reset();
     void RebuildSources(const SectorTopologyMap& map, const SectorCollisionWorld* sectorLookupWorld);
+    void ReserveReceiverBoundsCapacity(
+            size_t sectorCapacity,
+            size_t runtimeObjectCapacity);
     void UpdateSelection(
             const RuntimePortalVisibilityResult& visibility,
             const std::vector<SectorReceiverBounds>& sectorReceiverBounds,

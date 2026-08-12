@@ -732,6 +732,19 @@ int CountDoorObjects(engine::World& world)
     return count;
 }
 
+engine::Entity FindPlacedObjectEntity(
+        const game::SectorRuntimeObjectState& state,
+        int placedObjectId)
+{
+    for (const game::SectorPlacedRuntimeObjectEntity& entry :
+            state.placedObjectEntities) {
+        if (entry.placedObjectId == placedObjectId) {
+            return entry.entity;
+        }
+    }
+    return engine::NullEntity();
+}
+
 game::SectorPlacedRuntimeObject MakePlacedBillboard(
         int id,
         Vector3 position,
@@ -1144,16 +1157,34 @@ void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
     const game::SectorDoorModelRender& model =
             world.Get<game::SectorDoorModelRender>(entity);
     const Vector3 expectedHinge{
-            runtimeAnchor.endpointA.x,
-            runtimeAnchor.openBottom,
-            runtimeAnchor.endpointA.y};
+            runtimeAnchor.midpoint.x
+                    - runtimeAnchor.tangent.x
+                            * catalogAsset.leafHingeToFrameCenter
+                            * expectedFit.effectiveScale,
+            runtimeAnchor.openBottom
+                    + catalogAsset.leafBottomOffset * expectedFit.effectiveScale,
+            runtimeAnchor.midpoint.y
+                    - runtimeAnchor.tangent.y
+                            * catalogAsset.leafHingeToFrameCenter
+                            * expectedFit.effectiveScale};
     const Vector3 expectedFrameOrigin{
             runtimeAnchor.midpoint.x,
             runtimeAnchor.openBottom,
             runtimeAnchor.midpoint.y};
     Check(Near(Vector3Transform(Vector3{}, model.leafMatrix), expectedHinge)
                   && Near(Vector3Transform(Vector3{}, model.frameMatrix), expectedFrameOrigin),
-          "spawned model swing stores canonical moving-leaf and fixed-frame matrices");
+          "spawned framed swing preserves paired leaf inset/bottom alignment around its fixed frame");
+    Check(render.alignLeafToFrame
+                  && Near(render.leafHingeToFrameCenter,
+                          catalogAsset.leafHingeToFrameCenter
+                                  * expectedFit.effectiveScale)
+                  && Near(render.leafBottomOffset,
+                          catalogAsset.leafBottomOffset * expectedFit.effectiveScale)
+                  && Near(expectedFit.assemblyWidth,
+                          catalogAsset.frameOuterWidth * expectedFit.effectiveScale)
+                  && Near(expectedFit.assemblyHeight,
+                          catalogAsset.frameOuterHeight * expectedFit.effectiveScale),
+          "runtime render retains scaled assembly alignment and framed fit dimensions");
     std::vector<game::SectorReceiverBounds> receiverBounds;
     game::CollectSectorDoorReceiverBounds(world, receiverBounds);
     Check(receiverBounds.size() == 2
@@ -1262,6 +1293,159 @@ void TestProceduralSwingDoorRunsWithoutCatalogStyle()
                   && world.Has<game::SectorDoorModelRender>(entity)
                   && !world.Get<game::SectorDoorModelRender>(entity).modelVisualRequested,
           "procedural swing works without requiring a catalog style");
+}
+
+void TestMixedDoorRuntimeRefreshRecoveryAndScopeLifecycle()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+
+    const std::array<game::SectorDoorMotionType, 3> slideMotions{
+            game::SectorDoorMotionType::SlideVertical,
+            game::SectorDoorMotionType::SlideLeft,
+            game::SectorDoorMotionType::SlideRight};
+    for (size_t i = 0; i < slideMotions.size(); ++i) {
+        game::SectorPlacedDoor slide = MakeDoorOnPortal();
+        slide.motion = slideMotions[i];
+        slide.initialOpenFraction = 0.2f * static_cast<float>(i + 1);
+        slide.autoOpen = true;
+        map.runtimeObjects.push_back(MakePlacedDoor(
+                50 + static_cast<int>(i), slide));
+    }
+
+    game::SectorPlacedDoor modelDoor = MakeDoorOnPortal();
+    modelDoor.visual = game::SectorDoorVisualType::Model;
+    modelDoor.modelAssetId = "wooden_interior_001";
+    modelDoor.motion = game::SectorDoorMotionType::Swing;
+    modelDoor.initialOpenFraction = 0.4f;
+    map.runtimeObjects.push_back(MakePlacedDoor(53, modelDoor));
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountDoorObjects(world) == 4
+                  && state.spawnedObjectCount == 4
+                  && state.skippedObjectCount == 0
+                  && state.doorFallbackCount == 0,
+          "mixed procedural-slider and model-swing map spawns every door without fallback");
+    for (size_t i = 0; i < slideMotions.size(); ++i) {
+        const engine::Entity entity = FindPlacedObjectEntity(
+                state, 50 + static_cast<int>(i));
+        Check(world.IsAlive(entity)
+                      && world.Get<game::SectorDoorMotion>(entity).motion
+                              == slideMotions[i]
+                      && Near(
+                              world.Get<game::SectorDoorMotion>(entity)
+                                      .openFraction,
+                              0.2f * static_cast<float>(i + 1))
+                      && !world.Has<game::SectorDoorModelRender>(entity),
+              "mixed map preserves each procedural slide motion and initial fraction");
+    }
+
+    engine::Entity modelEntity = FindPlacedObjectEntity(state, 53);
+    Check(world.IsAlive(modelEntity)
+                  && world.Has<game::SectorDoorModelRender>(modelEntity)
+                  && Near(world.Get<game::SectorDoorMotion>(modelEntity).openFraction, 0.4f)
+                  && !world.Get<game::SectorDoorPortalBlocker>(modelEntity).blocksPortal,
+          "mixed map preserves the model swing door partial-open state");
+    game::SectorDoorModelRender& pendingModel =
+            world.Get<game::SectorDoorModelRender>(modelEntity);
+    const engine::ModelHandle firstLeaf = pendingModel.leafModel;
+    const engine::ModelHandle firstFrame = pendingModel.frameModel;
+    const engine::AssetScopeHandle firstScope = state.runtimeObjectAssetScope;
+    Check(!engine::IsNull(firstScope)
+                  && !engine::IsNull(firstLeaf)
+                  && !engine::IsNull(firstFrame)
+                  && game::ResolveSectorDoorModelDrawPolicy(
+                             pendingModel, false, false).drawProcedural,
+          "pending model requests retain the procedural slab in the shared runtime scope");
+
+    const BoundingBox analyticBounds = pendingModel.receiverBounds;
+    pendingModel.leafReady = true;
+    pendingModel.leafBoundsReady = true;
+    pendingModel.leafLocalBounds = BoundingBox{
+            Vector3{0.0f, 0.0f, -0.25f},
+            Vector3{4.0f, 3.0f, 0.25f}};
+    game::UpdateSectorDoorDerivedStateSystem(world);
+    const game::SectorDoorModelDrawPolicy readyPolicy =
+            game::ResolveSectorDoorModelDrawPolicy(pendingModel, true, false);
+    Check(readyPolicy.drawLeaf
+                  && !readyPolicy.drawProcedural
+                  && (pendingModel.receiverBounds.max.x > analyticBounds.max.x
+                          || pendingModel.receiverBounds.max.y > analyticBounds.max.y
+                          || pendingModel.receiverBounds.max.z > analyticBounds.max.z),
+          "CPU readiness transition replaces fallback and expands analytic receiver bounds");
+
+    game::SectorDoorInteraction& interaction =
+            world.Get<game::SectorDoorInteraction>(modelEntity);
+    interaction.autoOpen = true;
+    const game::SectorDoorResolvedAnchor& anchor =
+            world.Get<game::SectorDoorResolvedAnchor>(modelEntity);
+    game::UpdateSectorDoorAutoOpenSystem(
+            world,
+            Vector3{anchor.midpoint.x, anchor.openBottom, anchor.midpoint.y});
+    Check(Near(world.Get<game::SectorDoorMotion>(modelEntity).targetOpenFraction, 1.0f),
+          "model swing door participates in portal-based auto-open");
+    interaction.autoOpen = false;
+    const bool interacted = game::ToggleTargetedSectorDoorInteractionSystem(
+            world,
+            Vector3{anchor.midpoint.x - 1.0f, anchor.openBottom, anchor.midpoint.y},
+            Vector3{1.0f, 0.0f, 0.0f});
+    Check(interacted
+                  && Near(world.Get<game::SectorDoorMotion>(modelEntity).targetOpenFraction, 0.0f),
+          "model swing door participates in manual portal-based interaction");
+
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    const engine::Entity refreshedModelEntity = FindPlacedObjectEntity(state, 53);
+    const game::SectorDoorModelRender& refreshedModel =
+            world.Get<game::SectorDoorModelRender>(refreshedModelEntity);
+    Check(CountDoorObjects(world) == 4
+                  && refreshedModelEntity != modelEntity
+                  && !world.IsAlive(modelEntity)
+                  && state.runtimeObjectAssetScope == firstScope
+                  && refreshedModel.leafModel == firstLeaf
+                  && refreshedModel.frameModel == firstFrame
+                  && state.doorFallbackDiagnostics.empty(),
+          "entity-only refresh replaces mixed door entities while reusing scope and model requests");
+
+    map.runtimeObjects.back().door.modelAssetId = "missing_style";
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    Check(state.doorFallbackCount == 1
+                  && state.doorFallbackDiagnostics.size() == 1
+                  && world.Get<game::SectorDoorModelRender>(
+                             FindPlacedObjectEntity(state, 53)).fallbackReason
+                          == game::SectorDoorModelFallbackReason::MissingCatalogAsset,
+          "edited invalid style produces one stable procedural fallback diagnostic");
+    map.runtimeObjects.back().door.modelAssetId = "wooden_interior_001";
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    Check(state.doorFallbackCount == 0
+                  && state.doorFallbackDiagnostics.empty()
+                  && world.Get<game::SectorDoorModelRender>(
+                             FindPlacedObjectEntity(state, 53)).catalogResolved,
+          "restoring a valid style clears diagnostics and recovers model requests");
+
+    const engine::Entity beforeClear = FindPlacedObjectEntity(state, 53);
+    game::ClearSectorRuntimeObjects(world, assets, state);
+    Check(CountDoorObjects(world) == 0
+                  && !world.IsAlive(beforeClear)
+                  && engine::IsNull(state.runtimeObjectAssetScope)
+                  && assets.IsFinished(firstLeaf)
+                  && assets.IsFinished(firstFrame),
+          "runtime shutdown destroys mixed doors and retires model handles with their scope");
+
+    game::ResetSectorRuntimeObjectsForMap(world, assets, state, map);
+    const engine::Entity rebuiltModelEntity = FindPlacedObjectEntity(state, 53);
+    const game::SectorDoorModelRender& rebuiltModel =
+            world.Get<game::SectorDoorModelRender>(rebuiltModelEntity);
+    Check(CountDoorObjects(world) == 4
+                  && world.IsAlive(rebuiltModelEntity)
+                  && state.runtimeObjectAssetScope != firstScope
+                  && rebuiltModel.leafModel != firstLeaf
+                  && rebuiltModel.frameModel != firstFrame,
+          "scene rebuild creates fresh mixed-door entities, scope, and model handles");
+    game::ClearSectorRuntimeObjects(world, assets, state);
 }
 
 void TestSectorDoorSlabGeometryIsFiniteAndStable()
@@ -2634,6 +2818,41 @@ void TestSectorSwingDoorCanonicalPoseKeepsHingesAndChoosesSide()
             Check(Vector2DotProduct(frontDisplacement, anchor.normal) < 0.0f
                           && Vector2DotProduct(backDisplacement, anchor.normal) > 0.0f,
                   "front and back swing choices move the leaf center to the requested portal side");
+
+            game::SectorDoorRender framedRender = render;
+            framedRender.width = anchor.portalWidth * 0.7f;
+            framedRender.height = anchor.portalHeight * 0.8f;
+            framedRender.leafHingeToFrameCenter = anchor.portalWidth * 0.35f;
+            framedRender.leafBottomOffset = anchor.portalHeight * 0.05f;
+            framedRender.alignLeafToFrame = true;
+            const Vector2 closedWidthAxis = hinge == game::SectorDoorHinge::Start
+                    ? anchor.tangent
+                    : Vector2{-anchor.tangent.x, -anchor.tangent.y};
+            const Vector3 expectedFramedHinge{
+                    anchor.midpoint.x
+                            - closedWidthAxis.x
+                                    * framedRender.leafHingeToFrameCenter
+                            + anchor.normal.x * framedRender.normalOffset,
+                    anchor.openBottom + framedRender.leafBottomOffset,
+                    anchor.midpoint.y
+                            - closedWidthAxis.y
+                                    * framedRender.leafHingeToFrameCenter
+                            + anchor.normal.y * framedRender.normalOffset};
+            const Vector3 expectedFrameOrigin{
+                    anchor.midpoint.x + anchor.normal.x * framedRender.normalOffset,
+                    anchor.openBottom,
+                    anchor.midpoint.y + anchor.normal.y * framedRender.normalOffset};
+            const game::SectorDoorSwingPose framed = game::BuildSectorDoorSwingPose(
+                    anchor, motion, framedRender, 2.0f, 0.5f);
+            Check(Near(framed.hingePosition, expectedFramedHinge)
+                          && Near(Vector3Transform(Vector3{}, framed.leafMatrix),
+                                  expectedFramedHinge)
+                          && Near(Vector3Transform(Vector3{}, framed.frameMatrix),
+                                  expectedFrameOrigin)
+                          && Near(framed.bottom, expectedFramedHinge.y)
+                          && Near(framed.top,
+                                  expectedFramedHinge.y + framedRender.height),
+                  "framed swing pose preserves paired horizontal inset and vertical leaf offset for either hinge");
         }
     }
 }
@@ -2764,7 +2983,17 @@ void TestSectorSwingDoorFullyOpenClearsApertureButStillCollides()
 void TestSectorSwingDoorClosingSweepReopensWithoutTunneling()
 {
     const game::SectorDoorResolvedAnchor anchor = MakeRuntimeDoorAnchorForDerivedState();
-    const auto runClosingStep = [&anchor](Vector3 obstaclePosition, bool expectBlocked) {
+    game::SectorDoorRender render;
+    render.width = anchor.portalWidth * 0.7f;
+    render.height = anchor.portalHeight * 0.8f;
+    render.thickness = 0.1f;
+    render.normalOffset = 0.05f;
+    render.leafHingeToFrameCenter = anchor.portalWidth * 0.35f;
+    render.leafBottomOffset = anchor.portalHeight * 0.05f;
+    render.alignLeafToFrame = true;
+    const auto runClosingStep = [&anchor, &render](
+                                        Vector3 obstaclePosition,
+                                        bool expectBlocked) {
         engine::World world;
         game::ReserveSectorRuntimeObjectWorld(world, 1);
         const engine::Entity entity = AddSwingDoorForDerivedState(
@@ -2774,6 +3003,7 @@ void TestSectorSwingDoorClosingSweepReopensWithoutTunneling()
                 game::SectorDoorSwingSide::Front,
                 1.0f,
                 0.0f);
+        world.Get<game::SectorDoorRender>(entity) = render;
         const game::SectorDoorPlayerObstacle obstacle{
                 obstaclePosition,
                 0.08f,
@@ -2795,11 +3025,6 @@ void TestSectorSwingDoorClosingSweepReopensWithoutTunneling()
         return motion;
     };
 
-    game::SectorDoorRender render;
-    render.width = anchor.portalWidth;
-    render.height = anchor.portalHeight;
-    render.thickness = 0.1f;
-    render.normalOffset = 0.05f;
     const game::SectorDoorMotion poseMotion{
             game::SectorDoorMotionType::Swing,
             1.0f,
@@ -3147,8 +3372,157 @@ void TestSectorDoorDynamicCollisionBlocksThinDoorTunneling()
     Check(result.hitWall, "thin closed dynamic door reports wall contact for swept crossing");
     Check(result.currentSectorId == 10,
             "thin closed dynamic door preserves previous sector for swept crossing");
-    Check(Near(result.positionXZ, moveState.positionXZ),
-            "thin closed dynamic door rejects tunneled movement back to movement start");
+    Check(result.positionXZ.x > moveState.positionXZ.x + 0.5f
+                  && result.positionXZ.x <= 0.7f + 0.001f
+                  && Near(result.positionXZ.y, 0.0f),
+            "thin closed dynamic door stops swept movement at contact without rolling back to its start");
+}
+
+void TestSectorDoorDynamicCollisionPreservesTangentialSlide()
+{
+    const game::SectorCollisionMoveState moveState{
+            Vector2{0.0f, -0.8f},
+            0.0f,
+            10,
+            true};
+    const game::SectorCollisionMoveResult staticResult{
+            Vector2{1.0f, 0.8f},
+            20,
+            false,
+            false,
+            false};
+    const std::vector<game::SectorDynamicDoorCollider> colliders{
+            MakeDynamicDoorCollider(
+                    Vector2{0.75f, 0.0f},
+                    Vector2{1.0f, 0.125f},
+                    0.0f,
+                    2.0f)};
+
+    const game::SectorCollisionMoveResult result =
+            game::ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                    moveState,
+                    staticResult,
+                    game::SectorCollisionMoveConfig{0.25f, 1.6f, 0.25f, 4},
+                    colliders);
+
+    Check(result.hitWall && result.currentSectorId == moveState.currentSectorId,
+          "diagonal dynamic door impact reports contact and preserves the starting sector");
+    Check(result.positionXZ.x <= 0.375f + 0.001f
+                  && result.positionXZ.y > 0.7f,
+          "diagonal dynamic door impact preserves tangential sliding along the leaf");
+}
+
+void TestSectorDoorDynamicCollisionRotatedSlide()
+{
+    game::SectorDynamicDoorCollider collider = MakeDynamicDoorCollider(
+            Vector2{},
+            Vector2{0.8f, 0.12f},
+            0.0f,
+            2.0f);
+    const float angle = PI * 0.25f;
+    collider.tangent = Vector2{std::cos(angle), std::sin(angle)};
+    collider.normal = Vector2{-std::sin(angle), std::cos(angle)};
+    constexpr float radius = 0.25f;
+    const float contactDistance = collider.halfExtents.y + radius;
+    const Vector2 start = Vector2Scale(
+            collider.normal,
+            -(contactDistance + 0.5f));
+    const Vector2 destination = Vector2Add(
+            Vector2Add(start, Vector2Scale(collider.normal, 1.0f)),
+            Vector2Scale(collider.tangent, 0.8f));
+
+    const game::SectorCollisionMoveResult result =
+            game::ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                    game::SectorCollisionMoveState{start, 0.0f, 10, true},
+                    game::SectorCollisionMoveResult{
+                            destination, 10, false, false, false},
+                    game::SectorCollisionMoveConfig{radius, 1.6f, 0.25f, 4},
+                    std::vector<game::SectorDynamicDoorCollider>{collider});
+    const Vector2 relative = Vector2Subtract(result.positionXZ, collider.center);
+    const float normalDistance = Vector2DotProduct(relative, collider.normal);
+    const float tangentDistance = Vector2DotProduct(relative, collider.tangent);
+
+    Check(result.hitWall
+                  && normalDistance <= -contactDistance + 0.001f
+                  && tangentDistance > 0.7f,
+          "rotated swing-door OBB preserves tangential movement at diagonal contact");
+}
+
+void TestSectorDoorDynamicCollisionContactAllowsTangentAndAwayMovement()
+{
+    const game::SectorDynamicDoorCollider collider = MakeDynamicDoorCollider(
+            Vector2{0.75f, 0.0f},
+            Vector2{1.0f, 0.125f},
+            0.0f,
+            2.0f);
+    constexpr float contactX = 0.375f;
+    const game::SectorCollisionMoveState moveState{
+            Vector2{contactX, 0.0f},
+            0.0f,
+            10,
+            true};
+    const game::SectorCollisionMoveConfig config{0.25f, 1.6f, 0.25f, 4};
+
+    const game::SectorCollisionMoveResult tangent =
+            game::ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                    moveState,
+                    game::SectorCollisionMoveResult{
+                            Vector2{contactX, 0.4f}, 10, false, false, false},
+                    config,
+                    std::vector<game::SectorDynamicDoorCollider>{collider});
+    Check(Near(tangent.positionXZ, Vector2{contactX, 0.4f}),
+          "dynamic door face contact permits tangential movement");
+
+    const game::SectorCollisionMoveResult away =
+            game::ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                    moveState,
+                    game::SectorCollisionMoveResult{
+                            Vector2{contactX - 0.4f, 0.0f}, 10, false, false, false},
+                    config,
+                    std::vector<game::SectorDynamicDoorCollider>{collider});
+    Check(Near(away.positionXZ, Vector2{contactX - 0.4f, 0.0f}),
+                  "dynamic door face contact permits movement away from the leaf");
+}
+
+void TestSectorDoorDynamicCollisionRoundedCornerSweep()
+{
+    const std::vector<game::SectorDynamicDoorCollider> colliders{
+            MakeDynamicDoorCollider(
+                    Vector2{},
+                    Vector2{0.5f, 0.5f},
+                    0.0f,
+                    2.0f)};
+    const game::SectorCollisionMoveConfig config{0.5f, 1.6f, 0.25f, 4};
+
+    const Vector2 nearMissStart{1.1f, 0.9f};
+    const Vector2 nearMissDestination{0.9f, 1.1f};
+    const game::SectorCollisionMoveResult nearMiss =
+            game::ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                    game::SectorCollisionMoveState{
+                            nearMissStart, 0.0f, 10, true},
+                    game::SectorCollisionMoveResult{
+                            nearMissDestination, 10, false, false, false},
+                    config,
+                    colliders);
+    Check(!nearMiss.hitWall
+                  && Near(nearMiss.positionXZ, nearMissDestination),
+          "rounded door OBB corner does not block a player-circle near miss");
+
+    const Vector2 cornerStart{1.2f, 1.2f};
+    const game::SectorCollisionMoveResult cornerHit =
+            game::ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                    game::SectorCollisionMoveState{
+                            cornerStart, 0.0f, 10, true},
+                    game::SectorCollisionMoveResult{
+                            Vector2{0.6f, 0.6f}, 10, false, false, false},
+                    config,
+                    colliders);
+    const Vector2 fromCorner = Vector2Subtract(
+            cornerHit.positionXZ,
+            Vector2{0.5f, 0.5f});
+    Check(cornerHit.hitWall
+                  && Vector2Length(fromCorner) >= config.radius - 0.001f,
+          "true rounded door-corner impact maintains player-circle clearance");
 }
 
 void TestSectorDoorDynamicCollisionIgnoresPortalBlockerState()
@@ -3190,8 +3564,10 @@ void TestSectorDoorDynamicCollisionIgnoresPortalBlockerState()
 
     Check(colliders.size() == 1,
             "dynamic door collision collection keeps enabled physical collider independent of portal blocker");
-    Check(result.hitWall && Near(result.positionXZ, moveState.positionXZ),
-            "dynamic door crossing collision uses physical collider state rather than portal blocker state");
+    Check(result.hitWall
+                  && result.positionXZ.x > moveState.positionXZ.x + 0.5f
+                  && result.positionXZ.x <= 0.7f + 0.001f,
+            "dynamic door crossing collision uses physical collider contact rather than portal blocker state");
 }
 
 void TestSectorDoorDynamicPortalBlockerCollectionBuildsDirectedVisibilityKeys()
@@ -5119,6 +5495,68 @@ void TestSectorDoorAudioTransitionTracksTargetChanges()
           "door audio replaces the pending event on a close reversal");
 }
 
+void TestSectorDoorAudioEventTiming()
+{
+    game::SectorDoorMotion motion;
+    motion.motion = game::SectorDoorMotionType::Swing;
+    motion.openFraction = 1.0f;
+
+    Check(game::IsSectorDoorAudioEventReady(
+                      game::SectorDoorAudioEvent::Open, motion),
+          "swing door open audio remains ready at the start of animation");
+    Check(!game::IsSectorDoorAudioEventReady(
+                      game::SectorDoorAudioEvent::Close, motion),
+          "swing door close audio waits while the closing animation starts");
+
+    motion.openFraction = 0.5f;
+    Check(!game::IsSectorDoorAudioEventReady(
+                      game::SectorDoorAudioEvent::Close, motion),
+          "swing door close audio waits during the closing animation");
+    motion.openFraction = std::numeric_limits<float>::epsilon();
+    Check(!game::IsSectorDoorAudioEventReady(
+                      game::SectorDoorAudioEvent::Close, motion),
+          "swing door close audio waits until the exact closed endpoint");
+    motion.openFraction = 0.0f;
+    Check(game::IsSectorDoorAudioEventReady(
+                      game::SectorDoorAudioEvent::Close, motion),
+          "swing door close audio becomes ready when the leaf reaches the frame");
+
+    for (const game::SectorDoorMotionType slide : {
+                 game::SectorDoorMotionType::SlideVertical,
+                 game::SectorDoorMotionType::SlideLeft,
+                 game::SectorDoorMotionType::SlideRight}) {
+        motion.motion = slide;
+        motion.openFraction = 1.0f;
+        Check(game::IsSectorDoorAudioEventReady(
+                          game::SectorDoorAudioEvent::Close, motion),
+              "sliding door close audio retains immediate timing");
+    }
+
+    game::SectorDoorAudio audio;
+    audio.targetWasOpen = true;
+    motion.motion = game::SectorDoorMotionType::Swing;
+    motion.openFraction = 0.5f;
+    motion.targetOpenFraction = 0.0f;
+    Check(game::UpdateSectorDoorAudioTransition(audio, motion)
+                          == game::SectorDoorAudioEvent::Close
+                  && !game::IsSectorDoorAudioEventReady(audio.pendingEvent, motion),
+          "swing door close request queues a deferred frame-hit sound");
+    motion.targetOpenFraction = 1.0f;
+    Check(game::UpdateSectorDoorAudioTransition(audio, motion)
+                          == game::SectorDoorAudioEvent::Open
+                  && audio.pendingEvent == game::SectorDoorAudioEvent::Open
+                  && game::IsSectorDoorAudioEventReady(audio.pendingEvent, motion),
+          "swing door reversal replaces the deferred close sound with open audio");
+
+    motion.openFraction = std::numeric_limits<float>::quiet_NaN();
+    Check(!game::IsSectorDoorAudioEventReady(
+                      game::SectorDoorAudioEvent::Close, motion),
+          "invalid swing pose does not dispatch a close impact sound");
+    Check(!game::IsSectorDoorAudioEventReady(
+                      game::SectorDoorAudioEvent::None, motion),
+          "empty door audio event is never dispatchable");
+}
+
 void TestSectorDoorModelDrawPolicyTransitions()
 {
     game::SectorDoorModelRender model;
@@ -5280,6 +5718,7 @@ int main()
     TestRetainedCatalogFailureDoesNotBlockOtherDoors();
     TestNullSwingDoorLeafRequestKeepsRuntimeFallback();
     TestProceduralSwingDoorRunsWithoutCatalogStyle();
+    TestMixedDoorRuntimeRefreshRecoveryAndScopeLifecycle();
     TestSectorDoorSlabGeometryIsFiniteAndStable();
     TestSectorDoorSlabMeshDataHasStableAttributes();
     TestSectorDoorFaceUvsAffectOnlySelectedFace();
@@ -5304,6 +5743,7 @@ int main()
     TestSectorDoorMotionAdvancesOpenAndClosed();
     TestSectorDoorMotionClampsAndIgnoresZeroSpeed();
     TestSectorDoorAudioTransitionTracksTargetChanges();
+    TestSectorDoorAudioEventTiming();
     TestSectorDoorModelDrawPolicyTransitions();
     TestSectorDoorModelVisibilityUsesEitherAdjacentSector();
     TestSectorDoorModelBoundsAndLightingSectorHelpers();
@@ -5320,6 +5760,10 @@ int main()
     TestSectorDoorDynamicColliderCollectionExcludesDisabledAndInvalidShapes();
     TestSectorDoorDynamicCollisionBlocksClosedDoor();
     TestSectorDoorDynamicCollisionBlocksThinDoorTunneling();
+    TestSectorDoorDynamicCollisionPreservesTangentialSlide();
+    TestSectorDoorDynamicCollisionRotatedSlide();
+    TestSectorDoorDynamicCollisionContactAllowsTangentAndAwayMovement();
+    TestSectorDoorDynamicCollisionRoundedCornerSweep();
     TestSectorDoorDynamicCollisionIgnoresPortalBlockerState();
     TestSectorDoorDynamicPortalBlockerCollectionBuildsDirectedVisibilityKeys();
     TestSpawnedDoorRuntimeUpdateRefreshesPortalBlockerCollection();

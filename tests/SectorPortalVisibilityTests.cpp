@@ -448,11 +448,19 @@ void TestDynamicPortalBlockerTraversal()
             game::TraverseRuntimeSectorVisibility(graph, 10, &closedBlocker);
     Check(blocked.visibleSectorIds.size() == 1 && blocked.visibleSectorIds[0] == 10,
           "matching dynamic blocker prevents directed portal traversal");
+    Check(blocked.boundarySurfaceSectorIds.size() == 1
+                  && blocked.boundarySurfaceSectorIds[0] == 20,
+          "matching dynamic blocker exposes only the adjacent sector's terminal geometry");
     Check(game::ShouldDrawRuntimeSectorForVisibility(20, unblocked)
                   && !game::ShouldDrawRuntimeSectorForVisibility(20, blocked),
           "closed dynamic portal culls runtime objects owned by the hidden sector");
+    Check(game::ShouldDrawRuntimeSectorGeometryForVisibility(20, blocked),
+          "closed dynamic portal retains adjacent static geometry behind the blocker");
     Check(blocked.traversedPortalLineDefIds.empty(),
           "blocked dynamic portal is not recorded as traversed");
+    Check(game::FormatRuntimePortalVisibilityDebugText(blocked).find(
+                    "boundary surfaces: 20") != std::string::npos,
+          "visibility diagnostics report terminal boundary sectors");
 
     const game::RuntimePortalVisibilityResult oppositeDirection =
             game::TraverseRuntimeSectorVisibility(graph, 20, &closedBlocker);
@@ -460,12 +468,52 @@ void TestDynamicPortalBlockerTraversal()
                   && Contains(oppositeDirection.visibleSectorIds, 20),
           "directed blocker does not prevent opposite portal traversal");
 
+    const std::vector<game::RuntimePortalDynamicBlocker> closedBothDirections = {
+            game::RuntimePortalDynamicBlocker{2, 2, 10, 20, true},
+            game::RuntimePortalDynamicBlocker{2, 8, 20, 10, true}};
+    const game::RuntimePortalVisibilityResult blockedFromBack =
+            game::TraverseRuntimeSectorVisibility(
+                    graph, 20, &closedBothDirections);
+    Check(blockedFromBack.visibleSectorIds.size() == 1
+                  && blockedFromBack.visibleSectorIds[0] == 20
+                  && blockedFromBack.boundarySurfaceSectorIds.size() == 1
+                  && blockedFromBack.boundarySurfaceSectorIds[0] == 10,
+          "bidirectional closed door retains terminal geometry from its back side");
+
     const std::vector<game::RuntimePortalDynamicBlocker> sideBlocker = {
             game::RuntimePortalDynamicBlocker{2, 2, -1, -1, true}};
     const game::RuntimePortalVisibilityResult sideBlocked =
             game::TraverseRuntimeSectorVisibility(graph, 10, &sideBlocker);
     Check(sideBlocked.visibleSectorIds.size() == 1 && sideBlocked.visibleSectorIds[0] == 10,
           "matching sidedef dynamic blocker prevents portal traversal");
+    Check(sideBlocked.boundarySurfaceSectorIds.size() == 1
+                  && sideBlocked.boundarySurfaceSectorIds[0] == 20,
+          "matching sidedef blocker retains adjacent boundary geometry");
+}
+
+void TestDynamicPortalBoundaryPromotionThroughAlternateRoute()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    graph.sectors = {
+            game::RuntimeSectorNode{10, {0, 1}},
+            game::RuntimeSectorNode{20, {}},
+            game::RuntimeSectorNode{30, {2}}};
+    graph.portals = {
+            game::RuntimePortalEdge{2, 2, 10, 20, {}, {}, 0.0f, 2.0f, true},
+            game::RuntimePortalEdge{3, 3, 10, 30, {}, {}, 0.0f, 2.0f, true},
+            game::RuntimePortalEdge{4, 4, 30, 20, {}, {}, 0.0f, 2.0f, true}};
+    const std::vector<game::RuntimePortalDynamicBlocker> blocker = {
+            game::RuntimePortalDynamicBlocker{2, 2, 10, 20, true}};
+
+    const game::RuntimePortalVisibilityResult result =
+            game::TraverseRuntimeSectorVisibility(graph, 10, &blocker);
+    Check(result.visibleSectorIds.size() == 3
+                  && Contains(result.visibleSectorIds, 10)
+                  && Contains(result.visibleSectorIds, 20)
+                  && Contains(result.visibleSectorIds, 30),
+          "alternate open route promotes a blocked-boundary sector to ordinary visibility");
+    Check(result.boundarySurfaceSectorIds.empty(),
+          "ordinary visibility removes duplicate boundary-only classification");
 }
 
 void TestDynamicPortalBlockerMismatchAndUnblockedEntries()
@@ -947,9 +995,60 @@ void TestViewDynamicPortalBlockerDoesNotTraverse()
                     0,
                     &closed);
     Check(blocked.visibleSectorIds.size() == 1 && blocked.visibleSectorIds[0] == 10,
-          "view traversal skips matching dynamic portal blocker before angular tests");
+          "view traversal does not recurse through a matching dynamic portal blocker");
+    Check(blocked.boundarySurfaceSectorIds.size() == 1
+                  && blocked.boundarySurfaceSectorIds[0] == 20,
+          "view-facing dynamic blocker retains adjacent terminal geometry");
+    Check(!game::ShouldDrawRuntimeSectorForVisibility(20, blocked)
+                  && game::ShouldDrawRuntimeSectorGeometryForVisibility(20, blocked),
+          "view-facing blocker separates hidden runtime content from visible boundary geometry");
     Check(blocked.traversedPortalLineDefIds.empty(),
           "view traversal does not record dynamically blocked portal");
+
+    const game::RuntimePortalVisibilityResult facingAway =
+            game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+                    graph,
+                    game::SectorCoordToWorldPosition2(32, 32),
+                    ForwardFromPreviewYaw(Pi),
+                    Degrees(60.0f),
+                    {10},
+                    10,
+                    0,
+                    &closed);
+    Check(facingAway.visibleSectorIds.size() == 1
+                  && facingAway.visibleSectorIds[0] == 10
+                  && facingAway.boundarySurfaceSectorIds.empty(),
+          "view-away dynamic blocker does not retain off-screen boundary geometry");
+}
+
+void TestViewDynamicPortalBoundaryDoesNotRecurse()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(
+                    MakeClippedChain(true), graph, &error),
+          "view blocked-chain graph builds");
+    const std::vector<game::RuntimePortalDynamicBlocker> closed = {
+            game::RuntimePortalDynamicBlocker{3, -1, 10, 20, true}};
+
+    const game::RuntimePortalVisibilityResult result =
+            game::ComputeRuntimeSectorVisibilityFromViewSeeds(
+                    graph,
+                    game::SectorCoordToWorldPosition2(32, 32),
+                    ForwardFromPreviewYaw(0.0f),
+                    Degrees(60.0f),
+                    {10},
+                    10,
+                    0,
+                    &closed);
+    Check(result.visibleSectorIds.size() == 1
+                  && result.visibleSectorIds[0] == 10,
+          "blocked-chain traversal keeps sectors behind the door out of ordinary visibility");
+    Check(result.boundarySurfaceSectorIds.size() == 1
+                  && result.boundarySurfaceSectorIds[0] == 20,
+          "blocked-chain traversal retains only the immediately adjacent sector geometry");
+    Check(!game::ShouldDrawRuntimeSectorGeometryForVisibility(30, result),
+          "blocked terminal boundary does not expose geometry through a second portal");
 }
 
 void TestViewOneSidedVoidBoundaryDoesNotTraverse()
@@ -1274,6 +1373,7 @@ int main()
     TestClosedPortalDoesNotTraverse();
     TestConnectedAndDisconnectedTraversal();
     TestDynamicPortalBlockerTraversal();
+    TestDynamicPortalBoundaryPromotionThroughAlternateRoute();
     TestDynamicPortalBlockerMismatchAndUnblockedEntries();
     TestCycleTerminates();
     TestInvalidStartFallback();
@@ -1292,6 +1392,7 @@ int main()
     TestViewInvalidStartFallbackDrawsAll();
     TestViewClosedPortalDoesNotTraverse();
     TestViewDynamicPortalBlockerDoesNotTraverse();
+    TestViewDynamicPortalBoundaryDoesNotRecurse();
     TestViewOneSidedVoidBoundaryDoesNotTraverse();
     TestViewMultiStartUnionAndSortedMetadata();
     TestViewMultiStartFallbackPropagates();

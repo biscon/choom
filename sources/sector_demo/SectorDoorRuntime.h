@@ -128,6 +128,10 @@ struct SectorDoorRender {
     // Derived current leaf axes. They are updated from the same pose as collision.
     Vector2 widthAxis = {};
     Vector2 thicknessAxis = {};
+    // Optional fixed-frame alignment, stored in already-scaled world units.
+    float leafHingeToFrameCenter = 0.0f;
+    float leafBottomOffset = 0.0f;
+    bool alignLeafToFrame = false;
 };
 
 enum class SectorDoorModelFallbackReason {
@@ -152,6 +156,8 @@ struct SectorDoorModelRender {
     float actualThickness = 0.0f;
     float frameOuterWidth = 0.0f;
     float frameOuterHeight = 0.0f;
+    float leafHingeToFrameCenter = 0.0f;
+    float leafBottomOffset = 0.0f;
     Matrix leafMatrix = {};
     Matrix frameMatrix = {};
     BoundingBox analyticReceiverBounds = {};
@@ -421,6 +427,10 @@ bool RefreshSectorDoorModelReadinessSystem(
 
 SectorDoorAudioEvent UpdateSectorDoorAudioTransition(
         SectorDoorAudio& audio,
+        const SectorDoorMotion& motion);
+
+bool IsSectorDoorAudioEventReady(
+        SectorDoorAudioEvent event,
         const SectorDoorMotion& motion);
 
 void UpdateSectorDoorAudioSystem(

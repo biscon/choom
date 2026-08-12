@@ -10397,6 +10397,13 @@ game::SectorSwingDoorCatalog MakeEditorSwingDoorCatalog()
     second.id = "test_second";
     second.displayName = "Test Second";
     second.nominalWidth = 0.75f;
+    second.hasFrame = true;
+    second.hasFrameAlignment = true;
+    second.frameModelPath = "assets/models/doors/swing/test_second_frame.gltf";
+    second.frameOuterWidth = 1.0f;
+    second.frameOuterHeight = 2.25f;
+    second.leafHingeToFrameCenter = 0.4f;
+    second.leafBottomOffset = 0.1f;
     catalog.assetIndexById.emplace(second.id, 1);
     catalog.assets.push_back(second);
     return catalog;
@@ -10486,9 +10493,13 @@ void TestEditorSwingDoorDefaultsCachedFootprintGuidesAndPicking()
             door.modelFit,
             door.modelScale);
     const game::CachedRuntimeObjectDraw& start = cache.runtimeObjects[0];
-    const Vector2 expectedStartHinge{
-            game::SectorWorldToAuthoringDistance(resolved.endpointA.x),
-            game::SectorWorldToAuthoringDistance(resolved.endpointA.y)};
+    const Vector2 expectedStartHinge = game::SectorWorldToAuthoringPosition(Vector2{
+            resolved.midpoint.x
+                    - resolved.tangent.x * catalog.assets[1].leafHingeToFrameCenter
+                            * fit.effectiveScale,
+            resolved.midpoint.y
+                    - resolved.tangent.y * catalog.assets[1].leafHingeToFrameCenter
+                            * fit.effectiveScale});
     const Vector2 startFreeEdge{
             (start.doorCorners[1].x + start.doorCorners[2].x) * 0.5f,
             (start.doorCorners[1].y + start.doorCorners[2].y) * 0.5f};
@@ -10552,9 +10563,13 @@ void TestEditorSwingDoorDefaultsCachedFootprintGuidesAndPicking()
             &catalog,
             catalogRevision);
     const game::CachedRuntimeObjectDraw& end = cache.runtimeObjects[0];
-    const Vector2 expectedEndHinge{
-            game::SectorWorldToAuthoringDistance(resolved.endpointB.x),
-            game::SectorWorldToAuthoringDistance(resolved.endpointB.y)};
+    const Vector2 expectedEndHinge = game::SectorWorldToAuthoringPosition(Vector2{
+            resolved.midpoint.x
+                    + resolved.tangent.x * catalog.assets[1].leafHingeToFrameCenter
+                            * fit.effectiveScale,
+            resolved.midpoint.y
+                    + resolved.tangent.y * catalog.assets[1].leafHingeToFrameCenter
+                            * fit.effectiveScale});
     const Vector2 backDelta{
             end.doorOpenFreeEdge.x - end.doorHinge.x,
             end.doorOpenFreeEdge.y - end.doorHinge.y};
@@ -10562,7 +10577,7 @@ void TestEditorSwingDoorDefaultsCachedFootprintGuidesAndPicking()
                   && end.doorSwingIntoBack
                   && backDelta.x * resolved.normal.x
                                   + backDelta.y * resolved.normal.y > 0.0f,
-          "cached End-hinge Back guide uses the opposite endpoint and sector side");
+          "cached framed End-hinge Back guide uses the paired inset and sector side");
 
     door.modelAssetId = "missing_style";
     cache = game::BuildSectorEditorTopologyRenderCache(

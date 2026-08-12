@@ -482,14 +482,8 @@ bool ShouldIncludeSectorGeneratedSurfaceForVisibility(
         const SectorGeneratedSurface& surface,
         const RuntimePortalVisibilityResult& visibility)
 {
-    if (!visibility.validStartSector || visibility.fallbackDrawAll) {
-        return true;
-    }
-
-    return std::find(
-            visibility.visibleSectorIds.begin(),
-            visibility.visibleSectorIds.end(),
-            surface.ref.topologySectorId) != visibility.visibleSectorIds.end();
+    return ShouldDrawRuntimeSectorGeometryForVisibility(
+            surface.ref.topologySectorId, visibility);
 }
 
 std::string FormatSectorGeneratedSurfaceLabel(const SectorGeneratedSurfaceRef& ref)

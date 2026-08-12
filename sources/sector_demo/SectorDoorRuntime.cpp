@@ -901,6 +901,180 @@ bool CircleOverlapsDoorObb(
             <= radius * radius + DoorDynamicCollisionEpsilon;
 }
 
+bool IsValidDynamicDoorCollider(const SectorDynamicDoorCollider& collider)
+{
+    return IsFiniteVector2(collider.center)
+            && IsFiniteVector2(collider.tangent)
+            && IsFiniteVector2(collider.normal)
+            && IsFiniteVector2(collider.halfExtents)
+            && std::isfinite(collider.bottom)
+            && std::isfinite(collider.top)
+            && collider.halfExtents.x > DoorDynamicCollisionEpsilon
+            && collider.halfExtents.y > DoorDynamicCollisionEpsilon
+            && collider.top > collider.bottom + DoorDynamicCollisionEpsilon;
+}
+
+Vector2 DoorColliderWorldAabbHalfExtents(
+        const SectorDynamicDoorCollider& collider)
+{
+    const Vector2 tangent = NormalizedOrFallback(
+            collider.tangent, Vector2{1.0f, 0.0f});
+    const Vector2 normal = NormalizedOrFallback(
+            collider.normal, Vector2{0.0f, -1.0f});
+    return Vector2{
+            std::fabs(tangent.x) * collider.halfExtents.x
+                    + std::fabs(normal.x) * collider.halfExtents.y,
+            std::fabs(tangent.y) * collider.halfExtents.x
+                    + std::fabs(normal.y) * collider.halfExtents.y};
+}
+
+bool CircleMayOverlapDoorAabb(
+        Vector2 position,
+        float radius,
+        const SectorDynamicDoorCollider& collider)
+{
+    const Vector2 half = DoorColliderWorldAabbHalfExtents(collider);
+    return position.x + radius >= collider.center.x - half.x
+            && position.x - radius <= collider.center.x + half.x
+            && position.y + radius >= collider.center.y - half.y
+            && position.y - radius <= collider.center.y + half.y;
+}
+
+bool SweepMayOverlapDoorAabb(
+        Vector2 start,
+        Vector2 delta,
+        float radius,
+        const SectorDynamicDoorCollider& collider)
+{
+    const Vector2 end = Add(start, delta);
+    const Vector2 half = DoorColliderWorldAabbHalfExtents(collider);
+    const float sweepMinX = std::min(start.x, end.x) - radius;
+    const float sweepMaxX = std::max(start.x, end.x) + radius;
+    const float sweepMinY = std::min(start.y, end.y) - radius;
+    const float sweepMaxY = std::max(start.y, end.y) + radius;
+    return sweepMaxX >= collider.center.x - half.x
+            && sweepMinX <= collider.center.x + half.x
+            && sweepMaxY >= collider.center.y - half.y
+            && sweepMinY <= collider.center.y + half.y;
+}
+
+bool SweepCircleAgainstDoorObb(
+        Vector2 start,
+        Vector2 delta,
+        float radius,
+        const SectorDynamicDoorCollider& collider,
+        float& outTime,
+        Vector2& outNormal)
+{
+    const Vector2 tangent = NormalizedOrFallback(
+            collider.tangent, Vector2{1.0f, 0.0f});
+    const Vector2 normal = NormalizedOrFallback(
+            collider.normal, Vector2{0.0f, -1.0f});
+    const Vector2 startRelative = Subtract(start, collider.center);
+    const Vector2 startLocal{
+            Dot(startRelative, tangent),
+            Dot(startRelative, normal)};
+    const Vector2 deltaLocal{
+            Dot(delta, tangent),
+            Dot(delta, normal)};
+    const float movementLengthSquared = Dot(deltaLocal, deltaLocal);
+    if (!(movementLengthSquared
+                    > DoorDynamicCollisionEpsilon * DoorDynamicCollisionEpsilon)
+            || !std::isfinite(movementLengthSquared)) {
+        return false;
+    }
+
+    float earliest = std::numeric_limits<float>::infinity();
+    Vector2 earliestNormalLocal{};
+    const auto recordCandidate = [&](float time, Vector2 normalLocal) {
+        if (!std::isfinite(time)
+                || !IsFiniteVector2(normalLocal)
+                || time < -DoorDynamicCollisionEpsilon
+                || time > 1.0f + DoorDynamicCollisionEpsilon
+                || Dot(deltaLocal, normalLocal) >= -DoorDynamicCollisionEpsilon) {
+            return;
+        }
+        const float clampedTime = Clamp(time, 0.0f, 1.0f);
+        if (clampedTime < earliest) {
+            earliest = clampedTime;
+            earliestNormalLocal = normalLocal;
+        }
+    };
+
+    const float faceTangent = collider.halfExtents.x + radius;
+    if (std::fabs(deltaLocal.x) > DoorDynamicCollisionEpsilon) {
+        for (float sign : {-1.0f, 1.0f}) {
+            const Vector2 normalLocal{sign, 0.0f};
+            const float time = (sign * faceTangent - startLocal.x) / deltaLocal.x;
+            const float normalAtHit = startLocal.y + deltaLocal.y * time;
+            if (normalAtHit >= -collider.halfExtents.y - DoorDynamicCollisionEpsilon
+                    && normalAtHit <= collider.halfExtents.y + DoorDynamicCollisionEpsilon) {
+                recordCandidate(time, normalLocal);
+            }
+        }
+    }
+
+    const float faceNormal = collider.halfExtents.y + radius;
+    if (std::fabs(deltaLocal.y) > DoorDynamicCollisionEpsilon) {
+        for (float sign : {-1.0f, 1.0f}) {
+            const Vector2 normalLocal{0.0f, sign};
+            const float time = (sign * faceNormal - startLocal.y) / deltaLocal.y;
+            const float tangentAtHit = startLocal.x + deltaLocal.x * time;
+            if (tangentAtHit >= -collider.halfExtents.x - DoorDynamicCollisionEpsilon
+                    && tangentAtHit <= collider.halfExtents.x + DoorDynamicCollisionEpsilon) {
+                recordCandidate(time, normalLocal);
+            }
+        }
+    }
+
+    const float radiusSquared = radius * radius;
+    for (float tangentSign : {-1.0f, 1.0f}) {
+        for (float normalSign : {-1.0f, 1.0f}) {
+            const Vector2 corner{
+                    tangentSign * collider.halfExtents.x,
+                    normalSign * collider.halfExtents.y};
+            const Vector2 fromCorner = Subtract(startLocal, corner);
+            const float projected = Dot(fromCorner, deltaLocal);
+            const float constant = Dot(fromCorner, fromCorner) - radiusSquared;
+            const float discriminant = projected * projected
+                    - movementLengthSquared * constant;
+            if (!std::isfinite(discriminant)
+                    || discriminant < -DoorDynamicCollisionEpsilon) {
+                continue;
+            }
+
+            const float time = (-projected
+                    - std::sqrt(std::max(0.0f, discriminant)))
+                    / movementLengthSquared;
+            if (!std::isfinite(time)) {
+                continue;
+            }
+            const Vector2 hitPoint = Add(startLocal, Scale(deltaLocal, time));
+            const Vector2 fromHitCorner = Subtract(hitPoint, corner);
+            if (tangentSign * fromHitCorner.x < -DoorDynamicCollisionEpsilon
+                    || normalSign * fromHitCorner.y < -DoorDynamicCollisionEpsilon) {
+                continue;
+            }
+            recordCandidate(
+                    time,
+                    NormalizedOrFallback(
+                            fromHitCorner,
+                            Vector2{tangentSign, normalSign}));
+        }
+    }
+
+    if (!std::isfinite(earliest)) {
+        return false;
+    }
+
+    outTime = earliest;
+    outNormal = Add(
+            Scale(tangent, earliestNormalLocal.x),
+            Scale(normal, earliestNormalLocal.y));
+    outNormal = NormalizedOrFallback(outNormal, Vector2{1.0f, 0.0f});
+    return true;
+}
+
 bool ResolveCircleAgainstDoorObb(
         Vector2& position,
         float radius,
@@ -946,118 +1120,6 @@ bool ResolveCircleAgainstDoorObb(
             position,
             Add(Scale(tangent, pushLocal.x), Scale(normal, pushLocal.y)));
     return true;
-}
-
-bool SegmentIntersectsExpandedDoorObb(
-        Vector2 startPosition,
-        Vector2 endPosition,
-        float radius,
-        const SectorDynamicDoorCollider& collider)
-{
-    const Vector2 tangent = NormalizedOrFallback(collider.tangent, Vector2{1.0f, 0.0f});
-    const Vector2 normal = NormalizedOrFallback(collider.normal, Vector2{0.0f, -1.0f});
-    const Vector2 startRelative = Subtract(startPosition, collider.center);
-    const Vector2 endRelative = Subtract(endPosition, collider.center);
-    const Vector2 startLocal{
-            Dot(startRelative, tangent),
-            Dot(startRelative, normal)};
-    const Vector2 endLocal{
-            Dot(endRelative, tangent),
-            Dot(endRelative, normal)};
-    const Vector2 expanded{
-            collider.halfExtents.x + radius,
-            collider.halfExtents.y + radius};
-
-    if (startLocal.x > -expanded.x + DoorDynamicCollisionEpsilon
-            && startLocal.x < expanded.x - DoorDynamicCollisionEpsilon
-            && startLocal.y > -expanded.y + DoorDynamicCollisionEpsilon
-            && startLocal.y < expanded.y - DoorDynamicCollisionEpsilon) {
-        return false;
-    }
-
-    const Vector2 deltaLocal = Subtract(endLocal, startLocal);
-    float tEnter = 0.0f;
-    float tExit = 1.0f;
-    const float startAxes[2] = {startLocal.x, startLocal.y};
-    const float deltaAxes[2] = {deltaLocal.x, deltaLocal.y};
-    const float minAxes[2] = {-expanded.x, -expanded.y};
-    const float maxAxes[2] = {expanded.x, expanded.y};
-
-    for (int axis = 0; axis < 2; ++axis) {
-        if (std::fabs(deltaAxes[axis]) <= DoorDynamicCollisionEpsilon) {
-            if (startAxes[axis] < minAxes[axis] || startAxes[axis] > maxAxes[axis]) {
-                return false;
-            }
-            continue;
-        }
-
-        const float invDelta = 1.0f / deltaAxes[axis];
-        float axisEnter = (minAxes[axis] - startAxes[axis]) * invDelta;
-        float axisExit = (maxAxes[axis] - startAxes[axis]) * invDelta;
-        if (axisEnter > axisExit) {
-            std::swap(axisEnter, axisExit);
-        }
-
-        tEnter = std::max(tEnter, axisEnter);
-        tExit = std::min(tExit, axisExit);
-        if (tEnter > tExit) {
-            return false;
-        }
-    }
-
-    return tExit >= -DoorDynamicCollisionEpsilon
-            && tEnter <= 1.0f + DoorDynamicCollisionEpsilon;
-}
-
-void ConstrainCircleToStartingSideOfDoorObb(
-        Vector2& position,
-        Vector2 startPosition,
-        float radius,
-        const SectorDynamicDoorCollider& collider)
-{
-    const Vector2 tangent = NormalizedOrFallback(collider.tangent, Vector2{1.0f, 0.0f});
-    const Vector2 normal = NormalizedOrFallback(collider.normal, Vector2{0.0f, -1.0f});
-    const Vector2 startRelative = Subtract(startPosition, collider.center);
-    const Vector2 positionRelative = Subtract(position, collider.center);
-    const Vector2 startLocal{
-            Dot(startRelative, tangent),
-            Dot(startRelative, normal)};
-    const Vector2 positionLocal{
-            Dot(positionRelative, tangent),
-            Dot(positionRelative, normal)};
-    const Vector2 expanded{
-            collider.halfExtents.x + radius,
-            collider.halfExtents.y + radius};
-
-    Vector2 constrainedLocal = positionLocal;
-    bool constrained = false;
-    if (startLocal.x <= -expanded.x
-            && positionLocal.x > -expanded.x + DoorDynamicCollisionEpsilon) {
-        constrainedLocal.x = -expanded.x - DoorDynamicCollisionEpsilon;
-        constrained = true;
-    } else if (startLocal.x >= expanded.x
-            && positionLocal.x < expanded.x - DoorDynamicCollisionEpsilon) {
-        constrainedLocal.x = expanded.x + DoorDynamicCollisionEpsilon;
-        constrained = true;
-    }
-
-    if (startLocal.y <= -expanded.y
-            && positionLocal.y > -expanded.y + DoorDynamicCollisionEpsilon) {
-        constrainedLocal.y = -expanded.y - DoorDynamicCollisionEpsilon;
-        constrained = true;
-    } else if (startLocal.y >= expanded.y
-            && positionLocal.y < expanded.y - DoorDynamicCollisionEpsilon) {
-        constrainedLocal.y = expanded.y + DoorDynamicCollisionEpsilon;
-        constrained = true;
-    }
-
-    if (!constrained) {
-        return;
-    }
-
-    position = Add(
-            collider.center,
-            Add(Scale(tangent, constrainedLocal.x), Scale(normal, constrainedLocal.y)));
 }
 
 } // namespace
@@ -1189,17 +1251,24 @@ SectorDoorSwingPose BuildSectorDoorSwingPoseAtAngle(
     const Vector2 closedWidthAxis = endHinge ? Scale(tangent, -1.0f) : tangent;
     const Vector2 closedThicknessAxis = endHinge ? Scale(normal, -1.0f) : normal;
     const Vector2 endpoint = endHinge ? anchor.endpointB : anchor.endpointA;
-    const Vector2 hingeXZ = Add(endpoint, Scale(normal, render.normalOffset));
+    const Vector2 hingeBase = render.alignLeafToFrame
+            ? Subtract(
+                    anchor.midpoint,
+                    Scale(closedWidthAxis, render.leafHingeToFrameCenter))
+            : endpoint;
+    const Vector2 hingeXZ = Add(hingeBase, Scale(normal, render.normalOffset));
     const Vector2 widthAxis = NormalizedOrFallback(
             RotateDoorAxis(closedWidthAxis, angle),
             closedWidthAxis);
     const Vector2 thicknessAxis = NormalizedOrFallback(
             RotateDoorAxis(closedThicknessAxis, angle),
             closedThicknessAxis);
-    const Vector3 hingePosition{hingeXZ.x, anchor.openBottom, hingeXZ.y};
+    const float leafBottom = anchor.openBottom
+            + (render.alignLeafToFrame ? render.leafBottomOffset : 0.0f);
+    const Vector3 hingePosition{hingeXZ.x, leafBottom, hingeXZ.y};
     const Vector3 center{
             hingeXZ.x + widthAxis.x * render.width * 0.5f,
-            anchor.openBottom + render.height * 0.5f,
+            leafBottom + render.height * 0.5f,
             hingeXZ.y + widthAxis.y * render.width * 0.5f};
     const Vector3 framePosition{
             anchor.midpoint.x + normal.x * render.normalOffset,
@@ -1211,8 +1280,8 @@ SectorDoorSwingPose BuildSectorDoorSwingPoseAtAngle(
     pose.center = center;
     pose.widthAxis = widthAxis;
     pose.thicknessAxis = thicknessAxis;
-    pose.bottom = anchor.openBottom;
-    pose.top = anchor.openBottom + render.height;
+    pose.bottom = leafBottom;
+    pose.top = leafBottom + render.height;
     pose.angleRadians = angle;
     pose.leafMatrix = BuildDoorBasisMatrix(
             widthAxis, thicknessAxis, hingePosition, effectiveScale);
@@ -1609,6 +1678,21 @@ SectorDoorAudioEvent UpdateSectorDoorAudioTransition(
     return audio.pendingEvent;
 }
 
+bool IsSectorDoorAudioEventReady(
+        SectorDoorAudioEvent event,
+        const SectorDoorMotion& motion)
+{
+    if (event == SectorDoorAudioEvent::None) {
+        return false;
+    }
+    if (event != SectorDoorAudioEvent::Close
+            || motion.motion != SectorDoorMotionType::Swing) {
+        return true;
+    }
+    return std::isfinite(motion.openFraction)
+            && Clamp(motion.openFraction, 0.0f, 1.0f) == 0.0f;
+}
+
 void UpdateSectorDoorAudioSystem(
         engine::World& world,
         engine::AssetManager& assets,
@@ -1626,6 +1710,9 @@ void UpdateSectorDoorAudioSystem(
                 }
                 UpdateSectorDoorAudioTransition(audio, motion);
                 if (audio.pendingEvent == SectorDoorAudioEvent::None) {
+                    return;
+                }
+                if (!IsSectorDoorAudioEventReady(audio.pendingEvent, motion)) {
                     return;
                 }
 
@@ -1917,67 +2004,90 @@ SectorCollisionMoveResult ResolveSectorDoorDynamicCollidersForPlayerMovement(
         return result;
     }
 
+    Vector2 position = moveState.positionXZ;
+    Vector2 remaining = Subtract(staticResult.positionXZ, moveState.positionXZ);
     bool hitDynamicDoor = false;
-    for (const SectorDynamicDoorCollider& collider : colliders) {
-        if (!IsFiniteVector2(collider.center)
-                || !IsFiniteVector2(collider.tangent)
-                || !IsFiniteVector2(collider.normal)
-                || !IsFiniteVector2(collider.halfExtents)
-                || !std::isfinite(collider.bottom)
-                || !std::isfinite(collider.top)
-                || collider.halfExtents.x <= 0.0f
-                || collider.halfExtents.y <= 0.0f
-                || collider.top <= collider.bottom
-                || !PlayerVerticalIntervalOverlapsDoor(moveState, config, collider)) {
-            continue;
+    const auto resolvePenetrations = [&]() {
+        for (int iteration = 0; iteration < config.maxIterations; ++iteration) {
+            bool changed = false;
+            for (const SectorDynamicDoorCollider& collider : colliders) {
+                if (!IsValidDynamicDoorCollider(collider)
+                        || !PlayerVerticalIntervalOverlapsDoor(
+                                moveState, config, collider)
+                        || !CircleMayOverlapDoorAabb(
+                                position, config.radius, collider)) {
+                    continue;
+                }
+                if (ResolveCircleAgainstDoorObb(
+                            position, config.radius, collider)) {
+                    result.hitWall = true;
+                    hitDynamicDoor = true;
+                    changed = true;
+                }
+            }
+            if (!changed) {
+                break;
+            }
         }
+    };
 
-        if (SegmentIntersectsExpandedDoorObb(
-                    moveState.positionXZ,
-                    staticResult.positionXZ,
-                    config.radius,
-                    collider)) {
-            result.positionXZ = moveState.positionXZ;
-            result.currentSectorId = moveState.currentSectorId;
-            result.hitWall = true;
-            hitDynamicDoor = true;
-            break;
-        }
-    }
-
+    // Recover first so a frame that begins slightly embedded cannot turn that
+    // overlap into a persistent zero-time sweep contact.
+    resolvePenetrations();
     for (int iteration = 0; iteration < config.maxIterations; ++iteration) {
-        bool changed = false;
+        float earliest = std::numeric_limits<float>::infinity();
+        Vector2 hitNormal{};
         for (const SectorDynamicDoorCollider& collider : colliders) {
-            if (!IsFiniteVector2(collider.center)
-                    || !IsFiniteVector2(collider.tangent)
-                    || !IsFiniteVector2(collider.normal)
-                    || !IsFiniteVector2(collider.halfExtents)
-                    || !std::isfinite(collider.bottom)
-                    || !std::isfinite(collider.top)
-                    || collider.halfExtents.x <= 0.0f
-                    || collider.halfExtents.y <= 0.0f
-                    || collider.top <= collider.bottom
-                    || !PlayerVerticalIntervalOverlapsDoor(moveState, config, collider)) {
+            if (!IsValidDynamicDoorCollider(collider)
+                    || !PlayerVerticalIntervalOverlapsDoor(
+                            moveState, config, collider)
+                    || !SweepMayOverlapDoorAabb(
+                            position, remaining, config.radius, collider)) {
                 continue;
             }
-
-            if (ResolveCircleAgainstDoorObb(result.positionXZ, config.radius, collider)) {
-                if (staticResult.currentSectorId != moveState.currentSectorId) {
-                    ConstrainCircleToStartingSideOfDoorObb(
-                            result.positionXZ,
-                            moveState.positionXZ,
-                            config.radius,
-                            collider);
-                }
-                result.hitWall = true;
-                hitDynamicDoor = true;
-                changed = true;
+            float hitTime = 0.0f;
+            Vector2 normal{};
+            if (SweepCircleAgainstDoorObb(
+                        position,
+                        remaining,
+                        config.radius,
+                        collider,
+                        hitTime,
+                        normal)
+                    && hitTime < earliest) {
+                earliest = hitTime;
+                hitNormal = normal;
             }
         }
-        if (!changed) {
+
+        if (!std::isfinite(earliest)) {
+            position = Add(position, remaining);
+            remaining = Vector2{};
+            break;
+        }
+
+        const float approachDistance = -Dot(remaining, hitNormal);
+        const float skinTime = approachDistance > DoorDynamicCollisionEpsilon
+                ? DoorDynamicCollisionEpsilon / approachDistance
+                : 0.0f;
+        const float safeTime = std::max(0.0f, earliest - skinTime);
+        position = Add(position, Scale(remaining, safeTime));
+        remaining = Scale(remaining, 1.0f - earliest);
+        const float intoDoor = Dot(remaining, hitNormal);
+        if (intoDoor < 0.0f) {
+            remaining = Subtract(remaining, Scale(hitNormal, intoDoor));
+        }
+        result.hitWall = true;
+        hitDynamicDoor = true;
+        if (Dot(remaining, remaining)
+                <= DoorDynamicCollisionEpsilon * DoorDynamicCollisionEpsilon) {
+            remaining = Vector2{};
             break;
         }
     }
+
+    resolvePenetrations();
+    result.positionXZ = position;
 
     if (hitDynamicDoor && result.currentSectorId != moveState.currentSectorId) {
         result.currentSectorId = moveState.currentSectorId;

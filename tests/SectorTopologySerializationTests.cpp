@@ -1575,6 +1575,51 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && !proceduralSwingSaved["runtimeObjects"][0]["door"].contains("modelAssetId"),
           "procedural swing is valid without model fields");
 
+    SectorTopologyMap mixedDoorMap = MakeSquare();
+    SectorPlacedRuntimeObject mixedVertical = MakeDoorRuntimeObject(40);
+    mixedVertical.door.motion = game::SectorDoorMotionType::SlideVertical;
+    mixedVertical.door.initialOpenFraction = 0.1f;
+    mixedDoorMap.runtimeObjects.push_back(mixedVertical);
+    SectorPlacedRuntimeObject mixedLeft = MakeDoorRuntimeObject(41);
+    mixedLeft.door.motion = game::SectorDoorMotionType::SlideLeft;
+    mixedLeft.door.initialOpenFraction = 0.2f;
+    mixedDoorMap.runtimeObjects.push_back(mixedLeft);
+    SectorPlacedRuntimeObject mixedRight = MakeDoorRuntimeObject(42);
+    mixedRight.door.motion = game::SectorDoorMotionType::SlideRight;
+    mixedRight.door.initialOpenFraction = 0.3f;
+    mixedDoorMap.runtimeObjects.push_back(mixedRight);
+    SectorPlacedRuntimeObject mixedSwing = MakeDoorRuntimeObject(43);
+    mixedSwing.door.visual = game::SectorDoorVisualType::Model;
+    mixedSwing.door.modelAssetId = "wooden_interior_001";
+    mixedSwing.door.motion = game::SectorDoorMotionType::Swing;
+    mixedSwing.door.initialOpenFraction = 0.4f;
+    mixedDoorMap.runtimeObjects.push_back(mixedSwing);
+
+    const Json mixedDoorSaved = Json::parse(SaveText(mixedDoorMap));
+    Check(!mixedDoorSaved["runtimeObjects"][0]["door"].contains("motion")
+                  && mixedDoorSaved["runtimeObjects"][1]["door"]["motion"] == "slide_left"
+                  && mixedDoorSaved["runtimeObjects"][2]["door"]["motion"] == "slide_right"
+                  && mixedDoorSaved["runtimeObjects"][3]["door"]["visual"] == "model"
+                  && mixedDoorSaved["runtimeObjects"][3]["door"]["modelAssetId"]
+                             == "wooden_interior_001"
+                  && mixedDoorSaved["runtimeObjects"][3]["door"]["motion"] == "swing",
+          "mixed map preserves procedural defaults and explicit slide/model-swing values");
+    SectorTopologyMap mixedDoorLoaded;
+    Check(LoadText(mixedDoorSaved.dump(), mixedDoorLoaded, error)
+                  && mixedDoorLoaded.runtimeObjects.size() == 4
+                  && mixedDoorLoaded.runtimeObjects[0].door.motion
+                             == game::SectorDoorMotionType::SlideVertical
+                  && mixedDoorLoaded.runtimeObjects[1].door.motion
+                             == game::SectorDoorMotionType::SlideLeft
+                  && mixedDoorLoaded.runtimeObjects[2].door.motion
+                             == game::SectorDoorMotionType::SlideRight
+                  && mixedDoorLoaded.runtimeObjects[3].door.visual
+                             == game::SectorDoorVisualType::Model
+                  && mixedDoorLoaded.runtimeObjects[3].door.motion
+                             == game::SectorDoorMotionType::Swing
+                  && Near(mixedDoorLoaded.runtimeObjects[3].door.initialOpenFraction, 0.4f),
+          "mixed procedural and model door map round-trips all motion types and partial state");
+
     SectorTopologyMap defaultDoorMap = MakeSquare();
     SectorPlacedRuntimeObject defaultDoor = MakeDoorRuntimeObject(31);
     defaultDoor.door.width = 0.0f;

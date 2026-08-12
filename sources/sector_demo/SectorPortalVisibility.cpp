@@ -76,6 +76,28 @@ void SortUnique(std::vector<int>& values)
     values.erase(std::unique(values.begin(), values.end()), values.end());
 }
 
+void FinalizeVisibilitySectorSets(RuntimePortalVisibilityResult& result)
+{
+    SortUnique(result.visibleSectorIds);
+    if (result.fallbackDrawAll) {
+        result.boundarySurfaceSectorIds.clear();
+        return;
+    }
+
+    SortUnique(result.boundarySurfaceSectorIds);
+    result.boundarySurfaceSectorIds.erase(
+            std::remove_if(
+                    result.boundarySurfaceSectorIds.begin(),
+                    result.boundarySurfaceSectorIds.end(),
+                    [&result](int sectorId) {
+                        return std::binary_search(
+                                result.visibleSectorIds.begin(),
+                                result.visibleSectorIds.end(),
+                                sectorId);
+                    }),
+            result.boundarySurfaceSectorIds.end());
+}
+
 std::vector<int> AllSectorIds(const RuntimeSectorVisibilityGraph& graph)
 {
     std::vector<int> ids;
@@ -861,6 +883,7 @@ RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
                 continue;
             }
             if (IsRuntimePortalDynamicallyBlocked(edge, dynamicBlockers)) {
+                result.boundarySurfaceSectorIds.push_back(edge.toSectorId);
                 continue;
             }
 
@@ -872,7 +895,6 @@ RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
     }
 
     result.visibleSectorIds.assign(visited.begin(), visited.end());
-    SortUnique(result.visibleSectorIds);
     SortUnique(result.traversedPortalLineDefIds);
 
     if (hitIterationCap) {
@@ -881,6 +903,7 @@ RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
     } else {
         result.status = "visibility traversal complete";
     }
+    FinalizeVisibilitySectorSets(result);
 
     return result;
 }
@@ -1044,13 +1067,14 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
             if (!edge.open) {
                 continue;
             }
-            if (IsRuntimePortalDynamicallyBlocked(edge, dynamicBlockers)) {
-                continue;
-            }
 
             const PortalVisibilityTest portalVisibility =
                     TestPortalAgainstWindow(xz, normalizedForward, edge, item.window);
             if (!portalVisibility.visible) {
+                continue;
+            }
+            if (IsRuntimePortalDynamicallyBlocked(edge, dynamicBlockers)) {
+                result.boundarySurfaceSectorIds.push_back(edge.toSectorId);
                 continue;
             }
 
@@ -1087,7 +1111,7 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
         result.status = "visibility traversal complete";
     }
 
-    SortUnique(result.visibleSectorIds);
+    FinalizeVisibilitySectorSets(result);
     SortUnique(result.traversedPortalLineDefIds);
     return result;
 }
@@ -1163,22 +1187,6 @@ bool IsRuntimePortalDynamicallyBlocked(
     return false;
 }
 
-bool ShouldDrawRuntimeSectorForVisibility(
-        int sectorId,
-        const RuntimePortalVisibilityResult& visibility)
-{
-    if (!visibility.validStartSector || visibility.fallbackDrawAll) {
-        return true;
-    }
-    if (sectorId <= 0) {
-        return false;
-    }
-    return std::binary_search(
-            visibility.visibleSectorIds.begin(),
-            visibility.visibleSectorIds.end(),
-            sectorId);
-}
-
 std::string FormatRuntimePortalVisibilityDebugText(
         const RuntimePortalVisibilityResult& result)
 {
@@ -1209,6 +1217,15 @@ std::string FormatRuntimePortalVisibilityDebugText(
     text << " | visible count: " << result.visibleSectorIds.size();
     if (result.totalSectorCount > 0) {
         text << " / " << result.totalSectorCount;
+    }
+    if (!result.boundarySurfaceSectorIds.empty()) {
+        text << " | boundary surfaces: ";
+        for (size_t i = 0; i < result.boundarySurfaceSectorIds.size(); ++i) {
+            if (i != 0) {
+                text << ",";
+            }
+            text << result.boundarySurfaceSectorIds[i];
+        }
     }
     if (!result.mode.empty()) {
         text << " | mode: " << result.mode;

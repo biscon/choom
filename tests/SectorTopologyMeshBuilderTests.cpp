@@ -1093,6 +1093,16 @@ void TestGeneratedGeometryPickingUsesVisibilityFilter()
             game::PickSectorGeneratedGeometry(geometry, rightSectorFloorRay, visibleLeft);
     Check(!hiddenHit.hit, "visibility-aware picking ignores hidden-sector surfaces");
 
+    game::RuntimePortalVisibilityResult boundaryLeft = visibleLeft;
+    boundaryLeft.boundarySurfaceSectorIds = {20};
+    const game::SectorGeneratedSurfaceHit boundaryHit =
+            game::PickSectorGeneratedGeometry(
+                    geometry, rightSectorFloorRay, boundaryLeft);
+    Check(boundaryHit.hit && boundaryHit.ref.topologySectorId == 20,
+          "visibility-aware picking includes drawn terminal boundary-sector surfaces");
+    Check(!game::ShouldDrawRuntimeSectorForVisibility(20, boundaryLeft),
+          "pickable terminal boundary surfaces do not expose hidden runtime content");
+
     game::RuntimePortalVisibilityResult visibleRight;
     visibleRight.validStartSector = true;
     visibleRight.visibleSectorIds = {20};
@@ -1152,6 +1162,15 @@ void TestDrawRecordVisibilitySelection()
           "disconnected hidden sector record is not selected");
     Check(game::ShouldDrawSectorMeshRecordForVisibility(records[2], visible),
           "second visible sector record is selected");
+
+    game::RuntimePortalVisibilityResult boundary = visible;
+    boundary.boundarySurfaceSectorIds = {20};
+    Check(game::CountSectorMeshDrawRecordsForVisibility(records, boundary) == 3,
+          "draw selection includes terminal boundary-sector mesh records");
+    Check(game::ShouldDrawSectorMeshRecordForVisibility(records[1], boundary),
+          "terminal boundary sector static mesh is selected");
+    Check(!game::ShouldDrawRuntimeSectorForVisibility(20, boundary),
+          "terminal boundary sector remains hidden from runtime-object visibility");
 
     game::RuntimePortalVisibilityResult emptyVisible;
     emptyVisible.validStartSector = true;

@@ -225,7 +225,12 @@ DoorModelDiagnostic BuildDoorModelDiagnostic(
          << asset.nominalHeight << " H x " << asset.nominalThickness << " D\n"
          << "Effective scale: " << fit.effectiveScale << " | actual: "
          << fit.actualWidth << " W x " << fit.actualHeight << " H x "
-         << fit.actualThickness << " D\n"
+         << fit.actualThickness << " D\n";
+    if (asset.hasFrame) {
+        text << "Fitted assembly: " << fit.assemblyWidth << " W x "
+             << fit.assemblyHeight << " H\n";
+    }
+    text
          << "Target aperture: " << resolved.width << " W x " << resolved.height
          << " H | portal: " << resolved.portalWidth << " W x "
          << resolved.portalHeight << " H\n";
@@ -236,9 +241,9 @@ DoorModelDiagnostic BuildDoorModelDiagnostic(
         diagnostic.invalid = true;
     }
     if (fit.heightGap >= 0.0f) {
-        text << " | top gap: " << fit.heightGap;
+        text << " | assembly top gap: " << fit.heightGap;
     } else {
-        text << " | top overflow: " << -fit.heightGap;
+        text << " | assembly top overflow: " << -fit.heightGap;
         diagnostic.invalid = true;
     }
     text << "\n" << DoorRuntimeModelStatus(runtimeModel);

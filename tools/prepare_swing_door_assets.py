@@ -521,6 +521,17 @@ def inspect_assets(work_directory: Path, documents: dict[str, tuple[dict, bytes,
                 "frameNode": spec["frame_node"],
                 "frameMeshes": [obj.name for obj in validated["frame_meshes"]],
                 "frameBounds": validated["frame_bounds"],
+                "leafHingeToFrameCenter": (
+                    validated["panel_bounds"]["maximum"][0]
+                    - (validated["frame_bounds"]["minimum"][0]
+                       + validated["frame_bounds"]["maximum"][0]) * 0.5
+                    if validated["frame_bounds"] else None
+                ),
+                "leafBottomOffset": (
+                    validated["panel_bounds"]["minimum"][2]
+                    - validated["frame_bounds"]["minimum"][2]
+                    if validated["frame_bounds"] else None
+                ),
                 "leafNestedBelowFrame": spec["nested_leaf"],
             })
     result["assets"].sort(key=lambda item: item["id"])
@@ -735,6 +746,10 @@ def prepare_style(spec: dict, metadata: dict) -> dict:
         catalog["frameModelPath"] = relative(frame_path)
         catalog["frameOuterWidth"] = float(frame_dimensions.x)
         catalog["frameOuterHeight"] = float(frame_dimensions.z)
+        catalog["leafHingeToFrameCenter"] = float(
+            panel_maximum.x - (frame_minimum.x + frame_maximum.x) * 0.5
+        )
+        catalog["leafBottomOffset"] = float(panel_minimum.z - frame_minimum.z)
     return catalog
 
 
@@ -807,9 +822,27 @@ def load_and_validate_catalog() -> dict:
         frame_fields = ("frameModelPath", "frameOuterWidth", "frameOuterHeight")
         if any(field in asset for field in frame_fields) != all(field in asset for field in frame_fields):
             fail(f"catalog asset {asset['id']} has partial frame metadata")
+        alignment_fields = ("leafHingeToFrameCenter", "leafBottomOffset")
+        if any(field in asset for field in alignment_fields) != all(field in asset for field in alignment_fields):
+            fail(f"catalog asset {asset['id']} has partial leaf/frame alignment metadata")
+        if all(field in asset for field in alignment_fields) and "frameModelPath" not in asset:
+            fail(f"catalog asset {asset['id']} has leaf/frame alignment without a frame")
         for field in ("frameOuterWidth", "frameOuterHeight"):
             if field in asset and (not math.isfinite(asset[field]) or asset[field] <= 0.0):
                 fail(f"catalog asset {asset['id']} has invalid {field}")
+        if "leafHingeToFrameCenter" in asset:
+            hinge_offset = asset["leafHingeToFrameCenter"]
+            bottom_offset = asset["leafBottomOffset"]
+            if not isinstance(hinge_offset, (int, float)) or not math.isfinite(hinge_offset) or hinge_offset <= 0.0:
+                fail(f"catalog asset {asset['id']} has invalid leafHingeToFrameCenter")
+            if not isinstance(bottom_offset, (int, float)) or not math.isfinite(bottom_offset) or bottom_offset < 0.0:
+                fail(f"catalog asset {asset['id']} has invalid leafBottomOffset")
+            half_frame_width = asset["frameOuterWidth"] * 0.5
+            if (-hinge_offset < -half_frame_width - CANONICAL_TOLERANCE
+                    or asset["nominalWidth"] - hinge_offset > half_frame_width + CANONICAL_TOLERANCE
+                    or bottom_offset + asset["nominalHeight"]
+                        > asset["frameOuterHeight"] + CANONICAL_TOLERANCE):
+                fail(f"catalog asset {asset['id']} leaf does not fit inside its paired frame")
         for field in ("leafModelPath", "frameModelPath"):
             if field not in asset:
                 continue
@@ -1041,12 +1074,17 @@ def import_and_transform(path: Path, transform: Matrix) -> None:
 
 def place_contact_variant(asset: dict, hinge: Vector, angle_degrees: float) -> None:
     leaf_path = REPOSITORY_ROOT / asset["leafModelPath"]
-    leaf_transform = Matrix.Translation(hinge) @ Matrix.Rotation(math.radians(angle_degrees), 4, "Z")
+    leaf_hinge = hinge + Vector((0.0, 0.0, asset.get("leafBottomOffset", 0.0)))
+    leaf_transform = Matrix.Translation(leaf_hinge) @ Matrix.Rotation(math.radians(angle_degrees), 4, "Z")
     import_and_transform(leaf_path, leaf_transform)
     if "frameModelPath" in asset:
-        frame_origin = hinge + Vector((asset["nominalWidth"] * 0.5, 0.0, 0.0))
+        frame_origin = hinge + Vector((
+            asset.get("leafHingeToFrameCenter", asset["nominalWidth"] * 0.5),
+            0.0,
+            0.0,
+        ))
         import_and_transform(REPOSITORY_ROOT / asset["frameModelPath"], Matrix.Translation(frame_origin))
-    add_hinge_marker(hinge)
+    add_hinge_marker(leaf_hinge)
 
 
 def render_contact_sheet(catalog: dict, work_directory: Path, view: str) -> Path:
