@@ -1036,6 +1036,168 @@ void TestSpawnPlacedDoorRefreshDoesNotDuplicate()
             "placed door spawn refresh uses edited authored initial fraction");
 }
 
+void TestUnknownModelSwingDoorUsesClosedProceduralFallback()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    game::SectorPlacedDoor door = MakeDoorOnPortal();
+    door.visual = game::SectorDoorVisualType::Model;
+    door.modelAssetId = "missing_style";
+    door.motion = game::SectorDoorMotionType::Swing;
+    door.initialOpenFraction = 0.75f;
+    map.runtimeObjects.push_back(MakePlacedDoor(37, door));
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(state.swingDoorCatalogLoaded && state.swingDoorCatalog.assets.size() == 20,
+          "runtime map refresh retains the generated CPU swing door catalog");
+    Check(state.doorFallbackCount == 1 && state.doorFallbackDiagnostics.size() == 1,
+          "unknown model style records one stable fallback diagnostic");
+    Check(state.doorFallbackDiagnostics[0].placedObjectId == 37
+                  && state.doorFallbackDiagnostics[0].modelAssetId == "missing_style"
+                  && state.doorFallbackDiagnostics[0].message.find("missing from the swing door catalog")
+                          != std::string::npos,
+          "unknown model style diagnostic identifies object and catalog ID");
+    Check(CountDoorObjects(world) == 1 && state.spawnedObjectCount == 1,
+          "unknown model style still spawns a procedural door entity");
+    Check(engine::IsNull(state.runtimeObjectAssetScope),
+          "slice 2 model fallback requests no GPU model assets");
+
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    const game::SectorDoorMotion& motion = world.Get<game::SectorDoorMotion>(entity);
+    const game::SectorDoorPortalBlocker& blocker =
+            world.Get<game::SectorDoorPortalBlocker>(entity);
+    const game::SectorDoorRender& render = world.Get<game::SectorDoorRender>(entity);
+    Check(motion.motion == game::SectorDoorMotionType::Swing
+                  && Near(motion.openFraction, 0.0f)
+                  && Near(motion.targetOpenFraction, 0.0f)
+                  && Near(motion.openDistance, 0.0f)
+                  && Near(motion.speed, 0.0f)
+                  && blocker.blocksPortal,
+          "unknown model swing fallback is frozen closed and blocks portal visibility");
+    Check(Near(render.width, 0.5f)
+                  && Near(render.height, 1.5f)
+                  && Near(render.thickness, 0.25f),
+          "unknown model fallback uses resolved target slab dimensions");
+
+    game::UpdateSectorRuntimeObjects(world, assets, state, map, 1.0f);
+    Check(Near(world.Get<game::SectorDoorMotion>(entity).openFraction, 0.0f),
+          "steady runtime update cannot accidentally apply slide motion to swing fallback");
+}
+
+void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    game::SectorPlacedDoor door = MakeDoorOnPortal();
+    door.visual = game::SectorDoorVisualType::Model;
+    door.modelAssetId = "wooden_interior_001";
+    door.modelFit = game::SectorDoorModelFit::FitInside;
+    door.modelScale = 1.0f;
+    door.motion = game::SectorDoorMotionType::Swing;
+    map.runtimeObjects.push_back(MakePlacedDoor(38, door));
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SectorSwingDoorCatalogAsset catalogAsset;
+    Check(game::FindSectorSwingDoorCatalogAsset(
+                  state.swingDoorCatalog, door.modelAssetId, catalogAsset),
+          "known runtime model style resolves from retained catalog");
+    const game::SectorResolvedDoorAnchor resolved =
+            game::ResolveSectorDoorAnchor(map, door);
+    const game::SectorSwingDoorFitResult expectedFit =
+            game::ComputeSectorSwingDoorFit(
+                    catalogAsset,
+                    resolved.width,
+                    resolved.height,
+                    door.modelFit,
+                    door.modelScale);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    const game::SectorDoorRender& render = world.Get<game::SectorDoorRender>(entity);
+    Check(expectedFit.status == game::SectorSwingDoorFitStatus::Valid
+                  && Near(render.width, expectedFit.actualWidth)
+                  && Near(render.height, expectedFit.actualHeight)
+                  && Near(render.thickness, expectedFit.actualThickness),
+          "known model fallback slab uses one catalog-derived uniform scale");
+    Check(state.doorFallbackDiagnostics.size() == 1
+                  && state.doorFallbackDiagnostics[0].message.find("fit: valid")
+                          != std::string::npos,
+          "known model fallback diagnostic includes fit status");
+}
+
+void TestRetainedCatalogFailureDoesNotBlockOtherDoors()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    game::SectorPlacedDoor slideDoor = MakeDoorOnPortal();
+    slideDoor.initialOpenFraction = 0.25f;
+    map.runtimeObjects.push_back(MakePlacedDoor(39, slideDoor));
+    game::SectorPlacedDoor modelDoor = MakeDoorOnPortal();
+    modelDoor.visual = game::SectorDoorVisualType::Model;
+    modelDoor.modelAssetId = "wooden_interior_001";
+    modelDoor.motion = game::SectorDoorMotionType::Swing;
+    map.runtimeObjects.push_back(MakePlacedDoor(40, modelDoor));
+    game::SectorPlacedRuntimeObject unrelatedObject;
+    unrelatedObject.id = 41;
+    unrelatedObject.kind = "static_model";
+    map.runtimeObjects.push_back(unrelatedObject);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    state.swingDoorCatalogLoaded = false;
+    state.swingDoorCatalog = game::SectorSwingDoorCatalog{};
+    state.swingDoorCatalogWarning =
+            "Runtime object warnings: swing door catalog unavailable: test failure";
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    Check(CountDoorObjects(world) == 2
+                  && CountSectorObjects(world) == 3
+                  && state.spawnedObjectCount == 3
+                  && state.skippedObjectCount == 0,
+          "catalog failure does not prevent procedural doors or unrelated runtime objects spawning");
+    Check(state.doorFallbackCount == 1
+                  && state.doorFallbackDiagnostics[0].message.find("catalog failed")
+                          != std::string::npos,
+          "entity-only respawn refreshes fallback diagnostics from retained catalog state");
+    Check(state.placedObjectWarning == state.swingDoorCatalogWarning,
+          "catalog failure surfaces one stable runtime warning");
+
+    const engine::Entity slideEntity = state.placedObjectEntities[0].entity;
+    const engine::Entity modelEntity = state.placedObjectEntities[1].entity;
+    Check(Near(world.Get<game::SectorDoorMotion>(slideEntity).openFraction, 0.25f)
+                  && Near(world.Get<game::SectorDoorMotion>(modelEntity).openFraction, 0.0f),
+          "catalog failure preserves existing slide state while model fallback stays closed");
+}
+
+void TestProceduralSwingDoorUsesClosedFallbackWithoutCatalogStyle()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    game::SectorPlacedDoor door = MakeDoorOnPortal();
+    door.motion = game::SectorDoorMotionType::Swing;
+    door.initialOpenFraction = 1.0f;
+    map.runtimeObjects.push_back(MakePlacedDoor(41, door));
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(state.doorFallbackCount == 1
+                  && state.doorFallbackDiagnostics[0].modelAssetId.empty()
+                  && Near(world.Get<game::SectorDoorMotion>(entity).openFraction, 0.0f)
+                  && world.Get<game::SectorDoorPortalBlocker>(entity).blocksPortal,
+          "procedural swing record also fails closed without requiring a catalog style");
+}
+
 void TestSectorDoorSlabGeometryIsFiniteAndStable()
 {
     const auto SpawnDoorWithNormalOffset = [](float normalOffset,
@@ -4586,6 +4748,10 @@ int main()
     TestSpawnPlacedRuntimeObjectSkipsInvalidDoorAnchorWithDiagnostics();
     TestSpawnPlacedDoorCopiesResolvedPayloadToEcs();
     TestSpawnPlacedDoorRefreshDoesNotDuplicate();
+    TestUnknownModelSwingDoorUsesClosedProceduralFallback();
+    TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions();
+    TestRetainedCatalogFailureDoesNotBlockOtherDoors();
+    TestProceduralSwingDoorUsesClosedFallbackWithoutCatalogStyle();
     TestSectorDoorSlabGeometryIsFiniteAndStable();
     TestSectorDoorSlabMeshDataHasStableAttributes();
     TestSectorDoorFaceUvsAffectOnlySelectedFace();

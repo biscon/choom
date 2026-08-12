@@ -636,6 +636,8 @@ float SectorDoorResolvedOpenDistance(const SectorResolvedDoorAnchor& resolved, c
         case SectorDoorMotionType::SlideLeft:
         case SectorDoorMotionType::SlideRight:
             return resolved.width;
+        case SectorDoorMotionType::Swing:
+            return 0.0f;
     }
 
     return resolved.height;
@@ -897,6 +899,8 @@ Vector3 SectorDoorMotionOffset(
             return Vector3{-tangent.x * offset, 0.0f, -tangent.y * offset};
         case SectorDoorMotionType::SlideRight:
             return Vector3{tangent.x * offset, 0.0f, tangent.y * offset};
+        case SectorDoorMotionType::Swing:
+            return Vector3{};
     }
 
     return Vector3{};

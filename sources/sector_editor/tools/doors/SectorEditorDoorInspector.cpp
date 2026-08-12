@@ -29,6 +29,10 @@ int DoorMotionOptionIndex(SectorDoorMotionType motion) {
     return 1;
   case SectorDoorMotionType::SlideRight:
     return 2;
+  case SectorDoorMotionType::Swing:
+    // Slice 5 adds the dedicated swing authoring controls. Until then the
+    // runtime diagnostic/fallback remains authoritative for loaded records.
+    return 0;
   }
   return 0;
 }

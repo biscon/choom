@@ -45,7 +45,7 @@ When executing this plan:
 | Slice | Title | Status | Completed |
 |---|---|---|---|
 | 1 | Prepare and verify separated door assets | Completed | 2026-08-12 |
-| 2 | Add door-asset catalog and backward-compatible authored data | Not Started | — |
+| 2 | Add door-asset catalog and backward-compatible authored data | Completed | 2026-08-12 |
 | 3 | Add swing kinematics, collision, obstruction handling, and runtime spawning | Not Started | — |
 | 4 | Render model leaves/frames with PBR lighting and dynamic shadows | Not Started | — |
 | 5 | Add editor authoring, diagnostics, cached 2D footprint, and picking | Not Started | — |
@@ -962,3 +962,43 @@ Append one entry per attempted slice in this format:
 - Remaining follow-up within this plan: Slices 2 through 6 remain Not Started.
   The three source pack GLBs remain present for the user to remove only after
   the complete feature is accepted.
+
+### 2026-08-12 — Slice 2 — Completed
+
+- Summary: Added backward-compatible authored model/swing door fields and JSON
+  values, a strict version-1 CPU door catalog with stable-ID lookup, pure
+  uniform-fit calculations, retained catalog/fallback diagnostics, and an
+  explicit closed procedural-slab boundary fallback for model or swing records.
+  Existing door JSON retains its old defaults and omission shape. Catalog file
+  I/O occurs only during explicit runtime map-data refresh; entity-only respawns
+  re-evaluate diagnostics and dimensions from the retained catalog.
+- Decisions/deviations folded back into plan: No contract deviations were
+  needed. Slice 2 adds no model handles or ECS component type. Known model
+  styles use catalog-derived uniformly fitted dimensions for the temporary
+  slab, while missing/invalid catalog data uses the resolved target aperture.
+  The existing inspector does not expose swing authoring before Slice 5.
+- Files/modules materially affected: `SectorTopologyMap` door schema,
+  topology serialization, the new `SectorSwingDoorCatalog` module,
+  `SectorRuntimeObjects`/`SectorDoorRuntime` boundary behavior, CMake test
+  registration, focused catalog/runtime/serialization/lightmap tests, and this
+  plan.
+- Automated verification: `cmake --build cmake-build-debug -j2` passed;
+  `ctest --test-dir cmake-build-debug --output-on-failure` passed all 22 tests,
+  including the new `sector_swing_door_catalog` suite; `git diff --check`,
+  `git diff --stat`, and `git status --short` passed/reported cleanly as
+  recorded at handoff.
+- Manual verification: Not performed (user-owned).
+- Cache invalidation behavior: No topology mutation or 2D render-cache data/path
+  changed. Door editor mutations continue using the existing document-edited
+  path; catalog-driven cache invalidation remains scoped to Slice 5.
+- Lightmap source-hash behavior: Model/swing door fields remain excluded from
+  static bake input and `ComputeSectorLightmapSourceHash()`. Tests explicitly
+  cover visual, catalog ID, fit, scale, motion, hinge, swing side, open angle,
+  and angular speed without hash changes.
+- Collision/sector lookup/physics behavior: Existing slide-door collision and
+  motion, static topology collision, sector lookup, and player physics are
+  unchanged. Until Slice 3, model and swing records intentionally spawn a
+  closed active procedural OBB and portal blocker with zero travel rather than
+  receiving an incorrect slide transform.
+- Remaining follow-up within this plan: Slices 3 through 6 remain Not Started.
+  The three source pack GLBs remain present and untouched.

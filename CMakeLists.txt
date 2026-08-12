@@ -281,6 +281,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorPortalVisibility.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/SectorSwingDoorCatalog.cpp
             sources/sector_demo/SectorStaticModelCollision.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
@@ -456,6 +457,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/SectorSwingDoorCatalog.cpp
             sources/sector_demo/SectorStaticModelCollision.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
@@ -476,6 +478,16 @@ if(BUILD_TESTING)
     target_include_directories(sector_sky_cylinder_tests PRIVATE sources)
     target_link_libraries(sector_sky_cylinder_tests PRIVATE raylib)
     add_test(NAME sector_sky_cylinder COMMAND sector_sky_cylinder_tests)
+
+    add_executable(sector_swing_door_catalog_tests
+            tests/SectorSwingDoorCatalogTests.cpp
+            sources/sector_demo/SectorSwingDoorCatalog.cpp
+    )
+    target_include_directories(sector_swing_door_catalog_tests PRIVATE sources)
+    target_compile_definitions(sector_swing_door_catalog_tests PRIVATE
+            ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+    target_link_libraries(sector_swing_door_catalog_tests PRIVATE raylib)
+    add_test(NAME sector_swing_door_catalog COMMAND sector_swing_door_catalog_tests)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp

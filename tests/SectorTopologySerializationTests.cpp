@@ -1489,8 +1489,91 @@ void TestRuntimeObjectsRoundTripAndValidation()
             game::FindSectorPlacedRuntimeObject(oldDoorLoaded, 30);
     Check(loadedOldDoor != nullptr
                   && Near(loadedOldDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].scale, Vector2{1.0f, 1.0f})
-                  && Near(loadedOldDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Bottom)].offset, Vector2{0.0f, 0.0f}),
-          "missing door face UVs load defaults");
+                  && Near(loadedOldDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Bottom)].offset, Vector2{0.0f, 0.0f})
+                  && loadedOldDoor->door.visual == game::SectorDoorVisualType::Procedural
+                  && loadedOldDoor->door.modelAssetId.empty()
+                  && loadedOldDoor->door.modelFit == game::SectorDoorModelFit::FitInside
+                  && Near(loadedOldDoor->door.modelScale, 1.0f)
+                  && loadedOldDoor->door.hinge == game::SectorDoorHinge::Start
+                  && loadedOldDoor->door.swingSide == game::SectorDoorSwingSide::Front
+                  && Near(loadedOldDoor->door.openAngleDegrees, 90.0f)
+                  && Near(loadedOldDoor->door.angularSpeedDegrees, 90.0f),
+          "old door JSON without new fields loads exact procedural defaults");
+
+    SectorTopologyMap swingDoorMap = MakeSquare();
+    SectorPlacedRuntimeObject swingDoor = MakeDoorRuntimeObject(34);
+    swingDoor.door.visual = game::SectorDoorVisualType::Model;
+    swingDoor.door.modelAssetId = "future_catalog_style";
+    swingDoor.door.modelFit = game::SectorDoorModelFit::FitWidth;
+    swingDoor.door.modelScale = 1.25f;
+    swingDoor.door.motion = game::SectorDoorMotionType::Swing;
+    swingDoor.door.hinge = game::SectorDoorHinge::End;
+    swingDoor.door.swingSide = game::SectorDoorSwingSide::Back;
+    swingDoor.door.openAngleDegrees = 135.0f;
+    swingDoor.door.angularSpeedDegrees = 72.5f;
+    swingDoorMap.runtimeObjects.push_back(swingDoor);
+    const Json swingDoorSaved = Json::parse(SaveText(swingDoorMap));
+    const Json& savedSwingDoor = swingDoorSaved["runtimeObjects"][0]["door"];
+    Check(savedSwingDoor["visual"] == "model"
+                  && savedSwingDoor["modelAssetId"] == "future_catalog_style"
+                  && savedSwingDoor["modelFit"] == "fit_width"
+                  && Near(savedSwingDoor["modelScale"].get<float>(), 1.25f)
+                  && savedSwingDoor["motion"] == "swing"
+                  && savedSwingDoor["hinge"] == "end"
+                  && savedSwingDoor["swingSide"] == "back"
+                  && Near(savedSwingDoor["openAngleDegrees"].get<float>(), 135.0f)
+                  && Near(savedSwingDoor["angularSpeedDegrees"].get<float>(), 72.5f),
+          "model swing door writes every non-default authored field");
+    SectorTopologyMap swingDoorLoaded;
+    Check(LoadText(swingDoorSaved.dump(), swingDoorLoaded, error),
+          "model swing door with an unknown catalog ID remains valid map data");
+    const SectorPlacedRuntimeObject* loadedSwingDoor =
+            game::FindSectorPlacedRuntimeObject(swingDoorLoaded, 34);
+    Check(loadedSwingDoor != nullptr
+                  && loadedSwingDoor->door.visual == game::SectorDoorVisualType::Model
+                  && loadedSwingDoor->door.modelAssetId == "future_catalog_style"
+                  && loadedSwingDoor->door.modelFit == game::SectorDoorModelFit::FitWidth
+                  && Near(loadedSwingDoor->door.modelScale, 1.25f)
+                  && loadedSwingDoor->door.motion == game::SectorDoorMotionType::Swing
+                  && loadedSwingDoor->door.hinge == game::SectorDoorHinge::End
+                  && loadedSwingDoor->door.swingSide == game::SectorDoorSwingSide::Back
+                  && Near(loadedSwingDoor->door.openAngleDegrees, 135.0f)
+                  && Near(loadedSwingDoor->door.angularSpeedDegrees, 72.5f),
+          "model swing door authored fields round-trip without catalog lookup");
+
+    swingDoorMap.runtimeObjects[0].door.modelFit = game::SectorDoorModelFit::Manual;
+    swingDoorMap.runtimeObjects[0].door.angularSpeedDegrees = 0.0f;
+    const Json manualSwingDoorSaved = Json::parse(SaveText(swingDoorMap));
+    Check(manualSwingDoorSaved["runtimeObjects"][0]["door"]["modelFit"] == "manual"
+                  && Near(manualSwingDoorSaved["runtimeObjects"][0]["door"]
+                                  ["angularSpeedDegrees"].get<float>(),
+                          0.0f),
+          "manual fit and stationary angular speed serialize as valid values");
+    swingDoorMap.runtimeObjects[0].door.modelFit = game::SectorDoorModelFit::FitInside;
+    swingDoorMap.runtimeObjects[0].door.modelScale = 1.0f;
+    swingDoorMap.runtimeObjects[0].door.hinge = game::SectorDoorHinge::Start;
+    swingDoorMap.runtimeObjects[0].door.swingSide = game::SectorDoorSwingSide::Front;
+    swingDoorMap.runtimeObjects[0].door.openAngleDegrees = 90.0f;
+    swingDoorMap.runtimeObjects[0].door.angularSpeedDegrees = 90.0f;
+    const Json defaultSwingFieldsSaved = Json::parse(SaveText(swingDoorMap));
+    const Json& defaultSwingDoor = defaultSwingFieldsSaved["runtimeObjects"][0]["door"];
+    Check(!defaultSwingDoor.contains("modelFit")
+                  && !defaultSwingDoor.contains("modelScale")
+                  && !defaultSwingDoor.contains("hinge")
+                  && !defaultSwingDoor.contains("swingSide")
+                  && !defaultSwingDoor.contains("openAngleDegrees")
+                  && !defaultSwingDoor.contains("angularSpeedDegrees"),
+          "default model and swing tuning fields remain omitted");
+
+    SectorTopologyMap proceduralSwingMap = MakeSquare();
+    SectorPlacedRuntimeObject proceduralSwing = MakeDoorRuntimeObject(35);
+    proceduralSwing.door.motion = game::SectorDoorMotionType::Swing;
+    proceduralSwingMap.runtimeObjects.push_back(proceduralSwing);
+    const Json proceduralSwingSaved = Json::parse(SaveText(proceduralSwingMap));
+    Check(proceduralSwingSaved["runtimeObjects"][0]["door"]["motion"] == "swing"
+                  && !proceduralSwingSaved["runtimeObjects"][0]["door"].contains("visual")
+                  && !proceduralSwingSaved["runtimeObjects"][0]["door"].contains("modelAssetId"),
+          "procedural swing is valid without model fields");
 
     SectorTopologyMap defaultDoorMap = MakeSquare();
     SectorPlacedRuntimeObject defaultDoor = MakeDoorRuntimeObject(31);
@@ -1515,7 +1598,15 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && !savedDefaultDoor.contains("height")
                   && !savedDefaultDoor.contains("thickness")
                   && !savedDefaultDoor.contains("normalOffset")
+                  && !savedDefaultDoor.contains("visual")
+                  && !savedDefaultDoor.contains("modelAssetId")
+                  && !savedDefaultDoor.contains("modelFit")
+                  && !savedDefaultDoor.contains("modelScale")
                   && !savedDefaultDoor.contains("motion")
+                  && !savedDefaultDoor.contains("hinge")
+                  && !savedDefaultDoor.contains("swingSide")
+                  && !savedDefaultDoor.contains("openAngleDegrees")
+                  && !savedDefaultDoor.contains("angularSpeedDegrees")
                   && !savedDefaultDoor.contains("openDistance")
                   && !savedDefaultDoor.contains("speed")
                   && !savedDefaultDoor.contains("initialOpenFraction")
@@ -1539,7 +1630,15 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && Near(loadedDefaultDoor->door.height, 0.0f)
                   && Near(loadedDefaultDoor->door.thickness, 0.25f)
                   && Near(loadedDefaultDoor->door.normalOffset, 0.0f)
+                  && loadedDefaultDoor->door.visual == game::SectorDoorVisualType::Procedural
+                  && loadedDefaultDoor->door.modelAssetId.empty()
+                  && loadedDefaultDoor->door.modelFit == game::SectorDoorModelFit::FitInside
+                  && Near(loadedDefaultDoor->door.modelScale, 1.0f)
                   && loadedDefaultDoor->door.motion == game::SectorDoorMotionType::SlideVertical
+                  && loadedDefaultDoor->door.hinge == game::SectorDoorHinge::Start
+                  && loadedDefaultDoor->door.swingSide == game::SectorDoorSwingSide::Front
+                  && Near(loadedDefaultDoor->door.openAngleDegrees, 90.0f)
+                  && Near(loadedDefaultDoor->door.angularSpeedDegrees, 90.0f)
                   && Near(loadedDefaultDoor->door.openDistance, 0.0f)
                   && Near(loadedDefaultDoor->door.speed, 1.5f)
                   && Near(loadedDefaultDoor->door.initialOpenFraction, 0.0f)
@@ -1585,6 +1684,46 @@ void TestRuntimeObjectsRoundTripAndValidation()
     Json invalidDoor = doorSaved;
     invalidDoor["runtimeObjects"][0]["door"]["motion"] = "spin";
     ExpectRejected(invalidDoor, "unknown door motion is rejected");
+
+    invalidDoor = doorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["visual"] = "hologram";
+    ExpectRejected(invalidDoor, "unknown door visual is rejected");
+
+    invalidDoor = swingDoorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["modelFit"] = "stretch";
+    ExpectRejected(invalidDoor, "unknown door model fit is rejected");
+
+    invalidDoor = swingDoorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["hinge"] = "middle";
+    ExpectRejected(invalidDoor, "unknown door hinge is rejected");
+
+    invalidDoor = swingDoorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["swingSide"] = "sideways";
+    ExpectRejected(invalidDoor, "unknown door swing side is rejected");
+
+    invalidDoor = swingDoorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["modelScale"] = 0.0f;
+    ExpectRejected(invalidDoor, "non-positive door model scale is rejected");
+
+    invalidDoor = swingDoorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["openAngleDegrees"] = 0.0f;
+    ExpectRejected(invalidDoor, "zero door open angle is rejected");
+
+    invalidDoor = swingDoorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["openAngleDegrees"] = 170.01f;
+    ExpectRejected(invalidDoor, "door open angle above 170 degrees is rejected");
+
+    invalidDoor = swingDoorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["angularSpeedDegrees"] = -0.01f;
+    ExpectRejected(invalidDoor, "negative door angular speed is rejected");
+
+    invalidDoor = swingDoorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["modelAssetId"] = "";
+    ExpectRejected(invalidDoor, "model door with empty catalog ID is rejected");
+
+    invalidDoor = swingDoorSaved;
+    invalidDoor["runtimeObjects"][0]["door"]["motion"] = "slide_left";
+    ExpectRejected(invalidDoor, "model visual combined with slide motion is rejected");
 
     invalidDoor = doorSaved;
     invalidDoor["runtimeObjects"][0]["door"]["anchor"]["lineDefId"] = 0;

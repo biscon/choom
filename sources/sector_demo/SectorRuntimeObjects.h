@@ -7,6 +7,7 @@
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorStaticModelCollision.h"
+#include "sector_demo/SectorSwingDoorCatalog.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
@@ -77,10 +78,18 @@ struct SectorDoorAnchorDiagnostic {
     std::string message;
 };
 
+struct SectorDoorFallbackDiagnostic {
+    int placedObjectId = 0;
+    std::string modelAssetId;
+    std::string message;
+};
+
 struct SectorRuntimeObjectState {
     engine::AssetScopeHandle runtimeObjectAssetScope = engine::NullAssetScopeHandle();
     std::vector<SectorPlacedRuntimeObjectEntity> placedObjectEntities;
     std::vector<SectorDoorAnchorDiagnostic> doorAnchorDiagnostics;
+    SectorSwingDoorCatalog swingDoorCatalog;
+    std::vector<SectorDoorFallbackDiagnostic> doorFallbackDiagnostics;
     std::vector<SectorDynamicDoorCollider> dynamicDoorColliders;
     std::vector<SectorStaticModelCollider> staticModelColliders;
     std::vector<RuntimePortalDynamicBlocker> dynamicPortalBlockers;
@@ -90,6 +99,7 @@ struct SectorRuntimeObjectState {
     size_t doorObjectCount = 0;
     size_t validDoorAnchorCount = 0;
     size_t invalidDoorAnchorCount = 0;
+    size_t doorFallbackCount = 0;
     size_t spriteAnimationRequestedCount = 0;
     size_t spriteAnimationReadyCount = 0;
     size_t spriteAnimationPendingCount = 0;
@@ -107,6 +117,9 @@ struct SectorRuntimeObjectState {
     size_t singleClipFallbackCount = 0;
     std::string placedObjectStatus;
     std::string placedObjectWarning;
+    bool swingDoorCatalogLoaded = false;
+    std::string swingDoorCatalogStatus;
+    std::string swingDoorCatalogWarning;
     SectorBakedObjectLightProbeRuntimeData objectLightProbes;
     std::string objectProbeStatus;
     SectorCollisionWorld objectSectorLookupWorld;

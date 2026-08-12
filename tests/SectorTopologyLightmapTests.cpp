@@ -1546,6 +1546,36 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(doorUvMap) == doorUvHash,
           "hash ignores procedural door face UV edits");
 
+    game::SectorTopologyMap swingDoorMap = doorUvMap;
+    game::SectorPlacedDoor& swingDoor = swingDoorMap.runtimeObjects[0].door;
+    swingDoor.visual = game::SectorDoorVisualType::Model;
+    Check(game::ComputeSectorLightmapSourceHash(swingDoorMap) == doorUvHash,
+          "hash ignores door visual type");
+    swingDoor.modelAssetId = "wooden_interior_001";
+    Check(game::ComputeSectorLightmapSourceHash(swingDoorMap) == doorUvHash,
+          "hash ignores swing door catalog ID");
+    swingDoor.modelFit = game::SectorDoorModelFit::Manual;
+    Check(game::ComputeSectorLightmapSourceHash(swingDoorMap) == doorUvHash,
+          "hash ignores swing door uniform fit mode");
+    swingDoor.modelScale = 1.25f;
+    Check(game::ComputeSectorLightmapSourceHash(swingDoorMap) == doorUvHash,
+          "hash ignores swing door model scale");
+    swingDoor.motion = game::SectorDoorMotionType::Swing;
+    Check(game::ComputeSectorLightmapSourceHash(swingDoorMap) == doorUvHash,
+          "hash ignores swing door motion type");
+    swingDoor.hinge = game::SectorDoorHinge::End;
+    Check(game::ComputeSectorLightmapSourceHash(swingDoorMap) == doorUvHash,
+          "hash ignores swing door hinge endpoint");
+    swingDoor.swingSide = game::SectorDoorSwingSide::Back;
+    Check(game::ComputeSectorLightmapSourceHash(swingDoorMap) == doorUvHash,
+          "hash ignores swing door side");
+    swingDoor.openAngleDegrees = 135.0f;
+    Check(game::ComputeSectorLightmapSourceHash(swingDoorMap) == doorUvHash,
+          "hash ignores swing door open angle");
+    swingDoor.angularSpeedDegrees = 45.0f;
+    Check(game::ComputeSectorLightmapSourceHash(swingDoorMap) == doorUvHash,
+          "hash ignores swing door angular speed");
+
     game::SectorTopologyMap changedDirectional = base;
     changedDirectional.directionalLight.enabled = true;
     Check(game::ComputeSectorLightmapSourceHash(changedDirectional) != hash,

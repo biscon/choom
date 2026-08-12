@@ -147,7 +147,29 @@ struct SectorPlacedDynamicModel {
 enum class SectorDoorMotionType {
     SlideVertical,
     SlideLeft,
-    SlideRight
+    SlideRight,
+    Swing
+};
+
+enum class SectorDoorVisualType {
+    Procedural,
+    Model
+};
+
+enum class SectorDoorModelFit {
+    Manual,
+    FitWidth,
+    FitInside
+};
+
+enum class SectorDoorHinge {
+    Start,
+    End
+};
+
+enum class SectorDoorSwingSide {
+    Front,
+    Back
 };
 
 struct SectorDoorAnchor {
@@ -169,7 +191,15 @@ struct SectorPlacedDoor {
     float thickness = 0.25f;
     // Positive values move the closed slab from anchor.frontSectorId toward anchor.backSectorId.
     float normalOffset = 0.0f;
+    SectorDoorVisualType visual = SectorDoorVisualType::Procedural;
+    std::string modelAssetId;
+    SectorDoorModelFit modelFit = SectorDoorModelFit::FitInside;
+    float modelScale = 1.0f;
     SectorDoorMotionType motion = SectorDoorMotionType::SlideVertical;
+    SectorDoorHinge hinge = SectorDoorHinge::Start;
+    SectorDoorSwingSide swingSide = SectorDoorSwingSide::Front;
+    float openAngleDegrees = 90.0f;
+    float angularSpeedDegrees = 90.0f;
     float openDistance = 0.0f;
     float speed = 1.5f;
     float initialOpenFraction = 0.0f;

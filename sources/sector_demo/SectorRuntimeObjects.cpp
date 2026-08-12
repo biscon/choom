@@ -3,6 +3,7 @@
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshTypes.h"
+#include "sector_demo/SectorSwingDoorCatalog.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
 #include "engine/systems/AnimatedModelSystem.h"
@@ -118,6 +119,7 @@ void RefreshPlacedRuntimeObjectDiagnostics(
         engine::AssetManager& assets,
         SectorRuntimeObjectState& state)
 {
+    const std::string spawnWarning = state.placedObjectWarning;
     size_t requestedCount = 0;
     size_t readyCount = 0;
     size_t pendingCount = 0;
@@ -249,19 +251,22 @@ void RefreshPlacedRuntimeObjectDiagnostics(
     }
     if (state.doorObjectCount > 0) {
         state.placedObjectStatus += TextFormat(
-                " | doors %zu valid, %zu invalid anchors",
+                " | doors %zu valid, %zu invalid anchors, %zu fallback",
                 state.validDoorAnchorCount,
-                state.invalidDoorAnchorCount);
-    }
-
-    if (state.skippedObjectCount == 0) {
-        state.placedObjectWarning.clear();
+                state.invalidDoorAnchorCount,
+                state.doorFallbackCount);
     }
 
     if (state.invalidDoorAnchorCount > 0) {
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu door object(s) have invalid anchors",
                 state.invalidDoorAnchorCount);
+    } else if (!state.swingDoorCatalogWarning.empty()) {
+        state.placedObjectWarning = state.swingDoorCatalogWarning;
+    } else if (state.doorFallbackCount > 0) {
+        state.placedObjectWarning = TextFormat(
+                "Runtime object warnings: %zu door object(s) use closed procedural fallback",
+                state.doorFallbackCount);
     } else if (modelFailedCount > 0) {
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu static model asset(s) failed",
@@ -282,6 +287,10 @@ void RefreshPlacedRuntimeObjectDiagnostics(
         state.placedObjectWarning = TextFormat(
                 "Runtime object warnings: %zu billboard object(s) used fallback clips",
                 clipFallbackCount + singleClipFallbackCount);
+    } else if (state.skippedObjectCount > 0) {
+        state.placedObjectWarning = spawnWarning;
+    } else {
+        state.placedObjectWarning.clear();
     }
 }
 
@@ -316,6 +325,92 @@ void RefreshDoorAnchorDiagnostics(
                 placedObject.door.anchor.lineDefId,
                 resolved.diagnostic.empty() ? "unknown anchor error" : resolved.diagnostic.c_str());
         state.doorAnchorDiagnostics.push_back(std::move(diagnostic));
+    }
+}
+
+void LoadSwingDoorCatalog(SectorRuntimeObjectState& state)
+{
+    state.swingDoorCatalog = SectorSwingDoorCatalog{};
+    state.swingDoorCatalogLoaded = false;
+    state.swingDoorCatalogStatus.clear();
+    state.swingDoorCatalogWarning.clear();
+
+    std::string error;
+    const std::string resolvedPath = ResolveSectorAssetPath(
+            kSectorSwingDoorCatalogAssetPath);
+    if (!LoadSectorSwingDoorCatalog(resolvedPath, state.swingDoorCatalog, error)) {
+        state.swingDoorCatalogStatus = "Swing door catalog: unavailable";
+        state.swingDoorCatalogWarning = "Runtime object warnings: swing door catalog unavailable: "
+                + (error.empty() ? std::string{"unknown catalog error"} : error);
+        std::fprintf(
+                stderr,
+                "[SectorRuntimeObjects WARNING] %s\n",
+                state.swingDoorCatalogWarning.c_str());
+        return;
+    }
+
+    state.swingDoorCatalogLoaded = true;
+    state.swingDoorCatalogStatus = TextFormat(
+            "Swing door catalog: %zu styles",
+            state.swingDoorCatalog.assets.size());
+}
+
+void RefreshDoorFallbackDiagnostics(
+        SectorRuntimeObjectState& state,
+        const SectorTopologyMap& map)
+{
+    state.doorFallbackDiagnostics.clear();
+    state.doorFallbackCount = 0;
+
+    for (const SectorPlacedRuntimeObject& placedObject : map.runtimeObjects) {
+        if (placedObject.kind != "door"
+                || (placedObject.door.visual != SectorDoorVisualType::Model
+                        && placedObject.door.motion != SectorDoorMotionType::Swing)) {
+            continue;
+        }
+
+        SectorDoorFallbackDiagnostic diagnostic;
+        diagnostic.placedObjectId = placedObject.id;
+        diagnostic.modelAssetId = placedObject.door.modelAssetId;
+        if (placedObject.door.visual == SectorDoorVisualType::Model) {
+            SectorSwingDoorCatalogAsset asset;
+            if (!state.swingDoorCatalogLoaded) {
+                diagnostic.message = TextFormat(
+                        "door object %d model style '%s' is unavailable because the swing door catalog failed; using closed procedural fallback",
+                        placedObject.id,
+                        placedObject.door.modelAssetId.c_str());
+            } else if (!FindSectorSwingDoorCatalogAsset(
+                               state.swingDoorCatalog,
+                               placedObject.door.modelAssetId,
+                               asset)) {
+                diagnostic.message = TextFormat(
+                        "door object %d model style '%s' is missing from the swing door catalog; using closed procedural fallback",
+                        placedObject.id,
+                        placedObject.door.modelAssetId.c_str());
+            } else {
+                const SectorResolvedDoorAnchor resolved =
+                        ResolveSectorDoorAnchor(map, placedObject.door);
+                const SectorSwingDoorFitResult fit = resolved.valid
+                        ? ComputeSectorSwingDoorFit(
+                                asset,
+                                resolved.width,
+                                resolved.height,
+                                placedObject.door.modelFit,
+                                placedObject.door.modelScale)
+                        : SectorSwingDoorFitResult{};
+                diagnostic.message = TextFormat(
+                        "door object %d model style '%s' uses closed procedural fallback until swing runtime support is implemented (fit: %s)",
+                        placedObject.id,
+                        placedObject.door.modelAssetId.c_str(),
+                        SectorSwingDoorFitStatusName(fit.status));
+            }
+        } else {
+            diagnostic.message = TextFormat(
+                    "door object %d swing motion uses closed procedural fallback until swing runtime support is implemented",
+                    placedObject.id);
+        }
+        state.doorFallbackDiagnostics.push_back(std::move(diagnostic));
+        ++state.doorFallbackCount;
     }
 }
 
@@ -438,7 +533,9 @@ void RefreshSectorRuntimeObjectMapData(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map)
 {
+    LoadSwingDoorCatalog(state);
     RefreshDoorAnchorDiagnostics(state, map);
+    RefreshDoorFallbackDiagnostics(state, map);
 
     state.objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
     state.objectProbeStatus.clear();
@@ -485,6 +582,11 @@ void SpawnPlacedRuntimeObjects(
         const SectorTopologyMap& map)
 {
     EnsureSectorRuntimeObjectWorldReserved(world, state);
+    // Explicit object refreshes may follow authored door edits without a map-data
+    // reload. Re-evaluate CPU diagnostics against the retained catalog, but do
+    // not perform catalog file I/O here.
+    RefreshDoorAnchorDiagnostics(state, map);
+    RefreshDoorFallbackDiagnostics(state, map);
 
     for (const SectorPlacedRuntimeObjectEntity& entry : state.placedObjectEntities) {
         if (world.IsAlive(entry.entity)) {
@@ -537,17 +639,46 @@ void SpawnPlacedRuntimeObjects(
                 continue;
             }
 
+            const bool closedProceduralFallback =
+                    placedObject.door.visual == SectorDoorVisualType::Model
+                    || placedObject.door.motion == SectorDoorMotionType::Swing;
+            float fallbackWidth = resolved.width;
+            float fallbackHeight = resolved.height;
+            float fallbackThickness = placedObject.door.thickness;
+            if (placedObject.door.visual == SectorDoorVisualType::Model
+                    && state.swingDoorCatalogLoaded) {
+                SectorSwingDoorCatalogAsset asset;
+                if (FindSectorSwingDoorCatalogAsset(
+                            state.swingDoorCatalog,
+                            placedObject.door.modelAssetId,
+                            asset)) {
+                    const SectorSwingDoorFitResult fit = ComputeSectorSwingDoorFit(
+                            asset,
+                            resolved.width,
+                            resolved.height,
+                            placedObject.door.modelFit,
+                            placedObject.door.modelScale);
+                    if (fit.status != SectorSwingDoorFitStatus::InvalidInput) {
+                        fallbackWidth = fit.actualWidth;
+                        fallbackHeight = fit.actualHeight;
+                        fallbackThickness = fit.actualThickness;
+                    }
+                }
+            }
+
             const SectorDoorResolvedAnchor runtimeAnchor = ToSectorRuntimeDoorAnchor(resolved);
             const SectorDoorMotion runtimeMotion{
                     placedObject.door.motion,
-                    placedObject.door.initialOpenFraction,
-                    placedObject.door.initialOpenFraction,
-                    SectorDoorResolvedOpenDistance(resolved, placedObject.door),
-                    placedObject.door.speed};
+                    closedProceduralFallback ? 0.0f : placedObject.door.initialOpenFraction,
+                    closedProceduralFallback ? 0.0f : placedObject.door.initialOpenFraction,
+                    closedProceduralFallback
+                            ? 0.0f
+                            : SectorDoorResolvedOpenDistance(resolved, placedObject.door),
+                    closedProceduralFallback ? 0.0f : placedObject.door.speed};
             const SectorDoorRender runtimeRender{
-                    resolved.width,
-                    resolved.height,
-                    placedObject.door.thickness,
+                    fallbackWidth,
+                    fallbackHeight,
+                    fallbackThickness,
                     placedObject.door.normalOffset,
                     placedObject.door.textureId,
                     placedObject.door.faceUvs,
@@ -596,7 +727,8 @@ void SpawnPlacedRuntimeObjects(
                     resolved.backSectorId,
                     resolved.frontSideDefId,
                     resolved.backSideDefId,
-                    placedObject.door.initialOpenFraction <= kSectorDoorPortalBlockEpsilon});
+                    closedProceduralFallback
+                            || placedObject.door.initialOpenFraction <= kSectorDoorPortalBlockEpsilon});
             state.placedObjectEntities.push_back(SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
             ++spawnedCount;
             continue;
