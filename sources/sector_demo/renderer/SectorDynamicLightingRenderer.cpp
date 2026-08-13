@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorStaticModelShadow.h"
 
 #include <algorithm>
 #include <cstring>
@@ -270,6 +271,7 @@ void SectorDynamicLightingRenderer::Reset()
     shadowMatrices.clear();
     cachedShadowMatrices.clear();
     shadowMapsCacheValid = false;
+    cachedStaticModelShadowCasterRevision = 0;
 }
 
 void SectorDynamicLightingRenderer::RebuildSources(
@@ -504,6 +506,10 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
             && !context.doorShadowCasters->empty();
     const bool hasDoorModelCasters = context.doorModelShadowCasters != nullptr
             && !context.doorModelShadowCasters->empty();
+    if (context.staticModelShadowCasterRevision
+            != cachedStaticModelShadowCasterRevision) {
+        shadowMapsCacheValid = false;
+    }
     if (hasDoorCasters || hasDoorModelCasters) {
         shadowMapsCacheValid = false;
     } else if (shadowMapsCacheValid) {
@@ -618,11 +624,40 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                 }
             }
         }
+        if (context.staticModelShadowCasters != nullptr) {
+            rlDisableBackfaceCulling();
+            for (const SectorStaticModelShadowCaster& caster
+                    : *context.staticModelShadowCasters) {
+                const engine::ModelAsset* asset =
+                        context.assets->GetModelAsset(caster.model);
+                if (asset == nullptr) {
+                    if (!context.assets->HasFailed(caster.model)) {
+                        cacheable = false;
+                    }
+                    continue;
+                }
+                const Model& model = asset->model;
+                const Matrix modelTransform = MatrixMultiply(
+                        model.transform, caster.transform);
+                for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
+                    if (model.meshes[meshIndex].vertexCount <= 0) {
+                        continue;
+                    }
+                    DrawMesh(
+                            model.meshes[meshIndex],
+                            shadowMaterial,
+                            modelTransform);
+                }
+            }
+            rlEnableBackfaceCulling();
+        }
         shadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = shadowDefaultTexture;
         rlDisableDepthTest();
         EndTextureMode();
     }
     shadowMapsCacheValid = cacheable;
+    cachedStaticModelShadowCasterRevision =
+            context.staticModelShadowCasterRevision;
 }
 
 void SectorDynamicLightingRenderer::ReserveSelectionBuffers()

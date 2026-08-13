@@ -1011,6 +1011,7 @@ bool SectorStaticModelRenderer::Load()
 void SectorStaticModelRenderer::Shutdown()
 {
     ClearCachedModels();
+    shadowCasterCollection = {};
     lightmapData = {};
     if (shaderLoaded) {
         UnloadShader(shader);
@@ -1242,6 +1243,30 @@ void SectorStaticModelRenderer::FinalizeResources(
                 }
                 cachedModels.push_back(std::move(cached));
             });
+}
+
+void SectorStaticModelRenderer::ReserveShadowCasterCapacity(size_t capacity)
+{
+    ReserveSectorStaticModelShadowCasters(
+            shadowCasterCollection,
+            capacity);
+}
+
+void SectorStaticModelRenderer::PrepareShadowRenderContext(
+        SectorDynamicSpotLightShadowRenderContext& context,
+        engine::World* runtimeObjectWorld)
+{
+    UpdateSectorStaticModelShadowCasters(
+            shadowCasterCollection,
+            runtimeObjectWorld);
+    context.staticModelShadowCasters = &shadowCasterCollection.casters;
+    context.staticModelShadowCasterRevision =
+            shadowCasterCollection.revision;
+}
+
+void SectorStaticModelRenderer::ClearPreparedShadowCasters()
+{
+    ClearSectorStaticModelShadowCasters(shadowCasterCollection);
 }
 
 bool SectorStaticModelRenderer::DrawWorldDynamicModel(

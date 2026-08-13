@@ -453,6 +453,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
+            sources/sector_demo/SectorStaticModelShadow.cpp
             sources/sector_demo/SectorBillboardRuntime.cpp
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorFpsController.cpp

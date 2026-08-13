@@ -4195,6 +4195,87 @@ void TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures()
           "static prop fallback clears auxiliary material textures when no prop lightmap is valid");
 }
 
+void TestStaticModelSpotlightShadowCasterCollectionAndRevision()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 8);
+
+    const engine::Entity visible = world.CreateEntity();
+    const game::SectorObjectTransform visibleTransform{
+            Vector3{2.0f, 3.0f, -4.0f},
+            0.35f,
+            -0.2f,
+            0.1f};
+    world.Add(visible, visibleTransform);
+    world.Add(visible, game::SectorObject{7, true});
+    world.Add(visible, game::SectorStaticModel{
+            engine::ModelHandle{3, 5},
+            41,
+            Vector3{0.1f, 0.1f, 0.1f},
+            1.75f,
+            0.2f});
+
+    const engine::Entity hidden = world.CreateEntity();
+    world.Add(hidden, game::SectorObjectTransform{});
+    world.Add(hidden, game::SectorObject{7, false});
+    world.Add(hidden, game::SectorStaticModel{
+            engine::ModelHandle{4, 2},
+            42});
+
+    const engine::Entity unassigned = world.CreateEntity();
+    world.Add(unassigned, game::SectorObjectTransform{});
+    world.Add(unassigned, game::SectorObject{7, true});
+    world.Add(unassigned, game::SectorStaticModel{});
+
+    game::SectorStaticModelShadowCasterCollection collection;
+    game::ReserveSectorStaticModelShadowCasters(collection, 8);
+    game::UpdateSectorStaticModelShadowCasters(collection, &world);
+
+    Check(collection.casters.size() == 1,
+          "spotlight shadow collection includes only visible assigned static props");
+    const game::SectorStaticModelShadowCaster& caster =
+            collection.casters.front();
+    const Matrix expected = game::BuildSectorStaticModelAuthoredTransform(
+            visibleTransform.position,
+            visibleTransform.rotationXRadians,
+            visibleTransform.yawRadians,
+            visibleTransform.rotationZRadians,
+            1.75f);
+    Check(caster.placedObjectId == 41
+                  && caster.model == engine::ModelHandle{3, 5}
+                  && Near(
+                             Vector3Transform(Vector3{}, caster.transform),
+                             Vector3Transform(Vector3{}, expected))
+                  && Near(
+                             Vector3Transform(Vector3{1.0f, 0.0f, 0.0f}, caster.transform),
+                             Vector3Transform(Vector3{1.0f, 0.0f, 0.0f}, expected))
+                  && Near(
+                             Vector3Transform(Vector3{0.0f, 1.0f, 0.0f}, caster.transform),
+                             Vector3Transform(Vector3{0.0f, 1.0f, 0.0f}, expected)),
+          "static prop spotlight caster uses the visible renderer authored transform");
+
+    const uint64_t initialRevision = collection.revision;
+    game::UpdateSectorStaticModelShadowCasters(collection, &world);
+    Check(collection.revision == initialRevision,
+          "unchanged static prop shadow casters preserve the cache revision");
+
+    world.Get<game::SectorObjectTransform>(visible).position.x += 0.5f;
+    game::UpdateSectorStaticModelShadowCasters(collection, &world);
+    const uint64_t movedRevision = collection.revision;
+    Check(movedRevision != initialRevision,
+          "moving a static prop invalidates the spotlight shadow caster revision");
+
+    world.Get<game::SectorObject>(visible).visible = false;
+    game::UpdateSectorStaticModelShadowCasters(collection, &world);
+    const uint64_t hiddenRevision = collection.revision;
+    Check(collection.casters.empty()
+                  && hiddenRevision != movedRevision,
+          "hiding the final static prop empties casters and invalidates shadows");
+    game::UpdateSectorStaticModelShadowCasters(collection, &world);
+    Check(collection.revision == hiddenRevision,
+          "an unchanged empty static prop caster set keeps its revision stable");
+}
+
 void TestViewmodelMaterialOverrideResolution()
 {
     float metallicFactor = 0.5f;
@@ -5781,6 +5862,7 @@ int main()
     TestSpawnDynamicModelCopiesPlaybackAndLightingPayload();
     TestAnimatedModelSelectionAndBlendApi();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
+    TestStaticModelSpotlightShadowCasterCollectionAndRevision();
     TestViewmodelMaterialOverrideResolution();
     TestSpawnPlacedDirectionalBillboardCopiesClipNames();
     TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate();

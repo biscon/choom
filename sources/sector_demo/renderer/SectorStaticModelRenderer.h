@@ -7,6 +7,7 @@
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorStaticSpecularLighting.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
+#include "sector_demo/SectorStaticModelShadow.h"
 
 #include <raylib.h>
 
@@ -268,6 +269,11 @@ public:
     void FinalizeResources(
             engine::AssetManager& assets,
             engine::World& runtimeObjectWorld);
+    void ReserveShadowCasterCapacity(size_t capacity);
+    void PrepareShadowRenderContext(
+            SectorDynamicSpotLightShadowRenderContext& context,
+            engine::World* runtimeObjectWorld);
+    void ClearPreparedShadowCasters();
 
     void Draw(
             engine::AssetManager& assets,
@@ -364,6 +370,7 @@ private:
 
     SectorStaticModelLightmapData lightmapData;
     std::vector<CachedModel> cachedModels;
+    SectorStaticModelShadowCasterCollection shadowCasterCollection;
     int baseColorFactorLoc = -1;
     int emissiveFactorLoc = -1;
     int emissiveStrengthLoc = -1;

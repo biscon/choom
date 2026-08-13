@@ -810,6 +810,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
     const size_t runtimeObjectCapacity = std::max(
             kSectorRuntimeObjectInitialCapacity,
             map.runtimeObjects.size());
+    staticModelRenderer.ReserveShadowCasterCapacity(runtimeObjectCapacity);
     dynamicLightState.ReserveReceiverBoundsCapacity(
             meshes.sectorReceiverBounds.size(),
             runtimeObjectCapacity);
@@ -1340,6 +1341,9 @@ void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
         context.userData = this;
         context.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
         doorRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
+        staticModelRenderer.PrepareShadowRenderContext(
+                context,
+                runtimeObjectWorld);
         dynamicLightState.RenderShadowMaps(context);
     }
 

@@ -323,6 +323,16 @@ void TestRemovedShaderPathsStayRemoved()
     Check(source.find("directDiffuse += staticDirectSpecular")
                     == std::string::npos,
           "static authored lights do not duplicate baked diffuse lighting");
+    Check(source.find(
+                      "float visibility = DynamicSpotLightShadowVisibility(")
+                            != std::string::npos
+                    && source.find(
+                               "dynamicLightContext.shadowMaps.shadowMap0")
+                            != std::string::npos
+                    && source.find(
+                               "dynamicLightContext.shadowMaps.shadowMap1")
+                            != std::string::npos,
+          "static and dynamic world-model PBR draws receive dynamic spotlight shadow maps");
     Check(source.find("DrawWorldDynamicModel(") != std::string::npos
                     && source.find("SectorDoorModelRender& modelRender")
                             != std::string::npos
