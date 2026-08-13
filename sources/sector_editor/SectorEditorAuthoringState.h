@@ -129,6 +129,7 @@ struct SectorEditorAuthoringLineSegmentResult {
     int endVertexId = -1;
     SectorTopologyCoordPoint startPoint = {};
     SectorTopologyCoordPoint endPoint = {};
+    std::string errorMessage;
 };
 
 bool AddSectorEditorAuthoringLineSegment(

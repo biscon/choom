@@ -47,6 +47,10 @@
       "path": "assets/images/hub/hub_drain_grate_256.png",
       "filter": "anisotropic8x"
     },
+    "hydraulic_blast_door_512": {
+      "path": "assets/images/doors/hydraulic_blast_door_512.png",
+      "filter": "anisotropic8x"
+    },
     "industrial_wall_01": {
       "path": "assets/images/walls/industrial_wall_01.png",
       "filter": "anisotropic8x"
@@ -450,53 +454,15 @@
       "yawDegrees": 0.0
     },
     {
-      "id": 28,
-      "kind": "door",
-      "door": {
-        "anchor": {
-          "lineDefId": 97,
-          "frontSectorId": 24,
-          "backSectorId": 25,
-          "frontSideDefId": 54,
-          "backSideDefId": 55,
-          "endpointA": [
-            -688,
-            1296
-          ],
-          "endpointB": [
-            -896,
-            1296
-          ]
-        },
-        "width": 1.625,
-        "height": 2.75,
-        "normalOffset": 0.125,
-        "visual": "model",
-        "modelAssetId": "wooden_interior_001",
-        "motion": "swing",
-        "angularSpeedDegrees": 120.0,
-        "openDistance": 2.75,
-        "interactionDistance": 4.0,
-        "openSoundId": "door_open_01",
-        "closeSoundId": "door_close_01"
-      },
-      "position": [
-        -49.5,
-        0.0,
-        81.0
-      ],
-      "yawDegrees": 0.0
-    },
-    {
       "id": 29,
       "kind": "door",
       "door": {
         "anchor": {
-          "lineDefId": 97,
+          "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 92,
-          "backSideDefId": 93,
+          "frontSideDefId": 98,
+          "backSideDefId": 99,
           "endpointA": [
             -704,
             1296
@@ -520,7 +486,7 @@
       },
       "position": [
         -49.0,
-        0.0,
+        0.5,
         81.0
       ],
       "yawDegrees": 0.0
@@ -530,11 +496,11 @@
       "kind": "door",
       "door": {
         "anchor": {
-          "lineDefId": 120,
+          "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 62,
-          "backSideDefId": 82,
+          "frontSideDefId": 68,
+          "backSideDefId": 88,
           "endpointA": [
             -992,
             1456
@@ -589,6 +555,105 @@
         -52.0,
         0.0,
         106.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 33,
+      "kind": "door",
+      "door": {
+        "anchor": {
+          "lineDefId": 127,
+          "frontSectorId": 33,
+          "backSectorId": 26,
+          "frontSideDefId": 2,
+          "backSideDefId": 13,
+          "endpointA": [
+            -2560,
+            1376
+          ],
+          "endpointB": [
+            -2560,
+            1712
+          ]
+        },
+        "width": 2.625,
+        "height": 2.75,
+        "normalOffset": -0.20000000298023224,
+        "openDistance": 2.75,
+        "speed": 1.75,
+        "autoOpen": true,
+        "autoOpenDistance": 2.5,
+        "textureId": "hydraulic_blast_door_512",
+        "openSoundId": "slidingdoor_03",
+        "closeSoundId": "slidingdoor_03",
+        "faceUvs": {
+          "front": {
+            "scale": [
+              0.380952388048172,
+              0.3636363744735718
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "back": {
+            "scale": [
+              0.380952388048172,
+              0.3636363744735718
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "left": {
+            "scale": [
+              0.380952388048172,
+              0.3636363744735718
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "right": {
+            "scale": [
+              0.380952388048172,
+              0.3636363744735718
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "top": {
+            "scale": [
+              0.380952388048172,
+              0.3636363744735718
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          },
+          "bottom": {
+            "scale": [
+              0.380952388048172,
+              0.3636363744735718
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      "position": [
+        -160.0,
+        -25.0,
+        96.5
       ],
       "yawDegrees": 0.0
     }
@@ -732,23 +797,6 @@
           "noiseScaleWorld": 0.25,
           "flowSpeedWorld": 0.10000000149011612
         }
-      }
-    },
-    {
-      "id": 9,
-      "position": [
-        -146.0,
-        17.0,
-        96.0
-      ],
-      "radius": 64.0,
-      "sourceRadius": 2.0,
-      "intensity": 1.0,
-      "color": {
-        "r": 255,
-        "g": 255,
-        "b": 255,
-        "a": 255
       }
     },
     {
@@ -1134,7 +1182,24 @@
       }
     }
   ],
-  "dynamicPointLights": [],
+  "dynamicPointLights": [
+    {
+      "id": 1,
+      "position": [
+        -152.0,
+        -12.600000381469727,
+        96.0
+      ],
+      "radius": 48.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 240,
+        "b": 230,
+        "a": 255
+      }
+    }
+  ],
   "dynamicSpotLights": [
     {
       "id": 1,
@@ -1270,7 +1335,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "6710ea01407cfa9d",
+    "sourceHash": "c04261b43727f439",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -1290,8 +1355,8 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "6710ea01407cfa9d",
-      "count": 463,
+      "sourceHash": "c04261b43727f439",
+      "count": 475,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -1309,14 +1374,14 @@
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 2778,
+        "sampleCount": 2850,
         "rgbChannelsAboveOne": 41
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "6710ea01407cfa9d",
+      "sourceHash": "c04261b43727f439",
       "modelCount": 20,
       "objectCount": 24,
       "format": "staticModelUvRemapF32LE"
@@ -1806,6 +1871,26 @@
         "id": 108,
         "x": -960,
         "y": 1616
+      },
+      {
+        "id": 109,
+        "x": -2560,
+        "y": 1376
+      },
+      {
+        "id": 110,
+        "x": -2816,
+        "y": 1376
+      },
+      {
+        "id": 111,
+        "x": -2816,
+        "y": 1712
+      },
+      {
+        "id": 112,
+        "x": -2560,
+        "y": 1712
       }
     ],
     "lines": [
@@ -2141,11 +2226,6 @@
         "endVertexId": 69
       },
       {
-        "id": 112,
-        "startVertexId": 67,
-        "endVertexId": 70
-      },
-      {
         "id": 113,
         "startVertexId": 70,
         "endVertexId": 66
@@ -2434,6 +2514,36 @@
         "id": 205,
         "startVertexId": 107,
         "endVertexId": 108
+      },
+      {
+        "id": 206,
+        "startVertexId": 67,
+        "endVertexId": 109
+      },
+      {
+        "id": 208,
+        "startVertexId": 109,
+        "endVertexId": 110
+      },
+      {
+        "id": 209,
+        "startVertexId": 110,
+        "endVertexId": 111
+      },
+      {
+        "id": 210,
+        "startVertexId": 109,
+        "endVertexId": 112
+      },
+      {
+        "id": 211,
+        "startVertexId": 112,
+        "endVertexId": 70
+      },
+      {
+        "id": 212,
+        "startVertexId": 111,
+        "endVertexId": 112
       }
     ],
     "lineSides": [
@@ -4683,49 +4793,6 @@
         }
       },
       {
-        "lineId": 112,
-        "side": "back",
-        "wall": {
-          "textureId": "dirty_gray_concrete_wall_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -0.0
-            ]
-          }
-        },
-        "lower": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "textureId": "wall",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 113,
         "side": "back",
         "wall": {
@@ -6032,7 +6099,7 @@
           }
         },
         "lower": {
-          "textureId": "brick_repair_512",
+          "textureId": "worn_gray_metal_step_512",
           "uv": {
             "scale": [
               1.0,
@@ -6118,7 +6185,7 @@
           }
         },
         "lower": {
-          "textureId": "wall",
+          "textureId": "worn_gray_metal_step_512",
           "uv": {
             "scale": [
               1.0,
@@ -7280,6 +7347,264 @@
         },
         "lower": {
           "textureId": "brick_repair_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 206,
+        "side": "back",
+        "wall": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 208,
+        "side": "back",
+        "wall": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.1875
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 209,
+        "side": "back",
+        "wall": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 210,
+        "side": "back",
+        "wall": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 211,
+        "side": "back",
+        "wall": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 212,
+        "side": "back",
+        "wall": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.1875
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
           "uv": {
             "scale": [
               1.0,
@@ -9213,7 +9538,7 @@
         "name": "Sector 25",
         "x": -845,
         "y": 1310,
-        "floorZ": 0.0,
+        "floorZ": 0.5,
         "ceilingZ": 21.5,
         "floorTextureId": "worn_gray_metal_step_512",
         "ceilingTextureId": "concrete_floor1",
@@ -9750,6 +10075,82 @@
         "ceilingZ": 28.0,
         "floorTextureId": "floor",
         "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.03999999910593033,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 33,
+        "name": "Sector 33",
+        "x": -2689,
+        "y": 1510,
+        "floorZ": -25.0,
+        "ceilingZ": -3.0,
+        "floorTextureId": "worn_gray_metal_step_512",
+        "ceilingTextureId": "dirty_gray_concrete_wall_512",
         "floorUv": {
           "scale": [
             1.0,

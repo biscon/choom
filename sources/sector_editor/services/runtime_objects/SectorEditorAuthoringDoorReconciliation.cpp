@@ -55,6 +55,51 @@ bool SameUnorderedEndpoints(
             || (same(firstA, secondB) && same(firstB, secondA));
 }
 
+const SectorTopologyLineDef* FindUniqueCandidatePortal(
+        const SectorAuthoringDerivationResult& candidateDerivation,
+        SectorTopologyCoordPoint oldA,
+        SectorTopologyCoordPoint oldB,
+        int authoringLineId,
+        bool requireSameEndpoints)
+{
+    const SectorTopologyLineDef* found = nullptr;
+    for (const SectorAuthoringDerivedLineMapping& mapping
+            : candidateDerivation.mapping.lines) {
+        if (IsValidSectorAuthoringId(authoringLineId)
+                && mapping.authoringLineId != authoringLineId) {
+            continue;
+        }
+        SectorTopologyCoordPoint candidateA{};
+        SectorTopologyCoordPoint candidateB{};
+        if (!TopologyLineEndpoints(
+                    candidateDerivation.topology,
+                    mapping.topologyLineDefId,
+                    candidateA,
+                    candidateB)
+                || (requireSameEndpoints
+                        && !SameUnorderedEndpoints(
+                                oldA,
+                                oldB,
+                                candidateA,
+                                candidateB))) {
+            continue;
+        }
+        const SectorTopologyLineDef* line = FindSectorTopologyLineDef(
+                candidateDerivation.topology,
+                mapping.topologyLineDefId);
+        if (line == nullptr
+                || !IsValidSectorTopologyId(line->frontSideDefId)
+                || !IsValidSectorTopologyId(line->backSideDefId)) {
+            continue;
+        }
+        if (found != nullptr) {
+            return nullptr;
+        }
+        found = line;
+    }
+    return found;
+}
+
 } // namespace
 
 bool ReconcileSectorEditorAuthoringCandidateDoors(
@@ -79,23 +124,15 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
 
         const SectorResolvedDoorAnchor currentResolved =
                 ResolveSectorDoorAnchor(currentMap, object.door);
-        if (!currentResolved.valid) {
-            outError = TextFormat(
-                    "Authoring edit unavailable: door %d already has an invalid portal anchor",
-                    object.id);
-            return false;
-        }
         const SectorAuthoringDerivedLineMapping* currentLineMapping =
-                FindLineMappingForTopologyLine(
+                currentResolved.valid
+                ? FindLineMappingForTopologyLine(
                         currentDerivation,
-                        object.door.anchor.lineDefId);
-        if (currentLineMapping == nullptr) {
-            outError = TextFormat(
-                    "Authoring edit unavailable: door %d is not mapped to one authoring line",
-                    object.id);
-            return false;
-        }
-        const int authoringLineId = currentLineMapping->authoringLineId;
+                        object.door.anchor.lineDefId)
+                : nullptr;
+        const int authoringLineId = currentLineMapping == nullptr
+                ? -1
+                : currentLineMapping->authoringLineId;
         if (rejectDoorAuthoringLineIds.find(authoringLineId)
                 != rejectDoorAuthoringLineIds.end()) {
             outError = TextFormat(
@@ -109,47 +146,52 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
             continue;
         }
 
-        SectorTopologyCoordPoint oldA{};
-        SectorTopologyCoordPoint oldB{};
-        if (!TopologyLineEndpoints(
-                    currentMap,
-                    object.door.anchor.lineDefId,
-                    oldA,
-                    oldB)) {
+        SectorTopologyCoordPoint oldA{
+                object.door.anchor.endpointAX,
+                object.door.anchor.endpointAY};
+        SectorTopologyCoordPoint oldB{
+                object.door.anchor.endpointBX,
+                object.door.anchor.endpointBY};
+        if (currentResolved.valid
+                && !TopologyLineEndpoints(
+                        currentMap,
+                        object.door.anchor.lineDefId,
+                        oldA,
+                        oldB)) {
             outError = TextFormat(
                     "Authoring edit unavailable: door %d portal endpoints are invalid",
                     object.id);
             return false;
         }
 
-        const SectorTopologyLineDef* candidateLine = nullptr;
-        for (const SectorAuthoringDerivedLineMapping& mapping
-                : candidateDerivation.mapping.lines) {
-            if (mapping.authoringLineId != authoringLineId) {
-                continue;
-            }
-            SectorTopologyCoordPoint candidateA{};
-            SectorTopologyCoordPoint candidateB{};
-            if (!TopologyLineEndpoints(
-                        candidateDerivation.topology,
-                        mapping.topologyLineDefId,
-                        candidateA,
-                        candidateB)
-                    || !SameUnorderedEndpoints(oldA, oldB, candidateA, candidateB)) {
-                continue;
-            }
-            if (candidateLine != nullptr) {
-                outError = TextFormat(
-                        "Authoring edit unavailable: door %d maps to multiple surviving portal fragments",
-                        object.id);
-                return false;
-            }
-            candidateLine = FindSectorTopologyLineDef(
-                    candidateDerivation.topology,
-                    mapping.topologyLineDefId);
+        const SectorTopologyLineDef* candidateLine = FindUniqueCandidatePortal(
+                candidateDerivation,
+                oldA,
+                oldB,
+                authoringLineId,
+                true);
+        if (candidateLine == nullptr) {
+            candidateLine = FindUniqueCandidatePortal(
+                    candidateDerivation,
+                    oldA,
+                    oldB,
+                    -1,
+                    true);
+        }
+        if (candidateLine == nullptr && IsValidSectorAuthoringId(authoringLineId)) {
+            candidateLine = FindUniqueCandidatePortal(
+                    candidateDerivation,
+                    oldA,
+                    oldB,
+                    authoringLineId,
+                    false);
         }
 
         if (candidateLine == nullptr) {
+            if (!currentResolved.valid) {
+                reconciled.push_back(std::move(object));
+                continue;
+            }
             outError = TextFormat(
                     "Authoring edit unavailable: door %d cannot be mapped to its surviving portal",
                     object.id);
@@ -208,6 +250,94 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
     }
     candidateMapData.runtimeObjects = std::move(reconciled);
     std::sort(outRemovedDoorIds.begin(), outRemovedDoorIds.end());
+    return true;
+}
+
+bool ValidateSectorEditorAuthoringCandidateDoorPortalSpans(
+        const SectorTopologyMap& currentMap,
+        const SectorAuthoringDerivationResult& currentDerivation,
+        const SectorAuthoringGraph& candidateGraph,
+        std::string& outError)
+{
+    outError.clear();
+    for (const SectorPlacedRuntimeObject& object : currentMap.runtimeObjects) {
+        if (object.kind != "door") {
+            continue;
+        }
+
+        const SectorResolvedDoorAnchor resolved =
+                ResolveSectorDoorAnchor(currentMap, object.door);
+        if (!resolved.valid) {
+            continue;
+        }
+
+        SectorTopologyCoordPoint oldA{};
+        SectorTopologyCoordPoint oldB{};
+        if (!TopologyLineEndpoints(
+                    currentMap,
+                    object.door.anchor.lineDefId,
+                    oldA,
+                    oldB)) {
+            outError = TextFormat(
+                    "Authoring edit unavailable: door %d portal endpoints are invalid",
+                    object.id);
+            return false;
+        }
+
+        const SectorAuthoringDerivedLineMapping* currentLineMapping =
+                FindLineMappingForTopologyLine(
+                        currentDerivation,
+                        object.door.anchor.lineDefId);
+        bool spanSurvives = false;
+        for (const SectorAuthoringLine& line : candidateGraph.lines) {
+            if (currentLineMapping != nullptr
+                    && line.id != currentLineMapping->authoringLineId) {
+                continue;
+            }
+            const SectorAuthoringVertex* start = FindSectorAuthoringVertex(
+                    candidateGraph,
+                    line.startVertexId);
+            const SectorAuthoringVertex* end = FindSectorAuthoringVertex(
+                    candidateGraph,
+                    line.endVertexId);
+            if (start == nullptr || end == nullptr) {
+                continue;
+            }
+            const SectorTopologyCoordPoint lineA{start->x, start->y};
+            const SectorTopologyCoordPoint lineB{end->x, end->y};
+            if (SectorTopologyPointOnSegment(oldA, lineA, lineB)
+                    && SectorTopologyPointOnSegment(oldB, lineA, lineB)) {
+                spanSurvives = true;
+                break;
+            }
+        }
+        if (!spanSurvives && currentLineMapping != nullptr) {
+            for (const SectorAuthoringLine& line : candidateGraph.lines) {
+                const SectorAuthoringVertex* start = FindSectorAuthoringVertex(
+                        candidateGraph,
+                        line.startVertexId);
+                const SectorAuthoringVertex* end = FindSectorAuthoringVertex(
+                        candidateGraph,
+                        line.endVertexId);
+                if (start == nullptr || end == nullptr) {
+                    continue;
+                }
+                const SectorTopologyCoordPoint lineA{start->x, start->y};
+                const SectorTopologyCoordPoint lineB{end->x, end->y};
+                if (SectorTopologyPointOnSegment(oldA, lineA, lineB)
+                        && SectorTopologyPointOnSegment(oldB, lineA, lineB)) {
+                    spanSurvives = true;
+                    break;
+                }
+            }
+        }
+        if (!spanSurvives) {
+            outError = TextFormat(
+                    "Cannot split portal containing door %d; remove the door first",
+                    object.id);
+            return false;
+        }
+    }
     return true;
 }
 

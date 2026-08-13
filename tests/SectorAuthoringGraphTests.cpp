@@ -378,6 +378,58 @@ game::SectorAuthoringGraph MakeHubLikeFaceMergeGraph()
     return graph;
 }
 
+game::SectorAuthoringGraph MakeAdjacentTwoRoomGraph()
+{
+    game::SectorAuthoringGraph graph;
+    AddAuthoringVertexWithId(graph, 1, 0, 0);
+    AddAuthoringVertexWithId(graph, 2, 64, 0);
+    AddAuthoringVertexWithId(graph, 3, 128, 0);
+    AddAuthoringVertexWithId(graph, 4, 128, 64);
+    AddAuthoringVertexWithId(graph, 5, 64, 64);
+    AddAuthoringVertexWithId(graph, 6, 0, 64);
+    AddAuthoringLineWithId(graph, 10, 1, 2);
+    AddAuthoringLineWithId(graph, 11, 2, 3);
+    AddAuthoringLineWithId(graph, 12, 3, 4);
+    AddAuthoringLineWithId(graph, 13, 4, 5);
+    AddAuthoringLineWithId(graph, 14, 5, 6);
+    AddAuthoringLineWithId(graph, 15, 6, 1);
+    AddAuthoringLineWithId(graph, 16, 2, 5);
+    AddFaceAnchor(graph, 100, 32, 32, "Left");
+    AddFaceAnchor(graph, 101, 80, 32, "Right");
+    return graph;
+}
+
+int FindDerivedTopologyLineIdForAuthoringLine(
+        const game::SectorAuthoringDerivationResult& derivation,
+        int authoringLineId);
+
+int AddConfiguredDoorToAuthoringPortal(
+        game::SectorEditorDocumentState& documentState,
+        int authoringLineId)
+{
+    const int portalLineId = FindDerivedTopologyLineIdForAuthoringLine(
+            documentState.derivation.authoringDerivation,
+            authoringLineId);
+    const game::SectorEditorAddDoorResult added = game::AddDoorToPortal(
+            documentState.map.topologyMap,
+            portalLineId);
+    Check(added.changed, "door reconciliation fixture adds a portal door");
+    game::SectorPlacedRuntimeObject* object = game::FindSectorPlacedRuntimeObject(
+            documentState.map.topologyMap,
+            added.objectId);
+    Check(object != nullptr, "door reconciliation fixture finds the added door");
+    if (object != nullptr) {
+        object->door.motion = game::SectorDoorMotionType::Swing;
+        object->door.modelAssetId = "preserved_model";
+        object->door.textureId = "preserved_texture";
+        object->door.openSoundId = "preserved_open";
+        object->door.closeSoundId = "preserved_close";
+        object->door.normalOffset = 0.125f;
+        object->door.initialOpenFraction = 0.25f;
+    }
+    return added.objectId;
+}
+
 int FindDerivedTopologyLineIdForAuthoringLine(
         const game::SectorAuthoringDerivationResult& derivation,
         int authoringLineId)
@@ -8520,6 +8572,230 @@ void TestAuthoringRectangleRejectsNonGridIntersectionAtomically()
           "rejected non-grid rectangle leaves graph unchanged atomically");
 }
 
+void TestEditorAuthoringRectangleRebindsUnrelatedDoorAfterTopologyIdsChange()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph =
+            documentState.authoring.authoringGraph;
+    InitializeEditorStateWithAuthoringGraph(
+            state,
+            documentState,
+            authoringGraph,
+            MakeAdjacentTwoRoomGraph());
+    const int doorId = AddConfiguredDoorToAuthoringPortal(documentState, 16);
+    const game::SectorPlacedRuntimeObject* beforeDoor =
+            game::FindSectorPlacedRuntimeObject(
+                    documentState.map.topologyMap,
+                    doorId);
+    Check(beforeDoor != nullptr, "rectangle door rebind fixture has its door");
+    if (beforeDoor == nullptr) {
+        return;
+    }
+    const game::SectorDoorAnchor oldAnchor = beforeDoor->door.anchor;
+
+    game::SectorPlacedRuntimeObject billboard = MakeBillboardRuntimeObject(
+            900,
+            "preserved.json",
+            Vector3{12.0f, 3.0f, 20.0f},
+            0.75f);
+    documentState.map.topologyMap.runtimeObjects.push_back(billboard);
+
+    Check(game::AddSectorEditorAuthoringRectangle(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  game::SectorTopologyCoordPoint{96, -32},
+                  game::SectorTopologyCoordPoint{160, 96}),
+          "intersecting authoring rectangle commits with an unrelated door");
+
+    const game::SectorPlacedRuntimeObject* reboundDoor =
+            game::FindSectorPlacedRuntimeObject(
+                    documentState.map.topologyMap,
+                    doorId);
+    const game::SectorPlacedRuntimeObject* preservedBillboard =
+            game::FindSectorPlacedRuntimeObject(
+                    documentState.map.topologyMap,
+                    billboard.id);
+    Check(reboundDoor != nullptr
+                  && game::ResolveSectorDoorAnchor(
+                             documentState.map.topologyMap,
+                             reboundDoor->door)
+                             .valid,
+          "intersecting rectangle preserves and validates the unrelated door");
+    Check(reboundDoor != nullptr
+                  && reboundDoor->door.anchor.lineDefId != oldAnchor.lineDefId,
+          "intersecting rectangle updates the door's regenerated topology IDs");
+    Check(reboundDoor != nullptr
+                  && reboundDoor->door.motion == game::SectorDoorMotionType::Swing
+                  && reboundDoor->door.modelAssetId == "preserved_model"
+                  && reboundDoor->door.textureId == "preserved_texture"
+                  && reboundDoor->door.openSoundId == "preserved_open"
+                  && reboundDoor->door.closeSoundId == "preserved_close"
+                  && Near(reboundDoor->door.normalOffset, 0.125f)
+                  && Near(reboundDoor->door.initialOpenFraction, 0.25f),
+          "rectangle door reconciliation preserves authored door settings");
+    Check(preservedBillboard != nullptr
+                  && preservedBillboard->billboard.spriteAnimationPath
+                          == "preserved.json"
+                  && Near(preservedBillboard->position, billboard.position),
+          "rectangle door reconciliation preserves unrelated runtime objects");
+    Check(IsAuthoringDerivationCurrent(documentState),
+          "intersecting rectangle leaves the authoring derivation current");
+}
+
+void TestEditorAuthoringLineChainRebindsDoorAfterIntermediateInvalidDerivations()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph =
+            documentState.authoring.authoringGraph;
+    game::SelectionState selectionState;
+    InitializeEditorStateWithAuthoringGraph(
+            state,
+            documentState,
+            authoringGraph,
+            MakeAdjacentTwoRoomGraph());
+    const int doorId = AddConfiguredDoorToAuthoringPortal(documentState, 16);
+
+    const game::SectorTopologyCoordPoint points[] = {
+            {96, -32},
+            {160, -32},
+            {160, 96},
+            {96, 96},
+            {96, -32}};
+    Check(game::ClickSectorEditorAuthoringLineTool(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  selectionState,
+                  points[0])
+                          .status
+                  == game::SectorEditorAuthoringLineToolClickStatus::StartedChain,
+          "door line-chain fixture starts the chain");
+    for (std::size_t index = 1; index < std::size(points); ++index) {
+        const game::SectorEditorAuthoringLineToolClickResult click =
+                game::ClickSectorEditorAuthoringLineTool(
+                        state,
+                        game::MakeSectorEditorDocumentLifecycleAccess(
+                                documentState.lifecycle),
+                        documentState.map.topologyMap,
+                        authoringGraph,
+                        game::MakeSectorEditorDerivationDocumentAccess(
+                                documentState.derivation),
+                        selectionState,
+                        points[index]);
+        Check(click.status
+                      == game::SectorEditorAuthoringLineToolClickStatus::CreatedSegment,
+              "intersecting line chain creates each requested segment");
+    }
+
+    const game::SectorPlacedRuntimeObject* reboundDoor =
+            game::FindSectorPlacedRuntimeObject(
+                    documentState.map.topologyMap,
+                    doorId);
+    Check(IsAuthoringDerivationCurrent(documentState),
+          "closed intersecting line chain recovers a current derivation");
+    Check(reboundDoor != nullptr
+                  && game::ResolveSectorDoorAnchor(
+                             documentState.map.topologyMap,
+                             reboundDoor->door)
+                             .valid,
+          "line chain preserves and rebinds its unrelated door after stale mapping");
+    Check(reboundDoor != nullptr
+                  && reboundDoor->door.modelAssetId == "preserved_model"
+                  && reboundDoor->door.openSoundId == "preserved_open"
+                  && reboundDoor->door.closeSoundId == "preserved_close",
+          "line-chain door reconciliation preserves authored settings");
+}
+
+void TestEditorAuthoringToolsRejectOccupiedPortalSplitsAtomically()
+{
+    const auto initialize = [](game::SectorEditorState& state,
+                                    game::SectorEditorDocumentState& documentState,
+                                    game::SectorAuthoringGraph& authoringGraph) {
+        InitializeEditorStateWithAuthoringGraph(
+                state,
+                documentState,
+                authoringGraph,
+                MakeAdjacentTwoRoomGraph());
+        AddConfiguredDoorToAuthoringPortal(documentState, 16);
+        documentState.lifecycle.topologyDocumentDirty = false;
+        documentState.lifecycle.hasUnsavedChanges = false;
+        state.topologyRenderCache.valid = true;
+    };
+
+    game::SectorEditorState lineState;
+    game::SectorEditorDocumentState lineDocumentState;
+    game::SectorAuthoringGraph& lineGraph =
+            lineDocumentState.authoring.authoringGraph;
+    initialize(lineState, lineDocumentState, lineGraph);
+    game::SelectionState selectionState;
+    const std::size_t lineCountBefore = lineGraph.lines.size();
+    const uint64_t lineRevisionBefore = lineState.topologyRenderRevision;
+    game::SectorEditorAuthoringLineSegmentResult lineResult;
+    Check(!game::AddSectorEditorAuthoringLineSegment(
+                  lineState,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          lineDocumentState.lifecycle),
+                  lineDocumentState.map.topologyMap,
+                  lineGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          lineDocumentState.derivation),
+                  selectionState,
+                  game::SectorTopologyCoordPoint{0, 32},
+                  game::SectorTopologyCoordPoint{128, 32},
+                  nullptr,
+                  &lineResult),
+          "line tool rejects splitting a portal occupied by a door");
+    Check(lineResult.errorMessage.find("remove the door first")
+                          != std::string::npos
+                  && lineGraph.lines.size() == lineCountBefore
+                  && !lineDocumentState.lifecycle.topologyDocumentDirty
+                  && !lineDocumentState.lifecycle.hasUnsavedChanges
+                  && lineState.topologyRenderCache.valid
+                  && lineState.topologyRenderRevision == lineRevisionBefore,
+          "occupied-portal line rejection is atomic and reports the required action");
+
+    game::SectorEditorState rectangleState;
+    game::SectorEditorDocumentState rectangleDocumentState;
+    game::SectorAuthoringGraph& rectangleGraph =
+            rectangleDocumentState.authoring.authoringGraph;
+    initialize(rectangleState, rectangleDocumentState, rectangleGraph);
+    const std::size_t rectangleLineCountBefore = rectangleGraph.lines.size();
+    const uint64_t rectangleRevisionBefore = rectangleState.topologyRenderRevision;
+    game::SectorEditorAuthoringRectangleResult rectangleResult;
+    Check(!game::AddSectorEditorAuthoringRectangle(
+                  rectangleState,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          rectangleDocumentState.lifecycle),
+                  rectangleDocumentState.map.topologyMap,
+                  rectangleGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          rectangleDocumentState.derivation),
+                  game::SectorTopologyCoordPoint{32, 16},
+                  game::SectorTopologyCoordPoint{96, 48},
+                  &rectangleResult),
+          "rectangle tool rejects splitting a portal occupied by a door");
+    Check(rectangleResult.errorMessage.find("remove the door first")
+                          != std::string::npos
+                  && rectangleGraph.lines.size() == rectangleLineCountBefore
+                  && !rectangleDocumentState.lifecycle.topologyDocumentDirty
+                  && !rectangleDocumentState.lifecycle.hasUnsavedChanges
+                  && rectangleState.topologyRenderCache.valid
+                  && rectangleState.topologyRenderRevision
+                          == rectangleRevisionBefore,
+          "occupied-portal rectangle rejection is atomic and reports the required action");
+}
+
 void TestEditorAuthoringLinePickingFindsNearestValidLine()
 {
     game::SectorAuthoringGraph graph;
@@ -10795,6 +11071,124 @@ void TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent()
     std::filesystem::remove(path, removeError);
 }
 
+void TestEditorGraphNativeLoadRecoversDoorsWithoutPriorDerivedTopology()
+{
+    game::SectorEditorLoadedDocument loaded;
+    loaded.format = game::SectorEditorDocumentFormat::AuthoringGraph;
+    loaded.authoringGraph = MakeAdjacentTwoRoomGraph();
+    loaded.mapData = game::CreateEmptySectorTopologyDocument();
+
+    game::SectorAuthoringDerivationResult sourceDerivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(
+                    loaded.authoringGraph);
+    Check(sourceDerivation.success,
+          "graph-native door load fixture derives source topology");
+    const int sourcePortalLineId = FindDerivedTopologyLineIdForAuthoringLine(
+            sourceDerivation,
+            16);
+    const game::SectorEditorAddDoorResult added = game::AddDoorToPortal(
+            sourceDerivation.topology,
+            sourcePortalLineId);
+    Check(added.changed,
+          "graph-native door load fixture creates a recoverable door");
+    const game::SectorPlacedRuntimeObject* sourceDoor =
+            game::FindSectorPlacedRuntimeObject(
+                    sourceDerivation.topology,
+                    added.objectId);
+    Check(sourceDoor != nullptr,
+          "graph-native door load fixture finds its source door");
+    if (sourceDoor == nullptr) {
+        return;
+    }
+
+    game::SectorPlacedRuntimeObject recoverableDoor = *sourceDoor;
+    recoverableDoor.door.modelAssetId = "load_preserved_model";
+    recoverableDoor.door.openSoundId = "load_preserved_open";
+    recoverableDoor.door.closeSoundId = "load_preserved_close";
+    recoverableDoor.door.anchor.lineDefId = 9001;
+    recoverableDoor.door.anchor.frontSideDefId = 9002;
+    recoverableDoor.door.anchor.backSideDefId = 9003;
+    recoverableDoor.door.anchor.frontSectorId = 9004;
+    recoverableDoor.door.anchor.backSectorId = 9005;
+    loaded.mapData.runtimeObjects.push_back(recoverableDoor);
+
+    game::SectorPlacedRuntimeObject unresolvedDoor = recoverableDoor;
+    unresolvedDoor.id = recoverableDoor.id + 1;
+    unresolvedDoor.door.anchor.lineDefId = 9101;
+    unresolvedDoor.door.anchor.frontSideDefId = 9102;
+    unresolvedDoor.door.anchor.backSideDefId = 9103;
+    unresolvedDoor.door.anchor.frontSectorId = 9104;
+    unresolvedDoor.door.anchor.backSectorId = 9105;
+    unresolvedDoor.door.anchor.endpointAX = 777;
+    unresolvedDoor.door.anchor.endpointAY = 888;
+    unresolvedDoor.door.anchor.endpointBX = 999;
+    unresolvedDoor.door.anchor.endpointBY = 1111;
+    unresolvedDoor.door.textureId = "unresolved_preserved_texture";
+    loaded.mapData.runtimeObjects.push_back(unresolvedDoor);
+
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& authoringGraph =
+            documentState.authoring.authoringGraph;
+    bool current = false;
+    game::SectorEditorState state = MakeEditorStateFromLoadedDocument(
+            loaded,
+            documentState,
+            authoringGraph,
+            &current);
+
+    const game::SectorPlacedRuntimeObject* reboundDoor =
+            game::FindSectorPlacedRuntimeObject(
+                    documentState.map.topologyMap,
+                    recoverableDoor.id);
+    const game::SectorPlacedRuntimeObject* preservedUnresolvedDoor =
+            game::FindSectorPlacedRuntimeObject(
+                    documentState.map.topologyMap,
+                    unresolvedDoor.id);
+    Check(current && IsAuthoringDerivationCurrent(documentState),
+          "graph-native load builds current topology without a prior derived map");
+    Check(reboundDoor != nullptr
+                  && reboundDoor->door.anchor.lineDefId != 9001
+                  && game::ResolveSectorDoorAnchor(
+                             documentState.map.topologyMap,
+                             reboundDoor->door)
+                             .valid,
+          "graph-native load rebinds a unique endpoint-matched door");
+    Check(reboundDoor != nullptr
+                  && reboundDoor->door.modelAssetId == "load_preserved_model"
+                  && reboundDoor->door.openSoundId == "load_preserved_open"
+                  && reboundDoor->door.closeSoundId == "load_preserved_close",
+          "graph-native load preserves recovered door settings");
+    Check(preservedUnresolvedDoor != nullptr
+                  && preservedUnresolvedDoor->door.anchor.lineDefId == 9101
+                  && preservedUnresolvedDoor->door.textureId
+                          == "unresolved_preserved_texture"
+                  && !game::ResolveSectorDoorAnchor(
+                              documentState.map.topologyMap,
+                              preservedUnresolvedDoor->door)
+                              .valid,
+          "graph-native load preserves an unresolved door for existing diagnostics");
+
+    game::SectorEditorAuthoringRectangleResult rectangleResult;
+    Check(game::AddSectorEditorAuthoringRectangle(
+                  state,
+                  game::MakeSectorEditorDocumentLifecycleAccess(
+                          documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  authoringGraph,
+                  game::MakeSectorEditorDerivationDocumentAccess(
+                          documentState.derivation),
+                  game::SectorTopologyCoordPoint{192, 0},
+                  game::SectorTopologyCoordPoint{256, 64},
+                  &rectangleResult),
+          "unresolved door does not block an unrelated rectangle edit");
+    Check(IsAuthoringDerivationCurrent(documentState)
+                  && game::FindSectorPlacedRuntimeObject(
+                             documentState.map.topologyMap,
+                             unresolvedDoor.id)
+                          != nullptr,
+          "unrelated edit keeps current topology and preserves unresolved door data");
+}
+
 void TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics()
 {
     game::SectorAuthoringGraph graph;
@@ -12663,6 +13057,9 @@ int main()
     TestAuthoringRectangleCornerOnLineSplitsExistingLine();
     TestAuthoringRectangleRejectsOverlapAtomically();
     TestAuthoringRectangleRejectsNonGridIntersectionAtomically();
+    TestEditorAuthoringRectangleRebindsUnrelatedDoorAfterTopologyIdsChange();
+    TestEditorAuthoringLineChainRebindsDoorAfterIntermediateInvalidDerivations();
+    TestEditorAuthoringToolsRejectOccupiedPortalSplitsAtomically();
     TestEditorAuthoringLinePickingFindsNearestValidLine();
     TestEditorAuthoringDeleteSelectedLineCommitsOnlyValidCandidate();
     TestEditorAuthoringFaceMergeRemovesHubLikeIslandAtomically();
@@ -12693,6 +13090,7 @@ int main()
     TestEditorAuthoringLastValidTopologyIsNotPersisted();
     TestEditorResetBlankMapClearsLifecyclePathAndDirtyState();
     TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent();
+    TestEditorGraphNativeLoadRecoversDoorsWithoutPriorDerivedTopology();
     TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics();
     TestEditorLegacyTopologyImportThenSaveWritesGraphNative();
     TestEditorGraphNativeNestedRoundTripPreservesAnchorsMaterialsAndSelection();

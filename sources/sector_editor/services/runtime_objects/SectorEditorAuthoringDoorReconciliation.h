@@ -19,4 +19,10 @@ bool ReconcileSectorEditorAuthoringCandidateDoors(
         std::vector<int>& outRemovedDoorIds,
         std::string& outError);
 
+bool ValidateSectorEditorAuthoringCandidateDoorPortalSpans(
+        const SectorTopologyMap& currentMap,
+        const SectorAuthoringDerivationResult& currentDerivation,
+        const SectorAuthoringGraph& candidateGraph,
+        std::string& outError);
+
 } // namespace game

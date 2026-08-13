@@ -2368,6 +2368,21 @@ bool AddSectorEditorAuthoringLineSegment(
                 start,
                 end,
                 &insertResult)) {
+        if (outResult != nullptr) {
+            outResult->errorMessage = insertResult.errorMessage;
+        }
+        return false;
+    }
+
+    std::string doorError;
+    if (!ValidateSectorEditorAuthoringCandidateDoorPortalSpans(
+                topologyMap,
+                derivation.authoringDerivation,
+                candidate,
+                doorError)) {
+        if (outResult != nullptr) {
+            outResult->errorMessage = std::move(doorError);
+        }
         return false;
     }
 
@@ -2440,7 +2455,9 @@ SectorEditorAuthoringLineToolClickResult ClickSectorEditorAuthoringLineTool(
                 point,
                 &lineId,
                 &segment)) {
-        state.pendingAuthoringLine.errorMessage = "Authoring line segment rejected";
+        state.pendingAuthoringLine.errorMessage = segment.errorMessage.empty()
+                ? "Authoring line segment rejected"
+                : segment.errorMessage;
         result.status = SectorEditorAuthoringLineToolClickStatus::Rejected;
         return result;
     }
@@ -2538,8 +2555,9 @@ bool AddSectorEditorAuthoringRectangle(
         SectorEditorAuthoringRectangleResult* outResult)
 {
     SectorEditorAuthoringRectangleResult result;
+    SectorAuthoringGraph candidate = authoringGraph;
     if (!CreateSectorAuthoringRectangle(
-                authoringGraph,
+                candidate,
                 firstCorner,
                 oppositeCorner,
                 &result)) {
@@ -2548,6 +2566,21 @@ bool AddSectorEditorAuthoringRectangle(
         }
         return false;
     }
+
+    std::string doorError;
+    if (!ValidateSectorEditorAuthoringCandidateDoorPortalSpans(
+                topologyMap,
+                derivation.authoringDerivation,
+                candidate,
+                doorError)) {
+        result.errorMessage = std::move(doorError);
+        if (outResult != nullptr) {
+            *outResult = result;
+        }
+        return false;
+    }
+
+    authoringGraph = std::move(candidate);
 
     MarkSectorEditorAuthoringGraphEdited(state, lifecycle, derivation, "Created authoring rectangle");
     RefreshSectorEditorAuthoringDerivation(
@@ -4064,7 +4097,35 @@ bool RefreshSectorEditorAuthoringDerivation(
                     topologyRenderCache);
             return false;
         }
-        CopyEditorMapLevelFields(result.topology, topologyMap);
+        SectorTopologyMap candidateMapData = topologyMap;
+        std::vector<int> removedDoorIds;
+        std::string doorError;
+        if (!ReconcileSectorEditorAuthoringCandidateDoors(
+                    topologyMap,
+                    derivation.authoringDerivation,
+                    result,
+                    {},
+                    {},
+                    candidateMapData,
+                    removedDoorIds,
+                    doorError)) {
+            derivation.authoringDerivation = std::move(result);
+            derivation.authoringDerivedTopologyStale = true;
+            derivation.authoringDerivationState =
+                    derivation.lastValidAuthoringDerivedTopology.has_value()
+                    ? SectorEditorAuthoringDerivationState::InvalidLastValid
+                    : SectorEditorAuthoringDerivationState::InvalidNoDerived;
+            derivation.authoringDerivationStatus = doorError.empty()
+                    ? "Authoring graph: door reconciliation failed"
+                    : doorError;
+            lifecycle.topologyDocumentStatus = derivation.authoringDerivationStatus;
+            InvalidateEditorTopologyRenderCacheIfNeeded(
+                    topologyRenderRevision,
+                    topologyRenderCache);
+            return false;
+        }
+
+        CopyEditorMapLevelFields(result.topology, candidateMapData);
         topologyMap = result.topology;
         derivation.lastValidAuthoringDerivedTopology = result.topology;
         derivation.authoringDerivation = std::move(result);
