@@ -221,34 +221,44 @@ void TestRuntimeObjectInspectorHeightCountsBillboardRows()
           "aspect warning height includes text row and trailing gap");
 }
 
-void TestDoorInspectorHeightCountsCoreRows()
+void TestDoorInspectorHeightCountsConditionalRows()
 {
     const float rowH = 40.0f;
     const float gap = 8.0f;
     const float anchorStatusHeight = 44.0f;
-    const float textureStatusHeight = 20.0f;
-    const float height = game::SectorEditorDoorInspectorContentHeight(
+    const float assetStatusHeight = 20.0f;
+    const float modelDiagnosticHeight = 92.0f;
+    const float proceduralSlideHeight = game::SectorEditorDoorInspectorContentHeight(
             rowH,
             gap,
             anchorStatusHeight,
-            textureStatusHeight);
-    const float expected =
-            38.0f
-            + 34.0f
-            + anchorStatusHeight + gap
-            + (rowH + gap) * 4.0f
-            + game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap
-            + (rowH + gap) * 3.0f
-            + (rowH + gap) * 4.0f
-            + textureStatusHeight + gap
-            + rowH + gap
-            + rowH + gap
-            + rowH + gap
-            + rowH + gap
-            + rowH + gap;
-
-    Check(Near(height, expected),
-          "door inspector height includes anchor, core fields, motion, interaction controls, asset status, texture and sound buttons, and delete");
+            assetStatusHeight,
+            0.0f,
+            false,
+            false);
+    const float proceduralSwingHeight = game::SectorEditorDoorInspectorContentHeight(
+            rowH,
+            gap,
+            anchorStatusHeight,
+            assetStatusHeight,
+            0.0f,
+            false,
+            true);
+    const float modelSwingHeight = game::SectorEditorDoorInspectorContentHeight(
+            rowH,
+            gap,
+            anchorStatusHeight,
+            assetStatusHeight,
+            modelDiagnosticHeight,
+            true,
+            true);
+    const float stacked =
+            game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;
+    Check(Near(proceduralSwingHeight - proceduralSlideHeight, stacked * 2.0f),
+          "procedural swing inspector reserves two additional stacked hinge/side rows without clipping later controls");
+    Check(modelSwingHeight > proceduralSwingHeight
+                  && modelSwingHeight >= modelDiagnosticHeight + stacked * 5.0f,
+          "model swing inspector reserves style, fit, diagnostics, and swing controls without overlapping the final actions");
 }
 
 void TestDoorTextureSettingsModalLayoutDoesNotOverlap()
@@ -530,7 +540,7 @@ int main()
     TestTextureRowHeight();
     TestStackedOptionRow();
     TestRuntimeObjectInspectorHeightCountsBillboardRows();
-    TestDoorInspectorHeightCountsCoreRows();
+    TestDoorInspectorHeightCountsConditionalRows();
     TestDoorTextureSettingsModalLayoutDoesNotOverlap();
     TestPreviewSettingsModalCopiesObjectProbeSettings();
     TestPreviewSettingsScrollableContentHeightsReachLastControls();

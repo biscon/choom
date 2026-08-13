@@ -627,18 +627,46 @@ logical connection.
 
 Door dimensions are authored in runtime/world units. Width and height can derive
 from the resolved portal opening, while thickness and normal offset control the
-physical slab around the portal plane. Implemented V1 motion types are
-`slide_vertical`, `slide_left`, and `slide_right`. Door runtime state, including
-current open fraction, target open fraction, transform, collider, and portal
+physical leaf around the portal plane. Implemented motion values are
+`slide_vertical`, `slide_left`, `slide_right`, and `swing`. Door runtime state,
+including current and target open fractions, transform, collider, and portal
 visibility blocker state, lives in ECS. Authored `initialOpenFraction` remains a
 level default and is not rewritten by preview interaction.
 
-In 3D preview, doors render as opaque procedural box/slab geometry after static
-sector geometry. Door faces use one authored map texture ID for all faces, with
-procedural UVs from slab dimensions. Empty, missing, unloaded, or failed door
-textures fall back to the renderer default material instead of crashing. V1 does
-not support door frames, six-face materials, per-face UV editing, transparent
-glass doors, glTF/model doors, or dynamic sector-height doors.
+The default `visual` is `procedural`, preserving older map JSON. Procedural doors
+render as opaque box/slab geometry and may use any motion type. Their map texture
+ID and per-face UV controls remain available; missing or failed textures use the
+default material. Selecting `visual: "model"` requires `motion: "swing"` and a
+non-empty `modelAssetId` from `assets/models/doors/swing/catalog.json`. Unknown
+catalog IDs remain loadable and produce an editor/runtime diagnostic plus an
+animated procedural fallback instead of an invisible blocker or crash.
+
+Model swing-door authored fields and defaults are:
+
+- `modelFit`: `fit_inside` by default, or `fit_width` / `manual`
+- `modelScale`: positive uniform multiplier, default `1.0`
+- `hinge`: portal endpoint `start` by default, or `end`
+- `swingSide`: into the portal `front` sector by default, or `back`
+- `openAngleDegrees`: greater than zero and at most 170, default `90`
+- `angularSpeedDegrees`: non-negative degrees per second, default `90`
+
+All fit modes use one uniform scale. For styles with a frame, `fit_width`
+matches the complete frame width and `fit_inside` constrains the complete frame
+width and height to the target aperture. Frameless styles use the leaf bounds.
+`manual` uses `modelScale` directly but reports overflow from the complete
+assembly when a frame exists. The multiplier is applied after the base fit. The
+inspector reports both the fitted assembly and actual leaf size; the runtime
+never stretches individual axes. Generated catalog metadata preserves the
+source leaf's horizontal hinge inset and bottom offset within its paired frame,
+so the fixed frame remains centered at the portal while the leaf rotates from
+its correctly aligned hinge. Pending or failed leaf assets retain the same
+aligned procedural fallback, and a missing frame does not hide a ready leaf.
+
+Swing rendering uses the existing world-model PBR path, object-probe or sector
+ambient fallback lighting, dynamic point/spot lights, fog, environment
+reflections, and opaque dynamic spotlight shadows. Leaves and frames are runtime
+visuals: they are not static lightmap receivers or baked occluders and their
+fields/assets do not affect the lightmap source hash.
 
 Door interaction is deliberately small. Authored `autoOpen` doors open as the
 player approaches and close when the player leaves the configured distance.
@@ -646,6 +674,14 @@ Non-auto doors can be targeted and toggled with the Interact key `F` when the
 player is close enough. The selected-door inspector also exposes a runtime
 debug open/close target control when a spawned ECS door exists; that control
 changes only preview runtime state.
+
+The same derived swing-leaf transform drives rendering, bounds, and its rotated
+2D OBB collision at every open fraction. The open leaf therefore remains a
+physical obstacle beside the doorway. If a closing swing step would sweep
+through the player's cylinder, the step is rejected and the door retargets open;
+the player is not pushed. Frames have no separate collider. Static topology
+collision, sector lookup, and general player physics are unchanged by swing
+doors.
 
 Closed ECS doors also contribute dynamic portal visibility blockers. A closed
 door blocks traversal across its anchored portal for the preview visibility
@@ -795,14 +831,17 @@ deferred.
   grounded-only jumping. Two-sided portal linedefs can opt into player blocking.
   Crouching, slopes, projectile/sight/monster collision flags, polished drop
   behavior, and NPC navigation are deferred.
-- No dynamic runtime lights or dynamic shadows.
+- No entity-attached gameplay lights or unrestricted general-purpose dynamic
+  shadow system; preview dynamic lights use the documented bounded renderer
+  paths.
 - No alpha-based middle texture collision, translucent glass, depth sorting,
   middle texture decals, middle emissive/tint/bloom controls, or middle
   Copy/Paste Material controls.
-- Door frames, hinged/swing doors, split doors, dynamic sector-height doors,
-  glTF/model doors, per-face door UV editing, door sound effects, locks, keys,
-  scripts, save-game door state, NPC/pathfinding integration, and door shadow
-  casting are deferred.
+- Split/double-leaf doors, dynamic sector-height doors, transparent/glass model
+  doors, frame collision, locks, keys, scripts, save-game door state, and
+  NPC/pathfinding integration are deferred. Model leaves/frames do not enter
+  static lightmaps, and middle/transparent alpha-aware door shadows are not
+  supported.
 - No material maps, PBR material editing, or texture search UI.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.
 - No direct linedef or sidedef deletion.

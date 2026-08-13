@@ -7,6 +7,7 @@
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorStaticSpecularLighting.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
+#include "sector_demo/SectorStaticModelShadow.h"
 
 #include <raylib.h>
 
@@ -268,6 +269,11 @@ public:
     void FinalizeResources(
             engine::AssetManager& assets,
             engine::World& runtimeObjectWorld);
+    void ReserveShadowCasterCapacity(size_t capacity);
+    void PrepareShadowRenderContext(
+            SectorDynamicSpotLightShadowRenderContext& context,
+            engine::World* runtimeObjectWorld);
+    void ClearPreparedShadowCasters();
 
     void Draw(
             engine::AssetManager& assets,
@@ -341,12 +347,30 @@ private:
             const SectorPbrDrawState& state,
             const engine::ModelMaterialAsset& material,
             const SectorStaticSpecularLightContext& staticSpecularLights);
+    bool DrawWorldDynamicModel(
+            const engine::ModelAsset& modelAsset,
+            const Model& model,
+            engine::ModelHandle modelHandle,
+            Matrix modelTransform,
+            int placedObjectId,
+            int receiverSectorId,
+            const SectorReceiverBounds& receiverBounds,
+            Vector3 containingSectorAmbient,
+            float environmentExposure,
+            const BakedObjectLightingVerticalSample& lighting,
+            const SectorBillboardDynamicLightContext& dynamicLightContext,
+            const SectorStaticSpecularLightState& staticSpecularLights,
+            const RuntimePortalVisibilityResult& visibility,
+            bool objectProbeBakeCurrent,
+            const TextureCubemap* environment,
+            bool allowSkinning);
     const CachedModel* FindCachedModel(
             engine::ModelHandle handle,
             int lightmapModelIndex) const;
 
     SectorStaticModelLightmapData lightmapData;
     std::vector<CachedModel> cachedModels;
+    SectorStaticModelShadowCasterCollection shadowCasterCollection;
     int baseColorFactorLoc = -1;
     int emissiveFactorLoc = -1;
     int emissiveStrengthLoc = -1;

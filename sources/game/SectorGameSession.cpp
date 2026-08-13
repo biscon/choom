@@ -174,7 +174,20 @@ void SectorGameSession::Update(
 
     const Vector3 playerPosition =
             controller.fpsControllerState.feetPosition;
-    scene.Update(context, topologyMap, dt, &playerPosition);
+    const SectorFpsControllerConfig obstacleConfig =
+            EffectiveSectorFpsControllerConfig(
+                    controller.fpsControllerState,
+                    controller.fpsControllerConfig);
+    const SectorDoorPlayerObstacle playerObstacle{
+            controller.fpsControllerState.feetPosition,
+            obstacleConfig.playerRadius,
+            obstacleConfig.playerHeight};
+    scene.Update(
+            context,
+            topologyMap,
+            dt,
+            &playerPosition,
+            &playerObstacle);
     SectorRuntimeObjectState& objects = scene.RuntimeObjects();
 
     context.input.ForEachEvent(

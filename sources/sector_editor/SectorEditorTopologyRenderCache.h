@@ -3,6 +3,7 @@
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorTopologyRenderCacheTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
+#include "sector_demo/SectorSwingDoorCatalog.h"
 
 #include <raylib.h>
 
@@ -13,6 +14,16 @@ namespace game {
 void UpdateCachedSectorEditorRuntimeObjectDraw(
         SectorEditorTopologyRenderCache& cache,
         const SectorPlacedRuntimeObject& object);
+
+inline bool IsSectorEditorTopologyRenderCacheCurrent(
+        const SectorEditorTopologyRenderCache& cache,
+        uint64_t topologyRevision,
+        uint64_t swingDoorCatalogRevision)
+{
+    return cache.valid
+            && cache.revision == topologyRevision
+            && cache.swingDoorCatalogRevision == swingDoorCatalogRevision;
+}
 
 struct SectorEditorTopologyDrawContext {
     Rectangle canvasRect = {};
@@ -45,7 +56,9 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         const SectorTopologyMap& map,
         const SectorAuthoringGraph& authoringGraph,
         const SectorAuthoringDerivationResult& authoringDerivation,
-        uint64_t revision);
+        uint64_t revision,
+        const SectorSwingDoorCatalog* swingDoorCatalog = nullptr,
+        uint64_t swingDoorCatalogRevision = 0);
 
 void AppendCachedRuntimeObjectPickCandidates(
         const SectorEditorTopologyRenderCache& cache,

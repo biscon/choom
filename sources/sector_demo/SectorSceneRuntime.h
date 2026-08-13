@@ -31,7 +31,8 @@ public:
             engine::EngineContext& context,
             const SectorTopologyMap& map,
             float dt,
-            const Vector3* playerPosition);
+            const Vector3* playerPosition,
+            const SectorDoorPlayerObstacle* playerObstacle = nullptr);
 
     void RenderShadowMaps(engine::EngineContext& context);
     void RenderScene(

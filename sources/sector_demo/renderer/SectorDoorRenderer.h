@@ -140,7 +140,9 @@ public:
 
 private:
     void ResetOpaqueShaderLocations();
-    void PrepareRuntimeDoorMeshes(engine::World& runtimeObjectWorld);
+    void PrepareRuntimeDoorMeshes(
+            engine::AssetManager& assets,
+            engine::World& runtimeObjectWorld);
     const std::vector<SectorDoorShadowCaster>& ShadowCasters() const { return runtimeDoorShadowCasters; }
     DoorMeshCacheEntry* FindMutableDoorMesh(int placedObjectId);
     const DoorMeshCacheEntry* FindDoorMesh(int placedObjectId) const;
@@ -156,6 +158,7 @@ private:
 
     std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
     std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;
+    std::vector<SectorDoorModelShadowCaster> runtimeDoorModelShadowCasters;
     Shader opaqueShader = {};
     SectorDoorOpaqueShaderLocations opaqueShaderLocations;
     bool opaqueShaderLoaded = false;

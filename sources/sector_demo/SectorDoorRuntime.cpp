@@ -233,14 +233,22 @@ SectorDoorSlabGeometry BuildSectorDoorSlabGeometry(
         const SectorDoorResolvedAnchor& anchor,
         const SectorDoorRender& render)
 {
-    Vector3 tangent = Vector3{anchor.tangent.x, 0.0f, anchor.tangent.y};
+    const Vector2 resolvedWidthAxis = IsFiniteVector2(render.widthAxis)
+                    && Vector2LengthSqr(render.widthAxis) > 0.000001f
+            ? render.widthAxis
+            : anchor.tangent;
+    const Vector2 resolvedThicknessAxis = IsFiniteVector2(render.thicknessAxis)
+                    && Vector2LengthSqr(render.thicknessAxis) > 0.000001f
+            ? render.thicknessAxis
+            : anchor.normal;
+    Vector3 tangent = Vector3{resolvedWidthAxis.x, 0.0f, resolvedWidthAxis.y};
     if (Vector3LengthSqr(tangent) <= 0.000001f) {
         tangent = Vector3{1.0f, 0.0f, 0.0f};
     } else {
         tangent = Vector3Normalize(tangent);
     }
 
-    Vector3 normal = Vector3{anchor.normal.x, 0.0f, anchor.normal.y};
+    Vector3 normal = Vector3{resolvedThicknessAxis.x, 0.0f, resolvedThicknessAxis.y};
     if (Vector3LengthSqr(normal) <= 0.000001f) {
         normal = Vector3{0.0f, 0.0f, -1.0f};
     } else {
@@ -376,16 +384,25 @@ SectorDoorSlabMeshData BuildSectorDoorSlabMeshData(const SectorDoorRender& rende
 
 Matrix BuildSectorDoorSlabModelMatrix(
         const SectorObjectTransform& transform,
-        const SectorDoorResolvedAnchor& anchor)
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render)
 {
-    Vector3 tangent = Vector3{anchor.tangent.x, 0.0f, anchor.tangent.y};
+    const Vector2 resolvedWidthAxis = IsFiniteVector2(render.widthAxis)
+                    && Vector2LengthSqr(render.widthAxis) > 0.000001f
+            ? render.widthAxis
+            : anchor.tangent;
+    const Vector2 resolvedThicknessAxis = IsFiniteVector2(render.thicknessAxis)
+                    && Vector2LengthSqr(render.thicknessAxis) > 0.000001f
+            ? render.thicknessAxis
+            : anchor.normal;
+    Vector3 tangent = Vector3{resolvedWidthAxis.x, 0.0f, resolvedWidthAxis.y};
     if (Vector3LengthSqr(tangent) <= 0.000001f) {
         tangent = Vector3{1.0f, 0.0f, 0.0f};
     } else {
         tangent = Vector3Normalize(tangent);
     }
 
-    Vector3 normal = Vector3{anchor.normal.x, 0.0f, anchor.normal.y};
+    Vector3 normal = Vector3{resolvedThicknessAxis.x, 0.0f, resolvedThicknessAxis.y};
     if (Vector3LengthSqr(normal) <= 0.000001f) {
         normal = Vector3{0.0f, 0.0f, -1.0f};
     } else {
@@ -447,6 +464,7 @@ bool BuildSectorDoorStaticLightingColors(
         const SectorObjectTransform& transform,
         const SectorObject& object,
         const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap* mapForFallback,
         std::vector<Vector3>& outLighting)
@@ -456,7 +474,7 @@ bool BuildSectorDoorStaticLightingColors(
         return false;
     }
 
-    const Matrix model = BuildSectorDoorSlabModelMatrix(transform, anchor);
+    const Matrix model = BuildSectorDoorSlabModelMatrix(transform, anchor, render);
     outLighting.reserve(meshData.vertices.size());
     for (const SectorDoorSlabMeshVertex& vertex : meshData.vertices) {
         const Vector3 worldPosition = Vector3Transform(vertex.position, model);
@@ -545,15 +563,183 @@ void CollectSectorDoorReceiverBounds(
             SectorObject,
             SectorDoor,
             SectorDoorResolvedAnchor,
+            SectorDoorMotion,
             SectorDoorRender>(
-            [&outBounds](
-                    engine::Entity,
+            [&world, &outBounds](
+                    engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObject& object,
                     SectorDoor& door,
                     SectorDoorResolvedAnchor& anchor,
+                    SectorDoorMotion& motion,
                     SectorDoorRender& render) {
+                if (motion.motion == SectorDoorMotionType::Swing
+                        && world.Has<SectorDoorModelRender>(entity)) {
+                    const BoundingBox bounds = world.Get<SectorDoorModelRender>(entity)
+                            .receiverBounds;
+                    if (object.visible
+                            && door.enabled
+                            && render.visible
+                            && IsFiniteVector3(bounds.min)
+                            && IsFiniteVector3(bounds.max)
+                            && bounds.max.x >= bounds.min.x
+                            && bounds.max.y >= bounds.min.y
+                            && bounds.max.z >= bounds.min.z) {
+                        outBounds.push_back(SectorReceiverBounds{
+                                anchor.frontSectorId, bounds.min, bounds.max});
+                        if (anchor.backSectorId > 0
+                                && anchor.backSectorId != anchor.frontSectorId) {
+                            outBounds.push_back(SectorReceiverBounds{
+                                    anchor.backSectorId, bounds.min, bounds.max});
+                        }
+                        return;
+                    }
+                }
                 AppendSectorDoorReceiverBounds(transform, object, door, anchor, render, outBounds);
+            });
+}
+
+SectorDoorModelDrawPolicy ResolveSectorDoorModelDrawPolicy(
+        const SectorDoorModelRender& model,
+        bool leafAssetAvailable,
+        bool frameAssetAvailable)
+{
+    SectorDoorModelDrawPolicy policy;
+    const bool validRequest = model.modelVisualRequested
+            && model.catalogResolved;
+    policy.drawLeaf = validRequest
+            && !engine::IsNull(model.leafModel)
+            && model.leafReady
+            && !model.leafFailed
+            && leafAssetAvailable;
+    policy.drawFrame = validRequest
+            && model.frameDeclared
+            && !engine::IsNull(model.frameModel)
+            && model.frameReady
+            && !model.frameFailed
+            && frameAssetAvailable;
+    policy.drawProcedural = !policy.drawLeaf;
+    return policy;
+}
+
+bool ShouldDrawSectorDoorForVisibility(
+        const SectorDoorResolvedAnchor& anchor,
+        const RuntimePortalVisibilityResult& visibility)
+{
+    if (!visibility.validStartSector || visibility.fallbackDrawAll) {
+        return true;
+    }
+    const auto visible = [&visibility](int sectorId) {
+        return sectorId > 0
+                && std::binary_search(
+                        visibility.visibleSectorIds.begin(),
+                        visibility.visibleSectorIds.end(),
+                        sectorId);
+    };
+    return visible(anchor.frontSectorId) || visible(anchor.backSectorId);
+}
+
+int ResolveSectorDoorAdjacentLightingSector(
+        const SectorDoorResolvedAnchor& anchor,
+        Vector3 leafCenter,
+        int containingSectorId)
+{
+    if (containingSectorId == anchor.frontSectorId
+            || containingSectorId == anchor.backSectorId) {
+        return containingSectorId;
+    }
+    const Vector2 displacement{
+            leafCenter.x - anchor.midpoint.x,
+            leafCenter.z - anchor.midpoint.y};
+    const float side = Vector2DotProduct(displacement, anchor.normal);
+    if (side > 0.0f && anchor.backSectorId > 0) {
+        return anchor.backSectorId;
+    }
+    if (anchor.frontSectorId > 0) {
+        return anchor.frontSectorId;
+    }
+    return anchor.backSectorId;
+}
+
+BoundingBox TransformSectorDoorModelBounds(
+        BoundingBox localBounds,
+        Matrix transform)
+{
+    SectorAabb3 bounds = EmptySectorAabb3();
+    for (float x : {localBounds.min.x, localBounds.max.x}) {
+        for (float y : {localBounds.min.y, localBounds.max.y}) {
+            for (float z : {localBounds.min.z, localBounds.max.z}) {
+                const Vector3 point = Vector3Transform(Vector3{x, y, z}, transform);
+                if (IsFiniteVector3(point)) {
+                    ExpandSectorAabb3(bounds, point);
+                }
+            }
+        }
+    }
+    return BoundingBox{bounds.min, bounds.max};
+}
+
+BoundingBox UnionSectorDoorModelBounds(
+        BoundingBox first,
+        BoundingBox second)
+{
+    return BoundingBox{
+            Vector3{
+                    std::min(first.min.x, second.min.x),
+                    std::min(first.min.y, second.min.y),
+                    std::min(first.min.z, second.min.z)},
+            Vector3{
+                    std::max(first.max.x, second.max.x),
+                    std::max(first.max.y, second.max.y),
+                    std::max(first.max.z, second.max.z)}};
+}
+
+bool AppendSectorDoorModelShadowCasters(
+        engine::Entity entity,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorRender& render,
+        const SectorDoorModelRender& model,
+        const SectorDoorModelDrawPolicy& policy,
+        std::vector<SectorDoorModelShadowCaster>& outCasters)
+{
+    if (!object.visible || !door.enabled || !render.visible) {
+        return false;
+    }
+    const std::size_t beginIndex = outCasters.size();
+    if (policy.drawLeaf) {
+        outCasters.push_back(SectorDoorModelShadowCaster{
+                door.placedObjectId, entity, model.leafModel, model.leafMatrix});
+    }
+    if (policy.drawFrame) {
+        outCasters.push_back(SectorDoorModelShadowCaster{
+                door.placedObjectId, entity, model.frameModel, model.frameMatrix});
+    }
+    return outCasters.size() > beginIndex;
+}
+
+void CollectSectorDoorModelShadowCasters(
+        engine::World& world,
+        engine::AssetManager& assets,
+        std::vector<SectorDoorModelShadowCaster>& outCasters)
+{
+    world.ForEach<SectorObject, SectorDoor, SectorDoorRender, SectorDoorModelRender>(
+            [&assets, &outCasters](
+                    engine::Entity entity,
+                    SectorObject& object,
+                    SectorDoor& door,
+                    SectorDoorRender& render,
+                    SectorDoorModelRender& model) {
+                if (!object.visible || !door.enabled || !render.visible) {
+                    return;
+                }
+                const engine::ModelAsset* leaf = assets.GetModelAsset(model.leafModel);
+                const engine::ModelAsset* frame = assets.GetModelAsset(model.frameModel);
+                const SectorDoorModelDrawPolicy policy =
+                        ResolveSectorDoorModelDrawPolicy(
+                                model, leaf != nullptr, frame != nullptr);
+                AppendSectorDoorModelShadowCasters(
+                        entity, object, door, render, model, policy, outCasters);
             });
 }
 
@@ -586,7 +772,7 @@ bool AppendSectorDoorShadowCaster(
     outCasters.push_back(SectorDoorShadowCaster{
             door.placedObjectId,
             entity,
-            BuildSectorDoorSlabModelMatrix(transform, anchor),
+            BuildSectorDoorSlabModelMatrix(transform, anchor, render),
             transform.position,
             render.width + 2.0f * kSectorDoorShadowCasterHorizontalSealMarginWorld,
             render.height + 2.0f * kSectorDoorShadowCasterVerticalSealMarginWorld,
@@ -636,6 +822,8 @@ float SectorDoorResolvedOpenDistance(const SectorResolvedDoorAnchor& resolved, c
         case SectorDoorMotionType::SlideLeft:
         case SectorDoorMotionType::SlideRight:
             return resolved.width;
+        case SectorDoorMotionType::Swing:
+            return 0.0f;
     }
 
     return resolved.height;
@@ -713,6 +901,180 @@ bool CircleOverlapsDoorObb(
             <= radius * radius + DoorDynamicCollisionEpsilon;
 }
 
+bool IsValidDynamicDoorCollider(const SectorDynamicDoorCollider& collider)
+{
+    return IsFiniteVector2(collider.center)
+            && IsFiniteVector2(collider.tangent)
+            && IsFiniteVector2(collider.normal)
+            && IsFiniteVector2(collider.halfExtents)
+            && std::isfinite(collider.bottom)
+            && std::isfinite(collider.top)
+            && collider.halfExtents.x > DoorDynamicCollisionEpsilon
+            && collider.halfExtents.y > DoorDynamicCollisionEpsilon
+            && collider.top > collider.bottom + DoorDynamicCollisionEpsilon;
+}
+
+Vector2 DoorColliderWorldAabbHalfExtents(
+        const SectorDynamicDoorCollider& collider)
+{
+    const Vector2 tangent = NormalizedOrFallback(
+            collider.tangent, Vector2{1.0f, 0.0f});
+    const Vector2 normal = NormalizedOrFallback(
+            collider.normal, Vector2{0.0f, -1.0f});
+    return Vector2{
+            std::fabs(tangent.x) * collider.halfExtents.x
+                    + std::fabs(normal.x) * collider.halfExtents.y,
+            std::fabs(tangent.y) * collider.halfExtents.x
+                    + std::fabs(normal.y) * collider.halfExtents.y};
+}
+
+bool CircleMayOverlapDoorAabb(
+        Vector2 position,
+        float radius,
+        const SectorDynamicDoorCollider& collider)
+{
+    const Vector2 half = DoorColliderWorldAabbHalfExtents(collider);
+    return position.x + radius >= collider.center.x - half.x
+            && position.x - radius <= collider.center.x + half.x
+            && position.y + radius >= collider.center.y - half.y
+            && position.y - radius <= collider.center.y + half.y;
+}
+
+bool SweepMayOverlapDoorAabb(
+        Vector2 start,
+        Vector2 delta,
+        float radius,
+        const SectorDynamicDoorCollider& collider)
+{
+    const Vector2 end = Add(start, delta);
+    const Vector2 half = DoorColliderWorldAabbHalfExtents(collider);
+    const float sweepMinX = std::min(start.x, end.x) - radius;
+    const float sweepMaxX = std::max(start.x, end.x) + radius;
+    const float sweepMinY = std::min(start.y, end.y) - radius;
+    const float sweepMaxY = std::max(start.y, end.y) + radius;
+    return sweepMaxX >= collider.center.x - half.x
+            && sweepMinX <= collider.center.x + half.x
+            && sweepMaxY >= collider.center.y - half.y
+            && sweepMinY <= collider.center.y + half.y;
+}
+
+bool SweepCircleAgainstDoorObb(
+        Vector2 start,
+        Vector2 delta,
+        float radius,
+        const SectorDynamicDoorCollider& collider,
+        float& outTime,
+        Vector2& outNormal)
+{
+    const Vector2 tangent = NormalizedOrFallback(
+            collider.tangent, Vector2{1.0f, 0.0f});
+    const Vector2 normal = NormalizedOrFallback(
+            collider.normal, Vector2{0.0f, -1.0f});
+    const Vector2 startRelative = Subtract(start, collider.center);
+    const Vector2 startLocal{
+            Dot(startRelative, tangent),
+            Dot(startRelative, normal)};
+    const Vector2 deltaLocal{
+            Dot(delta, tangent),
+            Dot(delta, normal)};
+    const float movementLengthSquared = Dot(deltaLocal, deltaLocal);
+    if (!(movementLengthSquared
+                    > DoorDynamicCollisionEpsilon * DoorDynamicCollisionEpsilon)
+            || !std::isfinite(movementLengthSquared)) {
+        return false;
+    }
+
+    float earliest = std::numeric_limits<float>::infinity();
+    Vector2 earliestNormalLocal{};
+    const auto recordCandidate = [&](float time, Vector2 normalLocal) {
+        if (!std::isfinite(time)
+                || !IsFiniteVector2(normalLocal)
+                || time < -DoorDynamicCollisionEpsilon
+                || time > 1.0f + DoorDynamicCollisionEpsilon
+                || Dot(deltaLocal, normalLocal) >= -DoorDynamicCollisionEpsilon) {
+            return;
+        }
+        const float clampedTime = Clamp(time, 0.0f, 1.0f);
+        if (clampedTime < earliest) {
+            earliest = clampedTime;
+            earliestNormalLocal = normalLocal;
+        }
+    };
+
+    const float faceTangent = collider.halfExtents.x + radius;
+    if (std::fabs(deltaLocal.x) > DoorDynamicCollisionEpsilon) {
+        for (float sign : {-1.0f, 1.0f}) {
+            const Vector2 normalLocal{sign, 0.0f};
+            const float time = (sign * faceTangent - startLocal.x) / deltaLocal.x;
+            const float normalAtHit = startLocal.y + deltaLocal.y * time;
+            if (normalAtHit >= -collider.halfExtents.y - DoorDynamicCollisionEpsilon
+                    && normalAtHit <= collider.halfExtents.y + DoorDynamicCollisionEpsilon) {
+                recordCandidate(time, normalLocal);
+            }
+        }
+    }
+
+    const float faceNormal = collider.halfExtents.y + radius;
+    if (std::fabs(deltaLocal.y) > DoorDynamicCollisionEpsilon) {
+        for (float sign : {-1.0f, 1.0f}) {
+            const Vector2 normalLocal{0.0f, sign};
+            const float time = (sign * faceNormal - startLocal.y) / deltaLocal.y;
+            const float tangentAtHit = startLocal.x + deltaLocal.x * time;
+            if (tangentAtHit >= -collider.halfExtents.x - DoorDynamicCollisionEpsilon
+                    && tangentAtHit <= collider.halfExtents.x + DoorDynamicCollisionEpsilon) {
+                recordCandidate(time, normalLocal);
+            }
+        }
+    }
+
+    const float radiusSquared = radius * radius;
+    for (float tangentSign : {-1.0f, 1.0f}) {
+        for (float normalSign : {-1.0f, 1.0f}) {
+            const Vector2 corner{
+                    tangentSign * collider.halfExtents.x,
+                    normalSign * collider.halfExtents.y};
+            const Vector2 fromCorner = Subtract(startLocal, corner);
+            const float projected = Dot(fromCorner, deltaLocal);
+            const float constant = Dot(fromCorner, fromCorner) - radiusSquared;
+            const float discriminant = projected * projected
+                    - movementLengthSquared * constant;
+            if (!std::isfinite(discriminant)
+                    || discriminant < -DoorDynamicCollisionEpsilon) {
+                continue;
+            }
+
+            const float time = (-projected
+                    - std::sqrt(std::max(0.0f, discriminant)))
+                    / movementLengthSquared;
+            if (!std::isfinite(time)) {
+                continue;
+            }
+            const Vector2 hitPoint = Add(startLocal, Scale(deltaLocal, time));
+            const Vector2 fromHitCorner = Subtract(hitPoint, corner);
+            if (tangentSign * fromHitCorner.x < -DoorDynamicCollisionEpsilon
+                    || normalSign * fromHitCorner.y < -DoorDynamicCollisionEpsilon) {
+                continue;
+            }
+            recordCandidate(
+                    time,
+                    NormalizedOrFallback(
+                            fromHitCorner,
+                            Vector2{tangentSign, normalSign}));
+        }
+    }
+
+    if (!std::isfinite(earliest)) {
+        return false;
+    }
+
+    outTime = earliest;
+    outNormal = Add(
+            Scale(tangent, earliestNormalLocal.x),
+            Scale(normal, earliestNormalLocal.y));
+    outNormal = NormalizedOrFallback(outNormal, Vector2{1.0f, 0.0f});
+    return true;
+}
+
 bool ResolveCircleAgainstDoorObb(
         Vector2& position,
         float radius,
@@ -760,118 +1122,6 @@ bool ResolveCircleAgainstDoorObb(
     return true;
 }
 
-bool SegmentIntersectsExpandedDoorObb(
-        Vector2 startPosition,
-        Vector2 endPosition,
-        float radius,
-        const SectorDynamicDoorCollider& collider)
-{
-    const Vector2 tangent = NormalizedOrFallback(collider.tangent, Vector2{1.0f, 0.0f});
-    const Vector2 normal = NormalizedOrFallback(collider.normal, Vector2{0.0f, -1.0f});
-    const Vector2 startRelative = Subtract(startPosition, collider.center);
-    const Vector2 endRelative = Subtract(endPosition, collider.center);
-    const Vector2 startLocal{
-            Dot(startRelative, tangent),
-            Dot(startRelative, normal)};
-    const Vector2 endLocal{
-            Dot(endRelative, tangent),
-            Dot(endRelative, normal)};
-    const Vector2 expanded{
-            collider.halfExtents.x + radius,
-            collider.halfExtents.y + radius};
-
-    if (startLocal.x > -expanded.x + DoorDynamicCollisionEpsilon
-            && startLocal.x < expanded.x - DoorDynamicCollisionEpsilon
-            && startLocal.y > -expanded.y + DoorDynamicCollisionEpsilon
-            && startLocal.y < expanded.y - DoorDynamicCollisionEpsilon) {
-        return false;
-    }
-
-    const Vector2 deltaLocal = Subtract(endLocal, startLocal);
-    float tEnter = 0.0f;
-    float tExit = 1.0f;
-    const float startAxes[2] = {startLocal.x, startLocal.y};
-    const float deltaAxes[2] = {deltaLocal.x, deltaLocal.y};
-    const float minAxes[2] = {-expanded.x, -expanded.y};
-    const float maxAxes[2] = {expanded.x, expanded.y};
-
-    for (int axis = 0; axis < 2; ++axis) {
-        if (std::fabs(deltaAxes[axis]) <= DoorDynamicCollisionEpsilon) {
-            if (startAxes[axis] < minAxes[axis] || startAxes[axis] > maxAxes[axis]) {
-                return false;
-            }
-            continue;
-        }
-
-        const float invDelta = 1.0f / deltaAxes[axis];
-        float axisEnter = (minAxes[axis] - startAxes[axis]) * invDelta;
-        float axisExit = (maxAxes[axis] - startAxes[axis]) * invDelta;
-        if (axisEnter > axisExit) {
-            std::swap(axisEnter, axisExit);
-        }
-
-        tEnter = std::max(tEnter, axisEnter);
-        tExit = std::min(tExit, axisExit);
-        if (tEnter > tExit) {
-            return false;
-        }
-    }
-
-    return tExit >= -DoorDynamicCollisionEpsilon
-            && tEnter <= 1.0f + DoorDynamicCollisionEpsilon;
-}
-
-void ConstrainCircleToStartingSideOfDoorObb(
-        Vector2& position,
-        Vector2 startPosition,
-        float radius,
-        const SectorDynamicDoorCollider& collider)
-{
-    const Vector2 tangent = NormalizedOrFallback(collider.tangent, Vector2{1.0f, 0.0f});
-    const Vector2 normal = NormalizedOrFallback(collider.normal, Vector2{0.0f, -1.0f});
-    const Vector2 startRelative = Subtract(startPosition, collider.center);
-    const Vector2 positionRelative = Subtract(position, collider.center);
-    const Vector2 startLocal{
-            Dot(startRelative, tangent),
-            Dot(startRelative, normal)};
-    const Vector2 positionLocal{
-            Dot(positionRelative, tangent),
-            Dot(positionRelative, normal)};
-    const Vector2 expanded{
-            collider.halfExtents.x + radius,
-            collider.halfExtents.y + radius};
-
-    Vector2 constrainedLocal = positionLocal;
-    bool constrained = false;
-    if (startLocal.x <= -expanded.x
-            && positionLocal.x > -expanded.x + DoorDynamicCollisionEpsilon) {
-        constrainedLocal.x = -expanded.x - DoorDynamicCollisionEpsilon;
-        constrained = true;
-    } else if (startLocal.x >= expanded.x
-            && positionLocal.x < expanded.x - DoorDynamicCollisionEpsilon) {
-        constrainedLocal.x = expanded.x + DoorDynamicCollisionEpsilon;
-        constrained = true;
-    }
-
-    if (startLocal.y <= -expanded.y
-            && positionLocal.y > -expanded.y + DoorDynamicCollisionEpsilon) {
-        constrainedLocal.y = -expanded.y - DoorDynamicCollisionEpsilon;
-        constrained = true;
-    } else if (startLocal.y >= expanded.y
-            && positionLocal.y < expanded.y - DoorDynamicCollisionEpsilon) {
-        constrainedLocal.y = expanded.y + DoorDynamicCollisionEpsilon;
-        constrained = true;
-    }
-
-    if (!constrained) {
-        return;
-    }
-
-    position = Add(
-            collider.center,
-            Add(Scale(tangent, constrainedLocal.x), Scale(normal, constrainedLocal.y)));
-}
-
 } // namespace
 
 Vector3 SectorDoorMotionOffset(
@@ -881,8 +1131,8 @@ Vector3 SectorDoorMotionOffset(
     const float openFraction = std::isfinite(motion.openFraction)
             ? Clamp(motion.openFraction, 0.0f, 1.0f)
             : 0.0f;
-    const float openDistance = motion.openDistance > 0.0f && std::isfinite(motion.openDistance)
-            ? motion.openDistance
+    const float openDistance = motion.travelAmount > 0.0f && std::isfinite(motion.travelAmount)
+            ? motion.travelAmount
             : 0.0f;
     const float effectiveOpenDistance = openDistance > kSectorDoorOpenParkingEpsilonWorld
             ? openDistance - kSectorDoorOpenParkingEpsilonWorld
@@ -897,6 +1147,8 @@ Vector3 SectorDoorMotionOffset(
             return Vector3{-tangent.x * offset, 0.0f, -tangent.y * offset};
         case SectorDoorMotionType::SlideRight:
             return Vector3{tangent.x * offset, 0.0f, tangent.y * offset};
+        case SectorDoorMotionType::Swing:
+            return Vector3{};
     }
 
     return Vector3{};
@@ -931,6 +1183,154 @@ SectorDoorResolvedAnchor ToSectorRuntimeDoorAnchor(const SectorResolvedDoorAncho
     anchor.portalWidth = resolved.portalWidth;
     anchor.portalHeight = resolved.portalHeight;
     return anchor;
+}
+
+namespace {
+
+Vector2 RotateDoorAxis(Vector2 axis, float angleRadians)
+{
+    const float cosine = std::cos(angleRadians);
+    const float sine = std::sin(angleRadians);
+    return Vector2{
+            axis.x * cosine - axis.y * sine,
+            axis.x * sine + axis.y * cosine};
+}
+
+Matrix BuildDoorBasisMatrix(
+        Vector2 widthAxis,
+        Vector2 thicknessAxis,
+        Vector3 translation,
+        float scale)
+{
+    widthAxis = NormalizedOrFallback(widthAxis, Vector2{1.0f, 0.0f});
+    thicknessAxis = NormalizedOrFallback(thicknessAxis, Vector2{0.0f, -1.0f});
+    const float safeScale = std::isfinite(scale) && scale > 0.0f ? scale : 1.0f;
+    return Matrix{
+            widthAxis.x * safeScale, 0.0f, thicknessAxis.x * safeScale, translation.x,
+            0.0f, safeScale, 0.0f, translation.y,
+            widthAxis.y * safeScale, 0.0f, thicknessAxis.y * safeScale, translation.z,
+            0.0f, 0.0f, 0.0f, 1.0f};
+}
+
+} // namespace
+
+float SectorDoorSwingSign(
+        const SectorDoorResolvedAnchor& anchor,
+        SectorDoorHinge hinge,
+        SectorDoorSwingSide swingSide)
+{
+    const Vector2 tangent = NormalizedOrFallback(anchor.tangent, Vector2{1.0f, 0.0f});
+    const Vector2 normal = NormalizedOrFallback(anchor.normal, Vector2{0.0f, -1.0f});
+    const Vector2 closedWidthAxis = hinge == SectorDoorHinge::End
+            ? Scale(tangent, -1.0f)
+            : tangent;
+    constexpr float probeAngle = 1.0f * DEG2RAD;
+    const Vector2 positiveDisplacement = Subtract(
+            RotateDoorAxis(closedWidthAxis, probeAngle),
+            closedWidthAxis);
+    const float positiveDot = Dot(positiveDisplacement, normal);
+    const bool wantsPositiveNormal = swingSide == SectorDoorSwingSide::Back;
+    const bool positiveMatches = wantsPositiveNormal
+            ? positiveDot > 0.0f
+            : positiveDot < 0.0f;
+    return positiveMatches ? 1.0f : -1.0f;
+}
+
+namespace {
+
+SectorDoorSwingPose BuildSectorDoorSwingPoseAtAngle(
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorMotion& motion,
+        const SectorDoorRender& render,
+        float effectiveScale,
+        float angle)
+{
+    const Vector2 tangent = NormalizedOrFallback(anchor.tangent, Vector2{1.0f, 0.0f});
+    const Vector2 normal = NormalizedOrFallback(anchor.normal, Vector2{0.0f, -1.0f});
+    const bool endHinge = motion.hinge == SectorDoorHinge::End;
+    const Vector2 closedWidthAxis = endHinge ? Scale(tangent, -1.0f) : tangent;
+    const Vector2 closedThicknessAxis = endHinge ? Scale(normal, -1.0f) : normal;
+    const Vector2 endpoint = endHinge ? anchor.endpointB : anchor.endpointA;
+    const Vector2 hingeBase = render.alignLeafToFrame
+            ? Subtract(
+                    anchor.midpoint,
+                    Scale(closedWidthAxis, render.leafHingeToFrameCenter))
+            : endpoint;
+    const Vector2 hingeXZ = Add(hingeBase, Scale(normal, render.normalOffset));
+    const Vector2 widthAxis = NormalizedOrFallback(
+            RotateDoorAxis(closedWidthAxis, angle),
+            closedWidthAxis);
+    const Vector2 thicknessAxis = NormalizedOrFallback(
+            RotateDoorAxis(closedThicknessAxis, angle),
+            closedThicknessAxis);
+    const float leafBottom = anchor.openBottom
+            + (render.alignLeafToFrame ? render.leafBottomOffset : 0.0f);
+    const Vector3 hingePosition{hingeXZ.x, leafBottom, hingeXZ.y};
+    const Vector3 center{
+            hingeXZ.x + widthAxis.x * render.width * 0.5f,
+            leafBottom + render.height * 0.5f,
+            hingeXZ.y + widthAxis.y * render.width * 0.5f};
+    const Vector3 framePosition{
+            anchor.midpoint.x + normal.x * render.normalOffset,
+            anchor.openBottom,
+            anchor.midpoint.y + normal.y * render.normalOffset};
+
+    SectorDoorSwingPose pose;
+    pose.hingePosition = hingePosition;
+    pose.center = center;
+    pose.widthAxis = widthAxis;
+    pose.thicknessAxis = thicknessAxis;
+    pose.bottom = leafBottom;
+    pose.top = leafBottom + render.height;
+    pose.angleRadians = angle;
+    pose.leafMatrix = BuildDoorBasisMatrix(
+            widthAxis, thicknessAxis, hingePosition, effectiveScale);
+    pose.frameMatrix = BuildDoorBasisMatrix(
+            tangent, normal, framePosition, effectiveScale);
+    return pose;
+}
+
+} // namespace
+
+SectorDoorSwingPose BuildSectorDoorSwingPose(
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorMotion& motion,
+        const SectorDoorRender& render,
+        float effectiveScale,
+        float openFraction)
+{
+    const float clampedFraction = std::isfinite(openFraction)
+            ? Clamp(openFraction, 0.0f, 1.0f)
+            : 0.0f;
+    const float travel = std::isfinite(motion.travelAmount) && motion.travelAmount > 0.0f
+            ? motion.travelAmount
+            : 0.0f;
+    const float angle = SmootherStep01(clampedFraction)
+            * travel
+            * SectorDoorSwingSign(anchor, motion.hinge, motion.swingSide);
+    return BuildSectorDoorSwingPoseAtAngle(
+            anchor, motion, render, effectiveScale, angle);
+}
+
+SectorDoorCollider BuildSectorDoorSwingCollider(
+        const SectorDoorSwingPose& pose,
+        float width,
+        float thickness,
+        bool enabled)
+{
+    const bool valid = enabled
+            && std::isfinite(width) && width > 0.0f
+            && std::isfinite(thickness) && thickness > 0.0f
+            && std::isfinite(pose.bottom) && std::isfinite(pose.top)
+            && pose.top > pose.bottom;
+    return SectorDoorCollider{
+            Vector2{pose.center.x, pose.center.z},
+            pose.widthAxis,
+            pose.thicknessAxis,
+            Vector2{valid ? width * 0.5f : 0.0f, valid ? thickness * 0.5f : 0.0f},
+            pose.bottom,
+            pose.top,
+            valid};
 }
 
 namespace {
@@ -1076,7 +1476,10 @@ bool ToggleTargetedSectorDoorInteractionSystem(
     return true;
 }
 
-bool AdvanceSectorDoorMotionSystem(engine::World& world, float dt)
+bool AdvanceSectorDoorMotionSystem(
+        engine::World& world,
+        float dt,
+        const SectorDoorPlayerObstacle* playerObstacle)
 {
     if (!std::isfinite(dt) || dt <= 0.0f) {
         return false;
@@ -1084,7 +1487,10 @@ bool AdvanceSectorDoorMotionSystem(engine::World& world, float dt)
 
     bool changed = false;
     world.ForEach<SectorDoor, SectorDoorMotion>(
-            [dt, &changed](engine::Entity, SectorDoor& door, SectorDoorMotion& motion) {
+            [dt, playerObstacle, &world, &changed](
+                    engine::Entity entity,
+                    SectorDoor& door,
+                    SectorDoorMotion& motion) {
                 if (!door.enabled) {
                     return;
                 }
@@ -1098,25 +1504,160 @@ bool AdvanceSectorDoorMotionSystem(engine::World& world, float dt)
 
                 motion.openFraction = Clamp(motion.openFraction, 0.0f, 1.0f);
                 motion.targetOpenFraction = Clamp(motion.targetOpenFraction, 0.0f, 1.0f);
-                if (motion.speed <= 0.0f || !std::isfinite(motion.speed)) {
+                if (motion.travelSpeed <= 0.0f || !std::isfinite(motion.travelSpeed)) {
                     return;
                 }
 
-                const float distance = motion.openDistance > 0.0f && std::isfinite(motion.openDistance)
-                        ? motion.openDistance
+                const float distance = motion.travelAmount > 0.0f && std::isfinite(motion.travelAmount)
+                        ? motion.travelAmount
                         : 1.0f;
-                const float fractionStep = (motion.speed * dt) / distance;
+                const float fractionStep = (motion.travelSpeed * dt) / distance;
                 if (!std::isfinite(fractionStep) || fractionStep <= 0.0f) {
                     return;
                 }
 
                 const float previousOpenFraction = motion.openFraction;
-                if (motion.openFraction < motion.targetOpenFraction) {
-                    motion.openFraction = std::min(motion.openFraction + fractionStep, motion.targetOpenFraction);
-                } else if (motion.openFraction > motion.targetOpenFraction) {
-                    motion.openFraction = std::max(motion.openFraction - fractionStep, motion.targetOpenFraction);
+                float candidateOpenFraction = motion.openFraction;
+                if (candidateOpenFraction < motion.targetOpenFraction) {
+                    candidateOpenFraction = std::min(
+                            candidateOpenFraction + fractionStep,
+                            motion.targetOpenFraction);
+                } else if (candidateOpenFraction > motion.targetOpenFraction) {
+                    candidateOpenFraction = std::max(
+                            candidateOpenFraction - fractionStep,
+                            motion.targetOpenFraction);
                 }
+
+                const bool closingSwing = motion.motion == SectorDoorMotionType::Swing
+                        && candidateOpenFraction < previousOpenFraction;
+                bool obstructed = false;
+                if (closingSwing
+                        && playerObstacle != nullptr
+                        && world.Has<SectorDoorResolvedAnchor>(entity)
+                        && world.Has<SectorDoorRender>(entity)
+                        && IsFiniteVector3(playerObstacle->feetPosition)
+                        && std::isfinite(playerObstacle->radius)
+                        && playerObstacle->radius > 0.0f
+                        && std::isfinite(playerObstacle->height)
+                        && playerObstacle->height > 0.0f) {
+                    const SectorDoorResolvedAnchor& anchor =
+                            world.Get<SectorDoorResolvedAnchor>(entity);
+                    const SectorDoorRender& render = world.Get<SectorDoorRender>(entity);
+                    const SectorDoorSwingPose previousPose = BuildSectorDoorSwingPose(
+                            anchor, motion, render, 1.0f, previousOpenFraction);
+                    const SectorDoorSwingPose candidatePose = BuildSectorDoorSwingPose(
+                            anchor, motion, render, 1.0f, candidateOpenFraction);
+                    constexpr float maximumSampleStep = 5.0f * DEG2RAD;
+                    constexpr int maximumSegments = 34;
+                    const float sweptAngle = std::fabs(
+                            candidatePose.angleRadians - previousPose.angleRadians);
+                    const int segmentCount = std::clamp(
+                            static_cast<int>(std::ceil(sweptAngle / maximumSampleStep)),
+                            1,
+                            maximumSegments);
+                    const float playerBottom = playerObstacle->feetPosition.y;
+                    const float playerTop = playerBottom + playerObstacle->height;
+                    for (int sampleIndex = 0; sampleIndex <= segmentCount; ++sampleIndex) {
+                        const float sampleT = static_cast<float>(sampleIndex)
+                                / static_cast<float>(segmentCount);
+                        const float sampleAngle = previousPose.angleRadians
+                                + (candidatePose.angleRadians
+                                        - previousPose.angleRadians) * sampleT;
+                        const SectorDoorSwingPose samplePose =
+                                BuildSectorDoorSwingPoseAtAngle(
+                                        anchor,
+                                        motion,
+                                        render,
+                                        1.0f,
+                                        sampleAngle);
+                        if (playerTop <= samplePose.bottom + DoorDynamicCollisionEpsilon
+                                || playerBottom >= samplePose.top - DoorDynamicCollisionEpsilon) {
+                            continue;
+                        }
+                        const SectorDoorCollider sampleCollider = BuildSectorDoorSwingCollider(
+                                samplePose, render.width, render.thickness, door.enabled);
+                        const SectorDynamicDoorCollider dynamicCollider{
+                                door.placedObjectId,
+                                entity,
+                                sampleCollider.center,
+                                sampleCollider.tangent,
+                                sampleCollider.normal,
+                                sampleCollider.halfExtents,
+                                sampleCollider.bottom,
+                                sampleCollider.top};
+                        if (sampleCollider.enabled
+                                && CircleOverlapsDoorObb(
+                                        Vector2{
+                                                playerObstacle->feetPosition.x,
+                                                playerObstacle->feetPosition.z},
+                                        playerObstacle->radius,
+                                        dynamicCollider)) {
+                            obstructed = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (obstructed) {
+                    const bool targetChanged = motion.targetOpenFraction != 1.0f;
+                    motion.targetOpenFraction = 1.0f;
+                    changed = changed || targetChanged;
+                    return;
+                }
+
+                motion.openFraction = candidateOpenFraction;
                 changed = changed || motion.openFraction != previousOpenFraction;
+            });
+    return changed;
+}
+
+bool RefreshSectorDoorModelReadinessSystem(
+        engine::World& world,
+        engine::AssetManager& assets)
+{
+    bool changed = false;
+    world.ForEach<SectorDoorModelRender>(
+            [&assets, &changed](engine::Entity, SectorDoorModelRender& model) {
+                const bool leafReady = !engine::IsNull(model.leafModel)
+                        && assets.IsReady(model.leafModel);
+                const bool leafFailed = !engine::IsNull(model.leafModel)
+                        && assets.HasFailed(model.leafModel);
+                const bool frameReady = model.frameDeclared
+                        && !engine::IsNull(model.frameModel)
+                        && assets.IsReady(model.frameModel);
+                const bool frameFailed = model.frameDeclared
+                        && model.catalogResolved
+                        && model.fallbackReason
+                                != SectorDoorModelFallbackReason::AssetScopeUnavailable
+                        && (engine::IsNull(model.frameModel)
+                                || assets.HasFailed(model.frameModel));
+                const engine::ModelAsset* leafAsset = leafReady
+                        ? assets.GetModelAsset(model.leafModel) : nullptr;
+                const engine::ModelAsset* frameAsset = frameReady
+                        ? assets.GetModelAsset(model.frameModel) : nullptr;
+                const bool leafBoundsReady = leafAsset != nullptr
+                        && leafAsset->hasLocalBounds;
+                const bool frameBoundsReady = frameAsset != nullptr
+                        && frameAsset->hasLocalBounds;
+                changed = changed
+                        || leafReady != model.leafReady
+                        || leafFailed != model.leafFailed
+                        || frameReady != model.frameReady
+                        || frameFailed != model.frameFailed
+                        || leafBoundsReady != model.leafBoundsReady
+                        || frameBoundsReady != model.frameBoundsReady;
+                model.leafReady = leafReady;
+                model.leafFailed = leafFailed;
+                model.frameReady = frameReady;
+                model.frameFailed = frameFailed;
+                model.leafBoundsReady = leafBoundsReady;
+                model.frameBoundsReady = frameBoundsReady;
+                if (leafBoundsReady) {
+                    model.leafLocalBounds = leafAsset->localBounds;
+                }
+                if (frameBoundsReady) {
+                    model.frameLocalBounds = frameAsset->localBounds;
+                }
             });
     return changed;
 }
@@ -1137,6 +1678,21 @@ SectorDoorAudioEvent UpdateSectorDoorAudioTransition(
     return audio.pendingEvent;
 }
 
+bool IsSectorDoorAudioEventReady(
+        SectorDoorAudioEvent event,
+        const SectorDoorMotion& motion)
+{
+    if (event == SectorDoorAudioEvent::None) {
+        return false;
+    }
+    if (event != SectorDoorAudioEvent::Close
+            || motion.motion != SectorDoorMotionType::Swing) {
+        return true;
+    }
+    return std::isfinite(motion.openFraction)
+            && Clamp(motion.openFraction, 0.0f, 1.0f) == 0.0f;
+}
+
 void UpdateSectorDoorAudioSystem(
         engine::World& world,
         engine::AssetManager& assets,
@@ -1154,6 +1710,9 @@ void UpdateSectorDoorAudioSystem(
                 }
                 UpdateSectorDoorAudioTransition(audio, motion);
                 if (audio.pendingEvent == SectorDoorAudioEvent::None) {
+                    return;
+                }
+                if (!IsSectorDoorAudioEventReady(audio.pendingEvent, motion)) {
                     return;
                 }
 
@@ -1185,7 +1744,7 @@ void UpdateSectorDoorDerivedStateSystem(engine::World& world)
             SectorDoorRender,
             SectorDoorCollider,
             SectorDoorPortalBlocker>(
-            [](engine::Entity,
+            [&world](engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorDoor& door,
                     SectorDoorResolvedAnchor& anchor,
@@ -1201,22 +1760,112 @@ void UpdateSectorDoorDerivedStateSystem(engine::World& world)
                         && std::isfinite(render.height)
                         && render.thickness > 0.0f
                         && std::isfinite(render.thickness);
-                const Vector3 center = Vector3Add(
-                        SectorDoorClosedCenter(anchor, render),
-                        SectorDoorMotionOffset(anchor, motion));
+                if (motion.motion == SectorDoorMotionType::Swing) {
+                    const float effectiveScale = world.Has<SectorDoorModelRender>(entity)
+                            ? world.Get<SectorDoorModelRender>(entity).effectiveScale
+                            : 1.0f;
+                    const SectorDoorSwingPose pose = BuildSectorDoorSwingPose(
+                            anchor,
+                            motion,
+                            render,
+                            effectiveScale,
+                            motion.openFraction);
+                    transform.position = pose.center;
+                    transform.yawRadians = std::atan2(
+                            pose.widthAxis.y, pose.widthAxis.x);
+                    render.widthAxis = pose.widthAxis;
+                    render.thicknessAxis = pose.thicknessAxis;
+                    collider = BuildSectorDoorSwingCollider(
+                            pose,
+                            render.width,
+                            render.thickness,
+                            door.enabled && validShape);
 
-                transform.position = center;
-                transform.yawRadians = std::atan2(tangent.y, tangent.x);
+                    if (world.Has<SectorDoorModelRender>(entity)) {
+                        SectorDoorModelRender& model =
+                                world.Get<SectorDoorModelRender>(entity);
+                        model.leafMatrix = pose.leafMatrix;
+                        model.frameMatrix = pose.frameMatrix;
 
-                collider.center = Vector2{center.x, center.z};
-                collider.tangent = tangent;
-                collider.normal = normal;
-                collider.halfExtents = Vector2{
-                        validShape ? render.width * 0.5f : 0.0f,
-                        validShape ? render.thickness * 0.5f : 0.0f};
-                collider.bottom = center.y - (validShape ? render.height * 0.5f : 0.0f);
-                collider.top = center.y + (validShape ? render.height * 0.5f : 0.0f);
-                collider.enabled = door.enabled && validShape;
+                        const float leafHalfWidth = validShape ? render.width * 0.5f : 0.0f;
+                        const float leafHalfThickness = validShape ? render.thickness * 0.5f : 0.0f;
+                        const float extentX = std::fabs(pose.widthAxis.x) * leafHalfWidth
+                                + std::fabs(pose.thicknessAxis.x) * leafHalfThickness;
+                        const float extentZ = std::fabs(pose.widthAxis.y) * leafHalfWidth
+                                + std::fabs(pose.thicknessAxis.y) * leafHalfThickness;
+                        Vector3 boundsMin{
+                                pose.center.x - extentX,
+                                pose.bottom,
+                                pose.center.z - extentZ};
+                        Vector3 boundsMax{
+                                pose.center.x + extentX,
+                                pose.top,
+                                pose.center.z + extentZ};
+                        if (model.frameDeclared
+                                && std::isfinite(model.frameOuterWidth)
+                                && model.frameOuterWidth > 0.0f
+                                && std::isfinite(model.frameOuterHeight)
+                                && model.frameOuterHeight > 0.0f
+                                && std::isfinite(model.effectiveScale)
+                                && model.effectiveScale > 0.0f) {
+                            const float frameHalfWidth = model.frameOuterWidth
+                                    * model.effectiveScale * 0.5f;
+                            const float frameHalfDepth = render.thickness * 0.5f;
+                            const Vector3 frameCenter = Vector3Transform(
+                                    Vector3{
+                                            0.0f,
+                                            model.frameOuterHeight * 0.5f,
+                                            0.0f},
+                                    pose.frameMatrix);
+                            const float frameExtentX = std::fabs(tangent.x) * frameHalfWidth
+                                    + std::fabs(normal.x) * frameHalfDepth;
+                            const float frameExtentZ = std::fabs(tangent.y) * frameHalfWidth
+                                    + std::fabs(normal.y) * frameHalfDepth;
+                            boundsMin.x = std::min(boundsMin.x, frameCenter.x - frameExtentX);
+                            boundsMin.y = std::min(boundsMin.y, anchor.openBottom);
+                            boundsMin.z = std::min(boundsMin.z, frameCenter.z - frameExtentZ);
+                            boundsMax.x = std::max(boundsMax.x, frameCenter.x + frameExtentX);
+                            boundsMax.y = std::max(
+                                    boundsMax.y,
+                                    anchor.openBottom
+                                            + model.frameOuterHeight * model.effectiveScale);
+                            boundsMax.z = std::max(boundsMax.z, frameCenter.z + frameExtentZ);
+                        }
+                        model.analyticReceiverBounds = BoundingBox{boundsMin, boundsMax};
+                        model.receiverBounds = model.analyticReceiverBounds;
+                        if (model.leafBoundsReady) {
+                            model.receiverBounds = UnionSectorDoorModelBounds(
+                                    model.receiverBounds,
+                                    TransformSectorDoorModelBounds(
+                                            model.leafLocalBounds,
+                                            model.leafMatrix));
+                        }
+                        if (model.frameBoundsReady) {
+                            model.receiverBounds = UnionSectorDoorModelBounds(
+                                    model.receiverBounds,
+                                    TransformSectorDoorModelBounds(
+                                            model.frameLocalBounds,
+                                            model.frameMatrix));
+                        }
+                    }
+                } else {
+                    const Vector3 center = Vector3Add(
+                            SectorDoorClosedCenter(anchor, render),
+                            SectorDoorMotionOffset(anchor, motion));
+                    transform.position = center;
+                    transform.yawRadians = std::atan2(tangent.y, tangent.x);
+                    render.widthAxis = tangent;
+                    render.thicknessAxis = normal;
+                    collider.center = Vector2{center.x, center.z};
+                    collider.tangent = tangent;
+                    collider.normal = normal;
+                    collider.halfExtents = Vector2{
+                            validShape ? render.width * 0.5f : 0.0f,
+                            validShape ? render.thickness * 0.5f : 0.0f};
+                    collider.bottom = center.y - (validShape ? render.height * 0.5f : 0.0f);
+                    collider.top = center.y + (validShape ? render.height * 0.5f : 0.0f);
+                    collider.enabled = door.enabled && validShape;
+                }
 
                 const float openFraction = std::isfinite(motion.openFraction)
                         ? Clamp(motion.openFraction, 0.0f, 1.0f)
@@ -1355,67 +2004,90 @@ SectorCollisionMoveResult ResolveSectorDoorDynamicCollidersForPlayerMovement(
         return result;
     }
 
+    Vector2 position = moveState.positionXZ;
+    Vector2 remaining = Subtract(staticResult.positionXZ, moveState.positionXZ);
     bool hitDynamicDoor = false;
-    for (const SectorDynamicDoorCollider& collider : colliders) {
-        if (!IsFiniteVector2(collider.center)
-                || !IsFiniteVector2(collider.tangent)
-                || !IsFiniteVector2(collider.normal)
-                || !IsFiniteVector2(collider.halfExtents)
-                || !std::isfinite(collider.bottom)
-                || !std::isfinite(collider.top)
-                || collider.halfExtents.x <= 0.0f
-                || collider.halfExtents.y <= 0.0f
-                || collider.top <= collider.bottom
-                || !PlayerVerticalIntervalOverlapsDoor(moveState, config, collider)) {
-            continue;
+    const auto resolvePenetrations = [&]() {
+        for (int iteration = 0; iteration < config.maxIterations; ++iteration) {
+            bool changed = false;
+            for (const SectorDynamicDoorCollider& collider : colliders) {
+                if (!IsValidDynamicDoorCollider(collider)
+                        || !PlayerVerticalIntervalOverlapsDoor(
+                                moveState, config, collider)
+                        || !CircleMayOverlapDoorAabb(
+                                position, config.radius, collider)) {
+                    continue;
+                }
+                if (ResolveCircleAgainstDoorObb(
+                            position, config.radius, collider)) {
+                    result.hitWall = true;
+                    hitDynamicDoor = true;
+                    changed = true;
+                }
+            }
+            if (!changed) {
+                break;
+            }
         }
+    };
 
-        if (SegmentIntersectsExpandedDoorObb(
-                    moveState.positionXZ,
-                    staticResult.positionXZ,
-                    config.radius,
-                    collider)) {
-            result.positionXZ = moveState.positionXZ;
-            result.currentSectorId = moveState.currentSectorId;
-            result.hitWall = true;
-            hitDynamicDoor = true;
-            break;
-        }
-    }
-
+    // Recover first so a frame that begins slightly embedded cannot turn that
+    // overlap into a persistent zero-time sweep contact.
+    resolvePenetrations();
     for (int iteration = 0; iteration < config.maxIterations; ++iteration) {
-        bool changed = false;
+        float earliest = std::numeric_limits<float>::infinity();
+        Vector2 hitNormal{};
         for (const SectorDynamicDoorCollider& collider : colliders) {
-            if (!IsFiniteVector2(collider.center)
-                    || !IsFiniteVector2(collider.tangent)
-                    || !IsFiniteVector2(collider.normal)
-                    || !IsFiniteVector2(collider.halfExtents)
-                    || !std::isfinite(collider.bottom)
-                    || !std::isfinite(collider.top)
-                    || collider.halfExtents.x <= 0.0f
-                    || collider.halfExtents.y <= 0.0f
-                    || collider.top <= collider.bottom
-                    || !PlayerVerticalIntervalOverlapsDoor(moveState, config, collider)) {
+            if (!IsValidDynamicDoorCollider(collider)
+                    || !PlayerVerticalIntervalOverlapsDoor(
+                            moveState, config, collider)
+                    || !SweepMayOverlapDoorAabb(
+                            position, remaining, config.radius, collider)) {
                 continue;
             }
-
-            if (ResolveCircleAgainstDoorObb(result.positionXZ, config.radius, collider)) {
-                if (staticResult.currentSectorId != moveState.currentSectorId) {
-                    ConstrainCircleToStartingSideOfDoorObb(
-                            result.positionXZ,
-                            moveState.positionXZ,
-                            config.radius,
-                            collider);
-                }
-                result.hitWall = true;
-                hitDynamicDoor = true;
-                changed = true;
+            float hitTime = 0.0f;
+            Vector2 normal{};
+            if (SweepCircleAgainstDoorObb(
+                        position,
+                        remaining,
+                        config.radius,
+                        collider,
+                        hitTime,
+                        normal)
+                    && hitTime < earliest) {
+                earliest = hitTime;
+                hitNormal = normal;
             }
         }
-        if (!changed) {
+
+        if (!std::isfinite(earliest)) {
+            position = Add(position, remaining);
+            remaining = Vector2{};
+            break;
+        }
+
+        const float approachDistance = -Dot(remaining, hitNormal);
+        const float skinTime = approachDistance > DoorDynamicCollisionEpsilon
+                ? DoorDynamicCollisionEpsilon / approachDistance
+                : 0.0f;
+        const float safeTime = std::max(0.0f, earliest - skinTime);
+        position = Add(position, Scale(remaining, safeTime));
+        remaining = Scale(remaining, 1.0f - earliest);
+        const float intoDoor = Dot(remaining, hitNormal);
+        if (intoDoor < 0.0f) {
+            remaining = Subtract(remaining, Scale(hitNormal, intoDoor));
+        }
+        result.hitWall = true;
+        hitDynamicDoor = true;
+        if (Dot(remaining, remaining)
+                <= DoorDynamicCollisionEpsilon * DoorDynamicCollisionEpsilon) {
+            remaining = Vector2{};
             break;
         }
     }
+
+    resolvePenetrations();
+    result.positionXZ = position;
 
     if (hitDynamicDoor && result.currentSectorId != moveState.currentSectorId) {
         result.currentSectorId = moveState.currentSectorId;

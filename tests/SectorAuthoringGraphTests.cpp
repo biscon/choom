@@ -21,7 +21,9 @@
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
+#include "sector_editor/tools/doors/SectorEditorDoorInspector.h"
 #include "engine/assets/AssetManager.h"
+#include "engine/EngineContext.h"
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -92,6 +94,11 @@ bool Near(float a, float b)
 bool Near(Vector3 a, Vector3 b)
 {
     return Near(a.x, b.x) && Near(a.y, b.y) && Near(a.z, b.z);
+}
+
+bool Near(Vector2 a, Vector2 b)
+{
+    return Near(a.x, b.x) && Near(a.y, b.y);
 }
 
 game::SectorPlacedRuntimeObject MakeBillboardRuntimeObject(
@@ -10373,6 +10380,218 @@ void TestEditorDoorPlacementRejectsOneSidedWall()
           "rejected door placement explains the portal requirement");
 }
 
+game::SectorSwingDoorCatalog MakeEditorSwingDoorCatalog()
+{
+    game::SectorSwingDoorCatalog catalog;
+    catalog.formatVersion = 1;
+    game::SectorSwingDoorCatalogAsset first;
+    first.id = "test_first";
+    first.displayName = "Test First";
+    first.leafModelPath = "assets/models/doors/swing/test_first_leaf.gltf";
+    first.nominalWidth = 1.0f;
+    first.nominalHeight = 2.0f;
+    first.nominalThickness = 0.1f;
+    catalog.assetIndexById.emplace(first.id, 0);
+    catalog.assets.push_back(first);
+    game::SectorSwingDoorCatalogAsset second = first;
+    second.id = "test_second";
+    second.displayName = "Test Second";
+    second.nominalWidth = 0.75f;
+    second.hasFrame = true;
+    second.hasFrameAlignment = true;
+    second.frameModelPath = "assets/models/doors/swing/test_second_frame.gltf";
+    second.frameOuterWidth = 1.0f;
+    second.frameOuterHeight = 2.25f;
+    second.leafHingeToFrameCenter = 0.4f;
+    second.leafBottomOffset = 0.1f;
+    catalog.assetIndexById.emplace(second.id, 1);
+    catalog.assets.push_back(second);
+    return catalog;
+}
+
+void TestEditorSwingDoorDefaultsCachedFootprintGuidesAndPicking()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    const game::SectorEditorAddDoorResult add = game::AddDoorToPortal(map, 11);
+    Check(add.changed && map.runtimeObjects.size() == 1,
+          "swing-door editor cache fixture places a portal door");
+    if (map.runtimeObjects.empty()) return;
+
+    game::SectorPlacedDoor& door = map.runtimeObjects[0].door;
+    door.interactionDistance = 3.25f;
+    door.autoOpenDistance = 4.5f;
+    door.openSoundId = "open_preserved";
+    door.closeSoundId = "close_preserved";
+    door.initialOpenFraction = 0.35f;
+    const float targetWidth = door.width;
+    const float targetHeight = door.height;
+    const game::SectorSwingDoorCatalog catalog = MakeEditorSwingDoorCatalog();
+    Check(game::InitializeSectorEditorModelSwingDoor(door, catalog)
+                  && door.visual == game::SectorDoorVisualType::Model
+                  && door.modelAssetId == "test_first"
+                  && door.modelFit == game::SectorDoorModelFit::FitInside
+                  && Near(door.modelScale, 1.0f)
+                  && door.motion == game::SectorDoorMotionType::Swing
+                  && door.hinge == game::SectorDoorHinge::Start
+                  && door.swingSide == game::SectorDoorSwingSide::Front
+                  && Near(door.openAngleDegrees, 90.0f)
+                  && Near(door.angularSpeedDegrees, 90.0f),
+          "model selection initializes the documented first-style swing defaults");
+    Check(!game::SectorEditorDoorInspectorShowsSlideMotionOptions(door)
+                  && !game::SectorEditorDoorInspectorShowsProceduralMaterialControls(door),
+          "model door inspector exposes neither slide choices nor procedural material controls");
+    Check(Near(door.width, targetWidth)
+                  && Near(door.height, targetHeight)
+                  && Near(door.interactionDistance, 3.25f)
+                  && Near(door.autoOpenDistance, 4.5f)
+                  && door.openSoundId == "open_preserved"
+                  && door.closeSoundId == "close_preserved"
+                  && Near(door.initialOpenFraction, 0.35f),
+          "model initialization preserves aperture, interaction, sounds, and initial fraction");
+    const game::SectorPlacedDoor beforeStyle = door;
+    Check(game::SelectSectorEditorSwingDoorStyle(door, catalog, "test_second")
+                  && door.modelAssetId == "test_second"
+                  && door.visual == beforeStyle.visual
+                  && door.modelFit == beforeStyle.modelFit
+                  && Near(door.modelScale, beforeStyle.modelScale)
+                  && door.motion == beforeStyle.motion
+                  && door.hinge == beforeStyle.hinge
+                  && door.swingSide == beforeStyle.swingSide
+                  && Near(door.openAngleDegrees, beforeStyle.openAngleDegrees)
+                  && Near(door.interactionDistance, beforeStyle.interactionDistance),
+          "style selection changes only the catalog ID");
+    Check(!game::SelectSectorEditorSwingDoorStyle(door, catalog, "missing_style")
+                  && door.modelAssetId == "test_second",
+          "style selection rejects IDs absent from the loaded door catalog");
+
+    door.hinge = game::SectorDoorHinge::Start;
+    door.swingSide = game::SectorDoorSwingSide::Front;
+    const uint64_t topologyRevision = 8;
+    const uint64_t catalogRevision = 23;
+    game::SectorEditorTopologyRenderCache cache =
+            game::BuildSectorEditorTopologyRenderCache(
+                    map,
+                    game::SectorAuthoringGraph{},
+                    game::SectorAuthoringDerivationResult{},
+                    topologyRevision,
+                    &catalog,
+                    catalogRevision);
+    Check(game::IsSectorEditorTopologyRenderCacheCurrent(
+                  cache, topologyRevision, catalogRevision)
+                  && !game::IsSectorEditorTopologyRenderCacheCurrent(
+                          cache, topologyRevision, catalogRevision + 1),
+          "door catalog revision participates in 2D render-cache currency");
+    Check(cache.runtimeObjects.size() == 1,
+          "model swing door produces one cached runtime-object draw");
+    if (cache.runtimeObjects.empty()) return;
+    const game::SectorResolvedDoorAnchor resolved =
+            game::ResolveSectorDoorAnchor(map, door);
+    const game::SectorSwingDoorFitResult fit = game::ComputeSectorSwingDoorFit(
+            catalog.assets[1],
+            resolved.width,
+            resolved.height,
+            door.modelFit,
+            door.modelScale);
+    const game::CachedRuntimeObjectDraw& start = cache.runtimeObjects[0];
+    const Vector2 expectedStartHinge = game::SectorWorldToAuthoringPosition(Vector2{
+            resolved.midpoint.x
+                    - resolved.tangent.x * catalog.assets[1].leafHingeToFrameCenter
+                            * fit.effectiveScale,
+            resolved.midpoint.y
+                    - resolved.tangent.y * catalog.assets[1].leafHingeToFrameCenter
+                            * fit.effectiveScale});
+    const Vector2 startFreeEdge{
+            (start.doorCorners[1].x + start.doorCorners[2].x) * 0.5f,
+            (start.doorCorners[1].y + start.doorCorners[2].y) * 0.5f};
+    const float cachedWidth = std::sqrt(
+            (startFreeEdge.x - start.doorHinge.x)
+                    * (startFreeEdge.x - start.doorHinge.x)
+            + (startFreeEdge.y - start.doorHinge.y)
+                    * (startFreeEdge.y - start.doorHinge.y));
+    Check(start.doorFootprintValid
+                  && start.doorModelMetadataValid
+                  && start.doorSwingGuideValid
+                  && Near(start.doorHinge, expectedStartHinge)
+                  && Near(cachedWidth,
+                          game::SectorWorldToAuthoringDistance(fit.actualWidth)),
+          "cached Start-hinge footprint uses exact catalog-fitted leaf dimensions");
+    const Vector2 frontDelta{
+            start.doorOpenFreeEdge.x - start.doorHinge.x,
+            start.doorOpenFreeEdge.y - start.doorHinge.y};
+    Check(frontDelta.x * resolved.normal.x
+                      + frontDelta.y * resolved.normal.y < 0.0f,
+          "cached Front swing guide opens toward the resolved front sector");
+
+    for (float zoom : {0.5f, 8.0f, 64.0f}) {
+        game::SectorEditorTopologyDrawContext context;
+        context.canvasRect = Rectangle{0.0f, 0.0f, 200.0f, 200.0f};
+        context.viewCenter = game::SectorAuthoringToWorldPosition(start.map);
+        context.viewZoom = zoom;
+        std::vector<game::SectorEditorPickCandidate> candidates;
+        game::AppendCachedRuntimeObjectPickCandidates(
+                cache,
+                context,
+                Vector2{100.0f, 100.0f},
+                game::ScreenLightPickPixels,
+                candidates);
+        Check(candidates.size() == 1 && candidates[0].target.id == add.objectId,
+              "closed catalog-resolved door footprint remains pickable across zoom levels");
+    }
+
+    game::SectorEditorTopologyDrawContext guideContext;
+    guideContext.canvasRect = Rectangle{0.0f, 0.0f, 200.0f, 200.0f};
+    guideContext.viewCenter =
+            game::SectorAuthoringToWorldPosition(start.doorOpenFreeEdge);
+    guideContext.viewZoom = 64.0f;
+    std::vector<game::SectorEditorPickCandidate> guideCandidates;
+    game::AppendCachedRuntimeObjectPickCandidates(
+            cache,
+            guideContext,
+            Vector2{100.0f, 100.0f},
+            1.0f,
+            guideCandidates);
+    Check(guideCandidates.empty(),
+          "open outline and swing guide alone are not door pick targets");
+
+    door.hinge = game::SectorDoorHinge::End;
+    door.swingSide = game::SectorDoorSwingSide::Back;
+    cache = game::BuildSectorEditorTopologyRenderCache(
+            map,
+            game::SectorAuthoringGraph{},
+            game::SectorAuthoringDerivationResult{},
+            topologyRevision + 1,
+            &catalog,
+            catalogRevision);
+    const game::CachedRuntimeObjectDraw& end = cache.runtimeObjects[0];
+    const Vector2 expectedEndHinge = game::SectorWorldToAuthoringPosition(Vector2{
+            resolved.midpoint.x
+                    + resolved.tangent.x * catalog.assets[1].leafHingeToFrameCenter
+                            * fit.effectiveScale,
+            resolved.midpoint.y
+                    + resolved.tangent.y * catalog.assets[1].leafHingeToFrameCenter
+                            * fit.effectiveScale});
+    const Vector2 backDelta{
+            end.doorOpenFreeEdge.x - end.doorHinge.x,
+            end.doorOpenFreeEdge.y - end.doorHinge.y};
+    Check(Near(end.doorHinge, expectedEndHinge)
+                  && end.doorSwingIntoBack
+                  && backDelta.x * resolved.normal.x
+                                  + backDelta.y * resolved.normal.y > 0.0f,
+          "cached framed End-hinge Back guide uses the paired inset and sector side");
+
+    door.modelAssetId = "missing_style";
+    cache = game::BuildSectorEditorTopologyRenderCache(
+            map,
+            game::SectorAuthoringGraph{},
+            game::SectorAuthoringDerivationResult{},
+            topologyRevision + 2,
+            &catalog,
+            catalogRevision);
+    Check(cache.runtimeObjects[0].doorFootprintValid
+                  && !cache.runtimeObjects[0].doorModelMetadataValid,
+          "missing catalog metadata deterministically keeps authored fallback footprint and marks it invalid");
+}
+
 void TestEditorUnifiedSelectPickOrderingCyclingAndDragGate()
 {
     std::vector<game::SectorEditorPickCandidate> candidates{
@@ -11225,6 +11444,221 @@ game::SectorEditorRuntimeObjectEditingService MakeRuntimeObjectEditingServiceFor
                     statusText,
                     nullptr,
                     derivationCurrent}};
+}
+
+void TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    const game::SectorEditorAddDoorResult add = game::AddDoorToPortal(map, 11);
+    Check(add.changed && map.runtimeObjects.size() == 1,
+          "swing-door mutation fixture places a portal door");
+    if (map.runtimeObjects.empty()) return;
+    map.runtimeObjects[0].door.modelAssetId = "test_first";
+    map.runtimeObjects[0].door.interactionDistance = 7.25f;
+
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::RuntimeObjectEditingState editingState;
+    game::RuntimeObjectEditingUiState uiState;
+    game::SelectionState selectionState;
+    selectionState.selectedRuntimeObjectId = add.objectId;
+    game::SectorEditorDocumentState documentState;
+    uint64_t renderRevision = 40;
+    game::SectorEditorTopologyRenderCache renderCache;
+    std::string statusText;
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    game::SectorEditorRuntimeObjectEditingService editing =
+            MakeRuntimeObjectEditingServiceForTest(
+                    map,
+                    runtimeObjects,
+                    editingState,
+                    uiState,
+                    selectionState,
+                    documentState,
+                    renderRevision,
+                    renderCache,
+                    statusText,
+                    true);
+
+    const auto verifyMutation = [&] (
+            const char* description,
+            const std::function<bool(game::SectorPlacedDoor&)>& mutate,
+            const std::function<bool(const game::SectorPlacedDoor&)>& verify) {
+        documentState.lifecycle.topologyDocumentDirty = false;
+        documentState.lifecycle.hasUnsavedChanges = false;
+        FillRuntimeObjectTestSectorCache(renderCache, map);
+        const uint64_t beforeRevision = renderRevision;
+        const bool changed = editing.MutateSelected(
+                description,
+                [&mutate](game::SectorPlacedRuntimeObject& object) {
+                    return object.kind == "door" && mutate(object.door);
+                });
+        Check(changed
+                      && verify(map.runtimeObjects[0].door)
+                      && Near(map.runtimeObjects[0].door.interactionDistance, 7.25f)
+                      && documentState.lifecycle.topologyDocumentDirty
+                      && documentState.lifecycle.hasUnsavedChanges
+                      && renderRevision == beforeRevision + 1
+                      && !renderCache.valid,
+              description);
+    };
+
+    verifyMutation(
+            "door visual edit uses the document-edited cache invalidation path",
+            [](game::SectorPlacedDoor& door) {
+                door.visual = game::SectorDoorVisualType::Model;
+                return true;
+            },
+            [](const game::SectorPlacedDoor& door) {
+                return door.visual == game::SectorDoorVisualType::Model;
+            });
+    verifyMutation(
+            "door model style edit uses the document-edited cache invalidation path",
+            [](game::SectorPlacedDoor& door) {
+                door.modelAssetId = "test_second";
+                return true;
+            },
+            [](const game::SectorPlacedDoor& door) {
+                return door.modelAssetId == "test_second";
+            });
+    verifyMutation(
+            "door model fit edit uses the document-edited cache invalidation path",
+            [](game::SectorPlacedDoor& door) {
+                door.modelFit = game::SectorDoorModelFit::Manual;
+                return true;
+            },
+            [](const game::SectorPlacedDoor& door) {
+                return door.modelFit == game::SectorDoorModelFit::Manual;
+            });
+    verifyMutation(
+            "door model scale edit uses the document-edited cache invalidation path",
+            [](game::SectorPlacedDoor& door) {
+                door.modelScale = 1.25f;
+                return true;
+            },
+            [](const game::SectorPlacedDoor& door) {
+                return Near(door.modelScale, 1.25f);
+            });
+    verifyMutation(
+            "door swing motion edit uses the document-edited cache invalidation path",
+            [](game::SectorPlacedDoor& door) {
+                door.motion = game::SectorDoorMotionType::Swing;
+                return true;
+            },
+            [](const game::SectorPlacedDoor& door) {
+                return door.motion == game::SectorDoorMotionType::Swing;
+            });
+    verifyMutation(
+            "door hinge edit uses the document-edited cache invalidation path",
+            [](game::SectorPlacedDoor& door) {
+                door.hinge = game::SectorDoorHinge::End;
+                return true;
+            },
+            [](const game::SectorPlacedDoor& door) {
+                return door.hinge == game::SectorDoorHinge::End;
+            });
+    verifyMutation(
+            "door swing-side edit uses the document-edited cache invalidation path",
+            [](game::SectorPlacedDoor& door) {
+                door.swingSide = game::SectorDoorSwingSide::Back;
+                return true;
+            },
+            [](const game::SectorPlacedDoor& door) {
+                return door.swingSide == game::SectorDoorSwingSide::Back;
+            });
+    verifyMutation(
+            "door open-angle edit uses the document-edited cache invalidation path",
+            [](game::SectorPlacedDoor& door) {
+                door.openAngleDegrees = 120.0f;
+                return true;
+            },
+            [](const game::SectorPlacedDoor& door) {
+                return Near(door.openAngleDegrees, 120.0f);
+            });
+    verifyMutation(
+            "door angular-speed edit uses the document-edited cache invalidation path",
+            [](game::SectorPlacedDoor& door) {
+                door.angularSpeedDegrees = 45.0f;
+                return true;
+            },
+            [](const game::SectorPlacedDoor& door) {
+                return Near(door.angularSpeedDegrees, 45.0f);
+            });
+
+    engine::EngineContext engineContext;
+    game::SectorTopologyMap runtimeMap = MakeAdjacentSectorMap();
+    const game::SectorEditorAddDoorResult runtimeAdd =
+            game::AddDoorToPortal(runtimeMap, 11);
+    game::SectorRuntimeObjectState runtimeRefreshState;
+    game::ReloadSectorSwingDoorCatalog(runtimeRefreshState);
+    game::SpawnPlacedRuntimeObjects(
+            engineContext.world,
+            engineContext.assets,
+            runtimeRefreshState,
+            runtimeMap);
+    game::RuntimeObjectEditingState runtimeEditingState;
+    game::RuntimeObjectEditingUiState runtimeUiState;
+    game::SelectionState runtimeSelection;
+    runtimeSelection.selectedRuntimeObjectId = runtimeAdd.objectId;
+    game::SectorEditorDocumentState runtimeDocument;
+    uint64_t runtimeRevision = 1;
+    game::SectorEditorTopologyRenderCache runtimeCache;
+    FillRuntimeObjectTestSectorCache(runtimeCache, runtimeMap);
+    std::string runtimeStatus;
+    game::SectorEditorRuntimeObjectEditingService runtimeEditing{
+            game::SectorEditorRuntimeObjectEditingServiceContext{
+                    runtimeMap,
+                    runtimeRefreshState,
+                    runtimeEditingState,
+                    runtimeUiState,
+                    runtimeSelection,
+                    nullptr,
+                    game::MakeSectorEditorDocumentLifecycleAccess(
+                            runtimeDocument.lifecycle),
+                    runtimeRevision,
+                    runtimeCache,
+                    runtimeStatus,
+                    &engineContext,
+                    true}};
+    Check(runtimeEditing.MutateSelected(
+                  "Updated runtime swing door",
+                  [](game::SectorPlacedRuntimeObject& object) {
+                      object.door.motion = game::SectorDoorMotionType::Swing;
+                      object.door.hinge = game::SectorDoorHinge::End;
+                      object.door.swingSide = game::SectorDoorSwingSide::Back;
+                      object.door.openAngleDegrees = 110.0f;
+                      return true;
+                  }),
+          "authored swing-door mutation refreshes preview ECS objects");
+    bool refreshed = false;
+    for (const game::SectorPlacedRuntimeObjectEntity& entry :
+            runtimeRefreshState.placedObjectEntities) {
+        if (entry.placedObjectId == runtimeAdd.objectId
+                && engineContext.world.IsAlive(entry.entity)
+                && engineContext.world.Has<game::SectorDoorMotion>(entry.entity)) {
+            const game::SectorDoorMotion& motion =
+                    engineContext.world.Get<game::SectorDoorMotion>(entry.entity);
+            refreshed = motion.motion == game::SectorDoorMotionType::Swing
+                    && motion.hinge == game::SectorDoorHinge::End
+                    && motion.swingSide == game::SectorDoorSwingSide::Back
+                    && Near(motion.travelAmount, 110.0f * DEG2RAD);
+        }
+    }
+    Check(refreshed,
+          "preview ECS entity receives the edited swing motion, hinge, side, and angle");
+
+    runtimeDocument.lifecycle.topologyDocumentDirty = false;
+    runtimeDocument.lifecycle.hasUnsavedChanges = false;
+    FillRuntimeObjectTestSectorCache(runtimeCache, runtimeMap);
+    const uint64_t revisionBeforeRuntimeTarget = runtimeRevision;
+    Check(runtimeEditing.SetSelectedDoorRuntimeTargetOpen(true)
+                  && runtimeRevision == revisionBeforeRuntimeTarget
+                  && !runtimeDocument.lifecycle.topologyDocumentDirty
+                  && runtimeCache.valid,
+          "runtime debug target remains non-authored and does not invalidate the 2D cache");
+    game::ClearSectorRuntimeObjects(
+            engineContext.world,
+            engineContext.assets,
+            runtimeRefreshState);
 }
 
 void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
@@ -12253,6 +12687,7 @@ int main()
     TestEditorAuthoringToolPaneNamingAndHelpDistinguishGraphAndLegacyTools();
     TestEditorBillboardPlacementCreatesGenericAuthoredObject();
     TestEditorDoorPlacementCreatesPortalAnchoredObject();
+    TestEditorSwingDoorDefaultsCachedFootprintGuidesAndPicking();
     TestEditorDoorPlacementRejectsOneSidedWall();
     TestEditorUnifiedSelectPickOrderingCyclingAndDragGate();
     TestEditorAuthoringLastValidTopologyIsNotPersisted();
@@ -12269,6 +12704,7 @@ int main()
     TestStaticModelAssetRequestsDeduplicateAndUnloadByScope();
     TestStaticPropEditingPlacementMutationAndFloorRelativeDrag();
     TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag();
+    TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime();
     TestRuntimeObjectEditingServicesStayIndependentOfSectorEditor();
 
     if (failures != 0) {

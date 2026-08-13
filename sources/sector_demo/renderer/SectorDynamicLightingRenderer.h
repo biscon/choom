@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,8 @@ namespace game {
 
 struct SectorTopologyMap;
 struct SectorDoorShadowCaster;
+struct SectorDoorModelShadowCaster;
+struct SectorStaticModelShadowCaster;
 
 struct SectorDynamicSpotLightShadowRenderContext {
     using TextureResolver = const Texture2D* (*)(
@@ -34,6 +37,9 @@ struct SectorDynamicSpotLightShadowRenderContext {
     engine::AssetManager* assets = nullptr;
     const std::vector<SectorMeshBatch>* sectorDrawRecords = nullptr;
     const std::vector<SectorDoorShadowCaster>* doorShadowCasters = nullptr;
+    const std::vector<SectorDoorModelShadowCaster>* doorModelShadowCasters = nullptr;
+    const std::vector<SectorStaticModelShadowCaster>* staticModelShadowCasters = nullptr;
+    uint64_t staticModelShadowCasterRevision = 0;
     void* userData = nullptr;
     void* doorMeshResolverUserData = nullptr;
     TextureResolver textureResolver = nullptr;
@@ -105,6 +111,9 @@ class SectorDynamicLightingRenderer {
 public:
     void Reset();
     void RebuildSources(const SectorTopologyMap& map, const SectorCollisionWorld* sectorLookupWorld);
+    void ReserveReceiverBoundsCapacity(
+            size_t sectorCapacity,
+            size_t runtimeObjectCapacity);
     void UpdateSelection(
             const RuntimePortalVisibilityResult& visibility,
             const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
@@ -156,6 +165,7 @@ private:
     std::vector<SectorPreviewDynamicSpotLightShadowMatrix> shadowMatrices;
     std::vector<SectorPreviewDynamicSpotLightShadowMatrix> cachedShadowMatrices;
     bool shadowMapsCacheValid = false;
+    uint64_t cachedStaticModelShadowCasterRevision = 0;
     std::array<RenderTexture2D, MaxDynamicSpotLightShadowCasters> shadowMaps{};
     Material shadowMaterial = {};
     Texture2D shadowDefaultTexture = {};

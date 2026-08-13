@@ -1,7 +1,9 @@
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 
+#include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorStaticModelShadow.h"
 
 #include <algorithm>
 #include <cstring>
@@ -269,6 +271,7 @@ void SectorDynamicLightingRenderer::Reset()
     shadowMatrices.clear();
     cachedShadowMatrices.clear();
     shadowMapsCacheValid = false;
+    cachedStaticModelShadowCasterRevision = 0;
 }
 
 void SectorDynamicLightingRenderer::RebuildSources(
@@ -278,6 +281,14 @@ void SectorDynamicLightingRenderer::RebuildSources(
     BuildSectorPreviewDynamicPointLightSources(map, sectorLookupWorld, sources);
     selectionSources.reserve(sources.size() + 1);
     ReserveSelectionBuffers();
+}
+
+void SectorDynamicLightingRenderer::ReserveReceiverBoundsCapacity(
+        size_t sectorCapacity,
+        size_t runtimeObjectCapacity)
+{
+    receiverBounds.clear();
+    receiverBounds.reserve(sectorCapacity + runtimeObjectCapacity * 2);
 }
 
 void SectorDynamicLightingRenderer::SetRuntimePointLight(
@@ -493,12 +504,18 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
 
     const bool hasDoorCasters = context.doorShadowCasters != nullptr
             && !context.doorShadowCasters->empty();
-    if (hasDoorCasters) {
+    const bool hasDoorModelCasters = context.doorModelShadowCasters != nullptr
+            && !context.doorModelShadowCasters->empty();
+    if (context.staticModelShadowCasterRevision
+            != cachedStaticModelShadowCasterRevision) {
+        shadowMapsCacheValid = false;
+    }
+    if (hasDoorCasters || hasDoorModelCasters) {
         shadowMapsCacheValid = false;
     } else if (shadowMapsCacheValid) {
         return;
     }
-    bool cacheable = !hasDoorCasters;
+    bool cacheable = !hasDoorCasters && !hasDoorModelCasters;
 
     for (const SectorPreviewDynamicSpotLightShadowMatrix& matrix : shadowMatrices) {
         if (matrix.shadowSlot < 0) {
@@ -585,11 +602,62 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                 DrawMesh(*doorMesh, shadowMaterial, shadowModel);
             }
         }
+        if (context.doorModelShadowCasters != nullptr) {
+            for (const SectorDoorModelShadowCaster& caster
+                    : *context.doorModelShadowCasters) {
+                const engine::ModelAsset* asset =
+                        context.assets->GetModelAsset(caster.model);
+                if (asset == nullptr) {
+                    continue;
+                }
+                const Model& model = asset->model;
+                const Matrix modelTransform = MatrixMultiply(
+                        model.transform, caster.transform);
+                for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
+                    if (model.meshes[meshIndex].vertexCount <= 0) {
+                        continue;
+                    }
+                    DrawMesh(
+                            model.meshes[meshIndex],
+                            shadowMaterial,
+                            modelTransform);
+                }
+            }
+        }
+        if (context.staticModelShadowCasters != nullptr) {
+            rlDisableBackfaceCulling();
+            for (const SectorStaticModelShadowCaster& caster
+                    : *context.staticModelShadowCasters) {
+                const engine::ModelAsset* asset =
+                        context.assets->GetModelAsset(caster.model);
+                if (asset == nullptr) {
+                    if (!context.assets->HasFailed(caster.model)) {
+                        cacheable = false;
+                    }
+                    continue;
+                }
+                const Model& model = asset->model;
+                const Matrix modelTransform = MatrixMultiply(
+                        model.transform, caster.transform);
+                for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
+                    if (model.meshes[meshIndex].vertexCount <= 0) {
+                        continue;
+                    }
+                    DrawMesh(
+                            model.meshes[meshIndex],
+                            shadowMaterial,
+                            modelTransform);
+                }
+            }
+            rlEnableBackfaceCulling();
+        }
         shadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = shadowDefaultTexture;
         rlDisableDepthTest();
         EndTextureMode();
     }
     shadowMapsCacheValid = cacheable;
+    cachedStaticModelShadowCasterRevision =
+            context.staticModelShadowCasterRevision;
 }
 
 void SectorDynamicLightingRenderer::ReserveSelectionBuffers()
@@ -613,7 +681,6 @@ void SectorDynamicLightingRenderer::BuildReceiverBounds(
         engine::World* runtimeObjectWorld)
 {
     receiverBounds.clear();
-    receiverBounds.reserve(sectorReceiverBounds.size());
     receiverBounds.insert(receiverBounds.end(), sectorReceiverBounds.begin(), sectorReceiverBounds.end());
     if (runtimeObjectWorld != nullptr) {
         CollectSectorDoorReceiverBounds(*runtimeObjectWorld, receiverBounds);

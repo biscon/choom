@@ -523,6 +523,10 @@ bool IsDefaultBillboardDirectionalClips(const SectorPlacedBillboard& billboard)
 }
 
 const char* WriteSectorDoorMotionType(SectorDoorMotionType motion);
+const char* WriteSectorDoorVisualType(SectorDoorVisualType visual);
+const char* WriteSectorDoorModelFit(SectorDoorModelFit fit);
+const char* WriteSectorDoorHinge(SectorDoorHinge hinge);
+const char* WriteSectorDoorSwingSide(SectorDoorSwingSide side);
 
 constexpr const char* DoorFaceJsonNames[SectorDoorFaceCount] = {
         "front",
@@ -605,6 +609,9 @@ void ValidatePlacedDoorForSerialization(const SectorPlacedDoor& door, const std:
             || !std::isfinite(door.height)
             || !std::isfinite(door.thickness)
             || !std::isfinite(door.normalOffset)
+            || !std::isfinite(door.modelScale)
+            || !std::isfinite(door.openAngleDegrees)
+            || !std::isfinite(door.angularSpeedDegrees)
             || !std::isfinite(door.openDistance)
             || !std::isfinite(door.speed)
             || !std::isfinite(door.initialOpenFraction)
@@ -621,6 +628,15 @@ void ValidatePlacedDoorForSerialization(const SectorPlacedDoor& door, const std:
     if (door.speed < 0.0f) {
         Fail(context + ".speed must be non-negative");
     }
+    if (door.modelScale <= 0.0f) {
+        Fail(context + ".modelScale must be positive");
+    }
+    if (door.openAngleDegrees <= 0.0f || door.openAngleDegrees > 170.0f) {
+        Fail(context + ".openAngleDegrees must be greater than 0 and at most 170");
+    }
+    if (door.angularSpeedDegrees < 0.0f) {
+        Fail(context + ".angularSpeedDegrees must be non-negative");
+    }
     if (door.initialOpenFraction < 0.0f || door.initialOpenFraction > 1.0f) {
         Fail(context + ".initialOpenFraction must be between 0 and 1");
     }
@@ -629,6 +645,18 @@ void ValidatePlacedDoorForSerialization(const SectorPlacedDoor& door, const std:
     }
     ValidateDoorFaceUvSet(door.faceUvs, context);
     (void)WriteSectorDoorMotionType(door.motion);
+    (void)WriteSectorDoorVisualType(door.visual);
+    (void)WriteSectorDoorModelFit(door.modelFit);
+    (void)WriteSectorDoorHinge(door.hinge);
+    (void)WriteSectorDoorSwingSide(door.swingSide);
+    if (door.visual == SectorDoorVisualType::Model) {
+        if (door.modelAssetId.empty()) {
+            Fail(context + ".modelAssetId must be non-empty when visual is 'model'");
+        }
+        if (door.motion != SectorDoorMotionType::Swing) {
+            Fail(context + ".visual 'model' requires motion 'swing'");
+        }
+    }
 }
 
 float ReadOptionalPositiveFloat(
@@ -660,7 +688,47 @@ SectorDoorMotionType ReadSectorDoorMotionType(const Json& object, const char* fi
     if (value == "slide_right") {
         return SectorDoorMotionType::SlideRight;
     }
-    Fail(context + "." + field + " must be 'slide_vertical', 'slide_left', or 'slide_right'");
+    if (value == "swing") {
+        return SectorDoorMotionType::Swing;
+    }
+    Fail(context + "." + field + " must be 'slide_vertical', 'slide_left', 'slide_right', or 'swing'");
+}
+
+SectorDoorVisualType ReadSectorDoorVisualType(
+        const Json& object, const char* field, const std::string& context)
+{
+    const std::string value = ReadOptionalString(object, field, context, "procedural");
+    if (value == "procedural") return SectorDoorVisualType::Procedural;
+    if (value == "model") return SectorDoorVisualType::Model;
+    Fail(context + "." + field + " must be 'procedural' or 'model'");
+}
+
+SectorDoorModelFit ReadSectorDoorModelFit(
+        const Json& object, const char* field, const std::string& context)
+{
+    const std::string value = ReadOptionalString(object, field, context, "fit_inside");
+    if (value == "manual") return SectorDoorModelFit::Manual;
+    if (value == "fit_width") return SectorDoorModelFit::FitWidth;
+    if (value == "fit_inside") return SectorDoorModelFit::FitInside;
+    Fail(context + "." + field + " must be 'manual', 'fit_width', or 'fit_inside'");
+}
+
+SectorDoorHinge ReadSectorDoorHinge(
+        const Json& object, const char* field, const std::string& context)
+{
+    const std::string value = ReadOptionalString(object, field, context, "start");
+    if (value == "start") return SectorDoorHinge::Start;
+    if (value == "end") return SectorDoorHinge::End;
+    Fail(context + "." + field + " must be 'start' or 'end'");
+}
+
+SectorDoorSwingSide ReadSectorDoorSwingSide(
+        const Json& object, const char* field, const std::string& context)
+{
+    const std::string value = ReadOptionalString(object, field, context, "front");
+    if (value == "front") return SectorDoorSwingSide::Front;
+    if (value == "back") return SectorDoorSwingSide::Back;
+    Fail(context + "." + field + " must be 'front' or 'back'");
 }
 
 SectorCoord ReadCoordPairElement(const Json& value, size_t index, const std::string& context)
@@ -767,7 +835,17 @@ SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
     door.height = ReadOptionalFloat(value, "height", context, door.height);
     door.thickness = ReadOptionalFloat(value, "thickness", context, door.thickness);
     door.normalOffset = ReadOptionalFloat(value, "normalOffset", context, door.normalOffset);
+    door.visual = ReadSectorDoorVisualType(value, "visual", context);
+    door.modelAssetId = ReadOptionalString(value, "modelAssetId", context, door.modelAssetId);
+    door.modelFit = ReadSectorDoorModelFit(value, "modelFit", context);
+    door.modelScale = ReadOptionalFloat(value, "modelScale", context, door.modelScale);
     door.motion = ReadSectorDoorMotionType(value, "motion", context);
+    door.hinge = ReadSectorDoorHinge(value, "hinge", context);
+    door.swingSide = ReadSectorDoorSwingSide(value, "swingSide", context);
+    door.openAngleDegrees = ReadOptionalFloat(
+            value, "openAngleDegrees", context, door.openAngleDegrees);
+    door.angularSpeedDegrees = ReadOptionalFloat(
+            value, "angularSpeedDegrees", context, door.angularSpeedDegrees);
     door.openDistance = ReadOptionalFloat(value, "openDistance", context, door.openDistance);
     door.speed = ReadOptionalFloat(value, "speed", context, door.speed);
     door.initialOpenFraction = ReadOptionalFloat(
@@ -1701,8 +1779,47 @@ const char* WriteSectorDoorMotionType(SectorDoorMotionType motion)
             return "slide_left";
         case SectorDoorMotionType::SlideRight:
             return "slide_right";
+        case SectorDoorMotionType::Swing:
+            return "swing";
     }
     Fail("door motion has an invalid value");
+}
+
+const char* WriteSectorDoorVisualType(SectorDoorVisualType visual)
+{
+    switch (visual) {
+        case SectorDoorVisualType::Procedural: return "procedural";
+        case SectorDoorVisualType::Model: return "model";
+    }
+    Fail("door visual has an invalid value");
+}
+
+const char* WriteSectorDoorModelFit(SectorDoorModelFit fit)
+{
+    switch (fit) {
+        case SectorDoorModelFit::Manual: return "manual";
+        case SectorDoorModelFit::FitWidth: return "fit_width";
+        case SectorDoorModelFit::FitInside: return "fit_inside";
+    }
+    Fail("door model fit has an invalid value");
+}
+
+const char* WriteSectorDoorHinge(SectorDoorHinge hinge)
+{
+    switch (hinge) {
+        case SectorDoorHinge::Start: return "start";
+        case SectorDoorHinge::End: return "end";
+    }
+    Fail("door hinge has an invalid value");
+}
+
+const char* WriteSectorDoorSwingSide(SectorDoorSwingSide side)
+{
+    switch (side) {
+        case SectorDoorSwingSide::Front: return "front";
+        case SectorDoorSwingSide::Back: return "back";
+    }
+    Fail("door swing side has an invalid value");
 }
 
 Json WriteSectorCoordPair(SectorCoord x, SectorCoord y)
@@ -1763,8 +1880,32 @@ Json WritePlacedDoor(const SectorPlacedDoor& door)
     if (door.normalOffset != 0.0f) {
         json["normalOffset"] = door.normalOffset;
     }
+    if (door.visual != SectorDoorVisualType::Procedural) {
+        json["visual"] = WriteSectorDoorVisualType(door.visual);
+    }
+    if (!door.modelAssetId.empty()) {
+        json["modelAssetId"] = door.modelAssetId;
+    }
+    if (door.modelFit != SectorDoorModelFit::FitInside) {
+        json["modelFit"] = WriteSectorDoorModelFit(door.modelFit);
+    }
+    if (door.modelScale != 1.0f) {
+        json["modelScale"] = door.modelScale;
+    }
     if (door.motion != SectorDoorMotionType::SlideVertical) {
         json["motion"] = WriteSectorDoorMotionType(door.motion);
+    }
+    if (door.hinge != SectorDoorHinge::Start) {
+        json["hinge"] = WriteSectorDoorHinge(door.hinge);
+    }
+    if (door.swingSide != SectorDoorSwingSide::Front) {
+        json["swingSide"] = WriteSectorDoorSwingSide(door.swingSide);
+    }
+    if (door.openAngleDegrees != 90.0f) {
+        json["openAngleDegrees"] = door.openAngleDegrees;
+    }
+    if (door.angularSpeedDegrees != 90.0f) {
+        json["angularSpeedDegrees"] = door.angularSpeedDegrees;
     }
     if (door.openDistance != 0.0f) {
         json["openDistance"] = door.openDistance;

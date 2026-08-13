@@ -57,7 +57,8 @@ void SectorSceneRuntime::Update(
         engine::EngineContext& context,
         const SectorTopologyMap& map,
         float dt,
-        const Vector3* playerPosition)
+        const Vector3* playerPosition,
+        const SectorDoorPlayerObstacle* playerObstacle)
 {
     UpdateLevelAudio(context);
     UpdateSectorRuntimeObjects(
@@ -66,7 +67,8 @@ void SectorSceneRuntime::Update(
             runtimeObjects,
             map,
             dt,
-            playerPosition);
+            playerPosition,
+            playerObstacle);
     UpdateSectorDoorAudioSystem(
             context.world,
             context.assets,

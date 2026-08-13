@@ -5,6 +5,7 @@
 #include "sector_editor/SectorEditorSelectionTypes.h"
 
 #include <string>
+#include <cstdint>
 #include <vector>
 
 namespace game {
@@ -35,6 +36,9 @@ struct RuntimeObjectEditingState {
     bool billboardMetadataInitialRepairAttempted = false;
     SpritePickerState spritePicker;
     StaticModelPickerState staticModelPicker;
+    uint64_t swingDoorStyleCatalogRevision = 0;
+    std::vector<std::string> swingDoorStyleIds;
+    std::vector<std::string> swingDoorStyleLabels;
 };
 
 struct RuntimeObjectEditingUiState {
@@ -53,6 +57,9 @@ struct RuntimeObjectEditingUiState {
     engine::UIFloatInputState normalOffsetInput;
     engine::UIFloatInputState openDistanceInput;
     engine::UIFloatInputState speedInput;
+    engine::UIFloatInputState modelScaleInput;
+    engine::UIFloatInputState openAngleDegreesInput;
+    engine::UIFloatInputState angularSpeedDegreesInput;
     engine::UIFloatInputState initialOpenFractionInput;
     engine::UIFloatInputState autoOpenDistanceInput;
     engine::UIFloatInputState interactionDistanceInput;

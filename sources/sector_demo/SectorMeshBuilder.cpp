@@ -455,14 +455,8 @@ bool ShouldDrawSectorMeshRecordForVisibility(
         const SectorMeshBatch& record,
         const RuntimePortalVisibilityResult& visibility)
 {
-    if (!visibility.validStartSector || visibility.fallbackDrawAll) {
-        return true;
-    }
-
-    return std::find(
-            visibility.visibleSectorIds.begin(),
-            visibility.visibleSectorIds.end(),
-            record.sectorId) != visibility.visibleSectorIds.end();
+    return ShouldDrawRuntimeSectorGeometryForVisibility(
+            record.sectorId, visibility);
 }
 
 size_t CountSectorMeshDrawRecordsForVisibility(

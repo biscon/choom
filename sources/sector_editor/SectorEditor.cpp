@@ -497,7 +497,26 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
 
     if (state.mode == SectorEditorMode::Preview3D) {
         const Vector3 playerPosition = previewState.controller.freeflyController.pose.position;
-        sceneRuntime.Update(context, TopologyMap(), dt, &playerPosition);
+        SectorDoorPlayerObstacle playerObstacle;
+        const SectorDoorPlayerObstacle* playerObstaclePtr = nullptr;
+        if (previewState.controller.previewControlMode
+                == SectorPreviewControlMode::Gameplay) {
+            const SectorFpsControllerConfig obstacleConfig =
+                    EffectiveSectorFpsControllerConfig(
+                            previewState.controller.fpsControllerState,
+                            previewState.controller.fpsControllerConfig);
+            playerObstacle = SectorDoorPlayerObstacle{
+                    previewState.controller.fpsControllerState.feetPosition,
+                    obstacleConfig.playerRadius,
+                    obstacleConfig.playerHeight};
+            playerObstaclePtr = &playerObstacle;
+        }
+        sceneRuntime.Update(
+                context,
+                TopologyMap(),
+                dt,
+                &playerPosition,
+                playerObstaclePtr);
         UpdateFpsViewmodel(assets, dt);
         const bool hasBlockingModal = state.texturePicker.open
                 || state.soundPicker.open
@@ -3611,15 +3630,22 @@ void SectorEditor::InvalidateTopologyRenderCache()
 
 void SectorEditor::EnsureTopologyRenderCache()
 {
-    if (!state.topologyRenderCache.valid
-            || state.topologyRenderCache.revision != state.topologyRenderRevision) {
+    const SectorRuntimeObjectState& runtimeObjects = sceneRuntime.RuntimeObjects();
+    if (!IsSectorEditorTopologyRenderCacheCurrent(
+                state.topologyRenderCache,
+                state.topologyRenderRevision,
+                runtimeObjects.swingDoorCatalogRevision)) {
         const SectorEditorConstDerivationDocumentAccess derivation =
                 MakeLiveConstDerivationAccess(documentState.derivation);
         state.topologyRenderCache = BuildSectorEditorTopologyRenderCache(
                 TopologyMap(),
                 AuthoringGraph(),
                 derivation.authoringDerivation,
-                state.topologyRenderRevision);
+                state.topologyRenderRevision,
+                runtimeObjects.swingDoorCatalogLoaded
+                        ? &runtimeObjects.swingDoorCatalog
+                        : nullptr,
+                runtimeObjects.swingDoorCatalogRevision);
         state.topologyRenderWarning = state.topologyRenderCache.warning;
     }
 }
@@ -5314,6 +5340,7 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     textureCatalog.RefreshDefaultTextureIds();
     textureCatalog.RefreshTextureHandles(assets);
     BuildSoundService().RefreshCatalogHandles();
+    ReloadSectorSwingDoorCatalog(sceneRuntime.RuntimeObjects());
     initialized = true;
     authoringFaceMergeState = SectorEditorAuthoringFaceMergeState{};
     ClearSectorEditorAuthoringSelection(selectionState);

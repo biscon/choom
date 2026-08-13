@@ -73,6 +73,15 @@ struct CachedRuntimeObjectDraw {
     Vector2 doorCorners[4] = {};
     Vector2 doorEndpointA = {};
     Vector2 doorEndpointB = {};
+    bool doorModelMetadataValid = true;
+    bool doorSwingGuideValid = false;
+    bool doorSwingIntoBack = false;
+    Vector2 doorHinge = {};
+    Vector2 doorOpenCorners[4] = {};
+    Vector2 doorOpenFreeEdge = {};
+    float doorSwingArcRadius = 0.0f;
+    float doorSwingArcStartRadians = 0.0f;
+    float doorSwingArcSweepRadians = 0.0f;
 };
 
 struct CachedAuthoringLevelMarkerDraw {
@@ -118,6 +127,7 @@ struct CachedAuthoringDiagnosticDraw {
 struct SectorEditorTopologyRenderCache {
     bool valid = false;
     uint64_t revision = 0;
+    uint64_t swingDoorCatalogRevision = 0;
     std::string warning;
     std::vector<CachedTopologySectorDraw> sectors;
     std::vector<CachedTopologyLineDraw> lineDefs;

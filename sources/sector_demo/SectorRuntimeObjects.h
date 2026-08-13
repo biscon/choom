@@ -7,11 +7,13 @@
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorStaticModelCollision.h"
+#include "sector_demo/SectorSwingDoorCatalog.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <raylib.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -20,6 +22,10 @@ namespace game {
 constexpr size_t kSectorRuntimeObjectInitialCapacity = 128;
 
 float ComputeSectorModelEnvironmentExposure(
+        const SectorTopologyMap& map,
+        int sectorId);
+
+Vector3 ComputeSectorModelAmbient(
         const SectorTopologyMap& map,
         int sectorId);
 
@@ -77,10 +83,18 @@ struct SectorDoorAnchorDiagnostic {
     std::string message;
 };
 
+struct SectorDoorFallbackDiagnostic {
+    int placedObjectId = 0;
+    std::string modelAssetId;
+    std::string message;
+};
+
 struct SectorRuntimeObjectState {
     engine::AssetScopeHandle runtimeObjectAssetScope = engine::NullAssetScopeHandle();
     std::vector<SectorPlacedRuntimeObjectEntity> placedObjectEntities;
     std::vector<SectorDoorAnchorDiagnostic> doorAnchorDiagnostics;
+    SectorSwingDoorCatalog swingDoorCatalog;
+    std::vector<SectorDoorFallbackDiagnostic> doorFallbackDiagnostics;
     std::vector<SectorDynamicDoorCollider> dynamicDoorColliders;
     std::vector<SectorStaticModelCollider> staticModelColliders;
     std::vector<RuntimePortalDynamicBlocker> dynamicPortalBlockers;
@@ -90,6 +104,8 @@ struct SectorRuntimeObjectState {
     size_t doorObjectCount = 0;
     size_t validDoorAnchorCount = 0;
     size_t invalidDoorAnchorCount = 0;
+    size_t doorFallbackCount = 0;
+    size_t doorFrameFailureCount = 0;
     size_t spriteAnimationRequestedCount = 0;
     size_t spriteAnimationReadyCount = 0;
     size_t spriteAnimationPendingCount = 0;
@@ -107,6 +123,10 @@ struct SectorRuntimeObjectState {
     size_t singleClipFallbackCount = 0;
     std::string placedObjectStatus;
     std::string placedObjectWarning;
+    bool swingDoorCatalogLoaded = false;
+    uint64_t swingDoorCatalogRevision = 0;
+    std::string swingDoorCatalogStatus;
+    std::string swingDoorCatalogWarning;
     SectorBakedObjectLightProbeRuntimeData objectLightProbes;
     std::string objectProbeStatus;
     SectorCollisionWorld objectSectorLookupWorld;
@@ -135,6 +155,8 @@ void RefreshSectorRuntimeObjectMapData(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map);
 
+void ReloadSectorSwingDoorCatalog(SectorRuntimeObjectState& state);
+
 void ResetSectorRuntimeObjectsForMap(
         engine::World& world,
         engine::AssetManager& assets,
@@ -153,7 +175,8 @@ void UpdateSectorRuntimeObjects(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map,
         float dt,
-        const Vector3* playerPosition = nullptr);
+        const Vector3* playerPosition = nullptr,
+        const SectorDoorPlayerObstacle* playerObstacle = nullptr);
 
 void UpdateSectorObjectCurrentSectorSystem(
         engine::World& world,
