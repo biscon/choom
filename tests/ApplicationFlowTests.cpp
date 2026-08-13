@@ -62,6 +62,11 @@ void FlowPreservesReturnTargets()
 
     game::RequestApplicationQuit(state);
     assert(state.quitRequested);
+
+    game::MarkApplicationGameStopped(state);
+    assert(!state.gameRunning);
+    assert(state.screen == game::ApplicationScreen::MainMenu);
+    assert(state.menuReturnScreen == game::ApplicationScreen::MainMenu);
 }
 
 } // namespace

@@ -41,6 +41,7 @@ void OpenApplicationMenu(
         ApplicationScreen returnScreen);
 bool ReturnFromApplicationMenu(ApplicationFlowState& state);
 void MarkApplicationGameStarted(ApplicationFlowState& state);
+void MarkApplicationGameStopped(ApplicationFlowState& state);
 void ShowApplicationEditor(ApplicationFlowState& state);
 void RequestApplicationQuit(ApplicationFlowState& state);
 

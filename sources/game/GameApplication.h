@@ -2,6 +2,7 @@
 
 #include "engine/EngineContext.h"
 #include "engine/ui/UI.h"
+#include "engine/scripting/ScriptData.h"
 #include "game/ApplicationFlow.h"
 #include "game/FpsWeaponRegistry.h"
 #include "game/GameMainMenu.h"
@@ -78,6 +79,7 @@ private:
     SectorSceneRuntime gameScene;
     FpsWeaponRegistry weaponRegistry;
     PlayerAudioRuntime playerAudio;
+    engine::PersistentScriptStore persistentScripts;
     std::string menuStatus;
     std::optional<MainMenuAction> pendingMenuAction;
     std::optional<GameGraphicsSettingsAction> pendingSettingsAction;

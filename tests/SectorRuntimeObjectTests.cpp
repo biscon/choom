@@ -5833,6 +5833,8 @@ void TestSectorDoorModelShadowCasterMatrices()
 
 int main()
 {
+    extern void RunSectorScriptBindingTests();
+    RunSectorScriptBindingTests();
     TestResolveSectorDoorAnchorValidPortal();
     TestResolveSectorDoorAnchorRejectsOneSidedWall();
     TestResolveSectorDoorAnchorRejectsSectorMismatch();

@@ -90,6 +90,7 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     flow = ApplicationFlowState{};
     applicationSettings = FpsApplicationSettings{};
     playerAudio = PlayerAudioRuntime{};
+    persistentScripts = engine::PersistentScriptStore{};
     weaponRegistry = FpsWeaponRegistry{};
     menuStatus.clear();
     pendingMenuAction.reset();
@@ -226,6 +227,11 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
             return;
         }
         gameSession.Update(context, gameScene, dt);
+        const std::string scriptFailure = gameSession.TakeFailureError();
+        if (!scriptFailure.empty()) {
+            menuStatus = scriptFailure;
+            MarkApplicationGameStopped(flow);
+        }
         return;
     }
 
@@ -452,6 +458,7 @@ void GameApplication::StartNewGame(engine::EngineContext& context)
     context.audio.StopAll(context.assets);
     editor.SuspendRuntime(context);
     std::string error;
+    persistentScripts = engine::PersistentScriptStore{};
     if (!gameSession.StartNew(
                 context,
                 gameScene,
@@ -459,6 +466,8 @@ void GameApplication::StartNewGame(engine::EngineContext& context)
                 weaponRegistry,
                 applicationSettings,
                 playerAudio,
+                persistentScripts,
+                false,
                 error)) {
         menuStatus = error.empty() ? "Could not start a new game" : error;
         return;
@@ -499,7 +508,7 @@ void GameApplication::ResumeGame(engine::EngineContext& context)
 void GameApplication::OpenEditor(engine::EngineContext& context)
 {
     if (gameSession.IsRunning()) {
-        gameSession.Pause();
+        gameSession.SuspendForEditor(context);
         context.audio.StopAll(context.assets);
         if (gameScene.IsReady()) {
             gameScene.Shutdown(context);
