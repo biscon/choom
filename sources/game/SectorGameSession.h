@@ -30,6 +30,7 @@ public:
 
     void Pause();
     void Resume(SectorSceneRuntime& scene);
+    void SetConsoleInputCaptured(bool captured);
     void Update(
             engine::EngineContext& context,
             SectorSceneRuntime& scene,
@@ -44,12 +45,21 @@ public:
             SectorSceneRuntime& scene,
             const SectorTopologyMap& map,
             std::string& error);
+    bool ReloadCurrentMap(
+            engine::EngineContext& context,
+            SectorSceneRuntime& scene,
+            bool remainPaused,
+            std::string& error);
 
     bool IsRunning() const { return running; }
     std::string TakeFailureError();
     const SectorTopologyMap& Map() const { return topologyMap; }
     const std::string& LevelName() const { return levelName; }
     const std::string& LevelPath() const { return levelPath; }
+    engine::ScriptRuntime* ConsoleScriptRuntime()
+    {
+        return running ? &scripts : nullptr;
+    }
     int CurrentSectorId() const
     {
         return controller.fpsControllerState.currentSectorId;
@@ -73,6 +83,7 @@ private:
     std::string levelPath;
     bool running = false;
     bool paused = false;
+    bool consoleInputCaptured = false;
     FpsPlayerRuntime fpsPlayer;
     const FpsWeaponRegistry* weaponRegistry = nullptr;
     const FpsApplicationSettings* applicationSettings = nullptr;

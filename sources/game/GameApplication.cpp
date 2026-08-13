@@ -1,5 +1,8 @@
 #include "game/GameApplication.h"
 
+#include "engine/assets/FontLoadFlags.h"
+#include "engine/debug/DebugConsole.h"
+#include "engine/debug/DebugConsoleLogBridge.h"
 #include "game/GameMainMenu.h"
 
 #include <raylib.h>
@@ -54,6 +57,18 @@ bool GameApplication::Init(engine::EngineContext& context)
     }
     applicationSettings.graphics =
             NormalizeFpsGraphicsSettings(applicationSettings.graphics);
+    engine::SetDebugConsoleLogCaptureEnabled(
+            applicationSettings.consoleEnabled);
+    const engine::FontHandle consoleFont = context.assets.RequestFont(
+            context.assets.GlobalScope(),
+            "debug_console_inconsolata_22",
+            ASSETS_PATH "fonts/Inconsolata.otf",
+            22,
+            engine::FontLoad_BilinearFilter);
+    engine::DebugConsoleInitialize(debugConsole, consoleFont);
+    if (applicationSettings.consoleEnabled) {
+        engine::FlushPendingDebugConsoleLogs(debugConsole);
+    }
     std::string weaponError;
     if (!LoadFpsWeaponRegistry(
                 ASSETS_PATH "config/weapons.json",
@@ -87,6 +102,11 @@ void GameApplication::Shutdown(engine::EngineContext& context)
         gameScene.Shutdown(context);
     }
     editor.Shutdown(context);
+    if (debugConsole.initialized) {
+        engine::FlushPendingDebugConsoleLogs(debugConsole);
+        engine::SetDebugConsoleLogCaptureEnabled(false);
+        engine::DebugConsoleShutdown(debugConsole);
+    }
     flow = ApplicationFlowState{};
     applicationSettings = FpsApplicationSettings{};
     playerAudio = PlayerAudioRuntime{};
@@ -100,6 +120,83 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     graphicsSettingsOpen = false;
     editorAttachedToGame = false;
     initialized = false;
+}
+
+void GameApplication::UpdateDebugConsole(
+        engine::EngineContext& context,
+        float dt)
+{
+    if (!debugConsole.initialized) return;
+    if (applicationSettings.consoleEnabled) {
+        engine::FlushPendingDebugConsoleLogs(debugConsole);
+    }
+    const bool available = DebugConsoleAvailable();
+    engine::ScriptRuntime* scripts = available
+            ? gameSession.ConsoleScriptRuntime() : nullptr;
+    engine::DebugConsoleUpdate(
+            debugConsole,
+            context.input,
+            scripts,
+            available ? std::string_view{gameSession.LevelName()}
+                      : std::string_view{},
+            available,
+            dt);
+    gameSession.SetConsoleInputCaptured(
+            available
+                    && engine::DebugConsoleCapturesGameplayInput(debugConsole));
+    if (applicationSettings.consoleEnabled) {
+        engine::FlushPendingDebugConsoleLogs(debugConsole);
+    }
+}
+
+void GameApplication::ProcessDeferredDebugActions(
+        engine::EngineContext& context)
+{
+    const engine::DeferredDebugAction action =
+            engine::DebugConsoleTakeDeferredAction(debugConsole);
+    if (action.type == engine::DeferredDebugActionType::None) return;
+    if (action.type == engine::DeferredDebugActionType::QuitApplication) {
+        RequestApplicationQuit(flow);
+        return;
+    }
+    if (!gameSession.IsRunning() || action.mapId != gameSession.LevelName()) {
+        engine::DebugConsoleAddLine(
+                debugConsole,
+                "reload cancelled: the active game map changed",
+                engine::DebugConsoleSeverity::Error);
+        return;
+    }
+    const bool remainPaused = flow.screen == ApplicationScreen::MainMenu
+            && flow.menuReturnScreen == ApplicationScreen::Game;
+    std::string error;
+    if (!gameSession.ReloadCurrentMap(
+                context, gameScene, remainPaused, error)) {
+        menuStatus = "Reload failed: "
+                + (error.empty() ? std::string{"unknown error"} : error);
+        engine::DebugConsoleAddLine(
+                debugConsole, menuStatus, engine::DebugConsoleSeverity::Error);
+        debugConsole.open = false;
+        MarkApplicationGameStopped(flow);
+        return;
+    }
+    if (remainPaused) context.audio.PauseAll(context.assets);
+    gameSession.SetConsoleInputCaptured(
+            engine::DebugConsoleCapturesGameplayInput(debugConsole));
+    engine::DebugConsoleAddLine(
+            debugConsole,
+            "reload completed: " + gameSession.LevelName(),
+            engine::DebugConsoleSeverity::Success);
+    engine::FlushPendingDebugConsoleLogs(debugConsole);
+}
+
+void GameApplication::RenderDebugConsole(
+        engine::AssetManager& assets,
+        int logicalWidth,
+        int logicalHeight)
+{
+    if (!DebugConsoleAvailable()) return;
+    engine::DebugConsoleRender(
+            debugConsole, assets, logicalWidth, logicalHeight);
 }
 
 void GameApplication::RenderInteractiveUI(
@@ -230,6 +327,8 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
         const std::string scriptFailure = gameSession.TakeFailureError();
         if (!scriptFailure.empty()) {
             menuStatus = scriptFailure;
+            debugConsole.open = false;
+            gameSession.SetConsoleInputCaptured(false);
             MarkApplicationGameStopped(flow);
         }
         return;
@@ -543,6 +642,14 @@ ApplicationScreen GameApplication::BackgroundScreen() const
     return flow.screen == ApplicationScreen::MainMenu
             ? flow.menuReturnScreen
             : flow.screen;
+}
+
+bool GameApplication::DebugConsoleAvailable() const
+{
+    return IsApplicationDebugConsoleAvailable(
+            flow,
+            gameSession.IsRunning(),
+            applicationSettings.consoleEnabled);
 }
 
 } // namespace game

@@ -4,6 +4,7 @@
 
 #include "engine/EngineContext.h"
 #include "engine/assets/FontLoadFlags.h"
+#include "engine/debug/DebugConsoleLogBridge.h"
 #include "engine/render/ColorTransfer.h"
 #include "engine/render/FxaaShader.h"
 #include "engine/render/RenderColorDiagnostics.h"
@@ -197,6 +198,7 @@ static void ClearLinearSceneBackground(Color displaySrgbColor)
 
 int main()
 {
+    engine::InstallDebugConsoleTraceLogBridge();
     unsigned int flags = 0;
     flags |= FLAG_VSYNC_HINT;
     SetConfigFlags(flags);
@@ -344,12 +346,16 @@ int main()
     engine::RenderTarget editorTargetResource;
     engine::RenderTarget uiTargetResource;
     engine::RenderTarget menuTargetResource;
+    engine::RenderTarget consoleTargetResource;
     loadDisplayTarget("editor-2d", editorTargetResource);
     loadDisplayTarget("ui", uiTargetResource);
     loadDisplayTarget("menu", menuTargetResource);
+    loadDisplayTarget("debug-console", consoleTargetResource);
     RenderTexture2D& editorTarget = engine::NativeRenderTexture(editorTargetResource);
     RenderTexture2D& uiTarget = engine::NativeRenderTexture(uiTargetResource);
     RenderTexture2D& menuTarget = engine::NativeRenderTexture(menuTargetResource);
+    RenderTexture2D& consoleTarget =
+            engine::NativeRenderTexture(consoleTargetResource);
 
     Shader fxaaShader{};
     int fxaaTexelSizeLoc = -1;
@@ -369,6 +375,7 @@ int main()
         engine::UnloadRenderTarget(editorTargetResource);
         engine::UnloadRenderTarget(uiTargetResource);
         engine::UnloadRenderTarget(menuTargetResource);
+        engine::UnloadRenderTarget(consoleTargetResource);
         CloseWindow();
         return 1;
     }
@@ -385,6 +392,7 @@ int main()
         engine::UnloadRenderTarget(editorTargetResource);
         engine::UnloadRenderTarget(uiTargetResource);
         engine::UnloadRenderTarget(menuTargetResource);
+        engine::UnloadRenderTarget(consoleTargetResource);
     };
 
     engine::EngineContext context;
@@ -509,6 +517,9 @@ int main()
     BeginTextureMode(menuTarget);
     ClearBackground(BLANK);
     EndTextureMode();
+    BeginTextureMode(consoleTarget);
+    ClearBackground(BLANK);
+    EndTextureMode();
     BeginTextureMode(scenePresentationTarget);
     ClearBackground(BLACK);
     EndTextureMode();
@@ -542,6 +553,7 @@ int main()
 
         context.input.BeginFrame();
         context.input.PollRaylib(dt);
+        application.UpdateDebugConsole(context, dt);
         bool windowModeChanged = false;
         context.input.ForEachEvent(
                 engine::InputEventType::KeyPressed,
@@ -612,6 +624,7 @@ int main()
         }
 
         application.Update(context, dt);
+        application.ProcessDeferredDebugActions(context);
         if (const game::FpsApplicationSettings* pending =
                     application.PendingGraphicsSettings()) {
             const float requestedScale = pending->graphics.renderScale;
@@ -648,6 +661,12 @@ int main()
             }
         }
         context.audio.Update(assets);
+
+        BeginTextureMode(consoleTarget);
+        ClearBackground(BLANK);
+        application.RenderDebugConsole(
+                assets, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+        EndTextureMode();
 
         const game::ApplicationContentKind contentKind =
                 application.BackgroundContentKind();
@@ -760,6 +779,14 @@ int main()
                 Rectangle menuSrc = GetFullscreenSrcRect(menuTarget.texture);
                 DrawTexturePro(menuTarget.texture, menuSrc, dst, {0,0}, 0.0f, WHITE);
             }
+            Rectangle consoleSrc = GetFullscreenSrcRect(consoleTarget.texture);
+            DrawTexturePro(
+                    consoleTarget.texture,
+                    consoleSrc,
+                    dst,
+                    {0,0},
+                    0.0f,
+                    WHITE);
         }
         EndDrawing();
         performanceProfiler.End(RenderProfilePass::FinalComposite);

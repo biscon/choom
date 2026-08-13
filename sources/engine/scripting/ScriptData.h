@@ -197,6 +197,7 @@ struct ScriptRuntime {
     std::string requestedSpawnId;
     bool mapAbortRequested = false;
     std::string mapAbortError;
+    bool consoleExecuting = false;
 };
 
 struct ScriptCallOutcome {

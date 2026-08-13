@@ -154,6 +154,7 @@ include(CTest)
 if(BUILD_TESTING)
     add_executable(script_system_tests
             tests/ScriptSystemTests.cpp
+            sources/engine/scripting/ScriptConsole.cpp
             sources/engine/scripting/ScriptSystem.cpp
             sources/engine/scripting/ScriptPersistence.cpp
             sources/engine/assets/AssetManager.cpp
@@ -167,6 +168,17 @@ if(BUILD_TESTING)
     target_include_directories(script_system_tests PRIVATE sources)
     target_link_libraries(script_system_tests PRIVATE lua55 raylib)
     add_test(NAME script_system COMMAND script_system_tests)
+
+    add_executable(debug_console_tests
+            tests/DebugConsoleTests.cpp
+            sources/engine/debug/DebugConsole.cpp
+            sources/engine/debug/DebugConsoleLogBridge.cpp
+            sources/engine/input/Input.cpp
+            sources/engine/scripting/ScriptConsole.cpp
+    )
+    target_include_directories(debug_console_tests PRIVATE sources)
+    target_link_libraries(debug_console_tests PRIVATE lua55 raylib)
+    add_test(NAME debug_console COMMAND debug_console_tests)
 
     add_executable(render_color_foundations_tests
             tests/RenderColorFoundationsTests.cpp

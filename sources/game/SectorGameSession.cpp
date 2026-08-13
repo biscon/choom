@@ -123,6 +123,7 @@ bool SectorGameSession::StartNew(
             "fps_game_viewmodel");
     running = true;
     paused = false;
+    consoleInputCaptured = false;
     InitializeSectorScriptHost(
             scriptHost, scene.RuntimeObjects(), topologyMap, scripts);
     if (!engine::ScriptSystemCreateForMap(
@@ -161,6 +162,7 @@ void SectorGameSession::Shutdown(
     levelPath.clear();
     running = false;
     paused = false;
+    consoleInputCaptured = false;
     weaponRegistry = nullptr;
     applicationSettings = nullptr;
     playerAudio = nullptr;
@@ -189,8 +191,19 @@ void SectorGameSession::Resume(SectorSceneRuntime& scene)
         return;
     }
     paused = false;
-    SetSectorFreeflyMouseLookEnabled(controller.freeflyController, true);
+    SetSectorFreeflyMouseLookEnabled(
+            controller.freeflyController, !consoleInputCaptured);
     ApplyPlayerPose(scene);
+}
+
+void SectorGameSession::SetConsoleInputCaptured(bool captured)
+{
+    if (!running || consoleInputCaptured == captured) return;
+    consoleInputCaptured = captured;
+    if (!paused) {
+        SetSectorFreeflyMouseLookEnabled(
+                controller.freeflyController, !consoleInputCaptured);
+    }
 }
 
 void SectorGameSession::Update(
@@ -221,7 +234,7 @@ void SectorGameSession::Update(
     UpdateSectorScriptOperations(context, scriptHost);
     SectorRuntimeObjectState& objects = scene.RuntimeObjects();
 
-    context.input.ForEachEvent(
+    if (!consoleInputCaptured) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
             [this, &context](engine::InputEvent& event) {
@@ -237,15 +250,17 @@ void SectorGameSession::Update(
             });
 
     SectorFpsControllerInput input;
-    input.moveForward = context.input.IsKeyDown(KEY_W);
-    input.moveBackward = context.input.IsKeyDown(KEY_S);
-    input.strafeLeft = context.input.IsKeyDown(KEY_A);
-    input.strafeRight = context.input.IsKeyDown(KEY_D);
-    input.run = context.input.IsKeyDown(KEY_LEFT_SHIFT)
-            || context.input.IsKeyDown(KEY_RIGHT_SHIFT);
-    input.mouseLookEnabled = true;
-    input.mouseDelta = context.input.MouseDelta();
-    context.input.ForEachEvent(
+    if (!consoleInputCaptured) {
+        input.moveForward = context.input.IsKeyDown(KEY_W);
+        input.moveBackward = context.input.IsKeyDown(KEY_S);
+        input.strafeLeft = context.input.IsKeyDown(KEY_A);
+        input.strafeRight = context.input.IsKeyDown(KEY_D);
+        input.run = context.input.IsKeyDown(KEY_LEFT_SHIFT)
+                || context.input.IsKeyDown(KEY_RIGHT_SHIFT);
+        input.mouseLookEnabled = true;
+        input.mouseDelta = context.input.MouseDelta();
+    }
+    if (!consoleInputCaptured) context.input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
             [&input](engine::InputEvent& event) {
@@ -329,8 +344,8 @@ void SectorGameSession::Update(
                         : nullptr,
                 scene.Renderer(),
                 true,
-                true,
-                false);
+                !consoleInputCaptured,
+                consoleInputCaptured);
         if (acceptedShot) {
             ApplyPlayerPose(scene);
         }
@@ -431,6 +446,44 @@ bool SectorGameSession::RebuildFromMap(
         ResetSectorScriptHost(scriptHost);
         return false;
     }
+    error.clear();
+    return true;
+}
+
+bool SectorGameSession::ReloadCurrentMap(
+        engine::EngineContext& context,
+        SectorSceneRuntime& scene,
+        bool remainPaused,
+        std::string& error)
+{
+    if (!running) {
+        error = "No game session is running";
+        return false;
+    }
+    const std::string mapId = levelName;
+    const FpsWeaponRegistry* savedWeaponRegistry = weaponRegistry;
+    const FpsApplicationSettings* savedSettings = applicationSettings;
+    PlayerAudioRuntime* savedPlayerAudio = playerAudio;
+    engine::PersistentScriptStore* savedPersistent = persistentScripts;
+    Shutdown(context, scene);
+    if (savedWeaponRegistry == nullptr || savedSettings == nullptr
+            || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
+        error = "Game services became unavailable during reload";
+        return false;
+    }
+    if (!StartNew(
+                context,
+                scene,
+                SectorLevelEntryRequest{mapId, std::nullopt},
+                *savedWeaponRegistry,
+                *savedSettings,
+                *savedPlayerAudio,
+                *savedPersistent,
+                false,
+                error)) {
+        return false;
+    }
+    if (remainPaused) Pause();
     error.clear();
     return true;
 }

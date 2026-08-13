@@ -87,4 +87,15 @@ void RequestApplicationQuit(ApplicationFlowState& state)
     state.quitRequested = true;
 }
 
+bool IsApplicationDebugConsoleAvailable(
+        const ApplicationFlowState& state,
+        bool gameRunning,
+        bool consoleEnabled)
+{
+    if (!consoleEnabled || !gameRunning) return false;
+    return state.screen == ApplicationScreen::Game
+            || (state.screen == ApplicationScreen::MainMenu
+                    && state.menuReturnScreen == ApplicationScreen::Game);
+}
+
 } // namespace game

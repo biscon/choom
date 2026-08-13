@@ -187,9 +187,9 @@ BeginDoorMoveResult BeginDoorMove(
 
     const uint64_t token = host.nextDoorMoveToken++;
     if (host.doorMoves.size() == host.doorMoves.capacity()) {
-        std::fprintf(
-                stderr,
-                "[Lua WARNING] scripted door-move capacity exceeded; runtime allocation may occur\n");
+        TraceLog(
+                LOG_WARNING,
+                "[Lua WARNING] scripted door-move capacity exceeded; runtime allocation may occur");
     }
     host.doorMoves.push_back(SectorScriptDoorMove{
             token,
@@ -543,12 +543,12 @@ void UpdateSectorScriptTriggers(
         state.remainingDelayMilliseconds = 0.0f;
         if (!trigger.repeat) state.consumed = true;
         if (outcome.result == engine::ScriptCallResult::Missing) {
-            std::fprintf(stderr,
-                    "[Lua WARNING] trigger '%s' has no callable script function '%s'\n",
+            TraceLog(LOG_WARNING,
+                    "[Lua WARNING] trigger '%s' has no callable script function '%s'",
                     trigger.id.c_str(), trigger.script.c_str());
         } else if (outcome.result == engine::ScriptCallResult::Error) {
-            std::fprintf(stderr,
-                    "[Lua ERROR] trigger '%s' function '%s' failed: %s\n",
+            TraceLog(LOG_ERROR,
+                    "[Lua ERROR] trigger '%s' function '%s' failed: %s",
                     trigger.id.c_str(), trigger.script.c_str(), outcome.error.c_str());
         }
     }

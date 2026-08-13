@@ -736,6 +736,13 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 Fail("application settings.firstLevel must use only letters, digits, underscore, or dash");
             }
         }
+        const auto consoleEnabled = root.find("consoleEnabled");
+        if (consoleEnabled != root.end()) {
+            if (!consoleEnabled->is_boolean()) {
+                Fail("application settings.consoleEnabled must be a boolean");
+            }
+            parsed.consoleEnabled = consoleEnabled->get<bool>();
+        }
         const auto graphics = root.find("graphics");
         if (graphics != root.end()) {
             if (!graphics->is_object()) {
@@ -1084,6 +1091,7 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
     Json root = {
             {"version", 1},
             {"firstLevel", settings.firstLevel},
+            {"consoleEnabled", settings.consoleEnabled},
             {"footsteps", {
                     {"defaultSet", settings.footsteps.defaultSet},
                     {"volume", settings.footsteps.volume},

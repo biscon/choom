@@ -272,6 +272,7 @@ struct FpsGraphicsSettings {
 struct FpsApplicationSettings {
     int version = 1;
     std::string firstLevel = "hub";
+    bool consoleEnabled = true;
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
     FpsGraphicsSettings graphics;

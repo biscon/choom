@@ -3,6 +3,7 @@
 #include "engine/EngineContext.h"
 
 #include "lua.hpp"
+#include <raylib.h>
 
 #include <algorithm>
 #include <cassert>
@@ -11,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <locale>
 #include <sstream>
 #include <utility>
 
@@ -62,9 +64,17 @@ const char* OperationStateName(ScriptOperationState state)
 
 void Log(const ScriptRuntime& runtime, const char* level, const std::string& message)
 {
-    std::fprintf(
-            level != nullptr && std::string{level} == "ERROR" ? stderr : stdout,
-            "[Lua %s] map='%s' script='%s' phase=%s: %s\n",
+    int traceLevel = LOG_INFO;
+    if (level != nullptr && std::string{level} == "ERROR") {
+        traceLevel = LOG_ERROR;
+    } else if (level != nullptr && std::string{level} == "WARNING") {
+        traceLevel = LOG_WARNING;
+    } else if (level != nullptr && std::string{level} == "DEBUG") {
+        traceLevel = LOG_DEBUG;
+    }
+    TraceLog(
+            traceLevel,
+            "[Lua %s] map='%s' script='%s' phase=%s: %s",
             level != nullptr ? level : "INFO",
             runtime.mapId.c_str(),
             runtime.mapScriptPath.c_str(),
@@ -849,11 +859,37 @@ int LuaLog(lua_State* state)
     std::string message;
     const int count = lua_gettop(state);
     for (int index = 1; index <= count; ++index) {
-        size_t length = 0;
-        const char* value = luaL_tolstring(state, index, &length);
         if (index > 1) message.push_back('\t');
-        if (value != nullptr) message.append(value, length);
-        lua_pop(state, 1);
+        switch (lua_type(state, index)) {
+            case LUA_TNIL:
+                message += "nil";
+                break;
+            case LUA_TBOOLEAN:
+                message += lua_toboolean(state, index) ? "true" : "false";
+                break;
+            case LUA_TNUMBER: {
+                std::ostringstream value;
+                value.imbue(std::locale::classic());
+                if (lua_isinteger(state, index)) {
+                    value << lua_tointeger(state, index);
+                } else {
+                    value << lua_tonumber(state, index);
+                }
+                message += value.str();
+                break;
+            }
+            case LUA_TSTRING: {
+                size_t length = 0;
+                const char* value = lua_tolstring(state, index, &length);
+                if (value != nullptr) message.append(value, length);
+                break;
+            }
+            default:
+                message += '<';
+                message += luaL_typename(state, index);
+                message += '>';
+                break;
+        }
     }
     Log(runtime, "INFO", message);
     return 0;
@@ -880,6 +916,8 @@ void RegisterCoreBindings(lua_State* state)
         lua_setfield(state, -2, "__tostring");
         lua_pushliteral(state, "protected ScriptOperation metatable");
         lua_setfield(state, -2, "__metatable");
+        lua_pushliteral(state, "Engine.ScriptOperation");
+        lua_setfield(state, -2, "__name");
     }
     lua_pop(state, 1);
 
@@ -898,6 +936,7 @@ void RegisterCoreBindings(lua_State* state)
     RegisterFunction(state, "setPersistentString", LuaSetPersistentString);
     RegisterFunction(state, "getPersistentString", LuaGetPersistentString);
     RegisterFunction(state, "log", LuaLog);
+    RegisterFunction(state, "print", LuaLog);
     RegisterFunction(state, "isLoadingSave", LuaIsLoadingSave);
 }
 
@@ -990,6 +1029,7 @@ void ResetRuntimeForCreate(ScriptRuntime& runtime)
     runtime.requestedSpawnId.clear();
     runtime.mapAbortRequested = false;
     runtime.mapAbortError.clear();
+    runtime.consoleExecuting = false;
 }
 
 void ReclaimTerminalOperations(ScriptRuntime& runtime)
@@ -1292,6 +1332,7 @@ void ScriptSystemShutdownForMap(
     runtime.requestedSpawnId.clear();
     runtime.mapAbortRequested = false;
     runtime.mapAbortError.clear();
+    runtime.consoleExecuting = false;
     runtime.phase = ScriptRuntimePhase::Empty;
     Log(runtime, "INFO", "map VM closed");
 }

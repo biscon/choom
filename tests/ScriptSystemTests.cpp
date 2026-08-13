@@ -1,5 +1,6 @@
 #include "engine/EngineContext.h"
 #include "engine/scripting/ScriptPersistence.h"
+#include "engine/scripting/ScriptConsole.h"
 #include "engine/scripting/ScriptSystem.h"
 
 #include "lua.hpp"
@@ -115,6 +116,10 @@ end
     assert(CreateRuntime(context, runtime, persistent, files, nullptr, nullptr, true));
     assert(!runtime.initFinished);
     assert(runtime.loadingSave);
+    const engine::ScriptConsoleResult loadingConsole =
+            engine::ScriptSystemExecuteConsole(runtime, "1");
+    assert(!loadingConsole.success);
+    assert(loadingConsole.error.find("still loading") != std::string::npos);
     assert(persistent.bools.at("loading_before"));
     engine::ScriptSystemUpdate(context, runtime, 0.0f);
     assert(runtime.initFinished);
@@ -331,6 +336,93 @@ void PersistentCodecIsTransactional()
     assert(loaded.ints.at("sentinel") == 9);
 }
 
+void ConsoleEvaluationIsSynchronousBoundedAndStackSafe()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    TestFiles files("console");
+    files.Write(files.scriptPath, R"(
+function consoleWorker()
+    setPersistentBool("console_worker", true)
+end
+)");
+    assert(CreateRuntime(context, runtime, persistent, files));
+
+    lua_pushinteger(runtime.vm, 91);
+    const int baseTop = lua_gettop(runtime.vm);
+    engine::ScriptConsoleResult expression =
+            engine::ScriptSystemExecuteConsole(
+                    runtime, "1 + 2, nil, true, 'text'");
+    assert(expression.success);
+    assert(expression.evaluatedExpression);
+    assert(expression.values.size() == 4);
+    assert(expression.values[0] == "[1] 3");
+    assert(expression.values[1] == "[2] nil");
+    assert(expression.values[2] == "[3] true");
+    assert(expression.values[3] == "[4] \"text\"");
+    assert(lua_gettop(runtime.vm) == baseTop);
+    assert(lua_tointeger(runtime.vm, -1) == 91);
+
+    engine::ScriptConsoleResult statement =
+            engine::ScriptSystemExecuteConsole(runtime, "consoleValue = 17");
+    assert(statement.success);
+    assert(!statement.evaluatedExpression);
+    assert(statement.values.empty());
+    engine::ScriptConsoleResult read =
+            engine::ScriptSystemExecuteConsole(runtime, "consoleValue");
+    assert(read.success && read.values.size() == 1
+            && read.values[0] == "[1] 17");
+
+    engine::ScriptConsoleResult explicitReturn =
+            engine::ScriptSystemExecuteConsole(runtime, "return 23, 'ok'");
+    assert(explicitReturn.success);
+    assert(!explicitReturn.evaluatedExpression);
+    assert(explicitReturn.values.size() == 2);
+
+    engine::ScriptConsoleResult runtimeError =
+            engine::ScriptSystemExecuteConsole(runtime, "error('console boom')");
+    assert(!runtimeError.success);
+    assert(runtimeError.error.find("console boom") != std::string::npos);
+    assert(runtimeError.error.find("stack traceback") != std::string::npos);
+    assert(lua_gettop(runtime.vm) == baseTop);
+
+    engine::ScriptConsoleResult blocking =
+            engine::ScriptSystemExecuteConsole(runtime, "delay(1)");
+    assert(!blocking.success);
+    assert(blocking.error.find("blocking operation") != std::string::npos);
+
+    engine::ScriptConsoleResult printed =
+            engine::ScriptSystemExecuteConsole(runtime, "print('console print')");
+    assert(printed.success);
+    assert(printed.values.empty());
+
+    std::string manyValues;
+    for (int i = 0; i < 70; ++i) {
+        if (!manyValues.empty()) manyValues += ',';
+        manyValues += std::to_string(i);
+    }
+    engine::ScriptConsoleResult bounded =
+            engine::ScriptSystemExecuteConsole(runtime, manyValues);
+    assert(bounded.success);
+    assert(bounded.values.size() == 65);
+    assert(bounded.values.back().find("omitted") != std::string::npos);
+
+    runtime.consoleExecuting = true;
+    engine::ScriptConsoleResult reentrant =
+            engine::ScriptSystemExecuteConsole(runtime, "1");
+    assert(!reentrant.success);
+    assert(reentrant.error.find("already executing") != std::string::npos);
+    runtime.consoleExecuting = false;
+
+    lua_settop(runtime.vm, 0);
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    engine::ScriptConsoleResult unavailable =
+            engine::ScriptSystemExecuteConsole(runtime, "1");
+    assert(!unavailable.success);
+    assert(unavailable.error.find("no map VM") != std::string::npos);
+}
+
 } // namespace
 
 int main()
@@ -341,5 +433,6 @@ int main()
     AsyncOperationsDeliverValuesAndCancelOnce();
     ModulePathsAreDeterministic();
     PersistentCodecIsTransactional();
+    ConsoleEvaluationIsSynchronousBoundedAndStackSafe();
     return 0;
 }

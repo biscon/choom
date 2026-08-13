@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/EngineContext.h"
+#include "engine/debug/DebugConsoleData.h"
 #include "engine/ui/UI.h"
 #include "engine/scripting/ScriptData.h"
 #include "game/ApplicationFlow.h"
@@ -37,6 +38,12 @@ public:
             engine::FontHandle font,
             engine::FontHandle smallFont);
     void Update(engine::EngineContext& context, float dt);
+    void UpdateDebugConsole(engine::EngineContext& context, float dt);
+    void ProcessDeferredDebugActions(engine::EngineContext& context);
+    void RenderDebugConsole(
+            engine::AssetManager& assets,
+            int logicalWidth,
+            int logicalHeight);
 
     ApplicationContentKind BackgroundContentKind() const;
     bool ShouldRefreshBackground() const;
@@ -71,6 +78,7 @@ private:
     void ResumeGame(engine::EngineContext& context);
     void OpenEditor(engine::EngineContext& context);
     ApplicationScreen BackgroundScreen() const;
+    bool DebugConsoleAvailable() const;
 
     ApplicationFlowState flow;
     FpsApplicationSettings applicationSettings;
@@ -80,6 +88,7 @@ private:
     FpsWeaponRegistry weaponRegistry;
     PlayerAudioRuntime playerAudio;
     engine::PersistentScriptStore persistentScripts;
+    engine::DebugConsoleData debugConsole;
     std::string menuStatus;
     std::optional<MainMenuAction> pendingMenuAction;
     std::optional<GameGraphicsSettingsAction> pendingSettingsAction;

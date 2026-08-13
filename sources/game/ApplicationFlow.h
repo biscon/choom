@@ -44,5 +44,9 @@ void MarkApplicationGameStarted(ApplicationFlowState& state);
 void MarkApplicationGameStopped(ApplicationFlowState& state);
 void ShowApplicationEditor(ApplicationFlowState& state);
 void RequestApplicationQuit(ApplicationFlowState& state);
+bool IsApplicationDebugConsoleAvailable(
+        const ApplicationFlowState& state,
+        bool gameRunning,
+        bool consoleEnabled);
 
 } // namespace game
