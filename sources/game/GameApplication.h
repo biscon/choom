@@ -26,7 +26,10 @@ class GameApplication {
 public:
     GameApplication() : editor(applicationSettings) {}
 
-    bool Init(engine::EngineContext& context);
+    bool Init(
+            engine::EngineContext& context,
+            FpsApplicationSettings initialSettings,
+            std::string settingsLoadError);
     void Shutdown(engine::EngineContext& context);
 
     void RenderInteractiveUI(
@@ -79,6 +82,7 @@ private:
     void OpenEditor(engine::EngineContext& context);
     ApplicationScreen BackgroundScreen() const;
     bool DebugConsoleAvailable() const;
+    void ApplyPerspectiveFov();
 
     ApplicationFlowState flow;
     FpsApplicationSettings applicationSettings;

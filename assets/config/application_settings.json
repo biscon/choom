@@ -12,7 +12,9 @@
     "fxaa": true,
     "volumetricQualityCap": "high",
     "shadowQuality": "high",
-    "performanceOverlay": false
+    "performanceOverlay": false,
+    "vsync": true,
+    "horizontalFovDegrees": 95
   },
   "hdrBloom": {
     "enabled": true,

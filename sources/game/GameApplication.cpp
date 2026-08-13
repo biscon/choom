@@ -40,21 +40,14 @@ int ProjectedShadowResolution(FpsShadowQuality quality)
 
 } // namespace
 
-bool GameApplication::Init(engine::EngineContext& context)
+bool GameApplication::Init(
+        engine::EngineContext& context,
+        FpsApplicationSettings initialSettings,
+        std::string settingsLoadError)
 {
     Shutdown(context);
-    std::string settingsError;
-    if (!LoadFpsApplicationSettings(
-                ApplicationSettingsPath,
-                applicationSettings,
-                &settingsError)) {
-        TraceLog(
-                LOG_WARNING,
-                "Application settings ignored: %s",
-                settingsError.c_str());
-        applicationSettings = FpsApplicationSettings{};
-        menuStatus = settingsError;
-    }
+    applicationSettings = std::move(initialSettings);
+    menuStatus = std::move(settingsLoadError);
     applicationSettings.graphics =
             NormalizeFpsGraphicsSettings(applicationSettings.graphics);
     engine::SetDebugConsoleLogCaptureEnabled(
@@ -88,6 +81,7 @@ bool GameApplication::Init(engine::EngineContext& context)
         menuStatus = "Editor initialization failed";
         return false;
     }
+    ApplyPerspectiveFov();
     flow = ApplicationFlowState{};
     initialized = true;
     return true;
@@ -527,6 +521,7 @@ bool GameApplication::CommitPendingGraphicsSettings(std::string& error)
         return false;
     }
     applicationSettings = std::move(candidate);
+    ApplyPerspectiveFov();
     graphicsSettingsDraft = applicationSettings;
     pendingGraphicsSettings.reset();
     graphicsSettingsOpen = false;
@@ -650,6 +645,16 @@ bool GameApplication::DebugConsoleAvailable() const
             flow,
             gameSession.IsRunning(),
             applicationSettings.consoleEnabled);
+}
+
+void GameApplication::ApplyPerspectiveFov()
+{
+    constexpr float WorldRenderAspect = 16.0f / 9.0f;
+    const float verticalFov = FpsVerticalFovDegrees(
+            applicationSettings.graphics.horizontalFovDegrees,
+            WorldRenderAspect);
+    gameScene.Renderer().SetVerticalFovDegrees(verticalFov);
+    editor.SetPreviewVerticalFovDegrees(verticalFov);
 }
 
 } // namespace game

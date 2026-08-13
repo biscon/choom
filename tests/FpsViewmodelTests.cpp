@@ -745,6 +745,8 @@ void SettingsResolutionAndPersistence()
             game::FpsVolumetricQualityCap::Low;
     settings.graphics.shadowQuality = game::FpsShadowQuality::Medium;
     settings.graphics.performanceOverlay = true;
+    settings.graphics.vsync = false;
+    settings.graphics.horizontalFovDegrees = 96;
     const std::filesystem::path path = std::filesystem::temp_directory_path()/"fps_viewmodel_settings_test.json";
     assert(game::SaveFpsApplicationSettings(path.string(), settings, &error));
     game::FpsApplicationSettings loaded;
@@ -759,6 +761,8 @@ void SettingsResolutionAndPersistence()
             == game::FpsVolumetricQualityCap::Low);
     assert(loaded.graphics.shadowQuality == game::FpsShadowQuality::Medium);
     assert(loaded.graphics.performanceOverlay);
+    assert(!loaded.graphics.vsync);
+    assert(loaded.graphics.horizontalFovDegrees == 96);
     assert(loaded.footsteps.defaultSet == "DirtRoad_Mono");
     assert(Near(loaded.footsteps.volume, 0.7f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.5f));
@@ -868,6 +872,14 @@ void SettingsResolutionAndPersistence()
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"shadowQuality":false}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"vsync":"yes"}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"horizontalFovDegrees":69}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"horizontalFovDegrees":121}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"horizontalFovDegrees":90.5}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"consoleEnabled":"yes"})",loaded,&error));
     assert(game::ParseFpsApplicationSettings(
             R"({"version":1})",
@@ -881,6 +893,27 @@ void SettingsResolutionAndPersistence()
     assert(loaded.playerSounds.events[0].id == "jump");
     assert(loaded.playerSounds.events[0].set == "Jump");
     assert(loaded.playerSounds.events[1].id == "land");
+    assert(loaded.graphics.vsync);
+    assert(loaded.graphics.horizontalFovDegrees
+            == game::DefaultFpsHorizontalFovDegrees);
+
+    game::FpsGraphicsSettings normalized;
+    normalized.horizontalFovDegrees = 20;
+    assert(game::NormalizeFpsGraphicsSettings(normalized).horizontalFovDegrees
+            == game::MinFpsHorizontalFovDegrees);
+    normalized.horizontalFovDegrees = 200;
+    assert(game::NormalizeFpsGraphicsSettings(normalized).horizontalFovDegrees
+            == game::MaxFpsHorizontalFovDegrees);
+
+    const float defaultVerticalFov = game::FpsVerticalFovDegrees(
+            game::DefaultFpsHorizontalFovDegrees, 16.0f / 9.0f);
+    assert(Near(defaultVerticalFov, 75.5f, 0.1f));
+    assert(game::FpsVerticalFovDegrees(
+                    game::MinFpsHorizontalFovDegrees, 16.0f / 9.0f)
+            < defaultVerticalFov);
+    assert(game::FpsVerticalFovDegrees(
+                    game::MaxFpsHorizontalFovDegrees, 16.0f / 9.0f)
+            > defaultVerticalFov);
 }
 
 void PreviewSettingsOverrideDeltaCoverage()

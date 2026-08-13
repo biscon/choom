@@ -22,6 +22,8 @@
 static constexpr int INTERNAL_WIDTH = 1920;
 static constexpr int INTERNAL_HEIGHT = 1080;
 static constexpr float DEFAULT_WORLD_RENDER_SCALE = 1.5f;
+static constexpr const char* APPLICATION_SETTINGS_PATH =
+        ASSETS_PATH "config/application_settings.json";
 
 enum class RenderProfilePass : std::size_t {
     Shadows,
@@ -199,8 +201,24 @@ static void ClearLinearSceneBackground(Color displaySrgbColor)
 int main()
 {
     engine::InstallDebugConsoleTraceLogBridge();
+    game::FpsApplicationSettings startupSettings;
+    std::string startupSettingsError;
+    if (!game::LoadFpsApplicationSettings(
+                APPLICATION_SETTINGS_PATH,
+                startupSettings,
+                &startupSettingsError)) {
+        TraceLog(
+                LOG_WARNING,
+                "Application settings ignored: %s",
+                startupSettingsError.c_str());
+        startupSettings = game::FpsApplicationSettings{};
+    }
+    startupSettings.graphics = game::NormalizeFpsGraphicsSettings(
+            startupSettings.graphics);
     unsigned int flags = 0;
-    flags |= FLAG_VSYNC_HINT;
+    if (startupSettings.graphics.vsync) {
+        flags |= FLAG_VSYNC_HINT;
+    }
     SetConfigFlags(flags);
 
     InitWindow(STARTUP_WINDOW_WIDTH, STARTUP_WINDOW_HEIGHT, "Engine");
@@ -452,7 +470,10 @@ int main()
             static_cast<float>(INTERNAL_HEIGHT)
     };
     game::GameApplication application;
-    if (!application.Init(context)) {
+    if (!application.Init(
+                context,
+                std::move(startupSettings),
+                std::move(startupSettingsError))) {
         TraceLog(LOG_ERROR, "Engine application initialization failed");
         unloadRenderResources();
         context.assets.Shutdown();

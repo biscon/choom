@@ -1840,6 +1840,87 @@ bool Slider(
     return changed;
 }
 
+bool IntSlider(
+        UIContext& ui,
+        const UIConfig& config,
+        Input& input,
+        const char* id,
+        Rectangle bounds,
+        int minValue,
+        int maxValue,
+        int& value)
+{
+    const uint32_t widgetId = HashId(id);
+    const bool hovered = ContainsWidget(ui, bounds, ui.mousePosition);
+    if (hovered) {
+        ui.hotId = widgetId;
+        if (ui.mouseDown) {
+            ui.activeId = widgetId;
+        }
+        ConsumeMousePresses(ui, input, bounds);
+    }
+    if (ConsumeMouseClick(ui, input, bounds)) {
+        ui.activeId = widgetId;
+    }
+
+    const int low = std::min(minValue, maxValue);
+    const int high = std::max(minValue, maxValue);
+    const int range = high - low;
+    value = std::clamp(value, low, high);
+
+    bool changed = false;
+    if (ui.activeId == widgetId && ui.mouseDown && range > 0
+            && bounds.width > 0.0f) {
+        const Rectangle drawBounds = TransformBounds(ui, bounds);
+        const float t = std::clamp(
+                (ui.mousePosition.x - drawBounds.x) / drawBounds.width,
+                0.0f,
+                1.0f);
+        const int nextValue = low + static_cast<int>(
+                std::lround(static_cast<float>(range) * t));
+        if (nextValue != value) {
+            value = nextValue;
+            changed = true;
+        }
+    }
+
+    DrawWidgetBackground(
+            ui,
+            config,
+            bounds,
+            InteractiveFill(config, ui, widgetId),
+            config.borderColor);
+
+    const Rectangle drawBounds = TransformBounds(ui, bounds);
+    const float trackY = bounds.y
+            + (bounds.height - config.sliderTrackHeight) * 0.5f;
+    const Rectangle trackLocal{
+            bounds.x + config.paddingX,
+            trackY,
+            std::max(0.0f, bounds.width - config.paddingX * 2.0f),
+            config.sliderTrackHeight};
+    const Rectangle track = TransformBounds(ui, trackLocal);
+    DrawRectangleRec(track, config.panelColor);
+
+    const float t = range > 0
+            ? static_cast<float>(value - low) / static_cast<float>(range)
+            : 0.0f;
+    DrawRectangleRec(
+            Rectangle{track.x, track.y, track.width * t, track.height},
+            config.accentColor);
+
+    const float handleX = track.x + track.width * t
+            - config.sliderHandleWidth * 0.5f;
+    DrawRectangleRec(
+            Rectangle{
+                    handleX,
+                    drawBounds.y + config.paddingY,
+                    config.sliderHandleWidth,
+                    bounds.height - config.paddingY * 2.0f},
+            config.textColor);
+    return changed;
+}
+
 UINumericInputResult FloatInput(
         UIContext& ui,
         const UIConfig& config,

@@ -249,6 +249,16 @@ bool Slider(
         float maxValue,
         float& value);
 
+bool IntSlider(
+        UIContext& ui,
+        const UIConfig& config,
+        Input& input,
+        const char* id,
+        Rectangle bounds,
+        int minValue,
+        int maxValue,
+        int& value);
+
 UINumericInputResult FloatInput(
         UIContext& ui,
         const UIConfig& config,

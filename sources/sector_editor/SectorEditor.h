@@ -68,6 +68,10 @@ public:
                 volumetricCap, shadowsEnabled, shadowMapResolution,
                 projectedShadowIntervalSeconds, projectedShadowResolution);
     }
+    void SetPreviewVerticalFovDegrees(float value)
+    {
+        sceneRuntime.Renderer().SetVerticalFovDegrees(value);
+    }
 
     void Update(engine::EngineContext& context, float dt);
     void Render(engine::AssetManager& assets);
