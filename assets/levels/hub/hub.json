@@ -1307,7 +1307,7 @@
     "maxOpacity": 0.6499999761581421,
     "referenceHeightWorld": 1.0,
     "heightFalloff": 0.0,
-    "localVolumeQuality": "high"
+    "localVolumeQuality": "medium"
   },
   "audio": {
     "music": "ambience/horror_ambience.wav",
