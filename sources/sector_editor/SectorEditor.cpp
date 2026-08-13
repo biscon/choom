@@ -302,6 +302,12 @@ bool SectorEditor::Init(engine::EngineContext& context)
                     selectionState,
                     levelMarkerEditingState,
                     statusText});
+    triggerEditingService.emplace(
+            SectorEditorTriggerEditingServiceContext{
+                    Lifecycle(), TopologyMap(), AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    state.topologyRenderRevision, state.topologyRenderCache,
+                    selectionState, triggerEditingState, statusText});
     authoringFaceMergeService.emplace(
             SectorEditorAuthoringFaceMergeServiceContext{
                     state,
@@ -349,10 +355,13 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    triggerEditingState = TriggerEditingState{};
+    triggerEditingUiState = TriggerEditingUiState{};
     authoringFaceMergeState = SectorEditorAuthoringFaceMergeState{};
     fogVolumeEditingService.reset();
     authoringFaceMergeService.reset();
     levelMarkerEditingService.reset();
+    triggerEditingService.reset();
     playerAudio = PlayerAudioRuntime{};
     canvasRect = {};
     statusText.clear();
@@ -864,6 +873,8 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
     context.authoringFaceMerge = authoringFaceMergeService
             ? &authoringFaceMergeService.value()
             : nullptr;
+    context.triggerEditing = triggerEditingService ? &triggerEditingService.value() : nullptr;
+    context.triggerEditingState = &triggerEditingState;
     context.currentSnappedSectorPoint = [this]() {
         return CurrentSnappedSectorPoint();
     };
@@ -1236,6 +1247,9 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     } else if (state.pendingAuthoringInsertVertex.active
                             || state.currentTool == SectorEditorTool::AuthoringInsertVertex) {
                         CancelPendingAuthoringInsertVertex("Insert Vertex cancelled");
+                    } else if (triggerEditingState.pending.active) {
+                        triggerEditingState.pending = PendingTriggerDrawState{};
+                        statusText = "Trigger drawing cancelled";
                     } else if (selectionState.selectedTopologyLightId >= 0
                             || selectionState.selectedTopologyStaticSpotLightId >= 0
                             || selectionState.selectedTopologyDynamicLightId >= 0
@@ -1575,6 +1589,11 @@ SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
                 SectorEditorPickKind::LevelMarker,
                 selectionState.selectedAuthoring.levelMarkerId};
     }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Trigger
+            && selectionState.selectedAuthoring.triggerId >= 0) {
+        return SectorEditorPickTarget{SectorEditorPickKind::Trigger,
+                selectionState.selectedAuthoring.triggerId};
+    }
     return SectorEditorPickTarget{};
 }
 
@@ -1589,6 +1608,7 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             + TopologyMap().staticLights.size()
             + AuthoringGraph().fogVolumes.size()
             + AuthoringGraph().levelMarkers.size()
+            + AuthoringGraph().triggers.size()
             + 3);
 
     const auto addPointCandidate = [&](SectorEditorPickKind kind, int id, Vector2 center) {
@@ -1634,6 +1654,17 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             screenPoint,
             ScreenLightPickPixels,
             candidates);
+    if (triggerEditingService) {
+        const Vector2 mapPoint = ScreenToMap(screenPoint);
+        const Vector2 tolerancePoint = ScreenToMap(Vector2{screenPoint.x + ScreenLightPickPixels, screenPoint.y});
+        const float tolerance = std::fabs(tolerancePoint.x - mapPoint.x);
+        for (const SectorAuthoringTrigger& trigger : AuthoringGraph().triggers) {
+            if (SectorEditorTriggerHitTest(trigger, mapPoint, tolerance)) {
+                candidates.push_back(SectorEditorPickCandidate{
+                        SectorEditorPickTarget{SectorEditorPickKind::Trigger, trigger.editorId}, 0.0f});
+            }
+        }
+    }
     for (const SectorTopologyDynamicSpotLight& light : TopologyMap().dynamicSpotLights) {
         addSpotCandidate(
                 SectorEditorPickKind::DynamicSpotLight,
@@ -2493,6 +2524,7 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
     context.levelMarkerEditing = levelMarkerEditingService
             ? &levelMarkerEditingService.value()
             : nullptr;
+    context.triggerEditing = triggerEditingService ? &triggerEditingService.value() : nullptr;
     context.startAuthoringVertexDrag = [](void* userData, int vertexId, SectorTopologyCoordPoint point) {
         static_cast<SectorEditor*>(userData)->StartAuthoringVertexDrag(vertexId, point);
     };
@@ -3692,6 +3724,8 @@ void SectorEditor::DrawTopologyDocument()
             authoringFaceMergeState.hoveredTargetFaceAnchorId
     };
     DrawCachedTopologySectors(state.topologyRenderCache, drawContext);
+    DrawCachedTriggers(state.topologyRenderCache, drawContext,
+            triggerEditingState.drag.active ? &triggerEditingState.drag : nullptr);
     DrawAuthoringFogVolumes();
 
     if (drawLegacyTopologySelection) {
@@ -3726,6 +3760,7 @@ void SectorEditor::DrawTopologyDocument()
     drawToolOverlay(SectorEditorTool::AuthoringRectangle);
     drawToolOverlay(SectorEditorTool::AuthoringInsertVertex);
     drawToolOverlay(SectorEditorTool::AuthoringFogVolume);
+    drawToolOverlay(SectorEditorTool::Trigger);
     DrawTopologySnapCrosshair();
 
     if (!state.topologyRenderWarning.empty()) {
@@ -4256,7 +4291,7 @@ void SectorEditor::DrawToolsPanel(
     };
     const float toolsContentH =
             sectionLabelH + rowsHeight(5)
-            + separatorH + sectionLabelH + rowsHeight(10)
+            + separatorH + sectionLabelH + rowsHeight(12)
             + separatorH + rowsHeight(5)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
@@ -4345,6 +4380,10 @@ void SectorEditor::DrawToolsPanel(
         if (state.pendingAuthoringInsertVertex.active && tool != SectorEditorTool::AuthoringInsertVertex) {
             CancelPendingAuthoringInsertVertex("Insert Vertex cancelled");
         }
+        if (triggerEditingState.pending.active && tool != SectorEditorTool::Trigger) {
+            triggerEditingState.pending = PendingTriggerDrawState{};
+            statusText = "Trigger drawing cancelled";
+        }
         if (manipulationState.authoringVertexDrag.active && tool != SectorEditorTool::AuthoringMove) {
             CancelAuthoringVertexDrag("Cancelled authoring vertex move");
         }
@@ -4357,6 +4396,11 @@ void SectorEditor::DrawToolsPanel(
                 && levelMarkerEditingService->Drag().active
                 && tool != SectorEditorTool::Select) {
             levelMarkerEditingService->CancelMove("Cancelled Level Marker move");
+        }
+        if (triggerEditingService
+                && triggerEditingService->IsMoving()
+                && tool != SectorEditorTool::Select) {
+            triggerEditingService->CancelMove("Cancelled trigger move");
         }
         if (lightEditingState.lightDrag.active
                 && tool != SectorEditorTool::Move
@@ -4396,6 +4440,10 @@ void SectorEditor::DrawToolsPanel(
             statusText = "Fog Volume: click strictly inside a sector";
         } else if (tool == SectorEditorTool::LevelMarker) {
             statusText = "Level Marker: click strictly inside a sector";
+        } else if (tool == SectorEditorTool::Trigger) {
+            statusText = triggerEditingState.drawMode == TriggerDrawMode::Rectangle
+                    ? "Trigger Rectangle: click first corner"
+                    : "Trigger Polygon: click first point";
         }
     };
 
@@ -4434,6 +4482,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::StaticModel,
             SectorEditorTool::DynamicModel,
             SectorEditorTool::Door,
+            SectorEditorTool::Trigger,
             SectorEditorTool::LevelMarker,
             SectorEditorTool::AuthoringFogVolume,
             SectorEditorTool::StaticLight,
@@ -4444,6 +4493,25 @@ void SectorEditor::DrawToolsPanel(
     for (SectorEditorTool tool : mapTools) {
         if (drawToolButton(tool)) {
             selectTool(tool);
+        }
+        if (tool == SectorEditorTool::Trigger && state.currentTool == SectorEditorTool::Trigger) {
+            const float half = (contentW - gap) * 0.5f;
+            const bool rectangle = engine::ToolButton(
+                    ui, config, input, assets, "sector_editor_trigger_rectangle",
+                    Rectangle{0.0f, y, half, rowH}, font, "Rectangle",
+                    triggerEditingState.drawMode == TriggerDrawMode::Rectangle);
+            const bool polygon = engine::ToolButton(
+                    ui, config, input, assets, "sector_editor_trigger_polygon",
+                    Rectangle{half + gap, y, half, rowH}, font, "Polygon",
+                    triggerEditingState.drawMode == TriggerDrawMode::Polygon);
+            y += rowH + gap;
+            if (rectangle || polygon) {
+                triggerEditingState.pending = PendingTriggerDrawState{};
+                triggerEditingState.drawMode = rectangle
+                        ? TriggerDrawMode::Rectangle : TriggerDrawMode::Polygon;
+                statusText = rectangle ? "Trigger Rectangle: click first corner"
+                                       : "Trigger Polygon: click first point";
+            }
         }
     }
 
@@ -4643,6 +4711,7 @@ void SectorEditor::DrawSectorsPanel(
             materialEditingUiState,
             fogVolumeEditingUiState,
             levelMarkerEditingUiState,
+            triggerEditingUiState,
             statusText,
             selection,
             runtimeObjectEditing,
@@ -4654,6 +4723,7 @@ void SectorEditor::DrawSectorsPanel(
             lightEditing,
             fogVolumeEditingService.value(),
             levelMarkerEditingService.value(),
+            triggerEditingService.value(),
             authoringFaceMergeService.value(),
             engineContext};
     const SectorEditorInspectorPanelResult result = DrawSectorEditorInspectorPanel(context);
@@ -4692,6 +4762,16 @@ void SectorEditor::DrawSectorsPanel(
                     [this]() {
                         if (levelMarkerEditingService) {
                             levelMarkerEditingService->DeleteSelected();
+                        }
+                    });
+            break;
+        case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedTriggerConfirmation:
+            OpenConfirmation(
+                    "Delete Trigger",
+                    "Delete the selected trigger?",
+                    [this]() {
+                        if (triggerEditingService) {
+                            triggerEditingService->DeleteSelected();
                         }
                     });
             break;
@@ -5326,6 +5406,8 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    triggerEditingState = TriggerEditingState{};
+    triggerEditingUiState = TriggerEditingUiState{};
     previewState.controller = SectorEditorPreviewControllerState{};
     ResetEditorTopologyDocumentState(
             Lifecycle(),
@@ -5468,6 +5550,8 @@ bool SectorEditor::LoadLevel(
     manipulationState = ManipulationState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    triggerEditingState = TriggerEditingState{};
+    triggerEditingUiState = TriggerEditingUiState{};
     runtimeObjectEditingState = RuntimeObjectEditingState{};
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     lightEditingState = LightEditingState{};

@@ -281,6 +281,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
             sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
             sources/sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.cpp
+            sources/sector_editor/services/triggers/SectorEditorTriggerEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
             sources/sector_editor/services/runtime_objects/SectorEditorAuthoringDoorReconciliation.cpp
@@ -314,6 +315,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTriggers.cpp
             sources/sector_demo/SectorTopologySerialization.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
@@ -328,6 +330,7 @@ if(BUILD_TESTING)
             sources/game/SectorLevelLoader.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTriggers.cpp
             sources/sector_demo/SectorTopologySerialization.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
@@ -495,6 +498,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTriggers.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
     )

@@ -1,4 +1,5 @@
 #include "sector_demo/SectorAuthoringGraph.h"
+#include "sector_demo/SectorTriggers.h"
 #include "sector_demo/SectorUnits.h"
 
 #include <algorithm>
@@ -1822,6 +1823,17 @@ int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph)
     return AllocateNextId(graph.levelMarkers);
 }
 
+int AllocateSectorAuthoringTriggerId(const SectorAuthoringGraph& graph)
+{
+    int next = 1;
+    for (const SectorAuthoringTrigger& trigger : graph.triggers) {
+        if (trigger.editorId >= next && trigger.editorId < std::numeric_limits<int>::max()) {
+            next = trigger.editorId + 1;
+        }
+    }
+    return next;
+}
+
 bool IsValidSectorAuthoringLevelMarkerReferenceId(const std::string& id)
 {
     if (id.empty() || id.size() > 63) {
@@ -1836,6 +1848,23 @@ bool IsValidSectorAuthoringLevelMarkerReferenceId(const std::string& id)
     });
 }
 
+bool IsValidSectorTriggerReferenceId(const std::string& id)
+{
+    return IsValidSectorAuthoringLevelMarkerReferenceId(id);
+}
+
+bool IsValidSectorTriggerScriptName(const std::string& name)
+{
+    if (name.empty()) return true;
+    const auto head = [](char ch) {
+        return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == '_';
+    };
+    if (!head(name.front())) return false;
+    return std::all_of(name.begin() + 1, name.end(), [head](char ch) {
+        return head(ch) || (ch >= '0' && ch <= '9');
+    });
+}
+
 std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringGraph& graph)
 {
     if (graph.levelMarkers.empty()
@@ -1847,6 +1876,15 @@ std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringG
         if (FindSectorAuthoringLevelMarkerByReferenceId(graph, candidate) == nullptr) {
             return candidate;
         }
+    }
+    return {};
+}
+
+std::string AllocateSectorAuthoringTriggerReferenceId(const SectorAuthoringGraph& graph)
+{
+    for (int suffix = 1; suffix < std::numeric_limits<int>::max(); ++suffix) {
+        const std::string candidate = "trigger_" + std::to_string(suffix);
+        if (FindSectorAuthoringTriggerByReferenceId(graph, candidate) == nullptr) return candidate;
     }
     return {};
 }
@@ -1949,6 +1987,34 @@ const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarkerByReferenceId(
         if (marker.referenceId == referenceId) {
             return &marker;
         }
+    }
+    return nullptr;
+}
+
+const SectorAuthoringTrigger* FindSectorAuthoringTrigger(
+        const SectorAuthoringGraph& graph,
+        int editorId)
+{
+    for (const SectorAuthoringTrigger& trigger : graph.triggers) {
+        if (trigger.editorId == editorId) return &trigger;
+    }
+    return nullptr;
+}
+
+SectorAuthoringTrigger* FindSectorAuthoringTrigger(SectorAuthoringGraph& graph, int editorId)
+{
+    for (SectorAuthoringTrigger& trigger : graph.triggers) {
+        if (trigger.editorId == editorId) return &trigger;
+    }
+    return nullptr;
+}
+
+const SectorAuthoringTrigger* FindSectorAuthoringTriggerByReferenceId(
+        const SectorAuthoringGraph& graph,
+        const std::string& id)
+{
+    for (const SectorAuthoringTrigger& trigger : graph.triggers) {
+        if (trigger.id == id) return &trigger;
     }
     return nullptr;
 }
@@ -2314,6 +2380,38 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
         if (!std::isfinite(marker.y) || !std::isfinite(marker.orientationDegrees)) {
             AddIssue(issues, SectorAuthoringObjectKind::LevelMarker, marker.id,
                      "Authoring level marker transform must be finite");
+        }
+    }
+
+    std::set<int> triggerEditorIds;
+    std::set<std::string> triggerReferenceIds;
+    for (const SectorAuthoringTrigger& trigger : graph.triggers) {
+        if (!IsValidSectorAuthoringId(trigger.editorId)) {
+            AddIssue(issues, SectorAuthoringObjectKind::Trigger, trigger.editorId,
+                     "Invalid authoring trigger editor ID");
+        } else if (!triggerEditorIds.insert(trigger.editorId).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::Trigger, trigger.editorId,
+                     "Duplicate authoring trigger editor ID");
+        }
+        if (!IsValidSectorTriggerReferenceId(trigger.id)) {
+            AddIssue(issues, SectorAuthoringObjectKind::Trigger, trigger.editorId,
+                     "Trigger ID must contain 1-63 letters, digits, underscores, or dashes");
+        } else if (!triggerReferenceIds.insert(trigger.id).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::Trigger, trigger.editorId,
+                     "Duplicate trigger ID");
+        }
+        if (trigger.delayMilliseconds < 0) {
+            AddIssue(issues, SectorAuthoringObjectKind::Trigger, trigger.editorId,
+                     "Trigger delay must be non-negative");
+        }
+        if (!IsValidSectorTriggerScriptName(trigger.script)) {
+            AddIssue(issues, SectorAuthoringObjectKind::Trigger, trigger.editorId,
+                     "Trigger script must be empty or a valid Lua global identifier");
+        }
+        std::string geometryError;
+        if (!ValidateSectorTriggerPolygon(trigger.points, trigger.shape, &geometryError)) {
+            AddIssue(issues, SectorAuthoringObjectKind::Trigger, trigger.editorId,
+                     "Invalid trigger geometry: " + geometryError);
         }
     }
 
@@ -2792,6 +2890,19 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
         result.topology.levelMarkers.push_back(std::move(compiled));
     }
 
+    result.topology.triggers.reserve(graph.triggers.size());
+    for (const SectorAuthoringTrigger& trigger : graph.triggers) {
+        result.topology.triggers.push_back(SectorCompiledTrigger{
+                trigger.editorId,
+                trigger.id,
+                trigger.shape,
+                trigger.points,
+                trigger.enabled,
+                trigger.repeat,
+                trigger.delayMilliseconds,
+                trigger.script});
+    }
+
     const std::vector<SectorTopologyValidationIssue> topologyIssues =
             ValidateSectorTopologyMap(result.topology);
     for (const SectorTopologyValidationIssue& issue : topologyIssues) {
@@ -2822,6 +2933,7 @@ SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopolog
     graph.lineSides.reserve(map.sideDefs.size());
     graph.faceAnchors.reserve(map.sectors.size());
     graph.levelMarkers.reserve(map.levelMarkers.size());
+    graph.triggers.reserve(map.triggers.size());
 
     for (const SectorTopologyVertex& topologyVertex : map.vertices) {
         SectorAuthoringVertex vertex;
@@ -2877,6 +2989,21 @@ SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopolog
         marker.y = compiled.position.y;
         marker.orientationDegrees = compiled.yawRadians * RadiansToDegrees;
         graph.levelMarkers.push_back(std::move(marker));
+    }
+
+    for (const SectorCompiledTrigger& compiled : map.triggers) {
+        SectorAuthoringTrigger trigger;
+        trigger.editorId = IsValidSectorAuthoringId(compiled.sourceAuthoringTriggerId)
+                ? compiled.sourceAuthoringTriggerId
+                : AllocateSectorAuthoringTriggerId(graph);
+        trigger.id = compiled.id;
+        trigger.shape = compiled.shape;
+        trigger.points = compiled.points;
+        trigger.enabled = compiled.enabled;
+        trigger.repeat = compiled.repeat;
+        trigger.delayMilliseconds = compiled.delayMilliseconds;
+        trigger.script = compiled.script;
+        graph.triggers.push_back(std::move(trigger));
     }
 
     return graph;

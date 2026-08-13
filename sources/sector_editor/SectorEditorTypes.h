@@ -35,6 +35,7 @@ enum class SectorEditorTool {
     DynamicModel,
     Door,
     AuthoringFogVolume,
+    Trigger,
     LevelMarker,
     StaticLight,
     StaticSpotLight,

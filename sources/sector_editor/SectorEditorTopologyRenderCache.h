@@ -4,6 +4,7 @@
 #include "sector_editor/SectorEditorTopologyRenderCacheTypes.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_demo/SectorSwingDoorCatalog.h"
+#include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
 
 #include <raylib.h>
 
@@ -101,6 +102,10 @@ void DrawCachedLevelMarkers(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,
         const LevelMarkerDragState* drag = nullptr);
+void DrawCachedTriggers(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        const TriggerDragState* drag = nullptr);
 void DrawCachedAuthoringGraphOverlay(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context);

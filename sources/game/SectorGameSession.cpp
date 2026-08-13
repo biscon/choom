@@ -219,7 +219,6 @@ void SectorGameSession::Update(
             &playerPosition,
             &playerObstacle);
     UpdateSectorScriptOperations(context, scriptHost);
-    engine::ScriptSystemUpdate(context, scripts, dt);
     SectorRuntimeObjectState& objects = scene.RuntimeObjects();
 
     context.input.ForEachEvent(
@@ -271,6 +270,13 @@ void SectorGameSession::Update(
             input,
             previousVisualEyeY,
             dt);
+    UpdateSectorScriptTriggers(
+            scriptHost,
+            Vector2{
+                    controller.fpsControllerState.feetPosition.x,
+                    controller.fpsControllerState.feetPosition.z},
+            dt);
+    engine::ScriptSystemUpdate(context, scripts, dt);
     if (controller.frameEvents.footstep && applicationSettings != nullptr) {
         scene.PlayFootstepForSector(
                 context,

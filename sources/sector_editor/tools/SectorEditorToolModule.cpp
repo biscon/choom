@@ -6,6 +6,7 @@
 #include "sector_editor/tools/level_marker/SectorEditorLevelMarkerTool.h"
 #include "sector_editor/tools/rectangle/SectorEditorRectangleTool.h"
 #include "sector_editor/tools/select/SectorEditorSelectTool.h"
+#include "sector_editor/tools/trigger/SectorEditorTriggerTool.h"
 
 namespace game {
 
@@ -29,6 +30,7 @@ const SectorEditorToolModule* FindSectorEditorToolModule(SectorEditorTool tool)
     if (tool == SectorEditorTool::LevelMarker) {
         return &SectorEditorLevelMarkerToolModule();
     }
+    if (tool == SectorEditorTool::Trigger) return &SectorEditorTriggerToolModule();
     return nullptr;
 }
 

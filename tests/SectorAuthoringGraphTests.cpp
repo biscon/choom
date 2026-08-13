@@ -18,6 +18,7 @@
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
@@ -12858,6 +12859,93 @@ void TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache()
           "Level Marker placement rejects points outside derived sectors");
 }
 
+void TestTriggerEditingServiceCommitsAuthoringAndDragOnce()
+{
+    game::SectorEditorDocumentState documentState;
+    documentState.authoring.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {160, 0}, {160, 160}, {0, 160}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    documentState.derivation.authoringDerivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(
+                    documentState.authoring.authoringGraph);
+    documentState.map.topologyMap = documentState.derivation.authoringDerivation.topology;
+    documentState.derivation.lastValidAuthoringDerivedTopology = documentState.map.topologyMap;
+    documentState.derivation.authoringDerivationState =
+            game::SectorEditorAuthoringDerivationState::ValidCurrent;
+    documentState.derivation.authoringDerivedTopologyStale = false;
+
+    game::SectorEditorState editorState;
+    editorState.topologyRenderCache.valid = true;
+    game::SelectionState selection;
+    game::TriggerEditingState editingState;
+    std::string status;
+    game::SectorEditorTriggerEditingService editing{
+            game::SectorEditorTriggerEditingServiceContext{
+                    game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                    documentState.map.topologyMap,
+                    documentState.authoring.authoringGraph,
+                    game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                    editorState.topologyRenderRevision,
+                    editorState.topologyRenderCache,
+                    selection,
+                    editingState,
+                    status}};
+
+    const std::vector<game::SectorTriggerPoint> rectangle{
+            {16, 16}, {64, 16}, {64, 64}, {16, 64}};
+    const std::string originalHash =
+            game::ComputeSectorLightmapSourceHash(documentState.map.topologyMap);
+    int triggerId = -1;
+    Check(editing.Place(game::SectorTriggerShapeKind::Rectangle, rectangle, &triggerId),
+          "trigger service places valid exact-coordinate rectangles");
+    Check(documentState.authoring.authoringGraph.triggers.size() == 1
+                  && documentState.authoring.authoringGraph.triggers[0].id == "trigger_1"
+                  && documentState.map.topologyMap.triggers.size() == 1
+                  && documentState.map.topologyMap.triggers[0].enabled
+                  && !documentState.map.topologyMap.triggers[0].repeat,
+          "trigger placement writes source authoring and compiled runtime defaults");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && !editorState.topologyRenderCache.valid,
+          "trigger placement marks dirty and invalidates the 2D topology cache");
+    Check(game::ComputeSectorLightmapSourceHash(documentState.map.topologyMap) == originalHash,
+          "trigger placement leaves the lightmap source hash unchanged");
+
+    std::string error;
+    Check(editing.RenameSelected("hall_exit", error)
+                  && editing.SetSelectedRepeat(true)
+                  && editing.SetSelectedDelay(125)
+                  && editing.SetSelectedScript("onHallExit", error),
+          "trigger inspector mutations commit through the editing service");
+    const game::SectorAuthoringTrigger* trigger = editing.Selected();
+    Check(trigger != nullptr && trigger->id == "hall_exit" && trigger->repeat
+                  && trigger->delayMilliseconds == 125 && trigger->script == "onHallExit",
+          "trigger inspector values update the selected authoring trigger");
+    Check(!editing.SetSelectedScript("not callable()", error) && !error.empty(),
+          "trigger service rejects invalid Lua callback names");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    editorState.topologyRenderCache.valid = true;
+    Check(editing.BeginMove(triggerId, game::SectorTriggerPoint{16, 16}),
+          "trigger drag begins from stable editor identity");
+    editing.UpdateMove(game::SectorTriggerPoint{32, 48});
+    Check(editing.Selected()->points[0].x == 16
+                  && !documentState.lifecycle.topologyDocumentDirty,
+          "trigger drag preview does not mutate source data or dirty the document");
+    Check(editing.FinishMove()
+                  && editing.Selected()->points[0].x == 32
+                  && editing.Selected()->points[0].z == 48
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && !editorState.topologyRenderCache.valid,
+          "trigger drag commits its snapped translation once and invalidates the cache");
+
+    Check(editing.DeleteSelected()
+                  && documentState.authoring.authoringGraph.triggers.empty()
+                  && documentState.map.topologyMap.triggers.empty(),
+          "trigger deletion removes authoring and compiled runtime data");
+}
+
 int main()
 {
     TestLevelMarkerAuthoringSelectionCacheAndPicking();
@@ -12866,6 +12954,7 @@ int main()
     TestAuthoringFogVolumeSerializationRoundTrip();
     TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce();
     TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache();
+    TestTriggerEditingServiceCommitsAuthoringAndDragOnce();
     TestEmptyGraph();
     TestStablePositiveIdAllocation();
     TestAddVerticesAndLines();

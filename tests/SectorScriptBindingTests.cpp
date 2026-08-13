@@ -4,6 +4,7 @@
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorTriggers.h"
 
 #include <cassert>
 #include <chrono>
@@ -168,10 +169,115 @@ end
     game::ResetSectorScriptHost(host);
 }
 
+game::SectorCompiledTrigger MakeTrigger(
+        int editorId,
+        const char* id,
+        int minX,
+        int maxX,
+        bool repeat,
+        int delayMilliseconds,
+        const char* script)
+{
+    return game::SectorCompiledTrigger{
+            editorId,
+            id,
+            game::SectorTriggerShapeKind::Rectangle,
+            {{minX, 0}, {maxX, 0}, {maxX, 32}, {minX, 32}},
+            true,
+            repeat,
+            delayMilliseconds,
+            script};
+}
+
+void TriggerDispatchDelayRepeatAndEnableControls()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    map.triggers.push_back(MakeTrigger(1, "once", 0, 32, false, 0, "onOnce"));
+    map.triggers.push_back(MakeTrigger(2, "repeat", 64, 96, true, 0, "onRepeat"));
+    map.triggers.push_back(MakeTrigger(3, "delayed", 128, 160, false, 100, "onDelayed"));
+    game::SectorScriptHost host;
+    ScriptFiles files;
+    game::InitializeSectorScriptHost(host, objects, map, runtime);
+    files.Write(R"(
+function init()
+    assert(disableTrigger("repeat"))
+    assert(enableTrigger("repeat"))
+end
+function onOnce()
+    setPersistentInt("once", getPersistentInt("once") + 1)
+end
+function onRepeat()
+    setPersistentInt("repeat", getPersistentInt("repeat") + 1)
+end
+function onDelayed()
+    setPersistentInt("delayed", getPersistentInt("delayed") + 1)
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+
+    const auto update = [&](float x, float dt) {
+        game::UpdateSectorScriptTriggers(host, Vector2{x, 0.125f}, dt);
+        engine::ScriptSystemUpdate(context, runtime, dt);
+    };
+
+    update(0.125f, 0.016f);
+    assert(persistent.ints.at("once") == 1);
+    update(0.125f, 0.016f);
+    update(-0.125f, 0.016f);
+    update(0.125f, 0.016f);
+    assert(persistent.ints.at("once") == 1);
+
+    update(0.625f, 0.016f);
+    assert(persistent.ints.at("repeat") == 1);
+    update(0.625f, 0.016f);
+    update(0.875f, 0.016f);
+    update(0.625f, 0.016f);
+    assert(persistent.ints.at("repeat") == 2);
+
+    update(1.125f, 0.050f);
+    assert(persistent.ints.find("delayed") == persistent.ints.end());
+    update(1.5f, 0.050f);
+    assert(persistent.ints.find("delayed") == persistent.ints.end());
+    update(1.5f, 0.050f);
+    assert(persistent.ints.at("delayed") == 1);
+
+    std::string error;
+    update(0.875f, 0.016f);
+    assert(game::SetSectorScriptTriggerEnabled(host, "repeat", false, error));
+    update(0.625f, 0.016f);
+    assert(persistent.ints.at("repeat") == 2);
+    assert(game::SetSectorScriptTriggerEnabled(host, "repeat", true, error));
+    update(0.625f, 0.016f);
+    assert(persistent.ints.at("repeat") == 2);
+    update(0.875f, 0.016f);
+    update(0.625f, 0.016f);
+    assert(persistent.ints.at("repeat") == 3);
+    assert(!game::SetSectorScriptTriggerEnabled(host, "missing", false, error)
+            && !error.empty());
+
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+}
+
+void TriggerContainmentUsesExplicitCoordinateSpaces()
+{
+    const std::vector<game::SectorTriggerPoint> hubLikeTrigger{
+            {-256, 384}, {384, 384}, {384, 512}, {-256, 512}};
+    assert(game::SectorTriggerContainsAuthoringPoint(hubLikeTrigger, 0.0f, 28.0f));
+    assert(game::SectorTriggerContainsWorldPoint(hubLikeTrigger, 0.0f, 3.5f));
+    assert(!game::SectorTriggerContainsWorldPoint(hubLikeTrigger, 0.0f, 28.0f));
+}
+
 } // namespace
 
 void RunSectorScriptBindingTests()
 {
     DoorCompletionAndCancellationShareTheBackend();
     TravelPreservesFirstRequest();
+    TriggerContainmentUsesExplicitCoordinateSpaces();
+    TriggerDispatchDelayRepeatAndEnableControls();
 }

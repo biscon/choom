@@ -11,6 +11,27 @@
 
 namespace game {
 
+enum class SectorTriggerShapeKind {
+    Rectangle,
+    Polygon
+};
+
+struct SectorTriggerPoint {
+    SectorCoord x = 0;
+    SectorCoord z = 0;
+};
+
+struct SectorCompiledTrigger {
+    int sourceAuthoringTriggerId = -1;
+    std::string id;
+    SectorTriggerShapeKind shape = SectorTriggerShapeKind::Rectangle;
+    std::vector<SectorTriggerPoint> points;
+    bool enabled = true;
+    bool repeat = false;
+    int delayMilliseconds = 0;
+    std::string script;
+};
+
 struct SectorPreviewSettings {
     float walkSpeed = 6.0f;
     float runSpeed = 12.0f;
@@ -263,6 +284,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologyDynamicSpotLight> dynamicSpotLights;
     std::vector<SectorPlacedRuntimeObject> runtimeObjects;
     std::vector<SectorCompiledLevelMarker> levelMarkers;
+    std::vector<SectorCompiledTrigger> triggers;
     SectorPreviewSettings previewSettings;
     SectorTopologySkySettings skySettings;
     SectorTopologyDirectionalLightSettings directionalLight;

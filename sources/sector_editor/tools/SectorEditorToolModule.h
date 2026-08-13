@@ -8,6 +8,7 @@
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
+#include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 
 #include <raylib.h>
 
@@ -39,6 +40,8 @@ struct SectorEditorToolContext {
     SectorEditorAuthoringFogVolumeEditingService* fogVolumeEditing = nullptr;
     SectorEditorLevelMarkerEditingService* levelMarkerEditing = nullptr;
     SectorEditorAuthoringFaceMergeService* authoringFaceMerge = nullptr;
+    SectorEditorTriggerEditingService* triggerEditing = nullptr;
+    TriggerEditingState* triggerEditingState = nullptr;
 
     std::function<SectorPoint()> currentSnappedSectorPoint;
     std::function<bool(SectorPoint, SectorTopologyCoordPoint&, std::string&)> toTopologyCoordPoint;

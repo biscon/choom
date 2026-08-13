@@ -34,6 +34,8 @@
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
+#include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
+#include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
 #include "sector_demo/SectorSceneRuntime.h"
 #include "game/FpsWeaponRegistry.h"
 
@@ -471,6 +473,9 @@ private:
     SectorEditorAuthoringFaceMergeState authoringFaceMergeState;
     std::optional<SectorEditorAuthoringFaceMergeService> authoringFaceMergeService;
     std::optional<SectorEditorLevelMarkerEditingService> levelMarkerEditingService;
+    TriggerEditingState triggerEditingState;
+    TriggerEditingUiState triggerEditingUiState;
+    std::optional<SectorEditorTriggerEditingService> triggerEditingService;
     SectorEditorLightmapBakeController lightmapBake;
     Rectangle canvasRect = {};
     std::string statusText;

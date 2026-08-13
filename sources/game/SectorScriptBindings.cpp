@@ -4,6 +4,7 @@
 #include "engine/scripting/ScriptSystem.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/SectorTriggers.h"
 
 #include "lua.hpp"
 
@@ -354,6 +355,30 @@ int LuaChangeMap(lua_State* state)
     return 1;
 }
 
+int LuaSetTriggerEnabled(lua_State* state, bool enabled)
+{
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    std::string error;
+    if (!SetSectorScriptTriggerEnabled(HostFromLua(state), std::string{rawId, length}, enabled, error)) {
+        lua_pushboolean(state, 0);
+        lua_pushlstring(state, error.data(), error.size());
+        return 2;
+    }
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaEnableTrigger(lua_State* state)
+{
+    return LuaSetTriggerEnabled(state, true);
+}
+
+int LuaDisableTrigger(lua_State* state)
+{
+    return LuaSetTriggerEnabled(state, false);
+}
+
 void Register(lua_State* state, const char* name, lua_CFunction function)
 {
     lua_pushcfunction(state, function);
@@ -373,6 +398,16 @@ void InitializeSectorScriptHost(
     host.scripts = &scripts;
     host.doorMoves.clear();
     host.doorMoves.reserve(64);
+    host.triggers.clear();
+    host.triggers.reserve(map.triggers.size());
+    std::vector<size_t> triggerIndices(map.triggers.size());
+    for (size_t i = 0; i < triggerIndices.size(); ++i) triggerIndices[i] = i;
+    std::sort(triggerIndices.begin(), triggerIndices.end(), [&map](size_t left, size_t right) {
+        return map.triggers[left].sourceAuthoringTriggerId < map.triggers[right].sourceAuthoringTriggerId;
+    });
+    for (size_t index : triggerIndices) {
+        host.triggers.push_back(SectorScriptTriggerState{index, map.triggers[index].enabled});
+    }
 }
 
 void ResetSectorScriptHost(SectorScriptHost& host)
@@ -381,6 +416,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.map = nullptr;
     host.scripts = nullptr;
     host.doorMoves.clear();
+    host.triggers.clear();
 }
 
 void RegisterSectorScriptBindings(lua_State* state)
@@ -388,6 +424,8 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "moveDoor", LuaMoveDoor);
     Register(state, "startMoveDoor", LuaStartMoveDoor);
     Register(state, "changeMap", LuaChangeMap);
+    Register(state, "enableTrigger", LuaEnableTrigger);
+    Register(state, "disableTrigger", LuaDisableTrigger);
 }
 
 void UpdateSectorScriptOperations(
@@ -440,6 +478,80 @@ void UpdateSectorScriptOperations(
                         return !move.active;
                     }),
             host.doorMoves.end());
+}
+
+bool SetSectorScriptTriggerEnabled(
+        SectorScriptHost& host,
+        const std::string& triggerId,
+        bool enabled,
+        std::string& error)
+{
+    if (host.map == nullptr || triggerId.empty()) {
+        error = triggerId.empty() ? "trigger ID must not be empty" : "trigger runtime is unavailable";
+        return false;
+    }
+    for (SectorScriptTriggerState& state : host.triggers) {
+        if (state.triggerIndex >= host.map->triggers.size()) continue;
+        if (host.map->triggers[state.triggerIndex].id != triggerId) continue;
+        state.enabled = enabled;
+        if (!enabled) {
+            state.pending = false;
+            state.remainingDelayMilliseconds = 0.0f;
+        }
+        error.clear();
+        return true;
+    }
+    error = "trigger not found: " + triggerId;
+    return false;
+}
+
+void UpdateSectorScriptTriggers(
+        SectorScriptHost& host,
+        Vector2 playerPositionXZ,
+        float dtSeconds)
+{
+    if (host.map == nullptr || host.scripts == nullptr) return;
+    const float elapsedMs = std::isfinite(dtSeconds) && dtSeconds > 0.0f
+            ? dtSeconds * 1000.0f : 0.0f;
+    for (SectorScriptTriggerState& state : host.triggers) {
+        if (state.triggerIndex >= host.map->triggers.size()) continue;
+        const SectorCompiledTrigger& trigger = host.map->triggers[state.triggerIndex];
+        const bool insideNow = SectorTriggerContainsWorldPoint(
+                trigger.points, playerPositionXZ.x, playerPositionXZ.y);
+        bool enteredThisFrame = false;
+        if (state.enabled && !state.consumed && !state.pending && !state.inside && insideNow) {
+            state.pending = true;
+            state.remainingDelayMilliseconds = static_cast<float>(trigger.delayMilliseconds);
+            enteredThisFrame = true;
+        }
+        state.inside = insideNow;
+        if (!state.enabled || !state.pending) continue;
+        if (!enteredThisFrame) state.remainingDelayMilliseconds -= elapsedMs;
+        if (state.remainingDelayMilliseconds > 0.0f) continue;
+
+        engine::ScriptCallOutcome outcome;
+        if (trigger.script.empty()) {
+            outcome.result = engine::ScriptCallResult::Missing;
+        } else {
+            outcome = engine::ScriptSystemCallForegroundHook(*host.scripts, trigger.script);
+        }
+        if (outcome.result == engine::ScriptCallResult::ForegroundBusy
+                || outcome.result == engine::ScriptCallResult::AlreadyRunning) {
+            continue;
+        }
+        state.pending = false;
+        state.remainingDelayMilliseconds = 0.0f;
+        if (!trigger.repeat) state.consumed = true;
+        if (outcome.result == engine::ScriptCallResult::Missing) {
+            std::fprintf(stderr,
+                    "[Lua WARNING] trigger '%s' has no callable script function '%s'\n",
+                    trigger.id.c_str(), trigger.script.c_str());
+        } else if (outcome.result == engine::ScriptCallResult::Error) {
+            std::fprintf(stderr,
+                    "[Lua ERROR] trigger '%s' function '%s' failed: %s\n",
+                    trigger.id.c_str(), trigger.script.c_str(), outcome.error.c_str());
+        }
+    }
 }
 
 } // namespace game
