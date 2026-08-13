@@ -121,6 +121,8 @@ struct SectorDoorRender {
     float thickness = 0.25f;
     // Positive values move the closed slab from the front sector toward the back sector.
     float normalOffset = 0.0f;
+    // Final world-space vertical nudge for the slab and any model frame.
+    float heightOffsetWorld = 0.0f;
     std::string textureId;
     SectorDoorFaceUvSet faceUvs;
     Color tint = WHITE;

@@ -829,6 +829,52 @@ void TestSpawnPlacedDoorPositiveNormalOffsetMovesTowardBackSector()
           "dynamic door collider snapshot consumes the same resolved normal");
 }
 
+void TestSpawnPlacedDoorHeightOffsetMovesSlabAndColliderWithoutResizing()
+{
+    for (float heightOffset : {0.375f, -0.5f}) {
+        engine::World world;
+        engine::AssetManager assets;
+        game::SectorRuntimeObjectState state;
+        game::SectorTopologyMap map = MakeDoorPortalMap();
+        game::SectorPlacedDoor door = MakeDoorOnPortal();
+        door.width = 2.0f;
+        door.height = 1.5f;
+        door.thickness = 0.25f;
+        door.openDistance = 2.25f;
+        door.heightOffsetWorld = heightOffset;
+        map.runtimeObjects.push_back(MakePlacedDoor(34, door));
+
+        game::RefreshSectorRuntimeObjectMapData(state, map);
+        game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+
+        Check(CountDoorObjects(world) == 1,
+              "height offset fixture spawns one procedural door entity");
+        const engine::Entity entity = state.placedObjectEntities[0].entity;
+        const game::SectorDoorResolvedAnchor& anchor =
+                world.Get<game::SectorDoorResolvedAnchor>(entity);
+        const game::SectorObjectTransform& transform =
+                world.Get<game::SectorObjectTransform>(entity);
+        const game::SectorDoorRender& render =
+                world.Get<game::SectorDoorRender>(entity);
+        const game::SectorDoorMotion& motion =
+                world.Get<game::SectorDoorMotion>(entity);
+        const game::SectorDoorCollider& collider =
+                world.Get<game::SectorDoorCollider>(entity);
+        const float expectedBottom = anchor.openBottom + heightOffset;
+
+        Check(Near(render.heightOffsetWorld, heightOffset)
+                      && Near(render.width, door.width)
+                      && Near(render.height, door.height)
+                      && Near(render.thickness, door.thickness)
+                      && Near(motion.travelAmount, door.openDistance),
+              "door height offset preserves procedural dimensions and authored travel");
+        Check(Near(transform.position.y, expectedBottom + door.height * 0.5f)
+                      && Near(collider.bottom, expectedBottom)
+                      && Near(collider.top, expectedBottom + door.height),
+              "door height offset moves the procedural slab transform and collider together");
+    }
+}
+
 void TestRefreshSectorRuntimeObjectMapDataReportsDoorAnchorDiagnostics()
 {
     game::SectorRuntimeObjectState state;
@@ -1118,6 +1164,7 @@ void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
     door.modelFit = game::SectorDoorModelFit::FitInside;
     door.modelScale = 1.0f;
     door.motion = game::SectorDoorMotionType::Swing;
+    door.heightOffsetWorld = 0.4f;
     map.runtimeObjects.push_back(MakePlacedDoor(38, door));
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -1162,6 +1209,7 @@ void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
                             * catalogAsset.leafHingeToFrameCenter
                             * expectedFit.effectiveScale,
             runtimeAnchor.openBottom
+                    + door.heightOffsetWorld
                     + catalogAsset.leafBottomOffset * expectedFit.effectiveScale,
             runtimeAnchor.midpoint.y
                     - runtimeAnchor.tangent.y
@@ -1169,12 +1217,13 @@ void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
                             * expectedFit.effectiveScale};
     const Vector3 expectedFrameOrigin{
             runtimeAnchor.midpoint.x,
-            runtimeAnchor.openBottom,
+            runtimeAnchor.openBottom + door.heightOffsetWorld,
             runtimeAnchor.midpoint.y};
     Check(Near(Vector3Transform(Vector3{}, model.leafMatrix), expectedHinge)
                   && Near(Vector3Transform(Vector3{}, model.frameMatrix), expectedFrameOrigin),
           "spawned framed swing preserves paired leaf inset/bottom alignment around its fixed frame");
     Check(render.alignLeafToFrame
+                  && Near(render.heightOffsetWorld, door.heightOffsetWorld)
                   && Near(render.leafHingeToFrameCenter,
                           catalogAsset.leafHingeToFrameCenter
                                   * expectedFit.effectiveScale)
@@ -1188,9 +1237,17 @@ void TestKnownModelSwingDoorUsesUniformCatalogFallbackDimensions()
     std::vector<game::SectorReceiverBounds> receiverBounds;
     game::CollectSectorDoorReceiverBounds(world, receiverBounds);
     Check(receiverBounds.size() == 2
+                  && Near(receiverBounds[0].min.y,
+                          runtimeAnchor.openBottom + door.heightOffsetWorld)
                   && receiverBounds[0].max.y
-                          >= runtimeAnchor.openBottom + render.height,
+                          >= runtimeAnchor.openBottom
+                                  + door.heightOffsetWorld + render.height,
           "spawned model swing contributes analytic leaf/frame receiver fallback bounds to both adjacent sectors");
+    const game::SectorDoorCollider& collider =
+            world.Get<game::SectorDoorCollider>(entity);
+    Check(Near(collider.bottom, expectedHinge.y)
+                  && Near(collider.top, expectedHinge.y + render.height),
+          "framed swing height offset moves its physical leaf collider with the model assembly");
 }
 
 void TestRetainedCatalogFailureDoesNotBlockOtherDoors()
@@ -5790,6 +5847,7 @@ int main()
     TestSectorBillboardQuadWorldPositions();
     TestClearSectorRuntimeObjectsOnlyDestroysSectorObjects();
     TestSpawnPlacedDoorPositiveNormalOffsetMovesTowardBackSector();
+    TestSpawnPlacedDoorHeightOffsetMovesSlabAndColliderWithoutResizing();
     TestRefreshSectorRuntimeObjectMapDataReportsDoorAnchorDiagnostics();
     TestSpawnPlacedRuntimeObjectSkipsInvalidDoorAnchorWithDiagnostics();
     TestSpawnPlacedDoorCopiesResolvedPayloadToEcs();

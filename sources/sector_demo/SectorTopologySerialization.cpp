@@ -609,6 +609,7 @@ void ValidatePlacedDoorForSerialization(const SectorPlacedDoor& door, const std:
             || !std::isfinite(door.height)
             || !std::isfinite(door.thickness)
             || !std::isfinite(door.normalOffset)
+            || !std::isfinite(door.heightOffsetWorld)
             || !std::isfinite(door.modelScale)
             || !std::isfinite(door.openAngleDegrees)
             || !std::isfinite(door.angularSpeedDegrees)
@@ -835,6 +836,8 @@ SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
     door.height = ReadOptionalFloat(value, "height", context, door.height);
     door.thickness = ReadOptionalFloat(value, "thickness", context, door.thickness);
     door.normalOffset = ReadOptionalFloat(value, "normalOffset", context, door.normalOffset);
+    door.heightOffsetWorld = ReadOptionalFloat(
+            value, "heightOffsetWorld", context, door.heightOffsetWorld);
     door.visual = ReadSectorDoorVisualType(value, "visual", context);
     door.modelAssetId = ReadOptionalString(value, "modelAssetId", context, door.modelAssetId);
     door.modelFit = ReadSectorDoorModelFit(value, "modelFit", context);
@@ -1879,6 +1882,9 @@ Json WritePlacedDoor(const SectorPlacedDoor& door)
     }
     if (door.normalOffset != 0.0f) {
         json["normalOffset"] = door.normalOffset;
+    }
+    if (door.heightOffsetWorld != 0.0f) {
+        json["heightOffsetWorld"] = door.heightOffsetWorld;
     }
     if (door.visual != SectorDoorVisualType::Procedural) {
         json["visual"] = WriteSectorDoorVisualType(door.visual);

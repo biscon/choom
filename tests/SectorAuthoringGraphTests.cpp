@@ -425,6 +425,7 @@ int AddConfiguredDoorToAuthoringPortal(
         object->door.openSoundId = "preserved_open";
         object->door.closeSoundId = "preserved_close";
         object->door.normalOffset = 0.125f;
+        object->door.heightOffsetWorld = -0.375f;
         object->door.initialOpenFraction = 0.25f;
     }
     return added.objectId;
@@ -8637,6 +8638,7 @@ void TestEditorAuthoringRectangleRebindsUnrelatedDoorAfterTopologyIdsChange()
                   && reboundDoor->door.openSoundId == "preserved_open"
                   && reboundDoor->door.closeSoundId == "preserved_close"
                   && Near(reboundDoor->door.normalOffset, 0.125f)
+                  && Near(reboundDoor->door.heightOffsetWorld, -0.375f)
                   && Near(reboundDoor->door.initialOpenFraction, 0.25f),
           "rectangle door reconciliation preserves authored door settings");
     Check(preservedBillboard != nullptr

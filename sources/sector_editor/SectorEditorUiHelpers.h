@@ -219,7 +219,7 @@ inline float SectorEditorDoorInspectorContentHeight(
     height += 38.0f;
     height += 34.0f;
     height += anchorStatusHeight + gap;
-    height += (rowH + gap) * 3.0f;
+    height += (rowH + gap) * 4.0f;
     height += SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;
     if (modelVisual) {
         height += SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;

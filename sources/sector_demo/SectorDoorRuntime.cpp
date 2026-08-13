@@ -1161,7 +1161,7 @@ Vector3 SectorDoorClosedCenter(
     const Vector2 normal = NormalizedOrFallback(anchor.normal, Vector2{0.0f, -1.0f});
     return Vector3{
             anchor.midpoint.x + normal.x * render.normalOffset,
-            anchor.openBottom + render.height * 0.5f,
+            anchor.openBottom + render.heightOffsetWorld + render.height * 0.5f,
             anchor.midpoint.y + normal.y * render.normalOffset};
 }
 
@@ -1263,7 +1263,7 @@ SectorDoorSwingPose BuildSectorDoorSwingPoseAtAngle(
     const Vector2 thicknessAxis = NormalizedOrFallback(
             RotateDoorAxis(closedThicknessAxis, angle),
             closedThicknessAxis);
-    const float leafBottom = anchor.openBottom
+    const float leafBottom = anchor.openBottom + render.heightOffsetWorld
             + (render.alignLeafToFrame ? render.leafBottomOffset : 0.0f);
     const Vector3 hingePosition{hingeXZ.x, leafBottom, hingeXZ.y};
     const Vector3 center{
@@ -1272,7 +1272,7 @@ SectorDoorSwingPose BuildSectorDoorSwingPoseAtAngle(
             hingeXZ.y + widthAxis.y * render.width * 0.5f};
     const Vector3 framePosition{
             anchor.midpoint.x + normal.x * render.normalOffset,
-            anchor.openBottom,
+            anchor.openBottom + render.heightOffsetWorld,
             anchor.midpoint.y + normal.y * render.normalOffset};
 
     SectorDoorSwingPose pose;
@@ -1822,12 +1822,14 @@ void UpdateSectorDoorDerivedStateSystem(engine::World& world)
                             const float frameExtentZ = std::fabs(tangent.y) * frameHalfWidth
                                     + std::fabs(normal.y) * frameHalfDepth;
                             boundsMin.x = std::min(boundsMin.x, frameCenter.x - frameExtentX);
-                            boundsMin.y = std::min(boundsMin.y, anchor.openBottom);
+                            const float frameBottom =
+                                    anchor.openBottom + render.heightOffsetWorld;
+                            boundsMin.y = std::min(boundsMin.y, frameBottom);
                             boundsMin.z = std::min(boundsMin.z, frameCenter.z - frameExtentZ);
                             boundsMax.x = std::max(boundsMax.x, frameCenter.x + frameExtentX);
                             boundsMax.y = std::max(
                                     boundsMax.y,
-                                    anchor.openBottom
+                                    frameBottom
                                             + model.frameOuterHeight * model.effectiveScale);
                             boundsMax.z = std::max(boundsMax.z, frameCenter.z + frameExtentZ);
                         }

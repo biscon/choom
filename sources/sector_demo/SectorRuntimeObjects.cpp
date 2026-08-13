@@ -874,6 +874,7 @@ void SpawnPlacedRuntimeObjects(
                     fallbackHeight,
                     fallbackThickness,
                     placedObject.door.normalOffset,
+                    placedObject.door.heightOffsetWorld,
                     placedObject.door.textureId,
                     placedObject.door.faceUvs,
                     WHITE,

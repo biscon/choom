@@ -191,6 +191,8 @@ struct SectorPlacedDoor {
     float thickness = 0.25f;
     // Positive values move the closed slab from anchor.frontSectorId toward anchor.backSectorId.
     float normalOffset = 0.0f;
+    // Final world-space vertical nudge applied after resolving and fitting the door assembly.
+    float heightOffsetWorld = 0.0f;
     SectorDoorVisualType visual = SectorDoorVisualType::Procedural;
     std::string modelAssetId;
     SectorDoorModelFit modelFit = SectorDoorModelFit::FitInside;

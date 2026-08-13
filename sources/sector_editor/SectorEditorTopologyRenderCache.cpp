@@ -455,6 +455,7 @@ void PopulateCachedDoorDraw(
             height,
             thickness,
             object.door.normalOffset,
+            object.door.heightOffsetWorld,
             {},
             {},
             WHITE,

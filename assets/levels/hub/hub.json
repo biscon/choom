@@ -475,6 +475,7 @@
         "width": 1.25,
         "height": 2.75,
         "normalOffset": 0.125,
+        "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
         "modelAssetId": "wooden_interior_001",
         "motion": "swing",
@@ -513,6 +514,7 @@
         "width": 1.25,
         "height": 2.75,
         "normalOffset": 0.125,
+        "heightOffsetWorld": -0.054999999701976776,
         "visual": "model",
         "modelAssetId": "wooden_interior_009",
         "motion": "swing",
@@ -524,7 +526,7 @@
       },
       "position": [
         -62.0,
-        0.0,
+        0.5,
         96.0
       ],
       "yawDegrees": 0.0
@@ -1335,7 +1337,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "c04261b43727f439",
+    "sourceHash": "983bcd321c10faa8",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -1355,7 +1357,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "c04261b43727f439",
+      "sourceHash": "983bcd321c10faa8",
       "count": 475,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -1381,7 +1383,7 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "c04261b43727f439",
+      "sourceHash": "983bcd321c10faa8",
       "modelCount": 20,
       "objectCount": 24,
       "format": "staticModelUvRemapF32LE"
@@ -7260,7 +7262,7 @@
           }
         },
         "lower": {
-          "textureId": "wall",
+          "textureId": "worn_gray_metal_step_512",
           "uv": {
             "scale": [
               1.0,
@@ -9995,7 +9997,7 @@
         "name": "Sector 31",
         "x": -977,
         "y": 1470,
-        "floorZ": 0.0,
+        "floorZ": 0.5,
         "ceilingZ": 21.5,
         "floorTextureId": "worn_gray_metal_step_512",
         "ceilingTextureId": "brick_repair_512",

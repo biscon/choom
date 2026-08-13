@@ -223,7 +223,8 @@ DoorModelDiagnostic BuildDoorModelDiagnostic(
     text << std::fixed << std::setprecision(3)
          << "Nominal leaf: " << asset.nominalWidth << " W x "
          << asset.nominalHeight << " H x " << asset.nominalThickness << " D\n"
-         << "Effective scale: " << fit.effectiveScale << " | actual: "
+         << "Effective scale: " << fit.effectiveScale << "\n"
+         << "Actual leaf: "
          << fit.actualWidth << " W x " << fit.actualHeight << " H x "
          << fit.actualThickness << " D\n";
     if (asset.hasFrame) {
@@ -232,7 +233,8 @@ DoorModelDiagnostic BuildDoorModelDiagnostic(
     }
     text
          << "Target aperture: " << resolved.width << " W x " << resolved.height
-         << " H | portal: " << resolved.portalWidth << " W x "
+         << " H\n"
+         << "Portal opening: " << resolved.portalWidth << " W x "
          << resolved.portalHeight << " H\n";
     if (sideDifference >= 0.0f) {
         text << "Side gap: " << sideDifference << " each";
@@ -241,9 +243,9 @@ DoorModelDiagnostic BuildDoorModelDiagnostic(
         diagnostic.invalid = true;
     }
     if (fit.heightGap >= 0.0f) {
-        text << " | assembly top gap: " << fit.heightGap;
+        text << "\nAssembly top gap: " << fit.heightGap;
     } else {
-        text << " | assembly top overflow: " << -fit.heightGap;
+        text << "\nAssembly top overflow: " << -fit.heightGap;
         diagnostic.invalid = true;
     }
     text << "\n" << DoorRuntimeModelStatus(runtimeModel);
@@ -393,7 +395,9 @@ void DrawSectorEditorDoorInspector(
             float maxValue,
             int decimals,
             const std::function<bool(SectorPlacedDoor&, float)>& applyValue) {
-        constexpr float labelW = 104.0f;
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(
+                        y, contentW, rowH, gap);
         const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
                 ui,
                 config,
@@ -402,12 +406,8 @@ void DrawSectorEditorDoorInspector(
                 font,
                 id,
                 label,
-                Rectangle{0.0f, y, labelW, rowH},
-                Rectangle{
-                        labelW + gap,
-                        y,
-                        std::max(0.0f, contentW - labelW - gap),
-                        rowH},
+                layout.labelRect,
+                layout.inputRect,
                 engine::UITextJustify::Left,
                 value,
                 inputState,
@@ -499,6 +499,20 @@ void DrawSectorEditorDoorInspector(
             [](SectorPlacedDoor& door, float value) {
                 if (door.normalOffset == value) return false;
                 door.normalOffset = value;
+                return true;
+            });
+    selectedObject = selectedDoor(); if (selectedObject == nullptr) return;
+    drawDoorFloat(
+            "sector_editor_door_height_offset",
+            "Offset Height",
+            selectedObject->door.heightOffsetWorld,
+            uiState.heightOffsetInput,
+            -100000.0f,
+            100000.0f,
+            3,
+            [](SectorPlacedDoor& door, float value) {
+                if (door.heightOffsetWorld == value) return false;
+                door.heightOffsetWorld = value;
                 return true;
             });
     selectedObject = selectedDoor(); if (selectedObject == nullptr) return;

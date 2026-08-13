@@ -184,6 +184,7 @@ SectorPlacedRuntimeObject MakeDoorRuntimeObject(int id)
     object.door.height = 2.5f;
     object.door.thickness = 0.375f;
     object.door.normalOffset = 0.125f;
+    object.door.heightOffsetWorld = -0.25f;
     object.door.motion = game::SectorDoorMotionType::SlideRight;
     object.door.openDistance = 3.0f;
     object.door.speed = 2.25f;
@@ -1422,6 +1423,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && Near(savedDoor["height"].get<float>(), 2.5f)
                   && Near(savedDoor["thickness"].get<float>(), 0.375f)
                   && Near(savedDoor["normalOffset"].get<float>(), 0.125f)
+                  && Near(savedDoor["heightOffsetWorld"].get<float>(), -0.25f)
                   && savedDoor["motion"].get<std::string>() == "slide_right"
                   && Near(savedDoor["openDistance"].get<float>(), 3.0f)
                   && Near(savedDoor["speed"].get<float>(), 2.25f)
@@ -1463,6 +1465,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && Near(loadedDoor->door.height, 2.5f)
                   && Near(loadedDoor->door.thickness, 0.375f)
                   && Near(loadedDoor->door.normalOffset, 0.125f)
+                  && Near(loadedDoor->door.heightOffsetWorld, -0.25f)
                   && loadedDoor->door.motion == game::SectorDoorMotionType::SlideRight
                   && Near(loadedDoor->door.openDistance, 3.0f)
                   && Near(loadedDoor->door.speed, 2.25f)
@@ -1482,6 +1485,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
 
     Json oldDoorJson = doorSaved;
     oldDoorJson["runtimeObjects"][0]["door"].erase("faceUvs");
+    oldDoorJson["runtimeObjects"][0]["door"].erase("heightOffsetWorld");
     SectorTopologyMap oldDoorLoaded;
     Check(LoadText(oldDoorJson.dump(), oldDoorLoaded, error),
           "old door JSON without face UVs loads");
@@ -1494,6 +1498,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && loadedOldDoor->door.modelAssetId.empty()
                   && loadedOldDoor->door.modelFit == game::SectorDoorModelFit::FitInside
                   && Near(loadedOldDoor->door.modelScale, 1.0f)
+                  && Near(loadedOldDoor->door.heightOffsetWorld, 0.0f)
                   && loadedOldDoor->door.hinge == game::SectorDoorHinge::Start
                   && loadedOldDoor->door.swingSide == game::SectorDoorSwingSide::Front
                   && Near(loadedOldDoor->door.openAngleDegrees, 90.0f)
@@ -1626,6 +1631,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
     defaultDoor.door.height = 0.0f;
     defaultDoor.door.thickness = 0.25f;
     defaultDoor.door.normalOffset = 0.0f;
+    defaultDoor.door.heightOffsetWorld = 0.0f;
     defaultDoor.door.motion = game::SectorDoorMotionType::SlideVertical;
     defaultDoor.door.openDistance = 0.0f;
     defaultDoor.door.speed = 1.5f;
@@ -1643,6 +1649,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && !savedDefaultDoor.contains("height")
                   && !savedDefaultDoor.contains("thickness")
                   && !savedDefaultDoor.contains("normalOffset")
+                  && !savedDefaultDoor.contains("heightOffsetWorld")
                   && !savedDefaultDoor.contains("visual")
                   && !savedDefaultDoor.contains("modelAssetId")
                   && !savedDefaultDoor.contains("modelFit")
@@ -1675,6 +1682,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && Near(loadedDefaultDoor->door.height, 0.0f)
                   && Near(loadedDefaultDoor->door.thickness, 0.25f)
                   && Near(loadedDefaultDoor->door.normalOffset, 0.0f)
+                  && Near(loadedDefaultDoor->door.heightOffsetWorld, 0.0f)
                   && loadedDefaultDoor->door.visual == game::SectorDoorVisualType::Procedural
                   && loadedDefaultDoor->door.modelAssetId.empty()
                   && loadedDefaultDoor->door.modelFit == game::SectorDoorModelFit::FitInside
@@ -1729,6 +1737,13 @@ void TestRuntimeObjectsRoundTripAndValidation()
     Json invalidDoor = doorSaved;
     invalidDoor["runtimeObjects"][0]["door"]["motion"] = "spin";
     ExpectRejected(invalidDoor, "unknown door motion is rejected");
+
+    SectorTopologyMap nonFiniteDoor = doorMap;
+    nonFiniteDoor.runtimeObjects[0].door.heightOffsetWorld =
+            std::numeric_limits<float>::infinity();
+    ExpectSaveRejected(
+            nonFiniteDoor,
+            "non-finite door height offset is rejected on save");
 
     invalidDoor = doorSaved;
     invalidDoor["runtimeObjects"][0]["door"]["visual"] = "hologram";
