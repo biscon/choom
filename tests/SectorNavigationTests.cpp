@@ -481,10 +481,41 @@ void TestTopologyWalkabilityFixtures()
     doorWorld.Initialize();
     doorWorld.RequestRebuild();
     FinishBuild(doorWorld, doored);
+    const auto capableDoorPath = doorWorld.FindPath(
+            {4.0f, 0.0f, 4.0f}, {12.0f, 0.0f, 4.0f}, {true});
+    const auto incapableClosedDoorPath = doorWorld.FindPath(
+            {4.0f, 0.0f, 4.0f}, {12.0f, 0.0f, 4.0f}, {false});
     Check(doorWorld.DebugCache().doorPlaceholders.size() == 1
-                  && doorWorld.FindPath({4.0f, 0.0f, 4.0f}, {12.0f, 0.0f, 4.0f}).status
+                  && doorWorld.DebugCache().doorLinks.size() == 1
+                  && doorWorld.DebugCache().doorLinks[0].valid
+                  && capableDoorPath.status
+                          == game::SectorNavigationQueryStatus::Success
+                  && incapableClosedDoorPath.status
                           != game::SectorNavigationQueryStatus::Success,
-          "closed door placeholder cuts its portal until off-mesh links are implemented");
+          "closed door is cut from ground navigation and crossed by a typed capable-only link");
+    bool pathCarriesDoorMetadata = false;
+    for (size_t corner = 0; corner < capableDoorPath.cornerCount; ++corner) {
+        pathCarriesDoorMetadata = pathCarriesDoorMetadata
+                || capableDoorPath.cornerDoorIds[corner] == 77;
+    }
+    Check(pathCarriesDoorMetadata,
+          "door path corner carries the stable placed door ID");
+    Check(doorWorld.SetDoorLinkRuntimeState(
+                  77, game::SectorNavigationDoorLinkState::Clear, 0)
+                  && doorWorld.FindPath(
+                          {4.0f, 0.0f, 4.0f},
+                          {12.0f, 0.0f, 4.0f},
+                          {false}).status
+                          == game::SectorNavigationQueryStatus::Success,
+          "NPC without door-opening capability may traverse an already-clear door");
+    Check(doorWorld.SetDoorLinkRuntimeState(
+                  77, game::SectorNavigationDoorLinkState::Disabled, 0)
+                  && doorWorld.FindPath(
+                          {4.0f, 0.0f, 4.0f},
+                          {12.0f, 0.0f, 4.0f},
+                          {true}).status
+                          != game::SectorNavigationQueryStatus::Success,
+          "disabled door link yields a diagnosed unavailable route");
 
     game::SectorTopologyMap lowClearance = MakeAdjacentMap(0.0f, 24.0f, 0.0f, 12.0f);
     game::SectorNavigationWorld clearanceWorld;

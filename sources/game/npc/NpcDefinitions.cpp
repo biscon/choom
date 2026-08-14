@@ -258,7 +258,7 @@ bool ParseNpcDefinitionJson(
         if (!root.is_object()) Fail("NPC definition root must be an object");
         RejectUnknownFields(
                 root,
-                {"formatVersion", "id", "name", "hostile", "modelPath", "animationBlendSeconds", "actions"},
+                {"formatVersion", "id", "name", "hostile", "canOpenDoors", "modelPath", "animationBlendSeconds", "actions"},
                 "NPC definition");
 
         const Json& version = RequireField(root, "formatVersion", "NPC definition");
@@ -271,6 +271,8 @@ bool ParseNpcDefinitionJson(
         parsed.id = RequireString(root, "id", "NPC definition");
         parsed.name = OptionalString(root, "name", {}, "NPC definition");
         parsed.hostile = OptionalBool(root, "hostile", false, "NPC definition");
+        parsed.canOpenDoors = OptionalBool(
+                root, "canOpenDoors", true, "NPC definition");
         parsed.modelPath = RequireString(root, "modelPath", "NPC definition");
         parsed.animationBlendSeconds = OptionalFloat(
                 root,
@@ -333,6 +335,7 @@ bool SerializeNpcDefinitionJson(
         root["id"] = definition.id;
         if (!definition.name.empty()) root["name"] = definition.name;
         if (definition.hostile) root["hostile"] = true;
+        if (!definition.canOpenDoors) root["canOpenDoors"] = false;
         root["modelPath"] = definition.modelPath;
         if (definition.animationBlendSeconds != kDefaultNpcAnimationBlendSeconds) {
             root["animationBlendSeconds"] = definition.animationBlendSeconds;

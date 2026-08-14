@@ -1,5 +1,7 @@
 #include "game/navigation/SectorNavigationBuildInput.h"
 
+#include <raymath.h>
+
 #include "sector_demo/SectorTopologyUnits.h"
 #include "util/earcut.h"
 
@@ -377,6 +379,33 @@ bool BuildSectorNavigationBuildInput(
                 {door.endpointB.x, bottom, door.endpointB.y},
                 bottom,
                 top});
+        const Vector2 midpoint = Vector2Scale(
+                Vector2Add(door.endpointA, door.endpointB), 0.5f);
+        const Vector2 normal = Vector2Normalize(door.normal);
+        const float closedHalfThickness = std::max(
+                settings.cellSize,
+                object->door.thickness * 0.5f);
+        const float swingSweep = object->door.motion == SectorDoorMotionType::Swing
+                ? std::max(door.width, door.portalWidth)
+                : 0.0f;
+        const float baseStagingDistance = settings.agentRadius
+                + closedHalfThickness
+                + settings.cellSize * 2.0f;
+        const float frontStagingDistance = baseStagingDistance
+                + (object->door.swingSide == SectorDoorSwingSide::Front
+                        ? swingSweep : 0.0f);
+        const float backStagingDistance = baseStagingDistance
+                + (object->door.swingSide == SectorDoorSwingSide::Back
+                        ? swingSweep : 0.0f);
+        outInput.doorLinks.push_back(SectorNavigationBuildDoorLink{
+                object->id,
+                {midpoint.x - normal.x * frontStagingDistance,
+                 bottom,
+                 midpoint.y - normal.y * frontStagingDistance},
+                {midpoint.x + normal.x * backStagingDistance,
+                 bottom,
+                 midpoint.y + normal.y * backStagingDistance},
+                settings.agentRadius});
     }
 
     for (const SectorTopologyLineDef* line : SortedById(map.lineDefs)) {
@@ -495,6 +524,15 @@ uint64_t ComputeSectorNavigationSourceHash(
                 hash.Float(object->door.thickness);
                 hash.Float(object->door.normalOffset);
                 hash.Float(object->door.heightOffsetWorld);
+                hash.Pod(static_cast<uint8_t>(object->door.visual));
+                hash.String(object->door.modelAssetId);
+                hash.Pod(static_cast<uint8_t>(object->door.modelFit));
+                hash.Float(object->door.modelScale);
+                hash.Pod(static_cast<uint8_t>(object->door.motion));
+                hash.Pod(static_cast<uint8_t>(object->door.hinge));
+                hash.Pod(static_cast<uint8_t>(object->door.swingSide));
+                hash.Float(object->door.openAngleDegrees);
+                hash.Float(object->door.openDistance);
             }
         }
     }

@@ -5,6 +5,7 @@
 #include "game/FpsPlayerRuntime.h"
 #include "game/PlayerAudio.h"
 #include "game/SectorScriptBindings.h"
+#include "game/SectorGameNavigationDebug.h"
 #include "engine/scripting/ScriptSystem.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_demo/SectorSceneRuntime.h"
@@ -39,6 +40,12 @@ public:
             engine::AssetManager& assets,
             SectorSceneRuntime& scene);
     void RenderHud(Rectangle playableViewport) const;
+    void RenderNavigationDebugWorld(const SectorSceneRuntime& scene) const;
+    void RenderNavigationDebugPanel(
+            const engine::UIConfig& config,
+            engine::AssetManager& assets,
+            engine::FontHandle smallFont,
+            const SectorSceneRuntime& scene) const;
 
     bool RebuildFromMap(
             engine::EngineContext& context,
@@ -91,6 +98,7 @@ private:
     engine::PersistentScriptStore* persistentScripts = nullptr;
     engine::ScriptRuntime scripts;
     SectorScriptHost scriptHost;
+    SectorGameNavigationDebugState navigationDebug;
     std::string failureError;
 };
 

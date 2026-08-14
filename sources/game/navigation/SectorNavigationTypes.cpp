@@ -170,4 +170,24 @@ const char* SectorNavigationBuildStageName(SectorNavigationBuildStage stage)
     return "none";
 }
 
+const char* SectorNavigationDoorLinkStateName(SectorNavigationDoorLinkState state)
+{
+    switch (state) {
+        case SectorNavigationDoorLinkState::RequiresOpening: return "Requires opening";
+        case SectorNavigationDoorLinkState::Clear: return "Clear";
+        case SectorNavigationDoorLinkState::Disabled: return "Disabled";
+    }
+    return "Unknown";
+}
+
+const char* SectorNavigationDoorDirectionName(SectorNavigationDoorDirection direction)
+{
+    switch (direction) {
+        case SectorNavigationDoorDirection::None: return "none";
+        case SectorNavigationDoorDirection::FrontToBack: return "front -> back";
+        case SectorNavigationDoorDirection::BackToFront: return "back -> front";
+    }
+    return "unknown";
+}
+
 } // namespace game

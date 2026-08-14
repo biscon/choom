@@ -105,6 +105,41 @@ struct NavigationTileCacheCompressor final : dtTileCacheCompressor {
 };
 
 struct NavigationTileCacheMeshProcess final : dtTileCacheMeshProcess {
+    std::vector<float> connectionVertices;
+    std::vector<float> connectionRadii;
+    std::vector<unsigned short> connectionFlags;
+    std::vector<unsigned char> connectionAreas;
+    std::vector<unsigned char> connectionDirections;
+    std::vector<unsigned int> connectionUserIds;
+
+    void Configure(const std::vector<SectorNavigationBuildDoorLink>& links)
+    {
+        connectionVertices.clear();
+        connectionRadii.clear();
+        connectionFlags.clear();
+        connectionAreas.clear();
+        connectionDirections.clear();
+        connectionUserIds.clear();
+        connectionVertices.reserve(links.size() * 6u);
+        connectionRadii.reserve(links.size());
+        connectionFlags.reserve(links.size());
+        connectionAreas.reserve(links.size());
+        connectionDirections.reserve(links.size());
+        connectionUserIds.reserve(links.size());
+        for (const SectorNavigationBuildDoorLink& link : links) {
+            connectionVertices.insert(connectionVertices.end(), {
+                    link.frontStage.x, link.frontStage.y, link.frontStage.z,
+                    link.backStage.x, link.backStage.y, link.backStage.z});
+            connectionRadii.push_back(link.radius);
+            connectionFlags.push_back(SectorNavigationPolyFlag_Walk
+                    | SectorNavigationPolyFlag_Door
+                    | SectorNavigationPolyFlag_DoorRequiresOpening);
+            connectionAreas.push_back(static_cast<unsigned char>(SectorNavigationArea::Door));
+            connectionDirections.push_back(DT_OFFMESH_CON_BIDIR);
+            connectionUserIds.push_back(static_cast<unsigned int>(link.placedObjectId));
+        }
+    }
+
     void process(
             dtNavMeshCreateParams* params,
             unsigned char* polyAreas,
@@ -123,6 +158,19 @@ struct NavigationTileCacheMeshProcess final : dtTileCacheMeshProcess {
                 polyFlags[index] = SectorNavigationPolyFlag_None;
             }
         }
+        params->offMeshConVerts = connectionVertices.empty()
+                ? nullptr : connectionVertices.data();
+        params->offMeshConRad = connectionRadii.empty()
+                ? nullptr : connectionRadii.data();
+        params->offMeshConFlags = connectionFlags.empty()
+                ? nullptr : connectionFlags.data();
+        params->offMeshConAreas = connectionAreas.empty()
+                ? nullptr : connectionAreas.data();
+        params->offMeshConDir = connectionDirections.empty()
+                ? nullptr : connectionDirections.data();
+        params->offMeshConUserID = connectionUserIds.empty()
+                ? nullptr : connectionUserIds.data();
+        params->offMeshConCount = static_cast<int>(connectionUserIds.size());
     }
 };
 
@@ -164,6 +212,17 @@ dtQueryFilter MakeQueryFilter(const SectorNavigationQueryFilterPolicy& policy)
     return filter;
 }
 
+dtQueryFilter MakeQueryFilter(
+        const SectorNavigationQueryFilterPolicy& policy,
+        SectorNavigationQueryOptions options)
+{
+    SectorNavigationQueryFilterPolicy effective = policy;
+    if (!options.canOpenDoors) {
+        effective.excludedFlags |= SectorNavigationPolyFlag_DoorRequiresOpening;
+    }
+    return MakeQueryFilter(effective);
+}
+
 Vector3 FromFloat3(const float* value)
 {
     return {value[0], value[1], value[2]};
@@ -179,6 +238,12 @@ bool ProjectionWithinExtents(const float* requested, const float* projected, con
 } // namespace
 
 struct SectorNavigationWorld::Impl {
+    struct RuntimeDoorLink {
+        int placedObjectId = 0;
+        dtPolyRef polygon = 0;
+        SectorNavigationDoorLinkState state =
+                SectorNavigationDoorLinkState::RequiresOpening;
+    };
     SectorNavigationSettings settings;
     SectorNavigationCapacitySettings capacities;
     SectorNavigationQueryFilterPolicy filterPolicy;
@@ -192,6 +257,7 @@ struct SectorNavigationWorld::Impl {
     std::vector<RecordSlot> pathSlots;
     SectorNavigationBuildInput buildInput;
     std::vector<NavigationTileCoordinate> tileCoordinates;
+    std::vector<RuntimeDoorLink> doorLinks;
     size_t nextTileCoordinate = 0;
     uint64_t sourceRevision = 0;
     uint64_t buildRevision = 0;
@@ -218,6 +284,8 @@ struct SectorNavigationWorld::Impl {
         navMesh = nullptr;
         buildInput = {};
         tileCoordinates.clear();
+        doorLinks.clear();
+        meshProcess.Configure({});
         nextTileCoordinate = 0;
         statistics = {};
         debugCache = {};
@@ -326,6 +394,7 @@ struct SectorNavigationWorld::Impl {
                     map, colliders, settings, buildInput, warnings, error)) {
             return false;
         }
+        meshProcess.Configure(buildInput.doorLinks);
         for (const std::string& warning : warnings) {
             Record(SectorNavigationDiagnosticSeverity::Warning, stage, warning);
         }
@@ -565,12 +634,51 @@ struct SectorNavigationWorld::Impl {
         debugCache = {};
         debugCache.staticObstacles = buildInput.staticObstacles;
         debugCache.doorPlaceholders = buildInput.doorPlaceholders;
+        debugCache.doorLinks.reserve(buildInput.doorLinks.size());
+        for (const SectorNavigationBuildDoorLink& link : buildInput.doorLinks) {
+            debugCache.doorLinks.push_back({
+                    link.placedObjectId,
+                    link.frontStage,
+                    link.backStage,
+                    SectorNavigationDoorLinkState::RequiresOpening,
+                    0,
+                    false});
+        }
         const dtNavMesh* readableNavMesh = navMesh;
         for (int tileIndex = 0; tileIndex < navMesh->getMaxTiles(); ++tileIndex) {
             const dtMeshTile* tile = readableNavMesh->getTile(tileIndex);
             if (tile == nullptr || tile->header == nullptr) continue;
             ++statistics.navMeshTileCount;
             statistics.navMeshPolygonCount += tile->header->polyCount;
+            for (int connectionIndex = 0;
+                    connectionIndex < tile->header->offMeshConCount;
+                    ++connectionIndex) {
+                const dtOffMeshConnection& connection =
+                        tile->offMeshCons[connectionIndex];
+                if (connection.userId == 0) continue;
+                const dtPolyRef reference = navMesh->getPolyRefBase(tile)
+                        | static_cast<dtPolyRef>(connection.poly);
+                const int placedObjectId = static_cast<int>(connection.userId);
+                const auto duplicate = std::find_if(
+                        doorLinks.begin(), doorLinks.end(),
+                        [placedObjectId](const RuntimeDoorLink& link) {
+                            return link.placedObjectId == placedObjectId;
+                        });
+                if (duplicate != doorLinks.end()) {
+                    Record(SectorNavigationDiagnosticSeverity::Error, stage,
+                            "Duplicate navigation door link ID "
+                                    + std::to_string(placedObjectId));
+                    continue;
+                }
+                doorLinks.push_back({placedObjectId, reference,
+                        SectorNavigationDoorLinkState::RequiresOpening});
+                const auto debug = std::find_if(
+                        debugCache.doorLinks.begin(), debugCache.doorLinks.end(),
+                        [placedObjectId](const SectorNavigationDebugDoorLink& link) {
+                            return link.placedObjectId == placedObjectId;
+                        });
+                if (debug != debugCache.doorLinks.end()) debug->valid = true;
+            }
             debugCache.tileBounds.push_back({
                     {{tile->header->bmin[0], tile->header->bmin[1], tile->header->bmin[2]},
                      {tile->header->bmax[0], tile->header->bmax[1], tile->header->bmax[2]}},
@@ -659,6 +767,13 @@ struct SectorNavigationWorld::Impl {
                         debugCache.stepConnections.push_back({center, targetCenter});
                     }
                 }
+            }
+        }
+        for (const SectorNavigationDebugDoorLink& link : debugCache.doorLinks) {
+            if (!link.valid) {
+                Record(SectorNavigationDiagnosticSeverity::Warning, stage,
+                        "Door " + std::to_string(link.placedObjectId)
+                                + " has no usable off-mesh connection");
             }
         }
         buildInput = {};
@@ -831,7 +946,10 @@ SectorNavigationNearestPointResult SectorNavigationWorld::FindNearestPoint(Vecto
     return result;
 }
 
-SectorNavigationPathResult SectorNavigationWorld::FindPath(Vector3 start, Vector3 destination)
+SectorNavigationPathResult SectorNavigationWorld::FindPath(
+        Vector3 start,
+        Vector3 destination,
+        SectorNavigationQueryOptions options)
 {
     SectorNavigationPathResult result;
     result.requestedStart = start;
@@ -844,7 +962,7 @@ SectorNavigationPathResult SectorNavigationWorld::FindPath(Vector3 start, Vector
     float projectedDestination[3]{};
     dtPolyRef startReference = 0;
     dtPolyRef destinationReference = 0;
-    const dtQueryFilter filter = MakeQueryFilter(impl->filterPolicy);
+    const dtQueryFilter filter = MakeQueryFilter(impl->filterPolicy, options);
     if (dtStatusFailed(impl->query->findNearestPoly(startPoint, extents, &filter,
                 &startReference, projectedStart)) || startReference == 0
         || !ProjectionWithinExtents(startPoint, projectedStart, extents)) {
@@ -895,12 +1013,13 @@ SectorNavigationPathResult SectorNavigationWorld::FindPath(Vector3 start, Vector
     }
     std::array<float, SectorNavigationMaximumStraightPathCorners * 3> straightPoints{};
     std::array<unsigned char, SectorNavigationMaximumStraightPathCorners> straightFlags{};
+    std::array<dtPolyRef, SectorNavigationMaximumStraightPathCorners> straightRefs{};
     int straightCount = 0;
     const int straightCapacity = std::min(impl->capacities.maximumStraightPathCorners,
             static_cast<int>(result.corners.size()));
     const dtStatus straightStatus = impl->query->findStraightPath(
             projectedStart, straightDestination, corridor.data(), corridorCount,
-            straightPoints.data(), straightFlags.data(), nullptr, &straightCount,
+            straightPoints.data(), straightFlags.data(), straightRefs.data(), &straightCount,
             straightCapacity);
     if (dtStatusFailed(straightStatus)) {
         result.status = SectorNavigationQueryStatus::InternalError;
@@ -911,6 +1030,55 @@ SectorNavigationPathResult SectorNavigationWorld::FindPath(Vector3 start, Vector
     for (int index = 0; index < straightCount; ++index) {
         result.corners[index] = FromFloat3(&straightPoints[index * 3]);
         result.cornerFlags[index] = straightFlags[index];
+        if ((straightFlags[index] & DT_STRAIGHTPATH_OFFMESH_CONNECTION) == 0
+                || straightRefs[index] == 0) {
+            continue;
+        }
+        const dtOffMeshConnection* connection =
+                impl->navMesh->getOffMeshConnectionByRef(straightRefs[index]);
+        if (connection == nullptr || connection->userId == 0) {
+            result.status = SectorNavigationQueryStatus::InternalError;
+            ++impl->counters.failedQueries;
+            return result;
+        }
+        const int doorId = static_cast<int>(connection->userId);
+        result.cornerDoorIds[index] = doorId;
+        dtPolyRef previousReference = 0;
+        for (int corridorIndex = 0; corridorIndex < corridorCount; ++corridorIndex) {
+            if (corridor[corridorIndex] == straightRefs[index]) {
+                if (corridorIndex > 0) previousReference = corridor[corridorIndex - 1];
+                break;
+            }
+        }
+        float connectionStart[3]{};
+        float connectionEnd[3]{};
+        if (previousReference == 0
+                || dtStatusFailed(impl->navMesh->getOffMeshConnectionPolyEndPoints(
+                        previousReference,
+                        straightRefs[index],
+                        connectionStart,
+                        connectionEnd))) {
+            result.status = SectorNavigationQueryStatus::InternalError;
+            ++impl->counters.failedQueries;
+            return result;
+        }
+        result.corners[index] = FromFloat3(connectionStart);
+        result.cornerDoorLandings[index] = FromFloat3(connectionEnd);
+        const auto debug = std::find_if(
+                impl->debugCache.doorLinks.begin(),
+                impl->debugCache.doorLinks.end(),
+                [doorId](const SectorNavigationDebugDoorLink& link) {
+                    return link.placedObjectId == doorId;
+                });
+        if (debug != impl->debugCache.doorLinks.end()) {
+            const float frontDistance = Vector3DistanceSqr(
+                    result.corners[index], debug->frontStage);
+            const float backDistance = Vector3DistanceSqr(
+                    result.corners[index], debug->backStage);
+            result.cornerDoorDirections[index] = frontDistance <= backDistance
+                    ? SectorNavigationDoorDirection::FrontToBack
+                    : SectorNavigationDoorDirection::BackToFront;
+        }
     }
     if (capacityExceeded || dtStatusDetail(straightStatus, DT_BUFFER_TOO_SMALL)) {
         result.status = SectorNavigationQueryStatus::CapacityExceeded;
@@ -923,6 +1091,57 @@ SectorNavigationPathResult SectorNavigationWorld::FindPath(Vector3 start, Vector
         ++impl->counters.successfulQueries;
     }
     return result;
+}
+
+bool SectorNavigationWorld::SetDoorLinkRuntimeState(
+        int placedObjectId,
+        SectorNavigationDoorLinkState state,
+        uint32_t holderCount)
+{
+    if (!impl || impl->navMesh == nullptr || placedObjectId <= 0) return false;
+    const auto found = std::find_if(
+            impl->doorLinks.begin(), impl->doorLinks.end(),
+            [placedObjectId](const Impl::RuntimeDoorLink& link) {
+                return link.placedObjectId == placedObjectId;
+            });
+    if (found == impl->doorLinks.end()) return false;
+    unsigned short flags = SectorNavigationPolyFlag_Walk
+            | SectorNavigationPolyFlag_Door;
+    if (state == SectorNavigationDoorLinkState::RequiresOpening) {
+        flags |= SectorNavigationPolyFlag_DoorRequiresOpening;
+    } else if (state == SectorNavigationDoorLinkState::Disabled) {
+        flags |= SectorNavigationPolyFlag_Disabled;
+    }
+    if (dtStatusFailed(impl->navMesh->setPolyFlags(found->polygon, flags))) {
+        return false;
+    }
+    found->state = state;
+    const auto debug = std::find_if(
+            impl->debugCache.doorLinks.begin(),
+            impl->debugCache.doorLinks.end(),
+            [placedObjectId](const SectorNavigationDebugDoorLink& link) {
+                return link.placedObjectId == placedObjectId;
+            });
+    if (debug != impl->debugCache.doorLinks.end()) {
+        debug->state = state;
+        debug->holderCount = holderCount;
+    }
+    return true;
+}
+
+bool SectorNavigationWorld::GetDoorLinkRuntimeState(
+        int placedObjectId,
+        SectorNavigationDoorLinkState& outState) const
+{
+    if (!impl) return false;
+    const auto found = std::find_if(
+            impl->doorLinks.begin(), impl->doorLinks.end(),
+            [placedObjectId](const Impl::RuntimeDoorLink& link) {
+                return link.placedObjectId == placedObjectId;
+            });
+    if (found == impl->doorLinks.end()) return false;
+    outState = found->state;
+    return true;
 }
 
 SectorNavigationAgentHandle SectorNavigationWorld::AllocateAgentRecord()

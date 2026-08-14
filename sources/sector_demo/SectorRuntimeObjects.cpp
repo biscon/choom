@@ -44,7 +44,7 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(24);
+    world.ReserveComponentTypes(25);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
@@ -63,6 +63,7 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<SectorDoor>(objectCapacity);
     world.ReserveComponent<SectorDoorResolvedAnchor>(objectCapacity);
     world.ReserveComponent<SectorDoorMotion>(objectCapacity);
+    world.ReserveComponent<SectorDoorOpenControl>(objectCapacity);
     world.ReserveComponent<SectorDoorAudio>(objectCapacity);
     world.ReserveComponent<SectorDoorInteraction>(objectCapacity);
     world.ReserveComponent<SectorDoorRender>(objectCapacity);
@@ -760,6 +761,8 @@ void SpawnPlacedRuntimeObjects(
     state.placedObjectEntities.reserve(map.runtimeObjects.size());
     state.dynamicDoorColliders.clear();
     state.dynamicDoorColliders.reserve(map.runtimeObjects.size());
+    state.doorObstacles.clear();
+    state.doorObstacles.reserve(map.runtimeObjects.size() + 1u);
     state.dynamicPortalBlockers.clear();
     state.dynamicPortalBlockers.reserve(map.runtimeObjects.size() * 2);
     state.doorCollisionCacheInitialized = false;
@@ -965,6 +968,7 @@ void SpawnPlacedRuntimeObjects(
             world.Add(entity, SectorDoor{placedObject.id, true});
             world.Add(entity, runtimeAnchor);
             world.Add(entity, runtimeMotion);
+            world.Add(entity, SectorDoorOpenControl{});
             world.Add(entity, SectorDoorAudio{
                     placedObject.door.openSoundId,
                     placedObject.door.closeSoundId,
@@ -1129,6 +1133,7 @@ void SpawnPlacedRuntimeObjects(
                     placedObject.npc.instanceId,
                     NpcAction::Idle,
                     definition->hostile,
+                    definition->canOpenDoors,
                     GetNpcAction(*definition, NpcAction::Walk).movementSpeed,
                     GetNpcAction(*definition, NpcAction::Run).movementSpeed});
             NpcAnimationState npcAnimation;
@@ -1338,15 +1343,18 @@ void UpdateSectorRuntimeObjects(
         const SectorTopologyMap& map,
         float dt,
         const Vector3* playerPosition,
-        const SectorDoorPlayerObstacle* playerObstacle)
+        const SectorDoorPlayerObstacle* playerObstacle,
+        const std::vector<SectorDoorPlayerObstacle>* doorObstacles)
 {
     AdvanceSectorBillboardAnimatorSystem(world, dt);
     ResolveDynamicModelAnimations(world, assets);
     if (playerPosition != nullptr) {
         UpdateSectorDoorAutoOpenSystem(world, *playerPosition);
     }
-    state.doorSpatialStateChanged = AdvanceSectorDoorMotionSystem(
-            world, dt, playerObstacle);
+    state.doorSpatialStateChanged = doorObstacles != nullptr
+            ? AdvanceSectorDoorMotionSystem(
+                    world, dt, doorObstacles->data(), doorObstacles->size())
+            : AdvanceSectorDoorMotionSystem(world, dt, playerObstacle);
     if (state.doorSpatialStateChanged) {
         UpdateSectorDoorDerivedStateSystem(world);
     }

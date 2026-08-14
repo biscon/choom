@@ -203,6 +203,124 @@ end
     engine::ScriptSystemShutdownForMap(context, runtime);
 }
 
+void CoreLifecycleLuaBindingsControlQueuedAndActiveTasks()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    TestFiles files("lifecycle_bindings");
+    files.Write(files.scriptPath, R"(
+function queuedVictim()
+    setPersistentBool("queued_victim_ran", true)
+end
+
+function verifyQueuedControl()
+    assert(type(startScript) == "function")
+    assert(type(stopScript) == "function")
+    assert(type(stopAllScripts) == "function")
+    assert(type(isScriptRunning) == "function")
+
+    local started, startReason = startScript("queuedVictim")
+    setPersistentBool("queued_started", started)
+    setPersistentString("queued_start_reason", startReason or "")
+    setPersistentBool("queued_seen_running", isScriptRunning("queuedVictim"))
+
+    local duplicate, duplicateReason = startScript("queuedVictim")
+    setPersistentBool("queued_duplicate_rejected", not duplicate)
+    setPersistentString("queued_duplicate_reason", duplicateReason or "")
+
+    local stopped, stopReason = stopScript("queuedVictim")
+    setPersistentBool("queued_stopped", stopped)
+    setPersistentString("queued_stop_reason", stopReason or "")
+    setPersistentBool("queued_seen_after_stop", isScriptRunning("queuedVictim"))
+
+    local missing, missingReason = stopScript("missingVictim")
+    setPersistentBool("missing_stop_rejected", not missing)
+    setPersistentString("missing_stop_reason", missingReason or "")
+end
+
+function activeVictim()
+    setPersistentBool("active_victim_started", true)
+    delay(1000)
+    setPersistentBool("active_victim_finished", true)
+end
+
+function startActiveVictim()
+    assert(startScript("activeVictim"))
+end
+
+function stopActiveVictim()
+    setPersistentBool("active_seen_before_stop", isScriptRunning("activeVictim"))
+    setPersistentBool("active_stopped", stopScript("activeVictim"))
+    setPersistentBool("active_seen_during_stop", isScriptRunning("activeVictim"))
+end
+
+function stopAllVictim()
+    setPersistentBool("stop_all_victim_ran", true)
+end
+
+function stopAllCaller()
+    assert(startScript("stopAllVictim"))
+    setPersistentBool("stop_all_victim_queued", isScriptRunning("stopAllVictim"))
+    setPersistentBool("stop_all_result", stopAllScripts())
+    setPersistentBool("stop_all_victim_after", isScriptRunning("stopAllVictim"))
+    setPersistentBool("stop_all_caller_seen", isScriptRunning("stopAllCaller"))
+end
+)");
+    assert(CreateRuntime(context, runtime, persistent, files));
+
+    assert(engine::ScriptSystemCallForegroundHook(
+            runtime, "verifyQueuedControl").result
+            == engine::ScriptCallResult::Completed);
+    assert(persistent.bools.at("queued_started"));
+    assert(persistent.strings.at("queued_start_reason").empty());
+    assert(persistent.bools.at("queued_seen_running"));
+    assert(persistent.bools.at("queued_duplicate_rejected"));
+    assert(persistent.strings.at("queued_duplicate_reason").find("already")
+            != std::string::npos);
+    assert(persistent.bools.at("queued_stopped"));
+    assert(persistent.strings.at("queued_stop_reason").empty());
+    assert(!persistent.bools.at("queued_seen_after_stop"));
+    assert(persistent.bools.at("missing_stop_rejected"));
+    assert(persistent.strings.at("missing_stop_reason").find("not running")
+            != std::string::npos);
+    engine::ScriptSystemUpdate(context, runtime, 0.0f);
+    assert(persistent.bools.find("queued_victim_ran")
+            == persistent.bools.end());
+
+    assert(engine::ScriptSystemCallForegroundHook(
+            runtime, "startActiveVictim").result
+            == engine::ScriptCallResult::Completed);
+    assert(engine::ScriptSystemIsFunctionRunning(runtime, "activeVictim"));
+    engine::ScriptSystemUpdate(context, runtime, 0.0f);
+    assert(persistent.bools.at("active_victim_started"));
+    assert(engine::ScriptSystemIsFunctionRunning(runtime, "activeVictim"));
+    assert(engine::ScriptSystemCallForegroundHook(
+            runtime, "stopActiveVictim").result
+            == engine::ScriptCallResult::Completed);
+    assert(persistent.bools.at("active_seen_before_stop"));
+    assert(persistent.bools.at("active_stopped"));
+    assert(persistent.bools.at("active_seen_during_stop"));
+    engine::ScriptSystemUpdate(context, runtime, 0.0f);
+    assert(!engine::ScriptSystemIsFunctionRunning(runtime, "activeVictim"));
+    assert(persistent.bools.find("active_victim_finished")
+            == persistent.bools.end());
+    assert(engine::ScriptSystemOperationSnapshot(runtime).empty());
+
+    assert(engine::ScriptSystemCallForegroundHook(
+            runtime, "stopAllCaller").result
+            == engine::ScriptCallResult::Completed);
+    assert(persistent.bools.at("stop_all_victim_queued"));
+    assert(persistent.bools.at("stop_all_result"));
+    assert(!persistent.bools.at("stop_all_victim_after"));
+    assert(persistent.bools.at("stop_all_caller_seen"));
+    engine::ScriptSystemUpdate(context, runtime, 0.0f);
+    assert(persistent.bools.find("stop_all_victim_ran")
+            == persistent.bools.end());
+
+    engine::ScriptSystemShutdownForMap(context, runtime);
+}
+
 struct FakeOperationHost {
     engine::ScriptRuntime* runtime = nullptr;
     engine::ScriptOperationHandle operation{};
@@ -430,6 +548,7 @@ int main()
     MissingAndBrokenScriptsFollowLifecyclePolicy();
     YieldedInitPersistenceAndShutdownWork();
     BackgroundStartsAreDeferredAndForegroundIsSerialized();
+    CoreLifecycleLuaBindingsControlQueuedAndActiveTasks();
     AsyncOperationsDeliverValuesAndCancelOnce();
     ModulePathsAreDeterministic();
     PersistentCodecIsTransactional();

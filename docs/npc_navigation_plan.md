@@ -48,8 +48,8 @@ When executing this plan:
 | 1 | Integrate dependencies and establish navigation contracts | Completed | 2026-08-14 |
 | 2 | Build tiled static navigation and add the 3D Nav debug tab | Completed | 2026-08-14 |
 | 3 | Add basic NPC path following and locomotion | Completed | 2026-08-14 |
-| 4 | Expose scripted NPC movement early | Not Started | - |
-| 5 | Add door-aware traversal and door arbitration | Not Started | - |
+| 4 | Expose scripted NPC movement early | Completed | 2026-08-14 |
+| 5 | Add door-aware traversal and door arbitration | Completed | 2026-08-15 |
 | 6 | Add dynamic obstacle updates with DetourTileCache | Not Started | - |
 | 7 | Add local avoidance with DetourCrowd | Not Started | - |
 | 8 | Harden lifecycle, caching, diagnostics, and acceptance coverage | Not Started | - |
@@ -274,6 +274,14 @@ sector lookup, path queries, baked-light/probe sampling, or physics.
 - Locks are not implemented. The link-filter API should ask whether a door is
   traversable for an NPC and currently return true for valid enabled doors;
   future lock state can disable the link without changing path consumers.
+- NPC definitions have an optional `canOpenDoors` boolean, defaulting to `true`
+  for backward compatibility. An NPC with this disabled never acquires an open
+  hold and cannot plan through a link that currently requires opening; it may
+  still traverse the typed link while the real collider is already clear.
+- Player auto-open/manual interaction and scripts retain the ordinary door
+  target. Navigation holder counts are derived from stable per-NPC traversal
+  state and force only the effective target open. Timed script closes wait for
+  holders; an instantaneous close is rejected while held.
 
 ### Script operations
 
@@ -590,13 +598,18 @@ Follow existing door-operation conventions with bindings shaped as:
 
 ```lua
 moveNpc(instanceId, x, z [, gait])
+moveNpc(instanceId, levelMarkerId [, gait])
 startMoveNpc(instanceId, x, z [, gait])
+startMoveNpc(instanceId, levelMarkerId [, gait])
 ```
 
 - `instanceId` is the placed NPC's unique map instance ID.
 - `x`/`z` are runtime world coordinates. The service projects the destination
   onto an appropriate walkable floor; scripts do not supply authored height
   units.
+- `levelMarkerId` is an exact, case-sensitive compiled level-marker reference
+  ID. Its authored position is converted to runtime world units and its X/Z is
+  resolved once at request start. Marker height and yaw are ignored.
 - `gait` is `"walk"` by default and may be `"run"`.
 - `moveNpc` yields until arrival or terminal failure and follows existing
   binding conventions for returning success versus `(false, reason)`.
@@ -842,23 +855,26 @@ dynamic-obstacle, and crowd work is complete.
 
 Tasks:
 
-1. Add `moveNpc(instanceId, x, z [, gait])` using the existing blocking script
+1. **Completed 2026-08-14:** add `moveNpc(instanceId, x, z [, gait])` using the existing blocking script
    operation/yield mechanism.
-2. Add `startMoveNpc(instanceId, x, z [, gait])` using existing asynchronous
+2. **Completed 2026-08-14:** add `startMoveNpc(instanceId, x, z [, gait])` using existing asynchronous
    operation userdata/status/cancel behavior.
-3. Enforce the shared movement authority and duplicate-script-request policy.
+3. **Completed 2026-08-14:** enforce the shared movement authority and duplicate-script-request policy.
    Script requests take authority from future AI; script-versus-script overlap
    fails clearly.
-4. Complete/fail/cancel operations from navigation terminal state after
+4. **Completed 2026-08-14:** complete/fail/cancel operations from navigation terminal state after
    locomotion feedback, not merely when Detour returns a route.
-5. Handle invalid instance IDs, missing NPC definitions/entities, invalid
+5. **Completed 2026-08-14:** handle invalid instance IDs, missing NPC definitions/entities, invalid
    destinations/gaits, unavailable/stale navigation, partial/no path, capacity,
    stalls, map reset, and NPC deletion.
-6. Reserve operation storage and warn on fallback growth consistently with the
+6. **Completed 2026-08-14:** reserve operation storage and warn on fallback growth consistently with the
    existing script operation host.
-7. Show active script-owned movement and operation outcome in Nav diagnostics.
-8. Document the Lua API and current limitation that door links, dynamic
+7. **Completed 2026-08-14:** show active script-owned movement and operation outcome in Nav diagnostics.
+8. **Completed 2026-08-14:** document the Lua API and current limitation that door links, dynamic
    TileCache obstacles, and local avoidance arrive in later slices.
+9. **Completed 2026-08-14:** support exact level-marker IDs as an alternative to explicit X/Z
+   destinations for both blocking and asynchronous movement, using the same
+   floor projection, navigation, operation, and cancellation paths.
 
 Tests:
 
@@ -873,10 +889,11 @@ Tests:
 
 User-owned manual acceptance after this slice:
 
-- place an NPC, open the 3D preview Nav tab, and enable path/corner display;
-- invoke a script move whose destination requires routing around a wall/static
-  prop and confirm the operation resolves after arrival;
-- request an unreachable destination and confirm the script and Nav tab expose
+- run the map, press F8 to open the read-only gameplay Nav overlay, and use the
+  F1 console to invoke `startMoveNpc()` for a placed NPC;
+- choose a destination that requires routing around a wall/static prop and
+  confirm the operation resolves after physical arrival;
+- request an unreachable destination and confirm the script and Nav overlay expose
   a useful failure rather than hanging.
 
 Completion criteria:
@@ -1284,3 +1301,90 @@ Append one entry per slice attempt using this shape:
   typed door links/arbitration; Slice 6 owns TileCache dynamic obstacles; Slice
   7 owns Crowd avoidance. Manual preview verification of authored character
   clips and the user's staircase remains for the user.
+
+### 2026-08-14 — Slice 4 — Completed
+
+- Scope completed: blocking `moveNpc()` and async `startMoveNpc()` Lua APIs,
+  including explicit X/Z and compiled level-marker destination overloads;
+  request-specific cancellation; script/programmatic/future-AI authority;
+  duplicate-script rejection; physical-arrival completion; terminal
+  failure/cancellation propagation; pre-reserved host tracking with growth
+  warnings; lifecycle cleanup; operation diagnostics; and an F8 read-only
+  gameplay Nav panel plus cached path/agent world visualization.
+- Files/modules added or changed: extended the shared NPC navigation and sector
+  script bindings; added focused gameplay navigation diagnostics and reusable
+  debug drawing; updated scene/game orchestration, generated-fixture tests, Lua
+  documentation, and this plan.
+- Decisions or contract updates: accepted moves receive a monotonic request ID
+  and authority. Script requests can replace future AI intent, while AI and
+  duplicate scripts cannot retarget an active script move. Script operation
+  cancellation carries the expected request ID so stale operations cannot stop
+  replacement movement. The gameplay Nav overlay is toggled with F8 because
+  scripts run in the game runtime, while the editor Nav tab owns a separate
+  preview runtime. Marker movement resolves authored marker positions to world
+  X/Z once per request and intentionally ignores marker height and yaw.
+- Tests/checks: added blocking physical-arrival, async await/status/cancel,
+  walk/run, duplicate/validation, off-sector target, rebuild interruption, NPC
+  deletion, map teardown, capacity warning, authority takeover, and stale
+  request-cancellation coverage. `cmake --build cmake-build-debug -j2` passed;
+  all 26 CTest tests passed; `git diff --check` passed; diff/stat/status were
+  reviewed. The pre-existing Lua `tmpnam` linker warning remains.
+- Collision/sector lookup/physics impact: unchanged. Script requests use the
+  Slice 3 collision-constrained locomotion backend; player collision, sector
+  lookup, physics, and camera behavior were not modified.
+- Topology cache invalidation impact: none. No authoring/topology mutation path
+  changed, and both editor/game navigation world drawing read the existing
+  derived debug cache.
+- Lightmap/source-hash impact: none. Lightmap and navigation source hashes are
+  unchanged; script operations, NPC request identity/authority, and F8 debug
+  visibility are runtime-only state.
+- Manual verification performed by user: none; no GUI/xdotool test was run.
+- Remaining debt/blocker: Slice 5 owns door links/arbitration; Slice 6 owns
+  TileCache dynamic obstacles; Slice 7 owns Crowd avoidance.
+
+### 2026-08-15 — Slice 5 — Completed
+
+- Scope completed: permanent doorway cuts with typed bidirectional Detour
+  links; stable placed-door metadata and front/back traversal direction;
+  per-query door capability filtering; NPC approach/hold/wait-for-collider/
+  cross/release behavior; derived multi-NPC holder counts combined with normal
+  player/script targets; actual sliding and swing collider-clearance checks;
+  player plus relevant-NPC closing-sweep obstruction; lifecycle-safe hold
+  release; runtime link disable/replan failure handling; and editor/gameplay Nav
+  link, holder, direction, selected-NPC phase, and wait diagnostics.
+- Files/modules added or changed: NPC definitions/runtime/editor, navigation
+  build input/types/world/debug drawing, NPC navigation systems, sector door and
+  runtime-object systems, scene update orchestration, script door-close
+  arbitration documentation/handling, focused generated-fixture tests, and
+  this plan.
+- Decisions or contract updates: `canOpenDoors` is optional and defaults to
+  `true` for legacy definitions; `false` NPCs cannot request or open a door but
+  may traverse a typed link while its real collider is already clear. Door
+  holder counts are derived from stable NPC traversal records. Holds force the
+  effective target open without replacing the normal player/script target;
+  timed script closes wait, while zero-duration closes are rejected while held.
+  Door-link traversal state changes Detour polygon flags without rebuilding the
+  navmesh.
+- Tests/checks: added definition JSON/editor/runtime propagation, closed/clear/
+  disabled link filtering and stable metadata, end-to-end NPC stage/open/wait/
+  cross/release, immediate cancellation release, multiple-holder arbitration,
+  and sliding closing-sweep coverage; retained swing obstruction and existing
+  player/door coverage. `cmake --build cmake-build-debug -j2` passed; all 26
+  CTest tests passed; `git diff --check` passed; diff/stat/status were reviewed.
+  The pre-existing Lua `tmpnam` linker warning remains.
+- Collision/sector lookup/physics impact: NPC door traversal still uses the
+  authoritative sector, dynamic-door, and static-prop collision paths. Door
+  closing obstruction now covers both sliding slabs and swinging leaves and
+  accepts the player plus waiting/crossing NPC cylinders. Player movement
+  collision, sector lookup, camera behavior, and general physics were not
+  changed.
+- Topology cache invalidation impact: none. No topology or authoring mutation
+  path changed; door-link geometry/debug data remains navigation-derived and is
+  rebuilt only during an explicit navigation build.
+- Lightmap/source-hash impact: the lightmap source hash is unchanged. The
+  navigation source hash now includes door link/cut/sweep-affecting geometry,
+  visual-fit dimensions, motion, hinge/side, angle, and distance. NPC
+  capability, live door pose, link flags, and holder counts remain excluded.
+- Manual verification performed by user: none; no GUI/xdotool test was run.
+- Remaining debt/blocker: Slice 6 owns TileCache dynamic prop obstacles, Slice
+  7 owns Crowd avoidance, and Slice 8 owns final hardening/persistence work.

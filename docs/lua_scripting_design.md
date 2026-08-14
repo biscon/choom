@@ -646,6 +646,10 @@ local ok, reason = startScript("alarmLoop")
 
 `startScript` validates that the named global exists and is a function, and that the name is not queued/running. On success it queues a background `ScriptStartRequest`; it does not recursively resume another Lua task inside the current binding. The new task begins during the next `ScriptSystemUpdate`.
 
+This is a core scheduler binding registered for every map VM by
+`ScriptSystem.cpp`, before any game/sector-specific binding registration. It is
+therefore intentionally not implemented in `SectorScriptBindings.cpp`.
+
 Return values:
 
 ```text
@@ -678,6 +682,9 @@ If the target is waiting on an operation:
 If a task stops itself, the stop call returns, and Lua may run until the current call yields or the function returns. The scheduler then cancels it. This is cooperative cancellation; do not attempt unsafe preemption.
 
 `stopAllScripts()` marks all foreground and background tasks, including its caller, but does not run `shutdown()`. Map teardown uses the stronger shutdown path. `isScriptRunning` returns true for queued, running, waiting, and stop-requested-but-not-yet-reclaimed tasks.
+
+Like `startScript`, `stopScript`, `stopAllScripts`, and `isScriptRunning` are
+global core bindings registered by `ScriptSystem.cpp` for every map VM.
 
 Suggested return contract:
 
@@ -977,6 +984,49 @@ CompleteOperation(scriptRuntime, scriptOperationHandle);
 
 The door move record should retain the script operation handle or the engine should maintain a mapping from backend move token to script operation handle. That retained handle is a value, not a pointer. A completion after teardown simply fails generation/runtime validation.
 
+### 13.1 NPC navigation operations
+
+NPC movement uses the same operation and result contracts:
+
+```lua
+moveNpc(instanceId, x, z [, gait])
+moveNpc(instanceId, levelMarkerId [, gait])
+    -> true
+    -> false, reason
+
+startMoveNpc(instanceId, x, z [, gait])
+startMoveNpc(instanceId, levelMarkerId [, gait])
+    -> operation
+    -> nil, reason
+```
+
+`instanceId` is the placed NPC instance ID. `x` and `z` are runtime world
+coordinates; navigation projects the destination onto the appropriate floor.
+The marker overload resolves an exact, case-sensitive compiled level-marker ID,
+converts its authored position to runtime world units, and uses its X/Z as the
+destination. Marker height and yaw are intentionally ignored; navigation keeps
+the same floor projection and movement-facing behavior as the coordinate form.
+The marker is resolved once when the request starts. `gait` defaults to
+`"walk"` and also accepts `"run"`.
+
+The blocking form resumes only after authoritative collision-constrained
+locomotion reports physical arrival. Finding a Detour route does not complete
+the operation. Async operations use `await`, `operationStatus`, and
+`cancelOperation` exactly like door operations. Only one script-owned move may
+be active for an NPC; overlapping script requests fail without replacing the
+first operation. Script authority blocks future AI retargeting until the move
+arrives, fails, or is cancelled.
+
+Requests fail clearly for invalid IDs or gaits, non-finite/off-mesh targets,
+unavailable or rebuilding navigation, partial/no paths, capacity exhaustion,
+stalls, NPC removal, and map teardown. The navigation mesh must already be
+ready when a request begins. Door traversal links, dynamic TileCache obstacles,
+and Crowd avoidance are intentionally deferred to later navigation slices.
+
+During gameplay, F8 toggles the read-only Nav diagnostics and cached world
+path/agent overlay. This is useful with `startMoveNpc` commands issued from the
+F1 debug console.
+
 ## 14. Built-in delay operation
 
 Implement `delay(ms)` through the same operation mechanism, not as a special task wait enum.
@@ -1219,8 +1269,8 @@ Gameplay functions should use paired naming when both forms are useful:
 moveDoor(...)        blocking
 startMoveDoor(...)   async, returns operation
 
-moveEntityTo(...)        blocking
-startMoveEntityTo(...)   async, returns operation
+moveNpc(...)          blocking
+startMoveNpc(...)     async, returns operation
 
 playSequence(...)        blocking
 startSequence(...)       async, returns operation

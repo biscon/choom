@@ -211,6 +211,10 @@ void GameApplication::RenderInteractiveUI(
                 font,
                 smallFont);
     }
+    if (flow.screen == ApplicationScreen::Game) {
+        gameSession.RenderNavigationDebugPanel(
+                config, assets, smallFont, gameScene);
+    }
     if (flow.screen == ApplicationScreen::MainMenu) {
         if (graphicsSettingsOpen) {
             const GameGraphicsSettingsAction action = DrawGameGraphicsSettings(
@@ -419,7 +423,9 @@ void GameApplication::Render3DViewmodel(engine::AssetManager& assets)
 
 void GameApplication::Render3DOverlays()
 {
-    if (BackgroundScreen() == ApplicationScreen::Editor) {
+    if (flow.screen == ApplicationScreen::Game) {
+        gameSession.RenderNavigationDebugWorld(gameScene);
+    } else if (BackgroundScreen() == ApplicationScreen::Editor) {
         editor.RenderPreview3DOverlays();
     }
 }

@@ -33,4 +33,26 @@ const char* NpcMoveGaitName(NpcMoveGait gait)
     return gait == NpcMoveGait::Run ? "run" : "walk";
 }
 
+const char* NpcMoveAuthorityName(NpcMoveAuthority authority)
+{
+    switch (authority) {
+        case NpcMoveAuthority::None: return "none";
+        case NpcMoveAuthority::Programmatic: return "programmatic";
+        case NpcMoveAuthority::Script: return "script";
+        case NpcMoveAuthority::Ai: return "AI";
+    }
+    return "unknown";
+}
+
+const char* NpcDoorTraversalPhaseName(NpcDoorTraversalPhase phase)
+{
+    switch (phase) {
+        case NpcDoorTraversalPhase::None: return "None";
+        case NpcDoorTraversalPhase::Approaching: return "Approaching";
+        case NpcDoorTraversalPhase::WaitingForClearance: return "Waiting for clearance";
+        case NpcDoorTraversalPhase::Crossing: return "Crossing";
+    }
+    return "Unknown";
+}
+
 } // namespace game

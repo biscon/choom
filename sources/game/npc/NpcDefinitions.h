@@ -44,6 +44,7 @@ struct NpcDefinition {
     std::string id;
     std::string name;
     bool hostile = false;
+    bool canOpenDoors = true;
     std::string modelPath;
     float animationBlendSeconds = kDefaultNpcAnimationBlendSeconds;
     std::array<NpcActionDefinition, kNpcActionCount> actions;

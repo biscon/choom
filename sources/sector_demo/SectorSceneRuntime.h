@@ -68,10 +68,12 @@ public:
             engine::EngineContext& context,
             std::string_view instanceId,
             Vector2 destinationXZ,
-            NpcMoveGait gait = NpcMoveGait::Walk);
+            NpcMoveGait gait = NpcMoveGait::Walk,
+            NpcMoveAuthority authority = NpcMoveAuthority::Programmatic);
     bool CancelNpcMove(
             engine::EngineContext& context,
-            std::string_view instanceId);
+            std::string_view instanceId,
+            uint64_t expectedRequestId = 0);
     NpcMoveStatus GetNpcMoveStatus(std::string_view instanceId) const;
     bool IsReady() const { return renderer.IsRendererReady(); }
     engine::SoundHandle FindLevelSound(const std::string& id) const;

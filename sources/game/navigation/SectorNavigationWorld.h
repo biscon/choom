@@ -40,7 +40,18 @@ public:
             size_t pendingStaticColliderCount);
 
     SectorNavigationNearestPointResult FindNearestPoint(Vector3 position) const;
-    SectorNavigationPathResult FindPath(Vector3 start, Vector3 destination);
+    SectorNavigationPathResult FindPath(
+            Vector3 start,
+            Vector3 destination,
+            SectorNavigationQueryOptions options = {});
+
+    bool SetDoorLinkRuntimeState(
+            int placedObjectId,
+            SectorNavigationDoorLinkState state,
+            uint32_t holderCount);
+    bool GetDoorLinkRuntimeState(
+            int placedObjectId,
+            SectorNavigationDoorLinkState& outState) const;
 
     SectorNavigationAgentHandle AllocateAgentRecord();
     SectorNavigationPathHandle AllocatePathRecord();

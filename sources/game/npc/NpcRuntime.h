@@ -17,6 +17,7 @@ struct NpcRuntimeInstance {
     std::string instanceId;
     NpcAction action = NpcAction::Idle;
     bool hostile = false;
+    bool canOpenDoors = true;
     float walkSpeed = 1.5f;
     float runSpeed = 3.0f;
 };
@@ -40,12 +41,26 @@ enum class NpcMoveGait : uint8_t {
     Run
 };
 
+enum class NpcMoveAuthority : uint8_t {
+    None,
+    Programmatic,
+    Script,
+    Ai
+};
+
 enum class NpcMovePhase : uint8_t {
     Idle,
     FollowingPath,
     Arrived,
     Cancelled,
     Failed
+};
+
+enum class NpcDoorTraversalPhase : uint8_t {
+    None,
+    Approaching,
+    WaitingForClearance,
+    Crossing
 };
 
 struct NpcNavigationRecord {
@@ -56,11 +71,17 @@ struct NpcNavigationRecord {
     SectorNavigationPathHandle pathHandle;
     NpcMovePhase phase = NpcMovePhase::Idle;
     NpcMoveGait gait = NpcMoveGait::Walk;
+    NpcMoveAuthority authority = NpcMoveAuthority::None;
+    uint64_t requestId = 0;
     SectorNavigationQueryStatus lastQueryStatus =
             SectorNavigationQueryStatus::NavigationUnavailable;
     Vector2 requestedDestinationXZ = {};
     Vector3 projectedDestination = {};
     std::array<Vector3, SectorNavigationMaximumStraightPathCorners> corners{};
+    std::array<int, SectorNavigationMaximumStraightPathCorners> cornerDoorIds{};
+    std::array<SectorNavigationDoorDirection,
+            SectorNavigationMaximumStraightPathCorners> cornerDoorDirections{};
+    std::array<Vector3, SectorNavigationMaximumStraightPathCorners> cornerDoorLandings{};
     size_t cornerCount = 0;
     size_t nextCorner = 0;
     Vector2 desiredVelocity = {};
@@ -71,6 +92,13 @@ struct NpcNavigationRecord {
     float replanCooldownSeconds = 0.0f;
     float driftCheckSeconds = 0.0f;
     uint32_t replanCount = 0;
+    NpcDoorTraversalPhase doorPhase = NpcDoorTraversalPhase::None;
+    int doorId = 0;
+    SectorNavigationDoorDirection doorDirection =
+            SectorNavigationDoorDirection::None;
+    Vector3 doorLanding = {};
+    float doorWaitSeconds = 0.0f;
+    bool holdsDoor = false;
     std::array<char, 192> diagnostic{};
     bool occupied = false;
 };
@@ -88,6 +116,7 @@ struct NpcNavigationCounters {
 struct NpcNavigationRuntime {
     std::vector<NpcNavigationRecord> records;
     NpcNavigationCounters counters;
+    uint64_t nextRequestId = 1;
     bool growthWarned = false;
 };
 
@@ -95,6 +124,7 @@ struct NpcMoveRequestResult {
     bool accepted = false;
     SectorNavigationQueryStatus status =
             SectorNavigationQueryStatus::NavigationUnavailable;
+    uint64_t requestId = 0;
     std::string message;
 };
 
@@ -102,6 +132,8 @@ struct NpcMoveStatus {
     bool found = false;
     NpcMovePhase phase = NpcMovePhase::Idle;
     NpcMoveGait gait = NpcMoveGait::Walk;
+    NpcMoveAuthority authority = NpcMoveAuthority::None;
+    uint64_t requestId = 0;
     SectorNavigationQueryStatus queryStatus =
             SectorNavigationQueryStatus::NavigationUnavailable;
     Vector2 requestedDestinationXZ = {};
@@ -117,5 +149,7 @@ struct NpcMoveStatus {
 bool IsValidNpcInstanceId(std::string_view id);
 const char* NpcMovePhaseName(NpcMovePhase phase);
 const char* NpcMoveGaitName(NpcMoveGait gait);
+const char* NpcMoveAuthorityName(NpcMoveAuthority authority);
+const char* NpcDoorTraversalPhaseName(NpcDoorTraversalPhase phase);
 
 } // namespace game

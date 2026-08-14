@@ -236,7 +236,7 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         editor.RefreshAnimationOptions(assets);
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
         const float actionSectionHeight = 4.0f * (RowHeight + RowGap) + 54.0f;
-        const float contentHeight = 6.0f * (RowHeight + RowGap)
+        const float contentHeight = 7.0f * (RowHeight + RowGap)
                 + actionSectionHeight * static_cast<float>(kNpcActionCount)
                 + 80.0f;
         engine::UIScrollAreaResult formScroll = engine::BeginScrollArea(
@@ -289,6 +289,16 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                     Rectangle{fieldX, y, 260.0f, RowHeight},
                     font, "Hostile", hostile)) {
             editor.SetSelectedHostile(hostile);
+        }
+        y += RowHeight + RowGap;
+
+        bool canOpenDoors = selected->definition.canOpenDoors;
+        if (engine::Checkbox(
+                    ui, config, input, assets,
+                    "sector_editor_npc_can_open_doors",
+                    Rectangle{fieldX, y, 260.0f, RowHeight},
+                    font, "Can open doors", canOpenDoors)) {
+            editor.SetSelectedCanOpenDoors(canOpenDoors);
         }
         y += RowHeight + RowGap;
 

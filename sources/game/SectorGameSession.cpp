@@ -92,6 +92,7 @@ bool SectorGameSession::StartNew(
     levelPath = path;
     controller = SectorEditorPreviewControllerState{};
     collision = SectorEditorPreviewCollisionState{};
+    navigationDebug = SectorGameNavigationDebugState{};
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
     ResetSectorFreeflyController(
@@ -125,7 +126,12 @@ bool SectorGameSession::StartNew(
     paused = false;
     consoleInputCaptured = false;
     InitializeSectorScriptHost(
-            scriptHost, scene.RuntimeObjects(), topologyMap, scripts);
+            scriptHost,
+            scene.RuntimeObjects(),
+            topologyMap,
+            scripts,
+            &scene.Navigation(),
+            &scene.NpcNavigation());
     if (!engine::ScriptSystemCreateForMap(
                 context,
                 scripts,
@@ -158,6 +164,7 @@ void SectorGameSession::Shutdown(
     topologyMap = SectorTopologyMap{};
     controller = SectorEditorPreviewControllerState{};
     collision = SectorEditorPreviewCollisionState{};
+    navigationDebug = SectorGameNavigationDebugState{};
     levelName.clear();
     levelPath.clear();
     running = false;
@@ -214,6 +221,15 @@ void SectorGameSession::Update(
     if (!running || paused) {
         return;
     }
+
+    context.input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [this](engine::InputEvent& event) {
+                if (event.key.key != KEY_F8) return;
+                navigationDebug.visible = !navigationDebug.visible;
+                engine::ConsumeEvent(event);
+            });
 
     const Vector3 playerPosition =
             controller.fpsControllerState.feetPosition;
@@ -391,6 +407,33 @@ void SectorGameSession::RenderHud(Rectangle playableViewport) const
     }
 }
 
+void SectorGameSession::RenderNavigationDebugWorld(
+        const SectorSceneRuntime& scene) const
+{
+    if (!running || !navigationDebug.visible) return;
+    DrawSectorNavigationDebugWorld(
+            navigationDebug.drawSettings,
+            scene.Navigation(),
+            scene.NpcNavigation(),
+            scene.Renderer());
+}
+
+void SectorGameSession::RenderNavigationDebugPanel(
+        const engine::UIConfig& config,
+        engine::AssetManager& assets,
+        engine::FontHandle smallFont,
+        const SectorSceneRuntime& scene) const
+{
+    if (!running || !navigationDebug.visible) return;
+    DrawSectorGameNavigationDebugPanel(
+            config,
+            assets,
+            smallFont,
+            scene.Navigation(),
+            scene.NpcNavigation(),
+            scriptHost);
+}
+
 bool SectorGameSession::RebuildFromMap(
         engine::EngineContext& context,
         SectorSceneRuntime& scene,
@@ -431,7 +474,12 @@ bool SectorGameSession::RebuildFromMap(
         return false;
     }
     InitializeSectorScriptHost(
-            scriptHost, scene.RuntimeObjects(), topologyMap, scripts);
+            scriptHost,
+            scene.RuntimeObjects(),
+            topologyMap,
+            scripts,
+            &scene.Navigation(),
+            &scene.NpcNavigation());
     if (!engine::ScriptSystemCreateForMap(
                 context,
                 scripts,

@@ -21,8 +21,7 @@ namespace game {
 namespace {
 
 constexpr float ArrivalTolerance = 0.10f;
-constexpr float ProgressEpsilon = 0.01f;
-constexpr float MovingSpeedEpsilon = 0.01f;
+constexpr float MovementDistanceEpsilon = 0.0001f;
 constexpr float StallTriggerSeconds = 0.75f;
 constexpr float ReplanCooldownSeconds = 0.50f;
 constexpr float DriftCheckIntervalSeconds = 0.25f;
@@ -84,17 +83,35 @@ bool IsActive(NpcMovePhase phase)
 
 void ReleasePath(
         SectorNavigationWorld& navigation,
-        NpcNavigationRecord& record)
+        NpcNavigationRecord& record,
+        engine::World* world = nullptr)
 {
+    if (world != nullptr && record.holdsDoor && record.doorId > 0) {
+        world->ForEach<SectorDoor, SectorDoorOpenControl>(
+                [&record](engine::Entity, SectorDoor& door,
+                        SectorDoorOpenControl& control) {
+                    if (door.placedObjectId == record.doorId
+                            && control.navigationHolderCount > 0) {
+                        --control.navigationHolderCount;
+                    }
+                });
+    }
     if (!IsNull(record.pathHandle)) {
         navigation.ReleasePathRecord(record.pathHandle);
         record.pathHandle = {};
     }
     record.cornerCount = 0;
     record.nextCorner = 0;
+    record.doorPhase = NpcDoorTraversalPhase::None;
+    record.doorId = 0;
+    record.doorDirection = SectorNavigationDoorDirection::None;
+    record.doorLanding = {};
+    record.doorWaitSeconds = 0.0f;
+    record.holdsDoor = false;
 }
 
 void SetTerminal(
+        engine::World& world,
         SectorNavigationWorld& navigation,
         NpcNavigationRuntime& runtime,
         NpcNavigationRecord& record,
@@ -102,7 +119,7 @@ void SetTerminal(
         SectorNavigationQueryStatus status,
         const char* diagnostic)
 {
-    ReleasePath(navigation, record);
+    ReleasePath(navigation, record, &world);
     record.phase = phase;
     record.lastQueryStatus = status;
     record.desiredVelocity = {};
@@ -116,17 +133,25 @@ void SetTerminal(
 }
 
 bool CopySuccessfulPath(
+        engine::World& world,
         SectorNavigationWorld& navigation,
         NpcNavigationRecord& record,
         const SectorNavigationPathResult& path)
 {
-    ReleasePath(navigation, record);
+    ReleasePath(navigation, record, &world);
     record.pathHandle = navigation.AllocatePathRecord();
     if (IsNull(record.pathHandle)) return false;
     record.cornerCount = std::min(path.cornerCount, record.corners.size());
     std::copy_n(path.corners.begin(), record.cornerCount, record.corners.begin());
+    std::copy_n(path.cornerDoorIds.begin(), record.cornerCount,
+            record.cornerDoorIds.begin());
+    std::copy_n(path.cornerDoorDirections.begin(), record.cornerCount,
+            record.cornerDoorDirections.begin());
+    std::copy_n(path.cornerDoorLandings.begin(), record.cornerCount,
+            record.cornerDoorLandings.begin());
     record.nextCorner = 0;
     while (record.nextCorner < record.cornerCount) {
+        if (record.cornerDoorIds[record.nextCorner] > 0) break;
         const Vector3& corner = record.corners[record.nextCorner];
         const float dx = corner.x - path.projectedStart.x;
         const float dz = corner.z - path.projectedStart.z;
@@ -140,7 +165,15 @@ bool CopySuccessfulPath(
 
 NpcMoveRequestResult FailRequest(SectorNavigationQueryStatus status, const char* message)
 {
-    return {false, status, message != nullptr ? message : SectorNavigationQueryStatusName(status)};
+    return {false, status, 0,
+            message != nullptr ? message : SectorNavigationQueryStatusName(status)};
+}
+
+uint64_t AllocateRequestId(NpcNavigationRuntime& runtime)
+{
+    uint64_t result = runtime.nextRequestId++;
+    if (result == 0) result = runtime.nextRequestId++;
+    return result;
 }
 
 float ShortestAngleDelta(float from, float to)
@@ -221,12 +254,15 @@ bool Replan(
     }
     const SectorObjectTransform& transform =
             world.Get<SectorObjectTransform>(record.entity);
+    const bool canOpenDoors = world.Has<NpcRuntimeInstance>(record.entity)
+            && world.Get<NpcRuntimeInstance>(record.entity).canOpenDoors;
     const SectorNavigationPathResult path = navigation.FindPath(
             transform.position,
-            record.projectedDestination);
+            record.projectedDestination,
+            {canOpenDoors});
     record.lastQueryStatus = path.status;
     if (path.status != SectorNavigationQueryStatus::Success
-            || !CopySuccessfulPath(navigation, record, path)) {
+            || !CopySuccessfulPath(world, navigation, record, path)) {
         return false;
     }
     ++record.replanCount;
@@ -336,7 +372,7 @@ void ShutdownNpcNavigationRuntime(
                 world.Get<SectorObjectVisualOffset>(record.entity).position = {};
             }
         }
-        ReleasePath(navigation, record);
+        ReleasePath(navigation, record, &world);
         if (!IsNull(record.agentHandle)) {
             navigation.ReleaseAgentRecord(record.agentHandle);
         }
@@ -355,7 +391,8 @@ NpcMoveRequestResult RequestNpcMove(
         NpcNavigationRuntime& runtime,
         std::string_view instanceId,
         Vector2 destinationXZ,
-        NpcMoveGait gait)
+        NpcMoveGait gait,
+        NpcMoveAuthority authority)
 {
     if (!IsValidNpcInstanceId(instanceId)) {
         return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "invalid NPC instance ID");
@@ -367,7 +404,19 @@ NpcMoveRequestResult RequestNpcMove(
         return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "NPC instance was not found");
     }
     if (IsActive(record->phase)) {
-        return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "NPC already has an active move");
+        if (record->authority == NpcMoveAuthority::Script) {
+            return FailRequest(
+                    SectorNavigationQueryStatus::InvalidAgent,
+                    authority == NpcMoveAuthority::Script
+                            ? "NPC already has an active scripted move"
+                            : "NPC movement is controlled by a script");
+        }
+        if (authority != NpcMoveAuthority::Script
+                || record->authority != NpcMoveAuthority::Ai) {
+            return FailRequest(
+                    SectorNavigationQueryStatus::InvalidAgent,
+                    "NPC already has an active move");
+        }
     }
     if (navigation.State() != SectorNavigationState::Ready) {
         return FailRequest(SectorNavigationQueryStatus::NavigationUnavailable, "navigation is not ready");
@@ -401,11 +450,13 @@ NpcMoveRequestResult RequestNpcMove(
             destinationXZ.y};
     const SectorNavigationPathResult path = navigation.FindPath(
             transform.position,
-            destination);
+            destination,
+            {world.Has<NpcRuntimeInstance>(record->entity)
+                    && world.Get<NpcRuntimeInstance>(record->entity).canOpenDoors});
     if (path.status != SectorNavigationQueryStatus::Success) {
         return FailRequest(path.status, SectorNavigationQueryStatusName(path.status));
     }
-    if (!CopySuccessfulPath(navigation, *record, path)) {
+    if (!CopySuccessfulPath(world, navigation, *record, path)) {
         ++runtime.counters.capacityWarnings;
         return FailRequest(
                 SectorNavigationQueryStatus::CapacityExceeded,
@@ -413,6 +464,8 @@ NpcMoveRequestResult RequestNpcMove(
     }
     record->phase = NpcMovePhase::FollowingPath;
     record->gait = gait;
+    record->authority = authority;
+    record->requestId = AllocateRequestId(runtime);
     record->requestedDestinationXZ = destinationXZ;
     record->projectedDestination = path.projectedDestination;
     record->desiredVelocity = {};
@@ -423,22 +476,28 @@ NpcMoveRequestResult RequestNpcMove(
     record->replanCount = 0;
     SetDiagnostic(*record, "following complete path");
     ++runtime.counters.requests;
-    return {true, SectorNavigationQueryStatus::Success, {}};
+    return {true, SectorNavigationQueryStatus::Success, record->requestId, {}};
 }
 
 bool CancelNpcMove(
         engine::World& world,
         SectorNavigationWorld& navigation,
         NpcNavigationRuntime& runtime,
-        std::string_view instanceId)
+        std::string_view instanceId,
+        uint64_t expectedRequestId)
 {
     NpcNavigationRecord* record = FindRecord(runtime, instanceId);
-    if (record == nullptr || !IsActive(record->phase)) return false;
+    if (record == nullptr || !IsActive(record->phase)
+            || (expectedRequestId != 0
+                && record->requestId != expectedRequestId)) {
+        return false;
+    }
     if (world.IsAlive(record->entity)
             && world.Has<NpcRuntimeInstance>(record->entity)) {
         world.Get<NpcRuntimeInstance>(record->entity).action = NpcAction::Idle;
     }
     SetTerminal(
+            world,
             navigation,
             runtime,
             *record,
@@ -458,6 +517,8 @@ NpcMoveStatus GetNpcMoveStatus(
     status.found = true;
     status.phase = record->phase;
     status.gait = record->gait;
+    status.authority = record->authority;
+    status.requestId = record->requestId;
     status.queryStatus = record->lastQueryStatus;
     status.requestedDestinationXZ = record->requestedDestinationXZ;
     status.projectedDestination = record->projectedDestination;
@@ -469,6 +530,172 @@ NpcMoveStatus GetNpcMoveStatus(
     status.replanCount = record->replanCount;
     status.message = record->diagnostic.data();
     return status;
+}
+
+void PrepareNpcDoorTraversalAndHoldsSystem(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime,
+        const std::vector<SectorDynamicDoorCollider>& doorColliders,
+        float rawDt)
+{
+    const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+    world.ForEach<SectorDoorOpenControl>(
+            [](engine::Entity, SectorDoorOpenControl& control) {
+                control.navigationHolderCount = 0;
+            });
+
+    const SectorNavigationSettings& settings = navigation.Settings();
+    for (NpcNavigationRecord& record : runtime.records) {
+        if (!record.occupied || !IsActive(record.phase)
+                || !world.IsAlive(record.entity)
+                || !world.Has<NpcRuntimeInstance>(record.entity)
+                || !world.Has<SectorObjectTransform>(record.entity)) {
+            record.holdsDoor = false;
+            continue;
+        }
+        const NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(record.entity);
+        const SectorObjectTransform& transform =
+                world.Get<SectorObjectTransform>(record.entity);
+        if (record.doorPhase == NpcDoorTraversalPhase::None
+                && record.nextCorner < record.cornerCount
+                && record.cornerDoorIds[record.nextCorner] > 0) {
+            record.doorPhase = NpcDoorTraversalPhase::Approaching;
+            record.doorId = record.cornerDoorIds[record.nextCorner];
+            record.doorDirection = record.cornerDoorDirections[record.nextCorner];
+            record.doorLanding = record.cornerDoorLandings[record.nextCorner];
+            record.doorWaitSeconds = 0.0f;
+        }
+        if (record.doorPhase == NpcDoorTraversalPhase::None) continue;
+
+        const Vector3 stage = record.corners[record.nextCorner];
+        const float dx = stage.x - transform.position.x;
+        const float dz = stage.z - transform.position.z;
+        if (record.doorPhase == NpcDoorTraversalPhase::Approaching
+                && std::sqrt(dx * dx + dz * dz) <= ArrivalTolerance) {
+            record.doorPhase = NpcDoorTraversalPhase::WaitingForClearance;
+            record.holdsDoor = npc.canOpenDoors;
+            SetDiagnostic(record, npc.canOpenDoors
+                    ? "holding door open; waiting for physical clearance"
+                    : "waiting for an already-open door");
+        }
+        if (record.doorPhase == NpcDoorTraversalPhase::WaitingForClearance) {
+            record.doorWaitSeconds += dt;
+            record.holdsDoor = npc.canOpenDoors;
+            SectorNavigationDoorLinkState linkState =
+                    SectorNavigationDoorLinkState::Disabled;
+            const bool linkExists = navigation.GetDoorLinkRuntimeState(
+                    record.doorId, linkState);
+            if (!linkExists || linkState == SectorNavigationDoorLinkState::Disabled) {
+                if (!Replan(world, navigation, runtime, record)) {
+                    SetTerminal(world, navigation, runtime, record,
+                            NpcMovePhase::Failed,
+                            SectorNavigationQueryStatus::NoPath,
+                            "door link became unavailable");
+                }
+                continue;
+            }
+            const bool clear = SectorDoorTraversalIsClear(
+                    record.doorId,
+                    stage,
+                    record.doorLanding,
+                    settings.agentRadius,
+                    settings.agentHeight,
+                    doorColliders);
+            if (clear && (npc.canOpenDoors
+                            || linkState == SectorNavigationDoorLinkState::Clear)) {
+                record.doorPhase = NpcDoorTraversalPhase::Crossing;
+                SetDiagnostic(record, "crossing physically clear door");
+            } else if (!npc.canOpenDoors && record.doorWaitSeconds >= 0.5f) {
+                if (!Replan(world, navigation, runtime, record)) {
+                    SetTerminal(world, navigation, runtime, record,
+                            NpcMovePhase::Failed,
+                            SectorNavigationQueryStatus::NoPath,
+                            "NPC cannot open the required door");
+                }
+                continue;
+            }
+        }
+
+    }
+
+    // Derive holder counts only after every record has updated its traversal
+    // state, so replans/cancellations earlier in the pass cannot undercount a
+    // different NPC that uses the same door.
+    for (NpcNavigationRecord& record : runtime.records) {
+        if (record.occupied && IsActive(record.phase)
+                && record.holdsDoor && record.doorId > 0) {
+            world.ForEach<SectorDoor, SectorDoorOpenControl>(
+                    [&record](engine::Entity, SectorDoor& door,
+                            SectorDoorOpenControl& control) {
+                        if (door.enabled
+                                && door.placedObjectId == record.doorId) {
+                            ++control.navigationHolderCount;
+                        }
+                    });
+        }
+    }
+}
+
+void SynchronizeSectorNavigationDoorLinksSystem(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        const std::vector<SectorDynamicDoorCollider>& doorColliders)
+{
+    const SectorNavigationSettings& settings = navigation.Settings();
+    for (const SectorNavigationDebugDoorLink& link :
+            navigation.DebugCache().doorLinks) {
+        bool found = false;
+        bool enabled = false;
+        uint32_t holderCount = 0;
+        world.ForEach<SectorDoor>(
+                [&link, &found, &enabled, &holderCount, &world](
+                        engine::Entity entity, SectorDoor& door) {
+                    if (door.placedObjectId != link.placedObjectId) return;
+                    found = true;
+                    enabled = door.enabled;
+                    if (world.Has<SectorDoorOpenControl>(entity)) {
+                        holderCount = world.Get<SectorDoorOpenControl>(entity)
+                                .navigationHolderCount;
+                    }
+                });
+        SectorNavigationDoorLinkState state =
+                SectorNavigationDoorLinkState::Disabled;
+        if (found && enabled) {
+            state = SectorDoorTraversalIsClear(
+                    link.placedObjectId,
+                    link.frontStage,
+                    link.backStage,
+                    settings.agentRadius,
+                    settings.agentHeight,
+                    doorColliders)
+                    ? SectorNavigationDoorLinkState::Clear
+                    : SectorNavigationDoorLinkState::RequiresOpening;
+        }
+        navigation.SetDoorLinkRuntimeState(
+                link.placedObjectId, state, holderCount);
+    }
+}
+
+void CollectNpcDoorObstacles(
+        engine::World& world,
+        const NpcNavigationRuntime& runtime,
+        std::vector<SectorDoorPlayerObstacle>& outObstacles,
+        const SectorDoorPlayerObstacle* playerObstacle)
+{
+    outObstacles.clear();
+    if (playerObstacle != nullptr) outObstacles.push_back(*playerObstacle);
+    const SectorDoorPlayerObstacle npcShape{{}, 0.25f, 1.6f};
+    for (const NpcNavigationRecord& record : runtime.records) {
+        if (!record.occupied || !IsActive(record.phase)
+                || (record.doorPhase != NpcDoorTraversalPhase::WaitingForClearance
+                    && record.doorPhase != NpcDoorTraversalPhase::Crossing)
+                || !world.IsAlive(record.entity)
+                || !world.Has<SectorObjectTransform>(record.entity)) continue;
+        SectorDoorPlayerObstacle obstacle = npcShape;
+        obstacle.feetPosition = world.Get<SectorObjectTransform>(record.entity).position;
+        outObstacles.push_back(obstacle);
+    }
 }
 
 void UpdateNpcNavigationAndLocomotionSystem(
@@ -499,7 +726,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 || !world.Has<NpcRuntimeInstance>(record.entity)
                 || !world.Has<SectorObjectTransform>(record.entity)
                 || !world.Has<SectorObject>(record.entity)) {
-            ReleasePath(navigation, record);
+            ReleasePath(navigation, record, &world);
             if (!IsNull(record.agentHandle)) {
                 navigation.ReleaseAgentRecord(record.agentHandle);
             }
@@ -527,6 +754,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 if (IsActive(record.phase)) {
                     npc.action = NpcAction::Idle;
                     SetTerminal(
+                            world,
                             navigation,
                             runtime,
                             record,
@@ -541,6 +769,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 && navigation.State() != SectorNavigationState::Ready) {
             npc.action = NpcAction::Idle;
             SetTerminal(
+                    world,
                     navigation,
                     runtime,
                     record,
@@ -555,16 +784,32 @@ void UpdateNpcNavigationAndLocomotionSystem(
             float movementBudget = std::max(0.0f, movementSpeed) * dt;
             Vector2 totalActual{};
             int stepCount = 0;
-            while (movementBudget > ProgressEpsilon
+            while (movementBudget > MovementDistanceEpsilon
                     && record.nextCorner < record.cornerCount
                     && stepCount++ < 64) {
-                const Vector3 corner = record.corners[record.nextCorner];
+                const Vector3 corner = record.doorPhase == NpcDoorTraversalPhase::Crossing
+                        ? record.doorLanding
+                        : record.corners[record.nextCorner];
                 Vector2 toCorner{
                         corner.x - transform.position.x,
                         corner.z - transform.position.z};
                 float distance = Vector2Length(toCorner);
                 if (distance <= ArrivalTolerance) {
+                    if (record.doorPhase == NpcDoorTraversalPhase::Approaching
+                            || record.doorPhase
+                                    == NpcDoorTraversalPhase::WaitingForClearance) {
+                        break;
+                    }
                     ++record.nextCorner;
+                    if (record.doorPhase == NpcDoorTraversalPhase::Crossing) {
+                        record.doorPhase = NpcDoorTraversalPhase::None;
+                        record.doorId = 0;
+                        record.doorDirection = SectorNavigationDoorDirection::None;
+                        record.doorLanding = {};
+                        record.doorWaitSeconds = 0.0f;
+                        record.holdsDoor = false;
+                        SetDiagnostic(record, "door traversal completed");
+                    }
                     continue;
                 }
                 const Vector2 direction = Vector2Scale(toCorner, 1.0f / distance);
@@ -636,20 +881,31 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 totalActual = Vector2Add(totalActual, actual);
                 const float actualDistance = Vector2Length(actual);
                 movementBudget -= requestedDistance;
-                if (actualDistance <= ProgressEpsilon) break;
+                if (actualDistance <= MovementDistanceEpsilon) break;
                 movedAnyNpc = true;
                 toCorner = {
                         corner.x - transform.position.x,
                         corner.z - transform.position.z};
                 if (Vector2Length(toCorner) <= ArrivalTolerance) {
-                    ++record.nextCorner;
+                    if (record.doorPhase == NpcDoorTraversalPhase::Crossing) {
+                        ++record.nextCorner;
+                        record.doorPhase = NpcDoorTraversalPhase::None;
+                        record.doorId = 0;
+                        record.doorDirection = SectorNavigationDoorDirection::None;
+                        record.doorLanding = {};
+                        record.doorWaitSeconds = 0.0f;
+                        record.holdsDoor = false;
+                        SetDiagnostic(record, "door traversal completed");
+                    } else if (record.doorPhase == NpcDoorTraversalPhase::None) {
+                        ++record.nextCorner;
+                    }
                 }
             }
 
             const float actualDistance = Vector2Length(totalActual);
             record.actualVelocity = dt > 0.0f
                     ? Vector2Scale(totalActual, 1.0f / dt) : Vector2{};
-            if (actualDistance > ProgressEpsilon) {
+            if (actualDistance > MovementDistanceEpsilon) {
                 record.stallSeconds = 0.0f;
                 const float targetYaw = std::atan2(totalActual.x, totalActual.y);
                 const float delta = ShortestAngleDelta(transform.yawRadians, targetYaw);
@@ -657,6 +913,10 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 transform.yawRadians += std::clamp(delta, -maximumTurn, maximumTurn);
                 npc.action = record.gait == NpcMoveGait::Run
                         ? NpcAction::Run : NpcAction::Walk;
+            } else if (record.doorPhase
+                    == NpcDoorTraversalPhase::WaitingForClearance) {
+                record.stallSeconds = 0.0f;
+                npc.action = NpcAction::Idle;
             } else {
                 record.stallSeconds += dt;
                 npc.action = NpcAction::Idle;
@@ -672,6 +932,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
                             <= ArrivalTolerance) {
                 npc.action = NpcAction::Idle;
                 SetTerminal(
+                        world,
                         navigation,
                         runtime,
                         record,
@@ -685,6 +946,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
                     npc.action = NpcAction::Idle;
                     ++runtime.counters.stalls;
                     SetTerminal(
+                            world,
                             navigation,
                             runtime,
                             record,
@@ -711,6 +973,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
                                 || !Replan(world, navigation, runtime, record))) {
                         npc.action = NpcAction::Idle;
                         SetTerminal(
+                                world,
                                 navigation,
                                 runtime,
                                 record,

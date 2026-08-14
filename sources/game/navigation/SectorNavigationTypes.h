@@ -62,7 +62,24 @@ enum SectorNavigationPolyFlag : uint16_t {
     SectorNavigationPolyFlag_None = 0,
     SectorNavigationPolyFlag_Walk = 1u << 0u,
     SectorNavigationPolyFlag_Door = 1u << 1u,
+    SectorNavigationPolyFlag_DoorRequiresOpening = 1u << 2u,
     SectorNavigationPolyFlag_Disabled = 1u << 15u
+};
+
+enum class SectorNavigationDoorLinkState : uint8_t {
+    RequiresOpening,
+    Clear,
+    Disabled
+};
+
+enum class SectorNavigationDoorDirection : uint8_t {
+    None,
+    FrontToBack,
+    BackToFront
+};
+
+struct SectorNavigationQueryOptions {
+    bool canOpenDoors = true;
 };
 
 struct SectorNavigationAgentHandle {
@@ -147,6 +164,10 @@ struct SectorNavigationPathResult {
     Vector3 projectedDestination = {};
     std::array<Vector3, SectorNavigationMaximumStraightPathCorners> corners{};
     std::array<uint8_t, SectorNavigationMaximumStraightPathCorners> cornerFlags{};
+    std::array<int, SectorNavigationMaximumStraightPathCorners> cornerDoorIds{};
+    std::array<SectorNavigationDoorDirection,
+            SectorNavigationMaximumStraightPathCorners> cornerDoorDirections{};
+    std::array<Vector3, SectorNavigationMaximumStraightPathCorners> cornerDoorLandings{};
     size_t cornerCount = 0;
     size_t corridorPolygonCount = 0;
 };
@@ -211,12 +232,23 @@ struct SectorNavigationDebugDoorPlaceholder {
     float top = 0.0f;
 };
 
+struct SectorNavigationDebugDoorLink {
+    int placedObjectId = 0;
+    Vector3 frontStage = {};
+    Vector3 backStage = {};
+    SectorNavigationDoorLinkState state =
+            SectorNavigationDoorLinkState::RequiresOpening;
+    uint32_t holderCount = 0;
+    bool valid = false;
+};
+
 struct SectorNavigationDebugCache {
     std::vector<SectorNavigationDebugTriangle> walkableTriangles;
     std::vector<SectorNavigationDebugSegment> polygonEdges;
     std::vector<SectorNavigationDebugTileBounds> tileBounds;
     std::vector<SectorNavigationDebugObstacle> staticObstacles;
     std::vector<SectorNavigationDebugDoorPlaceholder> doorPlaceholders;
+    std::vector<SectorNavigationDebugDoorLink> doorLinks;
     std::vector<SectorNavigationDebugSegment> stepConnections;
     uint64_t navigationRevision = 0;
 };
@@ -237,5 +269,7 @@ float SectorNavigationAuthoredHeightToWorld(float authoredHeight);
 const char* SectorNavigationStateName(SectorNavigationState state);
 const char* SectorNavigationQueryStatusName(SectorNavigationQueryStatus status);
 const char* SectorNavigationBuildStageName(SectorNavigationBuildStage stage);
+const char* SectorNavigationDoorLinkStateName(SectorNavigationDoorLinkState state);
+const char* SectorNavigationDoorDirectionName(SectorNavigationDoorDirection direction);
 
 } // namespace game

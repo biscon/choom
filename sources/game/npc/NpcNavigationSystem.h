@@ -19,8 +19,27 @@ class SectorCollisionWorld;
 class SectorNavigationWorld;
 struct SectorBakedObjectLightProbeRuntimeData;
 struct SectorDynamicDoorCollider;
+struct SectorDoorPlayerObstacle;
 struct SectorStaticModelCollider;
 struct SectorTopologyMap;
+
+void PrepareNpcDoorTraversalAndHoldsSystem(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime,
+        const std::vector<SectorDynamicDoorCollider>& doorColliders,
+        float dt);
+
+void SynchronizeSectorNavigationDoorLinksSystem(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        const std::vector<SectorDynamicDoorCollider>& doorColliders);
+
+void CollectNpcDoorObstacles(
+        engine::World& world,
+        const NpcNavigationRuntime& runtime,
+        std::vector<SectorDoorPlayerObstacle>& outObstacles,
+        const SectorDoorPlayerObstacle* playerObstacle = nullptr);
 
 enum class NpcAnimationApplyResult : uint8_t {
     Unchanged,
@@ -51,13 +70,15 @@ NpcMoveRequestResult RequestNpcMove(
         NpcNavigationRuntime& runtime,
         std::string_view instanceId,
         Vector2 destinationXZ,
-        NpcMoveGait gait = NpcMoveGait::Walk);
+        NpcMoveGait gait = NpcMoveGait::Walk,
+        NpcMoveAuthority authority = NpcMoveAuthority::Programmatic);
 
 bool CancelNpcMove(
         engine::World& world,
         SectorNavigationWorld& navigation,
         NpcNavigationRuntime& runtime,
-        std::string_view instanceId);
+        std::string_view instanceId,
+        uint64_t expectedRequestId = 0);
 
 NpcMoveStatus GetNpcMoveStatus(
         const NpcNavigationRuntime& runtime,

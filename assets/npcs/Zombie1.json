@@ -4,13 +4,15 @@
   "name": "Zombie",
   "hostile": true,
   "modelPath": "assets/models/characters/Zombie1.glb",
+  "animationBlendSeconds": 0.5,
   "actions": {
     "idle": {
       "animation": "Idle"
     },
     "walk": {
       "animation": "Walk",
-      "movementSpeed": 1.5
+      "animationSpeed": 2.0,
+      "movementSpeed": 0.75
     },
     "run": {
       "animation": "Running",

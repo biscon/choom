@@ -83,6 +83,7 @@ void TestRoundTripDefaultsAndSharedClips()
     Check(parsed.id == original.id
                   && parsed.name == original.name
                   && parsed.hostile
+                  && parsed.canOpenDoors
                   && parsed.modelPath == original.modelPath
                   && Near(parsed.animationBlendSeconds, 0.35f)
                   && game::GetNpcAction(parsed, game::NpcAction::Walk).animation == "Walk"
@@ -94,8 +95,16 @@ void TestRoundTripDefaultsAndSharedClips()
 
     game::NpcDefinition defaults = MakeDefinition("defaults_test");
     Check(game::SerializeNpcDefinitionJson(defaults, json, error)
-                  && !Json::parse(json).contains("animationBlendSeconds"),
-          "default animation blend duration is omitted from serialized definitions");
+                  && !Json::parse(json).contains("animationBlendSeconds")
+                  && !Json::parse(json).contains("canOpenDoors"),
+          "default blend and door-opening capability are omitted from serialized definitions");
+
+    defaults.canOpenDoors = false;
+    Check(game::SerializeNpcDefinitionJson(defaults, json, error)
+                  && Json::parse(json)["canOpenDoors"] == false
+                  && game::ParseNpcDefinitionJson(json, parsed, error)
+                  && !parsed.canOpenDoors,
+          "disabled door-opening capability round-trips explicitly");
 
     Json incomplete = document;
     incomplete["actions"] = Json::object();
@@ -213,6 +222,9 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
     service.SetSelectedAnimationBlendSeconds(0.45f);
     Check(Near(service.SelectedDraft()->definition.animationBlendSeconds, 0.45f),
           "NPC editor service updates animation blending through its draft API");
+    service.SetSelectedCanOpenDoors(false);
+    Check(!service.SelectedDraft()->definition.canOpenDoors,
+          "NPC editor service updates door-opening capability through its draft API");
     service.SelectedDraft()->definition.id = "RENAMED_beta";
     session.selectedNpcId = "RENAMED_beta";
     Check(service.SaveAndClose(nullptr)

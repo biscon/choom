@@ -33,6 +33,7 @@ public:
     void ApplyIdBuffer();
     void ApplyNameBuffer();
     void SetSelectedHostile(bool hostile);
+    void SetSelectedCanOpenDoors(bool canOpenDoors);
     void SetSelectedAnimationBlendSeconds(float seconds);
     void SetSelectedModelPath(
             const std::string& modelPath,

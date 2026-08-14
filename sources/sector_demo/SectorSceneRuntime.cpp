@@ -77,6 +77,17 @@ void SectorSceneRuntime::Update(
         const SectorDoorPlayerObstacle* playerObstacle)
 {
     UpdateLevelAudio(context);
+    PrepareNpcDoorTraversalAndHoldsSystem(
+            context.world,
+            navigation,
+            npcNavigation,
+            runtimeObjects.dynamicDoorColliders,
+            dt);
+    CollectNpcDoorObstacles(
+            context.world,
+            npcNavigation,
+            runtimeObjects.doorObstacles,
+            playerObstacle);
     UpdateSectorRuntimeObjects(
             context.world,
             context.assets,
@@ -84,7 +95,8 @@ void SectorSceneRuntime::Update(
             map,
             dt,
             playerPosition,
-            playerObstacle);
+            playerObstacle,
+            &runtimeObjects.doorObstacles);
     UpdateSectorDoorAudioSystem(
             context.world,
             context.assets,
@@ -106,6 +118,10 @@ void SectorSceneRuntime::Update(
             map,
             runtimeObjects.staticModelColliders,
             runtimeObjects.staticModelPendingCount);
+    SynchronizeSectorNavigationDoorLinksSystem(
+            context.world,
+            navigation,
+            runtimeObjects.dynamicDoorColliders);
     if (runtimeObjects.objectSectorLookupWorldValid) {
         UpdateNpcNavigationAndLocomotionSystem(
                 context.world,
@@ -128,11 +144,13 @@ NpcMoveRequestResult SectorSceneRuntime::RequestNpcMove(
         engine::EngineContext& context,
         std::string_view instanceId,
         Vector2 destinationXZ,
-        NpcMoveGait gait)
+        NpcMoveGait gait,
+        NpcMoveAuthority authority)
 {
     if (!runtimeObjects.objectSectorLookupWorldValid) {
         return {false,
                 SectorNavigationQueryStatus::NavigationUnavailable,
+                0,
                 "sector collision is unavailable"};
     }
     return game::RequestNpcMove(
@@ -142,15 +160,18 @@ NpcMoveRequestResult SectorSceneRuntime::RequestNpcMove(
             npcNavigation,
             instanceId,
             destinationXZ,
-            gait);
+            gait,
+            authority);
 }
 
 bool SectorSceneRuntime::CancelNpcMove(
         engine::EngineContext& context,
-        std::string_view instanceId)
+        std::string_view instanceId,
+        uint64_t expectedRequestId)
 {
     return game::CancelNpcMove(
-            context.world, navigation, npcNavigation, instanceId);
+            context.world, navigation, npcNavigation, instanceId,
+            expectedRequestId);
 }
 
 NpcMoveStatus SectorSceneRuntime::GetNpcMoveStatus(

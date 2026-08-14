@@ -43,6 +43,7 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
     if (left.id != right.id
             || left.name != right.name
             || left.hostile != right.hostile
+            || left.canOpenDoors != right.canOpenDoors
             || left.modelPath != right.modelPath
             || left.animationBlendSeconds != right.animationBlendSeconds) {
         return false;
@@ -328,6 +329,14 @@ void SectorEditorNpcEditorService::SetSelectedHostile(bool hostile)
     SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
     if (draft == nullptr) return;
     draft->definition.hostile = hostile;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedCanOpenDoors(bool canOpenDoors)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.canOpenDoors = canOpenDoors;
     state_.validationMessage.clear();
 }
 

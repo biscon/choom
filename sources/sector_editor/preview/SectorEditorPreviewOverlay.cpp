@@ -2,6 +2,7 @@
 #include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 
 #include "engine/render/ColorTransfer.h"
+#include "game/navigation/SectorNavigationDebugDraw.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
@@ -421,131 +422,25 @@ void DrawSectorEditorPreviewNavigationOverlay(
         int selectedRuntimeObjectId,
         const SectorMeshRenderer& preview)
 {
-    if (!preview.IsRendererReady()
-        || overlayState.activePreviewDebugOverlayTab != PreviewDebugOverlayTab::Navigation) {
+    if (overlayState.activePreviewDebugOverlayTab
+            != PreviewDebugOverlayTab::Navigation) {
         return;
     }
-    const SectorNavigationDebugCache& debug = navigation.DebugCache();
-    if (debug.navigationRevision == 0) return;
-
-    const Color surfaceColor = LinearOverlaySwatch(Color{62, 202, 132, 72});
-    const Color edgeColor = LinearOverlaySwatch(Color{88, 242, 164, 225});
-    const Color tileColor = LinearOverlaySwatch(Color{84, 156, 255, 180});
-    const Color obstacleColor = LinearOverlaySwatch(Color{255, 154, 72, 235});
-    const Color doorColor = LinearOverlaySwatch(Color{244, 214, 78, 245});
-    const Color stepColor = LinearOverlaySwatch(Color{104, 226, 255, 245});
-    const Color pathColor = LinearOverlaySwatch(Color{255, 102, 214, 245});
-    const Color agentColor = LinearOverlaySwatch(Color{255, 238, 132, 245});
-    BeginMode3D(preview.RenderCamera());
-    if (overlayState.showNavigationSurface) {
-        for (const SectorNavigationDebugTriangle& triangle : debug.walkableTriangles) {
-            DrawTriangle3D(triangle.a, triangle.b, triangle.c, surfaceColor);
-            DrawTriangle3D(triangle.c, triangle.b, triangle.a, surfaceColor);
-        }
-    }
-    if (overlayState.showNavigationEdges) {
-        for (const SectorNavigationDebugSegment& edge : debug.polygonEdges) {
-            DrawLine3D(edge.a, edge.b, edgeColor);
-        }
-    }
-    if (overlayState.showNavigationTileBounds) {
-        for (const SectorNavigationDebugTileBounds& tile : debug.tileBounds) {
-            DrawBoundingBox(tile.bounds, tileColor);
-        }
-    }
-    if (overlayState.showNavigationStaticObstacles) {
-        for (const SectorNavigationDebugObstacle& obstacle : debug.staticObstacles) {
-            const auto corner = [&](float x, float z, float y) {
-                return Vector3{
-                        obstacle.center.x + obstacle.axisX.x * x + obstacle.axisZ.x * z,
-                        y,
-                        obstacle.center.y + obstacle.axisX.y * x + obstacle.axisZ.y * z};
-            };
-            const float ex = obstacle.halfExtents.x;
-            const float ez = obstacle.halfExtents.y;
-            const Vector3 vertices[8]{
-                    corner(-ex, -ez, obstacle.bottom), corner(ex, -ez, obstacle.bottom),
-                    corner(ex, ez, obstacle.bottom), corner(-ex, ez, obstacle.bottom),
-                    corner(-ex, -ez, obstacle.top), corner(ex, -ez, obstacle.top),
-                    corner(ex, ez, obstacle.top), corner(-ex, ez, obstacle.top)};
-            constexpr int edges[12][2] = {
-                    {0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6},
-                    {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
-            for (const auto& edge : edges) {
-                DrawLine3D(vertices[edge[0]], vertices[edge[1]], obstacleColor);
-            }
-        }
-    }
-    if (overlayState.showNavigationDoorPlaceholders) {
-        for (const SectorNavigationDebugDoorPlaceholder& door : debug.doorPlaceholders) {
-            Vector3 aBottom = door.a;
-            Vector3 bBottom = door.b;
-            Vector3 aTop = door.a;
-            Vector3 bTop = door.b;
-            aBottom.y = bBottom.y = door.bottom;
-            aTop.y = bTop.y = door.top;
-            DrawLine3D(aBottom, bBottom, doorColor);
-            DrawLine3D(aTop, bTop, doorColor);
-            DrawLine3D(aBottom, aTop, doorColor);
-            DrawLine3D(bBottom, bTop, doorColor);
-        }
-    }
-    if (overlayState.showNavigationStepConnections) {
-        for (const SectorNavigationDebugSegment& connection : debug.stepConnections) {
-            DrawLine3D(connection.a, connection.b, stepColor);
-            DrawSphere(connection.a, 0.035f, stepColor);
-            DrawSphere(connection.b, 0.035f, stepColor);
-        }
-    }
-    for (const NpcNavigationRecord& agent : npcNavigation.records) {
-        if (!agent.occupied
-                || (overlayState.showNavigationSelectedNpcOnly
-                    && agent.placedObjectId != selectedRuntimeObjectId)) {
-            continue;
-        }
-        if (overlayState.showNavigationNpcAgents) {
-            const float height = navigation.Settings().agentHeight;
-            const float radius = navigation.Settings().agentRadius;
-            const Vector3 top{
-                    agent.physicalPosition.x,
-                    agent.physicalPosition.y + height,
-                    agent.physicalPosition.z};
-            DrawCylinderWiresEx(
-                    agent.physicalPosition,
-                    top,
-                    radius,
-                    radius,
-                    12,
-                    agentColor);
-            DrawLine3D(
-                    agent.physicalPosition,
-                    Vector3Add(
-                            agent.physicalPosition,
-                            Vector3{agent.desiredVelocity.x * 0.2f, 0.0f,
-                                    agent.desiredVelocity.y * 0.2f}),
-                    pathColor);
-            DrawLine3D(
-                    agent.physicalPosition,
-                    Vector3Add(
-                            agent.physicalPosition,
-                            Vector3{agent.actualVelocity.x * 0.2f, 0.0f,
-                                    agent.actualVelocity.y * 0.2f}),
-                    agentColor);
-            DrawLine3D(agent.physicalPosition, agent.visualPosition, stepColor);
-        }
-        if (overlayState.showNavigationNpcPaths
-                && agent.nextCorner < agent.cornerCount) {
-            Vector3 previous = agent.physicalPosition;
-            for (size_t cornerIndex = agent.nextCorner;
-                    cornerIndex < agent.cornerCount;
-                    ++cornerIndex) {
-                DrawLine3D(previous, agent.corners[cornerIndex], pathColor);
-                DrawSphere(agent.corners[cornerIndex], 0.045f, pathColor);
-                previous = agent.corners[cornerIndex];
-            }
-        }
-    }
-    EndMode3D();
+    DrawSectorNavigationDebugWorld(
+            SectorNavigationDebugDrawSettings{
+                    overlayState.showNavigationSurface,
+                    overlayState.showNavigationEdges,
+                    overlayState.showNavigationTileBounds,
+                    overlayState.showNavigationStaticObstacles,
+                    overlayState.showNavigationDoorPlaceholders,
+                    overlayState.showNavigationStepConnections,
+                    overlayState.showNavigationNpcPaths,
+                    overlayState.showNavigationNpcAgents,
+                    overlayState.showNavigationSelectedNpcOnly,
+                    selectedRuntimeObjectId},
+            navigation,
+            npcNavigation,
+            preview);
 }
 
 SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
@@ -1303,12 +1198,39 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         static_cast<unsigned long long>(context.npcNavigation.counters.requests),
                         static_cast<unsigned long long>(context.npcNavigation.counters.replans),
                         static_cast<unsigned long long>(context.npcNavigation.counters.stalls)));
+                size_t clearDoorLinks = 0;
+                size_t openingDoorLinks = 0;
+                size_t disabledDoorLinks = 0;
+                uint32_t doorHolders = 0;
+                for (const SectorNavigationDebugDoorLink& link :
+                        context.navigation.DebugCache().doorLinks) {
+                    doorHolders += link.holderCount;
+                    if (link.state == SectorNavigationDoorLinkState::Clear) ++clearDoorLinks;
+                    else if (link.state == SectorNavigationDoorLinkState::Disabled) ++disabledDoorLinks;
+                    else ++openingDoorLinks;
+                }
+                addKeyValue("door links", TextFormat(
+                        "%zu clear | %zu require open | %zu disabled | %u holders",
+                        clearDoorLinks, openingDoorLinks, disabledDoorLinks,
+                        doorHolders));
+                size_t shownDoorLinks = 0;
+                for (const SectorNavigationDebugDoorLink& link :
+                        context.navigation.DebugCache().doorLinks) {
+                    if (shownDoorLinks++ >= 8) break;
+                    addKeyValue("door link", TextFormat(
+                            "ID %d | %s | front <-> back | %u holders",
+                            link.placedObjectId,
+                            SectorNavigationDoorLinkStateName(link.state),
+                            link.holderCount));
+                }
                 if (selectedAgent != nullptr) {
                     addKeyValue("selected NPC", TextFormat(
-                            "%s | %s | %s",
+                            "%s | %s | %s | %s | request %llu",
                             selectedAgent->instanceId.c_str(),
+                            NpcMoveAuthorityName(selectedAgent->authority),
                             NpcMovePhaseName(selectedAgent->phase),
-                            NpcMoveGaitName(selectedAgent->gait)));
+                            NpcMoveGaitName(selectedAgent->gait),
+                            static_cast<unsigned long long>(selectedAgent->requestId)));
                     addKeyValue("destination", TextFormat(
                             "%.2f %.2f | %zu corners remain | %s",
                             selectedAgent->requestedDestinationXZ.x,
@@ -1328,8 +1250,16 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             selectedAgent->physicalPosition.y,
                             selectedAgent->visualPosition.y,
                             selectedAgent->diagnostic.data()));
+                    addKeyValue("door traversal", TextFormat(
+                            "%s | door %d | direction %s | wait %.2fs | %s",
+                            NpcDoorTraversalPhaseName(selectedAgent->doorPhase),
+                            selectedAgent->doorId,
+                            SectorNavigationDoorDirectionName(
+                                    selectedAgent->doorDirection),
+                            selectedAgent->doorWaitSeconds,
+                            selectedAgent->holdsDoor ? "holding" : "not holding"));
                 }
-                addWrappedLine("Door traversal links, dynamic obstacles, Crowd, and query probes remain unavailable until later navigation slices.");
+                addWrappedLine("Door links are live; dynamic prop obstacles, Crowd, and query probes remain assigned to later navigation slices.");
                 break;
             }
             case PreviewDebugOverlayTab::Controls:

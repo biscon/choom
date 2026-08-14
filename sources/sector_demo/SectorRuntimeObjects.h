@@ -104,6 +104,7 @@ struct SectorRuntimeObjectState {
     NpcDefinitionCatalog npcDefinitionCatalog;
     std::vector<SectorDoorFallbackDiagnostic> doorFallbackDiagnostics;
     std::vector<SectorDynamicDoorCollider> dynamicDoorColliders;
+    std::vector<SectorDoorPlayerObstacle> doorObstacles;
     std::vector<SectorStaticModelCollider> staticModelColliders;
     std::vector<RuntimePortalDynamicBlocker> dynamicPortalBlockers;
     size_t placedObjectCount = 0;
@@ -188,7 +189,8 @@ void UpdateSectorRuntimeObjects(
         const SectorTopologyMap& map,
         float dt,
         const Vector3* playerPosition = nullptr,
-        const SectorDoorPlayerObstacle* playerObstacle = nullptr);
+        const SectorDoorPlayerObstacle* playerObstacle = nullptr,
+        const std::vector<SectorDoorPlayerObstacle>* doorObstacles = nullptr);
 
 void UpdateSectorObjectCurrentSectorSystem(
         engine::World& world,

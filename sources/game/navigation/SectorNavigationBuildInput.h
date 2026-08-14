@@ -18,10 +18,18 @@ struct SectorNavigationBuildTriangle {
     int sourceId = 0;
 };
 
+struct SectorNavigationBuildDoorLink {
+    int placedObjectId = 0;
+    Vector3 frontStage = {};
+    Vector3 backStage = {};
+    float radius = 0.25f;
+};
+
 struct SectorNavigationBuildInput {
     std::vector<SectorNavigationBuildTriangle> triangles;
     std::vector<SectorNavigationDebugObstacle> staticObstacles;
     std::vector<SectorNavigationDebugDoorPlaceholder> doorPlaceholders;
+    std::vector<SectorNavigationBuildDoorLink> doorLinks;
     BoundingBox bounds = {};
     uint64_t sourceHash = 0;
 };
