@@ -4,6 +4,7 @@
 #include "engine/input/Input.h"
 #include "engine/ui/UI.h"
 #include "game/FpsViewmodel.h"
+#include "game/navigation/SectorNavigationWorld.h"
 #include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
@@ -36,6 +37,7 @@ struct SectorEditorPreviewOverlayContext {
     RuntimeObjectDragState& runtimeObjectDrag;
     SectorEditorPreviewState& previewState;
     SectorRuntimeObjectState& runtimeObjects;
+    SectorNavigationWorld& navigation;
     FpsViewmodelRuntimeState& viewmodel;
     SelectionState& selectionState;
     ManipulationState& manipulationState;
@@ -53,6 +55,7 @@ struct SectorEditorPreviewOverlayResult {
     bool requestCancelLightPilot = false;
     bool openPreviewSettings = false;
     bool markTopologyDocumentEdited = false;
+    bool requestNavigationRebuild = false;
     const char* topologyDocumentEditStatus = nullptr;
 };
 
@@ -80,6 +83,10 @@ void DrawSectorEditorPreviewObjectProbeOverlay(
         const SectorTopologyMap& topologyMap,
         const SectorEditorPreviewState& previewState,
         const SectorRuntimeObjectState& runtimeObjects,
+        const SectorMeshRenderer& preview);
+void DrawSectorEditorPreviewNavigationOverlay(
+        const SectorEditorPreviewOverlayState& overlayState,
+        const SectorNavigationWorld& navigation,
         const SectorMeshRenderer& preview);
 
 SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(

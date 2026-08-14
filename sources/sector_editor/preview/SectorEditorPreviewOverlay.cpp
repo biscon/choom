@@ -1,4 +1,5 @@
 #include "sector_editor/preview/SectorEditorPreviewOverlay.h"
+#include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 
 #include "engine/render/ColorTransfer.h"
 #include "sector_editor/SectorEditorHelpers.h"
@@ -221,9 +222,7 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
     constexpr float y = 32.0f;
     constexpr float width = 700.0f;
     constexpr float collapsedHeight = 78.0f;
-    const float expandedHeight = activeTab == PreviewDebugOverlayTab::Pbr
-            ? 610.0f
-            : 390.0f;
+    const float expandedHeight = SectorEditorPreviewOverlayExpandedHeight(activeTab);
     return Rectangle{
             x,
             y,
@@ -411,6 +410,80 @@ void DrawSectorEditorPreviewObjectProbeOverlay(
                 8,
                 8,
                 LinearOverlaySwatch(Color{255, 255, 255, 155}));
+    }
+    EndMode3D();
+}
+
+void DrawSectorEditorPreviewNavigationOverlay(
+        const SectorEditorPreviewOverlayState& overlayState,
+        const SectorNavigationWorld& navigation,
+        const SectorMeshRenderer& preview)
+{
+    if (!preview.IsRendererReady()
+        || overlayState.activePreviewDebugOverlayTab != PreviewDebugOverlayTab::Navigation) {
+        return;
+    }
+    const SectorNavigationDebugCache& debug = navigation.DebugCache();
+    if (debug.navigationRevision == 0) return;
+
+    const Color surfaceColor = LinearOverlaySwatch(Color{62, 202, 132, 72});
+    const Color edgeColor = LinearOverlaySwatch(Color{88, 242, 164, 225});
+    const Color tileColor = LinearOverlaySwatch(Color{84, 156, 255, 180});
+    const Color obstacleColor = LinearOverlaySwatch(Color{255, 154, 72, 235});
+    const Color doorColor = LinearOverlaySwatch(Color{244, 214, 78, 245});
+    BeginMode3D(preview.RenderCamera());
+    if (overlayState.showNavigationSurface) {
+        for (const SectorNavigationDebugTriangle& triangle : debug.walkableTriangles) {
+            DrawTriangle3D(triangle.a, triangle.b, triangle.c, surfaceColor);
+            DrawTriangle3D(triangle.c, triangle.b, triangle.a, surfaceColor);
+        }
+    }
+    if (overlayState.showNavigationEdges) {
+        for (const SectorNavigationDebugSegment& edge : debug.polygonEdges) {
+            DrawLine3D(edge.a, edge.b, edgeColor);
+        }
+    }
+    if (overlayState.showNavigationTileBounds) {
+        for (const SectorNavigationDebugTileBounds& tile : debug.tileBounds) {
+            DrawBoundingBox(tile.bounds, tileColor);
+        }
+    }
+    if (overlayState.showNavigationStaticObstacles) {
+        for (const SectorNavigationDebugObstacle& obstacle : debug.staticObstacles) {
+            const auto corner = [&](float x, float z, float y) {
+                return Vector3{
+                        obstacle.center.x + obstacle.axisX.x * x + obstacle.axisZ.x * z,
+                        y,
+                        obstacle.center.y + obstacle.axisX.y * x + obstacle.axisZ.y * z};
+            };
+            const float ex = obstacle.halfExtents.x;
+            const float ez = obstacle.halfExtents.y;
+            const Vector3 vertices[8]{
+                    corner(-ex, -ez, obstacle.bottom), corner(ex, -ez, obstacle.bottom),
+                    corner(ex, ez, obstacle.bottom), corner(-ex, ez, obstacle.bottom),
+                    corner(-ex, -ez, obstacle.top), corner(ex, -ez, obstacle.top),
+                    corner(ex, ez, obstacle.top), corner(-ex, ez, obstacle.top)};
+            constexpr int edges[12][2] = {
+                    {0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6},
+                    {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+            for (const auto& edge : edges) {
+                DrawLine3D(vertices[edge[0]], vertices[edge[1]], obstacleColor);
+            }
+        }
+    }
+    if (overlayState.showNavigationDoorPlaceholders) {
+        for (const SectorNavigationDebugDoorPlaceholder& door : debug.doorPlaceholders) {
+            Vector3 aBottom = door.a;
+            Vector3 bBottom = door.b;
+            Vector3 aTop = door.a;
+            Vector3 bTop = door.b;
+            aBottom.y = bBottom.y = door.bottom;
+            aTop.y = bTop.y = door.top;
+            DrawLine3D(aBottom, bBottom, doorColor);
+            DrawLine3D(aTop, bTop, doorColor);
+            DrawLine3D(aBottom, aTop, doorColor);
+            DrawLine3D(bBottom, bTop, doorColor);
+        }
     }
     EndMode3D();
 }
@@ -1119,6 +1192,45 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 if (!vm.error.empty()) addKeyValueStyled("error", vm.error, Color{236, 92, 92, 245}, true);
                 break;
             }
+            case PreviewDebugOverlayTab::Navigation: {
+                const SectorNavigationBuildStatistics& stats = context.navigation.BuildStatistics();
+                addKeyValue("state", SectorNavigationStateName(context.navigation.State()));
+                addKeyValue("stage", SectorNavigationBuildStageName(context.navigation.BuildStage()));
+                addKeyValue("source hash", TextFormat("%016llx",
+                        static_cast<unsigned long long>(context.navigation.SourceHash())));
+                addKeyValue("progress", TextFormat("%d / %d tile coordinates | %d layers",
+                        stats.builtTileCoordinateCount,
+                        stats.tileCoordinateCount,
+                        stats.builtLayerCount));
+                addKeyValue("mesh", TextFormat("%d tiles | %d polygons | %.3f MiB compressed",
+                        stats.navMeshTileCount,
+                        stats.navMeshPolygonCount,
+                        static_cast<double>(stats.compressedLayerBytes) / (1024.0 * 1024.0)));
+                addKeyValue("capacity", TextFormat("%d layer tiles | %d polys/tile | refs %d/%d bits",
+                        stats.tileLayerCapacity,
+                        context.navigation.Capacities().plannedMaximumPolygonsPerTile,
+                        stats.tileReferenceBits,
+                        stats.polygonReferenceBits));
+                addKeyValue("tile memory", TextFormat("%.3f / %.3f MiB temporary peak/cap",
+                        static_cast<double>(stats.tileTemporaryBytes) / (1024.0 * 1024.0),
+                        static_cast<double>(context.navigation.Capacities().tileCacheTemporaryBytes)
+                                / (1024.0 * 1024.0)));
+                addKeyValue("voxel/tile", TextFormat("cs %.3f | ch %.3f | %d cells / %.2fm",
+                        context.navigation.Settings().cellSize,
+                        context.navigation.Settings().cellHeight,
+                        context.navigation.Settings().tileSizeCells,
+                        stats.tileWorldSize));
+                const auto& diagnostics = context.navigation.Diagnostics();
+                if (!diagnostics.empty()) {
+                    addKeyValueStyled("latest", diagnostics.back().message,
+                            diagnostics.back().severity == SectorNavigationDiagnosticSeverity::Error
+                                    ? Color{236, 92, 92, 245}
+                                    : smallConfig.mutedTextColor,
+                            true);
+                }
+                addWrappedLine("Door traversal links, dynamic obstacles, agents, and query probes are unavailable until later navigation slices.");
+                break;
+            }
             case PreviewDebugOverlayTab::Controls:
                 if (context.lightState.lightPilot.active) {
                     addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down, hold Shift for precision movement. Unlock cursor with F11 to click Apply or Cancel.");
@@ -1155,6 +1267,9 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
         contentH += rowH + 6.0f;
+    }
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Navigation) {
+        contentH += (rowH + 6.0f) * 4.0f;
     }
     const Rectangle panel{
             basePanel.x,
@@ -1227,42 +1342,23 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         }
     }
 
-    const struct {
-        PreviewDebugOverlayTab tab;
-        const char* id;
-        const char* label;
-    } tabs[] = {
-            {PreviewDebugOverlayTab::View, "sector_editor_preview_tab_view", "View"},
-            {PreviewDebugOverlayTab::Render, "sector_editor_preview_tab_render", "Render"},
-            {PreviewDebugOverlayTab::Visibility, "sector_editor_preview_tab_visibility", "Visibility"},
-            {PreviewDebugOverlayTab::Lighting, "sector_editor_preview_tab_lighting", "Lighting"},
-            {PreviewDebugOverlayTab::Pbr, "sector_editor_preview_tab_pbr", "PBR"},
-            {PreviewDebugOverlayTab::Objects, "sector_editor_preview_tab_objects", "Objects"},
-            {PreviewDebugOverlayTab::Probes, "sector_editor_preview_tab_probes", "Probes"},
-            {PreviewDebugOverlayTab::Viewmodel, "sector_editor_preview_tab_viewmodel", "Arms"},
-            {PreviewDebugOverlayTab::Controls, "sector_editor_preview_tab_controls", "Controls"},
-    };
-
     const float tabY = panel.y + padding + stripH + gap;
     const float tabGap = 6.0f;
-    const float tabW = (contentW - tabGap * 8.0f) / 9.0f;
-    for (int i = 0; i < 9; ++i) {
-        const Rectangle tabRect{
-                panel.x + padding + static_cast<float>(i) * (tabW + tabGap),
-                tabY,
-                tabW,
-                tabH};
-        const bool selected = overlayState.activePreviewDebugOverlayTab == tabs[i].tab;
+    for (size_t index = 0; index < SectorEditorPreviewDebugTabs.size(); ++index) {
+        const Rectangle tabRect = BuildSectorEditorPreviewDebugTabRect(
+                panel, padding, stripH, gap, tabH, tabGap, index);
+        const SectorEditorPreviewDebugTabDefinition& tab = SectorEditorPreviewDebugTabs[index];
+        const bool selected = overlayState.activePreviewDebugOverlayTab == tab.tab;
         if (mouseInteractive) {
-            if (engine::ToolButton(ui, smallConfig, input, assets, tabs[i].id, tabRect, smallFont, tabs[i].label, selected)) {
+            if (engine::ToolButton(ui, smallConfig, input, assets, tab.id, tabRect, smallFont, tab.label, selected)) {
                 overlayState.activePreviewDebugOverlayTab = selected
                         ? PreviewDebugOverlayTab::None
-                        : tabs[i].tab;
+                        : tab.tab;
             }
         } else {
             DrawRectangleRec(tabRect, selected ? Color{48, 68, 86, 210} : Color{24, 30, 38, 185});
             DrawRectangleLinesEx(tabRect, config.borderThickness, config.borderColor);
-            engine::Text(smallConfig, assets, tabRect, smallFont, tabs[i].label, engine::UITextJustify::Center, smallConfig.mutedTextColor);
+            engine::Text(smallConfig, assets, tabRect, smallFont, tab.label, engine::UITextJustify::Center, smallConfig.mutedTextColor);
         }
     }
 
@@ -1581,6 +1677,60 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     engine::UITextJustify::Center,
                     smallConfig.mutedTextColor);
         }
+        y += rowH + 6.0f;
+    }
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Navigation) {
+        const Rectangle rebuildRect{panel.x + padding, y, 132.0f, rowH};
+        if (mouseInteractive) {
+            if (engine::Button(
+                        ui, smallConfig, input, assets,
+                        "sector_editor_navigation_rebuild", rebuildRect,
+                        smallFont, "Rebuild Nav")) {
+                result.requestNavigationRebuild = true;
+            }
+        } else {
+            DrawRectangleRec(rebuildRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(rebuildRect, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, rebuildRect, smallFont, "Rebuild Nav",
+                    engine::UITextJustify::Center, smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+
+        const auto drawNavigationCheckbox = [&](const char* id, const char* label,
+                                                 Rectangle rect, bool& value) {
+            if (mouseInteractive) {
+                engine::Checkbox(ui, smallConfig, input, assets, id, rect, smallFont, label, value);
+            } else {
+                DrawRectangleRec(rect, Color{24, 30, 38, 155});
+                DrawRectangleLinesEx(rect, config.borderThickness, config.borderColor);
+                const std::string text = std::string(value ? "[x] " : "[ ] ") + label;
+                engine::Text(smallConfig, assets, rect, smallFont, text.c_str(),
+                        engine::UITextJustify::Left, smallConfig.mutedTextColor);
+            }
+        };
+        const float checkboxWidth = (contentW - gap) * 0.5f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_surface", "Walkable Surface",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationSurface);
+        drawNavigationCheckbox(
+                "sector_editor_navigation_edges", "Polygon Edges",
+                Rectangle{panel.x + padding + checkboxWidth + gap, y, checkboxWidth, rowH},
+                overlayState.showNavigationEdges);
+        y += rowH + 6.0f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_tiles", "Tile Bounds",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationTileBounds);
+        drawNavigationCheckbox(
+                "sector_editor_navigation_obstacles", "Static Obstacles",
+                Rectangle{panel.x + padding + checkboxWidth + gap, y, checkboxWidth, rowH},
+                overlayState.showNavigationStaticObstacles);
+        y += rowH + 6.0f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_doors", "Door Placeholders",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationDoorPlaceholders);
         y += rowH + 6.0f;
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {

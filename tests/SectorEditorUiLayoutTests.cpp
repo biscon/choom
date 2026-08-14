@@ -1,5 +1,6 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
+#include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 #include "sector_demo/SectorLightmap.h"
@@ -559,6 +560,24 @@ void TestPreviewSettingsModalFogDraftApplyAndReset()
           "preview settings modal resets fog defaults");
 }
 
+void TestPreviewNavigationTabLayout()
+{
+    Check(game::SectorEditorPreviewDebugTabs.size() == 10,
+          "preview debug strip contains ten array-defined tabs");
+    const Rectangle panel{32.0f, 32.0f, 700.0f, 520.0f};
+    Rectangle previous{};
+    for (size_t index = 0; index < game::SectorEditorPreviewDebugTabs.size(); ++index) {
+        const Rectangle tab = game::BuildSectorEditorPreviewDebugTabRect(
+                panel, 10.0f, 26.0f, 6.0f, 30.0f, 6.0f, index);
+        Check(Contains(panel, tab), "preview debug tab fits inside its panel");
+        if (index > 0) Check(!Overlaps(previous, tab), "preview debug tabs do not overlap");
+        previous = tab;
+    }
+    Check(game::SectorEditorPreviewOverlayExpandedHeight(
+                  game::PreviewDebugOverlayTab::Navigation) >= 520.0f,
+          "preview interaction bounds include Navigation controls and diagnostics");
+}
+
 } // namespace
 
 int main()
@@ -586,6 +605,7 @@ int main()
     TestPreviewSettingsFogTabLayout();
     TestNpcEditorModalSplitPaneLayout();
     TestPreviewSettingsModalFogDraftApplyAndReset();
+    TestPreviewNavigationTabLayout();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorUiLayoutTests failure(s)\n";

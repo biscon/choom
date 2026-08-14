@@ -21,6 +21,7 @@ enum class PreviewDebugOverlayTab {
     Objects,
     Probes,
     Viewmodel,
+    Navigation,
     Controls
 };
 

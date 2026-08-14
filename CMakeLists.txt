@@ -33,6 +33,7 @@ file(GLOB RECASTNAVIGATION_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/sources/detour_crowd/*.cpp"
 )
 add_library(recastnavigation STATIC ${RECASTNAVIGATION_SOURCES})
+target_compile_definitions(recastnavigation PUBLIC DT_POLYREF64=1)
 target_include_directories(recastnavigation PUBLIC
         sources/recast
         sources/detour
@@ -607,6 +608,20 @@ if(BUILD_TESTING)
     target_compile_definitions(sector_editor_ui_layout_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(sector_editor_ui_layout_tests PRIVATE raylib xatlas)
     add_test(NAME sector_editor_ui_layout COMMAND sector_editor_ui_layout_tests)
+
+    add_executable(sector_navigation_tests
+            tests/SectorNavigationTests.cpp
+            sources/game/navigation/SectorNavigationBuildInput.cpp
+            sources/game/navigation/SectorNavigationCompression.cpp
+            sources/game/navigation/SectorNavigationTypes.cpp
+            sources/game/navigation/SectorNavigationWorld.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_navigation_tests PRIVATE sources)
+    target_link_libraries(sector_navigation_tests PRIVATE raylib recastnavigation)
+    add_test(NAME sector_navigation COMMAND sector_navigation_tests)
 endif()
 
 # -------------------------------

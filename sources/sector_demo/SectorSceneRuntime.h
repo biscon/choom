@@ -2,6 +2,7 @@
 
 #include "engine/EngineContext.h"
 #include "game/FootstepAudio.h"
+#include "game/navigation/SectorNavigationWorld.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
@@ -58,6 +59,8 @@ public:
     const SectorMeshRenderer& Renderer() const { return renderer; }
     SectorRuntimeObjectState& RuntimeObjects() { return runtimeObjects; }
     const SectorRuntimeObjectState& RuntimeObjects() const { return runtimeObjects; }
+    SectorNavigationWorld& Navigation() { return navigation; }
+    const SectorNavigationWorld& Navigation() const { return navigation; }
     bool IsReady() const { return renderer.IsRendererReady(); }
     engine::SoundHandle FindLevelSound(const std::string& id) const;
     engine::MusicHandle FindLevelMusic(const std::string& id) const;
@@ -82,6 +85,7 @@ private:
 
     SectorMeshRenderer renderer;
     SectorRuntimeObjectState runtimeObjects;
+    SectorNavigationWorld navigation;
     engine::AssetScopeHandle audioScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::SoundHandle> levelSounds;
     std::unordered_map<std::string, engine::MusicHandle> levelMusicById;

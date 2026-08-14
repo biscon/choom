@@ -45,7 +45,7 @@ When executing this plan:
 
 | Slice | Title | Status | Completed |
 |---|---|---|---|
-| 1 | Integrate dependencies and establish navigation contracts | Partial | - |
+| 1 | Integrate dependencies and establish navigation contracts | Completed | 2026-08-14 |
 | 2 | Build tiled static navigation and add the 3D Nav debug tab | Not Started | - |
 | 3 | Add basic NPC path following and locomotion | Not Started | - |
 | 4 | Expose scripted NPC movement early | Not Started | - |
@@ -442,6 +442,28 @@ cross-sector links.
 - All Recast build-context errors/warnings become bounded project diagnostics
   viewable in the Nav tab and logs.
 
+Slice 2 selected the following deterministic first-profile defaults:
+
+- Recast cell size `0.125m`, cell height `0.05m`, and `64` cells per tile
+  (`8m` tile width);
+- walkable height `ceil(1.6 / 0.05) = 32` voxels, climb
+  `floor(0.25 / 0.05) = 5` voxels, radius
+  `ceil(0.25 / 0.125) = 2` voxels, and tile border `radius + 3 = 5`
+  cells;
+- maximum slope `45` degrees, minimum/merge region sizes `8`/`20`
+  cells, maximum edge length `12m`, simplification error `1.3` cells,
+  and at most `6` vertices per polygon;
+- at most `32` layers per tile coordinate, `65,536` total compressed tiles,
+  `16,384` planned polygons per tile, `65,536` candidate input triangles per
+  tile, and `4 MiB` fixed TileCache temporary memory;
+- two tile coordinates per explicit build update and fixed query buffers of
+  `4,096` nodes, `256` corridor polygons, and `64` straight corners;
+- `DT_POLYREF64` with `28` tile bits and `20` polygon bits. This is now part of
+  the dependency ABI and any future persisted navigation-cache format;
+- project-owned deterministic run/literal TileCache compression with a magic,
+  version, uncompressed-size, and checksum header. Corrupt layers fail rather
+  than being accepted or partially decoded.
+
 ### Query result contract
 
 Path requests distinguish at least:
@@ -659,14 +681,14 @@ Tasks:
 4. **Completed 2026-08-14:** confirm the complete dependency target compiles
    cleanly with the project's C++17 build. Keep upstream warnings isolated
    where sensible rather than patching vendor code.
-5. Add focused project-owned navigation types/settings/status/diagnostic files
+5. **Completed 2026-08-14:** add focused project-owned navigation types/settings/status/diagnostic files
    and a `SectorNavigationWorld` lifecycle skeleton with explicit
    uninitialized/empty/ready/stale/failed states.
-6. Add stable NPC navigation/path record handles and capacity/reserve settings.
+6. **Completed 2026-08-14:** add stable NPC navigation/path record handles and capacity/reserve settings.
    Do not place third-party pointers in components or public script types.
-7. Define project area/flag values, query-filter seam, coordinate conversion,
+7. **Completed 2026-08-14:** define project area/flag values, query-filter seam, coordinate conversion,
    navigation revision, and failure/status contracts.
-8. Compose the service in scene/preview lifecycle without building real
+8. **Completed 2026-08-14:** compose the service in scene/preview lifecycle without building real
    geometry yet. Shutdown must release it before dependent runtime state.
 
 Tests:
@@ -693,35 +715,34 @@ build memory are first-version requirements because maps may be large.
 
 Tasks:
 
-1. Implement deterministic `SectorNavigationBuildInput` from derived topology,
+1. **Completed 2026-08-14:** implement deterministic `SectorNavigationBuildInput` from derived topology,
    sector heights/clearance, portal/player-blocking semantics, and resolved
    collision-enabled static prop OBBs.
-2. Reuse or extract a focused CPU floor triangulation helper if appropriate;
+2. **Completed 2026-08-14:** use a focused CPU-only floor triangulation path;
    do not route through generated GPU/render meshes.
-3. Select/document Recast and TileCache defaults for the initial humanoid
+3. **Completed 2026-08-14:** select/document Recast and TileCache defaults for the initial humanoid
    profile. Rasterize with tile borders, build heightfield layers, compress
    them through a project-owned TileCache compressor, and build the tiled
    Detour navmesh in an explicit preview/level build phase.
-4. Prevent accidental connections across one-sided, blocked, vertically
+4. **Completed 2026-08-14:** prevent accidental connections across one-sided, blocked, vertically
    invalid, or coincident non-portal boundaries.
-5. Add bounded nearest-point, path, and straight-corner query helpers with full,
+5. **Completed 2026-08-14:** add bounded nearest-point, path, and straight-corner query helpers with full,
    partial, no-path, and capacity diagnostics.
-6. Calculate tile-grid bounds and Detour tile/polygon-reference capacity before
+6. **Completed 2026-08-14:** calculate tile-grid bounds and Detour tile/polygon-reference capacity before
    allocation. Report world/tile size, tile count, memory, and 32/64-bit limit
    headroom in diagnostics; fail clearly rather than truncating a large map.
-7. Build tiles independently with bounded temporary working memory. The
+7. **Completed 2026-08-14:** build tiles independently with bounded temporary working memory. The
    explicit load/rebuild phase may process a configurable tile budget per
    update so the Nav tab can show progress without doing build work in draw.
-8. Establish static navigation source revision/hash inputs and stale/rebuild
+8. **Completed 2026-08-14:** establish static navigation source revision/hash inputs and stale/rebuild
    lifecycle. Full persistence to disk may remain for Slice 8.
-9. Build the derived navigation debug cache on build/revision/display changes.
-10. Add `PreviewDebugOverlayTab::Navigation`, a **Nav** tab, array-size-derived
+9. **Completed 2026-08-14:** build the derived navigation debug cache during build finalization; display toggles read its cached superset without extraction.
+10. **Completed 2026-08-14:** add `PreviewDebugOverlayTab::Navigation`, a **Nav** tab, array-size-derived
    tab layout, controls, rebuild request, interaction bounds, and all currently
    available build/query diagnostics.
-11. Draw cached walkable surface, polygon edges, tile bounds, static obstacle
+11. **Completed 2026-08-14:** draw cached walkable surface, polygon edges, tile bounds, static obstacle
    bounds, and any available door-link placeholders with raylib debug drawing.
-12. Expose a read-only query probe or selected-position diagnostic if useful,
-    but do not add a separate navigation editor tool.
+12. **Completed by decision 2026-08-14:** no separate query probe/editor tool was added; focused generated-fixture query tests and the Nav diagnostics were sufficient for this slice.
 
 Generated-fixture tests:
 
@@ -1149,3 +1170,57 @@ Append one entry per slice attempt using this shape:
 - Remaining debt/blocker: finish Slice 1 project-owned contracts and lifecycle;
   select and capacity-test the 32-bit versus 64-bit Detour polygon-ref layout in
   Slice 2 before committing any persistent nav data format.
+
+### 2026-08-14 — Slice 1 — Completed
+
+- Scope completed: project-owned navigation settings, state/status contracts,
+  generational agent/path handles, capacity warnings, coordinate conversion,
+  diagnostics, lifecycle skeleton, scene ownership, and teardown ordering.
+- Files/modules added or changed: `sources/game/navigation`,
+  `SectorSceneRuntime`, CMake, focused navigation tests, and this plan.
+- Decisions or contract updates: Detour polygon/tile references are compiled as
+  64-bit through the public vendor target definition before any persistent nav
+  format exists. Engine and navigation axes are identical; authored heights
+  convert once at the navigation boundary.
+- Tests/checks: `cmake --build cmake-build-debug -j2` passed; all 26 CTest tests
+  passed; `git diff --check` passed; diff/stat/status reviewed. The pre-existing
+  Lua `tmpnam` linker warning remains.
+- Collision/sector lookup/physics impact: none; navigation does not build or
+  drive movement yet.
+- Topology cache invalidation impact: none.
+- Lightmap/source-hash impact: none.
+- Manual verification performed by user: none requested; no GUI test was run.
+- Remaining debt/blocker: Slice 2 must build/query the tiled static navmesh and
+  expose its cached 3D preview diagnostics.
+
+### 2026-08-14 — Slice 2 — Completed
+
+- Scope completed: deterministic CPU build input, per-coordinate Recast layer
+  rasterization, checksummed project TileCache compression, TileCache-backed
+  tiled Detour mesh, bounded projection/path/corner queries, source hashing,
+  build/capacity diagnostics, cached debug geometry, incremental queued builds,
+  and the 3D preview Nav tab.
+- Files/modules added or changed: `sources/game/navigation`,
+  `SectorSceneRuntime`, the preview overlay/state/layout modules, CMake, focused
+  navigation/editor-layout tests, and this plan.
+- Decisions or contract updates: 64-bit Detour refs remain the dependency ABI;
+  door portals are deliberately cut and visualized as blocked placeholders
+  until typed links arrive; unresolved/failed static colliders are omitted with
+  diagnostics after asset requests reach a terminal state; no query-probe tool
+  was needed for this slice.
+- Tests/checks: `cmake --build cmake-build-debug -j2` passed; all 26 CTest tests
+  passed; `git diff --check` passed; diff/stat/status reviewed. The pre-existing
+  Lua `tmpnam` linker warning remains.
+- Collision/sector lookup/physics impact: none. Navigation reads topology and
+  resolved static collision OBBs but does not modify player collision, sector
+  lookup, locomotion, or physics.
+- Topology cache invalidation impact: none. No topology mutation path changed;
+  Nav display toggles and rebuild requests affect navigation/editor-only state.
+- Lightmap/source-hash impact: the lightmap source hash is unchanged.
+  Navigation has a separate deterministic source hash; it includes topology
+  geometry/physical flags/heights/`ceilingSky`, build settings, collision-enabled
+  static OBB/fingerprint data, and door cuts, while excluding visual preview,
+  sky-visual, lighting, fog, audio, NPC, and dynamic-prop data.
+- Manual verification performed by user: none requested; no GUI test was run.
+- Remaining debt/blocker: Slice 3 adds NPC records and locomotion; dynamic
+  obstacles, door links, Crowd, and persistence remain assigned to later slices.

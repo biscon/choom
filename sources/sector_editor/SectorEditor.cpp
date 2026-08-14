@@ -3443,6 +3443,10 @@ void SectorEditor::RenderPreview3DOverlays()
         DrawPreviewSurfaceHighlights();
         DrawPreviewSpotLightOverlay();
         DrawPreviewObjectProbeOverlay();
+        DrawSectorEditorPreviewNavigationOverlay(
+                previewState.overlay,
+                sceneRuntime.Navigation(),
+                sceneRuntime.Renderer());
     }
 }
 
@@ -3567,6 +3571,7 @@ void SectorEditor::DrawPreviewOverlay(
             runtimeObjectEditingState.drag,
             previewState,
             sceneRuntime.RuntimeObjects(),
+            sceneRuntime.Navigation(),
             fpsPlayer.State(),
             selectionState,
             manipulationState,
@@ -3592,6 +3597,10 @@ void SectorEditor::DrawPreviewOverlay(
     }
     if (result.openPreviewSettings) {
         OpenPreviewSettingsModal();
+    }
+    if (result.requestNavigationRebuild) {
+        sceneRuntime.Navigation().RequestRebuild();
+        statusText = "Navigation rebuild queued";
     }
     if (result.markTopologyDocumentEdited) {
         MarkTopologyDocumentEdited(result.topologyDocumentEditStatus);

@@ -16,6 +16,7 @@ bool SectorSceneRuntime::Rebuild(
         const std::string& defaultFootstepSet,
         std::string& error)
 {
+    navigation.Shutdown();
     StopLevelAudio(context);
     if (!renderer.RebuildRendererResources(
                 context.assets,
@@ -29,6 +30,11 @@ bool SectorSceneRuntime::Rebuild(
             context.assets,
             runtimeObjects,
             map);
+    if (!navigation.Initialize()) {
+        TraceLog(LOG_WARNING, "Navigation service initialization failed");
+    } else {
+        navigation.RequestRebuild();
+    }
     BeginLevelAudio(context, map, assetScopeName, defaultFootstepSet);
     BindRuntimeObjectAudio(context.world);
     return true;
@@ -36,6 +42,7 @@ bool SectorSceneRuntime::Rebuild(
 
 void SectorSceneRuntime::Shutdown(engine::EngineContext& context)
 {
+    navigation.Shutdown();
     StopLevelAudio(context);
     ClearSectorRuntimeObjects(context.world, context.assets, runtimeObjects);
     renderer.ShutdownRendererResources(context.assets);
@@ -45,11 +52,13 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
         engine::EngineContext& context,
         const SectorTopologyMap& map)
 {
+    navigation.ResetForRebuild();
     ResetSectorRuntimeObjectsForMap(
             context.world,
             context.assets,
             runtimeObjects,
             map);
+    navigation.RequestRebuild();
     BindRuntimeObjectAudio(context.world);
 }
 
@@ -74,6 +83,10 @@ void SectorSceneRuntime::Update(
             context.assets,
             context.audio);
     renderer.FinalizeRuntimeObjectResources(context.assets, context.world);
+    navigation.UpdateBuild(
+            map,
+            runtimeObjects.staticModelColliders,
+            runtimeObjects.staticModelPendingCount);
     if (runtimeObjects.doorSpatialStateChanged
             || !runtimeObjects.doorCollisionCacheInitialized) {
         runtimeObjects.dynamicDoorColliders.clear();
