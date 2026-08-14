@@ -1,5 +1,6 @@
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "engine/systems/AnimatedModelSystem.h"
+#include "game/npc/NpcRuntime.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorMath.h"
@@ -4163,6 +4164,100 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
           "non-looping editor dynamic prop is configured frozen on its first frame");
 }
 
+void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 31;
+    object.kind = "npc";
+    object.position = Vector3{2.0f, 8.0f, 2.0f};
+    object.yawRadians = 0.5f;
+    object.npc.definitionId = "runtime_test_npc";
+    object.npc.instanceId = "guard_one";
+    object.npc.scale = 1.4f;
+    object.npc.shadowMode =
+            game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+    map.runtimeObjects.push_back(object);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::NpcDefinition definition = game::MakeDefaultNpcDefinition();
+    definition.id = "runtime_test_npc";
+    definition.name = "Runtime Test";
+    definition.hostile = true;
+    definition.modelPath = "assets/models/characters/Zombie1.glb";
+    game::GetNpcAction(definition, game::NpcAction::Idle).animation = "Idle";
+    game::GetNpcAction(definition, game::NpcAction::Idle).animationSpeed = 1.25f;
+    game::GetNpcAction(definition, game::NpcAction::Walk).movementSpeed = 2.0f;
+    game::GetNpcAction(definition, game::NpcAction::Run).movementSpeed = 4.5f;
+    state.npcDefinitionCatalog = game::NpcDefinitionCatalog{};
+    state.npcDefinitionCatalog.definitions.push_back(definition);
+
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    Check(state.placedObjectEntities.size() == 1,
+          "resolved NPC placement spawns one runtime entity");
+    if (state.placedObjectEntities.empty()) return;
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Has<game::NpcRuntimeInstance>(entity)
+                  && world.Has<game::SectorDynamicModel>(entity)
+                  && world.Has<engine::AnimatedModelInstance>(entity)
+                  && world.Has<engine::AnimatedModelAnimator>(entity),
+          "NPC runtime reuses animated dynamic-model rendering components");
+    const game::NpcRuntimeInstance& npc =
+            world.Get<game::NpcRuntimeInstance>(entity);
+    const game::SectorDynamicModel& dynamic =
+            world.Get<game::SectorDynamicModel>(entity);
+    const engine::AnimatedModelAnimator& animator =
+            world.Get<engine::AnimatedModelAnimator>(entity);
+    const game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(entity);
+    Check(npc.definitionId == "runtime_test_npc"
+                  && npc.instanceId == "guard_one"
+                  && npc.action == game::NpcAction::Idle
+                  && npc.hostile
+                  && Near(npc.walkSpeed, 2.0f)
+                  && Near(npc.runSpeed, 4.5f),
+          "NPC runtime component copies resolved identity and gameplay definition fields");
+    Check(dynamic.requestedAnimation == "Idle"
+                  && Near(dynamic.scale, 1.4f)
+                  && dynamic.shadowMode
+                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette
+                  && animator.loop
+                  && animator.playing
+                  && Near(animator.speed, 1.25f)
+                  && Near(transform.position, Vector3{0.25f, 1.0f, 0.25f})
+                  && Near(transform.yawRadians, 0.5f)
+                  && Near(transform.rotationXRadians, 0.0f)
+                  && Near(transform.rotationZRadians, 0.0f),
+          "NPC runtime loops semantic Idle with floor transform, scale, and shadow settings");
+}
+
+void TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 32;
+    object.kind = "npc";
+    object.position = Vector3{2.0f, 0.0f, 2.0f};
+    object.npc.definitionId = "definitely_missing_test_npc";
+    map.runtimeObjects.push_back(object);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    state.npcDefinitionCatalog = game::NpcDefinitionCatalog{};
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    Check(state.placedObjectEntities.empty()
+                  && state.spawnedObjectCount == 0
+                  && state.skippedObjectCount == 1
+                  && state.placedObjectWarning.find("was not found")
+                          != std::string::npos,
+          "missing NPC definition skips only the runtime entity and reports a diagnostic");
+}
+
 void TestAnimatedModelSelectionAndBlendApi()
 {
     ModelAnimation animations[3] = {};
@@ -5920,6 +6015,8 @@ int main()
     TestSectorModelEnvironmentExposureFollowsSectorLighting();
     TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity();
     TestSpawnDynamicModelCopiesPlaybackAndLightingPayload();
+    TestSpawnNpcResolvesDefinitionAndIdlePlayback();
+    TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip();
     TestAnimatedModelSelectionAndBlendApi();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
     TestStaticModelSpotlightShadowCasterCollectionAndRevision();

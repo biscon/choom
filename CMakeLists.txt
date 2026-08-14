@@ -19,6 +19,27 @@ file(GLOB_RECURSE PROJECT_SOURCES
 # glob so it can also be linked by focused scripting tests.
 list(FILTER PROJECT_SOURCES EXCLUDE REGEX "/sources/lua/.*\\.c$")
 
+# Recast Navigation is a vendored source dependency. Keep all of its modules
+# behind one explicit target so the main source glob cannot compile them a
+# second time and focused navigation tests can link the same implementation.
+list(FILTER PROJECT_SOURCES EXCLUDE REGEX
+        "/sources/(recast|detour|detour_tile_cache|detour_crowd)/.*"
+)
+
+file(GLOB RECASTNAVIGATION_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/recast/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/detour/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/detour_tile_cache/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/detour_crowd/*.cpp"
+)
+add_library(recastnavigation STATIC ${RECASTNAVIGATION_SOURCES})
+target_include_directories(recastnavigation PUBLIC
+        sources/recast
+        sources/detour
+        sources/detour_tile_cache
+        sources/detour_crowd
+)
+
 file(GLOB LUA55_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/sources/lua/*.c"
 )
@@ -30,7 +51,7 @@ target_include_directories(lua55 PUBLIC sources/lua)
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE sources)
-target_link_libraries(${PROJECT_NAME} PRIVATE raylib lua55)
+target_link_libraries(${PROJECT_NAME} PRIVATE raylib lua55 recastnavigation)
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE X11 Xcursor)
@@ -282,6 +303,8 @@ if(BUILD_TESTING)
 
     add_executable(sector_authoring_graph_tests
             tests/SectorAuthoringGraphTests.cpp
+            sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/NpcRuntime.cpp
             sources/sector_editor/SectorEditorAuthoringState.cpp
             sources/sector_editor/SectorEditorDirtyState.cpp
             sources/sector_editor/document/SectorEditorDocumentActions.cpp
@@ -298,6 +321,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
             sources/sector_editor/services/runtime_objects/SectorEditorAuthoringDoorReconciliation.cpp
             sources/sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.cpp
+            sources/sector_editor/npcs/SectorEditorNpcPlacementState.cpp
             sources/sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.cpp
             sources/sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.cpp
             sources/sector_editor/services/texture_picker/SectorEditorTexturePickerService.cpp
@@ -339,6 +363,8 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_serialization_tests
             tests/SectorTopologySerializationTests.cpp
+            sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/NpcRuntime.cpp
             sources/game/SectorLevelLoader.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -484,6 +510,8 @@ if(BUILD_TESTING)
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
             tests/SectorScriptBindingTests.cpp
+            sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/NpcRuntime.cpp
             sources/engine/scripting/ScriptSystem.cpp
             sources/engine/scripting/ScriptPersistence.cpp
             sources/game/SectorScriptBindings.cpp

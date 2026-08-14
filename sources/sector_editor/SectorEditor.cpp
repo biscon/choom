@@ -1537,6 +1537,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
+                if (state.currentTool == SectorEditorTool::Npc) {
+                    AddNpcAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (state.currentTool == SectorEditorTool::Door) {
                     AddDoorAtPortal(event.mouseClick.releasePosition);
                     engine::ConsumeEvent(event);
@@ -3054,6 +3060,22 @@ void SectorEditor::AddDynamicModelAt(Vector2 mapPoint)
     editing.AddDynamicModel(mapPoint);
 }
 
+void SectorEditor::AddNpcAt(Vector2 mapPoint)
+{
+    EnsureTopologyRenderCache();
+    SectorRuntimeObjectState& runtimeObjects = sceneRuntime.RuntimeObjects();
+    RefreshSectorEditorNpcPlacementOptions(
+            runtimeObjectEditingState.npcPlacement,
+            runtimeObjects.npcDefinitionCatalog,
+            runtimeObjects.npcDefinitionCatalogRevision);
+    const std::string definitionId = ResolveSectorEditorNpcPlacementDefault(
+            runtimeObjectEditingState.npcPlacement);
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.AddNpc(mapPoint, definitionId);
+}
+
 void SectorEditor::AddDoorAtPortal(Vector2 screenPoint)
 {
     const Vector2 mapPoint = ScreenToMap(screenPoint);
@@ -4304,7 +4326,7 @@ void SectorEditor::DrawToolsPanel(
     };
     const float toolsContentH =
             sectionLabelH + rowsHeight(5)
-            + separatorH + sectionLabelH + rowsHeight(12)
+            + separatorH + sectionLabelH + rowsHeight(13)
             + separatorH + rowsHeight(6)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
@@ -4447,6 +4469,15 @@ void SectorEditor::DrawToolsPanel(
             statusText = "3D Prop: click inside a derived sector to place a static model";
         } else if (tool == SectorEditorTool::DynamicModel) {
             statusText = "Dynamic Prop: click inside a derived sector to place an animated model";
+        } else if (tool == SectorEditorTool::Npc) {
+            SectorRuntimeObjectState& runtimeObjects = sceneRuntime.RuntimeObjects();
+            RefreshSectorEditorNpcPlacementOptions(
+                    runtimeObjectEditingState.npcPlacement,
+                    runtimeObjects.npcDefinitionCatalog,
+                    runtimeObjects.npcDefinitionCatalogRevision);
+            statusText = runtimeObjectEditingState.npcPlacement.definitionIds.empty()
+                    ? "NPC: create an NPC definition in the NPC Editor first"
+                    : "NPC: click inside a derived sector to place a character";
         } else if (tool == SectorEditorTool::Door) {
             statusText = "Door: click a two-sided portal line";
         } else if (tool == SectorEditorTool::AuthoringFogVolume) {
@@ -4494,6 +4525,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::RuntimeObject,
             SectorEditorTool::StaticModel,
             SectorEditorTool::DynamicModel,
+            SectorEditorTool::Npc,
             SectorEditorTool::Door,
             SectorEditorTool::Trigger,
             SectorEditorTool::LevelMarker,
@@ -5148,7 +5180,8 @@ void SectorEditor::DrawNpcEditorModal(
     SectorEditorStaticModelPickerService modelPicker{
             runtimeObjectEditingState.staticModelPicker,
             statusText};
-    game::DrawSectorEditorNpcEditorModal(
+    const SectorEditorNpcEditorModalResult result =
+            game::DrawSectorEditorNpcEditorModal(
             ui,
             config,
             input,
@@ -5157,6 +5190,10 @@ void SectorEditor::DrawNpcEditorModal(
             smallFont,
             editor,
             modelPicker);
+    if (result == SectorEditorNpcEditorModalResult::Saved
+            && engineContext != nullptr) {
+        sceneRuntime.RefreshMapRuntimeObjects(*engineContext, TopologyMap());
+    }
 }
 
 void SectorEditor::DrawSaveLevelModal(

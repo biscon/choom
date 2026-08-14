@@ -1,5 +1,7 @@
 #include "sector_demo/SectorTopologySerialization.h"
 
+#include "game/npc/NpcDefinitions.h"
+#include "game/npc/NpcRuntime.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorTriggers.h"
@@ -29,6 +31,7 @@ constexpr float Pi = 3.14159265358979323846f;
 constexpr const char* RuntimeObjectKindBillboard = "billboard";
 constexpr const char* RuntimeObjectKindStaticModel = "static_model";
 constexpr const char* RuntimeObjectKindDynamicModel = "dynamic_model";
+constexpr const char* RuntimeObjectKindNpc = "npc";
 constexpr const char* RuntimeObjectKindDoor = "door";
 
 [[noreturn]] void Fail(const std::string& message);
@@ -973,6 +976,29 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
     return model;
 }
 
+SectorPlacedNpc ReadPlacedNpc(const Json& value, const std::string& context)
+{
+    if (!value.is_object()) {
+        Fail(context + " must be an object");
+    }
+    SectorPlacedNpc npc;
+    npc.definitionId = ReadString(value, "definitionId", context);
+    npc.instanceId = ReadOptionalString(value, "instanceId", context, npc.instanceId);
+    npc.scale = ReadOptionalPositiveFloat(value, "scale", context, npc.scale);
+    const std::string shadowMode = ReadOptionalString(
+            value, "shadowMode", context, "contact");
+    if (shadowMode == "none") {
+        npc.shadowMode = SectorDynamicModelShadowMode::None;
+    } else if (shadowMode == "contact") {
+        npc.shadowMode = SectorDynamicModelShadowMode::Contact;
+    } else if (shadowMode == "projected_silhouette") {
+        npc.shadowMode = SectorDynamicModelShadowMode::ProjectedSilhouette;
+    } else {
+        Fail(context + ".shadowMode must be 'none', 'contact', or 'projected_silhouette'");
+    }
+    return npc;
+}
+
 SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -997,17 +1023,21 @@ SectorPlacedRuntimeObject ReadRuntimeObject(const Json& value, const std::string
             object.dynamicModel = ReadPlacedDynamicModel(
                     RequireObjectField(value, "dynamicModel", context),
                     context + ".dynamicModel");
+        } else if (object.kind == RuntimeObjectKindNpc) {
+            object.npc = ReadPlacedNpc(
+                    RequireObjectField(value, "npc", context),
+                    context + ".npc");
         } else if (object.kind == RuntimeObjectKindDoor) {
             object.door = ReadPlacedDoor(RequireObjectField(value, "door", context),
                     context + ".door");
         } else {
-            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
+            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'npc', or 'door'");
         }
     } else {
         if (value.contains("definitionId")) {
             Fail(context + ".definitionId-only runtime objects are legacy unsupported data; use kind 'billboard'");
         }
-        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
+        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'npc', or 'door'");
     }
     object.position = ReadVector3(RequireField(value, "position", context), context + ".position");
     object.yawRadians = DegreesToRadians(ReadFloat(value, "yawDegrees", context));
@@ -1961,7 +1991,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             {"id", object.id}
     };
     if (object.kind.empty()) {
-        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
+        Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'npc', or 'door'");
     } else {
         if (object.kind == RuntimeObjectKindBillboard) {
             json["kind"] = object.kind;
@@ -2044,11 +2074,39 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             }
             json["kind"] = object.kind;
             json["dynamicModel"] = std::move(dynamicModel);
+        } else if (object.kind == RuntimeObjectKindNpc) {
+            if (!IsValidNpcDefinitionId(object.npc.definitionId)) {
+                Fail(context + ".npc.definitionId is invalid");
+            }
+            if (!object.npc.instanceId.empty()
+                    && !IsValidNpcInstanceId(object.npc.instanceId)) {
+                Fail(context + ".npc.instanceId is invalid");
+            }
+            if (!std::isfinite(object.npc.scale) || object.npc.scale <= 0.0f) {
+                Fail(context + ".npc.scale must be a finite positive value");
+            }
+            if (object.npc.shadowMode != SectorDynamicModelShadowMode::None
+                    && object.npc.shadowMode != SectorDynamicModelShadowMode::Contact
+                    && object.npc.shadowMode
+                            != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                Fail(context + ".npc.shadowMode is invalid");
+            }
+            Json npc{{"definitionId", object.npc.definitionId}};
+            if (!object.npc.instanceId.empty()) npc["instanceId"] = object.npc.instanceId;
+            if (object.npc.scale != 1.0f) npc["scale"] = object.npc.scale;
+            if (object.npc.shadowMode == SectorDynamicModelShadowMode::None) {
+                npc["shadowMode"] = "none";
+            } else if (object.npc.shadowMode
+                    == SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                npc["shadowMode"] = "projected_silhouette";
+            }
+            json["kind"] = object.kind;
+            json["npc"] = std::move(npc);
         } else if (object.kind == RuntimeObjectKindDoor) {
             json["kind"] = object.kind;
             json["door"] = WritePlacedDoor(object.door);
         } else {
-            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
+            Fail(context + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'npc', or 'door'");
         }
     }
     json["position"] = WriteVector3(object.position, context + ".position");
@@ -2648,13 +2706,14 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
 {
     std::vector<int> objectIds;
     objectIds.reserve(map.runtimeObjects.size());
+    std::set<std::string> npcInstanceIds;
     for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
         const std::string objectContext = context + ".runtimeObjects[" + std::to_string(object.id) + "]";
         if (!IsValidSectorTopologyId(object.id)) {
             Fail(objectContext + ".id must be a positive integer");
         }
         if (object.kind.empty()) {
-            Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
+            Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'npc', or 'door'");
         } else {
             if (object.kind == RuntimeObjectKindBillboard) {
                 ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
@@ -2690,10 +2749,31 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                         && model.shadowMode != SectorDynamicModelShadowMode::ProjectedSilhouette) {
                     Fail(objectContext + ".dynamicModel.shadowMode is invalid");
                 }
+            } else if (object.kind == RuntimeObjectKindNpc) {
+                if (!IsValidNpcDefinitionId(object.npc.definitionId)) {
+                    Fail(objectContext + ".npc.definitionId is invalid");
+                }
+                if (!object.npc.instanceId.empty()) {
+                    if (!IsValidNpcInstanceId(object.npc.instanceId)) {
+                        Fail(objectContext + ".npc.instanceId is invalid");
+                    }
+                    if (!npcInstanceIds.insert(object.npc.instanceId).second) {
+                        Fail(objectContext + ".npc.instanceId duplicates another NPC instance ID");
+                    }
+                }
+                if (!std::isfinite(object.npc.scale) || object.npc.scale <= 0.0f) {
+                    Fail(objectContext + ".npc.scale must be a finite positive value");
+                }
+                if (object.npc.shadowMode != SectorDynamicModelShadowMode::None
+                        && object.npc.shadowMode != SectorDynamicModelShadowMode::Contact
+                        && object.npc.shadowMode
+                                != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                    Fail(objectContext + ".npc.shadowMode is invalid");
+                }
             } else if (object.kind == RuntimeObjectKindDoor) {
                 ValidatePlacedDoorForSerialization(object.door, objectContext + ".door");
             } else {
-                Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', or 'door'");
+                Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'npc', or 'door'");
             }
         }
         if (!std::isfinite(object.position.x)

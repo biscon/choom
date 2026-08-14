@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/components/AnimatedModel.h"
 #include "engine/ecs/World.h"
+#include "game/npc/NpcDefinitions.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -94,6 +95,7 @@ struct SectorRuntimeObjectState {
     std::vector<SectorPlacedRuntimeObjectEntity> placedObjectEntities;
     std::vector<SectorDoorAnchorDiagnostic> doorAnchorDiagnostics;
     SectorSwingDoorCatalog swingDoorCatalog;
+    NpcDefinitionCatalog npcDefinitionCatalog;
     std::vector<SectorDoorFallbackDiagnostic> doorFallbackDiagnostics;
     std::vector<SectorDynamicDoorCollider> dynamicDoorColliders;
     std::vector<SectorStaticModelCollider> staticModelColliders;
@@ -127,6 +129,9 @@ struct SectorRuntimeObjectState {
     uint64_t swingDoorCatalogRevision = 0;
     std::string swingDoorCatalogStatus;
     std::string swingDoorCatalogWarning;
+    uint64_t npcDefinitionCatalogRevision = 0;
+    std::string npcDefinitionCatalogStatus;
+    std::string npcDefinitionCatalogWarning;
     SectorBakedObjectLightProbeRuntimeData objectLightProbes;
     std::string objectProbeStatus;
     SectorCollisionWorld objectSectorLookupWorld;
@@ -156,6 +161,7 @@ void RefreshSectorRuntimeObjectMapData(
         const SectorTopologyMap& map);
 
 void ReloadSectorSwingDoorCatalog(SectorRuntimeObjectState& state);
+void ReloadSectorNpcDefinitionCatalog(SectorRuntimeObjectState& state);
 
 void ResetSectorRuntimeObjectsForMap(
         engine::World& world,

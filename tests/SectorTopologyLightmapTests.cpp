@@ -1322,6 +1322,29 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
           "hash excludes dynamic prop transform, playback, and runtime shadow changes");
 
+    game::SectorTopologyMap npcMap = base;
+    game::SectorPlacedRuntimeObject npc;
+    npc.id = 78;
+    npc.kind = "npc";
+    npc.position = Vector3{32.0f, 0.0f, 32.0f};
+    npc.yawRadians = 1.25f;
+    npc.npc.definitionId = "fred";
+    npc.npc.instanceId = "front_desk";
+    npc.npc.scale = 1.5f;
+    npc.npc.shadowMode = game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+    npcMap.runtimeObjects.push_back(npc);
+    Check(game::ComputeSectorLightmapSourceHash(npcMap) == hash,
+          "hash excludes NPCs because they are neither baked receivers nor occluders");
+    npcMap.runtimeObjects[0].position.x += 16.0f;
+    npcMap.runtimeObjects[0].yawRadians += 0.5f;
+    npcMap.runtimeObjects[0].npc.definitionId = "zombie";
+    npcMap.runtimeObjects[0].npc.instanceId = "guard";
+    npcMap.runtimeObjects[0].npc.scale = 0.75f;
+    npcMap.runtimeObjects[0].npc.shadowMode =
+            game::SectorDynamicModelShadowMode::None;
+    Check(game::ComputeSectorLightmapSourceHash(npcMap) == hash,
+          "hash excludes NPC definition, identity, transform, scale, and runtime shadow changes");
+
     game::SectorTopologyMap markerMap = base;
     markerMap.levelMarkers.push_back(game::SectorCompiledLevelMarker{
             1, "default", Vector3{24.0f, 0.0f, 24.0f}, 1.5f});

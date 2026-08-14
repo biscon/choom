@@ -1,5 +1,6 @@
 #include "sector_demo/SectorRuntimeObjects.h"
 
+#include "game/npc/NpcRuntime.h"
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshTypes.h"
@@ -10,6 +11,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <utility>
 #include <vector>
@@ -42,12 +44,13 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(21);
+    world.ReserveComponentTypes(22);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
     world.ReserveComponent<SectorStaticModel>(objectCapacity);
     world.ReserveComponent<SectorDynamicModel>(objectCapacity);
+    world.ReserveComponent<NpcRuntimeInstance>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelInstance>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelAnimator>(objectCapacity);
     world.ReserveComponent<SectorStaticModelCollider>(objectCapacity);
@@ -363,6 +366,32 @@ void ReloadSwingDoorCatalogData(SectorRuntimeObjectState& state)
             state.swingDoorCatalog.assets.size());
 }
 
+void ReloadNpcDefinitionCatalogData(SectorRuntimeObjectState& state)
+{
+    ++state.npcDefinitionCatalogRevision;
+    state.npcDefinitionCatalog = NpcDefinitionCatalog{};
+    state.npcDefinitionCatalogStatus.clear();
+    state.npcDefinitionCatalogWarning.clear();
+
+    const std::filesystem::path root = ResolveSectorAssetPath(
+            kNpcDefinitionsAssetRoot);
+    const bool valid = DiscoverNpcDefinitions(root, state.npcDefinitionCatalog);
+    state.npcDefinitionCatalogStatus = TextFormat(
+            "NPC definitions: %zu loaded",
+            state.npcDefinitionCatalog.definitions.size());
+    if (!valid && !state.npcDefinitionCatalog.errors.empty()) {
+        const NpcDefinitionCatalogError& error =
+                state.npcDefinitionCatalog.errors.front();
+        state.npcDefinitionCatalogWarning =
+                "Runtime object warnings: NPC catalog: "
+                + error.path + ": " + error.message;
+        std::fprintf(
+                stderr,
+                "[SectorRuntimeObjects WARNING] %s\n",
+                state.npcDefinitionCatalogWarning.c_str());
+    }
+}
+
 void RefreshDoorFallbackDiagnostics(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map)
@@ -641,9 +670,12 @@ void ClearSectorRuntimeObjects(
 
     const bool keepReservation = state.worldReserved;
     const uint64_t keepSwingDoorCatalogRevision = state.swingDoorCatalogRevision;
+    const uint64_t keepNpcDefinitionCatalogRevision =
+            state.npcDefinitionCatalogRevision;
     state = SectorRuntimeObjectState{};
     state.worldReserved = keepReservation;
     state.swingDoorCatalogRevision = keepSwingDoorCatalogRevision;
+    state.npcDefinitionCatalogRevision = keepNpcDefinitionCatalogRevision;
 }
 
 void ReloadSectorSwingDoorCatalog(SectorRuntimeObjectState& state)
@@ -651,11 +683,17 @@ void ReloadSectorSwingDoorCatalog(SectorRuntimeObjectState& state)
     ReloadSwingDoorCatalogData(state);
 }
 
+void ReloadSectorNpcDefinitionCatalog(SectorRuntimeObjectState& state)
+{
+    ReloadNpcDefinitionCatalogData(state);
+}
+
 void RefreshSectorRuntimeObjectMapData(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map)
 {
     ReloadSwingDoorCatalogData(state);
+    ReloadNpcDefinitionCatalogData(state);
     RefreshDoorAnchorDiagnostics(state, map);
     RefreshDoorFallbackDiagnostics(state, map);
 
@@ -1011,6 +1049,104 @@ void SpawnPlacedRuntimeObjects(
                 world.Add(entity, SectorStaticModelCollider{
                         placedObject.id});
             }
+            state.placedObjectEntities.push_back(
+                    SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
+            ++spawnedCount;
+            continue;
+        }
+
+        if (placedObject.kind == "npc") {
+            const NpcDefinition* definition = FindNpcDefinition(
+                    state.npcDefinitionCatalog,
+                    placedObject.npc.definitionId);
+            if (definition == nullptr) {
+                const std::string warning = TextFormat(
+                        "NPC definition '%s' was not found for placed object %d",
+                        placedObject.npc.definitionId.c_str(),
+                        placedObject.id);
+                std::fprintf(stderr, "[SectorRuntimeObjects WARNING] %s\n", warning.c_str());
+                recordWarning(warning);
+                ++skippedCount;
+                continue;
+            }
+
+            engine::ModelHandle model = engine::NullModelHandle();
+            if (!EnsureSectorRuntimeObjectAssetScope(assets, state)) {
+                recordWarning(TextFormat(
+                        "asset scope unavailable for NPC object %d",
+                        placedObject.id));
+                ++skippedCount;
+                continue;
+            }
+            const std::string modelPath = ResolveSectorAssetPath(
+                    definition->modelPath);
+            model = assets.RequestModel(
+                    state.runtimeObjectAssetScope,
+                    definition->modelPath.c_str(),
+                    modelPath.c_str(),
+                    engine::ModelLoad_Animations);
+            if (engine::IsNull(model)) {
+                const std::string warning = TextFormat(
+                        "could not request NPC model '%s' for placed object %d",
+                        definition->modelPath.c_str(),
+                        placedObject.id);
+                std::fprintf(stderr, "[SectorRuntimeObjects WARNING] %s\n", warning.c_str());
+                recordWarning(warning);
+            }
+
+            const NpcActionDefinition& idle = GetNpcAction(
+                    *definition,
+                    NpcAction::Idle);
+            Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
+                    placedObject.position);
+            SectorObject object;
+            if (state.objectSectorLookupWorldValid) {
+                const int foundSectorId =
+                        state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                                Vector2{worldPosition.x, worldPosition.z}, -1);
+                object.currentSectorId = foundSectorId != 0 ? foundSectorId : -1;
+            }
+            const Vector3 sectorAmbient = StaticModelSectorAmbient(
+                    map,
+                    object.currentSectorId);
+
+            const engine::Entity entity = world.CreateEntity();
+            world.Add(entity, SectorObjectTransform{
+                    worldPosition,
+                    placedObject.yawRadians,
+                    0.0f,
+                    0.0f});
+            world.Add(entity, object);
+            world.Add(entity, SampleSectorObjectLighting(
+                    state.objectLightProbes,
+                    worldPosition,
+                    object.currentSectorId,
+                    &map));
+            world.Add(entity, NpcRuntimeInstance{
+                    definition->id,
+                    placedObject.npc.instanceId,
+                    NpcAction::Idle,
+                    definition->hostile,
+                    GetNpcAction(*definition, NpcAction::Walk).movementSpeed,
+                    GetNpcAction(*definition, NpcAction::Run).movementSpeed});
+            world.Add(entity, SectorDynamicModel{
+                    placedObject.id,
+                    sectorAmbient,
+                    placedObject.npc.scale,
+                    StaticModelEnvironmentExposure(
+                            map,
+                            object.currentSectorId,
+                            sectorAmbient),
+                    idle.animation,
+                    false,
+                    false,
+                    placedObject.npc.shadowMode});
+            world.Add(entity, engine::AnimatedModelInstance{model});
+            engine::AnimatedModelAnimator animator;
+            animator.speed = idle.animationSpeed;
+            animator.loop = true;
+            animator.playing = true;
+            world.Add(entity, animator);
             state.placedObjectEntities.push_back(
                     SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
             ++spawnedCount;

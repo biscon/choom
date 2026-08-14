@@ -71,7 +71,13 @@ inline SectorEditorNpcEditorModalLayout BuildSectorEditorNpcEditorModalLayoutFor
 
 SectorEditorNpcEditorModalLayout BuildSectorEditorNpcEditorModalLayout();
 
-void DrawSectorEditorNpcEditorModal(
+enum class SectorEditorNpcEditorModalResult {
+    None,
+    Saved,
+    Cancelled
+};
+
+SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
         engine::Input& input,

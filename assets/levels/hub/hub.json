@@ -658,6 +658,20 @@
         96.5
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 34,
+      "kind": "npc",
+      "npc": {
+        "definitionId": "Zombie1",
+        "instanceId": "zombie01"
+      },
+      "position": [
+        4.0,
+        0.0,
+        46.0
+      ],
+      "yawDegrees": 180.0
     }
   ],
   "staticLights": [

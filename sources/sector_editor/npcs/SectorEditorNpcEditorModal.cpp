@@ -114,7 +114,7 @@ SectorEditorNpcEditorModalLayout BuildSectorEditorNpcEditorModalLayout()
             EditorHeight);
 }
 
-void DrawSectorEditorNpcEditorModal(
+SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
         engine::Input& input,
@@ -125,7 +125,7 @@ void DrawSectorEditorNpcEditorModal(
         SectorEditorStaticModelPickerService& modelPicker)
 {
     SectorEditorNpcEditorState& state = editor.State();
-    if (!state.open) return;
+    if (!state.open) return SectorEditorNpcEditorModalResult::None;
     const SectorEditorNpcEditorModalLayout layout =
             BuildSectorEditorNpcEditorModalLayout();
     DrawModalFrame(config, assets, font, layout);
@@ -139,7 +139,7 @@ void DrawSectorEditorNpcEditorModal(
             editor.SetSelectedModelPath(modelPicker.SelectedModelPath(), assets);
             modelPicker.State().open = false;
         }
-        return;
+        return SectorEditorNpcEditorModalResult::None;
     }
 
     bool cancelRequested = false;
@@ -159,13 +159,13 @@ void DrawSectorEditorNpcEditorModal(
     if (cancelRequested) {
         editor.Cancel(&assets);
         ConsumeRemainingInput(input);
-        return;
+        return SectorEditorNpcEditorModalResult::Cancelled;
     }
 
     if (state.deleteConfirmationOpen) {
         DrawDeleteConfirmation(ui, config, input, assets, font, editor, layout);
         ConsumeRemainingInput(input);
-        return;
+        return SectorEditorNpcEditorModalResult::None;
     }
 
     const float listContentW = ScrollContentWidth(layout.listBounds.width, config);
@@ -495,7 +495,7 @@ void DrawSectorEditorNpcEditorModal(
                 font, "Save")) {
         if (editor.SaveAndClose(&assets)) {
             ConsumeRemainingInput(input);
-            return;
+            return SectorEditorNpcEditorModalResult::Saved;
         }
     }
     if (engine::Button(
@@ -505,9 +505,10 @@ void DrawSectorEditorNpcEditorModal(
                 font, "Cancel")) {
         editor.Cancel(&assets);
         ConsumeRemainingInput(input);
-        return;
+        return SectorEditorNpcEditorModalResult::Cancelled;
     }
     ConsumeRemainingInput(input);
+    return SectorEditorNpcEditorModalResult::None;
 }
 
 } // namespace game

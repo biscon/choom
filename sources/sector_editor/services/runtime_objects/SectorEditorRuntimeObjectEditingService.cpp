@@ -1,6 +1,7 @@
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 
 #include "engine/EngineContext.h"
+#include "game/npc/NpcRuntime.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
@@ -165,6 +166,50 @@ bool SectorEditorRuntimeObjectEditingService::AddDynamicModel(Vector2 mapPoint)
     return true;
 }
 
+bool SectorEditorRuntimeObjectEditingService::AddNpc(
+        Vector2 mapPoint,
+        const std::string& definitionId)
+{
+    if (!context_.authoringDerivationCurrent || !context_.topologyRenderCache.valid) {
+        context_.statusText =
+                "NPC placement failed: derived sector cache is unavailable";
+        return false;
+    }
+    if (FindNpcDefinition(context_.runtimeObjects.npcDefinitionCatalog, definitionId)
+            == nullptr) {
+        context_.statusText = definitionId.empty()
+                ? "NPC placement failed: create an NPC definition first"
+                : "NPC placement failed: selected definition is unavailable";
+        return false;
+    }
+    const int sectorId = FindCachedSectorAt(mapPoint);
+    const SectorTopologySector* sector = FindSectorTopologySector(
+            context_.map,
+            sectorId);
+    if (sector == nullptr) {
+        context_.statusText =
+                "NPC placement failed: click inside a derived sector";
+        return false;
+    }
+    const int objectId = AllocateSectorPlacedRuntimeObjectId(context_.map);
+    if (!IsValidSectorTopologyId(objectId)) {
+        context_.statusText = "NPC placement failed: no runtime object IDs available";
+        return false;
+    }
+
+    SectorPlacedRuntimeObject object;
+    object.id = objectId;
+    object.kind = "npc";
+    object.position = Vector3{mapPoint.x, sector->floorZ, mapPoint.y};
+    object.npc.definitionId = definitionId;
+    context_.map.runtimeObjects.push_back(std::move(object));
+    context_.editingState.npcPlacement.lastDefinitionId = definitionId;
+    SelectObject(objectId);
+    MarkEdited(TextFormat("Added NPC %d", objectId));
+    RefreshPreviewObjects();
+    return true;
+}
+
 SectorEditorRuntimeObjectDeleteRequest
 SectorEditorRuntimeObjectEditingService::RequestDeleteSelected() const
 {
@@ -207,7 +252,9 @@ bool SectorEditorRuntimeObjectEditingService::MutateSelected(
     if (!mutate(*object)) {
         return false;
     }
-    if ((object->kind == "static_model" || object->kind == "dynamic_model")
+    if ((object->kind == "static_model"
+                || object->kind == "dynamic_model"
+                || object->kind == "npc")
             && context_.topologyRenderCache.valid
             && (std::fabs(object->position.x - previousPosition.x) > GeometryEpsilon
                     || std::fabs(object->position.z - previousPosition.z) > GeometryEpsilon)) {
@@ -251,6 +298,62 @@ bool SectorEditorRuntimeObjectEditingService::AssignSelectedDynamicModel(
                 }
                 object.dynamicModel.modelPath = modelPath;
                 object.dynamicModel.animation.clear();
+                return true;
+            });
+}
+
+bool SectorEditorRuntimeObjectEditingService::AssignSelectedNpcDefinition(
+        const std::string& definitionId)
+{
+    if (FindNpcDefinition(context_.runtimeObjects.npcDefinitionCatalog, definitionId)
+            == nullptr) {
+        context_.statusText = "NPC definition is unavailable";
+        return false;
+    }
+    context_.editingState.npcPlacement.lastDefinitionId = definitionId;
+    return MutateSelected(
+            "Updated NPC definition",
+            [&definitionId](SectorPlacedRuntimeObject& object) {
+                if (object.kind != "npc"
+                        || object.npc.definitionId == definitionId) {
+                    return false;
+                }
+                object.npc.definitionId = definitionId;
+                return true;
+            });
+}
+
+bool SectorEditorRuntimeObjectEditingService::SetSelectedNpcInstanceId(
+        const std::string& instanceId,
+        std::string& outError)
+{
+    const SectorPlacedRuntimeObject* selected = SelectedObject();
+    if (selected == nullptr || selected->kind != "npc") {
+        outError = "No NPC is selected";
+        return false;
+    }
+    if (!instanceId.empty() && !IsValidNpcInstanceId(instanceId)) {
+        outError =
+                "Instance ID must contain 1-63 letters, digits, underscores, or dashes";
+        return false;
+    }
+    if (!instanceId.empty()) {
+        for (const SectorPlacedRuntimeObject& object : context_.map.runtimeObjects) {
+            if (object.id != selected->id
+                    && object.kind == "npc"
+                    && object.npc.instanceId == instanceId) {
+                outError = "Instance ID must be unique among NPCs in this map";
+                return false;
+            }
+        }
+    }
+    outError.clear();
+    if (selected->npc.instanceId == instanceId) return true;
+    return MutateSelected(
+            "Updated NPC instance ID",
+            [&instanceId](SectorPlacedRuntimeObject& object) {
+                if (object.kind != "npc") return false;
+                object.npc.instanceId = instanceId;
                 return true;
             });
 }
@@ -342,7 +445,9 @@ void SectorEditorRuntimeObjectEditingService::UpdateDrag(Vector2 snappedMapPoint
     }
 
     float baseFloor = object->position.y;
-    if ((object->kind == "static_model" || object->kind == "dynamic_model")
+    if ((object->kind == "static_model"
+                || object->kind == "dynamic_model"
+                || object->kind == "npc")
             && context_.topologyRenderCache.valid) {
         const int sectorId = FindCachedSectorAt(snappedMapPoint);
         if (const SectorTopologySector* sector =
