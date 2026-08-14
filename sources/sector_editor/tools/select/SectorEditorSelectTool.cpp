@@ -92,6 +92,11 @@ bool SelectPickTarget(
             SelectSectorEditorAuthoringLevelMarkerTarget(selectionContext, target.id);
             return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::LevelMarker
                     && context.selectionState.selectedAuthoring.levelMarkerId == target.id;
+        case SectorEditorPickKind::Trigger:
+            ClearSectorEditorSelection(selectionContext);
+            SelectSectorEditorAuthoringTrigger(context.authoringGraph, context.selectionState, target.id);
+            return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Trigger
+                    && context.selectionState.selectedAuthoring.triggerId == target.id;
         case SectorEditorPickKind::None:
             ClearSectorEditorSelection(selectionContext);
             return true;
@@ -134,6 +139,11 @@ void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
                     target.id);
         } else if (target.kind == SectorEditorPickKind::LevelMarker) {
             SetHoveredSectorEditorAuthoringLevelMarker(
+                    context.authoringGraph,
+                    context.selectionState,
+                    target.id);
+        } else if (target.kind == SectorEditorPickKind::Trigger) {
+            SetHoveredSectorEditorAuthoringTrigger(
                     context.authoringGraph,
                     context.selectionState,
                     target.id);

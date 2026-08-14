@@ -27,7 +27,8 @@ bool HasAuthoringGraphData(const SectorAuthoringGraph& graph)
             || !graph.lineSides.empty()
             || !graph.faceAnchors.empty()
             || !graph.fogVolumes.empty()
-            || !graph.levelMarkers.empty();
+            || !graph.levelMarkers.empty()
+            || !graph.triggers.empty();
 }
 
 namespace {
@@ -1433,6 +1434,16 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringLevelMarkerSelectionTarget(int
     return target;
 }
 
+SectorAuthoringSelectionTarget MakeSectorAuthoringTriggerSelectionTarget(int triggerId)
+{
+    SectorAuthoringSelectionTarget target;
+    if (IsValidSectorAuthoringId(triggerId)) {
+        target.kind = SectorAuthoringSelectionKind::Trigger;
+        target.triggerId = triggerId;
+    }
+    return target;
+}
+
 bool SectorAuthoringSelectionTargetsEqual(
         SectorAuthoringSelectionTarget lhs,
         SectorAuthoringSelectionTarget rhs)
@@ -1442,7 +1453,8 @@ bool SectorAuthoringSelectionTargetsEqual(
             && lhs.vertexId == rhs.vertexId
             && lhs.faceAnchorId == rhs.faceAnchorId
             && lhs.fogVolumeId == rhs.fogVolumeId
-            && lhs.levelMarkerId == rhs.levelMarkerId;
+            && lhs.levelMarkerId == rhs.levelMarkerId
+            && lhs.triggerId == rhs.triggerId;
 }
 
 bool IsSectorAuthoringSelectionTargetValid(
@@ -1452,37 +1464,46 @@ bool IsSectorAuthoringSelectionTargetValid(
     switch (target.kind) {
     case SectorAuthoringSelectionKind::None:
         return target.lineId == -1 && target.vertexId == -1 && target.faceAnchorId == -1
-                && target.fogVolumeId == -1 && target.levelMarkerId == -1;
+                && target.fogVolumeId == -1 && target.levelMarkerId == -1 && target.triggerId == -1;
     case SectorAuthoringSelectionKind::Line:
         return target.vertexId == -1
                 && target.faceAnchorId == -1
                 && target.fogVolumeId == -1
                 && target.levelMarkerId == -1
+                && target.triggerId == -1
                 && FindSectorAuthoringLine(graph, target.lineId) != nullptr;
     case SectorAuthoringSelectionKind::Vertex:
         return target.lineId == -1
                 && target.faceAnchorId == -1
                 && target.fogVolumeId == -1
                 && target.levelMarkerId == -1
+                && target.triggerId == -1
                 && FindSectorAuthoringVertex(graph, target.vertexId) != nullptr;
     case SectorAuthoringSelectionKind::FaceAnchor:
         return target.lineId == -1
                 && target.vertexId == -1
                 && target.fogVolumeId == -1
                 && target.levelMarkerId == -1
+                && target.triggerId == -1
                 && FindSectorAuthoringFaceAnchor(graph, target.faceAnchorId) != nullptr;
     case SectorAuthoringSelectionKind::FogVolume:
         return target.lineId == -1
                 && target.vertexId == -1
                 && target.faceAnchorId == -1
                 && target.levelMarkerId == -1
+                && target.triggerId == -1
                 && FindSectorAuthoringFogVolume(graph, target.fogVolumeId) != nullptr;
     case SectorAuthoringSelectionKind::LevelMarker:
         return target.lineId == -1
                 && target.vertexId == -1
                 && target.faceAnchorId == -1
                 && target.fogVolumeId == -1
+                && target.triggerId == -1
                 && FindSectorAuthoringLevelMarker(graph, target.levelMarkerId) != nullptr;
+    case SectorAuthoringSelectionKind::Trigger:
+        return target.lineId == -1 && target.vertexId == -1 && target.faceAnchorId == -1
+                && target.fogVolumeId == -1 && target.levelMarkerId == -1
+                && FindSectorAuthoringTrigger(graph, target.triggerId) != nullptr;
     }
     return false;
 }
@@ -1627,6 +1648,19 @@ bool SelectSectorEditorAuthoringLevelMarker(
     return true;
 }
 
+bool SelectSectorEditorAuthoringTrigger(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int triggerId)
+{
+    const SectorAuthoringSelectionTarget target = MakeSectorAuthoringTriggerSelectionTarget(triggerId);
+    if (target.kind != SectorAuthoringSelectionKind::Trigger
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) return false;
+    selectionState.selectedAuthoring = target;
+    selectionState.selectedAuthoringFaceAnchorIds.clear();
+    return true;
+}
+
 void ClearSectorEditorAuthoringHover(SelectionState& selectionState)
 {
     selectionState.hoveredAuthoring = EmptyAuthoringSelectionTarget();
@@ -1690,6 +1724,18 @@ bool SetHoveredSectorEditorAuthoringLevelMarker(
             || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
         return false;
     }
+    selectionState.hoveredAuthoring = target;
+    return true;
+}
+
+bool SetHoveredSectorEditorAuthoringTrigger(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int triggerId)
+{
+    const SectorAuthoringSelectionTarget target = MakeSectorAuthoringTriggerSelectionTarget(triggerId);
+    if (target.kind != SectorAuthoringSelectionKind::Trigger
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) return false;
     selectionState.hoveredAuthoring = target;
     return true;
 }
@@ -3310,6 +3356,15 @@ SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::AuthoringLevelMarker;
         target.levelMarkerId = selectionState.selectedAuthoring.levelMarkerId;
+        return target;
+    }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Trigger
+            && FindSectorAuthoringTrigger(
+                    authoringGraph,
+                    selectionState.selectedAuthoring.triggerId) != nullptr) {
+        SectorEditorInspectorTarget target;
+        target.kind = SectorEditorInspectorTargetKind::AuthoringTrigger;
+        target.triggerId = selectionState.selectedAuthoring.triggerId;
         return target;
     }
 

@@ -62,6 +62,30 @@ void FlowPreservesReturnTargets()
 
     game::RequestApplicationQuit(state);
     assert(state.quitRequested);
+
+    game::MarkApplicationGameStopped(state);
+    assert(!state.gameRunning);
+    assert(state.screen == game::ApplicationScreen::MainMenu);
+    assert(state.menuReturnScreen == game::ApplicationScreen::MainMenu);
+}
+
+void DebugConsoleAvailabilityFollowsLiveGameOnly()
+{
+    game::ApplicationFlowState state;
+    assert(!game::IsApplicationDebugConsoleAvailable(state, false, true));
+    assert(!game::IsApplicationDebugConsoleAvailable(state, true, true));
+
+    game::MarkApplicationGameStarted(state);
+    assert(game::IsApplicationDebugConsoleAvailable(state, true, true));
+    assert(!game::IsApplicationDebugConsoleAvailable(state, true, false));
+
+    game::OpenApplicationMenu(state, game::ApplicationScreen::Game);
+    assert(game::IsApplicationDebugConsoleAvailable(state, true, true));
+
+    game::ShowApplicationEditor(state);
+    assert(!game::IsApplicationDebugConsoleAvailable(state, true, true));
+    game::OpenApplicationMenu(state, game::ApplicationScreen::Editor);
+    assert(!game::IsApplicationDebugConsoleAvailable(state, true, true));
 }
 
 } // namespace
@@ -70,5 +94,6 @@ int main()
 {
     MenuItemsFollowSessionState();
     FlowPreservesReturnTargets();
+    DebugConsoleAvailabilityFollowsLiveGameOnly();
     return 0;
 }

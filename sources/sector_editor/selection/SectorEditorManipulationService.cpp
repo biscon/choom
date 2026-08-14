@@ -51,6 +51,7 @@ bool IsAnySectorEditorManipulationActive(const SectorEditorManipulationServiceCo
     return context.manipulationState.authoringVertexDrag.active
             || context.manipulationState.authoringFogVolumeDrag.active
             || (context.levelMarkerEditing != nullptr && context.levelMarkerEditing->Drag().active)
+            || (context.triggerEditing != nullptr && context.triggerEditing->IsMoving())
             || context.lightState.lightDrag.active
             || context.runtimeObjectDrag.active;
 }
@@ -81,6 +82,16 @@ void UpdateActiveSectorEditorManipulation(
         context.levelMarkerEditing->UpdateMove(
                 context.snapMapPoint(context.screenToMap(input.MousePosition())));
     }
+    if (context.triggerEditing != nullptr && context.triggerEditing->IsMoving()
+            && context.screenToMap && context.snapMapPoint) {
+        const Vector2 snapped = context.snapMapPoint(context.screenToMap(input.MousePosition()));
+        SectorCoord x = 0;
+        SectorCoord z = 0;
+        if (VisibleAuthoringToSectorCoord(snapped.x, x)
+                && VisibleAuthoringToSectorCoord(snapped.y, z)) {
+            context.triggerEditing->UpdateMove(SectorTriggerPoint{x, z});
+        }
+    }
     if (context.lightState.lightDrag.active && context.updateLightDrag != nullptr) {
         context.updateLightDrag(context.userData, input);
     }
@@ -106,6 +117,9 @@ void FinishActiveSectorEditorManipulation(SectorEditorManipulationServiceContext
     }
     if (context.levelMarkerEditing != nullptr && context.levelMarkerEditing->Drag().active) {
         context.levelMarkerEditing->FinishMove();
+    }
+    if (context.triggerEditing != nullptr && context.triggerEditing->IsMoving()) {
+        context.triggerEditing->FinishMove();
     }
     if (context.lightState.lightDrag.active && context.finishLightDrag != nullptr) {
         context.finishLightDrag(context.userData);
@@ -140,6 +154,10 @@ bool CancelFirstActiveSectorEditorManipulation(
         context.levelMarkerEditing->CancelMove(authoringVertexMessage);
         return true;
     }
+    if (context.triggerEditing != nullptr && context.triggerEditing->IsMoving()) {
+        context.triggerEditing->CancelMove(authoringVertexMessage);
+        return true;
+    }
     if (context.lightState.lightDrag.active && context.cancelLightDrag != nullptr) {
         context.cancelLightDrag(context.userData, lightMessage);
         return true;
@@ -172,6 +190,9 @@ void CancelActiveSectorEditorManipulation(
     }
     if (context.levelMarkerEditing != nullptr && context.levelMarkerEditing->Drag().active) {
         context.levelMarkerEditing->CancelMove(authoringVertexMessage);
+    }
+    if (context.triggerEditing != nullptr && context.triggerEditing->IsMoving()) {
+        context.triggerEditing->CancelMove(authoringVertexMessage);
     }
     if (context.lightState.lightDrag.active && context.cancelLightDrag != nullptr) {
         context.cancelLightDrag(context.userData, lightMessage);
@@ -280,6 +301,17 @@ void StartSectorEditorSelectedManipulation(
         case SectorEditorPickKind::LevelMarker:
             if (context.levelMarkerEditing != nullptr) {
                 context.levelMarkerEditing->BeginMove(target.id);
+            }
+            break;
+        case SectorEditorPickKind::Trigger:
+            if (context.triggerEditing != nullptr && context.screenToMap && context.snapMapPoint) {
+                const Vector2 snapped = context.snapMapPoint(context.screenToMap(screenPoint));
+                SectorCoord x = 0;
+                SectorCoord z = 0;
+                if (VisibleAuthoringToSectorCoord(snapped.x, x)
+                        && VisibleAuthoringToSectorCoord(snapped.y, z)) {
+                    context.triggerEditing->BeginMove(target.id, SectorTriggerPoint{x, z});
+                }
             }
             break;
         case SectorEditorPickKind::None:

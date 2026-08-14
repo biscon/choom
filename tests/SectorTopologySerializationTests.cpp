@@ -12,6 +12,7 @@
 #include <cmath>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -4261,6 +4262,66 @@ void TestLevelMarkerRoundTripAndEntryResolution()
           "duplicate Level Marker reference IDs are rejected");
 }
 
+void TestTriggerRoundTripAndValidation()
+{
+    const std::vector<game::SectorTriggerPoint> rectangle{
+            {0, 0}, {32, 0}, {32, 48}, {0, 48}};
+    SectorTopologyMap topology = MakeSquare();
+    topology.triggers.push_back(game::SectorCompiledTrigger{
+            21, "exit_hall", game::SectorTriggerShapeKind::Rectangle,
+            rectangle, false, true, 250, "onExitHall"});
+
+    std::string error;
+    const Json topologyJson = Json::parse(SaveText(topology));
+    Check(topologyJson["triggers"].size() == 1
+                  && topologyJson["triggers"][0]["id"] == "exit_hall"
+                  && topologyJson["triggers"][0]["delayMilliseconds"] == 250,
+          "topology-v2 trigger fields serialize");
+    SectorTopologyMap loadedTopology;
+    Check(LoadText(topologyJson.dump(), loadedTopology, error)
+                  && loadedTopology.triggers.size() == 1
+                  && !loadedTopology.triggers[0].enabled
+                  && loadedTopology.triggers[0].repeat
+                  && loadedTopology.triggers[0].points[2].z == 48,
+          "topology-v2 triggers round-trip");
+
+    Json invalidScript = topologyJson;
+    invalidScript["triggers"][0]["script"] = "not a function()";
+    ExpectRejected(invalidScript, "invalid trigger Lua function names are rejected");
+    Json invalidGeometry = topologyJson;
+    invalidGeometry["triggers"][0]["points"][2]["x"] = 0;
+    invalidGeometry["triggers"][0]["points"][2]["z"] = 0;
+    ExpectRejected(invalidGeometry, "degenerate trigger geometry is rejected");
+
+    game::SectorAuthoringDocument document = MakeAuthoringDocumentFromMap(MakeSquare());
+    document.graph.triggers.push_back(game::SectorAuthoringTrigger{
+            31, "entry_zone", game::SectorTriggerShapeKind::Polygon,
+            {{16, 16}, {64, 16}, {48, 64}}, true, false, 0, "onEntryZone"});
+    document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
+    Check(document.derivation.success, "authoring graph with trigger derives");
+    const Json authoringJson = Json::parse(SaveAuthoringText(document));
+    Check(authoringJson["authoringGraph"]["triggers"].size() == 1
+                  && !authoringJson.contains("triggers")
+                  && !authoringJson["authoringGraph"]["triggers"][0].contains("enabled")
+                  && !authoringJson["authoringGraph"]["triggers"][0].contains("repeat")
+                  && !authoringJson["authoringGraph"]["triggers"][0].contains("delayMilliseconds"),
+          "authoring triggers are source-owned and omit default fields");
+    game::SectorAuthoringDocument loadedDocument;
+    Check(LoadAuthoringText(authoringJson.dump(), loadedDocument, error)
+                  && loadedDocument.graph.triggers.size() == 1
+                  && loadedDocument.graph.triggers[0].id == "entry_zone"
+                  && loadedDocument.derivation.topology.triggers.size() == 1
+                  && loadedDocument.derivation.topology.triggers[0].script == "onEntryZone",
+          "authoring trigger and compiled runtime trigger round-trip");
+
+    Json duplicate = authoringJson;
+    duplicate["authoringGraph"]["triggers"].push_back(
+            duplicate["authoringGraph"]["triggers"][0]);
+    duplicate["authoringGraph"]["triggers"][1]["editorId"] = 32;
+    Check(!LoadAuthoringText(duplicate.dump(), loadedDocument, error),
+          "duplicate trigger string IDs are rejected");
+}
+
 void TestFileApi()
 {
     const std::filesystem::path path =
@@ -4409,6 +4470,7 @@ int main()
     TestGraphNativeMapLevelRoundTrip();
     TestGraphNativeLegacyImportPathStillWorks();
     TestLevelMarkerRoundTripAndEntryResolution();
+    TestTriggerRoundTripAndValidation();
     TestFootstepSetRoundTripAndDefaults();
     TestAuthoringEditorSettingsRoundTripAndValidation();
     TestFileApi();

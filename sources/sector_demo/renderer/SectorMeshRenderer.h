@@ -115,6 +115,7 @@ public:
     void ApplyRendererPose(
             const SectorViewPose& pose,
             bool refreshVisibility = true);
+    void SetVerticalFovDegrees(float value);
     void RefreshDynamicLightSources(const SectorTopologyMap& map);
     void SetRuntimePointLight(
             const SectorPreviewDynamicPointLightSource* light)
@@ -332,6 +333,7 @@ private:
     float yawRadians = 0.0f;
     float pitchRadians = 0.0f;
     float rollRadians = 0.0f;
+    float verticalFovDegrees = 75.0f;
 };
 
 } // namespace game

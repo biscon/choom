@@ -8,6 +8,7 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorVertexInspector.h"
 #include "sector_editor/inspector/SectorEditorLevelMarkerInspector.h"
+#include "sector_editor/inspector/SectorEditorTriggerInspector.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/tools/doors/SectorEditorDoorModals.h"
 #include "sector_editor/tools/materials/SectorEditorMaterialInspector.h"
@@ -380,6 +381,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringLevelMarker
             ? FindSectorAuthoringLevelMarker(authoringGraph, inspectorTarget.levelMarkerId)
             : nullptr;
+    const SectorAuthoringTrigger* selectedTrigger =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringTrigger
+            ? FindSectorAuthoringTrigger(authoringGraph, inspectorTarget.triggerId)
+            : nullptr;
     const SectorTopologyVertex* inspectedVertex = FindSectorTopologyVertex(
             context.topologyMap,
             selectionState.inspectedTopologyVertexId);
@@ -541,6 +546,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     context.levelMarkerUiState,
                     rowH,
                     gap);
+        }
+        if (selectedTrigger != nullptr) {
+            return MeasureSectorEditorTriggerInspectorContentHeight(
+                    context.triggerUiState, rowH, gap);
         }
         return 42.0f;
     };
@@ -2425,6 +2434,29 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             AppendRequest(
                     result,
                     SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLevelMarkerConfirmation);
+        }
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
+    if (selectedTrigger != nullptr) {
+        const bool deleteRequested = DrawSectorEditorTriggerInspector(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                contentW,
+                rowH,
+                gap,
+                *selectedTrigger,
+                context.triggerUiState,
+                context.triggerEditing);
+        if (deleteRequested) {
+            AppendRequest(
+                    result,
+                    SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedTriggerConfirmation);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);

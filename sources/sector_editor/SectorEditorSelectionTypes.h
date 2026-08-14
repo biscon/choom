@@ -48,7 +48,8 @@ enum class SectorAuthoringSelectionKind {
     Vertex,
     FaceAnchor,
     FogVolume,
-    LevelMarker
+    LevelMarker,
+    Trigger
 };
 
 struct SectorAuthoringSelectionTarget {
@@ -58,6 +59,7 @@ struct SectorAuthoringSelectionTarget {
     int faceAnchorId = -1;
     int fogVolumeId = -1;
     int levelMarkerId = -1;
+    int triggerId = -1;
 };
 
 enum class SectorSurfaceKind {
@@ -120,7 +122,8 @@ enum class SectorEditorPickKind {
     AuthoringLine,
     AuthoringFaceAnchor,
     AuthoringFogVolume,
-    LevelMarker
+    LevelMarker,
+    Trigger
 };
 
 struct SectorEditorPickTarget {

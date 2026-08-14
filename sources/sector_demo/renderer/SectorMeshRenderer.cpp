@@ -912,7 +912,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
     }
     yawRadians = 0.0f;
     pitchRadians = 0.0f;
-    camera.fovy = 75.0f;
+    camera.fovy = verticalFovDegrees;
     camera.projection = CAMERA_PERSPECTIVE;
     UpdateCamera();
     UpdateVisibilityDebug();
@@ -1636,6 +1636,15 @@ void SectorMeshRenderer::ApplyRendererPose(
     if (refreshVisibility) {
         UpdateVisibilityDebug();
     }
+}
+
+void SectorMeshRenderer::SetVerticalFovDegrees(float value)
+{
+    if (!std::isfinite(value)) {
+        return;
+    }
+    verticalFovDegrees = std::clamp(value, 1.0f, 179.0f);
+    camera.fovy = verticalFovDegrees;
 }
 
 void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map)

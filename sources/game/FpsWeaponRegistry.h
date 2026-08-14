@@ -260,6 +260,10 @@ enum class FpsShadowQuality {
     High
 };
 
+inline constexpr int MinFpsHorizontalFovDegrees = 70;
+inline constexpr int MaxFpsHorizontalFovDegrees = 120;
+inline constexpr int DefaultFpsHorizontalFovDegrees = 108;
+
 struct FpsGraphicsSettings {
     float renderScale = 1.5f;
     bool fxaa = true;
@@ -267,11 +271,14 @@ struct FpsGraphicsSettings {
             FpsVolumetricQualityCap::High;
     FpsShadowQuality shadowQuality = FpsShadowQuality::High;
     bool performanceOverlay = false;
+    bool vsync = true;
+    int horizontalFovDegrees = DefaultFpsHorizontalFovDegrees;
 };
 
 struct FpsApplicationSettings {
     int version = 1;
     std::string firstLevel = "hub";
+    bool consoleEnabled = true;
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
     FpsGraphicsSettings graphics;
@@ -282,6 +289,7 @@ struct FpsApplicationSettings {
 const char* FpsVolumetricQualityCapName(FpsVolumetricQualityCap quality);
 const char* FpsShadowQualityName(FpsShadowQuality quality);
 FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings);
+float FpsVerticalFovDegrees(int horizontalFovDegrees, float aspectRatio);
 
 bool ParseFpsWeaponRegistry(
         std::string_view jsonText,

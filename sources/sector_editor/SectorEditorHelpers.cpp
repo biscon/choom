@@ -655,6 +655,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::DynamicModel: return "Dynamic Prop";
         case SectorEditorTool::Door: return "Door";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume";
+        case SectorEditorTool::Trigger: return "Trigger";
         case SectorEditorTool::LevelMarker: return "Level Marker";
         case SectorEditorTool::StaticLight: return "Static Light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot";
@@ -671,6 +672,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
             || tool == SectorEditorTool::AuthoringRectangle
             || tool == SectorEditorTool::AuthoringInsertVertex
             || tool == SectorEditorTool::AuthoringFogVolume
+            || tool == SectorEditorTool::Trigger
             || tool == SectorEditorTool::LevelMarker
             || tool == SectorEditorTool::AuthoringMove;
 }
@@ -708,6 +710,7 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
         case SectorEditorPickKind::AuthoringLine: return "authoring line";
         case SectorEditorPickKind::AuthoringFaceAnchor: return "authoring face";
         case SectorEditorPickKind::AuthoringFogVolume: return "fog volume";
+        case SectorEditorPickKind::Trigger: return "trigger";
         case SectorEditorPickKind::LevelMarker: return "level marker";
     }
     return "unknown";
@@ -730,6 +733,7 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
         case SectorEditorPickKind::StaticLight:
         case SectorEditorPickKind::AuthoringVertex:
         case SectorEditorPickKind::AuthoringFogVolume:
+        case SectorEditorPickKind::Trigger:
         case SectorEditorPickKind::LevelMarker:
             return target.id >= 0;
         case SectorEditorPickKind::None:
@@ -759,8 +763,9 @@ int SectorEditorPickPriority(SectorEditorPickKind kind)
         case SectorEditorPickKind::StaticLight: return 5;
         case SectorEditorPickKind::AuthoringVertex: return 6;
         case SectorEditorPickKind::AuthoringLine: return 7;
-        case SectorEditorPickKind::AuthoringFaceAnchor: return 8;
-        case SectorEditorPickKind::AuthoringFogVolume: return 9;
+        case SectorEditorPickKind::Trigger: return 8;
+        case SectorEditorPickKind::AuthoringFaceAnchor: return 9;
+        case SectorEditorPickKind::AuthoringFogVolume: return 10;
         case SectorEditorPickKind::None: break;
     }
     return 100;
@@ -1134,6 +1139,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::DynamicModel: return "Dynamic Prop: click inside a derived sector to place an animated model";
         case SectorEditorTool::Door: return "Door: click a two-sided portal line to place a sliding door";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume: click strictly inside a sector to place local fog";
+        case SectorEditorTool::Trigger: return "Trigger: choose Rectangle or Polygon, then draw snapped points; right click/Esc cancels";
         case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place a baked point light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place a baked spot light";
         case SectorEditorTool::DynamicLight: return "Dynamic Light: click inside a sector to place a runtime point light";

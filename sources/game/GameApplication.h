@@ -1,7 +1,9 @@
 #pragma once
 
 #include "engine/EngineContext.h"
+#include "engine/debug/DebugConsoleData.h"
 #include "engine/ui/UI.h"
+#include "engine/scripting/ScriptData.h"
 #include "game/ApplicationFlow.h"
 #include "game/FpsWeaponRegistry.h"
 #include "game/GameMainMenu.h"
@@ -24,7 +26,10 @@ class GameApplication {
 public:
     GameApplication() : editor(applicationSettings) {}
 
-    bool Init(engine::EngineContext& context);
+    bool Init(
+            engine::EngineContext& context,
+            FpsApplicationSettings initialSettings,
+            std::string settingsLoadError);
     void Shutdown(engine::EngineContext& context);
 
     void RenderInteractiveUI(
@@ -36,6 +41,12 @@ public:
             engine::FontHandle font,
             engine::FontHandle smallFont);
     void Update(engine::EngineContext& context, float dt);
+    void UpdateDebugConsole(engine::EngineContext& context, float dt);
+    void ProcessDeferredDebugActions(engine::EngineContext& context);
+    void RenderDebugConsole(
+            engine::AssetManager& assets,
+            int logicalWidth,
+            int logicalHeight);
 
     ApplicationContentKind BackgroundContentKind() const;
     bool ShouldRefreshBackground() const;
@@ -70,6 +81,8 @@ private:
     void ResumeGame(engine::EngineContext& context);
     void OpenEditor(engine::EngineContext& context);
     ApplicationScreen BackgroundScreen() const;
+    bool DebugConsoleAvailable() const;
+    void ApplyPerspectiveFov();
 
     ApplicationFlowState flow;
     FpsApplicationSettings applicationSettings;
@@ -78,6 +91,8 @@ private:
     SectorSceneRuntime gameScene;
     FpsWeaponRegistry weaponRegistry;
     PlayerAudioRuntime playerAudio;
+    engine::PersistentScriptStore persistentScripts;
+    engine::DebugConsoleData debugConsole;
     std::string menuStatus;
     std::optional<MainMenuAction> pendingMenuAction;
     std::optional<GameGraphicsSettingsAction> pendingSettingsAction;

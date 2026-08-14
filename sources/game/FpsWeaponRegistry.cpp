@@ -597,7 +597,29 @@ FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings)
         settings.renderScale = 1.5f;
     }
     settings.renderScale = std::clamp(settings.renderScale, 0.5f, 2.0f);
+    settings.horizontalFovDegrees = std::clamp(
+            settings.horizontalFovDegrees,
+            MinFpsHorizontalFovDegrees,
+            MaxFpsHorizontalFovDegrees);
     return settings;
+}
+
+float FpsVerticalFovDegrees(int horizontalFovDegrees, float aspectRatio)
+{
+    const int normalizedHorizontal = std::clamp(
+            horizontalFovDegrees,
+            MinFpsHorizontalFovDegrees,
+            MaxFpsHorizontalFovDegrees);
+    if (!std::isfinite(aspectRatio) || aspectRatio <= 0.0f) {
+        aspectRatio = 16.0f / 9.0f;
+    }
+    constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
+    constexpr float RadiansToDegrees = 180.0f / 3.14159265358979323846f;
+    const float horizontalRadians =
+            static_cast<float>(normalizedHorizontal) * DegreesToRadians;
+    return 2.0f * std::atan(
+            std::tan(horizontalRadians * 0.5f) / aspectRatio)
+            * RadiansToDegrees;
 }
 
 bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, std::string* error)
@@ -736,6 +758,13 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 Fail("application settings.firstLevel must use only letters, digits, underscore, or dash");
             }
         }
+        const auto consoleEnabled = root.find("consoleEnabled");
+        if (consoleEnabled != root.end()) {
+            if (!consoleEnabled->is_boolean()) {
+                Fail("application settings.consoleEnabled must be a boolean");
+            }
+            parsed.consoleEnabled = consoleEnabled->get<bool>();
+        }
         const auto graphics = root.find("graphics");
         if (graphics != root.end()) {
             if (!graphics->is_object()) {
@@ -765,6 +794,25 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                     Fail("application settings.graphics.performanceOverlay must be a boolean");
                 }
                 parsed.graphics.performanceOverlay = performanceOverlay->get<bool>();
+            }
+            const auto vsync = graphics->find("vsync");
+            if (vsync != graphics->end()) {
+                if (!vsync->is_boolean()) {
+                    Fail("application settings.graphics.vsync must be a boolean");
+                }
+                parsed.graphics.vsync = vsync->get<bool>();
+            }
+            const auto horizontalFov = graphics->find("horizontalFovDegrees");
+            if (horizontalFov != graphics->end()) {
+                if (!horizontalFov->is_number_integer()) {
+                    Fail("application settings.graphics.horizontalFovDegrees must be an integer");
+                }
+                const int value = horizontalFov->get<int>();
+                if (value < MinFpsHorizontalFovDegrees
+                        || value > MaxFpsHorizontalFovDegrees) {
+                    Fail("application settings.graphics.horizontalFovDegrees must be between 70 and 120");
+                }
+                parsed.graphics.horizontalFovDegrees = value;
             }
             const auto parseQuality = [](const Json& value, const char* context) {
                 if (!value.is_string()) Fail(std::string(context) + " must be a string");
@@ -1084,6 +1132,7 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
     Json root = {
             {"version", 1},
             {"firstLevel", settings.firstLevel},
+            {"consoleEnabled", settings.consoleEnabled},
             {"footsteps", {
                     {"defaultSet", settings.footsteps.defaultSet},
                     {"volume", settings.footsteps.volume},
@@ -1097,7 +1146,9 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"volumetricQualityCap", FpsVolumetricQualityCapName(
                     graphics.volumetricQualityCap)},
             {"shadowQuality", FpsShadowQualityName(graphics.shadowQuality)},
-            {"performanceOverlay", graphics.performanceOverlay}};
+            {"performanceOverlay", graphics.performanceOverlay},
+            {"vsync", graphics.vsync},
+            {"horizontalFovDegrees", graphics.horizontalFovDegrees}};
     const engine::HdrBloomSettings hdrBloom =
             engine::NormalizeHdrBloomSettings(settings.hdrBloom);
     root["hdrBloom"] = {

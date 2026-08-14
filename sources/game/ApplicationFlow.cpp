@@ -69,6 +69,13 @@ void MarkApplicationGameStarted(ApplicationFlowState& state)
     state.menuReturnScreen = ApplicationScreen::Game;
 }
 
+void MarkApplicationGameStopped(ApplicationFlowState& state)
+{
+    state.gameRunning = false;
+    state.screen = ApplicationScreen::MainMenu;
+    state.menuReturnScreen = ApplicationScreen::MainMenu;
+}
+
 void ShowApplicationEditor(ApplicationFlowState& state)
 {
     state.screen = ApplicationScreen::Editor;
@@ -78,6 +85,17 @@ void ShowApplicationEditor(ApplicationFlowState& state)
 void RequestApplicationQuit(ApplicationFlowState& state)
 {
     state.quitRequested = true;
+}
+
+bool IsApplicationDebugConsoleAvailable(
+        const ApplicationFlowState& state,
+        bool gameRunning,
+        bool consoleEnabled)
+{
+    if (!consoleEnabled || !gameRunning) return false;
+    return state.screen == ApplicationScreen::Game
+            || (state.screen == ApplicationScreen::MainMenu
+                    && state.menuReturnScreen == ApplicationScreen::Game);
 }
 
 } // namespace game

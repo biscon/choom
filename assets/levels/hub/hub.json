@@ -1307,7 +1307,7 @@
     "maxOpacity": 0.6499999761581421,
     "referenceHeightWorld": 1.0,
     "heightFalloff": 0.0,
-    "localVolumeQuality": "high"
+    "localVolumeQuality": "medium"
   },
   "audio": {
     "music": "ambience/horror_ambience.wav",
@@ -10285,6 +10285,66 @@
         "y": 0.0,
         "z": -128,
         "orientationDegrees": 90.0
+      }
+    ],
+    "triggers": [
+      {
+        "editorId": 1,
+        "id": "trigger_1",
+        "shape": "rectangle",
+        "points": [
+          {
+            "x": -256,
+            "z": 384
+          },
+          {
+            "x": 384,
+            "z": 384
+          },
+          {
+            "x": 384,
+            "z": 512
+          },
+          {
+            "x": -256,
+            "z": 512
+          }
+        ],
+        "repeat": true,
+        "script": "trigger_1"
+      },
+      {
+        "editorId": 2,
+        "id": "trigger_2",
+        "shape": "polygon",
+        "points": [
+          {
+            "x": -80,
+            "z": 1328
+          },
+          {
+            "x": 128,
+            "z": 1264
+          },
+          {
+            "x": 272,
+            "z": 1424
+          },
+          {
+            "x": 208,
+            "z": 1632
+          },
+          {
+            "x": -32,
+            "z": 1680
+          },
+          {
+            "x": -176,
+            "z": 1536
+          }
+        ],
+        "repeat": true,
+        "script": "trigger_2"
       }
     ]
   }

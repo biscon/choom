@@ -3,6 +3,7 @@
 #include <raylib.h>
 
 #include <cmath>
+#include <cstdio>
 
 namespace game {
 
@@ -125,7 +126,7 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     DrawRectangleRec(config.overlayBounds, Color{0, 0, 0, 128});
 
     constexpr float panelWidth = 620.0f;
-    constexpr float panelHeight = 650.0f;
+    constexpr float panelHeight = 790.0f;
     constexpr float padding = 44.0f;
     constexpr float rowHeight = 48.0f;
     const Rectangle panel{
@@ -189,6 +190,34 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     }
     y += rowHeight + 14.0f;
 
+    engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
+            smallFont, "Horizontal FOV", engine::UITextJustify::Left);
+    constexpr float fovValueWidth = 64.0f;
+    engine::IntSlider(
+            ui,
+            config,
+            input,
+            "graphics_horizontal_fov",
+            Rectangle{controlX, y, controlWidth - fovValueWidth, rowHeight},
+            MinFpsHorizontalFovDegrees,
+            MaxFpsHorizontalFovDegrees,
+            draft.graphics.horizontalFovDegrees);
+    char fovText[16];
+    std::snprintf(
+            fovText,
+            sizeof(fovText),
+            "%d",
+            draft.graphics.horizontalFovDegrees);
+    engine::Text(
+            config,
+            assets,
+            Rectangle{controlX + controlWidth - fovValueWidth, y,
+                    fovValueWidth, rowHeight},
+            smallFont,
+            fovText,
+            engine::UITextJustify::Right);
+    y += rowHeight + 14.0f;
+
     engine::Checkbox(ui, config, input, assets, "graphics_fxaa",
             Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
             smallFont, "FXAA", draft.graphics.fxaa);
@@ -200,7 +229,22 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     engine::Checkbox(ui, config, input, assets, "graphics_performance_overlay",
             Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
             smallFont, "Performance overlay (F9)", draft.graphics.performanceOverlay);
-    y += rowHeight + 12.0f;
+    y += rowHeight + 8.0f;
+    engine::Checkbox(ui, config, input, assets, "graphics_vsync",
+            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
+            smallFont, "VSync", draft.graphics.vsync);
+    y += rowHeight + 4.0f;
+    engine::Text(
+            config,
+            assets,
+            Rectangle{panel.x + padding, y,
+                    panel.width - padding * 2.0f, 42.0f},
+            smallFont,
+            "You must restart the game for VSync changes to take effect.",
+            engine::UITextJustify::Left,
+            config.mutedTextColor,
+            true);
+    y += 42.0f + 12.0f;
 
     GameGraphicsSettingsAction result = GameGraphicsSettingsAction::None;
     const float buttonGap = 10.0f;

@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTopologyUnits.h"
+#include "sector_demo/SectorTriggers.h"
 
 #include "util/json.hpp"
 
@@ -12,6 +13,7 @@
 #include <fstream>
 #include <filesystem>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -2855,6 +2857,51 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
         }
     }
 
+    const auto triggersIt = root.find("triggers");
+    if (triggersIt != root.end()) {
+        if (!triggersIt->is_array()) Fail("root.triggers must be an array");
+        for (size_t i = 0; i < triggersIt->size(); ++i) {
+            const Json& value = (*triggersIt)[i];
+            const std::string context = "root.triggers[" + std::to_string(i) + "]";
+            if (!value.is_object()) Fail(context + " must be an object");
+            SectorCompiledTrigger trigger;
+            trigger.sourceAuthoringTriggerId = ReadInt(value, "editorId", context);
+            trigger.id = ReadString(value, "id", context);
+            const std::string shape = ReadString(value, "shape", context);
+            if (shape == "rectangle") trigger.shape = SectorTriggerShapeKind::Rectangle;
+            else if (shape == "polygon") trigger.shape = SectorTriggerShapeKind::Polygon;
+            else Fail(context + ".shape must be 'rectangle' or 'polygon'");
+            const Json& points = RequireArrayField(value, "points", context);
+            for (size_t pointIndex = 0; pointIndex < points.size(); ++pointIndex) {
+                const std::string pointContext = context + ".points[" + std::to_string(pointIndex) + "]";
+                if (!points[pointIndex].is_object()) Fail(pointContext + " must be an object");
+                trigger.points.push_back(SectorTriggerPoint{
+                        ReadCoord(points[pointIndex], "x", pointContext),
+                        ReadCoord(points[pointIndex], "z", pointContext)});
+            }
+            trigger.enabled = ReadOptionalBool(value, "enabled", context, true);
+            trigger.repeat = ReadOptionalBool(value, "repeat", context, false);
+            trigger.delayMilliseconds = value.contains("delayMilliseconds")
+                    ? ReadInt(value, "delayMilliseconds", context) : 0;
+            trigger.script = ReadOptionalString(value, "script", context);
+            std::string geometryError;
+            if (!IsValidSectorAuthoringId(trigger.sourceAuthoringTriggerId)
+                    || !IsValidSectorTriggerReferenceId(trigger.id)
+                    || !IsValidSectorTriggerScriptName(trigger.script)
+                    || trigger.delayMilliseconds < 0
+                    || !ValidateSectorTriggerPolygon(trigger.points, trigger.shape, &geometryError)) {
+                Fail(context + " is invalid" + (geometryError.empty() ? std::string{} : ": " + geometryError));
+            }
+            map.triggers.push_back(std::move(trigger));
+        }
+        std::set<int> editorIds;
+        std::set<std::string> ids;
+        for (const SectorCompiledTrigger& trigger : map.triggers) {
+            if (!editorIds.insert(trigger.sourceAuthoringTriggerId).second) Fail("root.triggers has duplicate editorId");
+            if (!ids.insert(trigger.id).second) Fail("root.triggers has duplicate id");
+        }
+    }
+
     const auto runtimeObjectsIt = root.find("runtimeObjects");
     if (runtimeObjectsIt != root.end()) {
         if (!runtimeObjectsIt->is_array()) {
@@ -3258,14 +3305,46 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    const auto triggersIt = value.find("triggers");
+    if (triggersIt != value.end()) {
+        if (!triggersIt->is_array()) Fail("root.authoringGraph.triggers must be an array");
+        for (size_t i = 0; i < triggersIt->size(); ++i) {
+            const Json& triggerJson = (*triggersIt)[i];
+            const std::string context = "root.authoringGraph.triggers[" + std::to_string(i) + "]";
+            if (!triggerJson.is_object()) Fail(context + " must be an object");
+            SectorAuthoringTrigger trigger;
+            trigger.editorId = ReadInt(triggerJson, "editorId", context);
+            trigger.id = ReadString(triggerJson, "id", context);
+            const std::string shape = ReadString(triggerJson, "shape", context);
+            if (shape == "rectangle") trigger.shape = SectorTriggerShapeKind::Rectangle;
+            else if (shape == "polygon") trigger.shape = SectorTriggerShapeKind::Polygon;
+            else Fail(context + ".shape must be 'rectangle' or 'polygon'");
+            const Json& points = RequireArrayField(triggerJson, "points", context);
+            for (size_t pointIndex = 0; pointIndex < points.size(); ++pointIndex) {
+                const std::string pointContext = context + ".points[" + std::to_string(pointIndex) + "]";
+                if (!points[pointIndex].is_object()) Fail(pointContext + " must be an object");
+                trigger.points.push_back(SectorTriggerPoint{
+                        ReadCoord(points[pointIndex], "x", pointContext),
+                        ReadCoord(points[pointIndex], "z", pointContext)});
+            }
+            trigger.enabled = ReadOptionalBool(triggerJson, "enabled", context, true);
+            trigger.repeat = ReadOptionalBool(triggerJson, "repeat", context, false);
+            trigger.delayMilliseconds = triggerJson.contains("delayMilliseconds")
+                    ? ReadInt(triggerJson, "delayMilliseconds", context) : 0;
+            trigger.script = ReadOptionalString(triggerJson, "script", context);
+            graph.triggers.push_back(std::move(trigger));
+        }
+    }
+
     const std::vector<SectorAuthoringValidationIssue> issues =
             ValidateSectorAuthoringGraphReferences(graph);
     const auto markerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
-        return issue.objectKind == SectorAuthoringObjectKind::LevelMarker
+        return (issue.objectKind == SectorAuthoringObjectKind::LevelMarker
+                        || issue.objectKind == SectorAuthoringObjectKind::Trigger)
                 && issue.severity == SectorAuthoringValidationSeverity::Error;
     });
     if (markerError != issues.end()) {
-        Fail("Invalid authoring level marker: " + markerError->message);
+        Fail("Invalid authoring map object: " + markerError->message);
     }
 
     return graph;
@@ -3585,6 +3664,39 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         }
     }
 
+    if (!graph.triggers.empty()) {
+        const std::vector<SectorAuthoringValidationIssue> issues =
+                ValidateSectorAuthoringGraphReferences(graph);
+        const auto triggerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
+            return issue.objectKind == SectorAuthoringObjectKind::Trigger
+                    && issue.severity == SectorAuthoringValidationSeverity::Error;
+        });
+        if (triggerError != issues.end()) Fail("Invalid authoring trigger: " + triggerError->message);
+
+        graphJson["triggers"] = Json::array();
+        std::vector<const SectorAuthoringTrigger*> triggers;
+        triggers.reserve(graph.triggers.size());
+        for (const SectorAuthoringTrigger& trigger : graph.triggers) triggers.push_back(&trigger);
+        std::sort(triggers.begin(), triggers.end(), [](const auto* left, const auto* right) {
+            return left->editorId < right->editorId;
+        });
+        for (const SectorAuthoringTrigger* trigger : triggers) {
+            Json triggerJson{
+                    {"editorId", trigger->editorId},
+                    {"id", trigger->id},
+                    {"shape", trigger->shape == SectorTriggerShapeKind::Rectangle ? "rectangle" : "polygon"},
+                    {"points", Json::array()}};
+            for (SectorTriggerPoint point : trigger->points) {
+                triggerJson["points"].push_back(Json{{"x", point.x}, {"z", point.z}});
+            }
+            if (!trigger->enabled) triggerJson["enabled"] = false;
+            if (trigger->repeat) triggerJson["repeat"] = true;
+            if (trigger->delayMilliseconds != 0) triggerJson["delayMilliseconds"] = trigger->delayMilliseconds;
+            if (!trigger->script.empty()) triggerJson["script"] = trigger->script;
+            graphJson["triggers"].push_back(std::move(triggerJson));
+        }
+    }
+
     return graphJson;
 }
 
@@ -3838,6 +3950,44 @@ Json SerializeMap(const SectorTopologyMap& map)
                     {"id", marker->id},
                     {"position", WriteVector3(marker->position, "level marker position")},
                     {"orientationDegrees", marker->yawRadians * (180.0f / Pi)}});
+        }
+    }
+
+    if (!map.triggers.empty()) {
+        root["triggers"] = Json::array();
+        std::vector<const SectorCompiledTrigger*> triggers;
+        triggers.reserve(map.triggers.size());
+        for (const SectorCompiledTrigger& trigger : map.triggers) triggers.push_back(&trigger);
+        std::sort(triggers.begin(), triggers.end(), [](const auto* left, const auto* right) {
+            return left->sourceAuthoringTriggerId < right->sourceAuthoringTriggerId;
+        });
+        std::set<int> editorIds;
+        std::set<std::string> ids;
+        for (const SectorCompiledTrigger* trigger : triggers) {
+            std::string geometryError;
+            if (!IsValidSectorAuthoringId(trigger->sourceAuthoringTriggerId)
+                    || !editorIds.insert(trigger->sourceAuthoringTriggerId).second
+                    || !IsValidSectorTriggerReferenceId(trigger->id)
+                    || !ids.insert(trigger->id).second
+                    || trigger->delayMilliseconds < 0
+                    || !IsValidSectorTriggerScriptName(trigger->script)
+                    || !ValidateSectorTriggerPolygon(trigger->points, trigger->shape, &geometryError)) {
+                Fail("Invalid compiled trigger '" + trigger->id + "'"
+                        + (geometryError.empty() ? std::string{} : ": " + geometryError));
+            }
+            Json triggerJson{
+                    {"editorId", trigger->sourceAuthoringTriggerId},
+                    {"id", trigger->id},
+                    {"shape", trigger->shape == SectorTriggerShapeKind::Rectangle ? "rectangle" : "polygon"},
+                    {"points", Json::array()}};
+            for (SectorTriggerPoint point : trigger->points) {
+                triggerJson["points"].push_back(Json{{"x", point.x}, {"z", point.z}});
+            }
+            if (!trigger->enabled) triggerJson["enabled"] = false;
+            if (trigger->repeat) triggerJson["repeat"] = true;
+            if (trigger->delayMilliseconds != 0) triggerJson["delayMilliseconds"] = trigger->delayMilliseconds;
+            if (!trigger->script.empty()) triggerJson["script"] = trigger->script;
+            root["triggers"].push_back(std::move(triggerJson));
         }
     }
 

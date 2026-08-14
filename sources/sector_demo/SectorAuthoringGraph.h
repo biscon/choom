@@ -98,6 +98,17 @@ struct SectorAuthoringLevelMarker {
     float orientationDegrees = 0.0f;
 };
 
+struct SectorAuthoringTrigger {
+    int editorId = -1;
+    std::string id;
+    SectorTriggerShapeKind shape = SectorTriggerShapeKind::Rectangle;
+    std::vector<SectorTriggerPoint> points;
+    bool enabled = true;
+    bool repeat = false;
+    int delayMilliseconds = 0;
+    std::string script;
+};
+
 struct SectorAuthoringGraph {
     std::vector<SectorAuthoringVertex> vertices;
     std::vector<SectorAuthoringLine> lines;
@@ -105,6 +116,7 @@ struct SectorAuthoringGraph {
     std::vector<SectorAuthoringFaceAnchor> faceAnchors;
     std::vector<SectorAuthoringFogVolume> fogVolumes;
     std::vector<SectorAuthoringLevelMarker> levelMarkers;
+    std::vector<SectorAuthoringTrigger> triggers;
 };
 
 enum class SectorAuthoringValidationSeverity {
@@ -119,7 +131,8 @@ enum class SectorAuthoringObjectKind {
     Side,
     FaceAnchor,
     FogVolume,
-    LevelMarker
+    LevelMarker,
+    Trigger
 };
 
 struct SectorAuthoringValidationIssue {
@@ -326,8 +339,12 @@ int AllocateSectorAuthoringLineId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringFaceAnchorId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringFogVolumeId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph);
+int AllocateSectorAuthoringTriggerId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringGraph& graph);
+std::string AllocateSectorAuthoringTriggerReferenceId(const SectorAuthoringGraph& graph);
 bool IsValidSectorAuthoringLevelMarkerReferenceId(const std::string& id);
+bool IsValidSectorTriggerReferenceId(const std::string& id);
+bool IsValidSectorTriggerScriptName(const std::string& name);
 
 const SectorAuthoringVertex* FindSectorAuthoringVertex(const SectorAuthoringGraph& graph, int id);
 SectorAuthoringVertex* FindSectorAuthoringVertex(SectorAuthoringGraph& graph, int id);
@@ -362,6 +379,15 @@ SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
 const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarkerByReferenceId(
         const SectorAuthoringGraph& graph,
         const std::string& referenceId);
+const SectorAuthoringTrigger* FindSectorAuthoringTrigger(
+        const SectorAuthoringGraph& graph,
+        int editorId);
+SectorAuthoringTrigger* FindSectorAuthoringTrigger(
+        SectorAuthoringGraph& graph,
+        int editorId);
+const SectorAuthoringTrigger* FindSectorAuthoringTriggerByReferenceId(
+        const SectorAuthoringGraph& graph,
+        const std::string& id);
 
 bool SectorAuthoringSideIdsEqual(SectorAuthoringSideId lhs, SectorAuthoringSideId rhs);
 SectorAuthoringSideId OppositeSectorAuthoringSideId(SectorAuthoringSideId id);

@@ -1,6 +1,7 @@
 {
   "version": 1,
   "firstLevel": "hub",
+  "consoleEnabled": true,
   "footsteps": {
     "defaultSet": "Tile_Mono",
     "volume": 0.6499999761581421,
@@ -11,7 +12,9 @@
     "fxaa": true,
     "volumetricQualityCap": "high",
     "shadowQuality": "high",
-    "performanceOverlay": false
+    "performanceOverlay": false,
+    "vsync": true,
+    "horizontalFovDegrees": 95
   },
   "hdrBloom": {
     "enabled": true,

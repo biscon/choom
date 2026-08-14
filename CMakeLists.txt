@@ -15,10 +15,22 @@ file(GLOB_RECURSE PROJECT_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/sources/*.h"
 )
 
+# Lua is a vendored C dependency. Keep it out of the project's broad source
+# glob so it can also be linked by focused scripting tests.
+list(FILTER PROJECT_SOURCES EXCLUDE REGEX "/sources/lua/.*\\.c$")
+
+file(GLOB LUA55_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/lua/*.c"
+)
+list(FILTER LUA55_SOURCES EXCLUDE REGEX "/lua\\.c$")
+list(FILTER LUA55_SOURCES EXCLUDE REGEX "/luac\\.c$")
+add_library(lua55 STATIC ${LUA55_SOURCES})
+target_include_directories(lua55 PUBLIC sources/lua)
+
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE sources)
-target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
+target_link_libraries(${PROJECT_NAME} PRIVATE raylib lua55)
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE X11 Xcursor)
@@ -140,6 +152,34 @@ target_link_libraries(${PROJECT_NAME} PRIVATE xatlas)
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(script_system_tests
+            tests/ScriptSystemTests.cpp
+            sources/engine/scripting/ScriptConsole.cpp
+            sources/engine/scripting/ScriptSystem.cpp
+            sources/engine/scripting/ScriptPersistence.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
+            sources/engine/audio/AudioSystem.cpp
+    )
+    target_include_directories(script_system_tests PRIVATE sources)
+    target_link_libraries(script_system_tests PRIVATE lua55 raylib)
+    add_test(NAME script_system COMMAND script_system_tests)
+
+    add_executable(debug_console_tests
+            tests/DebugConsoleTests.cpp
+            sources/engine/debug/DebugConsole.cpp
+            sources/engine/debug/DebugConsoleLogBridge.cpp
+            sources/engine/input/Input.cpp
+            sources/engine/scripting/ScriptConsole.cpp
+    )
+    target_include_directories(debug_console_tests PRIVATE sources)
+    target_link_libraries(debug_console_tests PRIVATE lua55 raylib)
+    add_test(NAME debug_console COMMAND debug_console_tests)
+
     add_executable(render_color_foundations_tests
             tests/RenderColorFoundationsTests.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
@@ -253,6 +293,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
             sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
             sources/sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.cpp
+            sources/sector_editor/services/triggers/SectorEditorTriggerEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
             sources/sector_editor/services/runtime_objects/SectorEditorAuthoringDoorReconciliation.cpp
@@ -286,6 +327,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTriggers.cpp
             sources/sector_demo/SectorTopologySerialization.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
@@ -300,6 +342,7 @@ if(BUILD_TESTING)
             sources/game/SectorLevelLoader.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTriggers.cpp
             sources/sector_demo/SectorTopologySerialization.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
@@ -440,6 +483,10 @@ if(BUILD_TESTING)
 
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
+            tests/SectorScriptBindingTests.cpp
+            sources/engine/scripting/ScriptSystem.cpp
+            sources/engine/scripting/ScriptPersistence.cpp
+            sources/game/SectorScriptBindings.cpp
             sources/engine/audio/AudioSystem.cpp
             sources/engine/systems/AnimatedModelSystem.cpp
             sources/engine/assets/AssetManager.cpp
@@ -463,12 +510,13 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp
             sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTriggers.cpp
             sources/sector_demo/SectorTopologyUnits.cpp
             sources/sector_demo/SectorTopologyValidation.cpp
     )
     target_include_directories(sector_runtime_object_tests PRIVATE sources)
     target_compile_definitions(sector_runtime_object_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
-    target_link_libraries(sector_runtime_object_tests PRIVATE raylib xatlas)
+    target_link_libraries(sector_runtime_object_tests PRIVATE raylib xatlas lua55)
     add_test(NAME sector_runtime_object COMMAND sector_runtime_object_tests)
 
     add_executable(sector_sky_cylinder_tests

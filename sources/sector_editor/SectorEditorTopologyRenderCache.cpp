@@ -658,6 +658,27 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cache.levelMarkers.push_back(std::move(cached));
     }
 
+    cache.triggers.reserve(authoringGraph.triggers.size());
+    for (const SectorAuthoringTrigger& trigger : authoringGraph.triggers) {
+        CachedAuthoringTriggerDraw cached;
+        cached.triggerId = trigger.editorId;
+        cached.id = trigger.id;
+        cached.enabled = trigger.enabled;
+        std::vector<std::vector<std::array<double, 2>>> polygon(1);
+        for (SectorTriggerPoint point : trigger.points) {
+            const Vector2 map{SectorCoordToVisibleAuthoring(point.x),
+                    SectorCoordToVisibleAuthoring(point.z)};
+            cached.points.push_back(map);
+            polygon[0].push_back({static_cast<double>(map.x), static_cast<double>(map.y)});
+        }
+        const std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
+        cached.fillTrianglePoints.reserve(indices.size());
+        for (uint32_t index : indices) {
+            if (index < cached.points.size()) cached.fillTrianglePoints.push_back(cached.points[index]);
+        }
+        cache.triggers.push_back(std::move(cached));
+    }
+
     const std::vector<SectorAuthoringValidationIssue> referenceIssues =
             ValidateSectorAuthoringGraphReferences(authoringGraph);
     cache.authoringDiagnostics.reserve(referenceIssues.size() + authoringDerivation.diagnostics.size());
@@ -1739,6 +1760,58 @@ void DrawCachedLevelMarkers(
         DrawCircleV(tip, selected ? 3.5f : 3.0f, color);
         DrawText(marker.referenceId.c_str(), static_cast<int>(center.x + 11.0f),
                 static_cast<int>(center.y - 16.0f), 12, color);
+    }
+}
+
+void DrawCachedTriggers(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        const TriggerDragState* drag)
+{
+    const Color normal{255, 72, 184, 220};
+    const Color disabled{154, 70, 126, 190};
+    const Color selected{255, 154, 220, 255};
+    const Color hovered{255, 108, 198, 255};
+    for (const CachedAuthoringTriggerDraw& trigger : cache.triggers) {
+        const bool previewing = drag != nullptr && drag->active
+                && drag->triggerId == trigger.triggerId;
+        const bool isSelected = context.selectedAuthoring.kind == SectorAuthoringSelectionKind::Trigger
+                && context.selectedAuthoring.triggerId == trigger.triggerId;
+        const bool isHovered = context.hoveredAuthoring.kind == SectorAuthoringSelectionKind::Trigger
+                && context.hoveredAuthoring.triggerId == trigger.triggerId;
+        const Color line = isSelected ? selected : isHovered ? hovered : trigger.enabled ? normal : disabled;
+        if (!previewing) {
+            for (size_t i = 0; i + 2 < trigger.fillTrianglePoints.size(); i += 3) {
+                DrawTriangle(CachedMapToScreen(context, trigger.fillTrianglePoints[i]),
+                        CachedMapToScreen(context, trigger.fillTrianglePoints[i + 1]),
+                        CachedMapToScreen(context, trigger.fillTrianglePoints[i + 2]),
+                        Color{line.r, line.g, line.b, static_cast<unsigned char>(isSelected ? 58 : 34)});
+            }
+        }
+        const size_t pointCount = previewing ? drag->previewPoints.size() : trigger.points.size();
+        if (pointCount < 2) continue;
+        const auto mapPoint = [&](size_t index) {
+            if (!previewing) return trigger.points[index];
+            const SectorTriggerPoint point = drag->previewPoints[index];
+            return Vector2{SectorCoordToVisibleAuthoring(point.x),
+                    SectorCoordToVisibleAuthoring(point.z)};
+        };
+        for (size_t i = 0; i < pointCount; ++i) {
+            DrawLineEx(CachedMapToScreen(context, mapPoint(i)),
+                    CachedMapToScreen(context, mapPoint((i + 1) % pointCount)),
+                    isSelected ? 3.5f : 2.5f, line);
+        }
+        Vector2 center{};
+        for (size_t i = 0; i < pointCount; ++i) {
+            const Vector2 point = mapPoint(i);
+            center.x += point.x;
+            center.y += point.y;
+        }
+        center.x /= static_cast<float>(pointCount);
+        center.y /= static_cast<float>(pointCount);
+        const Vector2 screen = CachedMapToScreen(context, center);
+        DrawText(trigger.id.c_str(), static_cast<int>(screen.x + 7.0f),
+                static_cast<int>(screen.y - 15.0f), 12, line);
     }
 }
 

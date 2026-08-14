@@ -91,6 +91,14 @@ struct CachedAuthoringLevelMarkerDraw {
     float orientationDegrees = 0.0f;
 };
 
+struct CachedAuthoringTriggerDraw {
+    int triggerId = -1;
+    std::string id;
+    bool enabled = true;
+    std::vector<Vector2> points;
+    std::vector<Vector2> fillTrianglePoints;
+};
+
 struct CachedAuthoringVertexDraw {
     int vertexId = -1;
     SectorTopologyCoordPoint point = {};
@@ -138,6 +146,7 @@ struct SectorEditorTopologyRenderCache {
     std::vector<CachedTopologySpotLightDraw> dynamicSpotLights;
     std::vector<CachedRuntimeObjectDraw> runtimeObjects;
     std::vector<CachedAuthoringLevelMarkerDraw> levelMarkers;
+    std::vector<CachedAuthoringTriggerDraw> triggers;
     std::vector<CachedAuthoringLineDraw> authoringLines;
     std::vector<CachedAuthoringVertexDraw> authoringVertices;
     std::vector<CachedAuthoringFaceHighlightDraw> authoringFaceHighlights;
