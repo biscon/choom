@@ -127,7 +127,8 @@ bounds or visual NPC scale:
 
 - radius: `0.25` world units
 - standing height: `1.6` world units
-- maximum climb: `0.25` world units
+- maximum climb: the map's normalized gameplay-preview `stepHeight`, defaulting
+  to `0.25` world units when omitted
 - maximum slope, Recast cell size, cell height, region sizes, edge limits, and
   tile size: explicit navigation settings with documented defaults selected in
   Slice 2
@@ -462,8 +463,8 @@ Slice 2 selected the following deterministic first-profile defaults:
 
 - Recast cell size `0.125m`, cell height `0.05m`, and `64` cells per tile
   (`8m` tile width);
-- walkable height `ceil(1.6 / 0.05) = 32` voxels, climb
-  `floor(0.25 / 0.05) = 5` voxels, radius
+- walkable height `ceil(1.6 / 0.05) = 32` voxels, map-derived climb
+  (`floor(0.25 / 0.05) = 5` voxels by default), radius
   `ceil(0.25 / 0.125) = 2` voxels, and tile border `radius + 3 = 5`
   cells;
 - maximum slope `45` degrees, minimum/merge region sizes `8`/`20`
@@ -513,7 +514,10 @@ arrival. Script policy for partial routes is defined below.
   stable asset fingerprint, and door-link/cut geometry.
 - It excludes NPC placements and definitions, runtime move state, dynamic prop
   transforms, visual materials/textures, decals, lights, probes, fog, sky
-  visuals, debug toggles, and camera/preview settings.
+  visuals, debug toggles, and visual camera/preview settings. The gameplay
+  preview `stepHeight` is included indirectly through the effective navigation
+  climb setting because it changes walkability and NPC collision-constrained
+  locomotion.
 - Dynamic prop obstacles update TileCache state/revisions and affected debug
   cache data; they do not rewrite the static navigation source hash.
 - Editor authoring mutations that affect geometry/clearance/flags follow the
@@ -778,8 +782,8 @@ Generated-fixture tests:
 - empty/malformed input and deterministic failure reporting;
 - full, partial, no-path, invalid-start, invalid-target, and capacity query
   results;
-- source hash changes for every static walkability input and ignores visual
-  settings;
+- source hash changes for every static walkability input, including effective
+  map-derived climb, and ignores visual settings;
 - multi-tile paths cross tile boundaries and edge tiles retain the required
   rasterization border;
 - large synthetic bounds produce correct capacity/headroom diagnostics without
@@ -1244,8 +1248,9 @@ Append one entry per slice attempt using this shape:
 - Lightmap/source-hash impact: the lightmap source hash is unchanged.
   Navigation has a separate deterministic source hash; it includes topology
   geometry/physical flags/heights/`ceilingSky`, build settings, collision-enabled
-  static OBB/fingerprint data, and door cuts, while excluding visual preview,
-  sky-visual, lighting, fog, audio, NPC, and dynamic-prop data.
+  static OBB/fingerprint data, door cuts, and the effective map-derived climb,
+  while excluding visual preview, sky-visual, lighting, fog, audio, NPC, and
+  dynamic-prop data.
 - Manual verification performed by user: none requested; no GUI test was run.
 - Remaining debt/blocker: Slice 3 adds NPC records and locomotion; dynamic
   obstacles, door links, Crowd, and persistence remain assigned to later slices.
@@ -1388,3 +1393,39 @@ Append one entry per slice attempt using this shape:
 - Manual verification performed by user: none; no GUI/xdotool test was run.
 - Remaining debt/blocker: Slice 6 owns TileCache dynamic prop obstacles, Slice
   7 owns Crowd avoidance, and Slice 8 owns final hardening/persistence work.
+
+### 2026-08-15 — Slice 5 Door/Stair Connectivity Correction — Completed
+
+- Scope completed: effective NPC maximum climb now comes from the map's
+  normalized gameplay-preview `stepHeight`; level/preview scene builds use that
+  profile, live editor step-height edits safely release active navigation state
+  and queue a navigation-only rebuild, and both editor/game Nav diagnostics
+  show the effective radius, height, and climb.
+- Root cause and door correction: the hub staircase rises `0.375m` per tread
+  while navigation was fixed at `0.25m`, so Recast treated each riser as a
+  ledge, eroded the one-meter treads into small islands, and left a swing-door
+  staging endpoint attached to a disconnected tread. Door construction now
+  verifies each endpoint against the front/back sector region reachable under
+  the same portal, clearance, and climb rules; mismatches omit the link with a
+  stable door/side/sector diagnostic instead of reporting a false-valid link.
+- Tests/checks: added generated `0.375m` bidirectional stair locomotion and
+  navmesh coverage using a `0.40m` map step, legacy `0.25m` rejection, effective
+  source-hash coverage, and a narrow-threshold swing-door fixture that is
+  rejected while its landing is disconnected and succeeds with stable door
+  metadata once the map climb permits the raised side. The required debug
+  build passed and all 26 CTest tests passed; `git diff --check` passed.
+- Real-map diagnostic: a CPU-only query against the current hub topology now
+  returns full paths for `wp5 -> wp6`, `wp6 -> wp7`, and `wp5 -> wp7`; the
+  door-crossing routes carry placed door IDs `29` and `30`. The hub asset was
+  not edited and no GUI/xdotool verification was performed.
+- Collision/sector lookup/physics impact: NPC collision-constrained locomotion
+  now uses the map-derived climb already used to build its navmesh. Player
+  collision, sector lookup, camera behavior, agent radius/height, general
+  physics, and door collider clearance remain unchanged.
+- Topology cache invalidation impact: no topology or authoring geometry mutation
+  path changed. Applying preview settings retains its existing document/cache
+  invalidation; a step-height change additionally rebuilds only derived
+  navigation state.
+- Lightmap/source-hash impact: the lightmap source hash is unchanged. The
+  navigation source hash includes the effective map step height through the
+  normalized climb setting; other visual preview settings remain excluded.

@@ -29,6 +29,9 @@ public:
     void RefreshMapRuntimeObjects(
             engine::EngineContext& context,
             const SectorTopologyMap& map);
+    bool RebuildNavigationForMap(
+            engine::EngineContext& context,
+            const SectorTopologyMap& map);
     void Update(
             engine::EngineContext& context,
             const SectorTopologyMap& map,

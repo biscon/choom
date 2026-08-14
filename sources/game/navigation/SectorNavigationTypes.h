@@ -10,6 +10,8 @@
 
 namespace game {
 
+struct SectorTopologyMap;
+
 enum class SectorNavigationState {
     Uninitialized,
     Empty,
@@ -259,6 +261,8 @@ struct SectorNavigationPosition {
 
 SectorNavigationSettings NormalizeSectorNavigationSettings(
         SectorNavigationSettings settings);
+SectorNavigationSettings BuildSectorNavigationSettingsForMap(
+        const SectorTopologyMap& map);
 SectorNavigationCapacitySettings NormalizeSectorNavigationCapacitySettings(
         SectorNavigationCapacitySettings settings);
 

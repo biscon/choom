@@ -1,5 +1,6 @@
 #include "game/navigation/SectorNavigationTypes.h"
 
+#include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
 
 #include <algorithm>
@@ -73,6 +74,15 @@ SectorNavigationSettings NormalizeSectorNavigationSettings(
     settings.maximumVerticesPerPolygon = std::clamp(
             settings.maximumVerticesPerPolygon, 3, 6);
     return settings;
+}
+
+SectorNavigationSettings BuildSectorNavigationSettingsForMap(
+        const SectorTopologyMap& map)
+{
+    SectorNavigationSettings settings;
+    settings.agentMaximumClimb =
+            NormalizeSectorPreviewSettings(map.previewSettings).stepHeight;
+    return NormalizeSectorNavigationSettings(settings);
 }
 
 SectorNavigationCapacitySettings NormalizeSectorNavigationCapacitySettings(

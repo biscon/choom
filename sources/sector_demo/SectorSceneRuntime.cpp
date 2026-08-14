@@ -27,7 +27,7 @@ bool SectorSceneRuntime::Rebuild(
                 error)) {
         return false;
     }
-    if (!navigation.Initialize()) {
+    if (!navigation.Initialize(BuildSectorNavigationSettingsForMap(map))) {
         TraceLog(LOG_WARNING, "Navigation service initialization failed");
     }
     ResetSectorRuntimeObjectsForMap(
@@ -41,6 +41,21 @@ bool SectorSceneRuntime::Rebuild(
     }
     BeginLevelAudio(context, map, assetScopeName, defaultFootstepSet);
     BindRuntimeObjectAudio(context.world);
+    return true;
+}
+
+bool SectorSceneRuntime::RebuildNavigationForMap(
+        engine::EngineContext& context,
+        const SectorTopologyMap& map)
+{
+    ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    navigation.Shutdown();
+    if (!navigation.Initialize(BuildSectorNavigationSettingsForMap(map))) {
+        TraceLog(LOG_WARNING, "Navigation service initialization failed");
+        return false;
+    }
+    navigation.RequestRebuild();
+    InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     return true;
 }
 

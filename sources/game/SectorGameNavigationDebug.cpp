@@ -85,6 +85,12 @@ void DrawSectorGameNavigationDebugPanel(
             static_cast<unsigned long long>(
                     navigation.DebugCache().navigationRevision)),
             textConfig.textColor);
+    line(TextFormat(
+            "agent radius %.2f | height %.2f | climb %.2f (map step)",
+            navigation.Settings().agentRadius,
+            navigation.Settings().agentHeight,
+            navigation.Settings().agentMaximumClimb),
+            textConfig.textColor);
     size_t clearDoorLinks = 0;
     size_t openingDoorLinks = 0;
     size_t disabledDoorLinks = 0;

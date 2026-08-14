@@ -1175,6 +1175,10 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         context.navigation.Settings().cellHeight,
                         context.navigation.Settings().tileSizeCells,
                         stats.tileWorldSize));
+                addKeyValue("agent", TextFormat("radius %.3f | height %.3f | climb %.3f (map step)",
+                        context.navigation.Settings().agentRadius,
+                        context.navigation.Settings().agentHeight,
+                        context.navigation.Settings().agentMaximumClimb));
                 const auto& diagnostics = context.navigation.Diagnostics();
                 if (!diagnostics.empty()) {
                     addKeyValueStyled("latest", diagnostics.back().message,

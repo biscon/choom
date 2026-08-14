@@ -7,6 +7,8 @@
 #include "DetourNavMesh.h"
 #include "DetourNavMeshQuery.h"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -67,6 +69,18 @@ void TestSettingsAndStatusContracts()
                   game::SectorNavigationQueryStatus::CapacityExceeded))
                     == "capacity exceeded",
           "project status formatting does not expose raw Detour status");
+
+    game::SectorTopologyMap map;
+    Check(Near(game::BuildSectorNavigationSettingsForMap(map).agentMaximumClimb,
+                  0.25f),
+          "legacy map navigation keeps the default 0.25m climb");
+    map.previewSettings.stepHeight = 0.4f;
+    const game::SectorNavigationSettings mapSettings =
+            game::BuildSectorNavigationSettingsForMap(map);
+    Check(Near(mapSettings.agentMaximumClimb, 0.4f)
+                  && Near(mapSettings.agentRadius, 0.25f)
+                  && Near(mapSettings.agentHeight, 1.6f),
+          "map step height configures climb without changing the fixed NPC radius or height");
 }
 
 void TestLifecycleAndHandles()
@@ -243,6 +257,77 @@ game::SectorTopologyMap MakeSectorStairMap(
     return map;
 }
 
+game::SectorTopologyMap MakeDoorThresholdStepMap()
+{
+    game::SectorTopologyMap map;
+    constexpr game::SectorCoord DoorX = 1024; // 8.0 world units.
+    constexpr game::SectorCoord ThresholdX = 1056; // 0.25m threshold depth.
+    constexpr game::SectorCoord EndX = 2048;
+    constexpr game::SectorCoord Width = 160; // 1.25m door width.
+    map.vertices = {
+            {1, 0, 0}, {2, DoorX, 0}, {3, DoorX, Width}, {4, 0, Width},
+            {5, ThresholdX, 0}, {6, ThresholdX, Width},
+            {7, EndX, 0}, {8, EndX, Width}};
+
+    int nextLineId = 1;
+    int nextSideId = 1;
+    int doorLineId = 0;
+    int doorFrontSideId = 0;
+    int doorBackSideId = 0;
+    const auto addLine = [&](int startVertexId, int endVertexId,
+                             int frontSectorId, int backSectorId = 0) {
+        const int lineId = nextLineId++;
+        const int frontSideId = nextSideId++;
+        const int backSideId = backSectorId != 0 ? nextSideId++ : -1;
+        map.lineDefs.push_back({lineId, startVertexId, endVertexId,
+                frontSideId, backSideId});
+        AddSide(map, frontSideId, lineId,
+                game::SectorTopologySideKind::Front, frontSectorId);
+        if (backSectorId != 0) {
+            AddSide(map, backSideId, lineId,
+                    game::SectorTopologySideKind::Back, backSectorId);
+        }
+        return std::array<int, 3>{lineId, frontSideId, backSideId};
+    };
+
+    addLine(1, 2, 10);
+    const std::array<int, 3> doorPortal = addLine(2, 3, 10, 20);
+    doorLineId = doorPortal[0];
+    doorFrontSideId = doorPortal[1];
+    doorBackSideId = doorPortal[2];
+    addLine(3, 4, 10);
+    addLine(4, 1, 10);
+    addLine(2, 5, 20);
+    addLine(5, 6, 20, 30);
+    addLine(6, 3, 20);
+    addLine(5, 7, 30);
+    addLine(7, 8, 30);
+    addLine(8, 6, 30);
+
+    game::SectorTopologySector room;
+    room.id = 10;
+    game::SectorTopologySector threshold;
+    threshold.id = 20;
+    game::SectorTopologySector raisedRoom;
+    raisedRoom.id = 30;
+    raisedRoom.floorZ = 3.0f; // 0.375 world units.
+    raisedRoom.ceilingZ = 27.0f;
+    map.sectors = {room, threshold, raisedRoom};
+
+    game::SectorPlacedRuntimeObject object;
+    object.id = 77;
+    object.kind = "door";
+    object.door.anchor.lineDefId = doorLineId;
+    object.door.anchor.frontSectorId = 10;
+    object.door.anchor.backSectorId = 20;
+    object.door.anchor.frontSideDefId = doorFrontSideId;
+    object.door.anchor.backSideDefId = doorBackSideId;
+    object.door.width = 1.25f;
+    object.door.motion = game::SectorDoorMotionType::Swing;
+    map.runtimeObjects.push_back(object);
+    return map;
+}
+
 void AddIndependentLoop(
         game::SectorTopologyMap& map,
         int sectorId,
@@ -387,6 +472,11 @@ void TestBuildInputAndSourceHash()
     Check(game::ComputeSectorNavigationSourceHash(map, colliders, changedSettings)
                   != game::ComputeSectorNavigationSourceHash(map, colliders, {}),
           "navigation source hash includes normalized profile/build settings");
+    map.previewSettings.stepHeight = 0.4f;
+    Check(game::ComputeSectorNavigationSourceHash(
+                  map, colliders, game::BuildSectorNavigationSettingsForMap(map))
+                  != game::ComputeSectorNavigationSourceHash(map, colliders, {}),
+          "effective map step height changes the navigation source hash through climb settings");
 
     game::SectorNavigationBuildInput input;
     std::vector<std::string> warnings;
@@ -454,6 +544,47 @@ void TestTopologyWalkabilityFixtures()
     Check(!stairWorld.DebugCache().stepConnections.empty(),
           "navigation debug cache exposes Detour adjacency between stair levels");
 
+    constexpr float TallAuthoredRisePerStep = 3.0f; // 0.375 world units.
+    game::SectorTopologyMap mapConfiguredStairs = MakeSectorStairMap(
+            StairStepCount, TallAuthoredRisePerStep);
+    mapConfiguredStairs.previewSettings.stepHeight = 0.4f;
+    game::SectorNavigationWorld mapConfiguredStairWorld;
+    mapConfiguredStairWorld.Initialize(
+            game::BuildSectorNavigationSettingsForMap(mapConfiguredStairs));
+    mapConfiguredStairWorld.RequestRebuild();
+    FinishBuild(mapConfiguredStairWorld, mapConfiguredStairs);
+    const float tallStairTop = game::SectorNavigationAuthoredHeightToWorld(
+            TallAuthoredRisePerStep * static_cast<float>(StairStepCount - 1));
+    const game::SectorNavigationPathResult tallAscending =
+            mapConfiguredStairWorld.FindPath(
+                    {0.5f, 0.0f, 2.0f}, {5.5f, tallStairTop, 2.0f});
+    const game::SectorNavigationPathResult tallDescending =
+            mapConfiguredStairWorld.FindPath(
+                    {5.5f, tallStairTop, 2.0f}, {0.5f, 0.0f, 2.0f});
+    if (tallAscending.status != game::SectorNavigationQueryStatus::Success
+        || tallDescending.status != game::SectorNavigationQueryStatus::Success) {
+        std::cerr << "configured stairs ascending="
+                  << game::SectorNavigationQueryStatusName(tallAscending.status)
+                  << " descending="
+                  << game::SectorNavigationQueryStatusName(tallDescending.status)
+                  << " step links="
+                  << mapConfiguredStairWorld.DebugCache().stepConnections.size()
+                  << '\n';
+    }
+    Check(tallAscending.status == game::SectorNavigationQueryStatus::Success
+                  && tallDescending.status == game::SectorNavigationQueryStatus::Success
+                  && !mapConfiguredStairWorld.DebugCache().stepConnections.empty(),
+          "map-configured 0.40m climb connects 0.375m stair treads in both directions");
+
+    game::SectorNavigationWorld defaultTallStairWorld;
+    defaultTallStairWorld.Initialize();
+    defaultTallStairWorld.RequestRebuild();
+    FinishBuild(defaultTallStairWorld, mapConfiguredStairs);
+    Check(defaultTallStairWorld.FindPath(
+                  {0.5f, 0.0f, 2.0f}, {5.5f, tallStairTop, 2.0f}).status
+                    != game::SectorNavigationQueryStatus::Success,
+          "the same 0.375m stairs remain disconnected under the legacy 0.25m profile");
+
     game::SectorTopologyMap invalidStairs = MakeSectorStairMap(
             StairStepCount, AuthoredRisePerStep);
     invalidStairs.sectors[3].floorZ += 1.0f;
@@ -516,6 +647,41 @@ void TestTopologyWalkabilityFixtures()
                           {true}).status
                           != game::SectorNavigationQueryStatus::Success,
           "disabled door link yields a diagnosed unavailable route");
+
+    game::SectorTopologyMap thresholdStep = MakeDoorThresholdStepMap();
+    game::SectorNavigationBuildInput thresholdInput;
+    std::vector<std::string> thresholdWarnings;
+    std::string thresholdError;
+    Check(game::BuildSectorNavigationBuildInput(
+                  thresholdStep, {}, {}, thresholdInput,
+                  thresholdWarnings, thresholdError)
+                  && thresholdInput.doorLinks.empty()
+                  && std::any_of(
+                          thresholdWarnings.begin(), thresholdWarnings.end(),
+                          [](const std::string& warning) {
+                              return warning.find("Door 77") != std::string::npos
+                                      && warning.find("disconnected sector")
+                                              != std::string::npos;
+                          }),
+          "door staging on an over-climb island is omitted with a stable door diagnostic");
+    thresholdStep.previewSettings.stepHeight = 0.4f;
+    game::SectorNavigationWorld thresholdStepWorld;
+    thresholdStepWorld.Initialize(
+            game::BuildSectorNavigationSettingsForMap(thresholdStep));
+    thresholdStepWorld.RequestRebuild();
+    FinishBuild(thresholdStepWorld, thresholdStep);
+    const game::SectorNavigationPathResult thresholdStepPath =
+            thresholdStepWorld.FindPath(
+                    {4.0f, 0.0f, 0.625f},
+                    {12.0f, 0.375f, 0.625f});
+    bool thresholdPathCarriesDoor = false;
+    for (size_t corner = 0; corner < thresholdStepPath.cornerCount; ++corner) {
+        thresholdPathCarriesDoor = thresholdPathCarriesDoor
+                || thresholdStepPath.cornerDoorIds[corner] == 77;
+    }
+    Check(thresholdStepPath.status == game::SectorNavigationQueryStatus::Success
+                  && thresholdPathCarriesDoor,
+          "map-configured climb connects a swing-door landing through the raised side region");
 
     game::SectorTopologyMap lowClearance = MakeAdjacentMap(0.0f, 24.0f, 0.0f, 12.0f);
     game::SectorNavigationWorld clearanceWorld;

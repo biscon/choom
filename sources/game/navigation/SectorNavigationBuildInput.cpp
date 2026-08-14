@@ -270,6 +270,96 @@ bool IsPassablePortal(
                     + 0.0001f >= settings.agentHeight;
 }
 
+bool PointOnNavigationLoopSegment(
+        Vector2 point,
+        Vector2 start,
+        Vector2 end)
+{
+    constexpr float Epsilon = 0.0001f;
+    const float dx = end.x - start.x;
+    const float dz = end.y - start.y;
+    const float cross = dx * (point.y - start.y) - dz * (point.x - start.x);
+    if (std::fabs(cross) > Epsilon * std::max(1.0f, std::sqrt(dx * dx + dz * dz))) {
+        return false;
+    }
+    const float dot = (point.x - start.x) * dx + (point.y - start.y) * dz;
+    return dot >= -Epsilon && dot <= dx * dx + dz * dz + Epsilon;
+}
+
+bool NavigationLoopContainsPoint(
+        const SectorTopologyMap& map,
+        const SectorTopologyLoop& loop,
+        Vector2 point)
+{
+    bool inside = false;
+    for (size_t index = 0; index < loop.vertexIds.size(); ++index) {
+        const SectorTopologyVertex* start = FindSectorTopologyVertex(
+                map, loop.vertexIds[index]);
+        const SectorTopologyVertex* end = FindSectorTopologyVertex(
+                map, loop.vertexIds[(index + 1) % loop.vertexIds.size()]);
+        if (start == nullptr || end == nullptr) return false;
+        const Vector2 a = SectorCoordToWorldPosition2(start->x, start->y);
+        const Vector2 b = SectorCoordToWorldPosition2(end->x, end->y);
+        if (PointOnNavigationLoopSegment(point, a, b)) return true;
+        if ((a.y > point.y) != (b.y > point.y)
+            && point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
+bool NavigationSectorContainsPoint(
+        const SectorTopologyMap& map,
+        const SectorTopologyLoopSet& loops,
+        Vector2 point)
+{
+    if (!NavigationLoopContainsPoint(map, loops.outer, point)) return false;
+    for (const SectorTopologyLoop& hole : loops.holes) {
+        if (NavigationLoopContainsPoint(map, hole, point)) return false;
+    }
+    return true;
+}
+
+bool DoorStageBelongsToSideRegion(
+        const SectorTopologyMap& map,
+        const std::unordered_map<int, SectorTopologyLoopSet>& loopsBySectorId,
+        const std::unordered_map<int, std::vector<int>>& adjacency,
+        int anchorSectorId,
+        Vector2 stage,
+        int& outContainingSectorId)
+{
+    outContainingSectorId = 0;
+    std::vector<int> pending;
+    std::unordered_set<int> visited;
+    pending.reserve(map.sectors.size());
+    visited.reserve(map.sectors.size());
+    pending.push_back(anchorSectorId);
+    visited.insert(anchorSectorId);
+    for (size_t index = 0; index < pending.size(); ++index) {
+        const int sectorId = pending[index];
+        const auto loops = loopsBySectorId.find(sectorId);
+        if (loops != loopsBySectorId.end()
+            && NavigationSectorContainsPoint(map, loops->second, stage)) {
+            outContainingSectorId = sectorId;
+            return true;
+        }
+        const auto neighbors = adjacency.find(sectorId);
+        if (neighbors == adjacency.end()) continue;
+        for (int neighborId : neighbors->second) {
+            if (visited.insert(neighborId).second) pending.push_back(neighborId);
+        }
+    }
+
+    for (const auto& entry : loopsBySectorId) {
+        if (NavigationSectorContainsPoint(map, entry.second, stage)) {
+            outContainingSectorId = entry.first;
+            break;
+        }
+    }
+    return false;
+}
+
 void HashSettings(Fnv64& hash, const SectorNavigationSettings& settings)
 {
     hash.Float(settings.agentRadius);
@@ -314,6 +404,8 @@ bool BuildSectorNavigationBuildInput(
 
     const SectorNavigationSettings settings = NormalizeSectorNavigationSettings(rawSettings);
     const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(map);
+    std::unordered_map<int, SectorTopologyLoopSet> loopsBySectorId;
+    loopsBySectorId.reserve(map.sectors.size());
     Vector3 minimum{std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
             std::numeric_limits<float>::max()};
     Vector3 maximum{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
@@ -352,6 +444,7 @@ bool BuildSectorNavigationBuildInput(
                     NavigationRasterNullArea, outInput, minimum, maximum, outError)) {
             return false;
         }
+        loopsBySectorId.emplace(sector->id, std::move(loops));
     }
 
     std::unordered_set<int> doorLineIds;
@@ -361,6 +454,12 @@ bool BuildSectorNavigationBuildInput(
     std::sort(objects.begin(), objects.end(), [](const auto* lhs, const auto* rhs) {
         return lhs->id < rhs->id;
     });
+    struct ResolvedNavigationDoor {
+        const SectorPlacedRuntimeObject* object = nullptr;
+        SectorResolvedDoorAnchor anchor;
+    };
+    std::vector<ResolvedNavigationDoor> resolvedDoors;
+    resolvedDoors.reserve(map.runtimeObjects.size());
     for (const SectorPlacedRuntimeObject* object : objects) {
         if (object->kind != "door") continue;
         const SectorResolvedDoorAnchor door = ResolveSectorDoorAnchor(map, object->door);
@@ -370,6 +469,28 @@ bool BuildSectorNavigationBuildInput(
             continue;
         }
         doorLineIds.insert(door.lineDefId);
+        resolvedDoors.push_back({object, door});
+    }
+
+    std::unordered_map<int, std::vector<int>> walkableSectorAdjacency;
+    walkableSectorAdjacency.reserve(map.sectors.size());
+    for (const SectorTopologyLineDef* line : SortedById(map.lineDefs)) {
+        if (doorLineIds.find(line->id) != doorLineIds.end()
+            || !IsPassablePortal(map, *line, settings)) {
+            continue;
+        }
+        const SectorTopologySideDef* front = FindSectorTopologySideDef(
+                map, line->frontSideDefId);
+        const SectorTopologySideDef* back = FindSectorTopologySideDef(
+                map, line->backSideDefId);
+        if (front == nullptr || back == nullptr) continue;
+        walkableSectorAdjacency[front->sectorId].push_back(back->sectorId);
+        walkableSectorAdjacency[back->sectorId].push_back(front->sectorId);
+    }
+
+    for (const ResolvedNavigationDoor& resolvedDoor : resolvedDoors) {
+        const SectorPlacedRuntimeObject* object = resolvedDoor.object;
+        const SectorResolvedDoorAnchor& door = resolvedDoor.anchor;
         const float bottom = door.openBottom + object->door.heightOffsetWorld;
         const float top = bottom + door.height;
         outInput.doorPlaceholders.push_back(SectorNavigationDebugDoorPlaceholder{
@@ -397,7 +518,7 @@ bool BuildSectorNavigationBuildInput(
         const float backStagingDistance = baseStagingDistance
                 + (object->door.swingSide == SectorDoorSwingSide::Back
                         ? swingSweep : 0.0f);
-        outInput.doorLinks.push_back(SectorNavigationBuildDoorLink{
+        const SectorNavigationBuildDoorLink link{
                 object->id,
                 {midpoint.x - normal.x * frontStagingDistance,
                  bottom,
@@ -405,7 +526,40 @@ bool BuildSectorNavigationBuildInput(
                 {midpoint.x + normal.x * backStagingDistance,
                  bottom,
                  midpoint.y + normal.y * backStagingDistance},
-                settings.agentRadius});
+                settings.agentRadius};
+        int frontStageSectorId = 0;
+        int backStageSectorId = 0;
+        const bool frontStageValid = DoorStageBelongsToSideRegion(
+                map,
+                loopsBySectorId,
+                walkableSectorAdjacency,
+                door.frontSectorId,
+                {link.frontStage.x, link.frontStage.z},
+                frontStageSectorId);
+        const bool backStageValid = DoorStageBelongsToSideRegion(
+                map,
+                loopsBySectorId,
+                walkableSectorAdjacency,
+                door.backSectorId,
+                {link.backStage.x, link.backStage.z},
+                backStageSectorId);
+        if (!frontStageValid || !backStageValid) {
+            const char* side = !frontStageValid ? "front" : "back";
+            const int anchorSectorId = !frontStageValid
+                    ? door.frontSectorId : door.backSectorId;
+            const int stageSectorId = !frontStageValid
+                    ? frontStageSectorId : backStageSectorId;
+            outWarnings.push_back("Door " + std::to_string(object->id)
+                    + " was omitted from navigation: " + side
+                    + " staging point is in "
+                    + (stageSectorId > 0
+                            ? "disconnected sector " + std::to_string(stageSectorId)
+                            : std::string("no sector"))
+                    + " rather than the walkable region from anchor sector "
+                    + std::to_string(anchorSectorId));
+            continue;
+        }
+        outInput.doorLinks.push_back(link);
     }
 
     for (const SectorTopologyLineDef* line : SortedById(map.lineDefs)) {

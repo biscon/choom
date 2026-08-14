@@ -255,7 +255,7 @@ game::SectorTopologyMap MakeNavigationStairMap()
     for (int step = 0; step < StepCount; ++step) {
         const int sectorId = step + 1;
         game::SectorTopologySector sector = Sector(sectorId);
-        sector.floorZ = static_cast<float>(step) * 1.6f;
+        sector.floorZ = static_cast<float>(step) * 3.0f;
         sector.ceilingZ = sector.floorZ + 24.0f;
         map.sectors.push_back(sector);
         const int leftBottom = step * 2 + 1;
@@ -271,6 +271,7 @@ game::SectorTopologyMap MakeNavigationStairMap()
             addLine(rightBottom, rightTop, sectorId, sectorId + 1);
         }
     }
+    map.previewSettings.stepHeight = 0.4f;
     return map;
 }
 
@@ -4927,7 +4928,7 @@ void TestNpcNavigationSmoothsSectorGeometryStairsVisually()
     Check(collisionWorld.BuildFromTopology(map, &collisionError),
           "sector stair collision fixture builds");
     game::SectorNavigationWorld navigation;
-    navigation.Initialize();
+    navigation.Initialize(game::BuildSectorNavigationSettingsForMap(map));
     navigation.RequestRebuild();
     FinishNavigationBuild(navigation, map);
     Check(navigation.State() == game::SectorNavigationState::Ready,
@@ -4969,7 +4970,7 @@ void TestNpcNavigationSmoothsSectorGeometryStairsVisually()
             world.Get<game::SectorObjectTransform>(npcEntity);
     Check(game::GetNpcMoveStatus(npcNavigation, "stair_npc").phase
                     == game::NpcMovePhase::Arrived
-                  && Near(topTransform.position.y, 1.0f, 0.001f)
+                  && Near(topTransform.position.y, 1.875f, 0.001f)
                   && world.Get<game::SectorObject>(npcEntity).currentSectorId == 6,
           "NPC physically snaps through successive valid steps and reaches the top sector");
     Check(observedAscendingVisualLag,

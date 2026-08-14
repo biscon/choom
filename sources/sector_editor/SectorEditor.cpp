@@ -6202,6 +6202,9 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const bool previewChanged = !SamePreviewSettings(
             TopologyMap().previewSettings,
             draftPreviewSettings);
+    const bool navigationClimbChanged =
+            NormalizeSectorPreviewSettings(TopologyMap().previewSettings).stepHeight
+                    != draftPreviewSettings.stepHeight;
     const bool skyChanged = !SameSkySettings(TopologyMap().skySettings, draftSkySettings);
     const bool directionalChanged = !SameDirectionalLightSettings(
             TopologyMap().directionalLight,
@@ -6408,6 +6411,13 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     if (skyChanged && state.mode == SectorEditorMode::Preview3D && sceneRuntime.Renderer().IsRendererReady()) {
         if (engineContext != nullptr) {
             RebuildPreviewMeshesPreservingView(*engineContext);
+        }
+    } else if (navigationClimbChanged
+            && state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()
+            && engineContext != nullptr) {
+        if (!sceneRuntime.RebuildNavigationForMap(*engineContext, TopologyMap())) {
+            TraceLog(LOG_WARNING, "Could not rebuild navigation after step-height change");
         }
     }
     if (state.mode == SectorEditorMode::Preview3D
