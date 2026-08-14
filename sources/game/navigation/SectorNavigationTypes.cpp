@@ -28,6 +28,11 @@ bool IsNull(SectorNavigationPathHandle handle)
     return handle.index == UINT32_MAX;
 }
 
+bool operator==(SectorNavigationTileKey lhs, SectorNavigationTileKey rhs)
+{
+    return lhs.x == rhs.x && lhs.y == rhs.y && lhs.layer == rhs.layer;
+}
+
 SectorNavigationSettings NormalizeSectorNavigationSettings(
         SectorNavigationSettings settings)
 {
@@ -114,6 +119,38 @@ SectorNavigationCapacitySettings NormalizeSectorNavigationCapacitySettings(
             settings.tileCacheTemporaryBytes, 64u * 1024u, 256u * 1024u * 1024u);
     settings.dynamicObstacleCapacity = std::clamp(
             settings.dynamicObstacleCapacity, 1, 65535);
+    settings.dynamicObstacleRequestBudgetPerUpdate = std::clamp(
+            settings.dynamicObstacleRequestBudgetPerUpdate, 1, 64);
+    settings.dynamicObstacleTileBudgetPerUpdate = std::clamp(
+            settings.dynamicObstacleTileBudgetPerUpdate, 1, 64);
+    return settings;
+}
+
+SectorNavigationDynamicObstacleSettings NormalizeSectorNavigationDynamicObstacleSettings(
+        SectorNavigationDynamicObstacleSettings settings)
+{
+    const SectorNavigationDynamicObstacleSettings defaults;
+    const auto finiteOr = [](float value, float fallback) {
+        return std::isfinite(value) ? value : fallback;
+    };
+    settings.positionThresholdWorld = std::clamp(
+            finiteOr(settings.positionThresholdWorld,
+                    defaults.positionThresholdWorld), 0.001f, 8.0f);
+    settings.yawThresholdDegrees = std::clamp(
+            finiteOr(settings.yawThresholdDegrees,
+                    defaults.yawThresholdDegrees), 0.1f, 180.0f);
+    settings.slowUpdateIntervalSeconds = std::clamp(
+            finiteOr(settings.slowUpdateIntervalSeconds,
+                    defaults.slowUpdateIntervalSeconds), 0.01f, 10.0f);
+    settings.settleSeconds = std::clamp(
+            finiteOr(settings.settleSeconds, defaults.settleSeconds),
+            0.01f, 10.0f);
+    settings.fastLinearSpeedWorld = std::clamp(
+            finiteOr(settings.fastLinearSpeedWorld,
+                    defaults.fastLinearSpeedWorld), 0.01f, 1000.0f);
+    settings.fastAngularSpeedDegrees = std::clamp(
+            finiteOr(settings.fastAngularSpeedDegrees,
+                    defaults.fastAngularSpeedDegrees), 1.0f, 10000.0f);
     return settings;
 }
 
@@ -198,6 +235,19 @@ const char* SectorNavigationDoorDirectionName(SectorNavigationDoorDirection dire
         case SectorNavigationDoorDirection::BackToFront: return "back -> front";
     }
     return "unknown";
+}
+
+const char* SectorNavigationDynamicObstacleStateName(
+        SectorNavigationDynamicObstacleState state)
+{
+    switch (state) {
+        case SectorNavigationDynamicObstacleState::Pending: return "Pending";
+        case SectorNavigationDynamicObstacleState::Active: return "Active";
+        case SectorNavigationDynamicObstacleState::Removing: return "Removing";
+        case SectorNavigationDynamicObstacleState::FastSuppressed: return "Fast suppressed";
+        case SectorNavigationDynamicObstacleState::Failed: return "Failed";
+    }
+    return "Unknown";
 }
 
 } // namespace game

@@ -52,7 +52,7 @@ void DrawSectorGameNavigationDebugPanel(
     textConfig.paddingX = 8.0f;
     textConfig.paddingY = 4.0f;
     const float panelWidth = 620.0f;
-    const float panelHeight = 344.0f;
+    const float panelHeight = 373.0f;
     const Rectangle bounds = config.overlayBounds;
     const Rectangle panel{
             bounds.x + std::max(16.0f, bounds.width - panelWidth - 24.0f),
@@ -105,6 +105,15 @@ void DrawSectorGameNavigationDebugPanel(
     line(TextFormat(
             "doors %zu clear | %zu require open | %zu disabled | %u holders",
             clearDoorLinks, openingDoorLinks, disabledDoorLinks, doorHolders),
+            textConfig.textColor);
+    const SectorNavigationDynamicObstacleStatistics& obstacleStats =
+            navigation.DynamicObstacleStatistics();
+    line(TextFormat(
+            "obstacles %zu active | %zu pending | %zu fast | %llu tile updates",
+            obstacleStats.activeCount,
+            obstacleStats.pendingCount + obstacleStats.removingCount,
+            obstacleStats.fastSuppressedCount,
+            static_cast<unsigned long long>(obstacleStats.updatedTiles)),
             textConfig.textColor);
     line(TextFormat(
             "script moves %zu active | %llu ok | %llu failed | %llu cancelled",

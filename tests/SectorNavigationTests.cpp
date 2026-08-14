@@ -69,6 +69,15 @@ void TestSettingsAndStatusContracts()
                   game::SectorNavigationQueryStatus::CapacityExceeded))
                     == "capacity exceeded",
           "project status formatting does not expose raw Detour status");
+    game::SectorNavigationDynamicObstacleSettings dynamicSettings;
+    dynamicSettings.positionThresholdWorld = -1.0f;
+    dynamicSettings.fastLinearSpeedWorld = INFINITY;
+    const game::SectorNavigationDynamicObstacleSettings normalizedDynamic =
+            game::NormalizeSectorNavigationDynamicObstacleSettings(
+                    dynamicSettings);
+    Check(normalizedDynamic.positionThresholdWorld > 0.0f
+                  && std::isfinite(normalizedDynamic.fastLinearSpeedWorld),
+          "dynamic obstacle motion settings normalize invalid thresholds");
 
     game::SectorTopologyMap map;
     Check(Near(game::BuildSectorNavigationSettingsForMap(map).agentMaximumClimb,
@@ -355,6 +364,23 @@ void FinishBuild(game::SectorNavigationWorld& world, const game::SectorTopologyM
             && (world.State() == game::SectorNavigationState::Queued
                 || world.State() == game::SectorNavigationState::Building); ++iteration) {
         world.UpdateBuild(map, colliders, 0);
+    }
+}
+
+void FinishDynamicObstacleUpdates(
+        game::SectorNavigationWorld& world,
+        const std::vector<game::SectorStaticModelCollider>& colliders,
+        int maximumUpdates = 128,
+        float dt = 0.016f)
+{
+    for (int update = 0; update < maximumUpdates; ++update) {
+        world.UpdateDynamicObstacles(colliders, dt);
+        const auto& stats = world.DynamicObstacleStatistics();
+        if (stats.backlogCount == 0
+                && stats.removingCount == 0
+                && stats.pendingCount == 0) {
+            break;
+        }
     }
 }
 
@@ -849,6 +875,186 @@ void TestStaticObstacleAndCapacityFixtures()
           "bounded corridor query reports capacity exhaustion");
 }
 
+game::SectorStaticModelCollider MakeDynamicObstacle(
+        int id,
+        Vector2 center,
+        Vector2 halfExtents,
+        float yaw = 0.0f,
+        float bottom = 0.0f,
+        float top = 2.0f)
+{
+    game::SectorStaticModelCollider collider;
+    collider.placedObjectId = id;
+    collider.center = center;
+    collider.axisX = {std::cos(yaw), -std::sin(yaw)};
+    collider.axisZ = {std::sin(yaw), std::cos(yaw)};
+    collider.halfExtents = halfExtents;
+    collider.bottom = bottom;
+    collider.top = top;
+    collider.resolved = true;
+    return collider;
+}
+
+void TestDynamicObstacleLifecycleAndTileRevisions()
+{
+    const game::SectorTopologyMap map = MakeSquareMap(16384);
+    game::SectorNavigationWorld world;
+    world.Initialize();
+    world.RequestRebuild();
+    FinishBuild(world, map);
+    Check(world.State() == game::SectorNavigationState::Ready,
+          "dynamic-obstacle fixture builds its static TileCache navmesh");
+    const uint64_t sourceHash = world.SourceHash();
+    const uint64_t buildRevision = world.BuildRevision();
+    const game::SectorNavigationPathResult affectedPath = world.FindPath(
+            {2.0f, 0.0f, 8.0f}, {14.0f, 0.0f, 8.0f});
+    const game::SectorNavigationPathResult unaffectedPath = world.FindPath(
+            {80.0f, 0.0f, 80.0f}, {100.0f, 0.0f, 80.0f});
+    if (affectedPath.status != game::SectorNavigationQueryStatus::Success
+            || unaffectedPath.status
+                    != game::SectorNavigationQueryStatus::Success) {
+        std::cerr << "dynamic fixture paths affected="
+                  << game::SectorNavigationQueryStatusName(affectedPath.status)
+                  << " distant="
+                  << game::SectorNavigationQueryStatusName(unaffectedPath.status)
+                  << '\n';
+    }
+    Check(affectedPath.status == game::SectorNavigationQueryStatus::Success
+                  && unaffectedPath.status
+                          == game::SectorNavigationQueryStatus::Success,
+          "dynamic-obstacle fixture captures affected and distant corridors");
+
+    game::SectorStaticModelCollider obstacle = MakeDynamicObstacle(
+            701, {8.0f, 8.0f}, {0.75f, 3.0f}, 0.35f, 0.5f, 2.0f);
+    FinishDynamicObstacleUpdates(world, {obstacle});
+    const auto& activeStats = world.DynamicObstacleStatistics();
+    Check(activeStats.activeCount == 1
+                  && activeStats.updatedTiles > 0
+                  && world.DebugCache().dynamicObstacles.size() == 1
+                  && world.DebugCache().dynamicObstacles[0].state
+                          == game::SectorNavigationDynamicObstacleState::Active,
+          "resolved dynamic OBB becomes an active TileCache obstacle with debug state");
+    Check(Near(world.DebugCache().dynamicObstacles[0].halfExtents.x,
+                       obstacle.halfExtents.x + world.Settings().agentRadius)
+                  && Near(world.DebugCache().dynamicObstacles[0].bottom,
+                          obstacle.bottom - world.Settings().agentHeight
+                                  - world.Settings().cellHeight),
+          "dynamic obstacle uses the conservative agent-radius and vertical-overlap band");
+    Check(world.SourceHash() == sourceHash
+                  && world.BuildRevision() == buildRevision
+                  && world.TileRevision() > 0,
+          "dynamic obstacle advances only runtime tile revisions and leaves the static source stable");
+    Check(world.CorridorTouchesChangedTile(
+                  affectedPath.corridorTiles.data(),
+                  affectedPath.corridorTileCount,
+                  affectedPath.tileRevision)
+                  && !world.CorridorTouchesChangedTile(
+                          unaffectedPath.corridorTiles.data(),
+                          unaffectedPath.corridorTileCount,
+                          unaffectedPath.tileRevision),
+          "only corridors touching rebuilt tiles are invalidated");
+
+    const uint64_t revisionBeforeRotation = world.TileRevision();
+    obstacle.axisX = {std::cos(0.55f), -std::sin(0.55f)};
+    obstacle.axisZ = {std::sin(0.55f), std::cos(0.55f)};
+    world.UpdateDynamicObstacles({obstacle}, 0.25f);
+    FinishDynamicObstacleUpdates(world, {obstacle});
+    Check(world.DynamicObstacleStatistics().activeCount == 1
+                  && world.TileRevision() > revisionBeforeRotation
+                  && world.DynamicObstacleStatistics().transforms > 0,
+          "a meaningful slow rotation coalesces into remove/add tile work");
+
+    obstacle.center.x += 1.0f;
+    world.UpdateDynamicObstacles({obstacle}, 0.016f);
+    for (int update = 0; update < 12; ++update) {
+        world.UpdateDynamicObstacles({obstacle}, 0.016f);
+    }
+    Check(world.DynamicObstacleStatistics().fastSuppressedCount == 1
+                  || world.DynamicObstacleStatistics().pendingCount == 1,
+          "a fast transform suppresses its navmesh cut instead of rebuilding every frame");
+    for (int update = 0; update < 128
+            && world.DynamicObstacleStatistics().activeCount != 1;
+            ++update) {
+        world.UpdateDynamicObstacles({obstacle}, 0.05f);
+    }
+    if (world.DynamicObstacleStatistics().activeCount != 1) {
+        const auto& stats = world.DynamicObstacleStatistics();
+        std::cerr << "settled obstacle active=" << stats.activeCount
+                  << " pending=" << stats.pendingCount
+                  << " removing=" << stats.removingCount
+                  << " fast=" << stats.fastSuppressedCount
+                  << " failed=" << stats.failedCount
+                  << " backlog=" << stats.backlogCount << '\n';
+    }
+    Check(world.DynamicObstacleStatistics().activeCount == 1,
+          "a fast-suppressed obstacle returns after the balanced settle interval");
+
+    FinishDynamicObstacleUpdates(world, {});
+    Check(world.DynamicObstacleStatistics().activeCount == 0
+                  && world.DebugCache().dynamicObstacles.empty(),
+          "removing or disabling a dynamic collider removes its TileCache obstacle");
+    Check(world.FindPath({2.0f, 0.0f, 8.0f}, {14.0f, 0.0f, 8.0f}).status
+                  == game::SectorNavigationQueryStatus::Success,
+          "path queries recover after a dynamic obstacle is removed");
+
+    game::SectorNavigationCapacitySettings capacity;
+    capacity.dynamicObstacleCapacity = 1;
+    capacity.dynamicObstacleRequestBudgetPerUpdate = 1;
+    capacity.dynamicObstacleTileBudgetPerUpdate = 1;
+    game::SectorNavigationWorld limited;
+    limited.Initialize({}, capacity);
+    limited.RequestRebuild();
+    FinishBuild(limited, map);
+    const game::SectorStaticModelCollider second = MakeDynamicObstacle(
+            702, {20.0f, 20.0f}, {0.5f, 0.5f});
+    limited.UpdateDynamicObstacles({obstacle, second}, 0.016f);
+    Check(limited.Counters().capacityWarnings == 1
+                  && !limited.Diagnostics().empty(),
+          "dynamic obstacle capacity overflow warns and leaves excess props collision-only");
+    limited.Shutdown();
+    Check(limited.State() == game::SectorNavigationState::Uninitialized
+                  && limited.DebugCache().dynamicObstacles.empty(),
+          "dynamic obstacle records and debug state clear during teardown");
+
+    game::SectorNavigationWorld oversized;
+    oversized.Initialize();
+    oversized.RequestRebuild();
+    FinishBuild(oversized, map);
+    const game::SectorStaticModelCollider huge = MakeDynamicObstacle(
+            703, {64.0f, 64.0f}, {40.0f, 40.0f});
+    oversized.UpdateDynamicObstacles({huge}, 0.016f);
+    if (oversized.DynamicObstacleStatistics().failedCount != 1) {
+        const auto& stats = oversized.DynamicObstacleStatistics();
+        std::cerr << "oversized obstacle active=" << stats.activeCount
+                  << " pending=" << stats.pendingCount
+                  << " failed=" << stats.failedCount
+                  << " backlog=" << stats.backlogCount << '\n';
+    }
+    Check(oversized.DynamicObstacleStatistics().failedCount == 1,
+          "an obstacle exceeding Detour's eight touched-layer limit fails safely");
+
+    game::SectorTopologyMap doorMap = MakeAdjacentMap();
+    game::SectorPlacedRuntimeObject doorObject;
+    doorObject.id = 77;
+    doorObject.kind = "door";
+    doorObject.door.anchor.lineDefId = 2;
+    doorObject.door.anchor.frontSectorId = 10;
+    doorObject.door.anchor.backSectorId = 20;
+    doorObject.door.anchor.frontSideDefId = 2;
+    doorObject.door.anchor.backSideDefId = 8;
+    doorMap.runtimeObjects.push_back(doorObject);
+    game::SectorNavigationWorld doorWorld;
+    doorWorld.Initialize();
+    doorWorld.RequestRebuild();
+    FinishBuild(doorWorld, doorMap);
+    const game::SectorStaticModelCollider nearDoor = MakeDynamicObstacle(
+            704, {6.0f, 4.0f}, {0.5f, 0.5f});
+    FinishDynamicObstacleUpdates(doorWorld, {nearDoor});
+    Check(doorWorld.SetDoorLinkRuntimeState(
+                  77, game::SectorNavigationDoorLinkState::Clear, 1),
+          "door off-mesh references are rebound after an affected TileCache tile is replaced");
+}
+
 } // namespace
 
 int main()
@@ -861,6 +1067,7 @@ int main()
     TestBuildInputAndSourceHash();
     TestTopologyWalkabilityFixtures();
     TestStaticObstacleAndCapacityFixtures();
+    TestDynamicObstacleLifecycleAndTileRevisions();
     if (failures != 0) {
         std::cerr << failures << " navigation test(s) failed\n";
         return 1;

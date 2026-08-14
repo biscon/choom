@@ -11,6 +11,7 @@ struct SectorNavigationDebugDrawSettings {
     bool showEdges = true;
     bool showTileBounds = false;
     bool showStaticObstacles = true;
+    bool showDynamicObstacles = true;
     bool showDoorPlaceholders = true;
     bool showStepConnections = true;
     bool showNpcPaths = true;

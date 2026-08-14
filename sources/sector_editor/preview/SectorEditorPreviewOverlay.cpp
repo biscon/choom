@@ -432,6 +432,7 @@ void DrawSectorEditorPreviewNavigationOverlay(
                     overlayState.showNavigationEdges,
                     overlayState.showNavigationTileBounds,
                     overlayState.showNavigationStaticObstacles,
+                    overlayState.showNavigationDynamicObstacles,
                     overlayState.showNavigationDoorPlaceholders,
                     overlayState.showNavigationStepConnections,
                     overlayState.showNavigationNpcPaths,
@@ -1179,6 +1180,51 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         context.navigation.Settings().agentRadius,
                         context.navigation.Settings().agentHeight,
                         context.navigation.Settings().agentMaximumClimb));
+                const SectorNavigationDynamicObstacleStatistics& obstacleStats =
+                        context.navigation.DynamicObstacleStatistics();
+                addKeyValue("dynamic obstacles", TextFormat(
+                        "%zu active | %zu pending | %zu removing | %zu fast | %zu failed",
+                        obstacleStats.activeCount,
+                        obstacleStats.pendingCount,
+                        obstacleStats.removingCount,
+                        obstacleStats.fastSuppressedCount,
+                        obstacleStats.failedCount));
+                addKeyValue("obstacle updates", TextFormat(
+                        "backlog %zu | %llu tiles | %.3f / %.3f ms last/peak",
+                        obstacleStats.backlogCount,
+                        static_cast<unsigned long long>(obstacleStats.updatedTiles),
+                        obstacleStats.lastUpdateMilliseconds,
+                        obstacleStats.peakUpdateMilliseconds));
+                size_t shownObstacles = 0;
+                for (const SectorNavigationDebugDynamicObstacle& obstacle :
+                        context.navigation.DebugCache().dynamicObstacles) {
+                    if (shownObstacles++ >= 8) break;
+                    addKeyValue("dynamic obstacle", TextFormat(
+                            "ID %d | %s | %.2f %.2f | %.2fx%.2f | Y %.2f..%.2f",
+                            obstacle.placedObjectId,
+                            SectorNavigationDynamicObstacleStateName(
+                                    obstacle.state),
+                            obstacle.center.x,
+                            obstacle.center.y,
+                            obstacle.halfExtents.x * 2.0f,
+                            obstacle.halfExtents.y * 2.0f,
+                            obstacle.bottom,
+                            obstacle.top));
+                }
+                size_t shownUpdatedTiles = 0;
+                for (auto tile = context.navigation.DebugCache()
+                                     .recentlyUpdatedTiles.rbegin();
+                        tile != context.navigation.DebugCache()
+                                        .recentlyUpdatedTiles.rend()
+                                && shownUpdatedTiles++ < 6;
+                        ++tile) {
+                    addKeyValue("updated tile", TextFormat(
+                            "%d,%d layer %d | revision %llu",
+                            tile->key.x,
+                            tile->key.y,
+                            tile->key.layer,
+                            static_cast<unsigned long long>(tile->revision)));
+                }
                 const auto& diagnostics = context.navigation.Diagnostics();
                 if (!diagnostics.empty()) {
                     addKeyValueStyled("latest", diagnostics.back().message,
@@ -1263,7 +1309,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             selectedAgent->doorWaitSeconds,
                             selectedAgent->holdsDoor ? "holding" : "not holding"));
                 }
-                addWrappedLine("Door links are live; dynamic prop obstacles, Crowd, and query probes remain assigned to later navigation slices.");
+                addWrappedLine("Dynamic prop TileCache obstacles and door links are live; Crowd and query probes remain assigned to later navigation slices.");
                 break;
             }
             case PreviewDebugOverlayTab::Controls:
@@ -1761,6 +1807,11 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 "sector_editor_navigation_obstacles", "Static Obstacles",
                 Rectangle{panel.x + padding + checkboxWidth + gap, y, checkboxWidth, rowH},
                 overlayState.showNavigationStaticObstacles);
+        y += rowH + 6.0f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_dynamic_obstacles", "Dynamic Obstacles",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationDynamicObstacles);
         y += rowH + 6.0f;
         drawNavigationCheckbox(
                 "sector_editor_navigation_doors", "Door Placeholders",

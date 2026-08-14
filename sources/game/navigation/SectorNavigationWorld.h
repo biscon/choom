@@ -22,7 +22,8 @@ public:
 
     bool Initialize(
             SectorNavigationSettings settings = {},
-            SectorNavigationCapacitySettings capacities = {});
+            SectorNavigationCapacitySettings capacities = {},
+            SectorNavigationDynamicObstacleSettings dynamicObstacleSettings = {});
     void Shutdown();
     void ResetForRebuild();
     void RequestRebuild();
@@ -38,6 +39,17 @@ public:
             const SectorTopologyMap& map,
             const std::vector<SectorStaticModelCollider>& staticColliders,
             size_t pendingStaticColliderCount);
+
+    // Reconciles the current collision-enabled dynamic prop set and performs
+    // bounded TileCache request/tile work. Call during an explicit runtime
+    // phase before path/corridor updates.
+    void UpdateDynamicObstacles(
+            const std::vector<SectorStaticModelCollider>& dynamicColliders,
+            float dt);
+    bool CorridorTouchesChangedTile(
+            const SectorNavigationTileKey* tiles,
+            size_t tileCount,
+            uint64_t capturedTileRevision) const;
 
     SectorNavigationNearestPointResult FindNearestPoint(Vector3 position) const;
     SectorNavigationPathResult FindPath(
@@ -64,10 +76,13 @@ public:
     SectorNavigationBuildStage BuildStage() const;
     const SectorNavigationSettings& Settings() const;
     const SectorNavigationCapacitySettings& Capacities() const;
+    const SectorNavigationDynamicObstacleSettings& DynamicObstacleSettings() const;
+    const SectorNavigationDynamicObstacleStatistics& DynamicObstacleStatistics() const;
     const SectorNavigationCounters& Counters() const;
     const std::vector<SectorNavigationDiagnostic>& Diagnostics() const;
     uint64_t SourceRevision() const;
     uint64_t BuildRevision() const;
+    uint64_t TileRevision() const;
     uint64_t SourceHash() const;
     const SectorNavigationBuildStatistics& BuildStatistics() const;
     const SectorNavigationDebugCache& DebugCache() const;

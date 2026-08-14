@@ -768,6 +768,8 @@ void SpawnPlacedRuntimeObjects(
     state.doorCollisionCacheInitialized = false;
     state.staticModelColliders.clear();
     state.staticModelColliders.reserve(map.runtimeObjects.size());
+    state.dynamicModelColliders.clear();
+    state.dynamicModelColliders.reserve(map.runtimeObjects.size());
     state.placedObjectCount = map.runtimeObjects.size();
     state.spawnedObjectCount = 0;
     state.skippedObjectCount = 0;
@@ -1333,6 +1335,7 @@ void SpawnPlacedRuntimeObjects(
     ResolveDynamicModelAnimations(world, assets);
     UpdateSectorStaticModelColliderSystem(world, assets);
     CollectSectorStaticModelColliders(world, state.staticModelColliders);
+    CollectSectorDynamicModelColliders(world, state.dynamicModelColliders);
     RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
 }
 
@@ -1360,6 +1363,7 @@ void UpdateSectorRuntimeObjects(
     }
     if (UpdateSectorStaticModelColliderSystem(world, assets)) {
         CollectSectorStaticModelColliders(world, state.staticModelColliders);
+        CollectSectorDynamicModelColliders(world, state.dynamicModelColliders);
     }
     const bool doorModelReadinessChanged =
             RefreshSectorDoorModelReadinessSystem(world, assets);

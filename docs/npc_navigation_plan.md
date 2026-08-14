@@ -50,7 +50,7 @@ When executing this plan:
 | 3 | Add basic NPC path following and locomotion | Completed | 2026-08-14 |
 | 4 | Expose scripted NPC movement early | Completed | 2026-08-14 |
 | 5 | Add door-aware traversal and door arbitration | Completed | 2026-08-15 |
-| 6 | Add dynamic obstacle updates with DetourTileCache | Not Started | - |
+| 6 | Add dynamic obstacle updates with DetourTileCache | Completed | 2026-08-15 |
 | 7 | Add local avoidance with DetourCrowd | Not Started | - |
 | 8 | Harden lifecycle, caching, diagnostics, and acceptance coverage | Not Started | - |
 
@@ -1429,3 +1429,49 @@ Append one entry per slice attempt using this shape:
 - Lightmap/source-hash impact: the lightmap source hash is unchanged. The
   navigation source hash includes the effective map step height through the
   normalized climb setting; other visual preview settings remain excluded.
+
+### 2026-08-15 — Slice 6 — Completed
+
+- Scope completed: stable-ID DetourTileCache obstacles for collision-enabled
+  dynamic-model OBBs; bounded/coalesced add, remove, and transform requests;
+  slow-motion updates and fast-mover suppression/settling; per-tile revisions;
+  affected-corridor invalidation with the existing rate-limited NPC replan
+  path; affected-tile-only Detour debug-geometry refresh; door-link rebinding;
+  and editor/gameplay diagnostics for obstacle state, bounds, backlog,
+  failures, timing, and recently updated tiles.
+- Files/modules added or changed: navigation types/world/debug drawing, dynamic
+  collider collection and scene orchestration, NPC corridor bookkeeping and
+  replanning, editor/gameplay Nav diagnostics, generated-fixture navigation,
+  runtime-object, and scripting integration tests, and this plan.
+- Decisions or contract updates: meaningful movement is at least `0.0625m` or
+  `5 degrees`; slow obstacle requests are sampled at `0.25s`; motion above
+  `2m/s` or `180 degrees/s` is collision-only until settled for `0.25s`.
+  Horizontal bounds conservatively enclose the runtime OBB plus the agent
+  radius, and the vertical band extends from collider bottom minus agent height
+  and one cell to collider top plus one cell. Runtime work is capped at eight
+  obstacle requests and two TileCache tile rebuilds per update, with 256
+  tracked obstacles and at most eight touched tiles per obstacle. Exceeding a
+  stable limit leaves the object as an authoritative collision-only blocker
+  with a diagnostic rather than forcing a whole-map rebuild.
+- Tests/checks: added settings normalization; obstacle add/remove/translation/
+  rotation, conservative footprint and vertical-band, fast suppression and
+  settling, capacity/budget/failure/teardown, affected versus distant corridor
+  revision, door-link rebinding, dynamic collider collection, physical NPC
+  rerouting/restoration, and blocking Lua move completion coverage. The
+  required debug build passed; all 26 CTest tests passed; `git diff --check`
+  passed; diff/stat/status were reviewed. The pre-existing Lua `tmpnam` linker
+  warning remains.
+- Collision/sector lookup/physics impact: dynamic-model colliders remain in the
+  existing authoritative combined collision list, including while a fast or
+  unsupported obstacle is navigation-suppressed. NPC navigation corridors now
+  react to changed TileCache tiles; player collision, sector lookup, camera,
+  and general physics behavior were not changed.
+- Topology cache invalidation impact: none. No authoring/topology mutation path
+  changed, so the 2D topology render cache is not invalidated. Runtime obstacle
+  revisions and affected Detour debug-tile refreshes remain navigation-derived.
+- Lightmap/source-hash impact: none. The lightmap hash is unchanged. Dynamic
+  obstacle transforms/state are excluded from the static navigation source
+  hash; incremental TileCache and tile revisions are maintained separately.
+- Manual verification performed by user: none; no GUI/xdotool test was run.
+- Remaining debt/blocker: Slice 7 owns DetourCrowd/local avoidance; Slice 8
+  owns final lifecycle, persistence-policy, and acceptance hardening.

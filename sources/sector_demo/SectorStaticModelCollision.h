@@ -49,6 +49,10 @@ void CollectSectorStaticModelColliders(
         engine::World& world,
         std::vector<SectorStaticModelCollider>& colliders);
 
+void CollectSectorDynamicModelColliders(
+        engine::World& world,
+        std::vector<SectorStaticModelCollider>& colliders);
+
 bool SectorStaticModelCollidersAllowPlayerHeight(
         Vector2 positionXZ,
         float feetY,

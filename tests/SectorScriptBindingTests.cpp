@@ -218,6 +218,9 @@ struct NpcScriptFixture {
 
     void Update(float dt)
     {
+        navigation.UpdateDynamicObstacles(
+                objects.dynamicModelColliders,
+                dt);
         game::UpdateNpcNavigationAndLocomotionSystem(
                 context.world,
                 context.assets,
@@ -270,6 +273,48 @@ end
             fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc)
                     .position.x - 14.0f) < 0.11f);
     assert(fixture.host.npcMoveDiagnostics.successes == 1);
+}
+
+void BlockingNpcMoveReplansAfterDynamicObstacleChange()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write(R"(
+function init()
+    local ok, reason = moveNpc("script_guard", 14.0, 8.0)
+    setPersistentBool("dynamic_move_done", true)
+    setPersistentBool("dynamic_move_ok", ok)
+    setPersistentString("dynamic_move_reason", reason or "")
+end
+)");
+    assert(Create(
+            fixture.context,
+            fixture.runtime,
+            fixture.persistent,
+            fixture.host,
+            fixture.files));
+
+    game::SectorStaticModelCollider obstacle;
+    obstacle.placedObjectId = 777;
+    obstacle.center = {8.0f, 8.0f};
+    obstacle.axisX = {1.0f, 0.0f};
+    obstacle.axisZ = {0.0f, 1.0f};
+    obstacle.halfExtents = {0.75f, 2.5f};
+    obstacle.bottom = 0.0f;
+    obstacle.top = 2.0f;
+    obstacle.resolved = true;
+    fixture.objects.dynamicModelColliders = {obstacle};
+    fixture.objects.staticModelColliders = {obstacle};
+    for (int frame = 0; frame < 1500
+            && fixture.persistent.bools.find("dynamic_move_done")
+                    == fixture.persistent.bools.end();
+            ++frame) {
+        fixture.Update(0.016f);
+    }
+    assert(fixture.persistent.bools.at("dynamic_move_done"));
+    assert(fixture.persistent.bools.at("dynamic_move_ok"));
+    assert(fixture.persistent.strings.at("dynamic_move_reason").empty());
+    assert(game::GetNpcMoveStatus(
+            fixture.npcNavigation, "script_guard").replanCount > 0);
 }
 
 void NpcMoveLevelMarkerOverloadsResolvePositionOnly()
@@ -751,6 +796,7 @@ void RunSectorScriptBindingTests()
 {
     DoorCompletionAndCancellationShareTheBackend();
     BlockingNpcMoveCompletesAfterPhysicalArrival();
+    BlockingNpcMoveReplansAfterDynamicObstacleChange();
     NpcMoveLevelMarkerOverloadsResolvePositionOnly();
     AsyncNpcMoveSupportsAwaitDuplicateValidationAndCancellation();
     AsyncNpcMoveCancellationAndLifecycleFailuresResolve();

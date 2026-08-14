@@ -32,6 +32,9 @@ void DrawSectorNavigationDebugWorld(
     const Color edgeColor = LinearOverlaySwatch(Color{88, 242, 164, 225});
     const Color tileColor = LinearOverlaySwatch(Color{84, 156, 255, 180});
     const Color obstacleColor = LinearOverlaySwatch(Color{255, 154, 72, 235});
+    const Color dynamicObstacleColor = LinearOverlaySwatch(Color{255, 92, 92, 245});
+    const Color pendingObstacleColor = LinearOverlaySwatch(Color{255, 214, 78, 245});
+    const Color suppressedObstacleColor = LinearOverlaySwatch(Color{156, 166, 180, 220});
     const Color doorColor = LinearOverlaySwatch(Color{244, 214, 78, 245});
     const Color stepColor = LinearOverlaySwatch(Color{104, 226, 255, 245});
     const Color pathColor = LinearOverlaySwatch(Color{255, 102, 214, 245});
@@ -53,8 +56,8 @@ void DrawSectorNavigationDebugWorld(
             DrawBoundingBox(tile.bounds, tileColor);
         }
     }
-    if (settings.showStaticObstacles) {
-        for (const SectorNavigationDebugObstacle& obstacle : debug.staticObstacles) {
+    const auto drawObstacle = [](const SectorNavigationDebugObstacle& obstacle,
+                                 Color color) {
             const auto corner = [&](float x, float z, float y) {
                 return Vector3{
                         obstacle.center.x + obstacle.axisX.x * x
@@ -78,8 +81,27 @@ void DrawSectorNavigationDebugWorld(
                     {0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6},
                     {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
             for (const auto& edge : edges) {
-                DrawLine3D(vertices[edge[0]], vertices[edge[1]], obstacleColor);
+                DrawLine3D(vertices[edge[0]], vertices[edge[1]], color);
             }
+    };
+    if (settings.showStaticObstacles) {
+        for (const SectorNavigationDebugObstacle& obstacle : debug.staticObstacles) {
+            drawObstacle(obstacle, obstacleColor);
+        }
+    }
+    if (settings.showDynamicObstacles) {
+        for (const SectorNavigationDebugDynamicObstacle& obstacle :
+                debug.dynamicObstacles) {
+            const Color color = obstacle.state
+                            == SectorNavigationDynamicObstacleState::Active
+                    ? dynamicObstacleColor
+                    : obstacle.state
+                                    == SectorNavigationDynamicObstacleState::FastSuppressed
+                              || obstacle.state
+                                    == SectorNavigationDynamicObstacleState::Failed
+                            ? suppressedObstacleColor
+                            : pendingObstacleColor;
+            drawObstacle(obstacle, color);
         }
     }
     if (settings.showDoorPlaceholders) {

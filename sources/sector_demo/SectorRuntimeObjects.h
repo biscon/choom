@@ -106,6 +106,7 @@ struct SectorRuntimeObjectState {
     std::vector<SectorDynamicDoorCollider> dynamicDoorColliders;
     std::vector<SectorDoorPlayerObstacle> doorObstacles;
     std::vector<SectorStaticModelCollider> staticModelColliders;
+    std::vector<SectorStaticModelCollider> dynamicModelColliders;
     std::vector<RuntimePortalDynamicBlocker> dynamicPortalBlockers;
     size_t placedObjectCount = 0;
     size_t spawnedObjectCount = 0;

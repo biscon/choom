@@ -4487,6 +4487,38 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
           "non-looping editor dynamic prop is configured frozen on its first frame");
 }
 
+void TestDynamicModelColliderCollectionIsSeparatedForNavigation()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const engine::Entity staticEntity = world.CreateEntity();
+    world.Add(staticEntity, game::SectorStaticModel{});
+    game::SectorStaticModelCollider staticCollider;
+    staticCollider.placedObjectId = 41;
+    staticCollider.center = {1.0f, 1.0f};
+    staticCollider.halfExtents = {0.5f, 0.5f};
+    staticCollider.bottom = 0.0f;
+    staticCollider.top = 2.0f;
+    staticCollider.resolved = true;
+    world.Add(staticEntity, staticCollider);
+
+    const engine::Entity dynamicEntity = world.CreateEntity();
+    world.Add(dynamicEntity, game::SectorDynamicModel{});
+    game::SectorStaticModelCollider dynamicCollider = staticCollider;
+    dynamicCollider.placedObjectId = 42;
+    dynamicCollider.center = {2.0f, 2.0f};
+    world.Add(dynamicEntity, dynamicCollider);
+
+    std::vector<game::SectorStaticModelCollider> combined;
+    std::vector<game::SectorStaticModelCollider> dynamicOnly;
+    game::CollectSectorStaticModelColliders(world, combined);
+    game::CollectSectorDynamicModelColliders(world, dynamicOnly);
+    Check(combined.size() == 2
+                  && dynamicOnly.size() == 1
+                  && dynamicOnly[0].placedObjectId == 42,
+          "runtime collision keeps combined prop colliders while navigation receives a dynamic-only set");
+}
+
 void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
 {
     engine::World world;
@@ -4760,6 +4792,106 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
             collisionWorld, doors, colliders, probes, map, 0.016f);
     Check(npcNavigation.records[0].occupied != npcNavigation.records[1].occupied,
           "deleted NPC releases only its own external navigation record");
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+}
+
+void TestNpcNavigationReplansAroundDynamicTileCacheObstacle()
+{
+    const game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "dynamic NPC navigation collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "dynamic NPC navigation fixture builds its static mesh");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const engine::Entity npcEntity = SpawnNavigationTestNpc(
+            world, "dynamic_walker", 801, {2.0f, 0.0f, 8.0f}, 10, 2.0f, 4.0f);
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    const game::NpcMoveRequestResult request = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "dynamic_walker",
+            {14.0f, 8.0f},
+            game::NpcMoveGait::Walk);
+    Check(request.accepted, "NPC move begins before the dynamic obstacle is added");
+
+    game::SectorStaticModelCollider obstacle;
+    obstacle.placedObjectId = 802;
+    obstacle.center = {8.0f, 8.0f};
+    obstacle.axisX = {1.0f, 0.0f};
+    obstacle.axisZ = {0.0f, 1.0f};
+    obstacle.halfExtents = {0.75f, 2.5f};
+    obstacle.bottom = 0.0f;
+    obstacle.top = 2.0f;
+    obstacle.resolved = true;
+    const std::vector<game::SectorStaticModelCollider> colliders{obstacle};
+    for (int update = 0; update < 128
+            && navigation.DynamicObstacleStatistics().activeCount != 1;
+            ++update) {
+        navigation.UpdateDynamicObstacles(colliders, 0.016f);
+    }
+    Check(navigation.DynamicObstacleStatistics().activeCount == 1,
+          "dynamic prop becomes active before NPC locomotion resumes");
+
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    bool enteredObstacle = false;
+    for (int frame = 0; frame < 1200; ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world,
+                assets,
+                navigation,
+                npcNavigation,
+                definitions,
+                collisionWorld,
+                doors,
+                colliders,
+                probes,
+                map,
+                0.016f);
+        const Vector3 position =
+                world.Get<game::SectorObjectTransform>(npcEntity).position;
+        enteredObstacle = enteredObstacle
+                || (position.x > obstacle.center.x - obstacle.halfExtents.x
+                    && position.x < obstacle.center.x + obstacle.halfExtents.x
+                    && position.z > obstacle.center.y - obstacle.halfExtents.y
+                    && position.z < obstacle.center.y + obstacle.halfExtents.y);
+        if (game::GetNpcMoveStatus(npcNavigation, "dynamic_walker").phase
+                != game::NpcMovePhase::FollowingPath) {
+            break;
+        }
+    }
+    const game::NpcMoveStatus status = game::GetNpcMoveStatus(
+            npcNavigation, "dynamic_walker");
+    Check(status.phase == game::NpcMovePhase::Arrived
+                  && status.replanCount > 0,
+          "changed corridor tile schedules a bounded replan and the NPC arrives on the replacement route");
+    Check(!enteredObstacle,
+          "authoritative dynamic prop collision remains the final movement authority during rerouting");
+
+    for (int update = 0; update < 128
+            && navigation.DynamicObstacleStatistics().activeCount != 0;
+            ++update) {
+        navigation.UpdateDynamicObstacles({}, 0.016f);
+    }
+    Check(navigation.DynamicObstacleStatistics().activeCount == 0
+                  && navigation.FindPath(
+                          {2.0f, 0.0f, 8.0f},
+                          {14.0f, 0.0f, 8.0f}).status
+                          == game::SectorNavigationQueryStatus::Success,
+          "removing the dynamic prop restores path queries without a full rebuild");
     game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
 }
 
@@ -6810,8 +6942,10 @@ int main()
     TestSectorModelEnvironmentExposureFollowsSectorLighting();
     TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity();
     TestSpawnDynamicModelCopiesPlaybackAndLightingPayload();
+    TestDynamicModelColliderCollectionIsSeparatedForNavigation();
     TestSpawnNpcResolvesDefinitionAndIdlePlayback();
     TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
+    TestNpcNavigationReplansAroundDynamicTileCacheObstacle();
     TestNpcNavigationLowSpeedAdvancesAtHighRefreshRate();
     TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions();
     TestNpcNavigationSmoothsSectorGeometryStairsVisually();

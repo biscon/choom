@@ -19,6 +19,7 @@ struct SectorEditorPreviewOverlayState {
     bool showNavigationEdges = true;
     bool showNavigationTileBounds = false;
     bool showNavigationStaticObstacles = true;
+    bool showNavigationDynamicObstacles = true;
     bool showNavigationDoorPlaceholders = true;
     bool showNavigationStepConnections = true;
     bool showNavigationNpcPaths = true;

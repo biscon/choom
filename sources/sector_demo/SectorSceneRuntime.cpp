@@ -133,6 +133,9 @@ void SectorSceneRuntime::Update(
             map,
             runtimeObjects.staticModelColliders,
             runtimeObjects.staticModelPendingCount);
+    navigation.UpdateDynamicObstacles(
+            runtimeObjects.dynamicModelColliders,
+            dt);
     SynchronizeSectorNavigationDoorLinksSystem(
             context.world,
             navigation,

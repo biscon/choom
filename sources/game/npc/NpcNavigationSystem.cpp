@@ -102,6 +102,9 @@ void ReleasePath(
     }
     record.cornerCount = 0;
     record.nextCorner = 0;
+    record.corridorTileCount = 0;
+    record.pathTileRevision = 0;
+    record.tileReplanPending = false;
     record.doorPhase = NpcDoorTraversalPhase::None;
     record.doorId = 0;
     record.doorDirection = SectorNavigationDoorDirection::None;
@@ -150,6 +153,12 @@ bool CopySuccessfulPath(
     std::copy_n(path.cornerDoorLandings.begin(), record.cornerCount,
             record.cornerDoorLandings.begin());
     record.nextCorner = 0;
+    record.corridorTileCount = std::min(
+            path.corridorTileCount, record.corridorTiles.size());
+    std::copy_n(path.corridorTiles.begin(), record.corridorTileCount,
+            record.corridorTiles.begin());
+    record.pathTileRevision = path.tileRevision;
+    record.tileReplanPending = false;
     while (record.nextCorner < record.cornerCount) {
         if (record.cornerDoorIds[record.nextCorner] > 0) break;
         const Vector3& corner = record.corners[record.nextCorner];
@@ -778,7 +787,33 @@ void UpdateNpcNavigationAndLocomotionSystem(
                     "navigation became unavailable during movement");
         }
 
-        if (IsActive(record.phase) && dt > 0.0f) {
+        if (IsActive(record.phase)
+                && navigation.CorridorTouchesChangedTile(
+                        record.corridorTiles.data(),
+                        record.corridorTileCount,
+                        record.pathTileRevision)) {
+            record.tileReplanPending = true;
+            record.desiredVelocity = {};
+            npc.action = NpcAction::Idle;
+            SetDiagnostic(record, "corridor tile changed; replan pending");
+        }
+        if (IsActive(record.phase) && record.tileReplanPending
+                && record.replanCooldownSeconds <= 0.0f) {
+            if (record.replanCount >= MaximumReplans
+                    || !Replan(world, navigation, runtime, record)) {
+                ++runtime.counters.stalls;
+                SetTerminal(
+                        world,
+                        navigation,
+                        runtime,
+                        record,
+                        NpcMovePhase::Failed,
+                        record.lastQueryStatus,
+                        "dynamic obstacle invalidated the route and no replacement path was available");
+            }
+        }
+
+        if (IsActive(record.phase) && !record.tileReplanPending && dt > 0.0f) {
             const float movementSpeed = record.gait == NpcMoveGait::Run
                     ? npc.runSpeed : npc.walkSpeed;
             float movementBudget = std::max(0.0f, movementSpeed) * dt;

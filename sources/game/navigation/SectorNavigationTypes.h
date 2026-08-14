@@ -80,6 +80,14 @@ enum class SectorNavigationDoorDirection : uint8_t {
     BackToFront
 };
 
+enum class SectorNavigationDynamicObstacleState : uint8_t {
+    Pending,
+    Active,
+    Removing,
+    FastSuppressed,
+    Failed
+};
+
 struct SectorNavigationQueryOptions {
     bool canOpenDoors = true;
 };
@@ -101,6 +109,15 @@ bool IsNull(SectorNavigationPathHandle handle);
 
 constexpr size_t SectorNavigationMaximumPathPolygons = 256;
 constexpr size_t SectorNavigationMaximumStraightPathCorners = 64;
+constexpr size_t SectorNavigationMaximumCorridorTiles = 256;
+
+struct SectorNavigationTileKey {
+    int x = 0;
+    int y = 0;
+    int layer = 0;
+};
+
+bool operator==(SectorNavigationTileKey lhs, SectorNavigationTileKey rhs);
 
 struct SectorNavigationSettings {
     float agentRadius = 0.25f;
@@ -133,6 +150,17 @@ struct SectorNavigationCapacitySettings {
     int maximumCandidateTrianglesPerTile = 65536;
     size_t tileCacheTemporaryBytes = 4u * 1024u * 1024u;
     int dynamicObstacleCapacity = 256;
+    int dynamicObstacleRequestBudgetPerUpdate = 8;
+    int dynamicObstacleTileBudgetPerUpdate = 2;
+};
+
+struct SectorNavigationDynamicObstacleSettings {
+    float positionThresholdWorld = 0.0625f;
+    float yawThresholdDegrees = 5.0f;
+    float slowUpdateIntervalSeconds = 0.25f;
+    float settleSeconds = 0.25f;
+    float fastLinearSpeedWorld = 2.0f;
+    float fastAngularSpeedDegrees = 180.0f;
 };
 
 struct SectorNavigationQueryFilterPolicy {
@@ -172,6 +200,10 @@ struct SectorNavigationPathResult {
     std::array<Vector3, SectorNavigationMaximumStraightPathCorners> cornerDoorLandings{};
     size_t cornerCount = 0;
     size_t corridorPolygonCount = 0;
+    std::array<SectorNavigationTileKey,
+            SectorNavigationMaximumCorridorTiles> corridorTiles{};
+    size_t corridorTileCount = 0;
+    uint64_t tileRevision = 0;
 };
 
 struct SectorNavigationCounters {
@@ -179,6 +211,22 @@ struct SectorNavigationCounters {
     uint64_t partialQueries = 0;
     uint64_t failedQueries = 0;
     uint64_t capacityWarnings = 0;
+};
+
+struct SectorNavigationDynamicObstacleStatistics {
+    size_t activeCount = 0;
+    size_t pendingCount = 0;
+    size_t removingCount = 0;
+    size_t fastSuppressedCount = 0;
+    size_t failedCount = 0;
+    size_t backlogCount = 0;
+    uint64_t additions = 0;
+    uint64_t removals = 0;
+    uint64_t transforms = 0;
+    uint64_t updatedTiles = 0;
+    uint64_t failures = 0;
+    float lastUpdateMilliseconds = 0.0f;
+    float peakUpdateMilliseconds = 0.0f;
 };
 
 struct SectorNavigationBuildStatistics {
@@ -225,6 +273,16 @@ struct SectorNavigationDebugObstacle {
     float top = 0.0f;
 };
 
+struct SectorNavigationDebugDynamicObstacle : SectorNavigationDebugObstacle {
+    SectorNavigationDynamicObstacleState state =
+            SectorNavigationDynamicObstacleState::Pending;
+};
+
+struct SectorNavigationDebugUpdatedTile {
+    SectorNavigationTileKey key;
+    uint64_t revision = 0;
+};
+
 struct SectorNavigationDebugDoorPlaceholder {
     int placedObjectId = 0;
     int lineDefId = 0;
@@ -249,10 +307,13 @@ struct SectorNavigationDebugCache {
     std::vector<SectorNavigationDebugSegment> polygonEdges;
     std::vector<SectorNavigationDebugTileBounds> tileBounds;
     std::vector<SectorNavigationDebugObstacle> staticObstacles;
+    std::vector<SectorNavigationDebugDynamicObstacle> dynamicObstacles;
+    std::vector<SectorNavigationDebugUpdatedTile> recentlyUpdatedTiles;
     std::vector<SectorNavigationDebugDoorPlaceholder> doorPlaceholders;
     std::vector<SectorNavigationDebugDoorLink> doorLinks;
     std::vector<SectorNavigationDebugSegment> stepConnections;
     uint64_t navigationRevision = 0;
+    uint64_t tileRevision = 0;
 };
 
 struct SectorNavigationPosition {
@@ -265,6 +326,8 @@ SectorNavigationSettings BuildSectorNavigationSettingsForMap(
         const SectorTopologyMap& map);
 SectorNavigationCapacitySettings NormalizeSectorNavigationCapacitySettings(
         SectorNavigationCapacitySettings settings);
+SectorNavigationDynamicObstacleSettings NormalizeSectorNavigationDynamicObstacleSettings(
+        SectorNavigationDynamicObstacleSettings settings);
 
 SectorNavigationPosition SectorWorldToNavigationPosition(Vector3 position);
 Vector3 SectorNavigationToWorldPosition(SectorNavigationPosition position);
@@ -275,5 +338,7 @@ const char* SectorNavigationQueryStatusName(SectorNavigationQueryStatus status);
 const char* SectorNavigationBuildStageName(SectorNavigationBuildStage stage);
 const char* SectorNavigationDoorLinkStateName(SectorNavigationDoorLinkState state);
 const char* SectorNavigationDoorDirectionName(SectorNavigationDoorDirection direction);
+const char* SectorNavigationDynamicObstacleStateName(
+        SectorNavigationDynamicObstacleState state);
 
 } // namespace game

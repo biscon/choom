@@ -82,6 +82,10 @@ struct NpcNavigationRecord {
     std::array<SectorNavigationDoorDirection,
             SectorNavigationMaximumStraightPathCorners> cornerDoorDirections{};
     std::array<Vector3, SectorNavigationMaximumStraightPathCorners> cornerDoorLandings{};
+    std::array<SectorNavigationTileKey,
+            SectorNavigationMaximumCorridorTiles> corridorTiles{};
+    size_t corridorTileCount = 0;
+    uint64_t pathTileRevision = 0;
     size_t cornerCount = 0;
     size_t nextCorner = 0;
     Vector2 desiredVelocity = {};
@@ -99,6 +103,7 @@ struct NpcNavigationRecord {
     Vector3 doorLanding = {};
     float doorWaitSeconds = 0.0f;
     bool holdsDoor = false;
+    bool tileReplanPending = false;
     std::array<char, 192> diagnostic{};
     bool occupied = false;
 };

@@ -572,6 +572,19 @@ void CollectSectorStaticModelColliders(
             });
 }
 
+void CollectSectorDynamicModelColliders(
+        engine::World& world,
+        std::vector<SectorStaticModelCollider>& colliders)
+{
+    colliders.clear();
+    world.ForEach<SectorDynamicModel, SectorStaticModelCollider>(
+            [&colliders](engine::Entity,
+                    SectorDynamicModel&,
+                    SectorStaticModelCollider& collider) {
+                if (IsValidCollider(collider)) colliders.push_back(collider);
+            });
+}
+
 bool SectorStaticModelCollidersAllowPlayerHeight(
         Vector2 positionXZ,
         float feetY,

@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -243,13 +244,50 @@ struct SectorNavigationWorld::Impl {
         dtPolyRef polygon = 0;
         SectorNavigationDoorLinkState state =
                 SectorNavigationDoorLinkState::RequiresOpening;
+        uint32_t holderCount = 0;
+    };
+    enum class ObstaclePhase : uint8_t {
+        PendingAdd,
+        Active,
+        PendingRemove,
+        FastSuppressed,
+        Failed
+    };
+    struct RuntimeObstacle {
+        int placedObjectId = 0;
+        SectorStaticModelCollider desired;
+        SectorStaticModelCollider committed;
+        SectorStaticModelCollider lastObserved;
+        dtObstacleRef reference = 0;
+        ObstaclePhase phase = ObstaclePhase::PendingAdd;
+        float updateSeconds = 0.0f;
+        float settleSeconds = 0.0f;
+        bool seen = false;
+        bool addAfterRemove = false;
+        bool deleteAfterRemove = false;
+    };
+    struct TileRuntimeRevision {
+        SectorNavigationTileKey key;
+        dtTileRef reference = 0;
+        uint64_t revision = 0;
+    };
+    struct DebugTileChunk {
+        SectorNavigationTileKey key;
+        SectorNavigationDebugTileBounds bounds;
+        std::vector<SectorNavigationDebugTriangle> triangles;
+        std::vector<SectorNavigationDebugSegment> edges;
+        std::vector<SectorNavigationDebugSegment> stepConnections;
+        int polygonCount = 0;
+        bool populated = false;
     };
     SectorNavigationSettings settings;
     SectorNavigationCapacitySettings capacities;
+    SectorNavigationDynamicObstacleSettings dynamicObstacleSettings;
     SectorNavigationQueryFilterPolicy filterPolicy;
     SectorNavigationState state = SectorNavigationState::Uninitialized;
     SectorNavigationBuildStage stage = SectorNavigationBuildStage::None;
     SectorNavigationCounters counters;
+    SectorNavigationDynamicObstacleStatistics dynamicObstacleStatistics;
     SectorNavigationBuildStatistics statistics;
     SectorNavigationDebugCache debugCache;
     std::vector<SectorNavigationDiagnostic> diagnostics;
@@ -258,12 +296,24 @@ struct SectorNavigationWorld::Impl {
     SectorNavigationBuildInput buildInput;
     std::vector<NavigationTileCoordinate> tileCoordinates;
     std::vector<RuntimeDoorLink> doorLinks;
+    std::vector<RuntimeObstacle> obstacles;
+    std::vector<SectorNavigationTileKey> pendingAffectedTiles;
+    std::vector<TileRuntimeRevision> tileRevisions;
+    std::vector<int> seenObstacleIdsScratch;
+    std::vector<SectorNavigationTileKey> affectedTilesScratch;
+    std::vector<dtTileRef> tileReferencesScratch;
+    std::vector<RuntimeDoorLink> doorLinksScratch;
+    std::vector<SectorNavigationTileKey> changedTilesScratch;
+    std::vector<DebugTileChunk> debugTileChunks;
     size_t nextTileCoordinate = 0;
     uint64_t sourceRevision = 0;
     uint64_t buildRevision = 0;
+    uint64_t tileRevision = 0;
     uint64_t sourceHash = 0;
     bool agentGrowthWarned = false;
     bool pathGrowthWarned = false;
+    bool obstacleGrowthWarned = false;
+    bool tileCacheUpToDate = true;
 
     dtNavMesh* navMesh = nullptr;
     dtTileCache* tileCache = nullptr;
@@ -285,11 +335,23 @@ struct SectorNavigationWorld::Impl {
         buildInput = {};
         tileCoordinates.clear();
         doorLinks.clear();
+        obstacles.clear();
+        pendingAffectedTiles.clear();
+        tileRevisions.clear();
+        seenObstacleIdsScratch.clear();
+        affectedTilesScratch.clear();
+        tileReferencesScratch.clear();
+        doorLinksScratch.clear();
+        changedTilesScratch.clear();
+        debugTileChunks.clear();
         meshProcess.Configure({});
         nextTileCoordinate = 0;
         statistics = {};
         debugCache = {};
         sourceHash = 0;
+        tileRevision = 0;
+        dynamicObstacleStatistics = {};
+        tileCacheUpToDate = true;
     }
 
     void Record(
@@ -378,6 +440,242 @@ struct SectorNavigationWorld::Impl {
         for (RecordSlot& slot : pathSlots) {
             slot.occupied = false;
             slot.generation = NextGeneration(slot.generation);
+        }
+    }
+
+    static bool ValidDynamicCollider(const SectorStaticModelCollider& collider)
+    {
+        return collider.placedObjectId > 0
+                && collider.resolved
+                && !collider.failed
+                && std::isfinite(collider.center.x)
+                && std::isfinite(collider.center.y)
+                && std::isfinite(collider.axisX.x)
+                && std::isfinite(collider.axisX.y)
+                && std::isfinite(collider.axisZ.x)
+                && std::isfinite(collider.axisZ.y)
+                && std::isfinite(collider.halfExtents.x)
+                && std::isfinite(collider.halfExtents.y)
+                && std::isfinite(collider.bottom)
+                && std::isfinite(collider.top)
+                && collider.halfExtents.x > 0.0001f
+                && collider.halfExtents.y > 0.0001f
+                && collider.top > collider.bottom + 0.0001f;
+    }
+
+    float DynamicYaw(const SectorStaticModelCollider& collider) const
+    {
+        return std::atan2(collider.axisZ.x, collider.axisX.x);
+    }
+
+    float YawDistance(float a, float b) const
+    {
+        constexpr float Pi = 3.14159265358979323846f;
+        constexpr float TwoPi = Pi * 2.0f;
+        float delta = std::fmod(b - a, TwoPi);
+        if (delta > Pi) delta -= TwoPi;
+        if (delta < -Pi) delta += TwoPi;
+        return std::fabs(delta);
+    }
+
+    bool MeaningfullyDifferent(
+            const SectorStaticModelCollider& a,
+            const SectorStaticModelCollider& b) const
+    {
+        const float threshold = dynamicObstacleSettings.positionThresholdWorld;
+        const float yawThreshold = dynamicObstacleSettings.yawThresholdDegrees
+                * 3.14159265358979323846f / 180.0f;
+        const float dx = a.center.x - b.center.x;
+        const float dz = a.center.y - b.center.y;
+        return std::sqrt(dx * dx + dz * dz) >= threshold
+                || std::fabs(a.halfExtents.x - b.halfExtents.x) >= threshold
+                || std::fabs(a.halfExtents.y - b.halfExtents.y) >= threshold
+                || std::fabs(a.bottom - b.bottom) >= threshold
+                || std::fabs(a.top - b.top) >= threshold
+                || YawDistance(DynamicYaw(a), DynamicYaw(b)) >= yawThreshold;
+    }
+
+    void ObstacleBounds(
+            const SectorStaticModelCollider& collider,
+            float* center,
+            float* halfExtents,
+            float* bmin,
+            float* bmax) const
+    {
+        const float ex = collider.halfExtents.x + settings.agentRadius;
+        const float ez = collider.halfExtents.y + settings.agentRadius;
+        const float bottom = collider.bottom - settings.agentHeight
+                - settings.cellHeight;
+        const float top = collider.top + settings.cellHeight;
+        center[0] = collider.center.x;
+        center[1] = (bottom + top) * 0.5f;
+        center[2] = collider.center.y;
+        halfExtents[0] = ex;
+        halfExtents[1] = (top - bottom) * 0.5f;
+        halfExtents[2] = ez;
+        const float hx = std::fabs(collider.axisX.x) * ex
+                + std::fabs(collider.axisZ.x) * ez;
+        const float hz = std::fabs(collider.axisX.y) * ex
+                + std::fabs(collider.axisZ.y) * ez;
+        bmin[0] = collider.center.x - hx;
+        bmin[1] = bottom;
+        bmin[2] = collider.center.y - hz;
+        bmax[0] = collider.center.x + hx;
+        bmax[1] = top;
+        bmax[2] = collider.center.y + hz;
+    }
+
+    bool CollectAffectedTiles(
+            const SectorStaticModelCollider& collider,
+            std::vector<SectorNavigationTileKey>& out,
+            bool diagnoseOversize)
+    {
+        if (tileCache == nullptr) return false;
+        float center[3]{};
+        float halfExtents[3]{};
+        float bmin[3]{};
+        float bmax[3]{};
+        ObstacleBounds(collider, center, halfExtents, bmin, bmax);
+        std::array<dtCompressedTileRef, DT_MAX_TOUCHED_TILES + 1> refs{};
+        int count = 0;
+        const dtStatus status = tileCache->queryTiles(
+                bmin, bmax, refs.data(), &count, static_cast<int>(refs.size()));
+        if (dtStatusFailed(status)) return false;
+        if (count > DT_MAX_TOUCHED_TILES) {
+            if (diagnoseOversize) {
+                ++dynamicObstacleStatistics.failures;
+                Record(SectorNavigationDiagnosticSeverity::Warning,
+                        SectorNavigationBuildStage::Complete,
+                        "Dynamic obstacle "
+                                + std::to_string(collider.placedObjectId)
+                                + " touches more than the supported eight TileCache layers; it remains collision-only");
+            }
+            return false;
+        }
+        for (int index = 0; index < count; ++index) {
+            const dtCompressedTile* tile = tileCache->getTileByRef(refs[index]);
+            if (tile == nullptr || tile->header == nullptr) continue;
+            const SectorNavigationTileKey key{
+                    tile->header->tx, tile->header->ty, tile->header->tlayer};
+            if (std::find(out.begin(), out.end(), key) == out.end()) {
+                out.push_back(key);
+            }
+        }
+        return true;
+    }
+
+    void AppendPendingAffectedTiles(const SectorStaticModelCollider& collider)
+    {
+        affectedTilesScratch.clear();
+        if (!CollectAffectedTiles(collider, affectedTilesScratch, false)) return;
+        for (const SectorNavigationTileKey key : affectedTilesScratch) {
+            if (std::find(pendingAffectedTiles.begin(),
+                        pendingAffectedTiles.end(), key)
+                    == pendingAffectedTiles.end()) {
+                pendingAffectedTiles.push_back(key);
+            }
+        }
+    }
+
+    TileRuntimeRevision* FindTileRevision(SectorNavigationTileKey key)
+    {
+        const auto found = std::find_if(
+                tileRevisions.begin(), tileRevisions.end(),
+                [key](const TileRuntimeRevision& tile) {
+                    return tile.key == key;
+                });
+        return found == tileRevisions.end() ? nullptr : &*found;
+    }
+
+    void InitializeTileRevisions()
+    {
+        tileRevisions.clear();
+        tileRevisions.reserve(debugCache.tileBounds.size());
+        for (const SectorNavigationDebugTileBounds& tile : debugCache.tileBounds) {
+            const SectorNavigationTileKey key{tile.tileX, tile.tileY, tile.layer};
+            tileRevisions.push_back({key,
+                    navMesh != nullptr
+                            ? navMesh->getTileRefAt(key.x, key.y, key.layer) : 0,
+                    tileRevision});
+        }
+    }
+
+    SectorNavigationDynamicObstacleState DebugState(
+            const RuntimeObstacle& obstacle) const
+    {
+        switch (obstacle.phase) {
+            case ObstaclePhase::PendingAdd:
+                return SectorNavigationDynamicObstacleState::Pending;
+            case ObstaclePhase::Active:
+                return SectorNavigationDynamicObstacleState::Active;
+            case ObstaclePhase::PendingRemove:
+                return SectorNavigationDynamicObstacleState::Removing;
+            case ObstaclePhase::FastSuppressed:
+                return SectorNavigationDynamicObstacleState::FastSuppressed;
+            case ObstaclePhase::Failed:
+                return SectorNavigationDynamicObstacleState::Failed;
+        }
+        return SectorNavigationDynamicObstacleState::Failed;
+    }
+
+    void RefreshDynamicObstacleDebugAndStatistics()
+    {
+        const uint64_t additions = dynamicObstacleStatistics.additions;
+        const uint64_t removals = dynamicObstacleStatistics.removals;
+        const uint64_t transforms = dynamicObstacleStatistics.transforms;
+        const uint64_t updatedTiles = dynamicObstacleStatistics.updatedTiles;
+        const uint64_t failures = dynamicObstacleStatistics.failures;
+        const float lastMilliseconds =
+                dynamicObstacleStatistics.lastUpdateMilliseconds;
+        const float peakMilliseconds =
+                dynamicObstacleStatistics.peakUpdateMilliseconds;
+        dynamicObstacleStatistics = {};
+        dynamicObstacleStatistics.additions = additions;
+        dynamicObstacleStatistics.removals = removals;
+        dynamicObstacleStatistics.transforms = transforms;
+        dynamicObstacleStatistics.updatedTiles = updatedTiles;
+        dynamicObstacleStatistics.failures = failures;
+        dynamicObstacleStatistics.lastUpdateMilliseconds = lastMilliseconds;
+        dynamicObstacleStatistics.peakUpdateMilliseconds = peakMilliseconds;
+        debugCache.dynamicObstacles.clear();
+        debugCache.dynamicObstacles.reserve(obstacles.size());
+        for (const RuntimeObstacle& obstacle : obstacles) {
+            switch (obstacle.phase) {
+                case ObstaclePhase::PendingAdd:
+                    ++dynamicObstacleStatistics.pendingCount;
+                    break;
+                case ObstaclePhase::Active:
+                    ++dynamicObstacleStatistics.activeCount;
+                    break;
+                case ObstaclePhase::PendingRemove:
+                    ++dynamicObstacleStatistics.removingCount;
+                    break;
+                case ObstaclePhase::FastSuppressed:
+                    ++dynamicObstacleStatistics.fastSuppressedCount;
+                    break;
+                case ObstaclePhase::Failed:
+                    ++dynamicObstacleStatistics.failedCount;
+                    break;
+            }
+            if (obstacle.phase != ObstaclePhase::Active
+                    && obstacle.phase != ObstaclePhase::FastSuppressed
+                    && obstacle.phase != ObstaclePhase::Failed) {
+                ++dynamicObstacleStatistics.backlogCount;
+            }
+            const SectorStaticModelCollider& collider = obstacle.desired;
+            SectorNavigationDebugDynamicObstacle debug;
+            debug.placedObjectId = collider.placedObjectId;
+            debug.center = collider.center;
+            debug.axisX = collider.axisX;
+            debug.axisZ = collider.axisZ;
+            debug.halfExtents = {
+                    collider.halfExtents.x + settings.agentRadius,
+                    collider.halfExtents.y + settings.agentRadius};
+            debug.bottom = collider.bottom - settings.agentHeight
+                    - settings.cellHeight;
+            debug.top = collider.top + settings.cellHeight;
+            debug.state = DebugState(obstacle);
+            debugCache.dynamicObstacles.push_back(debug);
         }
     }
 
@@ -622,6 +920,223 @@ struct SectorNavigationWorld::Impl {
         return true;
     }
 
+    void ExtractDebugTileChunk(DebugTileChunk& chunk)
+    {
+        chunk.triangles.clear();
+        chunk.edges.clear();
+        chunk.stepConnections.clear();
+        chunk.polygonCount = 0;
+        chunk.populated = false;
+        const dtMeshTile* tile = navMesh != nullptr
+                ? navMesh->getTileAt(chunk.key.x, chunk.key.y, chunk.key.layer)
+                : nullptr;
+        if (tile == nullptr || tile->header == nullptr) return;
+        chunk.populated = true;
+        chunk.polygonCount = tile->header->polyCount;
+        chunk.bounds = {
+                {{tile->header->bmin[0], tile->header->bmin[1], tile->header->bmin[2]},
+                 {tile->header->bmax[0], tile->header->bmax[1], tile->header->bmax[2]}},
+                tile->header->x,
+                tile->header->y,
+                tile->header->layer};
+        for (int polyIndex = 0; polyIndex < tile->header->polyCount; ++polyIndex) {
+            const dtPoly& poly = tile->polys[polyIndex];
+            if (poly.getType() != DT_POLYTYPE_GROUND || poly.vertCount < 3) continue;
+            std::array<Vector3, DT_VERTS_PER_POLYGON> vertices{};
+            for (int vertexIndex = 0; vertexIndex < poly.vertCount; ++vertexIndex) {
+                vertices[vertexIndex] = FromFloat3(
+                        &tile->verts[poly.verts[vertexIndex] * 3]);
+                const int next = (vertexIndex + 1) % poly.vertCount;
+                chunk.edges.push_back({vertices[vertexIndex],
+                        FromFloat3(&tile->verts[poly.verts[next] * 3])});
+            }
+            for (int vertexIndex = 2; vertexIndex < poly.vertCount; ++vertexIndex) {
+                chunk.triangles.push_back({vertices[0],
+                        vertices[vertexIndex - 1], vertices[vertexIndex],
+                        poly.getArea()});
+            }
+            float minimumVertexY = vertices[0].y;
+            float maximumVertexY = vertices[0].y;
+            Vector3 center{};
+            for (int vertexIndex = 0; vertexIndex < poly.vertCount; ++vertexIndex) {
+                center = Vector3Add(center, vertices[vertexIndex]);
+                minimumVertexY = std::min(minimumVertexY, vertices[vertexIndex].y);
+                maximumVertexY = std::max(maximumVertexY, vertices[vertexIndex].y);
+            }
+            center = Vector3Scale(center, 1.0f / static_cast<float>(poly.vertCount));
+            if (maximumVertexY - minimumVertexY
+                    > settings.cellHeight * 0.5f) {
+                Vector3 lowerCenter{};
+                Vector3 upperCenter{};
+                int lowerCount = 0;
+                int upperCount = 0;
+                for (int vertexIndex = 0; vertexIndex < poly.vertCount; ++vertexIndex) {
+                    if (vertices[vertexIndex].y
+                            <= minimumVertexY + settings.cellHeight * 0.5f) {
+                        lowerCenter = Vector3Add(lowerCenter, vertices[vertexIndex]);
+                        ++lowerCount;
+                    }
+                    if (vertices[vertexIndex].y
+                            >= maximumVertexY - settings.cellHeight * 0.5f) {
+                        upperCenter = Vector3Add(upperCenter, vertices[vertexIndex]);
+                        ++upperCount;
+                    }
+                }
+                if (lowerCount > 0 && upperCount > 0) {
+                    chunk.stepConnections.push_back({
+                            Vector3Scale(lowerCenter,
+                                    1.0f / static_cast<float>(lowerCount)),
+                            Vector3Scale(upperCenter,
+                                    1.0f / static_cast<float>(upperCount))});
+                }
+            }
+            const dtPolyRef sourceRef = navMesh->getPolyRefBase(tile)
+                    | static_cast<dtPolyRef>(polyIndex);
+            for (unsigned int linkIndex = poly.firstLink;
+                    linkIndex != DT_NULL_LINK;
+                    linkIndex = tile->links[linkIndex].next) {
+                const dtPolyRef targetRef = tile->links[linkIndex].ref;
+                if (targetRef == 0 || sourceRef >= targetRef) continue;
+                const dtMeshTile* targetTile = nullptr;
+                const dtPoly* targetPoly = nullptr;
+                if (dtStatusFailed(navMesh->getTileAndPolyByRef(
+                            targetRef, &targetTile, &targetPoly))
+                        || targetTile == nullptr || targetPoly == nullptr
+                        || targetPoly->getType() != DT_POLYTYPE_GROUND
+                        || targetPoly->vertCount < 3) {
+                    continue;
+                }
+                Vector3 targetCenter{};
+                for (int targetVertex = 0;
+                        targetVertex < targetPoly->vertCount;
+                        ++targetVertex) {
+                    targetCenter = Vector3Add(targetCenter,
+                            FromFloat3(&targetTile->verts[
+                                    targetPoly->verts[targetVertex] * 3]));
+                }
+                targetCenter = Vector3Scale(targetCenter,
+                        1.0f / static_cast<float>(targetPoly->vertCount));
+                if (std::fabs(targetCenter.y - center.y)
+                        > settings.cellHeight * 0.5f) {
+                    chunk.stepConnections.push_back({center, targetCenter});
+                }
+            }
+        }
+    }
+
+    void InitializeDebugTileChunks()
+    {
+        debugTileChunks.clear();
+        debugTileChunks.reserve(debugCache.tileBounds.size());
+        for (const SectorNavigationDebugTileBounds& bounds : debugCache.tileBounds) {
+            debugTileChunks.push_back({});
+            DebugTileChunk& chunk = debugTileChunks.back();
+            chunk.key = {bounds.tileX, bounds.tileY, bounds.layer};
+            ExtractDebugTileChunk(chunk);
+        }
+    }
+
+    void RefreshChangedDebugTileChunks()
+    {
+        for (const SectorNavigationTileKey key : changedTilesScratch) {
+            auto found = std::find_if(
+                    debugTileChunks.begin(), debugTileChunks.end(),
+                    [key](const DebugTileChunk& chunk) {
+                        return chunk.key == key;
+                    });
+            if (found == debugTileChunks.end()) {
+                debugTileChunks.push_back({});
+                found = debugTileChunks.end() - 1;
+                found->key = key;
+            }
+            ExtractDebugTileChunk(*found);
+        }
+        debugCache.walkableTriangles.clear();
+        debugCache.polygonEdges.clear();
+        debugCache.tileBounds.clear();
+        debugCache.stepConnections.clear();
+        statistics.navMeshTileCount = 0;
+        statistics.navMeshPolygonCount = 0;
+        for (const DebugTileChunk& chunk : debugTileChunks) {
+            if (!chunk.populated) continue;
+            ++statistics.navMeshTileCount;
+            statistics.navMeshPolygonCount += chunk.polygonCount;
+            debugCache.tileBounds.push_back(chunk.bounds);
+            debugCache.walkableTriangles.insert(
+                    debugCache.walkableTriangles.end(),
+                    chunk.triangles.begin(), chunk.triangles.end());
+            debugCache.polygonEdges.insert(
+                    debugCache.polygonEdges.end(),
+                    chunk.edges.begin(), chunk.edges.end());
+            debugCache.stepConnections.insert(
+                    debugCache.stepConnections.end(),
+                    chunk.stepConnections.begin(), chunk.stepConnections.end());
+        }
+    }
+
+    void RefreshRuntimeNavigationDerivedData()
+    {
+        if (navMesh == nullptr) return;
+        doorLinksScratch.clear();
+        doorLinksScratch.insert(
+                doorLinksScratch.end(), doorLinks.begin(), doorLinks.end());
+        doorLinks.clear();
+        for (SectorNavigationDebugDoorLink& link : debugCache.doorLinks) {
+            link.valid = false;
+        }
+        const dtNavMesh* readableNavMesh = navMesh;
+        for (int tileIndex = 0; tileIndex < navMesh->getMaxTiles(); ++tileIndex) {
+            const dtMeshTile* tile = readableNavMesh->getTile(tileIndex);
+            if (tile == nullptr || tile->header == nullptr) continue;
+            for (int connectionIndex = 0;
+                    connectionIndex < tile->header->offMeshConCount;
+                    ++connectionIndex) {
+                const dtOffMeshConnection& connection =
+                        tile->offMeshCons[connectionIndex];
+                if (connection.userId == 0) continue;
+                const int placedObjectId = static_cast<int>(connection.userId);
+                const dtPolyRef reference = navMesh->getPolyRefBase(tile)
+                        | static_cast<dtPolyRef>(connection.poly);
+                const auto previous = std::find_if(
+                        doorLinksScratch.begin(), doorLinksScratch.end(),
+                        [placedObjectId](const RuntimeDoorLink& link) {
+                            return link.placedObjectId == placedObjectId;
+                        });
+                RuntimeDoorLink runtimeLink;
+                runtimeLink.placedObjectId = placedObjectId;
+                runtimeLink.polygon = reference;
+                if (previous != doorLinksScratch.end()) {
+                    runtimeLink.state = previous->state;
+                    runtimeLink.holderCount = previous->holderCount;
+                }
+                doorLinks.push_back(runtimeLink);
+                unsigned short flags = SectorNavigationPolyFlag_Walk
+                        | SectorNavigationPolyFlag_Door;
+                if (runtimeLink.state
+                        == SectorNavigationDoorLinkState::RequiresOpening) {
+                    flags |= SectorNavigationPolyFlag_DoorRequiresOpening;
+                } else if (runtimeLink.state
+                        == SectorNavigationDoorLinkState::Disabled) {
+                    flags |= SectorNavigationPolyFlag_Disabled;
+                }
+                navMesh->setPolyFlags(reference, flags);
+                const auto debug = std::find_if(
+                        debugCache.doorLinks.begin(), debugCache.doorLinks.end(),
+                        [placedObjectId](const SectorNavigationDebugDoorLink& link) {
+                            return link.placedObjectId == placedObjectId;
+                        });
+                if (debug != debugCache.doorLinks.end()) {
+                    debug->valid = true;
+                    debug->state = runtimeLink.state;
+                    debug->holderCount = runtimeLink.holderCount;
+                }
+            }
+        }
+        RefreshChangedDebugTileChunks();
+        debugCache.navigationRevision = buildRevision + tileRevision;
+        debugCache.tileRevision = tileRevision;
+    }
+
     bool FinalizeBuild(std::string& error)
     {
         query = dtAllocNavMeshQuery();
@@ -632,6 +1147,9 @@ struct SectorNavigationWorld::Impl {
         }
         stage = SectorNavigationBuildStage::BuildingDebugCache;
         debugCache = {};
+        debugCache.dynamicObstacles.reserve(static_cast<size_t>(
+                capacities.dynamicObstacleCapacity));
+        debugCache.recentlyUpdatedTiles.reserve(32);
         debugCache.staticObstacles = buildInput.staticObstacles;
         debugCache.doorPlaceholders = buildInput.doorPlaceholders;
         debugCache.doorLinks.reserve(buildInput.doorLinks.size());
@@ -776,11 +1294,16 @@ struct SectorNavigationWorld::Impl {
                                 + " has no usable off-mesh connection");
             }
         }
+        InitializeDebugTileChunks();
+        doorLinksScratch.reserve(doorLinks.size());
         buildInput = {};
         tileCoordinates.clear();
         tileCoordinates.shrink_to_fit();
         ++buildRevision;
         debugCache.navigationRevision = buildRevision;
+        debugCache.tileRevision = tileRevision;
+        InitializeTileRevisions();
+        RefreshDynamicObstacleDebugAndStatistics();
         state = statistics.navMeshPolygonCount > 0
                 ? SectorNavigationState::Ready : SectorNavigationState::Empty;
         stage = SectorNavigationBuildStage::Complete;
@@ -801,23 +1324,44 @@ SectorNavigationWorld& SectorNavigationWorld::operator=(SectorNavigationWorld&&)
 
 bool SectorNavigationWorld::Initialize(
         SectorNavigationSettings settings,
-        SectorNavigationCapacitySettings capacities)
+        SectorNavigationCapacitySettings capacities,
+        SectorNavigationDynamicObstacleSettings dynamicObstacleSettings)
 {
     if (!impl) impl = std::make_unique<Impl>();
     impl->ReleaseNavigation();
     impl->settings = NormalizeSectorNavigationSettings(settings);
     impl->capacities = NormalizeSectorNavigationCapacitySettings(capacities);
+    impl->dynamicObstacleSettings =
+            NormalizeSectorNavigationDynamicObstacleSettings(
+                    dynamicObstacleSettings);
     impl->diagnostics.clear();
     impl->diagnostics.reserve(impl->capacities.diagnosticCapacity);
     impl->agentSlots.clear();
     impl->agentSlots.reserve(impl->capacities.agentCapacity);
     impl->pathSlots.clear();
     impl->pathSlots.reserve(impl->capacities.pathRecordCapacity);
+    impl->obstacles.reserve(static_cast<size_t>(
+            impl->capacities.dynamicObstacleCapacity));
+    impl->pendingAffectedTiles.reserve(static_cast<size_t>(
+            impl->capacities.dynamicObstacleCapacity) * DT_MAX_TOUCHED_TILES);
+    impl->seenObstacleIdsScratch.reserve(static_cast<size_t>(
+            impl->capacities.dynamicObstacleCapacity));
+    impl->affectedTilesScratch.reserve(DT_MAX_TOUCHED_TILES + 1u);
+    impl->tileReferencesScratch.reserve(static_cast<size_t>(
+            impl->capacities.dynamicObstacleCapacity) * DT_MAX_TOUCHED_TILES);
+    impl->doorLinksScratch.reserve(static_cast<size_t>(
+            impl->capacities.dynamicObstacleCapacity));
+    impl->changedTilesScratch.reserve(static_cast<size_t>(
+            impl->capacities.dynamicObstacleCapacity) * DT_MAX_TOUCHED_TILES);
+    impl->debugCache.dynamicObstacles.reserve(static_cast<size_t>(
+            impl->capacities.dynamicObstacleCapacity));
+    impl->debugCache.recentlyUpdatedTiles.reserve(32);
     impl->counters = {};
     impl->sourceRevision = 0;
     impl->buildRevision = 0;
     impl->agentGrowthWarned = false;
     impl->pathGrowthWarned = false;
+    impl->obstacleGrowthWarned = false;
     impl->stage = SectorNavigationBuildStage::None;
     impl->state = SectorNavigationState::Empty;
     return true;
@@ -924,6 +1468,320 @@ void SectorNavigationWorld::UpdateBuild(
     }
 }
 
+void SectorNavigationWorld::UpdateDynamicObstacles(
+        const std::vector<SectorStaticModelCollider>& dynamicColliders,
+        float rawDt)
+{
+    if (!impl || impl->state != SectorNavigationState::Ready
+            || impl->tileCache == nullptr || impl->navMesh == nullptr) {
+        return;
+    }
+    const auto started = std::chrono::steady_clock::now();
+    const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+    impl->changedTilesScratch.clear();
+    for (Impl::RuntimeObstacle& obstacle : impl->obstacles) {
+        obstacle.seen = false;
+        obstacle.updateSeconds += dt;
+    }
+
+    impl->seenObstacleIdsScratch.clear();
+    for (const SectorStaticModelCollider& collider : dynamicColliders) {
+        if (!Impl::ValidDynamicCollider(collider)) continue;
+        if (std::find(impl->seenObstacleIdsScratch.begin(),
+                    impl->seenObstacleIdsScratch.end(), collider.placedObjectId)
+                != impl->seenObstacleIdsScratch.end()) {
+            impl->Record(SectorNavigationDiagnosticSeverity::Warning,
+                    SectorNavigationBuildStage::Complete,
+                    "Duplicate dynamic obstacle ID "
+                            + std::to_string(collider.placedObjectId)
+                            + " was ignored");
+            continue;
+        }
+        if (impl->seenObstacleIdsScratch.size()
+                < static_cast<size_t>(impl->capacities.dynamicObstacleCapacity)) {
+            impl->seenObstacleIdsScratch.push_back(collider.placedObjectId);
+        }
+        auto found = std::find_if(
+                impl->obstacles.begin(), impl->obstacles.end(),
+                [&collider](const Impl::RuntimeObstacle& obstacle) {
+                    return obstacle.placedObjectId == collider.placedObjectId;
+                });
+        if (found == impl->obstacles.end()) {
+            if (impl->obstacles.size()
+                    >= static_cast<size_t>(impl->capacities.dynamicObstacleCapacity)) {
+                if (!impl->obstacleGrowthWarned) {
+                    impl->obstacleGrowthWarned = true;
+                    ++impl->counters.capacityWarnings;
+                    ++impl->dynamicObstacleStatistics.failures;
+                    std::fprintf(stderr,
+                            "[Navigation WARNING] Dynamic obstacle capacity exceeded; additional props remain collision-only.\n");
+                    impl->Record(SectorNavigationDiagnosticSeverity::Warning,
+                            SectorNavigationBuildStage::Complete,
+                            "Dynamic obstacle capacity exceeded; additional props remain collision-only");
+                }
+                continue;
+            }
+            impl->obstacles.push_back({});
+            Impl::RuntimeObstacle& obstacle = impl->obstacles.back();
+            obstacle.placedObjectId = collider.placedObjectId;
+            obstacle.desired = collider;
+            obstacle.lastObserved = collider;
+            obstacle.seen = true;
+            continue;
+        }
+
+        Impl::RuntimeObstacle& obstacle = *found;
+        obstacle.seen = true;
+        const float dx = collider.center.x - obstacle.lastObserved.center.x;
+        const float dz = collider.center.y - obstacle.lastObserved.center.y;
+        const float sampleDistance = std::sqrt(dx * dx + dz * dz);
+        const float sampleYaw = impl->YawDistance(
+                impl->DynamicYaw(obstacle.lastObserved),
+                impl->DynamicYaw(collider));
+        const float linearSpeed = dt > 0.000001f ? sampleDistance / dt : 0.0f;
+        const float angularSpeedDegrees = dt > 0.000001f
+                ? sampleYaw * 180.0f / 3.14159265358979323846f / dt
+                : 0.0f;
+        const bool fast = linearSpeed
+                        > impl->dynamicObstacleSettings.fastLinearSpeedWorld
+                || angularSpeedDegrees
+                        > impl->dynamicObstacleSettings.fastAngularSpeedDegrees;
+        const float settleLinearSpeed =
+                impl->dynamicObstacleSettings.positionThresholdWorld
+                / impl->dynamicObstacleSettings.settleSeconds;
+        const float settleAngularSpeed =
+                impl->dynamicObstacleSettings.yawThresholdDegrees
+                / impl->dynamicObstacleSettings.settleSeconds;
+        const bool settled = linearSpeed <= settleLinearSpeed
+                && angularSpeedDegrees <= settleAngularSpeed;
+        obstacle.desired = collider;
+        obstacle.lastObserved = collider;
+
+        if (fast) {
+            obstacle.settleSeconds = 0.0f;
+            obstacle.addAfterRemove = false;
+            if (obstacle.phase == Impl::ObstaclePhase::Active) {
+                obstacle.phase = Impl::ObstaclePhase::PendingRemove;
+            } else if (obstacle.phase == Impl::ObstaclePhase::PendingAdd
+                    && obstacle.reference == 0) {
+                obstacle.phase = Impl::ObstaclePhase::FastSuppressed;
+            }
+            continue;
+        }
+        obstacle.settleSeconds = settled
+                ? obstacle.settleSeconds + dt : 0.0f;
+        if (obstacle.phase == Impl::ObstaclePhase::FastSuppressed
+                && obstacle.settleSeconds
+                        >= impl->dynamicObstacleSettings.settleSeconds) {
+            obstacle.phase = Impl::ObstaclePhase::PendingAdd;
+            obstacle.updateSeconds = 0.0f;
+        } else if (obstacle.phase == Impl::ObstaclePhase::Active
+                && impl->MeaningfullyDifferent(
+                        obstacle.desired, obstacle.committed)
+                && obstacle.updateSeconds
+                        >= impl->dynamicObstacleSettings.slowUpdateIntervalSeconds) {
+            obstacle.phase = Impl::ObstaclePhase::PendingRemove;
+            obstacle.addAfterRemove = true;
+            obstacle.updateSeconds = 0.0f;
+            ++impl->dynamicObstacleStatistics.transforms;
+        }
+    }
+
+    for (Impl::RuntimeObstacle& obstacle : impl->obstacles) {
+        if (obstacle.seen) continue;
+        obstacle.addAfterRemove = false;
+        obstacle.deleteAfterRemove = true;
+        if (obstacle.reference != 0) {
+            obstacle.phase = Impl::ObstaclePhase::PendingRemove;
+        }
+    }
+
+    int requestBudget = impl->capacities.dynamicObstacleRequestBudgetPerUpdate;
+    if (impl->tileCacheUpToDate) {
+        for (Impl::RuntimeObstacle& obstacle : impl->obstacles) {
+            if (requestBudget <= 0) break;
+            if (obstacle.phase == Impl::ObstaclePhase::PendingAdd
+                    && obstacle.reference == 0
+                    && !obstacle.deleteAfterRemove) {
+                impl->affectedTilesScratch.clear();
+                if (!impl->CollectAffectedTiles(
+                            obstacle.desired,
+                            impl->affectedTilesScratch,
+                            true)) {
+                    obstacle.phase = Impl::ObstaclePhase::Failed;
+                    continue;
+                }
+                float center[3]{};
+                float halfExtents[3]{};
+                float bmin[3]{};
+                float bmax[3]{};
+                impl->ObstacleBounds(
+                        obstacle.desired, center, halfExtents, bmin, bmax);
+                dtObstacleRef reference = 0;
+                const dtStatus status = impl->tileCache->addBoxObstacle(
+                        center, halfExtents,
+                        impl->DynamicYaw(obstacle.desired), &reference);
+                if (dtStatusFailed(status)) {
+                    if (dtStatusDetail(status, DT_BUFFER_TOO_SMALL)) break;
+                    obstacle.phase = Impl::ObstaclePhase::Failed;
+                    ++impl->dynamicObstacleStatistics.failures;
+                    impl->Record(SectorNavigationDiagnosticSeverity::Warning,
+                            SectorNavigationBuildStage::Complete,
+                            "Could not add dynamic obstacle "
+                                    + std::to_string(obstacle.placedObjectId)
+                                    + "; it remains collision-only");
+                    continue;
+                }
+                obstacle.reference = reference;
+                obstacle.committed = obstacle.desired;
+                for (const SectorNavigationTileKey key :
+                        impl->affectedTilesScratch) {
+                    if (std::find(impl->pendingAffectedTiles.begin(),
+                                impl->pendingAffectedTiles.end(), key)
+                            == impl->pendingAffectedTiles.end()) {
+                        impl->pendingAffectedTiles.push_back(key);
+                    }
+                }
+                ++impl->dynamicObstacleStatistics.additions;
+                --requestBudget;
+                impl->tileCacheUpToDate = false;
+            } else if (obstacle.phase == Impl::ObstaclePhase::PendingRemove
+                    && obstacle.reference != 0) {
+                impl->AppendPendingAffectedTiles(obstacle.committed);
+                const dtStatus status = impl->tileCache->removeObstacle(
+                        obstacle.reference);
+                if (dtStatusFailed(status)) {
+                    if (dtStatusDetail(status, DT_BUFFER_TOO_SMALL)) break;
+                    obstacle.phase = Impl::ObstaclePhase::Failed;
+                    obstacle.reference = 0;
+                    ++impl->dynamicObstacleStatistics.failures;
+                    impl->Record(SectorNavigationDiagnosticSeverity::Warning,
+                            SectorNavigationBuildStage::Complete,
+                            "Could not remove dynamic obstacle "
+                                    + std::to_string(obstacle.placedObjectId));
+                    continue;
+                }
+                ++impl->dynamicObstacleStatistics.removals;
+                --requestBudget;
+                impl->tileCacheUpToDate = false;
+            }
+        }
+    }
+
+    bool changedAnyTile = false;
+    for (int work = 0;
+            work < impl->capacities.dynamicObstacleTileBudgetPerUpdate
+                    && !impl->tileCacheUpToDate;
+            ++work) {
+        impl->tileReferencesScratch.clear();
+        for (const SectorNavigationTileKey key : impl->pendingAffectedTiles) {
+            impl->tileReferencesScratch.push_back(
+                    impl->navMesh->getTileRefAt(key.x, key.y, key.layer));
+        }
+        bool upToDate = false;
+        const dtStatus status = impl->tileCache->update(dt, impl->navMesh, &upToDate);
+        if (dtStatusFailed(status)) {
+            Fail(SectorNavigationBuildStage::BuildingDetourTiles,
+                    "Dynamic TileCache update failed; navigation was disabled safely");
+            return;
+        }
+        impl->tileCacheUpToDate = upToDate;
+        for (size_t index = 0; index < impl->pendingAffectedTiles.size(); ++index) {
+            const SectorNavigationTileKey key = impl->pendingAffectedTiles[index];
+            const dtTileRef after = impl->navMesh->getTileRefAt(
+                    key.x, key.y, key.layer);
+            if (after == impl->tileReferencesScratch[index]) continue;
+            changedAnyTile = true;
+            if (std::find(impl->changedTilesScratch.begin(),
+                        impl->changedTilesScratch.end(), key)
+                    == impl->changedTilesScratch.end()) {
+                impl->changedTilesScratch.push_back(key);
+            }
+            ++impl->tileRevision;
+            ++impl->dynamicObstacleStatistics.updatedTiles;
+            Impl::TileRuntimeRevision* tile = impl->FindTileRevision(key);
+            if (tile == nullptr) {
+                impl->tileRevisions.push_back({key, after, impl->tileRevision});
+            } else {
+                tile->reference = after;
+                tile->revision = impl->tileRevision;
+            }
+            impl->debugCache.recentlyUpdatedTiles.push_back({key, impl->tileRevision});
+            if (impl->debugCache.recentlyUpdatedTiles.size() > 32) {
+                impl->debugCache.recentlyUpdatedTiles.erase(
+                        impl->debugCache.recentlyUpdatedTiles.begin());
+            }
+        }
+    }
+
+    if (impl->tileCacheUpToDate) {
+        for (Impl::RuntimeObstacle& obstacle : impl->obstacles) {
+            if (obstacle.phase == Impl::ObstaclePhase::PendingAdd
+                    && obstacle.reference != 0) {
+                const dtTileCacheObstacle* detourObstacle =
+                        impl->tileCache->getObstacleByRef(obstacle.reference);
+                if (detourObstacle != nullptr
+                        && detourObstacle->state == DT_OBSTACLE_PROCESSED) {
+                    obstacle.phase = Impl::ObstaclePhase::Active;
+                    obstacle.updateSeconds = 0.0f;
+                }
+            } else if (obstacle.phase == Impl::ObstaclePhase::PendingRemove
+                    && obstacle.reference != 0
+                    && impl->tileCache->getObstacleByRef(obstacle.reference)
+                            == nullptr) {
+                obstacle.reference = 0;
+                if (obstacle.deleteAfterRemove) {
+                    continue;
+                }
+                obstacle.phase = obstacle.addAfterRemove
+                        ? Impl::ObstaclePhase::PendingAdd
+                        : Impl::ObstaclePhase::FastSuppressed;
+                obstacle.addAfterRemove = false;
+            }
+        }
+        impl->pendingAffectedTiles.clear();
+    }
+    impl->obstacles.erase(
+            std::remove_if(
+                    impl->obstacles.begin(), impl->obstacles.end(),
+                    [](const Impl::RuntimeObstacle& obstacle) {
+                        return obstacle.deleteAfterRemove
+                                && obstacle.reference == 0;
+                    }),
+            impl->obstacles.end());
+    if (changedAnyTile) impl->RefreshRuntimeNavigationDerivedData();
+    impl->RefreshDynamicObstacleDebugAndStatistics();
+    impl->debugCache.tileRevision = impl->tileRevision;
+    const float elapsedMilliseconds = std::chrono::duration<float, std::milli>(
+            std::chrono::steady_clock::now() - started).count();
+    impl->dynamicObstacleStatistics.lastUpdateMilliseconds = elapsedMilliseconds;
+    impl->dynamicObstacleStatistics.peakUpdateMilliseconds = std::max(
+            impl->dynamicObstacleStatistics.peakUpdateMilliseconds,
+            elapsedMilliseconds);
+}
+
+bool SectorNavigationWorld::CorridorTouchesChangedTile(
+        const SectorNavigationTileKey* tiles,
+        size_t tileCount,
+        uint64_t capturedTileRevision) const
+{
+    if (!impl || tiles == nullptr || capturedTileRevision >= impl->tileRevision) {
+        return false;
+    }
+    for (size_t index = 0; index < tileCount; ++index) {
+        const auto found = std::find_if(
+                impl->tileRevisions.begin(), impl->tileRevisions.end(),
+                [key = tiles[index]](const Impl::TileRuntimeRevision& tile) {
+                    return tile.key == key;
+                });
+        if (found != impl->tileRevisions.end()
+                && found->revision > capturedTileRevision) {
+            return true;
+        }
+    }
+    return false;
+}
+
 SectorNavigationNearestPointResult SectorNavigationWorld::FindNearestPoint(Vector3 position) const
 {
     SectorNavigationNearestPointResult result;
@@ -995,6 +1853,30 @@ SectorNavigationPathResult SectorNavigationWorld::FindPath(
         return result;
     }
     result.corridorPolygonCount = static_cast<size_t>(corridorCount);
+    result.tileRevision = impl->tileRevision;
+    for (int corridorIndex = 0; corridorIndex < corridorCount; ++corridorIndex) {
+        const dtMeshTile* corridorTile = nullptr;
+        const dtPoly* corridorPoly = nullptr;
+        if (dtStatusFailed(impl->navMesh->getTileAndPolyByRef(
+                    corridor[corridorIndex], &corridorTile, &corridorPoly))
+                || corridorTile == nullptr || corridorTile->header == nullptr) {
+            continue;
+        }
+        const SectorNavigationTileKey key{
+                corridorTile->header->x,
+                corridorTile->header->y,
+                corridorTile->header->layer};
+        const auto begin = result.corridorTiles.begin();
+        const auto end = begin
+                + static_cast<std::ptrdiff_t>(result.corridorTileCount);
+        if (std::find(begin, end, key) != end) continue;
+        if (result.corridorTileCount >= result.corridorTiles.size()) {
+            result.status = SectorNavigationQueryStatus::CapacityExceeded;
+            ++impl->counters.failedQueries;
+            return result;
+        }
+        result.corridorTiles[result.corridorTileCount++] = key;
+    }
     const bool capacityExceeded = dtStatusDetail(pathStatus, DT_BUFFER_TOO_SMALL)
             || dtStatusDetail(pathStatus, DT_OUT_OF_NODES);
     const bool partial = dtStatusDetail(pathStatus, DT_PARTIAL_RESULT)
@@ -1116,6 +1998,7 @@ bool SectorNavigationWorld::SetDoorLinkRuntimeState(
         return false;
     }
     found->state = state;
+    found->holderCount = holderCount;
     const auto debug = std::find_if(
             impl->debugCache.doorLinks.begin(),
             impl->debugCache.doorLinks.end(),
@@ -1202,6 +2085,20 @@ const SectorNavigationCapacitySettings& SectorNavigationWorld::Capacities() cons
     return impl ? impl->capacities : defaults;
 }
 
+const SectorNavigationDynamicObstacleSettings&
+SectorNavigationWorld::DynamicObstacleSettings() const
+{
+    static const SectorNavigationDynamicObstacleSettings defaults;
+    return impl ? impl->dynamicObstacleSettings : defaults;
+}
+
+const SectorNavigationDynamicObstacleStatistics&
+SectorNavigationWorld::DynamicObstacleStatistics() const
+{
+    static const SectorNavigationDynamicObstacleStatistics empty;
+    return impl ? impl->dynamicObstacleStatistics : empty;
+}
+
 const SectorNavigationCounters& SectorNavigationWorld::Counters() const
 {
     static const SectorNavigationCounters empty;
@@ -1216,6 +2113,7 @@ const std::vector<SectorNavigationDiagnostic>& SectorNavigationWorld::Diagnostic
 
 uint64_t SectorNavigationWorld::SourceRevision() const { return impl ? impl->sourceRevision : 0; }
 uint64_t SectorNavigationWorld::BuildRevision() const { return impl ? impl->buildRevision : 0; }
+uint64_t SectorNavigationWorld::TileRevision() const { return impl ? impl->tileRevision : 0; }
 uint64_t SectorNavigationWorld::SourceHash() const { return impl ? impl->sourceHash : 0; }
 
 const SectorNavigationBuildStatistics& SectorNavigationWorld::BuildStatistics() const
