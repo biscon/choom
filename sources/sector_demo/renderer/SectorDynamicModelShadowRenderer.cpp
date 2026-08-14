@@ -490,8 +490,14 @@ void SectorDynamicModelShadowRenderer::RenderShadowMaps(
                         && !ShouldDrawRuntimeSectorForVisibility(object.currentSectorId, *context.visibility)) return;
                 const engine::ModelAsset* asset = context.assets->GetModelAsset(instance.model);
                 if (asset == nullptr) return;
+                Vector3 renderPosition = transform.position;
+                if (context.world->Has<SectorObjectVisualOffset>(entity)) {
+                    renderPosition = Vector3Add(
+                            renderPosition,
+                            context.world->Get<SectorObjectVisualOffset>(entity).position);
+                }
                 const Matrix transformMatrix = BuildSectorStaticModelAuthoredTransform(
-                        transform.position, transform.rotationXRadians, transform.yawRadians,
+                        renderPosition, transform.rotationXRadians, transform.yawRadians,
                         transform.rotationZRadians, dynamicModel.scale);
                 const WorldBounds bounds = TransformBounds(asset->localBounds, transformMatrix);
                 const Vector3 cameraForward = NormalizeOr(
@@ -541,8 +547,14 @@ void SectorDynamicModelShadowRenderer::RenderShadowMaps(
         }
         if (!hasReceiver) continue;
 
+        Vector3 renderPosition = transform.position;
+        if (context.world->Has<SectorObjectVisualOffset>(candidate.entity)) {
+            renderPosition = Vector3Add(
+                    renderPosition,
+                    context.world->Get<SectorObjectVisualOffset>(candidate.entity).position);
+        }
         const Matrix authoredTransform = BuildSectorStaticModelAuthoredTransform(
-                transform.position, transform.rotationXRadians, transform.yawRadians,
+                renderPosition, transform.rotationXRadians, transform.yawRadians,
                 transform.rotationZRadians, dynamicModel.scale);
         const WorldBounds bounds = TransformBounds(asset->localBounds, authoredTransform);
         const float paddedRadius = std::max(bounds.radius * ProjectedShadowPadding, 0.15f);

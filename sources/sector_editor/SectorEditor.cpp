@@ -3446,6 +3446,8 @@ void SectorEditor::RenderPreview3DOverlays()
         DrawSectorEditorPreviewNavigationOverlay(
                 previewState.overlay,
                 sceneRuntime.Navigation(),
+                sceneRuntime.NpcNavigation(),
+                selectionState.selectedRuntimeObjectId,
                 sceneRuntime.Renderer());
     }
 }
@@ -3572,6 +3574,7 @@ void SectorEditor::DrawPreviewOverlay(
             previewState,
             sceneRuntime.RuntimeObjects(),
             sceneRuntime.Navigation(),
+            sceneRuntime.NpcNavigation(),
             fpsPlayer.State(),
             selectionState,
             manipulationState,

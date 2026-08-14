@@ -46,8 +46,8 @@ When executing this plan:
 | Slice | Title | Status | Completed |
 |---|---|---|---|
 | 1 | Integrate dependencies and establish navigation contracts | Completed | 2026-08-14 |
-| 2 | Build tiled static navigation and add the 3D Nav debug tab | Not Started | - |
-| 3 | Add basic NPC path following and locomotion | Not Started | - |
+| 2 | Build tiled static navigation and add the 3D Nav debug tab | Completed | 2026-08-14 |
+| 3 | Add basic NPC path following and locomotion | Completed | 2026-08-14 |
 | 4 | Expose scripted NPC movement early | Not Started | - |
 | 5 | Add door-aware traversal and door arbitration | Not Started | - |
 | 6 | Add dynamic obstacle updates with DetourTileCache | Not Started | - |
@@ -135,6 +135,14 @@ bounds or visual NPC scale:
 Visual model scale does not automatically change the navigation agent. If
 different physical sizes become a game requirement, introduce named agent
 profiles rather than deriving collision from arbitrary GLB bounds.
+
+Sector-geometry stairs use ordinary Recast/Detour ground adjacency when every
+successive rise is within maximum climb. They do not use artificial ramps or
+off-mesh links. Authoritative collision snaps physical NPC feet to each sector
+floor exactly as it resolves the player profile; a separate presentation-only
+model offset preserves the previous visible height and decays at `16/s` so
+step-up and step-down motion appears smooth without affecting collision,
+sector lookup, path queries, baked-light/probe sampling, or physics.
 
 ### Included
 
@@ -786,26 +794,26 @@ being prerequisites.
 
 Tasks:
 
-1. Add plain-data NPC navigation/locomotion components or pre-reserved external
+1. **Completed 2026-08-14:** add plain-data NPC navigation/locomotion components or pre-reserved external
    records, and reserve/register them during level spawning.
-2. Add the shared request/cancel/status backend using placed NPC instance IDs
+2. **Completed 2026-08-14:** add the shared request/cancel/status backend using placed NPC instance IDs
    and runtime entity handles internally.
-3. Project start/destination, build a bounded corridor/corner list, and advance
+3. **Completed 2026-08-14:** project start/destination, build a bounded corridor/corner list, and advance
    toward corners with a documented arrival tolerance.
-4. Move through authoritative sector, door, and prop collision. Update actual
+4. **Completed 2026-08-14:** move through authoritative sector, door, and prop collision. Update actual
    transform, grounded floor position, current sector, and dependent lighting
    state through existing runtime paths.
-5. Rotate toward actual movement while respecting authored initial yaw until a
+5. **Completed 2026-08-14:** rotate toward actual movement while respecting authored initial yaw until a
    movement request begins.
-6. Use definition WalkSpeed/RunSpeed and requested gait consistently. Select
+6. **Completed 2026-08-14:** use definition WalkSpeed/RunSpeed and requested gait consistently. Select
    semantic Idle, Walk, and Run actions and their normalized animation-speed
    multipliers; do not look up hardcoded animation clip names in locomotion.
-7. Feed actual displacement back into corridor progress. Detect stalls,
+7. **Completed 2026-08-14:** feed actual displacement back into corridor progress. Detect stalls,
    off-corridor drift, and obstruction; rate-limit bounded replans and fail with
    a clear status when recovery is exhausted.
-8. Extend Nav-tab debug data with paths, corners, agent cylinders, directions,
+8. **Completed 2026-08-14:** extend Nav-tab debug data with paths, corners, agent cylinders, directions,
    speed, selected NPC state, and query/replan/stall counters.
-9. Add a small non-script test/debug request seam so automated tests can drive
+9. **Completed 2026-08-14:** add a small non-script test/debug request seam so automated tests can drive
    movement before Slice 4.
 
 Tests:
@@ -1224,3 +1232,55 @@ Append one entry per slice attempt using this shape:
 - Manual verification performed by user: none requested; no GUI test was run.
 - Remaining debt/blocker: Slice 3 adds NPC records and locomotion; dynamic
   obstacles, door links, Crowd, and persistence remain assigned to later slices.
+
+### 2026-08-14 — Slice 3 — Completed
+
+- Scope completed: pre-reserved per-level NPC navigation records; shared
+  programmatic request/cancel/status API; bounded straight-corner following;
+  walk/run speed and semantic-action selection; authoritative topology, door,
+  and static-prop collision; physical floor grounding and sector updates;
+  actual-motion facing; stall/drift detection with rate-limited bounded
+  replans; lifecycle cleanup; baked-light/probe refresh; and selected/all-agent
+  path, corner, direction, velocity, status, and counter visualization in the
+  Nav tab.
+- Files/modules added or changed: added `NpcNavigationSystem`; extended NPC
+  runtime/definition data, scene runtime orchestration, runtime-object spawn and
+  rendering, navigation debug extraction, NPC editor fields, Nav preview state
+  and overlay, CMake, generated-fixture tests, and this plan.
+- Decisions or contract updates: NPC definition JSON now has an optional,
+  backward-compatible `animationBlendSeconds` field (default `0.2`, valid
+  `0.01..2.0`). Semantic clip indices are resolved once, animation-speed
+  multipliers come from Idle/Walk/Run definitions, and action changes crossfade
+  through the existing animated-model blend path; changes requested during a
+  transition queue until it completes. Sector stairs remain ordinary ground
+  navigation: valid successive rises connect through Detour, physical feet snap
+  to authoritative sector/static support, and only the rendered animated model
+  receives a decaying vertical smoothing offset. The initial combined
+  navigation/locomotion implementation remains in one focused NPC system file;
+  doors, dynamic obstacles, scripts, and Crowd stay in their assigned slices.
+- Tests/checks: added generated six-tread stair ascent/descent and invalid-rise
+  fixtures, Detour step-connection debug coverage, two independent moving
+  agents, forced invalid-corridor collision/replan recovery, walk/run semantics,
+  arrival/facing/sector/floor assertions, visual step-up/down smoothing,
+  cancellation/deletion/teardown, NPC definition/editor round trips, and direct
+  animation blend/queue/missing-clip coverage. `cmake --build
+  cmake-build-debug -j2` passed; all 26 CTest tests passed; `git diff --check`
+  passed; diff/stat/status were reviewed. The pre-existing Lua `tmpnam` linker
+  warning remains.
+- Collision/sector lookup/physics impact: NPC locomotion now calls the existing
+  authoritative topology, dynamic-door, and static-model collision paths and
+  writes its physical transform, grounded floor, and current sector. Player
+  collision, sector lookup, and physics code/behavior were not changed. Stair
+  smoothing is presentation-only and never feeds collision, sector lookup,
+  path queries, baked-light/probe sampling, or physics.
+- Topology cache invalidation impact: none. No topology or authoring mutation
+  path changed; navigation debug additions are derived during explicit navmesh
+  build finalization, and steady preview drawing reads cached data.
+- Lightmap/source-hash impact: none. Lightmap generation and its source hash are
+  unchanged. The existing navigation source hash is unchanged; NPC placements,
+  movement, animation blend settings, and visual stair offsets remain excluded.
+- Manual verification performed by user: none; no GUI/xdotool test was run.
+- Remaining debt/blocker: Slice 4 owns Lua movement operations; Slice 5 owns
+  typed door links/arbitration; Slice 6 owns TileCache dynamic obstacles; Slice
+  7 owns Crowd avoidance. Manual preview verification of authored character
+  clips and the user's staircase remains for the user.

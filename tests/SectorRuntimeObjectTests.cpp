@@ -1,5 +1,7 @@
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "engine/systems/AnimatedModelSystem.h"
+#include "game/navigation/SectorNavigationWorld.h"
+#include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcRuntime.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
@@ -213,6 +215,108 @@ game::SectorTopologyMap MakeSquareMap()
     map.sectors.push_back(Sector(10));
     AddSectorLoop(map, 10, {{0, 0}, {64, 0}, {64, 64}, {0, 64}});
     return map;
+}
+
+game::SectorTopologyMap MakeNavigationSquareMap()
+{
+    game::SectorTopologyMap map;
+    map.sectors.push_back(Sector(10));
+    AddSectorLoop(map, 10, {{0, 0}, {2048, 0}, {2048, 2048}, {0, 2048}});
+    return map;
+}
+
+game::SectorTopologyMap MakeNavigationStairMap()
+{
+    game::SectorTopologyMap map;
+    constexpr int StepCount = 6;
+    constexpr game::SectorCoord TreadDepth = 128;
+    constexpr game::SectorCoord StairWidth = 512;
+    for (int boundary = 0; boundary <= StepCount; ++boundary) {
+        const game::SectorCoord x = boundary * TreadDepth;
+        map.vertices.push_back({boundary * 2 + 1, x, 0});
+        map.vertices.push_back({boundary * 2 + 2, x, StairWidth});
+    }
+    int nextLineId = 1;
+    int nextSideId = 1;
+    const auto addLine = [&](int startVertexId, int endVertexId,
+                             int frontSectorId, int backSectorId = 0) {
+        const int lineId = nextLineId++;
+        const int frontSideId = nextSideId++;
+        const int backSideId = backSectorId != 0 ? nextSideId++ : -1;
+        map.lineDefs.push_back({lineId, startVertexId, endVertexId,
+                frontSideId, backSideId});
+        AddSide(map, frontSideId, lineId,
+                game::SectorTopologySideKind::Front, frontSectorId);
+        if (backSectorId != 0) {
+            AddSide(map, backSideId, lineId,
+                    game::SectorTopologySideKind::Back, backSectorId);
+        }
+    };
+    for (int step = 0; step < StepCount; ++step) {
+        const int sectorId = step + 1;
+        game::SectorTopologySector sector = Sector(sectorId);
+        sector.floorZ = static_cast<float>(step) * 1.6f;
+        sector.ceilingZ = sector.floorZ + 24.0f;
+        map.sectors.push_back(sector);
+        const int leftBottom = step * 2 + 1;
+        const int leftTop = step * 2 + 2;
+        const int rightBottom = (step + 1) * 2 + 1;
+        const int rightTop = (step + 1) * 2 + 2;
+        addLine(leftBottom, rightBottom, sectorId);
+        addLine(rightTop, leftTop, sectorId);
+        if (step == 0) addLine(leftTop, leftBottom, sectorId);
+        if (step == StepCount - 1) {
+            addLine(rightBottom, rightTop, sectorId);
+        } else {
+            addLine(rightBottom, rightTop, sectorId, sectorId + 1);
+        }
+    }
+    return map;
+}
+
+void FinishNavigationBuild(
+        game::SectorNavigationWorld& navigation,
+        const game::SectorTopologyMap& map,
+        const std::vector<game::SectorStaticModelCollider>& colliders = {})
+{
+    for (int iteration = 0; iteration < 1000
+            && (navigation.State() == game::SectorNavigationState::Queued
+                || navigation.State() == game::SectorNavigationState::Building);
+            ++iteration) {
+        navigation.UpdateBuild(map, colliders, 0);
+    }
+}
+
+engine::Entity SpawnNavigationTestNpc(
+        engine::World& world,
+        const char* instanceId,
+        int placedObjectId,
+        Vector3 position,
+        int sectorId,
+        float walkSpeed = 2.0f,
+        float runSpeed = 4.0f)
+{
+    const engine::Entity entity = world.CreateEntity();
+    game::SectorObjectTransform transform;
+    transform.position = position;
+    transform.yawRadians = 0.35f;
+    world.Add(entity, transform);
+    game::SectorObject object;
+    object.currentSectorId = sectorId;
+    world.Add(entity, object);
+    world.Add(entity, game::SectorObjectLighting{});
+    world.Add(entity, game::SectorObjectVisualOffset{});
+    game::SectorDynamicModel dynamicModel;
+    dynamicModel.placedObjectId = placedObjectId;
+    world.Add(entity, dynamicModel);
+    game::NpcRuntimeInstance npc;
+    npc.definitionId = "navigation_test";
+    npc.instanceId = instanceId;
+    npc.walkSpeed = walkSpeed;
+    npc.runSpeed = runSpeed;
+    world.Add(entity, npc);
+    world.Add(entity, game::NpcAnimationState{});
+    return entity;
 }
 
 game::SectorTopologyMap MakeDoorPortalMap()
@@ -4192,6 +4296,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     game::GetNpcAction(definition, game::NpcAction::Idle).animationSpeed = 1.25f;
     game::GetNpcAction(definition, game::NpcAction::Walk).movementSpeed = 2.0f;
     game::GetNpcAction(definition, game::NpcAction::Run).movementSpeed = 4.5f;
+    definition.animationBlendSeconds = 0.35f;
     state.npcDefinitionCatalog = game::NpcDefinitionCatalog{};
     state.npcDefinitionCatalog.definitions.push_back(definition);
 
@@ -4201,12 +4306,16 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     if (state.placedObjectEntities.empty()) return;
     const engine::Entity entity = state.placedObjectEntities[0].entity;
     Check(world.Has<game::NpcRuntimeInstance>(entity)
+                  && world.Has<game::NpcAnimationState>(entity)
+                  && world.Has<game::SectorObjectVisualOffset>(entity)
                   && world.Has<game::SectorDynamicModel>(entity)
                   && world.Has<engine::AnimatedModelInstance>(entity)
                   && world.Has<engine::AnimatedModelAnimator>(entity),
           "NPC runtime reuses animated dynamic-model rendering components");
     const game::NpcRuntimeInstance& npc =
             world.Get<game::NpcRuntimeInstance>(entity);
+    const game::NpcAnimationState& npcAnimation =
+            world.Get<game::NpcAnimationState>(entity);
     const game::SectorDynamicModel& dynamic =
             world.Get<game::SectorDynamicModel>(entity);
     const engine::AnimatedModelAnimator& animator =
@@ -4218,7 +4327,10 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
                   && npc.action == game::NpcAction::Idle
                   && npc.hostile
                   && Near(npc.walkSpeed, 2.0f)
-                  && Near(npc.runSpeed, 4.5f),
+                  && Near(npc.runSpeed, 4.5f)
+                  && Near(npcAnimation.blendSeconds, 0.35f)
+                  && Near(npcAnimation.animationSpeeds[
+                                  static_cast<size_t>(game::NpcAction::Idle)], 1.25f),
           "NPC runtime component copies resolved identity and gameplay definition fields");
     Check(dynamic.requestedAnimation == "Idle"
                   && Near(dynamic.scale, 1.4f)
@@ -4232,6 +4344,309 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
                   && Near(transform.rotationXRadians, 0.0f)
                   && Near(transform.rotationZRadians, 0.0f),
           "NPC runtime loops semantic Idle with floor transform, scale, and shadow settings");
+}
+
+void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
+{
+    game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorPlacedRuntimeObject obstacleObject;
+    obstacleObject.id = 900;
+    obstacleObject.kind = "static_model";
+    obstacleObject.staticModel.collision = true;
+    obstacleObject.staticModel.geometryFingerprint = "npc-navigation-test-obstacle";
+    map.runtimeObjects.push_back(obstacleObject);
+    game::SectorStaticModelCollider obstacle;
+    obstacle.placedObjectId = 900;
+    obstacle.center = {8.0f, 8.0f};
+    obstacle.axisX = {1.0f, 0.0f};
+    obstacle.axisZ = {0.0f, 1.0f};
+    obstacle.halfExtents = {1.0f, 4.0f};
+    obstacle.bottom = 0.0f;
+    obstacle.top = 2.0f;
+    obstacle.resolved = true;
+    const std::vector<game::SectorStaticModelCollider> colliders{obstacle};
+
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "NPC navigation collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map, colliders);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "NPC static-obstacle navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const engine::Entity walker = SpawnNavigationTestNpc(
+            world, "walker", 101, {2.0f, 0.0f, 6.0f}, 10, 2.0f, 4.0f);
+    const engine::Entity runner = SpawnNavigationTestNpc(
+            world, "runner", 102, {2.0f, 0.0f, 10.0f}, 10, 2.0f, 4.0f);
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    Check(npcNavigation.records.size() == 2
+                  && !(npcNavigation.records[0].agentHandle
+                          == npcNavigation.records[1].agentHandle),
+          "two NPCs own independent external navigation records");
+    const auto walkRequest = game::RequestNpcMove(
+            world, navigation, collisionWorld, npcNavigation,
+            "walker", {14.0f, 6.0f}, game::NpcMoveGait::Walk);
+    const auto runRequest = game::RequestNpcMove(
+            world, navigation, collisionWorld, npcNavigation,
+            "runner", {14.0f, 10.0f}, game::NpcMoveGait::Run);
+    Check(walkRequest.accepted && runRequest.accepted,
+          "programmatic Slice 3 seam accepts two independent move requests");
+    Check(!(npcNavigation.records[0].pathHandle
+                  == npcNavigation.records[1].pathHandle),
+          "agents do not share mutable path records");
+    for (game::NpcNavigationRecord& record : npcNavigation.records) {
+        if (record.instanceId != "walker") continue;
+        record.corners[0] = record.projectedDestination;
+        record.cornerCount = 1;
+        record.nextCorner = 0;
+    }
+
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    bool observedWalk = false;
+    bool observedRun = false;
+    bool enteredObstacle = false;
+    for (int frame = 0; frame < 800; ++frame) {
+        const float dt = frame % 2 == 0 ? 0.016f : 0.08f;
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, npcNavigation, definitions,
+                collisionWorld, doors, colliders, probes, map, dt);
+        observedWalk = observedWalk
+                || world.Get<game::NpcRuntimeInstance>(walker).action
+                        == game::NpcAction::Walk;
+        observedRun = observedRun
+                || world.Get<game::NpcRuntimeInstance>(runner).action
+                        == game::NpcAction::Run;
+        const game::SectorObjectTransform& currentWalker =
+                world.Get<game::SectorObjectTransform>(walker);
+        enteredObstacle = enteredObstacle
+                || (currentWalker.position.x > 7.0f
+                    && currentWalker.position.x < 9.0f
+                    && currentWalker.position.z > 4.0f
+                    && currentWalker.position.z < 12.0f);
+        if (game::GetNpcMoveStatus(npcNavigation, "walker").phase
+                        == game::NpcMovePhase::Arrived
+                && game::GetNpcMoveStatus(npcNavigation, "runner").phase
+                        == game::NpcMovePhase::Arrived) {
+            break;
+        }
+    }
+    const game::NpcMoveStatus walkerStatus =
+            game::GetNpcMoveStatus(npcNavigation, "walker");
+    const game::NpcMoveStatus runnerStatus =
+            game::GetNpcMoveStatus(npcNavigation, "runner");
+    const game::SectorObjectTransform& walkerTransform =
+            world.Get<game::SectorObjectTransform>(walker);
+    const game::SectorObjectTransform& runnerTransform =
+            world.Get<game::SectorObjectTransform>(runner);
+    Check(walkerStatus.phase == game::NpcMovePhase::Arrived
+                  && runnerStatus.phase == game::NpcMovePhase::Arrived
+                  && walkerStatus.replanCount > 0
+                  && observedWalk && observedRun,
+          "walk/run actions arrive after collision feedback repairs a forced invalid corridor");
+    Check(Near(walkerTransform.position.x, 14.0f, 0.11f)
+                  && Near(runnerTransform.position.x, 14.0f, 0.11f)
+                  && !Near(walkerTransform.yawRadians, 0.35f, 0.01f)
+                  && !Near(runnerTransform.yawRadians, 0.35f, 0.01f),
+          "locomotion reaches its tolerance and rotates only after movement begins");
+    Check(!enteredObstacle
+                  && !(walkerTransform.position.x > 7.0f
+                    && walkerTransform.position.x < 9.0f
+                    && walkerTransform.position.z > 4.0f
+                    && walkerTransform.position.z < 12.0f)
+                  && !(runnerTransform.position.x > 7.0f
+                    && runnerTransform.position.x < 9.0f
+                    && runnerTransform.position.z > 4.0f
+                    && runnerTransform.position.z < 12.0f),
+          "authoritative prop collision remains respected at final transforms");
+
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, npcNavigation,
+                  "walker", {2.0f, 6.0f}, game::NpcMoveGait::Walk).accepted
+                  && !game::RequestNpcMove(
+                          world, navigation, collisionWorld, npcNavigation,
+                          "walker", {3.0f, 6.0f}, game::NpcMoveGait::Walk).accepted,
+          "active move requests are not silently replaced");
+    Check(game::CancelNpcMove(world, navigation, npcNavigation, "walker")
+                  && game::GetNpcMoveStatus(npcNavigation, "walker").phase
+                          == game::NpcMovePhase::Cancelled
+                  && world.Get<game::NpcRuntimeInstance>(walker).action
+                          == game::NpcAction::Idle,
+          "programmatic cancellation releases the path and restores semantic Idle");
+
+    world.DestroyLater(walker);
+    world.FlushDestroyedEntities();
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world, assets, navigation, npcNavigation, definitions,
+            collisionWorld, doors, colliders, probes, map, 0.016f);
+    Check(npcNavigation.records[0].occupied != npcNavigation.records[1].occupied,
+          "deleted NPC releases only its own external navigation record");
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+}
+
+void TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions()
+{
+    game::NpcAnimationState state;
+    state.resolved = true;
+    state.animationIndices = {0, 1, 2};
+    state.animationSpeeds = {0.8f, 1.25f, 1.6f};
+    state.blendSeconds = 0.35f;
+    state.appliedAction = game::NpcAction::Idle;
+    engine::AnimatedModelAnimator animator;
+    animator.animationIndex = 0;
+    animator.speed = 0.8f;
+
+    Check(game::ApplyNpcSemanticAnimation(
+                  state, animator, game::NpcAction::Walk)
+                    == game::NpcAnimationApplyResult::Applied
+                  && animator.animationIndex == 0
+                  && animator.targetAnimationIndex == 1
+                  && Near(animator.transitionDurationSeconds, 0.35f)
+                  && Near(animator.speed, 1.25f),
+          "NPC Idle-to-Walk uses the authored blend time and semantic speed multiplier");
+    Check(game::ApplyNpcSemanticAnimation(
+                  state, animator, game::NpcAction::Run)
+                    == game::NpcAnimationApplyResult::Queued
+                  && state.hasPendingAction
+                  && state.pendingAction == game::NpcAction::Run
+                  && animator.targetAnimationIndex == 1,
+          "NPC action changes queue while the current animation blend completes");
+    animator.animationIndex = animator.targetAnimationIndex;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    Check(game::ApplyNpcSemanticAnimation(
+                  state, animator, game::NpcAction::Run)
+                    == game::NpcAnimationApplyResult::Applied
+                  && animator.animationIndex == 1
+                  && animator.targetAnimationIndex == 2
+                  && Near(animator.transitionDurationSeconds, 0.35f)
+                  && Near(animator.speed, 1.6f),
+          "queued Run action begins a second blend after Idle-to-Walk completes");
+
+    animator.animationIndex = animator.targetAnimationIndex;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    state.appliedAction = game::NpcAction::Run;
+    state.animationIndices[static_cast<size_t>(game::NpcAction::Walk)] =
+            engine::InvalidModelAnimationIndex;
+    Check(game::ApplyNpcSemanticAnimation(
+                  state, animator, game::NpcAction::Walk)
+                    == game::NpcAnimationApplyResult::Missing
+                  && state.appliedAction == game::NpcAction::Run,
+          "missing semantic animation leaves the current animation valid and reports gracefully");
+}
+
+void TestNpcNavigationSmoothsSectorGeometryStairsVisually()
+{
+    const game::SectorTopologyMap map = MakeNavigationStairMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "sector stair collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "sector stair navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const engine::Entity npcEntity = SpawnNavigationTestNpc(
+            world, "stair_npc", 201, {0.5f, 0.0f, 2.0f}, 1, 1.5f, 3.0f);
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, npcNavigation,
+                  "stair_npc", {5.5f, 2.0f}, game::NpcMoveGait::Walk).accepted,
+          "NPC accepts an ascending sector-stair request");
+
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> colliders;
+    bool observedAscendingVisualLag = false;
+    for (int frame = 0; frame < 500; ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, npcNavigation, definitions,
+                collisionWorld, doors, colliders, probes, map, 0.04f);
+        const game::SectorObjectTransform& transform =
+                world.Get<game::SectorObjectTransform>(npcEntity);
+        const game::SectorObjectVisualOffset& offset =
+                world.Get<game::SectorObjectVisualOffset>(npcEntity);
+        observedAscendingVisualLag = observedAscendingVisualLag
+                || (transform.position.y > 0.0f && offset.position.y < -0.001f);
+        if (game::GetNpcMoveStatus(npcNavigation, "stair_npc").phase
+                == game::NpcMovePhase::Arrived) {
+            break;
+        }
+    }
+    const game::SectorObjectTransform& topTransform =
+            world.Get<game::SectorObjectTransform>(npcEntity);
+    Check(game::GetNpcMoveStatus(npcNavigation, "stair_npc").phase
+                    == game::NpcMovePhase::Arrived
+                  && Near(topTransform.position.y, 1.0f, 0.001f)
+                  && world.Get<game::SectorObject>(npcEntity).currentSectorId == 6,
+          "NPC physically snaps through successive valid steps and reaches the top sector");
+    Check(observedAscendingVisualLag,
+          "ascending physical step snaps are hidden by a separate presentation offset");
+
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, npcNavigation,
+                  "stair_npc", {0.5f, 2.0f}, game::NpcMoveGait::Walk).accepted,
+          "NPC accepts a descending sector-stair request");
+    bool observedDescendingVisualLag = false;
+    for (int frame = 0; frame < 500; ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, npcNavigation, definitions,
+                collisionWorld, doors, colliders, probes, map, 0.04f);
+        const game::SectorObjectVisualOffset& offset =
+                world.Get<game::SectorObjectVisualOffset>(npcEntity);
+        observedDescendingVisualLag = observedDescendingVisualLag
+                || offset.position.y > 0.001f;
+        if (game::GetNpcMoveStatus(npcNavigation, "stair_npc").phase
+                == game::NpcMovePhase::Arrived) {
+            break;
+        }
+    }
+    for (int frame = 0; frame < 30; ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, npcNavigation, definitions,
+                collisionWorld, doors, colliders, probes, map, 0.04f);
+    }
+    const game::SectorObjectTransform& bottomTransform =
+            world.Get<game::SectorObjectTransform>(npcEntity);
+    const game::SectorObjectVisualOffset& settledOffset =
+            world.Get<game::SectorObjectVisualOffset>(npcEntity);
+    Check(game::GetNpcMoveStatus(npcNavigation, "stair_npc").phase
+                    == game::NpcMovePhase::Arrived
+                  && Near(bottomTransform.position.y, 0.0f, 0.001f)
+                  && world.Get<game::SectorObject>(npcEntity).currentSectorId == 1
+                  && observedDescendingVisualLag,
+          "NPC descends the same sector staircase with smoothed visual step-downs");
+    Check(std::fabs(settledOffset.position.y) < 0.001f,
+          "presentation-only stair offset decays without feeding physics or sector lookup");
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, npcNavigation,
+                  "stair_npc", {5.5f, 2.0f}, game::NpcMoveGait::Run).accepted,
+          "NPC can begin a fresh move after arrival");
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world, assets, navigation, npcNavigation, definitions,
+            collisionWorld, doors, colliders, probes, map, 0.04f);
+    world.Get<game::SectorObjectVisualOffset>(npcEntity).position.y = 0.1f;
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    Check(npcNavigation.records.empty()
+                  && world.Get<game::NpcRuntimeInstance>(npcEntity).action
+                          == game::NpcAction::Idle
+                  && Near(world.Get<game::SectorObjectVisualOffset>(npcEntity).position.y, 0.0f),
+          "map teardown cancels locomotion, restores Idle, and clears visual smoothing state");
 }
 
 void TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip()
@@ -6016,6 +6431,9 @@ int main()
     TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity();
     TestSpawnDynamicModelCopiesPlaybackAndLightingPayload();
     TestSpawnNpcResolvesDefinitionAndIdlePlayback();
+    TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
+    TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions();
+    TestNpcNavigationSmoothsSectorGeometryStairsVisually();
     TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip();
     TestAnimatedModelSelectionAndBlendApi();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();

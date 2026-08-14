@@ -43,7 +43,8 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
     if (left.id != right.id
             || left.name != right.name
             || left.hostile != right.hostile
-            || left.modelPath != right.modelPath) {
+            || left.modelPath != right.modelPath
+            || left.animationBlendSeconds != right.animationBlendSeconds) {
         return false;
     }
     for (size_t i = 0; i < kNpcActionCount; ++i) {
@@ -330,6 +331,14 @@ void SectorEditorNpcEditorService::SetSelectedHostile(bool hostile)
     state_.validationMessage.clear();
 }
 
+void SectorEditorNpcEditorService::SetSelectedAnimationBlendSeconds(float seconds)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.animationBlendSeconds = seconds;
+    state_.validationMessage.clear();
+}
+
 void SectorEditorNpcEditorService::SetSelectedModelPath(
         const std::string& modelPath,
         engine::AssetManager& assets)
@@ -475,6 +484,7 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
             state_.nameBuffer,
             sizeof(state_.nameBuffer),
             draft == nullptr ? std::string{} : draft->definition.name);
+    state_.animationBlendSecondsInput = {};
     state_.animationSpeedInputs = {};
     state_.movementSpeedInputs = {};
 }

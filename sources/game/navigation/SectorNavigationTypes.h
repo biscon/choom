@@ -217,6 +217,7 @@ struct SectorNavigationDebugCache {
     std::vector<SectorNavigationDebugTileBounds> tileBounds;
     std::vector<SectorNavigationDebugObstacle> staticObstacles;
     std::vector<SectorNavigationDebugDoorPlaceholder> doorPlaceholders;
+    std::vector<SectorNavigationDebugSegment> stepConnections;
     uint64_t navigationRevision = 0;
 };
 

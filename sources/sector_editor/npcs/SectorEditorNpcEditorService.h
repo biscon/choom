@@ -33,6 +33,7 @@ public:
     void ApplyIdBuffer();
     void ApplyNameBuffer();
     void SetSelectedHostile(bool hostile);
+    void SetSelectedAnimationBlendSeconds(float seconds);
     void SetSelectedModelPath(
             const std::string& modelPath,
             engine::AssetManager& assets);

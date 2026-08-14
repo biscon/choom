@@ -44,13 +44,15 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(22);
+    world.ReserveComponentTypes(24);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
+    world.ReserveComponent<SectorObjectVisualOffset>(objectCapacity);
     world.ReserveComponent<SectorStaticModel>(objectCapacity);
     world.ReserveComponent<SectorDynamicModel>(objectCapacity);
     world.ReserveComponent<NpcRuntimeInstance>(objectCapacity);
+    world.ReserveComponent<NpcAnimationState>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelInstance>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelAnimator>(objectCapacity);
     world.ReserveComponent<SectorStaticModelCollider>(objectCapacity);
@@ -1129,6 +1131,14 @@ void SpawnPlacedRuntimeObjects(
                     definition->hostile,
                     GetNpcAction(*definition, NpcAction::Walk).movementSpeed,
                     GetNpcAction(*definition, NpcAction::Run).movementSpeed});
+            NpcAnimationState npcAnimation;
+            npcAnimation.blendSeconds = definition->animationBlendSeconds;
+            for (const NpcActionMetadata& metadata : NpcActionMetadataTable()) {
+                npcAnimation.animationSpeeds[static_cast<size_t>(metadata.action)] =
+                        GetNpcAction(*definition, metadata.action).animationSpeed;
+            }
+            world.Add(entity, npcAnimation);
+            world.Add(entity, SectorObjectVisualOffset{});
             world.Add(entity, SectorDynamicModel{
                     placedObject.id,
                     sectorAmbient,
@@ -1332,7 +1342,6 @@ void UpdateSectorRuntimeObjects(
 {
     AdvanceSectorBillboardAnimatorSystem(world, dt);
     ResolveDynamicModelAnimations(world, assets);
-    engine::AnimatedModelSystem(world, assets, dt);
     if (playerPosition != nullptr) {
         UpdateSectorDoorAutoOpenSystem(world, *playerPosition);
     }

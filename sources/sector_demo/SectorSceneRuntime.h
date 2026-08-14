@@ -3,6 +3,7 @@
 #include "engine/EngineContext.h"
 #include "game/FootstepAudio.h"
 #include "game/navigation/SectorNavigationWorld.h"
+#include "game/npc/NpcNavigationSystem.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
@@ -61,6 +62,17 @@ public:
     const SectorRuntimeObjectState& RuntimeObjects() const { return runtimeObjects; }
     SectorNavigationWorld& Navigation() { return navigation; }
     const SectorNavigationWorld& Navigation() const { return navigation; }
+    NpcNavigationRuntime& NpcNavigation() { return npcNavigation; }
+    const NpcNavigationRuntime& NpcNavigation() const { return npcNavigation; }
+    NpcMoveRequestResult RequestNpcMove(
+            engine::EngineContext& context,
+            std::string_view instanceId,
+            Vector2 destinationXZ,
+            NpcMoveGait gait = NpcMoveGait::Walk);
+    bool CancelNpcMove(
+            engine::EngineContext& context,
+            std::string_view instanceId);
+    NpcMoveStatus GetNpcMoveStatus(std::string_view instanceId) const;
     bool IsReady() const { return renderer.IsRendererReady(); }
     engine::SoundHandle FindLevelSound(const std::string& id) const;
     engine::MusicHandle FindLevelMusic(const std::string& id) const;
@@ -86,6 +98,7 @@ private:
     SectorMeshRenderer renderer;
     SectorRuntimeObjectState runtimeObjects;
     SectorNavigationWorld navigation;
+    NpcNavigationRuntime npcNavigation;
     engine::AssetScopeHandle audioScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::SoundHandle> levelSounds;
     std::unordered_map<std::string, engine::MusicHandle> levelMusicById;

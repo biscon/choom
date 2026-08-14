@@ -52,6 +52,12 @@ struct SectorObjectLighting {
     BakedObjectLightingVerticalSample vertical = {};
 };
 
+// Presentation-only offset. Physical position, collision, sector lookup, and
+// lighting continue to use SectorObjectTransform.
+struct SectorObjectVisualOffset {
+    Vector3 position = {};
+};
+
 struct SectorStaticModel {
     engine::ModelHandle model = engine::NullModelHandle();
     int placedObjectId = 0;

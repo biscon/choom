@@ -3,6 +3,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologySerialization.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
+#include "engine/systems/AnimatedModelSystem.h"
 
 #include <raylib.h>
 
@@ -111,6 +112,7 @@ void SectorDemo::Update(engine::EngineContext& context, float dt)
     preview.FinalizeRuntimeObjectResources(
             context.assets,
             context.world);
+    engine::AnimatedModelSystem(context.world, context.assets, dt);
     preview.AdvanceRuntime(dt);
 
     UpdateSectorFreeflyController(freeflyController, input, dt, 1.0f);

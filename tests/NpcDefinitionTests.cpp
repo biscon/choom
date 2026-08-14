@@ -64,13 +64,15 @@ game::NpcDefinition MakeDefinition(
 
 void TestRoundTripDefaultsAndSharedClips()
 {
-    const game::NpcDefinition original = MakeDefinition("zombie_test");
+    game::NpcDefinition original = MakeDefinition("zombie_test");
+    original.animationBlendSeconds = 0.35f;
     std::string json;
     std::string error;
     Check(game::SerializeNpcDefinitionJson(original, json, error),
           "valid NPC definition serializes");
     const Json document = Json::parse(json);
     Check(document["formatVersion"] == 1
+                  && Near(document["animationBlendSeconds"].get<float>(), 0.35f)
                   && document["actions"]["walk"]["animation"] == "Walk"
                   && document["actions"]["run"]["animation"] == "Walk",
           "serialized actions may share a GLB animation");
@@ -82,12 +84,18 @@ void TestRoundTripDefaultsAndSharedClips()
                   && parsed.name == original.name
                   && parsed.hostile
                   && parsed.modelPath == original.modelPath
+                  && Near(parsed.animationBlendSeconds, 0.35f)
                   && game::GetNpcAction(parsed, game::NpcAction::Walk).animation == "Walk"
                   && game::GetNpcAction(parsed, game::NpcAction::Run).animation == "Walk"
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Run).animationSpeed, 1.6f)
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Walk).movementSpeed, 1.5f)
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Run).movementSpeed, 3.0f),
           "NPC fields and action defaults round-trip");
+
+    game::NpcDefinition defaults = MakeDefinition("defaults_test");
+    Check(game::SerializeNpcDefinitionJson(defaults, json, error)
+                  && !Json::parse(json).contains("animationBlendSeconds"),
+          "default animation blend duration is omitted from serialized definitions");
 
     Json incomplete = document;
     incomplete["actions"] = Json::object();
@@ -119,6 +127,13 @@ void TestValidation()
     game::GetNpcAction(definition, game::NpcAction::Run).movementSpeed = 201.0f;
     Check(!game::ValidateNpcDefinition(definition, error),
           "out-of-range movement speed is rejected");
+    definition = MakeDefinition("fred");
+    definition.animationBlendSeconds = 0.0f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "zero animation blend duration is rejected");
+    definition.animationBlendSeconds = 3.0f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "excessive animation blend duration is rejected");
 }
 
 void TestDiscoveryErrorsAreRetained()
@@ -195,6 +210,9 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                   && service.SelectedDraft() != nullptr
                   && service.SelectedDraft()->definition.id == "renamed_beta",
           "saved rename updates the session selection");
+    service.SetSelectedAnimationBlendSeconds(0.45f);
+    Check(Near(service.SelectedDraft()->definition.animationBlendSeconds, 0.45f),
+          "NPC editor service updates animation blending through its draft API");
     service.SelectedDraft()->definition.id = "RENAMED_beta";
     session.selectedNpcId = "RENAMED_beta";
     Check(service.SaveAndClose(nullptr)

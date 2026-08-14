@@ -99,6 +99,8 @@ void TestLifecycleAndHandles()
     world.RequestRebuild();
     Check(world.State() == game::SectorNavigationState::Queued,
           "rebuild request enters queued state");
+    Check(!world.IsAgentRecordValid(replacement),
+          "navigation rebuild invalidates external agent handles");
     world.Fail(game::SectorNavigationBuildStage::RasterizingTiles, "fixture failure");
     Check(world.State() == game::SectorNavigationState::Failed
                   && !world.Diagnostics().empty(),
@@ -184,6 +186,60 @@ game::SectorTopologyMap MakeAdjacentMap(
     right.floorZ = rightFloor;
     right.ceilingZ = rightCeiling;
     map.sectors = {left, right};
+    return map;
+}
+
+game::SectorTopologyMap MakeSectorStairMap(
+        int stepCount,
+        float authoredRisePerStep)
+{
+    game::SectorTopologyMap map;
+    constexpr game::SectorCoord TreadDepth = 128; // 1.0 world unit.
+    constexpr game::SectorCoord StairWidth = 512; // 4.0 world units.
+    for (int boundary = 0; boundary <= stepCount; ++boundary) {
+        const game::SectorCoord x = boundary * TreadDepth;
+        map.vertices.push_back({boundary * 2 + 1, x, 0});
+        map.vertices.push_back({boundary * 2 + 2, x, StairWidth});
+    }
+
+    int nextLineId = 1;
+    int nextSideId = 1;
+    const auto addLine = [&](int startVertexId, int endVertexId,
+                             int frontSectorId, int backSectorId = 0) {
+        const int lineId = nextLineId++;
+        const int frontSideId = nextSideId++;
+        const int backSideId = backSectorId != 0 ? nextSideId++ : -1;
+        map.lineDefs.push_back({lineId, startVertexId, endVertexId,
+                frontSideId, backSideId});
+        AddSide(map, frontSideId, lineId,
+                game::SectorTopologySideKind::Front, frontSectorId);
+        if (backSectorId != 0) {
+            AddSide(map, backSideId, lineId,
+                    game::SectorTopologySideKind::Back, backSectorId);
+        }
+    };
+
+    for (int step = 0; step < stepCount; ++step) {
+        const int sectorId = step + 1;
+        game::SectorTopologySector sector;
+        sector.id = sectorId;
+        sector.floorZ = authoredRisePerStep * static_cast<float>(step);
+        sector.ceilingZ = sector.floorZ + 24.0f;
+        map.sectors.push_back(sector);
+
+        const int leftBottom = step * 2 + 1;
+        const int leftTop = step * 2 + 2;
+        const int rightBottom = (step + 1) * 2 + 1;
+        const int rightTop = (step + 1) * 2 + 2;
+        addLine(leftBottom, rightBottom, sectorId);
+        addLine(rightTop, leftTop, sectorId);
+        if (step == 0) addLine(leftTop, leftBottom, sectorId);
+        if (step == stepCount - 1) {
+            addLine(rightBottom, rightTop, sectorId);
+        } else {
+            addLine(rightBottom, rightTop, sectorId, sectorId + 1);
+        }
+    }
     return map;
 }
 
@@ -377,6 +433,39 @@ void TestTopologyWalkabilityFixtures()
             {4.0f, 0.0f, 4.0f}, {12.0f, 0.375f, 4.0f});
     Check(overClimbPath.status != game::SectorNavigationQueryStatus::Success,
           "over-climb portal boundary remains disconnected");
+
+    constexpr int StairStepCount = 6;
+    constexpr float AuthoredRisePerStep = 1.6f; // 0.20 world units.
+    game::SectorTopologyMap stairs = MakeSectorStairMap(
+            StairStepCount, AuthoredRisePerStep);
+    game::SectorNavigationWorld stairWorld;
+    stairWorld.Initialize();
+    stairWorld.RequestRebuild();
+    FinishBuild(stairWorld, stairs);
+    const float stairTop = game::SectorNavigationAuthoredHeightToWorld(
+            AuthoredRisePerStep * static_cast<float>(StairStepCount - 1));
+    const auto ascending = stairWorld.FindPath(
+            {0.5f, 0.0f, 2.0f}, {5.5f, stairTop, 2.0f});
+    const auto descending = stairWorld.FindPath(
+            {5.5f, stairTop, 2.0f}, {0.5f, 0.0f, 2.0f});
+    Check(ascending.status == game::SectorNavigationQueryStatus::Success
+                  && descending.status == game::SectorNavigationQueryStatus::Success,
+          "successive sector-geometry stair treads connect in both directions");
+    Check(!stairWorld.DebugCache().stepConnections.empty(),
+          "navigation debug cache exposes Detour adjacency between stair levels");
+
+    game::SectorTopologyMap invalidStairs = MakeSectorStairMap(
+            StairStepCount, AuthoredRisePerStep);
+    invalidStairs.sectors[3].floorZ += 1.0f;
+    invalidStairs.sectors[3].ceilingZ += 1.0f;
+    game::SectorNavigationWorld invalidStairWorld;
+    invalidStairWorld.Initialize();
+    invalidStairWorld.RequestRebuild();
+    FinishBuild(invalidStairWorld, invalidStairs);
+    Check(invalidStairWorld.FindPath(
+                  {0.5f, 0.0f, 2.0f}, {5.5f, stairTop, 2.0f}).status
+                    != game::SectorNavigationQueryStatus::Success,
+          "a stair rise above maximum climb disconnects the staircase");
 
     game::SectorTopologyMap doored = MakeAdjacentMap();
     game::SectorPlacedRuntimeObject doorObject;

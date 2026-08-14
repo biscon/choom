@@ -220,6 +220,12 @@ bool ValidateNpcDefinition(
         outError = "NPC model must be a normalized .glb or .gltf path under assets/models/characters";
         return false;
     }
+    if (!std::isfinite(definition.animationBlendSeconds)
+            || definition.animationBlendSeconds < kMinimumNpcAnimationBlendSeconds
+            || definition.animationBlendSeconds > kMaximumNpcAnimationBlendSeconds) {
+        outError = "NPC animation blend time must be between 0.01 and 2 seconds";
+        return false;
+    }
     for (const NpcActionMetadata& metadata : NpcActionMetadataTable()) {
         const NpcActionDefinition& action = GetNpcAction(definition, metadata.action);
         if (!std::isfinite(action.animationSpeed)
@@ -252,7 +258,7 @@ bool ParseNpcDefinitionJson(
         if (!root.is_object()) Fail("NPC definition root must be an object");
         RejectUnknownFields(
                 root,
-                {"formatVersion", "id", "name", "hostile", "modelPath", "actions"},
+                {"formatVersion", "id", "name", "hostile", "modelPath", "animationBlendSeconds", "actions"},
                 "NPC definition");
 
         const Json& version = RequireField(root, "formatVersion", "NPC definition");
@@ -266,6 +272,11 @@ bool ParseNpcDefinitionJson(
         parsed.name = OptionalString(root, "name", {}, "NPC definition");
         parsed.hostile = OptionalBool(root, "hostile", false, "NPC definition");
         parsed.modelPath = RequireString(root, "modelPath", "NPC definition");
+        parsed.animationBlendSeconds = OptionalFloat(
+                root,
+                "animationBlendSeconds",
+                kDefaultNpcAnimationBlendSeconds,
+                "NPC definition");
 
         const Json& actions = RequireField(root, "actions", "NPC definition");
         if (!actions.is_object()) Fail("NPC definition.actions must be an object");
@@ -323,6 +334,9 @@ bool SerializeNpcDefinitionJson(
         if (!definition.name.empty()) root["name"] = definition.name;
         if (definition.hostile) root["hostile"] = true;
         root["modelPath"] = definition.modelPath;
+        if (definition.animationBlendSeconds != kDefaultNpcAnimationBlendSeconds) {
+            root["animationBlendSeconds"] = definition.animationBlendSeconds;
+        }
 
         Json actions = Json::object();
         for (const NpcActionMetadata& metadata : NpcActionMetadataTable()) {

@@ -12,6 +12,9 @@ inline constexpr int kNpcDefinitionFormatVersion = 1;
 inline constexpr const char* kNpcDefinitionsAssetRoot = "assets/npcs";
 inline constexpr const char* kNpcCharacterModelsAssetRoot =
         "assets/models/characters";
+inline constexpr float kDefaultNpcAnimationBlendSeconds = 0.2f;
+inline constexpr float kMinimumNpcAnimationBlendSeconds = 0.01f;
+inline constexpr float kMaximumNpcAnimationBlendSeconds = 2.0f;
 
 enum class NpcAction {
     Idle,
@@ -42,6 +45,7 @@ struct NpcDefinition {
     std::string name;
     bool hostile = false;
     std::string modelPath;
+    float animationBlendSeconds = kDefaultNpcAnimationBlendSeconds;
     std::array<NpcActionDefinition, kNpcActionCount> actions;
 };
 

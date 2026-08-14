@@ -417,6 +417,8 @@ void DrawSectorEditorPreviewObjectProbeOverlay(
 void DrawSectorEditorPreviewNavigationOverlay(
         const SectorEditorPreviewOverlayState& overlayState,
         const SectorNavigationWorld& navigation,
+        const NpcNavigationRuntime& npcNavigation,
+        int selectedRuntimeObjectId,
         const SectorMeshRenderer& preview)
 {
     if (!preview.IsRendererReady()
@@ -431,6 +433,9 @@ void DrawSectorEditorPreviewNavigationOverlay(
     const Color tileColor = LinearOverlaySwatch(Color{84, 156, 255, 180});
     const Color obstacleColor = LinearOverlaySwatch(Color{255, 154, 72, 235});
     const Color doorColor = LinearOverlaySwatch(Color{244, 214, 78, 245});
+    const Color stepColor = LinearOverlaySwatch(Color{104, 226, 255, 245});
+    const Color pathColor = LinearOverlaySwatch(Color{255, 102, 214, 245});
+    const Color agentColor = LinearOverlaySwatch(Color{255, 238, 132, 245});
     BeginMode3D(preview.RenderCamera());
     if (overlayState.showNavigationSurface) {
         for (const SectorNavigationDebugTriangle& triangle : debug.walkableTriangles) {
@@ -483,6 +488,61 @@ void DrawSectorEditorPreviewNavigationOverlay(
             DrawLine3D(aTop, bTop, doorColor);
             DrawLine3D(aBottom, aTop, doorColor);
             DrawLine3D(bBottom, bTop, doorColor);
+        }
+    }
+    if (overlayState.showNavigationStepConnections) {
+        for (const SectorNavigationDebugSegment& connection : debug.stepConnections) {
+            DrawLine3D(connection.a, connection.b, stepColor);
+            DrawSphere(connection.a, 0.035f, stepColor);
+            DrawSphere(connection.b, 0.035f, stepColor);
+        }
+    }
+    for (const NpcNavigationRecord& agent : npcNavigation.records) {
+        if (!agent.occupied
+                || (overlayState.showNavigationSelectedNpcOnly
+                    && agent.placedObjectId != selectedRuntimeObjectId)) {
+            continue;
+        }
+        if (overlayState.showNavigationNpcAgents) {
+            const float height = navigation.Settings().agentHeight;
+            const float radius = navigation.Settings().agentRadius;
+            const Vector3 top{
+                    agent.physicalPosition.x,
+                    agent.physicalPosition.y + height,
+                    agent.physicalPosition.z};
+            DrawCylinderWiresEx(
+                    agent.physicalPosition,
+                    top,
+                    radius,
+                    radius,
+                    12,
+                    agentColor);
+            DrawLine3D(
+                    agent.physicalPosition,
+                    Vector3Add(
+                            agent.physicalPosition,
+                            Vector3{agent.desiredVelocity.x * 0.2f, 0.0f,
+                                    agent.desiredVelocity.y * 0.2f}),
+                    pathColor);
+            DrawLine3D(
+                    agent.physicalPosition,
+                    Vector3Add(
+                            agent.physicalPosition,
+                            Vector3{agent.actualVelocity.x * 0.2f, 0.0f,
+                                    agent.actualVelocity.y * 0.2f}),
+                    agentColor);
+            DrawLine3D(agent.physicalPosition, agent.visualPosition, stepColor);
+        }
+        if (overlayState.showNavigationNpcPaths
+                && agent.nextCorner < agent.cornerCount) {
+            Vector3 previous = agent.physicalPosition;
+            for (size_t cornerIndex = agent.nextCorner;
+                    cornerIndex < agent.cornerCount;
+                    ++cornerIndex) {
+                DrawLine3D(previous, agent.corners[cornerIndex], pathColor);
+                DrawSphere(agent.corners[cornerIndex], 0.045f, pathColor);
+                previous = agent.corners[cornerIndex];
+            }
         }
     }
     EndMode3D();
@@ -1228,7 +1288,48 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                                     : smallConfig.mutedTextColor,
                             true);
                 }
-                addWrappedLine("Door traversal links, dynamic obstacles, agents, and query probes are unavailable until later navigation slices.");
+                const NpcNavigationRecord* selectedAgent = nullptr;
+                for (const NpcNavigationRecord& agent : context.npcNavigation.records) {
+                    if (agent.occupied
+                            && agent.placedObjectId
+                                    == selectionState.selectedRuntimeObjectId) {
+                        selectedAgent = &agent;
+                        break;
+                    }
+                }
+                addKeyValue("NPC agents", TextFormat(
+                        "%zu records | %llu requests | %llu replans | %llu stalls",
+                        context.npcNavigation.records.size(),
+                        static_cast<unsigned long long>(context.npcNavigation.counters.requests),
+                        static_cast<unsigned long long>(context.npcNavigation.counters.replans),
+                        static_cast<unsigned long long>(context.npcNavigation.counters.stalls)));
+                if (selectedAgent != nullptr) {
+                    addKeyValue("selected NPC", TextFormat(
+                            "%s | %s | %s",
+                            selectedAgent->instanceId.c_str(),
+                            NpcMovePhaseName(selectedAgent->phase),
+                            NpcMoveGaitName(selectedAgent->gait)));
+                    addKeyValue("destination", TextFormat(
+                            "%.2f %.2f | %zu corners remain | %s",
+                            selectedAgent->requestedDestinationXZ.x,
+                            selectedAgent->requestedDestinationXZ.y,
+                            selectedAgent->cornerCount > selectedAgent->nextCorner
+                                    ? selectedAgent->cornerCount - selectedAgent->nextCorner : 0,
+                            SectorNavigationQueryStatusName(
+                                    selectedAgent->lastQueryStatus)));
+                    addKeyValue("motion", TextFormat(
+                            "desired %.2f | actual %.2f | stall %.2fs | replans %u",
+                            Vector2Length(selectedAgent->desiredVelocity),
+                            Vector2Length(selectedAgent->actualVelocity),
+                            selectedAgent->stallSeconds,
+                            selectedAgent->replanCount));
+                    addKeyValue("physical/visual Y", TextFormat(
+                            "%.3f / %.3f | %s",
+                            selectedAgent->physicalPosition.y,
+                            selectedAgent->visualPosition.y,
+                            selectedAgent->diagnostic.data()));
+                }
+                addWrappedLine("Door traversal links, dynamic obstacles, Crowd, and query probes remain unavailable until later navigation slices.");
                 break;
             }
             case PreviewDebugOverlayTab::Controls:
@@ -1269,7 +1370,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         contentH += rowH + 6.0f;
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Navigation) {
-        contentH += (rowH + 6.0f) * 4.0f;
+        contentH += (rowH + 6.0f) * 6.0f;
     }
     const Rectangle panel{
             basePanel.x,
@@ -1731,6 +1832,24 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 "sector_editor_navigation_doors", "Door Placeholders",
                 Rectangle{panel.x + padding, y, checkboxWidth, rowH},
                 overlayState.showNavigationDoorPlaceholders);
+        drawNavigationCheckbox(
+                "sector_editor_navigation_steps", "Step Connections",
+                Rectangle{panel.x + padding + checkboxWidth + gap, y, checkboxWidth, rowH},
+                overlayState.showNavigationStepConnections);
+        y += rowH + 6.0f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_npc_paths", "NPC Paths",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationNpcPaths);
+        drawNavigationCheckbox(
+                "sector_editor_navigation_npc_agents", "NPC Agents",
+                Rectangle{panel.x + padding + checkboxWidth + gap, y, checkboxWidth, rowH},
+                overlayState.showNavigationNpcAgents);
+        y += rowH + 6.0f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_selected_npc", "Selected NPC Only",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationSelectedNpcOnly);
         y += rowH + 6.0f;
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {

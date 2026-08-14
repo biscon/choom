@@ -44,6 +44,8 @@ public:
 
     SectorNavigationAgentHandle AllocateAgentRecord();
     SectorNavigationPathHandle AllocatePathRecord();
+    bool IsAgentRecordValid(SectorNavigationAgentHandle handle) const;
+    bool IsPathRecordValid(SectorNavigationPathHandle handle) const;
     bool ReleaseAgentRecord(SectorNavigationAgentHandle handle);
     bool ReleasePathRecord(SectorNavigationPathHandle handle);
 

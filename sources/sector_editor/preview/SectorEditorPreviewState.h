@@ -20,6 +20,10 @@ struct SectorEditorPreviewOverlayState {
     bool showNavigationTileBounds = false;
     bool showNavigationStaticObstacles = true;
     bool showNavigationDoorPlaceholders = true;
+    bool showNavigationStepConnections = true;
+    bool showNavigationNpcPaths = true;
+    bool showNavigationNpcAgents = true;
+    bool showNavigationSelectedNpcOnly = false;
     PreviewDebugOverlayTab activePreviewDebugOverlayTab = PreviewDebugOverlayTab::None;
 };
 

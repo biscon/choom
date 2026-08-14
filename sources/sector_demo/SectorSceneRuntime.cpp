@@ -1,6 +1,7 @@
 #include "sector_demo/SectorSceneRuntime.h"
 
 #include "sector_demo/SectorAssetPaths.h"
+#include "engine/systems/AnimatedModelSystem.h"
 
 #include <raylib.h>
 
@@ -16,6 +17,7 @@ bool SectorSceneRuntime::Rebuild(
         const std::string& defaultFootstepSet,
         std::string& error)
 {
+    ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
     navigation.Shutdown();
     StopLevelAudio(context);
     if (!renderer.RebuildRendererResources(
@@ -25,15 +27,17 @@ bool SectorSceneRuntime::Rebuild(
                 error)) {
         return false;
     }
+    if (!navigation.Initialize()) {
+        TraceLog(LOG_WARNING, "Navigation service initialization failed");
+    }
     ResetSectorRuntimeObjectsForMap(
             context.world,
             context.assets,
             runtimeObjects,
             map);
-    if (!navigation.Initialize()) {
-        TraceLog(LOG_WARNING, "Navigation service initialization failed");
-    } else {
+    if (navigation.State() != SectorNavigationState::Uninitialized) {
         navigation.RequestRebuild();
+        InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     }
     BeginLevelAudio(context, map, assetScopeName, defaultFootstepSet);
     BindRuntimeObjectAudio(context.world);
@@ -42,6 +46,7 @@ bool SectorSceneRuntime::Rebuild(
 
 void SectorSceneRuntime::Shutdown(engine::EngineContext& context)
 {
+    ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
     navigation.Shutdown();
     StopLevelAudio(context);
     ClearSectorRuntimeObjects(context.world, context.assets, runtimeObjects);
@@ -52,6 +57,7 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
         engine::EngineContext& context,
         const SectorTopologyMap& map)
 {
+    ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
     navigation.ResetForRebuild();
     ResetSectorRuntimeObjectsForMap(
             context.world,
@@ -59,6 +65,7 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
             runtimeObjects,
             map);
     navigation.RequestRebuild();
+    InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     BindRuntimeObjectAudio(context.world);
 }
 
@@ -83,10 +90,6 @@ void SectorSceneRuntime::Update(
             context.assets,
             context.audio);
     renderer.FinalizeRuntimeObjectResources(context.assets, context.world);
-    navigation.UpdateBuild(
-            map,
-            runtimeObjects.staticModelColliders,
-            runtimeObjects.staticModelPendingCount);
     if (runtimeObjects.doorSpatialStateChanged
             || !runtimeObjects.doorCollisionCacheInitialized) {
         runtimeObjects.dynamicDoorColliders.clear();
@@ -99,7 +102,61 @@ void SectorSceneRuntime::Update(
                 runtimeObjects.dynamicPortalBlockers);
         runtimeObjects.doorCollisionCacheInitialized = true;
     }
+    navigation.UpdateBuild(
+            map,
+            runtimeObjects.staticModelColliders,
+            runtimeObjects.staticModelPendingCount);
+    if (runtimeObjects.objectSectorLookupWorldValid) {
+        UpdateNpcNavigationAndLocomotionSystem(
+                context.world,
+                context.assets,
+                navigation,
+                npcNavigation,
+                runtimeObjects.npcDefinitionCatalog,
+                runtimeObjects.objectSectorLookupWorld,
+                runtimeObjects.dynamicDoorColliders,
+                runtimeObjects.staticModelColliders,
+                runtimeObjects.objectLightProbes,
+                map,
+                dt);
+    }
+    engine::AnimatedModelSystem(context.world, context.assets, dt);
     renderer.AdvanceRuntime(dt);
+}
+
+NpcMoveRequestResult SectorSceneRuntime::RequestNpcMove(
+        engine::EngineContext& context,
+        std::string_view instanceId,
+        Vector2 destinationXZ,
+        NpcMoveGait gait)
+{
+    if (!runtimeObjects.objectSectorLookupWorldValid) {
+        return {false,
+                SectorNavigationQueryStatus::NavigationUnavailable,
+                "sector collision is unavailable"};
+    }
+    return game::RequestNpcMove(
+            context.world,
+            navigation,
+            runtimeObjects.objectSectorLookupWorld,
+            npcNavigation,
+            instanceId,
+            destinationXZ,
+            gait);
+}
+
+bool SectorSceneRuntime::CancelNpcMove(
+        engine::EngineContext& context,
+        std::string_view instanceId)
+{
+    return game::CancelNpcMove(
+            context.world, navigation, npcNavigation, instanceId);
+}
+
+NpcMoveStatus SectorSceneRuntime::GetNpcMoveStatus(
+        std::string_view instanceId) const
+{
+    return game::GetNpcMoveStatus(npcNavigation, instanceId);
 }
 
 void SectorSceneRuntime::StopLevelAudio(engine::EngineContext& context)

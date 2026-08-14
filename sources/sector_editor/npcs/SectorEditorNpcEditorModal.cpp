@@ -236,7 +236,7 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         editor.RefreshAnimationOptions(assets);
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
         const float actionSectionHeight = 4.0f * (RowHeight + RowGap) + 54.0f;
-        const float contentHeight = 5.0f * (RowHeight + RowGap)
+        const float contentHeight = 6.0f * (RowHeight + RowGap)
                 + actionSectionHeight * static_cast<float>(kNpcActionCount)
                 + 80.0f;
         engine::UIScrollAreaResult formScroll = engine::BeginScrollArea(
@@ -312,6 +312,23 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
             modelPicker.Open(
                     selected->definition.modelPath,
                     ModelPickerTarget::NpcDefinition);
+        }
+        y += RowHeight + RowGap;
+
+        drawLabel("Animation blend");
+        float animationBlendSeconds = selected->definition.animationBlendSeconds;
+        const engine::UINumericInputResult blendResult = engine::FloatInput(
+                ui, config, input, assets,
+                "sector_editor_npc_animation_blend_seconds",
+                Rectangle{fieldX, y, 190.0f, RowHeight},
+                font,
+                animationBlendSeconds,
+                state.animationBlendSecondsInput,
+                kMinimumNpcAnimationBlendSeconds,
+                kMaximumNpcAnimationBlendSeconds,
+                2);
+        if (blendResult.changed) {
+            editor.SetSelectedAnimationBlendSeconds(animationBlendSeconds);
         }
         y += RowHeight + RowGap;
 

@@ -16,4 +16,21 @@ bool IsValidNpcInstanceId(std::string_view id)
     });
 }
 
+const char* NpcMovePhaseName(NpcMovePhase phase)
+{
+    switch (phase) {
+        case NpcMovePhase::Idle: return "idle";
+        case NpcMovePhase::FollowingPath: return "following path";
+        case NpcMovePhase::Arrived: return "arrived";
+        case NpcMovePhase::Cancelled: return "cancelled";
+        case NpcMovePhase::Failed: return "failed";
+    }
+    return "unknown";
+}
+
+const char* NpcMoveGaitName(NpcMoveGait gait)
+{
+    return gait == NpcMoveGait::Run ? "run" : "walk";
+}
+
 } // namespace game

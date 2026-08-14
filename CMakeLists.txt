@@ -511,7 +511,12 @@ if(BUILD_TESTING)
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
             tests/SectorScriptBindingTests.cpp
+            sources/game/navigation/SectorNavigationBuildInput.cpp
+            sources/game/navigation/SectorNavigationCompression.cpp
+            sources/game/navigation/SectorNavigationTypes.cpp
+            sources/game/navigation/SectorNavigationWorld.cpp
             sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/NpcNavigationSystem.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/engine/scripting/ScriptSystem.cpp
             sources/engine/scripting/ScriptPersistence.cpp
@@ -545,7 +550,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(sector_runtime_object_tests PRIVATE sources)
     target_compile_definitions(sector_runtime_object_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
-    target_link_libraries(sector_runtime_object_tests PRIVATE raylib xatlas lua55)
+    target_link_libraries(sector_runtime_object_tests PRIVATE raylib xatlas lua55 recastnavigation)
     add_test(NAME sector_runtime_object COMMAND sector_runtime_object_tests)
 
     add_executable(sector_sky_cylinder_tests

@@ -5,6 +5,7 @@
 #include "engine/ui/UI.h"
 #include "game/FpsViewmodel.h"
 #include "game/navigation/SectorNavigationWorld.h"
+#include "game/npc/NpcRuntime.h"
 #include "sector_editor/preview/SectorEditorPreviewState.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
@@ -38,6 +39,7 @@ struct SectorEditorPreviewOverlayContext {
     SectorEditorPreviewState& previewState;
     SectorRuntimeObjectState& runtimeObjects;
     SectorNavigationWorld& navigation;
+    NpcNavigationRuntime& npcNavigation;
     FpsViewmodelRuntimeState& viewmodel;
     SelectionState& selectionState;
     ManipulationState& manipulationState;
@@ -87,6 +89,8 @@ void DrawSectorEditorPreviewObjectProbeOverlay(
 void DrawSectorEditorPreviewNavigationOverlay(
         const SectorEditorPreviewOverlayState& overlayState,
         const SectorNavigationWorld& navigation,
+        const NpcNavigationRuntime& npcNavigation,
+        int selectedRuntimeObjectId,
         const SectorMeshRenderer& preview);
 
 SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(

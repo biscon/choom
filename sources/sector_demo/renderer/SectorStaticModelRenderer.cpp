@@ -1775,8 +1775,9 @@ void SectorStaticModelRenderer::Draw(
              &considered,
              &drawn,
              &portalCulled,
-             &skipped](
-                    engine::Entity,
+             &skipped,
+             &runtimeObjectWorld](
+                    engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObject& object,
                     SectorObjectLighting& lighting,
@@ -1797,8 +1798,14 @@ void SectorStaticModelRenderer::Draw(
                     return;
                 }
                 Model model = engine::BuildAnimatedModelPoseView(*modelAsset, instance);
+                Vector3 renderPosition = transform.position;
+                if (runtimeObjectWorld.Has<SectorObjectVisualOffset>(entity)) {
+                    renderPosition = Vector3Add(
+                            renderPosition,
+                            runtimeObjectWorld.Get<SectorObjectVisualOffset>(entity).position);
+                }
                 const Matrix authoredTransform = BuildSectorStaticModelAuthoredTransform(
-                        transform.position,
+                        renderPosition,
                         transform.rotationXRadians,
                         transform.yawRadians,
                         transform.rotationZRadians,
@@ -1810,11 +1817,11 @@ void SectorStaticModelRenderer::Draw(
                                 modelAsset->localBounds,
                                 authoredTransform,
                                 object.currentSectorId,
-                                transform.position)
+                                renderPosition)
                         : SectorReceiverBounds{
                                 object.currentSectorId,
-                                transform.position,
-                                transform.position};
+                                renderPosition,
+                                renderPosition};
                 const bool drewMesh = DrawWorldDynamicModel(
                         *modelAsset,
                         model,

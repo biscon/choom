@@ -21,6 +21,8 @@
 #include <sstream>
 #include <utility>
 
+#include <raymath.h>
+
 namespace game {
 namespace {
 
@@ -277,6 +279,15 @@ struct SectorNavigationWorld::Impl {
         slots.push_back({});
         slots.back().occupied = true;
         return Handle{static_cast<uint32_t>(slots.size() - 1), slots.back().generation};
+    }
+
+    template <typename Handle>
+    bool IsValid(const std::vector<RecordSlot>& slots, Handle handle) const
+    {
+        return !IsNull(handle)
+                && handle.index < slots.size()
+                && slots[handle.index].occupied
+                && slots[handle.index].generation == handle.generation;
     }
 
     template <typename Handle>
@@ -580,6 +591,74 @@ struct SectorNavigationWorld::Impl {
                     debugCache.walkableTriangles.push_back({vertices[0],
                             vertices[vertexIndex - 1], vertices[vertexIndex], poly.getArea()});
                 }
+                Vector3 center{};
+                float minimumVertexY = vertices[0].y;
+                float maximumVertexY = vertices[0].y;
+                for (int vertexIndex = 0; vertexIndex < poly.vertCount; ++vertexIndex) {
+                    center = Vector3Add(center, vertices[vertexIndex]);
+                    minimumVertexY = std::min(minimumVertexY, vertices[vertexIndex].y);
+                    maximumVertexY = std::max(maximumVertexY, vertices[vertexIndex].y);
+                }
+                center = Vector3Scale(center, 1.0f / static_cast<float>(poly.vertCount));
+                if (maximumVertexY - minimumVertexY
+                        > settings.cellHeight * 0.5f) {
+                    Vector3 lowerCenter{};
+                    Vector3 upperCenter{};
+                    int lowerCount = 0;
+                    int upperCount = 0;
+                    for (int vertexIndex = 0; vertexIndex < poly.vertCount; ++vertexIndex) {
+                        if (vertices[vertexIndex].y
+                                <= minimumVertexY + settings.cellHeight * 0.5f) {
+                            lowerCenter = Vector3Add(lowerCenter, vertices[vertexIndex]);
+                            ++lowerCount;
+                        }
+                        if (vertices[vertexIndex].y
+                                >= maximumVertexY - settings.cellHeight * 0.5f) {
+                            upperCenter = Vector3Add(upperCenter, vertices[vertexIndex]);
+                            ++upperCount;
+                        }
+                    }
+                    if (lowerCount > 0 && upperCount > 0) {
+                        lowerCenter = Vector3Scale(
+                                lowerCenter, 1.0f / static_cast<float>(lowerCount));
+                        upperCenter = Vector3Scale(
+                                upperCenter, 1.0f / static_cast<float>(upperCount));
+                        debugCache.stepConnections.push_back({lowerCenter, upperCenter});
+                    }
+                }
+                const dtPolyRef sourceRef = navMesh->getPolyRefBase(tile)
+                        | static_cast<dtPolyRef>(polyIndex);
+                for (unsigned int linkIndex = poly.firstLink;
+                        linkIndex != DT_NULL_LINK;
+                        linkIndex = tile->links[linkIndex].next) {
+                    const dtPolyRef targetRef = tile->links[linkIndex].ref;
+                    if (targetRef == 0 || sourceRef >= targetRef) continue;
+                    const dtMeshTile* targetTile = nullptr;
+                    const dtPoly* targetPoly = nullptr;
+                    if (dtStatusFailed(navMesh->getTileAndPolyByRef(
+                                targetRef, &targetTile, &targetPoly))
+                            || targetTile == nullptr || targetPoly == nullptr
+                            || targetPoly->getType() != DT_POLYTYPE_GROUND
+                            || targetPoly->vertCount < 3) {
+                        continue;
+                    }
+                    Vector3 targetCenter{};
+                    for (int targetVertex = 0;
+                            targetVertex < targetPoly->vertCount;
+                            ++targetVertex) {
+                        targetCenter = Vector3Add(
+                                targetCenter,
+                                FromFloat3(&targetTile->verts[
+                                        targetPoly->verts[targetVertex] * 3]));
+                    }
+                    targetCenter = Vector3Scale(
+                            targetCenter,
+                            1.0f / static_cast<float>(targetPoly->vertCount));
+                    if (std::fabs(targetCenter.y - center.y)
+                            > settings.cellHeight * 0.5f) {
+                        debugCache.stepConnections.push_back({center, targetCenter});
+                    }
+                }
             }
         }
         buildInput = {};
@@ -858,6 +937,18 @@ SectorNavigationPathHandle SectorNavigationWorld::AllocatePathRecord()
     if (!impl || impl->state == SectorNavigationState::Uninitialized) return {};
     return impl->Allocate<SectorNavigationPathHandle>(
             impl->pathSlots, impl->pathGrowthWarned, "path record");
+}
+
+bool SectorNavigationWorld::IsAgentRecordValid(
+        SectorNavigationAgentHandle handle) const
+{
+    return impl && impl->IsValid(impl->agentSlots, handle);
+}
+
+bool SectorNavigationWorld::IsPathRecordValid(
+        SectorNavigationPathHandle handle) const
+{
+    return impl && impl->IsValid(impl->pathSlots, handle);
 }
 
 bool SectorNavigationWorld::ReleaseAgentRecord(SectorNavigationAgentHandle handle)

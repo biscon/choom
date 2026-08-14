@@ -1,0 +1,757 @@
+#include "game/npc/NpcNavigationSystem.h"
+
+#include "engine/assets/AssetManager.h"
+#include "engine/components/AnimatedModel.h"
+#include "engine/ecs/World.h"
+#include "engine/systems/AnimatedModelSystem.h"
+#include "game/navigation/SectorNavigationWorld.h"
+#include "sector_demo/SectorDoorRuntime.h"
+#include "sector_demo/SectorFpsController.h"
+#include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/SectorStaticModelCollision.h"
+
+#include <raymath.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+
+namespace game {
+namespace {
+
+constexpr float ArrivalTolerance = 0.10f;
+constexpr float ProgressEpsilon = 0.01f;
+constexpr float MovingSpeedEpsilon = 0.01f;
+constexpr float StallTriggerSeconds = 0.75f;
+constexpr float ReplanCooldownSeconds = 0.50f;
+constexpr float DriftCheckIntervalSeconds = 0.25f;
+constexpr uint32_t MaximumReplans = 3;
+constexpr float TurnRateRadiansPerSecond = 12.566370614359172f;
+constexpr float VisualStepSmoothingRate = 16.0f;
+constexpr float VisualOffsetEpsilon = 0.0001f;
+
+size_t ActionIndex(NpcAction action)
+{
+    const size_t index = static_cast<size_t>(action);
+    return index < kNpcActionCount ? index : 0;
+}
+
+void SetDiagnostic(NpcNavigationRecord& record, const char* message)
+{
+    std::snprintf(
+            record.diagnostic.data(),
+            record.diagnostic.size(),
+            "%s",
+            message != nullptr ? message : "");
+}
+
+void SetDiagnostic(NpcNavigationRecord& record, SectorNavigationQueryStatus status)
+{
+    SetDiagnostic(record, SectorNavigationQueryStatusName(status));
+}
+
+NpcNavigationRecord* FindRecord(
+        NpcNavigationRuntime& runtime,
+        std::string_view instanceId)
+{
+    const auto found = std::find_if(
+            runtime.records.begin(),
+            runtime.records.end(),
+            [instanceId](const NpcNavigationRecord& record) {
+                return record.occupied && record.instanceId == instanceId;
+            });
+    return found == runtime.records.end() ? nullptr : &*found;
+}
+
+const NpcNavigationRecord* FindRecord(
+        const NpcNavigationRuntime& runtime,
+        std::string_view instanceId)
+{
+    const auto found = std::find_if(
+            runtime.records.begin(),
+            runtime.records.end(),
+            [instanceId](const NpcNavigationRecord& record) {
+                return record.occupied && record.instanceId == instanceId;
+            });
+    return found == runtime.records.end() ? nullptr : &*found;
+}
+
+bool IsActive(NpcMovePhase phase)
+{
+    return phase == NpcMovePhase::FollowingPath;
+}
+
+void ReleasePath(
+        SectorNavigationWorld& navigation,
+        NpcNavigationRecord& record)
+{
+    if (!IsNull(record.pathHandle)) {
+        navigation.ReleasePathRecord(record.pathHandle);
+        record.pathHandle = {};
+    }
+    record.cornerCount = 0;
+    record.nextCorner = 0;
+}
+
+void SetTerminal(
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime,
+        NpcNavigationRecord& record,
+        NpcMovePhase phase,
+        SectorNavigationQueryStatus status,
+        const char* diagnostic)
+{
+    ReleasePath(navigation, record);
+    record.phase = phase;
+    record.lastQueryStatus = status;
+    record.desiredVelocity = {};
+    record.actualVelocity = {};
+    record.stallSeconds = 0.0f;
+    record.replanCooldownSeconds = 0.0f;
+    SetDiagnostic(record, diagnostic);
+    if (phase == NpcMovePhase::Arrived) ++runtime.counters.arrivals;
+    else if (phase == NpcMovePhase::Cancelled) ++runtime.counters.cancellations;
+    else if (phase == NpcMovePhase::Failed) ++runtime.counters.failures;
+}
+
+bool CopySuccessfulPath(
+        SectorNavigationWorld& navigation,
+        NpcNavigationRecord& record,
+        const SectorNavigationPathResult& path)
+{
+    ReleasePath(navigation, record);
+    record.pathHandle = navigation.AllocatePathRecord();
+    if (IsNull(record.pathHandle)) return false;
+    record.cornerCount = std::min(path.cornerCount, record.corners.size());
+    std::copy_n(path.corners.begin(), record.cornerCount, record.corners.begin());
+    record.nextCorner = 0;
+    while (record.nextCorner < record.cornerCount) {
+        const Vector3& corner = record.corners[record.nextCorner];
+        const float dx = corner.x - path.projectedStart.x;
+        const float dz = corner.z - path.projectedStart.z;
+        if (std::sqrt(dx * dx + dz * dz) > ArrivalTolerance) break;
+        ++record.nextCorner;
+    }
+    record.projectedDestination = path.projectedDestination;
+    record.lastQueryStatus = path.status;
+    return true;
+}
+
+NpcMoveRequestResult FailRequest(SectorNavigationQueryStatus status, const char* message)
+{
+    return {false, status, message != nullptr ? message : SectorNavigationQueryStatusName(status)};
+}
+
+float ShortestAngleDelta(float from, float to)
+{
+    constexpr float Pi = 3.14159265358979323846f;
+    constexpr float TwoPi = Pi * 2.0f;
+    float delta = std::fmod(to - from, TwoPi);
+    if (delta > Pi) delta -= TwoPi;
+    if (delta < -Pi) delta += TwoPi;
+    return delta;
+}
+
+void ResolveNpcAnimations(
+        engine::World& world,
+        engine::AssetManager& assets,
+        const NpcDefinitionCatalog& definitions,
+        NpcNavigationRecord& record)
+{
+    if (!world.IsAlive(record.entity)
+            || !world.Has<NpcRuntimeInstance>(record.entity)
+            || !world.Has<NpcAnimationState>(record.entity)
+            || !world.Has<engine::AnimatedModelInstance>(record.entity)
+            || !world.Has<engine::AnimatedModelAnimator>(record.entity)) {
+        return;
+    }
+    NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(record.entity);
+    NpcAnimationState& state = world.Get<NpcAnimationState>(record.entity);
+    engine::AnimatedModelInstance& instance =
+            world.Get<engine::AnimatedModelInstance>(record.entity);
+    engine::AnimatedModelAnimator& animator =
+            world.Get<engine::AnimatedModelAnimator>(record.entity);
+    const engine::ModelAsset* asset = assets.GetModelAsset(instance.model);
+    const NpcDefinition* definition = FindNpcDefinition(definitions, npc.definitionId);
+    if (!state.resolved) {
+        if (asset == nullptr || definition == nullptr) return;
+        state.missingAnimationMask = 0;
+        for (const NpcActionMetadata& metadata : NpcActionMetadataTable()) {
+            const size_t index = ActionIndex(metadata.action);
+            const NpcActionDefinition& action = GetNpcAction(*definition, metadata.action);
+            state.animationSpeeds[index] = action.animationSpeed;
+            state.animationIndices[index] = engine::FindModelAnimationIndex(
+                    *asset, action.animation.c_str());
+            if (state.animationIndices[index] == engine::InvalidModelAnimationIndex) {
+                state.missingAnimationMask |= static_cast<uint8_t>(1u << index);
+                std::fprintf(
+                        stderr,
+                        "[NPC WARNING] NPC '%s' semantic action '%s' has no model animation '%s'.\n",
+                        npc.instanceId.c_str(),
+                        metadata.displayName,
+                        action.animation.c_str());
+            }
+        }
+        state.blendSeconds = definition->animationBlendSeconds;
+        state.resolved = true;
+        const uint32_t idleIndex = state.animationIndices[ActionIndex(NpcAction::Idle)];
+        if (idleIndex != engine::InvalidModelAnimationIndex) {
+            engine::SetAnimatedModelAnimation(animator, idleIndex, 0.0f, false);
+            animator.speed = state.animationSpeeds[ActionIndex(NpcAction::Idle)];
+        }
+        state.appliedAction = NpcAction::Idle;
+    }
+
+    if (ApplyNpcSemanticAnimation(state, animator, npc.action)
+            == NpcAnimationApplyResult::Missing) {
+        SetDiagnostic(record, "semantic action animation is missing; movement continues");
+    }
+}
+
+bool Replan(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime,
+        NpcNavigationRecord& record)
+{
+    if (!world.IsAlive(record.entity)
+            || !world.Has<SectorObjectTransform>(record.entity)) {
+        return false;
+    }
+    const SectorObjectTransform& transform =
+            world.Get<SectorObjectTransform>(record.entity);
+    const SectorNavigationPathResult path = navigation.FindPath(
+            transform.position,
+            record.projectedDestination);
+    record.lastQueryStatus = path.status;
+    if (path.status != SectorNavigationQueryStatus::Success
+            || !CopySuccessfulPath(navigation, record, path)) {
+        return false;
+    }
+    ++record.replanCount;
+    ++runtime.counters.replans;
+    record.stallSeconds = 0.0f;
+    record.replanCooldownSeconds = ReplanCooldownSeconds;
+    SetDiagnostic(record, "path replanned from actual position");
+    return true;
+}
+
+SectorFpsVerticalContext BuildVerticalContext(
+        const SectorCollisionWorld& collisionWorld,
+        int sectorId)
+{
+    SectorFpsVerticalContext result;
+    SectorCollisionHeights heights;
+    if (sectorId != 0
+            && collisionWorld.GetSectorFloorCeiling(sectorId, &heights)) {
+        result.hasSector = true;
+        result.floorZ = heights.floorZ;
+        result.ceilingZ = heights.ceilingZ;
+    }
+    return result;
+}
+
+} // namespace
+
+NpcAnimationApplyResult ApplyNpcSemanticAnimation(
+        NpcAnimationState& state,
+        engine::AnimatedModelAnimator& animator,
+        NpcAction requested)
+{
+    if (!state.resolved) return NpcAnimationApplyResult::Unchanged;
+    if (engine::IsAnimatedModelTransitioning(animator)) {
+        if (requested != state.appliedAction) {
+            state.pendingAction = requested;
+            state.hasPendingAction = true;
+            return NpcAnimationApplyResult::Queued;
+        }
+        state.hasPendingAction = false;
+        return NpcAnimationApplyResult::Unchanged;
+    }
+    if (state.hasPendingAction) {
+        requested = state.pendingAction;
+        state.hasPendingAction = false;
+    }
+    if (requested == state.appliedAction) {
+        return NpcAnimationApplyResult::Unchanged;
+    }
+    const size_t requestedIndex = ActionIndex(requested);
+    const uint32_t animationIndex = state.animationIndices[requestedIndex];
+    if (animationIndex == engine::InvalidModelAnimationIndex) {
+        return NpcAnimationApplyResult::Missing;
+    }
+    engine::SetAnimatedModelAnimation(
+            animator,
+            animationIndex,
+            state.blendSeconds,
+            false);
+    animator.speed = state.animationSpeeds[requestedIndex];
+    state.appliedAction = requested;
+    return NpcAnimationApplyResult::Applied;
+}
+
+void InitializeNpcNavigationRuntime(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime)
+{
+    ShutdownNpcNavigationRuntime(world, navigation, runtime);
+    runtime.records.reserve(navigation.Capacities().agentCapacity);
+    world.ForEach<NpcRuntimeInstance, SectorDynamicModel>(
+            [&runtime, &navigation](
+                    engine::Entity entity,
+                    NpcRuntimeInstance& npc,
+                    SectorDynamicModel& model) {
+                if (runtime.records.size() == runtime.records.capacity()
+                        && !runtime.growthWarned) {
+                    runtime.growthWarned = true;
+                    ++runtime.counters.capacityWarnings;
+                    std::fprintf(stderr,
+                            "[NPC Navigation WARNING] Agent capacity exceeded; runtime allocation may occur.\n");
+                }
+                NpcNavigationRecord record;
+                record.instanceId = npc.instanceId;
+                record.placedObjectId = model.placedObjectId;
+                record.entity = entity;
+                record.agentHandle = navigation.AllocateAgentRecord();
+                record.phase = NpcMovePhase::Idle;
+                record.occupied = true;
+                runtime.records.push_back(std::move(record));
+            });
+}
+
+void ShutdownNpcNavigationRuntime(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime)
+{
+    for (NpcNavigationRecord& record : runtime.records) {
+        if (!record.occupied) continue;
+        if (world.IsAlive(record.entity)) {
+            if (world.Has<NpcRuntimeInstance>(record.entity)) {
+                world.Get<NpcRuntimeInstance>(record.entity).action = NpcAction::Idle;
+            }
+            if (world.Has<SectorObjectVisualOffset>(record.entity)) {
+                world.Get<SectorObjectVisualOffset>(record.entity).position = {};
+            }
+        }
+        ReleasePath(navigation, record);
+        if (!IsNull(record.agentHandle)) {
+            navigation.ReleaseAgentRecord(record.agentHandle);
+        }
+    }
+    const size_t capacity = runtime.records.capacity();
+    runtime.records.clear();
+    if (capacity > 0) runtime.records.reserve(capacity);
+    runtime.counters = {};
+    runtime.growthWarned = false;
+}
+
+NpcMoveRequestResult RequestNpcMove(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        const SectorCollisionWorld& collisionWorld,
+        NpcNavigationRuntime& runtime,
+        std::string_view instanceId,
+        Vector2 destinationXZ,
+        NpcMoveGait gait)
+{
+    if (!IsValidNpcInstanceId(instanceId)) {
+        return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "invalid NPC instance ID");
+    }
+    NpcNavigationRecord* record = FindRecord(runtime, instanceId);
+    if (record == nullptr || !world.IsAlive(record->entity)
+            || !world.Has<SectorObjectTransform>(record->entity)
+            || !world.Has<SectorObject>(record->entity)) {
+        return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "NPC instance was not found");
+    }
+    if (IsActive(record->phase)) {
+        return FailRequest(SectorNavigationQueryStatus::InvalidAgent, "NPC already has an active move");
+    }
+    if (navigation.State() != SectorNavigationState::Ready) {
+        return FailRequest(SectorNavigationQueryStatus::NavigationUnavailable, "navigation is not ready");
+    }
+    if (!navigation.IsAgentRecordValid(record->agentHandle)) {
+        record->agentHandle = navigation.AllocateAgentRecord();
+        if (IsNull(record->agentHandle)) {
+            ++runtime.counters.capacityWarnings;
+            return FailRequest(
+                    SectorNavigationQueryStatus::CapacityExceeded,
+                    "navigation agent capacity was exceeded");
+        }
+    }
+    const SectorObjectTransform& transform =
+            world.Get<SectorObjectTransform>(record->entity);
+    const SectorObject& object = world.Get<SectorObject>(record->entity);
+    const int destinationSector = collisionWorld.FindSectorContainingPointPreferCurrent(
+            destinationXZ,
+            object.currentSectorId);
+    SectorCollisionHeights destinationHeights;
+    if (destinationSector == 0
+            || !collisionWorld.GetSectorFloorCeiling(
+                    destinationSector, &destinationHeights)) {
+        return FailRequest(
+                SectorNavigationQueryStatus::DestinationNotOnNavmesh,
+                "destination is outside sector collision");
+    }
+    const Vector3 destination{
+            destinationXZ.x,
+            destinationHeights.floorZ,
+            destinationXZ.y};
+    const SectorNavigationPathResult path = navigation.FindPath(
+            transform.position,
+            destination);
+    if (path.status != SectorNavigationQueryStatus::Success) {
+        return FailRequest(path.status, SectorNavigationQueryStatusName(path.status));
+    }
+    if (!CopySuccessfulPath(navigation, *record, path)) {
+        ++runtime.counters.capacityWarnings;
+        return FailRequest(
+                SectorNavigationQueryStatus::CapacityExceeded,
+                "navigation path record capacity was exceeded");
+    }
+    record->phase = NpcMovePhase::FollowingPath;
+    record->gait = gait;
+    record->requestedDestinationXZ = destinationXZ;
+    record->projectedDestination = path.projectedDestination;
+    record->desiredVelocity = {};
+    record->actualVelocity = {};
+    record->stallSeconds = 0.0f;
+    record->replanCooldownSeconds = 0.0f;
+    record->driftCheckSeconds = 0.0f;
+    record->replanCount = 0;
+    SetDiagnostic(*record, "following complete path");
+    ++runtime.counters.requests;
+    return {true, SectorNavigationQueryStatus::Success, {}};
+}
+
+bool CancelNpcMove(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime,
+        std::string_view instanceId)
+{
+    NpcNavigationRecord* record = FindRecord(runtime, instanceId);
+    if (record == nullptr || !IsActive(record->phase)) return false;
+    if (world.IsAlive(record->entity)
+            && world.Has<NpcRuntimeInstance>(record->entity)) {
+        world.Get<NpcRuntimeInstance>(record->entity).action = NpcAction::Idle;
+    }
+    SetTerminal(
+            navigation,
+            runtime,
+            *record,
+            NpcMovePhase::Cancelled,
+            SectorNavigationQueryStatus::Cancelled,
+            "movement cancelled");
+    return true;
+}
+
+NpcMoveStatus GetNpcMoveStatus(
+        const NpcNavigationRuntime& runtime,
+        std::string_view instanceId)
+{
+    NpcMoveStatus status;
+    const NpcNavigationRecord* record = FindRecord(runtime, instanceId);
+    if (record == nullptr) return status;
+    status.found = true;
+    status.phase = record->phase;
+    status.gait = record->gait;
+    status.queryStatus = record->lastQueryStatus;
+    status.requestedDestinationXZ = record->requestedDestinationXZ;
+    status.projectedDestination = record->projectedDestination;
+    status.remainingCorners = record->cornerCount > record->nextCorner
+            ? record->cornerCount - record->nextCorner : 0;
+    status.desiredVelocity = record->desiredVelocity;
+    status.actualVelocity = record->actualVelocity;
+    status.stallSeconds = record->stallSeconds;
+    status.replanCount = record->replanCount;
+    status.message = record->diagnostic.data();
+    return status;
+}
+
+void UpdateNpcNavigationAndLocomotionSystem(
+        engine::World& world,
+        engine::AssetManager& assets,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime,
+        const NpcDefinitionCatalog& definitions,
+        const SectorCollisionWorld& collisionWorld,
+        const std::vector<SectorDynamicDoorCollider>& doorColliders,
+        const std::vector<SectorStaticModelCollider>& staticColliders,
+        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+        const SectorTopologyMap& map,
+        float rawDt)
+{
+    const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+    bool movedAnyNpc = false;
+    const SectorNavigationSettings& navSettings = navigation.Settings();
+    const SectorCollisionMoveConfig moveConfig{
+            navSettings.agentRadius,
+            navSettings.agentHeight,
+            navSettings.agentMaximumClimb,
+            4};
+
+    for (NpcNavigationRecord& record : runtime.records) {
+        if (!record.occupied) continue;
+        if (!world.IsAlive(record.entity)
+                || !world.Has<NpcRuntimeInstance>(record.entity)
+                || !world.Has<SectorObjectTransform>(record.entity)
+                || !world.Has<SectorObject>(record.entity)) {
+            ReleasePath(navigation, record);
+            if (!IsNull(record.agentHandle)) {
+                navigation.ReleaseAgentRecord(record.agentHandle);
+            }
+            record.occupied = false;
+            continue;
+        }
+
+        NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(record.entity);
+        SectorObjectTransform& transform = world.Get<SectorObjectTransform>(record.entity);
+        SectorObject& object = world.Get<SectorObject>(record.entity);
+        SectorObjectVisualOffset* visualOffset =
+                world.Has<SectorObjectVisualOffset>(record.entity)
+                ? &world.Get<SectorObjectVisualOffset>(record.entity) : nullptr;
+        record.actualVelocity = {};
+        record.desiredVelocity = {};
+        record.replanCooldownSeconds = std::max(
+                0.0f, record.replanCooldownSeconds - dt);
+        bool capturedStepOffset = false;
+
+        if (navigation.State() == SectorNavigationState::Ready
+                && !navigation.IsAgentRecordValid(record.agentHandle)) {
+            record.agentHandle = navigation.AllocateAgentRecord();
+            if (IsNull(record.agentHandle)) {
+                ++runtime.counters.capacityWarnings;
+                if (IsActive(record.phase)) {
+                    npc.action = NpcAction::Idle;
+                    SetTerminal(
+                            navigation,
+                            runtime,
+                            record,
+                            NpcMovePhase::Failed,
+                            SectorNavigationQueryStatus::CapacityExceeded,
+                            "navigation agent capacity was exceeded after rebuild");
+                }
+            }
+        }
+
+        if (IsActive(record.phase)
+                && navigation.State() != SectorNavigationState::Ready) {
+            npc.action = NpcAction::Idle;
+            SetTerminal(
+                    navigation,
+                    runtime,
+                    record,
+                    NpcMovePhase::Failed,
+                    SectorNavigationQueryStatus::NavigationUnavailable,
+                    "navigation became unavailable during movement");
+        }
+
+        if (IsActive(record.phase) && dt > 0.0f) {
+            const float movementSpeed = record.gait == NpcMoveGait::Run
+                    ? npc.runSpeed : npc.walkSpeed;
+            float movementBudget = std::max(0.0f, movementSpeed) * dt;
+            Vector2 totalActual{};
+            int stepCount = 0;
+            while (movementBudget > ProgressEpsilon
+                    && record.nextCorner < record.cornerCount
+                    && stepCount++ < 64) {
+                const Vector3 corner = record.corners[record.nextCorner];
+                Vector2 toCorner{
+                        corner.x - transform.position.x,
+                        corner.z - transform.position.z};
+                float distance = Vector2Length(toCorner);
+                if (distance <= ArrivalTolerance) {
+                    ++record.nextCorner;
+                    continue;
+                }
+                const Vector2 direction = Vector2Scale(toCorner, 1.0f / distance);
+                const float requestedDistance = std::min({
+                        distance,
+                        movementBudget,
+                        navSettings.agentRadius});
+                const Vector2 desiredDelta = Vector2Scale(direction, requestedDistance);
+                record.desiredVelocity = Vector2Scale(direction, movementSpeed);
+                const SectorCollisionMoveState moveState{
+                        {transform.position.x, transform.position.z},
+                        transform.position.y,
+                        object.currentSectorId,
+                        true};
+                SectorCollisionMoveResult result = collisionWorld.ResolveMovement(
+                        moveState, desiredDelta, moveConfig);
+                result = ResolveSectorDoorDynamicCollidersForPlayerMovement(
+                        moveState, result, moveConfig, doorColliders);
+                const SectorFpsVerticalContext sectorContext = BuildVerticalContext(
+                        collisionWorld, result.currentSectorId);
+                result = ResolveSectorStaticModelCollidersForPlayerMovement(
+                        moveState,
+                        result,
+                        moveConfig,
+                        sectorContext,
+                        staticColliders);
+
+                const Vector2 previousXZ{transform.position.x, transform.position.z};
+                const float previousPhysicalY = transform.position.y;
+                const float previousVisualY = previousPhysicalY
+                        + (visualOffset != nullptr ? visualOffset->position.y : 0.0f);
+                transform.position.x = result.positionXZ.x;
+                transform.position.z = result.positionXZ.y;
+                object.currentSectorId = result.currentSectorId;
+
+                SectorFpsVerticalContext support = BuildVerticalContext(
+                        collisionWorld, object.currentSectorId);
+                if (support.hasSector) {
+                    SectorFpsControllerState supportState;
+                    supportState.feetPosition = transform.position;
+                    supportState.feetPosition.y = previousPhysicalY;
+                    supportState.currentSectorId = object.currentSectorId;
+                    supportState.grounded = true;
+                    SectorFpsControllerConfig supportConfig;
+                    supportConfig.playerRadius = moveConfig.radius;
+                    supportConfig.playerHeight = moveConfig.playerHeight;
+                    supportConfig.stepHeight = moveConfig.stepHeight;
+                    support = BuildSectorStaticModelVerticalContext(
+                            support,
+                            supportState,
+                            supportConfig,
+                            staticColliders);
+                    const float floorDelta = support.floorZ - previousPhysicalY;
+                    if (std::fabs(floorDelta)
+                            <= moveConfig.stepHeight + 0.001f) {
+                        transform.position.y = support.floorZ;
+                        if (visualOffset != nullptr
+                                && std::fabs(transform.position.y - previousPhysicalY)
+                                        > 0.001f) {
+                            visualOffset->position.y = previousVisualY - transform.position.y;
+                            capturedStepOffset = true;
+                        }
+                    }
+                }
+
+                const Vector2 actual{
+                        transform.position.x - previousXZ.x,
+                        transform.position.z - previousXZ.y};
+                totalActual = Vector2Add(totalActual, actual);
+                const float actualDistance = Vector2Length(actual);
+                movementBudget -= requestedDistance;
+                if (actualDistance <= ProgressEpsilon) break;
+                movedAnyNpc = true;
+                toCorner = {
+                        corner.x - transform.position.x,
+                        corner.z - transform.position.z};
+                if (Vector2Length(toCorner) <= ArrivalTolerance) {
+                    ++record.nextCorner;
+                }
+            }
+
+            const float actualDistance = Vector2Length(totalActual);
+            record.actualVelocity = dt > 0.0f
+                    ? Vector2Scale(totalActual, 1.0f / dt) : Vector2{};
+            if (actualDistance > ProgressEpsilon) {
+                record.stallSeconds = 0.0f;
+                const float targetYaw = std::atan2(totalActual.x, totalActual.y);
+                const float delta = ShortestAngleDelta(transform.yawRadians, targetYaw);
+                const float maximumTurn = TurnRateRadiansPerSecond * dt;
+                transform.yawRadians += std::clamp(delta, -maximumTurn, maximumTurn);
+                npc.action = record.gait == NpcMoveGait::Run
+                        ? NpcAction::Run : NpcAction::Walk;
+            } else {
+                record.stallSeconds += dt;
+                npc.action = NpcAction::Idle;
+            }
+
+            const float destinationDx =
+                    record.projectedDestination.x - transform.position.x;
+            const float destinationDz =
+                    record.projectedDestination.z - transform.position.z;
+            if (record.nextCorner >= record.cornerCount
+                    && std::sqrt(destinationDx * destinationDx
+                                 + destinationDz * destinationDz)
+                            <= ArrivalTolerance) {
+                npc.action = NpcAction::Idle;
+                SetTerminal(
+                        navigation,
+                        runtime,
+                        record,
+                        NpcMovePhase::Arrived,
+                        SectorNavigationQueryStatus::Success,
+                        "arrived within 0.10m tolerance");
+            } else if (record.stallSeconds >= StallTriggerSeconds
+                    && record.replanCooldownSeconds <= 0.0f) {
+                if (record.replanCount >= MaximumReplans
+                        || !Replan(world, navigation, runtime, record)) {
+                    npc.action = NpcAction::Idle;
+                    ++runtime.counters.stalls;
+                    SetTerminal(
+                            navigation,
+                            runtime,
+                            record,
+                            NpcMovePhase::Failed,
+                            SectorNavigationQueryStatus::Stalled,
+                            "movement stalled after bounded replans");
+                }
+            }
+
+            record.driftCheckSeconds += dt;
+            if (IsActive(record.phase)
+                    && record.driftCheckSeconds >= DriftCheckIntervalSeconds) {
+                record.driftCheckSeconds = 0.0f;
+                const SectorNavigationNearestPointResult nearest =
+                        navigation.FindNearestPoint(transform.position);
+                const float driftThreshold = std::max(
+                        0.5f, navSettings.agentRadius * 2.0f);
+                const float dx = nearest.nearestPosition.x - transform.position.x;
+                const float dz = nearest.nearestPosition.z - transform.position.z;
+                if (nearest.status != SectorNavigationQueryStatus::Success
+                        || std::sqrt(dx * dx + dz * dz) > driftThreshold) {
+                    if (record.replanCooldownSeconds <= 0.0f
+                            && (record.replanCount >= MaximumReplans
+                                || !Replan(world, navigation, runtime, record))) {
+                        npc.action = NpcAction::Idle;
+                        SetTerminal(
+                                navigation,
+                                runtime,
+                                record,
+                                NpcMovePhase::Failed,
+                                SectorNavigationQueryStatus::Stalled,
+                                "agent drifted off the navigation surface");
+                    }
+                }
+            }
+        } else if (!IsActive(record.phase)) {
+            npc.action = NpcAction::Idle;
+        }
+
+        if (visualOffset != nullptr && !capturedStepOffset
+                && visualOffset->position.y != 0.0f && dt > 0.0f) {
+            visualOffset->position.y *= std::exp(-VisualStepSmoothingRate * dt);
+            if (std::fabs(visualOffset->position.y) < VisualOffsetEpsilon) {
+                visualOffset->position.y = 0.0f;
+            }
+        }
+
+        if (world.Has<SectorDynamicModel>(record.entity)) {
+            SectorDynamicModel& model = world.Get<SectorDynamicModel>(record.entity);
+            model.containingSectorAmbient = ComputeSectorModelAmbient(
+                    map, object.currentSectorId);
+            model.environmentExposure = ComputeSectorModelEnvironmentExposure(
+                    map, object.currentSectorId);
+        }
+        record.physicalPosition = transform.position;
+        record.visualPosition = transform.position;
+        if (visualOffset != nullptr) {
+            record.visualPosition = Vector3Add(
+                    record.visualPosition, visualOffset->position);
+        }
+        ResolveNpcAnimations(world, assets, definitions, record);
+    }
+
+    if (movedAnyNpc) {
+        UpdateSectorObjectBakedLightingSystem(
+                world, objectLightProbes, &map);
+    }
+}
+
+} // namespace game
