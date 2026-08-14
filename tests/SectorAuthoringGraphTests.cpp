@@ -12119,6 +12119,18 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
                   && picker.SelectedModelPath() == expected[1],
           "model picker reopening discovers new models and restores the current selection");
     picker.Close();
+    picker.Open(
+            "assets/models/characters/nested/beta.GLB",
+            game::ModelPickerTarget::NpcDefinition);
+    Check(picker.RefreshFromRoot(root, "assets/models/characters")
+                  && state.target == game::ModelPickerTarget::NpcDefinition
+                  && state.modelPaths[2]
+                          == "assets/models/characters/nested/beta.GLB"
+                  && state.optionLabelStorage[2] == "nested/beta.GLB"
+                  && picker.SelectedModelPath()
+                          == "assets/models/characters/nested/beta.GLB",
+          "NPC model picker target uses character-relative asset paths and labels");
+    picker.Close();
     Check(!state.open, "static model picker closes on cancel");
 
     std::filesystem::remove_all(root, error);

@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "id": "Zombie1",
+  "name": "Zombie",
+  "hostile": true,
+  "modelPath": "assets/models/characters/Zombie1.glb",
+  "actions": {
+    "idle": {
+      "animation": "Idle"
+    },
+    "walk": {
+      "animation": "Walk",
+      "movementSpeed": 1.5
+    },
+    "run": {
+      "animation": "Running",
+      "movementSpeed": 3.0
+    }
+  }
+}

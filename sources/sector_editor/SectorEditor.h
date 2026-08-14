@@ -11,6 +11,8 @@
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
+#include "sector_editor/npcs/SectorEditorNpcEditorService.h"
+#include "sector_editor/npcs/SectorEditorNpcEditorState.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/sounds/SectorEditorSoundCatalogState.h"
 #include "sector_editor/services/sounds/SectorEditorSoundService.h"
@@ -255,6 +257,13 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawNpcEditorModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawSaveLevelModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -422,6 +431,7 @@ private:
     SectorEditorSoundService BuildSoundService(
             SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr);
     SectorEditorTextureCatalogService MakeTextureCatalogService();
+    SectorEditorNpcEditorService BuildNpcEditorService();
     SectorEditorDocumentLifecycleAccess Lifecycle();
     SectorEditorConstDocumentLifecycleAccess Lifecycle() const;
     SectorTopologyMap& TopologyMap();
@@ -465,6 +475,8 @@ private:
     SectorEditorUiState uiState;
     RuntimeObjectEditingState runtimeObjectEditingState;
     RuntimeObjectEditingUiState runtimeObjectEditingUiState;
+    SectorEditorNpcEditorState npcEditorState;
+    SectorEditorNpcEditorSessionState npcEditorSessionState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
     SectorEditorSoundCatalogState soundCatalogState;

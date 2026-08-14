@@ -1,6 +1,7 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
+#include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 #include "sector_demo/SectorLightmap.h"
 
 #include <cmath>
@@ -491,6 +492,28 @@ void TestPreviewSettingsFogTabLayout()
           "weapon tab preserves the modal right margin");
 }
 
+void TestNpcEditorModalSplitPaneLayout()
+{
+    const game::SectorEditorNpcEditorModalLayout layout =
+            game::BuildSectorEditorNpcEditorModalLayoutForViewport(1920.0f, 1080.0f);
+    const Rectangle viewport{0.0f, 0.0f, 1920.0f, 1080.0f};
+    Check(Contains(viewport, layout.modal),
+          "NPC editor modal fits inside the editor viewport");
+    Check(Contains(layout.modal, layout.listPane)
+                  && Contains(layout.modal, layout.formBounds),
+          "NPC list and form panes stay inside the modal");
+    Check(!Overlaps(layout.listPane, layout.formBounds),
+          "NPC list and form panes do not overlap");
+    Check(!Overlaps(layout.addButton, layout.deleteButton)
+                  && Contains(layout.listPane, layout.addButton)
+                  && Contains(layout.listPane, layout.deleteButton),
+          "NPC Add and Delete controls fit without overlap");
+    Check(!Overlaps(layout.saveButton, layout.cancelButton)
+                  && Contains(layout.modal, layout.saveButton)
+                  && Contains(layout.modal, layout.cancelButton),
+          "NPC Save and Cancel controls fit without overlap");
+}
+
 void TestPreviewSettingsModalFogDraftApplyAndReset()
 {
     game::SectorTopologyMap map;
@@ -561,6 +584,7 @@ int main()
     TestPreviewSettingsModalResetsObjectProbeDefaults();
     TestPreviewSettingsModalNormalizesLayeredProbeSettings();
     TestPreviewSettingsFogTabLayout();
+    TestNpcEditorModalSplitPaneLayout();
     TestPreviewSettingsModalFogDraftApplyAndReset();
 
     if (failures != 0) {

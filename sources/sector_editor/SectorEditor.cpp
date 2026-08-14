@@ -6,6 +6,7 @@
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentModals.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
+#include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/SectorEditorHelpers.h"
@@ -324,6 +325,7 @@ bool SectorEditor::Init(engine::EngineContext& context)
 void SectorEditor::Shutdown(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
+    BuildNpcEditorService().Shutdown(assets);
     if (state.footstepPicker.open
             || !engine::IsNull(state.footstepPicker.previewScope)) {
         BuildFootstepService().Close();
@@ -347,6 +349,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     uiState = SectorEditorUiState{};
     runtimeObjectEditingState = RuntimeObjectEditingState{};
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
+    npcEditorState = SectorEditorNpcEditorState{};
+    npcEditorSessionState = SectorEditorNpcEditorSessionState{};
     textureCatalogState = TextureCatalogState{};
     soundCatalogState = SectorEditorSoundCatalogState{};
     lightEditingState = LightEditingState{};
@@ -440,6 +444,7 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             || state.footstepPicker.open
             || state.decalTintModal.open
             || state.previewSettingsModal.open
+            || npcEditorState.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen();
@@ -587,6 +592,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
             || state.footstepPicker.open
             || state.addMapTexture.open
             || state.addMapSound.open
+            || npcEditorState.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen()) {
@@ -698,6 +704,12 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (npcEditorState.open) {
+        DrawNpcEditorModal(ui, config, input, assets, font, smallFont);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (state.setAllModal.open) {
         DrawSetAllModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
@@ -801,6 +813,7 @@ void SectorEditor::RenderUI(
             || state.footstepPicker.open
             || state.addMapTexture.open
             || state.addMapSound.open
+            || npcEditorState.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen()) {
@@ -4292,7 +4305,7 @@ void SectorEditor::DrawToolsPanel(
     const float toolsContentH =
             sectionLabelH + rowsHeight(5)
             + separatorH + sectionLabelH + rowsHeight(12)
-            + separatorH + rowsHeight(5)
+            + separatorH + rowsHeight(6)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
             + separatorH + rowsHeight(1)
@@ -4543,6 +4556,14 @@ void SectorEditor::DrawToolsPanel(
     y += rowH + gap;
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_2d", Rectangle{0.0f, y, contentW, rowH}, font, "Settings")) {
         OpenPreviewSettingsModal();
+    }
+    y += rowH + gap;
+    if (engine::Button(
+                ui, config, input, assets,
+                "sector_editor_npc_editor",
+                Rectangle{0.0f, y, contentW, rowH},
+                font, "NPC Editor")) {
+        BuildNpcEditorService().Open();
     }
     y += rowH + gap;
 
@@ -5105,12 +5126,37 @@ void SectorEditor::DrawStaticModelPickerModal(
                     BuildRuntimeObjectEditingService(&selection);
             if (pickerState.target == ModelPickerTarget::DynamicModel) {
                 editing.AssignSelectedDynamicModel(picker.SelectedModelPath());
-            } else {
+            } else if (pickerState.target == ModelPickerTarget::StaticModel) {
                 editing.AssignSelectedStaticModel(picker.SelectedModelPath());
+            } else {
+                statusText = "NPC model selection is only available in the NPC Editor";
             }
             pickerState.open = false;
         }
     }
+}
+
+void SectorEditor::DrawNpcEditorModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    SectorEditorNpcEditorService editor = BuildNpcEditorService();
+    SectorEditorStaticModelPickerService modelPicker{
+            runtimeObjectEditingState.staticModelPicker,
+            statusText};
+    game::DrawSectorEditorNpcEditorModal(
+            ui,
+            config,
+            input,
+            assets,
+            font,
+            smallFont,
+            editor,
+            modelPicker);
 }
 
 void SectorEditor::DrawSaveLevelModal(
@@ -6354,6 +6400,15 @@ SectorEditorTextureCatalogService SectorEditor::MakeTextureCatalogService()
                     state.defaultWallTextureId,
                     state.defaultLowerWallTextureId,
                     state.defaultUpperWallTextureId}};
+}
+
+SectorEditorNpcEditorService SectorEditor::BuildNpcEditorService()
+{
+    return SectorEditorNpcEditorService{
+            npcEditorState,
+            npcEditorSessionState,
+            statusText,
+            std::filesystem::path(ASSETS_PATH) / "npcs"};
 }
 
 void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)

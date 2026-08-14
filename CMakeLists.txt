@@ -538,6 +538,24 @@ if(BUILD_TESTING)
     target_link_libraries(sector_swing_door_catalog_tests PRIVATE raylib)
     add_test(NAME sector_swing_door_catalog COMMAND sector_swing_door_catalog_tests)
 
+    add_executable(npc_definition_tests
+            tests/NpcDefinitionTests.cpp
+            sources/game/npc/NpcDefinitions.cpp
+            sources/sector_editor/npcs/SectorEditorNpcEditorService.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
+    )
+    target_include_directories(npc_definition_tests PRIVATE sources)
+    target_compile_definitions(npc_definition_tests PRIVATE
+            ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+    target_link_libraries(npc_definition_tests PRIVATE raylib)
+    add_test(NAME npc_definition COMMAND npc_definition_tests)
+
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
             sources/engine/assets/AssetManager.cpp
