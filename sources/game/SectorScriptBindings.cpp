@@ -833,8 +833,8 @@ void UpdateSectorScriptOperations(
             move.active = false;
             continue;
         }
-        const std::string reason = status.message.empty()
-                ? NpcMovePhaseName(status.phase) : status.message;
+        const std::string reason = status.message[0] == '\0'
+                ? NpcMovePhaseName(status.phase) : status.message.data();
         if (status.phase == NpcMovePhase::Cancelled) {
             engine::ScriptSystemCancelOperation(
                     context, *host.scripts, move.operation, reason);

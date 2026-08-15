@@ -250,6 +250,24 @@ startMoveNpc(instanceId, levelMarkerId [, gait]) -> operation | nil, reason
 Only one script-owned move may control an NPC at a time. Use `await`,
 `operationStatus`, or `cancelOperation` with the returned operation.
 
+```lua
+local movement, reason = startMoveNpc("guard_1", "patrol_end", "run")
+if not movement then
+    print("could not start guard move: " .. reason)
+    return
+end
+
+local arrived, failure = await(movement)
+if not arrived then
+    print("guard move ended: " .. failure)
+end
+```
+
+Navigation must be ready when the request starts. Rebuilds, map unload, NPC
+deletion, unreachable destinations, capacity limits, and prolonged stalls end
+the operation with a reason. Cancelling an operation also releases any door
+hold owned by that move.
+
 ## Map travel
 
 ### `changeMap(mapId [, spawnId]) -> true | false, reason`

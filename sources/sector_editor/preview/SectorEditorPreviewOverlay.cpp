@@ -1158,6 +1158,9 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         stats.builtTileCoordinateCount,
                         stats.tileCoordinateCount,
                         stats.builtLayerCount));
+                addKeyValue("build time", TextFormat("%.3f / %.3f ms last/peak",
+                        stats.lastBuildMilliseconds,
+                        stats.peakBuildMilliseconds));
                 addKeyValue("mesh", TextFormat("%d tiles | %d polygons | %.3f MiB compressed",
                         stats.navMeshTileCount,
                         stats.navMeshPolygonCount,
@@ -1244,6 +1247,25 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             static_cast<unsigned long long>(tile->revision)));
                 }
                 const auto& diagnostics = context.navigation.Diagnostics();
+                const SectorNavigationCounters& navigationCounters =
+                        context.navigation.Counters();
+                addKeyValue("lifecycle", TextFormat(
+                        "%llu queued | %llu complete | %llu failed | revisions %llu/%llu/%llu",
+                        static_cast<unsigned long long>(navigationCounters.rebuildRequests),
+                        static_cast<unsigned long long>(navigationCounters.completedBuilds),
+                        static_cast<unsigned long long>(navigationCounters.failedBuilds),
+                        static_cast<unsigned long long>(context.navigation.SourceRevision()),
+                        static_cast<unsigned long long>(context.navigation.BuildRevision()),
+                        static_cast<unsigned long long>(
+                                context.navigation.DebugCache().navigationRevision)));
+                addKeyValue("diagnostics", TextFormat(
+                        "%zu / %zu retained | %llu truncated | %llu dropped",
+                        diagnostics.size(),
+                        context.navigation.Capacities().diagnosticCapacity,
+                        static_cast<unsigned long long>(
+                                navigationCounters.truncatedDiagnostics),
+                        static_cast<unsigned long long>(
+                                navigationCounters.droppedDiagnostics)));
                 if (!diagnostics.empty()) {
                     addKeyValueStyled("latest", diagnostics.back().message,
                             diagnostics.back().severity == SectorNavigationDiagnosticSeverity::Error
@@ -1260,8 +1282,14 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         break;
                     }
                 }
+                size_t activeNpcRecords = 0;
+                for (const NpcNavigationRecord& agent :
+                        context.npcNavigation.records) {
+                    if (agent.occupied) ++activeNpcRecords;
+                }
                 addKeyValue("NPC agents", TextFormat(
-                        "%zu records | %llu requests | %llu replans | %llu stalls",
+                        "%zu active / %zu slots | %llu requests | %llu replans | %llu stalls",
+                        activeNpcRecords,
                         context.npcNavigation.records.size(),
                         static_cast<unsigned long long>(context.npcNavigation.counters.requests),
                         static_cast<unsigned long long>(context.npcNavigation.counters.replans),
@@ -1788,7 +1816,10 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Navigation) {
         const Rectangle rebuildRect{panel.x + padding, y, 132.0f, rowH};
-        if (mouseInteractive) {
+        const bool rebuildAvailable = context.navigation.State()
+                        != SectorNavigationState::Queued
+                && context.navigation.State() != SectorNavigationState::Building;
+        if (mouseInteractive && rebuildAvailable) {
             if (engine::Button(
                         ui, smallConfig, input, assets,
                         "sector_editor_navigation_rebuild", rebuildRect,
@@ -1798,7 +1829,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         } else {
             DrawRectangleRec(rebuildRect, Color{24, 30, 38, 155});
             DrawRectangleLinesEx(rebuildRect, config.borderThickness, config.borderColor);
-            engine::Text(smallConfig, assets, rebuildRect, smallFont, "Rebuild Nav",
+            engine::Text(smallConfig, assets, rebuildRect, smallFont,
+                    rebuildAvailable ? "Rebuild Nav" : "Building...",
                     engine::UITextJustify::Center, smallConfig.mutedTextColor);
         }
         y += rowH + 6.0f;

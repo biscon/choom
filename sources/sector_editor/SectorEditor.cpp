@@ -3603,8 +3603,11 @@ void SectorEditor::DrawPreviewOverlay(
         OpenPreviewSettingsModal();
     }
     if (result.requestNavigationRebuild) {
-        sceneRuntime.Navigation().RequestRebuild();
-        statusText = "Navigation rebuild queued";
+        statusText = engineContext != nullptr
+                && sceneRuntime.RebuildNavigationForMap(
+                        *engineContext, TopologyMap())
+                ? "Navigation rebuild queued"
+                : "Navigation rebuild failed to initialize";
     }
     if (result.markTopologyDocumentEdited) {
         MarkTopologyDocumentEdited(result.topologyDocumentEditStatus);

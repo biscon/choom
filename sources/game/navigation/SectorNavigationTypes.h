@@ -110,6 +110,7 @@ bool IsNull(SectorNavigationPathHandle handle);
 constexpr size_t SectorNavigationMaximumPathPolygons = 256;
 constexpr size_t SectorNavigationMaximumStraightPathCorners = 64;
 constexpr size_t SectorNavigationMaximumCorridorTiles = 256;
+constexpr size_t SectorNavigationMaximumDiagnosticMessageBytes = 512;
 
 struct SectorNavigationTileKey {
     int x = 0;
@@ -244,6 +245,11 @@ struct SectorNavigationCounters {
     uint64_t partialQueries = 0;
     uint64_t failedQueries = 0;
     uint64_t capacityWarnings = 0;
+    uint64_t rebuildRequests = 0;
+    uint64_t completedBuilds = 0;
+    uint64_t failedBuilds = 0;
+    uint64_t truncatedDiagnostics = 0;
+    uint64_t droppedDiagnostics = 0;
 };
 
 struct SectorNavigationDynamicObstacleStatistics {
@@ -273,6 +279,8 @@ struct SectorNavigationBuildStatistics {
     int polygonReferenceBits = 0;
     size_t compressedLayerBytes = 0;
     size_t tileTemporaryBytes = 0;
+    float lastBuildMilliseconds = 0.0f;
+    float peakBuildMilliseconds = 0.0f;
     float tileWorldSize = 0.0f;
     BoundingBox worldBounds = {};
 };

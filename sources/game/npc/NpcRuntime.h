@@ -157,7 +157,7 @@ struct NpcMoveStatus {
     Vector2 actualVelocity = {};
     float stallSeconds = 0.0f;
     uint32_t replanCount = 0;
-    std::string message;
+    std::array<char, 192> message{};
 };
 
 bool IsValidNpcInstanceId(std::string_view id);

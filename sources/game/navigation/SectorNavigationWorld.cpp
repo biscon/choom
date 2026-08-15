@@ -314,11 +314,16 @@ struct SectorNavigationWorld::Impl {
     uint64_t sourceRevision = 0;
     uint64_t buildRevision = 0;
     uint64_t tileRevision = 0;
+    uint64_t debugRevision = 0;
     uint64_t sourceHash = 0;
     bool agentGrowthWarned = false;
     bool pathGrowthWarned = false;
     bool obstacleGrowthWarned = false;
+    bool diagnosticOverflowWarned = false;
+    bool duplicateObstacleWarningReported = false;
     bool tileCacheUpToDate = true;
+    bool buildTimingActive = false;
+    std::chrono::steady_clock::time_point buildStartedAt;
 
     dtNavMesh* navMesh = nullptr;
     dtTileCache* tileCache = nullptr;
@@ -329,6 +334,26 @@ struct SectorNavigationWorld::Impl {
     NavigationTileCacheMeshProcess meshProcess;
 
     ~Impl() { ReleaseNavigation(); }
+
+    void BumpDebugRevision()
+    {
+        ++debugRevision;
+        if (debugRevision == 0) ++debugRevision;
+        debugCache.navigationRevision = debugRevision;
+        debugCache.tileRevision = tileRevision;
+    }
+
+    void FinishBuildTiming()
+    {
+        if (!buildTimingActive) return;
+        const auto elapsed = std::chrono::steady_clock::now() - buildStartedAt;
+        statistics.lastBuildMilliseconds =
+                std::chrono::duration<float, std::milli>(elapsed).count();
+        statistics.peakBuildMilliseconds = std::max(
+                statistics.peakBuildMilliseconds,
+                statistics.lastBuildMilliseconds);
+        buildTimingActive = false;
+    }
 
     void ReleaseNavigation()
     {
@@ -356,11 +381,14 @@ struct SectorNavigationWorld::Impl {
         nextTileCoordinate = 0;
         statistics = {};
         debugCache = {};
+        debugCache.navigationRevision = debugRevision;
         sourceHash = 0;
         tileRevision = 0;
         dynamicObstacleStatistics = {};
         crowdStatistics = {};
         tileCacheUpToDate = true;
+        buildTimingActive = false;
+        duplicateObstacleWarningReported = false;
     }
 
     void Record(
@@ -368,13 +396,25 @@ struct SectorNavigationWorld::Impl {
             SectorNavigationBuildStage diagnosticStage,
             const std::string& message)
     {
-        if (diagnostics.size() == diagnostics.capacity()) {
+        std::string boundedMessage = message;
+        if (boundedMessage.size() > SectorNavigationMaximumDiagnosticMessageBytes) {
+            constexpr const char suffix[] = "... [truncated]";
+            boundedMessage.resize(
+                    SectorNavigationMaximumDiagnosticMessageBytes - sizeof(suffix) + 1u);
+            boundedMessage += suffix;
+            ++counters.truncatedDiagnostics;
+        }
+        if (diagnostics.size() >= capacities.diagnosticCapacity) {
             ++counters.capacityWarnings;
-            std::fprintf(stderr,
-                    "[Navigation WARNING] Diagnostic capacity exceeded; oldest diagnostic will be discarded.\n");
+            ++counters.droppedDiagnostics;
+            if (!diagnosticOverflowWarned) {
+                diagnosticOverflowWarned = true;
+                std::fprintf(stderr,
+                        "[Navigation WARNING] Diagnostic capacity exceeded; oldest diagnostic will be discarded.\n");
+            }
             if (!diagnostics.empty()) diagnostics.erase(diagnostics.begin());
         }
-        diagnostics.push_back({severity, diagnosticStage, message});
+        diagnostics.push_back({severity, diagnosticStage, std::move(boundedMessage)});
     }
 
     struct DiagnosticRecastContext final : rcContext {
@@ -701,12 +741,19 @@ struct SectorNavigationWorld::Impl {
             const std::vector<SectorStaticModelCollider>& colliders,
             std::string& error)
     {
+        const float peakBuildMilliseconds = statistics.peakBuildMilliseconds;
         ReleaseNavigation();
+        statistics.peakBuildMilliseconds = peakBuildMilliseconds;
+        buildStartedAt = std::chrono::steady_clock::now();
+        buildTimingActive = true;
         diagnostics.clear();
+        diagnosticOverflowWarned = false;
         stage = SectorNavigationBuildStage::BuildingInput;
         std::vector<std::string> warnings;
-        if (!BuildSectorNavigationBuildInput(
-                    map, colliders, settings, buildInput, warnings, error)) {
+        const bool inputBuilt = BuildSectorNavigationBuildInput(
+                map, colliders, settings, buildInput, warnings, error);
+        sourceHash = buildInput.sourceHash;
+        if (!inputBuilt) {
             return false;
         }
         meshProcess.Configure(buildInput.doorLinks);
@@ -717,6 +764,9 @@ struct SectorNavigationWorld::Impl {
             state = SectorNavigationState::Empty;
             stage = SectorNavigationBuildStage::None;
             ++buildRevision;
+            ++counters.completedBuilds;
+            FinishBuildTiming();
+            BumpDebugRevision();
             return true;
         }
 
@@ -792,7 +842,6 @@ struct SectorNavigationWorld::Impl {
             error = "Detour TileCache rejected calculated build capacities";
             return false;
         }
-        sourceHash = buildInput.sourceHash;
         state = SectorNavigationState::Building;
         stage = SectorNavigationBuildStage::RasterizingTiles;
         return true;
@@ -1150,8 +1199,7 @@ struct SectorNavigationWorld::Impl {
             }
         }
         RefreshChangedDebugTileChunks();
-        debugCache.navigationRevision = buildRevision + tileRevision;
-        debugCache.tileRevision = tileRevision;
+        BumpDebugRevision();
     }
 
     bool FinalizeBuild(std::string& error)
@@ -1342,10 +1390,10 @@ struct SectorNavigationWorld::Impl {
         doorLinksScratch.reserve(doorLinks.size());
         buildInput = {};
         tileCoordinates.clear();
-        tileCoordinates.shrink_to_fit();
         ++buildRevision;
-        debugCache.navigationRevision = buildRevision;
-        debugCache.tileRevision = tileRevision;
+        ++counters.completedBuilds;
+        FinishBuildTiming();
+        BumpDebugRevision();
         InitializeTileRevisions();
         RefreshDynamicObstacleDebugAndStatistics();
         state = statistics.navMeshPolygonCount > 0
@@ -1406,9 +1454,14 @@ bool SectorNavigationWorld::Initialize(
     impl->crowdStatistics = {};
     impl->sourceRevision = 0;
     impl->buildRevision = 0;
+    impl->tileRevision = 0;
+    impl->debugRevision = 0;
+    impl->debugCache.navigationRevision = 0;
     impl->agentGrowthWarned = false;
     impl->pathGrowthWarned = false;
     impl->obstacleGrowthWarned = false;
+    impl->diagnosticOverflowWarned = false;
+    impl->duplicateObstacleWarningReported = false;
     impl->stage = SectorNavigationBuildStage::None;
     impl->state = SectorNavigationState::Empty;
     return true;
@@ -1422,9 +1475,14 @@ void SectorNavigationWorld::Shutdown()
     impl->diagnostics.clear();
     impl->agentSlots.clear();
     impl->pathSlots.clear();
+    impl->counters = {};
+    impl->sourceRevision = 0;
+    impl->buildRevision = 0;
+    impl->tileRevision = 0;
+    impl->debugRevision = 0;
+    impl->debugCache.navigationRevision = 0;
     impl->stage = SectorNavigationBuildStage::None;
     impl->state = SectorNavigationState::Uninitialized;
-    ++impl->buildRevision;
 }
 
 void SectorNavigationWorld::ResetForRebuild()
@@ -1436,15 +1494,21 @@ void SectorNavigationWorld::ResetForRebuild()
     impl->state = SectorNavigationState::Empty;
     ++impl->sourceRevision;
     ++impl->buildRevision;
+    impl->BumpDebugRevision();
 }
 
 void SectorNavigationWorld::RequestRebuild()
 {
     if (!impl || impl->state == SectorNavigationState::Uninitialized) return;
     impl->InvalidateRecords();
+    const float peakBuildMilliseconds = impl->statistics.peakBuildMilliseconds;
+    impl->ReleaseNavigation();
+    impl->statistics.peakBuildMilliseconds = peakBuildMilliseconds;
     impl->stage = SectorNavigationBuildStage::WaitingForStaticCollision;
     impl->state = SectorNavigationState::Queued;
     ++impl->sourceRevision;
+    ++impl->counters.rebuildRequests;
+    impl->BumpDebugRevision();
 }
 
 void SectorNavigationWorld::MarkStale()
@@ -1462,6 +1526,7 @@ void SectorNavigationWorld::SetEmpty()
     impl->stage = SectorNavigationBuildStage::None;
     impl->state = SectorNavigationState::Empty;
     ++impl->buildRevision;
+    impl->BumpDebugRevision();
 }
 
 void SectorNavigationWorld::Fail(
@@ -1470,11 +1535,18 @@ void SectorNavigationWorld::Fail(
 {
     if (!impl || impl->state == SectorNavigationState::Uninitialized) return;
     impl->InvalidateRecords();
+    impl->FinishBuildTiming();
+    const SectorNavigationBuildStatistics failedStatistics = impl->statistics;
+    const uint64_t failedSourceHash = impl->sourceHash;
     impl->ReleaseNavigation();
+    impl->statistics = failedStatistics;
+    impl->sourceHash = failedSourceHash;
     impl->stage = stage;
     impl->state = SectorNavigationState::Failed;
     impl->Record(SectorNavigationDiagnosticSeverity::Error, stage, message);
     ++impl->buildRevision;
+    ++impl->counters.failedBuilds;
+    impl->BumpDebugRevision();
 }
 
 void SectorNavigationWorld::UpdateBuild(
@@ -1537,11 +1609,14 @@ void SectorNavigationWorld::UpdateDynamicObstacles(
         if (std::find(impl->seenObstacleIdsScratch.begin(),
                     impl->seenObstacleIdsScratch.end(), collider.placedObjectId)
                 != impl->seenObstacleIdsScratch.end()) {
-            impl->Record(SectorNavigationDiagnosticSeverity::Warning,
-                    SectorNavigationBuildStage::Complete,
-                    "Duplicate dynamic obstacle ID "
-                            + std::to_string(collider.placedObjectId)
-                            + " was ignored");
+            if (!impl->duplicateObstacleWarningReported) {
+                impl->duplicateObstacleWarningReported = true;
+                impl->Record(SectorNavigationDiagnosticSeverity::Warning,
+                        SectorNavigationBuildStage::Complete,
+                        "Duplicate dynamic obstacle ID "
+                                + std::to_string(collider.placedObjectId)
+                                + " was ignored; further duplicate warnings are suppressed");
+            }
             continue;
         }
         if (impl->seenObstacleIdsScratch.size()
@@ -2044,6 +2119,7 @@ bool SectorNavigationWorld::SetDoorLinkRuntimeState(
     if (dtStatusFailed(impl->navMesh->setPolyFlags(found->polygon, flags))) {
         return false;
     }
+    const bool changed = found->state != state || found->holderCount != holderCount;
     found->state = state;
     found->holderCount = holderCount;
     const auto debug = std::find_if(
@@ -2056,6 +2132,7 @@ bool SectorNavigationWorld::SetDoorLinkRuntimeState(
         debug->state = state;
         debug->holderCount = holderCount;
     }
+    if (changed) impl->BumpDebugRevision();
     return true;
 }
 

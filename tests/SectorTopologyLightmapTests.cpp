@@ -1351,6 +1351,12 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(markerMap) == hash,
           "hash excludes Level Markers because they do not affect baked geometry or lighting");
 
+    game::SectorTopologyMap navigationOnlyMap = base;
+    navigationOnlyMap.previewSettings.stepHeight += 0.15f;
+    navigationOnlyMap.lineDefs.front().flags.blocksPlayer = true;
+    Check(game::ComputeSectorLightmapSourceHash(navigationOnlyMap) == hash,
+          "lightmap hash is independent from navigation climb and player-blocking policy");
+
     game::SectorTopologyMap movedVertex = base;
     movedVertex.vertices[0].x += 1;
     Check(game::ComputeSectorLightmapSourceHash(movedVertex) != hash, "hash changes when vertex coordinate changes");

@@ -435,6 +435,9 @@ void InitializeNpcNavigationRuntime(
                 record.occupied = true;
                 runtime.records.push_back(std::move(record));
             });
+    if (runtime.collisionCylinders.capacity() < runtime.records.size()) {
+        runtime.collisionCylinders.reserve(runtime.records.size());
+    }
 }
 
 void ShutdownNpcNavigationRuntime(
@@ -615,7 +618,7 @@ NpcMoveStatus GetNpcMoveStatus(
     status.actualVelocity = record->actualVelocity;
     status.stallSeconds = record->stallSeconds;
     status.replanCount = record->replanCount;
-    status.message = record->diagnostic.data();
+    status.message = record->diagnostic;
     return status;
 }
 
@@ -906,7 +909,9 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const float maximumSpeed = record.gait == NpcMoveGait::Run
                 ? npc.runSpeed : npc.walkSpeed;
         Vector2 preferred{};
-        if (IsActive(record.phase) && !record.tileReplanPending
+        if (IsActive(record.phase)
+                && navigation.IsPathRecordValid(record.pathHandle)
+                && !record.tileReplanPending
                 && record.nextCorner < record.cornerCount
                 && record.doorPhase != NpcDoorTraversalPhase::WaitingForClearance) {
             const Vector3 target = record.doorPhase == NpcDoorTraversalPhase::Crossing
@@ -1004,6 +1009,19 @@ void UpdateNpcNavigationAndLocomotionSystem(
                     NpcMovePhase::Failed,
                     SectorNavigationQueryStatus::NavigationUnavailable,
                     "navigation became unavailable during movement");
+        }
+
+        if (IsActive(record.phase)
+                && !navigation.IsPathRecordValid(record.pathHandle)) {
+            npc.action = NpcAction::Idle;
+            SetTerminal(
+                    world,
+                    navigation,
+                    runtime,
+                    record,
+                    NpcMovePhase::Failed,
+                    SectorNavigationQueryStatus::NavigationUnavailable,
+                    "navigation was rebuilt during movement");
         }
 
         if (IsActive(record.phase)

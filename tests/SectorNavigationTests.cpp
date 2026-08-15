@@ -377,6 +377,67 @@ void FinishBuild(game::SectorNavigationWorld& world, const game::SectorTopologyM
     }
 }
 
+void TestHardenedLifecycleAndDiagnostics()
+{
+    game::SectorNavigationCapacitySettings capacities;
+    capacities.diagnosticCapacity = 2;
+    capacities.tileBuildBudgetPerUpdate = 1;
+    game::SectorNavigationWorld world;
+    Check(world.Initialize({}, capacities),
+          "hardened lifecycle fixture initializes");
+
+    const std::string oversized(
+            game::SectorNavigationMaximumDiagnosticMessageBytes + 80u, 'x');
+    world.Fail(game::SectorNavigationBuildStage::BuildingInput, oversized);
+    world.Fail(game::SectorNavigationBuildStage::RasterizingTiles, "second");
+    world.Fail(game::SectorNavigationBuildStage::BuildingDebugCache, "third");
+    Check(world.Diagnostics().size() == capacities.diagnosticCapacity
+                  && world.Diagnostics().front().message == "second"
+                  && world.Counters().truncatedDiagnostics == 1
+                  && world.Counters().droppedDiagnostics == 1,
+          "diagnostics truncate messages and retain only the configured newest entries");
+
+    const game::SectorTopologyMap map = MakeSquareMap(4096);
+    world.RequestRebuild();
+    const uint64_t clearedDebugRevision =
+            world.DebugCache().navigationRevision;
+    Check(world.State() == game::SectorNavigationState::Queued
+                  && world.DebugCache().walkableTriangles.empty(),
+          "a rebuild request immediately releases stale derived navigation data");
+    world.UpdateBuild(map, {}, 0);
+    Check(world.State() == game::SectorNavigationState::Building,
+          "a low-budget build exposes an interruptible building state");
+    world.RequestRebuild();
+    Check(world.State() == game::SectorNavigationState::Queued
+                  && world.DebugCache().navigationRevision > clearedDebugRevision,
+          "requesting rebuild during a partial build cancels it and advances debug revision");
+    FinishBuild(world, map);
+    Check(world.State() == game::SectorNavigationState::Ready
+                  && world.Counters().rebuildRequests == 2
+                  && world.Counters().completedBuilds == 1
+                  && world.BuildStatistics().lastBuildMilliseconds >= 0.0f,
+          "cancelled build recovers and reports deterministic lifecycle counters and timing");
+
+    const uint64_t readyDebugRevision =
+            world.DebugCache().navigationRevision;
+    world.MarkStale();
+    Check(world.State() == game::SectorNavigationState::Stale
+                  && !world.DebugCache().walkableTriangles.empty(),
+          "stale state remains diagnosable until an explicit rebuild is requested");
+    world.RequestRebuild();
+    Check(world.DebugCache().walkableTriangles.empty()
+                  && world.DebugCache().navigationRevision > readyDebugRevision,
+          "queued rebuild never exposes the previous mesh as current");
+    FinishBuild(world, map);
+    world.Shutdown();
+    Check(world.State() == game::SectorNavigationState::Uninitialized
+                  && world.Counters().rebuildRequests == 0
+                  && world.SourceRevision() == 0
+                  && world.BuildRevision() == 0
+                  && world.DebugCache().navigationRevision == 0,
+          "shutdown clears per-level counters and all public revisions");
+}
+
 void TestCrowdCapacityAndAgentReuse()
 {
     game::SectorNavigationCapacitySettings capacities;
@@ -482,7 +543,7 @@ void TestStaticBuildAndQueries()
     const size_t cachedTriangleCount = world.DebugCache().walkableTriangles.size();
     Check(world.DebugCache().navigationRevision == cachedRevision
                   && world.DebugCache().walkableTriangles.size() == cachedTriangleCount
-                  && world.BuildRevision() == cachedRevision,
+                  && world.BuildRevision() > 0,
           "steady debug-cache reads do not rebuild or extract Detour data");
 
     const game::SectorNavigationNearestPointResult nearest =
@@ -546,6 +607,31 @@ void TestBuildInputAndSourceHash()
                   map, colliders, game::BuildSectorNavigationSettingsForMap(map))
                   != game::ComputeSectorNavigationSourceHash(map, colliders, {}),
           "effective map step height changes the navigation source hash through climb settings");
+
+    game::SectorTopologyMap doorMap = MakeAdjacentMap();
+    game::SectorPlacedRuntimeObject door;
+    door.id = 77;
+    door.kind = "door";
+    door.door.anchor.lineDefId = 2;
+    door.door.anchor.frontSectorId = 10;
+    door.door.anchor.backSectorId = 20;
+    door.door.anchor.frontSideDefId = 2;
+    door.door.anchor.backSideDefId = 8;
+    doorMap.runtimeObjects.push_back(door);
+    const uint64_t doorBase = game::ComputeSectorNavigationSourceHash(
+            doorMap, colliders, {});
+    doorMap.runtimeObjects.front().door.modelAssetId = "visual-only.glb";
+    doorMap.runtimeObjects.front().door.textureId = "visual-only";
+    doorMap.runtimeObjects.front().door.openSoundId = "open";
+    doorMap.runtimeObjects.front().door.speed += 2.0f;
+    doorMap.runtimeObjects.front().door.openAngleDegrees += 15.0f;
+    Check(game::ComputeSectorNavigationSourceHash(doorMap, colliders, {})
+                  == doorBase,
+          "navigation source hash excludes door presentation, audio, and timing fields");
+    doorMap.runtimeObjects.front().door.thickness += 0.25f;
+    Check(game::ComputeSectorNavigationSourceHash(doorMap, colliders, {})
+                  != doorBase,
+          "navigation source hash includes door geometry that changes link staging");
 
     game::SectorNavigationBuildInput input;
     std::vector<std::string> warnings;
@@ -895,6 +981,39 @@ void TestStaticObstacleAndCapacityFixtures()
     Check(world.SourceHash() != game::ComputeSectorNavigationSourceHash(map, {}, {}),
           "resolved static OBB geometry participates in the navigation source hash");
 
+    game::SectorStaticModelCollider failedCollider = collider;
+    failedCollider.resolved = false;
+    failedCollider.failed = true;
+    game::SectorNavigationWorld assetTransition;
+    assetTransition.Initialize();
+    assetTransition.RequestRebuild();
+    for (int iteration = 0; iteration < 1000
+            && (assetTransition.State() == game::SectorNavigationState::Queued
+                || assetTransition.State() == game::SectorNavigationState::Building);
+            ++iteration) {
+        assetTransition.UpdateBuild(map, {failedCollider}, 0);
+    }
+    Check(assetTransition.State() == game::SectorNavigationState::Ready
+                  && assetTransition.DebugCache().staticObstacles.empty()
+                  && std::any_of(
+                          assetTransition.Diagnostics().begin(),
+                          assetTransition.Diagnostics().end(),
+                          [](const game::SectorNavigationDiagnostic& diagnostic) {
+                              return diagnostic.message.find("omitted")
+                                      != std::string::npos;
+                          }),
+          "terminal failed static collision is omitted with a diagnostic instead of blocking load");
+    assetTransition.RequestRebuild();
+    for (int iteration = 0; iteration < 1000
+            && (assetTransition.State() == game::SectorNavigationState::Queued
+                || assetTransition.State() == game::SectorNavigationState::Building);
+            ++iteration) {
+        assetTransition.UpdateBuild(map, colliders, 0);
+    }
+    Check(assetTransition.State() == game::SectorNavigationState::Ready
+                  && assetTransition.DebugCache().staticObstacles.size() == 1,
+          "a later successful collision asset rebuild installs the static obstacle");
+
     game::SectorNavigationCapacitySettings limited;
     limited.maximumTotalTiles = 32;
     game::SectorNavigationWorld oversized;
@@ -1105,6 +1224,7 @@ int main()
     TestDependencyAndCoordinates();
     TestSettingsAndStatusContracts();
     TestLifecycleAndHandles();
+    TestHardenedLifecycleAndDiagnostics();
     TestCrowdCapacityAndAgentReuse();
     TestLayerCompression();
     TestStaticBuildAndQueries();

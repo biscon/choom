@@ -1075,6 +1075,8 @@ Completion criteria:
 
 ### Slice 8 — Harden Lifecycle, Caching, Diagnostics, And Acceptance Coverage
 
+State: **Completed** (2026-08-15).
+
 Purpose: close cross-slice failure paths, decide nav-data persistence policy,
 and leave a maintainable/tested subsystem.
 
@@ -1538,3 +1540,56 @@ Append one entry per slice attempt using this shape:
 - Remaining debt/blocker: Slice 8 retains the planned lifecycle, persistence
   policy, and final acceptance hardening. Manual intersecting-route and doorway
   preview inspection remains user-owned acceptance.
+
+### 2026-08-15 — Slice 8 — Completed
+
+- Scope completed: audited and hardened level/preview rebuild and teardown,
+  NPC/path/Crowd/door-hold cleanup, same-frame rebuild interruption, static
+  collision readiness transitions, monotonic navigation debug revisions,
+  counter reset rules, retained build failure statistics, diagnostic bounding,
+  reserve reuse, and duplicate-warning suppression. The Nav tab now exposes
+  build timing, lifecycle revisions/counters, active versus allocated NPC
+  records, and retained/truncated/dropped diagnostics, and disables duplicate
+  rebuild requests while a build is queued or running.
+- Files/modules added or changed: navigation build input/types/world, NPC
+  runtime/navigation and script completion handling, scene/editor preview
+  orchestration and Nav diagnostics, generated-fixture navigation/runtime/
+  scripting/lightmap tests, `docs/architecture/npc_navigation.md`, the editor
+  and Lua/API documentation, and this plan.
+- Decisions or contract updates: navigation remains derived and uses
+  rebuild-on-explicit-load/preview-entry; no serialized Detour cache is added.
+  An explicit rebuild releases the previous query/debug mesh immediately and
+  invalidates all external handles. `NpcMoveStatus` carries a fixed-size
+  diagnostic buffer, navigation diagnostics retain a configured bounded
+  history with 512-byte messages, and shutdown resets per-level counters and
+  revisions. Navigation source hash version 2 includes only settings/topology/
+  collision/door data that changes build output and excludes door visual,
+  audio, and animation-timing fields.
+- Tests/checks: added repeated/cancelled/failed/recovered build lifecycle,
+  diagnostic truncation/drop, stale/queued debug-cache behavior, failed then
+  ready static collider, navigation hash inclusion/exclusion, lightmap-hash
+  independence, same-frame script rebuild interruption, and moving NPC
+  deletion while holding a door. `cmake --build cmake-build-debug -j2` passed;
+  all 26 CTest tests passed; focused ASan navigation/runtime-object tests
+  passed; `git diff --check` passed; diff/stat/status were reviewed. The
+  pre-existing Lua `tmpnam` linker warning remains.
+- Collision/sector lookup/physics impact: none. The existing topology collision
+  world, NPC/player cylinders, floor/sector lookup, door collision, camera, and
+  physics behavior are unchanged; this slice only hardens navigation-derived
+  handle and lifecycle behavior.
+- Topology cache invalidation impact: none. No authoring topology mutation path
+  changed. Nav rebuilds neither mark the document edited nor invalidate the 2D
+  topology render cache.
+- Lightmap/source-hash impact: the lightmap source hash implementation is
+  unchanged, with a regression test confirming that navigation-only step-height
+  and player-blocking changes do not affect it. The separate navigation source
+  hash was advanced to version 2 as described above.
+- Manual verification performed by user: none during implementation; no GUI or
+  xdotool test was run. The plan's final preview acceptance remains ready for
+  the user.
+- Remaining debt/blocker: no Slice 8 completion blocker. A focused combined
+  ASan/UBSan run found an existing 64-bit Detour `dtLink` alignment report in
+  vendored `DetourNavMesh.cpp`; the ASan-only run passes. Resolving or
+  suppressing that vendor/layout UBSan finding should be handled separately
+  from navigation behavior. Persisted nav caches and the deferred backlog above
+  remain intentionally out of scope.

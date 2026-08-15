@@ -390,6 +390,10 @@ bool BuildSectorNavigationBuildInput(
     outInput = {};
     outWarnings.clear();
     outError.clear();
+    const SectorNavigationSettings settings =
+            NormalizeSectorNavigationSettings(rawSettings);
+    outInput.sourceHash = ComputeSectorNavigationSourceHash(
+            map, resolvedStaticColliders, settings);
     if (map.sectors.empty()) return true;
 
     const auto issues = ValidateSectorTopologyMap(map);
@@ -402,7 +406,6 @@ bool BuildSectorNavigationBuildInput(
         return false;
     }
 
-    const SectorNavigationSettings settings = NormalizeSectorNavigationSettings(rawSettings);
     const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(map);
     std::unordered_map<int, SectorTopologyLoopSet> loopsBySectorId;
     loopsBySectorId.reserve(map.sectors.size());
@@ -608,8 +611,6 @@ bool BuildSectorNavigationBuildInput(
     maximum.y += settings.agentHeight + settings.cellHeight;
     maximum.z += padding;
     outInput.bounds = {minimum, maximum};
-    outInput.sourceHash = ComputeSectorNavigationSourceHash(
-            map, resolvedStaticColliders, settings);
     return true;
 }
 
@@ -619,7 +620,7 @@ uint64_t ComputeSectorNavigationSourceHash(
         const SectorNavigationSettings& rawSettings)
 {
     Fnv64 hash;
-    hash.String("SectorNavigationSourceV1");
+    hash.String("SectorNavigationSourceV2");
     const SectorNavigationSettings settings = NormalizeSectorNavigationSettings(rawSettings);
     HashSettings(hash, settings);
 
@@ -676,17 +677,9 @@ uint64_t ComputeSectorNavigationSourceHash(
                 hash.Float(door.openBottom); hash.Float(door.openTop);
                 hash.Float(door.width); hash.Float(door.height);
                 hash.Float(object->door.thickness);
-                hash.Float(object->door.normalOffset);
                 hash.Float(object->door.heightOffsetWorld);
-                hash.Pod(static_cast<uint8_t>(object->door.visual));
-                hash.String(object->door.modelAssetId);
-                hash.Pod(static_cast<uint8_t>(object->door.modelFit));
-                hash.Float(object->door.modelScale);
                 hash.Pod(static_cast<uint8_t>(object->door.motion));
-                hash.Pod(static_cast<uint8_t>(object->door.hinge));
                 hash.Pod(static_cast<uint8_t>(object->door.swingSide));
-                hash.Float(object->door.openAngleDegrees);
-                hash.Float(object->door.openDistance);
             }
         }
     }

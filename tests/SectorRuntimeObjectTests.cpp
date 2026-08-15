@@ -3439,6 +3439,52 @@ void TestNpcDoorTraversalStagesWaitsCrossesAndReleases()
     } else {
         Check(false, "return move for door-hold cancellation fixture is accepted");
     }
+
+    const game::NpcMoveRequestResult deletionRequest = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "door_walker",
+            {1.5f, 0.5f});
+    if (deletionRequest.accepted) {
+        game::NpcNavigationRecord& record = npcNavigation.records[0];
+        record.doorId = 77;
+        record.doorPhase = game::NpcDoorTraversalPhase::WaitingForClearance;
+        record.holdsDoor = true;
+        world.ForEach<game::SectorDoor, game::SectorDoorOpenControl>(
+                [](engine::Entity, game::SectorDoor& door,
+                        game::SectorDoorOpenControl& control) {
+                    if (door.placedObjectId == 77) {
+                        control.navigationHolderCount = 1;
+                    }
+                });
+        world.DestroyLater(npc);
+        world.FlushDestroyedEntities();
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world,
+                assets,
+                navigation,
+                npcNavigation,
+                definitions,
+                collisionWorld,
+                runtimeObjects.dynamicDoorColliders,
+                staticColliders,
+                probes,
+                map,
+                0.016f);
+        uint32_t holdersAfterDeletion = 0;
+        world.ForEach<game::SectorDoorOpenControl>(
+                [&holdersAfterDeletion](engine::Entity,
+                        game::SectorDoorOpenControl& control) {
+                    holdersAfterDeletion += control.navigationHolderCount;
+                });
+        Check(!npcNavigation.records[0].occupied
+                      && holdersAfterDeletion == 0,
+              "deleting a moving NPC releases its path, Crowd agent, and door hold");
+    } else {
+        Check(false, "door-hold deletion fixture move is accepted");
+    }
 }
 
 void TestCrowdQueuesNpcAgentsThroughDoor()
@@ -3556,10 +3602,10 @@ void TestCrowdQueuesNpcAgentsThroughDoor()
                 observedQueue ? 1 : 0,
                 game::NpcMovePhaseName(queueA.phase),
                 game::NpcDoorTraversalPhaseName(npcNavigation.records[0].doorPhase),
-                queueA.message.c_str(),
+                queueA.message.data(),
                 game::NpcMovePhaseName(queueB.phase),
                 game::NpcDoorTraversalPhaseName(npcNavigation.records[1].doorPhase),
-                queueB.message.c_str());
+                queueB.message.data());
     }
     Check(maximumCrossingCount == 1 && observedQueue
                   && observedCrossingAgents == 3u,

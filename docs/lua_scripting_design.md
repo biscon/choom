@@ -1026,8 +1026,10 @@ arrives, fails, or is cancelled.
 Requests fail clearly for invalid IDs or gaits, non-finite/off-mesh targets,
 unavailable or rebuilding navigation, partial/no paths, capacity exhaustion,
 stalls, NPC removal, and map teardown. The navigation mesh must already be
-ready when a request begins. Door traversal links, dynamic TileCache obstacles,
-and Crowd avoidance are intentionally deferred to later navigation slices.
+ready when a request begins. A rebuild invalidates active path and Crowd agent
+handles, so affected script operations fail instead of continuing on stale
+derived data. Door traversal links, dynamic TileCache obstacles, and bounded
+Crowd avoidance are part of the runtime navigation service.
 
 During gameplay, F8 toggles the read-only Nav diagnostics and cached world
 path/agent overlay. This is useful with `startMoveNpc` commands issued from the

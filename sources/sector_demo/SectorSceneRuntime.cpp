@@ -110,8 +110,10 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
             context.assets,
             runtimeObjects,
             map);
-    navigation.RequestRebuild();
-    InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    if (navigation.State() != SectorNavigationState::Uninitialized) {
+        navigation.RequestRebuild();
+        InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    }
     BindRuntimeObjectAudio(context.world);
 }
 

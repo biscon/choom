@@ -558,6 +558,7 @@ end
                 fixture.host,
                 fixture.files));
         fixture.navigation.RequestRebuild();
+        FinishNavigationBuild(fixture.navigation, fixture.map);
         fixture.Update(0.016f);
         assert(engine::ScriptSystemCallForegroundHook(
                 fixture.runtime, "inspectMovement").result
