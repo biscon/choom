@@ -300,7 +300,8 @@ void SectorGameSession::Update(
             false,
             input,
             previousVisualEyeY,
-            dt);
+            dt,
+            &scene.NpcNavigation().collisionCylinders);
     UpdateSectorScriptTriggers(
             scriptHost,
             Vector2{

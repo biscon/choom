@@ -516,6 +516,7 @@ if(BUILD_TESTING)
             sources/game/navigation/SectorNavigationTypes.cpp
             sources/game/navigation/SectorNavigationWorld.cpp
             sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/NpcCollision.cpp
             sources/game/npc/NpcNavigationSystem.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/engine/scripting/ScriptSystem.cpp

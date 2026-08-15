@@ -6,6 +6,7 @@
 #include "DetourNavMesh.h"
 #include "DetourNavMeshBuilder.h"
 #include "DetourNavMeshQuery.h"
+#include "DetourCrowd.h"
 #include "DetourStatus.h"
 #include "DetourTileCache.h"
 #include "DetourTileCacheBuilder.h"
@@ -35,6 +36,8 @@ uint32_t NextGeneration(uint32_t generation)
 
 struct RecordSlot {
     uint32_t generation = 1;
+    int crowdIndex = -1;
+    bool crowdWarningReported = false;
     bool occupied = false;
 };
 
@@ -283,11 +286,13 @@ struct SectorNavigationWorld::Impl {
     SectorNavigationSettings settings;
     SectorNavigationCapacitySettings capacities;
     SectorNavigationDynamicObstacleSettings dynamicObstacleSettings;
+    SectorNavigationCrowdSettings crowdSettings;
     SectorNavigationQueryFilterPolicy filterPolicy;
     SectorNavigationState state = SectorNavigationState::Uninitialized;
     SectorNavigationBuildStage stage = SectorNavigationBuildStage::None;
     SectorNavigationCounters counters;
     SectorNavigationDynamicObstacleStatistics dynamicObstacleStatistics;
+    SectorNavigationCrowdStatistics crowdStatistics;
     SectorNavigationBuildStatistics statistics;
     SectorNavigationDebugCache debugCache;
     std::vector<SectorNavigationDiagnostic> diagnostics;
@@ -318,6 +323,7 @@ struct SectorNavigationWorld::Impl {
     dtNavMesh* navMesh = nullptr;
     dtTileCache* tileCache = nullptr;
     dtNavMeshQuery* query = nullptr;
+    dtCrowd* crowd = nullptr;
     NavigationTileCacheAllocator tileAllocator;
     NavigationTileCacheCompressor tileCompressor;
     NavigationTileCacheMeshProcess meshProcess;
@@ -326,9 +332,11 @@ struct SectorNavigationWorld::Impl {
 
     void ReleaseNavigation()
     {
+        if (crowd != nullptr) dtFreeCrowd(crowd);
         if (query != nullptr) dtFreeNavMeshQuery(query);
         if (tileCache != nullptr) dtFreeTileCache(tileCache);
         if (navMesh != nullptr) dtFreeNavMesh(navMesh);
+        crowd = nullptr;
         query = nullptr;
         tileCache = nullptr;
         navMesh = nullptr;
@@ -351,6 +359,7 @@ struct SectorNavigationWorld::Impl {
         sourceHash = 0;
         tileRevision = 0;
         dynamicObstacleStatistics = {};
+        crowdStatistics = {};
         tileCacheUpToDate = true;
     }
 
@@ -395,6 +404,8 @@ struct SectorNavigationWorld::Impl {
             RecordSlot& slot = slots[index];
             if (!slot.occupied) {
                 slot.occupied = true;
+                slot.crowdIndex = -1;
+                slot.crowdWarningReported = false;
                 return Handle{index, slot.generation};
             }
         }
@@ -427,6 +438,8 @@ struct SectorNavigationWorld::Impl {
         RecordSlot& slot = slots[handle.index];
         if (!slot.occupied || slot.generation != handle.generation) return false;
         slot.occupied = false;
+        slot.crowdIndex = -1;
+        slot.crowdWarningReported = false;
         slot.generation = NextGeneration(slot.generation);
         return true;
     }
@@ -434,6 +447,10 @@ struct SectorNavigationWorld::Impl {
     void InvalidateRecords()
     {
         for (RecordSlot& slot : agentSlots) {
+            if (crowd != nullptr && slot.crowdIndex >= 0) {
+                crowd->removeAgent(slot.crowdIndex);
+            }
+            slot.crowdIndex = -1;
             slot.occupied = false;
             slot.generation = NextGeneration(slot.generation);
         }
@@ -1145,6 +1162,33 @@ struct SectorNavigationWorld::Impl {
             error = "Could not initialize bounded Detour navigation queries";
             return false;
         }
+        crowd = dtAllocCrowd();
+        if (crowd == nullptr
+                || !crowd->init(
+                        static_cast<int>(capacities.agentCapacity),
+                        settings.agentRadius,
+                        navMesh)) {
+            error = "Could not initialize bounded DetourCrowd storage";
+            return false;
+        }
+        dtQueryFilter* crowdFilter = crowd->getEditableFilter(0);
+        if (crowdFilter == nullptr) {
+            error = "Could not initialize the DetourCrowd query filter";
+            return false;
+        }
+        crowdFilter->setIncludeFlags(SectorNavigationPolyFlag_Walk);
+        crowdFilter->setExcludeFlags(
+                SectorNavigationPolyFlag_Door
+                | SectorNavigationPolyFlag_Disabled);
+        dtObstacleAvoidanceParams avoidance =
+                *crowd->getObstacleAvoidanceParams(0);
+        avoidance.velBias = 0.5f;
+        avoidance.adaptiveDivs = 7;
+        avoidance.adaptiveRings = 3;
+        avoidance.adaptiveDepth = 3;
+        crowd->setObstacleAvoidanceParams(
+                static_cast<int>(crowdSettings.avoidanceQuality),
+                &avoidance);
         stage = SectorNavigationBuildStage::BuildingDebugCache;
         debugCache = {};
         debugCache.dynamicObstacles.reserve(static_cast<size_t>(
@@ -1325,7 +1369,8 @@ SectorNavigationWorld& SectorNavigationWorld::operator=(SectorNavigationWorld&&)
 bool SectorNavigationWorld::Initialize(
         SectorNavigationSettings settings,
         SectorNavigationCapacitySettings capacities,
-        SectorNavigationDynamicObstacleSettings dynamicObstacleSettings)
+        SectorNavigationDynamicObstacleSettings dynamicObstacleSettings,
+        SectorNavigationCrowdSettings crowdSettings)
 {
     if (!impl) impl = std::make_unique<Impl>();
     impl->ReleaseNavigation();
@@ -1334,6 +1379,7 @@ bool SectorNavigationWorld::Initialize(
     impl->dynamicObstacleSettings =
             NormalizeSectorNavigationDynamicObstacleSettings(
                     dynamicObstacleSettings);
+    impl->crowdSettings = NormalizeSectorNavigationCrowdSettings(crowdSettings);
     impl->diagnostics.clear();
     impl->diagnostics.reserve(impl->capacities.diagnosticCapacity);
     impl->agentSlots.clear();
@@ -1357,6 +1403,7 @@ bool SectorNavigationWorld::Initialize(
             impl->capacities.dynamicObstacleCapacity));
     impl->debugCache.recentlyUpdatedTiles.reserve(32);
     impl->counters = {};
+    impl->crowdStatistics = {};
     impl->sourceRevision = 0;
     impl->buildRevision = 0;
     impl->agentGrowthWarned = false;
@@ -2055,12 +2102,194 @@ bool SectorNavigationWorld::IsPathRecordValid(
 
 bool SectorNavigationWorld::ReleaseAgentRecord(SectorNavigationAgentHandle handle)
 {
-    return impl && impl->Release(impl->agentSlots, handle);
+    if (!impl || !impl->IsValid(impl->agentSlots, handle)) return false;
+    RecordSlot& slot = impl->agentSlots[handle.index];
+    if (impl->crowd != nullptr && slot.crowdIndex >= 0) {
+        impl->crowd->removeAgent(slot.crowdIndex);
+    }
+    return impl->Release(impl->agentSlots, handle);
 }
 
 bool SectorNavigationWorld::ReleasePathRecord(SectorNavigationPathHandle handle)
 {
     return impl && impl->Release(impl->pathSlots, handle);
+}
+
+bool SectorNavigationWorld::SynchronizeCrowdAgent(
+        SectorNavigationAgentHandle handle,
+        Vector3 physicalPosition,
+        Vector2 actualVelocity,
+        float maximumSpeed,
+        bool participate)
+{
+    if (!impl || impl->state != SectorNavigationState::Ready
+            || impl->crowd == nullptr
+            || !impl->IsValid(impl->agentSlots, handle)) {
+        return false;
+    }
+    RecordSlot& slot = impl->agentSlots[handle.index];
+    if (!participate) {
+        if (slot.crowdIndex >= 0) impl->crowd->removeAgent(slot.crowdIndex);
+        slot.crowdIndex = -1;
+        return true;
+    }
+    if (!std::isfinite(physicalPosition.x)
+            || !std::isfinite(physicalPosition.y)
+            || !std::isfinite(physicalPosition.z)
+            || !std::isfinite(actualVelocity.x)
+            || !std::isfinite(actualVelocity.y)) {
+        return false;
+    }
+    maximumSpeed = std::clamp(
+            std::isfinite(maximumSpeed) ? maximumSpeed : 0.0f,
+            0.0f, 1000.0f);
+    bool reattach = slot.crowdIndex < 0;
+    if (!reattach) {
+        const dtCrowdAgent* agent = impl->crowd->getAgent(slot.crowdIndex);
+        if (agent == nullptr || !agent->active) {
+            reattach = true;
+        } else {
+            const float dx = agent->npos[0] - physicalPosition.x;
+            const float dz = agent->npos[2] - physicalPosition.z;
+            const float threshold = impl->settings.agentRadius
+                    * impl->crowdSettings.reconciliationDistanceRadiusScale;
+            if (dx * dx + dz * dz > threshold * threshold) {
+                impl->crowd->removeAgent(slot.crowdIndex);
+                slot.crowdIndex = -1;
+                reattach = true;
+                ++impl->crowdStatistics.reconciliations;
+            }
+        }
+    }
+    dtCrowdAgentParams parameters{};
+    parameters.radius = impl->settings.agentRadius;
+    parameters.height = impl->settings.agentHeight;
+    parameters.maxAcceleration = impl->crowdSettings.maximumAcceleration;
+    parameters.maxSpeed = maximumSpeed;
+    parameters.collisionQueryRange = impl->settings.agentRadius
+            * impl->crowdSettings.collisionQueryRangeRadiusScale;
+    parameters.pathOptimizationRange = impl->settings.agentRadius
+            * impl->crowdSettings.pathOptimizationRangeRadiusScale;
+    parameters.separationWeight = impl->crowdSettings.separationWeight;
+    parameters.updateFlags = DT_CROWD_OBSTACLE_AVOIDANCE
+            | DT_CROWD_SEPARATION;
+    parameters.obstacleAvoidanceType = static_cast<unsigned char>(
+            impl->crowdSettings.avoidanceQuality);
+    parameters.queryFilterType = 0;
+    if (reattach) {
+        const float position[3]{
+                physicalPosition.x, physicalPosition.y, physicalPosition.z};
+        slot.crowdIndex = impl->crowd->addAgent(position, &parameters);
+        const dtCrowdAgent* attached = slot.crowdIndex >= 0
+                ? impl->crowd->getAgent(slot.crowdIndex) : nullptr;
+        if (slot.crowdIndex < 0 || attached == nullptr
+                || attached->state == DT_CROWDAGENT_STATE_INVALID) {
+            if (slot.crowdIndex >= 0) {
+                impl->crowd->removeAgent(slot.crowdIndex);
+                slot.crowdIndex = -1;
+            }
+            if (!slot.crowdWarningReported) {
+                slot.crowdWarningReported = true;
+                ++impl->crowdStatistics.attachmentFailures;
+                ++impl->crowdStatistics.capacityWarnings;
+                ++impl->counters.capacityWarnings;
+                impl->Record(
+                        SectorNavigationDiagnosticSeverity::Warning,
+                        SectorNavigationBuildStage::Complete,
+                        "Crowd agent could not attach within fixed capacity or navigation projection; collision-only steering fallback remains active");
+            }
+            return false;
+        }
+        slot.crowdWarningReported = false;
+    } else {
+        impl->crowd->updateAgentParameters(slot.crowdIndex, &parameters);
+    }
+    dtCrowdAgent* agent = impl->crowd->getEditableAgent(slot.crowdIndex);
+    if (agent != nullptr) {
+        agent->vel[0] = actualVelocity.x;
+        agent->vel[1] = 0.0f;
+        agent->vel[2] = actualVelocity.y;
+    }
+    return true;
+}
+
+bool SectorNavigationWorld::SetCrowdAgentDesiredVelocity(
+        SectorNavigationAgentHandle handle,
+        Vector2 desiredVelocity)
+{
+    if (!impl || impl->crowd == nullptr
+            || !impl->IsValid(impl->agentSlots, handle)) {
+        return false;
+    }
+    const RecordSlot& slot = impl->agentSlots[handle.index];
+    if (slot.crowdIndex < 0
+            || !std::isfinite(desiredVelocity.x)
+            || !std::isfinite(desiredVelocity.y)) {
+        return false;
+    }
+    const float velocity[3]{desiredVelocity.x, 0.0f, desiredVelocity.y};
+    return impl->crowd->requestMoveVelocity(slot.crowdIndex, velocity);
+}
+
+void SectorNavigationWorld::UpdateCrowd(float rawDt)
+{
+    if (!impl || impl->state != SectorNavigationState::Ready
+            || impl->crowd == nullptr) {
+        return;
+    }
+    const auto started = std::chrono::steady_clock::now();
+    const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+    const float simulated = std::min(
+            dt,
+            impl->crowdSettings.maximumStepSeconds
+                    * static_cast<float>(impl->crowdSettings.maximumSubsteps));
+    const int substeps = simulated > 0.0f
+            ? std::clamp(
+                    static_cast<int>(std::ceil(
+                            simulated / impl->crowdSettings.maximumStepSeconds)),
+                    1,
+                    impl->crowdSettings.maximumSubsteps)
+            : 0;
+    const float step = substeps > 0
+            ? simulated / static_cast<float>(substeps) : 0.0f;
+    for (int index = 0; index < substeps; ++index) {
+        impl->crowd->update(step, nullptr);
+    }
+    impl->crowdStatistics.activeAgentCount = 0;
+    for (const RecordSlot& slot : impl->agentSlots) {
+        if (!slot.occupied || slot.crowdIndex < 0) continue;
+        const dtCrowdAgent* agent = impl->crowd->getAgent(slot.crowdIndex);
+        if (agent != nullptr && agent->active) {
+            ++impl->crowdStatistics.activeAgentCount;
+        }
+    }
+    impl->crowdStatistics.lastVelocitySampleCount =
+            impl->crowd->getVelocitySampleCount();
+    const float elapsed = std::chrono::duration<float, std::milli>(
+            std::chrono::steady_clock::now() - started).count();
+    impl->crowdStatistics.lastUpdateMilliseconds = elapsed;
+    impl->crowdStatistics.peakUpdateMilliseconds = std::max(
+            impl->crowdStatistics.peakUpdateMilliseconds, elapsed);
+}
+
+SectorNavigationCrowdAgentState SectorNavigationWorld::GetCrowdAgentState(
+        SectorNavigationAgentHandle handle) const
+{
+    SectorNavigationCrowdAgentState result;
+    if (!impl || impl->crowd == nullptr
+            || !impl->IsValid(impl->agentSlots, handle)) {
+        return result;
+    }
+    const RecordSlot& slot = impl->agentSlots[handle.index];
+    if (slot.crowdIndex < 0) return result;
+    const dtCrowdAgent* agent = impl->crowd->getAgent(slot.crowdIndex);
+    if (agent == nullptr || !agent->active) return result;
+    result.attached = true;
+    result.steeredVelocity = {agent->vel[0], agent->vel[2]};
+    result.neighborCount = agent->nneis;
+    result.nearestNeighborDistance = agent->nneis > 0
+            ? agent->neis[0].dist : 0.0f;
+    return result;
 }
 
 SectorNavigationState SectorNavigationWorld::State() const
@@ -2097,6 +2326,18 @@ SectorNavigationWorld::DynamicObstacleStatistics() const
 {
     static const SectorNavigationDynamicObstacleStatistics empty;
     return impl ? impl->dynamicObstacleStatistics : empty;
+}
+
+const SectorNavigationCrowdSettings& SectorNavigationWorld::CrowdSettings() const
+{
+    static const SectorNavigationCrowdSettings defaults;
+    return impl ? impl->crowdSettings : defaults;
+}
+
+const SectorNavigationCrowdStatistics& SectorNavigationWorld::CrowdStatistics() const
+{
+    static const SectorNavigationCrowdStatistics empty;
+    return impl ? impl->crowdStatistics : empty;
 }
 
 const SectorNavigationCounters& SectorNavigationWorld::Counters() const

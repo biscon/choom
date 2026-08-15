@@ -1195,6 +1195,24 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         static_cast<unsigned long long>(obstacleStats.updatedTiles),
                         obstacleStats.lastUpdateMilliseconds,
                         obstacleStats.peakUpdateMilliseconds));
+                const SectorNavigationCrowdStatistics& crowdStats =
+                        context.navigation.CrowdStatistics();
+                addKeyValue("Crowd", TextFormat(
+                        "%zu / %zu active | %s avoidance | %d velocity samples",
+                        crowdStats.activeAgentCount,
+                        context.navigation.Capacities().agentCapacity,
+                        SectorNavigationAvoidanceQualityName(
+                                context.navigation.CrowdSettings()
+                                        .avoidanceQuality),
+                        crowdStats.lastVelocitySampleCount));
+                addKeyValue("Crowd updates", TextFormat(
+                        "%llu sync | %llu failures | %.3f / %.3f ms last/peak",
+                        static_cast<unsigned long long>(
+                                crowdStats.reconciliations),
+                        static_cast<unsigned long long>(
+                                crowdStats.attachmentFailures),
+                        crowdStats.lastUpdateMilliseconds,
+                        crowdStats.peakUpdateMilliseconds));
                 size_t shownObstacles = 0;
                 for (const SectorNavigationDebugDynamicObstacle& obstacle :
                         context.navigation.DebugCache().dynamicObstacles) {
@@ -1290,10 +1308,18 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             SectorNavigationQueryStatusName(
                                     selectedAgent->lastQueryStatus)));
                     addKeyValue("motion", TextFormat(
-                            "desired %.2f | actual %.2f | stall %.2fs | replans %u",
+                            "preferred %.2f | steered %.2f | actual %.2f | stall %.2fs",
+                            Vector2Length(selectedAgent->preferredVelocity),
                             Vector2Length(selectedAgent->desiredVelocity),
                             Vector2Length(selectedAgent->actualVelocity),
-                            selectedAgent->stallSeconds,
+                            selectedAgent->stallSeconds));
+                    addKeyValue("Crowd agent", TextFormat(
+                            "%s | %d neighbors | nearest %.2f | player avoid %s | %u replans",
+                            selectedAgent->crowdAttached ? "attached" : "fallback",
+                            selectedAgent->crowdNeighborCount,
+                            selectedAgent->crowdNearestNeighborDistance,
+                            selectedAgent->playerAvoidanceActive
+                                    ? "active" : "off",
                             selectedAgent->replanCount));
                     addKeyValue("physical/visual Y", TextFormat(
                             "%.3f / %.3f | %s",
@@ -1309,7 +1335,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             selectedAgent->doorWaitSeconds,
                             selectedAgent->holdsDoor ? "holding" : "not holding"));
                 }
-                addWrappedLine("Dynamic prop TileCache obstacles and door links are live; Crowd and query probes remain assigned to later navigation slices.");
+                addWrappedLine("Crowd handles NPC-to-NPC avoidance. Friendly NPCs additionally avoid the player; hostile NPCs approach until solid contact.");
                 break;
             }
             case PreviewDebugOverlayTab::Controls:

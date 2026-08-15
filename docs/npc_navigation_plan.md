@@ -51,7 +51,7 @@ When executing this plan:
 | 4 | Expose scripted NPC movement early | Completed | 2026-08-14 |
 | 5 | Add door-aware traversal and door arbitration | Completed | 2026-08-15 |
 | 6 | Add dynamic obstacle updates with DetourTileCache | Completed | 2026-08-15 |
-| 7 | Add local avoidance with DetourCrowd | Not Started | - |
+| 7 | Add local avoidance with DetourCrowd | Completed | 2026-08-15 |
 | 8 | Harden lifecycle, caching, diagnostics, and acceptance coverage | Not Started | - |
 
 ## Goal And Acceptance Criteria
@@ -1026,22 +1026,30 @@ Prerequisite:
 
 Tasks:
 
-1. Own/configure `dtCrowd` in `SectorNavigationWorld` with pre-reserved maximum
+1. **Completed 2026-08-15:** own/configure `dtCrowd` in `SectorNavigationWorld` with pre-reserved maximum
    agents and explicit avoidance parameters.
-2. Map NPC navigation records to stable Crowd agent handles without storing raw
+2. **Completed 2026-08-15:** map NPC navigation records to stable Crowd agent handles without storing raw
    Crowd pointers in ECS components.
-3. Feed shared backend targets/corridors to Crowd and use desired velocity as
-   locomotion input; authoritative sector/door/prop collision still produces
-   actual displacement.
-4. Reconcile actual position/velocity back into agent state and retain bounded
+3. **Completed 2026-08-15:** feed the shared backend's bounded current-corner preferred velocity to
+   Crowd and use its steered velocity as locomotion input; authoritative
+   sector/door/prop/character collision still produces actual displacement.
+   Velocity-request mode deliberately retains the existing tested Detour path,
+   typed-door, and fixed-corner backend instead of creating a second Crowd-owned
+   corridor that could cross door links outside the traversal state machine.
+4. **Completed 2026-08-15:** reconcile actual position/velocity back into agent state and retain bounded
    stall/replan recovery.
-5. Keep NPCs out of TileCache obstacle registration. Agent-agent separation is
+5. **Completed 2026-08-15:** keep NPCs out of TileCache obstacle registration. Agent-agent separation is
    a local-avoidance concern.
-6. Preserve scripted movement authority, completion, and cancellation semantics.
-7. Tune/diagnose narrow doorway queuing without allowing agents to bypass the
+6. **Completed 2026-08-15:** preserve scripted movement authority, completion, and cancellation semantics.
+7. **Completed 2026-08-15:** tune/diagnose narrow doorway queuing without allowing agents to bypass the
    door hold/traversal state machine.
-8. Add Crowd neighbor, desired velocity, avoidance-quality, active-agent,
+8. **Completed 2026-08-15:** add Crowd neighbor, desired velocity, avoidance-quality, active-agent,
    capacity, and selected-agent detail to the Nav tab.
+9. **Completed 2026-08-15 by requested extension:** add solid swept-cylinder
+   player/NPC and NPC/NPC collision in game and editor gameplay preview. This is
+   non-pushing collision. Friendly NPCs predictively steer around the player;
+   hostile NPCs intentionally do not, so they can approach to physical contact.
+   All NPC factions continue to avoid one another through Crowd.
 
 Tests:
 
@@ -1475,3 +1483,58 @@ Append one entry per slice attempt using this shape:
 - Manual verification performed by user: none; no GUI/xdotool test was run.
 - Remaining debt/blocker: Slice 7 owns DetourCrowd/local avoidance; Slice 8
   owns final lifecycle, persistence-policy, and acceptance hardening.
+
+### 2026-08-15 — Slice 7 — Completed
+
+- Scope completed: fixed-capacity `dtCrowd` ownership inside
+  `SectorNavigationWorld`; stable record-to-Crowd mapping; high-quality obstacle
+  avoidance and separation settings; bounded substeps; physical-position and
+  actual-velocity reconciliation; idle-agent participation; preferred,
+  steered, actual, neighbor, capacity, timing, and attachment diagnostics; and
+  exclusive typed-door crossing so constrained routes queue without bypassing
+  the existing hold/wait/cross state machine.
+- Requested collision extension completed: reusable swept vertical-cylinder
+  collision now makes NPCs solid to the player and one another without pushing
+  the blocking character. It is active in the game and editor gameplay preview.
+  Friendly NPCs receive a deterministic predictive player-avoidance adjustment
+  before Crowd steering; hostile NPCs skip that adjustment and can approach the
+  player until solid contact. Both factions remain Crowd neighbors and steer
+  around other NPCs.
+- Files/modules added or changed: added focused `NpcCollision` files; extended
+  navigation types/world/debug drawing, NPC runtime/navigation, scene/game/editor
+  gameplay orchestration and diagnostics, CMake, generated-fixture tests, and
+  this plan. No vendor Recast/Detour source was modified.
+- Decisions or contract updates: Crowd uses velocity requests derived from the
+  tested backend's current bounded corner rather than owning a parallel target
+  corridor. This preserves existing path records, scripted request authority,
+  physical-arrival completion, typed door links, and cancellation behavior.
+  Door-crossing agents temporarily detach from Crowd and use the explicit door
+  landing; only one waiting agent enters a given door crossing at a time, with
+  distance and stable placed-object ID as deterministic arbitration. A nearby
+  agent no longer exempts zero forward progress from bounded stall recovery.
+- Tests/checks: added Crowd settings/capacity/removal/reuse coverage; swept
+  cylinder contact, no-push, and vertical-overlap coverage; friendly versus
+  hostile player behavior; head-on, crossing, and stationary-agent avoidance;
+  sequential multi-NPC door queuing; high-refresh acceleration; and retained
+  physical-arrival and collision/replan tests. `cmake --build
+  cmake-build-debug -j2` passed; all 26 CTest tests passed; `git diff --check`
+  passed; diff/stat/status were reviewed. The pre-existing Lua `tmpnam` linker
+  warning remains.
+- Collision/sector lookup/physics impact: horizontal gameplay collision changed.
+  Player motion now resolves against every live NPC cylinder, and NPC motion
+  resolves against other live NPCs and the current player cylinder. Contacts
+  slide or stop and never displace the blocker. Existing topology, dynamic-door,
+  and static-prop collision remains authoritative; NPC floor grounding and
+  sector membership still use the existing paths. Vertical physics, player
+  sector lookup, camera/headbob/landing presentation, and freefly behavior are
+  otherwise unchanged.
+- Topology cache invalidation impact: none. No topology or authoring mutation
+  path changed, so the 2D topology render cache is not invalidated. Crowd and
+  character cylinders are pre-reserved runtime-derived state.
+- Lightmap/source-hash impact: none. Lightmap generation/source hashing and the
+  static navigation source hash are unchanged; live Crowd state, character
+  collision cylinders, faction steering, and physical positions are excluded.
+- Manual verification performed by user: none; no GUI/xdotool test was run.
+- Remaining debt/blocker: Slice 8 retains the planned lifecycle, persistence
+  policy, and final acceptance hardening. Manual intersecting-route and doorway
+  preview inspection remains user-owned acceptance.

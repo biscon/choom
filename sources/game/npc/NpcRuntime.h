@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game/npc/NpcDefinitions.h"
+#include "game/npc/NpcCollision.h"
 #include "engine/ecs/Entity.h"
 #include "game/navigation/SectorNavigationTypes.h"
 
@@ -89,7 +90,12 @@ struct NpcNavigationRecord {
     size_t cornerCount = 0;
     size_t nextCorner = 0;
     Vector2 desiredVelocity = {};
+    Vector2 preferredVelocity = {};
     Vector2 actualVelocity = {};
+    int crowdNeighborCount = 0;
+    float crowdNearestNeighborDistance = 0.0f;
+    bool crowdAttached = false;
+    bool playerAvoidanceActive = false;
     Vector3 physicalPosition = {};
     Vector3 visualPosition = {};
     float stallSeconds = 0.0f;
@@ -120,6 +126,7 @@ struct NpcNavigationCounters {
 
 struct NpcNavigationRuntime {
     std::vector<NpcNavigationRecord> records;
+    std::vector<NpcCollisionCylinder> collisionCylinders;
     NpcNavigationCounters counters;
     uint64_t nextRequestId = 1;
     bool growthWarned = false;

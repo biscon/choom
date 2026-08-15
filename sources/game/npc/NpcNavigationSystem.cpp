@@ -29,6 +29,8 @@ constexpr uint32_t MaximumReplans = 3;
 constexpr float TurnRateRadiansPerSecond = 12.566370614359172f;
 constexpr float VisualStepSmoothingRate = 16.0f;
 constexpr float VisualOffsetEpsilon = 0.0001f;
+constexpr float PlayerAvoidancePredictionSeconds = 1.25f;
+constexpr float PlayerAvoidancePadding = 0.15f;
 
 size_t ActionIndex(NpcAction action)
 {
@@ -125,8 +127,12 @@ void SetTerminal(
     ReleasePath(navigation, record, &world);
     record.phase = phase;
     record.lastQueryStatus = status;
+    record.preferredVelocity = {};
     record.desiredVelocity = {};
     record.actualVelocity = {};
+    record.crowdNeighborCount = 0;
+    record.crowdNearestNeighborDistance = 0.0f;
+    record.playerAvoidanceActive = false;
     record.stallSeconds = 0.0f;
     record.replanCooldownSeconds = 0.0f;
     SetDiagnostic(record, diagnostic);
@@ -297,6 +303,70 @@ SectorFpsVerticalContext BuildVerticalContext(
     return result;
 }
 
+Vector2 ApplyFriendlyPlayerAvoidance(
+        const NpcNavigationRecord& record,
+        Vector3 position,
+        Vector2 preferredVelocity,
+        float npcRadius,
+        float npcHeight,
+        float queryRange,
+        const SectorDoorPlayerObstacle* playerObstacle,
+        bool& outActive)
+{
+    outActive = false;
+    if (playerObstacle == nullptr
+            || Vector2LengthSqr(preferredVelocity) <= MovementDistanceEpsilon
+            || position.y + npcHeight <= playerObstacle->feetPosition.y
+            || position.y >= playerObstacle->feetPosition.y + playerObstacle->height) {
+        return preferredVelocity;
+    }
+    const Vector2 toPlayer{
+            playerObstacle->feetPosition.x - position.x,
+            playerObstacle->feetPosition.z - position.z};
+    const float distanceSquared = Vector2LengthSqr(toPlayer);
+    if (distanceSquared > queryRange * queryRange) return preferredVelocity;
+    const float speedSquared = Vector2LengthSqr(preferredVelocity);
+    const float time = std::clamp(
+            Vector2DotProduct(toPlayer, preferredVelocity) / speedSquared,
+            0.0f,
+            PlayerAvoidancePredictionSeconds);
+    const Vector2 closest = Vector2Subtract(
+            toPlayer, Vector2Scale(preferredVelocity, time));
+    const float clearance = npcRadius + playerObstacle->radius
+            + PlayerAvoidancePadding;
+    const float closestDistance = Vector2Length(closest);
+    if (time <= 0.0f || closestDistance >= clearance) return preferredVelocity;
+
+    Vector2 away = Vector2Negate(toPlayer);
+    const float distance = std::sqrt(std::max(distanceSquared, 0.0f));
+    if (distance > MovementDistanceEpsilon) {
+        away = Vector2Scale(away, 1.0f / distance);
+    } else {
+        away = (record.placedObjectId & 1) != 0
+                ? Vector2{1.0f, 0.0f} : Vector2{-1.0f, 0.0f};
+    }
+    Vector2 tangent{-away.y, away.x};
+    const float cross = preferredVelocity.x * toPlayer.y
+            - preferredVelocity.y * toPlayer.x;
+    if (cross < -MovementDistanceEpsilon
+            || (std::fabs(cross) <= MovementDistanceEpsilon
+                && (record.placedObjectId & 1) == 0)) {
+        tangent = Vector2Negate(tangent);
+    }
+    const float speed = std::sqrt(speedSquared);
+    const float strength = std::clamp(
+            1.0f - closestDistance / clearance, 0.0f, 1.0f);
+    Vector2 adjusted = Vector2Add(
+            preferredVelocity,
+            Vector2Scale(Vector2Add(away, tangent), speed * strength));
+    const float adjustedLength = Vector2Length(adjusted);
+    if (adjustedLength > speed && adjustedLength > MovementDistanceEpsilon) {
+        adjusted = Vector2Scale(adjusted, speed / adjustedLength);
+    }
+    outActive = true;
+    return adjusted;
+}
+
 } // namespace
 
 NpcAnimationApplyResult ApplyNpcSemanticAnimation(
@@ -343,6 +413,7 @@ void InitializeNpcNavigationRuntime(
 {
     ShutdownNpcNavigationRuntime(world, navigation, runtime);
     runtime.records.reserve(navigation.Capacities().agentCapacity);
+    runtime.collisionCylinders.reserve(navigation.Capacities().agentCapacity);
     world.ForEach<NpcRuntimeInstance, SectorDynamicModel>(
             [&runtime, &navigation](
                     engine::Entity entity,
@@ -389,6 +460,11 @@ void ShutdownNpcNavigationRuntime(
     const size_t capacity = runtime.records.capacity();
     runtime.records.clear();
     if (capacity > 0) runtime.records.reserve(capacity);
+    const size_t collisionCapacity = runtime.collisionCylinders.capacity();
+    runtime.collisionCylinders.clear();
+    if (collisionCapacity > 0) {
+        runtime.collisionCylinders.reserve(collisionCapacity);
+    }
     runtime.counters = {};
     runtime.growthWarned = false;
 }
@@ -613,8 +689,49 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
                     doorColliders);
             if (clear && (npc.canOpenDoors
                             || linkState == SectorNavigationDoorLinkState::Clear)) {
-                record.doorPhase = NpcDoorTraversalPhase::Crossing;
-                SetDiagnostic(record, "crossing physically clear door");
+                const NpcNavigationRecord* crossing = nullptr;
+                const NpcNavigationRecord* bestWaiting = nullptr;
+                float bestDistanceSquared = 0.0f;
+                for (const NpcNavigationRecord& candidate : runtime.records) {
+                    if (!candidate.occupied || !IsActive(candidate.phase)
+                            || candidate.doorId != record.doorId
+                            || !world.IsAlive(candidate.entity)
+                            || !world.Has<SectorObjectTransform>(candidate.entity)) {
+                        continue;
+                    }
+                    if (candidate.doorPhase == NpcDoorTraversalPhase::Crossing) {
+                        crossing = &candidate;
+                        break;
+                    }
+                    if (candidate.doorPhase
+                            != NpcDoorTraversalPhase::WaitingForClearance
+                            || candidate.nextCorner >= candidate.cornerCount) {
+                        continue;
+                    }
+                    const Vector3 candidatePosition =
+                            world.Get<SectorObjectTransform>(candidate.entity)
+                                    .position;
+                    const Vector3 candidateStage =
+                            candidate.corners[candidate.nextCorner];
+                    const float candidateDistanceSquared =
+                            Vector3DistanceSqr(candidatePosition, candidateStage);
+                    if (bestWaiting == nullptr
+                            || candidateDistanceSquared
+                                    < bestDistanceSquared - 0.0001f
+                            || (std::fabs(candidateDistanceSquared
+                                            - bestDistanceSquared) <= 0.0001f
+                                && candidate.placedObjectId
+                                        < bestWaiting->placedObjectId)) {
+                        bestWaiting = &candidate;
+                        bestDistanceSquared = candidateDistanceSquared;
+                    }
+                }
+                if (crossing == nullptr && bestWaiting == &record) {
+                    record.doorPhase = NpcDoorTraversalPhase::Crossing;
+                    SetDiagnostic(record, "crossing physically clear door");
+                } else {
+                    SetDiagnostic(record, "queued for exclusive door crossing");
+                }
             } else if (!npc.canOpenDoors && record.doorWaitSeconds >= 0.5f) {
                 if (!Replan(world, navigation, runtime, record)) {
                     SetTerminal(world, navigation, runtime, record,
@@ -718,7 +835,8 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const std::vector<SectorStaticModelCollider>& staticColliders,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap& map,
-        float rawDt)
+        float rawDt,
+        const SectorDoorPlayerObstacle* playerObstacle)
 {
     const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
     bool movedAnyNpc = false;
@@ -728,6 +846,80 @@ void UpdateNpcNavigationAndLocomotionSystem(
             navSettings.agentHeight,
             navSettings.agentMaximumClimb,
             4};
+
+    runtime.collisionCylinders.clear();
+    for (const NpcNavigationRecord& record : runtime.records) {
+        if (!record.occupied || !world.IsAlive(record.entity)
+                || !world.Has<SectorObjectTransform>(record.entity)) {
+            continue;
+        }
+        runtime.collisionCylinders.push_back({
+                record.placedObjectId,
+                world.Get<SectorObjectTransform>(record.entity).position,
+                navSettings.agentRadius,
+                navSettings.agentHeight});
+    }
+
+    // Submit every agent's preferred velocity before the single Crowd update.
+    // Idle agents participate with zero velocity so moving agents avoid them.
+    for (NpcNavigationRecord& record : runtime.records) {
+        if (!record.occupied || !world.IsAlive(record.entity)
+                || !world.Has<NpcRuntimeInstance>(record.entity)
+                || !world.Has<SectorObjectTransform>(record.entity)) {
+            continue;
+        }
+        if (navigation.State() == SectorNavigationState::Ready
+                && !navigation.IsAgentRecordValid(record.agentHandle)) {
+            record.agentHandle = navigation.AllocateAgentRecord();
+        }
+        if (!navigation.IsAgentRecordValid(record.agentHandle)) continue;
+        const NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(record.entity);
+        const SectorObjectTransform& transform =
+                world.Get<SectorObjectTransform>(record.entity);
+        const float maximumSpeed = record.gait == NpcMoveGait::Run
+                ? npc.runSpeed : npc.walkSpeed;
+        Vector2 preferred{};
+        if (IsActive(record.phase) && !record.tileReplanPending
+                && record.nextCorner < record.cornerCount
+                && record.doorPhase != NpcDoorTraversalPhase::WaitingForClearance) {
+            const Vector3 target = record.doorPhase == NpcDoorTraversalPhase::Crossing
+                    ? record.doorLanding : record.corners[record.nextCorner];
+            const Vector2 delta{
+                    target.x - transform.position.x,
+                    target.z - transform.position.z};
+            const float length = Vector2Length(delta);
+            if (length > MovementDistanceEpsilon) {
+                preferred = Vector2Scale(delta, maximumSpeed / length);
+            }
+        }
+        record.preferredVelocity = preferred;
+        record.playerAvoidanceActive = false;
+        Vector2 submitted = preferred;
+        if (!npc.hostile && record.doorPhase != NpcDoorTraversalPhase::Crossing) {
+            submitted = ApplyFriendlyPlayerAvoidance(
+                    record,
+                    transform.position,
+                    preferred,
+                    navSettings.agentRadius,
+                    navSettings.agentHeight,
+                    navSettings.agentRadius
+                            * navigation.CrowdSettings()
+                                    .collisionQueryRangeRadiusScale,
+                    playerObstacle,
+                    record.playerAvoidanceActive);
+        }
+        const bool participate = record.doorPhase != NpcDoorTraversalPhase::Crossing;
+        record.crowdAttached = navigation.SynchronizeCrowdAgent(
+                record.agentHandle,
+                transform.position,
+                record.actualVelocity,
+                maximumSpeed,
+                participate) && participate;
+        if (record.crowdAttached) {
+            navigation.SetCrowdAgentDesiredVelocity(record.agentHandle, submitted);
+        }
+    }
+    navigation.UpdateCrowd(dt);
 
     for (NpcNavigationRecord& record : runtime.records) {
         if (!record.occupied) continue;
@@ -750,7 +942,6 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 world.Has<SectorObjectVisualOffset>(record.entity)
                 ? &world.Get<SectorObjectVisualOffset>(record.entity) : nullptr;
         record.actualVelocity = {};
-        record.desiredVelocity = {};
         record.replanCooldownSeconds = std::max(
                 0.0f, record.replanCooldownSeconds - dt);
         bool capturedStepOffset = false;
@@ -816,8 +1007,36 @@ void UpdateNpcNavigationAndLocomotionSystem(
         if (IsActive(record.phase) && !record.tileReplanPending && dt > 0.0f) {
             const float movementSpeed = record.gait == NpcMoveGait::Run
                     ? npc.runSpeed : npc.walkSpeed;
-            float movementBudget = std::max(0.0f, movementSpeed) * dt;
+            const SectorNavigationCrowdAgentState crowdState =
+                    navigation.GetCrowdAgentState(record.agentHandle);
+            record.crowdAttached = crowdState.attached;
+            record.crowdNeighborCount = crowdState.neighborCount;
+            record.crowdNearestNeighborDistance =
+                    crowdState.nearestNeighborDistance;
+            Vector2 steeringVelocity = crowdState.attached
+                    ? crowdState.steeredVelocity : record.preferredVelocity;
+            if (record.doorPhase == NpcDoorTraversalPhase::Crossing) {
+                steeringVelocity = record.preferredVelocity;
+            }
+            record.desiredVelocity = steeringVelocity;
+            const float steeringSpeed = Vector2Length(steeringVelocity);
+            float movementBudget = steeringSpeed * dt;
             Vector2 totalActual{};
+            Vector2 progressDirection{};
+            if (record.nextCorner < record.cornerCount) {
+                const Vector3 progressTarget =
+                        record.doorPhase == NpcDoorTraversalPhase::Crossing
+                        ? record.doorLanding
+                        : record.corners[record.nextCorner];
+                progressDirection = {
+                        progressTarget.x - transform.position.x,
+                        progressTarget.z - transform.position.z};
+                const float progressLength = Vector2Length(progressDirection);
+                if (progressLength > MovementDistanceEpsilon) {
+                    progressDirection = Vector2Scale(
+                            progressDirection, 1.0f / progressLength);
+                }
+            }
             int stepCount = 0;
             while (movementBudget > MovementDistanceEpsilon
                     && record.nextCorner < record.cornerCount
@@ -847,13 +1066,17 @@ void UpdateNpcNavigationAndLocomotionSystem(
                     }
                     continue;
                 }
-                const Vector2 direction = Vector2Scale(toCorner, 1.0f / distance);
+                Vector2 direction = Vector2Scale(toCorner, 1.0f / distance);
+                if (record.doorPhase != NpcDoorTraversalPhase::Crossing
+                        && steeringSpeed > MovementDistanceEpsilon) {
+                    direction = Vector2Scale(
+                            steeringVelocity, 1.0f / steeringSpeed);
+                }
                 const float requestedDistance = std::min({
                         distance,
                         movementBudget,
                         navSettings.agentRadius});
                 const Vector2 desiredDelta = Vector2Scale(direction, requestedDistance);
-                record.desiredVelocity = Vector2Scale(direction, movementSpeed);
                 const SectorCollisionMoveState moveState{
                         {transform.position.x, transform.position.z},
                         transform.position.y,
@@ -871,6 +1094,27 @@ void UpdateNpcNavigationAndLocomotionSystem(
                         moveConfig,
                         sectorContext,
                         staticColliders);
+                result = ResolveNpcCollisionCylindersForMovement(
+                        moveState,
+                        result,
+                        moveConfig,
+                        record.placedObjectId,
+                        runtime.collisionCylinders.data(),
+                        runtime.collisionCylinders.size());
+                if (playerObstacle != nullptr) {
+                    const NpcCollisionCylinder playerCylinder{
+                            -1,
+                            playerObstacle->feetPosition,
+                            playerObstacle->radius,
+                            playerObstacle->height};
+                    result = ResolveNpcCollisionCylindersForMovement(
+                            moveState,
+                            result,
+                            moveConfig,
+                            record.placedObjectId,
+                            &playerCylinder,
+                            1);
+                }
 
                 const Vector2 previousXZ{transform.position.x, transform.position.z};
                 const float previousPhysicalY = transform.position.y;
@@ -879,7 +1123,6 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 transform.position.x = result.positionXZ.x;
                 transform.position.z = result.positionXZ.y;
                 object.currentSectorId = result.currentSectorId;
-
                 SectorFpsVerticalContext support = BuildVerticalContext(
                         collisionWorld, object.currentSectorId);
                 if (support.hasSector) {
@@ -907,6 +1150,13 @@ void UpdateNpcNavigationAndLocomotionSystem(
                             visualOffset->position.y = previousVisualY - transform.position.y;
                             capturedStepOffset = true;
                         }
+                    }
+                }
+                for (NpcCollisionCylinder& cylinder :
+                        runtime.collisionCylinders) {
+                    if (cylinder.stableId == record.placedObjectId) {
+                        cylinder.feetPosition = transform.position;
+                        break;
                     }
                 }
 
@@ -940,8 +1190,14 @@ void UpdateNpcNavigationAndLocomotionSystem(
             const float actualDistance = Vector2Length(totalActual);
             record.actualVelocity = dt > 0.0f
                     ? Vector2Scale(totalActual, 1.0f / dt) : Vector2{};
+            const float forwardProgress = Vector2DotProduct(
+                    totalActual, progressDirection);
             if (actualDistance > MovementDistanceEpsilon) {
-                record.stallSeconds = 0.0f;
+                if (forwardProgress > MovementDistanceEpsilon) {
+                    record.stallSeconds = 0.0f;
+                } else {
+                    record.stallSeconds += dt;
+                }
                 const float targetYaw = std::atan2(totalActual.x, totalActual.y);
                 const float delta = ShortestAngleDelta(transform.yawRadians, targetYaw);
                 const float maximumTurn = TurnRateRadiansPerSecond * dt;

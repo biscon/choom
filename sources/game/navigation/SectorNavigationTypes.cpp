@@ -93,7 +93,7 @@ SectorNavigationSettings BuildSectorNavigationSettingsForMap(
 SectorNavigationCapacitySettings NormalizeSectorNavigationCapacitySettings(
         SectorNavigationCapacitySettings settings)
 {
-    settings.agentCapacity = std::max<size_t>(1, settings.agentCapacity);
+    settings.agentCapacity = std::clamp<size_t>(settings.agentCapacity, 1, 65535);
     settings.pathRecordCapacity = std::max<size_t>(1, settings.pathRecordCapacity);
     settings.diagnosticCapacity = std::max<size_t>(1, settings.diagnosticCapacity);
     settings.queryNodeCapacity = std::clamp(settings.queryNodeCapacity, 32, 65536);
@@ -123,6 +123,36 @@ SectorNavigationCapacitySettings NormalizeSectorNavigationCapacitySettings(
             settings.dynamicObstacleRequestBudgetPerUpdate, 1, 64);
     settings.dynamicObstacleTileBudgetPerUpdate = std::clamp(
             settings.dynamicObstacleTileBudgetPerUpdate, 1, 64);
+    return settings;
+}
+
+SectorNavigationCrowdSettings NormalizeSectorNavigationCrowdSettings(
+        SectorNavigationCrowdSettings settings)
+{
+    const SectorNavigationCrowdSettings defaults;
+    const auto finiteOr = [](float value, float fallback) {
+        return std::isfinite(value) ? value : fallback;
+    };
+    settings.maximumAcceleration = std::clamp(
+            finiteOr(settings.maximumAcceleration, defaults.maximumAcceleration),
+            0.01f, 1000.0f);
+    settings.collisionQueryRangeRadiusScale = std::clamp(
+            finiteOr(settings.collisionQueryRangeRadiusScale,
+                    defaults.collisionQueryRangeRadiusScale), 1.0f, 64.0f);
+    settings.pathOptimizationRangeRadiusScale = std::clamp(
+            finiteOr(settings.pathOptimizationRangeRadiusScale,
+                    defaults.pathOptimizationRangeRadiusScale), 1.0f, 128.0f);
+    settings.separationWeight = std::clamp(
+            finiteOr(settings.separationWeight, defaults.separationWeight),
+            0.0f, 32.0f);
+    settings.reconciliationDistanceRadiusScale = std::clamp(
+            finiteOr(settings.reconciliationDistanceRadiusScale,
+                    defaults.reconciliationDistanceRadiusScale), 0.01f, 4.0f);
+    settings.maximumStepSeconds = std::clamp(
+            finiteOr(settings.maximumStepSeconds, defaults.maximumStepSeconds),
+            1.0f / 240.0f, 0.25f);
+    settings.maximumSubsteps = std::clamp(settings.maximumSubsteps, 1, 32);
+    settings.avoidanceQuality = SectorNavigationAvoidanceQuality::High;
     return settings;
 }
 
@@ -248,6 +278,15 @@ const char* SectorNavigationDynamicObstacleStateName(
         case SectorNavigationDynamicObstacleState::Failed: return "Failed";
     }
     return "Unknown";
+}
+
+const char* SectorNavigationAvoidanceQualityName(
+        SectorNavigationAvoidanceQuality quality)
+{
+    switch (quality) {
+        case SectorNavigationAvoidanceQuality::High: return "high";
+    }
+    return "unknown";
 }
 
 } // namespace game

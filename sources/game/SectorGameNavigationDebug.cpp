@@ -52,7 +52,7 @@ void DrawSectorGameNavigationDebugPanel(
     textConfig.paddingX = 8.0f;
     textConfig.paddingY = 4.0f;
     const float panelWidth = 620.0f;
-    const float panelHeight = 373.0f;
+    const float panelHeight = 460.0f;
     const Rectangle bounds = config.overlayBounds;
     const Rectangle panel{
             bounds.x + std::max(16.0f, bounds.width - panelWidth - 24.0f),
@@ -115,6 +115,21 @@ void DrawSectorGameNavigationDebugPanel(
             obstacleStats.fastSuppressedCount,
             static_cast<unsigned long long>(obstacleStats.updatedTiles)),
             textConfig.textColor);
+    const SectorNavigationCrowdStatistics& crowd =
+            navigation.CrowdStatistics();
+    line(TextFormat(
+            "Crowd %zu / %zu | high avoidance | %d velocity samples",
+            crowd.activeAgentCount,
+            navigation.Capacities().agentCapacity,
+            crowd.lastVelocitySampleCount),
+            textConfig.textColor);
+    line(TextFormat(
+            "Crowd sync %llu | failures %llu | %.3f / %.3f ms",
+            static_cast<unsigned long long>(crowd.reconciliations),
+            static_cast<unsigned long long>(crowd.attachmentFailures),
+            crowd.lastUpdateMilliseconds,
+            crowd.peakUpdateMilliseconds),
+            textConfig.textColor);
     line(TextFormat(
             "script moves %zu active | %llu ok | %llu failed | %llu cancelled",
             static_cast<size_t>(std::count_if(
@@ -160,9 +175,16 @@ void DrawSectorGameNavigationDebugPanel(
             SectorNavigationQueryStatusName(focused->lastQueryStatus)),
             textConfig.textColor);
     line(TextFormat(
-            "desired %.2f | actual %.2f | stall %.2fs | replans %u",
+            "preferred %.2f | steered %.2f | actual %.2f",
+            Vector2Length(focused->preferredVelocity),
             Vector2Length(focused->desiredVelocity),
-            Vector2Length(focused->actualVelocity),
+            Vector2Length(focused->actualVelocity)),
+            textConfig.textColor);
+    line(TextFormat(
+            "neighbors %d | nearest %.2f | player avoid %s | stall %.2f | replans %u",
+            focused->crowdNeighborCount,
+            focused->crowdNearestNeighborDistance,
+            focused->playerAvoidanceActive ? "active" : "off",
             focused->stallSeconds,
             focused->replanCount),
             textConfig.textColor);

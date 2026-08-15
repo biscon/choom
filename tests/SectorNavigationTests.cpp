@@ -78,6 +78,16 @@ void TestSettingsAndStatusContracts()
     Check(normalizedDynamic.positionThresholdWorld > 0.0f
                   && std::isfinite(normalizedDynamic.fastLinearSpeedWorld),
           "dynamic obstacle motion settings normalize invalid thresholds");
+    game::SectorNavigationCrowdSettings crowdSettings;
+    crowdSettings.maximumAcceleration = INFINITY;
+    crowdSettings.maximumSubsteps = 0;
+    const game::SectorNavigationCrowdSettings normalizedCrowd =
+            game::NormalizeSectorNavigationCrowdSettings(crowdSettings);
+    Check(std::isfinite(normalizedCrowd.maximumAcceleration)
+                  && normalizedCrowd.maximumSubsteps >= 1
+                  && normalizedCrowd.avoidanceQuality
+                          == game::SectorNavigationAvoidanceQuality::High,
+          "Crowd settings normalize to bounded high-quality avoidance");
 
     game::SectorTopologyMap map;
     Check(Near(game::BuildSectorNavigationSettingsForMap(map).agentMaximumClimb,
@@ -365,6 +375,39 @@ void FinishBuild(game::SectorNavigationWorld& world, const game::SectorTopologyM
                 || world.State() == game::SectorNavigationState::Building); ++iteration) {
         world.UpdateBuild(map, colliders, 0);
     }
+}
+
+void TestCrowdCapacityAndAgentReuse()
+{
+    game::SectorNavigationCapacitySettings capacities;
+    capacities.agentCapacity = 1;
+    game::SectorNavigationWorld world;
+    world.Initialize({}, capacities);
+    world.RequestRebuild();
+    FinishBuild(world, MakeSquareMap());
+    Check(world.State() == game::SectorNavigationState::Ready,
+          "Crowd capacity fixture builds navigation");
+    const game::SectorNavigationAgentHandle first = world.AllocateAgentRecord();
+    const game::SectorNavigationAgentHandle overflow = world.AllocateAgentRecord();
+    Check(world.SynchronizeCrowdAgent(
+                  first, {2.0f, 0.0f, 2.0f}, {}, 2.0f)
+                  && !world.SynchronizeCrowdAgent(
+                          overflow, {4.0f, 0.0f, 2.0f}, {}, 2.0f),
+          "fixed Crowd capacity diagnoses an excess agent safely");
+    Check(world.CrowdStatistics().attachmentFailures == 1
+                  && world.CrowdStatistics().capacityWarnings == 1,
+          "Crowd capacity failure is exposed through bounded diagnostics");
+    Check(world.SetCrowdAgentDesiredVelocity(first, {1.0f, 0.0f}),
+          "attached Crowd agent accepts a desired velocity");
+    world.UpdateCrowd(0.1f);
+    Check(world.GetCrowdAgentState(first).attached
+                  && world.GetCrowdAgentState(first).steeredVelocity.x > 0.0f,
+          "Crowd produces acceleration-limited steering for an attached agent");
+    Check(world.ReleaseAgentRecord(first)
+                  && world.SynchronizeCrowdAgent(
+                          overflow, {4.0f, 0.0f, 2.0f}, {}, 2.0f),
+          "removing an agent makes its fixed Crowd slot reusable");
+    world.Shutdown();
 }
 
 void FinishDynamicObstacleUpdates(
@@ -1062,6 +1105,7 @@ int main()
     TestDependencyAndCoordinates();
     TestSettingsAndStatusContracts();
     TestLifecycleAndHandles();
+    TestCrowdCapacityAndAgentReuse();
     TestLayerCompression();
     TestStaticBuildAndQueries();
     TestBuildInputAndSourceHash();

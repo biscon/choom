@@ -152,7 +152,8 @@ void SectorSceneRuntime::Update(
                 runtimeObjects.staticModelColliders,
                 runtimeObjects.objectLightProbes,
                 map,
-                dt);
+                dt,
+                playerObstacle);
     }
     engine::AnimatedModelSystem(context.world, context.assets, dt);
     renderer.AdvanceRuntime(dt);

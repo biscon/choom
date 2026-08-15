@@ -10,6 +10,7 @@ namespace game {
 
 class SectorMeshRenderer;
 struct SectorTopologyMap;
+struct NpcCollisionCylinder;
 
 SectorViewPose ActiveSectorEditorPreviewPose(
         const SectorEditorPreviewControllerState& controllerState,
@@ -47,6 +48,7 @@ void UpdateSectorEditorGameplayPreview(
         bool previewSettingsModalOpen,
         const SectorFpsControllerInput& controllerInput,
         float previousVisualEyeY,
-        float dt);
+        float dt,
+        const std::vector<NpcCollisionCylinder>* npcCollisionCylinders = nullptr);
 
 } // namespace game

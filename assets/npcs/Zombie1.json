@@ -2,7 +2,6 @@
   "formatVersion": 1,
   "id": "Zombie1",
   "name": "Zombie",
-  "hostile": true,
   "modelPath": "assets/models/characters/Zombie1.glb",
   "animationBlendSeconds": 0.5,
   "actions": {

@@ -2165,7 +2165,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     state.previewSettingsModal.open,
                     controllerInput,
                     previousVisualEyeY,
-                    dt);
+                    dt,
+                    &sceneRuntime.NpcNavigation().collisionCylinders);
             if (previewState.controller.frameEvents.footstep
                     && engineContext != nullptr) {
                 sceneRuntime.PlayFootstepForSector(

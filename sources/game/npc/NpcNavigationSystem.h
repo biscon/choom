@@ -95,6 +95,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const std::vector<SectorStaticModelCollider>& staticColliders,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap& map,
-        float dt);
+        float dt,
+        const SectorDoorPlayerObstacle* playerObstacle = nullptr);
 
 } // namespace game

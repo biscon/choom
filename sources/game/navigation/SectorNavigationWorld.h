@@ -23,7 +23,8 @@ public:
     bool Initialize(
             SectorNavigationSettings settings = {},
             SectorNavigationCapacitySettings capacities = {},
-            SectorNavigationDynamicObstacleSettings dynamicObstacleSettings = {});
+            SectorNavigationDynamicObstacleSettings dynamicObstacleSettings = {},
+            SectorNavigationCrowdSettings crowdSettings = {});
     void Shutdown();
     void ResetForRebuild();
     void RequestRebuild();
@@ -72,12 +73,27 @@ public:
     bool ReleaseAgentRecord(SectorNavigationAgentHandle handle);
     bool ReleasePathRecord(SectorNavigationPathHandle handle);
 
+    bool SynchronizeCrowdAgent(
+            SectorNavigationAgentHandle handle,
+            Vector3 physicalPosition,
+            Vector2 actualVelocity,
+            float maximumSpeed,
+            bool participate = true);
+    bool SetCrowdAgentDesiredVelocity(
+            SectorNavigationAgentHandle handle,
+            Vector2 desiredVelocity);
+    void UpdateCrowd(float dt);
+    SectorNavigationCrowdAgentState GetCrowdAgentState(
+            SectorNavigationAgentHandle handle) const;
+
     SectorNavigationState State() const;
     SectorNavigationBuildStage BuildStage() const;
     const SectorNavigationSettings& Settings() const;
     const SectorNavigationCapacitySettings& Capacities() const;
     const SectorNavigationDynamicObstacleSettings& DynamicObstacleSettings() const;
     const SectorNavigationDynamicObstacleStatistics& DynamicObstacleStatistics() const;
+    const SectorNavigationCrowdSettings& CrowdSettings() const;
+    const SectorNavigationCrowdStatistics& CrowdStatistics() const;
     const SectorNavigationCounters& Counters() const;
     const std::vector<SectorNavigationDiagnostic>& Diagnostics() const;
     uint64_t SourceRevision() const;

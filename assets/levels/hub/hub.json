@@ -664,8 +664,7 @@
       "kind": "npc",
       "npc": {
         "definitionId": "Zombie1",
-        "instanceId": "zombie01",
-        "shadowMode": "projected_silhouette"
+        "instanceId": "zombie01"
       },
       "position": [
         4.0,

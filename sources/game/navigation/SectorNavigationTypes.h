@@ -163,6 +163,39 @@ struct SectorNavigationDynamicObstacleSettings {
     float fastAngularSpeedDegrees = 180.0f;
 };
 
+enum class SectorNavigationAvoidanceQuality : uint8_t {
+    High = 3
+};
+
+struct SectorNavigationCrowdSettings {
+    float maximumAcceleration = 8.0f;
+    float collisionQueryRangeRadiusScale = 12.0f;
+    float pathOptimizationRangeRadiusScale = 30.0f;
+    float separationWeight = 2.0f;
+    float reconciliationDistanceRadiusScale = 0.25f;
+    float maximumStepSeconds = 1.0f / 30.0f;
+    int maximumSubsteps = 8;
+    SectorNavigationAvoidanceQuality avoidanceQuality =
+            SectorNavigationAvoidanceQuality::High;
+};
+
+struct SectorNavigationCrowdAgentState {
+    Vector2 steeredVelocity = {};
+    int neighborCount = 0;
+    float nearestNeighborDistance = 0.0f;
+    bool attached = false;
+};
+
+struct SectorNavigationCrowdStatistics {
+    size_t activeAgentCount = 0;
+    uint64_t attachmentFailures = 0;
+    uint64_t reconciliations = 0;
+    uint64_t capacityWarnings = 0;
+    int lastVelocitySampleCount = 0;
+    float lastUpdateMilliseconds = 0.0f;
+    float peakUpdateMilliseconds = 0.0f;
+};
+
 struct SectorNavigationQueryFilterPolicy {
     uint16_t includedFlags = SectorNavigationPolyFlag_Walk
             | SectorNavigationPolyFlag_Door;
@@ -328,6 +361,8 @@ SectorNavigationCapacitySettings NormalizeSectorNavigationCapacitySettings(
         SectorNavigationCapacitySettings settings);
 SectorNavigationDynamicObstacleSettings NormalizeSectorNavigationDynamicObstacleSettings(
         SectorNavigationDynamicObstacleSettings settings);
+SectorNavigationCrowdSettings NormalizeSectorNavigationCrowdSettings(
+        SectorNavigationCrowdSettings settings);
 
 SectorNavigationPosition SectorWorldToNavigationPosition(Vector3 position);
 Vector3 SectorNavigationToWorldPosition(SectorNavigationPosition position);
@@ -340,5 +375,7 @@ const char* SectorNavigationDoorLinkStateName(SectorNavigationDoorLinkState stat
 const char* SectorNavigationDoorDirectionName(SectorNavigationDoorDirection direction);
 const char* SectorNavigationDynamicObstacleStateName(
         SectorNavigationDynamicObstacleState state);
+const char* SectorNavigationAvoidanceQualityName(
+        SectorNavigationAvoidanceQuality quality);
 
 } // namespace game

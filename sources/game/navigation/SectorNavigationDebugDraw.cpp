@@ -39,6 +39,7 @@ void DrawSectorNavigationDebugWorld(
     const Color stepColor = LinearOverlaySwatch(Color{104, 226, 255, 245});
     const Color pathColor = LinearOverlaySwatch(Color{255, 102, 214, 245});
     const Color agentColor = LinearOverlaySwatch(Color{255, 238, 132, 245});
+    const Color preferredColor = LinearOverlaySwatch(Color{96, 220, 255, 245});
     BeginMode3D(renderer.RenderCamera());
     if (settings.showSurface) {
         for (const SectorNavigationDebugTriangle& triangle : debug.walkableTriangles) {
@@ -156,6 +157,13 @@ void DrawSectorNavigationDebugWorld(
                     radius,
                     12,
                     agentColor);
+            DrawLine3D(
+                    agent.physicalPosition,
+                    Vector3Add(
+                            agent.physicalPosition,
+                            Vector3{agent.preferredVelocity.x * 0.2f, 0.0f,
+                                    agent.preferredVelocity.y * 0.2f}),
+                    preferredColor);
             DrawLine3D(
                     agent.physicalPosition,
                     Vector3Add(
