@@ -808,6 +808,7 @@ int main()
                     {0,0},
                     0.0f,
                     WHITE);
+            application.RenderLoadingOverlay(dst, screenW, screenH);
         }
         EndDrawing();
         performanceProfiler.End(RenderProfilePass::FinalComposite);

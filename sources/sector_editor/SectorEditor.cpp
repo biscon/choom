@@ -5832,6 +5832,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
                 TopologyMap(),
                 "sector_editor_preview",
                 applicationSettings.footsteps.defaultSet,
+                applicationSettings.footsteps.volume,
                 error)) {
         sceneRuntime.RuntimeObjects().objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
         sceneRuntime.RuntimeObjects().objectProbeStatus.clear();
@@ -7289,6 +7290,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
                 TopologyMap(),
                 "sector_editor_preview",
                 applicationSettings.footsteps.defaultSet,
+                applicationSettings.footsteps.volume,
                 error)) {
         sceneRuntime.RuntimeObjects().objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
         sceneRuntime.RuntimeObjects().objectProbeStatus.clear();

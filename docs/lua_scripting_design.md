@@ -492,6 +492,12 @@ Immediate engine calls and `require` are allowed at top level, although declarat
 
 ### 10.1 Map activation and `init()`
 
+The sector game prepares renderer, runtime-object, audio, viewmodel, and
+navigation resources before map activation. Its loading screen fades out over
+250 ms while simulation remains frozen, and only then does it create this map
+script runtime. Consequently, `init()` and `startScript()` background work
+cannot run against a navigation build that is still queued or building.
+
 After the map chunk succeeds, look up global `init`:
 
 - If it is absent or nil, mark initialization finished and continue.

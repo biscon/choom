@@ -555,6 +555,8 @@ NpcMoveRequestResult RequestNpcMove(
     record->projectedDestination = path.projectedDestination;
     record->desiredVelocity = {};
     record->actualVelocity = {};
+    record->footstepDistanceWorld = 0.0f;
+    record->footstepEvent = false;
     record->stallSeconds = 0.0f;
     record->replanCooldownSeconds = 0.0f;
     record->driftCheckSeconds = 0.0f;
@@ -615,6 +617,27 @@ NpcMoveStatus GetNpcMoveStatus(
     status.replanCount = record->replanCount;
     status.message = record->diagnostic.data();
     return status;
+}
+
+bool UpdateNpcFootstepCadence(
+        NpcNavigationRecord& record,
+        bool active,
+        float resolvedHorizontalDistance)
+{
+    SectorFpsFootstepCadenceState cadence{
+            record.footstepDistanceWorld};
+    const SectorFpsControllerConfig config =
+            DefaultSectorFpsControllerConfig();
+    const float gaitSpeed = record.gait == NpcMoveGait::Run
+            ? config.runSpeed : config.walkSpeed;
+    record.footstepEvent = UpdateSectorFpsFootstepCadence(
+            cadence,
+            config,
+            active,
+            resolvedHorizontalDistance,
+            gaitSpeed);
+    record.footstepDistanceWorld = cadence.accumulatedDistanceWorld;
+    return record.footstepEvent;
 }
 
 void PrepareNpcDoorTraversalAndHoldsSystem(
@@ -847,6 +870,10 @@ void UpdateNpcNavigationAndLocomotionSystem(
             navSettings.agentMaximumClimb,
             4};
 
+    for (NpcNavigationRecord& record : runtime.records) {
+        record.footstepEvent = false;
+    }
+
     runtime.collisionCylinders.clear();
     for (const NpcNavigationRecord& record : runtime.records) {
         if (!record.occupied || !world.IsAlive(record.entity)
@@ -945,6 +972,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
         record.replanCooldownSeconds = std::max(
                 0.0f, record.replanCooldownSeconds - dt);
         bool capturedStepOffset = false;
+        float resolvedHorizontalDistance = 0.0f;
 
         if (navigation.State() == SectorNavigationState::Ready
                 && !navigation.IsAgentRecordValid(record.agentHandle)) {
@@ -1188,6 +1216,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
             }
 
             const float actualDistance = Vector2Length(totalActual);
+            resolvedHorizontalDistance = actualDistance;
             record.actualVelocity = dt > 0.0f
                     ? Vector2Scale(totalActual, 1.0f / dt) : Vector2{};
             const float forwardProgress = Vector2DotProduct(
@@ -1285,6 +1314,12 @@ void UpdateNpcNavigationAndLocomotionSystem(
                 visualOffset->position.y = 0.0f;
             }
         }
+
+        UpdateNpcFootstepCadence(
+                record,
+                IsActive(record.phase)
+                        || resolvedHorizontalDistance > MovementDistanceEpsilon,
+                resolvedHorizontalDistance);
 
         if (world.Has<SectorDynamicModel>(record.entity)) {
             SectorDynamicModel& model = world.Get<SectorDynamicModel>(record.entity);

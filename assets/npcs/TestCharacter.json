@@ -1,0 +1,19 @@
+{
+  "formatVersion": 1,
+  "id": "TestCharacter",
+  "name": "dude",
+  "modelPath": "assets/models/characters/TestCharacter.glb",
+  "animationBlendSeconds": 0.5,
+  "actions": {
+    "idle": {
+      "animation": "Idle"
+    },
+    "walk": {
+      "animation": "Standard Walk",
+      "movementSpeed": 1.5
+    },
+    "run": {
+      "movementSpeed": 3.0
+    }
+  }
+}

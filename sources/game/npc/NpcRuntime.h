@@ -98,6 +98,7 @@ struct NpcNavigationRecord {
     bool playerAvoidanceActive = false;
     Vector3 physicalPosition = {};
     Vector3 visualPosition = {};
+    float footstepDistanceWorld = 0.0f;
     float stallSeconds = 0.0f;
     float replanCooldownSeconds = 0.0f;
     float driftCheckSeconds = 0.0f;
@@ -110,6 +111,7 @@ struct NpcNavigationRecord {
     float doorWaitSeconds = 0.0f;
     bool holdsDoor = false;
     bool tileReplanPending = false;
+    bool footstepEvent = false;
     std::array<char, 192> diagnostic{};
     bool occupied = false;
 };

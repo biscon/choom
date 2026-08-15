@@ -12230,6 +12230,12 @@ void TestStaticModelAssetRequestsDeduplicateAndUnloadByScope()
                   && !assets.IsScopeFinished(firstScope)
                   && Near(assets.GetScopeProgress(firstScope), 0.0f),
           "queued deduplicated models contribute correctly to scope progress");
+    size_t finishedAssets = 99;
+    size_t totalAssets = 99;
+    assets.GetScopeProgressCounts(
+            firstScope, finishedAssets, totalAssets);
+    Check(finishedAssets == 0 && totalAssets == 3,
+          "scope progress counts reset outputs and count deduplicated requests once");
 
     assets.UnloadScope(firstScope);
     Check(!assets.IsReady(first)
@@ -12248,6 +12254,10 @@ void TestStaticModelAssetRequestsDeduplicateAndUnloadByScope()
                           assets.FindReadyModelByPath(
                                   "/tmp/models/crate.glb")),
           "main-thread model loading exposes a terminal failed state for a missing model");
+    assets.GetScopeProgressCounts(
+            secondScope, finishedAssets, totalAssets);
+    Check(finishedAssets == 1 && totalAssets == 1,
+          "failed assets count as finished loading work");
     assets.Shutdown();
     Check(assets.IsFinished(otherScope) && assets.GetModel(otherScope) == nullptr,
           "model shutdown safely retires remaining pending handles");

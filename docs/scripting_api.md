@@ -6,12 +6,14 @@ content, not sandboxed code.
 
 ## Script files and lifecycle
 
-A map loads the `.lua` file beside its map JSON. These global hooks are
+A runtime level finishes its asset/runtime-object/navigation loading gate and
+250 ms loading-screen fade before creating the map Lua runtime. It then loads
+the `.lua` file beside its map JSON and calls `init()`. These global hooks are
 optional:
 
 ```lua
 function init()
-    -- Runs when the map loads. May use blocking/yielding functions.
+    -- Runs after the level loading screen has faded. May block/yield.
 end
 
 function shutdown()

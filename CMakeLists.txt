@@ -219,6 +219,7 @@ if(BUILD_TESTING)
     add_executable(application_flow_tests
             tests/ApplicationFlowTests.cpp
             sources/game/ApplicationFlow.cpp
+            sources/game/GameLevelLoading.cpp
     )
     target_include_directories(application_flow_tests PRIVATE sources)
     add_test(NAME application_flow COMMAND application_flow_tests)

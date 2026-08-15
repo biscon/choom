@@ -4729,6 +4729,35 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
           "NPC runtime loops semantic Idle with floor transform, scale, and shadow settings");
 }
 
+void TestNpcFootstepCadenceUsesResolvedTravel()
+{
+    game::NpcNavigationRecord record;
+    record.gait = game::NpcMoveGait::Walk;
+    Check(!game::UpdateNpcFootstepCadence(record, true, 1.0f)
+                  && Near(record.footstepDistanceWorld, 1.0f),
+          "NPC walk cadence accumulates partial resolved travel");
+    Check(game::UpdateNpcFootstepCadence(record, true, 0.5f)
+                  && record.footstepEvent,
+          "NPC walk cadence emits at the player walk stride");
+    Check(!game::UpdateNpcFootstepCadence(record, true, 0.0f)
+                  && !record.footstepEvent,
+          "stationary NPC frames do not emit footsteps");
+
+    Check(game::UpdateNpcFootstepCadence(record, true, 10.0f),
+          "large resolved NPC movement emits one footstep event");
+    Check(!game::UpdateNpcFootstepCadence(record, true, 0.0f),
+          "large resolved NPC movement does not leave burst events queued");
+
+    Check(!game::UpdateNpcFootstepCadence(record, false, 0.0f)
+                  && Near(record.footstepDistanceWorld, 0.0f),
+          "inactive NPC movement resets footstep cadence");
+    record.gait = game::NpcMoveGait::Run;
+    Check(!game::UpdateNpcFootstepCadence(record, true, 2.3f),
+          "NPC run cadence waits for the player run stride");
+    Check(game::UpdateNpcFootstepCadence(record, true, 0.2f),
+          "NPC run cadence emits after enough resolved travel");
+}
+
 void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
 {
     game::SectorTopologyMap map = MakeNavigationSquareMap();
@@ -4796,6 +4825,8 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
     const std::vector<game::SectorDynamicDoorCollider> doors;
     bool observedWalk = false;
     bool observedRun = false;
+    bool observedWalkFootstep = false;
+    bool observedRunFootstep = false;
     bool enteredObstacle = false;
     for (int frame = 0; frame < 800; ++frame) {
         const float dt = frame % 2 == 0 ? 0.016f : 0.08f;
@@ -4808,6 +4839,16 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
         observedRun = observedRun
                 || world.Get<game::NpcRuntimeInstance>(runner).action
                         == game::NpcAction::Run;
+        for (const game::NpcNavigationRecord& record :
+                npcNavigation.records) {
+            if (record.instanceId == "walker") {
+                observedWalkFootstep = observedWalkFootstep
+                        || record.footstepEvent;
+            } else if (record.instanceId == "runner") {
+                observedRunFootstep = observedRunFootstep
+                        || record.footstepEvent;
+            }
+        }
         const game::SectorObjectTransform& currentWalker =
                 world.Get<game::SectorObjectTransform>(walker);
         enteredObstacle = enteredObstacle
@@ -4833,8 +4874,9 @@ void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
     Check(walkerStatus.phase == game::NpcMovePhase::Arrived
                   && runnerStatus.phase == game::NpcMovePhase::Arrived
                   && walkerStatus.replanCount > 0
-                  && observedWalk && observedRun,
-          "walk/run actions arrive after collision feedback repairs a forced invalid corridor");
+                  && observedWalk && observedRun
+                  && observedWalkFootstep && observedRunFootstep,
+          "walk/run actions and resolved-travel footsteps survive collision feedback and replanning");
     Check(Near(walkerTransform.position.x, 14.0f, 0.11f)
                   && Near(runnerTransform.position.x, 14.0f, 0.11f)
                   && !Near(walkerTransform.yawRadians, 0.35f, 0.01f)
@@ -7335,6 +7377,7 @@ int main()
     TestSpawnDynamicModelCopiesPlaybackAndLightingPayload();
     TestDynamicModelColliderCollectionIsSeparatedForNavigation();
     TestSpawnNpcResolvesDefinitionAndIdlePlayback();
+    TestNpcFootstepCadenceUsesResolvedTravel();
     TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
     TestNpcNavigationReplansAroundDynamicTileCacheObstacle();
     TestNpcNavigationLowSpeedAdvancesAtHighRefreshRate();

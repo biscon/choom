@@ -1,6 +1,7 @@
 function init()
     log("hub script initialized")
-    --startScript("npc_move_test1")
+    startScript("npc_move_test1")
+    startScript("npc_move_test2")
 end
 
 function shutdown()
@@ -25,5 +26,17 @@ function npc_move_test1()
         moveNpc("zombie01", "wp5", "walk")
         moveNpc("zombie01", "wp6", "walk")
         moveNpc("zombie01", "wp7", "run")
+    end
+end
+
+function npc_move_test2()
+    log("npc move test2 ran!!!!!!!!!!!!!!!!")
+    while true do
+        moveNpc("zombie02", "wp7", "walk")
+        moveNpc("zombie02", "wp5", "walk")
+        moveNpc("zombie02", "wp4", "walk")
+        moveNpc("zombie02", "wp3", "walk")
+        moveNpc("zombie02", "wp2", "walk")
+        moveNpc("zombie02", "wp1", "walk")
     end
 end

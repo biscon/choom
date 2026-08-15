@@ -672,6 +672,20 @@
         46.0
       ],
       "yawDegrees": 180.0
+    },
+    {
+      "id": 35,
+      "kind": "npc",
+      "npc": {
+        "definitionId": "TestCharacter",
+        "instanceId": "zombie02"
+      },
+      "position": [
+        -149.0,
+        -27.0,
+        92.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [

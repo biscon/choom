@@ -10,6 +10,7 @@
 
 #include <raylib.h>
 
+#include <cstddef>
 #include <string>
 #include <unordered_map>
 
@@ -22,6 +23,7 @@ public:
             const SectorTopologyMap& map,
             const char* assetScopeName,
             const std::string& defaultFootstepSet,
+            float footstepVolume,
             std::string& error);
     void Shutdown(engine::EngineContext& context);
     void StopLevelAudio(engine::EngineContext& context);
@@ -38,6 +40,15 @@ public:
             float dt,
             const Vector3* playerPosition,
             const SectorDoorPlayerObstacle* playerObstacle = nullptr);
+    void UpdateLoadPreparation(
+            engine::EngineContext& context,
+            const SectorTopologyMap& map);
+    bool AreLoadAssetScopesFinished(
+            const engine::AssetManager& assets) const;
+    void AccumulateLoadAssetProgress(
+            const engine::AssetManager& assets,
+            size_t& finished,
+            size_t& total) const;
 
     void RenderShadowMaps(engine::EngineContext& context);
     void RenderScene(
@@ -96,9 +107,11 @@ private:
             engine::EngineContext& context,
             const SectorTopologyMap& map,
             const char* scopeName,
-            const std::string& defaultFootstepSet);
+            const std::string& defaultFootstepSet,
+            float footstepVolume);
     void UpdateLevelAudio(engine::EngineContext& context);
     void BindRuntimeObjectAudio(engine::World& world);
+    void PlayPendingNpcFootsteps(engine::EngineContext& context);
 
     SectorMeshRenderer renderer;
     SectorRuntimeObjectState runtimeObjects;
@@ -110,6 +123,7 @@ private:
     std::unordered_map<std::string, LoadedFootstepSet> footstepSets;
     std::unordered_map<int, std::string> footstepSetBySectorId;
     FootstepPlaybackState footstepPlayback;
+    float footstepVolume = 1.0f;
     engine::MusicHandle backgroundMusic = engine::NullMusicHandle();
     float levelMusicVolume = SectorLevelAudioSettings::DefaultMusicVolume;
     bool levelMusicStartPending = false;

@@ -9,6 +9,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTriggers.h"
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -273,6 +274,42 @@ end
             fixture.context.world.Get<game::SectorObjectTransform>(fixture.npc)
                     .position.x - 14.0f) < 0.11f);
     assert(fixture.host.npcMoveDiagnostics.successes == 1);
+}
+
+void BackgroundNpcPatrolYieldsWhenNavigationIsPrepared()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write(R"(
+function init()
+    assert(startScript("patrol"))
+end
+function patrol()
+    while true do
+        moveNpc("script_guard", "run_target", "run")
+        moveNpc("script_guard", "walk_target", "walk")
+    end
+end
+)");
+    assert(Create(
+            fixture.context,
+            fixture.runtime,
+            fixture.persistent,
+            fixture.host,
+            fixture.files));
+    assert(fixture.runtime.initFinished);
+    fixture.Update(0.016f);
+
+    const std::vector<engine::ScriptTaskSnapshot> tasks =
+            engine::ScriptSystemTaskSnapshot(fixture.runtime);
+    const auto patrol = std::find_if(
+            tasks.begin(),
+            tasks.end(),
+            [](const engine::ScriptTaskSnapshot& task) {
+                return task.functionName == "patrol";
+            });
+    assert(patrol != tasks.end());
+    assert(patrol->state == engine::ScriptTaskState::Waiting);
+    assert(patrol->operationLabel == "moveNpc:script_guard");
 }
 
 void BlockingNpcMoveReplansAfterDynamicObstacleChange()
@@ -796,6 +833,7 @@ void RunSectorScriptBindingTests()
 {
     DoorCompletionAndCancellationShareTheBackend();
     BlockingNpcMoveCompletesAfterPhysicalArrival();
+    BackgroundNpcPatrolYieldsWhenNavigationIsPrepared();
     BlockingNpcMoveReplansAfterDynamicObstacleChange();
     NpcMoveLevelMarkerOverloadsResolvePositionOnly();
     AsyncNpcMoveSupportsAwaitDuplicateValidationAndCancellation();

@@ -84,6 +84,11 @@ NpcMoveStatus GetNpcMoveStatus(
         const NpcNavigationRuntime& runtime,
         std::string_view instanceId);
 
+bool UpdateNpcFootstepCadence(
+        NpcNavigationRecord& record,
+        bool active,
+        float resolvedHorizontalDistance);
+
 void UpdateNpcNavigationAndLocomotionSystem(
         engine::World& world,
         engine::AssetManager& assets,
