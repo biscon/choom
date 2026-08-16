@@ -443,25 +443,33 @@ bool AssetManager::IsScopeFinished(AssetScopeHandle scope) const
 
 float AssetManager::GetScopeProgress(AssetScopeHandle scope) const
 {
-    std::lock_guard<std::mutex> lock(stateMutex);
-    if (!IsValidScopeNoLock(scope)) {
-        return 1.0f;
-    }
-
     size_t finished = 0;
     size_t total = 0;
-    textures.GetScopeProgressCounts(scope, finished, total);
-    fonts.GetScopeProgress(scope, finished, total);
-    models.GetScopeProgress(scope, finished, total);
-    spriteAnimations.GetScopeProgress(scope, textures, finished, total);
-    sounds.GetScopeProgress(scope, finished, total);
-    music.GetScopeProgress(scope, finished, total);
+    GetScopeProgressCounts(scope, finished, total);
 
     if (total == 0) {
         return 1.0f;
     }
 
     return static_cast<float>(finished) / static_cast<float>(total);
+}
+
+void AssetManager::GetScopeProgressCounts(
+        AssetScopeHandle scope,
+        size_t& finished,
+        size_t& total) const
+{
+    finished = 0;
+    total = 0;
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (!IsValidScopeNoLock(scope)) return;
+
+    textures.GetScopeProgressCounts(scope, finished, total);
+    fonts.GetScopeProgress(scope, finished, total);
+    models.GetScopeProgress(scope, finished, total);
+    spriteAnimations.GetScopeProgress(scope, textures, finished, total);
+    sounds.GetScopeProgress(scope, finished, total);
+    music.GetScopeProgress(scope, finished, total);
 }
 
 void AssetManager::UpdateMainThread(float maxMilliseconds)

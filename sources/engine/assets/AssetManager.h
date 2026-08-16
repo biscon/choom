@@ -13,6 +13,7 @@
 #include <raylib.h>
 
 #include <atomic>
+#include <cstddef>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -129,6 +130,10 @@ public:
     bool IsScopeReady(AssetScopeHandle scope) const;
     bool IsScopeFinished(AssetScopeHandle scope) const;
     float GetScopeProgress(AssetScopeHandle scope) const;
+    void GetScopeProgressCounts(
+            AssetScopeHandle scope,
+            size_t& finished,
+            size_t& total) const;
 
     void UpdateMainThread(float maxMilliseconds);
 

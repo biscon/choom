@@ -1,7 +1,9 @@
 #include "game/ApplicationFlow.h"
+#include "game/GameLevelLoading.h"
 
 #include <cassert>
 #include <cstring>
+#include <cmath>
 
 namespace {
 
@@ -88,6 +90,49 @@ void DebugConsoleAvailabilityFollowsLiveGameOnly()
     assert(!game::IsApplicationDebugConsoleAvailable(state, true, true));
 }
 
+void LevelLoadingProgressAndFadeAreDeterministic()
+{
+    game::GameLevelLoadingState loading;
+    game::BeginGameLevelLoading(loading);
+    assert(game::IsGameLevelLoading(loading));
+    assert(game::IsGameLevelLoadOverlayVisible(loading));
+    assert(game::GameLevelLoadOverlayOpacity(loading) == 1.0f);
+
+    game::UpdateGameLevelLoadingProgress(loading, 0.5f, 0.25f, false);
+    assert(std::fabs(loading.displayedProgress - 0.45f) < 0.0001f);
+    game::UpdateGameLevelLoadingProgress(loading, 0.1f, 0.0f, false);
+    assert(std::fabs(loading.displayedProgress - 0.45f) < 0.0001f);
+    game::UpdateGameLevelLoadingProgress(loading, 1.0f, 1.0f, false);
+    assert(std::fabs(loading.displayedProgress - 0.99f) < 0.0001f);
+    game::UpdateGameLevelLoadingProgress(loading, 1.0f, 1.0f, true);
+    assert(loading.displayedProgress == 1.0f);
+
+    game::BeginGameLevelLoadingFade(loading);
+    assert(!game::AdvanceGameLevelLoadingFade(loading, 0.125f));
+    assert(std::fabs(game::GameLevelLoadOverlayOpacity(loading) - 0.5f)
+            < 0.0001f);
+    assert(game::AdvanceGameLevelLoadingFade(loading, 0.125f));
+    assert(game::GameLevelLoadOverlayOpacity(loading) == 0.0f);
+    game::ActivateGameLevel(loading);
+    assert(!game::IsGameLevelLoading(loading));
+    assert(!game::IsGameLevelLoadOverlayVisible(loading));
+
+    game::StopGameLevelLoading(loading);
+    assert(loading.phase == game::GameLevelLoadPhase::Stopped);
+}
+
+void NpcNavigationMustBeUsableBeforeActivation()
+{
+    assert(game::EvaluateGameLevelNavigationGate(true, false, false)
+            == game::GameLevelNavigationGate::Waiting);
+    assert(game::EvaluateGameLevelNavigationGate(true, true, true)
+            == game::GameLevelNavigationGate::Ready);
+    assert(game::EvaluateGameLevelNavigationGate(true, true, false)
+            == game::GameLevelNavigationGate::Unavailable);
+    assert(game::EvaluateGameLevelNavigationGate(false, true, false)
+            == game::GameLevelNavigationGate::Ready);
+}
+
 } // namespace
 
 int main()
@@ -95,5 +140,7 @@ int main()
     MenuItemsFollowSessionState();
     FlowPreservesReturnTargets();
     DebugConsoleAvailabilityFollowsLiveGameOnly();
+    LevelLoadingProgressAndFadeAreDeterministic();
+    NpcNavigationMustBeUsableBeforeActivation();
     return 0;
 }

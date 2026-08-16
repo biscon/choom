@@ -49,6 +49,7 @@ public:
     bool AddDoor(int lineDefId);
     bool AddStaticModel(Vector2 mapPoint);
     bool AddDynamicModel(Vector2 mapPoint);
+    bool AddNpc(Vector2 mapPoint, const std::string& definitionId);
     SectorEditorRuntimeObjectDeleteRequest RequestDeleteSelected() const;
     bool DeleteById(int objectId);
 
@@ -57,6 +58,10 @@ public:
             const std::function<bool(SectorPlacedRuntimeObject&)>& mutate);
     bool AssignSelectedStaticModel(const std::string& modelPath);
     bool AssignSelectedDynamicModel(const std::string& modelPath);
+    bool AssignSelectedNpcDefinition(const std::string& definitionId);
+    bool SetSelectedNpcInstanceId(
+            const std::string& instanceId,
+            std::string& outError);
     bool SelectedDoorRuntimeTargetOpen(bool& outOpen) const;
     bool SetSelectedDoorRuntimeTargetOpen(bool open);
 

@@ -333,6 +333,19 @@ FpsWeaponCrosshairDefinition ReadCrosshair(
     return result;
 }
 
+FpsWeaponImpactParticlesDefinition ReadImpactParticles(
+        const Json& object,
+        const std::string& context)
+{
+    if (!object.is_object()) Fail(context + " must be an object");
+    FpsWeaponImpactParticlesDefinition result;
+    result.enabled = Boolean(object, "enabled", context);
+    result.particleCount = Integer(object, "particleCount", context);
+    result.sizeScale = Number(object, "sizeScale", context);
+    result.intensity = Number(object, "intensity", context);
+    return result;
+}
+
 void ValidateFiring(
         const FpsWeaponFiringDefinition& value,
         const std::string& context)
@@ -373,7 +386,13 @@ void ValidateFiring(
             value.muzzleFlash.radianceStrength,
             value.muzzleLight.intensity,
             value.muzzleLight.radiusWorld, value.muzzleLight.lifetimeSeconds,
-            value.muzzleLight.decayExponent};
+            value.muzzleLight.decayExponent,
+            value.impact.staggerSeconds,
+            value.impact.knockbackImpulseWorldPerSecond,
+            value.impact.blood.sizeScale,
+            value.impact.blood.intensity,
+            value.impact.surfaceDebris.sizeScale,
+            value.impact.surfaceDebris.intensity};
     for (float component : values) {
         if (!std::isfinite(component)) Fail(context + " contains a non-finite value");
     }
@@ -429,6 +448,26 @@ void ValidateFiring(
             || value.muzzleLight.decayExponent <= 0.0f) {
         Fail(context + ".muzzleLight contains an invalid intensity, radius, lifetime, or decay");
     }
+    const auto validateParticles = [&](
+            const FpsWeaponImpactParticlesDefinition& particles,
+            const char* name) {
+        if (particles.particleCount < 0 || particles.particleCount > 256
+                || (particles.enabled && particles.particleCount == 0)
+                || particles.sizeScale < 0.05f || particles.sizeScale > 10.0f
+                || particles.intensity < 0.0f || particles.intensity > 10.0f) {
+            Fail(context + ".impact." + name
+                    + " contains an invalid count, size scale, or intensity");
+        }
+    };
+    if (value.impact.damage < 0 || value.impact.damage > 1000000
+            || value.impact.staggerSeconds < 0.0f
+            || value.impact.staggerSeconds > 10.0f
+            || value.impact.knockbackImpulseWorldPerSecond < 0.0f
+            || value.impact.knockbackImpulseWorldPerSecond > 100.0f) {
+        Fail(context + ".impact contains invalid damage, stagger, or knockback values");
+    }
+    validateParticles(value.impact.blood, "blood");
+    validateParticles(value.impact.surfaceDebris, "surfaceDebris");
 }
 
 FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& context)
@@ -529,6 +568,25 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
     result.muzzleLight.radiusWorld = Number(light, "radiusWorld", lightContext);
     result.muzzleLight.lifetimeSeconds = Number(light, "lifetimeSeconds", lightContext);
     result.muzzleLight.decayExponent = Number(light, "decayExponent", lightContext);
+
+    const auto impact = object.find("impact");
+    if (impact != object.end()) {
+        const std::string impactContext = context + ".impact";
+        if (!impact->is_object()) Fail(impactContext + " must be an object");
+        result.impact.damage = Integer(*impact, "damage", impactContext);
+        result.impact.staggerSeconds = Number(
+                *impact, "staggerSeconds", impactContext);
+        result.impact.knockbackImpulseWorldPerSecond = Number(
+                *impact,
+                "knockbackImpulseWorldPerSecond",
+                impactContext);
+        result.impact.blood = ReadImpactParticles(
+                Require(*impact, "blood", impactContext),
+                impactContext + ".blood");
+        result.impact.surfaceDebris = ReadImpactParticles(
+                Require(*impact, "surfaceDebris", impactContext),
+                impactContext + ".surfaceDebris");
+    }
     ValidateFiring(result, context);
     return result;
 }
@@ -1861,6 +1919,29 @@ FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
     value.muzzleLight.radiusWorld = std::clamp(value.muzzleLight.radiusWorld, 0.05f, 100.0f);
     value.muzzleLight.lifetimeSeconds = std::clamp(value.muzzleLight.lifetimeSeconds, 0.005f, 2.0f);
     value.muzzleLight.decayExponent = std::clamp(value.muzzleLight.decayExponent, 0.1f, 10.0f);
+    value.impact.damage = std::clamp(value.impact.damage, 0, 1000000);
+    value.impact.staggerSeconds = std::isfinite(value.impact.staggerSeconds)
+            ? std::clamp(value.impact.staggerSeconds, 0.0f, 10.0f)
+            : 0.0f;
+    value.impact.knockbackImpulseWorldPerSecond = std::isfinite(
+            value.impact.knockbackImpulseWorldPerSecond)
+            ? std::clamp(
+                    value.impact.knockbackImpulseWorldPerSecond,
+                    0.0f,
+                    100.0f)
+            : 0.0f;
+    const auto clampParticles = [](FpsWeaponImpactParticlesDefinition& particles) {
+        particles.particleCount = std::clamp(particles.particleCount, 0, 256);
+        particles.sizeScale = std::isfinite(particles.sizeScale)
+                ? std::clamp(particles.sizeScale, 0.05f, 10.0f)
+                : 1.0f;
+        particles.intensity = std::isfinite(particles.intensity)
+                ? std::clamp(particles.intensity, 0.0f, 10.0f)
+                : 1.0f;
+        if (particles.particleCount == 0) particles.enabled = false;
+    };
+    clampParticles(value.impact.blood);
+    clampParticles(value.impact.surfaceDebris);
     return value;
 }
 

@@ -15,6 +15,16 @@ struct SectorEditorPreviewOverlayState {
     bool useBakedAmbientOcclusion = true;
     bool showObjectProbeDebugOverlay = false;
     bool previewUiHidden = false;
+    bool showNavigationSurface = true;
+    bool showNavigationEdges = true;
+    bool showNavigationTileBounds = false;
+    bool showNavigationStaticObstacles = true;
+    bool showNavigationDynamicObstacles = true;
+    bool showNavigationDoorPlaceholders = true;
+    bool showNavigationStepConnections = true;
+    bool showNavigationNpcPaths = true;
+    bool showNavigationNpcAgents = true;
+    bool showNavigationSelectedNpcOnly = false;
     PreviewDebugOverlayTab activePreviewDebugOverlayTab = PreviewDebugOverlayTab::None;
 };
 

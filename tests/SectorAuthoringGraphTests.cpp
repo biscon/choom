@@ -11809,7 +11809,10 @@ void FillRuntimeObjectTestSectorCache(
         draw.definitionKnown =
                 object.kind == "billboard"
                 || object.kind == "door"
-                || object.kind == "static_model";
+                || object.kind == "static_model"
+                || object.kind == "dynamic_model"
+                || object.kind == "npc";
+        draw.isNpc = object.kind == "npc";
         cache.runtimeObjects.push_back(draw);
     }
 }
@@ -12119,6 +12122,18 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
                   && picker.SelectedModelPath() == expected[1],
           "model picker reopening discovers new models and restores the current selection");
     picker.Close();
+    picker.Open(
+            "assets/models/characters/nested/beta.GLB",
+            game::ModelPickerTarget::NpcDefinition);
+    Check(picker.RefreshFromRoot(root, "assets/models/characters")
+                  && state.target == game::ModelPickerTarget::NpcDefinition
+                  && state.modelPaths[2]
+                          == "assets/models/characters/nested/beta.GLB"
+                  && state.optionLabelStorage[2] == "nested/beta.GLB"
+                  && picker.SelectedModelPath()
+                          == "assets/models/characters/nested/beta.GLB",
+          "NPC model picker target uses character-relative asset paths and labels");
+    picker.Close();
     Check(!state.open, "static model picker closes on cancel");
 
     std::filesystem::remove_all(root, error);
@@ -12215,6 +12230,12 @@ void TestStaticModelAssetRequestsDeduplicateAndUnloadByScope()
                   && !assets.IsScopeFinished(firstScope)
                   && Near(assets.GetScopeProgress(firstScope), 0.0f),
           "queued deduplicated models contribute correctly to scope progress");
+    size_t finishedAssets = 99;
+    size_t totalAssets = 99;
+    assets.GetScopeProgressCounts(
+            firstScope, finishedAssets, totalAssets);
+    Check(finishedAssets == 0 && totalAssets == 3,
+          "scope progress counts reset outputs and count deduplicated requests once");
 
     assets.UnloadScope(firstScope);
     Check(!assets.IsReady(first)
@@ -12233,6 +12254,10 @@ void TestStaticModelAssetRequestsDeduplicateAndUnloadByScope()
                           assets.FindReadyModelByPath(
                                   "/tmp/models/crate.glb")),
           "main-thread model loading exposes a terminal failed state for a missing model");
+    assets.GetScopeProgressCounts(
+            secondScope, finishedAssets, totalAssets);
+    Check(finishedAssets == 1 && totalAssets == 1,
+          "failed assets count as finished loading work");
     assets.Shutdown();
     Check(assets.IsFinished(otherScope) && assets.GetModel(otherScope) == nullptr,
           "model shutdown safely retires remaining pending handles");
@@ -12529,6 +12554,131 @@ void TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag()
           "dynamic prop drag follows XZ and reanchors to the destination sector floor");
     Check(editing.FinishDrag() && !renderCache.valid,
           "dynamic prop drag commit invalidates the derived 2D cache");
+}
+
+void TestNpcEditingPlacementSelectionPickingAndFloorRelativeDrag()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    game::SectorTopologySector* left = game::FindSectorTopologySector(map, 200);
+    game::SectorTopologySector* right = game::FindSectorTopologySector(map, 201);
+    Check(left != nullptr && right != nullptr,
+          "NPC editing fixture has adjacent sectors");
+    if (left == nullptr || right == nullptr) return;
+    left->floorZ = 16.0f;
+    right->floorZ = 80.0f;
+
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::NpcDefinition fred = game::MakeDefaultNpcDefinition();
+    fred.id = "fred";
+    fred.name = "Fred Johnson";
+    game::NpcDefinition zombie = game::MakeDefaultNpcDefinition();
+    zombie.id = "zombie";
+    zombie.name = "Zombie";
+    runtimeObjects.npcDefinitionCatalog.definitions = {fred, zombie};
+    runtimeObjects.npcDefinitionCatalogRevision = 7;
+
+    game::RuntimeObjectEditingState editingState;
+    game::RefreshSectorEditorNpcPlacementOptions(
+            editingState.npcPlacement,
+            runtimeObjects.npcDefinitionCatalog,
+            runtimeObjects.npcDefinitionCatalogRevision);
+    Check(game::ResolveSectorEditorNpcPlacementDefault(editingState.npcPlacement)
+                  == "fred"
+                  && editingState.npcPlacement.optionLabelStorage.size() == 2
+                  && editingState.npcPlacement.optionLabelStorage[0]
+                          == "Fred Johnson (fred)",
+          "NPC placement options use the first definition fallback and human-readable labels");
+    editingState.npcPlacement.lastDefinitionId = "zombie";
+    Check(game::ResolveSectorEditorNpcPlacementDefault(editingState.npcPlacement)
+                  == "zombie",
+          "NPC placement remembers the last selected definition in editor memory");
+
+    game::RuntimeObjectEditingUiState uiState;
+    game::SelectionState selectionState;
+    game::SectorEditorDocumentState documentState;
+    uint64_t renderRevision = 3;
+    game::SectorEditorTopologyRenderCache renderCache;
+    std::string statusText;
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    game::SectorEditorRuntimeObjectEditingService editing =
+            MakeRuntimeObjectEditingServiceForTest(
+                    map, runtimeObjects, editingState, uiState, selectionState,
+                    documentState, renderRevision, renderCache, statusText, true);
+
+    Check(editing.AddNpc(Vector2{24.0f, 24.0f}, "zombie"),
+          "NPC placement succeeds inside a cached derived sector");
+    Check(map.runtimeObjects.size() == 1
+                  && map.runtimeObjects[0].kind == "npc"
+                  && map.runtimeObjects[0].npc.definitionId == "zombie"
+                  && map.runtimeObjects[0].npc.instanceId.empty()
+                  && Near(map.runtimeObjects[0].position, Vector3{24.0f, 16.0f, 24.0f})
+                  && Near(map.runtimeObjects[0].npc.scale, 1.0f)
+                  && map.runtimeObjects[0].npc.shadowMode
+                          == game::SectorDynamicModelShadowMode::Contact,
+          "NPC placement creates default floor-relative scale and contact-shadow data");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && renderRevision == 4
+                  && !renderCache.valid,
+          "NPC placement dirties the document and invalidates the 2D cache");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(!renderCache.runtimeObjects.empty()
+                  && renderCache.runtimeObjects[0].definitionKnown
+                  && renderCache.runtimeObjects[0].isNpc,
+          "NPC placement participates in the runtime-object render cache");
+    game::SectorEditorTopologyDrawContext pickContext;
+    pickContext.canvasRect = Rectangle{0.0f, 0.0f, 200.0f, 200.0f};
+    pickContext.viewCenter = game::SectorAuthoringToWorldPosition(Vector2{24.0f, 24.0f});
+    pickContext.viewZoom = 1.0f;
+    std::vector<game::SectorEditorPickCandidate> candidates;
+    game::AppendCachedRuntimeObjectPickCandidates(
+            renderCache,
+            pickContext,
+            Vector2{100.0f, 82.0f},
+            1.0f,
+            candidates);
+    Check(candidates.size() == 1
+                  && candidates[0].target.kind
+                          == game::SectorEditorPickKind::RuntimeObject
+                  && candidates[0].target.id == map.runtimeObjects[0].id,
+          "NPC stick-figure footprint is selectable beyond the center point");
+
+    Check(editing.AssignSelectedNpcDefinition("fred")
+                  && map.runtimeObjects[0].npc.definitionId == "fred"
+                  && editingState.npcPlacement.lastDefinitionId == "fred"
+                  && !renderCache.valid,
+          "NPC definition assignment updates the object and in-memory placement default");
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    std::string instanceError;
+    Check(editing.SetSelectedNpcInstanceId("front_desk", instanceError)
+                  && instanceError.empty()
+                  && map.runtimeObjects[0].npc.instanceId == "front_desk",
+          "NPC inspector accepts an optional valid map instance ID");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.AddNpc(Vector2{40.0f, 24.0f}, "zombie"),
+          "a second NPC can use the same reusable NPC definition");
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(!editing.SetSelectedNpcInstanceId("front_desk", instanceError)
+                  && instanceError.find("unique") != std::string::npos
+                  && map.runtimeObjects[1].npc.instanceId.empty(),
+          "NPC instance IDs are unique within a map without restricting definition reuse");
+
+    const int firstNpcId = map.runtimeObjects[0].id;
+    editing.SelectObject(firstNpcId);
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    Check(editing.BeginDrag(firstNpcId), "NPC drag begins through the shared select tool path");
+    editing.UpdateDrag(Vector2{96.0f, 32.0f});
+    const game::SectorPlacedRuntimeObject* moved =
+            game::FindSectorPlacedRuntimeObject(map, firstNpcId);
+    Check(moved != nullptr
+                  && Near(moved->position, Vector3{96.0f, 80.0f, 32.0f})
+                  && !renderCache.runtimeObjects.empty()
+                  && Near(renderCache.runtimeObjects[0].map, Vector2{96.0f, 32.0f}),
+          "NPC drag follows snapped XZ and reanchors to the destination sector floor");
+    Check(editing.FinishDrag() && !renderCache.valid,
+          "NPC drag commit invalidates the derived 2D cache");
 }
 
 void TestRuntimeObjectEditingServicesStayIndependentOfSectorEditor()
@@ -13193,6 +13343,7 @@ int main()
     TestStaticModelAssetRequestsDeduplicateAndUnloadByScope();
     TestStaticPropEditingPlacementMutationAndFloorRelativeDrag();
     TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag();
+    TestNpcEditingPlacementSelectionPickingAndFloorRelativeDrag();
     TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime();
     TestRuntimeObjectEditingServicesStayIndependentOfSectorEditor();
 

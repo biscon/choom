@@ -117,6 +117,9 @@ void RegistrySuccess()
     assert(Near(pistol->crosshair.outlineThicknessPixels, 1.0f));
     assert(Near(pistol->firing.shotIntervalSeconds, 0.18f));
     assert(Near(pistol->firing.maximumRangeWorld, 100.0f));
+    assert(pistol->firing.impact.damage == 0
+            && !pistol->firing.impact.blood.enabled
+            && !pistol->firing.impact.surfaceDebris.enabled);
     assert(pistol->firing.shootSoundPath == "weapons/pistol/shot_01.ogg");
     assert(Near(pistol->firing.recoil.translationImpulse.z, -0.03f));
     assert(Near(pistol->firing.recoil.rotationImpulseDegrees.x, -3.0f));
@@ -203,6 +206,26 @@ void RegistrySuccess()
     assert(Near(game::FpsViewmodelBrightnessMultiplier(-0.55f), 0.45f));
     assert(Near(game::FpsViewmodelBrightnessMultiplier(
             pistol->viewmodel.attachment.lighting.brightnessAdjustment), 1.0f));
+
+    std::string withImpact = ValidRegistry;
+    const std::string impactJson =
+            "\"impact\":{\"damage\":25,\"staggerSeconds\":0.18,"
+            "\"knockbackImpulseWorldPerSecond\":1.25,"
+            "\"blood\":{\"enabled\":true,\"particleCount\":18,"
+            "\"sizeScale\":1,\"intensity\":1},"
+            "\"surfaceDebris\":{\"enabled\":true,\"particleCount\":14,"
+            "\"sizeScale\":0.85,\"intensity\":0.8}},";
+    withImpact.insert(withImpact.find("\"shootSound\""), impactJson);
+    assert(game::ParseFpsWeaponRegistry(withImpact, registry, &error));
+    pistol = game::FindFpsWeaponDefinition(registry, "pistol");
+    assert(pistol != nullptr
+            && pistol->firing.impact.damage == 25
+            && Near(pistol->firing.impact.staggerSeconds, 0.18f)
+            && Near(pistol->firing.impact.knockbackImpulseWorldPerSecond, 1.25f)
+            && pistol->firing.impact.blood.enabled
+            && pistol->firing.impact.blood.particleCount == 18
+            && pistol->firing.impact.surfaceDebris.enabled
+            && pistol->firing.impact.surfaceDebris.particleCount == 14);
 
     std::string withoutOverride = ValidRegistry;
     const size_t overrideField = withoutOverride.find("\"materialOverride\"");

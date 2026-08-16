@@ -110,6 +110,7 @@ uniform float metallicFactor;
 uniform float roughnessFactor;
 uniform float normalScale;
 uniform float occlusionStrength;
+uniform float modelOpacity;
 uniform int hasBaseColorTexture;
 uniform int hasMetallicTexture;
 uniform int hasNormalTexture;
@@ -552,7 +553,9 @@ void main()
     linearColor.r = isnan(linearColor.r) ? 0.0 : (isinf(linearColor.r) ? (linearColor.r > 0.0 ? 65504.0 : 0.0) : min(max(linearColor.r, 0.0), 65504.0));
     linearColor.g = isnan(linearColor.g) ? 0.0 : (isinf(linearColor.g) ? (linearColor.g > 0.0 ? 65504.0 : 0.0) : min(max(linearColor.g, 0.0), 65504.0));
     linearColor.b = isnan(linearColor.b) ? 0.0 : (isinf(linearColor.b) ? (linearColor.b > 0.0 ? 65504.0 : 0.0) : min(max(linearColor.b, 0.0), 65504.0));
-    finalColor = vec4(linearColor, 1.0);
+    finalColor = vec4(
+            linearColor,
+            clamp(modelOpacity, 0.0, 1.0));
 }
 )";
 
@@ -913,6 +916,7 @@ bool SectorStaticModelRenderer::Load()
     roughnessFactorLoc = GetShaderLocation(shader, "roughnessFactor");
     normalScaleLoc = GetShaderLocation(shader, "normalScale");
     occlusionStrengthLoc = GetShaderLocation(shader, "occlusionStrength");
+    modelOpacityLoc = GetShaderLocation(shader, "modelOpacity");
     hasBaseColorTextureLoc = GetShaderLocation(shader, "hasBaseColorTexture");
     hasMetallicTextureLoc = GetShaderLocation(shader, "hasMetallicTexture");
     hasNormalTextureLoc = GetShaderLocation(shader, "hasNormalTexture");
@@ -1024,6 +1028,7 @@ void SectorStaticModelRenderer::Shutdown()
     roughnessFactorLoc = -1;
     normalScaleLoc = -1;
     occlusionStrengthLoc = -1;
+    modelOpacityLoc = -1;
     hasBaseColorTextureLoc = -1;
     hasMetallicTextureLoc = -1;
     hasNormalTextureLoc = -1;
@@ -1285,7 +1290,8 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
         const RuntimePortalVisibilityResult& visibility,
         bool objectProbeBakeCurrent,
         const TextureCubemap* environment,
-        bool allowSkinning)
+        bool allowSkinning,
+        float opacity)
 {
     const bool canSkin = allowSkinning
             && model.skeleton.boneCount > 0
@@ -1295,6 +1301,10 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
     const int useSkinning = canSkin ? 1 : 0;
     const int noStaticLightmap = 0;
     const int noBakedAo = 0;
+    opacity = std::isfinite(opacity) ? std::clamp(opacity, 0.0f, 1.0f) : 1.0f;
+    if (modelOpacityLoc >= 0) {
+        SetShaderValue(shader, modelOpacityLoc, &opacity, SHADER_UNIFORM_FLOAT);
+    }
     if (useSkinningLoc >= 0) SetShaderValue(shader, useSkinningLoc, &useSkinning, SHADER_UNIFORM_INT);
     if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &noStaticLightmap, SHADER_UNIFORM_INT);
     if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &noBakedAo, SHADER_UNIFORM_INT);
@@ -1440,6 +1450,10 @@ void SectorStaticModelRenderer::Draw(
     if (!shaderLoaded || shader.id == 0) {
         AppendStaticModelDebugText(renderDebugText, 0, 0, 0, 0);
         return;
+    }
+    const float opaque = 1.0f;
+    if (modelOpacityLoc >= 0) {
+        SetShaderValue(shader, modelOpacityLoc, &opaque, SHADER_UNIFORM_FLOAT);
     }
 
     SectorDynamicLightShaderLocations dynamicLocations;
@@ -1775,8 +1789,9 @@ void SectorStaticModelRenderer::Draw(
              &considered,
              &drawn,
              &portalCulled,
-             &skipped](
-                    engine::Entity,
+             &skipped,
+             &runtimeObjectWorld](
+                    engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObject& object,
                     SectorObjectLighting& lighting,
@@ -1797,8 +1812,14 @@ void SectorStaticModelRenderer::Draw(
                     return;
                 }
                 Model model = engine::BuildAnimatedModelPoseView(*modelAsset, instance);
+                Vector3 renderPosition = transform.position;
+                if (runtimeObjectWorld.Has<SectorObjectVisualOffset>(entity)) {
+                    renderPosition = Vector3Add(
+                            renderPosition,
+                            runtimeObjectWorld.Get<SectorObjectVisualOffset>(entity).position);
+                }
                 const Matrix authoredTransform = BuildSectorStaticModelAuthoredTransform(
-                        transform.position,
+                        renderPosition,
                         transform.rotationXRadians,
                         transform.yawRadians,
                         transform.rotationZRadians,
@@ -1810,11 +1831,17 @@ void SectorStaticModelRenderer::Draw(
                                 modelAsset->localBounds,
                                 authoredTransform,
                                 object.currentSectorId,
-                                transform.position)
+                                renderPosition)
                         : SectorReceiverBounds{
                                 object.currentSectorId,
-                                transform.position,
-                                transform.position};
+                                renderPosition,
+                                renderPosition};
+                const bool fading = dynamicModel.opacity < 0.999f;
+                if (fading) {
+                    rlEnableColorBlend();
+                    rlSetBlendMode(BLEND_ALPHA);
+                    rlDisableDepthMask();
+                }
                 const bool drewMesh = DrawWorldDynamicModel(
                         *modelAsset,
                         model,
@@ -1831,7 +1858,12 @@ void SectorStaticModelRenderer::Draw(
                         visibility,
                         objectProbeBakeCurrent,
                         environment,
-                        true);
+                        true,
+                        dynamicModel.opacity);
+                if (fading) {
+                    rlDisableColorBlend();
+                    rlEnableDepthMask();
+                }
                 if (drewMesh) ++drawn;
                 else ++skipped;
             });
@@ -1967,6 +1999,10 @@ void SectorStaticModelRenderer::DrawViewmodel(
         const SectorViewmodelLightingContext& attachmentLighting)
 {
     if (!shaderLoaded || !instance.poseReady || instance.poseFailed) return;
+    const float opaque = 1.0f;
+    if (modelOpacityLoc >= 0) {
+        SetShaderValue(shader, modelOpacityLoc, &opaque, SHADER_UNIFORM_FLOAT);
+    }
 
     SectorDynamicLightShaderLocations dynamicLocations{
             dynamicLightCountLoc, dynamicLightPositionsLoc, dynamicLightColorsLoc,

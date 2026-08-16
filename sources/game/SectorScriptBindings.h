@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <array>
 #include <raylib.h>
 #include <string>
 #include <vector>
@@ -18,6 +19,8 @@ struct EngineContext;
 namespace game {
 
 struct SectorRuntimeObjectState;
+class SectorNavigationWorld;
+struct NpcNavigationRuntime;
 struct SectorTopologyMap;
 
 struct SectorScriptDoorMove {
@@ -39,20 +42,45 @@ struct SectorScriptTriggerState {
     float remainingDelayMilliseconds = 0.0f;
 };
 
+struct SectorScriptNpcMove {
+    uint64_t token = 0;
+    uint64_t requestId = 0;
+    std::string instanceId;
+    engine::ScriptOperationHandle operation{};
+    bool active = false;
+};
+
+struct SectorScriptNpcMoveDiagnostics {
+    uint64_t requests = 0;
+    uint64_t successes = 0;
+    uint64_t failures = 0;
+    uint64_t cancellations = 0;
+    uint64_t capacityWarnings = 0;
+    std::array<char, 64> lastInstanceId{};
+    std::array<char, 192> lastOutcome{};
+};
+
 struct SectorScriptHost {
     SectorRuntimeObjectState* runtimeObjects = nullptr;
+    SectorNavigationWorld* navigation = nullptr;
+    NpcNavigationRuntime* npcNavigation = nullptr;
     SectorTopologyMap* map = nullptr;
     engine::ScriptRuntime* scripts = nullptr;
     std::vector<SectorScriptDoorMove> doorMoves;
+    std::vector<SectorScriptNpcMove> npcMoves;
     std::vector<SectorScriptTriggerState> triggers;
+    SectorScriptNpcMoveDiagnostics npcMoveDiagnostics;
     uint64_t nextDoorMoveToken = 1;
+    uint64_t nextNpcMoveToken = 1;
 };
 
 void InitializeSectorScriptHost(
         SectorScriptHost& host,
         SectorRuntimeObjectState& runtimeObjects,
         SectorTopologyMap& map,
-        engine::ScriptRuntime& scripts);
+        engine::ScriptRuntime& scripts,
+        SectorNavigationWorld* navigation = nullptr,
+        NpcNavigationRuntime* npcNavigation = nullptr);
 
 void ResetSectorScriptHost(SectorScriptHost& host);
 

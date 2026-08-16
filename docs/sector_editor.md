@@ -755,9 +755,10 @@ assets that can be selected like any other Aseprite billboard asset. Legacy
 external maps containing only `definitionId: "goblin"` are not migrated into
 functional generic billboards by the editor. The old F5 temporary
 non-serialized spawn path has been removed; placed billboards are the runtime
-object authoring path. NPC AI/state machines, general actor
-collision/physics, object scripting, attached lights, 3D model rendering, and
-transparent alpha-blended sprites are still deferred.
+object authoring path. Placed NPCs can use the shared bounded navigation,
+collision-constrained locomotion, door traversal, and Crowd avoidance service.
+General NPC AI/state machines, unrestricted actor physics, attached lights,
+and transparent alpha-blended sprites are still deferred.
 
 ## Baked Lightmaps
 
@@ -829,8 +830,9 @@ deferred.
 - Gameplay preview mode has topology-based horizontal cylinder collision,
   portal height checks, floor following, gravity, landing, ceiling clamp, and
   grounded-only jumping. Two-sided portal linedefs can opt into player blocking.
-  Crouching, slopes, projectile/sight/monster collision flags, polished drop
-  behavior, and NPC navigation are deferred.
+  Crouching, slopes, projectile/sight/monster collision flags, and polished
+  drop behavior are deferred. NPCs use a separate cached Detour navigation
+  world and still resolve locomotion through topology collision.
 - No entity-attached gameplay lights or unrestricted general-purpose dynamic
   shadow system; preview dynamic lights use the documented bounded renderer
   paths.
@@ -838,8 +840,9 @@ deferred.
   middle texture decals, middle emissive/tint/bloom controls, or middle
   Copy/Paste Material controls.
 - Split/double-leaf doors, dynamic sector-height doors, transparent/glass model
-  doors, frame collision, locks, keys, scripts, save-game door state, and
-  NPC/pathfinding integration are deferred. Model leaves/frames do not enter
+  doors, frame collision, locks, keys, and save-game door state are deferred.
+  NPC pathfinding supports current portal-attached doors through typed links.
+  Model leaves/frames do not enter
   static lightmaps, and middle/transparent alpha-aware door shadows are not
   supported.
 - No material maps, PBR material editing, or texture search UI.

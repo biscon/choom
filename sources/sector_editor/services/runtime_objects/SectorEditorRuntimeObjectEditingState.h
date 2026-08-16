@@ -3,6 +3,7 @@
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorModalTypes.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
+#include "sector_editor/npcs/SectorEditorNpcPlacementState.h"
 
 #include <string>
 #include <cstdint>
@@ -12,7 +13,8 @@ namespace game {
 
 enum class ModelPickerTarget {
     StaticModel,
-    DynamicModel
+    DynamicModel,
+    NpcDefinition
 };
 
 struct StaticModelPickerState {
@@ -30,6 +32,7 @@ struct StaticModelPickerState {
 
 struct RuntimeObjectEditingState {
     RuntimeObjectDragState drag;
+    SectorEditorNpcPlacementState npcPlacement;
     SectorSpriteMetadataCatalog spriteMetadataCatalog;
     int billboardMetadataObjectId = -1;
     std::string billboardMetadataSpriteAnimationPath;

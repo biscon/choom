@@ -7,6 +7,8 @@
 
 #include <raylib.h>
 
+#include <algorithm>
+
 namespace game {
 
 namespace {
@@ -178,8 +180,8 @@ void GameApplication::ProcessDeferredDebugActions(
             engine::DebugConsoleCapturesGameplayInput(debugConsole));
     engine::DebugConsoleAddLine(
             debugConsole,
-            "reload completed: " + gameSession.LevelName(),
-            engine::DebugConsoleSeverity::Success);
+            "reload loading: " + gameSession.LevelName(),
+            engine::DebugConsoleSeverity::Info);
     engine::FlushPendingDebugConsoleLogs(debugConsole);
 }
 
@@ -202,6 +204,7 @@ void GameApplication::RenderInteractiveUI(
         engine::FontHandle font,
         engine::FontHandle smallFont)
 {
+    if (gameSession.IsLoadOverlayVisible()) return;
     if (flow.screen == ApplicationScreen::Editor) {
         editor.RenderUI(
                 contentUi,
@@ -210,6 +213,10 @@ void GameApplication::RenderInteractiveUI(
                 assets,
                 font,
                 smallFont);
+    }
+    if (flow.screen == ApplicationScreen::Game) {
+        gameSession.RenderNavigationDebugPanel(
+                config, assets, smallFont, gameScene);
     }
     if (flow.screen == ApplicationScreen::MainMenu) {
         if (graphicsSettingsOpen) {
@@ -265,6 +272,18 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
                 break;
             case GameGraphicsSettingsAction::None:
                 break;
+        }
+        return;
+    }
+
+    if (gameSession.IsLoading()) {
+        gameSession.Update(context, gameScene, dt);
+        const std::string loadFailure = gameSession.TakeFailureError();
+        if (!loadFailure.empty()) {
+            menuStatus = loadFailure;
+            debugConsole.open = false;
+            gameSession.SetConsoleInputCaptured(false);
+            MarkApplicationGameStopped(flow);
         }
         return;
     }
@@ -350,6 +369,9 @@ void GameApplication::Update(engine::EngineContext& context, float dt)
 
 ApplicationContentKind GameApplication::BackgroundContentKind() const
 {
+    if (gameSession.IsLoadScreenOpaque()) {
+        return ApplicationContentKind::Empty;
+    }
     switch (BackgroundScreen()) {
         case ApplicationScreen::Game:
             return ApplicationContentKind::Sector3D;
@@ -365,6 +387,8 @@ ApplicationContentKind GameApplication::BackgroundContentKind() const
 
 bool GameApplication::ShouldRefreshBackground() const
 {
+    if (gameSession.IsLoadScreenOpaque()) return false;
+    if (gameSession.IsLoadScreenFading()) return true;
     return flow.screen != ApplicationScreen::MainMenu;
 }
 
@@ -419,7 +443,9 @@ void GameApplication::Render3DViewmodel(engine::AssetManager& assets)
 
 void GameApplication::Render3DOverlays()
 {
-    if (BackgroundScreen() == ApplicationScreen::Editor) {
+    if (flow.screen == ApplicationScreen::Game) {
+        gameSession.RenderNavigationDebugWorld(gameScene);
+    } else if (BackgroundScreen() == ApplicationScreen::Editor) {
         editor.RenderPreview3DOverlays();
     }
 }
@@ -462,13 +488,48 @@ const engine::RenderTarget* GameApplication::HdrDebugPresentationSource() const
     return editor.Preview3DHdrDebugPresentationSource();
 }
 
-void GameApplication::Render3DHud(Rectangle playableViewport) const
+void GameApplication::Render3DHud(
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        Rectangle playableViewport) const
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
-        gameSession.RenderHud(playableViewport);
+        gameSession.RenderHud(assets, font, playableViewport);
     } else {
         editor.RenderPreview3DHud(playableViewport);
     }
+}
+
+void GameApplication::RenderLoadingOverlay(
+        Rectangle presentationViewport,
+        int outputWidth,
+        int outputHeight) const
+{
+    if (!gameSession.IsLoadOverlayVisible()) return;
+    const float opacity = gameSession.LoadOverlayOpacity();
+    if (opacity <= 0.0f) return;
+
+    DrawRectangle(
+            0,
+            0,
+            std::max(0, outputWidth),
+            std::max(0, outputHeight),
+            Fade(BLACK, opacity));
+    const float barWidth = std::max(1.0f, presentationViewport.width * 0.40f);
+    const float barHeight = std::max(
+            1.0f,
+            presentationViewport.height * (14.0f / 1080.0f));
+    const Rectangle track{
+            presentationViewport.x
+                    + (presentationViewport.width - barWidth) * 0.5f,
+            presentationViewport.y
+                    + (presentationViewport.height - barHeight) * 0.5f,
+            barWidth,
+            barHeight};
+    DrawRectangleRec(track, Fade(Color{20, 28, 40, 255}, opacity));
+    Rectangle fill = track;
+    fill.width *= std::clamp(gameSession.LoadProgress(), 0.0f, 1.0f);
+    DrawRectangleRec(fill, Fade(Color{40, 120, 255, 255}, opacity));
 }
 
 void GameApplication::HandleMenuAction(
@@ -641,6 +702,7 @@ ApplicationScreen GameApplication::BackgroundScreen() const
 
 bool GameApplication::DebugConsoleAvailable() const
 {
+    if (gameSession.IsLoadOverlayVisible()) return false;
     return IsApplicationDebugConsoleAvailable(
             flow,
             gameSession.IsRunning(),

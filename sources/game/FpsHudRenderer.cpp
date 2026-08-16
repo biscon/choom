@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace game {
 namespace {
@@ -127,29 +128,66 @@ FpsCrosshairLayout BuildFpsCrosshairLayout(
 
 void DrawFpsHud(const FpsHudContext& context)
 {
-    if (!ShouldDrawFpsCrosshair(context)
-            || context.playableViewport.width <= 0.0f
+    if (context.playableViewport.width <= 0.0f
             || context.playableViewport.height <= 0.0f) {
         return;
     }
-    const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
-            context.weaponRegistry,
-            context.viewmodel.activeWeaponId);
-    if (weapon == nullptr) return;
-
-    const FpsCrosshairLayout layout =
-            BuildFpsCrosshairLayout(
+    const float uiScale = FpsHudScale(context.playableViewport);
+    if (ShouldDrawFpsCrosshair(context)) {
+        const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
+                context.weaponRegistry,
+                context.viewmodel.activeWeaponId);
+        if (weapon != nullptr) {
+            const FpsCrosshairLayout layout = BuildFpsCrosshairLayout(
                     weapon->crosshair,
                     context.playableViewport,
-                    FpsHudScale(context.playableViewport));
-    for (const FpsCrosshairSegmentLayout& segment
-            : layout.segments) {
-        DrawRectangleRec(segment.outline, weapon->crosshair.outlineColor);
+                    uiScale);
+            for (const FpsCrosshairSegmentLayout& segment : layout.segments) {
+                DrawRectangleRec(segment.outline, weapon->crosshair.outlineColor);
+            }
+            for (const FpsCrosshairSegmentLayout& segment : layout.segments) {
+                DrawRectangleRec(segment.inner, weapon->crosshair.innerColor);
+            }
+        }
     }
-    for (const FpsCrosshairSegmentLayout& segment
-            : layout.segments) {
-        DrawRectangleRec(segment.inner, weapon->crosshair.innerColor);
-    }
+
+    if (context.health == nullptr) return;
+    const engine::FontAsset* fontAsset = context.font;
+    if (fontAsset == nullptr) return;
+    const int margin = ScaledPixels(22.0f, uiScale);
+    const int width = ScaledPixels(180.0f, uiScale);
+    const int height = ScaledPixels(10.0f, uiScale);
+    const int x = static_cast<int>(std::lround(context.playableViewport.x)) + margin;
+    const int y = static_cast<int>(std::lround(
+            context.playableViewport.y + context.playableViewport.height))
+            - margin - height;
+    const Rectangle border = Rect(x, y, width, height);
+    DrawRectangleRec(border, Color{8, 10, 12, 210});
+    const Rectangle interior = Inset(border, 2);
+    const float ratio = context.health->maximum > 0
+            ? std::clamp(
+                    static_cast<float>(context.health->current)
+                            / static_cast<float>(context.health->maximum),
+                    0.0f,
+                    1.0f)
+            : 0.0f;
+    DrawRectangleRec(
+            Rectangle{interior.x, interior.y, interior.width * ratio, interior.height},
+            Color{145, 38, 37, 235});
+    char healthText[48] = {};
+    std::snprintf(
+            healthText,
+            sizeof(healthText),
+            "%d / %d",
+            context.health->current,
+            context.health->maximum);
+    DrawTextEx(
+            fontAsset->font,
+            healthText,
+            Vector2{border.x, border.y - static_cast<float>(fontAsset->pixelSize) - 3.0f},
+            static_cast<float>(fontAsset->pixelSize),
+            1.0f,
+            Color{235, 235, 225, 235});
 }
 
 } // namespace game

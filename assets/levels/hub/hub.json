@@ -658,6 +658,34 @@
         96.5
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 34,
+      "kind": "npc",
+      "npc": {
+        "definitionId": "Zombie1",
+        "instanceId": "zombie01"
+      },
+      "position": [
+        4.0,
+        0.0,
+        46.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 35,
+      "kind": "npc",
+      "npc": {
+        "definitionId": "TestCharacter",
+        "instanceId": "zombie02"
+      },
+      "position": [
+        -92.0,
+        0.0,
+        36.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -10285,6 +10313,62 @@
         "y": 0.0,
         "z": -128,
         "orientationDegrees": 90.0
+      },
+      {
+        "editorId": 2,
+        "id": "wp1",
+        "x": 64,
+        "y": 0.0,
+        "z": 304,
+        "orientationDegrees": 0.0
+      },
+      {
+        "editorId": 3,
+        "id": "wp2",
+        "x": 320,
+        "y": 0.0,
+        "z": 832,
+        "orientationDegrees": 0.0
+      },
+      {
+        "editorId": 4,
+        "id": "wp3",
+        "x": 256,
+        "y": 0.0,
+        "z": 1648,
+        "orientationDegrees": 0.0
+      },
+      {
+        "editorId": 5,
+        "id": "wp4",
+        "x": -640,
+        "y": 0.0,
+        "z": 1536,
+        "orientationDegrees": 0.0
+      },
+      {
+        "editorId": 6,
+        "id": "wp5",
+        "x": -1280,
+        "y": 0.0,
+        "z": 896,
+        "orientationDegrees": 0.0
+      },
+      {
+        "editorId": 7,
+        "id": "wp6",
+        "x": -1104,
+        "y": 0.0,
+        "z": 1696,
+        "orientationDegrees": 0.0
+      },
+      {
+        "editorId": 8,
+        "id": "wp7",
+        "x": -2352,
+        "y": -27.0,
+        "z": 1568,
+        "orientationDegrees": 0.0
       }
     ],
     "triggers": [

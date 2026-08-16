@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/components/AnimatedModel.h"
+#include "engine/ecs/Entity.h"
 #include "game/FpsWeaponRegistry.h"
 
 #include <raylib.h>
@@ -23,6 +24,7 @@ enum class FpsViewmodelEquipState {
 };
 
 enum class FpsShotSurfaceKind { None, Floor, Ceiling, Wall, LowerWall, UpperWall };
+enum class FpsShotHitKind { None, SectorSurface, Door, SolidProp, Npc };
 enum class FpsFireRejectReason {
     None,
     NotInGameplay3D,
@@ -41,11 +43,14 @@ struct FpsShotResult {
     Vector3 position{};
     Vector3 normal{};
     float distance = 0.0f;
+    FpsShotHitKind hitKind = FpsShotHitKind::None;
     FpsShotSurfaceKind surfaceKind = FpsShotSurfaceKind::None;
     int sectorId = 0;
     int lineDefId = 0;
     int sideDefId = 0;
     int neighborSectorId = 0;
+    int placedObjectId = 0;
+    engine::Entity targetEntity = engine::NullEntity();
 };
 
 struct FpsRecoilRuntimeState {

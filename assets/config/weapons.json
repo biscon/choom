@@ -16,6 +16,23 @@
       "firing": {
         "shotIntervalSeconds": 0.18,
         "maximumRangeWorld": 100.0,
+        "impact": {
+          "damage": 25,
+          "staggerSeconds": 0.18,
+          "knockbackImpulseWorldPerSecond": 1.25,
+          "blood": {
+            "enabled": true,
+            "particleCount": 18,
+            "sizeScale": 1.0,
+            "intensity": 1.0
+          },
+          "surfaceDebris": {
+            "enabled": true,
+            "particleCount": 14,
+            "sizeScale": 0.85,
+            "intensity": 0.8
+          }
+        },
         "shootSound": "weapons/pistol/shot_01.ogg",
         "recoil": {
           "translationImpulse": [0.0, 0.0, -0.03],

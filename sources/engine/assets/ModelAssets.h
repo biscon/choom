@@ -110,7 +110,12 @@ struct ModelAsset {
     int animationCount = 0;
     std::vector<ModelMaterialAsset> materials;
     BoundingBox localBounds = {};
+    // Conservative bounds covering loaded skeletal animation poses. These are
+    // generated once during model finalization and are used as a cheap raycast
+    // broad phase; exact hits still test the current skinned triangles.
+    BoundingBox animatedLocalBounds = {};
     bool hasLocalBounds = false;
+    bool hasAnimatedLocalBounds = false;
 };
 
 enum class ModelState {

@@ -1,6 +1,8 @@
 #include "sector_editor/preview/SectorEditorPreviewOverlay.h"
+#include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 
 #include "engine/render/ColorTransfer.h"
+#include "game/navigation/SectorNavigationDebugDraw.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
@@ -221,9 +223,7 @@ Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab 
     constexpr float y = 32.0f;
     constexpr float width = 700.0f;
     constexpr float collapsedHeight = 78.0f;
-    const float expandedHeight = activeTab == PreviewDebugOverlayTab::Pbr
-            ? 610.0f
-            : 390.0f;
+    const float expandedHeight = SectorEditorPreviewOverlayExpandedHeight(activeTab);
     return Rectangle{
             x,
             y,
@@ -413,6 +413,35 @@ void DrawSectorEditorPreviewObjectProbeOverlay(
                 LinearOverlaySwatch(Color{255, 255, 255, 155}));
     }
     EndMode3D();
+}
+
+void DrawSectorEditorPreviewNavigationOverlay(
+        const SectorEditorPreviewOverlayState& overlayState,
+        const SectorNavigationWorld& navigation,
+        const NpcNavigationRuntime& npcNavigation,
+        int selectedRuntimeObjectId,
+        const SectorMeshRenderer& preview)
+{
+    if (overlayState.activePreviewDebugOverlayTab
+            != PreviewDebugOverlayTab::Navigation) {
+        return;
+    }
+    DrawSectorNavigationDebugWorld(
+            SectorNavigationDebugDrawSettings{
+                    overlayState.showNavigationSurface,
+                    overlayState.showNavigationEdges,
+                    overlayState.showNavigationTileBounds,
+                    overlayState.showNavigationStaticObstacles,
+                    overlayState.showNavigationDynamicObstacles,
+                    overlayState.showNavigationDoorPlaceholders,
+                    overlayState.showNavigationStepConnections,
+                    overlayState.showNavigationNpcPaths,
+                    overlayState.showNavigationNpcAgents,
+                    overlayState.showNavigationSelectedNpcOnly,
+                    selectedRuntimeObjectId},
+            navigation,
+            npcNavigation,
+            preview);
 }
 
 SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
@@ -1119,6 +1148,224 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 if (!vm.error.empty()) addKeyValueStyled("error", vm.error, Color{236, 92, 92, 245}, true);
                 break;
             }
+            case PreviewDebugOverlayTab::Navigation: {
+                const SectorNavigationBuildStatistics& stats = context.navigation.BuildStatistics();
+                addKeyValue("state", SectorNavigationStateName(context.navigation.State()));
+                addKeyValue("stage", SectorNavigationBuildStageName(context.navigation.BuildStage()));
+                addKeyValue("source hash", TextFormat("%016llx",
+                        static_cast<unsigned long long>(context.navigation.SourceHash())));
+                addKeyValue("progress", TextFormat("%d / %d tile coordinates | %d layers",
+                        stats.builtTileCoordinateCount,
+                        stats.tileCoordinateCount,
+                        stats.builtLayerCount));
+                addKeyValue("build time", TextFormat("%.3f / %.3f ms last/peak",
+                        stats.lastBuildMilliseconds,
+                        stats.peakBuildMilliseconds));
+                addKeyValue("mesh", TextFormat("%d tiles | %d polygons | %.3f MiB compressed",
+                        stats.navMeshTileCount,
+                        stats.navMeshPolygonCount,
+                        static_cast<double>(stats.compressedLayerBytes) / (1024.0 * 1024.0)));
+                addKeyValue("capacity", TextFormat("%d layer tiles | %d polys/tile | refs %d/%d bits",
+                        stats.tileLayerCapacity,
+                        context.navigation.Capacities().plannedMaximumPolygonsPerTile,
+                        stats.tileReferenceBits,
+                        stats.polygonReferenceBits));
+                addKeyValue("tile memory", TextFormat("%.3f / %.3f MiB temporary peak/cap",
+                        static_cast<double>(stats.tileTemporaryBytes) / (1024.0 * 1024.0),
+                        static_cast<double>(context.navigation.Capacities().tileCacheTemporaryBytes)
+                                / (1024.0 * 1024.0)));
+                addKeyValue("voxel/tile", TextFormat("cs %.3f | ch %.3f | %d cells / %.2fm",
+                        context.navigation.Settings().cellSize,
+                        context.navigation.Settings().cellHeight,
+                        context.navigation.Settings().tileSizeCells,
+                        stats.tileWorldSize));
+                addKeyValue("agent", TextFormat("radius %.3f | height %.3f | climb %.3f (map step)",
+                        context.navigation.Settings().agentRadius,
+                        context.navigation.Settings().agentHeight,
+                        context.navigation.Settings().agentMaximumClimb));
+                const SectorNavigationDynamicObstacleStatistics& obstacleStats =
+                        context.navigation.DynamicObstacleStatistics();
+                addKeyValue("dynamic obstacles", TextFormat(
+                        "%zu active | %zu pending | %zu removing | %zu fast | %zu failed",
+                        obstacleStats.activeCount,
+                        obstacleStats.pendingCount,
+                        obstacleStats.removingCount,
+                        obstacleStats.fastSuppressedCount,
+                        obstacleStats.failedCount));
+                addKeyValue("obstacle updates", TextFormat(
+                        "backlog %zu | %llu tiles | %.3f / %.3f ms last/peak",
+                        obstacleStats.backlogCount,
+                        static_cast<unsigned long long>(obstacleStats.updatedTiles),
+                        obstacleStats.lastUpdateMilliseconds,
+                        obstacleStats.peakUpdateMilliseconds));
+                const SectorNavigationCrowdStatistics& crowdStats =
+                        context.navigation.CrowdStatistics();
+                addKeyValue("Crowd", TextFormat(
+                        "%zu / %zu active | %s avoidance | %d velocity samples",
+                        crowdStats.activeAgentCount,
+                        context.navigation.Capacities().agentCapacity,
+                        SectorNavigationAvoidanceQualityName(
+                                context.navigation.CrowdSettings()
+                                        .avoidanceQuality),
+                        crowdStats.lastVelocitySampleCount));
+                addKeyValue("Crowd updates", TextFormat(
+                        "%llu sync | %llu failures | %.3f / %.3f ms last/peak",
+                        static_cast<unsigned long long>(
+                                crowdStats.reconciliations),
+                        static_cast<unsigned long long>(
+                                crowdStats.attachmentFailures),
+                        crowdStats.lastUpdateMilliseconds,
+                        crowdStats.peakUpdateMilliseconds));
+                size_t shownObstacles = 0;
+                for (const SectorNavigationDebugDynamicObstacle& obstacle :
+                        context.navigation.DebugCache().dynamicObstacles) {
+                    if (shownObstacles++ >= 8) break;
+                    addKeyValue("dynamic obstacle", TextFormat(
+                            "ID %d | %s | %.2f %.2f | %.2fx%.2f | Y %.2f..%.2f",
+                            obstacle.placedObjectId,
+                            SectorNavigationDynamicObstacleStateName(
+                                    obstacle.state),
+                            obstacle.center.x,
+                            obstacle.center.y,
+                            obstacle.halfExtents.x * 2.0f,
+                            obstacle.halfExtents.y * 2.0f,
+                            obstacle.bottom,
+                            obstacle.top));
+                }
+                size_t shownUpdatedTiles = 0;
+                for (auto tile = context.navigation.DebugCache()
+                                     .recentlyUpdatedTiles.rbegin();
+                        tile != context.navigation.DebugCache()
+                                        .recentlyUpdatedTiles.rend()
+                                && shownUpdatedTiles++ < 6;
+                        ++tile) {
+                    addKeyValue("updated tile", TextFormat(
+                            "%d,%d layer %d | revision %llu",
+                            tile->key.x,
+                            tile->key.y,
+                            tile->key.layer,
+                            static_cast<unsigned long long>(tile->revision)));
+                }
+                const auto& diagnostics = context.navigation.Diagnostics();
+                const SectorNavigationCounters& navigationCounters =
+                        context.navigation.Counters();
+                addKeyValue("lifecycle", TextFormat(
+                        "%llu queued | %llu complete | %llu failed | revisions %llu/%llu/%llu",
+                        static_cast<unsigned long long>(navigationCounters.rebuildRequests),
+                        static_cast<unsigned long long>(navigationCounters.completedBuilds),
+                        static_cast<unsigned long long>(navigationCounters.failedBuilds),
+                        static_cast<unsigned long long>(context.navigation.SourceRevision()),
+                        static_cast<unsigned long long>(context.navigation.BuildRevision()),
+                        static_cast<unsigned long long>(
+                                context.navigation.DebugCache().navigationRevision)));
+                addKeyValue("diagnostics", TextFormat(
+                        "%zu / %zu retained | %llu truncated | %llu dropped",
+                        diagnostics.size(),
+                        context.navigation.Capacities().diagnosticCapacity,
+                        static_cast<unsigned long long>(
+                                navigationCounters.truncatedDiagnostics),
+                        static_cast<unsigned long long>(
+                                navigationCounters.droppedDiagnostics)));
+                if (!diagnostics.empty()) {
+                    addKeyValueStyled("latest", diagnostics.back().message,
+                            diagnostics.back().severity == SectorNavigationDiagnosticSeverity::Error
+                                    ? Color{236, 92, 92, 245}
+                                    : smallConfig.mutedTextColor,
+                            true);
+                }
+                const NpcNavigationRecord* selectedAgent = nullptr;
+                for (const NpcNavigationRecord& agent : context.npcNavigation.records) {
+                    if (agent.occupied
+                            && agent.placedObjectId
+                                    == selectionState.selectedRuntimeObjectId) {
+                        selectedAgent = &agent;
+                        break;
+                    }
+                }
+                size_t activeNpcRecords = 0;
+                for (const NpcNavigationRecord& agent :
+                        context.npcNavigation.records) {
+                    if (agent.occupied) ++activeNpcRecords;
+                }
+                addKeyValue("NPC agents", TextFormat(
+                        "%zu active / %zu slots | %llu requests | %llu replans | %llu stalls",
+                        activeNpcRecords,
+                        context.npcNavigation.records.size(),
+                        static_cast<unsigned long long>(context.npcNavigation.counters.requests),
+                        static_cast<unsigned long long>(context.npcNavigation.counters.replans),
+                        static_cast<unsigned long long>(context.npcNavigation.counters.stalls)));
+                size_t clearDoorLinks = 0;
+                size_t openingDoorLinks = 0;
+                size_t disabledDoorLinks = 0;
+                uint32_t doorHolders = 0;
+                for (const SectorNavigationDebugDoorLink& link :
+                        context.navigation.DebugCache().doorLinks) {
+                    doorHolders += link.holderCount;
+                    if (link.state == SectorNavigationDoorLinkState::Clear) ++clearDoorLinks;
+                    else if (link.state == SectorNavigationDoorLinkState::Disabled) ++disabledDoorLinks;
+                    else ++openingDoorLinks;
+                }
+                addKeyValue("door links", TextFormat(
+                        "%zu clear | %zu require open | %zu disabled | %u holders",
+                        clearDoorLinks, openingDoorLinks, disabledDoorLinks,
+                        doorHolders));
+                size_t shownDoorLinks = 0;
+                for (const SectorNavigationDebugDoorLink& link :
+                        context.navigation.DebugCache().doorLinks) {
+                    if (shownDoorLinks++ >= 8) break;
+                    addKeyValue("door link", TextFormat(
+                            "ID %d | %s | front <-> back | %u holders",
+                            link.placedObjectId,
+                            SectorNavigationDoorLinkStateName(link.state),
+                            link.holderCount));
+                }
+                if (selectedAgent != nullptr) {
+                    addKeyValue("selected NPC", TextFormat(
+                            "%s | %s | %s | %s | request %llu",
+                            selectedAgent->instanceId.c_str(),
+                            NpcMoveAuthorityName(selectedAgent->authority),
+                            NpcMovePhaseName(selectedAgent->phase),
+                            NpcMoveGaitName(selectedAgent->gait),
+                            static_cast<unsigned long long>(selectedAgent->requestId)));
+                    addKeyValue("destination", TextFormat(
+                            "%.2f %.2f | %zu corners remain | %s",
+                            selectedAgent->requestedDestinationXZ.x,
+                            selectedAgent->requestedDestinationXZ.y,
+                            selectedAgent->cornerCount > selectedAgent->nextCorner
+                                    ? selectedAgent->cornerCount - selectedAgent->nextCorner : 0,
+                            SectorNavigationQueryStatusName(
+                                    selectedAgent->lastQueryStatus)));
+                    addKeyValue("motion", TextFormat(
+                            "preferred %.2f | steered %.2f | actual %.2f | stall %.2fs",
+                            Vector2Length(selectedAgent->preferredVelocity),
+                            Vector2Length(selectedAgent->desiredVelocity),
+                            Vector2Length(selectedAgent->actualVelocity),
+                            selectedAgent->stallSeconds));
+                    addKeyValue("Crowd agent", TextFormat(
+                            "%s | %d neighbors | nearest %.2f | player avoid %s | %u replans",
+                            selectedAgent->crowdAttached ? "attached" : "fallback",
+                            selectedAgent->crowdNeighborCount,
+                            selectedAgent->crowdNearestNeighborDistance,
+                            selectedAgent->playerAvoidanceActive
+                                    ? "active" : "off",
+                            selectedAgent->replanCount));
+                    addKeyValue("physical/visual Y", TextFormat(
+                            "%.3f / %.3f | %s",
+                            selectedAgent->physicalPosition.y,
+                            selectedAgent->visualPosition.y,
+                            selectedAgent->diagnostic.data()));
+                    addKeyValue("door traversal", TextFormat(
+                            "%s | door %d | direction %s | wait %.2fs | %s",
+                            NpcDoorTraversalPhaseName(selectedAgent->doorPhase),
+                            selectedAgent->doorId,
+                            SectorNavigationDoorDirectionName(
+                                    selectedAgent->doorDirection),
+                            selectedAgent->doorWaitSeconds,
+                            selectedAgent->holdsDoor ? "holding" : "not holding"));
+                }
+                addWrappedLine("Crowd handles NPC-to-NPC avoidance. Friendly NPCs additionally avoid the player; hostile NPCs approach until solid contact.");
+                break;
+            }
             case PreviewDebugOverlayTab::Controls:
                 if (context.lightState.lightPilot.active) {
                     addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down, hold Shift for precision movement. Unlock cursor with F11 to click Apply or Cancel.");
@@ -1155,6 +1402,9 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {
         contentH += rowH + 6.0f;
+    }
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Navigation) {
+        contentH += (rowH + 6.0f) * 6.0f;
     }
     const Rectangle panel{
             basePanel.x,
@@ -1227,42 +1477,23 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         }
     }
 
-    const struct {
-        PreviewDebugOverlayTab tab;
-        const char* id;
-        const char* label;
-    } tabs[] = {
-            {PreviewDebugOverlayTab::View, "sector_editor_preview_tab_view", "View"},
-            {PreviewDebugOverlayTab::Render, "sector_editor_preview_tab_render", "Render"},
-            {PreviewDebugOverlayTab::Visibility, "sector_editor_preview_tab_visibility", "Visibility"},
-            {PreviewDebugOverlayTab::Lighting, "sector_editor_preview_tab_lighting", "Lighting"},
-            {PreviewDebugOverlayTab::Pbr, "sector_editor_preview_tab_pbr", "PBR"},
-            {PreviewDebugOverlayTab::Objects, "sector_editor_preview_tab_objects", "Objects"},
-            {PreviewDebugOverlayTab::Probes, "sector_editor_preview_tab_probes", "Probes"},
-            {PreviewDebugOverlayTab::Viewmodel, "sector_editor_preview_tab_viewmodel", "Arms"},
-            {PreviewDebugOverlayTab::Controls, "sector_editor_preview_tab_controls", "Controls"},
-    };
-
     const float tabY = panel.y + padding + stripH + gap;
     const float tabGap = 6.0f;
-    const float tabW = (contentW - tabGap * 8.0f) / 9.0f;
-    for (int i = 0; i < 9; ++i) {
-        const Rectangle tabRect{
-                panel.x + padding + static_cast<float>(i) * (tabW + tabGap),
-                tabY,
-                tabW,
-                tabH};
-        const bool selected = overlayState.activePreviewDebugOverlayTab == tabs[i].tab;
+    for (size_t index = 0; index < SectorEditorPreviewDebugTabs.size(); ++index) {
+        const Rectangle tabRect = BuildSectorEditorPreviewDebugTabRect(
+                panel, padding, stripH, gap, tabH, tabGap, index);
+        const SectorEditorPreviewDebugTabDefinition& tab = SectorEditorPreviewDebugTabs[index];
+        const bool selected = overlayState.activePreviewDebugOverlayTab == tab.tab;
         if (mouseInteractive) {
-            if (engine::ToolButton(ui, smallConfig, input, assets, tabs[i].id, tabRect, smallFont, tabs[i].label, selected)) {
+            if (engine::ToolButton(ui, smallConfig, input, assets, tab.id, tabRect, smallFont, tab.label, selected)) {
                 overlayState.activePreviewDebugOverlayTab = selected
                         ? PreviewDebugOverlayTab::None
-                        : tabs[i].tab;
+                        : tab.tab;
             }
         } else {
             DrawRectangleRec(tabRect, selected ? Color{48, 68, 86, 210} : Color{24, 30, 38, 185});
             DrawRectangleLinesEx(tabRect, config.borderThickness, config.borderColor);
-            engine::Text(smallConfig, assets, tabRect, smallFont, tabs[i].label, engine::UITextJustify::Center, smallConfig.mutedTextColor);
+            engine::Text(smallConfig, assets, tabRect, smallFont, tab.label, engine::UITextJustify::Center, smallConfig.mutedTextColor);
         }
     }
 
@@ -1581,6 +1812,87 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     engine::UITextJustify::Center,
                     smallConfig.mutedTextColor);
         }
+        y += rowH + 6.0f;
+    }
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Navigation) {
+        const Rectangle rebuildRect{panel.x + padding, y, 132.0f, rowH};
+        const bool rebuildAvailable = context.navigation.State()
+                        != SectorNavigationState::Queued
+                && context.navigation.State() != SectorNavigationState::Building;
+        if (mouseInteractive && rebuildAvailable) {
+            if (engine::Button(
+                        ui, smallConfig, input, assets,
+                        "sector_editor_navigation_rebuild", rebuildRect,
+                        smallFont, "Rebuild Nav")) {
+                result.requestNavigationRebuild = true;
+            }
+        } else {
+            DrawRectangleRec(rebuildRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(rebuildRect, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, rebuildRect, smallFont,
+                    rebuildAvailable ? "Rebuild Nav" : "Building...",
+                    engine::UITextJustify::Center, smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+
+        const auto drawNavigationCheckbox = [&](const char* id, const char* label,
+                                                 Rectangle rect, bool& value) {
+            if (mouseInteractive) {
+                engine::Checkbox(ui, smallConfig, input, assets, id, rect, smallFont, label, value);
+            } else {
+                DrawRectangleRec(rect, Color{24, 30, 38, 155});
+                DrawRectangleLinesEx(rect, config.borderThickness, config.borderColor);
+                const std::string text = std::string(value ? "[x] " : "[ ] ") + label;
+                engine::Text(smallConfig, assets, rect, smallFont, text.c_str(),
+                        engine::UITextJustify::Left, smallConfig.mutedTextColor);
+            }
+        };
+        const float checkboxWidth = (contentW - gap) * 0.5f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_surface", "Walkable Surface",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationSurface);
+        drawNavigationCheckbox(
+                "sector_editor_navigation_edges", "Polygon Edges",
+                Rectangle{panel.x + padding + checkboxWidth + gap, y, checkboxWidth, rowH},
+                overlayState.showNavigationEdges);
+        y += rowH + 6.0f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_tiles", "Tile Bounds",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationTileBounds);
+        drawNavigationCheckbox(
+                "sector_editor_navigation_obstacles", "Static Obstacles",
+                Rectangle{panel.x + padding + checkboxWidth + gap, y, checkboxWidth, rowH},
+                overlayState.showNavigationStaticObstacles);
+        y += rowH + 6.0f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_dynamic_obstacles", "Dynamic Obstacles",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationDynamicObstacles);
+        y += rowH + 6.0f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_doors", "Door Placeholders",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationDoorPlaceholders);
+        drawNavigationCheckbox(
+                "sector_editor_navigation_steps", "Step Connections",
+                Rectangle{panel.x + padding + checkboxWidth + gap, y, checkboxWidth, rowH},
+                overlayState.showNavigationStepConnections);
+        y += rowH + 6.0f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_npc_paths", "NPC Paths",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationNpcPaths);
+        drawNavigationCheckbox(
+                "sector_editor_navigation_npc_agents", "NPC Agents",
+                Rectangle{panel.x + padding + checkboxWidth + gap, y, checkboxWidth, rowH},
+                overlayState.showNavigationNpcAgents);
+        y += rowH + 6.0f;
+        drawNavigationCheckbox(
+                "sector_editor_navigation_selected_npc", "Selected NPC Only",
+                Rectangle{panel.x + padding, y, checkboxWidth, rowH},
+                overlayState.showNavigationSelectedNpcOnly);
         y += rowH + 6.0f;
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Controls) {

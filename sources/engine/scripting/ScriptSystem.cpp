@@ -21,12 +21,36 @@ namespace {
 
 constexpr size_t InitialTaskCapacity = 32;
 constexpr size_t InitialOperationCapacity = 64;
+constexpr int ManagedScriptInstructionBudget = 1000000;
 constexpr const char* OperationMetatable = "Engine.ScriptOperation";
 static char LuaEngineContextKey;
 
 struct LuaScriptOperationHandle {
     ScriptOperationHandle handle{};
 };
+
+void ManagedScriptInstructionBudgetHook(lua_State* state, lua_Debug*)
+{
+    luaL_error(
+            state,
+            "Lua instruction budget exceeded; possible non-yielding loop");
+}
+
+int ResumeManagedTask(
+        lua_State* thread,
+        int argumentCount,
+        int& resultCount)
+{
+    lua_sethook(
+            thread,
+            ManagedScriptInstructionBudgetHook,
+            LUA_MASKCOUNT,
+            ManagedScriptInstructionBudget);
+    const int status = lua_resume(
+            thread, nullptr, argumentCount, &resultCount);
+    lua_sethook(thread, nullptr, 0, 0);
+    return status;
+}
 
 uint32_t NextGeneration(uint32_t generation)
 {
@@ -498,7 +522,7 @@ ScriptCallOutcome StartManagedFunction(
 
     lua_State* thread = task->thread;
     int resultCount = 0;
-    const int status = lua_resume(thread, nullptr, 0, &resultCount);
+    const int status = ResumeManagedTask(thread, 0, resultCount);
     outcome.task = handle;
     ProcessResumeResult(
             runtime,
@@ -1229,7 +1253,8 @@ void ScriptSystemUpdate(
         task->state = ScriptTaskState::Running;
         lua_State* thread = task->thread;
         int resultCount = 0;
-        const int status = lua_resume(thread, nullptr, valueCount, &resultCount);
+        const int status = ResumeManagedTask(
+                thread, valueCount, resultCount);
         ProcessResumeResult(runtime, handle, status, resultCount, nullptr, nullptr);
     }
 

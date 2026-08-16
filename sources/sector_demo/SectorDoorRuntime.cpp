@@ -1481,13 +1481,26 @@ bool AdvanceSectorDoorMotionSystem(
         float dt,
         const SectorDoorPlayerObstacle* playerObstacle)
 {
+    return AdvanceSectorDoorMotionSystem(
+            world,
+            dt,
+            playerObstacle,
+            playerObstacle != nullptr ? 1u : 0u);
+}
+
+bool AdvanceSectorDoorMotionSystem(
+        engine::World& world,
+        float dt,
+        const SectorDoorPlayerObstacle* obstacles,
+        size_t obstacleCount)
+{
     if (!std::isfinite(dt) || dt <= 0.0f) {
         return false;
     }
 
     bool changed = false;
     world.ForEach<SectorDoor, SectorDoorMotion>(
-            [dt, playerObstacle, &world, &changed](
+            [dt, obstacles, obstacleCount, &world, &changed](
                     engine::Entity entity,
                     SectorDoor& door,
                     SectorDoorMotion& motion) {
@@ -1504,6 +1517,10 @@ bool AdvanceSectorDoorMotionSystem(
 
                 motion.openFraction = Clamp(motion.openFraction, 0.0f, 1.0f);
                 motion.targetOpenFraction = Clamp(motion.targetOpenFraction, 0.0f, 1.0f);
+                const float effectiveTarget = world.Has<SectorDoorOpenControl>(entity)
+                                && world.Get<SectorDoorOpenControl>(entity).navigationHolderCount > 0
+                        ? 1.0f
+                        : motion.targetOpenFraction;
                 if (motion.travelSpeed <= 0.0f || !std::isfinite(motion.travelSpeed)) {
                     return;
                 }
@@ -1518,28 +1535,25 @@ bool AdvanceSectorDoorMotionSystem(
 
                 const float previousOpenFraction = motion.openFraction;
                 float candidateOpenFraction = motion.openFraction;
-                if (candidateOpenFraction < motion.targetOpenFraction) {
+                if (candidateOpenFraction < effectiveTarget) {
                     candidateOpenFraction = std::min(
                             candidateOpenFraction + fractionStep,
-                            motion.targetOpenFraction);
-                } else if (candidateOpenFraction > motion.targetOpenFraction) {
+                            effectiveTarget);
+                } else if (candidateOpenFraction > effectiveTarget) {
                     candidateOpenFraction = std::max(
                             candidateOpenFraction - fractionStep,
-                            motion.targetOpenFraction);
+                            effectiveTarget);
                 }
 
                 const bool closingSwing = motion.motion == SectorDoorMotionType::Swing
                         && candidateOpenFraction < previousOpenFraction;
                 bool obstructed = false;
                 if (closingSwing
-                        && playerObstacle != nullptr
+                        && obstacles != nullptr
+                        && obstacleCount > 0
                         && world.Has<SectorDoorResolvedAnchor>(entity)
                         && world.Has<SectorDoorRender>(entity)
-                        && IsFiniteVector3(playerObstacle->feetPosition)
-                        && std::isfinite(playerObstacle->radius)
-                        && playerObstacle->radius > 0.0f
-                        && std::isfinite(playerObstacle->height)
-                        && playerObstacle->height > 0.0f) {
+                        ) {
                     const SectorDoorResolvedAnchor& anchor =
                             world.Get<SectorDoorResolvedAnchor>(entity);
                     const SectorDoorRender& render = world.Get<SectorDoorRender>(entity);
@@ -1555,8 +1569,6 @@ bool AdvanceSectorDoorMotionSystem(
                             static_cast<int>(std::ceil(sweptAngle / maximumSampleStep)),
                             1,
                             maximumSegments);
-                    const float playerBottom = playerObstacle->feetPosition.y;
-                    const float playerTop = playerBottom + playerObstacle->height;
                     for (int sampleIndex = 0; sampleIndex <= segmentCount; ++sampleIndex) {
                         const float sampleT = static_cast<float>(sampleIndex)
                                 / static_cast<float>(segmentCount);
@@ -1570,10 +1582,6 @@ bool AdvanceSectorDoorMotionSystem(
                                         render,
                                         1.0f,
                                         sampleAngle);
-                        if (playerTop <= samplePose.bottom + DoorDynamicCollisionEpsilon
-                                || playerBottom >= samplePose.top - DoorDynamicCollisionEpsilon) {
-                            continue;
-                        }
                         const SectorDoorCollider sampleCollider = BuildSectorDoorSwingCollider(
                                 samplePose, render.width, render.thickness, door.enabled);
                         const SectorDynamicDoorCollider dynamicCollider{
@@ -1585,13 +1593,79 @@ bool AdvanceSectorDoorMotionSystem(
                                 sampleCollider.halfExtents,
                                 sampleCollider.bottom,
                                 sampleCollider.top};
-                        if (sampleCollider.enabled
-                                && CircleOverlapsDoorObb(
-                                        Vector2{
-                                                playerObstacle->feetPosition.x,
-                                                playerObstacle->feetPosition.z},
-                                        playerObstacle->radius,
+                        for (size_t obstacleIndex = 0;
+                                sampleCollider.enabled && obstacleIndex < obstacleCount;
+                                ++obstacleIndex) {
+                            const SectorDoorPlayerObstacle& obstacle = obstacles[obstacleIndex];
+                            if (!IsFiniteVector3(obstacle.feetPosition)
+                                    || !std::isfinite(obstacle.radius)
+                                    || obstacle.radius <= 0.0f
+                                    || !std::isfinite(obstacle.height)
+                                    || obstacle.height <= 0.0f) {
+                                continue;
+                            }
+                            const float obstacleBottom = obstacle.feetPosition.y;
+                            const float obstacleTop = obstacleBottom + obstacle.height;
+                            if (obstacleTop <= samplePose.bottom + DoorDynamicCollisionEpsilon
+                                    || obstacleBottom >= samplePose.top - DoorDynamicCollisionEpsilon) {
+                                continue;
+                            }
+                            if (CircleOverlapsDoorObb(
+                                        Vector2{obstacle.feetPosition.x,
+                                                obstacle.feetPosition.z},
+                                        obstacle.radius,
                                         dynamicCollider)) {
+                                obstructed = true;
+                                break;
+                            }
+                        }
+                        if (obstructed) break;
+                    }
+                }
+
+                const bool closingSlide = motion.motion != SectorDoorMotionType::Swing
+                        && candidateOpenFraction < previousOpenFraction;
+                if (!obstructed && closingSlide && obstacles != nullptr
+                        && obstacleCount > 0
+                        && world.Has<SectorDoorResolvedAnchor>(entity)
+                        && world.Has<SectorDoorRender>(entity)
+                        && world.Has<SectorDoorCollider>(entity)) {
+                    const SectorDoorResolvedAnchor& anchor =
+                            world.Get<SectorDoorResolvedAnchor>(entity);
+                    const SectorDoorCollider& current = world.Get<SectorDoorCollider>(entity);
+                    SectorDoorMotion candidateMotion = motion;
+                    candidateMotion.openFraction = candidateOpenFraction;
+                    const Vector3 previousOffset = SectorDoorMotionOffset(anchor, motion);
+                    const Vector3 candidateOffset = SectorDoorMotionOffset(anchor, candidateMotion);
+                    const Vector2 delta{candidateOffset.x - previousOffset.x,
+                            candidateOffset.z - previousOffset.z};
+                    SectorDynamicDoorCollider swept{
+                            door.placedObjectId,
+                            entity,
+                            Vector2{current.center.x + delta.x * 0.5f,
+                                    current.center.y + delta.y * 0.5f},
+                            current.tangent,
+                            current.normal,
+                            Vector2{
+                                    current.halfExtents.x
+                                            + std::fabs(Vector2DotProduct(delta, current.tangent)) * 0.5f,
+                                    current.halfExtents.y
+                                            + std::fabs(Vector2DotProduct(delta, current.normal)) * 0.5f},
+                            std::min(current.bottom,
+                                    current.bottom + candidateOffset.y - previousOffset.y),
+                            std::max(current.top,
+                                    current.top + candidateOffset.y - previousOffset.y)};
+                    for (size_t obstacleIndex = 0; obstacleIndex < obstacleCount; ++obstacleIndex) {
+                        const SectorDoorPlayerObstacle& obstacle = obstacles[obstacleIndex];
+                        if (!IsFiniteVector3(obstacle.feetPosition)
+                                || obstacle.radius <= 0.0f || obstacle.height <= 0.0f) continue;
+                        const float obstacleTop = obstacle.feetPosition.y + obstacle.height;
+                        if (obstacleTop <= swept.bottom + DoorDynamicCollisionEpsilon
+                                || obstacle.feetPosition.y >= swept.top - DoorDynamicCollisionEpsilon) continue;
+                        if (CircleOverlapsDoorObb(
+                                    {obstacle.feetPosition.x, obstacle.feetPosition.z},
+                                    obstacle.radius,
+                                    swept)) {
                             obstructed = true;
                             break;
                         }
@@ -1699,8 +1773,8 @@ void UpdateSectorDoorAudioSystem(
         engine::AudioSystem& audioSystem)
 {
     world.ForEach<SectorObjectTransform, SectorDoor, SectorDoorMotion, SectorDoorAudio>(
-            [&assets, &audioSystem](
-                    engine::Entity,
+            [&world, &assets, &audioSystem](
+                    engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorDoor& door,
                     SectorDoorMotion& motion,
@@ -1708,7 +1782,13 @@ void UpdateSectorDoorAudioSystem(
                 if (!door.enabled) {
                     return;
                 }
-                UpdateSectorDoorAudioTransition(audio, motion);
+                SectorDoorMotion effectiveMotion = motion;
+                if (world.Has<SectorDoorOpenControl>(entity)
+                        && world.Get<SectorDoorOpenControl>(entity)
+                                .navigationHolderCount > 0) {
+                    effectiveMotion.targetOpenFraction = 1.0f;
+                }
+                UpdateSectorDoorAudioTransition(audio, effectiveMotion);
                 if (audio.pendingEvent == SectorDoorAudioEvent::None) {
                     return;
                 }
@@ -1942,6 +2022,36 @@ bool SectorDoorDynamicCollidersAllowPlayerHeight(
         if (collider.bottom > feetY + DoorDynamicCollisionEpsilon
                 && playerTop > collider.bottom + DoorDynamicCollisionEpsilon
                 && feetY < collider.top - DoorDynamicCollisionEpsilon) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SectorDoorTraversalIsClear(
+        int placedObjectId,
+        Vector3 staging,
+        Vector3 landing,
+        float radius,
+        float agentHeight,
+        const std::vector<SectorDynamicDoorCollider>& colliders)
+{
+    if (placedObjectId <= 0 || !IsFiniteVector3(staging)
+            || !IsFiniteVector3(landing) || radius <= 0.0f
+            || agentHeight <= 0.0f) return false;
+    for (const SectorDynamicDoorCollider& collider : colliders) {
+        if (collider.placedObjectId != placedObjectId) continue;
+        const float traversalBottom = std::min(staging.y, landing.y);
+        const float traversalTop = std::max(staging.y, landing.y) + agentHeight;
+        if (traversalTop <= collider.bottom + DoorDynamicCollisionEpsilon
+                || traversalBottom >= collider.top - DoorDynamicCollisionEpsilon) continue;
+        const Vector2 start{staging.x, staging.z};
+        const Vector2 delta{landing.x - staging.x, landing.z - staging.z};
+        float hitTime = 0.0f;
+        Vector2 hitNormal{};
+        if (CircleOverlapsDoorObb(start, radius, collider)
+                || SweepCircleAgainstDoorObb(
+                        start, delta, radius, collider, hitTime, hitNormal)) {
             return false;
         }
     }

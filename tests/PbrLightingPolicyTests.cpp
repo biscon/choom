@@ -467,9 +467,15 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&sectorRenderer.find("float coverage=isnan(source.a)")
                             !=std::string::npos
                     &&ReadSource(PBR_SHADER_SOURCE_PATH).find(
-                               "finalColor = vec4(linearColor, 1.0)")
+                               "uniform float modelOpacity")
+                            !=std::string::npos
+                    &&ReadSource(PBR_SHADER_SOURCE_PATH).find(
+                               "clamp(modelOpacity, 0.0, 1.0)")
+                            !=std::string::npos
+                    &&ReadSource(PBR_SHADER_SOURCE_PATH).find(
+                               "const float opaque = 1.0f")
                             !=std::string::npos,
-          "opaque-alpha PBR viewmodels remain compatible with direct HDR-color rendering");
+          "PBR model opacity supports corpse fading while viewmodels explicitly remain opaque");
     Check(muzzle.find("finalColor=vec4(storeFiniteHalfRadiance(radiance),0.0)")
                             !=std::string::npos
                     &&muzzle.find("BeginBlendMode(BLEND_ADD_COLORS)")

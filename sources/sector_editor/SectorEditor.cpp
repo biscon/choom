@@ -6,6 +6,7 @@
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentModals.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
+#include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/SectorEditorHelpers.h"
@@ -324,6 +325,7 @@ bool SectorEditor::Init(engine::EngineContext& context)
 void SectorEditor::Shutdown(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
+    BuildNpcEditorService().Shutdown(assets);
     if (state.footstepPicker.open
             || !engine::IsNull(state.footstepPicker.previewScope)) {
         BuildFootstepService().Close();
@@ -347,6 +349,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     uiState = SectorEditorUiState{};
     runtimeObjectEditingState = RuntimeObjectEditingState{};
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
+    npcEditorState = SectorEditorNpcEditorState{};
+    npcEditorSessionState = SectorEditorNpcEditorSessionState{};
     textureCatalogState = TextureCatalogState{};
     soundCatalogState = SectorEditorSoundCatalogState{};
     lightEditingState = LightEditingState{};
@@ -440,10 +444,11 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             || state.footstepPicker.open
             || state.decalTintModal.open
             || state.previewSettingsModal.open
+            || npcEditorState.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen();
-    return fpsPlayer.HandleFireInput(
+    const bool accepted = fpsPlayer.HandleFireInput(
             input,
             engineContext->assets,
             engineContext->audio,
@@ -454,6 +459,21 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             gameplay3D,
             mouseActive,
             uiCaptured);
+    if (!accepted) return false;
+    const FpsShotResult request = fpsPlayer.State().firing.lastShot;
+    FpsShotResult resolvedShot;
+    sceneRuntime.ResolvePlayerWeaponShot(
+            *engineContext,
+            previewState.collision.sectorCollisionWorldValid
+                    ? &previewState.collision.sectorCollisionWorld
+                    : nullptr,
+            request.rayOrigin,
+            request.rayDirection,
+            fpsPlayer.State().firing.definition.maximumRangeWorld,
+            fpsPlayer.State().firing.definition.impact,
+            resolvedShot);
+    fpsPlayer.RecordShotResolution(resolvedShot);
+    return true;
 }
 void SectorEditor::UpdateFpsViewmodelTransformsAndLight()
 {
@@ -587,6 +607,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
             || state.footstepPicker.open
             || state.addMapTexture.open
             || state.addMapSound.open
+            || npcEditorState.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen()) {
@@ -698,6 +719,12 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (npcEditorState.open) {
+        DrawNpcEditorModal(ui, config, input, assets, font, smallFont);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (state.setAllModal.open) {
         DrawSetAllModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
@@ -801,6 +828,7 @@ void SectorEditor::RenderUI(
             || state.footstepPicker.open
             || state.addMapTexture.open
             || state.addMapSound.open
+            || npcEditorState.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen()) {
@@ -1524,6 +1552,12 @@ void SectorEditor::HandleCanvasInput(engine::Input& input, float dt)
                     return;
                 }
 
+                if (state.currentTool == SectorEditorTool::Npc) {
+                    AddNpcAt(SnapMapPoint(ScreenToMap(event.mouseClick.releasePosition)));
+                    engine::ConsumeEvent(event);
+                    return;
+                }
+
                 if (state.currentTool == SectorEditorTool::Door) {
                     AddDoorAtPortal(event.mouseClick.releasePosition);
                     engine::ConsumeEvent(event);
@@ -2146,7 +2180,8 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     state.previewSettingsModal.open,
                     controllerInput,
                     previousVisualEyeY,
-                    dt);
+                    dt,
+                    &sceneRuntime.NpcNavigation().collisionCylinders);
             if (previewState.controller.frameEvents.footstep
                     && engineContext != nullptr) {
                 sceneRuntime.PlayFootstepForSector(
@@ -3041,6 +3076,22 @@ void SectorEditor::AddDynamicModelAt(Vector2 mapPoint)
     editing.AddDynamicModel(mapPoint);
 }
 
+void SectorEditor::AddNpcAt(Vector2 mapPoint)
+{
+    EnsureTopologyRenderCache();
+    SectorRuntimeObjectState& runtimeObjects = sceneRuntime.RuntimeObjects();
+    RefreshSectorEditorNpcPlacementOptions(
+            runtimeObjectEditingState.npcPlacement,
+            runtimeObjects.npcDefinitionCatalog,
+            runtimeObjects.npcDefinitionCatalogRevision);
+    const std::string definitionId = ResolveSectorEditorNpcPlacementDefault(
+            runtimeObjectEditingState.npcPlacement);
+    SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
+    SectorEditorRuntimeObjectEditingService editing =
+            BuildRuntimeObjectEditingService(&selection);
+    editing.AddNpc(mapPoint, definitionId);
+}
+
 void SectorEditor::AddDoorAtPortal(Vector2 screenPoint)
 {
     const Vector2 mapPoint = ScreenToMap(screenPoint);
@@ -3408,6 +3459,12 @@ void SectorEditor::RenderPreview3DOverlays()
         DrawPreviewSurfaceHighlights();
         DrawPreviewSpotLightOverlay();
         DrawPreviewObjectProbeOverlay();
+        DrawSectorEditorPreviewNavigationOverlay(
+                previewState.overlay,
+                sceneRuntime.Navigation(),
+                sceneRuntime.NpcNavigation(),
+                selectionState.selectedRuntimeObjectId,
+                sceneRuntime.Renderer());
     }
 }
 
@@ -3532,6 +3589,8 @@ void SectorEditor::DrawPreviewOverlay(
             runtimeObjectEditingState.drag,
             previewState,
             sceneRuntime.RuntimeObjects(),
+            sceneRuntime.Navigation(),
+            sceneRuntime.NpcNavigation(),
             fpsPlayer.State(),
             selectionState,
             manipulationState,
@@ -3557,6 +3616,13 @@ void SectorEditor::DrawPreviewOverlay(
     }
     if (result.openPreviewSettings) {
         OpenPreviewSettingsModal();
+    }
+    if (result.requestNavigationRebuild) {
+        statusText = engineContext != nullptr
+                && sceneRuntime.RebuildNavigationForMap(
+                        *engineContext, TopologyMap())
+                ? "Navigation rebuild queued"
+                : "Navigation rebuild failed to initialize";
     }
     if (result.markTopologyDocumentEdited) {
         MarkTopologyDocumentEdited(result.topologyDocumentEditStatus);
@@ -4291,8 +4357,8 @@ void SectorEditor::DrawToolsPanel(
     };
     const float toolsContentH =
             sectionLabelH + rowsHeight(5)
-            + separatorH + sectionLabelH + rowsHeight(12)
-            + separatorH + rowsHeight(5)
+            + separatorH + sectionLabelH + rowsHeight(13)
+            + separatorH + rowsHeight(6)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
             + separatorH + rowsHeight(1)
@@ -4434,6 +4500,15 @@ void SectorEditor::DrawToolsPanel(
             statusText = "3D Prop: click inside a derived sector to place a static model";
         } else if (tool == SectorEditorTool::DynamicModel) {
             statusText = "Dynamic Prop: click inside a derived sector to place an animated model";
+        } else if (tool == SectorEditorTool::Npc) {
+            SectorRuntimeObjectState& runtimeObjects = sceneRuntime.RuntimeObjects();
+            RefreshSectorEditorNpcPlacementOptions(
+                    runtimeObjectEditingState.npcPlacement,
+                    runtimeObjects.npcDefinitionCatalog,
+                    runtimeObjects.npcDefinitionCatalogRevision);
+            statusText = runtimeObjectEditingState.npcPlacement.definitionIds.empty()
+                    ? "NPC: create an NPC definition in the NPC Editor first"
+                    : "NPC: click inside a derived sector to place a character";
         } else if (tool == SectorEditorTool::Door) {
             statusText = "Door: click a two-sided portal line";
         } else if (tool == SectorEditorTool::AuthoringFogVolume) {
@@ -4481,6 +4556,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::RuntimeObject,
             SectorEditorTool::StaticModel,
             SectorEditorTool::DynamicModel,
+            SectorEditorTool::Npc,
             SectorEditorTool::Door,
             SectorEditorTool::Trigger,
             SectorEditorTool::LevelMarker,
@@ -4543,6 +4619,14 @@ void SectorEditor::DrawToolsPanel(
     y += rowH + gap;
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_2d", Rectangle{0.0f, y, contentW, rowH}, font, "Settings")) {
         OpenPreviewSettingsModal();
+    }
+    y += rowH + gap;
+    if (engine::Button(
+                ui, config, input, assets,
+                "sector_editor_npc_editor",
+                Rectangle{0.0f, y, contentW, rowH},
+                font, "NPC Editor")) {
+        BuildNpcEditorService().Open();
     }
     y += rowH + gap;
 
@@ -5105,11 +5189,41 @@ void SectorEditor::DrawStaticModelPickerModal(
                     BuildRuntimeObjectEditingService(&selection);
             if (pickerState.target == ModelPickerTarget::DynamicModel) {
                 editing.AssignSelectedDynamicModel(picker.SelectedModelPath());
-            } else {
+            } else if (pickerState.target == ModelPickerTarget::StaticModel) {
                 editing.AssignSelectedStaticModel(picker.SelectedModelPath());
+            } else {
+                statusText = "NPC model selection is only available in the NPC Editor";
             }
             pickerState.open = false;
         }
+    }
+}
+
+void SectorEditor::DrawNpcEditorModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    SectorEditorNpcEditorService editor = BuildNpcEditorService();
+    SectorEditorStaticModelPickerService modelPicker{
+            runtimeObjectEditingState.staticModelPicker,
+            statusText};
+    const SectorEditorNpcEditorModalResult result =
+            game::DrawSectorEditorNpcEditorModal(
+            ui,
+            config,
+            input,
+            assets,
+            font,
+            smallFont,
+            editor,
+            modelPicker);
+    if (result == SectorEditorNpcEditorModalResult::Saved
+            && engineContext != nullptr) {
+        sceneRuntime.RefreshMapRuntimeObjects(*engineContext, TopologyMap());
     }
 }
 
@@ -5736,6 +5850,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
                 TopologyMap(),
                 "sector_editor_preview",
                 applicationSettings.footsteps.defaultSet,
+                applicationSettings.footsteps.volume,
                 error)) {
         sceneRuntime.RuntimeObjects().objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
         sceneRuntime.RuntimeObjects().objectProbeStatus.clear();
@@ -6107,6 +6222,9 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const bool previewChanged = !SamePreviewSettings(
             TopologyMap().previewSettings,
             draftPreviewSettings);
+    const bool navigationClimbChanged =
+            NormalizeSectorPreviewSettings(TopologyMap().previewSettings).stepHeight
+                    != draftPreviewSettings.stepHeight;
     const bool skyChanged = !SameSkySettings(TopologyMap().skySettings, draftSkySettings);
     const bool directionalChanged = !SameDirectionalLightSettings(
             TopologyMap().directionalLight,
@@ -6314,6 +6432,13 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
         if (engineContext != nullptr) {
             RebuildPreviewMeshesPreservingView(*engineContext);
         }
+    } else if (navigationClimbChanged
+            && state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()
+            && engineContext != nullptr) {
+        if (!sceneRuntime.RebuildNavigationForMap(*engineContext, TopologyMap())) {
+            TraceLog(LOG_WARNING, "Could not rebuild navigation after step-height change");
+        }
     }
     if (state.mode == SectorEditorMode::Preview3D
             && previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
@@ -6354,6 +6479,15 @@ SectorEditorTextureCatalogService SectorEditor::MakeTextureCatalogService()
                     state.defaultWallTextureId,
                     state.defaultLowerWallTextureId,
                     state.defaultUpperWallTextureId}};
+}
+
+SectorEditorNpcEditorService SectorEditor::BuildNpcEditorService()
+{
+    return SectorEditorNpcEditorService{
+            npcEditorState,
+            npcEditorSessionState,
+            statusText,
+            std::filesystem::path(ASSETS_PATH) / "npcs"};
 }
 
 void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)
@@ -7174,6 +7308,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
                 TopologyMap(),
                 "sector_editor_preview",
                 applicationSettings.footsteps.defaultSet,
+                applicationSettings.footsteps.volume,
                 error)) {
         sceneRuntime.RuntimeObjects().objectLightProbes = SectorBakedObjectLightProbeRuntimeData{};
         sceneRuntime.RuntimeObjects().objectProbeStatus.clear();

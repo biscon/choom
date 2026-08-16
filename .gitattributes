@@ -7,3 +7,11 @@
 *.raw binary
 *.obj binary
 *.gltf binary
+
+# Preserve the exact upstream Recast Navigation v1.6.0 source bytes. The
+# upstream files contain intentional historical trailing whitespace.
+sources/recast/** -text -whitespace
+sources/detour/** -text -whitespace
+sources/detour_tile_cache/** -text -whitespace
+sources/detour_crowd/** -text -whitespace
+sources/recastnavigation/LICENSE.txt -text -whitespace

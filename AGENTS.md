@@ -283,6 +283,8 @@ task-scoping rules in the later sections.
 ## Codex task behavior for this project
 
 - Do not perform smoke tests/interactive tests with xdotool etc, user will test.
+- When adding, changing, or removing Lua script bindings or script-visible
+  globals, update `docs/scripting_api.md` in the same change.
 - Keep changes scoped to the requested task.
 - Avoid unrelated rewrites, renames, style churn, or architecture cleanup during
   feature/bugfix tasks.

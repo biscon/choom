@@ -19,6 +19,28 @@ file(GLOB_RECURSE PROJECT_SOURCES
 # glob so it can also be linked by focused scripting tests.
 list(FILTER PROJECT_SOURCES EXCLUDE REGEX "/sources/lua/.*\\.c$")
 
+# Recast Navigation is a vendored source dependency. Keep all of its modules
+# behind one explicit target so the main source glob cannot compile them a
+# second time and focused navigation tests can link the same implementation.
+list(FILTER PROJECT_SOURCES EXCLUDE REGEX
+        "/sources/(recast|detour|detour_tile_cache|detour_crowd)/.*"
+)
+
+file(GLOB RECASTNAVIGATION_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/recast/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/detour/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/detour_tile_cache/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/sources/detour_crowd/*.cpp"
+)
+add_library(recastnavigation STATIC ${RECASTNAVIGATION_SOURCES})
+target_compile_definitions(recastnavigation PUBLIC DT_POLYREF64=1)
+target_include_directories(recastnavigation PUBLIC
+        sources/recast
+        sources/detour
+        sources/detour_tile_cache
+        sources/detour_crowd
+)
+
 file(GLOB LUA55_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/sources/lua/*.c"
 )
@@ -30,7 +52,7 @@ target_include_directories(lua55 PUBLIC sources/lua)
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE sources)
-target_link_libraries(${PROJECT_NAME} PRIVATE raylib lua55)
+target_link_libraries(${PROJECT_NAME} PRIVATE raylib lua55 recastnavigation)
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE X11 Xcursor)
@@ -127,6 +149,16 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(raylib)
+execute_process(
+        COMMAND ${CMAKE_COMMAND}
+                "-DRAYLIB_SOURCE_DIR=${raylib_SOURCE_DIR}"
+                "-DRAYLIB_PATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/raylib-6.0-gltf-animation-endpoint.patch"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyRaylibGltfAnimationEndpointPatch.cmake"
+        RESULT_VARIABLE RAYLIB_GLTF_ENDPOINT_PATCH_RESULT
+)
+if(NOT RAYLIB_GLTF_ENDPOINT_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to apply the raylib glTF animation endpoint backport")
+endif()
 target_compile_definitions(raylib PRIVATE
     SUPPORT_FILEFORMAT_JPG=1
     SUPPORT_GPU_SKINNING=1
@@ -197,6 +229,7 @@ if(BUILD_TESTING)
     add_executable(application_flow_tests
             tests/ApplicationFlowTests.cpp
             sources/game/ApplicationFlow.cpp
+            sources/game/GameLevelLoading.cpp
     )
     target_include_directories(application_flow_tests PRIVATE sources)
     add_test(NAME application_flow COMMAND application_flow_tests)
@@ -282,6 +315,8 @@ if(BUILD_TESTING)
 
     add_executable(sector_authoring_graph_tests
             tests/SectorAuthoringGraphTests.cpp
+            sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/NpcRuntime.cpp
             sources/sector_editor/SectorEditorAuthoringState.cpp
             sources/sector_editor/SectorEditorDirtyState.cpp
             sources/sector_editor/document/SectorEditorDocumentActions.cpp
@@ -298,6 +333,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
             sources/sector_editor/services/runtime_objects/SectorEditorAuthoringDoorReconciliation.cpp
             sources/sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.cpp
+            sources/sector_editor/npcs/SectorEditorNpcPlacementState.cpp
             sources/sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.cpp
             sources/sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.cpp
             sources/sector_editor/services/texture_picker/SectorEditorTexturePickerService.cpp
@@ -339,6 +375,8 @@ if(BUILD_TESTING)
 
     add_executable(sector_topology_serialization_tests
             tests/SectorTopologySerializationTests.cpp
+            sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/NpcRuntime.cpp
             sources/game/SectorLevelLoader.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorTopologyMap.cpp
@@ -484,11 +522,21 @@ if(BUILD_TESTING)
     add_executable(sector_runtime_object_tests
             tests/SectorRuntimeObjectTests.cpp
             tests/SectorScriptBindingTests.cpp
+            sources/game/navigation/SectorNavigationBuildInput.cpp
+            sources/game/navigation/SectorNavigationCompression.cpp
+            sources/game/navigation/SectorNavigationTypes.cpp
+            sources/game/navigation/SectorNavigationWorld.cpp
+            sources/game/npc/NpcDefinitions.cpp
+            sources/game/npc/NpcCollision.cpp
+            sources/game/npc/NpcCombatSystem.cpp
+            sources/game/npc/NpcNavigationSystem.cpp
+            sources/game/npc/NpcRuntime.cpp
             sources/engine/scripting/ScriptSystem.cpp
             sources/engine/scripting/ScriptPersistence.cpp
             sources/game/SectorScriptBindings.cpp
             sources/engine/audio/AudioSystem.cpp
             sources/engine/systems/AnimatedModelSystem.cpp
+            sources/engine/systems/AnimatedModelRaycast.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
@@ -505,6 +553,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/renderer/SectorImpactParticleSystem.cpp
             sources/sector_demo/SectorSwingDoorCatalog.cpp
             sources/sector_demo/SectorStaticModelCollision.cpp
             sources/sector_demo/SectorTextureTypes.cpp
@@ -516,7 +565,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(sector_runtime_object_tests PRIVATE sources)
     target_compile_definitions(sector_runtime_object_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
-    target_link_libraries(sector_runtime_object_tests PRIVATE raylib xatlas lua55)
+    target_link_libraries(sector_runtime_object_tests PRIVATE raylib xatlas lua55 recastnavigation)
     add_test(NAME sector_runtime_object COMMAND sector_runtime_object_tests)
 
     add_executable(sector_sky_cylinder_tests
@@ -537,6 +586,24 @@ if(BUILD_TESTING)
             ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(sector_swing_door_catalog_tests PRIVATE raylib)
     add_test(NAME sector_swing_door_catalog COMMAND sector_swing_door_catalog_tests)
+
+    add_executable(npc_definition_tests
+            tests/NpcDefinitionTests.cpp
+            sources/game/npc/NpcDefinitions.cpp
+            sources/sector_editor/npcs/SectorEditorNpcEditorService.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
+    )
+    target_include_directories(npc_definition_tests PRIVATE sources)
+    target_compile_definitions(npc_definition_tests PRIVATE
+            ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+    target_link_libraries(npc_definition_tests PRIVATE raylib)
+    add_test(NAME npc_definition COMMAND npc_definition_tests)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp
@@ -561,6 +628,20 @@ if(BUILD_TESTING)
     target_compile_definitions(sector_editor_ui_layout_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(sector_editor_ui_layout_tests PRIVATE raylib xatlas)
     add_test(NAME sector_editor_ui_layout COMMAND sector_editor_ui_layout_tests)
+
+    add_executable(sector_navigation_tests
+            tests/SectorNavigationTests.cpp
+            sources/game/navigation/SectorNavigationBuildInput.cpp
+            sources/game/navigation/SectorNavigationCompression.cpp
+            sources/game/navigation/SectorNavigationTypes.cpp
+            sources/game/navigation/SectorNavigationWorld.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/SectorTopologyUnits.cpp
+            sources/sector_demo/SectorTopologyValidation.cpp
+    )
+    target_include_directories(sector_navigation_tests PRIVATE sources)
+    target_link_libraries(sector_navigation_tests PRIVATE raylib recastnavigation)
+    add_test(NAME sector_navigation COMMAND sector_navigation_tests)
 endif()
 
 # -------------------------------

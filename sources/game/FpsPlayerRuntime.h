@@ -5,6 +5,7 @@
 #include "engine/ecs/World.h"
 #include "engine/input/Input.h"
 #include "game/FpsViewmodel.h"
+#include "game/Health.h"
 #include "game/FpsViewmodelEffectsRenderer.h"
 #include "game/FpsWeaponRegistry.h"
 #include "sector_demo/SectorCollisionWorld.h"
@@ -61,6 +62,12 @@ public:
     void UpdateTransformsAndLight(
             SectorMeshRenderer& renderer,
             const SectorCollisionWorld* collisionWorld);
+    void RecordShotResolution(const FpsShotResult& shot)
+    {
+        state.firing.lastShot = shot;
+        state.firing.lastShot.accepted = true;
+        state.firing.hasLastShot = true;
+    }
     void Render(
             engine::AssetManager& assets,
             SectorMeshRenderer& renderer,
@@ -69,7 +76,9 @@ public:
             int preferredSectorId);
     void RenderHud(
             Rectangle playableViewport,
-            const FpsWeaponRegistry& registry) const;
+            const FpsWeaponRegistry& registry,
+            const engine::FontAsset* font = nullptr,
+            const Health* health = nullptr) const;
 
     FpsViewmodelRuntimeState& State() { return state; }
     const FpsViewmodelRuntimeState& State() const { return state; }

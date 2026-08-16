@@ -394,6 +394,9 @@ bool FpsPlayerRuntime::HandleFireInput(
                             direction,
                             state.firing.definition.maximumRangeWorld);
                     shot.hit = hit.hit;
+                    shot.hitKind = hit.hit
+                            ? FpsShotHitKind::SectorSurface
+                            : FpsShotHitKind::None;
                     shot.position = hit.position;
                     shot.normal = hit.normal;
                     shot.distance = hit.distance;
@@ -576,13 +579,17 @@ void FpsPlayerRuntime::Render(
 
 void FpsPlayerRuntime::RenderHud(
         Rectangle playableViewport,
-        const FpsWeaponRegistry& registry) const
+        const FpsWeaponRegistry& registry,
+        const engine::FontAsset* font,
+        const Health* health) const
 {
     DrawFpsHud(FpsHudContext{
             true,
             playableViewport,
             registry,
-            state});
+            state,
+            font,
+            health});
 }
 
 } // namespace game

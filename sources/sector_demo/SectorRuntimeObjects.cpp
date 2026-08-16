@@ -1,5 +1,6 @@
 #include "sector_demo/SectorRuntimeObjects.h"
 
+#include "game/npc/NpcRuntime.h"
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorMeshTypes.h"
@@ -10,6 +11,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <utility>
 #include <vector>
@@ -42,12 +44,17 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(21);
+    world.ReserveComponentTypes(27);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
+    world.ReserveComponent<SectorObjectVisualOffset>(objectCapacity);
     world.ReserveComponent<SectorStaticModel>(objectCapacity);
     world.ReserveComponent<SectorDynamicModel>(objectCapacity);
+    world.ReserveComponent<NpcRuntimeInstance>(objectCapacity);
+    world.ReserveComponent<NpcAnimationState>(objectCapacity);
+    world.ReserveComponent<Health>(objectCapacity);
+    world.ReserveComponent<NpcCombatState>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelInstance>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelAnimator>(objectCapacity);
     world.ReserveComponent<SectorStaticModelCollider>(objectCapacity);
@@ -58,6 +65,7 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<SectorDoor>(objectCapacity);
     world.ReserveComponent<SectorDoorResolvedAnchor>(objectCapacity);
     world.ReserveComponent<SectorDoorMotion>(objectCapacity);
+    world.ReserveComponent<SectorDoorOpenControl>(objectCapacity);
     world.ReserveComponent<SectorDoorAudio>(objectCapacity);
     world.ReserveComponent<SectorDoorInteraction>(objectCapacity);
     world.ReserveComponent<SectorDoorRender>(objectCapacity);
@@ -363,6 +371,32 @@ void ReloadSwingDoorCatalogData(SectorRuntimeObjectState& state)
             state.swingDoorCatalog.assets.size());
 }
 
+void ReloadNpcDefinitionCatalogData(SectorRuntimeObjectState& state)
+{
+    ++state.npcDefinitionCatalogRevision;
+    state.npcDefinitionCatalog = NpcDefinitionCatalog{};
+    state.npcDefinitionCatalogStatus.clear();
+    state.npcDefinitionCatalogWarning.clear();
+
+    const std::filesystem::path root = ResolveSectorAssetPath(
+            kNpcDefinitionsAssetRoot);
+    const bool valid = DiscoverNpcDefinitions(root, state.npcDefinitionCatalog);
+    state.npcDefinitionCatalogStatus = TextFormat(
+            "NPC definitions: %zu loaded",
+            state.npcDefinitionCatalog.definitions.size());
+    if (!valid && !state.npcDefinitionCatalog.errors.empty()) {
+        const NpcDefinitionCatalogError& error =
+                state.npcDefinitionCatalog.errors.front();
+        state.npcDefinitionCatalogWarning =
+                "Runtime object warnings: NPC catalog: "
+                + error.path + ": " + error.message;
+        std::fprintf(
+                stderr,
+                "[SectorRuntimeObjects WARNING] %s\n",
+                state.npcDefinitionCatalogWarning.c_str());
+    }
+}
+
 void RefreshDoorFallbackDiagnostics(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map)
@@ -641,9 +675,12 @@ void ClearSectorRuntimeObjects(
 
     const bool keepReservation = state.worldReserved;
     const uint64_t keepSwingDoorCatalogRevision = state.swingDoorCatalogRevision;
+    const uint64_t keepNpcDefinitionCatalogRevision =
+            state.npcDefinitionCatalogRevision;
     state = SectorRuntimeObjectState{};
     state.worldReserved = keepReservation;
     state.swingDoorCatalogRevision = keepSwingDoorCatalogRevision;
+    state.npcDefinitionCatalogRevision = keepNpcDefinitionCatalogRevision;
 }
 
 void ReloadSectorSwingDoorCatalog(SectorRuntimeObjectState& state)
@@ -651,11 +688,17 @@ void ReloadSectorSwingDoorCatalog(SectorRuntimeObjectState& state)
     ReloadSwingDoorCatalogData(state);
 }
 
+void ReloadSectorNpcDefinitionCatalog(SectorRuntimeObjectState& state)
+{
+    ReloadNpcDefinitionCatalogData(state);
+}
+
 void RefreshSectorRuntimeObjectMapData(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map)
 {
     ReloadSwingDoorCatalogData(state);
+    ReloadNpcDefinitionCatalogData(state);
     RefreshDoorAnchorDiagnostics(state, map);
     RefreshDoorFallbackDiagnostics(state, map);
 
@@ -720,11 +763,15 @@ void SpawnPlacedRuntimeObjects(
     state.placedObjectEntities.reserve(map.runtimeObjects.size());
     state.dynamicDoorColliders.clear();
     state.dynamicDoorColliders.reserve(map.runtimeObjects.size());
+    state.doorObstacles.clear();
+    state.doorObstacles.reserve(map.runtimeObjects.size() + 1u);
     state.dynamicPortalBlockers.clear();
     state.dynamicPortalBlockers.reserve(map.runtimeObjects.size() * 2);
     state.doorCollisionCacheInitialized = false;
     state.staticModelColliders.clear();
     state.staticModelColliders.reserve(map.runtimeObjects.size());
+    state.dynamicModelColliders.clear();
+    state.dynamicModelColliders.reserve(map.runtimeObjects.size());
     state.placedObjectCount = map.runtimeObjects.size();
     state.spawnedObjectCount = 0;
     state.skippedObjectCount = 0;
@@ -925,6 +972,7 @@ void SpawnPlacedRuntimeObjects(
             world.Add(entity, SectorDoor{placedObject.id, true});
             world.Add(entity, runtimeAnchor);
             world.Add(entity, runtimeMotion);
+            world.Add(entity, SectorDoorOpenControl{});
             world.Add(entity, SectorDoorAudio{
                     placedObject.door.openSoundId,
                     placedObject.door.closeSoundId,
@@ -1017,6 +1065,122 @@ void SpawnPlacedRuntimeObjects(
             continue;
         }
 
+        if (placedObject.kind == "npc") {
+            const NpcDefinition* definition = FindNpcDefinition(
+                    state.npcDefinitionCatalog,
+                    placedObject.npc.definitionId);
+            if (definition == nullptr) {
+                const std::string warning = TextFormat(
+                        "NPC definition '%s' was not found for placed object %d",
+                        placedObject.npc.definitionId.c_str(),
+                        placedObject.id);
+                std::fprintf(stderr, "[SectorRuntimeObjects WARNING] %s\n", warning.c_str());
+                recordWarning(warning);
+                ++skippedCount;
+                continue;
+            }
+
+            engine::ModelHandle model = engine::NullModelHandle();
+            if (!EnsureSectorRuntimeObjectAssetScope(assets, state)) {
+                recordWarning(TextFormat(
+                        "asset scope unavailable for NPC object %d",
+                        placedObject.id));
+                ++skippedCount;
+                continue;
+            }
+            const std::string modelPath = ResolveSectorAssetPath(
+                    definition->modelPath);
+            model = assets.RequestModel(
+                    state.runtimeObjectAssetScope,
+                    definition->modelPath.c_str(),
+                    modelPath.c_str(),
+                    engine::ModelLoad_Animations);
+            if (engine::IsNull(model)) {
+                const std::string warning = TextFormat(
+                        "could not request NPC model '%s' for placed object %d",
+                        definition->modelPath.c_str(),
+                        placedObject.id);
+                std::fprintf(stderr, "[SectorRuntimeObjects WARNING] %s\n", warning.c_str());
+                recordWarning(warning);
+            }
+
+            const NpcActionDefinition& idle = GetNpcAction(
+                    *definition,
+                    NpcAction::Idle);
+            Vector3 worldPosition = PlacedRuntimeObjectAuthoringToWorldPosition(
+                    placedObject.position);
+            SectorObject object;
+            if (state.objectSectorLookupWorldValid) {
+                const int foundSectorId =
+                        state.objectSectorLookupWorld.FindSectorContainingPointPreferCurrent(
+                                Vector2{worldPosition.x, worldPosition.z}, -1);
+                object.currentSectorId = foundSectorId != 0 ? foundSectorId : -1;
+            }
+            const Vector3 sectorAmbient = StaticModelSectorAmbient(
+                    map,
+                    object.currentSectorId);
+
+            const engine::Entity entity = world.CreateEntity();
+            world.Add(entity, SectorObjectTransform{
+                    worldPosition,
+                    placedObject.yawRadians,
+                    0.0f,
+                    0.0f});
+            world.Add(entity, object);
+            world.Add(entity, SampleSectorObjectLighting(
+                    state.objectLightProbes,
+                    worldPosition,
+                    object.currentSectorId,
+                    &map));
+            world.Add(entity, NpcRuntimeInstance{
+                    definition->id,
+                    placedObject.npc.instanceId,
+                    NpcAction::Idle,
+                    definition->hostile,
+                    definition->canOpenDoors,
+                    GetNpcAction(*definition, NpcAction::Walk).movementSpeed,
+                    GetNpcAction(*definition, NpcAction::Run).movementSpeed});
+            world.Add(entity, MakeHealth(definition->baseHealth));
+            NpcCombatState npcCombat;
+            npcCombat.despawnOnDeath = definition->despawnOnDeath;
+            npcCombat.corpseDespawnDelaySeconds =
+                    definition->corpseDespawnDelaySeconds;
+            npcCombat.corpseFadeDurationSeconds =
+                    definition->corpseFadeDurationSeconds;
+            world.Add(entity, npcCombat);
+            NpcAnimationState npcAnimation;
+            npcAnimation.blendSeconds = definition->animationBlendSeconds;
+            for (const NpcActionMetadata& metadata : NpcActionMetadataTable()) {
+                npcAnimation.animationSpeeds[static_cast<size_t>(metadata.action)] =
+                        GetNpcAction(*definition, metadata.action).animationSpeed;
+            }
+            world.Add(entity, npcAnimation);
+            world.Add(entity, SectorObjectVisualOffset{});
+            world.Add(entity, SectorDynamicModel{
+                    placedObject.id,
+                    sectorAmbient,
+                    placedObject.npc.scale,
+                    StaticModelEnvironmentExposure(
+                            map,
+                            object.currentSectorId,
+                            sectorAmbient),
+                    idle.animation,
+                    false,
+                    false,
+                    1.0f,
+                    placedObject.npc.shadowMode});
+            world.Add(entity, engine::AnimatedModelInstance{model});
+            engine::AnimatedModelAnimator animator;
+            animator.speed = idle.animationSpeed;
+            animator.loop = true;
+            animator.playing = true;
+            world.Add(entity, animator);
+            state.placedObjectEntities.push_back(
+                    SectorPlacedRuntimeObjectEntity{placedObject.id, entity});
+            ++spawnedCount;
+            continue;
+        }
+
         if (placedObject.kind == "dynamic_model") {
             engine::ModelHandle model = engine::NullModelHandle();
             if (!placedObject.dynamicModel.modelPath.empty()) {
@@ -1074,6 +1238,7 @@ void SpawnPlacedRuntimeObjects(
                     placedObject.dynamicModel.animation,
                     false,
                     false,
+                    1.0f,
                     placedObject.dynamicModel.shadowMode});
             world.Add(entity, engine::AnimatedModelInstance{model});
             engine::AnimatedModelAnimator animator;
@@ -1182,6 +1347,7 @@ void SpawnPlacedRuntimeObjects(
     ResolveDynamicModelAnimations(world, assets);
     UpdateSectorStaticModelColliderSystem(world, assets);
     CollectSectorStaticModelColliders(world, state.staticModelColliders);
+    CollectSectorDynamicModelColliders(world, state.dynamicModelColliders);
     RefreshPlacedRuntimeObjectDiagnostics(world, assets, state);
 }
 
@@ -1192,21 +1358,24 @@ void UpdateSectorRuntimeObjects(
         const SectorTopologyMap& map,
         float dt,
         const Vector3* playerPosition,
-        const SectorDoorPlayerObstacle* playerObstacle)
+        const SectorDoorPlayerObstacle* playerObstacle,
+        const std::vector<SectorDoorPlayerObstacle>* doorObstacles)
 {
     AdvanceSectorBillboardAnimatorSystem(world, dt);
     ResolveDynamicModelAnimations(world, assets);
-    engine::AnimatedModelSystem(world, assets, dt);
     if (playerPosition != nullptr) {
         UpdateSectorDoorAutoOpenSystem(world, *playerPosition);
     }
-    state.doorSpatialStateChanged = AdvanceSectorDoorMotionSystem(
-            world, dt, playerObstacle);
+    state.doorSpatialStateChanged = doorObstacles != nullptr
+            ? AdvanceSectorDoorMotionSystem(
+                    world, dt, doorObstacles->data(), doorObstacles->size())
+            : AdvanceSectorDoorMotionSystem(world, dt, playerObstacle);
     if (state.doorSpatialStateChanged) {
         UpdateSectorDoorDerivedStateSystem(world);
     }
     if (UpdateSectorStaticModelColliderSystem(world, assets)) {
         CollectSectorStaticModelColliders(world, state.staticModelColliders);
+        CollectSectorDynamicModelColliders(world, state.dynamicModelColliders);
     }
     const bool doorModelReadinessChanged =
             RefreshSectorDoorModelReadinessSystem(world, assets);

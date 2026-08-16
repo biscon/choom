@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/components/AnimatedModel.h"
 #include "engine/ecs/World.h"
+#include "game/npc/NpcDefinitions.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
@@ -51,6 +52,12 @@ struct SectorObjectLighting {
     BakedObjectLightingVerticalSample vertical = {};
 };
 
+// Presentation-only offset. Physical position, collision, sector lookup, and
+// lighting continue to use SectorObjectTransform.
+struct SectorObjectVisualOffset {
+    Vector3 position = {};
+};
+
 struct SectorStaticModel {
     engine::ModelHandle model = engine::NullModelHandle();
     int placedObjectId = 0;
@@ -67,6 +74,7 @@ struct SectorDynamicModel {
     std::string requestedAnimation;
     bool animationResolved = false;
     bool animationFallback = false;
+    float opacity = 1.0f;
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
 };
 
@@ -94,9 +102,12 @@ struct SectorRuntimeObjectState {
     std::vector<SectorPlacedRuntimeObjectEntity> placedObjectEntities;
     std::vector<SectorDoorAnchorDiagnostic> doorAnchorDiagnostics;
     SectorSwingDoorCatalog swingDoorCatalog;
+    NpcDefinitionCatalog npcDefinitionCatalog;
     std::vector<SectorDoorFallbackDiagnostic> doorFallbackDiagnostics;
     std::vector<SectorDynamicDoorCollider> dynamicDoorColliders;
+    std::vector<SectorDoorPlayerObstacle> doorObstacles;
     std::vector<SectorStaticModelCollider> staticModelColliders;
+    std::vector<SectorStaticModelCollider> dynamicModelColliders;
     std::vector<RuntimePortalDynamicBlocker> dynamicPortalBlockers;
     size_t placedObjectCount = 0;
     size_t spawnedObjectCount = 0;
@@ -127,6 +138,9 @@ struct SectorRuntimeObjectState {
     uint64_t swingDoorCatalogRevision = 0;
     std::string swingDoorCatalogStatus;
     std::string swingDoorCatalogWarning;
+    uint64_t npcDefinitionCatalogRevision = 0;
+    std::string npcDefinitionCatalogStatus;
+    std::string npcDefinitionCatalogWarning;
     SectorBakedObjectLightProbeRuntimeData objectLightProbes;
     std::string objectProbeStatus;
     SectorCollisionWorld objectSectorLookupWorld;
@@ -156,6 +170,7 @@ void RefreshSectorRuntimeObjectMapData(
         const SectorTopologyMap& map);
 
 void ReloadSectorSwingDoorCatalog(SectorRuntimeObjectState& state);
+void ReloadSectorNpcDefinitionCatalog(SectorRuntimeObjectState& state);
 
 void ResetSectorRuntimeObjectsForMap(
         engine::World& world,
@@ -176,7 +191,8 @@ void UpdateSectorRuntimeObjects(
         const SectorTopologyMap& map,
         float dt,
         const Vector3* playerPosition = nullptr,
-        const SectorDoorPlayerObstacle* playerObstacle = nullptr);
+        const SectorDoorPlayerObstacle* playerObstacle = nullptr,
+        const std::vector<SectorDoorPlayerObstacle>* doorObstacles = nullptr);
 
 void UpdateSectorObjectCurrentSectorSystem(
         engine::World& world,

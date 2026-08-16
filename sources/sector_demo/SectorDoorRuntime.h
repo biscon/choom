@@ -94,6 +94,12 @@ struct SectorDoorMotion {
     SectorDoorSwingSide swingSide = SectorDoorSwingSide::Front;
 };
 
+// The authored/player/script target remains on SectorDoorMotion. Navigation
+// holds are combined with it when motion advances.
+struct SectorDoorOpenControl {
+    uint32_t navigationHolderCount = 0;
+};
+
 enum class SectorDoorAudioEvent {
     None,
     Open,
@@ -423,6 +429,12 @@ bool AdvanceSectorDoorMotionSystem(
         float dt,
         const SectorDoorPlayerObstacle* playerObstacle = nullptr);
 
+bool AdvanceSectorDoorMotionSystem(
+        engine::World& world,
+        float dt,
+        const SectorDoorPlayerObstacle* obstacles,
+        size_t obstacleCount);
+
 bool RefreshSectorDoorModelReadinessSystem(
         engine::World& world,
         engine::AssetManager& assets);
@@ -451,6 +463,14 @@ bool SectorDoorDynamicCollidersAllowPlayerHeight(
         float feetY,
         float radius,
         float playerHeight,
+        const std::vector<SectorDynamicDoorCollider>& colliders);
+
+bool SectorDoorTraversalIsClear(
+        int placedObjectId,
+        Vector3 staging,
+        Vector3 landing,
+        float radius,
+        float agentHeight,
         const std::vector<SectorDynamicDoorCollider>& colliders);
 
 void CollectSectorDoorDynamicPortalBlockers(

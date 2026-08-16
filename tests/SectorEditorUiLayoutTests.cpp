@@ -1,6 +1,8 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
+#include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
+#include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 #include "sector_demo/SectorLightmap.h"
 
 #include <cmath>
@@ -491,6 +493,28 @@ void TestPreviewSettingsFogTabLayout()
           "weapon tab preserves the modal right margin");
 }
 
+void TestNpcEditorModalSplitPaneLayout()
+{
+    const game::SectorEditorNpcEditorModalLayout layout =
+            game::BuildSectorEditorNpcEditorModalLayoutForViewport(1920.0f, 1080.0f);
+    const Rectangle viewport{0.0f, 0.0f, 1920.0f, 1080.0f};
+    Check(Contains(viewport, layout.modal),
+          "NPC editor modal fits inside the editor viewport");
+    Check(Contains(layout.modal, layout.listPane)
+                  && Contains(layout.modal, layout.formBounds),
+          "NPC list and form panes stay inside the modal");
+    Check(!Overlaps(layout.listPane, layout.formBounds),
+          "NPC list and form panes do not overlap");
+    Check(!Overlaps(layout.addButton, layout.deleteButton)
+                  && Contains(layout.listPane, layout.addButton)
+                  && Contains(layout.listPane, layout.deleteButton),
+          "NPC Add and Delete controls fit without overlap");
+    Check(!Overlaps(layout.saveButton, layout.cancelButton)
+                  && Contains(layout.modal, layout.saveButton)
+                  && Contains(layout.modal, layout.cancelButton),
+          "NPC Save and Cancel controls fit without overlap");
+}
+
 void TestPreviewSettingsModalFogDraftApplyAndReset()
 {
     game::SectorTopologyMap map;
@@ -536,6 +560,24 @@ void TestPreviewSettingsModalFogDraftApplyAndReset()
           "preview settings modal resets fog defaults");
 }
 
+void TestPreviewNavigationTabLayout()
+{
+    Check(game::SectorEditorPreviewDebugTabs.size() == 10,
+          "preview debug strip contains ten array-defined tabs");
+    const Rectangle panel{32.0f, 32.0f, 700.0f, 520.0f};
+    Rectangle previous{};
+    for (size_t index = 0; index < game::SectorEditorPreviewDebugTabs.size(); ++index) {
+        const Rectangle tab = game::BuildSectorEditorPreviewDebugTabRect(
+                panel, 10.0f, 26.0f, 6.0f, 30.0f, 6.0f, index);
+        Check(Contains(panel, tab), "preview debug tab fits inside its panel");
+        if (index > 0) Check(!Overlaps(previous, tab), "preview debug tabs do not overlap");
+        previous = tab;
+    }
+    Check(game::SectorEditorPreviewOverlayExpandedHeight(
+                  game::PreviewDebugOverlayTab::Navigation) >= 520.0f,
+          "preview interaction bounds include Navigation controls and diagnostics");
+}
+
 } // namespace
 
 int main()
@@ -561,7 +603,9 @@ int main()
     TestPreviewSettingsModalResetsObjectProbeDefaults();
     TestPreviewSettingsModalNormalizesLayeredProbeSettings();
     TestPreviewSettingsFogTabLayout();
+    TestNpcEditorModalSplitPaneLayout();
     TestPreviewSettingsModalFogDraftApplyAndReset();
+    TestPreviewNavigationTabLayout();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorUiLayoutTests failure(s)\n";

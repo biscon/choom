@@ -653,6 +653,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::RuntimeObject: return "Billboard";
         case SectorEditorTool::StaticModel: return "3D Prop";
         case SectorEditorTool::DynamicModel: return "Dynamic Prop";
+        case SectorEditorTool::Npc: return "NPC";
         case SectorEditorTool::Door: return "Door";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume";
         case SectorEditorTool::Trigger: return "Trigger";
@@ -1137,6 +1138,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::RuntimeObject: return "Billboard: click inside a sector to place a billboard marker";
         case SectorEditorTool::StaticModel: return "3D Prop: click inside a derived sector to place a floor-relative static model";
         case SectorEditorTool::DynamicModel: return "Dynamic Prop: click inside a derived sector to place an animated model";
+        case SectorEditorTool::Npc: return "NPC: click inside a derived sector to place a character";
         case SectorEditorTool::Door: return "Door: click a two-sided portal line to place a sliding door";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume: click strictly inside a sector to place local fog";
         case SectorEditorTool::Trigger: return "Trigger: choose Rectangle or Polygon, then draw snapped points; right click/Esc cancels";

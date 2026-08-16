@@ -2,9 +2,13 @@
 
 #include "engine/EngineContext.h"
 #include "engine/scripting/ScriptSystem.h"
+#include "game/navigation/SectorNavigationWorld.h"
+#include "game/npc/NpcNavigationSystem.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTriggers.h"
+#include "sector_demo/SectorUnits.h"
 
 #include "lua.hpp"
 
@@ -17,6 +21,24 @@ namespace game {
 namespace {
 
 constexpr float DoorTargetEpsilon = 0.0001f;
+
+void RecordNpcMoveOutcome(
+        SectorScriptHost& host,
+        std::string_view instanceId,
+        const char* outcome)
+{
+    std::snprintf(
+            host.npcMoveDiagnostics.lastInstanceId.data(),
+            host.npcMoveDiagnostics.lastInstanceId.size(),
+            "%.*s",
+            static_cast<int>(instanceId.size()),
+            instanceId.data());
+    std::snprintf(
+            host.npcMoveDiagnostics.lastOutcome.data(),
+            host.npcMoveDiagnostics.lastOutcome.size(),
+            "%s",
+            outcome != nullptr ? outcome : "");
+}
 
 bool IsValidMapId(const std::string& name)
 {
@@ -76,6 +98,17 @@ SectorScriptDoorMove* FindDoorMove(SectorScriptHost& host, uint64_t token)
     return found != host.doorMoves.end() ? &*found : nullptr;
 }
 
+SectorScriptNpcMove* FindNpcMove(SectorScriptHost& host, uint64_t token)
+{
+    const auto found = std::find_if(
+            host.npcMoves.begin(),
+            host.npcMoves.end(),
+            [token](const SectorScriptNpcMove& move) {
+                return move.active && move.token == token;
+            });
+    return found != host.npcMoves.end() ? &*found : nullptr;
+}
+
 bool DoorMoveAlreadyActive(const SectorScriptHost& host, int placedObjectId)
 {
     return std::any_of(
@@ -129,6 +162,266 @@ void CancelDoorMove(
     move->active = false;
 }
 
+void CancelScriptNpcMove(
+        engine::EngineContext& context,
+        void* hostContext,
+        uint64_t token)
+{
+    auto* host = static_cast<SectorScriptHost*>(hostContext);
+    if (host == nullptr || host->navigation == nullptr
+            || host->npcNavigation == nullptr) {
+        return;
+    }
+    SectorScriptNpcMove* move = FindNpcMove(*host, token);
+    if (move == nullptr) return;
+    game::CancelNpcMove(
+            context.world,
+            *host->navigation,
+            *host->npcNavigation,
+            move->instanceId,
+            move->requestId);
+    ++host->npcMoveDiagnostics.cancellations;
+    RecordNpcMoveOutcome(*host, move->instanceId, "cancelled");
+    move->active = false;
+}
+
+struct BeginNpcMoveResult {
+    bool started = false;
+    uint64_t token = 0;
+    uint64_t requestId = 0;
+    std::string error;
+};
+
+BeginNpcMoveResult BeginNpcMove(
+        engine::EngineContext& context,
+        SectorScriptHost& host,
+        std::string instanceId,
+        Vector2 destinationXZ,
+        NpcMoveGait gait)
+{
+    BeginNpcMoveResult result;
+    ++host.npcMoveDiagnostics.requests;
+    if (host.navigation == nullptr || host.npcNavigation == nullptr
+            || host.runtimeObjects == nullptr
+            || !host.runtimeObjects->objectSectorLookupWorldValid) {
+        result.error = "NPC navigation runtime is unavailable";
+        ++host.npcMoveDiagnostics.failures;
+        RecordNpcMoveOutcome(host, instanceId, result.error.c_str());
+        return result;
+    }
+    const NpcMoveRequestResult request = game::RequestNpcMove(
+            context.world,
+            *host.navigation,
+            host.runtimeObjects->objectSectorLookupWorld,
+            *host.npcNavigation,
+            instanceId,
+            destinationXZ,
+            gait,
+            NpcMoveAuthority::Script);
+    if (!request.accepted) {
+        result.error = request.message.empty()
+                ? SectorNavigationQueryStatusName(request.status)
+                : request.message;
+        ++host.npcMoveDiagnostics.failures;
+        RecordNpcMoveOutcome(host, instanceId, result.error.c_str());
+        return result;
+    }
+
+    if (host.npcMoves.size() == host.npcMoves.capacity()) {
+        ++host.npcMoveDiagnostics.capacityWarnings;
+        TraceLog(
+                LOG_WARNING,
+                "[Lua WARNING] scripted NPC-move capacity exceeded; runtime allocation may occur");
+    }
+    result.started = true;
+    result.token = host.nextNpcMoveToken++;
+    result.requestId = request.requestId;
+    host.npcMoves.push_back(SectorScriptNpcMove{
+            result.token,
+            result.requestId,
+            std::move(instanceId),
+            {},
+            true});
+    RecordNpcMoveOutcome(host, host.npcMoves.back().instanceId, "following path");
+    return result;
+}
+
+void BindNpcOperation(
+        SectorScriptHost& host,
+        uint64_t token,
+        engine::ScriptOperationHandle operation)
+{
+    SectorScriptNpcMove* move = FindNpcMove(host, token);
+    if (move != nullptr) move->operation = operation;
+}
+
+bool ParseNpcMove(
+        lua_State* state,
+        const SectorScriptHost& host,
+        std::string& instanceId,
+        Vector2& destinationXZ,
+        NpcMoveGait& gait,
+        std::string& error)
+{
+    size_t idLength = 0;
+    const char* rawId = luaL_checklstring(state, 1, &idLength);
+    instanceId.assign(rawId, idLength);
+    if (!IsValidNpcInstanceId(instanceId)) {
+        error = "invalid NPC instance ID";
+        return false;
+    }
+
+    int gaitArgument = 4;
+    if (lua_type(state, 2) == LUA_TSTRING) {
+        size_t markerIdLength = 0;
+        const char* rawMarkerId = lua_tolstring(state, 2, &markerIdLength);
+        const std::string markerId{rawMarkerId, markerIdLength};
+        if (markerId.empty()) {
+            error = "level marker ID must not be empty";
+            return false;
+        }
+        if (host.map == nullptr) {
+            error = "level marker runtime is unavailable";
+            return false;
+        }
+        const SectorCompiledLevelMarker* marker =
+                FindSectorCompiledLevelMarker(*host.map, markerId);
+        if (marker == nullptr) {
+            error = "level marker not found: " + markerId;
+            return false;
+        }
+        const Vector3 worldPosition =
+                SectorAuthoringToWorldPosition(marker->position);
+        destinationXZ = {worldPosition.x, worldPosition.z};
+        gaitArgument = 3;
+    } else {
+        const lua_Number rawX = luaL_checknumber(state, 2);
+        const lua_Number rawZ = luaL_checknumber(state, 3);
+        if (!std::isfinite(static_cast<double>(rawX))
+                || !std::isfinite(static_cast<double>(rawZ))
+                || std::fabs(static_cast<double>(rawX))
+                        > std::numeric_limits<float>::max()
+                || std::fabs(static_cast<double>(rawZ))
+                        > std::numeric_limits<float>::max()) {
+            error = "NPC destination coordinates must be finite";
+            return false;
+        }
+        destinationXZ = {
+                static_cast<float>(rawX),
+                static_cast<float>(rawZ)};
+    }
+
+    gait = NpcMoveGait::Walk;
+    if (lua_isnoneornil(state, gaitArgument)) return true;
+    size_t gaitLength = 0;
+    const char* rawGait = luaL_checklstring(
+            state, gaitArgument, &gaitLength);
+    const std::string_view gaitName{rawGait, gaitLength};
+    if (gaitName == "walk") return true;
+    if (gaitName == "run") {
+        gait = NpcMoveGait::Run;
+        return true;
+    }
+    error = "unsupported NPC gait; expected 'walk' or 'run'";
+    return false;
+}
+
+int PushNpcMoveStartError(
+        lua_State* state,
+        bool async,
+        const std::string& error)
+{
+    if (async) lua_pushnil(state);
+    else lua_pushboolean(state, 0);
+    lua_pushlstring(state, error.data(), error.size());
+    return 2;
+}
+
+int LuaMoveNpc(lua_State* state)
+{
+    const int originalTop = lua_gettop(state);
+    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    const engine::ScriptTaskHandle task = engine::ScriptSystemCurrentTaskFromLua(state);
+    SectorScriptHost& host = HostFromLua(state);
+    std::string instanceId;
+    Vector2 destinationXZ{};
+    NpcMoveGait gait = NpcMoveGait::Walk;
+    std::string parseError;
+    if (!ParseNpcMove(
+            state, host, instanceId, destinationXZ, gait, parseError)) {
+        ++host.npcMoveDiagnostics.requests;
+        ++host.npcMoveDiagnostics.failures;
+        RecordNpcMoveOutcome(host, instanceId, parseError.c_str());
+        return PushNpcMoveStartError(state, false, parseError);
+    }
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    const BeginNpcMoveResult begin = BeginNpcMove(
+            context, host, instanceId, destinationXZ, gait);
+    if (!begin.started) {
+        return PushNpcMoveStartError(state, false, begin.error);
+    }
+    const engine::ScriptOperationHandle operation =
+            engine::ScriptSystemCreateOperation(
+                    scripts,
+                    engine::ScriptOperationLaunchStyle::Blocking,
+                    task,
+                    "moveNpc:" + instanceId,
+                    begin.token,
+                    CancelScriptNpcMove);
+    if (!engine::IsValid(operation)) {
+        CancelScriptNpcMove(context, &host, begin.token);
+        return PushNpcMoveStartError(
+                state, false, "could not allocate NPC script operation");
+    }
+    BindNpcOperation(host, begin.token, operation);
+    return engine::ScriptSystemYieldForOperation(state, operation, originalTop);
+}
+
+int LuaStartMoveNpc(lua_State* state)
+{
+    engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
+    if (scripts.phase != engine::ScriptRuntimePhase::Loading
+            && scripts.phase != engine::ScriptRuntimePhase::Active) {
+        lua_pushnil(state);
+        lua_pushliteral(state, "script runtime is shutting down");
+        return 2;
+    }
+    SectorScriptHost& host = HostFromLua(state);
+    std::string instanceId;
+    Vector2 destinationXZ{};
+    NpcMoveGait gait = NpcMoveGait::Walk;
+    std::string parseError;
+    if (!ParseNpcMove(
+            state, host, instanceId, destinationXZ, gait, parseError)) {
+        ++host.npcMoveDiagnostics.requests;
+        ++host.npcMoveDiagnostics.failures;
+        RecordNpcMoveOutcome(host, instanceId, parseError.c_str());
+        return PushNpcMoveStartError(state, true, parseError);
+    }
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    const BeginNpcMoveResult begin = BeginNpcMove(
+            context, host, instanceId, destinationXZ, gait);
+    if (!begin.started) {
+        return PushNpcMoveStartError(state, true, begin.error);
+    }
+    const engine::ScriptOperationHandle operation =
+            engine::ScriptSystemCreateOperation(
+                    scripts,
+                    engine::ScriptOperationLaunchStyle::Async,
+                    engine::ScriptSystemTryCurrentTaskFromLua(state),
+                    "moveNpc:" + instanceId,
+                    begin.token,
+                    CancelScriptNpcMove);
+    if (!engine::IsValid(operation)) {
+        CancelScriptNpcMove(context, &host, begin.token);
+        return PushNpcMoveStartError(
+                state, true, "could not allocate NPC script operation");
+    }
+    BindNpcOperation(host, begin.token, operation);
+    engine::ScriptSystemPushOperationUserdata(state, operation);
+    return 1;
+}
+
 BeginDoorMoveResult BeginDoorMove(
         engine::EngineContext& context,
         SectorScriptHost& host,
@@ -158,7 +451,16 @@ BeginDoorMoveResult BeginDoorMove(
     }
     const float current = std::isfinite(motion.openFraction)
             ? std::clamp(motion.openFraction, 0.0f, 1.0f) : 0.0f;
-    if (std::fabs(current - targetFraction) <= DoorTargetEpsilon) {
+    const bool heldForNavigation = context.world.Has<SectorDoorOpenControl>(entity)
+            && context.world.Get<SectorDoorOpenControl>(entity)
+                    .navigationHolderCount > 0;
+    if (targetFraction < 0.5f && heldForNavigation && durationMs == 0.0f) {
+        result.error = "door is held open by NPC navigation: "
+                + std::to_string(placedObjectId);
+        return result;
+    }
+    if (std::fabs(current - targetFraction) <= DoorTargetEpsilon
+            && !(targetFraction < 0.5f && heldForNavigation)) {
         motion.openFraction = targetFraction;
         motion.targetOpenFraction = targetFraction;
         result.started = true;
@@ -178,8 +480,10 @@ BeginDoorMoveResult BeginDoorMove(
     const float distance = motion.travelAmount > 0.0f
                     && std::isfinite(motion.travelAmount)
             ? motion.travelAmount : 1.0f;
-    const float scriptedSpeed = distance
-            * std::fabs(targetFraction - current) / durationSeconds;
+    const float targetDistance = std::fabs(targetFraction - current);
+    const float scriptedSpeed = targetDistance > DoorTargetEpsilon
+            ? distance * targetDistance / durationSeconds
+            : motion.travelSpeed;
     if (!std::isfinite(scriptedSpeed) || scriptedSpeed <= 0.0f) {
         result.error = "could not derive a valid door speed";
         return result;
@@ -391,13 +695,21 @@ void InitializeSectorScriptHost(
         SectorScriptHost& host,
         SectorRuntimeObjectState& runtimeObjects,
         SectorTopologyMap& map,
-        engine::ScriptRuntime& scripts)
+        engine::ScriptRuntime& scripts,
+        SectorNavigationWorld* navigation,
+        NpcNavigationRuntime* npcNavigation)
 {
     host.runtimeObjects = &runtimeObjects;
+    host.navigation = navigation;
+    host.npcNavigation = npcNavigation;
     host.map = &map;
     host.scripts = &scripts;
     host.doorMoves.clear();
     host.doorMoves.reserve(64);
+    host.npcMoves.clear();
+    host.npcMoves.reserve(navigation != nullptr
+            ? navigation->Capacities().agentCapacity : 64);
+    host.npcMoveDiagnostics = {};
     host.triggers.clear();
     host.triggers.reserve(map.triggers.size());
     std::vector<size_t> triggerIndices(map.triggers.size());
@@ -413,9 +725,12 @@ void InitializeSectorScriptHost(
 void ResetSectorScriptHost(SectorScriptHost& host)
 {
     host.runtimeObjects = nullptr;
+    host.navigation = nullptr;
+    host.npcNavigation = nullptr;
     host.map = nullptr;
     host.scripts = nullptr;
     host.doorMoves.clear();
+    host.npcMoves.clear();
     host.triggers.clear();
 }
 
@@ -423,6 +738,8 @@ void RegisterSectorScriptBindings(lua_State* state)
 {
     Register(state, "moveDoor", LuaMoveDoor);
     Register(state, "startMoveDoor", LuaStartMoveDoor);
+    Register(state, "moveNpc", LuaMoveNpc);
+    Register(state, "startMoveNpc", LuaStartMoveNpc);
     Register(state, "changeMap", LuaChangeMap);
     Register(state, "enableTrigger", LuaEnableTrigger);
     Register(state, "disableTrigger", LuaDisableTrigger);
@@ -460,8 +777,13 @@ void UpdateSectorScriptOperations(
             move.active = false;
             continue;
         }
+        const bool heldForNavigation =
+                context.world.Has<SectorDoorOpenControl>(move.entity)
+                && context.world.Get<SectorDoorOpenControl>(move.entity)
+                        .navigationHolderCount > 0;
         if (std::fabs(motion.openFraction - move.targetFraction)
-                <= DoorTargetEpsilon) {
+                <= DoorTargetEpsilon
+                && !(move.targetFraction < 0.5f && heldForNavigation)) {
             motion.openFraction = move.targetFraction;
             motion.targetOpenFraction = move.targetFraction;
             RestoreDoorSpeed(context.world, move);
@@ -478,6 +800,60 @@ void UpdateSectorScriptOperations(
                         return !move.active;
                     }),
             host.doorMoves.end());
+
+    if (host.navigation == nullptr || host.npcNavigation == nullptr) return;
+    for (SectorScriptNpcMove& move : host.npcMoves) {
+        if (!move.active || !engine::IsValid(move.operation)) continue;
+        const NpcMoveStatus status = GetNpcMoveStatus(
+                *host.npcNavigation, move.instanceId);
+        if (!status.found) {
+            ++host.npcMoveDiagnostics.failures;
+            RecordNpcMoveOutcome(host, move.instanceId, "NPC was removed");
+            engine::ScriptSystemFailOperation(
+                    *host.scripts, move.operation, "NPC was removed");
+            move.active = false;
+            continue;
+        }
+        if (status.requestId != move.requestId) {
+            ++host.npcMoveDiagnostics.failures;
+            RecordNpcMoveOutcome(
+                    host, move.instanceId, "NPC movement was replaced or reset");
+            engine::ScriptSystemFailOperation(
+                    *host.scripts,
+                    move.operation,
+                    "NPC movement was replaced or reset");
+            move.active = false;
+            continue;
+        }
+        if (status.phase == NpcMovePhase::FollowingPath) continue;
+        if (status.phase == NpcMovePhase::Arrived) {
+            ++host.npcMoveDiagnostics.successes;
+            RecordNpcMoveOutcome(host, move.instanceId, "arrived");
+            engine::ScriptSystemCompleteOperation(*host.scripts, move.operation);
+            move.active = false;
+            continue;
+        }
+        const std::string reason = status.message[0] == '\0'
+                ? NpcMovePhaseName(status.phase) : status.message.data();
+        if (status.phase == NpcMovePhase::Cancelled) {
+            engine::ScriptSystemCancelOperation(
+                    context, *host.scripts, move.operation, reason);
+            continue;
+        }
+        ++host.npcMoveDiagnostics.failures;
+        RecordNpcMoveOutcome(host, move.instanceId, reason.c_str());
+        engine::ScriptSystemFailOperation(
+                *host.scripts, move.operation, reason);
+        move.active = false;
+    }
+    host.npcMoves.erase(
+            std::remove_if(
+                    host.npcMoves.begin(),
+                    host.npcMoves.end(),
+                    [](const SectorScriptNpcMove& move) {
+                        return !move.active;
+                    }),
+            host.npcMoves.end());
 }
 
 bool SetSectorScriptTriggerEnabled(

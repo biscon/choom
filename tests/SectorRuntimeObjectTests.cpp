@@ -1,11 +1,17 @@
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "engine/systems/AnimatedModelRaycast.h"
 #include "engine/systems/AnimatedModelSystem.h"
+#include "game/navigation/SectorNavigationWorld.h"
+#include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcCombatSystem.h"
+#include "game/npc/NpcRuntime.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
+#include "sector_demo/renderer/SectorImpactParticleSystem.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
@@ -15,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <string>
@@ -212,6 +219,109 @@ game::SectorTopologyMap MakeSquareMap()
     map.sectors.push_back(Sector(10));
     AddSectorLoop(map, 10, {{0, 0}, {64, 0}, {64, 64}, {0, 64}});
     return map;
+}
+
+game::SectorTopologyMap MakeNavigationSquareMap()
+{
+    game::SectorTopologyMap map;
+    map.sectors.push_back(Sector(10));
+    AddSectorLoop(map, 10, {{0, 0}, {2048, 0}, {2048, 2048}, {0, 2048}});
+    return map;
+}
+
+game::SectorTopologyMap MakeNavigationStairMap()
+{
+    game::SectorTopologyMap map;
+    constexpr int StepCount = 6;
+    constexpr game::SectorCoord TreadDepth = 128;
+    constexpr game::SectorCoord StairWidth = 512;
+    for (int boundary = 0; boundary <= StepCount; ++boundary) {
+        const game::SectorCoord x = boundary * TreadDepth;
+        map.vertices.push_back({boundary * 2 + 1, x, 0});
+        map.vertices.push_back({boundary * 2 + 2, x, StairWidth});
+    }
+    int nextLineId = 1;
+    int nextSideId = 1;
+    const auto addLine = [&](int startVertexId, int endVertexId,
+                             int frontSectorId, int backSectorId = 0) {
+        const int lineId = nextLineId++;
+        const int frontSideId = nextSideId++;
+        const int backSideId = backSectorId != 0 ? nextSideId++ : -1;
+        map.lineDefs.push_back({lineId, startVertexId, endVertexId,
+                frontSideId, backSideId});
+        AddSide(map, frontSideId, lineId,
+                game::SectorTopologySideKind::Front, frontSectorId);
+        if (backSectorId != 0) {
+            AddSide(map, backSideId, lineId,
+                    game::SectorTopologySideKind::Back, backSectorId);
+        }
+    };
+    for (int step = 0; step < StepCount; ++step) {
+        const int sectorId = step + 1;
+        game::SectorTopologySector sector = Sector(sectorId);
+        sector.floorZ = static_cast<float>(step) * 3.0f;
+        sector.ceilingZ = sector.floorZ + 24.0f;
+        map.sectors.push_back(sector);
+        const int leftBottom = step * 2 + 1;
+        const int leftTop = step * 2 + 2;
+        const int rightBottom = (step + 1) * 2 + 1;
+        const int rightTop = (step + 1) * 2 + 2;
+        addLine(leftBottom, rightBottom, sectorId);
+        addLine(rightTop, leftTop, sectorId);
+        if (step == 0) addLine(leftTop, leftBottom, sectorId);
+        if (step == StepCount - 1) {
+            addLine(rightBottom, rightTop, sectorId);
+        } else {
+            addLine(rightBottom, rightTop, sectorId, sectorId + 1);
+        }
+    }
+    map.previewSettings.stepHeight = 0.4f;
+    return map;
+}
+
+void FinishNavigationBuild(
+        game::SectorNavigationWorld& navigation,
+        const game::SectorTopologyMap& map,
+        const std::vector<game::SectorStaticModelCollider>& colliders = {})
+{
+    for (int iteration = 0; iteration < 1000
+            && (navigation.State() == game::SectorNavigationState::Queued
+                || navigation.State() == game::SectorNavigationState::Building);
+            ++iteration) {
+        navigation.UpdateBuild(map, colliders, 0);
+    }
+}
+
+engine::Entity SpawnNavigationTestNpc(
+        engine::World& world,
+        const char* instanceId,
+        int placedObjectId,
+        Vector3 position,
+        int sectorId,
+        float walkSpeed = 2.0f,
+        float runSpeed = 4.0f)
+{
+    const engine::Entity entity = world.CreateEntity();
+    game::SectorObjectTransform transform;
+    transform.position = position;
+    transform.yawRadians = 0.35f;
+    world.Add(entity, transform);
+    game::SectorObject object;
+    object.currentSectorId = sectorId;
+    world.Add(entity, object);
+    world.Add(entity, game::SectorObjectLighting{});
+    world.Add(entity, game::SectorObjectVisualOffset{});
+    game::SectorDynamicModel dynamicModel;
+    dynamicModel.placedObjectId = placedObjectId;
+    world.Add(entity, dynamicModel);
+    game::NpcRuntimeInstance npc;
+    npc.definitionId = "navigation_test";
+    npc.instanceId = instanceId;
+    npc.walkSpeed = walkSpeed;
+    npc.runSpeed = runSpeed;
+    world.Add(entity, npc);
+    world.Add(entity, game::NpcAnimationState{});
+    return entity;
 }
 
 game::SectorTopologyMap MakeDoorPortalMap()
@@ -3117,6 +3227,400 @@ void TestSectorSwingDoorClosingSweepReopensWithoutTunneling()
           "obstruction reversal creates one open audio transition without per-frame retriggering");
 }
 
+void TestSectorDoorNavigationHoldsAndSlidingObstruction()
+{
+    engine::World heldWorld;
+    game::ReserveSectorRuntimeObjectWorld(heldWorld, 1);
+    const engine::Entity heldDoor = AddDoorForDerivedState(
+            heldWorld,
+            game::SectorDoorMotionType::SlideVertical,
+            0.0f,
+            1.5f);
+    heldWorld.Add(heldDoor, game::SectorDoorOpenControl{2});
+    game::SectorDoorMotion& heldMotion =
+            heldWorld.Get<game::SectorDoorMotion>(heldDoor);
+    heldMotion.targetOpenFraction = 0.0f;
+    game::AdvanceSectorDoorMotionSystem(heldWorld, 0.75f, nullptr);
+    const float afterTwoHolders = heldMotion.openFraction;
+    heldWorld.Get<game::SectorDoorOpenControl>(heldDoor)
+            .navigationHolderCount = 1;
+    game::AdvanceSectorDoorMotionSystem(heldWorld, 0.75f, nullptr);
+    Check(afterTwoHolders > 0.0f && Near(heldMotion.openFraction, 1.0f),
+          "two NPC holds combine with a closed ordinary target and one remaining hold keeps opening");
+    heldWorld.Get<game::SectorDoorOpenControl>(heldDoor)
+            .navigationHolderCount = 0;
+    game::AdvanceSectorDoorMotionSystem(heldWorld, 1.5f, nullptr);
+    Check(Near(heldMotion.openFraction, 0.0f),
+          "door resumes its ordinary closed target after the final NPC hold releases");
+
+    engine::World slideWorld;
+    game::ReserveSectorRuntimeObjectWorld(slideWorld, 1);
+    const engine::Entity slidingDoor = AddHorizontalDoorForDerivedState(
+            slideWorld, game::SectorDoorMotionType::SlideLeft);
+    game::UpdateSectorDoorDerivedStateSystem(slideWorld);
+    game::SectorDoorMotion& slidingMotion =
+            slideWorld.Get<game::SectorDoorMotion>(slidingDoor);
+    slidingMotion.targetOpenFraction = 0.0f;
+    const game::SectorDoorResolvedAnchor& anchor =
+            slideWorld.Get<game::SectorDoorResolvedAnchor>(slidingDoor);
+    const game::SectorDoorPlayerObstacle obstacle{
+            {anchor.midpoint.x, anchor.openBottom, anchor.midpoint.y},
+            0.15f,
+            1.0f};
+    game::AdvanceSectorDoorMotionSystem(slideWorld, 1.0f, &obstacle);
+    Check(Near(slidingMotion.openFraction, 1.0f)
+                  && Near(slidingMotion.targetOpenFraction, 1.0f),
+          "closing sliding slab detects a cylinder in its swept volume and retargets open");
+}
+
+void TestNpcDoorTraversalStagesWaitsCrossesAndReleases()
+{
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    for (game::SectorTopologyVertex& vertex : map.vertices) {
+        vertex.x *= 2;
+        vertex.y *= 2;
+    }
+    map.sectors[0].floorZ = 1.0f;
+    map.sectors[1].floorZ = 1.0f;
+    map.sectors[0].ceilingZ = 32.0f;
+    map.sectors[1].ceilingZ = 32.0f;
+    game::SectorPlacedDoor placedDoor = MakeDoorOnPortal();
+    placedDoor.anchor.endpointAX = 128;
+    placedDoor.anchor.endpointBX = 128;
+    placedDoor.anchor.endpointBY = 128;
+    placedDoor.speed = 2.0f;
+    map.runtimeObjects.push_back(MakePlacedDoor(77, placedDoor));
+
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "door traversal collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    if (navigation.State() != game::SectorNavigationState::Ready) {
+        for (const game::SectorNavigationDiagnostic& diagnostic :
+                navigation.Diagnostics()) {
+            std::fprintf(stderr, "door traversal nav diagnostic: %s\n",
+                    diagnostic.message.c_str());
+        }
+    }
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "door traversal navigation fixture builds");
+
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::RefreshSectorRuntimeObjectMapData(runtimeObjects, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, runtimeObjects, map);
+    const engine::Entity npc = SpawnNavigationTestNpc(
+            world, "door_walker", 501, {0.5f, 0.125f, 0.5f}, 10,
+            2.0f, 4.0f);
+    world.Get<game::NpcRuntimeInstance>(npc).canOpenDoors = true;
+
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    runtimeObjects.dynamicDoorColliders.clear();
+    game::CollectSectorDoorDynamicColliders(
+            world, runtimeObjects.dynamicDoorColliders);
+    game::SynchronizeSectorNavigationDoorLinksSystem(
+            world, navigation, runtimeObjects.dynamicDoorColliders);
+    const game::NpcMoveRequestResult request = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "door_walker",
+            {1.5f, 0.5f});
+    if (!request.accepted) {
+        std::fprintf(stderr, "door traversal request failed: %s (%s)\n",
+                request.message.c_str(),
+                game::SectorNavigationQueryStatusName(request.status));
+    }
+    Check(request.accepted,
+          "capable NPC accepts a path through a closed typed door link");
+
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorStaticModelCollider> staticColliders;
+    bool observedWaiting = false;
+    bool observedCrossing = false;
+    bool observedHold = false;
+    for (int frame = 0; frame < 400; ++frame) {
+        constexpr float Dt = 0.05f;
+        game::PrepareNpcDoorTraversalAndHoldsSystem(
+                world,
+                navigation,
+                npcNavigation,
+                runtimeObjects.dynamicDoorColliders,
+                Dt);
+        game::CollectNpcDoorObstacles(
+                world, npcNavigation, runtimeObjects.doorObstacles);
+        const bool doorChanged = game::AdvanceSectorDoorMotionSystem(
+                world,
+                Dt,
+                runtimeObjects.doorObstacles.data(),
+                runtimeObjects.doorObstacles.size());
+        if (doorChanged) game::UpdateSectorDoorDerivedStateSystem(world);
+        runtimeObjects.dynamicDoorColliders.clear();
+        game::CollectSectorDoorDynamicColliders(
+                world, runtimeObjects.dynamicDoorColliders);
+        game::SynchronizeSectorNavigationDoorLinksSystem(
+                world, navigation, runtimeObjects.dynamicDoorColliders);
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world,
+                assets,
+                navigation,
+                npcNavigation,
+                definitions,
+                collisionWorld,
+                runtimeObjects.dynamicDoorColliders,
+                staticColliders,
+                probes,
+                map,
+                Dt);
+        const game::NpcNavigationRecord& record = npcNavigation.records[0];
+        observedWaiting = observedWaiting
+                || record.doorPhase
+                        == game::NpcDoorTraversalPhase::WaitingForClearance;
+        observedCrossing = observedCrossing
+                || record.doorPhase == game::NpcDoorTraversalPhase::Crossing;
+        observedHold = observedHold || record.holdsDoor;
+        if (game::GetNpcMoveStatus(npcNavigation, "door_walker").phase
+                == game::NpcMovePhase::Arrived) break;
+    }
+    game::PrepareNpcDoorTraversalAndHoldsSystem(
+            world,
+            navigation,
+            npcNavigation,
+            runtimeObjects.dynamicDoorColliders,
+            0.05f);
+    uint32_t finalHolders = 0;
+    world.ForEach<game::SectorDoorOpenControl>(
+            [&finalHolders](engine::Entity, game::SectorDoorOpenControl& control) {
+                finalHolders += control.navigationHolderCount;
+            });
+    Check(game::GetNpcMoveStatus(npcNavigation, "door_walker").phase
+                  == game::NpcMovePhase::Arrived
+                  && observedWaiting && observedCrossing && observedHold
+                  && finalHolders == 0,
+          "NPC stages, holds, waits for physical clearance, crosses, and releases the door");
+
+    const game::NpcMoveRequestResult returnRequest = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "door_walker",
+            {0.5f, 0.5f});
+    if (returnRequest.accepted) {
+        game::NpcNavigationRecord& record = npcNavigation.records[0];
+        record.doorId = 77;
+        record.doorPhase = game::NpcDoorTraversalPhase::WaitingForClearance;
+        record.holdsDoor = true;
+        world.ForEach<game::SectorDoor, game::SectorDoorOpenControl>(
+                [](engine::Entity, game::SectorDoor& door,
+                        game::SectorDoorOpenControl& control) {
+                    if (door.placedObjectId == 77) {
+                        control.navigationHolderCount = 1;
+                    }
+                });
+        const bool cancelled = game::CancelNpcMove(
+                world,
+                navigation,
+                npcNavigation,
+                "door_walker",
+                returnRequest.requestId);
+        uint32_t holdersAfterCancel = 0;
+        world.ForEach<game::SectorDoorOpenControl>(
+                [&holdersAfterCancel](engine::Entity,
+                        game::SectorDoorOpenControl& control) {
+                    holdersAfterCancel += control.navigationHolderCount;
+                });
+        Check(cancelled && holdersAfterCancel == 0,
+              "movement cancellation releases its stable NPC door hold immediately");
+    } else {
+        Check(false, "return move for door-hold cancellation fixture is accepted");
+    }
+
+    const game::NpcMoveRequestResult deletionRequest = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "door_walker",
+            {1.5f, 0.5f});
+    if (deletionRequest.accepted) {
+        game::NpcNavigationRecord& record = npcNavigation.records[0];
+        record.doorId = 77;
+        record.doorPhase = game::NpcDoorTraversalPhase::WaitingForClearance;
+        record.holdsDoor = true;
+        world.ForEach<game::SectorDoor, game::SectorDoorOpenControl>(
+                [](engine::Entity, game::SectorDoor& door,
+                        game::SectorDoorOpenControl& control) {
+                    if (door.placedObjectId == 77) {
+                        control.navigationHolderCount = 1;
+                    }
+                });
+        world.DestroyLater(npc);
+        world.FlushDestroyedEntities();
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world,
+                assets,
+                navigation,
+                npcNavigation,
+                definitions,
+                collisionWorld,
+                runtimeObjects.dynamicDoorColliders,
+                staticColliders,
+                probes,
+                map,
+                0.016f);
+        uint32_t holdersAfterDeletion = 0;
+        world.ForEach<game::SectorDoorOpenControl>(
+                [&holdersAfterDeletion](engine::Entity,
+                        game::SectorDoorOpenControl& control) {
+                    holdersAfterDeletion += control.navigationHolderCount;
+                });
+        Check(!npcNavigation.records[0].occupied
+                      && holdersAfterDeletion == 0,
+              "deleting a moving NPC releases its path, Crowd agent, and door hold");
+    } else {
+        Check(false, "door-hold deletion fixture move is accepted");
+    }
+}
+
+void TestCrowdQueuesNpcAgentsThroughDoor()
+{
+    game::SectorTopologyMap map = MakeDoorPortalMap();
+    for (game::SectorTopologyVertex& vertex : map.vertices) {
+        vertex.x *= 4;
+        vertex.y *= 4;
+    }
+    map.sectors[0].floorZ = 1.0f;
+    map.sectors[1].floorZ = 1.0f;
+    map.sectors[0].ceilingZ = 32.0f;
+    map.sectors[1].ceilingZ = 32.0f;
+    game::SectorPlacedDoor placedDoor = MakeDoorOnPortal();
+    placedDoor.anchor.endpointAX = 256;
+    placedDoor.anchor.endpointBX = 256;
+    placedDoor.anchor.endpointBY = 256;
+    placedDoor.speed = 2.0f;
+    map.runtimeObjects.push_back(MakePlacedDoor(78, placedDoor));
+
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "Crowd door-queue collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::RefreshSectorRuntimeObjectMapData(runtimeObjects, map);
+    game::SpawnPlacedRuntimeObjects(world, assets, runtimeObjects, map);
+    SpawnNavigationTestNpc(
+            world, "door_queue_a", 521, {1.5f, 0.125f, 1.0f}, 10,
+            2.0f, 4.0f);
+    SpawnNavigationTestNpc(
+            world, "door_queue_b", 522, {0.75f, 0.125f, 1.0f}, 10,
+            2.0f, 4.0f);
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    runtimeObjects.dynamicDoorColliders.clear();
+    game::CollectSectorDoorDynamicColliders(
+            world, runtimeObjects.dynamicDoorColliders);
+    game::SynchronizeSectorNavigationDoorLinksSystem(
+            world, navigation, runtimeObjects.dynamicDoorColliders);
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, npcNavigation,
+                  "door_queue_a", {3.0f, 0.5f}).accepted
+                  && game::RequestNpcMove(
+                          world, navigation, collisionWorld, npcNavigation,
+                          "door_queue_b", {3.0f, 1.5f}).accepted,
+          "multiple NPCs accept routes through the same closed door");
+
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorStaticModelCollider> staticColliders;
+    int maximumCrossingCount = 0;
+    bool observedQueue = false;
+    unsigned int observedCrossingAgents = 0;
+    for (int frame = 0; frame < 800; ++frame) {
+        constexpr float Dt = 0.05f;
+        game::PrepareNpcDoorTraversalAndHoldsSystem(
+                world, navigation, npcNavigation,
+                runtimeObjects.dynamicDoorColliders, Dt);
+        int crossingCount = 0;
+        int activeCount = 0;
+        for (const game::NpcNavigationRecord& record : npcNavigation.records) {
+            activeCount += record.occupied
+                    && record.phase == game::NpcMovePhase::FollowingPath;
+            crossingCount += record.occupied
+                    && record.doorPhase == game::NpcDoorTraversalPhase::Crossing;
+            if (record.doorPhase == game::NpcDoorTraversalPhase::Crossing) {
+                if (record.placedObjectId == 521) observedCrossingAgents |= 1u;
+                if (record.placedObjectId == 522) observedCrossingAgents |= 2u;
+            }
+        }
+        maximumCrossingCount = std::max(maximumCrossingCount, crossingCount);
+        observedQueue = observedQueue || (crossingCount == 1 && activeCount >= 2);
+        game::CollectNpcDoorObstacles(
+                world, npcNavigation, runtimeObjects.doorObstacles);
+        const bool doorChanged = game::AdvanceSectorDoorMotionSystem(
+                world,
+                Dt,
+                runtimeObjects.doorObstacles.data(),
+                runtimeObjects.doorObstacles.size());
+        if (doorChanged) game::UpdateSectorDoorDerivedStateSystem(world);
+        runtimeObjects.dynamicDoorColliders.clear();
+        game::CollectSectorDoorDynamicColliders(
+                world, runtimeObjects.dynamicDoorColliders);
+        game::SynchronizeSectorNavigationDoorLinksSystem(
+                world, navigation, runtimeObjects.dynamicDoorColliders);
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, npcNavigation, definitions,
+                collisionWorld, runtimeObjects.dynamicDoorColliders,
+                staticColliders, probes, map, Dt);
+        if (game::GetNpcMoveStatus(npcNavigation, "door_queue_a").phase
+                            == game::NpcMovePhase::Arrived
+                && game::GetNpcMoveStatus(npcNavigation, "door_queue_b").phase
+                            == game::NpcMovePhase::Arrived) {
+            break;
+        }
+    }
+    const game::NpcMoveStatus queueA = game::GetNpcMoveStatus(
+            npcNavigation, "door_queue_a");
+    const game::NpcMoveStatus queueB = game::GetNpcMoveStatus(
+            npcNavigation, "door_queue_b");
+    if (maximumCrossingCount != 1 || !observedQueue
+            || observedCrossingAgents != 3u
+            || queueA.phase != game::NpcMovePhase::Arrived
+            || queueB.phase != game::NpcMovePhase::Arrived) {
+        std::fprintf(stderr,
+                "door queue result: crossing=%d queued=%d a=%s/%s(%s) b=%s/%s(%s)\n",
+                maximumCrossingCount,
+                observedQueue ? 1 : 0,
+                game::NpcMovePhaseName(queueA.phase),
+                game::NpcDoorTraversalPhaseName(npcNavigation.records[0].doorPhase),
+                queueA.message.data(),
+                game::NpcMovePhaseName(queueB.phase),
+                game::NpcDoorTraversalPhaseName(npcNavigation.records[1].doorPhase),
+                queueB.message.data());
+    }
+    Check(maximumCrossingCount == 1 && observedQueue
+                  && observedCrossingAgents == 3u,
+          "door traversal admits one NPC while another remains queued");
+    Check(queueA.phase == game::NpcMovePhase::Arrived
+                  && queueB.phase == game::NpcMovePhase::Arrived,
+          "queued Crowd agents cross sequentially and physically arrive");
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    navigation.Shutdown();
+}
+
 void TestSectorDoorDerivedStateUpdatesTransformAndCollider()
 {
     engine::World world;
@@ -4163,6 +4667,1019 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
           "non-looping editor dynamic prop is configured frozen on its first frame");
 }
 
+void TestDynamicModelColliderCollectionIsSeparatedForNavigation()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const engine::Entity staticEntity = world.CreateEntity();
+    world.Add(staticEntity, game::SectorStaticModel{});
+    game::SectorStaticModelCollider staticCollider;
+    staticCollider.placedObjectId = 41;
+    staticCollider.center = {1.0f, 1.0f};
+    staticCollider.halfExtents = {0.5f, 0.5f};
+    staticCollider.bottom = 0.0f;
+    staticCollider.top = 2.0f;
+    staticCollider.resolved = true;
+    world.Add(staticEntity, staticCollider);
+
+    const engine::Entity dynamicEntity = world.CreateEntity();
+    world.Add(dynamicEntity, game::SectorDynamicModel{});
+    game::SectorStaticModelCollider dynamicCollider = staticCollider;
+    dynamicCollider.placedObjectId = 42;
+    dynamicCollider.center = {2.0f, 2.0f};
+    world.Add(dynamicEntity, dynamicCollider);
+
+    std::vector<game::SectorStaticModelCollider> combined;
+    std::vector<game::SectorStaticModelCollider> dynamicOnly;
+    game::CollectSectorStaticModelColliders(world, combined);
+    game::CollectSectorDynamicModelColliders(world, dynamicOnly);
+    Check(combined.size() == 2
+                  && dynamicOnly.size() == 1
+                  && dynamicOnly[0].placedObjectId == 42,
+          "runtime collision keeps combined prop colliders while navigation receives a dynamic-only set");
+}
+
+void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 31;
+    object.kind = "npc";
+    object.position = Vector3{2.0f, 8.0f, 2.0f};
+    object.yawRadians = 0.5f;
+    object.npc.definitionId = "runtime_test_npc";
+    object.npc.instanceId = "guard_one";
+    object.npc.scale = 1.4f;
+    object.npc.shadowMode =
+            game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+    map.runtimeObjects.push_back(object);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    game::NpcDefinition definition = game::MakeDefaultNpcDefinition();
+    definition.id = "runtime_test_npc";
+    definition.name = "Runtime Test";
+    definition.hostile = true;
+    definition.canOpenDoors = false;
+    definition.baseHealth = 160;
+    definition.despawnOnDeath = true;
+    definition.corpseDespawnDelaySeconds = 1.25f;
+    definition.corpseFadeDurationSeconds = 0.6f;
+    definition.modelPath = "assets/models/characters/Zombie1.glb";
+    game::GetNpcAction(definition, game::NpcAction::Idle).animation = "Idle";
+    game::GetNpcAction(definition, game::NpcAction::Idle).animationSpeed = 1.25f;
+    game::GetNpcAction(definition, game::NpcAction::Walk).movementSpeed = 2.0f;
+    game::GetNpcAction(definition, game::NpcAction::Run).movementSpeed = 4.5f;
+    definition.animationBlendSeconds = 0.35f;
+    state.npcDefinitionCatalog = game::NpcDefinitionCatalog{};
+    state.npcDefinitionCatalog.definitions.push_back(definition);
+
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    Check(state.placedObjectEntities.size() == 1,
+          "resolved NPC placement spawns one runtime entity");
+    if (state.placedObjectEntities.empty()) return;
+    const engine::Entity entity = state.placedObjectEntities[0].entity;
+    Check(world.Has<game::NpcRuntimeInstance>(entity)
+                  && world.Has<game::NpcAnimationState>(entity)
+                  && world.Has<game::Health>(entity)
+                  && world.Has<game::NpcCombatState>(entity)
+                  && world.Has<game::SectorObjectVisualOffset>(entity)
+                  && world.Has<game::SectorDynamicModel>(entity)
+                  && world.Has<engine::AnimatedModelInstance>(entity)
+                  && world.Has<engine::AnimatedModelAnimator>(entity),
+          "NPC runtime reuses animated dynamic-model rendering components");
+    const game::NpcRuntimeInstance& npc =
+            world.Get<game::NpcRuntimeInstance>(entity);
+    const game::NpcAnimationState& npcAnimation =
+            world.Get<game::NpcAnimationState>(entity);
+    const game::Health& health = world.Get<game::Health>(entity);
+    const game::NpcCombatState& combat =
+            world.Get<game::NpcCombatState>(entity);
+    const game::SectorDynamicModel& dynamic =
+            world.Get<game::SectorDynamicModel>(entity);
+    const engine::AnimatedModelAnimator& animator =
+            world.Get<engine::AnimatedModelAnimator>(entity);
+    const game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(entity);
+    Check(npc.definitionId == "runtime_test_npc"
+                  && npc.instanceId == "guard_one"
+                  && npc.action == game::NpcAction::Idle
+                  && npc.hostile
+                  && !npc.canOpenDoors
+                  && Near(npc.walkSpeed, 2.0f)
+                  && Near(npc.runSpeed, 4.5f)
+                  && health.baseMaximum == 160
+                  && health.maximum == 160
+                  && health.current == 160
+                  && combat.despawnOnDeath
+                  && Near(combat.corpseDespawnDelaySeconds, 1.25f)
+                  && Near(combat.corpseFadeDurationSeconds, 0.6f)
+                  && Near(npcAnimation.blendSeconds, 0.35f)
+                  && Near(npcAnimation.animationSpeeds[
+                                  static_cast<size_t>(game::NpcAction::Idle)], 1.25f),
+          "NPC runtime component copies resolved identity and gameplay definition fields");
+    Check(dynamic.requestedAnimation == "Idle"
+                  && Near(dynamic.scale, 1.4f)
+                  && dynamic.shadowMode
+                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette
+                  && animator.loop
+                  && animator.playing
+                  && Near(animator.speed, 1.25f)
+                  && Near(transform.position, Vector3{0.25f, 1.0f, 0.25f})
+                  && Near(transform.yawRadians, 0.5f)
+                  && Near(transform.rotationXRadians, 0.0f)
+                  && Near(transform.rotationZRadians, 0.0f),
+          "NPC runtime loops semantic Idle with floor transform, scale, and shadow settings");
+}
+
+void TestNpcFootstepCadenceUsesResolvedTravel()
+{
+    game::NpcNavigationRecord record;
+    record.gait = game::NpcMoveGait::Walk;
+    Check(!game::UpdateNpcFootstepCadence(record, true, 1.0f)
+                  && Near(record.footstepDistanceWorld, 1.0f),
+          "NPC walk cadence accumulates partial resolved travel");
+    Check(game::UpdateNpcFootstepCadence(record, true, 0.5f)
+                  && record.footstepEvent,
+          "NPC walk cadence emits at the player walk stride");
+    Check(!game::UpdateNpcFootstepCadence(record, true, 0.0f)
+                  && !record.footstepEvent,
+          "stationary NPC frames do not emit footsteps");
+
+    Check(game::UpdateNpcFootstepCadence(record, true, 10.0f),
+          "large resolved NPC movement emits one footstep event");
+    Check(!game::UpdateNpcFootstepCadence(record, true, 0.0f),
+          "large resolved NPC movement does not leave burst events queued");
+
+    Check(!game::UpdateNpcFootstepCadence(record, false, 0.0f)
+                  && Near(record.footstepDistanceWorld, 0.0f),
+          "inactive NPC movement resets footstep cadence");
+    record.gait = game::NpcMoveGait::Run;
+    Check(!game::UpdateNpcFootstepCadence(record, true, 2.3f),
+          "NPC run cadence waits for the player run stride");
+    Check(game::UpdateNpcFootstepCadence(record, true, 0.2f),
+          "NPC run cadence emits after enough resolved travel");
+}
+
+void TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision()
+{
+    game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorPlacedRuntimeObject obstacleObject;
+    obstacleObject.id = 900;
+    obstacleObject.kind = "static_model";
+    obstacleObject.staticModel.collision = true;
+    obstacleObject.staticModel.geometryFingerprint = "npc-navigation-test-obstacle";
+    map.runtimeObjects.push_back(obstacleObject);
+    game::SectorStaticModelCollider obstacle;
+    obstacle.placedObjectId = 900;
+    obstacle.center = {8.0f, 8.0f};
+    obstacle.axisX = {1.0f, 0.0f};
+    obstacle.axisZ = {0.0f, 1.0f};
+    obstacle.halfExtents = {1.0f, 4.0f};
+    obstacle.bottom = 0.0f;
+    obstacle.top = 2.0f;
+    obstacle.resolved = true;
+    const std::vector<game::SectorStaticModelCollider> colliders{obstacle};
+
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "NPC navigation collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map, colliders);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "NPC static-obstacle navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const engine::Entity walker = SpawnNavigationTestNpc(
+            world, "walker", 101, {2.0f, 0.0f, 6.0f}, 10, 2.0f, 4.0f);
+    const engine::Entity runner = SpawnNavigationTestNpc(
+            world, "runner", 102, {2.0f, 0.0f, 10.0f}, 10, 2.0f, 4.0f);
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    Check(npcNavigation.records.size() == 2
+                  && !(npcNavigation.records[0].agentHandle
+                          == npcNavigation.records[1].agentHandle),
+          "two NPCs own independent external navigation records");
+    const auto walkRequest = game::RequestNpcMove(
+            world, navigation, collisionWorld, npcNavigation,
+            "walker", {14.0f, 6.0f}, game::NpcMoveGait::Walk);
+    const auto runRequest = game::RequestNpcMove(
+            world, navigation, collisionWorld, npcNavigation,
+            "runner", {14.0f, 10.0f}, game::NpcMoveGait::Run);
+    Check(walkRequest.accepted && runRequest.accepted,
+          "programmatic Slice 3 seam accepts two independent move requests");
+    Check(!(npcNavigation.records[0].pathHandle
+                  == npcNavigation.records[1].pathHandle),
+          "agents do not share mutable path records");
+    for (game::NpcNavigationRecord& record : npcNavigation.records) {
+        if (record.instanceId != "walker") continue;
+        record.corners[0] = record.projectedDestination;
+        record.cornerCount = 1;
+        record.nextCorner = 0;
+    }
+
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    bool observedWalk = false;
+    bool observedRun = false;
+    bool observedWalkFootstep = false;
+    bool observedRunFootstep = false;
+    bool enteredObstacle = false;
+    for (int frame = 0; frame < 800; ++frame) {
+        const float dt = frame % 2 == 0 ? 0.016f : 0.08f;
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, npcNavigation, definitions,
+                collisionWorld, doors, colliders, probes, map, dt);
+        observedWalk = observedWalk
+                || world.Get<game::NpcRuntimeInstance>(walker).action
+                        == game::NpcAction::Walk;
+        observedRun = observedRun
+                || world.Get<game::NpcRuntimeInstance>(runner).action
+                        == game::NpcAction::Run;
+        for (const game::NpcNavigationRecord& record :
+                npcNavigation.records) {
+            if (record.instanceId == "walker") {
+                observedWalkFootstep = observedWalkFootstep
+                        || record.footstepEvent;
+            } else if (record.instanceId == "runner") {
+                observedRunFootstep = observedRunFootstep
+                        || record.footstepEvent;
+            }
+        }
+        const game::SectorObjectTransform& currentWalker =
+                world.Get<game::SectorObjectTransform>(walker);
+        enteredObstacle = enteredObstacle
+                || (currentWalker.position.x > 7.0f
+                    && currentWalker.position.x < 9.0f
+                    && currentWalker.position.z > 4.0f
+                    && currentWalker.position.z < 12.0f);
+        if (game::GetNpcMoveStatus(npcNavigation, "walker").phase
+                        == game::NpcMovePhase::Arrived
+                && game::GetNpcMoveStatus(npcNavigation, "runner").phase
+                        == game::NpcMovePhase::Arrived) {
+            break;
+        }
+    }
+    const game::NpcMoveStatus walkerStatus =
+            game::GetNpcMoveStatus(npcNavigation, "walker");
+    const game::NpcMoveStatus runnerStatus =
+            game::GetNpcMoveStatus(npcNavigation, "runner");
+    const game::SectorObjectTransform& walkerTransform =
+            world.Get<game::SectorObjectTransform>(walker);
+    const game::SectorObjectTransform& runnerTransform =
+            world.Get<game::SectorObjectTransform>(runner);
+    Check(walkerStatus.phase == game::NpcMovePhase::Arrived
+                  && runnerStatus.phase == game::NpcMovePhase::Arrived
+                  && walkerStatus.replanCount > 0
+                  && observedWalk && observedRun
+                  && observedWalkFootstep && observedRunFootstep,
+          "walk/run actions and resolved-travel footsteps survive collision feedback and replanning");
+    Check(Near(walkerTransform.position.x, 14.0f, 0.11f)
+                  && Near(runnerTransform.position.x, 14.0f, 0.11f)
+                  && !Near(walkerTransform.yawRadians, 0.35f, 0.01f)
+                  && !Near(runnerTransform.yawRadians, 0.35f, 0.01f),
+          "locomotion reaches its tolerance and rotates only after movement begins");
+    Check(!enteredObstacle
+                  && !(walkerTransform.position.x > 7.0f
+                    && walkerTransform.position.x < 9.0f
+                    && walkerTransform.position.z > 4.0f
+                    && walkerTransform.position.z < 12.0f)
+                  && !(runnerTransform.position.x > 7.0f
+                    && runnerTransform.position.x < 9.0f
+                    && runnerTransform.position.z > 4.0f
+                    && runnerTransform.position.z < 12.0f),
+          "authoritative prop collision remains respected at final transforms");
+
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, npcNavigation,
+                  "walker", {2.0f, 6.0f}, game::NpcMoveGait::Walk).accepted
+                  && !game::RequestNpcMove(
+                          world, navigation, collisionWorld, npcNavigation,
+                          "walker", {3.0f, 6.0f}, game::NpcMoveGait::Walk).accepted,
+          "active move requests are not silently replaced");
+    Check(game::CancelNpcMove(world, navigation, npcNavigation, "walker")
+                  && game::GetNpcMoveStatus(npcNavigation, "walker").phase
+                          == game::NpcMovePhase::Cancelled
+                  && world.Get<game::NpcRuntimeInstance>(walker).action
+                          == game::NpcAction::Idle,
+          "programmatic cancellation releases the path and restores semantic Idle");
+
+    const game::NpcMoveRequestResult aiRequest = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "walker",
+            {3.0f, 6.0f},
+            game::NpcMoveGait::Walk,
+            game::NpcMoveAuthority::Ai);
+    const game::NpcMoveRequestResult scriptTakeover = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "walker",
+            {4.0f, 6.0f},
+            game::NpcMoveGait::Run,
+            game::NpcMoveAuthority::Script);
+    const game::NpcMoveRequestResult blockedAi = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "walker",
+            {5.0f, 6.0f},
+            game::NpcMoveGait::Walk,
+            game::NpcMoveAuthority::Ai);
+    const game::NpcMoveStatus scriptStatus = game::GetNpcMoveStatus(
+            npcNavigation, "walker");
+    Check(aiRequest.accepted
+                  && scriptTakeover.accepted
+                  && scriptTakeover.requestId != aiRequest.requestId
+                  && !blockedAi.accepted
+                  && scriptStatus.authority == game::NpcMoveAuthority::Script
+                  && scriptStatus.requestId == scriptTakeover.requestId,
+          "script authority replaces AI intent and blocks AI retargeting");
+    Check(!game::CancelNpcMove(
+                  world,
+                  navigation,
+                  npcNavigation,
+                  "walker",
+                  aiRequest.requestId)
+                  && game::CancelNpcMove(
+                          world,
+                          navigation,
+                          npcNavigation,
+                          "walker",
+                          scriptTakeover.requestId),
+          "request-specific cancellation cannot stop a replacement move");
+
+    world.DestroyLater(walker);
+    world.FlushDestroyedEntities();
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world, assets, navigation, npcNavigation, definitions,
+            collisionWorld, doors, colliders, probes, map, 0.016f);
+    Check(npcNavigation.records[0].occupied != npcNavigation.records[1].occupied,
+          "deleted NPC releases only its own external navigation record");
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+}
+
+void TestNpcNavigationReplansAroundDynamicTileCacheObstacle()
+{
+    const game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "dynamic NPC navigation collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "dynamic NPC navigation fixture builds its static mesh");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const engine::Entity npcEntity = SpawnNavigationTestNpc(
+            world, "dynamic_walker", 801, {2.0f, 0.0f, 8.0f}, 10, 2.0f, 4.0f);
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    const game::NpcMoveRequestResult request = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "dynamic_walker",
+            {14.0f, 8.0f},
+            game::NpcMoveGait::Walk);
+    Check(request.accepted, "NPC move begins before the dynamic obstacle is added");
+
+    game::SectorStaticModelCollider obstacle;
+    obstacle.placedObjectId = 802;
+    obstacle.center = {8.0f, 8.0f};
+    obstacle.axisX = {1.0f, 0.0f};
+    obstacle.axisZ = {0.0f, 1.0f};
+    obstacle.halfExtents = {0.75f, 2.5f};
+    obstacle.bottom = 0.0f;
+    obstacle.top = 2.0f;
+    obstacle.resolved = true;
+    const std::vector<game::SectorStaticModelCollider> colliders{obstacle};
+    for (int update = 0; update < 128
+            && navigation.DynamicObstacleStatistics().activeCount != 1;
+            ++update) {
+        navigation.UpdateDynamicObstacles(colliders, 0.016f);
+    }
+    Check(navigation.DynamicObstacleStatistics().activeCount == 1,
+          "dynamic prop becomes active before NPC locomotion resumes");
+
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    bool enteredObstacle = false;
+    for (int frame = 0; frame < 1200; ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world,
+                assets,
+                navigation,
+                npcNavigation,
+                definitions,
+                collisionWorld,
+                doors,
+                colliders,
+                probes,
+                map,
+                0.016f);
+        const Vector3 position =
+                world.Get<game::SectorObjectTransform>(npcEntity).position;
+        enteredObstacle = enteredObstacle
+                || (position.x > obstacle.center.x - obstacle.halfExtents.x
+                    && position.x < obstacle.center.x + obstacle.halfExtents.x
+                    && position.z > obstacle.center.y - obstacle.halfExtents.y
+                    && position.z < obstacle.center.y + obstacle.halfExtents.y);
+        if (game::GetNpcMoveStatus(npcNavigation, "dynamic_walker").phase
+                != game::NpcMovePhase::FollowingPath) {
+            break;
+        }
+    }
+    const game::NpcMoveStatus status = game::GetNpcMoveStatus(
+            npcNavigation, "dynamic_walker");
+    Check(status.phase == game::NpcMovePhase::Arrived
+                  && status.replanCount > 0,
+          "changed corridor tile schedules a bounded replan and the NPC arrives on the replacement route");
+    Check(!enteredObstacle,
+          "authoritative dynamic prop collision remains the final movement authority during rerouting");
+
+    for (int update = 0; update < 128
+            && navigation.DynamicObstacleStatistics().activeCount != 0;
+            ++update) {
+        navigation.UpdateDynamicObstacles({}, 0.016f);
+    }
+    Check(navigation.DynamicObstacleStatistics().activeCount == 0
+                  && navigation.FindPath(
+                          {2.0f, 0.0f, 8.0f},
+                          {14.0f, 0.0f, 8.0f}).status
+                          == game::SectorNavigationQueryStatus::Success,
+          "removing the dynamic prop restores path queries without a full rebuild");
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+}
+
+void TestNpcNavigationLowSpeedAdvancesAtHighRefreshRate()
+{
+    game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "low-speed NPC collision fixture builds");
+
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "low-speed NPC navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const engine::Entity npcEntity = SpawnNavigationTestNpc(
+            world, "slow_walker", 103, {3.0f, 0.0f, 8.0f}, 10, 1.0f, 3.0f);
+    game::SectorObjectTransform& initialTransform =
+            world.Get<game::SectorObjectTransform>(npcEntity);
+    initialTransform.yawRadians = PI * 0.5f;
+
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    const game::NpcMoveRequestResult request = game::RequestNpcMove(
+            world,
+            navigation,
+            collisionWorld,
+            npcNavigation,
+            "slow_walker",
+            {2.0f, 8.0f},
+            game::NpcMoveGait::Walk);
+    Check(request.accepted,
+          "one-unit-per-second NPC move is accepted");
+
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> colliders;
+    constexpr float HighRefreshDt = 1.0f / 240.0f;
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world,
+            assets,
+            navigation,
+            npcNavigation,
+            definitions,
+            collisionWorld,
+            doors,
+            colliders,
+            probes,
+            map,
+            HighRefreshDt);
+
+    const game::SectorObjectTransform& firstTransform =
+            world.Get<game::SectorObjectTransform>(npcEntity);
+    const game::NpcMoveStatus firstStatus = game::GetNpcMoveStatus(
+            npcNavigation, "slow_walker");
+    const float maximumTurn = 4.0f * PI * HighRefreshDt;
+    const float expectedFirstVelocity =
+            navigation.CrowdSettings().maximumAcceleration * HighRefreshDt;
+    Check(firstTransform.position.x < 3.0f
+                  && Near(
+                          firstTransform.position.x,
+                          3.0f - expectedFirstVelocity * HighRefreshDt,
+                          0.0001f)
+                  && Near(firstStatus.actualVelocity.x,
+                          -expectedFirstVelocity, 0.001f)
+                  && world.Get<game::NpcRuntimeInstance>(npcEntity).action
+                          == game::NpcAction::Walk,
+          "one-unit-per-second NPC advances under Crowd acceleration every 240 Hz frame");
+    Check(firstTransform.yawRadians < PI * 0.5f
+                  && firstTransform.yawRadians
+                          >= PI * 0.5f - maximumTurn - 0.0001f
+                  && std::fabs(firstTransform.yawRadians + PI * 0.5f) > 1.0f,
+          "180-degree NPC turn is rate-limited instead of snapping");
+
+    for (int frame = 0; frame < 400
+            && game::GetNpcMoveStatus(npcNavigation, "slow_walker").phase
+                    == game::NpcMovePhase::FollowingPath;
+            ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world,
+                assets,
+                navigation,
+                npcNavigation,
+                definitions,
+                collisionWorld,
+                doors,
+                colliders,
+                probes,
+                map,
+                HighRefreshDt);
+    }
+    const game::NpcMoveStatus completed = game::GetNpcMoveStatus(
+            npcNavigation, "slow_walker");
+    Check(completed.phase == game::NpcMovePhase::Arrived
+                  && completed.replanCount == 0
+                  && Near(
+                          world.Get<game::SectorObjectTransform>(npcEntity)
+                                  .position.x,
+                          2.0f,
+                          0.11f),
+          "one-unit-per-second NPC arrives without false stalls at 240 Hz");
+
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    navigation.Shutdown();
+}
+
+void TestNpcCollisionCylindersAreSolidWithoutVerticalFalsePositives()
+{
+    const game::SectorCollisionMoveState start{{0.0f, 0.0f}, 0.0f, 10, true};
+    const game::SectorCollisionMoveResult requested{{2.0f, 0.0f}, 10};
+    const game::SectorCollisionMoveConfig config{0.25f, 1.6f, 0.25f, 4};
+    const game::NpcCollisionCylinder obstacle{
+            77, {1.0f, 0.0f, 0.0f}, 0.25f, 1.6f};
+    const game::SectorCollisionMoveResult blocked =
+            game::ResolveNpcCollisionCylindersForMovement(
+                    start, requested, config, -2, &obstacle, 1);
+    Check(blocked.hitWall
+                  && blocked.positionXZ.x < 0.501f
+                  && blocked.positionXZ.x > 0.49f,
+          "swept character cylinders stop at solid contact without tunneling");
+    Check(Near(obstacle.feetPosition, Vector3{1.0f, 0.0f, 0.0f}),
+          "solid character collision does not push the blocking NPC");
+
+    game::NpcCollisionCylinder overhead = obstacle;
+    overhead.feetPosition.y = 2.0f;
+    const game::SectorCollisionMoveResult clear =
+            game::ResolveNpcCollisionCylindersForMovement(
+                    start, requested, config, -2, &overhead, 1);
+    Check(Near(clear.positionXZ, Vector2{2.0f, 0.0f}) && !clear.hitWall,
+          "character cylinders do not collide when vertical intervals do not overlap");
+}
+
+void TestCrowdFactionAwarePlayerAvoidanceAndHostileContact()
+{
+    const game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "Crowd faction collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "Crowd faction navigation fixture builds");
+
+    struct ScenarioResult {
+        game::NpcMovePhase phase = game::NpcMovePhase::Idle;
+        float firstSteeredZ = 0.0f;
+        float minimumPlayerDistance = 1000.0f;
+        float maximumLateralOffset = 0.0f;
+        bool playerAvoidanceActive = false;
+    };
+    const auto runScenario = [&](bool hostile) {
+        engine::World world;
+        game::ReserveSectorRuntimeObjectWorld(world, 2);
+        const engine::Entity entity = SpawnNavigationTestNpc(
+                world,
+                hostile ? "hostile" : "friendly",
+                hostile ? 402 : 401,
+                {3.0f, 0.0f, 8.0f},
+                10,
+                2.0f,
+                4.0f);
+        world.Get<game::NpcRuntimeInstance>(entity).hostile = hostile;
+        game::NpcNavigationRuntime runtime;
+        game::InitializeNpcNavigationRuntime(world, navigation, runtime);
+        const game::NpcMoveRequestResult request = game::RequestNpcMove(
+                world,
+                navigation,
+                collisionWorld,
+                runtime,
+                hostile ? "hostile" : "friendly",
+                {12.0f, 8.0f});
+        Check(request.accepted, "faction-aware Crowd move request is accepted");
+        engine::AssetManager assets;
+        game::NpcDefinitionCatalog definitions;
+        game::SectorBakedObjectLightProbeRuntimeData probes;
+        const std::vector<game::SectorDynamicDoorCollider> doors;
+        const std::vector<game::SectorStaticModelCollider> colliders;
+        const game::SectorDoorPlayerObstacle player{
+                {6.0f, 0.0f, 8.0f}, 0.25f, 1.6f};
+        ScenarioResult result;
+        for (int frame = 0; frame < 900; ++frame) {
+            game::UpdateNpcNavigationAndLocomotionSystem(
+                    world,
+                    assets,
+                    navigation,
+                    runtime,
+                    definitions,
+                    collisionWorld,
+                    doors,
+                    colliders,
+                    probes,
+                    map,
+                    0.016f,
+                    &player);
+            const game::NpcNavigationRecord& record = runtime.records[0];
+            if (frame == 0) {
+                result.firstSteeredZ = record.desiredVelocity.y;
+                result.playerAvoidanceActive = record.playerAvoidanceActive;
+            }
+            const Vector3 position =
+                    world.Get<game::SectorObjectTransform>(entity).position;
+            result.minimumPlayerDistance = std::min(
+                    result.minimumPlayerDistance,
+                    Vector2Distance(
+                            {position.x, position.z},
+                            {player.feetPosition.x, player.feetPosition.z}));
+            result.maximumLateralOffset = std::max(
+                    result.maximumLateralOffset,
+                    std::fabs(position.z - 8.0f));
+            if (record.phase != game::NpcMovePhase::FollowingPath) break;
+        }
+        result.phase = game::GetNpcMoveStatus(
+                runtime, hostile ? "hostile" : "friendly").phase;
+        game::ShutdownNpcNavigationRuntime(world, navigation, runtime);
+        return result;
+    };
+
+    const ScenarioResult friendly = runScenario(false);
+    const ScenarioResult hostile = runScenario(true);
+    Check(friendly.playerAvoidanceActive
+                  && std::fabs(friendly.firstSteeredZ) > 0.001f
+                  && friendly.maximumLateralOffset > 0.1f,
+          "friendly NPC receives a lateral steering adjustment around the player");
+    Check(!hostile.playerAvoidanceActive
+                  && std::fabs(hostile.firstSteeredZ) < 0.001f
+                  && hostile.maximumLateralOffset < 0.02f,
+          "hostile NPC does not steer around the player");
+    Check(hostile.minimumPlayerDistance >= 0.499f
+                  && hostile.minimumPlayerDistance < 0.55f,
+          "hostile NPC approaches until solid player contact without overlapping");
+    Check(friendly.minimumPlayerDistance >= 0.499f,
+          "friendly player avoidance remains backed by solid character collision");
+    navigation.Shutdown();
+}
+
+void TestCrowdHeadOnNpcAgentsAvoidEachOther()
+{
+    const game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "head-on Crowd collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const engine::Entity left = SpawnNavigationTestNpc(
+            world, "left_agent", 501, {4.0f, 0.0f, 8.0f}, 10);
+    const engine::Entity right = SpawnNavigationTestNpc(
+            world, "right_agent", 502, {12.0f, 0.0f, 8.0f}, 10);
+    game::NpcNavigationRuntime runtime;
+    game::InitializeNpcNavigationRuntime(world, navigation, runtime);
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, runtime,
+                  "left_agent", {12.0f, 8.0f}).accepted
+                  && game::RequestNpcMove(
+                          world, navigation, collisionWorld, runtime,
+                          "right_agent", {4.0f, 8.0f}).accepted,
+          "opposing Crowd agents accept crossing requests");
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> colliders;
+    float minimumDistance = 1000.0f;
+    float maximumLateralOffset = 0.0f;
+    for (int frame = 0; frame < 1200; ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, runtime, definitions,
+                collisionWorld, doors, colliders, probes, map, 0.016f);
+        const Vector3 a = world.Get<game::SectorObjectTransform>(left).position;
+        const Vector3 b = world.Get<game::SectorObjectTransform>(right).position;
+        minimumDistance = std::min(minimumDistance,
+                Vector2Distance({a.x, a.z}, {b.x, b.z}));
+        maximumLateralOffset = std::max({
+                maximumLateralOffset,
+                std::fabs(a.z - 8.0f),
+                std::fabs(b.z - 8.0f)});
+        if (game::GetNpcMoveStatus(runtime, "left_agent").phase
+                        != game::NpcMovePhase::FollowingPath
+                && game::GetNpcMoveStatus(runtime, "right_agent").phase
+                        != game::NpcMovePhase::FollowingPath) {
+            break;
+        }
+    }
+    Check(minimumDistance >= 0.499f && maximumLateralOffset > 0.05f,
+          "head-on Crowd agents separate laterally without physical overlap");
+    Check(game::GetNpcMoveStatus(runtime, "left_agent").phase
+                        == game::NpcMovePhase::Arrived
+                  && game::GetNpcMoveStatus(runtime, "right_agent").phase
+                        == game::NpcMovePhase::Arrived,
+          "head-on Crowd agents both physically arrive after avoiding each other");
+    game::ShutdownNpcNavigationRuntime(world, navigation, runtime);
+    navigation.Shutdown();
+}
+
+void TestCrowdMovingNpcAvoidsStationaryNpc()
+{
+    const game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "stationary-agent Crowd collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize();
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 4);
+    const engine::Entity moving = SpawnNavigationTestNpc(
+            world, "moving_agent", 511, {3.0f, 0.0f, 8.0f}, 10);
+    const engine::Entity stationary = SpawnNavigationTestNpc(
+            world, "stationary_agent", 512, {8.0f, 0.0f, 8.0f}, 10);
+    game::NpcNavigationRuntime runtime;
+    game::InitializeNpcNavigationRuntime(world, navigation, runtime);
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, runtime,
+                  "moving_agent", {13.0f, 8.0f}).accepted,
+          "moving NPC accepts a route through a stationary agent's lane");
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> colliders;
+    float minimumDistance = 1000.0f;
+    float maximumLateralOffset = 0.0f;
+    for (int frame = 0; frame < 1200; ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, runtime, definitions,
+                collisionWorld, doors, colliders, probes, map, 0.016f);
+        const Vector3 movingPosition =
+                world.Get<game::SectorObjectTransform>(moving).position;
+        const Vector3 stationaryPosition =
+                world.Get<game::SectorObjectTransform>(stationary).position;
+        minimumDistance = std::min(minimumDistance,
+                Vector2Distance(
+                        {movingPosition.x, movingPosition.z},
+                        {stationaryPosition.x, stationaryPosition.z}));
+        maximumLateralOffset = std::max(
+                maximumLateralOffset,
+                std::fabs(movingPosition.z - 8.0f));
+        if (game::GetNpcMoveStatus(runtime, "moving_agent").phase
+                != game::NpcMovePhase::FollowingPath) {
+            break;
+        }
+    }
+    Check(minimumDistance >= 0.499f && maximumLateralOffset > 0.05f,
+          "moving Crowd agent steers around an idle NPC without overlap");
+    Check(game::GetNpcMoveStatus(runtime, "moving_agent").phase
+                        == game::NpcMovePhase::Arrived
+                  && Near(
+                          world.Get<game::SectorObjectTransform>(stationary).position,
+                          Vector3{8.0f, 0.0f, 8.0f}),
+          "stationary NPC remains unpushed while the moving NPC physically arrives");
+    game::ShutdownNpcNavigationRuntime(world, navigation, runtime);
+    navigation.Shutdown();
+}
+
+void TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions()
+{
+    game::NpcAnimationState state;
+    state.resolved = true;
+    state.animationIndices = {0, 1, 2};
+    state.animationSpeeds = {0.8f, 1.25f, 1.6f};
+    state.blendSeconds = 0.35f;
+    state.appliedAction = game::NpcAction::Idle;
+    engine::AnimatedModelAnimator animator;
+    animator.animationIndex = 0;
+    animator.speed = 0.8f;
+
+    Check(game::ApplyNpcSemanticAnimation(
+                  state, animator, game::NpcAction::Walk)
+                    == game::NpcAnimationApplyResult::Applied
+                  && animator.animationIndex == 0
+                  && animator.targetAnimationIndex == 1
+                  && Near(animator.transitionDurationSeconds, 0.35f)
+                  && Near(animator.speed, 1.25f),
+          "NPC Idle-to-Walk uses the authored blend time and semantic speed multiplier");
+    Check(game::ApplyNpcSemanticAnimation(
+                  state, animator, game::NpcAction::Run)
+                    == game::NpcAnimationApplyResult::Queued
+                  && state.hasPendingAction
+                  && state.pendingAction == game::NpcAction::Run
+                  && animator.targetAnimationIndex == 1,
+          "NPC action changes queue while the current animation blend completes");
+    animator.animationIndex = animator.targetAnimationIndex;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    Check(game::ApplyNpcSemanticAnimation(
+                  state, animator, game::NpcAction::Run)
+                    == game::NpcAnimationApplyResult::Applied
+                  && animator.animationIndex == 1
+                  && animator.targetAnimationIndex == 2
+                  && Near(animator.transitionDurationSeconds, 0.35f)
+                  && Near(animator.speed, 1.6f),
+          "queued Run action begins a second blend after Idle-to-Walk completes");
+
+    animator.animationIndex = animator.targetAnimationIndex;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    state.appliedAction = game::NpcAction::Run;
+    state.animationIndices[static_cast<size_t>(game::NpcAction::Walk)] =
+            engine::InvalidModelAnimationIndex;
+    Check(game::ApplyNpcSemanticAnimation(
+                  state, animator, game::NpcAction::Walk)
+                    == game::NpcAnimationApplyResult::Missing
+                  && state.appliedAction == game::NpcAction::Run,
+          "missing semantic animation leaves the current animation valid and reports gracefully");
+}
+
+void TestNpcNavigationSmoothsSectorGeometryStairsVisually()
+{
+    const game::SectorTopologyMap map = MakeNavigationStairMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "sector stair collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize(game::BuildSectorNavigationSettingsForMap(map));
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "sector stair navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const engine::Entity npcEntity = SpawnNavigationTestNpc(
+            world, "stair_npc", 201, {0.5f, 0.0f, 2.0f}, 1, 1.5f, 3.0f);
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, npcNavigation,
+                  "stair_npc", {5.5f, 2.0f}, game::NpcMoveGait::Walk).accepted,
+          "NPC accepts an ascending sector-stair request");
+
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> colliders;
+    bool observedAscendingVisualLag = false;
+    for (int frame = 0; frame < 500; ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, npcNavigation, definitions,
+                collisionWorld, doors, colliders, probes, map, 0.04f);
+        const game::SectorObjectTransform& transform =
+                world.Get<game::SectorObjectTransform>(npcEntity);
+        const game::SectorObjectVisualOffset& offset =
+                world.Get<game::SectorObjectVisualOffset>(npcEntity);
+        observedAscendingVisualLag = observedAscendingVisualLag
+                || (transform.position.y > 0.0f && offset.position.y < -0.001f);
+        if (game::GetNpcMoveStatus(npcNavigation, "stair_npc").phase
+                == game::NpcMovePhase::Arrived) {
+            break;
+        }
+    }
+    const game::SectorObjectTransform& topTransform =
+            world.Get<game::SectorObjectTransform>(npcEntity);
+    Check(game::GetNpcMoveStatus(npcNavigation, "stair_npc").phase
+                    == game::NpcMovePhase::Arrived
+                  && Near(topTransform.position.y, 1.875f, 0.001f)
+                  && world.Get<game::SectorObject>(npcEntity).currentSectorId == 6,
+          "NPC physically snaps through successive valid steps and reaches the top sector");
+    Check(observedAscendingVisualLag,
+          "ascending physical step snaps are hidden by a separate presentation offset");
+
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, npcNavigation,
+                  "stair_npc", {0.5f, 2.0f}, game::NpcMoveGait::Walk).accepted,
+          "NPC accepts a descending sector-stair request");
+    bool observedDescendingVisualLag = false;
+    for (int frame = 0; frame < 500; ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, npcNavigation, definitions,
+                collisionWorld, doors, colliders, probes, map, 0.04f);
+        const game::SectorObjectVisualOffset& offset =
+                world.Get<game::SectorObjectVisualOffset>(npcEntity);
+        observedDescendingVisualLag = observedDescendingVisualLag
+                || offset.position.y > 0.001f;
+        if (game::GetNpcMoveStatus(npcNavigation, "stair_npc").phase
+                == game::NpcMovePhase::Arrived) {
+            break;
+        }
+    }
+    for (int frame = 0; frame < 30; ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, npcNavigation, definitions,
+                collisionWorld, doors, colliders, probes, map, 0.04f);
+    }
+    const game::SectorObjectTransform& bottomTransform =
+            world.Get<game::SectorObjectTransform>(npcEntity);
+    const game::SectorObjectVisualOffset& settledOffset =
+            world.Get<game::SectorObjectVisualOffset>(npcEntity);
+    Check(game::GetNpcMoveStatus(npcNavigation, "stair_npc").phase
+                    == game::NpcMovePhase::Arrived
+                  && Near(bottomTransform.position.y, 0.0f, 0.001f)
+                  && world.Get<game::SectorObject>(npcEntity).currentSectorId == 1
+                  && observedDescendingVisualLag,
+          "NPC descends the same sector staircase with smoothed visual step-downs");
+    Check(std::fabs(settledOffset.position.y) < 0.001f,
+          "presentation-only stair offset decays without feeding physics or sector lookup");
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, npcNavigation,
+                  "stair_npc", {5.5f, 2.0f}, game::NpcMoveGait::Run).accepted,
+          "NPC can begin a fresh move after arrival");
+    game::UpdateNpcNavigationAndLocomotionSystem(
+            world, assets, navigation, npcNavigation, definitions,
+            collisionWorld, doors, colliders, probes, map, 0.04f);
+    world.Get<game::SectorObjectVisualOffset>(npcEntity).position.y = 0.1f;
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    Check(npcNavigation.records.empty()
+                  && world.Get<game::NpcRuntimeInstance>(npcEntity).action
+                          == game::NpcAction::Idle
+                  && Near(world.Get<game::SectorObjectVisualOffset>(npcEntity).position.y, 0.0f),
+          "map teardown cancels locomotion, restores Idle, and clears visual smoothing state");
+}
+
+void TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip()
+{
+    engine::World world;
+    engine::AssetManager assets;
+    game::SectorRuntimeObjectState state;
+    game::SectorTopologyMap map = MakeSquareMap();
+    game::SectorPlacedRuntimeObject object;
+    object.id = 32;
+    object.kind = "npc";
+    object.position = Vector3{2.0f, 0.0f, 2.0f};
+    object.npc.definitionId = "definitely_missing_test_npc";
+    map.runtimeObjects.push_back(object);
+
+    game::RefreshSectorRuntimeObjectMapData(state, map);
+    state.npcDefinitionCatalog = game::NpcDefinitionCatalog{};
+    game::SpawnPlacedRuntimeObjects(world, assets, state, map);
+    Check(state.placedObjectEntities.empty()
+                  && state.spawnedObjectCount == 0
+                  && state.skippedObjectCount == 1
+                  && state.placedObjectWarning.find("was not found")
+                          != std::string::npos,
+          "missing NPC definition skips only the runtime entity and reports a diagnostic");
+}
+
 void TestAnimatedModelSelectionAndBlendApi()
 {
     ModelAnimation animations[3] = {};
@@ -4191,6 +5708,226 @@ void TestAnimatedModelSelectionAndBlendApi()
                   && animator.targetAnimationIndex == engine::InvalidModelAnimationIndex
                   && Near(animator.frame, 0.0f),
           "zero-duration animation selection switches immediately and restarts");
+}
+
+void TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose()
+{
+    engine::AnimatedModelAnimator animator;
+    animator.frame = 7.5f;
+    animator.playing = true;
+    animator.loop = false;
+    animator.finished = false;
+    animator.poseDirty = false;
+
+    Check(engine::AdvanceAnimatedModelAnimator(animator, 10, 0.1f)
+                  && Near(animator.frame, 9.0f)
+                  && !animator.playing
+                  && animator.finished
+                  && animator.poseDirty,
+          "non-looping animated models apply their clamped final frame before stopping");
+
+    animator.poseDirty = false;
+    Check(!engine::AdvanceAnimatedModelAnimator(animator, 10, 0.1f)
+                  && Near(animator.frame, 9.0f)
+                  && !animator.poseDirty,
+          "finished animated models hold their cached terminal pose without advancing again");
+
+    animator = {};
+    animator.animationIndex = 0;
+    animator.poseDirty = false;
+    engine::SetAnimatedModelAnimation(animator, 1, 0.25f, true);
+    animator.targetLoop = false;
+
+    animator.animationIndex = animator.targetAnimationIndex;
+    animator.frame = 8.5f;
+    animator.loop = animator.targetLoop;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    animator.poseDirty = false;
+    Check(engine::AdvanceAnimatedModelAnimator(animator, 10, 1.0f / 60.0f)
+                  && Near(animator.frame, 9.0f)
+                  && animator.finished
+                  && animator.poseDirty,
+          "a blended transition into a non-looping clip also applies and holds its terminal pose");
+}
+
+void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
+{
+    std::array<float, 9> vertices{
+            0.75f, 0.4f, 0.0f,
+            1.25f, 0.4f, 0.0f,
+            1.0f, 1.2f, 0.0f};
+    std::array<unsigned char, 12> boneIndices{};
+    std::array<float, 12> boneWeights{
+            1.0f, 0.0f, 0.0f, 0.0f,
+            1.0f, 0.0f, 0.0f, 0.0f,
+            1.0f, 0.0f, 0.0f, 0.0f};
+    Mesh mesh{};
+    mesh.vertexCount = 3;
+    mesh.triangleCount = 1;
+    mesh.vertices = vertices.data();
+    mesh.boneIndices = boneIndices.data();
+    mesh.boneWeights = boneWeights.data();
+
+    engine::ModelAsset asset;
+    asset.model.transform = MatrixIdentity();
+    asset.model.meshCount = 1;
+    asset.model.meshes = &mesh;
+    asset.model.skeleton.boneCount = 1;
+    asset.animatedLocalBounds = {
+            Vector3{-0.5f, 0.0f, -0.1f},
+            Vector3{2.0f, 1.5f, 0.1f}};
+    asset.hasAnimatedLocalBounds = true;
+
+    engine::AnimatedModelInstance instance;
+    instance.model = engine::ModelHandle{17, 3};
+    instance.boneMatrices.push_back(MatrixTranslate(0.5f, 0.0f, 0.0f));
+    instance.poseReady = true;
+
+    const Matrix authored = game::BuildSectorStaticModelAuthoredTransform(
+            Vector3{3.0f, 1.0f, 4.0f},
+            0.0f,
+            0.65f,
+            0.0f,
+            1.4f);
+    const Vector3 posedLocalHit{1.5f, 0.6f, 0.0f};
+    const Vector3 worldHit = Vector3Transform(posedLocalHit, authored);
+    const Vector3 worldForward = Vector3Normalize(Vector3Subtract(
+            Vector3Transform(
+                    Vector3Add(posedLocalHit, Vector3{0.0f, 0.0f, 1.0f}),
+                    authored),
+            worldHit));
+    const Ray ray{
+            Vector3Subtract(worldHit, Vector3Scale(worldForward, 2.0f)),
+            worldForward};
+    engine::AnimatedModelRaycastResult hit;
+    Check(engine::RaycastAnimatedModel(
+                  asset, instance, authored, ray, 10.0f, hit)
+                  == engine::AnimatedModelRaycastStatus::Hit
+                  && Near(hit.distance, 2.0f, 0.0001f)
+                  && Near(hit.position, worldHit, 0.0001f)
+                  && hit.anchor.valid
+                  && Vector3DotProduct(hit.normal, ray.direction) <= 0.0f,
+          "animated-model raycasts use the current skinned pose and rendered transform");
+
+    const Vector3 bindOnlyWorld = Vector3Transform(
+            Vector3{1.0f, 0.6f, 0.0f}, authored);
+    const Ray gapRay{
+            Vector3Subtract(
+                    bindOnlyWorld,
+                    Vector3Scale(worldForward, 2.0f)),
+            worldForward};
+    engine::AnimatedModelRaycastResult miss;
+    Check(engine::RaycastAnimatedModel(
+                  asset, instance, authored, gapRay, 10.0f, miss)
+                  == engine::AnimatedModelRaycastStatus::Miss,
+          "a ray inside broad-phase bounds but outside posed triangles passes through");
+
+    instance.boneMatrices[0] = MatrixTranslate(0.8f, 0.0f, 0.0f);
+    Vector3 movedAnchor{};
+    Check(engine::ResolveAnimatedModelSurfaceAnchor(
+                  asset,
+                  instance,
+                  hit.anchor,
+                  authored,
+                  movedAnchor)
+                  && Near(
+                          movedAnchor,
+                          Vector3Transform(
+                                  Vector3Add(
+                                          posedLocalHit,
+                                          Vector3{0.3f, 0.0f, 0.0f}),
+                                  authored),
+                          0.0001f),
+          "blood surface anchors follow subsequent skeletal pose movement");
+}
+
+void TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint()
+{
+    const std::filesystem::path root =
+            std::filesystem::temp_directory_path()
+            / "engine_raylib_gltf_animation_endpoint_test";
+    std::error_code filesystemError;
+    std::filesystem::remove_all(root, filesystemError);
+    filesystemError.clear();
+    std::filesystem::create_directories(root, filesystemError);
+    Check(!filesystemError,
+          "glTF animation endpoint test creates its temporary directory");
+    if (filesystemError) return;
+
+    const std::array<float, 24> buffer{
+            0.0f, 0.5f, 1.0f,
+            0.0f, 0.0f, 0.0f,
+            0.0f, 2.0f, 0.0f,
+            0.0f, 10.0f, 0.0f,
+            0.0f, 0.25f, 0.5f,
+            1.0f, 1.0f, 1.0f,
+            2.0f, 2.0f, 2.0f,
+            4.0f, 4.0f, 4.0f};
+    {
+        std::ofstream binary(root / "endpoint.bin", std::ios::binary);
+        binary.write(
+                reinterpret_cast<const char*>(buffer.data()),
+                static_cast<std::streamsize>(sizeof(buffer)));
+    }
+    {
+        std::ofstream gltf(root / "endpoint.gltf", std::ios::binary);
+        gltf << R"({
+  "asset": {"version": "2.0"},
+  "scene": 0,
+  "scenes": [{"nodes": [0]}],
+  "nodes": [
+    {"name": "Armature", "children": [1], "translation": [0, 0, 0], "rotation": [0, 0, 0, 1], "scale": [1, 1, 1]},
+    {"name": "Root", "translation": [0, 0, 0], "rotation": [0, 0, 0, 1], "scale": [1, 1, 1]}
+  ],
+  "skins": [{"joints": [1]}],
+  "animations": [{
+    "name": "Endpoint",
+    "samplers": [
+      {"input": 0, "output": 1, "interpolation": "LINEAR"},
+      {"input": 2, "output": 3, "interpolation": "LINEAR"}
+    ],
+    "channels": [
+      {"sampler": 0, "target": {"node": 1, "path": "translation"}},
+      {"sampler": 1, "target": {"node": 1, "path": "scale"}}
+    ]
+  }],
+  "buffers": [{"uri": "endpoint.bin", "byteLength": 96}],
+  "bufferViews": [
+    {"buffer": 0, "byteOffset": 0, "byteLength": 12},
+    {"buffer": 0, "byteOffset": 12, "byteLength": 36},
+    {"buffer": 0, "byteOffset": 48, "byteLength": 12},
+    {"buffer": 0, "byteOffset": 60, "byteLength": 36}
+  ],
+  "accessors": [
+    {"bufferView": 0, "componentType": 5126, "count": 3, "type": "SCALAR", "min": [0], "max": [1]},
+    {"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3"},
+    {"bufferView": 2, "componentType": 5126, "count": 3, "type": "SCALAR", "min": [0], "max": [0.5]},
+    {"bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC3"}
+  ]
+})";
+    }
+
+    int animationCount = 0;
+    const std::string gltfPath = (root / "endpoint.gltf").string();
+    ModelAnimation* animations = LoadModelAnimations(
+            gltfPath.c_str(), &animationCount);
+    Check(animations != nullptr
+                  && animationCount == 1
+                  && animations[0].keyframeCount == 61,
+          "raylib loads the generated endpoint animation at 60 Hz");
+    if (animations != nullptr && animationCount == 1
+            && animations[0].keyframeCount == 61) {
+        const Transform& first = animations[0].keyframePoses[0][0];
+        const Transform& last = animations[0].keyframePoses[60][0];
+        Check(Near(first.translation.y, 0.0f)
+                      && Near(last.translation.y, 10.0f)
+                      && Near(last.scale.x, 4.0f),
+              "raylib samples both the clip endpoint and an earlier-ending channel at their authored final poses");
+    }
+    if (animations != nullptr) {
+        UnloadModelAnimations(animations, animationCount);
+    }
+    std::filesystem::remove_all(root, filesystemError);
 }
 
 void TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures()
@@ -5831,6 +7568,117 @@ void TestSectorDoorModelShadowCasterMatrices()
           "fallback slab state emits only independently drawable model frame casters");
 }
 
+void TestNpcWeaponDamageOcclusionAndCorpseFade()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 8);
+    const engine::Entity npc = world.CreateEntity();
+    world.Add(npc, game::NpcRuntimeInstance{
+            "test", "target", game::NpcAction::Idle, false, true, 1.5f, 3.0f});
+    world.Add(npc, game::MakeHealth(100));
+    game::NpcCombatState combat;
+    combat.despawnOnDeath = true;
+    combat.corpseDespawnDelaySeconds = 0.2f;
+    combat.corpseFadeDurationSeconds = 0.5f;
+    world.Add(npc, combat);
+    world.Add(npc, game::SectorObjectTransform{{0.0f, 0.0f, 0.0f}});
+    world.Add(npc, game::SectorObject{1, true});
+    world.Add(npc, game::SectorDynamicModel{});
+
+    game::SectorNavigationWorld navigation;
+    game::NpcNavigationRuntime npcNavigation;
+    game::NpcNavigationRecord record;
+    record.entity = npc;
+    record.placedObjectId = 7;
+    record.instanceId = "target";
+    record.occupied = true;
+    npcNavigation.records.push_back(record);
+
+    game::FpsWeaponImpactDefinition impact;
+    impact.damage = 25;
+    impact.staggerSeconds = 0.18f;
+    impact.knockbackImpulseWorldPerSecond = 1.25f;
+    impact.blood = {true, 18, 1.0f, 1.0f};
+    impact.surfaceDebris = {true, 14, 0.85f, 0.8f};
+    game::FpsShotResult shot;
+    game::WeaponImpactEvent event;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    std::vector<game::SectorStaticModelCollider> props;
+
+    Check(game::ResolvePlayerWeaponShot(
+                  world, nullptr, navigation, npcNavigation, nullptr, doors, props,
+                  Vector3{0.0f, 0.8f, -5.0f}, Vector3{0.0f, 0.0f, 1.0f},
+                  20.0f, impact, shot, event)
+                  && shot.hitKind == game::FpsShotHitKind::Npc
+                  && world.Get<game::Health>(npc).current == 75
+                  && world.Get<game::NpcCombatState>(npc).hurtAnimationRequested
+                  && Near(world.Get<game::NpcCombatState>(npc)
+                                  .staggerRemainingSeconds,
+                          0.18f)
+                  && event.kind == game::WeaponImpactKind::Blood,
+          "weapon shot damages a friendly NPC and requests hurt, stagger, and blood");
+
+    game::SectorImpactParticleSystem particles;
+    particles.Spawn(event);
+    Check(particles.ActiveParticleCount() == 6,
+          "blood impact emits an immediate leading spray");
+    particles.Update(world, nullptr, 0.03f);
+    Check(particles.ActiveParticleCount() > 6
+                  && particles.ActiveParticleCount() <= 18,
+          "attached blood emitter releases the remaining droplets over its short lifetime");
+
+    game::SectorStaticModelCollider blocker;
+    blocker.placedObjectId = 99;
+    blocker.center = {0.0f, -2.0f};
+    blocker.halfExtents = {0.5f, 0.2f};
+    blocker.bottom = 0.0f;
+    blocker.top = 2.0f;
+    blocker.resolved = true;
+    props.push_back(blocker);
+    Check(game::ResolvePlayerWeaponShot(
+                  world, nullptr, navigation, npcNavigation, nullptr, doors, props,
+                  Vector3{0.0f, 0.8f, -5.0f}, Vector3{0.0f, 0.0f, 1.0f},
+                  20.0f, impact, shot, event)
+                  && shot.hitKind == game::FpsShotHitKind::SolidProp
+                  && world.Get<game::Health>(npc).current == 75
+                  && event.kind == game::WeaponImpactKind::SurfaceDebris,
+          "solid prop blocks NPC damage and produces surface debris");
+    const size_t bloodCount = particles.ActiveParticleCount();
+    particles.Spawn(event);
+    Check(particles.ActiveParticleCount() == bloodCount + 14,
+          "surface debris emits its configured mixed chip and dust burst");
+    props.clear();
+
+    for (int hit = 0; hit < 3; ++hit) {
+        game::ResolvePlayerWeaponShot(
+                world, nullptr, navigation, npcNavigation, nullptr, doors, props,
+                Vector3{0.0f, 0.8f, -5.0f}, Vector3{0.0f, 0.0f, 1.0f},
+                20.0f, impact, shot, event);
+    }
+    Check(game::IsDepleted(world.Get<game::Health>(npc))
+                  && world.Get<game::NpcCombatState>(npc).dead
+                  && world.Get<game::NpcCombatState>(npc).deathAnimationRequested
+                  && !npcNavigation.records[0].occupied,
+          "four pistol hits kill the NPC and immediately deactivate navigation");
+
+    world.Get<game::NpcCombatState>(npc).knockbackVelocity = {};
+    world.Get<game::NpcCombatState>(npc).deathAnimationComplete = true;
+    game::NpcCombatRuntime combatRuntime;
+    game::InitializeNpcCombatRuntime(combatRuntime, 1);
+    game::SectorCollisionWorld emptyCollision;
+    game::UpdateNpcCombatSystem(
+            world, emptyCollision, doors, props, nullptr, combatRuntime, 0.45f);
+    Check(world.IsAlive(npc)
+                  && Near(world.Get<game::SectorDynamicModel>(npc).opacity, 0.5f)
+                  && world.Get<game::SectorDynamicModel>(npc).shadowMode
+                          == game::SectorDynamicModelShadowMode::None,
+          "despawning corpse waits then fades and disables its shadow");
+    game::UpdateNpcCombatSystem(
+            world, emptyCollision, doors, props, nullptr, combatRuntime, 0.3f);
+    Check(!world.IsAlive(npc),
+          "corpse is destroyed after its configured fade finishes");
+}
+
 int main()
 {
     extern void RunSectorScriptBindingTests();
@@ -5880,6 +7728,9 @@ int main()
     TestSectorSwingDoorDerivedMatricesAndColliderAgree();
     TestSectorSwingDoorFullyOpenClearsApertureButStillCollides();
     TestSectorSwingDoorClosingSweepReopensWithoutTunneling();
+    TestSectorDoorNavigationHoldsAndSlidingObstruction();
+    TestNpcDoorTraversalStagesWaitsCrossesAndReleases();
+    TestCrowdQueuesNpcAgentsThroughDoor();
     TestSpawnPlacedDoorDerivesDefaultOpenDistance();
     TestSectorDoorMotionAdvancesOpenAndClosed();
     TestSectorDoorMotionClampsAndIgnoresZeroSpeed();
@@ -5920,7 +7771,24 @@ int main()
     TestSectorModelEnvironmentExposureFollowsSectorLighting();
     TestSpawnUnassignedStaticModelRemainsSelectableRuntimeEntity();
     TestSpawnDynamicModelCopiesPlaybackAndLightingPayload();
+    TestDynamicModelColliderCollectionIsSeparatedForNavigation();
+    TestSpawnNpcResolvesDefinitionAndIdlePlayback();
+    TestNpcFootstepCadenceUsesResolvedTravel();
+    TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
+    TestNpcNavigationReplansAroundDynamicTileCacheObstacle();
+    TestNpcNavigationLowSpeedAdvancesAtHighRefreshRate();
+    TestNpcCollisionCylindersAreSolidWithoutVerticalFalsePositives();
+    TestCrowdFactionAwarePlayerAvoidanceAndHostileContact();
+    TestCrowdHeadOnNpcAgentsAvoidEachOther();
+    TestCrowdMovingNpcAvoidsStationaryNpc();
+    TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions();
+    TestNpcWeaponDamageOcclusionAndCorpseFade();
+    TestNpcNavigationSmoothsSectorGeometryStairsVisually();
+    TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip();
     TestAnimatedModelSelectionAndBlendApi();
+    TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose();
+    TestAnimatedModelRaycastUsesCurrentSkinnedGeometry();
+    TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
     TestStaticModelSpotlightShadowCasterCollectionAndRevision();
     TestViewmodelMaterialOverrideResolution();

@@ -1932,6 +1932,73 @@ void TestDynamicModelRoundTripAndDefaultOmission()
           "dynamic prop rejects unknown shadow modes");
 }
 
+void TestNpcRoundTripDefaultsAndValidation()
+{
+    SectorTopologyMap map = MakeSquare();
+    SectorPlacedRuntimeObject object;
+    object.id = 42;
+    object.kind = "npc";
+    object.position = Vector3{12.0f, 16.0f, 20.0f};
+    object.yawRadians = 0.75f;
+    object.npc.definitionId = "zombie_guard";
+    object.npc.instanceId = "guard_at_gate";
+    object.npc.scale = 1.25f;
+    object.npc.shadowMode =
+            game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+    map.runtimeObjects.push_back(object);
+
+    const Json saved = Json::parse(SaveText(map));
+    const Json& payload = saved["runtimeObjects"][0]["npc"];
+    Check(saved["runtimeObjects"][0]["kind"] == "npc"
+                  && payload["definitionId"] == "zombie_guard"
+                  && payload["instanceId"] == "guard_at_gate"
+                  && Near(payload["scale"].get<float>(), 1.25f)
+                  && payload["shadowMode"] == "projected_silhouette",
+          "NPC placement writes definition, instance, scale, and shadow fields");
+
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error),
+          "NPC placement JSON loads without consulting the external catalog");
+    const SectorPlacedRuntimeObject* roundTripped =
+            game::FindSectorPlacedRuntimeObject(loaded, 42);
+    Check(roundTripped != nullptr
+                  && roundTripped->kind == "npc"
+                  && roundTripped->npc.definitionId == "zombie_guard"
+                  && roundTripped->npc.instanceId == "guard_at_gate"
+                  && Near(roundTripped->npc.scale, 1.25f)
+                  && roundTripped->npc.shadowMode
+                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette,
+          "NPC placement fields round-trip");
+
+    map.runtimeObjects[0].npc.instanceId.clear();
+    map.runtimeObjects[0].npc.scale = 1.0f;
+    map.runtimeObjects[0].npc.shadowMode =
+            game::SectorDynamicModelShadowMode::Contact;
+    const Json defaults = Json::parse(SaveText(map))["runtimeObjects"][0]["npc"];
+    Check(defaults["definitionId"] == "zombie_guard"
+                  && !defaults.contains("instanceId")
+                  && !defaults.contains("scale")
+                  && !defaults.contains("shadowMode"),
+          "NPC placement omits optional and default payload fields");
+
+    Json invalid = saved;
+    invalid["runtimeObjects"][0]["npc"]["instanceId"] = "bad instance";
+    ExpectRejected(invalid, "NPC placement rejects an invalid instance ID");
+    invalid = saved;
+    invalid["runtimeObjects"][0]["npc"]["scale"] = 0.0f;
+    ExpectRejected(invalid, "NPC placement rejects a non-positive scale");
+    invalid = saved;
+    invalid["runtimeObjects"][0]["npc"]["shadowMode"] = "blob";
+    ExpectRejected(invalid, "NPC placement rejects an unknown shadow mode");
+
+    Json duplicate = saved;
+    Json second = duplicate["runtimeObjects"][0];
+    second["id"] = 43;
+    duplicate["runtimeObjects"].push_back(second);
+    ExpectRejected(duplicate, "NPC instance IDs must be unique within a map");
+}
+
 void TestRuntimeObjectEditAndDeleteHelpers()
 {
     SectorTopologyMap map = MakeSquare();
@@ -4438,6 +4505,7 @@ int main()
     TestLightAtmosphereRoundTripAndDefaultOmission();
     TestRuntimeObjectsRoundTripAndValidation();
     TestDynamicModelRoundTripAndDefaultOmission();
+    TestNpcRoundTripDefaultsAndValidation();
     TestRuntimeObjectEditAndDeleteHelpers();
     TestLightmapMetadataRoundTrip();
     TestPreviewSettingsRoundTripAndValidation();

@@ -165,6 +165,13 @@ struct SectorPlacedDynamicModel {
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
 };
 
+struct SectorPlacedNpc {
+    std::string definitionId;
+    std::string instanceId;
+    float scale = 1.0f;
+    SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
+};
+
 enum class SectorDoorMotionType {
     SlideVertical,
     SlideLeft,
@@ -269,6 +276,7 @@ struct SectorPlacedRuntimeObject {
     SectorPlacedBillboard billboard;
     SectorPlacedStaticModel staticModel;
     SectorPlacedDynamicModel dynamicModel;
+    SectorPlacedNpc npc;
     SectorPlacedDoor door;
 };
 

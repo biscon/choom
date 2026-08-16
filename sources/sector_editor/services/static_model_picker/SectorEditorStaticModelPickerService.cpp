@@ -53,7 +53,9 @@ void SectorEditorStaticModelPickerService::Open(
     state_.scanned = false;
     statusText_ = target == ModelPickerTarget::DynamicModel
             ? "Choose a dynamic prop model"
-            : "Choose a static prop model";
+            : (target == ModelPickerTarget::NpcDefinition
+                    ? "Choose an NPC character model"
+                    : "Choose a static prop model");
 }
 
 void SectorEditorStaticModelPickerService::Close()
@@ -61,11 +63,18 @@ void SectorEditorStaticModelPickerService::Close()
     state_.open = false;
     statusText_ = state_.target == ModelPickerTarget::DynamicModel
             ? "Dynamic model selection cancelled"
-            : "Static model selection cancelled";
+            : (state_.target == ModelPickerTarget::NpcDefinition
+                    ? "NPC model selection cancelled"
+                    : "Static model selection cancelled");
 }
 
 bool SectorEditorStaticModelPickerService::Refresh()
 {
+    if (state_.target == ModelPickerTarget::NpcDefinition) {
+        return RefreshFromRoot(
+                std::filesystem::path(ASSETS_PATH) / "models" / "characters",
+                "assets/models/characters");
+    }
     return RefreshFromRoot(
             std::filesystem::path(ASSETS_PATH) / "models",
             "assets/models");
@@ -153,9 +162,12 @@ void SectorEditorStaticModelPickerService::RebuildOptionLabels()
 {
     state_.optionLabelStorage.clear();
     state_.optionLabelStorage.reserve(state_.modelPaths.size());
+    const char* prefix = state_.target == ModelPickerTarget::NpcDefinition
+            ? "assets/models/characters/"
+            : "assets/models/";
     for (const std::string& path : state_.modelPaths) {
         state_.optionLabelStorage.push_back(
-                EditorAssetPathDisplayLabel(path, "assets/models/"));
+                EditorAssetPathDisplayLabel(path, prefix));
     }
     state_.optionLabels.clear();
     state_.optionLabels.reserve(state_.optionLabelStorage.size());

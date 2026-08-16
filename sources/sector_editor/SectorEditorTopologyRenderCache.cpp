@@ -542,8 +542,10 @@ void UpdateCachedSectorEditorRuntimeObjectDraw(
         cached.definitionKnown = object.kind == "billboard"
                 || object.kind == "door"
                 || object.kind == "static_model"
-                || object.kind == "dynamic_model";
+                || object.kind == "dynamic_model"
+                || object.kind == "npc";
         cached.isDoor = object.kind == "door";
+        cached.isNpc = object.kind == "npc";
         cached.doorFootprintValid = false;
         return;
     }
@@ -950,8 +952,10 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cached.definitionKnown = object.kind == "billboard"
                 || object.kind == "door"
                 || object.kind == "static_model"
-                || object.kind == "dynamic_model";
+                || object.kind == "dynamic_model"
+                || object.kind == "npc";
         cached.isDoor = object.kind == "door";
+        cached.isNpc = object.kind == "npc";
         if (cached.isDoor) {
             PopulateCachedDoorDraw(map, object, swingDoorCatalog, cached);
         }
@@ -973,7 +977,6 @@ void AppendCachedRuntimeObjectPickCandidates(
         return;
     }
 
-    const float tolerance2 = tolerancePixels * tolerancePixels;
     for (const CachedRuntimeObjectDraw& object : cache.runtimeObjects) {
         const Vector2 center = CachedMapToScreen(context, object.map);
         const float centerDx = center.x - screenPoint.x;
@@ -988,7 +991,10 @@ void AppendCachedRuntimeObjectPickCandidates(
             distance2 = DistanceSquaredToPickQuad(screenPoint, corners);
         }
 
-        if (distance2 <= tolerance2) {
+        const float activeTolerance = object.isNpc
+                ? tolerancePixels + 18.0f
+                : tolerancePixels;
+        if (distance2 <= activeTolerance * activeTolerance) {
             outCandidates.push_back(SectorEditorPickCandidate{
                     SectorEditorPickTarget{SectorEditorPickKind::RuntimeObject, object.objectId},
                     distance2});
@@ -1601,6 +1607,7 @@ void DrawCachedRuntimeObjects(
 {
     const Color outline = Color{20, 24, 32, 255};
     const Color objectFill = Color{238, 204, 96, 235};
+    const Color npcFill = Color{245, 90, 190, 255};
     const Color doorFill = Color{72, 220, 128, 64};
     const Color doorLine = Color{72, 220, 128, 235};
     const Color selectedFill = Color{122, 220, 244, 255};
@@ -1610,7 +1617,7 @@ void DrawCachedRuntimeObjects(
         const bool selected = object.objectId == context.selectedRuntimeObjectId;
         const Color fill = !object.definitionKnown || !object.doorModelMetadataValid
                 ? missingFill
-                : selected ? selectedFill : objectFill;
+                : selected ? selectedFill : object.isNpc ? npcFill : objectFill;
 
         const float radius = selected ? 8.0f : 6.0f;
         if (object.isDoor && object.doorFootprintValid) {
@@ -1686,10 +1693,52 @@ void DrawCachedRuntimeObjects(
             }
         }
 
-        DrawCircleV(center, radius + 3.0f, outline);
-        DrawCircleV(center, radius, fill);
+        if (object.isNpc) {
+            const Vector2 forward{
+                    std::cos(object.yawRadians),
+                    std::sin(object.yawRadians)};
+            const Vector2 side{-forward.y, forward.x};
+            const Vector2 head{
+                    center.x + forward.x * 13.0f,
+                    center.y + forward.y * 13.0f};
+            const Vector2 neck{
+                    center.x + forward.x * 7.5f,
+                    center.y + forward.y * 7.5f};
+            const Vector2 shoulders{
+                    center.x + forward.x * 4.0f,
+                    center.y + forward.y * 4.0f};
+            const Vector2 hip{
+                    center.x - forward.x * 5.0f,
+                    center.y - forward.y * 5.0f};
+            const Vector2 handA{
+                    shoulders.x + side.x * 8.0f,
+                    shoulders.y + side.y * 8.0f};
+            const Vector2 handB{
+                    shoulders.x - side.x * 8.0f,
+                    shoulders.y - side.y * 8.0f};
+            const Vector2 footA{
+                    hip.x - forward.x * 8.0f + side.x * 6.0f,
+                    hip.y - forward.y * 8.0f + side.y * 6.0f};
+            const Vector2 footB{
+                    hip.x - forward.x * 8.0f - side.x * 6.0f,
+                    hip.y - forward.y * 8.0f - side.y * 6.0f};
+            const float bodyWidth = selected ? 3.5f : 2.5f;
+            const auto drawLimb = [&](Vector2 start, Vector2 end) {
+                DrawLineEx(start, end, bodyWidth + 3.0f, outline);
+                DrawLineEx(start, end, bodyWidth, fill);
+            };
+            drawLimb(neck, hip);
+            drawLimb(handA, handB);
+            drawLimb(hip, footA);
+            drawLimb(hip, footB);
+            DrawCircleV(head, selected ? 6.0f : 5.5f, outline);
+            DrawCircleV(head, selected ? 3.5f : 3.0f, fill);
+        } else {
+            DrawCircleV(center, radius + 3.0f, outline);
+            DrawCircleV(center, radius, fill);
+        }
 
-        if (!object.isDoor) {
+        if (!object.isDoor && !object.isNpc) {
             const Vector2 direction{
                     std::cos(object.yawRadians),
                     std::sin(object.yawRadians)

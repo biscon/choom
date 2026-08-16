@@ -1,5 +1,7 @@
 #include "sector_editor/SectorEditorPreviewActions.h"
 
+#include "game/npc/NpcCollision.h"
+
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorStaticModelCollision.h"
@@ -285,7 +287,8 @@ void UpdateSectorEditorGameplayPreview(
         bool previewSettingsModalOpen,
         const SectorFpsControllerInput& controllerInput,
         float previousVisualEyeY,
-        float dt)
+        float dt,
+        const std::vector<NpcCollisionCylinder>* npcCollisionCylinders)
 {
     controllerState.frameEvents = SectorFpsFrameEvents{};
     if (!std::isfinite(controllerState.landingDipState.offsetY)) {
@@ -385,6 +388,24 @@ void UpdateSectorEditorGameplayPreview(
                             collisionState,
                             moveResult.currentSectorId),
                     staticModelColliders);
+            if (npcCollisionCylinders != nullptr
+                    && !npcCollisionCylinders->empty()) {
+                moveResult = ResolveNpcCollisionCylindersForMovement(
+                        SectorCollisionMoveState{
+                                feetXZ,
+                                controllerState.fpsControllerState.feetPosition.y,
+                                controllerState.fpsControllerState.currentSectorId,
+                                controllerState.fpsControllerState.grounded},
+                        moveResult,
+                        SectorCollisionMoveConfig{
+                                effectiveConfig.playerRadius,
+                                effectiveConfig.playerHeight,
+                                effectiveConfig.stepHeight,
+                                4},
+                        -2,
+                        npcCollisionCylinders->data(),
+                        npcCollisionCylinders->size());
+            }
             SectorCollisionHeights movedHeights;
             if (wasGrounded
                     && moveResult.currentSectorId != previousSectorId

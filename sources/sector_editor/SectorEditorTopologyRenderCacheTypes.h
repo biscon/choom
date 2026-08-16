@@ -69,6 +69,7 @@ struct CachedRuntimeObjectDraw {
     float yawRadians = 0.0f;
     bool definitionKnown = false;
     bool isDoor = false;
+    bool isNpc = false;
     bool doorFootprintValid = false;
     Vector2 doorCorners[4] = {};
     Vector2 doorEndpointA = {};

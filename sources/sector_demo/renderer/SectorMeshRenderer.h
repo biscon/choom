@@ -129,6 +129,7 @@ public:
     const SectorGeneratedGeometry& RenderedGeometry() const { return GeneratedGeometry(); }
     float AssetProgress(engine::AssetManager& assets) const;
     float RendererAssetProgress(engine::AssetManager& assets) const;
+    engine::AssetScopeHandle RendererAssetScope() const { return assetScope; }
     const char* LightmapStatusText() const;
     const char* RendererLightmapStatusText() const;
     void UpdateVisibilityDebug(

@@ -37,6 +37,83 @@ void UpdateAudioListener(
             camera.up});
 }
 
+bool ScopeFinishedOrEmpty(
+        const engine::AssetManager& assets,
+        engine::AssetScopeHandle scope)
+{
+    return engine::IsNull(scope) || assets.IsScopeFinished(scope);
+}
+
+bool FpsViewmodelLoadFinished(const FpsViewmodelRuntimeState& state)
+{
+    if (state.loadState == FpsViewmodelLoadState::Failed
+            || state.loadState == FpsViewmodelLoadState::Inactive) {
+        return true;
+    }
+    return state.loadState == FpsViewmodelLoadState::Ready
+            && state.attachment.loadState
+                    != FpsViewmodelAttachmentLoadState::Pending;
+}
+
+bool HasRuntimeNpcs(const SectorSceneRuntime& scene)
+{
+    return std::any_of(
+            scene.NpcNavigation().records.begin(),
+            scene.NpcNavigation().records.end(),
+            [](const NpcNavigationRecord& record) {
+                return record.occupied;
+            });
+}
+
+bool NavigationBuildTerminal(SectorNavigationState state)
+{
+    return state == SectorNavigationState::Ready
+            || state == SectorNavigationState::Empty
+            || state == SectorNavigationState::Failed
+            || state == SectorNavigationState::Uninitialized
+            || state == SectorNavigationState::Stale;
+}
+
+float NavigationLoadProgress(const SectorNavigationWorld& navigation)
+{
+    const SectorNavigationState state = navigation.State();
+    if (NavigationBuildTerminal(state)) return 1.0f;
+    if (state != SectorNavigationState::Building) return 0.0f;
+    const SectorNavigationBuildStatistics& statistics =
+            navigation.BuildStatistics();
+    if (statistics.tileCoordinateCount <= 0) return 0.0f;
+    return std::clamp(
+            static_cast<float>(statistics.builtTileCoordinateCount)
+                    / static_cast<float>(statistics.tileCoordinateCount),
+            0.0f,
+            1.0f);
+}
+
+bool InitialNavigationObstaclesSettled(
+        const SectorNavigationWorld& navigation)
+{
+    if (navigation.State() != SectorNavigationState::Ready) return true;
+    const SectorNavigationDynamicObstacleStatistics& statistics =
+            navigation.DynamicObstacleStatistics();
+    return statistics.pendingCount == 0
+            && statistics.removingCount == 0
+            && statistics.backlogCount == 0;
+}
+
+std::string NavigationLoadFailure(const SectorNavigationWorld& navigation)
+{
+    const std::vector<SectorNavigationDiagnostic>& diagnostics =
+            navigation.Diagnostics();
+    for (auto it = diagnostics.rbegin(); it != diagnostics.rend(); ++it) {
+        if (it->severity == SectorNavigationDiagnosticSeverity::Error
+                && !it->message.empty()) {
+            return it->message;
+        }
+    }
+    return std::string{"navigation finished "}
+            + SectorNavigationStateName(navigation.State());
+}
+
 } // namespace
 
 bool SectorGameSession::StartNew(
@@ -51,6 +128,7 @@ bool SectorGameSession::StartNew(
         std::string& error)
 {
     failureError.clear();
+    playerHealth = MakeHealth(100);
     const std::string& requestedLevelName = entry.levelName;
     const std::string path = ApplicationLevelAssetPath(requestedLevelName);
     if (path.empty()) {
@@ -80,6 +158,7 @@ bool SectorGameSession::StartNew(
                 loaded,
                 "sector_game",
                 settings.footsteps.defaultSet,
+                settings.footsteps.volume,
                 error)) {
         return false;
     }
@@ -92,6 +171,7 @@ bool SectorGameSession::StartNew(
     levelPath = path;
     controller = SectorEditorPreviewControllerState{};
     collision = SectorEditorPreviewCollisionState{};
+    navigationDebug = SectorGameNavigationDebugState{};
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
     ResetSectorFreeflyController(
@@ -125,21 +205,14 @@ bool SectorGameSession::StartNew(
     paused = false;
     consoleInputCaptured = false;
     InitializeSectorScriptHost(
-            scriptHost, scene.RuntimeObjects(), topologyMap, scripts);
-    if (!engine::ScriptSystemCreateForMap(
-                context,
-                scripts,
-                persistentStore,
-                levelName,
-                levelPath,
-                ASSETS_PATH,
-                &scriptHost,
-                RegisterSectorScriptBindings,
-                loadingSave,
-                error)) {
-        Shutdown(context, scene);
-        return false;
-    }
+            scriptHost,
+            scene.RuntimeObjects(),
+            topologyMap,
+            scripts,
+            &scene.Navigation(),
+            &scene.NpcNavigation());
+    pendingLoadingSave = loadingSave;
+    BeginGameLevelLoading(loading);
     error.clear();
     return true;
 }
@@ -158,11 +231,14 @@ void SectorGameSession::Shutdown(
     topologyMap = SectorTopologyMap{};
     controller = SectorEditorPreviewControllerState{};
     collision = SectorEditorPreviewCollisionState{};
+    navigationDebug = SectorGameNavigationDebugState{};
+    StopGameLevelLoading(loading);
     levelName.clear();
     levelPath.clear();
     running = false;
     paused = false;
     consoleInputCaptured = false;
+    pendingLoadingSave = false;
     weaponRegistry = nullptr;
     applicationSettings = nullptr;
     playerAudio = nullptr;
@@ -211,9 +287,22 @@ void SectorGameSession::Update(
         SectorSceneRuntime& scene,
         float dt)
 {
+    if (running && IsLoading()) {
+        UpdateLoading(context, scene, dt);
+        return;
+    }
     if (!running || paused) {
         return;
     }
+
+    context.input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [this](engine::InputEvent& event) {
+                if (event.key.key != KEY_F8) return;
+                navigationDebug.visible = !navigationDebug.visible;
+                engine::ConsumeEvent(event);
+            });
 
     const Vector3 playerPosition =
             controller.fpsControllerState.feetPosition;
@@ -284,7 +373,8 @@ void SectorGameSession::Update(
             false,
             input,
             previousVisualEyeY,
-            dt);
+            dt,
+            &scene.NpcNavigation().collisionCylinders);
     UpdateSectorScriptTriggers(
             scriptHost,
             Vector2{
@@ -347,6 +437,19 @@ void SectorGameSession::Update(
                 !consoleInputCaptured,
                 consoleInputCaptured);
         if (acceptedShot) {
+            const FpsShotResult request = fpsPlayer.State().firing.lastShot;
+            FpsShotResult resolvedShot;
+            scene.ResolvePlayerWeaponShot(
+                    context,
+                    collision.sectorCollisionWorldValid
+                            ? &collision.sectorCollisionWorld
+                            : nullptr,
+                    request.rayOrigin,
+                    request.rayDirection,
+                    fpsPlayer.State().firing.definition.maximumRangeWorld,
+                    fpsPlayer.State().firing.definition.impact,
+                    resolvedShot);
+            fpsPlayer.RecordShotResolution(resolvedShot);
             ApplyPlayerPose(scene);
         }
         fpsPlayer.UpdateTransformsAndLight(
@@ -369,11 +472,125 @@ void SectorGameSession::Update(
     ConsumeScriptTransitionRequest(context, scene);
 }
 
+void SectorGameSession::UpdateLoading(
+        engine::EngineContext& context,
+        SectorSceneRuntime& scene,
+        float dt)
+{
+    if (loading.phase == GameLevelLoadPhase::Fading) {
+        if (!AdvanceGameLevelLoadingFade(loading, dt)) return;
+        std::string error;
+        if (!ActivateLoadedMap(context, error)) {
+            const std::string reason = error.empty()
+                    ? "Map script activation failed" : error;
+            Shutdown(context, scene);
+            failureError = reason;
+            return;
+        }
+        ActivateGameLevel(loading);
+        return;
+    }
+    if (loading.phase != GameLevelLoadPhase::Loading) return;
+
+    scene.UpdateLoadPreparation(context, topologyMap);
+    if (weaponRegistry != nullptr && applicationSettings != nullptr) {
+        fpsPlayer.Update(
+                context.assets,
+                *weaponRegistry,
+                *applicationSettings,
+                0.0f);
+    }
+    ApplyPlayerPose(scene);
+
+    size_t finishedAssets = 0;
+    size_t totalAssets = 0;
+    scene.AccumulateLoadAssetProgress(
+            context.assets, finishedAssets, totalAssets);
+    const engine::AssetScopeHandle viewmodelScope =
+            fpsPlayer.State().assetScope;
+    if (!engine::IsNull(viewmodelScope)) {
+        size_t finished = 0;
+        size_t total = 0;
+        context.assets.GetScopeProgressCounts(
+                viewmodelScope, finished, total);
+        finishedAssets += finished;
+        totalAssets += total;
+    }
+    const float assetProgress = totalAssets == 0
+            ? 1.0f
+            : static_cast<float>(finishedAssets)
+                    / static_cast<float>(totalAssets);
+
+    const SectorNavigationState navigationState = scene.Navigation().State();
+    const bool navigationTerminal = NavigationBuildTerminal(navigationState);
+    const bool hasNpcs = HasRuntimeNpcs(scene);
+    const GameLevelNavigationGate navigationGate =
+            EvaluateGameLevelNavigationGate(
+                    hasNpcs,
+                    navigationTerminal,
+                    navigationState == SectorNavigationState::Ready);
+    if (navigationGate == GameLevelNavigationGate::Unavailable) {
+        const std::string reason = "Level '" + levelName
+                + "' cannot activate NPCs: "
+                + NavigationLoadFailure(scene.Navigation());
+        Shutdown(context, scene);
+        failureError = reason;
+        return;
+    }
+
+    const SectorRuntimeObjectState& objects = scene.RuntimeObjects();
+    const bool assetsFinished = scene.AreLoadAssetScopesFinished(context.assets)
+            && ScopeFinishedOrEmpty(context.assets, viewmodelScope);
+    const bool runtimeObjectsFinished =
+            objects.spriteAnimationPendingCount == 0
+            && objects.staticModelPendingCount == 0;
+    const bool viewmodelFinished = FpsViewmodelLoadFinished(
+            fpsPlayer.State());
+    const bool complete = assetsFinished
+            && runtimeObjectsFinished
+            && viewmodelFinished
+            && navigationGate == GameLevelNavigationGate::Ready
+            && InitialNavigationObstaclesSettled(scene.Navigation());
+    UpdateGameLevelLoadingProgress(
+            loading,
+            assetProgress,
+            NavigationLoadProgress(scene.Navigation()),
+            complete);
+    if (complete) BeginGameLevelLoadingFade(loading);
+}
+
+bool SectorGameSession::ActivateLoadedMap(
+        engine::EngineContext& context,
+        std::string& error)
+{
+    if (persistentScripts == nullptr) {
+        error = "Persistent script store is unavailable";
+        return false;
+    }
+    if (!engine::ScriptSystemCreateForMap(
+                context,
+                scripts,
+                *persistentScripts,
+                levelName,
+                levelPath,
+                ASSETS_PATH,
+                &scriptHost,
+                RegisterSectorScriptBindings,
+                pendingLoadingSave,
+                error)) {
+        ResetSectorScriptHost(scriptHost);
+        return false;
+    }
+    pendingLoadingSave = false;
+    error.clear();
+    return true;
+}
+
 void SectorGameSession::RenderViewmodel(
         engine::AssetManager& assets,
         SectorSceneRuntime& scene)
 {
-    if (!running) {
+    if (!running || IsLoadScreenOpaque()) {
         return;
     }
     fpsPlayer.Render(
@@ -384,11 +601,45 @@ void SectorGameSession::RenderViewmodel(
             controller.fpsControllerState.currentSectorId);
 }
 
-void SectorGameSession::RenderHud(Rectangle playableViewport) const
+void SectorGameSession::RenderHud(
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        Rectangle playableViewport) const
 {
-    if (running && weaponRegistry != nullptr) {
-        fpsPlayer.RenderHud(playableViewport, *weaponRegistry);
+    if (IsActive() && weaponRegistry != nullptr) {
+        fpsPlayer.RenderHud(
+                playableViewport,
+                *weaponRegistry,
+                assets.GetFont(font),
+                &playerHealth);
     }
+}
+
+void SectorGameSession::RenderNavigationDebugWorld(
+        const SectorSceneRuntime& scene) const
+{
+    if (!IsActive() || !navigationDebug.visible) return;
+    DrawSectorNavigationDebugWorld(
+            navigationDebug.drawSettings,
+            scene.Navigation(),
+            scene.NpcNavigation(),
+            scene.Renderer());
+}
+
+void SectorGameSession::RenderNavigationDebugPanel(
+        const engine::UIConfig& config,
+        engine::AssetManager& assets,
+        engine::FontHandle smallFont,
+        const SectorSceneRuntime& scene) const
+{
+    if (!IsActive() || !navigationDebug.visible) return;
+    DrawSectorGameNavigationDebugPanel(
+            config,
+            assets,
+            smallFont,
+            scene.Navigation(),
+            scene.NpcNavigation(),
+            scriptHost);
 }
 
 bool SectorGameSession::RebuildFromMap(
@@ -411,6 +662,9 @@ bool SectorGameSession::RebuildFromMap(
                 applicationSettings != nullptr
                         ? applicationSettings->footsteps.defaultSet
                         : FootstepApplicationSettings{}.defaultSet,
+                applicationSettings != nullptr
+                        ? applicationSettings->footsteps.volume
+                        : FootstepApplicationSettings{}.volume,
                 error)) {
         return false;
     }
@@ -431,21 +685,14 @@ bool SectorGameSession::RebuildFromMap(
         return false;
     }
     InitializeSectorScriptHost(
-            scriptHost, scene.RuntimeObjects(), topologyMap, scripts);
-    if (!engine::ScriptSystemCreateForMap(
-                context,
-                scripts,
-                *persistentScripts,
-                levelName,
-                levelPath,
-                ASSETS_PATH,
-                &scriptHost,
-                RegisterSectorScriptBindings,
-                false,
-                error)) {
-        ResetSectorScriptHost(scriptHost);
-        return false;
-    }
+            scriptHost,
+            scene.RuntimeObjects(),
+            topologyMap,
+            scripts,
+            &scene.Navigation(),
+            &scene.NpcNavigation());
+    pendingLoadingSave = false;
+    BeginGameLevelLoading(loading);
     error.clear();
     return true;
 }
@@ -518,6 +765,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     const FpsApplicationSettings* savedSettings = applicationSettings;
     PlayerAudioRuntime* savedPlayerAudio = playerAudio;
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
+    const Health savedHealth = playerHealth;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedSettings == nullptr
             || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
@@ -543,6 +791,8 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
                 error)) {
         failureError = "Map change to '" + requestedMap + "' failed: "
                 + (error.empty() ? "unknown error" : error);
+    } else {
+        playerHealth = savedHealth;
     }
 }
 
