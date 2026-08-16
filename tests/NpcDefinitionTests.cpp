@@ -72,6 +72,17 @@ void TestRoundTripDefaultsAndSharedClips()
     original.despawnOnDeath = true;
     original.corpseDespawnDelaySeconds = 2.5f;
     original.corpseFadeDurationSeconds = 0.9f;
+    original.ambientVocalizations.soundPaths = {
+            "npc/zombie/moan_01.ogg",
+            "npc/zombie/moan_02.wav"};
+    original.ambientVocalizations.minimumDelaySeconds = 4.0f;
+    original.ambientVocalizations.maximumDelaySeconds = 9.0f;
+    game::GetNpcAction(
+            original, game::NpcAction::Hurt).soundPath =
+            "npc/zombie/hurt.wav";
+    game::GetNpcAction(
+            original, game::NpcAction::Death).soundPath =
+            "npc/zombie/death.mp3";
     std::string json;
     std::string error;
     Check(game::SerializeNpcDefinitionJson(original, json, error),
@@ -82,7 +93,16 @@ void TestRoundTripDefaultsAndSharedClips()
                   && document["actions"]["walk"]["animation"] == "Walk"
                   && document["actions"]["run"]["animation"] == "Walk"
                   && document["actions"]["hurt"]["animation"] == "Hit"
+                  && document["actions"]["hurt"]["sound"]
+                          == "npc/zombie/hurt.wav"
                   && document["actions"]["death"]["animation"] == "Death"
+                  && document["actions"]["death"]["sound"]
+                          == "npc/zombie/death.mp3"
+                  && document["ambientVocalizations"]["sounds"].size() == 2
+                  && Near(document["ambientVocalizations"]
+                                  ["minimumDelaySeconds"].get<float>(), 4.0f)
+                  && Near(document["ambientVocalizations"]
+                                  ["maximumDelaySeconds"].get<float>(), 9.0f)
                   && document["baseHealth"] == 175
                   && document["despawnOnDeath"] == true
                   && Near(document["corpseDespawnDelaySeconds"].get<float>(), 2.5f)
@@ -102,6 +122,16 @@ void TestRoundTripDefaultsAndSharedClips()
                   && Near(parsed.corpseFadeDurationSeconds, 0.9f)
                   && parsed.modelPath == original.modelPath
                   && Near(parsed.animationBlendSeconds, 0.35f)
+                  && parsed.ambientVocalizations.soundPaths
+                          == original.ambientVocalizations.soundPaths
+                  && Near(parsed.ambientVocalizations.minimumDelaySeconds, 4.0f)
+                  && Near(parsed.ambientVocalizations.maximumDelaySeconds, 9.0f)
+                  && game::GetNpcAction(
+                          parsed, game::NpcAction::Hurt).soundPath
+                          == "npc/zombie/hurt.wav"
+                  && game::GetNpcAction(
+                          parsed, game::NpcAction::Death).soundPath
+                          == "npc/zombie/death.mp3"
                   && game::GetNpcAction(parsed, game::NpcAction::Walk).animation == "Walk"
                   && game::GetNpcAction(parsed, game::NpcAction::Run).animation == "Walk"
                   && Near(game::GetNpcAction(parsed, game::NpcAction::Run).animationSpeed, 1.6f)
@@ -116,7 +146,8 @@ void TestRoundTripDefaultsAndSharedClips()
                   && !Json::parse(json).contains("baseHealth")
                   && !Json::parse(json).contains("despawnOnDeath")
                   && !Json::parse(json).contains("corpseDespawnDelaySeconds")
-                  && !Json::parse(json).contains("corpseFadeDurationSeconds"),
+                  && !Json::parse(json).contains("corpseFadeDurationSeconds")
+                  && !Json::parse(json).contains("ambientVocalizations"),
           "default combat, blend, and door fields are omitted from serialized definitions");
 
     defaults.canOpenDoors = false;
@@ -175,6 +206,37 @@ void TestValidation()
     definition.corpseFadeDurationSeconds = 0.0f;
     Check(!game::ValidateNpcDefinition(definition, error),
           "zero corpse fade duration is rejected");
+    definition = MakeDefinition("fred");
+    game::GetNpcAction(
+            definition, game::NpcAction::Idle).soundPath = "npc/idle.wav";
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "sound assignment on a non-vocal action is rejected");
+    definition = MakeDefinition("fred");
+    game::GetNpcAction(
+            definition, game::NpcAction::Hurt).soundPath = "../hurt.wav";
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "unsafe NPC action audio path is rejected");
+    definition = MakeDefinition("fred");
+    definition.ambientVocalizations.soundPaths = {
+            "npc/moan.wav", "npc/moan.wav"};
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "duplicate ambient vocalization paths are rejected");
+    definition = MakeDefinition("fred");
+    definition.ambientVocalizations.minimumDelaySeconds = 13.0f;
+    definition.ambientVocalizations.maximumDelaySeconds = 12.0f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "inverted ambient quiet-time range is rejected");
+
+    Json invalidActionSound = Json::parse(R"({
+        "formatVersion": 1,
+        "id": "fred",
+        "name": "Fred",
+        "modelPath": "assets/models/characters/Fred.glb",
+        "actions": {"idle": {"sound": "npc/idle.wav"}}
+    })");
+    Check(!game::ParseNpcDefinitionJson(
+                  invalidActionSound.dump(), definition, error),
+          "non-vocal action sound field is rejected by the JSON parser");
 }
 
 void TestDiscoveryErrorsAreRetained()
@@ -266,6 +328,31 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
                   && Near(service.SelectedDraft()->definition.corpseDespawnDelaySeconds, 3.2f)
                   && Near(service.SelectedDraft()->definition.corpseFadeDurationSeconds, 0.65f),
           "NPC editor service updates health and corpse behavior through its draft API");
+    service.SetSelectedActionSound(
+            game::NpcAction::Hurt, "npc/zombie/hurt.wav");
+    service.SetSelectedAmbientDelayRange(6.0f, 11.0f);
+    Check(service.AddSelectedAmbientSound("npc/zombie/moan_01.wav")
+                  && !service.AddSelectedAmbientSound(
+                          "npc/zombie/moan_01.wav")
+                  && service.ReplaceSelectedAmbientSound(
+                          0, "npc/zombie/moan_02.wav")
+                  && game::GetNpcAction(
+                          service.SelectedDraft()->definition,
+                          game::NpcAction::Hurt).soundPath
+                          == "npc/zombie/hurt.wav"
+                  && Near(service.SelectedDraft()->definition
+                                  .ambientVocalizations.minimumDelaySeconds,
+                          6.0f)
+                  && Near(service.SelectedDraft()->definition
+                                  .ambientVocalizations.maximumDelaySeconds,
+                          11.0f)
+                  && service.SelectedDraft()->definition
+                                  .ambientVocalizations.soundPaths.front()
+                          == "npc/zombie/moan_02.wav"
+                  && service.RemoveSelectedAmbientSound(0)
+                  && service.SelectedDraft()->definition
+                          .ambientVocalizations.soundPaths.empty(),
+          "NPC editor service updates action and ambient vocal audio drafts");
     service.SelectedDraft()->definition.id = "RENAMED_beta";
     session.selectedNpcId = "RENAMED_beta";
     Check(service.SaveAndClose(nullptr)

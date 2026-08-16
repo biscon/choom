@@ -5,6 +5,14 @@
   "hostile": true,
   "modelPath": "assets/models/characters/Zombie1.glb",
   "animationBlendSeconds": 0.5,
+  "ambientVocalizations": {
+    "sounds": [
+      "npc/zombie/Zombie_Growl_01.wav",
+      "npc/zombie/Zombie_Growl_02.wav",
+      "npc/zombie/Zombie_Moan_01.mp3",
+      "npc/zombie/Zombie_Moan_02.mp3"
+    ]
+  },
   "actions": {
     "idle": {
       "animation": "Idle"
@@ -20,10 +28,12 @@
     },
     "hurt": {
       "animation": "Reaction Hit",
+      "sound": "npc/zombie/Zombie_Hit_01.wav",
       "animationSpeed": 1.75
     },
     "death": {
       "animation": "Dying",
+      "sound": "npc/zombie/Zombie_Death_01.wav",
       "animationSpeed": 1.5
     }
   }

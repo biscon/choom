@@ -40,6 +40,11 @@ struct AudioSpatialization {
     float pan = 0.0f;
 };
 
+using PositionalSoundOcclusionQuery = float (*)(
+        void* context,
+        Vector3 listenerPosition,
+        Vector3 sourcePosition);
+
 AudioSpatialization ComputeAudioSpatialization(
         const AudioListener& listener,
         const PositionalSoundSettings& source);
@@ -60,6 +65,10 @@ public:
 
     void SetListener(const AudioListener& value);
     const AudioListener& Listener() const { return listener; }
+    void UpdatePositionalSoundOcclusion(
+            float dt,
+            void* queryContext,
+            PositionalSoundOcclusionQuery query);
     void Update(AssetManager& assets);
 
     SoundPlaybackHandle PlaySound(
@@ -101,6 +110,10 @@ private:
         uint64_t sequence = 0;
         SoundPlaybackSettings settings;
         PositionalSoundSettings positionalSettings;
+        float occlusionVolumeScale = 1.0f;
+        float occlusionTargetScale = 1.0f;
+        float occlusionQueryRemainingSeconds = 0.0f;
+        bool occlusionInitialized = false;
     };
 
     struct MusicPlaybackSlot {

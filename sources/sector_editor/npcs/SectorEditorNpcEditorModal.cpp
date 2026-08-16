@@ -123,7 +123,8 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         engine::FontHandle font,
         engine::FontHandle smallFont,
         SectorEditorNpcEditorService& editor,
-        SectorEditorStaticModelPickerService& modelPicker)
+        SectorEditorStaticModelPickerService& modelPicker,
+        SectorEditorAudioAssetPickerService& audioPicker)
 {
     SectorEditorNpcEditorState& state = editor.State();
     if (!state.open) return SectorEditorNpcEditorModalResult::None;
@@ -139,6 +140,36 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         if (result == SectorEditorModelPickerModalResult::Selected) {
             editor.SetSelectedModelPath(modelPicker.SelectedModelPath(), assets);
             modelPicker.State().open = false;
+        }
+        return SectorEditorNpcEditorModalResult::None;
+    }
+
+    if (state.audioPicker.assetPicker.open) {
+        const SectorEditorAudioAssetPickerResult result = audioPicker.DrawModal(
+                ui, config, input, font, state.audioPicker.assetPicker);
+        if (result == SectorEditorAudioAssetPickerResult::Selected) {
+            const std::string selected = audioPicker.SelectedPath(
+                    state.audioPicker.assetPicker);
+            switch (state.audioPicker.target) {
+                case SectorEditorNpcAudioPickerTarget::Action:
+                    editor.SetSelectedActionSound(
+                            state.audioPicker.action, selected);
+                    break;
+                case SectorEditorNpcAudioPickerTarget::AmbientAdd:
+                    editor.AddSelectedAmbientSound(selected);
+                    break;
+                case SectorEditorNpcAudioPickerTarget::AmbientReplace:
+                    editor.ReplaceSelectedAmbientSound(
+                            state.audioPicker.ambientIndex, selected);
+                    break;
+                case SectorEditorNpcAudioPickerTarget::None:
+                    break;
+            }
+            audioPicker.Close(state.audioPicker.assetPicker);
+            state.audioPicker.target = SectorEditorNpcAudioPickerTarget::None;
+        } else if (result == SectorEditorAudioAssetPickerResult::Cancelled) {
+            audioPicker.Close(state.audioPicker.assetPicker);
+            state.audioPicker.target = SectorEditorNpcAudioPickerTarget::None;
         }
         return SectorEditorNpcEditorModalResult::None;
     }
@@ -236,10 +267,13 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
     } else {
         editor.RefreshAnimationOptions(assets);
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
-        const float actionSectionHeight = 4.0f * (RowHeight + RowGap) + 54.0f;
-        const float contentHeight = 11.0f * (RowHeight + RowGap)
+        const float actionSectionHeight = 6.0f * (RowHeight + RowGap) + 84.0f;
+        const float contentHeight = 15.0f * (RowHeight + RowGap)
+                + static_cast<float>(
+                        selected->definition.ambientVocalizations.soundPaths.size())
+                        * (RowHeight + RowGap)
                 + actionSectionHeight * static_cast<float>(kNpcActionCount)
-                + 80.0f;
+                + 120.0f;
         engine::UIScrollAreaResult formScroll = engine::BeginScrollArea(
                 ui, config, input,
                 "sector_editor_npc_form_scroll",
@@ -432,6 +466,120 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                         : config.mutedTextColor);
         y += RowHeight + RowGap;
 
+        engine::Separator(
+                config,
+                Rectangle{
+                        formScroll.viewport.x,
+                        formScroll.viewport.y
+                                - editor.Session().formScroll.offset.y + y,
+                        formScroll.viewport.width,
+                        12.0f});
+        y += 18.0f;
+        engine::Text(
+                ui, config, assets,
+                Rectangle{0.0f, y, formScroll.viewport.width, 34.0f},
+                font, "Ambient vocalizations",
+                engine::UITextJustify::Left,
+                config.accentColor);
+        y += 38.0f;
+
+        drawLabel("Minimum quiet time (s)");
+        float ambientMinimum =
+                selected->definition.ambientVocalizations.minimumDelaySeconds;
+        const engine::UINumericInputResult ambientMinimumResult =
+                engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_ambient_minimum_delay",
+                        Rectangle{fieldX, y, 190.0f, RowHeight},
+                        font,
+                        ambientMinimum,
+                        state.ambientMinimumDelaySecondsInput,
+                        0.0f,
+                        kMaximumNpcAmbientDelaySeconds,
+                        2);
+        if (ambientMinimumResult.changed) {
+            editor.SetSelectedAmbientDelayRange(
+                    ambientMinimum,
+                    selected->definition.ambientVocalizations.maximumDelaySeconds);
+        }
+        y += RowHeight + RowGap;
+
+        drawLabel("Maximum quiet time (s)");
+        float ambientMaximum =
+                selected->definition.ambientVocalizations.maximumDelaySeconds;
+        const engine::UINumericInputResult ambientMaximumResult =
+                engine::FloatInput(
+                        ui, config, input, assets,
+                        "sector_editor_npc_ambient_maximum_delay",
+                        Rectangle{fieldX, y, 190.0f, RowHeight},
+                        font,
+                        ambientMaximum,
+                        state.ambientMaximumDelaySecondsInput,
+                        0.0f,
+                        kMaximumNpcAmbientDelaySeconds,
+                        2);
+        if (ambientMaximumResult.changed) {
+            editor.SetSelectedAmbientDelayRange(
+                    selected->definition.ambientVocalizations.minimumDelaySeconds,
+                    ambientMaximum);
+        }
+        y += RowHeight + RowGap;
+
+        for (size_t soundIndex = 0;
+                soundIndex
+                        < selected->definition.ambientVocalizations.soundPaths.size();
+                ++soundIndex) {
+            const std::string& soundPath =
+                    selected->definition.ambientVocalizations
+                            .soundPaths[soundIndex];
+            const std::string changeId =
+                    "sector_editor_npc_ambient_change_"
+                    + std::to_string(soundIndex);
+            const std::string removeId =
+                    "sector_editor_npc_ambient_remove_"
+                    + std::to_string(soundIndex);
+            engine::Text(
+                    ui, config, assets,
+                    Rectangle{fieldX, y, std::max(0.0f, fieldW - 206.0f), RowHeight},
+                    smallFont, soundPath.c_str(),
+                    engine::UITextJustify::Left,
+                    config.textColor);
+            if (engine::Button(
+                        ui, config, input, assets,
+                        changeId.c_str(),
+                        Rectangle{fieldX + fieldW - 196.0f, y, 92.0f, RowHeight},
+                        font, "Change")) {
+                state.audioPicker.target =
+                        SectorEditorNpcAudioPickerTarget::AmbientReplace;
+                state.audioPicker.ambientIndex = soundIndex;
+                audioPicker.Open(
+                        state.audioPicker.assetPicker,
+                        "Replace Ambient Vocalization",
+                        soundPath);
+            }
+            if (engine::Button(
+                        ui, config, input, assets,
+                        removeId.c_str(),
+                        Rectangle{fieldX + fieldW - 96.0f, y, 96.0f, RowHeight},
+                        font, "Remove")) {
+                editor.RemoveSelectedAmbientSound(soundIndex);
+                break;
+            }
+            y += RowHeight + RowGap;
+        }
+        if (engine::Button(
+                    ui, config, input, assets,
+                    "sector_editor_npc_ambient_add",
+                    Rectangle{fieldX, y, 170.0f, RowHeight},
+                    font, "Add Sound")) {
+            state.audioPicker.target =
+                    SectorEditorNpcAudioPickerTarget::AmbientAdd;
+            audioPicker.Open(
+                    state.audioPicker.assetPicker,
+                    "Add Ambient Vocalization");
+        }
+        y += RowHeight + RowGap;
+
         for (const NpcActionMetadata& metadata : NpcActionMetadataTable()) {
             engine::Separator(
                     config,
@@ -537,6 +685,60 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
                 editor.SetSelectedAnimationSpeed(metadata.action, animationSpeed);
             }
             y += RowHeight + RowGap;
+
+            if (metadata.hasSound) {
+                drawLabel("Sound");
+                engine::Text(
+                        ui, config, assets,
+                        Rectangle{
+                                fieldX,
+                                y,
+                                std::max(0.0f, fieldW - 206.0f),
+                                RowHeight},
+                        smallFont,
+                        action.soundPath.empty()
+                                ? "<none>"
+                                : action.soundPath.c_str(),
+                        engine::UITextJustify::Left,
+                        action.soundPath.empty()
+                                ? config.mutedTextColor
+                                : config.textColor);
+                const std::string pickSoundId =
+                        std::string{"sector_editor_npc_pick_sound_"}
+                        + metadata.jsonKey;
+                if (engine::Button(
+                            ui, config, input, assets,
+                            pickSoundId.c_str(),
+                            Rectangle{
+                                    fieldX + fieldW - 196.0f,
+                                    y,
+                                    92.0f,
+                                    RowHeight},
+                            font, "Pick")) {
+                    state.audioPicker.target =
+                            SectorEditorNpcAudioPickerTarget::Action;
+                    state.audioPicker.action = metadata.action;
+                    audioPicker.Open(
+                            state.audioPicker.assetPicker,
+                            std::string{"Pick "} + metadata.displayName + " Sound",
+                            action.soundPath);
+                }
+                const std::string clearSoundId =
+                        std::string{"sector_editor_npc_clear_sound_"}
+                        + metadata.jsonKey;
+                if (engine::Button(
+                            ui, config, input, assets,
+                            clearSoundId.c_str(),
+                            Rectangle{
+                                    fieldX + fieldW - 96.0f,
+                                    y,
+                                    96.0f,
+                                    RowHeight},
+                            font, "Clear")) {
+                    editor.SetSelectedActionSound(metadata.action, {});
+                }
+                y += RowHeight + RowGap;
+            }
 
             if (metadata.hasMovementSpeed) {
                 drawLabel("Movement speed");

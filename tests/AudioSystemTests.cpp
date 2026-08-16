@@ -65,12 +65,12 @@ void Spatialization()
 
     source.position = Vector3{0.0f, 0.0f, 6.0f};
     result = engine::ComputeAudioSpatialization(listener, source);
-    assert(Near(result.volumeScale, 0.5f));
+    assert(Near(result.volumeScale, 1.0f / 3.0f));
     assert(Near(result.pan, 0.0f));
 
     source.position = Vector3{-6.0f, 0.0f, 0.0f};
     result = engine::ComputeAudioSpatialization(listener, source);
-    assert(Near(result.volumeScale, 0.5f));
+    assert(Near(result.volumeScale, 1.0f / 3.0f));
     assert(Near(result.pan, 1.0f));
 
     source.position = Vector3{6.0f, 0.0f, 0.0f};
@@ -78,6 +78,21 @@ void Spatialization()
     assert(Near(result.pan, -1.0f));
 
     source.position = Vector3{0.0f, 0.0f, 10.0f};
+    result = engine::ComputeAudioSpatialization(listener, source);
+    assert(Near(result.volumeScale, 0.0f));
+
+    source.minimumDistanceWorld = 1.0f;
+    source.maximumDistanceWorld = 25.0f;
+    source.position = Vector3{0.0f, 0.0f, 10.0f};
+    result = engine::ComputeAudioSpatialization(listener, source);
+    assert(Near(result.volumeScale, 0.1f));
+    source.position = Vector3{0.0f, 0.0f, 20.0f};
+    result = engine::ComputeAudioSpatialization(listener, source);
+    assert(Near(result.volumeScale, 0.05f));
+    source.position = Vector3{0.0f, 0.0f, 22.0f};
+    result = engine::ComputeAudioSpatialization(listener, source);
+    assert(result.volumeScale > 0.03f && result.volumeScale < 0.032f);
+    source.position = Vector3{0.0f, 0.0f, 25.0f};
     result = engine::ComputeAudioSpatialization(listener, source);
     assert(Near(result.volumeScale, 0.0f));
 }

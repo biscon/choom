@@ -43,8 +43,13 @@ public:
             const std::string& modelPath,
             engine::AssetManager& assets);
     void SetSelectedAnimation(NpcAction action, const std::string& animation);
+    void SetSelectedActionSound(NpcAction action, const std::string& soundPath);
     void SetSelectedAnimationSpeed(NpcAction action, float speed);
     void SetSelectedMovementSpeed(NpcAction action, float speed);
+    void SetSelectedAmbientDelayRange(float minimumSeconds, float maximumSeconds);
+    bool AddSelectedAmbientSound(const std::string& soundPath);
+    bool ReplaceSelectedAmbientSound(size_t index, const std::string& soundPath);
+    bool RemoveSelectedAmbientSound(size_t index);
 
     void EnsureSelectedModelRequested(engine::AssetManager& assets);
     void RefreshAnimationOptions(engine::AssetManager& assets);

@@ -3,6 +3,7 @@
 #include "engine/EngineContext.h"
 #include "game/FootstepAudio.h"
 #include "game/navigation/SectorNavigationWorld.h"
+#include "game/npc/NpcAudioSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcCombatSystem.h"
 #include "sector_demo/SectorRuntimeObjects.h"
@@ -128,6 +129,7 @@ private:
     SectorNavigationWorld navigation;
     NpcNavigationRuntime npcNavigation;
     NpcCombatRuntime npcCombat;
+    NpcAudioRuntime npcAudio;
     SectorImpactParticleSystem impactParticles;
     engine::AssetScopeHandle audioScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::SoundHandle> levelSounds;

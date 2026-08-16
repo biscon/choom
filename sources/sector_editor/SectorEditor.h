@@ -478,6 +478,7 @@ private:
     RuntimeObjectEditingUiState runtimeObjectEditingUiState;
     SectorEditorNpcEditorState npcEditorState;
     SectorEditorNpcEditorSessionState npcEditorSessionState;
+    SectorEditorAudioAssetPickerSessionState audioAssetPickerSessionState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
     SectorEditorSoundCatalogState soundCatalogState;

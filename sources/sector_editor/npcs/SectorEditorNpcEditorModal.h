@@ -5,6 +5,7 @@
 #include "engine/ui/UI.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorService.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
+#include "sector_editor/services/sounds/SectorEditorAudioAssetPicker.h"
 
 namespace game {
 
@@ -85,6 +86,7 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         engine::FontHandle font,
         engine::FontHandle smallFont,
         SectorEditorNpcEditorService& editor,
-        SectorEditorStaticModelPickerService& modelPicker);
+        SectorEditorStaticModelPickerService& modelPicker,
+        SectorEditorAudioAssetPickerService& audioPicker);
 
 } // namespace game

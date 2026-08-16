@@ -325,6 +325,9 @@ bool SectorEditor::Init(engine::EngineContext& context)
 void SectorEditor::Shutdown(engine::EngineContext& context)
 {
     engine::AssetManager& assets = context.assets;
+    SectorEditorAudioAssetPickerService audioPicker{
+            context, audioAssetPickerSessionState};
+    audioPicker.Close(npcEditorState.audioPicker.assetPicker);
     BuildNpcEditorService().Shutdown(assets);
     if (state.footstepPicker.open
             || !engine::IsNull(state.footstepPicker.previewScope)) {
@@ -351,6 +354,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     npcEditorState = SectorEditorNpcEditorState{};
     npcEditorSessionState = SectorEditorNpcEditorSessionState{};
+    audioAssetPickerSessionState = SectorEditorAudioAssetPickerSessionState{};
     textureCatalogState = TextureCatalogState{};
     soundCatalogState = SectorEditorSoundCatalogState{};
     lightEditingState = LightEditingState{};
@@ -3045,6 +3049,7 @@ SectorEditorSoundService SectorEditor::BuildSoundService(
                     Lifecycle(),
                     TopologyMap(),
                     soundCatalogState,
+                    audioAssetPickerSessionState,
                     statusText,
                     *engineContext,
                     runtimeObjectEditing}};
@@ -5207,10 +5212,16 @@ void SectorEditor::DrawNpcEditorModal(
         engine::FontHandle font,
         engine::FontHandle smallFont)
 {
+    if (engineContext == nullptr) {
+        statusText = "NPC Editor audio picker requires an engine context";
+        return;
+    }
     SectorEditorNpcEditorService editor = BuildNpcEditorService();
     SectorEditorStaticModelPickerService modelPicker{
             runtimeObjectEditingState.staticModelPicker,
             statusText};
+    SectorEditorAudioAssetPickerService audioPicker{
+            *engineContext, audioAssetPickerSessionState};
     const SectorEditorNpcEditorModalResult result =
             game::DrawSectorEditorNpcEditorModal(
             ui,
@@ -5220,7 +5231,8 @@ void SectorEditor::DrawNpcEditorModal(
             font,
             smallFont,
             editor,
-            modelPicker);
+            modelPicker,
+            audioPicker);
     if (result == SectorEditorNpcEditorModalResult::Saved
             && engineContext != nullptr) {
         sceneRuntime.RefreshMapRuntimeObjects(*engineContext, TopologyMap());

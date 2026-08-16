@@ -129,7 +129,9 @@ void SectorEditorSoundService::StopPreview(
 
 void SectorEditorSoundService::Shutdown()
 {
-    StopPreview(context_.state.addMapSound.preview, true);
+    SectorEditorAudioAssetPickerService audioPicker{
+            context_.engineContext, context_.audioAssetPickerSession};
+    audioPicker.Close(context_.state.addMapSound.assetPicker);
     StopPreview(context_.state.soundPicker.preview, false);
     if (!engine::IsNull(context_.catalog.scope)) {
         context_.engineContext.assets.UnloadScope(context_.catalog.scope);
@@ -140,13 +142,14 @@ void SectorEditorSoundService::Shutdown()
 void SectorEditorSoundService::SelectAddPath(int pathIndex)
 {
     AddMapSoundState& modal = context_.state.addMapSound;
-    if (pathIndex < 0 || pathIndex >= static_cast<int>(modal.paths.size())) {
-        modal.selectedPathIndex = -1;
+    SectorEditorAudioAssetPickerService audioPicker{
+            context_.engineContext, context_.audioAssetPickerSession};
+    if (!audioPicker.SelectIndex(modal.assetPicker, pathIndex)) {
         modal.soundIdBuffer[0] = '\0';
         return;
     }
-    modal.selectedPathIndex = pathIndex;
-    const std::string base = GeneratedSoundIdBase(modal.paths[static_cast<size_t>(pathIndex)]);
+    const std::string base = GeneratedSoundIdBase(
+            modal.assetPicker.paths[static_cast<size_t>(pathIndex)]);
     std::string id = base;
     int suffix = 1;
     while (Find(id) != nullptr) {
@@ -161,8 +164,9 @@ bool SectorEditorSoundService::ValidateAdd(std::string& error) const
 {
     const AddMapSoundState& modal = context_.state.addMapSound;
     error.clear();
-    if (modal.selectedPathIndex < 0
-            || modal.selectedPathIndex >= static_cast<int>(modal.paths.size())) {
+    SectorEditorAudioAssetPickerService audioPicker{
+            context_.engineContext, context_.audioAssetPickerSession};
+    if (!audioPicker.HasSelection(modal.assetPicker)) {
         error = "Select an audio file";
         return false;
     }
@@ -183,17 +187,22 @@ void SectorEditorSoundService::OpenAddModal()
     CloseAddModal();
     AddMapSoundState& modal = context_.state.addMapSound;
     modal.open = true;
-    modal.paths = ScanAssetAudioFiles(modal.scanMessage);
-    modal.optionLabels.reserve(modal.paths.size());
-    for (const std::string& path : modal.paths) modal.optionLabels.push_back(path.c_str());
-    modal.scanned = true;
-    SelectAddPath(modal.paths.empty() ? -1 : 0);
+    SectorEditorAudioAssetPickerService audioPicker{
+            context_.engineContext, context_.audioAssetPickerSession};
+    audioPicker.Open(
+            modal.assetPicker,
+            "Add Map Sound",
+            {},
+            SectorSoundType::Sound);
+    SelectAddPath(modal.assetPicker.selectedPathIndex);
     context_.statusText = "Add map sound";
 }
 
 void SectorEditorSoundService::CloseAddModal()
 {
-    StopPreview(context_.state.addMapSound.preview, true);
+    SectorEditorAudioAssetPickerService audioPicker{
+            context_.engineContext, context_.audioAssetPickerSession};
+    audioPicker.Close(context_.state.addMapSound.assetPicker);
     context_.state.addMapSound = AddMapSoundState{};
 }
 
@@ -209,7 +218,8 @@ bool SectorEditorSoundService::AddSelected()
     const bool replacing = Find(id) != nullptr;
     SectorSoundDefinition definition;
     definition.id = id;
-    definition.path = modal.paths[static_cast<size_t>(modal.selectedPathIndex)];
+    definition.path = modal.assetPicker.paths[
+            static_cast<size_t>(modal.assetPicker.selectedPathIndex)];
     definition.type = modal.type;
     context_.map.audioSettings.soundsById[id] = std::move(definition);
     context_.lifecycle.topologyDocumentDirty = true;
@@ -264,35 +274,10 @@ void SectorEditorSoundService::UpdatePreview(
 void SectorEditorSoundService::PreviewAddSelection()
 {
     AddMapSoundState& modal = context_.state.addMapSound;
-    if (modal.selectedPathIndex < 0
-            || modal.selectedPathIndex >= static_cast<int>(modal.paths.size())) {
-        modal.previewMessage = "Select an audio file";
-        return;
-    }
-    StopPreview(modal.preview, true);
-    modal.preview.scope = context_.engineContext.assets.CreateScope(
-            "sector_editor_add_sound_preview");
-    if (engine::IsNull(modal.preview.scope)) {
-        modal.previewMessage = "Could not create preview scope";
-        return;
-    }
-    modal.preview.type = modal.type;
-    modal.preview.key = modal.paths[static_cast<size_t>(modal.selectedPathIndex)];
-    const std::string path = ResolveSectorAudioAssetPath(modal.preview.key);
-    if (modal.type == SectorSoundType::Music) {
-        modal.preview.music = context_.engineContext.assets.RequestMusic(
-                modal.preview.scope,
-                path.c_str());
-        modal.preview.pending = !engine::IsNull(modal.preview.music);
-    } else {
-        modal.preview.sound = context_.engineContext.assets.RequestSound(
-                modal.preview.scope,
-                path.c_str());
-        modal.preview.pending = !engine::IsNull(modal.preview.sound);
-    }
-    modal.previewMessage = modal.preview.pending
-            ? "Loading preview..."
-            : "Preview request failed";
+    SectorEditorAudioAssetPickerService audioPicker{
+            context_.engineContext, context_.audioAssetPickerSession};
+    audioPicker.SetPreviewType(modal.assetPicker, modal.type);
+    audioPicker.PreviewSelection(modal.assetPicker);
 }
 
 bool SectorEditorSoundService::OpenDoorPicker(
@@ -413,7 +398,9 @@ void SectorEditorSoundService::DrawAddModal(
                 }
             });
     if (!modalState.open) return;
-    UpdatePreview(modalState.preview, modalState.previewMessage);
+    SectorEditorAudioAssetPickerService audioPicker{
+            context_.engineContext, context_.audioAssetPickerSession};
+    audioPicker.UpdatePreview(modalState.assetPicker);
 
     engine::AssetManager& assets = context_.engineContext.assets;
     DrawRectangle(0, 0, static_cast<int>(EditorWidth), static_cast<int>(EditorHeight), Color{0, 0, 0, 135});
@@ -423,37 +410,26 @@ void SectorEditorSoundService::DrawAddModal(
     engine::Text(config, assets, Rectangle{modal.x + 22.0f, modal.y + 18.0f, modal.width - 44.0f, 36.0f}, font, "Add Map Sound");
 
     const Rectangle listBounds{modal.x + 22.0f, modal.y + 68.0f, 610.0f, 470.0f};
-    const Vector2 contentSize{
-            ScrollContentWidth(listBounds.width, config),
-            std::max(listBounds.height, config.listItemHeight * static_cast<float>(modalState.optionLabels.size()))};
-    engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
-            ui, config, input, "sector_editor_add_sound_scroll",
-            listBounds, contentSize, modalState.scroll);
-    if (!modalState.optionLabels.empty()) {
-        const int oldSelection = modalState.selectedPathIndex;
-        engine::List(ui, config, input, assets, "sector_editor_add_sound_list",
-                Rectangle{0.0f, 0.0f, scroll.viewport.width, contentSize.y}, font,
-                modalState.optionLabels.data(), modalState.optionLabels.size(), modalState.selectedPathIndex);
-        if (oldSelection != modalState.selectedPathIndex) {
-            StopPreview(modalState.preview, true);
-            modalState.previewMessage.clear();
-            SelectAddPath(modalState.selectedPathIndex);
-        }
+    const int oldSelection = modalState.assetPicker.selectedPathIndex;
+    audioPicker.DrawList(
+            ui, config, input, font,
+            "sector_editor_add_sound_scroll",
+            listBounds,
+            modalState.assetPicker);
+    if (oldSelection != modalState.assetPicker.selectedPathIndex) {
+        SelectAddPath(modalState.assetPicker.selectedPathIndex);
     }
-    engine::EndScrollArea(ui, config, input, scroll, modalState.scroll);
-    if (!modalState.scanMessage.empty()) {
+    if (!modalState.assetPicker.scanMessage.empty()) {
         engine::Text(config, assets,
                 Rectangle{listBounds.x, listBounds.y + listBounds.height + 8.0f, listBounds.width, 40.0f},
-                font, modalState.scanMessage.c_str(), engine::UITextJustify::Left,
-                modalState.paths.empty() ? config.invalidColor : config.mutedTextColor);
+                font, modalState.assetPicker.scanMessage.c_str(), engine::UITextJustify::Left,
+                modalState.assetPicker.paths.empty()
+                        ? config.invalidColor : config.mutedTextColor);
     }
 
     const float rightX = modal.x + 658.0f;
     float y = modal.y + 82.0f;
-    const std::string path = modalState.selectedPathIndex >= 0
-            && modalState.selectedPathIndex < static_cast<int>(modalState.paths.size())
-            ? modalState.paths[static_cast<size_t>(modalState.selectedPathIndex)]
-            : std::string{};
+    const std::string path = audioPicker.SelectedPath(modalState.assetPicker);
     engine::Text(config, assets, Rectangle{rightX, y, 410.0f, 86.0f}, font,
             TextFormat("Path: %s", path.empty() ? "<none>" : path.c_str()),
             engine::UITextJustify::Left, config.mutedTextColor);
@@ -470,16 +446,14 @@ void SectorEditorSoundService::DrawAddModal(
     if (engine::ToolButton(ui, config, input, assets, "sector_editor_add_sound_type_sound",
             Rectangle{rightX + 126.0f, y, 136.0f, 38.0f}, font, "Sound",
             modalState.type == SectorSoundType::Sound)) {
-        StopPreview(modalState.preview, true);
-        modalState.previewMessage.clear();
         modalState.type = SectorSoundType::Sound;
+        audioPicker.SetPreviewType(modalState.assetPicker, modalState.type);
     }
     if (engine::ToolButton(ui, config, input, assets, "sector_editor_add_sound_type_music",
             Rectangle{rightX + 272.0f, y, 138.0f, 38.0f}, font, "Music",
             modalState.type == SectorSoundType::Music)) {
-        StopPreview(modalState.preview, true);
-        modalState.previewMessage.clear();
         modalState.type = SectorSoundType::Music;
+        audioPicker.SetPreviewType(modalState.assetPicker, modalState.type);
     }
     y += 62.0f;
     engine::Text(config, assets, Rectangle{rightX, y, 410.0f, 38.0f}, font,
@@ -491,7 +465,8 @@ void SectorEditorSoundService::DrawAddModal(
         PreviewAddSelection();
     }
     engine::Text(config, assets, Rectangle{rightX + 166.0f, y, 244.0f, 50.0f}, font,
-            modalState.previewMessage.c_str(), engine::UITextJustify::Left, config.mutedTextColor);
+            modalState.assetPicker.previewMessage.c_str(),
+            engine::UITextJustify::Left, config.mutedTextColor);
     y += 70.0f;
     ValidateAdd(modalState.validationMessage);
     if (!modalState.validationMessage.empty()) {

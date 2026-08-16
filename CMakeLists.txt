@@ -528,6 +528,8 @@ if(BUILD_TESTING)
             sources/game/navigation/SectorNavigationCompression.cpp
             sources/game/navigation/SectorNavigationTypes.cpp
             sources/game/navigation/SectorNavigationWorld.cpp
+            sources/game/SoundSetAudio.cpp
+            sources/game/npc/NpcAudioSystem.cpp
             sources/game/npc/NpcDefinitions.cpp
             sources/game/npc/NpcCollision.cpp
             sources/game/npc/NpcCombatSystem.cpp
@@ -545,6 +547,7 @@ if(BUILD_TESTING)
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
             sources/engine/assets/TextureAssets.cpp
+            sources/sector_demo/SectorAudioOcclusion.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp

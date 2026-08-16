@@ -19,6 +19,7 @@ struct SectorEditorSoundServiceContext {
     SectorEditorDocumentLifecycleAccess lifecycle;
     SectorTopologyMap& map;
     SectorEditorSoundCatalogState& catalog;
+    SectorEditorAudioAssetPickerSessionState& audioAssetPickerSession;
     std::string& statusText;
     engine::EngineContext& engineContext;
     SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr;

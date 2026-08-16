@@ -19,6 +19,7 @@ namespace game {
 class SectorCollisionWorld;
 class SectorNavigationWorld;
 struct NpcNavigationRuntime;
+struct NpcAudioRuntime;
 struct SectorDynamicDoorCollider;
 struct SectorStaticModelCollider;
 struct SectorTopologyMap;
@@ -60,7 +61,8 @@ bool ResolvePlayerWeaponShot(
         float maximumDistance,
         const FpsWeaponImpactDefinition& impact,
         FpsShotResult& outShot,
-        WeaponImpactEvent& outImpact);
+        WeaponImpactEvent& outImpact,
+        NpcAudioRuntime* npcAudio = nullptr);
 
 bool UpdateNpcCombatSystem(
         engine::World& world,

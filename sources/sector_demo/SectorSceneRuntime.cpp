@@ -1,6 +1,7 @@
 #include "sector_demo/SectorSceneRuntime.h"
 
 #include "sector_demo/SectorAssetPaths.h"
+#include "sector_demo/SectorAudioOcclusion.h"
 #include "engine/systems/AnimatedModelSystem.h"
 
 #include <raylib.h>
@@ -43,6 +44,7 @@ bool SectorSceneRuntime::Rebuild(
         float newFootstepVolume,
         std::string& error)
 {
+    ShutdownNpcAudioRuntime(context.assets, context.audio, npcAudio);
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
     navigation.Shutdown();
     StopLevelAudio(context);
@@ -61,6 +63,13 @@ bool SectorSceneRuntime::Rebuild(
             context.assets,
             runtimeObjects,
             map);
+    InitializeNpcAudioRuntime(
+            context.world,
+            context.assets,
+            runtimeObjects.runtimeObjectAssetScope,
+            runtimeObjects.npcDefinitionCatalog,
+            npcAudio,
+            map.runtimeObjects.size());
     if (navigation.State() != SectorNavigationState::Uninitialized) {
         navigation.RequestRebuild();
         InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
@@ -96,6 +105,7 @@ bool SectorSceneRuntime::RebuildNavigationForMap(
 
 void SectorSceneRuntime::Shutdown(engine::EngineContext& context)
 {
+    ShutdownNpcAudioRuntime(context.assets, context.audio, npcAudio);
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
     ClearNpcCombatRuntime(npcCombat);
     impactParticles.Clear();
@@ -109,6 +119,7 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
         engine::EngineContext& context,
         const SectorTopologyMap& map)
 {
+    ShutdownNpcAudioRuntime(context.assets, context.audio, npcAudio);
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
     navigation.ResetForRebuild();
     ResetSectorRuntimeObjectsForMap(
@@ -116,6 +127,13 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
             context.assets,
             runtimeObjects,
             map);
+    InitializeNpcAudioRuntime(
+            context.world,
+            context.assets,
+            runtimeObjects.runtimeObjectAssetScope,
+            runtimeObjects.npcDefinitionCatalog,
+            npcAudio,
+            map.runtimeObjects.size());
     if (navigation.State() != SectorNavigationState::Uninitialized) {
         navigation.RequestRebuild();
         InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
@@ -213,6 +231,22 @@ void SectorSceneRuntime::Update(
                 playerObstacle);
         PlayPendingNpcFootsteps(context);
     }
+    UpdateNpcAudioSystem(
+            context.world,
+            context.assets,
+            context.audio,
+            npcAudio,
+            dt);
+    SectorAudioOcclusionContext audioOcclusion;
+    if (runtimeObjects.objectSectorLookupWorldValid) {
+        audioOcclusion.collisionWorld =
+                &runtimeObjects.objectSectorLookupWorld;
+    }
+    audioOcclusion.doorColliders = &runtimeObjects.dynamicDoorColliders;
+    context.audio.UpdatePositionalSoundOcclusion(
+            dt,
+            &audioOcclusion,
+            QuerySectorSoundOcclusion);
     engine::AnimatedModelSystem(context.world, context.assets, dt);
     impactParticles.Update(context.world, &context.assets, dt);
     renderer.AdvanceRuntime(dt);
@@ -241,7 +275,8 @@ bool SectorSceneRuntime::ResolvePlayerWeaponShot(
             maximumDistance,
             impact,
             outShot,
-            impactEvent);
+            impactEvent,
+            &npcAudio);
     impactParticles.Spawn(impactEvent);
     return hit;
 }

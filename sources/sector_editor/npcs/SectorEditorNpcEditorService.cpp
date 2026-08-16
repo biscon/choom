@@ -34,6 +34,7 @@ bool SameAction(
         const NpcActionDefinition& right)
 {
     return left.animation == right.animation
+            && left.soundPath == right.soundPath
             && left.animationSpeed == right.animationSpeed
             && left.movementSpeed == right.movementSpeed;
 }
@@ -51,7 +52,13 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
             || left.corpseFadeDurationSeconds
                     != right.corpseFadeDurationSeconds
             || left.modelPath != right.modelPath
-            || left.animationBlendSeconds != right.animationBlendSeconds) {
+            || left.animationBlendSeconds != right.animationBlendSeconds
+            || left.ambientVocalizations.soundPaths
+                    != right.ambientVocalizations.soundPaths
+            || left.ambientVocalizations.minimumDelaySeconds
+                    != right.ambientVocalizations.minimumDelaySeconds
+            || left.ambientVocalizations.maximumDelaySeconds
+                    != right.ambientVocalizations.maximumDelaySeconds) {
         return false;
     }
     for (size_t i = 0; i < kNpcActionCount; ++i) {
@@ -415,6 +422,16 @@ void SectorEditorNpcEditorService::SetSelectedAnimation(
     state_.validationMessage.clear();
 }
 
+void SectorEditorNpcEditorService::SetSelectedActionSound(
+        NpcAction action,
+        const std::string& soundPath)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr || !GetNpcActionMetadata(action).hasSound) return;
+    GetNpcAction(draft->definition, action).soundPath = soundPath;
+    state_.validationMessage.clear();
+}
+
 void SectorEditorNpcEditorService::SetSelectedAnimationSpeed(
         NpcAction action,
         float speed)
@@ -433,6 +450,65 @@ void SectorEditorNpcEditorService::SetSelectedMovementSpeed(
     if (draft == nullptr) return;
     GetNpcAction(draft->definition, action).movementSpeed = speed;
     state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedAmbientDelayRange(
+        float minimumSeconds,
+        float maximumSeconds)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.ambientVocalizations.minimumDelaySeconds = minimumSeconds;
+    draft->definition.ambientVocalizations.maximumDelaySeconds = maximumSeconds;
+    state_.validationMessage.clear();
+}
+
+bool SectorEditorNpcEditorService::AddSelectedAmbientSound(
+        const std::string& soundPath)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return false;
+    std::vector<std::string>& sounds =
+            draft->definition.ambientVocalizations.soundPaths;
+    if (std::find(sounds.begin(), sounds.end(), soundPath) != sounds.end()) {
+        state_.validationMessage = "Ambient vocalization sound is already assigned";
+        return false;
+    }
+    sounds.push_back(soundPath);
+    state_.validationMessage.clear();
+    return true;
+}
+
+bool SectorEditorNpcEditorService::ReplaceSelectedAmbientSound(
+        size_t index,
+        const std::string& soundPath)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return false;
+    std::vector<std::string>& sounds =
+            draft->definition.ambientVocalizations.soundPaths;
+    if (index >= sounds.size()) return false;
+    const auto duplicate = std::find(sounds.begin(), sounds.end(), soundPath);
+    if (duplicate != sounds.end()
+            && static_cast<size_t>(std::distance(sounds.begin(), duplicate)) != index) {
+        state_.validationMessage = "Ambient vocalization sound is already assigned";
+        return false;
+    }
+    sounds[index] = soundPath;
+    state_.validationMessage.clear();
+    return true;
+}
+
+bool SectorEditorNpcEditorService::RemoveSelectedAmbientSound(size_t index)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return false;
+    std::vector<std::string>& sounds =
+            draft->definition.ambientVocalizations.soundPaths;
+    if (index >= sounds.size()) return false;
+    sounds.erase(sounds.begin() + static_cast<std::ptrdiff_t>(index));
+    state_.validationMessage.clear();
+    return true;
 }
 
 void SectorEditorNpcEditorService::EnsureSelectedModelRequested(
@@ -536,6 +612,8 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
             sizeof(state_.nameBuffer),
             draft == nullptr ? std::string{} : draft->definition.name);
     state_.animationBlendSecondsInput = {};
+    state_.ambientMinimumDelaySecondsInput = {};
+    state_.ambientMaximumDelaySecondsInput = {};
     state_.baseHealthInput = {};
     state_.corpseDespawnDelayMillisecondsInput = {};
     state_.corpseFadeDurationMillisecondsInput = {};

@@ -153,11 +153,11 @@ void ValidateOrFail(const NpcDefinition& definition)
 const std::array<NpcActionMetadata, kNpcActionCount>& NpcActionMetadataTable()
 {
     static const std::array<NpcActionMetadata, kNpcActionCount> metadata = {{
-            {NpcAction::Idle, "idle", "Idle", false, 0.0f},
-            {NpcAction::Walk, "walk", "Walk", true, 1.5f},
-            {NpcAction::Run, "run", "Run", true, 3.0f},
-            {NpcAction::Hurt, "hurt", "Hurt", false, 0.0f},
-            {NpcAction::Death, "death", "Death", false, 0.0f}
+            {NpcAction::Idle, "idle", "Idle", false, 0.0f, false},
+            {NpcAction::Walk, "walk", "Walk", true, 1.5f, false},
+            {NpcAction::Run, "run", "Run", true, 3.0f, false},
+            {NpcAction::Hurt, "hurt", "Hurt", false, 0.0f, true},
+            {NpcAction::Death, "death", "Death", false, 0.0f, true}
     }};
     return metadata;
 }
@@ -223,6 +223,28 @@ bool IsValidNpcCharacterModelPath(std::string_view path)
     return extension == ".glb" || extension == ".gltf";
 }
 
+bool IsValidNpcAudioPath(std::string_view path)
+{
+    const bool windowsDrivePath = path.size() >= 2
+            && std::isalpha(static_cast<unsigned char>(path[0]))
+            && path[1] == ':';
+    if (path.empty() || path.front() == '/' || path.front() == '\\'
+            || windowsDrivePath
+            || path.find('\\') != std::string_view::npos) {
+        return false;
+    }
+    const std::filesystem::path parsed{std::string{path}};
+    if (parsed.is_absolute()
+            || parsed.lexically_normal().generic_string() != path) {
+        return false;
+    }
+    for (const std::filesystem::path& segment : parsed) {
+        if (segment == "." || segment == "..") return false;
+    }
+    const std::string extension = LowerAscii(parsed.extension().generic_string());
+    return extension == ".ogg" || extension == ".wav" || extension == ".mp3";
+}
+
 bool ValidateNpcDefinition(
         const NpcDefinition& definition,
         std::string& outError)
@@ -267,8 +289,35 @@ bool ValidateNpcDefinition(
         outError = "NPC animation blend time must be between 0.01 and 2 seconds";
         return false;
     }
+    const NpcAmbientVocalizationDefinition& ambient =
+            definition.ambientVocalizations;
+    if (!std::isfinite(ambient.minimumDelaySeconds)
+            || !std::isfinite(ambient.maximumDelaySeconds)
+            || ambient.minimumDelaySeconds < 0.0f
+            || ambient.maximumDelaySeconds < ambient.minimumDelaySeconds
+            || ambient.maximumDelaySeconds > kMaximumNpcAmbientDelaySeconds) {
+        outError = "NPC ambient vocalization delays must be between 0 and 600 seconds, with minimum no greater than maximum";
+        return false;
+    }
+    std::unordered_set<std::string> ambientPaths;
+    for (const std::string& path : ambient.soundPaths) {
+        if (!IsValidNpcAudioPath(path)) {
+            outError = "NPC ambient vocalization sounds must be relative .ogg, .wav, or .mp3 paths beneath assets/audio";
+            return false;
+        }
+        if (!ambientPaths.insert(path).second) {
+            outError = "NPC ambient vocalization sounds must be unique";
+            return false;
+        }
+    }
     for (const NpcActionMetadata& metadata : NpcActionMetadataTable()) {
         const NpcActionDefinition& action = GetNpcAction(definition, metadata.action);
+        if (!action.soundPath.empty()
+                && (!metadata.hasSound || !IsValidNpcAudioPath(action.soundPath))) {
+            outError = std::string{"NPC "} + metadata.displayName
+                    + " sound must be a relative .ogg, .wav, or .mp3 path beneath assets/audio";
+            return false;
+        }
         if (!std::isfinite(action.animationSpeed)
                 || action.animationSpeed < MinAnimationSpeed
                 || action.animationSpeed > MaxAnimationSpeed) {
@@ -302,7 +351,7 @@ bool ParseNpcDefinitionJson(
                 {"formatVersion", "id", "name", "hostile", "canOpenDoors",
                  "baseHealth", "despawnOnDeath", "corpseDespawnDelaySeconds",
                  "corpseFadeDurationSeconds", "modelPath",
-                 "animationBlendSeconds", "actions"},
+                 "animationBlendSeconds", "ambientVocalizations", "actions"},
                 "NPC definition");
 
         const Json& version = RequireField(root, "formatVersion", "NPC definition");
@@ -338,6 +387,38 @@ bool ParseNpcDefinitionJson(
                 kDefaultNpcAnimationBlendSeconds,
                 "NPC definition");
 
+        const auto ambient = root.find("ambientVocalizations");
+        if (ambient != root.end()) {
+            const std::string context = "NPC definition.ambientVocalizations";
+            if (!ambient->is_object()) Fail(context + " must be an object");
+            RejectUnknownFields(
+                    *ambient,
+                    {"sounds", "minimumDelaySeconds", "maximumDelaySeconds"},
+                    context);
+            parsed.ambientVocalizations.minimumDelaySeconds = OptionalFloat(
+                    *ambient,
+                    "minimumDelaySeconds",
+                    kDefaultNpcAmbientMinimumDelaySeconds,
+                    context);
+            parsed.ambientVocalizations.maximumDelaySeconds = OptionalFloat(
+                    *ambient,
+                    "maximumDelaySeconds",
+                    kDefaultNpcAmbientMaximumDelaySeconds,
+                    context);
+            const auto sounds = ambient->find("sounds");
+            if (sounds != ambient->end()) {
+                if (!sounds->is_array()) Fail(context + ".sounds must be an array");
+                parsed.ambientVocalizations.soundPaths.reserve(sounds->size());
+                for (const Json& sound : *sounds) {
+                    if (!sound.is_string()) {
+                        Fail(context + ".sounds must contain only strings");
+                    }
+                    parsed.ambientVocalizations.soundPaths.push_back(
+                            sound.get<std::string>());
+                }
+            }
+        }
+
         const Json& actions = RequireField(root, "actions", "NPC definition");
         if (!actions.is_object()) Fail("NPC definition.actions must be an object");
         std::unordered_set<std::string> actionKeys;
@@ -352,16 +433,19 @@ bool ParseNpcDefinitionJson(
             const std::string context =
                     std::string{"NPC definition.actions."} + metadata.jsonKey;
             if (!it->is_object()) Fail(context + " must be an object");
+            std::unordered_set<std::string> actionFields{
+                    "animation", "animationSpeed"};
+            if (metadata.hasMovementSpeed) actionFields.insert("movementSpeed");
+            if (metadata.hasSound) actionFields.insert("sound");
             RejectUnknownFields(
                     *it,
-                    metadata.hasMovementSpeed
-                            ? std::unordered_set<std::string>{
-                                    "animation", "animationSpeed", "movementSpeed"}
-                            : std::unordered_set<std::string>{
-                                    "animation", "animationSpeed"},
+                    actionFields,
                     context);
             NpcActionDefinition& action = GetNpcAction(parsed, metadata.action);
             action.animation = OptionalString(*it, "animation", {}, context);
+            if (metadata.hasSound) {
+                action.soundPath = OptionalString(*it, "sound", {}, context);
+            }
             action.animationSpeed = OptionalFloat(
                     *it, "animationSpeed", action.animationSpeed, context);
             if (metadata.hasMovementSpeed) {
@@ -413,12 +497,37 @@ bool SerializeNpcDefinitionJson(
             root["animationBlendSeconds"] = definition.animationBlendSeconds;
         }
 
+        const NpcAmbientVocalizationDefinition& ambient =
+                definition.ambientVocalizations;
+        if (!ambient.soundPaths.empty()
+                || ambient.minimumDelaySeconds
+                        != kDefaultNpcAmbientMinimumDelaySeconds
+                || ambient.maximumDelaySeconds
+                        != kDefaultNpcAmbientMaximumDelaySeconds) {
+            Json ambientJson = Json::object();
+            if (!ambient.soundPaths.empty()) {
+                ambientJson["sounds"] = ambient.soundPaths;
+            }
+            if (ambient.minimumDelaySeconds
+                    != kDefaultNpcAmbientMinimumDelaySeconds) {
+                ambientJson["minimumDelaySeconds"] = ambient.minimumDelaySeconds;
+            }
+            if (ambient.maximumDelaySeconds
+                    != kDefaultNpcAmbientMaximumDelaySeconds) {
+                ambientJson["maximumDelaySeconds"] = ambient.maximumDelaySeconds;
+            }
+            root["ambientVocalizations"] = std::move(ambientJson);
+        }
+
         Json actions = Json::object();
         for (const NpcActionMetadata& metadata : NpcActionMetadataTable()) {
             const NpcActionDefinition& action =
                     GetNpcAction(definition, metadata.action);
             Json actionJson = Json::object();
             if (!action.animation.empty()) actionJson["animation"] = action.animation;
+            if (metadata.hasSound && !action.soundPath.empty()) {
+                actionJson["sound"] = action.soundPath;
+            }
             if (action.animationSpeed != 1.0f) {
                 actionJson["animationSpeed"] = action.animationSpeed;
             }

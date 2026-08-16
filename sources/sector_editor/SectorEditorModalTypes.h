@@ -3,6 +3,7 @@
 #include "engine/assets/AssetHandles.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorSurfaceTypes.h"
+#include "sector_editor/services/sounds/SectorEditorAudioAssetPicker.h"
 #include "sector_demo/SectorFpsController.h"
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorTextureTypes.h"
@@ -97,29 +98,12 @@ enum class SectorEditorDoorSoundTarget {
     Close
 };
 
-struct SectorEditorAudioPreviewState {
-    engine::AssetScopeHandle scope = engine::NullAssetScopeHandle();
-    engine::SoundHandle sound = engine::NullSoundHandle();
-    engine::MusicHandle music = engine::NullMusicHandle();
-    engine::SoundPlaybackHandle soundPlayback = engine::NullSoundPlaybackHandle();
-    SectorSoundType type = SectorSoundType::Sound;
-    bool pending = false;
-    std::string key;
-};
-
 struct AddMapSoundState {
     bool open = false;
-    bool scanned = false;
-    std::string scanMessage;
-    engine::UIScrollState scroll;
-    std::vector<std::string> paths;
-    std::vector<const char*> optionLabels;
-    int selectedPathIndex = -1;
+    SectorEditorAudioAssetPickerState assetPicker;
     char soundIdBuffer[96] = {};
     SectorSoundType type = SectorSoundType::Sound;
     std::string validationMessage;
-    std::string previewMessage;
-    SectorEditorAudioPreviewState preview;
 };
 
 struct SoundPickerState {

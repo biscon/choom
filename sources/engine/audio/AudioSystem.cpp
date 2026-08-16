@@ -12,6 +12,9 @@ namespace engine {
 namespace {
 
 constexpr size_t InvalidSlot = std::numeric_limits<size_t>::max();
+constexpr float PositionalFadeStart = 0.8f;
+constexpr float PositionalOcclusionQueryIntervalSeconds = 0.1f;
+constexpr float PositionalOcclusionBlendSeconds = 0.1f;
 
 float FiniteOr(float value, float fallback)
 {
@@ -55,6 +58,18 @@ float ToRaylibPan(float pan)
     return (std::clamp(pan, -1.0f, 1.0f) + 1.0f) * 0.5f;
 }
 
+float SmoothStep01(float value)
+{
+    const float t = std::clamp(value, 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+float MoveTowards(float current, float target, float maximumDelta)
+{
+    if (current < target) return std::min(current + maximumDelta, target);
+    return std::max(current - maximumDelta, target);
+}
+
 } // namespace
 
 AudioSpatialization ComputeAudioSpatialization(
@@ -72,10 +87,19 @@ AudioSpatialization ComputeAudioSpatialization(
     } else if (distance >= source.maximumDistanceWorld) {
         result.volumeScale = 0.0f;
     } else {
-        result.volumeScale = 1.0f
-                - (distance - source.minimumDistanceWorld)
+        const float distancePastMinimum =
+                distance - source.minimumDistanceWorld;
+        const float referenceDistance = std::max(
+                1.0f, source.minimumDistanceWorld);
+        const float inverseDistanceGain = referenceDistance
+                / (referenceDistance + distancePastMinimum);
+        const float rangeT = distancePastMinimum
                 / (source.maximumDistanceWorld
                         - source.minimumDistanceWorld);
+        const float fadeT = (rangeT - PositionalFadeStart)
+                / (1.0f - PositionalFadeStart);
+        const float cutoffGain = 1.0f - SmoothStep01(fadeT);
+        result.volumeScale = inverseDistanceGain * cutoffGain;
     }
 
     Vector3 forward = listener.forward;
@@ -139,6 +163,43 @@ void AudioSystem::Shutdown()
 void AudioSystem::SetListener(const AudioListener& value)
 {
     listener = value;
+}
+
+void AudioSystem::UpdatePositionalSoundOcclusion(
+        float rawDt,
+        void* queryContext,
+        PositionalSoundOcclusionQuery query)
+{
+    const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+    for (SoundPlaybackSlot& playback : soundPlaybacks) {
+        if (!playback.active || !playback.positional) continue;
+        playback.occlusionQueryRemainingSeconds -= dt;
+        if (!playback.occlusionInitialized
+                || playback.occlusionQueryRemainingSeconds <= 0.0f) {
+            const float queried = query == nullptr
+                    ? 1.0f
+                    : query(
+                            queryContext,
+                            listener.position,
+                            playback.positionalSettings.position);
+            playback.occlusionTargetScale = std::clamp(
+                    FiniteOr(queried, 1.0f), 0.0f, 1.0f);
+            playback.occlusionQueryRemainingSeconds =
+                    PositionalOcclusionQueryIntervalSeconds;
+            if (!playback.occlusionInitialized) {
+                playback.occlusionVolumeScale =
+                        playback.occlusionTargetScale;
+                playback.occlusionInitialized = true;
+            }
+        }
+        const float maximumDelta = PositionalOcclusionBlendSeconds > 0.0f
+                ? dt / PositionalOcclusionBlendSeconds
+                : 1.0f;
+        playback.occlusionVolumeScale = MoveTowards(
+                playback.occlusionVolumeScale,
+                playback.occlusionTargetScale,
+                maximumDelta);
+    }
 }
 
 void AudioSystem::Update(AssetManager& assets)
@@ -475,7 +536,7 @@ void AudioSystem::ApplySoundMix(
         const AudioSpatialization spatial = ComputeAudioSpatialization(
                 listener,
                 playback.positionalSettings);
-        volume *= spatial.volumeScale;
+        volume *= spatial.volumeScale * playback.occlusionVolumeScale;
         pan = spatial.pan;
     }
     ::SetSoundVolume(voice, volume);

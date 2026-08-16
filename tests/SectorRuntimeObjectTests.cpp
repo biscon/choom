@@ -2,11 +2,13 @@
 #include "engine/systems/AnimatedModelRaycast.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "game/navigation/SectorNavigationWorld.h"
+#include "game/npc/NpcAudioSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "game/npc/NpcCombatSystem.h"
 #include "game/npc/NpcRuntime.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
+#include "sector_demo/SectorAudioOcclusion.h"
 #include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorStaticModelTransform.h"
@@ -68,6 +70,64 @@ bool Near(Vector2 actual, Vector2 expected, float epsilon = 0.00001f)
 {
     return Near(actual.x, expected.x, epsilon)
             && Near(actual.y, expected.y, epsilon);
+}
+
+void TestNpcVocalPriorityDelayAndShufflePolicy()
+{
+    game::NpcAudioRuntime runtime;
+    runtime.records.reserve(1);
+    game::NpcAudioRecord record;
+    record.entity = engine::Entity{7, 2};
+    record.occupied = true;
+    record.hurtSound = engine::SoundHandle{3, 1};
+    record.deathSound = engine::SoundHandle{4, 1};
+    record.minimumAmbientDelaySeconds = 5.0f;
+    record.maximumAmbientDelaySeconds = 12.0f;
+    record.delayRandomState = 12345u;
+    runtime.records.push_back(record);
+
+    Check(game::QueueNpcVocalEvent(
+                  runtime, record.entity, game::NpcVocalEvent::Hurt)
+                  && runtime.records.front().pendingEvent
+                          == game::NpcVocalEvent::Hurt,
+          "NPC hurt vocal queues when its channel is available");
+    Check(!game::QueueNpcVocalEvent(
+                  runtime, record.entity, game::NpcVocalEvent::Hurt),
+          "repeated NPC hurt vocal is ignored while already pending");
+    Check(game::QueueNpcVocalEvent(
+                  runtime, record.entity, game::NpcVocalEvent::Death)
+                  && runtime.records.front().pendingEvent
+                          == game::NpcVocalEvent::Death
+                  && runtime.records.front().ambientDisabled,
+          "NPC death vocal overrides hurt and permanently disables ambient vocals");
+    Check(!game::QueueNpcVocalEvent(
+                  runtime, record.entity, game::NpcVocalEvent::Hurt),
+          "NPC hurt vocal cannot override death");
+
+    game::NpcAudioRecord delayRecord;
+    delayRecord.minimumAmbientDelaySeconds = 5.0f;
+    delayRecord.maximumAmbientDelaySeconds = 12.0f;
+    delayRecord.delayRandomState = 6789u;
+    bool varied = false;
+    const float firstDelay = game::SelectNpcAmbientDelay(delayRecord);
+    for (int i = 0; i < 32; ++i) {
+        const float delay = game::SelectNpcAmbientDelay(delayRecord);
+        Check(delay >= 5.0f && delay <= 12.0f,
+              "NPC ambient quiet time stays within configured limits");
+        varied = varied || !Near(delay, firstDelay);
+    }
+    Check(varied, "NPC ambient quiet time is randomized");
+
+    game::SoundSetPlaybackState shuffle;
+    game::ReserveSoundSetPlaybackState(shuffle, 3, 16);
+    size_t previous = game::SelectSoundSetVariation(shuffle, "npc:ambient", 3);
+    for (int i = 0; i < 30; ++i) {
+        const size_t next = game::SelectSoundSetVariation(
+                shuffle, "npc:ambient", 3);
+        Check(next != previous,
+              "NPC ambient shuffle bag does not repeat consecutively");
+        previous = next;
+    }
 }
 
 bool NearTranslation(Matrix actual, Vector3 expected, float epsilon = 0.00001f)
@@ -359,6 +419,76 @@ game::SectorTopologyMap MakeDoorPortalMap()
     back.ceilingZ = 20.0f;
     map.sectors.push_back(back);
     return map;
+}
+
+void TestSectorSpatialSoundOcclusion()
+{
+    const std::vector<game::SectorDynamicDoorCollider> noDoors;
+    game::SectorCollisionWorld squareCollision;
+    std::string error;
+    Check(squareCollision.BuildFromTopology(MakeSquareMap(), &error),
+          "sound occlusion wall fixture builds");
+    Check(Near(
+                  game::ComputeSectorSoundOcclusion(
+                          &squareCollision,
+                          noDoors,
+                          Vector3{0.25f, 1.0f, 0.25f},
+                          Vector3{0.75f, 1.0f, 0.25f}),
+                  game::SectorOccludedSoundVolumeScale),
+          "sector wall attenuates a spatial sound");
+
+    game::SectorCollisionWorld portalCollision;
+    Check(portalCollision.BuildFromTopology(MakeDoorPortalMap(), &error),
+          "sound occlusion portal fixture builds");
+    const Vector3 listener{0.25f, 0.75f, 0.25f};
+    const Vector3 source{0.75f, 0.75f, 0.25f};
+    Check(Near(
+                  game::ComputeSectorSoundOcclusion(
+                          &portalCollision, noDoors, listener, source),
+                  1.0f),
+          "open sector portal does not attenuate a spatial sound");
+    Check(Near(
+                  game::ComputeSectorSoundOcclusion(
+                          &portalCollision,
+                          noDoors,
+                          Vector3{0.25f, 0.2f, 0.25f},
+                          Vector3{0.75f, 0.2f, 0.25f}),
+                  game::SectorOccludedSoundVolumeScale),
+          "solid lower portal wall attenuates a spatial sound");
+
+    game::SectorDynamicDoorCollider door;
+    door.center = Vector2{0.5f, 0.25f};
+    door.tangent = Vector2{0.0f, 1.0f};
+    door.normal = Vector2{1.0f, 0.0f};
+    door.halfExtents = Vector2{0.25f, 0.02f};
+    door.bottom = 0.25f;
+    door.top = 1.0f;
+    std::vector<game::SectorDynamicDoorCollider> doors{door};
+    Check(Near(
+                  game::ComputeSectorSoundOcclusion(
+                          &portalCollision, doors, listener, source),
+                  game::SectorOccludedSoundVolumeScale),
+          "closed door slab attenuates a spatial sound through a portal");
+    doors.front().center.y = 1.0f;
+    Check(Near(
+                  game::ComputeSectorSoundOcclusion(
+                          &portalCollision, doors, listener, source),
+                  1.0f),
+          "door slab moved clear of the direct path does not attenuate sound");
+    doors.front() = door;
+    Check(Near(
+                  game::ComputeSectorSoundOcclusion(
+                          &portalCollision,
+                          doors,
+                          listener,
+                          Vector3{0.5f, 0.75f, 0.25f}),
+                  1.0f),
+          "sound originating inside a door does not self-occlude");
+    Check(Near(
+                  game::ComputeSectorSoundOcclusion(
+                          nullptr, noDoors, listener, listener),
+                  1.0f),
+          "missing geometry and a zero-length sound ray remain unoccluded");
 }
 
 game::SectorPlacedDoor MakeDoorOnPortal()
@@ -7593,6 +7723,13 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
     record.instanceId = "target";
     record.occupied = true;
     npcNavigation.records.push_back(record);
+    game::NpcAudioRuntime npcAudio;
+    game::NpcAudioRecord audioRecord;
+    audioRecord.entity = npc;
+    audioRecord.hurtSound = engine::SoundHandle{3, 1};
+    audioRecord.deathSound = engine::SoundHandle{4, 1};
+    audioRecord.occupied = true;
+    npcAudio.records.push_back(audioRecord);
 
     game::FpsWeaponImpactDefinition impact;
     impact.damage = 25;
@@ -7608,15 +7745,17 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
     Check(game::ResolvePlayerWeaponShot(
                   world, nullptr, navigation, npcNavigation, nullptr, doors, props,
                   Vector3{0.0f, 0.8f, -5.0f}, Vector3{0.0f, 0.0f, 1.0f},
-                  20.0f, impact, shot, event)
+                  20.0f, impact, shot, event, &npcAudio)
                   && shot.hitKind == game::FpsShotHitKind::Npc
                   && world.Get<game::Health>(npc).current == 75
                   && world.Get<game::NpcCombatState>(npc).hurtAnimationRequested
                   && Near(world.Get<game::NpcCombatState>(npc)
                                   .staggerRemainingSeconds,
                           0.18f)
+                  && npcAudio.records.front().pendingEvent
+                          == game::NpcVocalEvent::Hurt
                   && event.kind == game::WeaponImpactKind::Blood,
-          "weapon shot damages a friendly NPC and requests hurt, stagger, and blood");
+          "weapon shot requests hurt animation, vocal, stagger, and blood");
 
     game::SectorImpactParticleSystem particles;
     particles.Spawn(event);
@@ -7638,7 +7777,7 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
     Check(game::ResolvePlayerWeaponShot(
                   world, nullptr, navigation, npcNavigation, nullptr, doors, props,
                   Vector3{0.0f, 0.8f, -5.0f}, Vector3{0.0f, 0.0f, 1.0f},
-                  20.0f, impact, shot, event)
+                  20.0f, impact, shot, event, &npcAudio)
                   && shot.hitKind == game::FpsShotHitKind::SolidProp
                   && world.Get<game::Health>(npc).current == 75
                   && event.kind == game::WeaponImpactKind::SurfaceDebris,
@@ -7653,13 +7792,16 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
         game::ResolvePlayerWeaponShot(
                 world, nullptr, navigation, npcNavigation, nullptr, doors, props,
                 Vector3{0.0f, 0.8f, -5.0f}, Vector3{0.0f, 0.0f, 1.0f},
-                20.0f, impact, shot, event);
+                20.0f, impact, shot, event, &npcAudio);
     }
     Check(game::IsDepleted(world.Get<game::Health>(npc))
                   && world.Get<game::NpcCombatState>(npc).dead
                   && world.Get<game::NpcCombatState>(npc).deathAnimationRequested
+                  && npcAudio.records.front().pendingEvent
+                          == game::NpcVocalEvent::Death
+                  && npcAudio.records.front().ambientDisabled
                   && !npcNavigation.records[0].occupied,
-          "four pistol hits kill the NPC and immediately deactivate navigation");
+          "four pistol hits request death animation and vocal and deactivate navigation");
 
     world.Get<game::NpcCombatState>(npc).knockbackVelocity = {};
     world.Get<game::NpcCombatState>(npc).deathAnimationComplete = true;
@@ -7683,6 +7825,8 @@ int main()
 {
     extern void RunSectorScriptBindingTests();
     RunSectorScriptBindingTests();
+    TestNpcVocalPriorityDelayAndShufflePolicy();
+    TestSectorSpatialSoundOcclusion();
     TestResolveSectorDoorAnchorValidPortal();
     TestResolveSectorDoorAnchorRejectsOneSidedWall();
     TestResolveSectorDoorAnchorRejectsSectorMismatch();

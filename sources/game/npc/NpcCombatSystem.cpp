@@ -1,5 +1,7 @@
 #include "game/npc/NpcCombatSystem.h"
 
+#include "game/npc/NpcAudioSystem.h"
+
 #include "engine/assets/AssetManager.h"
 #include "engine/components/AnimatedModel.h"
 #include "engine/ecs/World.h"
@@ -275,7 +277,8 @@ bool ResolvePlayerWeaponShot(
         float maximumDistance,
         const FpsWeaponImpactDefinition& impact,
         FpsShotResult& outShot,
-        WeaponImpactEvent& outImpact)
+        WeaponImpactEvent& outImpact,
+        NpcAudioRuntime* npcAudio)
 {
     outShot = {};
     outShot.accepted = true;
@@ -450,9 +453,17 @@ bool ResolvePlayerWeaponShot(
                 combat.deathAnimationComplete = false;
                 DeactivateNpcNavigation(
                         world, navigation, npcNavigation, best.entity);
+                if (npcAudio != nullptr) {
+                    QueueNpcVocalEvent(
+                            *npcAudio, best.entity, NpcVocalEvent::Death);
+                }
             } else {
                 combat.staggerRemainingSeconds = impact.staggerSeconds;
                 combat.hurtAnimationRequested = true;
+                if (npcAudio != nullptr) {
+                    QueueNpcVocalEvent(
+                            *npcAudio, best.entity, NpcVocalEvent::Hurt);
+                }
             }
             if (impact.blood.enabled) {
                 outImpact.kind = WeaponImpactKind::Blood;

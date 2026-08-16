@@ -58,6 +58,26 @@ void TestModelFilenameExtraction()
           "empty model path produces an empty filename");
 }
 
+void TestAudioAssetPickerScrollSession()
+{
+    game::SectorEditorAudioAssetPickerSessionState session;
+    game::SectorEditorAudioAssetPickerState firstPicker;
+    firstPicker.scroll.offset = Vector2{0.0f, 144.0f};
+    game::RememberSectorEditorAudioAssetPickerScroll(firstPicker, session);
+
+    game::SectorEditorAudioAssetPickerState reopenedPicker;
+    game::RestoreSectorEditorAudioAssetPickerScroll(reopenedPicker, session);
+    Check(Near(reopenedPicker.scroll.offset.y, 144.0f),
+          "audio picker restores its prior in-memory scroll offset");
+
+    reopenedPicker.scroll.offset.y = 48.0f;
+    game::RememberSectorEditorAudioAssetPickerScroll(reopenedPicker, session);
+    game::SectorEditorAudioAssetPickerState otherPicker;
+    game::RestoreSectorEditorAudioAssetPickerScroll(otherPicker, session);
+    Check(Near(otherPicker.scroll.offset.y, 48.0f),
+          "map and NPC audio pickers share the latest scroll offset");
+}
+
 void TestTextureRowWithoutClear()
 {
     const game::SectorEditorInspectorTextureRowLayout layout =
@@ -583,6 +603,7 @@ void TestPreviewNavigationTabLayout()
 int main()
 {
     TestModelFilenameExtraction();
+    TestAudioAssetPickerScrollSession();
     TestTextureRowWithoutClear();
     TestTextureRowWithClear();
     TestCompactNumericRow();

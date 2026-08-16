@@ -23,6 +23,9 @@ inline constexpr float kDefaultNpcCorpseFadeDurationSeconds = 0.75f;
 inline constexpr float kMaximumNpcCorpseDespawnDelaySeconds = 600.0f;
 inline constexpr float kMinimumNpcCorpseFadeDurationSeconds = 0.001f;
 inline constexpr float kMaximumNpcCorpseFadeDurationSeconds = 60.0f;
+inline constexpr float kDefaultNpcAmbientMinimumDelaySeconds = 5.0f;
+inline constexpr float kDefaultNpcAmbientMaximumDelaySeconds = 12.0f;
+inline constexpr float kMaximumNpcAmbientDelaySeconds = 600.0f;
 
 enum class NpcAction {
     Idle,
@@ -42,12 +45,20 @@ struct NpcActionMetadata {
     const char* displayName = "Idle";
     bool hasMovementSpeed = false;
     float defaultMovementSpeed = 0.0f;
+    bool hasSound = false;
 };
 
 struct NpcActionDefinition {
     std::string animation;
+    std::string soundPath;
     float animationSpeed = 1.0f;
     float movementSpeed = 0.0f;
+};
+
+struct NpcAmbientVocalizationDefinition {
+    std::vector<std::string> soundPaths;
+    float minimumDelaySeconds = kDefaultNpcAmbientMinimumDelaySeconds;
+    float maximumDelaySeconds = kDefaultNpcAmbientMaximumDelaySeconds;
 };
 
 struct NpcDefinition {
@@ -61,6 +72,7 @@ struct NpcDefinition {
     float corpseFadeDurationSeconds = kDefaultNpcCorpseFadeDurationSeconds;
     std::string modelPath;
     float animationBlendSeconds = kDefaultNpcAnimationBlendSeconds;
+    NpcAmbientVocalizationDefinition ambientVocalizations;
     std::array<NpcActionDefinition, kNpcActionCount> actions;
 };
 
@@ -84,6 +96,7 @@ const NpcActionDefinition& GetNpcAction(
 
 bool IsValidNpcDefinitionId(std::string_view id);
 bool IsValidNpcCharacterModelPath(std::string_view path);
+bool IsValidNpcAudioPath(std::string_view path);
 bool ValidateNpcDefinition(
         const NpcDefinition& definition,
         std::string& outError);

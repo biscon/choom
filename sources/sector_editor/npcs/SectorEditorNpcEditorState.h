@@ -3,6 +3,7 @@
 #include "engine/assets/AssetHandles.h"
 #include "engine/ui/UI.h"
 #include "game/npc/NpcDefinitions.h"
+#include "sector_editor/services/sounds/SectorEditorAudioAssetPicker.h"
 
 #include <array>
 #include <string>
@@ -23,6 +24,21 @@ struct SectorEditorNpcDefinitionDraft {
     bool isNew = false;
 };
 
+enum class SectorEditorNpcAudioPickerTarget {
+    None,
+    Action,
+    AmbientAdd,
+    AmbientReplace
+};
+
+struct SectorEditorNpcAudioPickerState {
+    SectorEditorAudioAssetPickerState assetPicker;
+    SectorEditorNpcAudioPickerTarget target =
+            SectorEditorNpcAudioPickerTarget::None;
+    NpcAction action = NpcAction::Hurt;
+    size_t ambientIndex = 0;
+};
+
 struct SectorEditorNpcEditorState {
     bool open = false;
     std::vector<SectorEditorNpcDefinitionDraft> drafts;
@@ -38,6 +54,8 @@ struct SectorEditorNpcEditorState {
     engine::UIIntInputState corpseDespawnDelayMillisecondsInput;
     engine::UIIntInputState corpseFadeDurationMillisecondsInput;
     engine::UIFloatInputState animationBlendSecondsInput;
+    engine::UIFloatInputState ambientMinimumDelaySecondsInput;
+    engine::UIFloatInputState ambientMaximumDelaySecondsInput;
     std::array<engine::UIFloatInputState, kNpcActionCount>
             animationSpeedInputs;
     std::array<engine::UIFloatInputState, kNpcActionCount>
@@ -53,6 +71,7 @@ struct SectorEditorNpcEditorState {
     std::string selectedModelPath;
     std::vector<std::string> animationOptionStorage;
     std::vector<const char*> animationOptions;
+    SectorEditorNpcAudioPickerState audioPicker;
 };
 
 } // namespace game
