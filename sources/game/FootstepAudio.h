@@ -9,11 +9,16 @@ using FootstepCatalog = SoundSetCatalog;
 using LoadedFootstepSet = LoadedSoundSet;
 using FootstepPlaybackState = SoundSetPlaybackState;
 
+inline constexpr float NpcFootstepMinimumDistanceWorld = 4.0f;
+inline constexpr float NpcFootstepMaximumDistanceWorld = 25.0f;
+
 bool IsValidFootstepSetId(std::string_view id);
 FootstepCatalog DiscoverFootstepCatalog(const std::string& footstepsRootPath);
 const FootstepCatalogSet* FindFootstepCatalogSet(
         const FootstepCatalog& catalog,
         std::string_view id);
+engine::PositionalSoundSettings MakeNpcFootstepPositionalSettings(
+        Vector3 position);
 
 void ReserveFootstepPlaybackState(
         FootstepPlaybackState& state,

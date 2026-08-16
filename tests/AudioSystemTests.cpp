@@ -97,6 +97,29 @@ void Spatialization()
     assert(Near(result.volumeScale, 0.0f));
 }
 
+void NpcFootstepSpatialization()
+{
+    engine::AudioListener listener;
+    listener.position = Vector3{};
+
+    engine::PositionalSoundSettings source =
+            game::MakeNpcFootstepPositionalSettings(
+                    Vector3{0.0f, 1.7f, 0.0f});
+    assert(Near(source.minimumDistanceWorld, 4.0f));
+    assert(Near(source.maximumDistanceWorld, 25.0f));
+    engine::AudioSpatialization result =
+            engine::ComputeAudioSpatialization(listener, source);
+    assert(Near(result.volumeScale, 1.0f));
+
+    source.position = Vector3{0.0f, 0.0f, 10.0f};
+    result = engine::ComputeAudioSpatialization(listener, source);
+    assert(Near(result.volumeScale, 0.4f));
+
+    source.position = Vector3{0.0f, 0.0f, 25.0f};
+    result = engine::ComputeAudioSpatialization(listener, source);
+    assert(Near(result.volumeScale, 0.0f));
+}
+
 void FootstepCatalogDiscovery()
 {
     const std::filesystem::path root =
@@ -226,6 +249,7 @@ int main()
 {
     ScopeDeduplication();
     Spatialization();
+    NpcFootstepSpatialization();
     FootstepCatalogDiscovery();
     FootstepShuffleAndPitch();
     PlayerSoundCatalogAndPlaybackSelection();

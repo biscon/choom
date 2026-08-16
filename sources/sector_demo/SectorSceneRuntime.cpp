@@ -622,13 +622,11 @@ void SectorSceneRuntime::PlayPendingNpcFootsteps(
                 context.world.Get<SectorObjectTransform>(record.entity);
         const SectorObject& object =
                 context.world.Get<SectorObject>(record.entity);
-        engine::PositionalSoundSettings positional;
-        positional.position = transform.position;
         PlayFootstepForSectorAt(
                 context,
                 object.currentSectorId,
                 footstepVolume,
-                positional);
+                MakeNpcFootstepPositionalSettings(transform.position));
     }
 }
 

@@ -674,16 +674,30 @@
       "yawDegrees": 180.0
     },
     {
-      "id": 35,
+      "id": 36,
       "kind": "npc",
       "npc": {
-        "definitionId": "TestCharacter",
+        "definitionId": "Zombie1",
         "instanceId": "zombie02"
       },
       "position": [
-        -92.0,
-        0.0,
-        36.0
+        -384.0,
+        -27.0,
+        32.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 37,
+      "kind": "npc",
+      "npc": {
+        "definitionId": "Zombie1",
+        "instanceId": "zombie03"
+      },
+      "position": [
+        -424.0,
+        -27.0,
+        176.0
       ],
       "yawDegrees": 0.0
     }
@@ -1382,7 +1396,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "c334060c39da839d",
+    "sourceHash": "2919426780826903",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -1402,7 +1416,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "c334060c39da839d",
+      "sourceHash": "2919426780826903",
       "count": 2067,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -1415,9 +1429,9 @@
           0.0
         ],
         "rgbMax": [
-          2.565159559249878,
-          2.565159559249878,
-          2.565159559249878
+          2.564159631729126,
+          2.564159631729126,
+          2.564159631729126
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
@@ -1428,7 +1442,7 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "c334060c39da839d",
+      "sourceHash": "2919426780826903",
       "modelCount": 20,
       "objectCount": 24,
       "format": "staticModelUvRemapF32LE"
@@ -10757,7 +10771,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.0010000000474974513,
+        "ambientIntensity": 0.0,
         "defaultWall": {
           "textureId": "dirty_gray_concrete_wall_512",
           "uv": {

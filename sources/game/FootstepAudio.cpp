@@ -33,6 +33,16 @@ const FootstepCatalogSet* FindFootstepCatalogSet(
     return FindSoundSetCatalogSet(catalog, id);
 }
 
+engine::PositionalSoundSettings MakeNpcFootstepPositionalSettings(
+        Vector3 position)
+{
+    engine::PositionalSoundSettings positional;
+    positional.position = position;
+    positional.minimumDistanceWorld = NpcFootstepMinimumDistanceWorld;
+    positional.maximumDistanceWorld = NpcFootstepMaximumDistanceWorld;
+    return positional;
+}
+
 void ReserveFootstepPlaybackState(
         FootstepPlaybackState& state,
         size_t maximumVariationCount,

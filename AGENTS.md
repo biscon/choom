@@ -310,3 +310,4 @@ task-scoping rules in the later sections.
   - `git diff --stat`
   - `git status --short`
 - When working on the editor, adhere to docs/architecture/sector_editor_architectural_principles.md
+- Do not run the CTest suite if you have not made any changes to C++ code. For instance when editing lua scene scripts or doing asset prep work.
