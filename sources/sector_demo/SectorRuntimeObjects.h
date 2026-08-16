@@ -74,6 +74,7 @@ struct SectorDynamicModel {
     std::string requestedAnimation;
     bool animationResolved = false;
     bool animationFallback = false;
+    float opacity = 1.0f;
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
 };
 

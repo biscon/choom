@@ -4,9 +4,11 @@
 #include "game/FootstepAudio.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcCombatSystem.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/renderer/SectorMeshRenderer.h"
+#include "sector_demo/renderer/SectorImpactParticleSystem.h"
 
 #include <raylib.h>
 
@@ -49,6 +51,14 @@ public:
             const engine::AssetManager& assets,
             size_t& finished,
             size_t& total) const;
+    bool ResolvePlayerWeaponShot(
+            engine::EngineContext& context,
+            const SectorCollisionWorld* collisionWorld,
+            Vector3 rayOrigin,
+            Vector3 rayDirection,
+            float maximumDistance,
+            const FpsWeaponImpactDefinition& impact,
+            FpsShotResult& outShot);
 
     void RenderShadowMaps(engine::EngineContext& context);
     void RenderScene(
@@ -117,6 +127,8 @@ private:
     SectorRuntimeObjectState runtimeObjects;
     SectorNavigationWorld navigation;
     NpcNavigationRuntime npcNavigation;
+    NpcCombatRuntime npcCombat;
+    SectorImpactParticleSystem impactParticles;
     engine::AssetScopeHandle audioScope = engine::NullAssetScopeHandle();
     std::unordered_map<std::string, engine::SoundHandle> levelSounds;
     std::unordered_map<std::string, engine::MusicHandle> levelMusicById;

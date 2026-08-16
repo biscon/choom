@@ -363,7 +363,8 @@ private:
             const RuntimePortalVisibilityResult& visibility,
             bool objectProbeBakeCurrent,
             const TextureCubemap* environment,
-            bool allowSkinning);
+            bool allowSkinning,
+            float opacity = 1.0f);
     const CachedModel* FindCachedModel(
             engine::ModelHandle handle,
             int lightmapModelIndex) const;
@@ -378,6 +379,7 @@ private:
     int roughnessFactorLoc = -1;
     int normalScaleLoc = -1;
     int occlusionStrengthLoc = -1;
+    int modelOpacityLoc = -1;
     int hasBaseColorTextureLoc = -1;
     int hasMetallicTextureLoc = -1;
     int hasNormalTextureLoc = -1;

@@ -53,6 +53,11 @@ NpcAnimationApplyResult ApplyNpcSemanticAnimation(
         engine::AnimatedModelAnimator& animator,
         NpcAction requested);
 
+void UpdateNpcAnimationStateSystem(
+        engine::World& world,
+        engine::AssetManager& assets,
+        const NpcDefinitionCatalog& definitions);
+
 void InitializeNpcNavigationRuntime(
         engine::World& world,
         SectorNavigationWorld& navigation,
@@ -62,6 +67,12 @@ void ShutdownNpcNavigationRuntime(
         engine::World& world,
         SectorNavigationWorld& navigation,
         NpcNavigationRuntime& runtime);
+
+bool DeactivateNpcNavigation(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime,
+        engine::Entity entity);
 
 NpcMoveRequestResult RequestNpcMove(
         engine::World& world,

@@ -34,6 +34,8 @@ struct AnimatedModelAnimator {
 
     uint32_t targetAnimationIndex = InvalidModelAnimationIndex;
     float targetFrame = 0.0f;
+    bool targetLoop = true;
+    bool targetFinished = false;
     float transitionDurationSeconds = 0.0f;
     float transitionElapsedSeconds = 0.0f;
 };

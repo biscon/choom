@@ -1,7 +1,9 @@
 #include "sector_demo/SectorRuntimeObjects.h"
+#include "engine/systems/AnimatedModelRaycast.h"
 #include "engine/systems/AnimatedModelSystem.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
+#include "game/npc/NpcCombatSystem.h"
 #include "game/npc/NpcRuntime.h"
 
 #include "sector_demo/SectorCollisionWorld.h"
@@ -9,6 +11,7 @@
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorStaticModelTransform.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
+#include "sector_demo/renderer/SectorImpactParticleSystem.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
@@ -18,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <string>
@@ -4719,6 +4723,10 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     definition.name = "Runtime Test";
     definition.hostile = true;
     definition.canOpenDoors = false;
+    definition.baseHealth = 160;
+    definition.despawnOnDeath = true;
+    definition.corpseDespawnDelaySeconds = 1.25f;
+    definition.corpseFadeDurationSeconds = 0.6f;
     definition.modelPath = "assets/models/characters/Zombie1.glb";
     game::GetNpcAction(definition, game::NpcAction::Idle).animation = "Idle";
     game::GetNpcAction(definition, game::NpcAction::Idle).animationSpeed = 1.25f;
@@ -4735,6 +4743,8 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     const engine::Entity entity = state.placedObjectEntities[0].entity;
     Check(world.Has<game::NpcRuntimeInstance>(entity)
                   && world.Has<game::NpcAnimationState>(entity)
+                  && world.Has<game::Health>(entity)
+                  && world.Has<game::NpcCombatState>(entity)
                   && world.Has<game::SectorObjectVisualOffset>(entity)
                   && world.Has<game::SectorDynamicModel>(entity)
                   && world.Has<engine::AnimatedModelInstance>(entity)
@@ -4744,6 +4754,9 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
             world.Get<game::NpcRuntimeInstance>(entity);
     const game::NpcAnimationState& npcAnimation =
             world.Get<game::NpcAnimationState>(entity);
+    const game::Health& health = world.Get<game::Health>(entity);
+    const game::NpcCombatState& combat =
+            world.Get<game::NpcCombatState>(entity);
     const game::SectorDynamicModel& dynamic =
             world.Get<game::SectorDynamicModel>(entity);
     const engine::AnimatedModelAnimator& animator =
@@ -4757,6 +4770,12 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
                   && !npc.canOpenDoors
                   && Near(npc.walkSpeed, 2.0f)
                   && Near(npc.runSpeed, 4.5f)
+                  && health.baseMaximum == 160
+                  && health.maximum == 160
+                  && health.current == 160
+                  && combat.despawnOnDeath
+                  && Near(combat.corpseDespawnDelaySeconds, 1.25f)
+                  && Near(combat.corpseFadeDurationSeconds, 0.6f)
                   && Near(npcAnimation.blendSeconds, 0.35f)
                   && Near(npcAnimation.animationSpeeds[
                                   static_cast<size_t>(game::NpcAction::Idle)], 1.25f),
@@ -5689,6 +5708,226 @@ void TestAnimatedModelSelectionAndBlendApi()
                   && animator.targetAnimationIndex == engine::InvalidModelAnimationIndex
                   && Near(animator.frame, 0.0f),
           "zero-duration animation selection switches immediately and restarts");
+}
+
+void TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose()
+{
+    engine::AnimatedModelAnimator animator;
+    animator.frame = 7.5f;
+    animator.playing = true;
+    animator.loop = false;
+    animator.finished = false;
+    animator.poseDirty = false;
+
+    Check(engine::AdvanceAnimatedModelAnimator(animator, 10, 0.1f)
+                  && Near(animator.frame, 9.0f)
+                  && !animator.playing
+                  && animator.finished
+                  && animator.poseDirty,
+          "non-looping animated models apply their clamped final frame before stopping");
+
+    animator.poseDirty = false;
+    Check(!engine::AdvanceAnimatedModelAnimator(animator, 10, 0.1f)
+                  && Near(animator.frame, 9.0f)
+                  && !animator.poseDirty,
+          "finished animated models hold their cached terminal pose without advancing again");
+
+    animator = {};
+    animator.animationIndex = 0;
+    animator.poseDirty = false;
+    engine::SetAnimatedModelAnimation(animator, 1, 0.25f, true);
+    animator.targetLoop = false;
+
+    animator.animationIndex = animator.targetAnimationIndex;
+    animator.frame = 8.5f;
+    animator.loop = animator.targetLoop;
+    animator.targetAnimationIndex = engine::InvalidModelAnimationIndex;
+    animator.poseDirty = false;
+    Check(engine::AdvanceAnimatedModelAnimator(animator, 10, 1.0f / 60.0f)
+                  && Near(animator.frame, 9.0f)
+                  && animator.finished
+                  && animator.poseDirty,
+          "a blended transition into a non-looping clip also applies and holds its terminal pose");
+}
+
+void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
+{
+    std::array<float, 9> vertices{
+            0.75f, 0.4f, 0.0f,
+            1.25f, 0.4f, 0.0f,
+            1.0f, 1.2f, 0.0f};
+    std::array<unsigned char, 12> boneIndices{};
+    std::array<float, 12> boneWeights{
+            1.0f, 0.0f, 0.0f, 0.0f,
+            1.0f, 0.0f, 0.0f, 0.0f,
+            1.0f, 0.0f, 0.0f, 0.0f};
+    Mesh mesh{};
+    mesh.vertexCount = 3;
+    mesh.triangleCount = 1;
+    mesh.vertices = vertices.data();
+    mesh.boneIndices = boneIndices.data();
+    mesh.boneWeights = boneWeights.data();
+
+    engine::ModelAsset asset;
+    asset.model.transform = MatrixIdentity();
+    asset.model.meshCount = 1;
+    asset.model.meshes = &mesh;
+    asset.model.skeleton.boneCount = 1;
+    asset.animatedLocalBounds = {
+            Vector3{-0.5f, 0.0f, -0.1f},
+            Vector3{2.0f, 1.5f, 0.1f}};
+    asset.hasAnimatedLocalBounds = true;
+
+    engine::AnimatedModelInstance instance;
+    instance.model = engine::ModelHandle{17, 3};
+    instance.boneMatrices.push_back(MatrixTranslate(0.5f, 0.0f, 0.0f));
+    instance.poseReady = true;
+
+    const Matrix authored = game::BuildSectorStaticModelAuthoredTransform(
+            Vector3{3.0f, 1.0f, 4.0f},
+            0.0f,
+            0.65f,
+            0.0f,
+            1.4f);
+    const Vector3 posedLocalHit{1.5f, 0.6f, 0.0f};
+    const Vector3 worldHit = Vector3Transform(posedLocalHit, authored);
+    const Vector3 worldForward = Vector3Normalize(Vector3Subtract(
+            Vector3Transform(
+                    Vector3Add(posedLocalHit, Vector3{0.0f, 0.0f, 1.0f}),
+                    authored),
+            worldHit));
+    const Ray ray{
+            Vector3Subtract(worldHit, Vector3Scale(worldForward, 2.0f)),
+            worldForward};
+    engine::AnimatedModelRaycastResult hit;
+    Check(engine::RaycastAnimatedModel(
+                  asset, instance, authored, ray, 10.0f, hit)
+                  == engine::AnimatedModelRaycastStatus::Hit
+                  && Near(hit.distance, 2.0f, 0.0001f)
+                  && Near(hit.position, worldHit, 0.0001f)
+                  && hit.anchor.valid
+                  && Vector3DotProduct(hit.normal, ray.direction) <= 0.0f,
+          "animated-model raycasts use the current skinned pose and rendered transform");
+
+    const Vector3 bindOnlyWorld = Vector3Transform(
+            Vector3{1.0f, 0.6f, 0.0f}, authored);
+    const Ray gapRay{
+            Vector3Subtract(
+                    bindOnlyWorld,
+                    Vector3Scale(worldForward, 2.0f)),
+            worldForward};
+    engine::AnimatedModelRaycastResult miss;
+    Check(engine::RaycastAnimatedModel(
+                  asset, instance, authored, gapRay, 10.0f, miss)
+                  == engine::AnimatedModelRaycastStatus::Miss,
+          "a ray inside broad-phase bounds but outside posed triangles passes through");
+
+    instance.boneMatrices[0] = MatrixTranslate(0.8f, 0.0f, 0.0f);
+    Vector3 movedAnchor{};
+    Check(engine::ResolveAnimatedModelSurfaceAnchor(
+                  asset,
+                  instance,
+                  hit.anchor,
+                  authored,
+                  movedAnchor)
+                  && Near(
+                          movedAnchor,
+                          Vector3Transform(
+                                  Vector3Add(
+                                          posedLocalHit,
+                                          Vector3{0.3f, 0.0f, 0.0f}),
+                                  authored),
+                          0.0001f),
+          "blood surface anchors follow subsequent skeletal pose movement");
+}
+
+void TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint()
+{
+    const std::filesystem::path root =
+            std::filesystem::temp_directory_path()
+            / "engine_raylib_gltf_animation_endpoint_test";
+    std::error_code filesystemError;
+    std::filesystem::remove_all(root, filesystemError);
+    filesystemError.clear();
+    std::filesystem::create_directories(root, filesystemError);
+    Check(!filesystemError,
+          "glTF animation endpoint test creates its temporary directory");
+    if (filesystemError) return;
+
+    const std::array<float, 24> buffer{
+            0.0f, 0.5f, 1.0f,
+            0.0f, 0.0f, 0.0f,
+            0.0f, 2.0f, 0.0f,
+            0.0f, 10.0f, 0.0f,
+            0.0f, 0.25f, 0.5f,
+            1.0f, 1.0f, 1.0f,
+            2.0f, 2.0f, 2.0f,
+            4.0f, 4.0f, 4.0f};
+    {
+        std::ofstream binary(root / "endpoint.bin", std::ios::binary);
+        binary.write(
+                reinterpret_cast<const char*>(buffer.data()),
+                static_cast<std::streamsize>(sizeof(buffer)));
+    }
+    {
+        std::ofstream gltf(root / "endpoint.gltf", std::ios::binary);
+        gltf << R"({
+  "asset": {"version": "2.0"},
+  "scene": 0,
+  "scenes": [{"nodes": [0]}],
+  "nodes": [
+    {"name": "Armature", "children": [1], "translation": [0, 0, 0], "rotation": [0, 0, 0, 1], "scale": [1, 1, 1]},
+    {"name": "Root", "translation": [0, 0, 0], "rotation": [0, 0, 0, 1], "scale": [1, 1, 1]}
+  ],
+  "skins": [{"joints": [1]}],
+  "animations": [{
+    "name": "Endpoint",
+    "samplers": [
+      {"input": 0, "output": 1, "interpolation": "LINEAR"},
+      {"input": 2, "output": 3, "interpolation": "LINEAR"}
+    ],
+    "channels": [
+      {"sampler": 0, "target": {"node": 1, "path": "translation"}},
+      {"sampler": 1, "target": {"node": 1, "path": "scale"}}
+    ]
+  }],
+  "buffers": [{"uri": "endpoint.bin", "byteLength": 96}],
+  "bufferViews": [
+    {"buffer": 0, "byteOffset": 0, "byteLength": 12},
+    {"buffer": 0, "byteOffset": 12, "byteLength": 36},
+    {"buffer": 0, "byteOffset": 48, "byteLength": 12},
+    {"buffer": 0, "byteOffset": 60, "byteLength": 36}
+  ],
+  "accessors": [
+    {"bufferView": 0, "componentType": 5126, "count": 3, "type": "SCALAR", "min": [0], "max": [1]},
+    {"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3"},
+    {"bufferView": 2, "componentType": 5126, "count": 3, "type": "SCALAR", "min": [0], "max": [0.5]},
+    {"bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC3"}
+  ]
+})";
+    }
+
+    int animationCount = 0;
+    const std::string gltfPath = (root / "endpoint.gltf").string();
+    ModelAnimation* animations = LoadModelAnimations(
+            gltfPath.c_str(), &animationCount);
+    Check(animations != nullptr
+                  && animationCount == 1
+                  && animations[0].keyframeCount == 61,
+          "raylib loads the generated endpoint animation at 60 Hz");
+    if (animations != nullptr && animationCount == 1
+            && animations[0].keyframeCount == 61) {
+        const Transform& first = animations[0].keyframePoses[0][0];
+        const Transform& last = animations[0].keyframePoses[60][0];
+        Check(Near(first.translation.y, 0.0f)
+                      && Near(last.translation.y, 10.0f)
+                      && Near(last.scale.x, 4.0f),
+              "raylib samples both the clip endpoint and an earlier-ending channel at their authored final poses");
+    }
+    if (animations != nullptr) {
+        UnloadModelAnimations(animations, animationCount);
+    }
+    std::filesystem::remove_all(root, filesystemError);
 }
 
 void TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures()
@@ -7329,6 +7568,117 @@ void TestSectorDoorModelShadowCasterMatrices()
           "fallback slab state emits only independently drawable model frame casters");
 }
 
+void TestNpcWeaponDamageOcclusionAndCorpseFade()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 8);
+    const engine::Entity npc = world.CreateEntity();
+    world.Add(npc, game::NpcRuntimeInstance{
+            "test", "target", game::NpcAction::Idle, false, true, 1.5f, 3.0f});
+    world.Add(npc, game::MakeHealth(100));
+    game::NpcCombatState combat;
+    combat.despawnOnDeath = true;
+    combat.corpseDespawnDelaySeconds = 0.2f;
+    combat.corpseFadeDurationSeconds = 0.5f;
+    world.Add(npc, combat);
+    world.Add(npc, game::SectorObjectTransform{{0.0f, 0.0f, 0.0f}});
+    world.Add(npc, game::SectorObject{1, true});
+    world.Add(npc, game::SectorDynamicModel{});
+
+    game::SectorNavigationWorld navigation;
+    game::NpcNavigationRuntime npcNavigation;
+    game::NpcNavigationRecord record;
+    record.entity = npc;
+    record.placedObjectId = 7;
+    record.instanceId = "target";
+    record.occupied = true;
+    npcNavigation.records.push_back(record);
+
+    game::FpsWeaponImpactDefinition impact;
+    impact.damage = 25;
+    impact.staggerSeconds = 0.18f;
+    impact.knockbackImpulseWorldPerSecond = 1.25f;
+    impact.blood = {true, 18, 1.0f, 1.0f};
+    impact.surfaceDebris = {true, 14, 0.85f, 0.8f};
+    game::FpsShotResult shot;
+    game::WeaponImpactEvent event;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    std::vector<game::SectorStaticModelCollider> props;
+
+    Check(game::ResolvePlayerWeaponShot(
+                  world, nullptr, navigation, npcNavigation, nullptr, doors, props,
+                  Vector3{0.0f, 0.8f, -5.0f}, Vector3{0.0f, 0.0f, 1.0f},
+                  20.0f, impact, shot, event)
+                  && shot.hitKind == game::FpsShotHitKind::Npc
+                  && world.Get<game::Health>(npc).current == 75
+                  && world.Get<game::NpcCombatState>(npc).hurtAnimationRequested
+                  && Near(world.Get<game::NpcCombatState>(npc)
+                                  .staggerRemainingSeconds,
+                          0.18f)
+                  && event.kind == game::WeaponImpactKind::Blood,
+          "weapon shot damages a friendly NPC and requests hurt, stagger, and blood");
+
+    game::SectorImpactParticleSystem particles;
+    particles.Spawn(event);
+    Check(particles.ActiveParticleCount() == 6,
+          "blood impact emits an immediate leading spray");
+    particles.Update(world, nullptr, 0.03f);
+    Check(particles.ActiveParticleCount() > 6
+                  && particles.ActiveParticleCount() <= 18,
+          "attached blood emitter releases the remaining droplets over its short lifetime");
+
+    game::SectorStaticModelCollider blocker;
+    blocker.placedObjectId = 99;
+    blocker.center = {0.0f, -2.0f};
+    blocker.halfExtents = {0.5f, 0.2f};
+    blocker.bottom = 0.0f;
+    blocker.top = 2.0f;
+    blocker.resolved = true;
+    props.push_back(blocker);
+    Check(game::ResolvePlayerWeaponShot(
+                  world, nullptr, navigation, npcNavigation, nullptr, doors, props,
+                  Vector3{0.0f, 0.8f, -5.0f}, Vector3{0.0f, 0.0f, 1.0f},
+                  20.0f, impact, shot, event)
+                  && shot.hitKind == game::FpsShotHitKind::SolidProp
+                  && world.Get<game::Health>(npc).current == 75
+                  && event.kind == game::WeaponImpactKind::SurfaceDebris,
+          "solid prop blocks NPC damage and produces surface debris");
+    const size_t bloodCount = particles.ActiveParticleCount();
+    particles.Spawn(event);
+    Check(particles.ActiveParticleCount() == bloodCount + 14,
+          "surface debris emits its configured mixed chip and dust burst");
+    props.clear();
+
+    for (int hit = 0; hit < 3; ++hit) {
+        game::ResolvePlayerWeaponShot(
+                world, nullptr, navigation, npcNavigation, nullptr, doors, props,
+                Vector3{0.0f, 0.8f, -5.0f}, Vector3{0.0f, 0.0f, 1.0f},
+                20.0f, impact, shot, event);
+    }
+    Check(game::IsDepleted(world.Get<game::Health>(npc))
+                  && world.Get<game::NpcCombatState>(npc).dead
+                  && world.Get<game::NpcCombatState>(npc).deathAnimationRequested
+                  && !npcNavigation.records[0].occupied,
+          "four pistol hits kill the NPC and immediately deactivate navigation");
+
+    world.Get<game::NpcCombatState>(npc).knockbackVelocity = {};
+    world.Get<game::NpcCombatState>(npc).deathAnimationComplete = true;
+    game::NpcCombatRuntime combatRuntime;
+    game::InitializeNpcCombatRuntime(combatRuntime, 1);
+    game::SectorCollisionWorld emptyCollision;
+    game::UpdateNpcCombatSystem(
+            world, emptyCollision, doors, props, nullptr, combatRuntime, 0.45f);
+    Check(world.IsAlive(npc)
+                  && Near(world.Get<game::SectorDynamicModel>(npc).opacity, 0.5f)
+                  && world.Get<game::SectorDynamicModel>(npc).shadowMode
+                          == game::SectorDynamicModelShadowMode::None,
+          "despawning corpse waits then fades and disables its shadow");
+    game::UpdateNpcCombatSystem(
+            world, emptyCollision, doors, props, nullptr, combatRuntime, 0.3f);
+    Check(!world.IsAlive(npc),
+          "corpse is destroyed after its configured fade finishes");
+}
+
 int main()
 {
     extern void RunSectorScriptBindingTests();
@@ -7432,9 +7782,13 @@ int main()
     TestCrowdHeadOnNpcAgentsAvoidEachOther();
     TestCrowdMovingNpcAvoidsStationaryNpc();
     TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions();
+    TestNpcWeaponDamageOcclusionAndCorpseFade();
     TestNpcNavigationSmoothsSectorGeometryStairsVisually();
     TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip();
     TestAnimatedModelSelectionAndBlendApi();
+    TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose();
+    TestAnimatedModelRaycastUsesCurrentSkinnedGeometry();
+    TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
     TestStaticModelSpotlightShadowCasterCollectionAndRevision();
     TestViewmodelMaterialOverrideResolution();

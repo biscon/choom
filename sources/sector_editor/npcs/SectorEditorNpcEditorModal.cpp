@@ -6,6 +6,7 @@
 #include "sector_editor/services/static_model_picker/SectorEditorModelPickerModal.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -236,7 +237,7 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
         editor.RefreshAnimationOptions(assets);
         const float contentW = ScrollContentWidth(layout.formBounds.width, config);
         const float actionSectionHeight = 4.0f * (RowHeight + RowGap) + 54.0f;
-        const float contentHeight = 7.0f * (RowHeight + RowGap)
+        const float contentHeight = 11.0f * (RowHeight + RowGap)
                 + actionSectionHeight * static_cast<float>(kNpcActionCount)
                 + 80.0f;
         engine::UIScrollAreaResult formScroll = engine::BeginScrollArea(
@@ -301,6 +302,73 @@ SectorEditorNpcEditorModalResult DrawSectorEditorNpcEditorModal(
             editor.SetSelectedCanOpenDoors(canOpenDoors);
         }
         y += RowHeight + RowGap;
+
+        drawLabel("Base health");
+        int baseHealth = selected->definition.baseHealth;
+        const engine::UINumericInputResult healthResult = engine::IntInput(
+                ui, config, input, assets,
+                "sector_editor_npc_base_health",
+                Rectangle{fieldX, y, 240.0f, RowHeight},
+                font,
+                baseHealth,
+                state.baseHealthInput,
+                kMinimumNpcBaseHealth,
+                kMaximumNpcBaseHealth,
+                10);
+        if (healthResult.changed) editor.SetSelectedBaseHealth(baseHealth);
+        y += RowHeight + RowGap;
+
+        bool despawnOnDeath = selected->definition.despawnOnDeath;
+        if (engine::Checkbox(
+                    ui, config, input, assets,
+                    "sector_editor_npc_despawn_on_death",
+                    Rectangle{fieldX, y, 300.0f, RowHeight},
+                    font, "Fade and despawn corpse", despawnOnDeath)) {
+            editor.SetSelectedDespawnOnDeath(despawnOnDeath);
+        }
+        y += RowHeight + RowGap;
+
+        if (selected->definition.despawnOnDeath) {
+            drawLabel("Despawn delay (ms)");
+            int delayMilliseconds = static_cast<int>(std::lround(
+                    selected->definition.corpseDespawnDelaySeconds * 1000.0f));
+            const engine::UINumericInputResult delayResult = engine::IntInput(
+                    ui, config, input, assets,
+                    "sector_editor_npc_corpse_despawn_delay_ms",
+                    Rectangle{fieldX, y, 240.0f, RowHeight},
+                    font,
+                    delayMilliseconds,
+                    state.corpseDespawnDelayMillisecondsInput,
+                    0,
+                    static_cast<int>(
+                            kMaximumNpcCorpseDespawnDelaySeconds * 1000.0f),
+                    100);
+            if (delayResult.changed) {
+                editor.SetSelectedCorpseDespawnDelayMilliseconds(
+                        delayMilliseconds);
+            }
+            y += RowHeight + RowGap;
+
+            drawLabel("Fade duration (ms)");
+            int fadeMilliseconds = static_cast<int>(std::lround(
+                    selected->definition.corpseFadeDurationSeconds * 1000.0f));
+            const engine::UINumericInputResult fadeResult = engine::IntInput(
+                    ui, config, input, assets,
+                    "sector_editor_npc_corpse_fade_duration_ms",
+                    Rectangle{fieldX, y, 240.0f, RowHeight},
+                    font,
+                    fadeMilliseconds,
+                    state.corpseFadeDurationMillisecondsInput,
+                    1,
+                    static_cast<int>(
+                            kMaximumNpcCorpseFadeDurationSeconds * 1000.0f),
+                    50);
+            if (fadeResult.changed) {
+                editor.SetSelectedCorpseFadeDurationMilliseconds(
+                        fadeMilliseconds);
+            }
+            y += RowHeight + RowGap;
+        }
 
         drawLabel("Model");
         engine::Text(

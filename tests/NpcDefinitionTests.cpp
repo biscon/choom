@@ -59,6 +59,8 @@ game::NpcDefinition MakeDefinition(
     game::GetNpcAction(definition, game::NpcAction::Walk).animation = "Walk";
     game::GetNpcAction(definition, game::NpcAction::Run).animation = "Walk";
     game::GetNpcAction(definition, game::NpcAction::Run).animationSpeed = 1.6f;
+    game::GetNpcAction(definition, game::NpcAction::Hurt).animation = "Hit";
+    game::GetNpcAction(definition, game::NpcAction::Death).animation = "Death";
     return definition;
 }
 
@@ -66,6 +68,10 @@ void TestRoundTripDefaultsAndSharedClips()
 {
     game::NpcDefinition original = MakeDefinition("zombie_test");
     original.animationBlendSeconds = 0.35f;
+    original.baseHealth = 175;
+    original.despawnOnDeath = true;
+    original.corpseDespawnDelaySeconds = 2.5f;
+    original.corpseFadeDurationSeconds = 0.9f;
     std::string json;
     std::string error;
     Check(game::SerializeNpcDefinitionJson(original, json, error),
@@ -74,7 +80,13 @@ void TestRoundTripDefaultsAndSharedClips()
     Check(document["formatVersion"] == 1
                   && Near(document["animationBlendSeconds"].get<float>(), 0.35f)
                   && document["actions"]["walk"]["animation"] == "Walk"
-                  && document["actions"]["run"]["animation"] == "Walk",
+                  && document["actions"]["run"]["animation"] == "Walk"
+                  && document["actions"]["hurt"]["animation"] == "Hit"
+                  && document["actions"]["death"]["animation"] == "Death"
+                  && document["baseHealth"] == 175
+                  && document["despawnOnDeath"] == true
+                  && Near(document["corpseDespawnDelaySeconds"].get<float>(), 2.5f)
+                  && Near(document["corpseFadeDurationSeconds"].get<float>(), 0.9f),
           "serialized actions may share a GLB animation");
 
     game::NpcDefinition parsed;
@@ -84,6 +96,10 @@ void TestRoundTripDefaultsAndSharedClips()
                   && parsed.name == original.name
                   && parsed.hostile
                   && parsed.canOpenDoors
+                  && parsed.baseHealth == 175
+                  && parsed.despawnOnDeath
+                  && Near(parsed.corpseDespawnDelaySeconds, 2.5f)
+                  && Near(parsed.corpseFadeDurationSeconds, 0.9f)
                   && parsed.modelPath == original.modelPath
                   && Near(parsed.animationBlendSeconds, 0.35f)
                   && game::GetNpcAction(parsed, game::NpcAction::Walk).animation == "Walk"
@@ -96,8 +112,12 @@ void TestRoundTripDefaultsAndSharedClips()
     game::NpcDefinition defaults = MakeDefinition("defaults_test");
     Check(game::SerializeNpcDefinitionJson(defaults, json, error)
                   && !Json::parse(json).contains("animationBlendSeconds")
-                  && !Json::parse(json).contains("canOpenDoors"),
-          "default blend and door-opening capability are omitted from serialized definitions");
+                  && !Json::parse(json).contains("canOpenDoors")
+                  && !Json::parse(json).contains("baseHealth")
+                  && !Json::parse(json).contains("despawnOnDeath")
+                  && !Json::parse(json).contains("corpseDespawnDelaySeconds")
+                  && !Json::parse(json).contains("corpseFadeDurationSeconds"),
+          "default combat, blend, and door fields are omitted from serialized definitions");
 
     defaults.canOpenDoors = false;
     Check(game::SerializeNpcDefinitionJson(defaults, json, error)
@@ -143,6 +163,18 @@ void TestValidation()
     definition.animationBlendSeconds = 3.0f;
     Check(!game::ValidateNpcDefinition(definition, error),
           "excessive animation blend duration is rejected");
+    definition = MakeDefinition("fred");
+    definition.baseHealth = 0;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "zero NPC health is rejected");
+    definition = MakeDefinition("fred");
+    definition.corpseDespawnDelaySeconds = -0.001f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "negative corpse delay is rejected");
+    definition = MakeDefinition("fred");
+    definition.corpseFadeDurationSeconds = 0.0f;
+    Check(!game::ValidateNpcDefinition(definition, error),
+          "zero corpse fade duration is rejected");
 }
 
 void TestDiscoveryErrorsAreRetained()
@@ -225,6 +257,15 @@ void TestDraftSaveCancelRenameDeleteAndSessionView()
     service.SetSelectedCanOpenDoors(false);
     Check(!service.SelectedDraft()->definition.canOpenDoors,
           "NPC editor service updates door-opening capability through its draft API");
+    service.SetSelectedBaseHealth(240);
+    service.SetSelectedDespawnOnDeath(true);
+    service.SetSelectedCorpseDespawnDelayMilliseconds(3200);
+    service.SetSelectedCorpseFadeDurationMilliseconds(650);
+    Check(service.SelectedDraft()->definition.baseHealth == 240
+                  && service.SelectedDraft()->definition.despawnOnDeath
+                  && Near(service.SelectedDraft()->definition.corpseDespawnDelaySeconds, 3.2f)
+                  && Near(service.SelectedDraft()->definition.corpseFadeDurationSeconds, 0.65f),
+          "NPC editor service updates health and corpse behavior through its draft API");
     service.SelectedDraft()->definition.id = "RENAMED_beta";
     session.selectedNpcId = "RENAMED_beta";
     Check(service.SaveAndClose(nullptr)

@@ -2,6 +2,7 @@
   "formatVersion": 1,
   "id": "Zombie1",
   "name": "Zombie",
+  "hostile": true,
   "modelPath": "assets/models/characters/Zombie1.glb",
   "animationBlendSeconds": 0.5,
   "actions": {
@@ -16,6 +17,14 @@
     "run": {
       "animation": "Running",
       "movementSpeed": 3.0
+    },
+    "hurt": {
+      "animation": "Reaction Hit",
+      "animationSpeed": 1.75
+    },
+    "death": {
+      "animation": "Dying",
+      "animationSpeed": 1.5
     }
   }
 }

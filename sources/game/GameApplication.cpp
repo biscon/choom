@@ -488,10 +488,13 @@ const engine::RenderTarget* GameApplication::HdrDebugPresentationSource() const
     return editor.Preview3DHdrDebugPresentationSource();
 }
 
-void GameApplication::Render3DHud(Rectangle playableViewport) const
+void GameApplication::Render3DHud(
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        Rectangle playableViewport) const
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
-        gameSession.RenderHud(playableViewport);
+        gameSession.RenderHud(assets, font, playableViewport);
     } else {
         editor.RenderPreview3DHud(playableViewport);
     }

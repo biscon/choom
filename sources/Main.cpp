@@ -788,7 +788,7 @@ int main()
                 DrawTexturePro(editorTarget.texture, editorSrc, dst, {0,0}, 0.0f, WHITE);
             }
             if (render3D) {
-                application.Render3DHud(dst);
+                application.Render3DHud(assets, smallFont, dst);
             }
             Rectangle uiSrc = GetFullscreenSrcRect(uiTarget.texture);
             DrawTexturePro(uiTarget.texture, uiSrc, dst, {0,0}, 0.0f, WHITE);

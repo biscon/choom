@@ -2,6 +2,7 @@
   "formatVersion": 1,
   "id": "TestCharacter",
   "name": "dude",
+  "despawnOnDeath": true,
   "modelPath": "assets/models/characters/TestCharacter.glb",
   "animationBlendSeconds": 0.5,
   "actions": {
@@ -14,6 +15,8 @@
     },
     "run": {
       "movementSpeed": 3.0
-    }
+    },
+    "hurt": {},
+    "death": {}
   }
 }

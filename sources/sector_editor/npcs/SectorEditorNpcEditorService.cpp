@@ -44,6 +44,12 @@ bool SameDefinition(const NpcDefinition& left, const NpcDefinition& right)
             || left.name != right.name
             || left.hostile != right.hostile
             || left.canOpenDoors != right.canOpenDoors
+            || left.baseHealth != right.baseHealth
+            || left.despawnOnDeath != right.despawnOnDeath
+            || left.corpseDespawnDelaySeconds
+                    != right.corpseDespawnDelaySeconds
+            || left.corpseFadeDurationSeconds
+                    != right.corpseFadeDurationSeconds
             || left.modelPath != right.modelPath
             || left.animationBlendSeconds != right.animationBlendSeconds) {
         return false;
@@ -340,6 +346,42 @@ void SectorEditorNpcEditorService::SetSelectedCanOpenDoors(bool canOpenDoors)
     state_.validationMessage.clear();
 }
 
+void SectorEditorNpcEditorService::SetSelectedBaseHealth(int health)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.baseHealth = health;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedDespawnOnDeath(bool despawn)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.despawnOnDeath = despawn;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedCorpseDespawnDelayMilliseconds(
+        int milliseconds)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.corpseDespawnDelaySeconds =
+            static_cast<float>(milliseconds) / 1000.0f;
+    state_.validationMessage.clear();
+}
+
+void SectorEditorNpcEditorService::SetSelectedCorpseFadeDurationMilliseconds(
+        int milliseconds)
+{
+    SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
+    if (draft == nullptr) return;
+    draft->definition.corpseFadeDurationSeconds =
+            static_cast<float>(milliseconds) / 1000.0f;
+    state_.validationMessage.clear();
+}
+
 void SectorEditorNpcEditorService::SetSelectedAnimationBlendSeconds(float seconds)
 {
     SectorEditorNpcDefinitionDraft* draft = SelectedDraft();
@@ -494,6 +536,9 @@ void SectorEditorNpcEditorService::SyncBuffersFromSelection()
             sizeof(state_.nameBuffer),
             draft == nullptr ? std::string{} : draft->definition.name);
     state_.animationBlendSecondsInput = {};
+    state_.baseHealthInput = {};
+    state_.corpseDespawnDelayMillisecondsInput = {};
+    state_.corpseFadeDurationMillisecondsInput = {};
     state_.animationSpeedInputs = {};
     state_.movementSpeedInputs = {};
 }

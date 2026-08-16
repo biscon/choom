@@ -448,7 +448,7 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen();
-    return fpsPlayer.HandleFireInput(
+    const bool accepted = fpsPlayer.HandleFireInput(
             input,
             engineContext->assets,
             engineContext->audio,
@@ -459,6 +459,21 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             gameplay3D,
             mouseActive,
             uiCaptured);
+    if (!accepted) return false;
+    const FpsShotResult request = fpsPlayer.State().firing.lastShot;
+    FpsShotResult resolvedShot;
+    sceneRuntime.ResolvePlayerWeaponShot(
+            *engineContext,
+            previewState.collision.sectorCollisionWorldValid
+                    ? &previewState.collision.sectorCollisionWorld
+                    : nullptr,
+            request.rayOrigin,
+            request.rayDirection,
+            fpsPlayer.State().firing.definition.maximumRangeWorld,
+            fpsPlayer.State().firing.definition.impact,
+            resolvedShot);
+    fpsPlayer.RecordShotResolution(resolvedShot);
+    return true;
 }
 void SectorEditor::UpdateFpsViewmodelTransformsAndLight()
 {

@@ -1093,7 +1093,7 @@ Detaching before resume matters because resumed Lua can immediately start anothe
 
 Each task may be started or resumed at most once per update. This naturally prevents a chain of immediately terminal awaits from monopolizing a single scheduler pass if all starts/completions are snapshot-based.
 
-Ordinary Lua code that never calls a yielding binding can still loop forever. For v1, treat scripts as trusted and document this limitation. In Debug builds, it is reasonable to add an optional instruction-count hook that aborts a task with a clear "instruction budget exceeded" error, but do not make a profiler/debug hook part of release semantics without measuring its cost.
+Every managed task start/resume installs a count hook with a budget of 1,000,000 Lua VM instructions. Exceeding the budget raises a clear "instruction budget exceeded" error, terminates only the offending task through the normal task-error path, and leaves the runtime active. The hook is removed after each resume and the budget resets at the next resume, so scripts that regularly yield can run indefinitely. Binding failures that return immediately must still be checked inside loops; the hook is a last-resort safeguard rather than normal flow control.
 
 ## 16. Error handling and tracebacks
 

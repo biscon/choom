@@ -120,6 +120,21 @@ struct FpsWeaponMuzzleLightDefinition {
     float decayExponent = 2.5f;
 };
 
+struct FpsWeaponImpactParticlesDefinition {
+    bool enabled = false;
+    int particleCount = 0;
+    float sizeScale = 1.0f;
+    float intensity = 1.0f;
+};
+
+struct FpsWeaponImpactDefinition {
+    int damage = 0;
+    float staggerSeconds = 0.0f;
+    float knockbackImpulseWorldPerSecond = 0.0f;
+    FpsWeaponImpactParticlesDefinition blood;
+    FpsWeaponImpactParticlesDefinition surfaceDebris;
+};
+
 struct FpsWeaponFiringDefinition {
     float shotIntervalSeconds = 0.18f;
     float maximumRangeWorld = 100.0f;
@@ -130,6 +145,7 @@ struct FpsWeaponFiringDefinition {
     FpsWeaponMuzzleSocketDefinition muzzleSocket;
     FpsWeaponMuzzleFlashDefinition muzzleFlash;
     FpsWeaponMuzzleLightDefinition muzzleLight;
+    FpsWeaponImpactDefinition impact;
 };
 
 struct FpsWeaponViewmodelDefinition {

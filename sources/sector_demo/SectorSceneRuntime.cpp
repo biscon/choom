@@ -65,6 +65,8 @@ bool SectorSceneRuntime::Rebuild(
         navigation.RequestRebuild();
         InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     }
+    InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
+    impactParticles.Clear();
     BeginLevelAudio(
             context,
             map,
@@ -87,12 +89,16 @@ bool SectorSceneRuntime::RebuildNavigationForMap(
     }
     navigation.RequestRebuild();
     InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
+    impactParticles.Clear();
     return true;
 }
 
 void SectorSceneRuntime::Shutdown(engine::EngineContext& context)
 {
     ShutdownNpcNavigationRuntime(context.world, navigation, npcNavigation);
+    ClearNpcCombatRuntime(npcCombat);
+    impactParticles.Clear();
     navigation.Shutdown();
     StopLevelAudio(context);
     ClearSectorRuntimeObjects(context.world, context.assets, runtimeObjects);
@@ -114,6 +120,8 @@ void SectorSceneRuntime::RefreshMapRuntimeObjects(
         navigation.RequestRebuild();
         InitializeNpcNavigationRuntime(context.world, navigation, npcNavigation);
     }
+    InitializeNpcCombatRuntime(npcCombat, map.runtimeObjects.size());
+    impactParticles.Clear();
     BindRuntimeObjectAudio(context.world);
 }
 
@@ -162,6 +170,22 @@ void SectorSceneRuntime::Update(
                 runtimeObjects.dynamicPortalBlockers);
         runtimeObjects.doorCollisionCacheInitialized = true;
     }
+    if (runtimeObjects.objectSectorLookupWorldValid) {
+        const bool npcKnockbackMoved = UpdateNpcCombatSystem(
+                context.world,
+                runtimeObjects.objectSectorLookupWorld,
+                runtimeObjects.dynamicDoorColliders,
+                runtimeObjects.staticModelColliders,
+                &map,
+                npcCombat,
+                dt);
+        if (npcKnockbackMoved) {
+            UpdateSectorObjectBakedLightingSystem(
+                    context.world,
+                    runtimeObjects.objectLightProbes,
+                    &map);
+        }
+    }
     navigation.UpdateBuild(
             map,
             runtimeObjects.staticModelColliders,
@@ -190,7 +214,36 @@ void SectorSceneRuntime::Update(
         PlayPendingNpcFootsteps(context);
     }
     engine::AnimatedModelSystem(context.world, context.assets, dt);
+    impactParticles.Update(context.world, &context.assets, dt);
     renderer.AdvanceRuntime(dt);
+}
+
+bool SectorSceneRuntime::ResolvePlayerWeaponShot(
+        engine::EngineContext& context,
+        const SectorCollisionWorld* collisionWorld,
+        Vector3 rayOrigin,
+        Vector3 rayDirection,
+        float maximumDistance,
+        const FpsWeaponImpactDefinition& impact,
+        FpsShotResult& outShot)
+{
+    WeaponImpactEvent impactEvent;
+    const bool hit = game::ResolvePlayerWeaponShot(
+            context.world,
+            &context.assets,
+            navigation,
+            npcNavigation,
+            collisionWorld,
+            runtimeObjects.dynamicDoorColliders,
+            runtimeObjects.staticModelColliders,
+            rayOrigin,
+            rayDirection,
+            maximumDistance,
+            impact,
+            outShot,
+            impactEvent);
+    impactParticles.Spawn(impactEvent);
+    return hit;
 }
 
 void SectorSceneRuntime::UpdateLoadPreparation(
@@ -587,6 +640,11 @@ void SectorSceneRuntime::RenderScene(
                     &runtimeObjects.objectLightProbes,
                     &map},
             map.fogSettings);
+    BeginMode3D(renderer.RenderCamera());
+    impactParticles.Draw(
+            renderer.RenderCamera(),
+            renderer.VisibilityResult());
+    EndMode3D();
 }
 
 void SectorSceneRuntime::ApplyWorldAtmosphere(

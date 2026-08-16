@@ -19,7 +19,7 @@ bool ValidAnimationIndex(const ModelAsset& asset, uint32_t index)
             && index < static_cast<uint32_t>(std::max(0, asset.animationCount));
 }
 
-void AdvanceFrame(
+bool AdvanceFrame(
         float& frame,
         bool& playing,
         bool& finished,
@@ -29,7 +29,7 @@ void AdvanceFrame(
         float dt)
 {
     if (!playing || finished || speed <= 0.0f || dt <= 0.0f || keyframeCount <= 0) {
-        return;
+        return false;
     }
 
     frame += dt * GltfAnimationFramesPerSecond * speed;
@@ -44,6 +44,7 @@ void AdvanceFrame(
         finished = true;
         playing = false;
     }
+    return true;
 }
 
 } // namespace
@@ -78,6 +79,8 @@ void SetAnimatedModelAnimation(
             && animator.animationIndex != animationIndex) {
         animator.targetAnimationIndex = animationIndex;
         animator.targetFrame = 0.0f;
+        animator.targetLoop = animator.loop;
+        animator.targetFinished = false;
         animator.transitionDurationSeconds = blendDurationSeconds;
         animator.transitionElapsedSeconds = 0.0f;
     } else {
@@ -88,6 +91,8 @@ void SetAnimatedModelAnimation(
         }
         animator.targetAnimationIndex = InvalidModelAnimationIndex;
         animator.targetFrame = 0.0f;
+        animator.targetLoop = true;
+        animator.targetFinished = false;
         animator.transitionDurationSeconds = 0.0f;
         animator.transitionElapsedSeconds = 0.0f;
     }
@@ -109,6 +114,25 @@ bool SetAnimatedModelAnimationByName(
     }
     SetAnimatedModelAnimation(animator, index, blendDurationSeconds, restart);
     return true;
+}
+
+bool AdvanceAnimatedModelAnimator(
+        AnimatedModelAnimator& animator,
+        int keyframeCount,
+        float dt)
+{
+    const bool poseChanged = AdvanceFrame(
+            animator.frame,
+            animator.playing,
+            animator.finished,
+            animator.loop,
+            animator.speed,
+            keyframeCount,
+            dt);
+    if (poseChanged) {
+        animator.poseDirty = true;
+    }
+    return poseChanged;
 }
 
 void PrepareAnimatedModelInstancesSystem(World& world, AssetManager& assets)
@@ -180,26 +204,19 @@ void AnimatedModelSystem(World& world, AssetManager& assets, float dt)
                     return;
                 }
 
-                AdvanceFrame(
-                        animator.frame,
-                        animator.playing,
-                        animator.finished,
-                        animator.loop,
-                        animator.speed,
-                        source.keyframeCount,
-                        dt);
+                AdvanceAnimatedModelAnimator(
+                        animator, source.keyframeCount, dt);
 
                 Model poseModel = BuildAnimatedModelPoseView(*asset, instance);
                 if (ValidAnimationIndex(*asset, animator.targetAnimationIndex)) {
                     const ModelAnimation& target = asset->animations[animator.targetAnimationIndex];
                     if (IsModelAnimationValid(asset->model, target)) {
-                        bool targetPlaying = animator.playing;
-                        bool targetFinished = false;
+                        bool targetPlaying = !animator.targetFinished;
                         AdvanceFrame(
                                 animator.targetFrame,
                                 targetPlaying,
-                                targetFinished,
-                                animator.loop,
+                                animator.targetFinished,
+                                animator.targetLoop,
                                 animator.speed,
                                 target.keyframeCount,
                                 dt);
@@ -221,7 +238,12 @@ void AnimatedModelSystem(World& world, AssetManager& assets, float dt)
                         if (blend >= 1.0f) {
                             animator.animationIndex = animator.targetAnimationIndex;
                             animator.frame = animator.targetFrame;
+                            animator.loop = animator.targetLoop;
+                            animator.finished = animator.targetFinished;
+                            animator.playing = !animator.targetFinished;
                             animator.targetAnimationIndex = InvalidModelAnimationIndex;
+                            animator.targetLoop = true;
+                            animator.targetFinished = false;
                             animator.transitionDurationSeconds = 0.0f;
                             animator.transitionElapsedSeconds = 0.0f;
                         }
@@ -229,6 +251,8 @@ void AnimatedModelSystem(World& world, AssetManager& assets, float dt)
                         return;
                     }
                     animator.targetAnimationIndex = InvalidModelAnimationIndex;
+                    animator.targetLoop = true;
+                    animator.targetFinished = false;
                 }
 
                 if (animator.playing || animator.poseDirty) {

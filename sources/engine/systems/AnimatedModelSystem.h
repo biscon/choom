@@ -25,6 +25,14 @@ bool SetAnimatedModelAnimationByName(
         float blendDurationSeconds = 0.0f,
         bool restart = true);
 
+// Advances the active clip cursor. Returns true when the resulting pose must
+// be applied, including the update that clamps a non-looping clip to its final
+// frame and stops playback.
+bool AdvanceAnimatedModelAnimator(
+        AnimatedModelAnimator& animator,
+        int keyframeCount,
+        float dt);
+
 // Called during explicit load/finalization, where allocating the per-instance
 // pose buffers is allowed.
 void PrepareAnimatedModelInstancesSystem(World& world, AssetManager& assets);

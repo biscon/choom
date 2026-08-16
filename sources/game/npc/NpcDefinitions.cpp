@@ -121,6 +121,25 @@ float OptionalFloat(
     return static_cast<float>(number);
 }
 
+int OptionalInt(
+        const Json& object,
+        const char* field,
+        int fallback,
+        const std::string& context)
+{
+    const auto it = object.find(field);
+    if (it == object.end()) return fallback;
+    if (!it->is_number_integer()) {
+        Fail(context + "." + field + " must be an integer");
+    }
+    const long long number = it->get<long long>();
+    if (number < std::numeric_limits<int>::min()
+            || number > std::numeric_limits<int>::max()) {
+        Fail(context + "." + field + " is outside the supported integer range");
+    }
+    return static_cast<int>(number);
+}
+
 void ValidateOrFail(const NpcDefinition& definition)
 {
     std::string error;
@@ -136,7 +155,9 @@ const std::array<NpcActionMetadata, kNpcActionCount>& NpcActionMetadataTable()
     static const std::array<NpcActionMetadata, kNpcActionCount> metadata = {{
             {NpcAction::Idle, "idle", "Idle", false, 0.0f},
             {NpcAction::Walk, "walk", "Walk", true, 1.5f},
-            {NpcAction::Run, "run", "Run", true, 3.0f}
+            {NpcAction::Run, "run", "Run", true, 3.0f},
+            {NpcAction::Hurt, "hurt", "Hurt", false, 0.0f},
+            {NpcAction::Death, "death", "Death", false, 0.0f}
     }};
     return metadata;
 }
@@ -220,6 +241,26 @@ bool ValidateNpcDefinition(
         outError = "NPC model must be a normalized .glb or .gltf path under assets/models/characters";
         return false;
     }
+    if (definition.baseHealth < kMinimumNpcBaseHealth
+            || definition.baseHealth > kMaximumNpcBaseHealth) {
+        outError = "NPC base health must be between 1 and 1000000";
+        return false;
+    }
+    if (!std::isfinite(definition.corpseDespawnDelaySeconds)
+            || definition.corpseDespawnDelaySeconds < 0.0f
+            || definition.corpseDespawnDelaySeconds
+                    > kMaximumNpcCorpseDespawnDelaySeconds) {
+        outError = "NPC corpse despawn delay must be between 0 and 600 seconds";
+        return false;
+    }
+    if (!std::isfinite(definition.corpseFadeDurationSeconds)
+            || definition.corpseFadeDurationSeconds
+                    < kMinimumNpcCorpseFadeDurationSeconds
+            || definition.corpseFadeDurationSeconds
+                    > kMaximumNpcCorpseFadeDurationSeconds) {
+        outError = "NPC corpse fade duration must be between 0.001 and 60 seconds";
+        return false;
+    }
     if (!std::isfinite(definition.animationBlendSeconds)
             || definition.animationBlendSeconds < kMinimumNpcAnimationBlendSeconds
             || definition.animationBlendSeconds > kMaximumNpcAnimationBlendSeconds) {
@@ -258,7 +299,10 @@ bool ParseNpcDefinitionJson(
         if (!root.is_object()) Fail("NPC definition root must be an object");
         RejectUnknownFields(
                 root,
-                {"formatVersion", "id", "name", "hostile", "canOpenDoors", "modelPath", "animationBlendSeconds", "actions"},
+                {"formatVersion", "id", "name", "hostile", "canOpenDoors",
+                 "baseHealth", "despawnOnDeath", "corpseDespawnDelaySeconds",
+                 "corpseFadeDurationSeconds", "modelPath",
+                 "animationBlendSeconds", "actions"},
                 "NPC definition");
 
         const Json& version = RequireField(root, "formatVersion", "NPC definition");
@@ -273,6 +317,20 @@ bool ParseNpcDefinitionJson(
         parsed.hostile = OptionalBool(root, "hostile", false, "NPC definition");
         parsed.canOpenDoors = OptionalBool(
                 root, "canOpenDoors", true, "NPC definition");
+        parsed.baseHealth = OptionalInt(
+                root, "baseHealth", kDefaultNpcBaseHealth, "NPC definition");
+        parsed.despawnOnDeath = OptionalBool(
+                root, "despawnOnDeath", false, "NPC definition");
+        parsed.corpseDespawnDelaySeconds = OptionalFloat(
+                root,
+                "corpseDespawnDelaySeconds",
+                kDefaultNpcCorpseDespawnDelaySeconds,
+                "NPC definition");
+        parsed.corpseFadeDurationSeconds = OptionalFloat(
+                root,
+                "corpseFadeDurationSeconds",
+                kDefaultNpcCorpseFadeDurationSeconds,
+                "NPC definition");
         parsed.modelPath = RequireString(root, "modelPath", "NPC definition");
         parsed.animationBlendSeconds = OptionalFloat(
                 root,
@@ -336,6 +394,20 @@ bool SerializeNpcDefinitionJson(
         if (!definition.name.empty()) root["name"] = definition.name;
         if (definition.hostile) root["hostile"] = true;
         if (!definition.canOpenDoors) root["canOpenDoors"] = false;
+        if (definition.baseHealth != kDefaultNpcBaseHealth) {
+            root["baseHealth"] = definition.baseHealth;
+        }
+        if (definition.despawnOnDeath) root["despawnOnDeath"] = true;
+        if (definition.corpseDespawnDelaySeconds
+                != kDefaultNpcCorpseDespawnDelaySeconds) {
+            root["corpseDespawnDelaySeconds"] =
+                    definition.corpseDespawnDelaySeconds;
+        }
+        if (definition.corpseFadeDurationSeconds
+                != kDefaultNpcCorpseFadeDurationSeconds) {
+            root["corpseFadeDurationSeconds"] =
+                    definition.corpseFadeDurationSeconds;
+        }
         root["modelPath"] = definition.modelPath;
         if (definition.animationBlendSeconds != kDefaultNpcAnimationBlendSeconds) {
             root["animationBlendSeconds"] = definition.animationBlendSeconds;

@@ -240,6 +240,12 @@ moveNpc(instanceId, levelMarkerId [, gait]) -> true | false, reason
 They resume only after collision-constrained locomotion physically arrives or
 reports a terminal failure.
 
+Loops must check the returned boolean and exit, yield, or back off after a
+failure. A missing or removed NPC makes later requests fail immediately. As a
+last-resort safeguard, each managed script start/resume has a budget of
+1,000,000 Lua VM instructions; exceeding it terminates that task with an
+`instruction budget exceeded` error instead of freezing the game thread.
+
 ### Async forms
 
 ```text

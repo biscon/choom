@@ -205,21 +205,21 @@ void ResolveNpcAnimations(
         engine::World& world,
         engine::AssetManager& assets,
         const NpcDefinitionCatalog& definitions,
-        NpcNavigationRecord& record)
+        engine::Entity entity)
 {
-    if (!world.IsAlive(record.entity)
-            || !world.Has<NpcRuntimeInstance>(record.entity)
-            || !world.Has<NpcAnimationState>(record.entity)
-            || !world.Has<engine::AnimatedModelInstance>(record.entity)
-            || !world.Has<engine::AnimatedModelAnimator>(record.entity)) {
+    if (!world.IsAlive(entity)
+            || !world.Has<NpcRuntimeInstance>(entity)
+            || !world.Has<NpcAnimationState>(entity)
+            || !world.Has<engine::AnimatedModelInstance>(entity)
+            || !world.Has<engine::AnimatedModelAnimator>(entity)) {
         return;
     }
-    NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(record.entity);
-    NpcAnimationState& state = world.Get<NpcAnimationState>(record.entity);
+    NpcRuntimeInstance& npc = world.Get<NpcRuntimeInstance>(entity);
+    NpcAnimationState& state = world.Get<NpcAnimationState>(entity);
     engine::AnimatedModelInstance& instance =
-            world.Get<engine::AnimatedModelInstance>(record.entity);
+            world.Get<engine::AnimatedModelInstance>(entity);
     engine::AnimatedModelAnimator& animator =
-            world.Get<engine::AnimatedModelAnimator>(record.entity);
+            world.Get<engine::AnimatedModelAnimator>(entity);
     const engine::ModelAsset* asset = assets.GetModelAsset(instance.model);
     const NpcDefinition* definition = FindNpcDefinition(definitions, npc.definitionId);
     if (!state.resolved) {
@@ -229,16 +229,20 @@ void ResolveNpcAnimations(
             const size_t index = ActionIndex(metadata.action);
             const NpcActionDefinition& action = GetNpcAction(*definition, metadata.action);
             state.animationSpeeds[index] = action.animationSpeed;
-            state.animationIndices[index] = engine::FindModelAnimationIndex(
-                    *asset, action.animation.c_str());
+            state.animationIndices[index] = action.animation.empty()
+                    ? engine::InvalidModelAnimationIndex
+                    : engine::FindModelAnimationIndex(
+                            *asset, action.animation.c_str());
             if (state.animationIndices[index] == engine::InvalidModelAnimationIndex) {
                 state.missingAnimationMask |= static_cast<uint8_t>(1u << index);
-                std::fprintf(
-                        stderr,
-                        "[NPC WARNING] NPC '%s' semantic action '%s' has no model animation '%s'.\n",
-                        npc.instanceId.c_str(),
-                        metadata.displayName,
-                        action.animation.c_str());
+                if (!action.animation.empty()) {
+                    std::fprintf(
+                            stderr,
+                            "[NPC WARNING] NPC '%s' semantic action '%s' has no model animation '%s'.\n",
+                            npc.instanceId.c_str(),
+                            metadata.displayName,
+                            action.animation.c_str());
+                }
             }
         }
         state.blendSeconds = definition->animationBlendSeconds;
@@ -251,10 +255,72 @@ void ResolveNpcAnimations(
         state.appliedAction = NpcAction::Idle;
     }
 
-    if (ApplyNpcSemanticAnimation(state, animator, npc.action)
-            == NpcAnimationApplyResult::Missing) {
-        SetDiagnostic(record, "semantic action animation is missing; movement continues");
+    NpcCombatState* combat = world.Has<NpcCombatState>(entity)
+            ? &world.Get<NpcCombatState>(entity)
+            : nullptr;
+    if (combat != nullptr && combat->dead) {
+        const size_t deathIndex = ActionIndex(NpcAction::Death);
+        if (combat->deathAnimationRequested) {
+            combat->deathAnimationRequested = false;
+            if (state.animationIndices[deathIndex]
+                    == engine::InvalidModelAnimationIndex) {
+                animator.playing = false;
+                animator.targetAnimationIndex =
+                        engine::InvalidModelAnimationIndex;
+                animator.targetFrame = 0.0f;
+                animator.targetFinished = false;
+                animator.transitionDurationSeconds = 0.0f;
+                animator.transitionElapsedSeconds = 0.0f;
+                combat->deathAnimationComplete = true;
+                return;
+            }
+            engine::SetAnimatedModelAnimation(
+                    animator,
+                    state.animationIndices[deathIndex],
+                    state.blendSeconds,
+                    true);
+            animator.speed = state.animationSpeeds[deathIndex];
+            animator.loop = false;
+            animator.targetLoop = false;
+            state.appliedAction = NpcAction::Death;
+        }
+        if (state.appliedAction == NpcAction::Death && animator.finished) {
+            combat->deathAnimationComplete = true;
+        }
+        return;
     }
+
+    if (combat != nullptr && combat->hurtAnimationRequested) {
+        combat->hurtAnimationRequested = false;
+        const size_t hurtIndex = ActionIndex(NpcAction::Hurt);
+        if (state.animationIndices[hurtIndex]
+                != engine::InvalidModelAnimationIndex) {
+            engine::SetAnimatedModelAnimation(
+                    animator,
+                    state.animationIndices[hurtIndex],
+                    state.blendSeconds,
+                    true);
+            animator.speed = state.animationSpeeds[hurtIndex];
+            animator.loop = false;
+            animator.targetLoop = false;
+            state.appliedAction = NpcAction::Hurt;
+            combat->hurtAnimationPlaying = true;
+        } else {
+            combat->hurtAnimationPlaying = false;
+            return;
+        }
+    }
+    if (combat != nullptr
+            && combat->staggerRemainingSeconds > 0.0f
+            && state.animationIndices[ActionIndex(NpcAction::Hurt)]
+                    == engine::InvalidModelAnimationIndex) {
+        return;
+    }
+    if (combat != nullptr && combat->hurtAnimationPlaying) {
+        if (!animator.finished) return;
+        combat->hurtAnimationPlaying = false;
+    }
+    ApplyNpcSemanticAnimation(state, animator, npc.action);
 }
 
 bool Replan(
@@ -402,8 +468,28 @@ NpcAnimationApplyResult ApplyNpcSemanticAnimation(
             state.blendSeconds,
             false);
     animator.speed = state.animationSpeeds[requestedIndex];
+    animator.loop = requested != NpcAction::Hurt
+            && requested != NpcAction::Death;
+    animator.targetLoop = animator.loop;
     state.appliedAction = requested;
     return NpcAnimationApplyResult::Applied;
+}
+
+void UpdateNpcAnimationStateSystem(
+        engine::World& world,
+        engine::AssetManager& assets,
+        const NpcDefinitionCatalog& definitions)
+{
+    world.ForEach<NpcRuntimeInstance, NpcAnimationState,
+            engine::AnimatedModelInstance, engine::AnimatedModelAnimator>(
+            [&world, &assets, &definitions](
+                    engine::Entity entity,
+                    NpcRuntimeInstance&,
+                    NpcAnimationState&,
+                    engine::AnimatedModelInstance&,
+                    engine::AnimatedModelAnimator&) {
+                ResolveNpcAnimations(world, assets, definitions, entity);
+            });
 }
 
 void InitializeNpcNavigationRuntime(
@@ -470,6 +556,36 @@ void ShutdownNpcNavigationRuntime(
     }
     runtime.counters = {};
     runtime.growthWarned = false;
+}
+
+bool DeactivateNpcNavigation(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& runtime,
+        engine::Entity entity)
+{
+    for (NpcNavigationRecord& record : runtime.records) {
+        if (!record.occupied || record.entity != entity) continue;
+        ReleasePath(navigation, record, &world);
+        if (!IsNull(record.agentHandle)) {
+            navigation.ReleaseAgentRecord(record.agentHandle);
+            record.agentHandle = {};
+        }
+        record.preferredVelocity = {};
+        record.desiredVelocity = {};
+        record.actualVelocity = {};
+        record.occupied = false;
+        runtime.collisionCylinders.erase(
+                std::remove_if(
+                        runtime.collisionCylinders.begin(),
+                        runtime.collisionCylinders.end(),
+                        [&record](const NpcCollisionCylinder& cylinder) {
+                            return cylinder.stableId == record.placedObjectId;
+                        }),
+                runtime.collisionCylinders.end());
+        return true;
+    }
+    return false;
 }
 
 NpcMoveRequestResult RequestNpcMove(
@@ -909,7 +1025,10 @@ void UpdateNpcNavigationAndLocomotionSystem(
         const float maximumSpeed = record.gait == NpcMoveGait::Run
                 ? npc.runSpeed : npc.walkSpeed;
         Vector2 preferred{};
-        if (IsActive(record.phase)
+        const bool staggered = world.Has<NpcCombatState>(record.entity)
+                && world.Get<NpcCombatState>(record.entity)
+                        .staggerRemainingSeconds > 0.0f;
+        if (!staggered && IsActive(record.phase)
                 && navigation.IsPathRecordValid(record.pathHandle)
                 && !record.tileReplanPending
                 && record.nextCorner < record.cornerCount
@@ -1050,7 +1169,11 @@ void UpdateNpcNavigationAndLocomotionSystem(
             }
         }
 
-        if (IsActive(record.phase) && !record.tileReplanPending && dt > 0.0f) {
+        const bool staggered = world.Has<NpcCombatState>(record.entity)
+                && world.Get<NpcCombatState>(record.entity)
+                        .staggerRemainingSeconds > 0.0f;
+        if (!staggered && IsActive(record.phase)
+                && !record.tileReplanPending && dt > 0.0f) {
             const float movementSpeed = record.gait == NpcMoveGait::Run
                     ? npc.runSpeed : npc.walkSpeed;
             const SectorNavigationCrowdAgentState crowdState =
@@ -1321,6 +1444,11 @@ void UpdateNpcNavigationAndLocomotionSystem(
                     }
                 }
             }
+        } else if (staggered) {
+            record.preferredVelocity = {};
+            record.desiredVelocity = {};
+            record.actualVelocity = {};
+            npc.action = NpcAction::Idle;
         } else if (!IsActive(record.phase)) {
             npc.action = NpcAction::Idle;
         }
@@ -1352,13 +1480,13 @@ void UpdateNpcNavigationAndLocomotionSystem(
             record.visualPosition = Vector3Add(
                     record.visualPosition, visualOffset->position);
         }
-        ResolveNpcAnimations(world, assets, definitions, record);
     }
 
     if (movedAnyNpc) {
         UpdateSectorObjectBakedLightingSystem(
                 world, objectLightProbes, &map);
     }
+    UpdateNpcAnimationStateSystem(world, assets, definitions);
 }
 
 } // namespace game

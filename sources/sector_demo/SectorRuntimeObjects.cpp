@@ -44,7 +44,7 @@ SectorObjectLighting SampleSectorObjectLighting(
 void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity)
 {
     world.ReserveEntities(objectCapacity);
-    world.ReserveComponentTypes(25);
+    world.ReserveComponentTypes(27);
     world.ReserveComponent<SectorObjectTransform>(objectCapacity);
     world.ReserveComponent<SectorObject>(objectCapacity);
     world.ReserveComponent<SectorObjectLighting>(objectCapacity);
@@ -53,6 +53,8 @@ void ReserveSectorRuntimeObjectWorld(engine::World& world, size_t objectCapacity
     world.ReserveComponent<SectorDynamicModel>(objectCapacity);
     world.ReserveComponent<NpcRuntimeInstance>(objectCapacity);
     world.ReserveComponent<NpcAnimationState>(objectCapacity);
+    world.ReserveComponent<Health>(objectCapacity);
+    world.ReserveComponent<NpcCombatState>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelInstance>(objectCapacity);
     world.ReserveComponent<engine::AnimatedModelAnimator>(objectCapacity);
     world.ReserveComponent<SectorStaticModelCollider>(objectCapacity);
@@ -1138,6 +1140,14 @@ void SpawnPlacedRuntimeObjects(
                     definition->canOpenDoors,
                     GetNpcAction(*definition, NpcAction::Walk).movementSpeed,
                     GetNpcAction(*definition, NpcAction::Run).movementSpeed});
+            world.Add(entity, MakeHealth(definition->baseHealth));
+            NpcCombatState npcCombat;
+            npcCombat.despawnOnDeath = definition->despawnOnDeath;
+            npcCombat.corpseDespawnDelaySeconds =
+                    definition->corpseDespawnDelaySeconds;
+            npcCombat.corpseFadeDurationSeconds =
+                    definition->corpseFadeDurationSeconds;
+            world.Add(entity, npcCombat);
             NpcAnimationState npcAnimation;
             npcAnimation.blendSeconds = definition->animationBlendSeconds;
             for (const NpcActionMetadata& metadata : NpcActionMetadataTable()) {
@@ -1157,6 +1167,7 @@ void SpawnPlacedRuntimeObjects(
                     idle.animation,
                     false,
                     false,
+                    1.0f,
                     placedObject.npc.shadowMode});
             world.Add(entity, engine::AnimatedModelInstance{model});
             engine::AnimatedModelAnimator animator;
@@ -1227,6 +1238,7 @@ void SpawnPlacedRuntimeObjects(
                     placedObject.dynamicModel.animation,
                     false,
                     false,
+                    1.0f,
                     placedObject.dynamicModel.shadowMode});
             world.Add(entity, engine::AnimatedModelInstance{model});
             engine::AnimatedModelAnimator animator;

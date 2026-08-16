@@ -346,6 +346,179 @@ bool ComputeModelLocalBounds(const Model& model, BoundingBox& outBounds)
     return foundVertex;
 }
 
+struct ModelBoundsAccumulator {
+    Vector3 minimum{};
+    Vector3 maximum{};
+    bool valid = false;
+};
+
+void IncludeModelBoundsPoint(ModelBoundsAccumulator& bounds, Vector3 point)
+{
+    if (!std::isfinite(point.x)
+            || !std::isfinite(point.y)
+            || !std::isfinite(point.z)) {
+        return;
+    }
+    if (!bounds.valid) {
+        bounds.minimum = point;
+        bounds.maximum = point;
+        bounds.valid = true;
+        return;
+    }
+    bounds.minimum.x = std::min(bounds.minimum.x, point.x);
+    bounds.minimum.y = std::min(bounds.minimum.y, point.y);
+    bounds.minimum.z = std::min(bounds.minimum.z, point.z);
+    bounds.maximum.x = std::max(bounds.maximum.x, point.x);
+    bounds.maximum.y = std::max(bounds.maximum.y, point.y);
+    bounds.maximum.z = std::max(bounds.maximum.z, point.z);
+}
+
+void IncludeTransformedModelBounds(
+        ModelBoundsAccumulator& destination,
+        const ModelBoundsAccumulator& source,
+        Matrix transform)
+{
+    if (!source.valid) return;
+    for (float x : {source.minimum.x, source.maximum.x}) {
+        for (float y : {source.minimum.y, source.maximum.y}) {
+            for (float z : {source.minimum.z, source.maximum.z}) {
+                IncludeModelBoundsPoint(
+                        destination,
+                        Vector3Transform(Vector3{x, y, z}, transform));
+            }
+        }
+    }
+}
+
+Matrix ModelPoseTransformMatrix(const Transform& transform)
+{
+    return MatrixMultiply(
+            MatrixMultiply(
+                    MatrixScale(
+                            transform.scale.x,
+                            transform.scale.y,
+                            transform.scale.z),
+                    QuaternionToMatrix(transform.rotation)),
+            MatrixTranslate(
+                    transform.translation.x,
+                    transform.translation.y,
+                    transform.translation.z));
+}
+
+bool ComputeAnimatedModelLocalBounds(
+        const Model& model,
+        const ModelAnimation* animations,
+        int animationCount,
+        BoundingBox localBounds,
+        bool hasLocalBounds,
+        BoundingBox& outBounds)
+{
+    const int boneCount = model.skeleton.boneCount;
+    if (!hasLocalBounds
+            || boneCount <= 0
+            || model.skeleton.bindPose == nullptr
+            || animations == nullptr
+            || animationCount <= 0) {
+        return false;
+    }
+
+    std::vector<ModelBoundsAccumulator> boneInfluenceBounds(
+            static_cast<size_t>(boneCount));
+    bool foundSkinningData = false;
+    for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
+        const Mesh& mesh = model.meshes[meshIndex];
+        if (mesh.vertices == nullptr
+                || mesh.vertexCount <= 0
+                || mesh.boneIndices == nullptr
+                || mesh.boneWeights == nullptr) {
+            continue;
+        }
+        for (int vertexIndex = 0; vertexIndex < mesh.vertexCount; ++vertexIndex) {
+            const Vector3 vertex{
+                    mesh.vertices[vertexIndex * 3],
+                    mesh.vertices[vertexIndex * 3 + 1],
+                    mesh.vertices[vertexIndex * 3 + 2]};
+            for (int influenceIndex = 0; influenceIndex < 4; ++influenceIndex) {
+                const int offset = vertexIndex * 4 + influenceIndex;
+                const float weight = mesh.boneWeights[offset];
+                const int boneIndex = mesh.boneIndices[offset];
+                if (!std::isfinite(weight)
+                        || weight <= 0.0f
+                        || boneIndex < 0
+                        || boneIndex >= boneCount) {
+                    continue;
+                }
+                IncludeModelBoundsPoint(
+                        boneInfluenceBounds[static_cast<size_t>(boneIndex)],
+                        vertex);
+                foundSkinningData = true;
+            }
+        }
+    }
+    if (!foundSkinningData) return false;
+
+    ModelBoundsAccumulator animatedBounds;
+    IncludeModelBoundsPoint(animatedBounds, localBounds.min);
+    IncludeModelBoundsPoint(animatedBounds, localBounds.max);
+    // A weighted skinning result is a convex combination of bone-transformed
+    // points. Including the model origin keeps the envelope conservative for
+    // assets whose quantized weights sum to slightly less than one.
+    IncludeModelBoundsPoint(
+            animatedBounds,
+            Vector3Transform(Vector3{}, model.transform));
+
+    for (int animationIndex = 0;
+            animationIndex < animationCount;
+            ++animationIndex) {
+        const ModelAnimation& animation = animations[animationIndex];
+        if (animation.keyframePoses == nullptr
+                || animation.keyframeCount <= 0
+                || animation.boneCount <= 0) {
+            continue;
+        }
+        const int animationBoneCount = std::min(
+                boneCount, animation.boneCount);
+        for (int frameIndex = 0;
+                frameIndex < animation.keyframeCount;
+                ++frameIndex) {
+            const Transform* pose = animation.keyframePoses[frameIndex];
+            if (pose == nullptr) continue;
+            for (int boneIndex = 0;
+                    boneIndex < animationBoneCount;
+                    ++boneIndex) {
+                const ModelBoundsAccumulator& influenceBounds =
+                        boneInfluenceBounds[static_cast<size_t>(boneIndex)];
+                if (!influenceBounds.valid) continue;
+                const Matrix bindPose = ModelPoseTransformMatrix(
+                        model.skeleton.bindPose[boneIndex]);
+                const Matrix currentPose = ModelPoseTransformMatrix(
+                        pose[boneIndex]);
+                const Matrix boneMatrix = MatrixMultiply(
+                        MatrixInvert(bindPose), currentPose);
+                IncludeTransformedModelBounds(
+                        animatedBounds,
+                        influenceBounds,
+                        MatrixMultiply(boneMatrix, model.transform));
+            }
+        }
+    }
+    if (!animatedBounds.valid) return false;
+
+    const Vector3 size = Vector3Subtract(
+            animatedBounds.maximum, animatedBounds.minimum);
+    const float padding = std::max(
+            0.025f,
+            Vector3Length(size) * 0.025f);
+    outBounds = {
+            Vector3Subtract(
+                    animatedBounds.minimum,
+                    Vector3{padding, padding, padding}),
+            Vector3Add(
+                    animatedBounds.maximum,
+                    Vector3{padding, padding, padding})};
+    return true;
+}
+
 } // namespace
 
 void ModelAssets::OnScopeCreated(AssetScopeHandle scope)
@@ -574,11 +747,20 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
 
         ParsedModelMaterials parsed;
         BoundingBox localBounds{};
+        BoundingBox animatedLocalBounds{};
         bool hasLocalBounds = false;
+        bool hasAnimatedLocalBounds = false;
         if (loadedModel) {
             parsed = ParseModelMaterials(path, loaded.materialCount);
             GenerateMissingTangents(loaded);
             hasLocalBounds = ComputeModelLocalBounds(loaded, localBounds);
+            hasAnimatedLocalBounds = ComputeAnimatedModelLocalBounds(
+                    loaded,
+                    loadedAnimations,
+                    loadedAnimationCount,
+                    localBounds,
+                    hasLocalBounds,
+                    animatedLocalBounds);
         }
 
         {
@@ -680,7 +862,9 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                     slot.asset.animationCount = loadedAnimationCount;
                     slot.asset.materials = std::move(parsed.materials);
                     slot.asset.localBounds = localBounds;
+                    slot.asset.animatedLocalBounds = animatedLocalBounds;
                     slot.asset.hasLocalBounds = hasLocalBounds;
+                    slot.asset.hasAnimatedLocalBounds = hasAnimatedLocalBounds;
                     slot.state = ModelState::Ready;
                     slot.error.clear();
                     if (parsed.hasUnsupportedMaterial) {

@@ -128,6 +128,7 @@ bool SectorGameSession::StartNew(
         std::string& error)
 {
     failureError.clear();
+    playerHealth = MakeHealth(100);
     const std::string& requestedLevelName = entry.levelName;
     const std::string path = ApplicationLevelAssetPath(requestedLevelName);
     if (path.empty()) {
@@ -436,6 +437,19 @@ void SectorGameSession::Update(
                 !consoleInputCaptured,
                 consoleInputCaptured);
         if (acceptedShot) {
+            const FpsShotResult request = fpsPlayer.State().firing.lastShot;
+            FpsShotResult resolvedShot;
+            scene.ResolvePlayerWeaponShot(
+                    context,
+                    collision.sectorCollisionWorldValid
+                            ? &collision.sectorCollisionWorld
+                            : nullptr,
+                    request.rayOrigin,
+                    request.rayDirection,
+                    fpsPlayer.State().firing.definition.maximumRangeWorld,
+                    fpsPlayer.State().firing.definition.impact,
+                    resolvedShot);
+            fpsPlayer.RecordShotResolution(resolvedShot);
             ApplyPlayerPose(scene);
         }
         fpsPlayer.UpdateTransformsAndLight(
@@ -587,10 +601,17 @@ void SectorGameSession::RenderViewmodel(
             controller.fpsControllerState.currentSectorId);
 }
 
-void SectorGameSession::RenderHud(Rectangle playableViewport) const
+void SectorGameSession::RenderHud(
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        Rectangle playableViewport) const
 {
     if (IsActive() && weaponRegistry != nullptr) {
-        fpsPlayer.RenderHud(playableViewport, *weaponRegistry);
+        fpsPlayer.RenderHud(
+                playableViewport,
+                *weaponRegistry,
+                assets.GetFont(font),
+                &playerHealth);
     }
 }
 
@@ -744,6 +765,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     const FpsApplicationSettings* savedSettings = applicationSettings;
     PlayerAudioRuntime* savedPlayerAudio = playerAudio;
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
+    const Health savedHealth = playerHealth;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedSettings == nullptr
             || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
@@ -769,6 +791,8 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
                 error)) {
         failureError = "Map change to '" + requestedMap + "' failed: "
                 + (error.empty() ? "unknown error" : error);
+    } else {
+        playerHealth = savedHealth;
     }
 }
 

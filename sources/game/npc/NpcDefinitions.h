@@ -15,11 +15,21 @@ inline constexpr const char* kNpcCharacterModelsAssetRoot =
 inline constexpr float kDefaultNpcAnimationBlendSeconds = 0.2f;
 inline constexpr float kMinimumNpcAnimationBlendSeconds = 0.01f;
 inline constexpr float kMaximumNpcAnimationBlendSeconds = 2.0f;
+inline constexpr int kDefaultNpcBaseHealth = 100;
+inline constexpr int kMinimumNpcBaseHealth = 1;
+inline constexpr int kMaximumNpcBaseHealth = 1000000;
+inline constexpr float kDefaultNpcCorpseDespawnDelaySeconds = 2.0f;
+inline constexpr float kDefaultNpcCorpseFadeDurationSeconds = 0.75f;
+inline constexpr float kMaximumNpcCorpseDespawnDelaySeconds = 600.0f;
+inline constexpr float kMinimumNpcCorpseFadeDurationSeconds = 0.001f;
+inline constexpr float kMaximumNpcCorpseFadeDurationSeconds = 60.0f;
 
 enum class NpcAction {
     Idle,
     Walk,
     Run,
+    Hurt,
+    Death,
     Count
 };
 
@@ -45,6 +55,10 @@ struct NpcDefinition {
     std::string name;
     bool hostile = false;
     bool canOpenDoors = true;
+    int baseHealth = kDefaultNpcBaseHealth;
+    bool despawnOnDeath = false;
+    float corpseDespawnDelaySeconds = kDefaultNpcCorpseDespawnDelaySeconds;
+    float corpseFadeDurationSeconds = kDefaultNpcCorpseFadeDurationSeconds;
     std::string modelPath;
     float animationBlendSeconds = kDefaultNpcAnimationBlendSeconds;
     std::array<NpcActionDefinition, kNpcActionCount> actions;

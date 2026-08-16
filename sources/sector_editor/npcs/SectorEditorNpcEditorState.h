@@ -34,6 +34,9 @@ struct SectorEditorNpcEditorState {
 
     char idBuffer[64] = {};
     char nameBuffer[256] = {};
+    engine::UIIntInputState baseHealthInput;
+    engine::UIIntInputState corpseDespawnDelayMillisecondsInput;
+    engine::UIIntInputState corpseFadeDurationMillisecondsInput;
     engine::UIFloatInputState animationBlendSecondsInput;
     std::array<engine::UIFloatInputState, kNpcActionCount>
             animationSpeedInputs;

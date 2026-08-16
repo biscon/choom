@@ -2,6 +2,7 @@
 
 #include "engine/EngineContext.h"
 #include "game/GameLevelLoading.h"
+#include "game/Health.h"
 #include "game/SectorLevelLoader.h"
 #include "game/FpsPlayerRuntime.h"
 #include "game/PlayerAudio.h"
@@ -40,7 +41,10 @@ public:
     void RenderViewmodel(
             engine::AssetManager& assets,
             SectorSceneRuntime& scene);
-    void RenderHud(Rectangle playableViewport) const;
+    void RenderHud(
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            Rectangle playableViewport) const;
     void RenderNavigationDebugWorld(const SectorSceneRuntime& scene) const;
     void RenderNavigationDebugPanel(
             const engine::UIConfig& config,
@@ -89,6 +93,7 @@ public:
     {
         return controller.fpsControllerState.currentSectorId;
     }
+    const Health& PlayerHealth() const { return playerHealth; }
 
 private:
     bool BuildCollisionAndPlayer(
@@ -126,6 +131,7 @@ private:
     engine::ScriptRuntime scripts;
     SectorScriptHost scriptHost;
     SectorGameNavigationDebugState navigationDebug;
+    Health playerHealth = MakeHealth(100);
     std::string failureError;
 };
 

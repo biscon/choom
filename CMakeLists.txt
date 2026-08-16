@@ -149,6 +149,16 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(raylib)
+execute_process(
+        COMMAND ${CMAKE_COMMAND}
+                "-DRAYLIB_SOURCE_DIR=${raylib_SOURCE_DIR}"
+                "-DRAYLIB_PATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/raylib-6.0-gltf-animation-endpoint.patch"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyRaylibGltfAnimationEndpointPatch.cmake"
+        RESULT_VARIABLE RAYLIB_GLTF_ENDPOINT_PATCH_RESULT
+)
+if(NOT RAYLIB_GLTF_ENDPOINT_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to apply the raylib glTF animation endpoint backport")
+endif()
 target_compile_definitions(raylib PRIVATE
     SUPPORT_FILEFORMAT_JPG=1
     SUPPORT_GPU_SKINNING=1
@@ -518,6 +528,7 @@ if(BUILD_TESTING)
             sources/game/navigation/SectorNavigationWorld.cpp
             sources/game/npc/NpcDefinitions.cpp
             sources/game/npc/NpcCollision.cpp
+            sources/game/npc/NpcCombatSystem.cpp
             sources/game/npc/NpcNavigationSystem.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/engine/scripting/ScriptSystem.cpp
@@ -525,6 +536,7 @@ if(BUILD_TESTING)
             sources/game/SectorScriptBindings.cpp
             sources/engine/audio/AudioSystem.cpp
             sources/engine/systems/AnimatedModelSystem.cpp
+            sources/engine/systems/AnimatedModelRaycast.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
             sources/engine/assets/FontAssets.cpp
@@ -541,6 +553,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/renderer/SectorImpactParticleSystem.cpp
             sources/sector_demo/SectorSwingDoorCatalog.cpp
             sources/sector_demo/SectorStaticModelCollision.cpp
             sources/sector_demo/SectorTextureTypes.cpp

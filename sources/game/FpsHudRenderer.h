@@ -2,6 +2,8 @@
 
 #include "game/FpsViewmodel.h"
 #include "game/FpsWeaponRegistry.h"
+#include "game/Health.h"
+#include "engine/assets/FontAssets.h"
 
 #include <raylib.h>
 
@@ -24,6 +26,8 @@ struct FpsHudContext {
     Rectangle playableViewport = {};
     const FpsWeaponRegistry& weaponRegistry;
     const FpsViewmodelRuntimeState& viewmodel;
+    const engine::FontAsset* font = nullptr;
+    const Health* health = nullptr;
 };
 
 bool ShouldDrawFpsCrosshair(

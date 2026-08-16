@@ -34,6 +34,10 @@ public:
     void ApplyNameBuffer();
     void SetSelectedHostile(bool hostile);
     void SetSelectedCanOpenDoors(bool canOpenDoors);
+    void SetSelectedBaseHealth(int health);
+    void SetSelectedDespawnOnDeath(bool despawn);
+    void SetSelectedCorpseDespawnDelayMilliseconds(int milliseconds);
+    void SetSelectedCorpseFadeDurationMilliseconds(int milliseconds);
     void SetSelectedAnimationBlendSeconds(float seconds);
     void SetSelectedModelPath(
             const std::string& modelPath,

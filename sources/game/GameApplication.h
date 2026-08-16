@@ -71,7 +71,10 @@ public:
             engine::RenderTarget& sceneTarget,
             const engine::RenderTarget& viewmodelTarget);
     const engine::RenderTarget* HdrDebugPresentationSource() const;
-    void Render3DHud(Rectangle playableViewport) const;
+    void Render3DHud(
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            Rectangle playableViewport) const;
     void RenderLoadingOverlay(
             Rectangle presentationViewport,
             int outputWidth,

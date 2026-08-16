@@ -407,6 +407,38 @@ end
     engine::ScriptSystemShutdownForMap(context, runtime);
 }
 
+void RunawayManagedTaskIsStoppedWithoutFreezingTheRuntime()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    TestFiles files("instruction_budget");
+    files.Write(files.scriptPath, R"(
+function runaway()
+    while true do
+    end
+end
+
+function healthy()
+    setPersistentBool("healthy_ran", true)
+end
+)");
+    assert(CreateRuntime(context, runtime, persistent, files));
+
+    const engine::ScriptCallOutcome runaway =
+            engine::ScriptSystemCallForegroundHook(runtime, "runaway");
+    assert(runaway.result == engine::ScriptCallResult::Error);
+    assert(runaway.error.find("instruction budget exceeded")
+            != std::string::npos);
+    assert(!engine::ScriptSystemIsFunctionRunning(runtime, "runaway"));
+
+    const engine::ScriptCallOutcome healthy =
+            engine::ScriptSystemCallForegroundHook(runtime, "healthy");
+    assert(healthy.result == engine::ScriptCallResult::Completed);
+    assert(persistent.bools.at("healthy_ran"));
+    engine::ScriptSystemShutdownForMap(context, runtime);
+}
+
 void ModulePathsAreDeterministic()
 {
     engine::EngineContext context;
@@ -550,6 +582,7 @@ int main()
     BackgroundStartsAreDeferredAndForegroundIsSerialized();
     CoreLifecycleLuaBindingsControlQueuedAndActiveTasks();
     AsyncOperationsDeliverValuesAndCancelOnce();
+    RunawayManagedTaskIsStoppedWithoutFreezingTheRuntime();
     ModulePathsAreDeterministic();
     PersistentCodecIsTransactional();
     ConsoleEvaluationIsSynchronousBoundedAndStackSafe();

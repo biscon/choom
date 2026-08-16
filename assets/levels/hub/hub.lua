@@ -1,7 +1,6 @@
 function init()
     log("hub script initialized")
     startScript("npc_move_test1")
-    startScript("npc_move_test2")
 end
 
 function shutdown()
@@ -16,27 +15,22 @@ function trigger_2()
     log("trigger_2")
 end
 
-function npc_move_test1()
-    log("npc move test1 ran!!!!!!!!!!!!!!!!")
-    while true do
-        moveNpc("zombie01", "wp1", "run")
-        moveNpc("zombie01", "wp2", "run")
-        moveNpc("zombie01", "wp3", "walk")
-        moveNpc("zombie01", "wp4", "run")
-        moveNpc("zombie01", "wp5", "walk")
-        moveNpc("zombie01", "wp6", "walk")
-        moveNpc("zombie01", "wp7", "run")
+local function movePatrolNpc(instanceId, markerId, gait)
+    local ok, reason = moveNpc(instanceId, markerId, gait)
+    if ok then
+        return true
     end
+    log("stopping patrol for " .. instanceId .. ": " .. (reason or "move failed"))
+    return false
 end
 
-function npc_move_test2()
-    log("npc move test2 ran!!!!!!!!!!!!!!!!")
+function npc_move_test1()
     while true do
-        moveNpc("zombie02", "wp7", "walk")
-        moveNpc("zombie02", "wp5", "walk")
-        moveNpc("zombie02", "wp4", "walk")
-        moveNpc("zombie02", "wp3", "walk")
-        moveNpc("zombie02", "wp2", "walk")
-        moveNpc("zombie02", "wp1", "walk")
+        if not movePatrolNpc("zombie01", "wp1", "run") then return end
+        if not movePatrolNpc("zombie01", "wp2", "walk") then return end
+        if not movePatrolNpc("zombie01", "wp3", "walk") then return end
+        if not movePatrolNpc("zombie01", "wp4", "walk") then return end
+        if not movePatrolNpc("zombie01", "wp5", "walk") then return end
+        if not movePatrolNpc("zombie01", "wp7", "walk") then return end
     end
 end

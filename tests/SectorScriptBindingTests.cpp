@@ -1,7 +1,9 @@
 #include "engine/EngineContext.h"
 #include "engine/scripting/ScriptSystem.h"
+#include "game/Health.h"
 #include "game/SectorScriptBindings.h"
 #include "game/navigation/SectorNavigationWorld.h"
+#include "game/npc/NpcCombatSystem.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorStaticModelCollision.h"
@@ -167,6 +169,8 @@ engine::Entity SpawnScriptNpc(engine::World& world)
     npc.walkSpeed = 2.0f;
     npc.runSpeed = 4.0f;
     world.Add(entity, npc);
+    world.Add(entity, game::MakeHealth(25));
+    world.Add(entity, game::NpcCombatState{});
     world.Add(entity, game::NpcAnimationState{});
     return entity;
 }
@@ -310,6 +314,64 @@ end
     assert(patrol != tasks.end());
     assert(patrol->state == engine::ScriptTaskState::Waiting);
     assert(patrol->operationLabel == "moveNpc:script_guard");
+}
+
+void KillingMovingNpcStopsRunawayPatrolWithoutFreezing()
+{
+    NpcScriptFixture fixture;
+    fixture.files.Write(R"(
+function init()
+    assert(startScript("patrol"))
+end
+
+function patrol()
+    while true do
+        moveNpc("script_guard", "run_target", "run")
+        moveNpc("script_guard", "walk_target", "walk")
+    end
+end
+)");
+    assert(Create(
+            fixture.context,
+            fixture.runtime,
+            fixture.persistent,
+            fixture.host,
+            fixture.files));
+    fixture.Update(0.016f);
+    assert(engine::ScriptSystemIsFunctionRunning(
+            fixture.runtime, "patrol"));
+    assert(fixture.host.npcMoves.size() == 1);
+
+    game::FpsWeaponImpactDefinition impact;
+    impact.damage = 25;
+    game::FpsShotResult shot;
+    game::WeaponImpactEvent impactEvent;
+    assert(game::ResolvePlayerWeaponShot(
+            fixture.context.world,
+            &fixture.context.assets,
+            fixture.navigation,
+            fixture.npcNavigation,
+            &fixture.objects.objectSectorLookupWorld,
+            fixture.objects.dynamicDoorColliders,
+            fixture.objects.staticModelColliders,
+            Vector3{2.0f, 0.8f, 4.0f},
+            Vector3{0.0f, 0.0f, 1.0f},
+            20.0f,
+            impact,
+            shot,
+            impactEvent));
+    assert(shot.hitKind == game::FpsShotHitKind::Npc);
+    assert(game::IsDepleted(
+            fixture.context.world.Get<game::Health>(fixture.npc)));
+    assert(fixture.context.world.Get<game::NpcCombatState>(fixture.npc).dead);
+    assert(!fixture.npcNavigation.records.front().occupied);
+
+    fixture.Update(0.016f);
+    assert(!engine::ScriptSystemIsFunctionRunning(
+            fixture.runtime, "patrol"));
+    assert(fixture.host.npcMoves.empty());
+    assert(engine::ScriptSystemOperationSnapshot(
+            fixture.runtime).empty());
 }
 
 void BlockingNpcMoveReplansAfterDynamicObstacleChange()
@@ -835,6 +897,7 @@ void RunSectorScriptBindingTests()
     DoorCompletionAndCancellationShareTheBackend();
     BlockingNpcMoveCompletesAfterPhysicalArrival();
     BackgroundNpcPatrolYieldsWhenNavigationIsPrepared();
+    KillingMovingNpcStopsRunawayPatrolWithoutFreezing();
     BlockingNpcMoveReplansAfterDynamicObstacleChange();
     NpcMoveLevelMarkerOverloadsResolvePositionOnly();
     AsyncNpcMoveSupportsAwaitDuplicateValidationAndCancellation();

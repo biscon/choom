@@ -2,6 +2,7 @@
 
 #include "game/npc/NpcDefinitions.h"
 #include "game/npc/NpcCollision.h"
+#include "game/Health.h"
 #include "engine/ecs/Entity.h"
 #include "game/navigation/SectorNavigationTypes.h"
 
@@ -23,12 +24,29 @@ struct NpcRuntimeInstance {
     float runSpeed = 3.0f;
 };
 
+struct NpcCombatState {
+    Vector2 knockbackVelocity{};
+    float staggerRemainingSeconds = 0.0f;
+    float corpseElapsedSeconds = 0.0f;
+    float corpseDespawnDelaySeconds = kDefaultNpcCorpseDespawnDelaySeconds;
+    float corpseFadeDurationSeconds = kDefaultNpcCorpseFadeDurationSeconds;
+    bool despawnOnDeath = false;
+    bool dead = false;
+    bool hurtAnimationRequested = false;
+    bool hurtAnimationPlaying = false;
+    bool deathAnimationRequested = false;
+    bool deathAnimationComplete = false;
+};
+
 struct NpcAnimationState {
     std::array<uint32_t, kNpcActionCount> animationIndices{
             UINT32_MAX,
             UINT32_MAX,
+            UINT32_MAX,
+            UINT32_MAX,
             UINT32_MAX};
-    std::array<float, kNpcActionCount> animationSpeeds{1.0f, 1.0f, 1.0f};
+    std::array<float, kNpcActionCount> animationSpeeds{
+            1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
     float blendSeconds = kDefaultNpcAnimationBlendSeconds;
     NpcAction appliedAction = NpcAction::Idle;
     NpcAction pendingAction = NpcAction::Idle;
