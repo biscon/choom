@@ -256,6 +256,29 @@ vec3 EvaluateObjectAmbientCube(vec3 normal)
     return mix(lowerLighting, upperLighting, blend);
 }
 
+vec3 EvaluateFogObjectProbeLighting()
+{
+    vec3 lowerLighting = (
+            objectAmbientCube[0]
+            + objectAmbientCube[1]
+            + objectAmbientCube[2]
+            + objectAmbientCube[4]
+            + objectAmbientCube[5]) / 5.0;
+    if (useVerticalObjectProbeLighting == 0) return lowerLighting;
+
+    vec3 upperLighting = (
+            objectAmbientCubeUpper[0]
+            + objectAmbientCubeUpper[1]
+            + objectAmbientCubeUpper[2]
+            + objectAmbientCubeUpper[4]
+            + objectAmbientCubeUpper[5]) / 5.0;
+    float heightRange = objectAmbientCubeUpperHeight - objectAmbientCubeLowerHeight;
+    float blend = heightRange > 0.0001
+            ? clamp((fragWorldPosition.y - objectAmbientCubeLowerHeight) / heightRange, 0.0, 1.0)
+            : 0.0;
+    return mix(lowerLighting, upperLighting, blend);
+}
+
 vec2 EnvironmentBrdfApprox(float roughness, float ndotv)
 {
     const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
@@ -305,7 +328,10 @@ float DynamicSpotLightShadowVisibility(
     return visible / 12.0;
 }
 
-vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
+vec3 ApplySectorFog(
+        vec3 surfaceRgb,
+        vec3 staticAtmosphericLighting,
+        vec3 worldPosition)
 {
     if (fogEnabled == 0 || fogDensity <= 0.0 || fogMaxOpacity <= 0.0) {
         return surfaceRgb;
@@ -318,7 +344,8 @@ vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
     float fogAmount = min(
             1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
             fogMaxOpacity);
-    return mix(surfaceRgb, fogColor, fogAmount);
+    vec3 fogScattering = fogColor * max(staticAtmosphericLighting, vec3(0.0));
+    return surfaceRgb * (1.0 - fogAmount) + fogScattering * fogAmount;
 }
 
 void main()
@@ -486,13 +513,18 @@ void main()
         }
     }
 
+    vec4 bakedStaticSample = hasStaticLightmap != 0
+            ? texture(lightmapTexture, fragLightmapTexCoord)
+            : vec4(0.0, 0.0, 0.0, 1.0);
     vec3 staticLighting = containingSectorAmbient;
+    vec3 staticAtmosphericLighting = containingSectorAmbient;
     if (useObjectProbeLighting != 0) {
         staticLighting = EvaluateObjectAmbientCube(worldNormal);
+        staticAtmosphericLighting = EvaluateFogObjectProbeLighting();
     } else if (hasStaticLightmap != 0) {
-        vec4 baked = texture(lightmapTexture, fragLightmapTexCoord);
-        float ao = useBakedAmbientOcclusion != 0 ? baked.a : 1.0;
-        staticLighting = containingSectorAmbient * ao + baked.rgb;
+        float ao = useBakedAmbientOcclusion != 0 ? bakedStaticSample.a : 1.0;
+        staticLighting = containingSectorAmbient * ao + bakedStaticSample.rgb;
+        staticAtmosphericLighting = containingSectorAmbient + bakedStaticSample.rgb;
     }
     // Probe, fallback ambient, and lightmap RGB are incoming diffuse
     // illumination. They never enter final radiance without the material's
@@ -548,7 +580,10 @@ void main()
     linearColor = max(linearColor, vec3(0.0));
     if (pbrDiagnosticMode == 0) {
         linearColor *= outputBrightnessMultiplier;
-        linearColor = ApplySectorFog(linearColor, fragWorldPosition);
+        linearColor = ApplySectorFog(
+                linearColor,
+                staticAtmosphericLighting,
+                fragWorldPosition);
     }
     linearColor.r = isnan(linearColor.r) ? 0.0 : (isinf(linearColor.r) ? (linearColor.r > 0.0 ? 65504.0 : 0.0) : min(max(linearColor.r, 0.0), 65504.0));
     linearColor.g = isnan(linearColor.g) ? 0.0 : (isinf(linearColor.g) ? (linearColor.g > 0.0 ? 65504.0 : 0.0) : min(max(linearColor.g, 0.0), 65504.0));

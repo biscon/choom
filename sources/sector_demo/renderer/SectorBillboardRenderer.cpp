@@ -162,7 +162,10 @@ float DynamicSpotLightShadowVisibility(
     return visible / 12.0;
 }
 
-vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
+vec3 ApplySectorFog(
+        vec3 surfaceRgb,
+        vec3 staticAtmosphericLighting,
+        vec3 worldPosition)
 {
     if (fogEnabled == 0 || fogDensity <= 0.0 || fogMaxOpacity <= 0.0) {
         return surfaceRgb;
@@ -175,7 +178,8 @@ vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
     float fogAmount = min(
             1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
             fogMaxOpacity);
-    return mix(surfaceRgb, fogColor, fogAmount);
+    vec3 fogScattering = fogColor * max(staticAtmosphericLighting, vec3(0.0));
+    return surfaceRgb * (1.0 - fogAmount) + fogScattering * fogAmount;
 }
 
 void main()
@@ -226,7 +230,10 @@ void main()
 
     vec3 surfaceRgb = sampled.rgb * fragColor.rgb;
     vec3 lighting = max(bakedBillboardLighting + dynamicDirect, vec3(0.0));
-    finalColor = vec4(StoreFiniteHalfRadiance(ApplySectorFog(surfaceRgb * lighting, fragWorldPosition)), 1.0);
+    finalColor = vec4(StoreFiniteHalfRadiance(ApplySectorFog(
+            surfaceRgb * lighting,
+            bakedBillboardLighting,
+            fragWorldPosition)), 1.0);
 }
 )";
 

@@ -1362,7 +1362,7 @@
       "a": 255
     },
     "startDistanceWorld": 1.5,
-    "density": 0.009999999776482582,
+    "density": 0.05000000074505806,
     "maxOpacity": 0.6499999761581421,
     "referenceHeightWorld": 1.0,
     "heightFalloff": 0.0,

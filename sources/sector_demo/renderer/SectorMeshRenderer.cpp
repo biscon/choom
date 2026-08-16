@@ -301,7 +301,10 @@ float DynamicSpotLightShadowVisibility(
     return visible / 12.0;
 }
 
-vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
+vec3 ApplySectorFog(
+        vec3 surfaceRgb,
+        vec3 staticAtmosphericLighting,
+        vec3 worldPosition)
 {
     if (fogEnabled == 0 || fogDensity <= 0.0 || fogMaxOpacity <= 0.0) {
         return surfaceRgb;
@@ -314,7 +317,8 @@ vec3 ApplySectorFog(vec3 surfaceRgb, vec3 worldPosition)
     float fogAmount = min(
             1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
             fogMaxOpacity);
-    return mix(surfaceRgb, fogColor, fogAmount);
+    vec3 fogScattering = fogColor * max(staticAtmosphericLighting, vec3(0.0));
+    return surfaceRgb * (1.0 - fogAmount) + fogScattering * fogAmount;
 }
 
 void main()
@@ -386,11 +390,15 @@ void main()
     }
     vec3 bakedLighting = max(ambient + bakedDirect, vec3(0.0));
     vec3 lighting = max(bakedLighting + dynamicDirect, vec3(0.0));
+    vec3 staticAtmosphericLighting = max(fragColor.rgb + bakedDirect, vec3(0.0));
     vec3 litRgb = surfaceRgb * lighting;
     vec3 emissiveRadiance = emissiveDecalRgb * max(decalEmissiveStrength, 0.0);
     vec3 surfaceOutput = litRgb * (1.0 - emissiveDecalAlpha)
             + emissiveRadiance * emissiveDecalAlpha;
-    finalColor = vec4(StoreFiniteHalfRadiance(ApplySectorFog(surfaceOutput, fragWorldPosition)),
+    finalColor = vec4(StoreFiniteHalfRadiance(ApplySectorFog(
+            surfaceOutput,
+            staticAtmosphericLighting,
+            fragWorldPosition)),
             clamp(baseColor.a * fragColor.a, 0.0, 1.0));
 }
 )";

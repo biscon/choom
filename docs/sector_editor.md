@@ -524,6 +524,15 @@ height. Step height defaults to `0.25` world units. Jump height defaults to
 bob frequency defaults to `2.0`. Gravity uses a positive magnitude; `0`
 disables falling and also prevents jumps from adding lift.
 
+`Preview Settings -> Fog` configures map-level analytic distance fog. The fog
+color is a scattering tint, not an emissive replacement color: distance fog
+attenuates surfaces and its visible in-scattering is multiplied by the static
+illumination already available to each receiver. Completely dark sectors
+therefore fade toward black instead of developing a self-lit colored veil,
+while sector ambient, baked lightmaps, and baked object probes keep the air
+visible in lit areas. Dynamic-light shafts remain an explicit per-light haze
+effect rather than being added automatically by distance fog.
+
 Grounded Gameplay movement snaps feet to same-height floors and small up/down
 floor changes within step height. The physics feet/body position still snaps
 immediately for collision correctness, but the rendered Gameplay camera eases
