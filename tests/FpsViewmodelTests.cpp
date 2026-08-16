@@ -770,6 +770,20 @@ void SettingsResolutionAndPersistence()
     settings.graphics.performanceOverlay = true;
     settings.graphics.vsync = false;
     settings.graphics.horizontalFovDegrees = 96;
+    settings.playerStamina.maximum = 120.0f;
+    settings.playerStamina.sprintDrainPerSecond = 18.0f;
+    settings.playerStamina.jumpCost = 24.0f;
+    settings.playerStamina.regenerationPerSecond = 14.0f;
+    settings.playerStamina.exhaustedRecoveryRatio = 0.25f;
+    settings.playerStamina.windedCamera.enabled = false;
+    settings.playerStamina.windedCamera.startThresholdRatio = 0.5f;
+    settings.playerStamina.windedCamera.verticalAmplitudeWorld = 0.02f;
+    settings.playerStamina.windedCamera.pitchAmplitudeDegrees = 0.8f;
+    settings.playerStamina.windedCamera.frequencyHz = 0.6f;
+    settings.playerStamina.windedCamera.responseSeconds = 0.4f;
+    settings.playerStamina.breathingAudio.thresholdRatio = 0.3f;
+    settings.playerStamina.breathingAudio.volume = 0.6f;
+    settings.playerStamina.breathingAudio.fadeOutSeconds = 3.0f;
     const std::filesystem::path path = std::filesystem::temp_directory_path()/"fps_viewmodel_settings_test.json";
     assert(game::SaveFpsApplicationSettings(path.string(), settings, &error));
     game::FpsApplicationSettings loaded;
@@ -786,6 +800,20 @@ void SettingsResolutionAndPersistence()
     assert(loaded.graphics.performanceOverlay);
     assert(!loaded.graphics.vsync);
     assert(loaded.graphics.horizontalFovDegrees == 96);
+    assert(Near(loaded.playerStamina.maximum, 120.0f));
+    assert(Near(loaded.playerStamina.sprintDrainPerSecond, 18.0f));
+    assert(Near(loaded.playerStamina.jumpCost, 24.0f));
+    assert(Near(loaded.playerStamina.regenerationPerSecond, 14.0f));
+    assert(Near(loaded.playerStamina.exhaustedRecoveryRatio, 0.25f));
+    assert(!loaded.playerStamina.windedCamera.enabled);
+    assert(Near(loaded.playerStamina.windedCamera.startThresholdRatio, 0.5f));
+    assert(Near(loaded.playerStamina.windedCamera.verticalAmplitudeWorld, 0.02f));
+    assert(Near(loaded.playerStamina.windedCamera.pitchAmplitudeDegrees, 0.8f));
+    assert(Near(loaded.playerStamina.windedCamera.frequencyHz, 0.6f));
+    assert(Near(loaded.playerStamina.windedCamera.responseSeconds, 0.4f));
+    assert(Near(loaded.playerStamina.breathingAudio.thresholdRatio, 0.3f));
+    assert(Near(loaded.playerStamina.breathingAudio.volume, 0.6f));
+    assert(Near(loaded.playerStamina.breathingAudio.fadeOutSeconds, 3.0f));
     assert(loaded.footsteps.defaultSet == "DirtRoad_Mono");
     assert(Near(loaded.footsteps.volume, 0.7f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.5f));
@@ -885,6 +913,27 @@ void SettingsResolutionAndPersistence()
             R"({"version":1,"playerSounds":{"events":{"jump":{"volume":0.5}}}})",
             loaded, &error));
     assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerStamina":{"maximum":0}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerStamina":{"maximum":10,"jumpCost":11}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerStamina":{"exhaustedRecoveryRatio":1.1}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerStamina":{"windedCamera":{"enabled":"yes"}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerStamina":{"windedCamera":{"responseSeconds":0}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerStamina":{"breathingAudio":{"thresholdRatio":-0.1}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"playerStamina":{"breathingAudio":{"fadeOutSeconds":0}}})",
+            loaded, &error));
+    assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"hdrBloom":{"threshold":-1}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"renderScale":2.1}})",loaded,&error));
@@ -916,6 +965,15 @@ void SettingsResolutionAndPersistence()
     assert(loaded.playerSounds.events[0].id == "jump");
     assert(loaded.playerSounds.events[0].set == "Jump");
     assert(loaded.playerSounds.events[1].id == "land");
+    assert(Near(loaded.playerStamina.maximum, 100.0f));
+    assert(Near(loaded.playerStamina.sprintDrainPerSecond, 20.0f));
+    assert(Near(loaded.playerStamina.jumpCost, 20.0f));
+    assert(Near(loaded.playerStamina.regenerationPerSecond, 12.5f));
+    assert(Near(loaded.playerStamina.exhaustedRecoveryRatio, 0.20f));
+    assert(loaded.playerStamina.windedCamera.enabled);
+    assert(Near(loaded.playerStamina.windedCamera.startThresholdRatio, 0.40f));
+    assert(Near(loaded.playerStamina.breathingAudio.thresholdRatio, 0.20f));
+    assert(Near(loaded.playerStamina.breathingAudio.fadeOutSeconds, 2.0f));
     assert(loaded.graphics.vsync);
     assert(loaded.graphics.horizontalFovDegrees
             == game::DefaultFpsHorizontalFovDegrees);
@@ -1528,6 +1586,22 @@ void CrosshairVisibilityAndLayout()
             && Near(twice.center.y, 1080.0f));
     assert(Near(twice.segments[0].inner.width, 12.0f));
     assert(Near(twice.segments[0].inner.height, 4.0f));
+
+    const game::FpsVitalsLayout vitals = game::BuildFpsVitalsLayout(
+            Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
+            1.0f,
+            22,
+            true);
+    assert(vitals.stamina.border.y > vitals.health.border.y);
+    assert(Near(vitals.stamina.border.y + vitals.stamina.border.height,
+            1080.0f - 22.0f));
+    assert(vitals.health.textPosition.y >= 0.0f);
+    const game::FpsVitalsLayout healthOnly = game::BuildFpsVitalsLayout(
+            Rectangle{0.0f, 0.0f, 1920.0f, 1080.0f},
+            1.0f,
+            22,
+            false);
+    assert(SameRectangle(healthOnly.health.border, vitals.stamina.border));
 
     runtime.attachment.handModelTransform = MatrixTranslate(10.0f, 20.0f, 30.0f);
     runtime.attachment.pistolWorldTransform = MatrixRotateY(1.25f);

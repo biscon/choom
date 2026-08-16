@@ -126,6 +126,42 @@ FpsCrosshairLayout BuildFpsCrosshairLayout(
     return result;
 }
 
+FpsVitalsLayout BuildFpsVitalsLayout(
+        Rectangle playableViewport,
+        float uiScale,
+        int fontPixelSize,
+        bool includeStamina)
+{
+    const int margin = ScaledPixels(22.0f, uiScale);
+    const int width = ScaledPixels(180.0f, uiScale);
+    const int height = ScaledPixels(10.0f, uiScale);
+    const int gap = ScaledPixels(8.0f, uiScale);
+    const int textGap = ScaledPixels(3.0f, uiScale);
+    const int x = static_cast<int>(std::lround(playableViewport.x)) + margin;
+    const int bottomY = static_cast<int>(std::lround(
+            playableViewport.y + playableViewport.height))
+            - margin - height;
+
+    FpsVitalsLayout result;
+    if (includeStamina) {
+        result.stamina.border = Rect(x, bottomY, width, height);
+        result.stamina.textPosition = Vector2{
+                result.stamina.border.x,
+                result.stamina.border.y
+                        - static_cast<float>(fontPixelSize + textGap)};
+        const int healthY = static_cast<int>(std::lround(
+                result.stamina.textPosition.y)) - gap - height;
+        result.health.border = Rect(x, healthY, width, height);
+    } else {
+        result.health.border = Rect(x, bottomY, width, height);
+    }
+    result.health.textPosition = Vector2{
+            result.health.border.x,
+            result.health.border.y
+                    - static_cast<float>(fontPixelSize + textGap)};
+    return result;
+}
+
 void DrawFpsHud(const FpsHudContext& context)
 {
     if (context.playableViewport.width <= 0.0f
@@ -154,16 +190,14 @@ void DrawFpsHud(const FpsHudContext& context)
     if (context.health == nullptr) return;
     const engine::FontAsset* fontAsset = context.font;
     if (fontAsset == nullptr) return;
-    const int margin = ScaledPixels(22.0f, uiScale);
-    const int width = ScaledPixels(180.0f, uiScale);
-    const int height = ScaledPixels(10.0f, uiScale);
-    const int x = static_cast<int>(std::lround(context.playableViewport.x)) + margin;
-    const int y = static_cast<int>(std::lround(
-            context.playableViewport.y + context.playableViewport.height))
-            - margin - height;
-    const Rectangle border = Rect(x, y, width, height);
-    DrawRectangleRec(border, Color{8, 10, 12, 210});
-    const Rectangle interior = Inset(border, 2);
+    const FpsVitalsLayout vitals = BuildFpsVitalsLayout(
+            context.playableViewport,
+            uiScale,
+            fontAsset->pixelSize,
+            context.stamina != nullptr);
+    const Rectangle healthBorder = vitals.health.border;
+    DrawRectangleRec(healthBorder, Color{8, 10, 12, 210});
+    const Rectangle healthInterior = Inset(healthBorder, 2);
     const float ratio = context.health->maximum > 0
             ? std::clamp(
                     static_cast<float>(context.health->current)
@@ -172,7 +206,11 @@ void DrawFpsHud(const FpsHudContext& context)
                     1.0f)
             : 0.0f;
     DrawRectangleRec(
-            Rectangle{interior.x, interior.y, interior.width * ratio, interior.height},
+            Rectangle{
+                    healthInterior.x,
+                    healthInterior.y,
+                    healthInterior.width * ratio,
+                    healthInterior.height},
             Color{145, 38, 37, 235});
     char healthText[48] = {};
     std::snprintf(
@@ -184,7 +222,33 @@ void DrawFpsHud(const FpsHudContext& context)
     DrawTextEx(
             fontAsset->font,
             healthText,
-            Vector2{border.x, border.y - static_cast<float>(fontAsset->pixelSize) - 3.0f},
+            vitals.health.textPosition,
+            static_cast<float>(fontAsset->pixelSize),
+            1.0f,
+            Color{235, 235, 225, 235});
+
+    if (context.stamina == nullptr) return;
+    const Rectangle staminaBorder = vitals.stamina.border;
+    DrawRectangleRec(staminaBorder, Color{8, 10, 12, 210});
+    const Rectangle staminaInterior = Inset(staminaBorder, 2);
+    DrawRectangleRec(
+            Rectangle{
+                    staminaInterior.x,
+                    staminaInterior.y,
+                    staminaInterior.width * PlayerStaminaRatio(*context.stamina),
+                    staminaInterior.height},
+            Color{45, 100, 190, 235});
+    char staminaText[48] = {};
+    std::snprintf(
+            staminaText,
+            sizeof(staminaText),
+            "%.0f / %.0f",
+            context.stamina->current,
+            context.stamina->maximum);
+    DrawTextEx(
+            fontAsset->font,
+            staminaText,
+            vitals.stamina.textPosition,
             static_cast<float>(fontAsset->pixelSize),
             1.0f,
             Color{235, 235, 225, 235});

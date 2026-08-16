@@ -1,4 +1,5 @@
 #include "sector_demo/SectorFpsController.h"
+#include "game/PlayerStamina.h"
 
 #include <raymath.h>
 
@@ -552,6 +553,146 @@ void TestRunAndWalkSpeeds()
     runInput.run = true;
     UpdateSectorFpsController(running, config, runInput, 1.0f);
     Check(Near(running.feetPosition.x, 12.0f), "run speed is used with run input");
+
+    game::SectorFpsControllerInput strafeInput;
+    strafeInput.strafeRight = true;
+    strafeInput.run = true;
+    const Vector2 strafeDelta = game::ComputeSectorFpsHorizontalMovementDelta(
+            game::SectorFpsControllerState{},
+            config,
+            strafeInput,
+            1.0f);
+    Check(Near(Vector2Length(strafeDelta), 12.0f),
+          "pure strafing may use run speed");
+
+    game::SectorFpsControllerInput backwardInput;
+    backwardInput.moveBackward = true;
+    backwardInput.run = true;
+    const Vector2 backwardDelta = game::ComputeSectorFpsHorizontalMovementDelta(
+            game::SectorFpsControllerState{},
+            config,
+            backwardInput,
+            1.0f);
+    Check(Near(backwardDelta, Vector2{-6.0f, 0.0f}),
+          "backpedalling is capped at walk speed while run is held");
+    Check(!game::SectorFpsInputUsesRunSpeed(backwardInput),
+          "backward input is not classified as sprinting");
+
+    backwardInput.strafeRight = true;
+    const Vector2 backwardDiagonal =
+            game::ComputeSectorFpsHorizontalMovementDelta(
+                    game::SectorFpsControllerState{},
+                    config,
+                    backwardInput,
+                    1.0f);
+    Check(Near(Vector2Length(backwardDiagonal), 6.0f),
+          "backward diagonal movement is capped at walk speed");
+
+    game::SectorFpsControllerInput opposingInput;
+    opposingInput.moveForward = true;
+    opposingInput.moveBackward = true;
+    opposingInput.strafeRight = true;
+    opposingInput.run = true;
+    Check(game::SectorFpsInputUsesRunSpeed(opposingInput),
+          "opposing forward inputs with net sideways motion may sprint");
+}
+
+void TestPlayerStaminaConsumptionRecoveryAndLockout()
+{
+    game::PlayerStaminaApplicationSettings settings;
+    game::PlayerStamina stamina = game::MakePlayerStamina(settings);
+    Check(Near(stamina.current, 100.0f)
+                  && Near(game::PlayerStaminaRatio(stamina), 1.0f),
+          "new player stamina starts full");
+
+    game::UpdatePlayerStamina(stamina, settings, true, false, 1.0f);
+    Check(Near(stamina.current, 80.0f),
+          "sprinting drains configured stamina per second");
+    game::UpdatePlayerStamina(stamina, settings, false, true, 1.0f / 60.0f);
+    Check(Near(stamina.current, 60.0f),
+          "a successful jump deducts its fixed stamina cost");
+    game::UpdatePlayerStamina(stamina, settings, false, false, 2.0f);
+    Check(Near(stamina.current, 85.0f),
+          "a frame without consuming actions regenerates stamina");
+
+    stamina.current = 25.0f;
+    game::UpdatePlayerStamina(stamina, settings, true, true, 0.5f);
+    Check(Near(stamina.current, 0.0f) && stamina.exhausted,
+          "combined sprint and jump costs clamp at zero and exhaust the player");
+    Check(!game::CanPlayerStaminaSprint(stamina)
+                  && !game::CanPlayerStaminaJump(stamina, settings),
+          "exhaustion locks sprint and jump");
+
+    game::UpdatePlayerStamina(stamina, settings, false, false, 1.0f);
+    Check(Near(stamina.current, 12.5f) && stamina.exhausted,
+          "recovery below the hysteresis threshold stays locked");
+    game::UpdatePlayerStamina(stamina, settings, false, false, 0.6f);
+    Check(Near(stamina.current, 20.0f) && !stamina.exhausted,
+          "reaching the recovery threshold unlocks stamina actions");
+    Check(game::CanPlayerStaminaJump(stamina, settings),
+          "default recovery threshold restores enough stamina for one jump");
+
+    stamina.current = 10.0f;
+    stamina.exhausted = false;
+    Check(!game::CanPlayerStaminaJump(stamina, settings),
+          "jump is rejected when its cost is unaffordable before exhaustion");
+    game::UpdatePlayerStamina(stamina, settings, false, false, 1.0f);
+    Check(Near(stamina.current, 22.5f),
+          "a rejected consuming action leaves the frame free to regenerate");
+}
+
+void TestPlayerWindedCameraAndBreathingEnvelope()
+{
+    game::PlayerWindedCameraApplicationSettings cameraSettings;
+    cameraSettings.responseSeconds = 0.01f;
+    game::PlayerWindedCameraState camera;
+    game::UpdatePlayerWindedCamera(camera, cameraSettings, 0.0f, 0.25f);
+    Check(camera.intensity > 0.99f,
+          "empty stamina drives the winded camera toward full intensity");
+    Check(std::isfinite(camera.verticalOffsetWorld)
+                  && std::isfinite(camera.pitchOffsetDegrees)
+                  && std::fabs(camera.verticalOffsetWorld) > 0.0f,
+          "winded camera produces finite procedural offsets");
+
+    game::UpdatePlayerWindedCamera(camera, cameraSettings, 1.0f, 0.25f);
+    Check(camera.intensity < 0.01f,
+          "recovered stamina smoothly removes the winded camera effect");
+    cameraSettings.enabled = false;
+    game::UpdatePlayerWindedCamera(camera, cameraSettings, 0.0f, 0.25f);
+    Check(Near(camera.intensity, 0.0f)
+                  && Near(camera.verticalOffsetWorld, 0.0f)
+                  && Near(camera.pitchOffsetDegrees, 0.0f),
+          "disabled winded camera clears all visual offsets");
+
+    game::PlayerBreathingAudioApplicationSettings audioSettings;
+    float volume = game::AdvancePlayerBreathingAudioVolume(
+            0.0f,
+            audioSettings,
+            0.19f,
+            0.0f);
+    Check(Near(volume, 0.75f),
+          "breathing audio starts at configured volume below threshold");
+    volume = game::AdvancePlayerBreathingAudioVolume(
+            volume,
+            audioSettings,
+            0.20f,
+            1.0f);
+    Check(Near(volume, 0.375f),
+          "breathing audio fades linearly after reaching threshold");
+    volume = game::AdvancePlayerBreathingAudioVolume(
+            volume,
+            audioSettings,
+            0.19f,
+            0.1f);
+    Check(Near(volume, 0.75f),
+          "dropping below threshold during fade restores full loop volume");
+    volume = game::AdvancePlayerBreathingAudioVolume(
+            volume,
+            audioSettings,
+            0.50f,
+            2.0f);
+    Check(Near(volume, 0.0f),
+          "breathing audio reaches silence after the configured fade duration");
 }
 
 void TestCrouchToggleTransitionAndEffectiveDimensions()
@@ -1032,6 +1173,8 @@ int main()
     TestLandingDipClearTransitions();
     TestForwardMovementIgnoresPitchAndPreservesY();
     TestRunAndWalkSpeeds();
+    TestPlayerStaminaConsumptionRecoveryAndLockout();
+    TestPlayerWindedCameraAndBreathingEnvelope();
     TestCrouchToggleTransitionAndEffectiveDimensions();
     TestCrouchGroundingReversalAndResetRules();
     TestCrouchedMovementSpeedAndVerticalFit();

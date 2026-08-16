@@ -78,7 +78,8 @@ public:
             Rectangle playableViewport,
             const FpsWeaponRegistry& registry,
             const engine::FontAsset* font = nullptr,
-            const Health* health = nullptr) const;
+            const Health* health = nullptr,
+            const PlayerStamina* stamina = nullptr) const;
 
     FpsViewmodelRuntimeState& State() { return state; }
     const FpsViewmodelRuntimeState& State() const { return state; }

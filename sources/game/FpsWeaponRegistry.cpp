@@ -618,6 +618,71 @@ std::optional<bool> OptionalBoolean(
     return Boolean(object, name, context);
 }
 
+std::string PlayerStaminaSettingsError(
+        const PlayerStaminaApplicationSettings& settings)
+{
+    const auto finite = [](float value) { return std::isfinite(value); };
+    if (!finite(settings.maximum) || settings.maximum <= 0.0f) {
+        return "maximum must be greater than zero";
+    }
+    if (!finite(settings.sprintDrainPerSecond)
+            || settings.sprintDrainPerSecond < 0.0f) {
+        return "sprintDrainPerSecond must be non-negative";
+    }
+    if (!finite(settings.jumpCost)
+            || settings.jumpCost < 0.0f
+            || settings.jumpCost > settings.maximum) {
+        return "jumpCost must be between zero and maximum";
+    }
+    if (!finite(settings.regenerationPerSecond)
+            || settings.regenerationPerSecond < 0.0f) {
+        return "regenerationPerSecond must be non-negative";
+    }
+    if (!finite(settings.exhaustedRecoveryRatio)
+            || settings.exhaustedRecoveryRatio < 0.0f
+            || settings.exhaustedRecoveryRatio > 1.0f) {
+        return "exhaustedRecoveryRatio must be between 0 and 1";
+    }
+    const PlayerWindedCameraApplicationSettings& camera =
+            settings.windedCamera;
+    if (!finite(camera.startThresholdRatio)
+            || camera.startThresholdRatio < 0.0f
+            || camera.startThresholdRatio > 1.0f) {
+        return "windedCamera.startThresholdRatio must be between 0 and 1";
+    }
+    if (!finite(camera.verticalAmplitudeWorld)
+            || camera.verticalAmplitudeWorld < 0.0f) {
+        return "windedCamera.verticalAmplitudeWorld must be non-negative";
+    }
+    if (!finite(camera.pitchAmplitudeDegrees)
+            || camera.pitchAmplitudeDegrees < 0.0f) {
+        return "windedCamera.pitchAmplitudeDegrees must be non-negative";
+    }
+    if (!finite(camera.frequencyHz) || camera.frequencyHz < 0.0f) {
+        return "windedCamera.frequencyHz must be non-negative";
+    }
+    if (!finite(camera.responseSeconds) || camera.responseSeconds <= 0.0f) {
+        return "windedCamera.responseSeconds must be greater than zero";
+    }
+    const PlayerBreathingAudioApplicationSettings& breathing =
+            settings.breathingAudio;
+    if (!finite(breathing.thresholdRatio)
+            || breathing.thresholdRatio < 0.0f
+            || breathing.thresholdRatio > 1.0f) {
+        return "breathingAudio.thresholdRatio must be between 0 and 1";
+    }
+    if (!finite(breathing.volume)
+            || breathing.volume < 0.0f
+            || breathing.volume > 1.0f) {
+        return "breathingAudio.volume must be between 0 and 1";
+    }
+    if (!finite(breathing.fadeOutSeconds)
+            || breathing.fadeOutSeconds <= 0.0f) {
+        return "breathingAudio.fadeOutSeconds must be greater than zero";
+    }
+    return {};
+}
+
 void SetError(std::string* output, const std::string& message) { if (output) *output = message; }
 
 bool NearlyEqual(float a, float b) { return std::abs(a - b) <= 0.0001f; }
@@ -1017,6 +1082,116 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 }
             }
         }
+        const auto playerStamina = root.find("playerStamina");
+        if (playerStamina != root.end()) {
+            const std::string staminaContext = "application settings.playerStamina";
+            if (!playerStamina->is_object()) {
+                Fail(staminaContext + " must be an object");
+            }
+            parsed.playerStamina.maximum = OptionalNumber(
+                    *playerStamina,
+                    "maximum",
+                    staminaContext).value_or(parsed.playerStamina.maximum);
+            parsed.playerStamina.sprintDrainPerSecond = OptionalNumber(
+                    *playerStamina,
+                    "sprintDrainPerSecond",
+                    staminaContext).value_or(
+                            parsed.playerStamina.sprintDrainPerSecond);
+            parsed.playerStamina.jumpCost = OptionalNumber(
+                    *playerStamina,
+                    "jumpCost",
+                    staminaContext).value_or(parsed.playerStamina.jumpCost);
+            parsed.playerStamina.regenerationPerSecond = OptionalNumber(
+                    *playerStamina,
+                    "regenerationPerSecond",
+                    staminaContext).value_or(
+                            parsed.playerStamina.regenerationPerSecond);
+            parsed.playerStamina.exhaustedRecoveryRatio = OptionalNumber(
+                    *playerStamina,
+                    "exhaustedRecoveryRatio",
+                    staminaContext).value_or(
+                            parsed.playerStamina.exhaustedRecoveryRatio);
+
+            const auto windedCamera = playerStamina->find("windedCamera");
+            if (windedCamera != playerStamina->end()) {
+                const std::string cameraContext = staminaContext
+                        + ".windedCamera";
+                if (!windedCamera->is_object()) {
+                    Fail(cameraContext + " must be an object");
+                }
+                parsed.playerStamina.windedCamera.enabled = OptionalBoolean(
+                        *windedCamera,
+                        "enabled",
+                        cameraContext).value_or(
+                                parsed.playerStamina.windedCamera.enabled);
+                parsed.playerStamina.windedCamera.startThresholdRatio =
+                        OptionalNumber(
+                                *windedCamera,
+                                "startThresholdRatio",
+                                cameraContext).value_or(
+                                        parsed.playerStamina.windedCamera
+                                                .startThresholdRatio);
+                parsed.playerStamina.windedCamera.verticalAmplitudeWorld =
+                        OptionalNumber(
+                                *windedCamera,
+                                "verticalAmplitudeWorld",
+                                cameraContext).value_or(
+                                        parsed.playerStamina.windedCamera
+                                                .verticalAmplitudeWorld);
+                parsed.playerStamina.windedCamera.pitchAmplitudeDegrees =
+                        OptionalNumber(
+                                *windedCamera,
+                                "pitchAmplitudeDegrees",
+                                cameraContext).value_or(
+                                        parsed.playerStamina.windedCamera
+                                                .pitchAmplitudeDegrees);
+                parsed.playerStamina.windedCamera.frequencyHz = OptionalNumber(
+                        *windedCamera,
+                        "frequencyHz",
+                        cameraContext).value_or(
+                                parsed.playerStamina.windedCamera.frequencyHz);
+                parsed.playerStamina.windedCamera.responseSeconds =
+                        OptionalNumber(
+                                *windedCamera,
+                                "responseSeconds",
+                                cameraContext).value_or(
+                                        parsed.playerStamina.windedCamera
+                                                .responseSeconds);
+            }
+
+            const auto breathingAudio = playerStamina->find("breathingAudio");
+            if (breathingAudio != playerStamina->end()) {
+                const std::string breathingContext = staminaContext
+                        + ".breathingAudio";
+                if (!breathingAudio->is_object()) {
+                    Fail(breathingContext + " must be an object");
+                }
+                parsed.playerStamina.breathingAudio.thresholdRatio =
+                        OptionalNumber(
+                                *breathingAudio,
+                                "thresholdRatio",
+                                breathingContext).value_or(
+                                        parsed.playerStamina.breathingAudio
+                                                .thresholdRatio);
+                parsed.playerStamina.breathingAudio.volume = OptionalNumber(
+                        *breathingAudio,
+                        "volume",
+                        breathingContext).value_or(
+                                parsed.playerStamina.breathingAudio.volume);
+                parsed.playerStamina.breathingAudio.fadeOutSeconds =
+                        OptionalNumber(
+                                *breathingAudio,
+                                "fadeOutSeconds",
+                                breathingContext).value_or(
+                                        parsed.playerStamina.breathingAudio
+                                                .fadeOutSeconds);
+            }
+            const std::string staminaError = PlayerStaminaSettingsError(
+                    parsed.playerStamina);
+            if (!staminaError.empty()) {
+                Fail(staminaContext + "." + staminaError);
+            }
+        }
         const auto overrides = root.find("viewmodelOverrides");
         if (overrides != root.end()) {
             if (!overrides->is_object()) Fail("application settings.viewmodelOverrides must be an object");
@@ -1169,6 +1344,12 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         SetError(error, "application settings landing footstep volume multiplier must be non-negative");
         return false;
     }
+    const std::string staminaError = PlayerStaminaSettingsError(
+            settings.playerStamina);
+    if (!staminaError.empty()) {
+        SetError(error, "application settings playerStamina." + staminaError);
+        return false;
+    }
     std::unordered_set<std::string> playerSoundEventIds;
     for (const PlayerSoundEventSettings& event : settings.playerSounds.events) {
         if (!ValidSoundSetId(event.id)
@@ -1222,6 +1403,39 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                 {"volume", event.volume}};
     }
     root["playerSounds"] = {{"events", std::move(playerSoundEvents)}};
+    root["playerStamina"] = {
+            {"maximum", settings.playerStamina.maximum},
+            {"sprintDrainPerSecond",
+                    settings.playerStamina.sprintDrainPerSecond},
+            {"jumpCost", settings.playerStamina.jumpCost},
+            {"regenerationPerSecond",
+                    settings.playerStamina.regenerationPerSecond},
+            {"exhaustedRecoveryRatio",
+                    settings.playerStamina.exhaustedRecoveryRatio},
+            {"windedCamera", {
+                    {"enabled", settings.playerStamina.windedCamera.enabled},
+                    {"startThresholdRatio",
+                            settings.playerStamina.windedCamera
+                                    .startThresholdRatio},
+                    {"verticalAmplitudeWorld",
+                            settings.playerStamina.windedCamera
+                                    .verticalAmplitudeWorld},
+                    {"pitchAmplitudeDegrees",
+                            settings.playerStamina.windedCamera
+                                    .pitchAmplitudeDegrees},
+                    {"frequencyHz",
+                            settings.playerStamina.windedCamera.frequencyHz},
+                    {"responseSeconds",
+                            settings.playerStamina.windedCamera
+                                    .responseSeconds}}},
+            {"breathingAudio", {
+                    {"thresholdRatio",
+                            settings.playerStamina.breathingAudio
+                                    .thresholdRatio},
+                    {"volume", settings.playerStamina.breathingAudio.volume},
+                    {"fadeOutSeconds",
+                            settings.playerStamina.breathingAudio
+                                    .fadeOutSeconds}}}};
     Json overrides = Json::object();
     for (const auto& entry : settings.weapons) {
         Json value = Json::object();

@@ -94,6 +94,7 @@ public:
         return controller.fpsControllerState.currentSectorId;
     }
     const Health& PlayerHealth() const { return playerHealth; }
+    const PlayerStamina& PlayerStaminaState() const { return playerStamina; }
 
 private:
     bool BuildCollisionAndPlayer(
@@ -132,6 +133,9 @@ private:
     SectorScriptHost scriptHost;
     SectorGameNavigationDebugState navigationDebug;
     Health playerHealth = MakeHealth(100);
+    PlayerStamina playerStamina;
+    PlayerWindedCameraState windedCamera;
+    PlayerBreathingAudioRuntime breathingAudio;
     std::string failureError;
 };
 

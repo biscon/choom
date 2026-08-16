@@ -551,6 +551,18 @@ void UpdateSectorFpsMouseLook(
     }
 }
 
+bool SectorFpsInputUsesRunSpeed(
+        const SectorFpsControllerInput& input)
+{
+    const int forwardAxis = (input.moveForward ? 1 : 0)
+            - (input.moveBackward ? 1 : 0);
+    const int strafeAxis = (input.strafeRight ? 1 : 0)
+            - (input.strafeLeft ? 1 : 0);
+    return input.run
+            && (forwardAxis != 0 || strafeAxis != 0)
+            && forwardAxis >= 0;
+}
+
 Vector2 ComputeSectorFpsHorizontalMovementDelta(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
@@ -576,7 +588,9 @@ Vector2 ComputeSectorFpsHorizontalMovementDelta(
 
     if (Vector3LengthSqr(movement) > 0.0001f && dt > 0.0f) {
         movement = Vector3Normalize(movement);
-        const float standingSpeed = input.run ? normalized.runSpeed : normalized.walkSpeed;
+        const float standingSpeed = SectorFpsInputUsesRunSpeed(input)
+                ? normalized.runSpeed
+                : normalized.walkSpeed;
         const float crouchedSpeed = normalized.walkSpeed * 0.5f;
         const float crouchBlend = SectorFpsCrouchBlend(state);
         const float speed = standingSpeed + (crouchedSpeed - standingSpeed) * crouchBlend;

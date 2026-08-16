@@ -2,6 +2,7 @@
 
 #include "engine/assets/AssetHandles.h"
 #include "engine/render/HdrEffectPolicy.h"
+#include "game/PlayerStamina.h"
 
 #include <raylib.h>
 
@@ -297,6 +298,7 @@ struct FpsApplicationSettings {
     bool consoleEnabled = true;
     FootstepApplicationSettings footsteps;
     PlayerSoundApplicationSettings playerSounds;
+    PlayerStaminaApplicationSettings playerStamina;
     FpsGraphicsSettings graphics;
     engine::HdrBloomSettings hdrBloom;
     std::vector<FpsApplicationSettingsEntry> weapons;

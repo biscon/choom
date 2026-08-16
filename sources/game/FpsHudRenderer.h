@@ -3,6 +3,7 @@
 #include "game/FpsViewmodel.h"
 #include "game/FpsWeaponRegistry.h"
 #include "game/Health.h"
+#include "game/PlayerStamina.h"
 #include "engine/assets/FontAssets.h"
 
 #include <raylib.h>
@@ -21,6 +22,16 @@ struct FpsCrosshairLayout {
     std::array<FpsCrosshairSegmentLayout, 4> segments{};
 };
 
+struct FpsStatusBarLayout {
+    Rectangle border = {};
+    Vector2 textPosition = {};
+};
+
+struct FpsVitalsLayout {
+    FpsStatusBarLayout health;
+    FpsStatusBarLayout stamina;
+};
+
 struct FpsHudContext {
     bool preview3DActive = false;
     Rectangle playableViewport = {};
@@ -28,6 +39,7 @@ struct FpsHudContext {
     const FpsViewmodelRuntimeState& viewmodel;
     const engine::FontAsset* font = nullptr;
     const Health* health = nullptr;
+    const PlayerStamina* stamina = nullptr;
 };
 
 bool ShouldDrawFpsCrosshair(
@@ -37,6 +49,11 @@ FpsCrosshairLayout BuildFpsCrosshairLayout(
         const FpsWeaponCrosshairDefinition& crosshair,
         Rectangle playableViewport,
         float uiScale);
+FpsVitalsLayout BuildFpsVitalsLayout(
+        Rectangle playableViewport,
+        float uiScale,
+        int fontPixelSize,
+        bool includeStamina);
 void DrawFpsHud(const FpsHudContext& context);
 
 } // namespace game

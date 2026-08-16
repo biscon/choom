@@ -129,6 +129,9 @@ bool SectorGameSession::StartNew(
 {
     failureError.clear();
     playerHealth = MakeHealth(100);
+    playerStamina = MakePlayerStamina(settings.playerStamina);
+    ClearPlayerWindedCamera(windedCamera);
+    breathingAudio = PlayerBreathingAudioRuntime{};
     const std::string& requestedLevelName = entry.levelName;
     const std::string path = ApplicationLevelAssetPath(requestedLevelName);
     if (path.empty()) {
@@ -221,6 +224,15 @@ void SectorGameSession::Shutdown(
         engine::EngineContext& context,
         SectorSceneRuntime& scene)
 {
+    if (playerAudio != nullptr) {
+        StopPlayerBreathingAudio(
+                context.assets,
+                context.audio,
+                *playerAudio,
+                breathingAudio);
+    } else {
+        breathingAudio = PlayerBreathingAudioRuntime{};
+    }
     engine::ScriptSystemShutdownForMap(context, scripts);
     ResetSectorScriptHost(scriptHost);
     fpsPlayer.End(context.assets, scene.Renderer());
@@ -232,6 +244,8 @@ void SectorGameSession::Shutdown(
     controller = SectorEditorPreviewControllerState{};
     collision = SectorEditorPreviewCollisionState{};
     navigationDebug = SectorGameNavigationDebugState{};
+    playerStamina = PlayerStamina{};
+    ClearPlayerWindedCamera(windedCamera);
     StopGameLevelLoading(loading);
     levelName.clear();
     levelPath.clear();
@@ -364,6 +378,18 @@ void SectorGameSession::Update(
                 engine::ConsumeEvent(event);
             });
 
+    if (applicationSettings != nullptr) {
+        if (input.run && !CanPlayerStaminaSprint(playerStamina)) {
+            input.run = false;
+        }
+        if (input.jumpPressed
+                && !CanPlayerStaminaJump(
+                        playerStamina,
+                        applicationSettings->playerStamina)) {
+            input.jumpPressed = false;
+        }
+    }
+
     const float previousVisualEyeY = scene.Renderer().RendererPose().position.y;
     UpdateSectorEditorGameplayPreview(
             objects.dynamicDoorColliders,
@@ -375,6 +401,30 @@ void SectorGameSession::Update(
             previousVisualEyeY,
             dt,
             &scene.NpcNavigation().collisionCylinders);
+    if (applicationSettings != nullptr) {
+        UpdatePlayerStamina(
+                playerStamina,
+                applicationSettings->playerStamina,
+                controller.frameEvents.sprinting,
+                controller.frameEvents.jumped,
+                dt);
+        const float staminaRatio = PlayerStaminaRatio(playerStamina);
+        UpdatePlayerWindedCamera(
+                windedCamera,
+                applicationSettings->playerStamina.windedCamera,
+                staminaRatio,
+                dt);
+        if (playerAudio != nullptr) {
+            UpdatePlayerBreathingAudio(
+                    context.assets,
+                    context.audio,
+                    *playerAudio,
+                    breathingAudio,
+                    applicationSettings->playerStamina.breathingAudio,
+                    staminaRatio,
+                    dt);
+        }
+    }
     UpdateSectorScriptTriggers(
             scriptHost,
             Vector2{
@@ -611,7 +661,8 @@ void SectorGameSession::RenderHud(
                 playableViewport,
                 *weaponRegistry,
                 assets.GetFont(font),
-                &playerHealth);
+                &playerHealth,
+                &playerStamina);
     }
 }
 
@@ -766,6 +817,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     PlayerAudioRuntime* savedPlayerAudio = playerAudio;
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
     const Health savedHealth = playerHealth;
+    const PlayerStamina savedStamina = playerStamina;
     Shutdown(context, scene);
     if (savedWeaponRegistry == nullptr || savedSettings == nullptr
             || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
@@ -793,6 +845,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
                 + (error.empty() ? "unknown error" : error);
     } else {
         playerHealth = savedHealth;
+        playerStamina = savedStamina;
     }
 }
 
@@ -850,8 +903,13 @@ void SectorGameSession::ApplyPlayerPose(SectorSceneRuntime& scene)
             controller.visualStepOffsetY,
             controller.headBobState.offset,
             controller.landingDipState.offsetY);
+    SectorViewPose windedPose = basePose;
+    windedPose.position.y += windedCamera.verticalOffsetWorld;
+    windedPose.pitchRadians = ClampSectorFpsPitch(
+            windedPose.pitchRadians
+                    + windedCamera.pitchOffsetDegrees * DEG2RAD);
     scene.Renderer().ApplyRendererPose(ApplySectorFpsViewRotationOffset(
-            basePose,
+            windedPose,
             fpsPlayer.State().firing.cameraRecoil.rotationDegrees),
             false);
     controller.freeflyController.pose = basePose;

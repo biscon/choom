@@ -478,6 +478,9 @@ void UpdateSectorEditorGameplayPreview(
     const float resolvedHorizontalSpeed = dt > 0.0f
             ? Vector2Length(resolvedHorizontalMovement) / dt
             : 0.0f;
+    controllerState.frameEvents.sprinting =
+            SectorFpsInputUsesRunSpeed(controllerInput)
+            && Vector2Length(resolvedHorizontalMovement) > 0.0001f;
     const bool headBobActive = !collisionState.previewCollisionNoclipFallback
             && collisionState.previewVerticalResult.hasSector
             && controllerState.fpsControllerState.grounded

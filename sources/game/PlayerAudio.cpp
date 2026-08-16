@@ -12,6 +12,7 @@ namespace {
 
 constexpr float MinimumPlayerSoundPitch = 0.98f;
 constexpr float MaximumPlayerSoundPitch = 1.02f;
+constexpr float BreathingVolumeEpsilon = 0.0001f;
 
 PlayerSoundRuntimeEvent* FindPlayerSoundEvent(
         PlayerAudioRuntime& runtime,
@@ -66,6 +67,11 @@ void RequestPlayerAudioAssets(
         PlayerAudioRuntime& runtime)
 {
     runtime = PlayerAudioRuntime{};
+    const std::string breathingPath = ResolveSectorAudioAssetPath(
+            "player/Heavy_Breathing_01.ogg");
+    runtime.heavyBreathing = assets.RequestMusic(
+            assets.GlobalScope(),
+            breathingPath.c_str());
     const SoundSetCatalog catalog = DiscoverSoundSetCatalog(
             ASSETS_PATH "audio/player",
             "player");
@@ -148,6 +154,53 @@ engine::SoundPlaybackHandle PlayPlayerSoundAt(
 {
     return PlayPlayerSoundInternal(
             assets, audio, runtime, eventId, &positional);
+}
+
+void UpdatePlayerBreathingAudio(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        const PlayerAudioRuntime& playerAudio,
+        PlayerBreathingAudioRuntime& runtime,
+        const PlayerBreathingAudioApplicationSettings& settings,
+        float staminaRatio,
+        float dt)
+{
+    runtime.volume = AdvancePlayerBreathingAudioVolume(
+            runtime.volume,
+            settings,
+            staminaRatio,
+            dt);
+    if (runtime.volume > BreathingVolumeEpsilon) {
+        runtime.playing = audio.PlayMusic(
+                assets,
+                playerAudio.heavyBreathing,
+                engine::MusicPlaybackSettings{
+                        runtime.volume,
+                        1.0f,
+                        0.0f,
+                        true});
+        return;
+    }
+
+    runtime.volume = 0.0f;
+    if (runtime.playing
+            || audio.IsMusicPlaying(playerAudio.heavyBreathing)) {
+        audio.StopMusic(assets, playerAudio.heavyBreathing);
+    }
+    runtime.playing = false;
+}
+
+void StopPlayerBreathingAudio(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        const PlayerAudioRuntime& playerAudio,
+        PlayerBreathingAudioRuntime& runtime)
+{
+    if (runtime.playing
+            || audio.IsMusicPlaying(playerAudio.heavyBreathing)) {
+        audio.StopMusic(assets, playerAudio.heavyBreathing);
+    }
+    runtime = PlayerBreathingAudioRuntime{};
 }
 
 } // namespace game

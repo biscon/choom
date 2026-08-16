@@ -35,6 +35,26 @@
       }
     }
   },
+  "playerStamina": {
+    "maximum": 100.0,
+    "sprintDrainPerSecond": 20.0,
+    "jumpCost": 20.0,
+    "regenerationPerSecond": 12.5,
+    "exhaustedRecoveryRatio": 0.2,
+    "windedCamera": {
+      "enabled": true,
+      "startThresholdRatio": 0.6,
+      "verticalAmplitudeWorld": 0.04,
+      "pitchAmplitudeDegrees": 1.75,
+      "frequencyHz": 0.65,
+      "responseSeconds": 0.35
+    },
+    "breathingAudio": {
+      "thresholdRatio": 0.25,
+      "volume": 0.75,
+      "fadeOutSeconds": 2.0
+    }
+  },
   "viewmodelOverrides": {
     "pistol": {
       "position": [

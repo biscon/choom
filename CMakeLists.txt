@@ -255,6 +255,7 @@ if(BUILD_TESTING)
             sources/game/FpsViewmodel.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/game/FpsHudRenderer.cpp
+            sources/game/PlayerStamina.cpp
             sources/game/FpsViewmodelEffectsRenderer.cpp
             sources/engine/render/ColorTransfer.cpp
             sources/engine/render/HdrEffectPolicy.cpp
@@ -512,6 +513,7 @@ if(BUILD_TESTING)
 
     add_executable(sector_fps_controller_tests
             tests/SectorFpsControllerTests.cpp
+            sources/game/PlayerStamina.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorTopologyMap.cpp
     )

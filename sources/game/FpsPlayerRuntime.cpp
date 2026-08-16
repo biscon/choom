@@ -581,7 +581,8 @@ void FpsPlayerRuntime::RenderHud(
         Rectangle playableViewport,
         const FpsWeaponRegistry& registry,
         const engine::FontAsset* font,
-        const Health* health) const
+        const Health* health,
+        const PlayerStamina* stamina) const
 {
     DrawFpsHud(FpsHudContext{
             true,
@@ -589,7 +590,8 @@ void FpsPlayerRuntime::RenderHud(
             registry,
             state,
             font,
-            health});
+            health,
+            stamina});
 }
 
 } // namespace game

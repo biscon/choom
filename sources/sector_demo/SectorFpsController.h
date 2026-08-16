@@ -83,6 +83,7 @@ struct SectorFpsFootstepCadenceState {
 
 struct SectorFpsFrameEvents {
     bool footstep = false;
+    bool sprinting = false;
     bool jumped = false;
     bool landed = false;
     float landingImpactSpeed = 0.0f;
@@ -193,6 +194,8 @@ void UpdateSectorFpsLandingDip(
         SectorFpsLandingDipState& landingDip,
         const SectorFpsVerticalResult& verticalResult,
         float dt);
+bool SectorFpsInputUsesRunSpeed(
+        const SectorFpsControllerInput& input);
 Vector2 ComputeSectorFpsHorizontalMovementDelta(
         const SectorFpsControllerState& state,
         const SectorFpsControllerConfig& config,
