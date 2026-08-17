@@ -7,6 +7,7 @@
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
 #include "sector_demo/renderer/SectorVolumetricAtmosphereClusters.h"
+#include "sector_demo/renderer/SectorVolumetricAtmosphereMath.h"
 
 #include <array>
 #include <cstddef>
@@ -30,9 +31,11 @@ public:
             const std::vector<SectorLightAtmosphereSource>& lightAtmosphereSources,
             const RuntimePortalVisibilityResult& visibility,
             const std::vector<SectorReceiverBounds>& receiverBounds,
-            bool dynamicLightingEnabled);
+            bool dynamicLightingEnabled,
+            std::uint64_t sourceRevision);
     bool Apply(RenderTexture2D& sceneTarget, RenderTexture2D& sceneScratch);
     void ResetPreparedFrame();
+    void InvalidateHistory(SectorVolumetricHistoryResetReason reason);
     void Shutdown();
 
     bool Prepared() const { return prepared; }
@@ -71,6 +74,20 @@ public:
     std::uint64_t EstimatedResourceBytes() const { return estimatedResourceBytes; }
     const engine::RenderTarget& AccumulationTarget() const { return integratedTarget; }
     const std::string& ResourceDiagnostic() const { return resourceDiagnostic; }
+    bool HistoryEnabled() const { return temporalPolicy.enabled; }
+    bool HistoryValid() const { return historyValid; }
+    bool HistoryFrozen() const { return historyFrozen; }
+    void SetHistoryFrozen(bool frozen);
+    std::uint64_t HistoryFrameCount() const { return historyFrameCount; }
+    SectorVolumetricHistoryResetReason HistoryResetReason() const {
+        return historyResetReason;
+    }
+    SectorVolumetricDebugView DebugView() const { return debugView; }
+    void SetDebugView(SectorVolumetricDebugView view);
+    int ShadowedSpotLightCount() const { return shadowedSpotLightCount; }
+    const SectorVolumetricTemporalPolicy& TemporalPolicy() const {
+        return temporalPolicy;
+    }
 
 private:
     struct CommonLocations {
@@ -86,6 +103,7 @@ private:
         int clusterBandCount = -1;
         int sliceDepths = -1;
         int runtimeSeconds = -1;
+        int jitter = -1;
     };
 
     struct MediumLocations : CommonLocations {
@@ -105,6 +123,16 @@ private:
         int lightData = -1;
         int lightLists = -1;
         int anisotropy = -1;
+        std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrices = [] {
+            std::array<int, MaxDynamicSpotLightShadowCasters> locations{};
+            locations.fill(-1);
+            return locations;
+        }();
+        int shadowBias = -1;
+        int shadowStrength = -1;
+        int shadowSoftness = -1;
+        int shadowMap0 = -1;
+        int shadowMap1 = -1;
     };
 
     struct IntegrationLocations : CommonLocations {
@@ -114,11 +142,37 @@ private:
         int farPlane = -1;
     };
 
+    struct TemporalLocations {
+        int currentAtmosphere = -1;
+        int currentDepth = -1;
+        int historyAtmosphere = -1;
+        int historyDepth = -1;
+        int inverseCurrentViewProjection = -1;
+        int previousViewProjection = -1;
+        int currentJitterUv = -1;
+        int previousJitterUv = -1;
+        int texelSize = -1;
+        int nearPlane = -1;
+        int farPlane = -1;
+        int historyValid = -1;
+        int baseCurrentWeight = -1;
+        int responsiveCurrentWeight = -1;
+        int outputHistoryWeight = -1;
+    };
+
     struct CompositeLocations {
         int sceneColor = -1;
         int sceneDepth = -1;
         int atmosphereTexture = -1;
         int atmosphereTexelSize = -1;
+        int atmosphereDepth = -1;
+        int mediumAtlas = -1;
+        int lightingAtlas = -1;
+        int nearPlane = -1;
+        int farPlane = -1;
+        int maximumDistance = -1;
+        int debugView = -1;
+        int historyAvailable = -1;
     };
 
     bool EnsureResources(const SectorVolumetricResourceLayout& layout);
@@ -136,14 +190,17 @@ private:
     Shader mediumShader = {};
     Shader lightShader = {};
     Shader integrationShader = {};
+    Shader temporalShader = {};
     Shader compositeShader = {};
     MediumLocations mediumLocations;
     LightLocations lightLocations;
     IntegrationLocations integrationLocations;
+    TemporalLocations temporalLocations;
     CompositeLocations compositeLocations;
     engine::RenderTarget mediumAtlas;
     engine::RenderTarget lightingAtlas;
     engine::RenderTarget integratedTarget;
+    std::array<engine::RenderTarget, 2> historyTargets;
     Texture2D lightDataTexture = {};
     Texture2D volumeDataTexture = {};
     Texture2D lightListTexture = {};
@@ -157,10 +214,19 @@ private:
     SectorVolumetricDepthSliceLayout depthLayout;
     SectorTopologyFogSettings fogSettings;
     Camera3D preparedCamera = {};
+    SectorBillboardDynamicLightContext preparedDynamicLights;
     float preparedRuntimeSeconds = 0.0f;
     float nearPlane = 0.0f;
     float farPlane = 0.0f;
     float aspectRatio = 1.0f;
+    Matrix currentViewProjection = {};
+    Matrix inverseCurrentViewProjection = {};
+    Matrix historyViewProjection = {};
+    Vector3 currentJitter = {};
+    Vector3 historyJitter = {};
+    SectorVolumetricTemporalPolicy temporalPolicy;
+    SectorVolumetricHistoryFrameState currentFrameState;
+    SectorVolumetricHistoryFrameState previousFrameState;
     int maximumTextureSize = 0;
     int failedSceneWidth = 0;
     int failedSceneHeight = 0;
@@ -175,6 +241,15 @@ private:
     bool resourcesReady = false;
     bool activeMedia = false;
     bool globalFogActive = false;
+    bool historyValid = false;
+    bool historyFrozen = false;
+    int historyReadIndex = 0;
+    std::uint64_t temporalFrameIndex = 0;
+    std::uint64_t historyFrameCount = 0;
+    SectorVolumetricHistoryResetReason historyResetReason =
+            SectorVolumetricHistoryResetReason::FirstFrame;
+    SectorVolumetricDebugView debugView = SectorVolumetricDebugView::Composite;
+    int shadowedSpotLightCount = 0;
     std::string resourceDiagnostic = "not initialized";
 };
 

@@ -27,6 +27,7 @@
 #include <raylib.h>
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -246,6 +247,18 @@ public:
     void CancelAtmosphereCapture();
     SectorAtmosphereBackend AtmosphereBackend() const { return atmosphereBackend; }
     void SetAtmosphereBackend(SectorAtmosphereBackend backend);
+    bool AtmosphereHistoryFrozen() const {
+        return volumetricAtmosphereRenderer.HistoryFrozen();
+    }
+    void SetAtmosphereHistoryFrozen(bool frozen) {
+        volumetricAtmosphereRenderer.SetHistoryFrozen(frozen);
+    }
+    SectorVolumetricDebugView AtmosphereDebugView() const {
+        return volumetricAtmosphereRenderer.DebugView();
+    }
+    void SetAtmosphereDebugView(SectorVolumetricDebugView view) {
+        volumetricAtmosphereRenderer.SetDebugView(view);
+    }
 
 private:
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
@@ -327,6 +340,10 @@ private:
     SectorAtmosphereDiagnostics atmosphereDiagnostics;
     SectorAtmosphereCapture atmosphereCapture;
     SectorAtmosphereBackend atmosphereBackend = SectorAtmosphereBackend::Unified;
+    std::uint64_t atmosphereSourceRevision = 1;
+    std::string atmosphereProbeSourceHash;
+    std::string atmosphereMapProbeSourceHash;
+    std::size_t atmosphereProbeCount = 0;
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;

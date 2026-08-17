@@ -39,6 +39,21 @@ struct SectorVolumetricQualityContract {
     bool temporalResolve = false;
 };
 
+struct SectorVolumetricTemporalPolicy {
+    bool enabled = false;
+    int jitterPeriod = 1;
+    float baseCurrentFrameWeight = 1.0f;
+    float responsiveCurrentFrameWeight = 1.0f;
+};
+
+enum class SectorVolumetricDebugView {
+    Composite,
+    Froxels,
+    HistoryWeight
+};
+
+const char* SectorVolumetricDebugViewName(SectorVolumetricDebugView view);
+
 struct SectorVolumetricAtlasLayout {
     SectorVolumetricGridSize grid;
     int tileColumns = 0;
@@ -90,6 +105,8 @@ struct SectorLegacyAtmosphereQualityContract {
 const char* SectorVolumetricQualityName(
         SectorTopologyFogSettings::VolumetricQuality quality);
 SectorVolumetricQualityContract GetSectorVolumetricQualityContract(
+        SectorTopologyFogSettings::VolumetricQuality quality);
+SectorVolumetricTemporalPolicy GetSectorVolumetricTemporalPolicy(
         SectorTopologyFogSettings::VolumetricQuality quality);
 SectorLegacyAtmosphereQualityContract GetSectorLegacyAtmosphereQualityContract(
         SectorTopologyFogSettings::VolumetricQuality quality);

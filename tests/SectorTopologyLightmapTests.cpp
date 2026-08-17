@@ -4629,6 +4629,51 @@ void TestVolumetricClusterBudgetsAndReuse()
                     && builder.Lights()[2].stableId == 5,
           "view selection orders by importance then stable light ID");
 
+    game::SectorLightAtmosphereSource shadowedSpot;
+    shadowedSpot.kind = game::SectorLightAtmosphereSourceKind::DynamicSpot;
+    shadowedSpot.shape = game::SectorLightAtmosphereShape::Cone;
+    shadowedSpot.lightId = 70;
+    shadowedSpot.positionWorld = Vector3{0.0f, 0.0f, 6.0f};
+    shadowedSpot.directionWorld = Vector3{0.0f, 0.0f, 1.0f};
+    shadowedSpot.rangeWorld = 4.0f;
+    shadowedSpot.intensity = 1.0f;
+    shadowedSpot.innerConeCos = 0.9f;
+    shadowedSpot.outerConeCos = 0.7f;
+    game::SectorLightAtmosphereSource unshadowedSpot = shadowedSpot;
+    unshadowedSpot.lightId = 71;
+    game::SectorLightAtmosphereSource dynamicPoint = shadowedSpot;
+    dynamicPoint.kind = game::SectorLightAtmosphereSourceKind::DynamicPoint;
+    dynamicPoint.shape = game::SectorLightAtmosphereShape::Sphere;
+    dynamicPoint.lightId = 72;
+    dynamicLights.dynamicLightCount = 3;
+    dynamicLights.dynamicLightIds[0] = 70;
+    dynamicLights.dynamicLightTypes[0] = 1;
+    dynamicLights.shadowUniforms.dynamicLightShadowSlots[0] = 0;
+    dynamicLights.dynamicLightIds[1] = 71;
+    dynamicLights.dynamicLightTypes[1] = 1;
+    dynamicLights.shadowUniforms.dynamicLightShadowSlots[1] = -1;
+    dynamicLights.dynamicLightIds[2] = 72;
+    dynamicLights.dynamicLightTypes[2] = 0;
+    dynamicLights.shadowUniforms.dynamicLightShadowSlots[2] = 1;
+    Check(builder.Build(
+                    map,
+                    {shadowedSpot, unshadowedSpot, dynamicPoint},
+                    nullptr, dynamicLights, visibility, {}, camera,
+                    16.0f / 9.0f, depth, 0.0f, true),
+          "cluster builder accepts existing spotlight shadow ownership metadata");
+    int shadowedSlot = -2;
+    int unshadowedSlot = -2;
+    int pointSlot = -2;
+    for (int index = 0; index < builder.Diagnostics().retainedLightCount; ++index) {
+        const auto& record = builder.Lights()[static_cast<size_t>(index)];
+        if (record.stableId == 70) shadowedSlot = record.shadowSlot;
+        if (record.stableId == 71) unshadowedSlot = record.shadowSlot;
+        if (record.stableId == 72) pointSlot = record.shadowSlot;
+    }
+    Check(shadowedSlot == 0 && unshadowedSlot == -1 && pointSlot == -1,
+          "only an existing dynamic spotlight shadow owner receives a volumetric shadow slot");
+    dynamicLights = {};
+
     std::vector<game::SectorLightAtmosphereSource> separated;
     for (int index = 0; index < 20; ++index) {
         game::SectorLightAtmosphereSource source;

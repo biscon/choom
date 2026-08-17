@@ -30,6 +30,16 @@ const char* SectorVolumetricQualityName(
     return "Unknown";
 }
 
+const char* SectorVolumetricDebugViewName(SectorVolumetricDebugView view)
+{
+    switch (view) {
+        case SectorVolumetricDebugView::Composite: return "Composite";
+        case SectorVolumetricDebugView::Froxels: return "Froxels";
+        case SectorVolumetricDebugView::HistoryWeight: return "History Weight";
+    }
+    return "Unknown";
+}
+
 SectorVolumetricQualityContract GetSectorVolumetricQualityContract(
         SectorTopologyFogSettings::VolumetricQuality quality)
 {
@@ -44,6 +54,21 @@ SectorVolumetricQualityContract GetSectorVolumetricQualityContract(
             return SectorVolumetricQualityContract{};
     }
     return SectorVolumetricQualityContract{};
+}
+
+SectorVolumetricTemporalPolicy GetSectorVolumetricTemporalPolicy(
+        SectorTopologyFogSettings::VolumetricQuality quality)
+{
+    switch (quality) {
+        case SectorTopologyFogSettings::VolumetricQuality::Medium:
+            return SectorVolumetricTemporalPolicy{true, 8, 0.20f, 0.65f};
+        case SectorTopologyFogSettings::VolumetricQuality::High:
+            return SectorVolumetricTemporalPolicy{true, 16, 0.10f, 0.50f};
+        case SectorTopologyFogSettings::VolumetricQuality::Off:
+        case SectorTopologyFogSettings::VolumetricQuality::Low:
+            return SectorVolumetricTemporalPolicy{};
+    }
+    return SectorVolumetricTemporalPolicy{};
 }
 
 SectorLegacyAtmosphereQualityContract GetSectorLegacyAtmosphereQualityContract(

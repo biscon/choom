@@ -850,6 +850,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
             lightAtmosphereSources);
+    ++atmosphereSourceRevision;
     doorRenderer.ReserveRuntimeDoorCapacity(runtimeObjectCapacity);
     runtimeSeconds = 0.0f;
     localFogRenderer.Shutdown();
@@ -983,6 +984,9 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     surfaceLightmapBakeCurrent = false;
     objectProbeBakeCurrent = false;
     lightAtmosphereSources.clear();
+    atmosphereProbeSourceHash.clear();
+    atmosphereMapProbeSourceHash.clear();
+    atmosphereProbeCount = 0;
     doorRenderer.ClearPreparedShadowCasters();
     runtimeSeconds = 0.0f;
     localFogRenderer.Shutdown();
@@ -1589,6 +1593,8 @@ void SectorMeshRenderer::SetAtmosphereBackend(SectorAtmosphereBackend backend)
     if (backend == atmosphereBackend) return;
     CancelAtmosphereCapture();
     atmosphereBackend = backend;
+    volumetricAtmosphereRenderer.InvalidateHistory(
+            SectorVolumetricHistoryResetReason::BackendSwitch);
     volumetricAtmosphereRenderer.ResetPreparedFrame();
     atmosphereGpuProfiler.Shutdown();
     atmosphereGpuProfiler.Initialize();
@@ -1732,6 +1738,27 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
             clusterDiagnostics.volumeViewOverflowCount;
     atmosphereDiagnostics.unifiedVolumeClusterOverflowCount =
             clusterDiagnostics.volumeClusterOverflowCount;
+    const SectorVolumetricTemporalPolicy& temporalPolicy =
+            volumetricAtmosphereRenderer.TemporalPolicy();
+    atmosphereDiagnostics.unifiedHistoryEnabled =
+            volumetricAtmosphereRenderer.HistoryEnabled();
+    atmosphereDiagnostics.unifiedHistoryValid =
+            volumetricAtmosphereRenderer.HistoryValid();
+    atmosphereDiagnostics.unifiedHistoryFrozen =
+            volumetricAtmosphereRenderer.HistoryFrozen();
+    atmosphereDiagnostics.unifiedHistoryFrameCount =
+            volumetricAtmosphereRenderer.HistoryFrameCount();
+    atmosphereDiagnostics.unifiedJitterPeriod = temporalPolicy.jitterPeriod;
+    atmosphereDiagnostics.unifiedBaseCurrentFrameWeight =
+            temporalPolicy.baseCurrentFrameWeight;
+    atmosphereDiagnostics.unifiedResponsiveCurrentFrameWeight =
+            temporalPolicy.responsiveCurrentFrameWeight;
+    atmosphereDiagnostics.unifiedHistoryResetReason =
+            volumetricAtmosphereRenderer.HistoryResetReason();
+    atmosphereDiagnostics.unifiedDebugView =
+            volumetricAtmosphereRenderer.DebugView();
+    atmosphereDiagnostics.unifiedShadowedSpotLightCount =
+            volumetricAtmosphereRenderer.ShadowedSpotLightCount();
 
     atmosphereDiagnostics.dustEligible = targetSupported
             ? lightDustRenderer.EligibleEmitterCount()
@@ -1784,7 +1811,6 @@ bool SectorMeshRenderer::PrepareWorldAtmosphere(
         const SectorTopologyMap& map,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes)
 {
-    static_cast<void>(objectLightProbes);
     if (atmosphereBackend != SectorAtmosphereBackend::Unified) {
         volumetricAtmosphereRenderer.ResetPreparedFrame();
         return true;
@@ -1794,6 +1820,15 @@ bool SectorMeshRenderer::PrepareWorldAtmosphere(
                     < static_cast<int>(volumetricQualityCap)
             ? map.fogSettings.volumetricQuality
             : volumetricQualityCap;
+    if (atmosphereProbeSourceHash != objectLightProbes.metadata.sourceHash
+            || atmosphereMapProbeSourceHash
+                    != map.bakedLightmap.objectProbes.sourceHash
+            || atmosphereProbeCount != objectLightProbes.probes.size()) {
+        atmosphereProbeSourceHash = objectLightProbes.metadata.sourceHash;
+        atmosphereMapProbeSourceHash = map.bakedLightmap.objectProbes.sourceHash;
+        atmosphereProbeCount = objectLightProbes.probes.size();
+        ++atmosphereSourceRevision;
+    }
     return volumetricAtmosphereRenderer.Prepare(
             sceneTarget,
             map,
@@ -1805,7 +1840,8 @@ bool SectorMeshRenderer::PrepareWorldAtmosphere(
             lightAtmosphereSources,
             visibilityResult,
             meshes.sectorReceiverBounds,
-            dynamicLightingEnabled);
+            dynamicLightingEnabled,
+            atmosphereSourceRevision);
 }
 
 bool SectorMeshRenderer::ApplyWorldAtmosphere(
@@ -1847,6 +1883,11 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
                     == engine::RenderTargetDepthKind::SampleableTexture;
     const bool targetSupported = sceneTargetSupported
             && EnsureHdrSceneScratch(sceneTarget);
+    if (atmosphereBackend == SectorAtmosphereBackend::Unified
+            && !targetSupported) {
+        volumetricAtmosphereRenderer.InvalidateHistory(
+                SectorVolumetricHistoryResetReason::ResourceUnavailable);
+    }
     RenderTexture2D& nativeScene = sceneTarget.native;
     const SectorBillboardDynamicLightContext dynamicLightContext =
             BuildBillboardDynamicLightContext();
@@ -1916,6 +1957,10 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
             unifiedApplied = volumetricAtmosphereRenderer.Apply(
                     nativeScene, hdrSceneScratch.native);
             pipelineFailed = unifiedApplied && !CommitHdrScratch(sceneTarget);
+            if (pipelineFailed) {
+                volumetricAtmosphereRenderer.InvalidateHistory(
+                        SectorVolumetricHistoryResetReason::ResourceUnavailable);
+            }
         }
     }
     atmosphereGpuProfiler.End(SectorAtmosphereGpuPass::Unified);
@@ -2041,6 +2086,7 @@ void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
             lightAtmosphereSources);
+    ++atmosphereSourceRevision;
     UpdateVisibilityDebug();
 }
 

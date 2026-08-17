@@ -1,6 +1,8 @@
 #include "engine/render/HdrEffectPolicy.h"
 #include "sector_demo/renderer/SectorVolumetricAtmosphereMath.h"
 
+#include <raymath.h>
+
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -153,6 +155,151 @@ void TestFinalAtmosphereSettingNormalization()
           "high volumetric light scattering clamps to eight");
 }
 
+game::SectorVolumetricHistoryFrameState MakeHistoryFrame()
+{
+    game::SectorVolumetricHistoryFrameState frame;
+    frame.valid = true;
+    frame.targetWidth = 1920;
+    frame.targetHeight = 1080;
+    frame.quality = game::SectorTopologyFogSettings::VolumetricQuality::High;
+    frame.atlas = game::ComputeSectorVolumetricAtlasLayout(
+            game::SectorVolumetricGridSize{240, 135, 64});
+    frame.cameraForward = Vector3{0.0f, 0.0f, 1.0f};
+    frame.cameraUp = Vector3{0.0f, 1.0f, 0.0f};
+    frame.verticalFovDegrees = 75.0f;
+    frame.aspectRatio = 16.0f / 9.0f;
+    frame.nearPlane = 0.05f;
+    frame.farPlane = 1000.0f;
+    frame.renderSeconds = 1.0f;
+    frame.fogSignature = 10;
+    frame.sourceRevision = 20;
+    return frame;
+}
+
+void TestTemporalPoliciesAndJitter()
+{
+    using Quality = game::SectorTopologyFogSettings::VolumetricQuality;
+    const auto low = game::GetSectorVolumetricTemporalPolicy(Quality::Low);
+    const auto medium = game::GetSectorVolumetricTemporalPolicy(Quality::Medium);
+    const auto high = game::GetSectorVolumetricTemporalPolicy(Quality::High);
+    Check(!low.enabled && low.jitterPeriod == 1
+                    && medium.enabled && medium.jitterPeriod == 8
+                    && Near(medium.baseCurrentFrameWeight, 0.20f)
+                    && Near(medium.responsiveCurrentFrameWeight, 0.65f)
+                    && high.enabled && high.jitterPeriod == 16
+                    && Near(high.baseCurrentFrameWeight, 0.10f)
+                    && Near(high.responsiveCurrentFrameWeight, 0.50f),
+          "temporal quality policies use fixed internal jitter and blend weights");
+    const Vector3 centered = game::ComputeSectorVolumetricJitter(Quality::Low, 12);
+    const Vector3 first = game::ComputeSectorVolumetricJitter(Quality::Medium, 0);
+    const Vector3 wrapped = game::ComputeSectorVolumetricJitter(Quality::Medium, 8);
+    Check(Near(centered.x, 0.0f) && Near(centered.y, 0.0f)
+                    && Near(centered.z, 0.5f)
+                    && Near(first.x, wrapped.x) && Near(first.y, wrapped.y)
+                    && Near(first.z, wrapped.z)
+                    && first.x >= -0.5f && first.x <= 0.5f
+                    && first.y >= -0.5f && first.y <= 0.5f
+                    && first.z >= 0.0f && first.z <= 1.0f,
+          "jitter is deterministic, bounded, and wraps at the quality period");
+}
+
+void TestTemporalReprojectionAndDepthPolicy()
+{
+    Vector2 historyUv;
+    float previousDepth = 0.0f;
+    Check(game::ReprojectSectorVolumetricHistoryUv(
+                    Vector2{0.25f, 0.75f}, 0.5f,
+                    MatrixIdentity(), MatrixIdentity(),
+                    Vector2{0.01f, -0.02f}, Vector2{0.01f, -0.02f},
+                    historyUv, previousDepth)
+                    && Near(historyUv.x, 0.25f)
+                    && Near(historyUv.y, 0.75f)
+                    && Near(previousDepth, 0.5f),
+          "identity reprojection preserves UV and depth after jitter compensation");
+    Check(!game::ReprojectSectorVolumetricHistoryUv(
+                    Vector2{0.9f, 0.5f}, 0.5f,
+                    MatrixIdentity(), MatrixTranslate(2.0f, 0.0f, 0.0f),
+                    Vector2{}, Vector2{}, historyUv, previousDepth),
+          "reprojection rejects history outside the previous viewport");
+    Check(game::AcceptSectorVolumetricHistoryDepth(10.0f, 10.15f)
+                    && !game::AcceptSectorVolumetricHistoryDepth(10.0f, 10.25f)
+                    && !game::AcceptSectorVolumetricHistoryDepth(
+                            std::numeric_limits<float>::quiet_NaN(), 10.0f),
+          "history depth accepts nearby surfaces and rejects disocclusion or invalid data");
+    Check(game::ComputeSectorVolumetricBilateralDepthWeight(2.0f, 2.0f) > 0.99f
+                    && game::ComputeSectorVolumetricBilateralDepthWeight(2.0f, 4.0f)
+                            < 0.001f,
+          "bilateral reconstruction strongly rejects a mismatched foreground depth");
+}
+
+void TestHistoryClampAndResetTriggers()
+{
+    const Vector4 clamped = game::ClampSectorVolumetricHistorySample(
+            Vector4{10.0f, -2.0f, std::numeric_limits<float>::infinity(), 2.0f},
+            Vector4{1.0f, 2.0f, 3.0f, 0.2f},
+            Vector4{4.0f, 5.0f, 6.0f, 0.8f});
+    Check(Near(clamped.x, 4.0f) && Near(clamped.y, 2.0f)
+                    && Near(clamped.z, 3.0f) && Near(clamped.w, 0.8f),
+          "history clamp sanitizes finite HDR values and clamps to the current neighborhood");
+
+    const auto base = MakeHistoryFrame();
+    Check(game::EvaluateSectorVolumetricHistoryReset({}, base)
+                    == game::SectorVolumetricHistoryResetReason::FirstFrame,
+          "first temporal frame resets history");
+    auto changed = base;
+    changed.targetWidth = 1280;
+    Check(game::EvaluateSectorVolumetricHistoryReset(base, changed)
+                    == game::SectorVolumetricHistoryResetReason::TargetChanged,
+          "target changes reset history");
+    changed = base;
+    changed.quality = game::SectorTopologyFogSettings::VolumetricQuality::Medium;
+    Check(game::EvaluateSectorVolumetricHistoryReset(base, changed)
+                    == game::SectorVolumetricHistoryResetReason::QualityChanged,
+          "quality changes reset history");
+    changed = base;
+    ++changed.atlas.tileColumns;
+    Check(game::EvaluateSectorVolumetricHistoryReset(base, changed)
+                    == game::SectorVolumetricHistoryResetReason::AtlasLayoutChanged,
+          "atlas layout changes reset history");
+    changed = base;
+    ++changed.fogSignature;
+    Check(game::EvaluateSectorVolumetricHistoryReset(base, changed)
+                    == game::SectorVolumetricHistoryResetReason::FogSettingsChanged,
+          "fog changes reset history");
+    changed = base;
+    ++changed.sourceRevision;
+    Check(game::EvaluateSectorVolumetricHistoryReset(base, changed)
+                    == game::SectorVolumetricHistoryResetReason::SourceRevisionChanged,
+          "static source revisions reset history");
+    changed = base;
+    changed.verticalFovDegrees += 1.0f;
+    Check(game::EvaluateSectorVolumetricHistoryReset(base, changed)
+                    == game::SectorVolumetricHistoryResetReason::ProjectionChanged,
+          "projection changes reset history");
+    changed = base;
+    changed.cameraPosition.x = 2.01f;
+    Check(game::EvaluateSectorVolumetricHistoryReset(base, changed)
+                    == game::SectorVolumetricHistoryResetReason::CameraTranslation,
+          "camera teleports reset history");
+    changed = base;
+    changed.cameraForward = Vector3{std::sin(31.0f * DEG2RAD), 0.0f,
+            std::cos(31.0f * DEG2RAD)};
+    Check(game::EvaluateSectorVolumetricHistoryReset(base, changed)
+                    == game::SectorVolumetricHistoryResetReason::CameraRotation,
+          "large visual-camera rotations reset history");
+    changed = base;
+    changed.renderSeconds += 0.251f;
+    Check(game::EvaluateSectorVolumetricHistoryReset(base, changed)
+                    == game::SectorVolumetricHistoryResetReason::RenderGap,
+          "long render gaps reset history");
+    changed = base;
+    changed.cameraPosition.x = 0.25f;
+    changed.renderSeconds += 0.016f;
+    Check(game::EvaluateSectorVolumetricHistoryReset(base, changed)
+                    == game::SectorVolumetricHistoryResetReason::None,
+          "ordinary motion retains temporal history");
+}
+
 } // namespace
 
 int main()
@@ -162,6 +309,9 @@ int main()
     TestPhaseAndDepthClipping();
     TestAnalyticFogHandoff();
     TestFinalAtmosphereSettingNormalization();
+    TestTemporalPoliciesAndJitter();
+    TestTemporalReprojectionAndDepthPolicy();
+    TestHistoryClampAndResetTriggers();
     if (failures != 0) {
         std::cerr << failures << " SectorVolumetricAtmosphereTests failure(s)\n";
         return 1;

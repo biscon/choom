@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorViewPose.h"
 #include "sector_demo/renderer/SectorVolumetricAtmosphereContracts.h"
+#include "sector_demo/renderer/SectorVolumetricAtmosphereMath.h"
 
 #include <array>
 #include <cstddef>
@@ -193,6 +194,18 @@ struct SectorAtmosphereDiagnostics {
     std::uint64_t unifiedLightClusterOverflowCount = 0;
     int unifiedVolumeViewOverflowCount = 0;
     std::uint64_t unifiedVolumeClusterOverflowCount = 0;
+    bool unifiedHistoryEnabled = false;
+    bool unifiedHistoryValid = false;
+    bool unifiedHistoryFrozen = false;
+    std::uint64_t unifiedHistoryFrameCount = 0;
+    int unifiedJitterPeriod = 1;
+    float unifiedBaseCurrentFrameWeight = 1.0f;
+    float unifiedResponsiveCurrentFrameWeight = 1.0f;
+    SectorVolumetricHistoryResetReason unifiedHistoryResetReason =
+            SectorVolumetricHistoryResetReason::FirstFrame;
+    SectorVolumetricDebugView unifiedDebugView =
+            SectorVolumetricDebugView::Composite;
+    int unifiedShadowedSpotLightCount = 0;
     int dustEligible = 0;
     int dustActive = 0;
     int dustVisibleParticles = 0;

@@ -240,6 +240,7 @@ if(BUILD_TESTING)
             tests/SectorVolumetricAtmosphereTests.cpp
             sources/engine/render/HdrEffectPolicy.cpp
             sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/renderer/SectorVolumetricAtmosphereContracts.cpp
             sources/sector_demo/renderer/SectorVolumetricAtmosphereMath.cpp
     )
     target_include_directories(sector_volumetric_atmosphere_tests PRIVATE sources)

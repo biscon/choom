@@ -68,6 +68,8 @@ inline float SectorEditorPreviewOverlayExpandedHeight(
 
 struct SectorEditorPreviewAtmosphereOverlayLayout {
     Rectangle backend;
+    Rectangle debugView;
+    Rectangle freezeHistory;
     Rectangle capture;
     Rectangle copyReport;
     Rectangle diagnosticsScroll;
@@ -83,16 +85,22 @@ BuildSectorEditorPreviewAtmosphereOverlayLayout(
 {
     const float contentWidth = std::max(0.0f, panel.width - padding * 2.0f);
     const float controlGap = 8.0f;
-    const float backendWidth = 220.0f;
+    const float backendWidth = 180.0f;
+    const float debugWidth = 190.0f;
+    const float freezeWidth = 170.0f;
     const float actionWidth = 132.0f;
-    const float scrollTop = contentTop + rowHeight + gap;
+    const float actionTop = contentTop + rowHeight + gap;
+    const float scrollTop = actionTop + rowHeight + gap;
     return SectorEditorPreviewAtmosphereOverlayLayout{
             Rectangle{panel.x + padding, contentTop, backendWidth, rowHeight},
             Rectangle{panel.x + padding + backendWidth + controlGap,
-                    contentTop, actionWidth, rowHeight},
+                    contentTop, debugWidth, rowHeight},
             Rectangle{panel.x + padding + backendWidth + controlGap
-                            + actionWidth + controlGap,
-                    contentTop, actionWidth, rowHeight},
+                            + debugWidth + controlGap,
+                    contentTop, freezeWidth, rowHeight},
+            Rectangle{panel.x + padding, actionTop, actionWidth, rowHeight},
+            Rectangle{panel.x + padding + actionWidth + controlGap,
+                    actionTop, actionWidth, rowHeight},
             Rectangle{panel.x + padding, scrollTop, contentWidth,
                     std::max(0.0f, panel.y + panel.height - padding - scrollTop)}};
 }
