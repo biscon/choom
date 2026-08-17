@@ -93,6 +93,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorLevelMarkerEditingService& levelMarkerEditing;
     SectorEditorTriggerEditingService& triggerEditing;
     SectorEditorAuthoringFaceMergeService& authoringFaceMerge;
+    bool showLegacyAtmosphereHaze = true;
     engine::EngineContext* engineContext = nullptr;
 };
 

@@ -1,5 +1,6 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
+#include "sector_editor/SectorEditorLightInspector.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
@@ -369,7 +370,7 @@ void TestPreviewSettingsScrollableContentHeightsReachLastControls()
             + 4.0f * (8.0f + 38.0f)
             + 36.0f + gap;
     const float fogLastControlBottom =
-            10.0f * (rowH + gap)
+            12.0f * (rowH + gap)
             + 28.0f
             + 36.0f + gap
             + 38.0f
@@ -383,6 +384,22 @@ void TestPreviewSettingsScrollableContentHeightsReachLastControls()
                   game::MeasureSectorPreviewSettingsFogContentHeight(rowH, gap),
                   fogLastControlBottom + 12.0f),
           "fog scroll reaches the complete color swatch with bottom padding");
+}
+
+void TestLightAtmosphereInspectorBackendHeight()
+{
+    constexpr float rowH = 40.0f;
+    constexpr float gap = 8.0f;
+    game::SectorLightAtmosphereSettings atmosphere;
+    atmosphere.haze.enabled = true;
+    const float unified = game::MeasureLightAtmosphereInspectorContentHeight(
+            rowH, gap, atmosphere, false);
+    const float legacy = game::MeasureLightAtmosphereInspectorContentHeight(
+            rowH, gap, atmosphere, true);
+    Check(Near(
+                  legacy - unified,
+                  26.0f + rowH + gap + 10.0f * (rowH + gap)),
+          "legacy inspector height includes only the temporary haze controls");
 }
 
 void TestAuthoringFaceInspectorHeightIncludesAllSections()
@@ -552,23 +569,27 @@ void TestPreviewSettingsModalFogDraftApplyAndReset()
     const std::string lightmapHash = game::ComputeSectorLightmapSourceHash(map);
     modal.draftFogSettings.density = 0.35f;
     modal.draftFogSettings.referenceHeightWorld = -3.0f;
+    modal.draftFogSettings.anisotropy = -0.4f;
+    modal.draftFogSettings.volumetricMaxDistanceWorld = 72.0f;
     Check(game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
           "preview settings modal applies changed fog settings");
     Check(Near(map.fogSettings.density, 0.35f)
-                  && Near(map.fogSettings.referenceHeightWorld, -3.0f),
+                  && Near(map.fogSettings.referenceHeightWorld, -3.0f)
+                  && Near(map.fogSettings.anisotropy, -0.4f)
+                  && Near(map.fogSettings.volumetricMaxDistanceWorld, 72.0f),
           "preview settings modal writes normalized fog settings");
     Check(!game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
           "preview settings modal reports unchanged fog settings");
 
-    modal.draftFogSettings.localVolumeQuality =
-            game::SectorTopologyFogSettings::LocalVolumeQuality::High;
+    modal.draftFogSettings.volumetricQuality =
+            game::SectorTopologyFogSettings::VolumetricQuality::High;
     Check(game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
           "preview settings modal applies a quality-only fog change");
-    Check(map.fogSettings.localVolumeQuality
-                  == game::SectorTopologyFogSettings::LocalVolumeQuality::High,
-          "preview settings modal writes local fog quality");
+    Check(map.fogSettings.volumetricQuality
+                  == game::SectorTopologyFogSettings::VolumetricQuality::High,
+          "preview settings modal writes volumetric quality");
     Check(!game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
-          "preview settings modal reports unchanged local fog quality");
+          "preview settings modal reports unchanged volumetric quality");
     Check(game::ComputeSectorLightmapSourceHash(map) == lightmapHash,
           "preview fog settings do not change the lightmap source hash");
 
@@ -576,7 +597,10 @@ void TestPreviewSettingsModalFogDraftApplyAndReset()
     const game::SectorTopologyFogSettings defaults = game::DefaultSectorTopologyFogSettings();
     Check(modal.draftFogSettings.enabled == defaults.enabled
                   && Near(modal.draftFogSettings.density, defaults.density)
-                  && Near(modal.draftFogSettings.heightFalloff, defaults.heightFalloff),
+                  && Near(modal.draftFogSettings.heightFalloff, defaults.heightFalloff)
+                  && Near(modal.draftFogSettings.anisotropy, defaults.anisotropy)
+                  && Near(modal.draftFogSettings.volumetricMaxDistanceWorld,
+                          defaults.volumetricMaxDistanceWorld),
           "preview settings modal resets fog defaults");
 }
 
@@ -621,6 +645,7 @@ int main()
     TestDoorTextureSettingsModalLayoutDoesNotOverlap();
     TestPreviewSettingsModalCopiesObjectProbeSettings();
     TestPreviewSettingsScrollableContentHeightsReachLastControls();
+    TestLightAtmosphereInspectorBackendHeight();
     TestAuthoringFaceInspectorHeightIncludesAllSections();
     TestPreviewSettingsModalResetPreservesSessionView();
     TestPreviewSettingsModalAppliesObjectProbeSettingsAndChangesHash();

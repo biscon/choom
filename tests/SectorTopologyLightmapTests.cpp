@@ -2,6 +2,7 @@
 #include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/renderer/SectorLocalFogLighting.h"
@@ -1404,6 +1405,7 @@ void TestSourceHashChanges()
     changedLight = base;
     changedLight.staticLights[0].atmosphere.haze.enabled = true;
     changedLight.staticLights[0].atmosphere.haze.density = 0.25f;
+    changedLight.staticLights[0].atmosphere.volumetricScatteringIntensity = 4.0f;
     changedLight.staticLights[0].atmosphere.dust.enabled = true;
     changedLight.staticLights[0].atmosphere.dust.amount = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) == hash,
@@ -1461,6 +1463,10 @@ void TestSourceHashChanges()
     changedStaticSpotLight.staticSpotLights.front().castsShadow = true;
     Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) == staticSpotHash,
           "default static spot shadow state preserves the existing source hash");
+    changedStaticSpotLight.staticSpotLights.front().atmosphere
+            .volumetricScatteringIntensity = 0.25f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) == staticSpotHash,
+          "hash ignores static spot volumetric scattering intensity");
 
     game::SectorTopologyMap changedDynamicLight = base;
     changedDynamicLight.dynamicPointLights.push_back(game::SectorTopologyDynamicPointLight{
@@ -1475,6 +1481,8 @@ void TestSourceHashChanges()
     changedDynamicLight.dynamicPointLights.front().flicker = true;
     changedDynamicLight.dynamicPointLights.front().flickerSpeed = 4.0f;
     changedDynamicLight.dynamicPointLights.front().flickerAmount = 0.8f;
+    changedDynamicLight.dynamicPointLights.front().atmosphere
+            .volumetricScatteringIntensity = 3.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedDynamicLight) == hash,
           "hash ignores dynamic point light edits");
 
@@ -1508,6 +1516,8 @@ void TestSourceHashChanges()
     changedDynamicSpotLight.dynamicSpotLights.front().shadowBias = 0.01f;
     changedDynamicSpotLight.dynamicSpotLights.front().shadowStrength = 0.5f;
     changedDynamicSpotLight.dynamicSpotLights.front().shadowSoftness = 4.0f;
+    changedDynamicSpotLight.dynamicSpotLights.front().atmosphere
+            .volumetricScatteringIntensity = 6.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedDynamicSpotLight) == hash,
           "hash ignores dynamic spot light edits including shadow settings");
 
@@ -1685,6 +1695,10 @@ void TestSourceHashChanges()
     changedFog.fogSettings.maxOpacity = 0.9f;
     changedFog.fogSettings.referenceHeightWorld = -4.0f;
     changedFog.fogSettings.heightFalloff = 2.0f;
+    changedFog.fogSettings.anisotropy = -0.5f;
+    changedFog.fogSettings.volumetricMaxDistanceWorld = 80.0f;
+    changedFog.fogSettings.volumetricQuality =
+            game::SectorTopologyFogSettings::VolumetricQuality::High;
     Check(game::ComputeSectorLightmapSourceHash(changedFog) == hash,
           "hash ignores visual-only fog settings");
     game::SectorTopologyMap changedLocalFog = base;
@@ -3251,12 +3265,13 @@ void TestLightAtmosphereVolumeShapesAndProbeFallback()
     sourceMap.staticLights.push_back(disabledAtmosphere);
     std::vector<game::SectorLightAtmosphereSource> sources;
     game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
-    Check(sources.empty(),
-          "disabled light atmosphere does not create a per-frame renderer source");
+    Check(sources.size() == 1
+                  && sources[0].atmosphere.volumetricScatteringIntensity == 1.0f,
+          "default volumetric scattering creates a full light source without haze");
     sourceMap.staticLights[0].atmosphere.haze.enabled = true;
     game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
     Check(sources.size() == 1,
-          "enabled static-light haze creates one bounded renderer source");
+          "enabling static-light haze does not duplicate its full light source");
     game::SectorTopologyDynamicPointLight disabledDynamic;
     disabledDynamic.id = 2;
     disabledDynamic.enabled = false;
@@ -3265,6 +3280,80 @@ void TestLightAtmosphereVolumeShapesAndProbeFallback()
     game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
     Check(sources.size() == 1,
           "disabled dynamic light does not create an atmosphere renderer source");
+
+    std::vector<game::SectorLightAtmosphereSource> selectionSources;
+    for (int id = 9; id >= 1; --id) {
+        game::SectorLightAtmosphereSource source;
+        source.kind = game::SectorLightAtmosphereSourceKind::StaticPoint;
+        source.lightId = id;
+        source.positionWorld = Vector3{0.0f, 0.0f, 8.0f};
+        source.rangeWorld = 2.0f;
+        source.intensity = 1.0f;
+        selectionSources.push_back(source);
+    }
+    game::SectorLightAtmosphereSource excluded = selectionSources.front();
+    excluded.lightId = 100;
+    excluded.atmosphere.volumetricScatteringIntensity = 0.0f;
+    selectionSources.push_back(excluded);
+    game::RuntimePortalVisibilityResult visibility;
+    visibility.fallbackDrawAll = true;
+    Camera3D camera{};
+    camera.position = Vector3{};
+    camera.target = Vector3{0.0f, 0.0f, 1.0f};
+    camera.up = Vector3{0.0f, 1.0f, 0.0f};
+    camera.fovy = 75.0f;
+    const game::SectorVolumetricLightSelection selected =
+            game::SelectSectorTemporaryVolumetricLights(
+                    selectionSources,
+                    visibility,
+                    {},
+                    camera,
+                    16.0f / 9.0f,
+                    0.1f,
+                    32.0f,
+                    true);
+    Check(selected.eligibleCount == 9 && selected.activeCount == 8,
+          "temporary volumetric light array reports eligible and retained overflow");
+    Check(Near(selected.lights[0].effectiveIntensity, 1.0f),
+          "default volumetric scattering intensity preserves light intensity");
+    bool stableIds = true;
+    for (int index = 0; index < selected.activeCount; ++index) {
+        stableIds = stableIds
+                && selected.lights[static_cast<std::size_t>(index)].lightId
+                        == index + 1;
+    }
+    Check(stableIds,
+          "temporary volumetric light ties retain the lowest stable light IDs");
+
+    selectionSources.resize(1);
+    selectionSources[0].atmosphere.volumetricScatteringIntensity = 8.0f;
+    const game::SectorVolumetricLightSelection highIntensity =
+            game::SelectSectorTemporaryVolumetricLights(
+                    selectionSources,
+                    visibility,
+                    {},
+                    camera,
+                    16.0f / 9.0f,
+                    0.1f,
+                    32.0f,
+                    true);
+    Check(highIntensity.activeCount == 1
+                  && Near(highIntensity.lights[0].effectiveIntensity, 8.0f),
+          "high volumetric scattering intensity scales the retained light");
+    selectionSources[0].kind =
+            game::SectorLightAtmosphereSourceKind::DynamicPoint;
+    const game::SectorVolumetricLightSelection disabledDynamicSelection =
+            game::SelectSectorTemporaryVolumetricLights(
+                    selectionSources,
+                    visibility,
+                    {},
+                    camera,
+                    16.0f / 9.0f,
+                    0.1f,
+                    32.0f,
+                    false);
+    Check(disabledDynamicSelection.activeCount == 0,
+          "disabled dynamic lighting excludes dynamic volumetric sources");
 
     game::SectorLightAtmosphereSource point;
     point.shape = game::SectorLightAtmosphereShape::Sphere;

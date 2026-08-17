@@ -1,11 +1,9 @@
 #pragma once
 
 #include "engine/render/RenderTarget.h"
-#include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorTopologyMap.h"
-#include "sector_demo/renderer/LegacyHazeComparisonAdapter.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
 
@@ -24,14 +22,14 @@ public:
     bool Prepare(
             const engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
-            SectorTopologyFogSettings::LocalVolumeQuality quality,
+            SectorTopologyFogSettings::VolumetricQuality quality,
             const Camera3D& camera,
             float runtimeSeconds,
-            const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
             const SectorBillboardDynamicLightContext& dynamicLights,
             const std::vector<SectorLightAtmosphereSource>& lightAtmosphereSources,
             const RuntimePortalVisibilityResult& visibility,
-            const std::vector<SectorReceiverBounds>& receiverBounds);
+            const std::vector<SectorReceiverBounds>& receiverBounds,
+            bool dynamicLightingEnabled);
     bool Apply(RenderTexture2D& sceneTarget, RenderTexture2D& sceneScratch);
     void ResetPreparedFrame();
     void Shutdown();
@@ -44,9 +42,8 @@ public:
     }
     int EligibleLocalVolumeCount() const { return eligibleLocalVolumeCount; }
     int ActiveLocalVolumeCount() const { return activeLocalVolumeCount; }
-    int EligibleHazeVolumeCount() const { return hazeAdapter.EligibleCount(); }
-    int ActiveHazeVolumeCount() const { return hazeAdapter.ActiveCount(); }
-    int ActiveDynamicLightCount() const { return dynamicLightContext.dynamicLightCount; }
+    int EligibleLightCount() const { return lightSelection.eligibleCount; }
+    int ActiveLightCount() const { return lightSelection.activeCount; }
     int TargetWidth() const { return target.native.texture.width; }
     int TargetHeight() const { return target.native.texture.height; }
     int MarchSteps() const { return marchSteps; }
@@ -81,17 +78,6 @@ private:
         int localColors = -1;
         int localParamsA = -1;
         int localParamsB = -1;
-        int localLighting = -1;
-        int hazeVolumeCount = -1;
-        int hazeCenters = -1;
-        int hazeDirections = -1;
-        int hazeShapes = -1;
-        int hazeExtents = -1;
-        int hazeConeRadii = -1;
-        int hazeColors = -1;
-        int hazeParamsA = -1;
-        int hazeParamsB = -1;
-        int hazeLighting = -1;
         SectorDynamicLightShaderLocations dynamicLights;
         SectorDynamicSpotLightShadowShaderLocations dynamicShadows;
         int shadowMap0 = -1;
@@ -105,46 +91,36 @@ private:
         int atmosphereTexelSize = -1;
     };
 
-    struct LocalLightingCacheEntry {
-        bool valid = false;
-        int volumeId = -1;
-        int topologySectorId = -1;
-        Vector3 center = {};
-        Vector3 radii = {};
-        Color ambientColor = {};
-        float ambientIntensity = 0.0f;
-        SectorLocalFogStaticLightingSamples lighting;
+    struct LocalVolume {
+        int stableId = -1;
+        Vector3 centerWorld = {};
+        Vector3 radiiWorld = {};
+        Vector3 tint = {};
+        float density = 0.0f;
+        float maximumOpacity = 0.0f;
+        float edgeSoftness = 0.0f;
+        float noiseAmount = 0.0f;
+        float noiseScaleWorld = 1.0f;
+        float flowDirectionRadians = 0.0f;
+        float flowSpeedWorld = 0.0f;
     };
 
     bool EnsureTargets(int width, int height);
     void ReleaseTargets();
-    void RefreshLocalLightingCacheIdentity(
-            const SectorTopologyMap& map,
-            const SectorBakedObjectLightProbeRuntimeData& probes);
-    const SectorLocalFogStaticLightingSamples& LocalLightingFor(
-            const SectorTopologyMap& map,
-            const SectorBakedObjectLightProbeRuntimeData& probes,
-            const SectorCompiledLocalFogVolume& volume);
     void BuildLocalVolumes(
             const SectorTopologyMap& map,
-            const SectorBakedObjectLightProbeRuntimeData& probes,
-            SectorTopologyFogSettings::LocalVolumeQuality quality,
+            SectorTopologyFogSettings::VolumetricQuality quality,
             const Camera3D& camera);
+    void BuildLightContext(
+            const SectorBillboardDynamicLightContext& dynamicLights);
 
     Shader shader = {};
     Shader compositeShader = {};
     ShaderLocations locations;
     CompositeLocations compositeLocations;
     engine::RenderTarget target;
-    std::array<SectorVolumetricComparisonVolume, MaximumLocalVolumes> localVolumes{};
-    std::array<SectorVolumetricComparisonVolume,
-            LegacyHazeComparisonAdapter::MaximumVolumes> hazeVolumes{};
-    std::array<LocalLightingCacheEntry, MaximumLocalVolumes> localLightingCache{};
-    LegacyHazeComparisonAdapter hazeAdapter;
-    const SectorBakedObjectLightProbe* cachedProbeData = nullptr;
-    std::size_t cachedProbeCount = 0;
-    std::size_t cachedProbeHash = 0;
-    std::size_t cachedMapProbeHash = 0;
+    std::array<LocalVolume, MaximumLocalVolumes> localVolumes{};
+    SectorVolumetricLightSelection lightSelection;
     SectorTopologyFogSettings fogSettings;
     SectorBillboardDynamicLightContext dynamicLightContext;
     Camera3D preparedCamera = {};

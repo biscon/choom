@@ -378,7 +378,7 @@ const SectorLightHazeStaticLightingSamples& SectorLightHazeRenderer::LightingFor
 bool SectorLightHazeRenderer::Apply(
         RenderTexture2D& sceneTarget, RenderTexture2D& sceneScratch,
         const SectorTopologyMap& map,
-        SectorTopologyFogSettings::LocalVolumeQuality quality,
+        SectorTopologyFogSettings::VolumetricQuality quality,
         const Camera3D& camera,
         float runtimeSeconds, const SectorBakedObjectLightProbeRuntimeData& probes,
         const SectorBillboardDynamicLightContext& dynamicLights,
@@ -388,7 +388,7 @@ bool SectorLightHazeRenderer::Apply(
 {
     eligibleCount=0; activeCount=0;
     if(sceneTarget.texture.id==0||sceneTarget.depth.id==0
-            ||quality==SectorTopologyFogSettings::LocalVolumeQuality::Off) return false;
+            ||quality==SectorTopologyFogSettings::VolumetricQuality::Off) return false;
     const float nearPlane=static_cast<float>(rlGetCullDistanceNear()), farPlane=static_cast<float>(rlGetCullDistanceFar());
     if(!std::isfinite(nearPlane)||!std::isfinite(farPlane)||nearPlane<=0.0f||farPlane<=nearPlane) return false;
     const float aspect=static_cast<float>(sceneTarget.texture.width)/std::max(sceneTarget.texture.height,1);
@@ -458,7 +458,7 @@ bool SectorLightHazeRenderer::Apply(
     UploadSectorRendererDynamicPointLights(shader,locations.dynamicLights,dynamicLights); UploadSectorRendererDynamicSpotLightShadowUniforms(shader,locations.shadows,dynamicLights.shadowUniforms);
     rlDisableColorBlend(); DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(hazeTarget.native.texture),{},0,WHITE);
     rlDrawRenderBatchActive(); EndShaderMode(); rlEnableColorBlend(); EndTextureMode();
-    const Vector2 texel{1.0f/hazeTarget.native.texture.width,1.0f/hazeTarget.native.texture.height}; const int bilateral=quality==SectorTopologyFogSettings::LocalVolumeQuality::Medium?1:0;
+    const Vector2 texel{1.0f/hazeTarget.native.texture.width,1.0f/hazeTarget.native.texture.height}; const int bilateral=quality==SectorTopologyFogSettings::VolumetricQuality::Medium?1:0;
     rlDrawRenderBatchActive();
     BeginTextureMode(sceneScratch); ClearBackground(BLANK); BeginShaderMode(compositeShader);
     SetShaderValueTexture(compositeShader,compositeLocations.sceneColor,sceneTarget.texture); SetShaderValueTexture(compositeShader,compositeLocations.sceneDepth,sceneTarget.depth);

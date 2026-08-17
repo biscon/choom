@@ -27,7 +27,9 @@ bool SameLightAtmosphere(
 {
     const SectorLightAtmosphereSettings a = NormalizeSectorLightAtmosphereSettings(left);
     const SectorLightAtmosphereSettings b = NormalizeSectorLightAtmosphereSettings(right);
-    return a.haze.enabled == b.haze.enabled
+    return a.volumetricScatteringIntensity
+                    == b.volumetricScatteringIntensity
+            && a.haze.enabled == b.haze.enabled
             && a.haze.extentScale == b.haze.extentScale
             && a.haze.density == b.haze.density
             && SameColor(a.haze.scatteringTint, b.haze.scatteringTint)
@@ -105,17 +107,6 @@ bool AtmosphereSourceChanged(
             || !SameLightAtmosphere(before.atmosphere, after.atmosphere);
 }
 
-float LightAtmosphereInspectorContentHeight(
-        float rowH,
-        float gap,
-        const SectorLightAtmosphereSettings& atmosphere)
-{
-    float height = 2.0f * (26.0f + rowH + gap);
-    if (atmosphere.haze.enabled) height += 10.0f * (rowH + gap);
-    if (atmosphere.dust.enabled) height += 10.0f * (rowH + gap);
-    return height;
-}
-
 template<typename ApplyFn>
 void DrawLightAtmosphereInspector(
         engine::UIContext& ui,
@@ -129,6 +120,7 @@ void DrawLightAtmosphereInspector(
         float& y,
         SectorLightAtmosphereSettings atmosphere,
         SectorEditorUiState& uiState,
+        bool showLegacyHaze,
         ApplyFn&& apply,
         bool& sourceRefreshRequested)
 {
@@ -193,14 +185,28 @@ void DrawLightAtmosphereInspector(
     };
 
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 22.0f}, font,
-            "Atmosphere: Haze", engine::UITextJustify::Left, config.textColor);
+            "Volumetric Scattering", engine::UITextJustify::Left, config.textColor);
     y += 26.0f;
-    if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_haze_enabled",
-            Rectangle{0.0f, y, contentW, rowH}, font, "Haze enabled", atmosphere.haze.enabled)) {
-        commit();
+    drawFloat(
+            "sector_editor_light_volumetric_scattering",
+            "Intensity:",
+            atmosphere.volumetricScatteringIntensity,
+            uiState.lightVolumetricScatteringInput,
+            0.0f,
+            8.0f,
+            3);
+
+    if (showLegacyHaze) {
+        engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 22.0f}, font,
+                "Temporary Legacy Haze", engine::UITextJustify::Left, config.textColor);
+        y += 26.0f;
+        if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_haze_enabled",
+                Rectangle{0.0f, y, contentW, rowH}, font, "Haze enabled", atmosphere.haze.enabled)) {
+            commit();
+        }
+        y += rowH + gap;
     }
-    y += rowH + gap;
-    if (atmosphere.haze.enabled) {
+    if (showLegacyHaze && atmosphere.haze.enabled) {
         drawFloat("sector_editor_light_haze_extent", "Extent scale:", atmosphere.haze.extentScale,
                 uiState.lightHazeExtentScaleInput, 0.05f, 2.0f, 3);
         drawFloat("sector_editor_light_haze_density", "Density:", atmosphere.haze.density,
@@ -258,7 +264,7 @@ void DrawLightAtmosphereInspector(
 
 } // namespace
 
-float StaticLightInspectorContentHeight(float rowH, float gap, bool hasIdError, const SectorLightAtmosphereSettings& atmosphere)
+float StaticLightInspectorContentHeight(float rowH, float gap, bool hasIdError, const SectorLightAtmosphereSettings& atmosphere, bool showLegacyHaze)
 {
     float height = 38.0f; // Light title.
     height += rowH + gap; // Id.
@@ -270,12 +276,12 @@ float StaticLightInspectorContentHeight(float rowH, float gap, bool hasIdError, 
     height += 6.0f * (rowH + gap); // Position/intensity/radius/source radius.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
-    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
+    height += MeasureLightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, showLegacyHaze);
     height += rowH + gap; // Bake.
     return height;
 }
 
-float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError, const SectorLightAtmosphereSettings& atmosphere)
+float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError, const SectorLightAtmosphereSettings& atmosphere, bool showLegacyHaze)
 {
     float height = 38.0f; // Light title.
     height += rowH + gap; // Id.
@@ -287,12 +293,12 @@ float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdErr
     height += 12.0f * (rowH + gap); // Position/target/intensity/range/source/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
-    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
+    height += MeasureLightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, showLegacyHaze);
     height += rowH + gap; // Bake.
     return height;
 }
 
-float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError, const SectorLightAtmosphereSettings& atmosphere)
+float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError, const SectorLightAtmosphereSettings& atmosphere, bool showLegacyHaze)
 {
     float height = 38.0f; // Light title.
     height += rowH + gap; // Id.
@@ -305,11 +311,11 @@ float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError,
     height += 5.0f * (rowH + gap); // Position/intensity/radius.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
-    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
+    height += MeasureLightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, showLegacyHaze);
     return height;
 }
 
-float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError, float shadowNoteHeight, const SectorLightAtmosphereSettings& atmosphere)
+float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdError, float shadowNoteHeight, const SectorLightAtmosphereSettings& atmosphere, bool showLegacyHaze)
 {
     float height = 38.0f; // Light title.
     height += rowH + gap; // Id.
@@ -324,7 +330,7 @@ float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdEr
     height += 11.0f * (rowH + gap); // Position/target/intensity/range/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
-    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
+    height += MeasureLightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, showLegacyHaze);
     return height;
 }
 
@@ -342,6 +348,7 @@ bool DrawSelectedStaticLightInspector(
         SectorEditorUiState& uiState,
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
+        bool showLegacyHaze,
         bool& deleteRequested,
         bool& bakeRequested,
         bool& sourceRefreshRequested)
@@ -505,7 +512,7 @@ bool DrawSelectedStaticLightInspector(
 
     DrawLightAtmosphereInspector(
             ui, config, input, assets, font, contentW, rowH, gap, y,
-            light.atmosphere, uiState,
+            light.atmosphere, uiState, showLegacyHaze,
             [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
                 return lightEditing.SetStaticLightAtmosphere(light, settings);
             },
@@ -533,6 +540,7 @@ bool DrawSelectedStaticSpotLightInspector(
         SectorEditorUiState& uiState,
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
+        bool showLegacyHaze,
         bool& deleteRequested,
         bool& bakeRequested,
         bool& sourceRefreshRequested)
@@ -722,7 +730,7 @@ bool DrawSelectedStaticSpotLightInspector(
 
     DrawLightAtmosphereInspector(
             ui, config, input, assets, font, contentW, rowH, gap, y,
-            light.atmosphere, uiState,
+            light.atmosphere, uiState, showLegacyHaze,
             [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
                 return lightEditing.SetStaticSpotLightAtmosphere(light, settings);
             },
@@ -750,6 +758,7 @@ bool DrawSelectedDynamicLightInspector(
         SectorEditorUiState& uiState,
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
+        bool showLegacyHaze,
         bool& deleteRequested,
         bool& sourceRefreshRequested)
 {
@@ -909,7 +918,7 @@ bool DrawSelectedDynamicLightInspector(
 
     DrawLightAtmosphereInspector(
             ui, config, input, assets, font, contentW, rowH, gap, y,
-            light.atmosphere, uiState,
+            light.atmosphere, uiState, showLegacyHaze,
             [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
                 return lightEditing.SetDynamicLightAtmosphere(light, settings);
             },
@@ -934,6 +943,7 @@ bool DrawSelectedDynamicSpotLightInspector(
         SectorEditorUiState& uiState,
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
+        bool showLegacyHaze,
         bool& deleteRequested,
         bool& sourceRefreshRequested)
 {
@@ -1249,7 +1259,7 @@ bool DrawSelectedDynamicSpotLightInspector(
 
     DrawLightAtmosphereInspector(
             ui, config, input, assets, font, contentW, rowH, gap, y,
-            light.atmosphere, uiState,
+            light.atmosphere, uiState, showLegacyHaze,
             [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
                 return lightEditing.SetDynamicSpotLightAtmosphere(light, settings);
             },

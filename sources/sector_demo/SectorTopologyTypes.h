@@ -199,6 +199,7 @@ struct SectorLightDustSettings {
 };
 
 struct SectorLightAtmosphereSettings {
+    float volumetricScatteringIntensity = 1.0f;
     SectorLightHazeSettings haze;
     SectorLightDustSettings dust;
 };

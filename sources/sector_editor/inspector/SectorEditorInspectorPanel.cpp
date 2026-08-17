@@ -432,15 +432,15 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         }
         if (hasSelectedLight) {
             return StaticLightInspectorContentHeight(
-                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedStaticLight()->atmosphere);
+                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedStaticLight()->atmosphere, context.showLegacyAtmosphereHaze);
         }
         if (hasSelectedStaticSpotLight) {
             return StaticSpotLightInspectorContentHeight(
-                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedStaticSpotLight()->atmosphere);
+                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedStaticSpotLight()->atmosphere, context.showLegacyAtmosphereHaze);
         }
         if (hasSelectedDynamicLight) {
             return DynamicLightInspectorContentHeight(
-                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedDynamicLight()->atmosphere);
+                    rowH, gap, !context.inspectorIdUiState.idEditError.empty(), selectedDynamicLight()->atmosphere, context.showLegacyAtmosphereHaze);
         }
         if (hasSelectedDynamicSpotLight) {
             const float shadowNoteHeight = MeasureSectorEditorWrappedTextHeight(
@@ -457,7 +457,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     gap,
                     !context.inspectorIdUiState.idEditError.empty(),
                     shadowNoteHeight,
-                    selectedDynamicSpotLight()->atmosphere);
+                    selectedDynamicSpotLight()->atmosphere,
+                    context.showLegacyAtmosphereHaze);
         }
         if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
             return SectorInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
@@ -885,6 +886,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 uiState,
                 context.inspectorIdUiState,
                 lightEditing,
+                context.showLegacyAtmosphereHaze,
                 deleteRequested,
                 bakeRequested,
                 sourceRefreshRequested);
@@ -920,6 +922,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 uiState,
                 context.inspectorIdUiState,
                 lightEditing,
+                context.showLegacyAtmosphereHaze,
                 deleteRequested,
                 bakeRequested,
                 sourceRefreshRequested);
@@ -954,6 +957,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 uiState,
                 context.inspectorIdUiState,
                 lightEditing,
+                context.showLegacyAtmosphereHaze,
                 deleteRequested,
                 sourceRefreshRequested);
         if (deleteRequested) {
@@ -985,6 +989,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 uiState,
                 context.inspectorIdUiState,
                 lightEditing,
+                context.showLegacyAtmosphereHaze,
                 deleteRequested,
                 sourceRefreshRequested);
         if (deleteRequested) {

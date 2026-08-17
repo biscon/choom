@@ -1449,22 +1449,30 @@ SectorTopologyFogSettings ReadFogSettings(const Json& value, const std::string& 
     readOptionalFloat("maxOpacity", settings.maxOpacity);
     readOptionalFloat("referenceHeightWorld", settings.referenceHeightWorld);
     readOptionalFloat("heightFalloff", settings.heightFalloff);
-    const auto qualityIt = value.find("localVolumeQuality");
+    readOptionalFloat("anisotropy", settings.anisotropy);
+    readOptionalFloat("volumetricMaxDistanceWorld", settings.volumetricMaxDistanceWorld);
+    auto qualityIt = value.find("volumetricQuality");
+    std::string qualityField = "volumetricQuality";
+    if (qualityIt == value.end()) {
+        qualityIt = value.find("localVolumeQuality");
+        qualityField = "localVolumeQuality";
+    }
     if (qualityIt != value.end()) {
         if (!qualityIt->is_string()) {
-            Fail(context + ".localVolumeQuality must be a string");
+            Fail(context + "." + qualityField + " must be a string");
         }
         const std::string quality = qualityIt->get<std::string>();
         if (quality == "off") {
-            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Off;
+            settings.volumetricQuality = SectorTopologyFogSettings::VolumetricQuality::Off;
         } else if (quality == "low") {
-            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Low;
+            settings.volumetricQuality = SectorTopologyFogSettings::VolumetricQuality::Low;
         } else if (quality == "medium") {
-            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Medium;
+            settings.volumetricQuality = SectorTopologyFogSettings::VolumetricQuality::Medium;
         } else if (quality == "high") {
-            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::High;
+            settings.volumetricQuality = SectorTopologyFogSettings::VolumetricQuality::High;
         } else {
-            Fail(context + ".localVolumeQuality must be 'off', 'low', 'medium', or 'high'");
+            Fail(context + "." + qualityField
+                    + " must be 'off', 'low', 'medium', or 'high'");
         }
     }
     return NormalizeSectorTopologyFogSettings(settings);
@@ -2332,7 +2340,13 @@ Json WriteLightDustSettings(const SectorLightDustSettings& source)
 Json WriteLightAtmosphereSettings(const SectorLightAtmosphereSettings& source)
 {
     const SectorLightAtmosphereSettings settings = NormalizeSectorLightAtmosphereSettings(source);
+    const SectorLightAtmosphereSettings defaults;
     Json value = Json::object();
+    if (settings.volumetricScatteringIntensity
+            != defaults.volumetricScatteringIntensity) {
+        value["volumetricScatteringIntensity"] =
+                settings.volumetricScatteringIntensity;
+    }
     if (!IsDefaultSectorLightHazeSettings(settings.haze)) {
         value["haze"] = WriteLightHazeSettings(settings.haze);
     }
@@ -2522,6 +2536,10 @@ Json WriteFogSettings(const SectorTopologyFogSettings& settings)
     RequireFinite(settings.maxOpacity, "fogSettings.maxOpacity");
     RequireFinite(settings.referenceHeightWorld, "fogSettings.referenceHeightWorld");
     RequireFinite(settings.heightFalloff, "fogSettings.heightFalloff");
+    RequireFinite(settings.anisotropy, "fogSettings.anisotropy");
+    RequireFinite(
+            settings.volumetricMaxDistanceWorld,
+            "fogSettings.volumetricMaxDistanceWorld");
     const SectorTopologyFogSettings normalized = NormalizeSectorTopologyFogSettings(settings);
     Json result{
             {"enabled", normalized.enabled},
@@ -2530,20 +2548,22 @@ Json WriteFogSettings(const SectorTopologyFogSettings& settings)
             {"density", normalized.density},
             {"maxOpacity", normalized.maxOpacity},
             {"referenceHeightWorld", normalized.referenceHeightWorld},
-            {"heightFalloff", normalized.heightFalloff}
+            {"heightFalloff", normalized.heightFalloff},
+            {"anisotropy", normalized.anisotropy},
+            {"volumetricMaxDistanceWorld", normalized.volumetricMaxDistanceWorld}
     };
-    switch (normalized.localVolumeQuality) {
-        case SectorTopologyFogSettings::LocalVolumeQuality::Off:
-            result["localVolumeQuality"] = "off";
+    switch (normalized.volumetricQuality) {
+        case SectorTopologyFogSettings::VolumetricQuality::Off:
+            result["volumetricQuality"] = "off";
             break;
-        case SectorTopologyFogSettings::LocalVolumeQuality::Low:
-            result["localVolumeQuality"] = "low";
+        case SectorTopologyFogSettings::VolumetricQuality::Low:
+            result["volumetricQuality"] = "low";
             break;
-        case SectorTopologyFogSettings::LocalVolumeQuality::Medium:
-            result["localVolumeQuality"] = "medium";
+        case SectorTopologyFogSettings::VolumetricQuality::Medium:
+            result["volumetricQuality"] = "medium";
             break;
-        case SectorTopologyFogSettings::LocalVolumeQuality::High:
-            result["localVolumeQuality"] = "high";
+        case SectorTopologyFogSettings::VolumetricQuality::High:
+            result["volumetricQuality"] = "high";
             break;
     }
     return result;
@@ -2556,6 +2576,10 @@ bool IsDefaultFogSettings(const SectorTopologyFogSettings& settings)
     RequireFinite(settings.maxOpacity, "fogSettings.maxOpacity");
     RequireFinite(settings.referenceHeightWorld, "fogSettings.referenceHeightWorld");
     RequireFinite(settings.heightFalloff, "fogSettings.heightFalloff");
+    RequireFinite(settings.anisotropy, "fogSettings.anisotropy");
+    RequireFinite(
+            settings.volumetricMaxDistanceWorld,
+            "fogSettings.volumetricMaxDistanceWorld");
     const SectorTopologyFogSettings normalized = NormalizeSectorTopologyFogSettings(settings);
     const SectorTopologyFogSettings defaults = DefaultSectorTopologyFogSettings();
     return normalized.enabled == defaults.enabled
@@ -2568,7 +2592,10 @@ bool IsDefaultFogSettings(const SectorTopologyFogSettings& settings)
             && normalized.maxOpacity == defaults.maxOpacity
             && normalized.referenceHeightWorld == defaults.referenceHeightWorld
             && normalized.heightFalloff == defaults.heightFalloff
-            && normalized.localVolumeQuality == defaults.localVolumeQuality;
+            && normalized.anisotropy == defaults.anisotropy
+            && normalized.volumetricMaxDistanceWorld
+                    == defaults.volumetricMaxDistanceWorld
+            && normalized.volumetricQuality == defaults.volumetricQuality;
 }
 
 Json WriteIlluminationStatistics(const SectorIlluminationStatistics& statistics);
@@ -2895,6 +2922,13 @@ SectorLightAtmosphereSettings ReadOptionalLightAtmosphereSettings(
     if (!atmosphereIt->is_object()) {
         Fail(context + ".atmosphere must be an object");
     }
+    settings.volumetricScatteringIntensity = ReadOptionalClampedFloat(
+            *atmosphereIt,
+            "volumetricScatteringIntensity",
+            context + ".atmosphere",
+            settings.volumetricScatteringIntensity,
+            0.0f,
+            8.0f);
     const auto hazeIt = atmosphereIt->find("haze");
     if (hazeIt != atmosphereIt->end()) {
         settings.haze = ReadLightHazeSettings(*hazeIt, context + ".atmosphere.haze");

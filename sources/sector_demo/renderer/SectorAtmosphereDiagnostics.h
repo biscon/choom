@@ -55,8 +55,8 @@ SectorAtmosphereSampleStatistics ComputeSectorAtmosphereSampleStatistics(
 
 struct SectorAtmosphereCaptureMetadata {
     SectorAtmosphereBackend backend = SectorAtmosphereBackend::Legacy;
-    SectorTopologyFogSettings::LocalVolumeQuality quality =
-            SectorTopologyFogSettings::LocalVolumeQuality::Off;
+    SectorTopologyFogSettings::VolumetricQuality quality =
+            SectorTopologyFogSettings::VolumetricQuality::Off;
     int sceneWidth = 0;
     int sceneHeight = 0;
     int localFogEligible = 0;
@@ -64,7 +64,8 @@ struct SectorAtmosphereCaptureMetadata {
     int hazeEligible = 0;
     int hazeActive = 0;
     int unifiedIntegrations = 0;
-    int unifiedDynamicLights = 0;
+    int unifiedLightEligible = 0;
+    int unifiedLightActive = 0;
     int dustEligible = 0;
     int dustActive = 0;
     SectorViewPose cameraPose;
@@ -170,8 +171,8 @@ struct SectorAtmosphereTargetDiagnostics {
 
 struct SectorAtmosphereDiagnostics {
     SectorAtmosphereBackend backend = SectorAtmosphereBackend::Legacy;
-    SectorTopologyFogSettings::LocalVolumeQuality effectiveQuality =
-            SectorTopologyFogSettings::LocalVolumeQuality::Off;
+    SectorTopologyFogSettings::VolumetricQuality effectiveQuality =
+            SectorTopologyFogSettings::VolumetricQuality::Off;
     int sceneWidth = 0;
     int sceneHeight = 0;
     std::uint64_t estimatedIntermediateBytes = 0;
@@ -179,7 +180,8 @@ struct SectorAtmosphereDiagnostics {
     SectorAtmosphereTargetDiagnostics haze;
     SectorAtmosphereTargetDiagnostics unified;
     int unifiedIntegrationCount = 0;
-    int unifiedDynamicLightCount = 0;
+    int unifiedLightEligibleCount = 0;
+    int unifiedLightActiveCount = 0;
     int dustEligible = 0;
     int dustActive = 0;
     int dustVisibleParticles = 0;

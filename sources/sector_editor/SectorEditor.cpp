@@ -4821,6 +4821,8 @@ void SectorEditor::DrawSectorsPanel(
             levelMarkerEditingService.value(),
             triggerEditingService.value(),
             authoringFaceMergeService.value(),
+            sceneRuntime.Renderer().AtmosphereBackend()
+                    == SectorAtmosphereBackend::Legacy,
             engineContext};
     const SectorEditorInspectorPanelResult result = DrawSectorEditorInspectorPanel(context);
     for (int i = 0; i < result.requestCount; ++i) {
@@ -7264,6 +7266,7 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
                             uiState.lightBlueInput,
                             inspectorIdUiState,
                             {
+                                    &uiState.lightVolumetricScatteringInput,
                                     &uiState.lightHazeExtentScaleInput,
                                     &uiState.lightHazeDensityInput,
                                     &uiState.lightHazeEdgeSoftnessInput,

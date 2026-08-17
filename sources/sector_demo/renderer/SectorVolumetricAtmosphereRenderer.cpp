@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <functional>
 #include <limits>
 #include <string>
 
@@ -32,7 +31,6 @@ out vec4 finalColor;
 
 #define MAX_STEPS 64
 #define MAX_LOCAL_VOLUMES 16
-#define MAX_HAZE_VOLUMES 8
 #define MAX_DYNAMIC_LIGHTS 8
 #define MAX_DYNAMIC_SHADOW_CASTERS 2
 
@@ -64,18 +62,6 @@ uniform vec3 localRadii[MAX_LOCAL_VOLUMES];
 uniform vec3 localColors[MAX_LOCAL_VOLUMES];
 uniform vec4 localParamsA[MAX_LOCAL_VOLUMES];
 uniform vec4 localParamsB[MAX_LOCAL_VOLUMES];
-uniform vec3 localLighting[MAX_LOCAL_VOLUMES*4];
-
-uniform int hazeVolumeCount;
-uniform vec3 hazeCenters[MAX_HAZE_VOLUMES];
-uniform vec3 hazeDirections[MAX_HAZE_VOLUMES];
-uniform int hazeShapes[MAX_HAZE_VOLUMES];
-uniform float hazeExtents[MAX_HAZE_VOLUMES];
-uniform float hazeConeRadii[MAX_HAZE_VOLUMES];
-uniform vec3 hazeColors[MAX_HAZE_VOLUMES];
-uniform vec4 hazeParamsA[MAX_HAZE_VOLUMES];
-uniform vec4 hazeParamsB[MAX_HAZE_VOLUMES];
-uniform vec3 hazeLighting[MAX_HAZE_VOLUMES*8];
 
 uniform int dynamicLightCount;
 uniform vec3 dynamicLightPositions[MAX_DYNAMIC_LIGHTS];
@@ -169,49 +155,13 @@ vec3 dynamicLighting(vec3 p,vec3 rayDirection) {
     }
     return result;
 }
-vec3 localStaticLighting(int index,vec3 local) {
-    int base=index*4; vec2 uv=clamp(local.xz+0.5,vec2(0),vec2(1));
-    return mix(mix(localLighting[base],localLighting[base+1],uv.x),
-               mix(localLighting[base+2],localLighting[base+3],uv.x),uv.y);
-}
-void hazeShape(int index,vec3 p,out bool inside,out float boundary,out vec3 grid) {
-    vec3 axis=safeNormalize(hazeDirections[index],vec3(0,-1,0));
-    vec3 reference=abs(axis.y)>0.98?vec3(0,0,1):vec3(0,1,0);
-    vec3 right=safeNormalize(cross(axis,reference),vec3(1,0,0));
-    vec3 up=safeNormalize(cross(right,axis),vec3(0,1,0));
-    vec3 q=p-hazeCenters[index]; float softness=max(hazeParamsA[index].z,0.0001);
-    if(hazeShapes[index]==0) {
-        float radius=length(q/max(hazeExtents[index],0.0001)); inside=radius<=1.0;
-        boundary=1.0-smoothstep(1.0-softness,1.0,radius);
-        grid=vec3(dot(q,right),dot(q,up),dot(q,axis))/max(hazeExtents[index]*2.0,0.0001)+0.5;
-    } else {
-        float axial=dot(q,axis); float axial01=axial/max(hazeExtents[index],0.0001);
-        vec3 radial=q-axis*axial; float allowed=hazeConeRadii[index]*max(axial01,0.0001);
-        float radial01=length(radial)/max(allowed,0.0001);
-        inside=axial01>=0.0&&axial01<=1.0&&radial01<=1.0;
-        float side=1.0-smoothstep(1.0-softness,1.0,radial01);
-        float endFade=1.0-smoothstep(1.0-softness,1.0,axial01);
-        float startFade=smoothstep(0.0,max(softness*0.25,0.01),axial01);
-        boundary=side*endFade*startFade;
-        grid=vec3(dot(radial,right)/max(allowed*2.0,0.0001)+0.5,
-                  dot(radial,up)/max(allowed*2.0,0.0001)+0.5,axial01);
-    }
-}
-vec3 hazeStaticLightingAt(int index,vec3 grid) {
-    vec3 g=clamp(grid,vec3(0),vec3(1)); int b=index*8;
-    vec3 z0y0=mix(hazeLighting[b],hazeLighting[b+1],g.x);
-    vec3 z0y1=mix(hazeLighting[b+2],hazeLighting[b+3],g.x);
-    vec3 z1y0=mix(hazeLighting[b+4],hazeLighting[b+5],g.x);
-    vec3 z1y1=mix(hazeLighting[b+6],hazeLighting[b+7],g.x);
-    return mix(mix(z0y0,z0y1,g.y),mix(z1y0,z1y1,g.y),g.z);
-}
-void addMedium(float rawDepth,float maximumOpacity,vec3 tint,vec3 staticLighting,
+void addMedium(float rawDepth,float maximumOpacity,vec3 tint,
         inout float accumulatedDepth,inout float totalDepth,
-        inout vec3 weightedTint,inout vec3 weightedStatic) {
+        inout vec3 weightedTint) {
     float accepted=min(max(rawDepth,0.0),max(capDepth(maximumOpacity)-accumulatedDepth,0.0));
     if(accepted<=0.0) return;
     accumulatedDepth+=accepted; totalDepth+=accepted;
-    weightedTint+=tint*accepted; weightedStatic+=tint*max(staticLighting,vec3(0))*accepted;
+    weightedTint+=tint*accepted;
 }
 void main() {
     float depth=texture(sceneDepth,fragUv).r; vec2 ndc=fragUv*2.0-1.0;
@@ -224,18 +174,17 @@ void main() {
     }
     sceneDistance=max(sceneDistance,0.0);
     int steps=max(marchSteps,1); float stepLength=sceneDistance/float(steps);
-    float globalDepth=0.0; float localDepths[MAX_LOCAL_VOLUMES]; float hazeDepths[MAX_HAZE_VOLUMES];
+    float globalDepth=0.0; float localDepths[MAX_LOCAL_VOLUMES];
     for(int i=0;i<MAX_LOCAL_VOLUMES;++i) localDepths[i]=0.0;
-    for(int i=0;i<MAX_HAZE_VOLUMES;++i) hazeDepths[i]=0.0;
     float transmittance=1.0; vec3 radiance=vec3(0.0);
     for(int stepIndex=0;stepIndex<MAX_STEPS;++stepIndex) {
         if(stepIndex>=steps||transmittance<=0.0001) break;
         float t=(float(stepIndex)+0.5)*stepLength; vec3 p=cameraPosition+rayDirection*t;
-        float totalDepth=0.0; vec3 weightedTint=vec3(0.0); vec3 weightedStatic=vec3(0.0);
+        float totalDepth=0.0; vec3 weightedTint=vec3(0.0);
         if(fogEnabled!=0&&t>fogStartDistance&&fogDensity>0.0&&fogMaximumOpacity>0.0) {
             float above=max(p.y-fogReferenceHeight,0.0);
             float raw=fogDensity*exp(-above*fogHeightFalloff)*stepLength;
-            addMedium(raw,fogMaximumOpacity,fogColor,vec3(0),globalDepth,totalDepth,weightedTint,weightedStatic);
+            addMedium(raw,fogMaximumOpacity,fogColor,globalDepth,totalDepth,weightedTint);
         }
         for(int i=0;i<MAX_LOCAL_VOLUMES;++i) {
             if(i>=localVolumeCount) break;
@@ -244,20 +193,12 @@ void main() {
             vec4 a=localParamsA[i],b=localParamsB[i]; float boundary=1.0-smoothstep(1.0-max(a.z,0.0001),1.0,radius);
             vec2 flow=vec2(cos(b.y),sin(b.y))*b.z*runtimeSeconds; vec3 np=p/max(a.w,0.05); np.xz+=flow;
             float noise=mix(1.0,mix(0.35,1.35,valueNoise(np)),b.x);
-            addMedium(a.x*boundary*noise*stepLength,a.y,localColors[i],localStaticLighting(i,local),
-                    localDepths[i],totalDepth,weightedTint,weightedStatic);
-        }
-        for(int i=0;i<MAX_HAZE_VOLUMES;++i) {
-            if(i>=hazeVolumeCount) break;
-            bool inside; float boundary; vec3 grid; hazeShape(i,p,inside,boundary,grid); if(!inside) continue;
-            vec4 a=hazeParamsA[i],b=hazeParamsB[i]; vec2 flow=vec2(cos(b.y),sin(b.y))*b.z*runtimeSeconds;
-            vec3 np=p/max(a.w,0.05); np.xz+=flow; float noise=mix(1.0,mix(0.35,1.35,valueNoise(np)),b.x);
-            addMedium(a.x*boundary*noise*stepLength,a.y,hazeColors[i],hazeStaticLightingAt(i,grid),
-                    hazeDepths[i],totalDepth,weightedTint,weightedStatic);
+            addMedium(a.x*boundary*noise*stepLength,a.y,localColors[i],
+                    localDepths[i],totalDepth,weightedTint);
         }
         if(totalDepth<=0.0) continue;
         vec3 direct=dynamicLighting(p,rayDirection);
-        vec3 source=(weightedStatic+weightedTint*direct)/max(totalDepth,0.000001);
+        vec3 source=weightedTint*direct/max(totalDepth,0.000001);
         float stepTransmittance=exp(-totalDepth); float stepOpacity=1.0-stepTransmittance;
         radiance+=transmittance*stepOpacity*max(source,vec3(0.0)); transmittance*=stepTransmittance;
     }
@@ -323,17 +264,6 @@ int ArrayElementLocation(Shader shader, const char* name, std::size_t index)
             (std::string(name) + "[" + std::to_string(index) + "]").c_str());
 }
 
-bool SameVector(Vector3 left, Vector3 right)
-{
-    return left.x == right.x && left.y == right.y && left.z == right.z;
-}
-
-bool SameColor(Color left, Color right)
-{
-    return left.r == right.r && left.g == right.g
-            && left.b == right.b && left.a == right.a;
-}
-
 } // namespace
 
 bool SectorVolumetricAtmosphereRenderer::Initialize()
@@ -362,7 +292,7 @@ bool SectorVolumetricAtmosphereRenderer::Initialize()
     LOC(fogColor, "fogColor"); LOC(fogStartDistance, "fogStartDistance");
     LOC(fogDensity, "fogDensity"); LOC(fogMaximumOpacity, "fogMaximumOpacity");
     LOC(fogReferenceHeight, "fogReferenceHeight"); LOC(fogHeightFalloff, "fogHeightFalloff");
-    LOC(localVolumeCount, "localVolumeCount"); LOC(hazeVolumeCount, "hazeVolumeCount");
+    LOC(localVolumeCount, "localVolumeCount");
     LOC(shadowMap0, "shadowMap0"); LOC(shadowMap1, "shadowMap1");
 #undef LOC
     locations.localCenters = ArrayLocation(shader, "localCenters");
@@ -370,16 +300,6 @@ bool SectorVolumetricAtmosphereRenderer::Initialize()
     locations.localColors = ArrayLocation(shader, "localColors");
     locations.localParamsA = ArrayLocation(shader, "localParamsA");
     locations.localParamsB = ArrayLocation(shader, "localParamsB");
-    locations.localLighting = ArrayLocation(shader, "localLighting");
-    locations.hazeCenters = ArrayLocation(shader, "hazeCenters");
-    locations.hazeDirections = ArrayLocation(shader, "hazeDirections");
-    locations.hazeShapes = ArrayLocation(shader, "hazeShapes");
-    locations.hazeExtents = ArrayLocation(shader, "hazeExtents");
-    locations.hazeConeRadii = ArrayLocation(shader, "hazeConeRadii");
-    locations.hazeColors = ArrayLocation(shader, "hazeColors");
-    locations.hazeParamsA = ArrayLocation(shader, "hazeParamsA");
-    locations.hazeParamsB = ArrayLocation(shader, "hazeParamsB");
-    locations.hazeLighting = ArrayLocation(shader, "hazeLighting");
     locations.dynamicLights.dynamicLightCount = GetShaderLocation(shader, "dynamicLightCount");
     locations.dynamicLights.dynamicLightPositions = ArrayLocation(shader, "dynamicLightPositions");
     locations.dynamicLights.dynamicLightColors = ArrayLocation(shader, "dynamicLightColors");
@@ -440,8 +360,7 @@ void SectorVolumetricAtmosphereRenderer::ReleaseTargets()
 
 void SectorVolumetricAtmosphereRenderer::BuildLocalVolumes(
         const SectorTopologyMap& map,
-        const SectorBakedObjectLightProbeRuntimeData& probes,
-        SectorTopologyFogSettings::LocalVolumeQuality quality,
+        SectorTopologyFogSettings::VolumetricQuality quality,
         const Camera3D& camera)
 {
     localVolumes = {};
@@ -485,13 +404,11 @@ void SectorVolumetricAtmosphereRenderer::BuildLocalVolumes(
         selected[static_cast<std::size_t>(insertAt)] = &volume;
         distances[static_cast<std::size_t>(insertAt)] = distance;
     }
-    RefreshLocalLightingCacheIdentity(map, probes);
     for (int index = 0; index < activeLocalVolumeCount; ++index) {
         const SectorCompiledLocalFogVolume& volume =
                 *selected[static_cast<std::size_t>(index)];
-        SectorVolumetricComparisonVolume& record =
+        LocalVolume& record =
                 localVolumes[static_cast<std::size_t>(index)];
-        record.shape = SectorVolumetricComparisonShape::Ellipsoid;
         record.stableId = volume.sourceAuthoringFogVolumeId;
         record.centerWorld = volume.centerWorld;
         record.radiiWorld = volume.radiiWorld;
@@ -503,10 +420,60 @@ void SectorVolumetricAtmosphereRenderer::BuildLocalVolumes(
         record.noiseScaleWorld = volume.noiseScaleWorld;
         record.flowDirectionRadians = volume.flowDirectionDegrees * DEG2RAD;
         record.flowSpeedWorld = volume.flowSpeedWorld;
-        record.staticLightingSampleCount = 4;
-        const auto& lighting = LocalLightingFor(map, probes, volume);
-        for (std::size_t corner = 0; corner < lighting.corners.size(); ++corner) {
-            record.staticLighting[corner] = lighting.corners[corner];
+    }
+}
+
+void SectorVolumetricAtmosphereRenderer::BuildLightContext(
+        const SectorBillboardDynamicLightContext& dynamicLights)
+{
+    dynamicLightContext = {};
+    dynamicLightContext.dynamicLightCount = lightSelection.activeCount;
+    dynamicLightContext.shadowMaps = dynamicLights.shadowMaps;
+    dynamicLightContext.shadowUniforms = dynamicLights.shadowUniforms;
+    dynamicLightContext.shadowUniforms.dynamicLightShadowSlots.fill(-1);
+    for (int index = 0; index < lightSelection.activeCount; ++index) {
+        const SectorVolumetricLightRecord& light =
+                lightSelection.lights[static_cast<std::size_t>(index)];
+        const bool spot = light.kind == SectorLightAtmosphereSourceKind::StaticSpot
+                || light.kind == SectorLightAtmosphereSourceKind::DynamicSpot;
+        dynamicLightContext.dynamicLightIds[static_cast<std::size_t>(index)] =
+                light.lightId;
+        dynamicLightContext.dynamicLightPositions[static_cast<std::size_t>(index)] =
+                light.positionWorld;
+        dynamicLightContext.dynamicLightColors[static_cast<std::size_t>(index)] =
+                engine::SrgbColorBytesToLinearSceneRgb(light.color);
+        dynamicLightContext.dynamicLightRadii[static_cast<std::size_t>(index)] =
+                light.rangeWorld;
+        dynamicLightContext.dynamicLightIntensities[static_cast<std::size_t>(index)] =
+                light.effectiveIntensity * (light.flicker
+                        ? EvaluateDynamicLightFlickerMultiplier(
+                                light.lightId,
+                                preparedRuntimeSeconds,
+                                light.flickerSpeed,
+                                light.flickerAmount)
+                        : 1.0f);
+        dynamicLightContext.dynamicLightTypes[static_cast<std::size_t>(index)] =
+                spot ? 1 : 0;
+        dynamicLightContext.dynamicLightDirections[static_cast<std::size_t>(index)] =
+                light.directionWorld;
+        dynamicLightContext.dynamicLightInnerConeCos[static_cast<std::size_t>(index)] =
+                light.innerConeCos;
+        dynamicLightContext.dynamicLightOuterConeCos[static_cast<std::size_t>(index)] =
+                light.outerConeCos;
+        if (light.kind != SectorLightAtmosphereSourceKind::DynamicSpot) continue;
+        for (int dynamicIndex = 0;
+             dynamicIndex < dynamicLights.dynamicLightCount;
+             ++dynamicIndex) {
+            if (dynamicLights.dynamicLightIds[static_cast<std::size_t>(dynamicIndex)]
+                            == light.lightId
+                    && dynamicLights.dynamicLightTypes[
+                               static_cast<std::size_t>(dynamicIndex)] == 1) {
+                dynamicLightContext.shadowUniforms.dynamicLightShadowSlots[
+                        static_cast<std::size_t>(index)] =
+                        dynamicLights.shadowUniforms.dynamicLightShadowSlots[
+                                static_cast<std::size_t>(dynamicIndex)];
+                break;
+            }
         }
     }
 }
@@ -514,33 +481,32 @@ void SectorVolumetricAtmosphereRenderer::BuildLocalVolumes(
 bool SectorVolumetricAtmosphereRenderer::Prepare(
         const engine::RenderTarget& sceneTarget,
         const SectorTopologyMap& map,
-        SectorTopologyFogSettings::LocalVolumeQuality quality,
+        SectorTopologyFogSettings::VolumetricQuality quality,
         const Camera3D& camera,
         float runtimeSeconds,
-        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorBillboardDynamicLightContext& dynamicLights,
         const std::vector<SectorLightAtmosphereSource>& lightAtmosphereSources,
         const RuntimePortalVisibilityResult& visibility,
-        const std::vector<SectorReceiverBounds>& receiverBounds)
+        const std::vector<SectorReceiverBounds>& receiverBounds,
+        bool dynamicLightingEnabled)
 {
     ResetPreparedFrame();
     prepared = true;
     fogSettings = NormalizeSectorTopologyFogSettings(map.fogSettings);
     globalFogActive = fogSettings.enabled && fogSettings.density > 0.0f
             && fogSettings.maxOpacity > 0.0f;
-    dynamicLightContext = dynamicLights;
     preparedCamera = camera;
     preparedRuntimeSeconds = runtimeSeconds;
     nearPlane = static_cast<float>(rlGetCullDistanceNear());
     farPlane = static_cast<float>(rlGetCullDistanceFar());
-    if (quality == SectorTopologyFogSettings::LocalVolumeQuality::Off
+    if (quality == SectorTopologyFogSettings::VolumetricQuality::Off
             || sceneTarget.descriptor.colorFormat
                     != engine::RenderTargetColorFormat::Rgba16Float
             || sceneTarget.actual.depth
                     != engine::RenderTargetDepthKind::SampleableTexture
             || !std::isfinite(nearPlane) || !std::isfinite(farPlane)
             || nearPlane <= 0.0f || farPlane <= nearPlane) {
-        resourceDiagnostic = quality == SectorTopologyFogSettings::LocalVolumeQuality::Off
+        resourceDiagnostic = quality == SectorTopologyFogSettings::VolumetricQuality::Off
                 ? "inactive: volumetric quality Off"
                 : "disabled: unsupported target or camera projection";
         return false;
@@ -552,12 +518,18 @@ bool SectorVolumetricAtmosphereRenderer::Prepare(
     marchSteps = grid.z;
     aspectRatio = static_cast<float>(sceneTarget.native.texture.width)
             / std::max(sceneTarget.native.texture.height, 1);
-    BuildLocalVolumes(map, objectLightProbes, quality, camera);
-    hazeAdapter.Build(
-            map, objectLightProbes, quality, camera, aspectRatio, dynamicLights,
-            lightAtmosphereSources, visibility, receiverBounds, hazeVolumes);
-    activeMedia = globalFogActive || activeLocalVolumeCount > 0
-            || hazeAdapter.ActiveCount() > 0;
+    BuildLocalVolumes(map, quality, camera);
+    lightSelection = SelectSectorTemporaryVolumetricLights(
+            lightAtmosphereSources,
+            visibility,
+            receiverBounds,
+            camera,
+            aspectRatio,
+            nearPlane,
+            std::min(farPlane, fogSettings.volumetricMaxDistanceWorld),
+            dynamicLightingEnabled);
+    BuildLightContext(dynamicLights);
+    activeMedia = globalFogActive || activeLocalVolumeCount > 0;
     if (!activeMedia) {
         resourceDiagnostic = "inactive: no visible unified media";
         return false;
@@ -585,7 +557,6 @@ bool SectorVolumetricAtmosphereRenderer::Apply(
     std::array<Vector3, MaximumLocalVolumes> localColors{};
     std::array<Vector4, MaximumLocalVolumes> localParamsA{};
     std::array<Vector4, MaximumLocalVolumes> localParamsB{};
-    std::array<Vector3, MaximumLocalVolumes * 4> localLighting{};
     for (int index = 0; index < activeLocalVolumeCount; ++index) {
         const auto& record = localVolumes[static_cast<std::size_t>(index)];
         localCenters[static_cast<std::size_t>(index)] = record.centerWorld;
@@ -597,50 +568,16 @@ bool SectorVolumetricAtmosphereRenderer::Apply(
         localParamsB[static_cast<std::size_t>(index)] = Vector4{
                 record.noiseAmount, record.flowDirectionRadians,
                 record.flowSpeedWorld, 0.0f};
-        for (int corner = 0; corner < 4; ++corner) {
-            localLighting[static_cast<std::size_t>(index * 4 + corner)] =
-                    record.staticLighting[static_cast<std::size_t>(corner)];
-        }
-    }
-    std::array<Vector3, LegacyHazeComparisonAdapter::MaximumVolumes> hazeCenters{};
-    std::array<Vector3, LegacyHazeComparisonAdapter::MaximumVolumes> hazeDirections{};
-    std::array<int, LegacyHazeComparisonAdapter::MaximumVolumes> hazeShapes{};
-    std::array<float, LegacyHazeComparisonAdapter::MaximumVolumes> hazeExtents{};
-    std::array<float, LegacyHazeComparisonAdapter::MaximumVolumes> hazeConeRadii{};
-    std::array<Vector3, LegacyHazeComparisonAdapter::MaximumVolumes> hazeColors{};
-    std::array<Vector4, LegacyHazeComparisonAdapter::MaximumVolumes> hazeParamsA{};
-    std::array<Vector4, LegacyHazeComparisonAdapter::MaximumVolumes> hazeParamsB{};
-    std::array<Vector3, LegacyHazeComparisonAdapter::MaximumVolumes * 8> hazeLighting{};
-    for (int index = 0; index < hazeAdapter.ActiveCount(); ++index) {
-        const auto& record = hazeVolumes[static_cast<std::size_t>(index)];
-        hazeCenters[static_cast<std::size_t>(index)] = record.centerWorld;
-        hazeDirections[static_cast<std::size_t>(index)] = record.directionWorld;
-        hazeShapes[static_cast<std::size_t>(index)] =
-                record.shape == SectorVolumetricComparisonShape::Cone ? 1 : 0;
-        hazeExtents[static_cast<std::size_t>(index)] = record.extentWorld;
-        hazeConeRadii[static_cast<std::size_t>(index)] = record.coneRadiusWorld;
-        hazeColors[static_cast<std::size_t>(index)] = record.tint;
-        hazeParamsA[static_cast<std::size_t>(index)] = Vector4{
-                record.density, record.maximumOpacity, record.edgeSoftness,
-                record.noiseScaleWorld};
-        hazeParamsB[static_cast<std::size_t>(index)] = Vector4{
-                record.noiseAmount, record.flowDirectionRadians,
-                record.flowSpeedWorld, 0.0f};
-        for (int corner = 0; corner < 8; ++corner) {
-            hazeLighting[static_cast<std::size_t>(index * 8 + corner)] =
-                    record.staticLighting[static_cast<std::size_t>(corner)];
-        }
     }
     Vector3 forward = Vector3Normalize(Vector3Subtract(
             preparedCamera.target, preparedCamera.position));
     Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, preparedCamera.up));
     Vector3 up = Vector3Normalize(Vector3CrossProduct(right, forward));
     const float tanHalfFov = std::tan(preparedCamera.fovy * DEG2RAD * 0.5f);
-    const float maximumDistance = SectorVolumetricPrototypeMaximumDistanceWorld;
-    const float anisotropy = SectorVolumetricPrototypeAnisotropy;
+    const float maximumDistance = fogSettings.volumetricMaxDistanceWorld;
+    const float anisotropy = fogSettings.anisotropy;
     const int fogEnabled = globalFogActive ? 1 : 0;
     const Vector3 fogColor = engine::SrgbColorBytesToLinearSceneRgb(fogSettings.color);
-    const int hazeCount = hazeAdapter.ActiveCount();
 
     rlDrawRenderBatchActive();
     BeginTextureMode(target.native);
@@ -673,23 +610,12 @@ bool SectorVolumetricAtmosphereRenderer::Apply(
     SET(fogReferenceHeight, fogSettings.referenceHeightWorld, SHADER_UNIFORM_FLOAT);
     SET(fogHeightFalloff, fogSettings.heightFalloff, SHADER_UNIFORM_FLOAT);
     SET(localVolumeCount, activeLocalVolumeCount, SHADER_UNIFORM_INT);
-    SET(hazeVolumeCount, hazeCount, SHADER_UNIFORM_INT);
 #undef SET
     SetShaderValueV(shader, locations.localCenters, localCenters.data(), SHADER_UNIFORM_VEC3, activeLocalVolumeCount);
     SetShaderValueV(shader, locations.localRadii, localRadii.data(), SHADER_UNIFORM_VEC3, activeLocalVolumeCount);
     SetShaderValueV(shader, locations.localColors, localColors.data(), SHADER_UNIFORM_VEC3, activeLocalVolumeCount);
     SetShaderValueV(shader, locations.localParamsA, localParamsA.data(), SHADER_UNIFORM_VEC4, activeLocalVolumeCount);
     SetShaderValueV(shader, locations.localParamsB, localParamsB.data(), SHADER_UNIFORM_VEC4, activeLocalVolumeCount);
-    SetShaderValueV(shader, locations.localLighting, localLighting.data(), SHADER_UNIFORM_VEC3, activeLocalVolumeCount * 4);
-    SetShaderValueV(shader, locations.hazeCenters, hazeCenters.data(), SHADER_UNIFORM_VEC3, hazeCount);
-    SetShaderValueV(shader, locations.hazeDirections, hazeDirections.data(), SHADER_UNIFORM_VEC3, hazeCount);
-    SetShaderValueV(shader, locations.hazeShapes, hazeShapes.data(), SHADER_UNIFORM_INT, hazeCount);
-    SetShaderValueV(shader, locations.hazeExtents, hazeExtents.data(), SHADER_UNIFORM_FLOAT, hazeCount);
-    SetShaderValueV(shader, locations.hazeConeRadii, hazeConeRadii.data(), SHADER_UNIFORM_FLOAT, hazeCount);
-    SetShaderValueV(shader, locations.hazeColors, hazeColors.data(), SHADER_UNIFORM_VEC3, hazeCount);
-    SetShaderValueV(shader, locations.hazeParamsA, hazeParamsA.data(), SHADER_UNIFORM_VEC4, hazeCount);
-    SetShaderValueV(shader, locations.hazeParamsB, hazeParamsB.data(), SHADER_UNIFORM_VEC4, hazeCount);
-    SetShaderValueV(shader, locations.hazeLighting, hazeLighting.data(), SHADER_UNIFORM_VEC3, hazeCount * 8);
     UploadSectorRendererDynamicPointLights(shader, locations.dynamicLights, dynamicLightContext);
     UploadSectorRendererDynamicSpotLightShadowUniforms(
             shader, locations.dynamicShadows, dynamicLightContext.shadowUniforms);
@@ -723,65 +649,6 @@ bool SectorVolumetricAtmosphereRenderer::Apply(
     return true;
 }
 
-void SectorVolumetricAtmosphereRenderer::RefreshLocalLightingCacheIdentity(
-        const SectorTopologyMap& map,
-        const SectorBakedObjectLightProbeRuntimeData& probes)
-{
-    const SectorBakedObjectLightProbe* data = probes.probes.empty()
-            ? nullptr : probes.probes.data();
-    const std::size_t hash = std::hash<std::string>{}(probes.metadata.sourceHash);
-    const std::size_t mapHash = std::hash<std::string>{}(
-            map.bakedLightmap.objectProbes.sourceHash);
-    if (data == cachedProbeData && probes.probes.size() == cachedProbeCount
-            && hash == cachedProbeHash && mapHash == cachedMapProbeHash) return;
-    localLightingCache = {};
-    cachedProbeData = data;
-    cachedProbeCount = probes.probes.size();
-    cachedProbeHash = hash;
-    cachedMapProbeHash = mapHash;
-}
-
-const SectorLocalFogStaticLightingSamples&
-SectorVolumetricAtmosphereRenderer::LocalLightingFor(
-        const SectorTopologyMap& map,
-        const SectorBakedObjectLightProbeRuntimeData& probes,
-        const SectorCompiledLocalFogVolume& volume)
-{
-    const SectorTopologySector* sector = FindSectorTopologySector(
-            map, volume.topologySectorId);
-    const Color ambientColor = sector != nullptr ? sector->ambientColor : Color{};
-    const float ambientIntensity = sector != nullptr ? sector->ambientIntensity : 0.0f;
-    LocalLightingCacheEntry* available = nullptr;
-    for (LocalLightingCacheEntry& entry : localLightingCache) {
-        if (entry.valid && entry.volumeId == volume.sourceAuthoringFogVolumeId) {
-            if (entry.topologySectorId == volume.topologySectorId
-                    && SameVector(entry.center, volume.centerWorld)
-                    && SameVector(entry.radii, volume.radiiWorld)
-                    && SameColor(entry.ambientColor, ambientColor)
-                    && entry.ambientIntensity == ambientIntensity) {
-                return entry.lighting;
-            }
-            available = &entry;
-            break;
-        }
-        if (!entry.valid && available == nullptr) available = &entry;
-    }
-    if (available == nullptr) {
-        available = &localLightingCache[static_cast<std::size_t>(
-                std::max(volume.sourceAuthoringFogVolumeId, 0))
-                % localLightingCache.size()];
-    }
-    available->valid = true;
-    available->volumeId = volume.sourceAuthoringFogVolumeId;
-    available->topologySectorId = volume.topologySectorId;
-    available->center = volume.centerWorld;
-    available->radii = volume.radiiWorld;
-    available->ambientColor = ambientColor;
-    available->ambientIntensity = ambientIntensity;
-    available->lighting = SampleSectorLocalFogStaticLighting(map, probes, volume);
-    return available->lighting;
-}
-
 void SectorVolumetricAtmosphereRenderer::ResetPreparedFrame()
 {
     prepared = false;
@@ -792,8 +659,8 @@ void SectorVolumetricAtmosphereRenderer::ResetPreparedFrame()
     eligibleLocalVolumeCount = 0;
     activeLocalVolumeCount = 0;
     localVolumes = {};
-    hazeVolumes = {};
-    hazeAdapter.ClearFrameCounts();
+    lightSelection = {};
+    dynamicLightContext = {};
 }
 
 void SectorVolumetricAtmosphereRenderer::Shutdown()
@@ -805,12 +672,6 @@ void SectorVolumetricAtmosphereRenderer::Shutdown()
     compositeShader = {};
     locations = {};
     compositeLocations = {};
-    localLightingCache = {};
-    hazeAdapter.Reset();
-    cachedProbeData = nullptr;
-    cachedProbeCount = 0;
-    cachedProbeHash = 0;
-    cachedMapProbeHash = 0;
     failedWidth = 0;
     failedHeight = 0;
     shaderFailed = false;

@@ -31,7 +31,7 @@ int StableKind(const SectorLightAtmosphereSource& source)
 int LegacyHazeComparisonAdapter::Build(
         const SectorTopologyMap& map,
         const SectorBakedObjectLightProbeRuntimeData& probes,
-        SectorTopologyFogSettings::LocalVolumeQuality quality,
+        SectorTopologyFogSettings::VolumetricQuality quality,
         const Camera3D& camera,
         float aspectRatio,
         const SectorBillboardDynamicLightContext& dynamicLights,
@@ -43,7 +43,7 @@ int LegacyHazeComparisonAdapter::Build(
     outVolumes = {};
     eligibleCount = 0;
     activeCount = 0;
-    if (quality == SectorTopologyFogSettings::LocalVolumeQuality::Off) return 0;
+    if (quality == SectorTopologyFogSettings::VolumetricQuality::Off) return 0;
 
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());

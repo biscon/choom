@@ -932,6 +932,7 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
           "default-disabled light atmosphere is omitted for every light variant");
 
     game::SectorLightAtmosphereSettings atmosphere;
+    atmosphere.volumetricScatteringIntensity = 2.5f;
     atmosphere.haze.enabled = true;
     atmosphere.haze.extentScale = 0.75f;
     atmosphere.haze.density = 0.125f;
@@ -967,6 +968,10 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
         const Json& staticAtmosphere = saved["staticLights"][0]["atmosphere"];
         Check(staticAtmosphere.contains("haze") && staticAtmosphere.contains("dust"),
               "enabled atmosphere serializes both haze and dust blocks");
+        Check(Near(
+                      staticAtmosphere["volumetricScatteringIntensity"].get<float>(),
+                      2.5f),
+              "non-default volumetric scattering intensity serializes");
         if (staticAtmosphere.contains("haze") && staticAtmosphere.contains("dust")) {
             Check(staticAtmosphere["haze"].value("enabled", false)
                           && staticAtmosphere["dust"].value("enabled", false),
@@ -978,7 +983,8 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
     std::string error;
     Check(LoadText(text, loaded, error), "light atmosphere JSON loads");
     const auto checkAtmosphere = [](const game::SectorLightAtmosphereSettings& value) {
-        return value.haze.enabled
+        return Near(value.volumetricScatteringIntensity, 2.5f)
+                && value.haze.enabled
                 && Near(value.haze.extentScale, 0.75f)
                 && Near(value.haze.density, 0.125f)
                 && value.haze.scatteringTint.r == 210
@@ -1000,6 +1006,17 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
           "dynamic point atmosphere round-trips");
     Check(loaded.dynamicSpotLights.size() == 1 && checkAtmosphere(loaded.dynamicSpotLights[0].atmosphere),
           "dynamic spot atmosphere round-trips");
+
+    Json clamped = saved;
+    clamped["staticLights"][0]["atmosphere"]
+            ["volumetricScatteringIntensity"] = 99.0f;
+    Check(LoadText(clamped.dump(), loaded, error),
+          "out-of-range volumetric scattering intensity loads");
+    Check(Near(
+                  loaded.staticLights[0].atmosphere
+                          .volumetricScatteringIntensity,
+                  8.0f),
+          "volumetric scattering intensity clamps to its authored maximum");
 }
 
 void TestRuntimeObjectsRoundTripAndValidation()
@@ -2685,8 +2702,10 @@ void TestFogSettingsRoundTripAndValidation()
     original.fogSettings.maxOpacity = 0.8f;
     original.fogSettings.referenceHeightWorld = -2.25f;
     original.fogSettings.heightFalloff = 1.5f;
-    original.fogSettings.localVolumeQuality =
-            game::SectorTopologyFogSettings::LocalVolumeQuality::High;
+    original.fogSettings.anisotropy = -0.35f;
+    original.fogSettings.volumetricMaxDistanceWorld = 48.0f;
+    original.fogSettings.volumetricQuality =
+            game::SectorTopologyFogSettings::VolumetricQuality::High;
 
     const Json saved = Json::parse(SaveText(original));
     Check(saved["fogSettings"].is_object(), "non-default fog settings are written");
@@ -2699,10 +2718,12 @@ void TestFogSettingsRoundTripAndValidation()
                   && Near(saved["fogSettings"]["density"].get<float>(), 0.075f)
                   && Near(saved["fogSettings"]["maxOpacity"].get<float>(), 0.8f)
                   && Near(saved["fogSettings"]["referenceHeightWorld"].get<float>(), -2.25f)
-                  && Near(saved["fogSettings"]["heightFalloff"].get<float>(), 1.5f),
+                  && Near(saved["fogSettings"]["heightFalloff"].get<float>(), 1.5f)
+                  && Near(saved["fogSettings"]["anisotropy"].get<float>(), -0.35f)
+                  && Near(saved["fogSettings"]["volumetricMaxDistanceWorld"].get<float>(), 48.0f),
           "fog settings serialize normalized values");
-    Check(saved["fogSettings"]["localVolumeQuality"] == "high",
-          "local fog quality serializes with preview fog settings");
+    Check(saved["fogSettings"]["volumetricQuality"] == "high",
+          "volumetric quality serializes with preview fog settings");
 
     SectorTopologyMap loaded;
     std::string error;
@@ -2716,15 +2737,18 @@ void TestFogSettingsRoundTripAndValidation()
                   && Near(loaded.fogSettings.density, 0.075f)
                   && Near(loaded.fogSettings.maxOpacity, 0.8f)
                   && Near(loaded.fogSettings.referenceHeightWorld, -2.25f)
-                  && Near(loaded.fogSettings.heightFalloff, 1.5f),
+                  && Near(loaded.fogSettings.heightFalloff, 1.5f)
+                  && Near(loaded.fogSettings.anisotropy, -0.35f)
+                  && Near(loaded.fogSettings.volumetricMaxDistanceWorld, 48.0f),
           "fog settings round-trip");
-    Check(loaded.fogSettings.localVolumeQuality
-                  == game::SectorTopologyFogSettings::LocalVolumeQuality::High,
-          "local fog quality round-trips");
+    Check(loaded.fogSettings.volumetricQuality
+                  == game::SectorTopologyFogSettings::VolumetricQuality::High,
+          "volumetric quality round-trips");
 
     Json missingFields = saved;
     for (const char* field : {"enabled", "startDistanceWorld", "density", "maxOpacity",
-                              "referenceHeightWorld", "heightFalloff"}) {
+                              "referenceHeightWorld", "heightFalloff", "anisotropy",
+                              "volumetricMaxDistanceWorld"}) {
         missingFields["fogSettings"].erase(field);
     }
     Check(LoadText(missingFields.dump(), loaded, error), "omitted fog fields are accepted");
@@ -2735,7 +2759,10 @@ void TestFogSettingsRoundTripAndValidation()
                   && Near(loaded.fogSettings.density, defaults.density)
                   && Near(loaded.fogSettings.maxOpacity, defaults.maxOpacity)
                   && Near(loaded.fogSettings.referenceHeightWorld, defaults.referenceHeightWorld)
-                  && Near(loaded.fogSettings.heightFalloff, defaults.heightFalloff),
+                  && Near(loaded.fogSettings.heightFalloff, defaults.heightFalloff)
+                  && Near(loaded.fogSettings.anisotropy, defaults.anisotropy)
+                  && Near(loaded.fogSettings.volumetricMaxDistanceWorld,
+                          defaults.volumetricMaxDistanceWorld),
           "omitted fog fields load defaults while present color remains");
 
     Json withoutFog = saved;
@@ -2749,18 +2776,40 @@ void TestFogSettingsRoundTripAndValidation()
     Check(!Json::parse(SaveText(MakeSquare())).contains("fogSettings"),
           "default fog settings are omitted");
 
+    Json legacyQuality = saved;
+    legacyQuality["fogSettings"]["localVolumeQuality"] =
+            legacyQuality["fogSettings"]["volumetricQuality"];
+    legacyQuality["fogSettings"].erase("volumetricQuality");
+    Check(LoadText(legacyQuality.dump(), loaded, error),
+          "legacy localVolumeQuality alias loads during migration");
+    const Json canonicalAliasSave = Json::parse(SaveText(loaded));
+    Check(canonicalAliasSave["fogSettings"].contains("volumetricQuality")
+                  && !canonicalAliasSave["fogSettings"].contains(
+                          "localVolumeQuality"),
+          "legacy quality alias always saves with the canonical field name");
+    Json bothQualityNames = legacyQuality;
+    bothQualityNames["fogSettings"]["volumetricQuality"] = "low";
+    Check(LoadText(bothQualityNames.dump(), loaded, error)
+                  && loaded.fogSettings.volumetricQuality
+                          == game::SectorTopologyFogSettings::VolumetricQuality::Low,
+          "canonical volumetricQuality takes precedence over the migration alias");
+
     Json clamped = saved;
     clamped["fogSettings"]["startDistanceWorld"] = -1.0f;
     clamped["fogSettings"]["density"] = 2.0f;
     clamped["fogSettings"]["maxOpacity"] = -1.0f;
     clamped["fogSettings"]["referenceHeightWorld"] = 999.0f;
     clamped["fogSettings"]["heightFalloff"] = 99.0f;
+    clamped["fogSettings"]["anisotropy"] = 5.0f;
+    clamped["fogSettings"]["volumetricMaxDistanceWorld"] = 999.0f;
     Check(LoadText(clamped.dump(), loaded, error), "out-of-range fog settings load");
     Check(Near(loaded.fogSettings.startDistanceWorld, 0.0f)
                   && Near(loaded.fogSettings.density, 1.0f)
                   && Near(loaded.fogSettings.maxOpacity, 0.0f)
                   && Near(loaded.fogSettings.referenceHeightWorld, 512.0f)
-                  && Near(loaded.fogSettings.heightFalloff, 16.0f),
+                  && Near(loaded.fogSettings.heightFalloff, 16.0f)
+                  && Near(loaded.fogSettings.anisotropy, 0.90f)
+                  && Near(loaded.fogSettings.volumetricMaxDistanceWorld, 256.0f),
           "out-of-range fog settings clamp");
 
     Json invalid = saved;
@@ -2776,7 +2825,8 @@ void TestFogSettingsRoundTripAndValidation()
     invalid["fogSettings"]["color"]["r"] = "red";
     ExpectRejected(invalid, "wrong-type fog color channel is rejected");
     for (const char* field : {"startDistanceWorld", "density", "maxOpacity",
-                              "referenceHeightWorld", "heightFalloff"}) {
+                              "referenceHeightWorld", "heightFalloff", "anisotropy",
+                              "volumetricMaxDistanceWorld"}) {
         invalid = saved;
         invalid["fogSettings"][field] = "invalid";
         ExpectRejected(invalid, "wrong-type fog numeric field is rejected");

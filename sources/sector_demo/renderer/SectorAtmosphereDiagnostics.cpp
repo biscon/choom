@@ -314,7 +314,8 @@ std::string FormatSectorAtmosphereCaptureReport(
            << " fog=" << metadata.localFogEligible << '/' << metadata.localFogActive
            << " haze=" << metadata.hazeEligible << '/' << metadata.hazeActive
            << " unified=" << metadata.unifiedIntegrations
-           << " lights=" << metadata.unifiedDynamicLights
+           << " lights=" << metadata.unifiedLightEligible << '/'
+           << metadata.unifiedLightActive
            << " dust=" << metadata.dustEligible << '/' << metadata.dustActive
            << " camera_pos=" << metadata.cameraPose.position.x << ','
            << metadata.cameraPose.position.y << ',' << metadata.cameraPose.position.z

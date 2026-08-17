@@ -56,7 +56,7 @@ When executing this plan:
 |---|---|---|---|
 | 1 | Establish baseline measurements, diagnostics, and renderer contracts | Completed | 2026-08-17 |
 | 2 | Add the shared-medium screen-space renderer and comparison mode | Completed | 2026-08-17 |
-| 3 | Unify global fog and authored local fog under the final data model | Not Started | - |
+| 3 | Unify global fog and authored local fog under the final data model | Completed | 2026-08-17 |
 | 4 | Add the OpenGL 3.3 froxel atlas and clustered light lists | Not Started | - |
 | 5 | Add reconstruction, temporal stability, and supported volumetric shadows | Not Started | - |
 | 6 | Migrate and tune the hub maps, then pass visual/performance gates | Not Started | - |
@@ -942,3 +942,17 @@ Append one entry per attempted slice in this format:
 - Collision/sector lookup/physics behavior: Unchanged.
 - Legacy coexistence/removal state: Legacy remains available and is still the initial backend as required for the migration period. Slice 2 is complete; no legacy renderer/schema/UI removal occurred.
 - Remaining follow-up within this plan: Slice 3 may now begin when explicitly requested. Preserve the accepted slight intensity difference as a tuning reference; do not start Slice 3 or retune Slice 2 as part of this documentation-only closure.
+
+### 2026-08-17 — Slice 3 — Completed
+
+- Summary: Added the final map-level anisotropy, volumetric maximum distance, and `volumetricQuality` data with normalization and canonical serialization; retained a read-only `localVolumeQuality` migration alias. Added normalized per-light `volumetricScatteringIntensity`. Unified now takes density only from global fog and compiled authoring-graph local fog, and a deterministic temporary eight-record array supplies direct static/dynamic point/spot illumination without reading legacy haze density or shape. The analytic fog path begins at the authored volumetric maximum only when Unified is ready; quality Off, inactive Unified, and resource failure retain the full configured analytic path. Added the final Preview Fog controls, a light scattering control, Legacy-only temporary haze controls, and eligible/active Unified light diagnostics.
+- Decisions/deviations folded back into plan: The Slice 3 fixed-array bridge selects visible lights by distance with stable kind/ID tie-breaking and reports eligible/active counts; the 254-view and clustered importance scheme remains exclusively Slice 4. Static lights are direct, unshadowed volumetric emitters. Dynamic flicker and the existing selected spotlight shadow slots are preserved. Unified no longer samples sector ambient/object probes, preventing unlit fog from becoming emissive and avoiding direct-static double counting. Legacy haze/schema/renderers remain intact solely for comparison; no tracked map or hub-content migration was performed.
+- Files/modules materially affected: Topology fog/light data and JSON serialization; focused atmosphere source selection, Unified renderer, contracts, and diagnostics modules under `sources/sector_demo/renderer`; existing Preview Settings and light-inspector/service integration; focused serialization, volumetric math/policy, lightmap hash, editor layout/service, and selection tests; this living plan.
+- Automated verification: Passed `cmake --build cmake-build-debug -j2`; passed `ctest --test-dir cmake-build-debug --output-on-failure` (28/28); passed `git diff --check`; `git diff --stat` and `git status --short` reviewed.
+- GPU measurements: Not captured (user-owned GUI run); Slice 3 changes authoring/data semantics and no new performance gate was required.
+- Manual verification: Not performed (user-owned).
+- Cache invalidation behavior: Authored local fog continues through the authoring graph edit/derivation/cache path unchanged. Per-light scattering edits use `SectorEditorLightEditingService`, which marks the document edited, invalidates the 2D topology render cache, and requests preview source refresh through the inspector path. Global fog edits use the existing Preview Settings document mutation path and `MarkTopologyDocumentEdited()`; its existing conservative 2D cache invalidation remains. No direct local-volume or topology mutation path was added.
+- Lightmap source-hash behavior: Anisotropy, volumetric maximum distance, volumetric quality, and per-light volumetric scattering intensity are visual-only and remain excluded from `ComputeSectorLightmapSourceHash()`. Explicit static point/spot, dynamic point/spot, and fog hash tests pass; baked lighting inputs/results are unchanged.
+- Collision/sector lookup/physics behavior: Unchanged. Atmosphere remains visual-only; no collision, sector lookup, camera, portal topology, picking, or physics behavior changed.
+- Legacy coexistence/removal state: Legacy local fog and haze renderers, haze schema, and temporary comparison controls remain usable as required through Slice 6. Unified does not invoke the legacy haze adapter or consume haze density/shape. The old haze inspector controls appear only when the Legacy comparison backend is selected and are labeled temporary.
+- Remaining follow-up within this plan: Slice 4 may add the OpenGL 3.3 froxel atlas, 254-view light/volume staging, and deterministic clustered lists when explicitly requested. Do not migrate hub maps or remove Legacy as part of this completed slice.

@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace game {
 namespace {
@@ -96,6 +97,8 @@ SectorLightAtmosphereSource MakePointSource(
     source.shape = SectorLightAtmosphereShape::Sphere;
     source.lightId = light.id;
     source.positionWorld = SectorAuthoringToWorldPosition(light.position);
+    source.color = light.color;
+    source.intensity = std::max(light.intensity, 0.0f);
     source.rangeWorld = SectorAuthoringToWorldDistance(light.radius);
     source.ownerSectorId = OwnerSector(sectorLookupWorld, source.positionWorld);
     source.atmosphere = NormalizeSectorLightAtmosphereSettings(light.atmosphere);
@@ -115,7 +118,11 @@ SectorLightAtmosphereSource MakeSpotSource(
     source.positionWorld = SectorAuthoringToWorldPosition(light.position);
     const Vector3 targetWorld = SectorAuthoringToWorldPosition(light.target);
     source.directionWorld = NormalizeDirection(Vector3Subtract(targetWorld, source.positionWorld));
+    source.color = light.color;
+    source.intensity = std::max(light.intensity, 0.0f);
     source.rangeWorld = SectorAuthoringToWorldDistance(light.range);
+    source.innerConeCos = std::cos(std::clamp(
+            light.innerConeDegrees, 0.0f, 179.0f) * DEG2RAD);
     source.outerConeCos = std::cos(std::clamp(light.outerConeDegrees, 0.0f, 179.0f) * DEG2RAD);
     source.ownerSectorId = OwnerSector(sectorLookupWorld, source.positionWorld);
     source.atmosphere = NormalizeSectorLightAtmosphereSettings(light.atmosphere);
@@ -136,25 +143,123 @@ void BuildSectorLightAtmosphereSources(
             + map.dynamicPointLights.size()
             + map.dynamicSpotLights.size());
     for (const SectorTopologyStaticPointLight& light : map.staticLights) {
-        if (light.atmosphere.haze.enabled || light.atmosphere.dust.enabled) {
-            outSources.push_back(MakePointSource(light, SectorLightAtmosphereSourceKind::StaticPoint, sectorLookupWorld));
-        }
+        outSources.push_back(MakePointSource(
+                light,
+                SectorLightAtmosphereSourceKind::StaticPoint,
+                sectorLookupWorld));
     }
     for (const SectorTopologyStaticSpotLight& light : map.staticSpotLights) {
-        if (light.atmosphere.haze.enabled || light.atmosphere.dust.enabled) {
-            outSources.push_back(MakeSpotSource(light, SectorLightAtmosphereSourceKind::StaticSpot, sectorLookupWorld));
-        }
+        outSources.push_back(MakeSpotSource(
+                light,
+                SectorLightAtmosphereSourceKind::StaticSpot,
+                sectorLookupWorld));
     }
     for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
-        if (light.enabled && (light.atmosphere.haze.enabled || light.atmosphere.dust.enabled)) {
-            outSources.push_back(MakePointSource(light, SectorLightAtmosphereSourceKind::DynamicPoint, sectorLookupWorld));
-        }
+        if (!light.enabled) continue;
+        SectorLightAtmosphereSource source = MakePointSource(
+                light,
+                SectorLightAtmosphereSourceKind::DynamicPoint,
+                sectorLookupWorld);
+        source.flicker = light.flicker;
+        source.flickerSpeed = light.flickerSpeed;
+        source.flickerAmount = light.flickerAmount;
+        outSources.push_back(source);
     }
     for (const SectorTopologyDynamicSpotLight& light : map.dynamicSpotLights) {
-        if (light.enabled && (light.atmosphere.haze.enabled || light.atmosphere.dust.enabled)) {
-            outSources.push_back(MakeSpotSource(light, SectorLightAtmosphereSourceKind::DynamicSpot, sectorLookupWorld));
-        }
+        if (!light.enabled) continue;
+        SectorLightAtmosphereSource source = MakeSpotSource(
+                light,
+                SectorLightAtmosphereSourceKind::DynamicSpot,
+                sectorLookupWorld);
+        source.flicker = light.flicker;
+        source.flickerSpeed = light.flickerSpeed;
+        source.flickerAmount = light.flickerAmount;
+        outSources.push_back(source);
     }
+}
+
+SectorVolumetricLightSelection SelectSectorTemporaryVolumetricLights(
+        const std::vector<SectorLightAtmosphereSource>& sources,
+        const RuntimePortalVisibilityResult& visibility,
+        const std::vector<SectorReceiverBounds>& receiverBounds,
+        const Camera3D& camera,
+        float aspectRatio,
+        float nearPlane,
+        float maximumDistanceWorld,
+        bool dynamicLightingEnabled)
+{
+    SectorVolumetricLightSelection result;
+    std::array<float, SectorTemporaryVolumetricLightCapacity> distances{};
+    distances.fill(std::numeric_limits<float>::max());
+    for (const SectorLightAtmosphereSource& source : sources) {
+        const bool dynamic = IsSectorLightAtmosphereSourceDynamic(source);
+        const SectorLightAtmosphereSettings atmosphere =
+                NormalizeSectorLightAtmosphereSettings(source.atmosphere);
+        if ((dynamic && !dynamicLightingEnabled)
+                || source.rangeWorld <= 0.0f
+                || source.intensity <= 0.0f
+                || atmosphere.volumetricScatteringIntensity <= 0.0f) {
+            continue;
+        }
+        SectorLightAtmosphereVolume volume;
+        if (!MakeSectorLightAtmosphereVolume(source, 1.0f, volume)
+                || !IsSectorLightAtmosphereVolumeVisible(
+                        volume,
+                        visibility,
+                        receiverBounds,
+                        camera,
+                        aspectRatio,
+                        nearPlane,
+                        maximumDistanceWorld)) {
+            continue;
+        }
+        ++result.eligibleCount;
+        const float distance = Vector3DistanceSqr(
+                camera.position,
+                volume.boundsCenterWorld);
+        const auto comesBefore = [&](int index) {
+            const SectorVolumetricLightRecord& existing =
+                    result.lights[static_cast<std::size_t>(index)];
+            return distance < distances[static_cast<std::size_t>(index)]
+                    || (distance == distances[static_cast<std::size_t>(index)]
+                        && (static_cast<int>(source.kind)
+                                    < static_cast<int>(existing.kind)
+                            || (source.kind == existing.kind
+                                && source.lightId < existing.lightId)));
+        };
+        constexpr int capacity = static_cast<int>(
+                SectorTemporaryVolumetricLightCapacity);
+        if (result.activeCount >= capacity && !comesBefore(capacity - 1)) {
+            continue;
+        }
+        int insertAt = std::min(result.activeCount, capacity - 1);
+        if (result.activeCount < capacity) ++result.activeCount;
+        while (insertAt > 0 && comesBefore(insertAt - 1)) {
+            result.lights[static_cast<std::size_t>(insertAt)] =
+                    result.lights[static_cast<std::size_t>(insertAt - 1)];
+            distances[static_cast<std::size_t>(insertAt)] =
+                    distances[static_cast<std::size_t>(insertAt - 1)];
+            --insertAt;
+        }
+        const float effectiveIntensity = source.intensity
+                * atmosphere.volumetricScatteringIntensity;
+        result.lights[static_cast<std::size_t>(insertAt)] =
+                SectorVolumetricLightRecord{
+                        source.kind,
+                        source.lightId,
+                        source.positionWorld,
+                        source.directionWorld,
+                        source.color,
+                        source.rangeWorld,
+                        std::max(effectiveIntensity, 0.0f),
+                        source.innerConeCos,
+                        source.outerConeCos,
+                        source.flicker,
+                        source.flickerSpeed,
+                        source.flickerAmount};
+        distances[static_cast<std::size_t>(insertAt)] = distance;
+    }
+    return result;
 }
 
 bool MakeSectorLightAtmosphereVolume(

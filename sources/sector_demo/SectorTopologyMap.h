@@ -70,12 +70,14 @@ struct SectorTopologyFogSettings {
     float maxOpacity = 0.65f;
     float referenceHeightWorld = 1.0f;
     float heightFalloff = 0.35f;
-    enum class LocalVolumeQuality {
+    float anisotropy = 0.20f;
+    float volumetricMaxDistanceWorld = 32.0f;
+    enum class VolumetricQuality {
         Off,
         Low,
         Medium,
         High
-    } localVolumeQuality = LocalVolumeQuality::Medium;
+    } volumetricQuality = VolumetricQuality::Medium;
 };
 
 enum class SectorSoundType {

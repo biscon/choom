@@ -1248,7 +1248,9 @@ bool SameFogSettings(
             && a.maxOpacity == b.maxOpacity
             && a.referenceHeightWorld == b.referenceHeightWorld
             && a.heightFalloff == b.heightFalloff
-            && a.localVolumeQuality == b.localVolumeQuality;
+            && a.anisotropy == b.anisotropy
+            && a.volumetricMaxDistanceWorld == b.volumetricMaxDistanceWorld
+            && a.volumetricQuality == b.volumetricQuality;
 }
 
 bool SamePreviewSettings(const SectorPreviewSettings& left, const SectorPreviewSettings& right)

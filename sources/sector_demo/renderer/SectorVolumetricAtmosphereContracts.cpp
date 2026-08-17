@@ -19,51 +19,51 @@ std::uint64_t SaturatingMultiply(std::uint64_t left, std::uint64_t right)
 } // namespace
 
 const char* SectorVolumetricQualityName(
-        SectorTopologyFogSettings::LocalVolumeQuality quality)
+        SectorTopologyFogSettings::VolumetricQuality quality)
 {
     switch (quality) {
-        case SectorTopologyFogSettings::LocalVolumeQuality::Off: return "Off";
-        case SectorTopologyFogSettings::LocalVolumeQuality::Low: return "Low";
-        case SectorTopologyFogSettings::LocalVolumeQuality::Medium: return "Medium";
-        case SectorTopologyFogSettings::LocalVolumeQuality::High: return "High";
+        case SectorTopologyFogSettings::VolumetricQuality::Off: return "Off";
+        case SectorTopologyFogSettings::VolumetricQuality::Low: return "Low";
+        case SectorTopologyFogSettings::VolumetricQuality::Medium: return "Medium";
+        case SectorTopologyFogSettings::VolumetricQuality::High: return "High";
     }
     return "Unknown";
 }
 
 SectorVolumetricQualityContract GetSectorVolumetricQualityContract(
-        SectorTopologyFogSettings::LocalVolumeQuality quality)
+        SectorTopologyFogSettings::VolumetricQuality quality)
 {
     switch (quality) {
-        case SectorTopologyFogSettings::LocalVolumeQuality::Low:
+        case SectorTopologyFogSettings::VolumetricQuality::Low:
             return SectorVolumetricQualityContract{120, 68, 32, 4, false};
-        case SectorTopologyFogSettings::LocalVolumeQuality::Medium:
+        case SectorTopologyFogSettings::VolumetricQuality::Medium:
             return SectorVolumetricQualityContract{160, 90, 48, 6, true};
-        case SectorTopologyFogSettings::LocalVolumeQuality::High:
+        case SectorTopologyFogSettings::VolumetricQuality::High:
             return SectorVolumetricQualityContract{240, 135, 64, 8, true};
-        case SectorTopologyFogSettings::LocalVolumeQuality::Off:
+        case SectorTopologyFogSettings::VolumetricQuality::Off:
             return SectorVolumetricQualityContract{};
     }
     return SectorVolumetricQualityContract{};
 }
 
 SectorLegacyAtmosphereQualityContract GetSectorLegacyAtmosphereQualityContract(
-        SectorTopologyFogSettings::LocalVolumeQuality quality)
+        SectorTopologyFogSettings::VolumetricQuality quality)
 {
     switch (quality) {
-        case SectorTopologyFogSettings::LocalVolumeQuality::Low:
+        case SectorTopologyFogSettings::VolumetricQuality::Low:
             return SectorLegacyAtmosphereQualityContract{0.25f, 4, 4, 0.25f, 4, 2};
-        case SectorTopologyFogSettings::LocalVolumeQuality::Medium:
+        case SectorTopologyFogSettings::VolumetricQuality::Medium:
             return SectorLegacyAtmosphereQualityContract{0.5f, 8, 8, 0.5f, 8, 4};
-        case SectorTopologyFogSettings::LocalVolumeQuality::High:
+        case SectorTopologyFogSettings::VolumetricQuality::High:
             return SectorLegacyAtmosphereQualityContract{1.0f, 12, 16, 1.0f, 12, 8};
-        case SectorTopologyFogSettings::LocalVolumeQuality::Off:
+        case SectorTopologyFogSettings::VolumetricQuality::Off:
             return SectorLegacyAtmosphereQualityContract{};
     }
     return SectorLegacyAtmosphereQualityContract{};
 }
 
 SectorVolumetricGridSize ComputeSectorVolumetricGridSize(
-        SectorTopologyFogSettings::LocalVolumeQuality quality,
+        SectorTopologyFogSettings::VolumetricQuality quality,
         int sceneWidth,
         int sceneHeight)
 {

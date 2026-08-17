@@ -81,6 +81,7 @@ void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& 
     const auto resetInt = [](engine::UIIntInputState* state) {
         if (state != nullptr) *state = engine::UIIntInputState{};
     };
+    resetFloat(uiState.atmosphere.volumetricScatteringInput);
     resetFloat(uiState.atmosphere.hazeExtentScaleInput);
     resetFloat(uiState.atmosphere.hazeDensityInput);
     resetFloat(uiState.atmosphere.hazeEdgeSoftnessInput);
@@ -182,7 +183,9 @@ bool SameAtmosphere(
     const auto sameColor = [](Color a, Color b) {
         return a.r == b.r && a.g == b.g && a.b == b.b;
     };
-    return left.haze.enabled == right.haze.enabled
+    return left.volumetricScatteringIntensity
+                    == right.volumetricScatteringIntensity
+            && left.haze.enabled == right.haze.enabled
             && left.haze.extentScale == right.haze.extentScale
             && left.haze.density == right.haze.density
             && sameColor(left.haze.scatteringTint, right.haze.scatteringTint)

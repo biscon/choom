@@ -57,7 +57,7 @@ inline float MeasureSectorPreviewSettingsFogContentHeight(
     constexpr float colorTitleHeight = 38.0f;
     constexpr float swatchHeight = 36.0f;
     constexpr float trailingPadding = 12.0f;
-    return 10.0f * (rowHeight + gap)
+    return 12.0f * (rowHeight + gap)
             + qualityTitleHeight
             + noteHeight + gap
             + colorTitleHeight
@@ -134,6 +134,8 @@ inline void ResetSectorPreviewSettingsModalFogDefaults(
     modalState.fogMaxOpacityInput = engine::UIFloatInputState{};
     modalState.fogReferenceHeightInput = engine::UIFloatInputState{};
     modalState.fogHeightFalloffInput = engine::UIFloatInputState{};
+    modalState.fogAnisotropyInput = engine::UIFloatInputState{};
+    modalState.fogVolumetricMaxDistanceInput = engine::UIFloatInputState{};
     modalState.fogColorRedInput = engine::UIIntInputState{};
     modalState.fogColorGreenInput = engine::UIIntInputState{};
     modalState.fogColorBlueInput = engine::UIIntInputState{};
@@ -155,7 +157,10 @@ inline bool ApplySectorPreviewFogSettings(
             && current.maxOpacity == draft.maxOpacity
             && current.referenceHeightWorld == draft.referenceHeightWorld
             && current.heightFalloff == draft.heightFalloff
-            && current.localVolumeQuality == draft.localVolumeQuality;
+            && current.anisotropy == draft.anisotropy
+            && current.volumetricMaxDistanceWorld
+                    == draft.volumetricMaxDistanceWorld
+            && current.volumetricQuality == draft.volumetricQuality;
     if (same) {
         return false;
     }

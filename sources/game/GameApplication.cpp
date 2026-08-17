@@ -16,10 +16,10 @@ namespace {
 constexpr const char* ApplicationSettingsPath =
         ASSETS_PATH "config/application_settings.json";
 
-SectorTopologyFogSettings::LocalVolumeQuality VolumetricQuality(
+SectorTopologyFogSettings::VolumetricQuality VolumetricQuality(
         FpsVolumetricQualityCap quality)
 {
-    return static_cast<SectorTopologyFogSettings::LocalVolumeQuality>(
+    return static_cast<SectorTopologyFogSettings::VolumetricQuality>(
             static_cast<int>(quality));
 }
 

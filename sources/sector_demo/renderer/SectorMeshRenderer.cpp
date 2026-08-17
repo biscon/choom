@@ -1109,7 +1109,8 @@ void SectorMeshRenderer::DrawScene(
             fogSettings,
             camera.position,
             volumetricHandoff,
-            SectorVolumetricPrototypeMaximumDistanceWorld);
+            NormalizeSectorTopologyFogSettings(
+                    fogSettings).volumetricMaxDistanceWorld);
     UploadSectorFogShaderValues(material.shader, fogShaderLocations, fogContext);
 
     float useAo = useBakedAmbientOcclusion ? 1.0f : 0.0f;
@@ -1574,7 +1575,8 @@ SectorAtmosphereCaptureMetadata SectorMeshRenderer::BuildAtmosphereCaptureMetada
     metadata.hazeEligible = atmosphereDiagnostics.haze.eligibleCount;
     metadata.hazeActive = atmosphereDiagnostics.haze.activeCount;
     metadata.unifiedIntegrations = atmosphereDiagnostics.unifiedIntegrationCount;
-    metadata.unifiedDynamicLights = atmosphereDiagnostics.unifiedDynamicLightCount;
+    metadata.unifiedLightEligible = atmosphereDiagnostics.unifiedLightEligibleCount;
+    metadata.unifiedLightActive = atmosphereDiagnostics.unifiedLightActiveCount;
     metadata.dustEligible = atmosphereDiagnostics.dustEligible;
     metadata.dustActive = atmosphereDiagnostics.dustActive;
     metadata.cameraPose = RendererPose();
@@ -1618,7 +1620,7 @@ void SectorMeshRenderer::CancelAtmosphereCapture()
 
 void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
         const engine::RenderTarget& sceneTarget,
-        SectorTopologyFogSettings::LocalVolumeQuality quality,
+        SectorTopologyFogSettings::VolumetricQuality quality,
         bool targetSupported,
         bool pipelineFailed,
         bool localFogApplied,
@@ -1671,12 +1673,12 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
     atmosphereDiagnostics.haze.marchSteps = qualityContract.hazeMarchSteps;
     atmosphereDiagnostics.haze.eligibleCount = targetSupported
             ? (atmosphereBackend == SectorAtmosphereBackend::Unified
-                    ? volumetricAtmosphereRenderer.EligibleHazeVolumeCount()
+                    ? 0
                     : lightHazeRenderer.EligibleCount())
             : 0;
     atmosphereDiagnostics.haze.activeCount = targetSupported
             ? (atmosphereBackend == SectorAtmosphereBackend::Unified
-                    ? volumetricAtmosphereRenderer.ActiveHazeVolumeCount()
+                    ? 0
                     : lightHazeRenderer.ActiveCount())
             : 0;
     atmosphereDiagnostics.haze.estimatedBytes = EstimateSectorAtmosphereTargetBytes(
@@ -1693,11 +1695,9 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
     atmosphereDiagnostics.unified.marchSteps =
             volumetricAtmosphereRenderer.MarchSteps();
     atmosphereDiagnostics.unified.eligibleCount =
-            atmosphereDiagnostics.localFog.eligibleCount
-            + atmosphereDiagnostics.haze.eligibleCount;
+            atmosphereDiagnostics.localFog.eligibleCount;
     atmosphereDiagnostics.unified.activeCount =
-            atmosphereDiagnostics.localFog.activeCount
-            + atmosphereDiagnostics.haze.activeCount;
+            atmosphereDiagnostics.localFog.activeCount;
     atmosphereDiagnostics.unified.estimatedBytes =
             EstimateSectorAtmosphereTargetBytes(
                     atmosphereDiagnostics.unified.width,
@@ -1706,9 +1706,13 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
     atmosphereDiagnostics.unified.resourceStatus =
             volumetricAtmosphereRenderer.ResourceDiagnostic();
     atmosphereDiagnostics.unifiedIntegrationCount = unifiedApplied ? 1 : 0;
-    atmosphereDiagnostics.unifiedDynamicLightCount =
+    atmosphereDiagnostics.unifiedLightEligibleCount =
             atmosphereBackend == SectorAtmosphereBackend::Unified
-            ? volumetricAtmosphereRenderer.ActiveDynamicLightCount()
+            ? volumetricAtmosphereRenderer.EligibleLightCount()
+            : 0;
+    atmosphereDiagnostics.unifiedLightActiveCount =
+            atmosphereBackend == SectorAtmosphereBackend::Unified
+            ? volumetricAtmosphereRenderer.ActiveLightCount()
             : 0;
 
     atmosphereDiagnostics.dustEligible = targetSupported
@@ -1748,7 +1752,7 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
                         == SectorAtmosphereBackend::Unified
                 ? "unified medium inactive; dust only"
                 : "legacy backend active";
-    } else if (quality == SectorTopologyFogSettings::LocalVolumeQuality::Off) {
+    } else if (quality == SectorTopologyFogSettings::VolumetricQuality::Off) {
         atmosphereDiagnostics.fallbackStatus =
                 "inactive: volumetric quality Off and no visible dust";
     } else {
@@ -1762,14 +1766,15 @@ bool SectorMeshRenderer::PrepareWorldAtmosphere(
         const SectorTopologyMap& map,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes)
 {
+    static_cast<void>(objectLightProbes);
     if (atmosphereBackend != SectorAtmosphereBackend::Unified) {
         volumetricAtmosphereRenderer.ResetPreparedFrame();
         return true;
     }
     const auto effectiveQuality =
-            static_cast<int>(map.fogSettings.localVolumeQuality)
+            static_cast<int>(map.fogSettings.volumetricQuality)
                     < static_cast<int>(volumetricQualityCap)
-            ? map.fogSettings.localVolumeQuality
+            ? map.fogSettings.volumetricQuality
             : volumetricQualityCap;
     return volumetricAtmosphereRenderer.Prepare(
             sceneTarget,
@@ -1777,11 +1782,11 @@ bool SectorMeshRenderer::PrepareWorldAtmosphere(
             effectiveQuality,
             camera,
             runtimeSeconds,
-            objectLightProbes,
             BuildBillboardDynamicLightContext(),
             lightAtmosphereSources,
             visibilityResult,
-            meshes.sectorReceiverBounds);
+            meshes.sectorReceiverBounds,
+            dynamicLightingEnabled);
 }
 
 bool SectorMeshRenderer::ApplyWorldAtmosphere(
@@ -1790,9 +1795,9 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes)
 {
     const auto effectiveVolumetricQuality =
-            static_cast<int>(map.fogSettings.localVolumeQuality)
+            static_cast<int>(map.fogSettings.volumetricQuality)
                     < static_cast<int>(volumetricQualityCap)
-            ? map.fogSettings.localVolumeQuality
+            ? map.fogSettings.volumetricQuality
             : volumetricQualityCap;
     atmosphereDiagnostics.effectiveQuality = effectiveVolumetricQuality;
     atmosphereDiagnostics.sceneWidth = sceneTarget.native.texture.width;

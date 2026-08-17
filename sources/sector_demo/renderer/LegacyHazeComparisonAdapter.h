@@ -47,7 +47,7 @@ public:
     int Build(
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& probes,
-            SectorTopologyFogSettings::LocalVolumeQuality quality,
+            SectorTopologyFogSettings::VolumetricQuality quality,
             const Camera3D& camera,
             float aspectRatio,
             const SectorBillboardDynamicLightContext& dynamicLights,

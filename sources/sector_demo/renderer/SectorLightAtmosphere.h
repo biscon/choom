@@ -5,6 +5,7 @@
 
 #include <raylib.h>
 
+#include <array>
 #include <cstddef>
 #include <vector>
 
@@ -33,9 +34,40 @@ struct SectorLightAtmosphereSource {
     int ownerSectorId = 0;
     Vector3 positionWorld = {};
     Vector3 directionWorld = {0.0f, -1.0f, 0.0f};
+    Color color = WHITE;
+    float intensity = 0.0f;
     float rangeWorld = 0.0f;
+    float innerConeCos = -1.0f;
     float outerConeCos = -1.0f;
+    bool flicker = false;
+    float flickerSpeed = DynamicLightFlickerDefaultSpeed;
+    float flickerAmount = DynamicLightFlickerDefaultAmount;
     SectorLightAtmosphereSettings atmosphere;
+};
+
+inline constexpr std::size_t SectorTemporaryVolumetricLightCapacity = 8;
+
+struct SectorVolumetricLightRecord {
+    SectorLightAtmosphereSourceKind kind =
+            SectorLightAtmosphereSourceKind::StaticPoint;
+    int lightId = 0;
+    Vector3 positionWorld = {};
+    Vector3 directionWorld = {0.0f, -1.0f, 0.0f};
+    Color color = WHITE;
+    float rangeWorld = 0.0f;
+    float effectiveIntensity = 0.0f;
+    float innerConeCos = -1.0f;
+    float outerConeCos = -1.0f;
+    bool flicker = false;
+    float flickerSpeed = DynamicLightFlickerDefaultSpeed;
+    float flickerAmount = DynamicLightFlickerDefaultAmount;
+};
+
+struct SectorVolumetricLightSelection {
+    std::array<SectorVolumetricLightRecord,
+            SectorTemporaryVolumetricLightCapacity> lights{};
+    int eligibleCount = 0;
+    int activeCount = 0;
 };
 
 struct SectorLightAtmosphereVolume {
@@ -54,6 +86,16 @@ void BuildSectorLightAtmosphereSources(
         const SectorTopologyMap& map,
         const SectorCollisionWorld* sectorLookupWorld,
         std::vector<SectorLightAtmosphereSource>& outSources);
+
+SectorVolumetricLightSelection SelectSectorTemporaryVolumetricLights(
+        const std::vector<SectorLightAtmosphereSource>& sources,
+        const RuntimePortalVisibilityResult& visibility,
+        const std::vector<SectorReceiverBounds>& receiverBounds,
+        const Camera3D& camera,
+        float aspectRatio,
+        float nearPlane,
+        float maximumDistanceWorld,
+        bool dynamicLightingEnabled);
 
 bool MakeSectorLightAtmosphereVolume(
         const SectorLightAtmosphereSource& source,

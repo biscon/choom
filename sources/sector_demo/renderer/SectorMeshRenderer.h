@@ -152,7 +152,7 @@ public:
     void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
     void SetGraphicsQuality(
-            SectorTopologyFogSettings::LocalVolumeQuality volumetricCap,
+            SectorTopologyFogSettings::VolumetricQuality volumetricCap,
             bool shadowsEnabled,
             int shadowMapResolution = DynamicSpotLightShadowMapResolution,
             float projectedShadowIntervalSeconds = 0.0f,
@@ -256,7 +256,7 @@ private:
     SectorAtmosphereCaptureMetadata BuildAtmosphereCaptureMetadata() const;
     void UpdateAtmosphereDiagnostics(
             const engine::RenderTarget& sceneTarget,
-            SectorTopologyFogSettings::LocalVolumeQuality quality,
+            SectorTopologyFogSettings::VolumetricQuality quality,
             bool targetSupported,
             bool pipelineFailed,
             bool localFogApplied,
@@ -351,8 +351,8 @@ private:
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
-    SectorTopologyFogSettings::LocalVolumeQuality volumetricQualityCap =
-            SectorTopologyFogSettings::LocalVolumeQuality::High;
+    SectorTopologyFogSettings::VolumetricQuality volumetricQualityCap =
+            SectorTopologyFogSettings::VolumetricQuality::High;
     bool shadowMapsEnabled = true;
     float dynamicModelShadowIntervalSeconds = 0.0f;
     float lastDynamicModelShadowRenderSeconds = -1000.0f;

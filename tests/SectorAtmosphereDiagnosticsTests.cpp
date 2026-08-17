@@ -24,7 +24,7 @@ bool Near(double left, double right)
 
 void TestQualityContractsAndLegacyParity()
 {
-    using Quality = game::SectorTopologyFogSettings::LocalVolumeQuality;
+    using Quality = game::SectorTopologyFogSettings::VolumetricQuality;
     const game::SectorVolumetricQualityContract low =
             game::GetSectorVolumetricQualityContract(Quality::Low);
     const game::SectorVolumetricQualityContract medium =
@@ -69,7 +69,7 @@ void TestQualityContractsAndLegacyParity()
 
 void TestGridAtlasAndClusterLayouts()
 {
-    using Quality = game::SectorTopologyFogSettings::LocalVolumeQuality;
+    using Quality = game::SectorTopologyFogSettings::VolumetricQuality;
     const game::SectorVolumetricGridSize low =
             game::ComputeSectorVolumetricGridSize(Quality::Low, 1920, 1080);
     Check(low.x == 120 && low.y == 68 && low.z == 32,
@@ -140,7 +140,7 @@ void TestStatisticsAndFormatting()
 
     game::SectorAtmosphereDiagnostics diagnostics;
     diagnostics.effectiveQuality =
-            game::SectorTopologyFogSettings::LocalVolumeQuality::Medium;
+            game::SectorTopologyFogSettings::VolumetricQuality::Medium;
     diagnostics.sceneWidth = 2880;
     diagnostics.sceneHeight = 1620;
     diagnostics.haze.eligibleCount = 11;
@@ -168,7 +168,7 @@ void TestStatisticsAndFormatting()
 game::SectorAtmosphereCaptureMetadata MakeMetadata()
 {
     game::SectorAtmosphereCaptureMetadata metadata;
-    metadata.quality = game::SectorTopologyFogSettings::LocalVolumeQuality::High;
+    metadata.quality = game::SectorTopologyFogSettings::VolumetricQuality::High;
     metadata.sceneWidth = 2880;
     metadata.sceneHeight = 1620;
     metadata.hazeEligible = 11;

@@ -32,6 +32,11 @@ void TestCombinedDensityAndStaticRadiance()
     second.extinction = 0.75f;
     second.extinctionWeightedTint = Vector3{0.0f, 0.75f, 0.0f};
     second.extinctionWeightedStaticRadiance = Vector3{0.0f, 1.5f, 0.0f};
+    const auto globalOnly = game::CombineSectorVolumetricMediumSamples(first, {});
+    const auto localOnly = game::CombineSectorVolumetricMediumSamples({}, second);
+    Check(Near(globalOnly.extinction, 0.25f)
+                    && Near(localOnly.extinction, 0.75f),
+          "global-only and local-only medium density remain independently valid");
     const auto combined = game::CombineSectorVolumetricMediumSamples(first, second);
     Check(Near(combined.extinction, 1.0f)
                     && Near(combined.extinctionWeightedTint.x, 0.25f)
@@ -98,9 +103,54 @@ void TestAnalyticFogHandoff()
                        0.0f),
           "analytic fog contributes no tail inside the volumetric range");
     const float tail = game::ComputeSectorAnalyticFogTailOpacity(
-            settings, camera, Vector3{0.0f, 0.0f, 48.0f}, 32.0f);
+            settings,
+            camera,
+            Vector3{0.0f, 0.0f, 48.0f},
+            settings.volumetricMaxDistanceWorld);
     Check(tail > 0.0f && tail < settings.maxOpacity,
           "analytic fog continues beyond the finite volumetric range");
+    const float fullOpticalDepth = game::ComputeSectorFogOpticalDepth(
+            settings, camera, Vector3{0.0f, 0.0f, 48.0f}, 48.0f);
+    Check(Near(
+                  game::ComputeSectorAnalyticFogTailOpacity(
+                          settings,
+                          camera,
+                          Vector3{0.0f, 0.0f, 48.0f},
+                          0.0f),
+                  1.0f - std::exp(-fullOpticalDepth)),
+          "quality Off or unavailable resources restore full analytic fog");
+}
+
+void TestFinalAtmosphereSettingNormalization()
+{
+    game::SectorTopologyFogSettings settings;
+    settings.anisotropy = -5.0f;
+    settings.volumetricMaxDistanceWorld = 999.0f;
+    settings = game::NormalizeSectorTopologyFogSettings(settings);
+    Check(Near(settings.anisotropy, -0.90f)
+                    && Near(settings.volumetricMaxDistanceWorld, 256.0f),
+          "authored volumetric settings clamp to final limits");
+    settings.anisotropy = std::numeric_limits<float>::quiet_NaN();
+    settings.volumetricMaxDistanceWorld =
+            std::numeric_limits<float>::infinity();
+    settings = game::NormalizeSectorTopologyFogSettings(settings);
+    Check(Near(settings.anisotropy, 0.20f)
+                    && Near(settings.volumetricMaxDistanceWorld, 32.0f),
+          "non-finite volumetric settings restore final defaults");
+
+    game::SectorLightAtmosphereSettings light;
+    light.volumetricScatteringIntensity = -1.0f;
+    Check(Near(
+                  game::NormalizeSectorLightAtmosphereSettings(light)
+                          .volumetricScatteringIntensity,
+                  0.0f),
+          "zero is the normalized lower bound for volumetric light scattering");
+    light.volumetricScatteringIntensity = 20.0f;
+    Check(Near(
+                  game::NormalizeSectorLightAtmosphereSettings(light)
+                          .volumetricScatteringIntensity,
+                  8.0f),
+          "high volumetric light scattering clamps to eight");
 }
 
 } // namespace
@@ -111,6 +161,7 @@ int main()
     TestBeerLambertIntegrationAndPremultipliedComposition();
     TestPhaseAndDepthClipping();
     TestAnalyticFogHandoff();
+    TestFinalAtmosphereSettingNormalization();
     if (failures != 0) {
         std::cerr << failures << " SectorVolumetricAtmosphereTests failure(s)\n";
         return 1;

@@ -60,7 +60,7 @@ public:
     bool Init(engine::EngineContext& context);
     void Shutdown(engine::EngineContext& context);
     void SetPreviewGraphicsQuality(
-            SectorTopologyFogSettings::LocalVolumeQuality volumetricCap,
+            SectorTopologyFogSettings::VolumetricQuality volumetricCap,
             bool shadowsEnabled,
             int shadowMapResolution,
             float projectedShadowIntervalSeconds,

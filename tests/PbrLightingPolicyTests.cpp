@@ -550,6 +550,14 @@ void TestHdrEffectShaderAndPassPolicies()
                     && unified.find("atmosphere/=max(totalWeight,0.0001)")
                             != std::string::npos,
           "unified prototype performs one depth-clipped march and bilateral composite");
+    Check(unified.find("hazeVolumeCount") == std::string::npos
+                    && unified.find("hazeLighting") == std::string::npos
+                    && unified.find("localLighting") == std::string::npos
+                    && unified.find("weightedStatic") == std::string::npos
+                    && unified.find("fogSettings.volumetricMaxDistanceWorld")
+                            != std::string::npos
+                    && unified.find("fogSettings.anisotropy") != std::string::npos,
+          "unified density uses only global/local media and authored atmosphere settings");
     Check(mainGraph.find("glBeginQuery(GL_TIME_ELAPSED") != std::string::npos
                     && mainGraph.find("RenderProfilePass::Atmosphere") != std::string::npos,
           "aggregate delayed GL_TIME_ELAPSED atmosphere timing remains intact");

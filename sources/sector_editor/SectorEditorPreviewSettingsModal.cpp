@@ -414,25 +414,25 @@ void DrawPreviewSettingsModal(
         engine::Text(
                 ui, config, assets,
                 Rectangle{0.0f, contentY, contentW, 24.0f},
-                font, "Local volume quality", engine::UITextJustify::Left, config.textColor);
+                font, "Volumetric quality", engine::UITextJustify::Left, config.textColor);
         contentY += 28.0f;
         const float qualityGap = 6.0f;
         const float qualityWidth = (contentW - qualityGap * 3.0f) * 0.25f;
-        const SectorTopologyFogSettings::LocalVolumeQuality qualities[] = {
-                SectorTopologyFogSettings::LocalVolumeQuality::Off,
-                SectorTopologyFogSettings::LocalVolumeQuality::Low,
-                SectorTopologyFogSettings::LocalVolumeQuality::Medium,
-                SectorTopologyFogSettings::LocalVolumeQuality::High};
+        const SectorTopologyFogSettings::VolumetricQuality qualities[] = {
+                SectorTopologyFogSettings::VolumetricQuality::Off,
+                SectorTopologyFogSettings::VolumetricQuality::Low,
+                SectorTopologyFogSettings::VolumetricQuality::Medium,
+                SectorTopologyFogSettings::VolumetricQuality::High};
         const char* qualityNames[] = {"Off", "Low", "Medium", "High"};
         for (int qualityIndex = 0; qualityIndex < 4; ++qualityIndex) {
             if (engine::ToolButton(
                         ui, config, input, assets,
-                        TextFormat("sector_editor_preview_local_fog_quality_%d", qualityIndex),
+                        TextFormat("sector_editor_preview_volumetric_quality_%d", qualityIndex),
                         Rectangle{qualityIndex * (qualityWidth + qualityGap), contentY, qualityWidth, rowH},
                         font,
                         qualityNames[qualityIndex],
-                        modalState.draftFogSettings.localVolumeQuality == qualities[qualityIndex])) {
-                modalState.draftFogSettings.localVolumeQuality = qualities[qualityIndex];
+                        modalState.draftFogSettings.volumetricQuality == qualities[qualityIndex])) {
+                modalState.draftFogSettings.volumetricQuality = qualities[qualityIndex];
             }
         }
         contentY += rowH + gap;
@@ -456,6 +456,8 @@ void DrawPreviewSettingsModal(
         drawFloat(contentY, "sector_editor_preview_fog_max_opacity", "Maximum opacity", modalState.draftFogSettings.maxOpacity, modalState.fogMaxOpacityInput, 0.0f, 1.0f, 3);
         drawFloat(contentY, "sector_editor_preview_fog_reference_height", "Reference height", modalState.draftFogSettings.referenceHeightWorld, modalState.fogReferenceHeightInput, -512.0f, 512.0f, 2);
         drawFloat(contentY, "sector_editor_preview_fog_height_falloff", "Height falloff", modalState.draftFogSettings.heightFalloff, modalState.fogHeightFalloffInput, 0.0f, 16.0f, 3);
+        drawFloat(contentY, "sector_editor_preview_fog_anisotropy", "Anisotropy", modalState.draftFogSettings.anisotropy, modalState.fogAnisotropyInput, -0.90f, 0.90f, 3);
+        drawFloat(contentY, "sector_editor_preview_fog_volumetric_max_distance", "Volumetric maximum distance", modalState.draftFogSettings.volumetricMaxDistanceWorld, modalState.fogVolumetricMaxDistanceInput, 1.0f, 256.0f, 2);
         modalState.draftFogSettings = NormalizeSectorTopologyFogSettings(modalState.draftFogSettings);
 
         engine::Text(

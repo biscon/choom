@@ -662,12 +662,13 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         FormatSectorAtmosphereBytes(
                                 diagnostics.haze.estimatedBytes).c_str()));
                 addKeyValue("unified", TextFormat(
-                        "%dx%d RGBA16F | %d steps | integrations %d | lights %d | %s",
+                        "%dx%d RGBA16F | %d steps | integrations %d | lights %d/%d | %s",
                         diagnostics.unified.width,
                         diagnostics.unified.height,
                         diagnostics.unified.marchSteps,
                         diagnostics.unifiedIntegrationCount,
-                        diagnostics.unifiedDynamicLightCount,
+                        diagnostics.unifiedLightEligibleCount,
+                        diagnostics.unifiedLightActiveCount,
                         FormatSectorAtmosphereBytes(
                                 diagnostics.unified.estimatedBytes).c_str()));
                 addKeyValue("dust", TextFormat(

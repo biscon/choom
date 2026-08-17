@@ -14,8 +14,6 @@ inline constexpr int SectorVolumetricLightRecordTexels = 4;
 inline constexpr int SectorVolumetricClusterListTexels = 4;
 inline constexpr int SectorVolumetricFirstReservedIndex = 254;
 inline constexpr int SectorVolumetricListTerminator = 255;
-inline constexpr float SectorVolumetricPrototypeMaximumDistanceWorld = 32.0f;
-inline constexpr float SectorVolumetricPrototypeAnisotropy = 0.20f;
 static_assert(SectorVolumetricMaximumViewLights
         == SectorVolumetricFirstReservedIndex);
 static_assert(SectorVolumetricMaximumViewVolumes
@@ -68,13 +66,13 @@ struct SectorLegacyAtmosphereQualityContract {
 };
 
 const char* SectorVolumetricQualityName(
-        SectorTopologyFogSettings::LocalVolumeQuality quality);
+        SectorTopologyFogSettings::VolumetricQuality quality);
 SectorVolumetricQualityContract GetSectorVolumetricQualityContract(
-        SectorTopologyFogSettings::LocalVolumeQuality quality);
+        SectorTopologyFogSettings::VolumetricQuality quality);
 SectorLegacyAtmosphereQualityContract GetSectorLegacyAtmosphereQualityContract(
-        SectorTopologyFogSettings::LocalVolumeQuality quality);
+        SectorTopologyFogSettings::VolumetricQuality quality);
 SectorVolumetricGridSize ComputeSectorVolumetricGridSize(
-        SectorTopologyFogSettings::LocalVolumeQuality quality,
+        SectorTopologyFogSettings::VolumetricQuality quality,
         int sceneWidth,
         int sceneHeight);
 SectorVolumetricAtlasLayout ComputeSectorVolumetricAtlasLayout(

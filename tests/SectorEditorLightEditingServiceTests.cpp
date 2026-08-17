@@ -586,13 +586,16 @@ void TestAtmosphereEditUsesDocumentMutationBoundary()
             inspectorIdUiState,
             statusText);
     game::SectorLightAtmosphereSettings atmosphere;
+    atmosphere.volumetricScatteringIntensity = 3.5f;
     atmosphere.haze.enabled = true;
     atmosphere.dust.enabled = true;
     atmosphere.dust.amount = 35;
     Check(service.SetStaticLightAtmosphere(
                   documentState.map.topologyMap.staticLights.front(), atmosphere),
           "atmosphere edit reports a change");
-    Check(documentState.map.topologyMap.staticLights.front().atmosphere.haze.enabled
+    Check(documentState.map.topologyMap.staticLights.front().atmosphere
+                          .volumetricScatteringIntensity == 3.5f
+                  && documentState.map.topologyMap.staticLights.front().atmosphere.haze.enabled
                   && documentState.map.topologyMap.staticLights.front().atmosphere.dust.enabled
                   && documentState.map.topologyMap.staticLights.front().atmosphere.dust.amount == 35,
           "atmosphere edit writes normalized light data");

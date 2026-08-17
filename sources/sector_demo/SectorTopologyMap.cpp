@@ -76,6 +76,13 @@ SectorLightDustSettings NormalizeSectorLightDustSettings(SectorLightDustSettings
 SectorLightAtmosphereSettings NormalizeSectorLightAtmosphereSettings(
         SectorLightAtmosphereSettings settings)
 {
+    const SectorLightAtmosphereSettings defaults;
+    settings.volumetricScatteringIntensity = std::clamp(
+            FiniteOr(
+                    settings.volumetricScatteringIntensity,
+                    defaults.volumetricScatteringIntensity),
+            0.0f,
+            8.0f);
     settings.haze = NormalizeSectorLightHazeSettings(settings.haze);
     settings.dust = NormalizeSectorLightDustSettings(settings.dust);
     return settings;
@@ -113,8 +120,13 @@ bool IsDefaultSectorLightDustSettings(const SectorLightDustSettings& settings)
 
 bool IsDefaultSectorLightAtmosphereSettings(const SectorLightAtmosphereSettings& settings)
 {
-    return IsDefaultSectorLightHazeSettings(settings.haze)
-            && IsDefaultSectorLightDustSettings(settings.dust);
+    const SectorLightAtmosphereSettings value =
+            NormalizeSectorLightAtmosphereSettings(settings);
+    const SectorLightAtmosphereSettings defaults;
+    return value.volumetricScatteringIntensity
+                    == defaults.volumetricScatteringIntensity
+            && IsDefaultSectorLightHazeSettings(value.haze)
+            && IsDefaultSectorLightDustSettings(value.dust);
 }
 namespace {
 
@@ -155,6 +167,10 @@ constexpr float FogReferenceHeightMin = -512.0f;
 constexpr float FogReferenceHeightMax = 512.0f;
 constexpr float FogHeightFalloffMin = 0.0f;
 constexpr float FogHeightFalloffMax = 16.0f;
+constexpr float FogAnisotropyMin = -0.90f;
+constexpr float FogAnisotropyMax = 0.90f;
+constexpr float FogVolumetricMaxDistanceMin = 1.0f;
+constexpr float FogVolumetricMaxDistanceMax = 256.0f;
 constexpr float DoorAnchorSideProbeDistance = 0.001f;
 constexpr float DoorAnchorSideEpsilon = 0.000001f;
 
@@ -339,6 +355,16 @@ SectorTopologyFogSettings NormalizeSectorTopologyFogSettings(SectorTopologyFogSe
             FogHeightFalloffMin,
             FogHeightFalloffMax,
             defaults.heightFalloff);
+    settings.anisotropy = ClampFinite(
+            settings.anisotropy,
+            FogAnisotropyMin,
+            FogAnisotropyMax,
+            defaults.anisotropy);
+    settings.volumetricMaxDistanceWorld = ClampFinite(
+            settings.volumetricMaxDistanceWorld,
+            FogVolumetricMaxDistanceMin,
+            FogVolumetricMaxDistanceMax,
+            defaults.volumetricMaxDistanceWorld);
     return settings;
 }
 
