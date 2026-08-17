@@ -290,14 +290,20 @@ std::string FormatSectorAtmosphereDiagnosticsSummary(
                << SectorVolumetricQualityName(diagnostics.effectiveQuality);
     }
     stream
-           << " | scene " << diagnostics.sceneWidth << 'x' << diagnostics.sceneHeight
-           << " | fog " << diagnostics.localFog.eligibleCount << '/'
-           << diagnostics.localFog.activeCount
-           << " | haze " << diagnostics.haze.eligibleCount << '/'
-           << diagnostics.haze.activeCount
-           << " | unified " << diagnostics.unifiedIntegrationCount
-           << " lights " << diagnostics.unifiedLightEligibleCount << '/'
-           << diagnostics.unifiedLightActiveCount
+           << " | scene " << diagnostics.sceneWidth << 'x' << diagnostics.sceneHeight;
+    if (diagnostics.backend == SectorAtmosphereBackend::Legacy) {
+        stream << " | legacy fog " << diagnostics.localFog.eligibleCount << '/'
+               << diagnostics.localFog.activeCount
+               << " | legacy haze " << diagnostics.haze.eligibleCount << '/'
+               << diagnostics.haze.activeCount;
+    } else {
+        stream << " | medium volumes " << diagnostics.localFog.eligibleCount << '/'
+               << diagnostics.localFog.activeCount
+               << " | lights " << diagnostics.unifiedLightEligibleCount << '/'
+               << diagnostics.unifiedLightActiveCount
+               << " | integrations " << diagnostics.unifiedIntegrationCount;
+    }
+    stream
            << " | dust " << diagnostics.dustEligible << '/'
            << diagnostics.dustActive
            << " | " << FormatSectorAtmosphereBytes(

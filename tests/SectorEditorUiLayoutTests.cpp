@@ -630,14 +630,14 @@ void TestPreviewNavigationTabLayout()
     const auto atmosphere = game::BuildSectorEditorPreviewAtmosphereOverlayLayout(
             atmospherePanel, 10.0f, 104.0f, 24.0f, 6.0f);
     Check(Contains(atmospherePanel, atmosphere.backend)
-                  && Contains(atmospherePanel, atmosphere.debugView)
-                  && Contains(atmospherePanel, atmosphere.freezeHistory)
+                  && Contains(atmospherePanel, atmosphere.debugViews[0])
+                  && Contains(atmospherePanel, atmosphere.debugViews[1])
                   && Contains(atmospherePanel, atmosphere.capture)
                   && Contains(atmospherePanel, atmosphere.copyReport)
                   && Contains(atmospherePanel, atmosphere.diagnosticsScroll),
           "atmosphere controls and diagnostics scroll viewport stay inside the panel");
-    Check(!Overlaps(atmosphere.backend, atmosphere.debugView)
-                  && !Overlaps(atmosphere.debugView, atmosphere.freezeHistory)
+    Check(!Overlaps(atmosphere.backend, atmosphere.debugViews[0])
+                  && !Overlaps(atmosphere.debugViews[0], atmosphere.debugViews[1])
                   && !Overlaps(atmosphere.backend, atmosphere.capture)
                   && !Overlaps(atmosphere.capture, atmosphere.copyReport)
                   && atmosphere.diagnosticsScroll.y

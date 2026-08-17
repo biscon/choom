@@ -182,25 +182,21 @@ void TestTemporalPoliciesAndJitter()
     const auto low = game::GetSectorVolumetricTemporalPolicy(Quality::Low);
     const auto medium = game::GetSectorVolumetricTemporalPolicy(Quality::Medium);
     const auto high = game::GetSectorVolumetricTemporalPolicy(Quality::High);
-    Check(!low.enabled && low.jitterPeriod == 1
-                    && medium.enabled && medium.jitterPeriod == 8
-                    && Near(medium.baseCurrentFrameWeight, 0.20f)
-                    && Near(medium.responsiveCurrentFrameWeight, 0.65f)
-                    && high.enabled && high.jitterPeriod == 16
-                    && Near(high.baseCurrentFrameWeight, 0.10f)
-                    && Near(high.responsiveCurrentFrameWeight, 0.50f),
-          "temporal quality policies use fixed internal jitter and blend weights");
+    Check(!low.enabled && !medium.enabled && !high.enabled
+                    && low.jitterPeriod == 1
+                    && medium.jitterPeriod == 1
+                    && high.jitterPeriod == 1,
+          "stabilized volumetric quality policies are current-frame only");
     const Vector3 centered = game::ComputeSectorVolumetricJitter(Quality::Low, 12);
     const Vector3 first = game::ComputeSectorVolumetricJitter(Quality::Medium, 0);
     const Vector3 wrapped = game::ComputeSectorVolumetricJitter(Quality::Medium, 8);
     Check(Near(centered.x, 0.0f) && Near(centered.y, 0.0f)
                     && Near(centered.z, 0.5f)
+                    && Near(first.x, 0.0f) && Near(first.y, 0.0f)
+                    && Near(first.z, 0.5f)
                     && Near(first.x, wrapped.x) && Near(first.y, wrapped.y)
-                    && Near(first.z, wrapped.z)
-                    && first.x >= -0.5f && first.x <= 0.5f
-                    && first.y >= -0.5f && first.y <= 0.5f
-                    && first.z >= 0.0f && first.z <= 1.0f,
-          "jitter is deterministic, bounded, and wraps at the quality period");
+                    && Near(first.z, wrapped.z),
+          "current-frame sampling stays centered at every quality");
 }
 
 void TestTemporalReprojectionAndDepthPolicy()
@@ -210,16 +206,30 @@ void TestTemporalReprojectionAndDepthPolicy()
     Check(game::ReprojectSectorVolumetricHistoryUv(
                     Vector2{0.25f, 0.75f}, 0.5f,
                     MatrixIdentity(), MatrixIdentity(),
-                    Vector2{0.01f, -0.02f}, Vector2{0.01f, -0.02f},
                     historyUv, previousDepth)
                     && Near(historyUv.x, 0.25f)
                     && Near(historyUv.y, 0.75f)
                     && Near(previousDepth, 0.5f),
-          "identity reprojection preserves UV and depth after jitter compensation");
+          "identity reprojection preserves unjittered screen UV and depth");
+    const Matrix view = MatrixLookAt(
+            Vector3{3.0f, 1.5f, -4.0f},
+            Vector3{1.0f, 1.0f, 2.0f},
+            Vector3{0.0f, 1.0f, 0.0f});
+    const Matrix projection = MatrixPerspective(
+            70.0 * DEG2RAD, 16.0 / 9.0, 0.05, 1000.0);
+    const Matrix viewProjection = MatrixMultiply(view, projection);
+    Check(game::ReprojectSectorVolumetricHistoryUv(
+                    Vector2{0.37f, 0.61f}, 0.997f,
+                    MatrixInvert(viewProjection), viewProjection,
+                    historyUv, previousDepth)
+                    && Near(historyUv.x, 0.37f, 0.0001f)
+                    && Near(historyUv.y, 0.61f, 0.0001f)
+                    && Near(previousDepth, 0.997f, 0.0001f),
+          "camera view-projection inversion preserves stable history coordinates");
     Check(!game::ReprojectSectorVolumetricHistoryUv(
                     Vector2{0.9f, 0.5f}, 0.5f,
                     MatrixIdentity(), MatrixTranslate(2.0f, 0.0f, 0.0f),
-                    Vector2{}, Vector2{}, historyUv, previousDepth),
+                    historyUv, previousDepth),
           "reprojection rejects history outside the previous viewport");
     Check(game::AcceptSectorVolumetricHistoryDepth(10.0f, 10.15f)
                     && !game::AcceptSectorVolumetricHistoryDepth(10.0f, 10.25f)

@@ -32,16 +32,13 @@ void TestQualityContractsAndLegacyParity()
     const game::SectorVolumetricQualityContract high =
             game::GetSectorVolumetricQualityContract(Quality::High);
     Check(low.referenceWidth == 120 && low.referenceHeight == 68
-                    && low.depthSlices == 32 && low.clusterBands == 4
-                    && !low.temporalResolve,
+                    && low.depthSlices == 32 && low.clusterBands == 4,
           "Low volumetric preset matches the fixed contract");
     Check(medium.referenceWidth == 160 && medium.referenceHeight == 90
-                    && medium.depthSlices == 48 && medium.clusterBands == 6
-                    && medium.temporalResolve,
+                    && medium.depthSlices == 48 && medium.clusterBands == 6,
           "Medium volumetric preset matches the fixed contract");
     Check(high.referenceWidth == 240 && high.referenceHeight == 135
-                    && high.depthSlices == 64 && high.clusterBands == 8
-                    && high.temporalResolve,
+                    && high.depthSlices == 64 && high.clusterBands == 8,
           "High volumetric preset matches the fixed contract");
 
     const game::SectorLegacyAtmosphereQualityContract legacyLow =
@@ -74,6 +71,10 @@ void TestGridAtlasAndClusterLayouts()
             game::ComputeSectorVolumetricGridSize(Quality::Low, 1920, 1080);
     Check(low.x == 120 && low.y == 68 && low.z == 32,
           "16:9 Low grid uses its reference cap");
+    const game::SectorVolumetricGridSize lowClusters =
+            game::ComputeSectorVolumetricClusterGridSize(low);
+    Check(lowClusters.x == 30 && lowClusters.y == 17 && lowClusters.z == 32,
+          "cluster culling uses four-by-four froxel tiles");
     const game::SectorVolumetricGridSize fourByThree =
             game::ComputeSectorVolumetricGridSize(Quality::Low, 1024, 768);
     Check(fourByThree.x == 91 && fourByThree.y == 68,
@@ -220,7 +221,7 @@ void TestStatisticsAndFormatting()
     const std::string summary =
             game::FormatSectorAtmosphereDiagnosticsSummary(diagnostics);
     Check(summary.find("Legacy Medium") != std::string::npos
-                    && summary.find("haze 11/4") != std::string::npos
+                    && summary.find("legacy haze 11/4") != std::string::npos
                     && summary.find("legacy backend active") != std::string::npos,
           "legacy diagnostic summary contains quality, counts, and status");
     diagnostics.backend = game::SectorAtmosphereBackend::Unified;
@@ -228,8 +229,10 @@ void TestStatisticsAndFormatting()
     const std::string unifiedSummary =
             game::FormatSectorAtmosphereDiagnosticsSummary(diagnostics);
     Check(unifiedSummary.find("Unified Medium") != std::string::npos
-                    && unifiedSummary.find("unified 1") != std::string::npos,
-          "unified diagnostic summary identifies its backend and one integration");
+                    && unifiedSummary.find("medium volumes") != std::string::npos
+                    && unifiedSummary.find("integrations 1") != std::string::npos
+                    && unifiedSummary.find("legacy haze") == std::string::npos,
+          "unified diagnostic summary identifies medium, lights, and one integration without legacy haze counters");
     Check(std::string(game::SectorAtmosphereGpuPassName(
                     game::SectorAtmosphereGpuPass::Unified))
                     == "unified integration/composite",

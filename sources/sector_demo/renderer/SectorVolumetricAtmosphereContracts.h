@@ -36,7 +36,6 @@ struct SectorVolumetricQualityContract {
     int referenceHeight = 0;
     int depthSlices = 0;
     int clusterBands = 0;
-    bool temporalResolve = false;
 };
 
 struct SectorVolumetricTemporalPolicy {
@@ -83,6 +82,7 @@ struct SectorVolumetricResourceLayout {
     SectorTopologyFogSettings::VolumetricQuality quality =
             SectorTopologyFogSettings::VolumetricQuality::Off;
     SectorVolumetricGridSize grid;
+    SectorVolumetricGridSize clusterGrid;
     SectorVolumetricAtlasLayout atlas;
     SectorVolumetricClusterListLayout clusters;
     int integratedWidth = 0;
@@ -114,6 +114,8 @@ SectorVolumetricGridSize ComputeSectorVolumetricGridSize(
         SectorTopologyFogSettings::VolumetricQuality quality,
         int sceneWidth,
         int sceneHeight);
+SectorVolumetricGridSize ComputeSectorVolumetricClusterGridSize(
+        SectorVolumetricGridSize froxelGrid);
 SectorVolumetricAtlasLayout ComputeSectorVolumetricAtlasLayout(
         SectorVolumetricGridSize grid);
 bool ComputeSectorVolumetricAtlasTexel(

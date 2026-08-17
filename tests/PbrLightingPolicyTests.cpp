@@ -551,21 +551,29 @@ void TestHdrEffectShaderAndPassPolicies()
                     && unified.find("uniform sampler2D sceneDepth")
                             != std::string::npos
                     && unified.find("vec4 packed=") == std::string::npos
-                    && unified.find("TemporalResolveFs") != std::string::npos
-                    && unified.find("depthWeight=exp(-difference/max(0.05,centerWorld*0.02))")
+                    && unified.find("temporalPolicy = {}") != std::string::npos
+                    && unified.find("globalOpticalDepth") != std::string::npos
+                    && unified.find("if(x!=0&&y!=0)continue")
                             != std::string::npos
-                    && unified.find("minimumValue=min(minimumValue,value)")
+                    && unified.find("float weight=exp(-difference*600.0)")
+                            != std::string::npos
+                    && unified.find("vec2 ndc=(vec2(cell)+vec2(0.5))/vec2(grid.xy)")
+                            != std::string::npos
+                    && unified.find("float depth=texture(sceneDepth,fragUv).r")
+                            != std::string::npos
+                    && unified.find("if(debugView==1){ivec2 size=")
+                            != std::string::npos
+                    && unified.find("atmosphere=texelFetch(atmosphereTexture,cell,0)")
                             != std::string::npos,
-          "unified backend injects and integrates froxels, resolves temporal history, and reconstructs bilaterally");
+          "unified backend uses centered current froxels, accumulated fog capping, and five-tap depth-aware reconstruction");
     Check(unified.find("uniform mat4 shadowLightMatrices[2]")
-                            != std::string::npos
+                            == std::string::npos
                     && unified.find("uniform sampler2D shadowMap0")
-                            != std::string::npos
+                            == std::string::npos
                     && unified.find("uniform sampler2D shadowMap1")
-                            != std::string::npos
-                    && unified.find("shadowSoftness[2]") != std::string::npos
+                            == std::string::npos
                     && unified.find("samplerCube") == std::string::npos,
-          "unified volumetrics reuse exactly two spotlight shadow maps without point-light cubemaps");
+          "stabilized unified volumetrics execute without shadow-map samplers");
     Check(unified.find("hazeVolumeCount") == std::string::npos
                     && unified.find("hazeLighting") == std::string::npos
                     && unified.find("localLighting") == std::string::npos

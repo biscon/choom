@@ -45,11 +45,11 @@ SectorVolumetricQualityContract GetSectorVolumetricQualityContract(
 {
     switch (quality) {
         case SectorTopologyFogSettings::VolumetricQuality::Low:
-            return SectorVolumetricQualityContract{120, 68, 32, 4, false};
+            return SectorVolumetricQualityContract{120, 68, 32, 4};
         case SectorTopologyFogSettings::VolumetricQuality::Medium:
-            return SectorVolumetricQualityContract{160, 90, 48, 6, true};
+            return SectorVolumetricQualityContract{160, 90, 48, 6};
         case SectorTopologyFogSettings::VolumetricQuality::High:
-            return SectorVolumetricQualityContract{240, 135, 64, 8, true};
+            return SectorVolumetricQualityContract{240, 135, 64, 8};
         case SectorTopologyFogSettings::VolumetricQuality::Off:
             return SectorVolumetricQualityContract{};
     }
@@ -59,15 +59,7 @@ SectorVolumetricQualityContract GetSectorVolumetricQualityContract(
 SectorVolumetricTemporalPolicy GetSectorVolumetricTemporalPolicy(
         SectorTopologyFogSettings::VolumetricQuality quality)
 {
-    switch (quality) {
-        case SectorTopologyFogSettings::VolumetricQuality::Medium:
-            return SectorVolumetricTemporalPolicy{true, 8, 0.20f, 0.65f};
-        case SectorTopologyFogSettings::VolumetricQuality::High:
-            return SectorVolumetricTemporalPolicy{true, 16, 0.10f, 0.50f};
-        case SectorTopologyFogSettings::VolumetricQuality::Off:
-        case SectorTopologyFogSettings::VolumetricQuality::Low:
-            return SectorVolumetricTemporalPolicy{};
-    }
+    (void)quality;
     return SectorVolumetricTemporalPolicy{};
 }
 
@@ -105,6 +97,17 @@ SectorVolumetricGridSize ComputeSectorVolumetricGridSize(
             std::clamp(static_cast<int>(std::lround(sceneHeight * scale)),
                     1, preset.referenceHeight),
             preset.depthSlices};
+}
+
+SectorVolumetricGridSize ComputeSectorVolumetricClusterGridSize(
+        SectorVolumetricGridSize froxelGrid)
+{
+    if (froxelGrid.x <= 0 || froxelGrid.y <= 0 || froxelGrid.z <= 0) return {};
+    constexpr int clusterTileSize = 4;
+    return SectorVolumetricGridSize{
+            (froxelGrid.x + clusterTileSize - 1) / clusterTileSize,
+            (froxelGrid.y + clusterTileSize - 1) / clusterTileSize,
+            froxelGrid.z};
 }
 
 SectorVolumetricAtlasLayout ComputeSectorVolumetricAtlasLayout(
@@ -213,11 +216,12 @@ SectorVolumetricResourceLayout ComputeSectorVolumetricResourceLayout(
     result.quality = quality;
     result.grid = ComputeSectorVolumetricGridSize(
             quality, sceneWidth, sceneHeight);
+    result.clusterGrid = ComputeSectorVolumetricClusterGridSize(result.grid);
     result.atlas = ComputeSectorVolumetricAtlasLayout(result.grid);
     const SectorVolumetricQualityContract contract =
             GetSectorVolumetricQualityContract(quality);
     result.clusters = ComputeSectorVolumetricClusterListLayout(
-            result.grid, contract.clusterBands);
+            result.clusterGrid, contract.clusterBands);
     result.integratedWidth = result.grid.x;
     result.integratedHeight = result.grid.y;
     return result;

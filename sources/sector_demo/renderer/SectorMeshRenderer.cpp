@@ -1726,6 +1726,7 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
     const SectorVolumetricClusterBuildDiagnostics& clusterDiagnostics =
             volumetricAtmosphereRenderer.ClusterDiagnostics();
     atmosphereDiagnostics.unifiedGrid = unifiedLayout.grid;
+    atmosphereDiagnostics.unifiedClusterGrid = unifiedLayout.clusterGrid;
     atmosphereDiagnostics.unifiedAtlasWidth = unifiedLayout.atlas.width;
     atmosphereDiagnostics.unifiedAtlasHeight = unifiedLayout.atlas.height;
     atmosphereDiagnostics.unifiedClusterListWidth = unifiedLayout.clusters.width;

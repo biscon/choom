@@ -186,6 +186,7 @@ struct SectorAtmosphereDiagnostics {
     int unifiedLightEligibleCount = 0;
     int unifiedLightActiveCount = 0;
     SectorVolumetricGridSize unifiedGrid;
+    SectorVolumetricGridSize unifiedClusterGrid;
     int unifiedAtlasWidth = 0;
     int unifiedAtlasHeight = 0;
     int unifiedClusterListWidth = 0;

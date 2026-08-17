@@ -80,7 +80,7 @@ const char* SectorVolumetricHistoryResetReasonName(
         case SectorVolumetricHistoryResetReason::CameraRotation: return "camera rotation";
         case SectorVolumetricHistoryResetReason::RenderGap: return "render gap";
         case SectorVolumetricHistoryResetReason::FreezeReleased: return "history unfrozen";
-        case SectorVolumetricHistoryResetReason::DebugViewChanged: return "history-weight debug ended";
+        case SectorVolumetricHistoryResetReason::DebugViewChanged: return "debug view changed";
     }
     return "unknown";
 }
@@ -156,8 +156,6 @@ bool ReprojectSectorVolumetricHistoryUv(
         float currentDepth,
         Matrix inverseCurrentViewProjection,
         Matrix previousViewProjection,
-        Vector2 currentJitterUv,
-        Vector2 previousJitterUv,
         Vector2& outHistoryUv,
         float& outExpectedPreviousDepth)
 {
@@ -167,10 +165,9 @@ bool ReprojectSectorVolumetricHistoryUv(
             || !std::isfinite(currentDepth)) {
         return false;
     }
-    const Vector2 sampledUv = Vector2Add(currentUv, currentJitterUv);
     const Vector4 clip{
-            sampledUv.x * 2.0f - 1.0f,
-            sampledUv.y * 2.0f - 1.0f,
+            currentUv.x * 2.0f - 1.0f,
+            currentUv.y * 2.0f - 1.0f,
             std::clamp(currentDepth, 0.0f, 1.0f) * 2.0f - 1.0f,
             1.0f};
     const Vector4 world = TransformHomogeneous(inverseCurrentViewProjection, clip);
@@ -189,8 +186,8 @@ bool ReprojectSectorVolumetricHistoryUv(
         return false;
     }
     outHistoryUv = Vector2{
-            previousNdc.x * 0.5f + 0.5f - previousJitterUv.x,
-            previousNdc.y * 0.5f + 0.5f - previousJitterUv.y};
+            previousNdc.x * 0.5f + 0.5f,
+            previousNdc.y * 0.5f + 0.5f};
     outExpectedPreviousDepth = previousNdc.z * 0.5f + 0.5f;
     return outHistoryUv.x >= 0.0f && outHistoryUv.x <= 1.0f
             && outHistoryUv.y >= 0.0f && outHistoryUv.y <= 1.0f

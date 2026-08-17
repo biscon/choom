@@ -68,8 +68,7 @@ inline float SectorEditorPreviewOverlayExpandedHeight(
 
 struct SectorEditorPreviewAtmosphereOverlayLayout {
     Rectangle backend;
-    Rectangle debugView;
-    Rectangle freezeHistory;
+    std::array<Rectangle, 2> debugViews;
     Rectangle capture;
     Rectangle copyReport;
     Rectangle diagnosticsScroll;
@@ -85,19 +84,23 @@ BuildSectorEditorPreviewAtmosphereOverlayLayout(
 {
     const float contentWidth = std::max(0.0f, panel.width - padding * 2.0f);
     const float controlGap = 8.0f;
-    const float backendWidth = 180.0f;
-    const float debugWidth = 190.0f;
-    const float freezeWidth = 170.0f;
+    const float debugGap = 4.0f;
+    const float backendWidth = 140.0f;
+    const float debugWidth = std::max(0.0f,
+            contentWidth - backendWidth - controlGap);
+    const float debugButtonWidth = std::max(0.0f,
+            (debugWidth - debugGap) / 2.0f);
+    const float debugLeft = panel.x + padding + backendWidth + controlGap;
     const float actionWidth = 132.0f;
     const float actionTop = contentTop + rowHeight + gap;
     const float scrollTop = actionTop + rowHeight + gap;
     return SectorEditorPreviewAtmosphereOverlayLayout{
             Rectangle{panel.x + padding, contentTop, backendWidth, rowHeight},
-            Rectangle{panel.x + padding + backendWidth + controlGap,
-                    contentTop, debugWidth, rowHeight},
-            Rectangle{panel.x + padding + backendWidth + controlGap
-                            + debugWidth + controlGap,
-                    contentTop, freezeWidth, rowHeight},
+            std::array<Rectangle, 2>{
+                    Rectangle{debugLeft, contentTop,
+                            debugButtonWidth, rowHeight},
+                    Rectangle{debugLeft + debugButtonWidth + debugGap,
+                            contentTop, debugButtonWidth, rowHeight}},
             Rectangle{panel.x + padding, actionTop, actionWidth, rowHeight},
             Rectangle{panel.x + padding + actionWidth + controlGap,
                     actionTop, actionWidth, rowHeight},

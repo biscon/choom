@@ -1381,11 +1381,13 @@
       "a": 255
     },
     "startDistanceWorld": 1.5,
-    "density": 0.05000000074505806,
+    "density": 0.25,
     "maxOpacity": 0.6499999761581421,
     "referenceHeightWorld": 1.0,
     "heightFalloff": 0.0,
-    "localVolumeQuality": "medium"
+    "anisotropy": 0.20000000298023224,
+    "volumetricMaxDistanceWorld": 32.0,
+    "volumetricQuality": "medium"
   },
   "audio": {
     "music": "ambience/horror_ambience.wav",

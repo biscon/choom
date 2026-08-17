@@ -670,7 +670,10 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             FormatSectorAtmosphereBytes(
                                     diagnostics.unified.estimatedBytes).c_str()));
                     addKeyValueStyled("clustered", TextFormat(
-                            "lights %d/%d overflow view %d cluster %llu | volumes %d/%d overflow view %d cluster %llu",
+                            "grid %dx%dx%d | lights %d/%d overflow view %d cluster %llu | volumes %d/%d overflow view %d cluster %llu",
+                            diagnostics.unifiedClusterGrid.x,
+                            diagnostics.unifiedClusterGrid.y,
+                            diagnostics.unifiedClusterGrid.z / 8,
                             diagnostics.unifiedLightEligibleCount,
                             diagnostics.unifiedLightActiveCount,
                             diagnostics.unifiedLightViewOverflowCount,
@@ -683,24 +686,14 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                                     diagnostics.unifiedVolumeClusterOverflowCount)),
                             smallConfig.mutedTextColor,
                             true);
-                    addKeyValue("history", TextFormat(
-                            "%s | %s | frames %llu | reset %s",
-                            diagnostics.unifiedHistoryEnabled ? "temporal" : "current-only",
-                            diagnostics.unifiedHistoryValid ? "valid"
-                                    : "invalid",
-                            static_cast<unsigned long long>(
-                                    diagnostics.unifiedHistoryFrameCount),
-                            SectorVolumetricHistoryResetReasonName(
-                                    diagnostics.unifiedHistoryResetReason)));
-                    addKeyValueStyled("temporal/debug", TextFormat(
-                            "jitter %d | current %.2f responsive %.2f | %s | %s | shadowed spots %d",
-                            diagnostics.unifiedJitterPeriod,
-                            diagnostics.unifiedBaseCurrentFrameWeight,
-                            diagnostics.unifiedResponsiveCurrentFrameWeight,
-                            diagnostics.unifiedHistoryFrozen ? "frozen" : "running",
+                    addKeyValueStyled("reconstruction", TextFormat(
+                            "centered current frame | 5-tap depth-aware upscale | %s",
                             SectorVolumetricDebugViewName(
-                                    diagnostics.unifiedDebugView),
-                            diagnostics.unifiedShadowedSpotLightCount),
+                                    diagnostics.unifiedDebugView)),
+                            smallConfig.mutedTextColor,
+                            true);
+                    addKeyValueStyled("debug key",
+                            "Froxels = nearest-sampled current integrated atmosphere; Composite = depth-aware upscale",
                             smallConfig.mutedTextColor,
                             true);
                 }
@@ -1707,48 +1700,33 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         }
 
         const SectorAtmosphereCapture& capture = preview.AtmosphereCapture();
-        const char* debugOptions[] = {
-                "Composite", "Froxels", "History Weight"};
-        int selectedDebugView = static_cast<int>(preview.AtmosphereDebugView());
-        if (mouseInteractive) {
-            if (engine::Option(
-                        ui, smallConfig, input, assets,
-                        "sector_editor_atmosphere_debug_view",
-                        atmosphereLayout.debugView, smallFont,
-                        debugOptions,
-                        sizeof(debugOptions) / sizeof(debugOptions[0]),
-                        selectedDebugView)) {
-                preview.SetAtmosphereDebugView(
-                        static_cast<SectorVolumetricDebugView>(selectedDebugView));
+        const char* debugLabels[] = {"Composite", "Froxels"};
+        for (int debugIndex = 0; debugIndex < 2; ++debugIndex) {
+            const auto debugView = static_cast<SectorVolumetricDebugView>(debugIndex);
+            if (mouseInteractive) {
+                if (engine::ToolButton(
+                            ui, smallConfig, input, assets,
+                            TextFormat("sector_editor_atmosphere_debug_view_%d",
+                                    debugIndex),
+                            atmosphereLayout.debugViews[
+                                    static_cast<std::size_t>(debugIndex)],
+                            smallFont, debugLabels[debugIndex],
+                            preview.AtmosphereDebugView() == debugView)) {
+                    preview.SetAtmosphereDebugView(debugView);
+                }
+            } else {
+                const Rectangle bounds = atmosphereLayout.debugViews[
+                        static_cast<std::size_t>(debugIndex)];
+                DrawRectangleRec(bounds,
+                        preview.AtmosphereDebugView() == debugView
+                                ? smallConfig.widgetActiveColor
+                                : Color{24, 30, 38, 155});
+                DrawRectangleLinesEx(bounds,
+                        config.borderThickness, config.borderColor);
+                engine::Text(smallConfig, assets, bounds, smallFont,
+                        debugLabels[debugIndex], engine::UITextJustify::Center,
+                        smallConfig.mutedTextColor);
             }
-            bool frozen = preview.AtmosphereHistoryFrozen();
-            if (engine::Checkbox(
-                        ui, smallConfig, input, assets,
-                        "sector_editor_atmosphere_freeze_history",
-                        atmosphereLayout.freezeHistory, smallFont,
-                        "Freeze History", frozen)) {
-                preview.SetAtmosphereHistoryFrozen(frozen);
-            }
-        } else {
-            DrawRectangleRec(atmosphereLayout.debugView, Color{24, 30, 38, 155});
-            DrawRectangleLinesEx(atmosphereLayout.debugView,
-                    config.borderThickness, config.borderColor);
-            engine::Text(smallConfig, assets, atmosphereLayout.debugView,
-                    smallFont,
-                    SectorVolumetricDebugViewName(preview.AtmosphereDebugView()),
-                    engine::UITextJustify::Center,
-                    smallConfig.mutedTextColor);
-            DrawRectangleRec(atmosphereLayout.freezeHistory,
-                    Color{24, 30, 38, 155});
-            DrawRectangleLinesEx(atmosphereLayout.freezeHistory,
-                    config.borderThickness, config.borderColor);
-            const std::string freezeLabel = std::string(
-                    preview.AtmosphereHistoryFrozen() ? "[x] " : "[ ] ")
-                    + "Freeze History";
-            engine::Text(smallConfig, assets, atmosphereLayout.freezeHistory,
-                    smallFont, freezeLabel.c_str(),
-                    engine::UITextJustify::Left,
-                    smallConfig.mutedTextColor);
         }
         const bool captureRunning = capture.State() == SectorAtmosphereCaptureState::Warmup
                 || capture.State() == SectorAtmosphereCaptureState::Capturing
@@ -2190,7 +2168,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             line.text.c_str(), lineContentW, 1)
                     : rowH;
             engine::Text(
-                    smallConfig,
+                    ui, smallConfig,
                     assets,
                     Rectangle{0.0f, localY, lineContentW, lineH},
                     smallFont,

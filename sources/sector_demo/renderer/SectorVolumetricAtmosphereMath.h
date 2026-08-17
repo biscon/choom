@@ -74,8 +74,6 @@ bool ReprojectSectorVolumetricHistoryUv(
         float currentDepth,
         Matrix inverseCurrentViewProjection,
         Matrix previousViewProjection,
-        Vector2 currentJitterUv,
-        Vector2 previousJitterUv,
         Vector2& outHistoryUv,
         float& outExpectedPreviousDepth);
 bool AcceptSectorVolumetricHistoryDepth(

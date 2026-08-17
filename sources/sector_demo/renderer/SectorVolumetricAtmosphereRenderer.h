@@ -98,6 +98,7 @@ private:
         int tanHalfFov = -1;
         int aspectRatio = -1;
         int gridSize = -1;
+        int clusterGridSize = -1;
         int tileColumns = -1;
         int sliceCount = -1;
         int clusterBandCount = -1;
@@ -140,6 +141,12 @@ private:
         int sceneDepth = -1;
         int nearPlane = -1;
         int farPlane = -1;
+        int fogEnabled = -1;
+        int fogStartDistance = -1;
+        int fogDensity = -1;
+        int fogMaximumOpacity = -1;
+        int fogReferenceHeight = -1;
+        int fogHeightFalloff = -1;
     };
 
     struct TemporalLocations {
@@ -149,9 +156,6 @@ private:
         int historyDepth = -1;
         int inverseCurrentViewProjection = -1;
         int previousViewProjection = -1;
-        int currentJitterUv = -1;
-        int previousJitterUv = -1;
-        int texelSize = -1;
         int nearPlane = -1;
         int farPlane = -1;
         int historyValid = -1;
@@ -165,14 +169,7 @@ private:
         int sceneDepth = -1;
         int atmosphereTexture = -1;
         int atmosphereTexelSize = -1;
-        int atmosphereDepth = -1;
-        int mediumAtlas = -1;
-        int lightingAtlas = -1;
-        int nearPlane = -1;
-        int farPlane = -1;
-        int maximumDistance = -1;
         int debugView = -1;
-        int historyAvailable = -1;
     };
 
     bool EnsureResources(const SectorVolumetricResourceLayout& layout);
@@ -223,7 +220,6 @@ private:
     Matrix inverseCurrentViewProjection = {};
     Matrix historyViewProjection = {};
     Vector3 currentJitter = {};
-    Vector3 historyJitter = {};
     SectorVolumetricTemporalPolicy temporalPolicy;
     SectorVolumetricHistoryFrameState currentFrameState;
     SectorVolumetricHistoryFrameState previousFrameState;
