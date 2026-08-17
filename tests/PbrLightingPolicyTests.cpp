@@ -380,33 +380,67 @@ void TestBakedHdrConsumersStayUnclamped()
           "baked-light consumers do not tone map or encode output locally");
 }
 
-void TestDistanceFogUsesIlluminatedScattering()
+void TestDistanceFogUsesDarknessGatedScattering()
 {
     const std::string sector = ReadSource(SECTOR_SHADER_SOURCE_PATH);
     const std::string door = ReadSource(DOOR_SHADER_SOURCE_PATH);
     const std::string billboard = ReadSource(BILLBOARD_SHADER_SOURCE_PATH);
     const std::string model = ReadSource(PBR_SHADER_SOURCE_PATH);
-    const std::string illuminatedScattering =
-            "fogColor * max(staticAtmosphericLighting, vec3(0.0))";
+    const std::string lightPeak =
+            "float fogLightPeak = max(max(fogLighting.r, fogLighting.g), fogLighting.b)";
+    const std::string visibility =
+            "float fogLightVisibility = smoothstep(0.0, 0.04, fogLightPeak)";
+    const std::string normalizedTint =
+            "clamp(fogLighting / fogLightPeak, vec3(0.0), vec3(1.0))";
+    const std::string gatedScattering =
+            "fogColor * fogLightTint * fogLightVisibility";
     const std::string extinctionAndScattering =
             "surfaceRgb * (1.0 - fogAmount) + fogScattering * fogAmount";
+    const std::string directlyScaledScattering =
+            "fogColor * max(staticAtmosphericLighting, vec3(0.0))";
 
     Check(!sector.empty() && !door.empty() && !billboard.empty() && !model.empty(),
           "distance-fog policy can read every active material renderer");
-    Check(sector.find(illuminatedScattering) != std::string::npos
-                    && door.find(illuminatedScattering) != std::string::npos
-                    && billboard.find(illuminatedScattering) != std::string::npos
-                    && model.find(illuminatedScattering) != std::string::npos
-                    && sector.find(extinctionAndScattering) != std::string::npos
+    Check(sector.find(lightPeak) != std::string::npos
+                    && door.find(lightPeak) != std::string::npos
+                    && billboard.find(lightPeak) != std::string::npos
+                    && model.find(lightPeak) != std::string::npos
+                    && sector.find(visibility) != std::string::npos
+                    && door.find(visibility) != std::string::npos
+                    && billboard.find(visibility) != std::string::npos
+                    && model.find(visibility) != std::string::npos
+                    && sector.find(normalizedTint) != std::string::npos
+                    && door.find(normalizedTint) != std::string::npos
+                    && billboard.find(normalizedTint) != std::string::npos
+                    && model.find(normalizedTint) != std::string::npos
+                    && sector.find(gatedScattering) != std::string::npos
+                    && door.find(gatedScattering) != std::string::npos
+                    && billboard.find(gatedScattering) != std::string::npos
+                    && model.find(gatedScattering) != std::string::npos,
+          "distance fog normalizes static-light tint and fades scattering near black");
+    Check(sector.find("fogLightPeak > 0.00001") != std::string::npos
+                    && door.find("fogLightPeak > 0.00001") != std::string::npos
+                    && billboard.find("fogLightPeak > 0.00001") != std::string::npos
+                    && model.find("fogLightPeak > 0.00001") != std::string::npos
+                    && sector.find("            : vec3(0.0);") != std::string::npos
+                    && door.find("            : vec3(0.0);") != std::string::npos
+                    && billboard.find("            : vec3(0.0);") != std::string::npos
+                    && model.find("            : vec3(0.0);") != std::string::npos,
+          "distance fog produces no in-scattering for black static illumination");
+    Check(sector.find(extinctionAndScattering) != std::string::npos
                     && door.find(extinctionAndScattering) != std::string::npos
                     && billboard.find(extinctionAndScattering) != std::string::npos
                     && model.find(extinctionAndScattering) != std::string::npos,
           "distance fog separates extinction from statically illuminated in-scattering");
-    Check(sector.find("mix(surfaceRgb, fogColor, fogAmount)") == std::string::npos
+    Check(sector.find(directlyScaledScattering) == std::string::npos
+                    && door.find(directlyScaledScattering) == std::string::npos
+                    && billboard.find(directlyScaledScattering) == std::string::npos
+                    && model.find(directlyScaledScattering) == std::string::npos
+                    && sector.find("mix(surfaceRgb, fogColor, fogAmount)") == std::string::npos
                     && door.find("mix(surfaceRgb, fogColor, fogAmount)") == std::string::npos
                     && billboard.find("mix(surfaceRgb, fogColor, fogAmount)") == std::string::npos
                     && model.find("mix(surfaceRgb, fogColor, fogAmount)") == std::string::npos,
-          "constant emissive fog-color composition stays removed");
+          "direct light-intensity scaling and constant emissive fog mixing stay removed");
     Check(sector.find(
                       "staticAtmosphericLighting = max(fragColor.rgb + bakedDirect, vec3(0.0))")
                             != std::string::npos
@@ -640,7 +674,7 @@ int main()
     TestEnvironmentEligibility();
     TestRemovedShaderPathsStayRemoved();
     TestBakedHdrConsumersStayUnclamped();
-    TestDistanceFogUsesIlluminatedScattering();
+    TestDistanceFogUsesDarknessGatedScattering();
     TestHdrEffectShaderAndPassPolicies();
     if (failures != 0) {
         std::fprintf(stderr, "%d PBR lighting policy test(s) failed\n", failures);

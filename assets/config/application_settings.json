@@ -10,7 +10,7 @@
   "graphics": {
     "renderScale": 1.5,
     "fxaa": true,
-    "volumetricQuality": "medium",
+    "volumetricQuality": "high",
     "shadowQuality": "high",
     "performanceOverlay": false,
     "vsync": true,

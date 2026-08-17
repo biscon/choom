@@ -526,12 +526,13 @@ disables falling and also prevents jumps from adding lift.
 
 `Preview Settings -> Fog` configures map-level analytic distance fog. The fog
 color is a scattering tint, not an emissive replacement color: distance fog
-attenuates surfaces and its visible in-scattering is multiplied by the static
-illumination already available to each receiver. Completely dark sectors
-therefore fade toward black instead of developing a self-lit colored veil,
-while sector ambient, baked lightmaps, and baked object probes keep the air
-visible in lit areas. Dynamic-light shafts remain an explicit per-light haze
-effect rather than being added automatically by distance fog.
+attenuates surfaces and uses the static illumination available to each receiver
+to tint and gate its visible in-scattering. Lit surfaces can approach the
+authored fog color, while scattering fades smoothly to zero as static
+illumination approaches black. Completely dark sectors therefore remain black
+instead of developing a self-lit colored veil. Dynamic-light shafts remain an
+explicit per-light haze effect rather than being added automatically by
+distance fog.
 
 Grounded Gameplay movement snaps feet to same-height floors and small up/down
 floor changes within step height. The physics feet/body position still snaps

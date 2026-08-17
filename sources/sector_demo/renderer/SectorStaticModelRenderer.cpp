@@ -344,7 +344,13 @@ vec3 ApplySectorFog(
     float fogAmount = min(
             1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
             fogMaxOpacity);
-    vec3 fogScattering = fogColor * max(staticAtmosphericLighting, vec3(0.0));
+    vec3 fogLighting = max(staticAtmosphericLighting, vec3(0.0));
+    float fogLightPeak = max(max(fogLighting.r, fogLighting.g), fogLighting.b);
+    float fogLightVisibility = smoothstep(0.0, 0.04, fogLightPeak);
+    vec3 fogLightTint = fogLightPeak > 0.00001
+            ? clamp(fogLighting / fogLightPeak, vec3(0.0), vec3(1.0))
+            : vec3(0.0);
+    vec3 fogScattering = fogColor * fogLightTint * fogLightVisibility;
     return surfaceRgb * (1.0 - fogAmount) + fogScattering * fogAmount;
 }
 
