@@ -7,6 +7,7 @@
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/renderer/SectorBillboardRenderer.h"
+#include "sector_demo/renderer/SectorAtmosphereGpuProfiler.h"
 #include "sector_demo/renderer/SectorBloomRenderer.h"
 #include "sector_demo/renderer/SectorDoorRenderer.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
@@ -228,6 +229,16 @@ public:
     {
         return hdrSceneScratchDiagnostic;
     }
+    const SectorAtmosphereDiagnostics& AtmosphereDiagnostics() const
+    {
+        return atmosphereDiagnostics;
+    }
+    const SectorAtmosphereCapture& AtmosphereCapture() const
+    {
+        return atmosphereCapture;
+    }
+    void StartAtmosphereCapture();
+    void CancelAtmosphereCapture();
 
 private:
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
@@ -235,6 +246,15 @@ private:
     void UnloadHdrSceneColorView();
     bool EnsureHdrCompositeShader();
     bool CommitHdrScratch(engine::RenderTarget& sceneTarget);
+    SectorAtmosphereCaptureMetadata BuildAtmosphereCaptureMetadata() const;
+    void UpdateAtmosphereDiagnostics(
+            const engine::RenderTarget& sceneTarget,
+            SectorTopologyFogSettings::LocalVolumeQuality quality,
+            bool targetSupported,
+            bool pipelineFailed,
+            bool localFogApplied,
+            bool lightHazeApplied,
+            bool lightDustApplied);
     engine::TextureHandle TextureForId(const std::string& textureId) const;
     engine::TextureHandle NormalTextureForId(const std::string& textureId) const;
     void UpdateCamera();
@@ -294,6 +314,9 @@ private:
     SectorLocalFogRenderer localFogRenderer;
     SectorLightHazeRenderer lightHazeRenderer;
     SectorLightDustRenderer lightDustRenderer;
+    SectorAtmosphereGpuProfiler atmosphereGpuProfiler;
+    SectorAtmosphereDiagnostics atmosphereDiagnostics;
+    SectorAtmosphereCapture atmosphereCapture;
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;

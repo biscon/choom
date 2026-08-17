@@ -15,12 +15,13 @@ struct SectorEditorPreviewDebugTabDefinition {
     const char* label;
 };
 
-inline constexpr std::array<SectorEditorPreviewDebugTabDefinition, 10>
+inline constexpr std::array<SectorEditorPreviewDebugTabDefinition, 11>
         SectorEditorPreviewDebugTabs{{
                 {PreviewDebugOverlayTab::View, "sector_editor_preview_tab_view", "View"},
                 {PreviewDebugOverlayTab::Render, "sector_editor_preview_tab_render", "Render"},
                 {PreviewDebugOverlayTab::Visibility, "sector_editor_preview_tab_visibility", "Visibility"},
                 {PreviewDebugOverlayTab::Lighting, "sector_editor_preview_tab_lighting", "Lighting"},
+                {PreviewDebugOverlayTab::Atmosphere, "sector_editor_preview_tab_atmosphere", "Atmo"},
                 {PreviewDebugOverlayTab::Pbr, "sector_editor_preview_tab_pbr", "PBR"},
                 {PreviewDebugOverlayTab::Objects, "sector_editor_preview_tab_objects", "Objects"},
                 {PreviewDebugOverlayTab::Probes, "sector_editor_preview_tab_probes", "Probes"},
@@ -52,6 +53,7 @@ inline Rectangle BuildSectorEditorPreviewDebugTabRect(
 inline float SectorEditorPreviewOverlayExpandedHeight(PreviewDebugOverlayTab activeTab)
 {
     if (activeTab == PreviewDebugOverlayTab::Pbr) return 610.0f;
+    if (activeTab == PreviewDebugOverlayTab::Atmosphere) return 650.0f;
     if (activeTab == PreviewDebugOverlayTab::Navigation) return 760.0f;
     return 390.0f;
 }

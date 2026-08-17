@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorLocalFogRenderer.h"
+#include "sector_demo/renderer/SectorVolumetricAtmosphereContracts.h"
 
 #include "engine/render/ColorTransfer.h"
 #include <raymath.h>
@@ -651,14 +652,11 @@ bool SectorLocalFogRenderer::Apply(
         return false;
     }
 
-    float scale = 0.5f;
-    int steps = 8;
-    int cap = 8;
-    if (quality == SectorTopologyFogSettings::LocalVolumeQuality::Low) {
-        scale = 0.25f; steps = 4; cap = 4;
-    } else if (quality == SectorTopologyFogSettings::LocalVolumeQuality::High) {
-        scale = 1.0f; steps = 12; cap = 16;
-    }
+    const SectorLegacyAtmosphereQualityContract qualityContract =
+            GetSectorLegacyAtmosphereQualityContract(quality);
+    const float scale = qualityContract.localFogTargetScale;
+    const int steps = qualityContract.localFogMarchSteps;
+    const int cap = qualityContract.maximumLocalFogVolumes;
     if (!EnsureShaders() || !EnsureTargets(sceneTarget.texture.width, sceneTarget.texture.height, scale)) {
         if (!warnedUnavailable) {
             TraceLog(LOG_WARNING, "LOCAL FOG: post-process resources unavailable; local fog disabled");

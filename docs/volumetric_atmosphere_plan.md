@@ -54,7 +54,7 @@ When executing this plan:
 
 | Slice | Title | Status | Completed |
 |---|---|---|---|
-| 1 | Establish baseline measurements, diagnostics, and renderer contracts | Not Started | - |
+| 1 | Establish baseline measurements, diagnostics, and renderer contracts | Completed | 2026-08-17 |
 | 2 | Add the shared-medium screen-space renderer and comparison mode | Not Started | - |
 | 3 | Unify global fog and authored local fog under the final data model | Not Started | - |
 | 4 | Add the OpenGL 3.3 froxel atlas and clustered light lists | Not Started | - |
@@ -836,3 +836,67 @@ Append one entry per attempted slice in this format:
 - Legacy coexistence/removal state:
 - Remaining follow-up within this plan:
 ```
+
+### 2026-08-17 — Slice 1 — Partial
+
+- Summary: Added fixed volumetric quality/grid/atlas/cluster contracts and final light/list budgets; centralized the legacy fog/haze quality constants; added legacy atmosphere target/count/resource diagnostics; added four-frame delayed, nonblocking OpenGL timestamp pairs for total atmosphere, local fog, haze accumulation/composite, and dust; and added an editor 3D Atmo diagnostics tab with deterministic 60-warmup/300-sample capture, stable-view rejection, logging, and copy-ready reports.
+- Decisions/deviations folded back into plan: The existing Main aggregate `GL_TIME_ELAPSED` profiler remains unchanged. Renderer-owned `GL_TIMESTAMP` pairs provide nested-safe subpass and capture measurements independently of the F9 overlay. Atlas packing minimizes the maximum atlas dimension, then texel area and width/height difference. Capture advances only on successfully issued query frames, never overwrites an unresolved ring slot, and records skipped query frames.
+- Files/modules materially affected: Focused atmosphere contracts/diagnostics/profiler modules under `sources/sector_demo/renderer`; `SectorMeshRenderer` legacy atmosphere sequencing instrumentation; the existing sector-editor preview overlay/layout; focused diagnostic, layout, and render-order tests; CMake test registration.
+- Automated verification: Passed `cmake --build cmake-build-debug -j2`; passed `ctest --test-dir cmake-build-debug --output-on-failure` (27/27); passed `git diff --check`; `git diff --stat` and `git status --short` reviewed.
+- GPU measurements: Not captured (user-owned GUI run). Slice remains Partial until Low/Medium/High captures are returned for one sparse hub view and one dense hub haze view.
+- Manual verification: Not performed (user-owned).
+- Cache invalidation behavior: No topology or visible cached 2D editor-state mutations were added; topology render-cache invalidation behavior is unchanged.
+- Lightmap source-hash behavior: No map/light/fog schema or lightmap inputs changed; `ComputeSectorLightmapSourceHash()` behavior and bake artifacts are unchanged.
+- Collision/sector lookup/physics behavior: Unchanged. Capture reads the visual renderer pose/FOV only and does not feed camera, collision, sector lookup, or physics.
+- Legacy coexistence/removal state: `SectorLocalFogRenderer`, `SectorLightHazeRenderer`, and `SectorLightDustRenderer` remain the active legacy path in their existing order; no Unified renderer, adapter, backend toggle, or map migration was added.
+- Remaining follow-up within this plan: User runs and returns the six hub capture reports plus hardware/settings metadata. On receipt, record the measurements, append a Slice 1 completion entry, and mark Slice 1 Completed without beginning Slice 2.
+
+### 2026-08-17 — Slice 1 — Completed
+
+- Summary: Closed the measurement portion of Slice 1 with user-run legacy Low/Medium/High captures at one sparse hub view and one dense hub haze view. Each capture contains 300 post-warmup samples and reported zero skipped query frames. Slice 1 is now complete; Slice 2 has not started.
+- Decisions/deviations folded back into plan: The dense High legacy reference is the retirement-gate baseline for the same camera/settings/hardware: Unified High must be at most `4.789 ms` median (70% of `6.842 ms`) and `5.139 ms` p95 (75% of `6.852 ms`). Dense Unified Medium must not exceed the legacy `2.115 ms` median at the same view; the sparse Medium reference is `0.900 ms`. Comparisons must retain the captured target, camera transform, FOV, shadow state, and application graphics settings.
+- Files/modules materially affected: Documentation only in this follow-up (`docs/volumetric_atmosphere_plan.md`).
+- Automated verification: C++ tests were not rerun because this follow-up changes documentation only. `git diff --check`, `git diff --stat`, and `git status --short` were run after the update.
+- GPU measurements: User-run on EndeavourOS, Linux `7.1.5-arch1-2`, NVIDIA GA106 GeForce RTX 3060 Lite Hash Rate using the loaded proprietary-compatible NVIDIA kernel driver/module `610.43.03` (`nvidia-open-dkms`/`nvidia-utils` package `610.43.03-5`). `nvidia-smi` was unavailable, but `lspci`, `modinfo`, and installed package metadata identified the active GPU/driver. Captured world target was `2880x1620`; repository application settings were render scale `1.5`, shadow quality High, VSync enabled, FXAA enabled, and horizontal FOV 95 degrees. Captures report vertical FOV `63.088` degrees.
+
+  Sparse view: camera position `(-13.316, 1.348, 12.372)`, yaw/pitch/roll `(-0.270, -0.045, 0.000)` radians; fog `3/3`, haze `1/1`, dust `1/1` at every quality.
+
+  ```text
+  Low total:       min 0.732 ms | median 0.734 ms | p95 0.736 ms | max 0.959 ms
+    local fog:     min 0.355 ms | median 0.357 ms | p95 0.358 ms | max 0.360 ms
+    haze:          min 0.355 ms | median 0.356 ms | p95 0.357 ms | max 0.582 ms
+    dust:          min 0.017 ms | median 0.018 ms | p95 0.019 ms | max 0.019 ms
+  Medium total:    min 0.896 ms | median 0.900 ms | p95 0.905 ms | max 0.913 ms
+    local fog:     min 0.432 ms | median 0.434 ms | p95 0.435 ms | max 0.438 ms
+    haze:          min 0.441 ms | median 0.445 ms | p95 0.450 ms | max 0.458 ms
+    dust:          min 0.017 ms | median 0.018 ms | p95 0.019 ms | max 0.020 ms
+  High total:      min 1.641 ms | median 1.666 ms | p95 1.683 ms | max 1.702 ms
+    local fog:     min 0.972 ms | median 0.991 ms | p95 1.006 ms | max 1.013 ms
+    haze:          min 0.641 ms | median 0.651 ms | p95 0.666 ms | max 0.689 ms
+    dust:          min 0.018 ms | median 0.019 ms | p95 0.019 ms | max 0.020 ms
+  ```
+
+  Dense view: camera position `(-6.433, 1.348, 12.644)`, yaw/pitch/roll `(-0.690, 0.024, 0.000)` radians; fog `3/3`, haze eligible `8` with active caps `2/4/8`, and dust `6/6`.
+
+  ```text
+  Low total:       min 0.820 ms | median 0.822 ms | p95 0.827 ms | max 1.153 ms
+    local fog:     min 0.364 ms | median 0.366 ms | p95 0.368 ms | max 0.695 ms
+    haze:          min 0.433 ms | median 0.434 ms | p95 0.436 ms | max 0.437 ms
+    dust:          min 0.018 ms | median 0.019 ms | p95 0.022 ms | max 0.023 ms
+  Medium total:    min 2.040 ms | median 2.115 ms | p95 2.122 ms | max 2.151 ms
+    local fog:     min 0.787 ms | median 0.861 ms | p95 0.868 ms | max 0.897 ms
+    haze:          min 1.225 ms | median 1.230 ms | p95 1.233 ms | max 1.234 ms
+    dust:          min 0.018 ms | median 0.020 ms | p95 0.023 ms | max 0.023 ms
+  High total:      min 6.823 ms | median 6.842 ms | p95 6.852 ms | max 6.865 ms
+    local fog:     min 0.634 ms | median 0.653 ms | p95 0.662 ms | max 0.676 ms
+    haze:          min 6.160 ms | median 6.164 ms | p95 6.168 ms | max 6.171 ms
+    dust:          min 0.022 ms | median 0.022 ms | p95 0.023 ms | max 0.023 ms
+  ```
+
+  Findings: Dense/sparse total median ratios are `1.12x` Low, `2.35x` Medium, and `4.11x` High. Dense High haze alone consumes `6.164 ms`, approximately 90% of the `6.842 ms` total median, while dust stays near `0.02 ms`. The active haze cap scales `2 -> 4 -> 8`, and the dense High result confirms the expected legacy volume/march/light scaling problem. The fixed capture/query path was stable in all six runs (`skipped_queries=0`).
+- Manual verification: The user performed the six requested GUI timing captures. No separate visual-parity or playability acceptance was reported or claimed.
+- Cache invalidation behavior: Unchanged; this completion follow-up is documentation-only and adds no topology mutation.
+- Lightmap source-hash behavior: Unchanged; no lightmap data, settings, source-hash logic, or bake artifacts changed.
+- Collision/sector lookup/physics behavior: Unchanged.
+- Legacy coexistence/removal state: The legacy local-fog, haze, and dust renderers remain active for comparison as required through Slice 6. No Unified renderer work or legacy removal was started.
+- Remaining follow-up within this plan: Slice 2 may use these exact sparse/dense transforms and legacy measurements for equal-setting Legacy/Unified comparison when explicitly requested.

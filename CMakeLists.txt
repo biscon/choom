@@ -226,6 +226,16 @@ if(BUILD_TESTING)
     target_link_libraries(render_color_foundations_tests PRIVATE raylib)
     add_test(NAME render_color_foundations COMMAND render_color_foundations_tests)
 
+    add_executable(sector_atmosphere_diagnostics_tests
+            tests/SectorAtmosphereDiagnosticsTests.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/renderer/SectorAtmosphereDiagnostics.cpp
+            sources/sector_demo/renderer/SectorVolumetricAtmosphereContracts.cpp
+    )
+    target_include_directories(sector_atmosphere_diagnostics_tests PRIVATE sources)
+    target_link_libraries(sector_atmosphere_diagnostics_tests PRIVATE raylib)
+    add_test(NAME sector_atmosphere_diagnostics COMMAND sector_atmosphere_diagnostics_tests)
+
     add_executable(application_flow_tests
             tests/ApplicationFlowTests.cpp
             sources/game/ApplicationFlow.cpp

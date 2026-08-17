@@ -582,8 +582,8 @@ void TestPreviewSettingsModalFogDraftApplyAndReset()
 
 void TestPreviewNavigationTabLayout()
 {
-    Check(game::SectorEditorPreviewDebugTabs.size() == 10,
-          "preview debug strip contains ten array-defined tabs");
+    Check(game::SectorEditorPreviewDebugTabs.size() == 11,
+          "preview debug strip contains eleven array-defined tabs");
     const Rectangle panel{32.0f, 32.0f, 700.0f, 520.0f};
     Rectangle previous{};
     for (size_t index = 0; index < game::SectorEditorPreviewDebugTabs.size(); ++index) {
@@ -596,6 +596,9 @@ void TestPreviewNavigationTabLayout()
     Check(game::SectorEditorPreviewOverlayExpandedHeight(
                   game::PreviewDebugOverlayTab::Navigation) >= 520.0f,
           "preview interaction bounds include Navigation controls and diagnostics");
+    Check(game::SectorEditorPreviewOverlayExpandedHeight(
+                  game::PreviewDebugOverlayTab::Atmosphere) >= 600.0f,
+          "preview interaction bounds include atmosphere capture controls and report");
 }
 
 } // namespace

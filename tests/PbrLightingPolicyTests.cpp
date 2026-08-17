@@ -522,6 +522,14 @@ void TestHdrEffectShaderAndPassPolicies()
                             ==std::string::npos,
           "viewmodel keeps private depth while drawing directly into shared HDR color");
     const std::string sectorRenderer=ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    const std::size_t localFogPass = sectorRenderer.find("localFogRenderer.Apply");
+    const std::size_t hazePass = sectorRenderer.find("lightHazeRenderer.Apply");
+    const std::size_t dustPass = sectorRenderer.find("lightDustRenderer.Apply");
+    Check(localFogPass < hazePass && hazePass < dustPass,
+          "legacy atmosphere keeps local fog, haze, then dust pass order");
+    Check(mainGraph.find("glBeginQuery(GL_TIME_ELAPSED") != std::string::npos
+                    && mainGraph.find("RenderProfilePass::Atmosphere") != std::string::npos,
+          "aggregate delayed GL_TIME_ELAPSED atmosphere timing remains intact");
     Check(sectorRenderer.find("uniform sampler2D sourceDepth")==std::string::npos
                     &&sectorRenderer.find("float coverage=isnan(source.a)")
                             !=std::string::npos

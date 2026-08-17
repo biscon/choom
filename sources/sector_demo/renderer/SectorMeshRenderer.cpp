@@ -924,6 +924,8 @@ bool SectorMeshRenderer::RebuildRendererResources(
     camera.projection = CAMERA_PERSPECTIVE;
     UpdateCamera();
     UpdateVisibilityDebug();
+    atmosphereGpuProfiler.Initialize();
+    atmosphereDiagnostics.gpuTimingStatus = atmosphereGpuProfiler.Status();
 
     initialized = true;
     return true;
@@ -936,6 +938,9 @@ void SectorMeshRenderer::Shutdown(engine::AssetManager& assets)
 
 void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
 {
+    atmosphereGpuProfiler.Shutdown();
+    atmosphereCapture = SectorAtmosphereCapture{};
+    atmosphereDiagnostics = SectorAtmosphereDiagnostics{};
     generatedGeometry = {};
     visibilityGraph = {};
     visibilityResult = {};
@@ -1524,27 +1529,186 @@ bool SectorMeshRenderer::CompositeViewmodel(
     return CommitHdrScratch(sceneTarget);
 }
 
+SectorAtmosphereCaptureMetadata SectorMeshRenderer::BuildAtmosphereCaptureMetadata() const
+{
+    SectorAtmosphereCaptureMetadata metadata;
+    metadata.quality = atmosphereDiagnostics.effectiveQuality;
+    metadata.sceneWidth = atmosphereDiagnostics.sceneWidth;
+    metadata.sceneHeight = atmosphereDiagnostics.sceneHeight;
+    metadata.localFogEligible = atmosphereDiagnostics.localFog.eligibleCount;
+    metadata.localFogActive = atmosphereDiagnostics.localFog.activeCount;
+    metadata.hazeEligible = atmosphereDiagnostics.haze.eligibleCount;
+    metadata.hazeActive = atmosphereDiagnostics.haze.activeCount;
+    metadata.dustEligible = atmosphereDiagnostics.dustEligible;
+    metadata.dustActive = atmosphereDiagnostics.dustActive;
+    metadata.cameraPose = RendererPose();
+    metadata.verticalFovDegrees = verticalFovDegrees;
+    return metadata;
+}
+
+void SectorMeshRenderer::StartAtmosphereCapture()
+{
+    if (!atmosphereGpuProfiler.IsAvailable()) {
+        atmosphereCapture.Start(
+                BuildAtmosphereCaptureMetadata(),
+                atmosphereGpuProfiler.NextSequence(),
+                atmosphereGpuProfiler.SkippedFrames());
+        atmosphereCapture.Cancel(atmosphereGpuProfiler.Status().c_str());
+        return;
+    }
+    atmosphereCapture.Start(
+            BuildAtmosphereCaptureMetadata(),
+            atmosphereGpuProfiler.NextSequence(),
+            atmosphereGpuProfiler.SkippedFrames());
+}
+
+void SectorMeshRenderer::CancelAtmosphereCapture()
+{
+    atmosphereCapture.Cancel();
+}
+
+void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
+        const engine::RenderTarget& sceneTarget,
+        SectorTopologyFogSettings::LocalVolumeQuality quality,
+        bool targetSupported,
+        bool pipelineFailed,
+        bool localFogApplied,
+        bool lightHazeApplied,
+        bool lightDustApplied)
+{
+    atmosphereDiagnostics.effectiveQuality = quality;
+    atmosphereDiagnostics.sceneWidth = sceneTarget.native.texture.width;
+    atmosphereDiagnostics.sceneHeight = sceneTarget.native.texture.height;
+    const SectorLegacyAtmosphereQualityContract qualityContract =
+            GetSectorLegacyAtmosphereQualityContract(quality);
+    const auto scaledDimension = [](int value, float scale) {
+        return scale > 0.0f
+                ? std::max(1, static_cast<int>(std::round(value * scale)))
+                : 0;
+    };
+    atmosphereDiagnostics.localFog.width = scaledDimension(
+            atmosphereDiagnostics.sceneWidth,
+            qualityContract.localFogTargetScale);
+    atmosphereDiagnostics.localFog.height = scaledDimension(
+            atmosphereDiagnostics.sceneHeight,
+            qualityContract.localFogTargetScale);
+    atmosphereDiagnostics.localFog.marchSteps = qualityContract.localFogMarchSteps;
+    atmosphereDiagnostics.localFog.eligibleCount = targetSupported
+            ? localFogRenderer.EligibleVolumeCount()
+            : 0;
+    atmosphereDiagnostics.localFog.activeCount = targetSupported
+            ? localFogRenderer.ActiveVolumeCount()
+            : 0;
+    atmosphereDiagnostics.localFog.estimatedBytes =
+            EstimateSectorAtmosphereTargetBytes(
+                    atmosphereDiagnostics.localFog.width,
+                    atmosphereDiagnostics.localFog.height,
+                    8);
+    atmosphereDiagnostics.localFog.resourceStatus =
+            localFogRenderer.AccumulationDiagnostic();
+
+    atmosphereDiagnostics.haze.width = scaledDimension(
+            atmosphereDiagnostics.sceneWidth,
+            qualityContract.hazeTargetScale);
+    atmosphereDiagnostics.haze.height = scaledDimension(
+            atmosphereDiagnostics.sceneHeight,
+            qualityContract.hazeTargetScale);
+    atmosphereDiagnostics.haze.marchSteps = qualityContract.hazeMarchSteps;
+    atmosphereDiagnostics.haze.eligibleCount = targetSupported
+            ? lightHazeRenderer.EligibleCount()
+            : 0;
+    atmosphereDiagnostics.haze.activeCount = targetSupported
+            ? lightHazeRenderer.ActiveCount()
+            : 0;
+    atmosphereDiagnostics.haze.estimatedBytes = EstimateSectorAtmosphereTargetBytes(
+            atmosphereDiagnostics.haze.width,
+            atmosphereDiagnostics.haze.height,
+            8);
+    atmosphereDiagnostics.haze.resourceStatus =
+            lightHazeRenderer.AccumulationDiagnostic();
+
+    atmosphereDiagnostics.dustEligible = targetSupported
+            ? lightDustRenderer.EligibleEmitterCount()
+            : 0;
+    atmosphereDiagnostics.dustActive = targetSupported
+            ? lightDustRenderer.ActiveEmitterCount()
+            : 0;
+    atmosphereDiagnostics.dustVisibleParticles = targetSupported
+            ? lightDustRenderer.VisibleParticleCount()
+            : 0;
+    atmosphereDiagnostics.dustResourceStatus =
+            lightDustRenderer.ResourceDiagnostic();
+    atmosphereDiagnostics.scratchResourceStatus = hdrSceneScratchDiagnostic;
+    atmosphereDiagnostics.estimatedIntermediateBytes =
+            atmosphereDiagnostics.localFog.estimatedBytes
+            + atmosphereDiagnostics.haze.estimatedBytes
+            + hdrSceneScratch.actual.estimatedAllocationBytes;
+    atmosphereDiagnostics.gpuTimingStatus = atmosphereGpuProfiler.Status();
+    atmosphereDiagnostics.skippedGpuQueryFrames =
+            atmosphereGpuProfiler.SkippedFrames();
+
+    if (!targetSupported) {
+        atmosphereDiagnostics.fallbackStatus =
+                "disabled: unsupported scene target or scratch unavailable";
+    } else if (pipelineFailed) {
+        atmosphereDiagnostics.fallbackStatus =
+                "disabled: legacy atmosphere composite failed";
+    } else if (localFogApplied || lightHazeApplied || lightDustApplied) {
+        atmosphereDiagnostics.fallbackStatus = "legacy backend active";
+    } else if (quality == SectorTopologyFogSettings::LocalVolumeQuality::Off) {
+        atmosphereDiagnostics.fallbackStatus =
+                "inactive: volumetric quality Off and no visible dust";
+    } else {
+        atmosphereDiagnostics.fallbackStatus =
+                "inactive: no eligible visible atmosphere";
+    }
+}
+
 bool SectorMeshRenderer::ApplyWorldAtmosphere(
         engine::RenderTarget& sceneTarget,
         const SectorTopologyMap& map,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes)
 {
-    if (sceneTarget.descriptor.colorFormat
-                    != engine::RenderTargetColorFormat::Rgba16Float
-            || sceneTarget.actual.depth
-                    != engine::RenderTargetDepthKind::SampleableTexture
-            || !EnsureHdrSceneScratch(sceneTarget)) {
-        return false;
-    }
-    RenderTexture2D& nativeScene = sceneTarget.native;
-    const SectorBillboardDynamicLightContext dynamicLightContext =
-            BuildBillboardDynamicLightContext();
     const auto effectiveVolumetricQuality =
             static_cast<int>(map.fogSettings.localVolumeQuality)
                     < static_cast<int>(volumetricQualityCap)
             ? map.fogSettings.localVolumeQuality
             : volumetricQualityCap;
-    const bool localFogApplied = localFogRenderer.Apply(
+    atmosphereDiagnostics.effectiveQuality = effectiveVolumetricQuality;
+    atmosphereDiagnostics.sceneWidth = sceneTarget.native.texture.width;
+    atmosphereDiagnostics.sceneHeight = sceneTarget.native.texture.height;
+
+    SectorAtmosphereGpuTimingFrame resolvedFrame;
+    const bool profileFrameActive =
+            atmosphereGpuProfiler.BeginFrame(resolvedFrame);
+    atmosphereCapture.SetSkippedQueryFrames(
+            atmosphereGpuProfiler.SkippedFrames());
+    if (resolvedFrame.valid) {
+        atmosphereDiagnostics.latestGpuTimings = resolvedFrame;
+        const SectorAtmosphereCaptureState previousState =
+                atmosphereCapture.State();
+        atmosphereCapture.OnFrameResolved(resolvedFrame);
+        if (previousState != SectorAtmosphereCaptureState::Complete
+                && atmosphereCapture.State()
+                        == SectorAtmosphereCaptureState::Complete) {
+            TraceLog(LOG_INFO, "%s", atmosphereCapture.Report().c_str());
+        }
+    }
+    atmosphereCapture.ValidateView(BuildAtmosphereCaptureMetadata());
+
+    atmosphereGpuProfiler.Begin(SectorAtmosphereGpuPass::Total);
+    const bool sceneTargetSupported = sceneTarget.descriptor.colorFormat
+                    == engine::RenderTargetColorFormat::Rgba16Float
+            && sceneTarget.actual.depth
+                    == engine::RenderTargetDepthKind::SampleableTexture;
+    const bool targetSupported = sceneTargetSupported
+            && EnsureHdrSceneScratch(sceneTarget);
+    RenderTexture2D& nativeScene = sceneTarget.native;
+    const SectorBillboardDynamicLightContext dynamicLightContext =
+            BuildBillboardDynamicLightContext();
+
+    atmosphereGpuProfiler.Begin(SectorAtmosphereGpuPass::LocalFog);
+    const bool localFogApplied = targetSupported && localFogRenderer.Apply(
             nativeScene,
             hdrSceneScratch.native,
             map,
@@ -1553,40 +1717,54 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
             runtimeSeconds,
             objectLightProbes,
             dynamicLightContext);
+    atmosphereGpuProfiler.End(SectorAtmosphereGpuPass::LocalFog);
+
     bool lightHazeApplied = false;
-    if (localFogApplied && EnsureHdrSceneColorView(sceneTarget)) {
-        RenderTexture2D foggedScene = hdrSceneScratch.native;
-        foggedScene.depth = nativeScene.depth;
-        lightHazeApplied = lightHazeRenderer.Apply(
-                foggedScene,
-                hdrSceneColorView,
-                map,
-                effectiveVolumetricQuality,
-                camera,
-                runtimeSeconds,
-                objectLightProbes,
-                dynamicLightContext,
-                lightAtmosphereSources,
-                visibilityResult,
-                meshes.sectorReceiverBounds);
-        if (!lightHazeApplied && !CommitHdrScratch(sceneTarget)) return false;
-    } else {
-        if (localFogApplied && !CommitHdrScratch(sceneTarget)) return false;
-        lightHazeApplied = lightHazeRenderer.Apply(
-                nativeScene,
-                hdrSceneScratch.native,
-                map,
-                effectiveVolumetricQuality,
-                camera,
-                runtimeSeconds,
-                objectLightProbes,
-                dynamicLightContext,
-                lightAtmosphereSources,
-                visibilityResult,
-                meshes.sectorReceiverBounds);
-        if (lightHazeApplied && !CommitHdrScratch(sceneTarget)) return false;
+    bool pipelineFailed = false;
+    atmosphereGpuProfiler.Begin(SectorAtmosphereGpuPass::Haze);
+    if (targetSupported) {
+        if (localFogApplied && EnsureHdrSceneColorView(sceneTarget)) {
+            RenderTexture2D foggedScene = hdrSceneScratch.native;
+            foggedScene.depth = nativeScene.depth;
+            lightHazeApplied = lightHazeRenderer.Apply(
+                    foggedScene,
+                    hdrSceneColorView,
+                    map,
+                    effectiveVolumetricQuality,
+                    camera,
+                    runtimeSeconds,
+                    objectLightProbes,
+                    dynamicLightContext,
+                    lightAtmosphereSources,
+                    visibilityResult,
+                    meshes.sectorReceiverBounds);
+            pipelineFailed = !lightHazeApplied
+                    && !CommitHdrScratch(sceneTarget);
+        } else {
+            pipelineFailed = localFogApplied && !CommitHdrScratch(sceneTarget);
+            if (!pipelineFailed) {
+                lightHazeApplied = lightHazeRenderer.Apply(
+                        nativeScene,
+                        hdrSceneScratch.native,
+                        map,
+                        effectiveVolumetricQuality,
+                        camera,
+                        runtimeSeconds,
+                        objectLightProbes,
+                        dynamicLightContext,
+                        lightAtmosphereSources,
+                        visibilityResult,
+                        meshes.sectorReceiverBounds);
+                pipelineFailed = lightHazeApplied
+                        && !CommitHdrScratch(sceneTarget);
+            }
+        }
     }
-    const bool lightDustApplied = lightDustRenderer.Apply(
+    atmosphereGpuProfiler.End(SectorAtmosphereGpuPass::Haze);
+
+    atmosphereGpuProfiler.Begin(SectorAtmosphereGpuPass::Dust);
+    const bool lightDustApplied = targetSupported && !pipelineFailed
+            && lightDustRenderer.Apply(
             nativeScene,
             hdrSceneScratch.native,
             map,
@@ -1597,7 +1775,27 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
             lightAtmosphereSources,
             visibilityResult,
             meshes.sectorReceiverBounds);
-    return localFogApplied || lightHazeApplied || lightDustApplied;
+    atmosphereGpuProfiler.End(SectorAtmosphereGpuPass::Dust);
+    atmosphereGpuProfiler.End(SectorAtmosphereGpuPass::Total);
+    const std::uint64_t issuedSequence =
+            atmosphereGpuProfiler.CurrentSequence();
+    atmosphereGpuProfiler.EndFrame();
+    if (profileFrameActive && atmosphereGpuProfiler.IsAvailable()) {
+        atmosphereCapture.OnFrameIssued(issuedSequence);
+    }
+    atmosphereCapture.SetSkippedQueryFrames(
+            atmosphereGpuProfiler.SkippedFrames());
+
+    UpdateAtmosphereDiagnostics(
+            sceneTarget,
+            effectiveVolumetricQuality,
+            targetSupported,
+            pipelineFailed,
+            localFogApplied,
+            lightHazeApplied,
+            lightDustApplied);
+    return !pipelineFailed
+            && (localFogApplied || lightHazeApplied || lightDustApplied);
 }
 
 bool SectorMeshRenderer::ApplyHdrBloom(

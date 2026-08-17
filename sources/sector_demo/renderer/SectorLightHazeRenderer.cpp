@@ -1,4 +1,5 @@
 #include "sector_demo/renderer/SectorLightHazeRenderer.h"
+#include "sector_demo/renderer/SectorVolumetricAtmosphereContracts.h"
 
 #include "engine/render/ColorTransfer.h"
 #include "sector_demo/renderer/SectorFog.h"
@@ -391,9 +392,9 @@ bool SectorLightHazeRenderer::Apply(
     const float nearPlane=static_cast<float>(rlGetCullDistanceNear()), farPlane=static_cast<float>(rlGetCullDistanceFar());
     if(!std::isfinite(nearPlane)||!std::isfinite(farPlane)||nearPlane<=0.0f||farPlane<=nearPlane) return false;
     const float aspect=static_cast<float>(sceneTarget.texture.width)/std::max(sceneTarget.texture.height,1);
-    int cap=4, steps=8; float renderScale=0.5f;
-    if(quality==SectorTopologyFogSettings::LocalVolumeQuality::Low) { cap=2; steps=4; renderScale=0.25f; }
-    else if(quality==SectorTopologyFogSettings::LocalVolumeQuality::High) { cap=8; steps=12; renderScale=1.0f; }
+    const SectorLegacyAtmosphereQualityContract qualityContract=GetSectorLegacyAtmosphereQualityContract(quality);
+    const int cap=qualityContract.maximumHazeVolumes, steps=qualityContract.hazeMarchSteps;
+    const float renderScale=qualityContract.hazeTargetScale;
     std::array<SectorLightAtmosphereVolume,MaxHazeVolumes> selected{}; std::array<float,MaxHazeVolumes> distances{};
     distances.fill(std::numeric_limits<float>::max());
     for(const auto& source:sources) {

@@ -633,6 +633,79 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         context.runtimeObjects.doorObjectCount,
                         context.runtimeObjects.validDoorAnchorCount));
                 break;
+            case PreviewDebugOverlayTab::Atmosphere: {
+                const SectorAtmosphereDiagnostics& diagnostics =
+                        preview.AtmosphereDiagnostics();
+                addKeyValue("backend", "Legacy");
+                addKeyValueStyled(
+                        "summary",
+                        FormatSectorAtmosphereDiagnosticsSummary(diagnostics),
+                        smallConfig.mutedTextColor,
+                        true);
+                addKeyValue("local fog", TextFormat(
+                        "%dx%d RGBA16F | %d steps | eligible/active %d/%d | %s",
+                        diagnostics.localFog.width,
+                        diagnostics.localFog.height,
+                        diagnostics.localFog.marchSteps,
+                        diagnostics.localFog.eligibleCount,
+                        diagnostics.localFog.activeCount,
+                        FormatSectorAtmosphereBytes(
+                                diagnostics.localFog.estimatedBytes).c_str()));
+                addKeyValue("haze", TextFormat(
+                        "%dx%d RGBA16F | %d steps | eligible/active %d/%d | %s",
+                        diagnostics.haze.width,
+                        diagnostics.haze.height,
+                        diagnostics.haze.marchSteps,
+                        diagnostics.haze.eligibleCount,
+                        diagnostics.haze.activeCount,
+                        FormatSectorAtmosphereBytes(
+                                diagnostics.haze.estimatedBytes).c_str()));
+                addKeyValue("dust", TextFormat(
+                        "eligible/active %d/%d | visible particles %d",
+                        diagnostics.dustEligible,
+                        diagnostics.dustActive,
+                        diagnostics.dustVisibleParticles));
+                addKeyValueStyled("resources", TextFormat(
+                        "fog=%s | haze=%s | dust=%s | scratch=%s",
+                        diagnostics.localFog.resourceStatus.c_str(),
+                        diagnostics.haze.resourceStatus.c_str(),
+                        diagnostics.dustResourceStatus.c_str(),
+                        diagnostics.scratchResourceStatus.c_str()),
+                        smallConfig.mutedTextColor, true);
+                addKeyValueStyled("GPU timestamps", TextFormat(
+                        "%s | skipped frames %llu",
+                        diagnostics.gpuTimingStatus.c_str(),
+                        static_cast<unsigned long long>(
+                                diagnostics.skippedGpuQueryFrames)),
+                        smallConfig.mutedTextColor, true);
+                if (diagnostics.latestGpuTimings.valid) {
+                    addKeyValue("latest GPU ms", TextFormat(
+                            "total %.3f | local fog %.3f | haze %.3f | dust %.3f",
+                            diagnostics.latestGpuTimings.milliseconds[
+                                    static_cast<size_t>(SectorAtmosphereGpuPass::Total)],
+                            diagnostics.latestGpuTimings.milliseconds[
+                                    static_cast<size_t>(SectorAtmosphereGpuPass::LocalFog)],
+                            diagnostics.latestGpuTimings.milliseconds[
+                                    static_cast<size_t>(SectorAtmosphereGpuPass::Haze)],
+                            diagnostics.latestGpuTimings.milliseconds[
+                                    static_cast<size_t>(SectorAtmosphereGpuPass::Dust)]));
+                } else {
+                    addKeyValue("latest GPU ms", "waiting for delayed query results");
+                }
+                const SectorAtmosphereCapture& capture = preview.AtmosphereCapture();
+                addKeyValue("capture", TextFormat(
+                        "%s | %s | warmup %zu/60 | issued %zu/300 | resolved %zu/300",
+                        SectorAtmosphereCaptureStateName(capture.State()),
+                        capture.Status().c_str(),
+                        capture.WarmupIssued(),
+                        capture.CaptureIssued(),
+                        capture.SamplesResolved()));
+                if (!capture.Report().empty()) {
+                    addKeyValueStyled("report", capture.Report(),
+                            smallConfig.mutedTextColor, true);
+                }
+                break;
+            }
             case PreviewDebugOverlayTab::Pbr: {
                 const SectorPbrContributionSettings settings =
                         preview.PbrContributionSettings();
@@ -1397,6 +1470,9 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
         contentH += rowH + 6.0f;
     }
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Atmosphere) {
+        contentH += (rowH + 6.0f) * 2.0f;
+    }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Pbr) {
         contentH += (rowH + 6.0f) * 4.0f;
     }
@@ -1543,6 +1619,52 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()),
                     engine::UITextJustify::Center,
                     smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+    }
+    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Atmosphere) {
+        const SectorAtmosphereCapture& capture = preview.AtmosphereCapture();
+        const bool captureRunning = capture.State() == SectorAtmosphereCaptureState::Warmup
+                || capture.State() == SectorAtmosphereCaptureState::Capturing
+                || capture.State() == SectorAtmosphereCaptureState::Draining;
+        const Rectangle captureRect{panel.x + padding, y, 132.0f, rowH};
+        if (mouseInteractive) {
+            if (engine::Button(
+                        ui, smallConfig, input, assets,
+                        "sector_editor_atmosphere_capture",
+                        captureRect, smallFont,
+                        captureRunning ? "Cancel Capture" : "Capture 300")) {
+                if (captureRunning) {
+                    preview.CancelAtmosphereCapture();
+                } else {
+                    preview.StartAtmosphereCapture();
+                }
+            }
+        } else {
+            DrawRectangleRec(captureRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(captureRect, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, captureRect, smallFont,
+                    captureRunning ? "Cancel Capture" : "Capture 300",
+                    engine::UITextJustify::Center, smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+
+        const Rectangle copyRect{panel.x + padding, y, 132.0f, rowH};
+        const bool reportReady = !capture.Report().empty();
+        if (mouseInteractive && reportReady) {
+            if (engine::Button(
+                        ui, smallConfig, input, assets,
+                        "sector_editor_atmosphere_copy_report",
+                        copyRect, smallFont, "Copy Report")) {
+                SetClipboardText(capture.Report().c_str());
+                context.statusText = "Atmosphere capture report copied";
+            }
+        } else {
+            DrawRectangleRec(copyRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(copyRect, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, copyRect, smallFont,
+                    reportReady ? "Copy Report" : "Report Pending",
+                    engine::UITextJustify::Center, smallConfig.mutedTextColor);
         }
         y += rowH + 6.0f;
     }
