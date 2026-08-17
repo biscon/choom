@@ -464,8 +464,8 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::size_t fogNoiseSetup = fog.find("float noiseModulation = 1.0;");
     const std::size_t fogNoiseSample = fog.find("valueNoise(", fogNoiseSetup);
     const std::size_t fogMarch = fog.find("for (int stepIndex", fogNoiseSetup);
-    const std::size_t hazeCountMarch = haze.find("for(int s=0;s<12");
-    const std::size_t hazeLightingMarch = haze.find("for(int s=0;s<12", hazeCountMarch + 1);
+    const std::size_t hazeLightingMarch = haze.find("for(int s=0;s<12");
+    const std::size_t hazeSecondMarch = haze.find("for(int s=0;s<12", hazeLightingMarch + 1);
     const std::size_t hazeNoiseSample = haze.find("valueNoise(", hazeLightingMarch);
     const std::size_t hazeSampleDepth = haze.find(
             "sampleDepth=a.x*boundary*noiseModulation*opticalStep",
@@ -476,6 +476,7 @@ void TestHdrEffectShaderAndPassPolicies()
                     && fog.find("modulatedOpticalDepth = volumeOpticalDepth * noiseModulation")
                             !=std::string::npos
                     && hazeLightingMarch!=std::string::npos
+                    && hazeSecondMarch==std::string::npos
                     && hazeSampleDepth!=std::string::npos
                     && hazeNoiseSample>hazeLightingMarch
                     && hazeNoiseSample<hazeSampleDepth
@@ -483,6 +484,11 @@ void TestHdrEffectShaderAndPassPolicies()
                     && haze.find("insidePositionSum")==std::string::npos
                     && haze.find("modulatedDepth=volumeDepth*noiseModulation")==std::string::npos,
           "fog uses coherent ray noise while haze samples world-speed noise at each lighting step");
+    Check(haze.find("bool intersectFiniteCone(")!=std::string::npos
+                    && haze.find("if(hazeShapes[i]!=0) { float coneEnter,coneExit;")!=std::string::npos
+                    && haze.find("effectivePath(segment,thickness)/float(stepCount)")!=std::string::npos
+                    && haze.find("insideCount")==std::string::npos,
+          "haze marches once across exact sphere or finite-cone ray intervals");
     Check(haze.find("volume.originWorld.y -= heightOffsetWorld")!=std::string::npos
                     && haze.find("volume.boundsCenterWorld.y -= heightOffsetWorld")!=std::string::npos
                     && haze.find("hazeOwnerDynamicLightIndices[volumeIndex]")!=std::string::npos

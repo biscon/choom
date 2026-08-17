@@ -122,6 +122,46 @@ bool intersectSphere(vec3 ro, vec3 rd, vec3 center, float radius, out float t0, 
     vec3 oc = ro-center; float b=dot(oc,rd); float c=dot(oc,oc)-radius*radius;
     float h=b*b-c; if(h<0.0) return false; h=sqrt(h); t0=-b-h; t1=-b+h; return t1>max(t0,0.0);
 }
+void includeConeHit(float t, inout float enter, inout float exit, inout int hitCount) {
+    if(isnan(t)||isinf(t)) return;
+    enter=min(enter,t); exit=max(exit,t); hitCount++;
+}
+bool intersectFiniteCone(vec3 ro, vec3 rd, vec3 apex, vec3 direction,
+        float extent, float baseRadius, out float enter, out float exit) {
+    vec3 axis=safeNormalize(direction,vec3(0,-1,0)); float height=max(extent,0.0001);
+    float radius=max(baseRadius,0.0); float slopeSquared=(radius*radius)/(height*height);
+    vec3 originOffset=ro-apex; float originAxial=dot(originOffset,axis);
+    float directionAxial=dot(rd,axis);
+    vec3 originRadial=originOffset-axis*originAxial;
+    vec3 directionRadial=rd-axis*directionAxial;
+    float a=dot(directionRadial,directionRadial)-slopeSquared*directionAxial*directionAxial;
+    float b=2.0*(dot(originRadial,directionRadial)-slopeSquared*originAxial*directionAxial);
+    float c=dot(originRadial,originRadial)-slopeSquared*originAxial*originAxial;
+    enter=1e30; exit=-1e30; int hitCount=0; const float epsilon=0.000001;
+    if(abs(a)<=epsilon) {
+        if(abs(b)>epsilon) {
+            float t=-c/b; float axial=originAxial+t*directionAxial;
+            if(axial>=-epsilon&&axial<=height+epsilon) includeConeHit(t,enter,exit,hitCount);
+        }
+    } else {
+        float discriminant=b*b-4.0*a*c;
+        if(discriminant>=0.0) {
+            float root=sqrt(max(discriminant,0.0)); float inverse=0.5/a;
+            float t0=(-b-root)*inverse; float axial0=originAxial+t0*directionAxial;
+            if(axial0>=-epsilon&&axial0<=height+epsilon) includeConeHit(t0,enter,exit,hitCount);
+            float t1=(-b+root)*inverse; float axial1=originAxial+t1*directionAxial;
+            if(axial1>=-epsilon&&axial1<=height+epsilon) includeConeHit(t1,enter,exit,hitCount);
+        }
+    }
+    if(abs(directionAxial)>epsilon) {
+        float baseT=(height-originAxial)/directionAxial;
+        vec3 baseOffset=originOffset+rd*baseT-axis*height;
+        if(dot(baseOffset,baseOffset)<=radius*radius+epsilon) {
+            includeConeHit(baseT,enter,exit,hitCount);
+        }
+    }
+    return hitCount>=2&&exit-enter>epsilon;
+}
 void shapeSample(int i, vec3 p, out bool inside, out float boundary, out vec3 grid) {
     vec3 axis=safeNormalize(hazeDirections[i],vec3(0,-1,0));
     vec3 reference=abs(axis.y)>0.98?vec3(0,0,1):vec3(0,1,0);
@@ -199,18 +239,19 @@ void main() {
     float totalDepth=0.0; vec3 weighted=vec3(0);
     for(int i=0;i<8;++i) { if(i>=volumeCount) break; float enter,exit;
         if(!intersectSphere(cameraPosition,rd,hazeBoundsCenters[i],hazeBoundsRadii[i],enter,exit)) continue;
+        if(hazeShapes[i]!=0) { float coneEnter,coneExit;
+            if(!intersectFiniteCone(cameraPosition,rd,hazeCenters[i],hazeDirections[i],
+                    hazeExtents[i],hazeConeRadii[i],coneEnter,coneExit)) continue;
+            enter=max(enter,coneEnter); exit=min(exit,coneExit); }
         enter=max(enter,0.0); exit=min(exit,sceneDistance); if(exit<=enter) continue;
-        float segment=exit-enter; float geometricStep=segment/float(max(marchSteps,1)); int insideCount=0;
-        for(int s=0;s<12;++s) { if(s>=marchSteps) break; bool inside; float boundary; vec3 grid;
-            vec3 p=cameraPosition+rd*(enter+(float(s)+0.5)*geometricStep);
-            shapeSample(i,p,inside,boundary,grid); if(inside) insideCount++; }
-        if(insideCount==0) continue; float insideLength=geometricStep*float(insideCount);
+        int stepCount=max(marchSteps,1); float segment=exit-enter;
+        float geometricStep=segment/float(stepCount);
         float thickness=hazeShapes[i]==0?hazeExtents[i]*2.0:max(hazeConeRadii[i]*2.0,0.1);
-        float opticalStep=effectivePath(insideLength,thickness)/float(insideCount);
+        float opticalStep=effectivePath(segment,thickness)/float(stepCount);
         float volumeDepth=0.0; vec3 volumeWeighted=vec3(0); vec4 a=hazeParamsA[i], b=hazeParamsB[i];
         vec2 flowWorld=vec2(cos(b.y),sin(b.y))*b.z*runtimeSeconds;
         float inverseNoiseScale=1.0/max(a.w,0.05);
-        for(int s=0;s<12;++s) { if(s>=marchSteps) break; vec3 p=cameraPosition+rd*(enter+(float(s)+0.5)*geometricStep);
+        for(int s=0;s<12;++s) { if(s>=stepCount) break; vec3 p=cameraPosition+rd*(enter+(float(s)+0.5)*geometricStep);
             bool inside; float boundary; vec3 grid; shapeSample(i,p,inside,boundary,grid); if(!inside) continue;
             float noiseModulation=1.0;
             if(b.x>0.0001) { vec3 noiseSamplePosition=p; noiseSamplePosition.xz-=flowWorld;
