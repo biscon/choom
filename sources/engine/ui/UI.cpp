@@ -1184,7 +1184,8 @@ UIScrollAreaResult BeginScrollArea(
         Vector2 contentSize,
         UIScrollState& state,
         bool drawFrame,
-        float paddingPx)
+        float paddingPx,
+        bool inputEnabled)
 {
     assert(!ui.inScrollArea && "Nested scroll areas are not supported.");
     UIScrollAreaResult result;
@@ -1250,7 +1251,7 @@ UIScrollAreaResult BeginScrollArea(
             config.scrollbarMinThumbSize
     );
 
-    if (scrollY && Contains(bounds, ui.mousePosition)) {
+    if (inputEnabled && scrollY && Contains(bounds, ui.mousePosition)) {
         input.ForEachEvent(
                 InputEventType::MouseWheel,
                 true,
@@ -1265,7 +1266,8 @@ UIScrollAreaResult BeginScrollArea(
         );
     }
 
-    if (ui.activeScrollId == scrollId && ui.scrollDragAxis != 0 && ui.mouseDown) {
+    if (inputEnabled && ui.activeScrollId == scrollId
+            && ui.scrollDragAxis != 0 && ui.mouseDown) {
         if (ui.scrollDragAxis == 1 && scrollY) {
             const float thumbTravel = std::max(1.0f, verticalTrack.height - verticalThumb.height);
             const float scrollTravel = std::max(0.0f, contentSize.y - viewport.height);
@@ -1287,7 +1289,7 @@ UIScrollAreaResult BeginScrollArea(
         }
     }
 
-    input.ForEachEvent(
+    if (inputEnabled) input.ForEachEvent(
             InputEventType::MouseButtonPressed,
             true,
             [&ui, scrollId, scrollX, scrollY, verticalTrack, verticalThumb, horizontalTrack, horizontalThumb, viewport, contentSize, &state](InputEvent& event) {
@@ -1330,7 +1332,7 @@ UIScrollAreaResult BeginScrollArea(
             }
     );
 
-    input.ForEachEvent(
+    if (inputEnabled) input.ForEachEvent(
             InputEventType::MouseClick,
             true,
             [scrollX, scrollY, verticalTrack, horizontalTrack](InputEvent& event) {

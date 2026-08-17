@@ -139,6 +139,33 @@ bool ComputeSectorVolumetricAtlasTexel(
             && outTexel.y >= 0 && outTexel.y < layout.height;
 }
 
+bool ComputeSectorVolumetricFroxel(
+        const SectorVolumetricAtlasLayout& layout,
+        int atlasX,
+        int atlasY,
+        int& outFroxelX,
+        int& outFroxelY,
+        int& outFroxelZ)
+{
+    outFroxelX = 0;
+    outFroxelY = 0;
+    outFroxelZ = 0;
+    if (layout.grid.x <= 0 || layout.grid.y <= 0
+            || layout.tileColumns <= 0 || layout.tileRows <= 0
+            || atlasX < 0 || atlasX >= layout.width
+            || atlasY < 0 || atlasY >= layout.height) {
+        return false;
+    }
+    const int tileX = atlasX / layout.grid.x;
+    const int tileY = atlasY / layout.grid.y;
+    const int slice = tileY * layout.tileColumns + tileX;
+    if (slice < 0 || slice >= layout.grid.z) return false;
+    outFroxelX = atlasX % layout.grid.x;
+    outFroxelY = atlasY % layout.grid.y;
+    outFroxelZ = slice;
+    return true;
+}
+
 SectorVolumetricClusterListLayout ComputeSectorVolumetricClusterListLayout(
         SectorVolumetricGridSize grid,
         int clusterBands)
@@ -150,6 +177,124 @@ SectorVolumetricClusterListLayout ComputeSectorVolumetricClusterListLayout(
             width,
             height,
             EstimateSectorAtmosphereTargetBytes(width, height, 4)};
+}
+
+SectorVolumetricResourceLayout ComputeSectorVolumetricResourceLayout(
+        SectorTopologyFogSettings::VolumetricQuality quality,
+        int sceneWidth,
+        int sceneHeight)
+{
+    SectorVolumetricResourceLayout result;
+    result.quality = quality;
+    result.grid = ComputeSectorVolumetricGridSize(
+            quality, sceneWidth, sceneHeight);
+    result.atlas = ComputeSectorVolumetricAtlasLayout(result.grid);
+    const SectorVolumetricQualityContract contract =
+            GetSectorVolumetricQualityContract(quality);
+    result.clusters = ComputeSectorVolumetricClusterListLayout(
+            result.grid, contract.clusterBands);
+    result.integratedWidth = result.grid.x;
+    result.integratedHeight = result.grid.y;
+    return result;
+}
+
+bool SectorVolumetricResourceLayoutFitsTextureLimit(
+        const SectorVolumetricResourceLayout& layout,
+        int maximumTextureSize)
+{
+    if (layout.quality == SectorTopologyFogSettings::VolumetricQuality::Off) {
+        return false;
+    }
+    const auto fits = [maximumTextureSize](int width, int height) {
+        return maximumTextureSize > 0 && width > 0 && height > 0
+                && width <= maximumTextureSize && height <= maximumTextureSize;
+    };
+    return fits(layout.atlas.width, layout.atlas.height)
+            && fits(layout.clusters.width, layout.clusters.height)
+            && fits(layout.integratedWidth, layout.integratedHeight)
+            && fits(layout.lightDataWidth, layout.lightDataHeight)
+            && fits(layout.volumeDataWidth, layout.volumeDataHeight);
+}
+
+SectorVolumetricResourceLayout ResolveSectorVolumetricResourceLayout(
+        SectorTopologyFogSettings::VolumetricQuality requestedQuality,
+        int sceneWidth,
+        int sceneHeight,
+        int maximumTextureSize)
+{
+    int quality = static_cast<int>(requestedQuality);
+    for (; quality >= static_cast<int>(
+                    SectorTopologyFogSettings::VolumetricQuality::Low);
+         --quality) {
+        const auto candidate = ComputeSectorVolumetricResourceLayout(
+                static_cast<SectorTopologyFogSettings::VolumetricQuality>(quality),
+                sceneWidth,
+                sceneHeight);
+        if (SectorVolumetricResourceLayoutFitsTextureLimit(
+                    candidate, maximumTextureSize)) {
+            return candidate;
+        }
+    }
+    return ComputeSectorVolumetricResourceLayout(
+            SectorTopologyFogSettings::VolumetricQuality::Off,
+            sceneWidth,
+            sceneHeight);
+}
+
+bool ComputeSectorVolumetricDepthSliceLayout(
+        float startDistance,
+        float endDistance,
+        int sliceCount,
+        int clusterBandCount,
+        SectorVolumetricDepthSliceLayout& outLayout)
+{
+    outLayout = {};
+    if (!std::isfinite(startDistance) || !std::isfinite(endDistance)
+            || startDistance <= 0.0f || endDistance <= startDistance
+            || sliceCount <= 0 || sliceCount > 64
+            || clusterBandCount <= 0
+            || sliceCount != clusterBandCount * 8) {
+        return false;
+    }
+    outLayout.sliceCount = sliceCount;
+    outLayout.clusterBandCount = clusterBandCount;
+    outLayout.endpoints[0] = startDistance;
+    const double logStart = std::log(static_cast<double>(startDistance));
+    const double logEnd = std::log(static_cast<double>(endDistance));
+    for (int index = 1; index < sliceCount; ++index) {
+        const double t = static_cast<double>(index)
+                / static_cast<double>(sliceCount);
+        const double value = std::exp(logStart + (logEnd - logStart) * t);
+        if (!std::isfinite(value)) {
+            outLayout = {};
+            return false;
+        }
+        outLayout.endpoints[static_cast<std::size_t>(index)] =
+                std::clamp(static_cast<float>(value), startDistance, endDistance);
+    }
+    outLayout.endpoints[static_cast<std::size_t>(sliceCount)] = endDistance;
+    return true;
+}
+
+int FindSectorVolumetricDepthSlice(
+        const SectorVolumetricDepthSliceLayout& layout,
+        float viewDepth)
+{
+    if (layout.sliceCount <= 0 || !std::isfinite(viewDepth)
+            || viewDepth < layout.endpoints[0]
+            || viewDepth > layout.endpoints[
+                    static_cast<std::size_t>(layout.sliceCount)]) {
+        return -1;
+    }
+    if (viewDepth == layout.endpoints[
+                static_cast<std::size_t>(layout.sliceCount)]) {
+        return layout.sliceCount - 1;
+    }
+    const auto begin = layout.endpoints.begin();
+    const auto end = begin + layout.sliceCount + 1;
+    const auto upper = std::upper_bound(begin, end, viewDepth);
+    return std::clamp(static_cast<int>(upper - begin) - 1,
+            0, layout.sliceCount - 1);
 }
 
 std::uint64_t EstimateSectorAtmosphereTargetBytes(

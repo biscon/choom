@@ -1629,7 +1629,11 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
         bool lightDustApplied)
 {
     atmosphereDiagnostics.backend = atmosphereBackend;
-    atmosphereDiagnostics.effectiveQuality = quality;
+    atmosphereDiagnostics.requestedQuality = quality;
+    atmosphereDiagnostics.effectiveQuality =
+            atmosphereBackend == SectorAtmosphereBackend::Unified
+                    ? volumetricAtmosphereRenderer.EffectiveQuality()
+                    : quality;
     atmosphereDiagnostics.sceneWidth = sceneTarget.native.texture.width;
     atmosphereDiagnostics.sceneHeight = sceneTarget.native.texture.height;
     const SectorLegacyAtmosphereQualityContract qualityContract =
@@ -1699,10 +1703,7 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
     atmosphereDiagnostics.unified.activeCount =
             atmosphereDiagnostics.localFog.activeCount;
     atmosphereDiagnostics.unified.estimatedBytes =
-            EstimateSectorAtmosphereTargetBytes(
-                    atmosphereDiagnostics.unified.width,
-                    atmosphereDiagnostics.unified.height,
-                    8);
+            volumetricAtmosphereRenderer.EstimatedResourceBytes();
     atmosphereDiagnostics.unified.resourceStatus =
             volumetricAtmosphereRenderer.ResourceDiagnostic();
     atmosphereDiagnostics.unifiedIntegrationCount = unifiedApplied ? 1 : 0;
@@ -1714,6 +1715,23 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
             atmosphereBackend == SectorAtmosphereBackend::Unified
             ? volumetricAtmosphereRenderer.ActiveLightCount()
             : 0;
+    const SectorVolumetricResourceLayout& unifiedLayout =
+            volumetricAtmosphereRenderer.ResourceLayout();
+    const SectorVolumetricClusterBuildDiagnostics& clusterDiagnostics =
+            volumetricAtmosphereRenderer.ClusterDiagnostics();
+    atmosphereDiagnostics.unifiedGrid = unifiedLayout.grid;
+    atmosphereDiagnostics.unifiedAtlasWidth = unifiedLayout.atlas.width;
+    atmosphereDiagnostics.unifiedAtlasHeight = unifiedLayout.atlas.height;
+    atmosphereDiagnostics.unifiedClusterListWidth = unifiedLayout.clusters.width;
+    atmosphereDiagnostics.unifiedClusterListHeight = unifiedLayout.clusters.height;
+    atmosphereDiagnostics.unifiedLightViewOverflowCount =
+            clusterDiagnostics.lightViewOverflowCount;
+    atmosphereDiagnostics.unifiedLightClusterOverflowCount =
+            clusterDiagnostics.lightClusterOverflowCount;
+    atmosphereDiagnostics.unifiedVolumeViewOverflowCount =
+            clusterDiagnostics.volumeViewOverflowCount;
+    atmosphereDiagnostics.unifiedVolumeClusterOverflowCount =
+            clusterDiagnostics.volumeClusterOverflowCount;
 
     atmosphereDiagnostics.dustEligible = targetSupported
             ? lightDustRenderer.EligibleEmitterCount()
@@ -1783,6 +1801,7 @@ bool SectorMeshRenderer::PrepareWorldAtmosphere(
             camera,
             runtimeSeconds,
             BuildBillboardDynamicLightContext(),
+            dynamicLightState.RuntimePointLight(),
             lightAtmosphereSources,
             visibilityResult,
             meshes.sectorReceiverBounds,

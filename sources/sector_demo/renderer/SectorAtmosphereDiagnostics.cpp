@@ -284,13 +284,20 @@ std::string FormatSectorAtmosphereDiagnosticsSummary(
 {
     std::ostringstream stream;
     stream << SectorAtmosphereBackendName(diagnostics.backend) << ' '
-           << SectorVolumetricQualityName(diagnostics.effectiveQuality)
+           << SectorVolumetricQualityName(diagnostics.requestedQuality);
+    if (diagnostics.requestedQuality != diagnostics.effectiveQuality) {
+        stream << " -> "
+               << SectorVolumetricQualityName(diagnostics.effectiveQuality);
+    }
+    stream
            << " | scene " << diagnostics.sceneWidth << 'x' << diagnostics.sceneHeight
            << " | fog " << diagnostics.localFog.eligibleCount << '/'
            << diagnostics.localFog.activeCount
            << " | haze " << diagnostics.haze.eligibleCount << '/'
            << diagnostics.haze.activeCount
            << " | unified " << diagnostics.unifiedIntegrationCount
+           << " lights " << diagnostics.unifiedLightEligibleCount << '/'
+           << diagnostics.unifiedLightActiveCount
            << " | dust " << diagnostics.dustEligible << '/'
            << diagnostics.dustActive
            << " | " << FormatSectorAtmosphereBytes(

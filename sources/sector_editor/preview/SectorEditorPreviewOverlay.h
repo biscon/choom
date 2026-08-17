@@ -61,7 +61,9 @@ struct SectorEditorPreviewOverlayResult {
     const char* topologyDocumentEditStatus = nullptr;
 };
 
-Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab activeTab);
+Rectangle BuildSectorEditorPreviewOverlayInteractionRect(
+        PreviewDebugOverlayTab activeTab,
+        float viewportHeight = 0.0f);
 
 void DrawSectorEditorPreviewSurfaceHighlights(
         SectorTopologyMap& topologyMap,

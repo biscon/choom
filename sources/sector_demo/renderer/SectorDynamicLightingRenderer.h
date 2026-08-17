@@ -127,6 +127,9 @@ public:
     const std::vector<int>& SelectedLightIds() const { return selectedLightIds; }
     const std::vector<SectorPreviewDynamicSpotLightShadowCaster>& ShadowCasters() const { return shadowCasters; }
     const std::vector<SectorPreviewDynamicSpotLightShadowMatrix>& ShadowMatrices() const { return shadowMatrices; }
+    const SectorPreviewDynamicPointLightSource* RuntimePointLight() const {
+        return runtimePointLightActive ? &runtimePointLight : nullptr;
+    }
 
     size_t SourceCount() const { return sources.size(); }
     size_t CandidateCount() const { return candidates.size(); }

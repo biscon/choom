@@ -6,9 +6,11 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
+#include "sector_demo/renderer/SectorVolumetricAtmosphereClusters.h"
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -16,8 +18,6 @@ namespace game {
 
 class SectorVolumetricAtmosphereRenderer {
 public:
-    static constexpr std::size_t MaximumLocalVolumes = 16;
-
     bool Initialize();
     bool Prepare(
             const engine::RenderTarget& sceneTarget,
@@ -26,6 +26,7 @@ public:
             const Camera3D& camera,
             float runtimeSeconds,
             const SectorBillboardDynamicLightContext& dynamicLights,
+            const SectorPreviewDynamicPointLightSource* runtimePointLight,
             const std::vector<SectorLightAtmosphereSource>& lightAtmosphereSources,
             const RuntimePortalVisibilityResult& visibility,
             const std::vector<SectorReceiverBounds>& receiverBounds,
@@ -40,31 +41,56 @@ public:
     bool ReadyForAnalyticFogHandoff() const {
         return prepared && resourcesReady && activeMedia && globalFogActive;
     }
-    int EligibleLocalVolumeCount() const { return eligibleLocalVolumeCount; }
-    int ActiveLocalVolumeCount() const { return activeLocalVolumeCount; }
-    int EligibleLightCount() const { return lightSelection.eligibleCount; }
-    int ActiveLightCount() const { return lightSelection.activeCount; }
-    int TargetWidth() const { return target.native.texture.width; }
-    int TargetHeight() const { return target.native.texture.height; }
-    int MarchSteps() const { return marchSteps; }
-    const engine::RenderTarget& AccumulationTarget() const { return target; }
+    int EligibleLocalVolumeCount() const {
+        return clusterBuilder.Diagnostics().eligibleVolumeCount;
+    }
+    int ActiveLocalVolumeCount() const {
+        return clusterBuilder.Diagnostics().retainedVolumeCount;
+    }
+    int EligibleLightCount() const {
+        return clusterBuilder.Diagnostics().eligibleLightCount;
+    }
+    int ActiveLightCount() const {
+        return clusterBuilder.Diagnostics().retainedLightCount;
+    }
+    const SectorVolumetricClusterBuildDiagnostics& ClusterDiagnostics() const {
+        return clusterBuilder.Diagnostics();
+    }
+    int TargetWidth() const { return resourceLayout.integratedWidth; }
+    int TargetHeight() const { return resourceLayout.integratedHeight; }
+    int MarchSteps() const { return resourceLayout.grid.z; }
+    const SectorVolumetricResourceLayout& ResourceLayout() const {
+        return resourceLayout;
+    }
+    SectorTopologyFogSettings::VolumetricQuality RequestedQuality() const {
+        return requestedQuality;
+    }
+    SectorTopologyFogSettings::VolumetricQuality EffectiveQuality() const {
+        return resourceLayout.quality;
+    }
+    std::uint64_t EstimatedResourceBytes() const { return estimatedResourceBytes; }
+    const engine::RenderTarget& AccumulationTarget() const { return integratedTarget; }
     const std::string& ResourceDiagnostic() const { return resourceDiagnostic; }
 
 private:
-    struct ShaderLocations {
-        int sceneDepth = -1;
-        int marchSteps = -1;
+    struct CommonLocations {
         int cameraPosition = -1;
         int cameraForward = -1;
         int cameraRight = -1;
         int cameraUp = -1;
         int tanHalfFov = -1;
         int aspectRatio = -1;
-        int nearPlane = -1;
-        int farPlane = -1;
-        int maximumDistance = -1;
-        int anisotropy = -1;
+        int gridSize = -1;
+        int tileColumns = -1;
+        int sliceCount = -1;
+        int clusterBandCount = -1;
+        int sliceDepths = -1;
         int runtimeSeconds = -1;
+    };
+
+    struct MediumLocations : CommonLocations {
+        int volumeData = -1;
+        int volumeLists = -1;
         int fogEnabled = -1;
         int fogColor = -1;
         int fogStartDistance = -1;
@@ -72,16 +98,20 @@ private:
         int fogMaximumOpacity = -1;
         int fogReferenceHeight = -1;
         int fogHeightFalloff = -1;
-        int localVolumeCount = -1;
-        int localCenters = -1;
-        int localRadii = -1;
-        int localColors = -1;
-        int localParamsA = -1;
-        int localParamsB = -1;
-        SectorDynamicLightShaderLocations dynamicLights;
-        SectorDynamicSpotLightShadowShaderLocations dynamicShadows;
-        int shadowMap0 = -1;
-        int shadowMap1 = -1;
+    };
+
+    struct LightLocations : CommonLocations {
+        int mediumAtlas = -1;
+        int lightData = -1;
+        int lightLists = -1;
+        int anisotropy = -1;
+    };
+
+    struct IntegrationLocations : CommonLocations {
+        int lightingAtlas = -1;
+        int sceneDepth = -1;
+        int nearPlane = -1;
+        int farPlane = -1;
     };
 
     struct CompositeLocations {
@@ -91,48 +121,54 @@ private:
         int atmosphereTexelSize = -1;
     };
 
-    struct LocalVolume {
-        int stableId = -1;
-        Vector3 centerWorld = {};
-        Vector3 radiiWorld = {};
-        Vector3 tint = {};
-        float density = 0.0f;
-        float maximumOpacity = 0.0f;
-        float edgeSoftness = 0.0f;
-        float noiseAmount = 0.0f;
-        float noiseScaleWorld = 1.0f;
-        float flowDirectionRadians = 0.0f;
-        float flowSpeedWorld = 0.0f;
-    };
+    bool EnsureResources(const SectorVolumetricResourceLayout& layout);
+    bool AllocateDataTexture(
+            int width,
+            int height,
+            int pixelFormat,
+            Texture2D& texture,
+            const char* debugName);
+    bool BuildAndUploadDataTextures();
+    void ReleaseResources();
+    void CaptureCommonLocations(Shader shader, CommonLocations& locations);
+    void UploadCommon(Shader shader, const CommonLocations& locations) const;
 
-    bool EnsureTargets(int width, int height);
-    void ReleaseTargets();
-    void BuildLocalVolumes(
-            const SectorTopologyMap& map,
-            SectorTopologyFogSettings::VolumetricQuality quality,
-            const Camera3D& camera);
-    void BuildLightContext(
-            const SectorBillboardDynamicLightContext& dynamicLights);
-
-    Shader shader = {};
+    Shader mediumShader = {};
+    Shader lightShader = {};
+    Shader integrationShader = {};
     Shader compositeShader = {};
-    ShaderLocations locations;
+    MediumLocations mediumLocations;
+    LightLocations lightLocations;
+    IntegrationLocations integrationLocations;
     CompositeLocations compositeLocations;
-    engine::RenderTarget target;
-    std::array<LocalVolume, MaximumLocalVolumes> localVolumes{};
-    SectorVolumetricLightSelection lightSelection;
+    engine::RenderTarget mediumAtlas;
+    engine::RenderTarget lightingAtlas;
+    engine::RenderTarget integratedTarget;
+    Texture2D lightDataTexture = {};
+    Texture2D volumeDataTexture = {};
+    Texture2D lightListTexture = {};
+    Texture2D volumeListTexture = {};
+    std::array<float, SectorVolumetricMaximumViewLights
+            * SectorVolumetricLightRecordTexels * 4> lightDataStaging{};
+    std::array<float, SectorVolumetricMaximumViewVolumes
+            * SectorVolumetricVolumeRecordTexels * 4> volumeDataStaging{};
+    SectorVolumetricClusterBuilder clusterBuilder;
+    SectorVolumetricResourceLayout resourceLayout;
+    SectorVolumetricDepthSliceLayout depthLayout;
     SectorTopologyFogSettings fogSettings;
-    SectorBillboardDynamicLightContext dynamicLightContext;
     Camera3D preparedCamera = {};
     float preparedRuntimeSeconds = 0.0f;
     float nearPlane = 0.0f;
     float farPlane = 0.0f;
     float aspectRatio = 1.0f;
-    int marchSteps = 0;
-    int eligibleLocalVolumeCount = 0;
-    int activeLocalVolumeCount = 0;
-    int failedWidth = 0;
-    int failedHeight = 0;
+    int maximumTextureSize = 0;
+    int failedSceneWidth = 0;
+    int failedSceneHeight = 0;
+    SectorTopologyFogSettings::VolumetricQuality failedQuality =
+            SectorTopologyFogSettings::VolumetricQuality::Off;
+    SectorTopologyFogSettings::VolumetricQuality requestedQuality =
+            SectorTopologyFogSettings::VolumetricQuality::Off;
+    std::uint64_t estimatedResourceBytes = 0;
     bool shaderFailed = false;
     bool warnedUnavailable = false;
     bool prepared = false;

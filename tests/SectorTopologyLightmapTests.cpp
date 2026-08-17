@@ -5,7 +5,9 @@
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
+#include "sector_demo/renderer/SectorLightAtmosphere.h"
 #include "sector_demo/renderer/SectorLocalFogLighting.h"
+#include "sector_demo/renderer/SectorVolumetricAtmosphereClusters.h"
 
 #include <raymath.h>
 
@@ -19,6 +21,7 @@
 #include <iterator>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -4565,6 +4568,148 @@ void TestHdrArtifactAndBakeColorContract()
     std::filesystem::remove_all(sandbox);
 }
 
+void TestVolumetricClusterBudgetsAndReuse()
+{
+    game::SectorVolumetricClusterBuilder builder;
+    const game::SectorVolumetricGridSize grid{32, 18, 32};
+    Check(builder.Configure(grid, 4),
+          "volumetric cluster staging configures for four coarse bands");
+    const size_t lightCapacity = builder.LightIndexCapacity();
+    const size_t volumeCapacity = builder.VolumeIndexCapacity();
+    game::SectorVolumetricDepthSliceLayout depth;
+    Check(game::ComputeSectorVolumetricDepthSliceLayout(
+                    0.1f, 32.0f, 32, 4, depth),
+          "cluster test builds logarithmic depth slices");
+    Camera3D camera{};
+    camera.target = Vector3{0.0f, 0.0f, 1.0f};
+    camera.up = Vector3{0.0f, 1.0f, 0.0f};
+    camera.fovy = 75.0f;
+    game::RuntimePortalVisibilityResult visibility;
+    visibility.fallbackDrawAll = true;
+    game::SectorBillboardDynamicLightContext dynamicLights;
+    game::SectorTopologyMap map;
+
+    const game::SectorVolumetricClusterCamera clusterCamera{
+            camera, 16.0f / 9.0f, grid, depth};
+    game::SectorVolumetricProjectedClusterBounds projected;
+    Check(game::ProjectSectorVolumetricSphereToClusters(
+                    clusterCamera, Vector3{0.0f, 0.0f, 8.0f}, 1.0f,
+                    projected)
+                    && projected.minimumX <= projected.maximumX
+                    && projected.minimumY <= projected.maximumY
+                    && projected.minimumBand
+                            == game::FindSectorVolumetricDepthSlice(depth, 7.0f) / 8
+                    && projected.maximumBand
+                            == game::FindSectorVolumetricDepthSlice(depth, 9.0f) / 8,
+          "front-facing projected bounds cover valid XY cells and depth bands");
+    Check(!game::ProjectSectorVolumetricSphereToClusters(
+                    clusterCamera, Vector3{0.0f, 0.0f, -2.0f}, 0.5f,
+                    projected),
+          "sphere fully behind the camera is rejected from clusters");
+
+    std::vector<game::SectorLightAtmosphereSource> ordered;
+    for (const auto [id, intensity] : {
+                 std::pair<int, float>{5, 1.0f},
+                 std::pair<int, float>{2, 3.0f},
+                 std::pair<int, float>{1, 3.0f}}) {
+        game::SectorLightAtmosphereSource source;
+        source.kind = game::SectorLightAtmosphereSourceKind::StaticPoint;
+        source.shape = game::SectorLightAtmosphereShape::Sphere;
+        source.lightId = id;
+        source.positionWorld = Vector3{0.0f, 0.0f, 8.0f};
+        source.rangeWorld = 1.0f;
+        source.intensity = intensity;
+        ordered.push_back(source);
+    }
+    Check(builder.Build(
+                    map, ordered, nullptr, dynamicLights, visibility, {},
+                    camera, 16.0f / 9.0f, depth, 0.0f, true)
+                    && builder.Lights()[0].stableId == 1
+                    && builder.Lights()[1].stableId == 2
+                    && builder.Lights()[2].stableId == 5,
+          "view selection orders by importance then stable light ID");
+
+    std::vector<game::SectorLightAtmosphereSource> separated;
+    for (int index = 0; index < 20; ++index) {
+        game::SectorLightAtmosphereSource source;
+        source.kind = game::SectorLightAtmosphereSourceKind::StaticPoint;
+        source.shape = game::SectorLightAtmosphereShape::Sphere;
+        source.lightId = index + 1;
+        source.positionWorld = Vector3{
+                -8.0f + static_cast<float>(index) * (16.0f / 19.0f),
+                0.0f,
+                12.0f};
+        source.rangeWorld = 0.18f;
+        source.intensity = 1.0f;
+        separated.push_back(source);
+    }
+    Check(builder.Build(
+                    map, separated, nullptr, dynamicLights, visibility, {},
+                    camera, 16.0f / 9.0f, depth, 0.0f, true),
+          "cluster builder accepts spatially separated light sources");
+    Check(builder.Diagnostics().eligibleLightCount == 20
+                    && builder.Diagnostics().retainedLightCount == 20
+                    && builder.Diagnostics().lightViewOverflowCount == 0,
+          "more than eight separated lights survive the view budget");
+    bool foundTerminatedList = false;
+    const auto& separatedLists = builder.LightClusterIndices();
+    for (size_t index = 0;
+         index + game::SectorVolumetricMaximumClusterLights
+                    <= separatedLists.size();
+         index += game::SectorVolumetricMaximumClusterLights) {
+        if (separatedLists[index] != game::SectorVolumetricListTerminator
+                && separatedLists[index + 1]
+                        == game::SectorVolumetricListTerminator) {
+            foundTerminatedList = true;
+            break;
+        }
+    }
+    Check(foundTerminatedList,
+          "cluster lists terminate unused slots with byte 255");
+
+    std::vector<game::SectorLightAtmosphereSource> crowded;
+    for (int id = 260; id >= 1; --id) {
+        game::SectorLightAtmosphereSource source;
+        source.kind = game::SectorLightAtmosphereSourceKind::StaticPoint;
+        source.shape = game::SectorLightAtmosphereShape::Sphere;
+        source.lightId = id;
+        source.positionWorld = Vector3{0.0f, 0.0f, 8.0f};
+        source.rangeWorld = 2.0f;
+        source.intensity = 1.0f;
+        crowded.push_back(source);
+
+        game::SectorCompiledLocalFogVolume volume;
+        volume.sourceAuthoringFogVolumeId = id;
+        volume.enabled = true;
+        volume.centerWorld = source.positionWorld;
+        volume.radiiWorld = Vector3{2.0f, 2.0f, 2.0f};
+        volume.density = 0.1f;
+        volume.maxOpacity = 0.5f;
+        map.compiledLocalFogVolumes.push_back(volume);
+    }
+    Check(builder.Build(
+                    map, crowded, nullptr, dynamicLights, visibility, {},
+                    camera, 16.0f / 9.0f, depth, 0.0f, true),
+          "cluster builder accepts overflowing light and volume sets");
+    const auto& diagnostics = builder.Diagnostics();
+    Check(diagnostics.eligibleLightCount == 260
+                    && diagnostics.retainedLightCount == 254
+                    && diagnostics.lightViewOverflowCount == 6
+                    && diagnostics.lightClusterOverflowCount > 0,
+          "light view and per-cluster overflow retain fixed budgets");
+    Check(diagnostics.eligibleVolumeCount == 260
+                    && diagnostics.retainedVolumeCount == 254
+                    && diagnostics.volumeViewOverflowCount == 6
+                    && diagnostics.volumeClusterOverflowCount > 0,
+          "volume view and per-cluster overflow retain fixed budgets");
+    Check(builder.Lights()[0].stableId == 1
+                    && builder.Volumes()[0].stableId == 1,
+          "equal-importance overflow uses stable IDs");
+    Check(builder.LightIndexCapacity() == lightCapacity
+                    && builder.VolumeIndexCapacity() == volumeCapacity,
+          "steady cluster rebuild reuses pre-sized staging buffers");
+}
+
 } // namespace
 
 int main()
@@ -4593,6 +4738,7 @@ int main()
     TestLocalFogEffectivePathLengthSaturatesGrazingTraversal();
     TestLocalFogProbeLightingReductionInterpolationAndFallback();
     TestLightAtmosphereVolumeShapesAndProbeFallback();
+    TestVolumetricClusterBudgetsAndReuse();
     TestObjectLightProbeBakeWritesSidecarAndStats();
     TestObjectLightProbeBakeCancellationDoesNotMarkValid();
     TestObjectLightProbePlacementGridCounts();

@@ -54,7 +54,7 @@ SectorAtmosphereSampleStatistics ComputeSectorAtmosphereSampleStatistics(
         std::size_t sampleCount);
 
 struct SectorAtmosphereCaptureMetadata {
-    SectorAtmosphereBackend backend = SectorAtmosphereBackend::Legacy;
+    SectorAtmosphereBackend backend = SectorAtmosphereBackend::Unified;
     SectorTopologyFogSettings::VolumetricQuality quality =
             SectorTopologyFogSettings::VolumetricQuality::Off;
     int sceneWidth = 0;
@@ -170,7 +170,9 @@ struct SectorAtmosphereTargetDiagnostics {
 };
 
 struct SectorAtmosphereDiagnostics {
-    SectorAtmosphereBackend backend = SectorAtmosphereBackend::Legacy;
+    SectorAtmosphereBackend backend = SectorAtmosphereBackend::Unified;
+    SectorTopologyFogSettings::VolumetricQuality requestedQuality =
+            SectorTopologyFogSettings::VolumetricQuality::Off;
     SectorTopologyFogSettings::VolumetricQuality effectiveQuality =
             SectorTopologyFogSettings::VolumetricQuality::Off;
     int sceneWidth = 0;
@@ -182,6 +184,15 @@ struct SectorAtmosphereDiagnostics {
     int unifiedIntegrationCount = 0;
     int unifiedLightEligibleCount = 0;
     int unifiedLightActiveCount = 0;
+    SectorVolumetricGridSize unifiedGrid;
+    int unifiedAtlasWidth = 0;
+    int unifiedAtlasHeight = 0;
+    int unifiedClusterListWidth = 0;
+    int unifiedClusterListHeight = 0;
+    int unifiedLightViewOverflowCount = 0;
+    std::uint64_t unifiedLightClusterOverflowCount = 0;
+    int unifiedVolumeViewOverflowCount = 0;
+    std::uint64_t unifiedVolumeClusterOverflowCount = 0;
     int dustEligible = 0;
     int dustActive = 0;
     int dustVisibleParticles = 0;

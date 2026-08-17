@@ -541,19 +541,25 @@ void TestHdrEffectShaderAndPassPolicies()
                                "atmosphereBackend == SectorAtmosphereBackend::Unified")
                             != std::string::npos,
           "comparison mode selects one continuous backend and keeps dust afterward");
-    Check(unified.find("for(int stepIndex=0;stepIndex<MAX_STEPS;++stepIndex)")
+    Check(unified.find("MediumInjectionFs") != std::string::npos
+                    && unified.find("LightInjectionFs") != std::string::npos
+                    && unified.find("IntegrateFs") != std::string::npos
+                    && unified.find("uniform sampler2D lightLists")
                             != std::string::npos
-                    && unified.find("vec3 direct=dynamicLighting(p,rayDirection)")
+                    && unified.find("uniform sampler2D volumeLists")
                             != std::string::npos
                     && unified.find("uniform sampler2D sceneDepth")
                             != std::string::npos
+                    && unified.find("vec4 packed=") == std::string::npos
                     && unified.find("atmosphere/=max(totalWeight,0.0001)")
                             != std::string::npos,
-          "unified prototype performs one depth-clipped march and bilateral composite");
+          "unified backend injects medium/light froxels with GLSL-safe identifiers, integrates columns, and composites bilaterally");
     Check(unified.find("hazeVolumeCount") == std::string::npos
                     && unified.find("hazeLighting") == std::string::npos
                     && unified.find("localLighting") == std::string::npos
                     && unified.find("weightedStatic") == std::string::npos
+                    && unified.find("MAX_DYNAMIC_LIGHTS") == std::string::npos
+                    && unified.find("glTexSubImage2D") != std::string::npos
                     && unified.find("fogSettings.volumetricMaxDistanceWorld")
                             != std::string::npos
                     && unified.find("fogSettings.anisotropy") != std::string::npos,

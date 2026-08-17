@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorTopologyMap.h"
 
+#include <array>
 #include <cstdint>
 
 namespace game {
@@ -11,6 +12,7 @@ inline constexpr int SectorVolumetricMaximumViewVolumes = 254;
 inline constexpr int SectorVolumetricMaximumClusterLights = 16;
 inline constexpr int SectorVolumetricMaximumClusterVolumes = 16;
 inline constexpr int SectorVolumetricLightRecordTexels = 4;
+inline constexpr int SectorVolumetricVolumeRecordTexels = 5;
 inline constexpr int SectorVolumetricClusterListTexels = 4;
 inline constexpr int SectorVolumetricFirstReservedIndex = 254;
 inline constexpr int SectorVolumetricListTerminator = 255;
@@ -56,6 +58,26 @@ struct SectorVolumetricClusterListLayout {
     std::uint64_t estimatedBytes = 0;
 };
 
+struct SectorVolumetricDepthSliceLayout {
+    int sliceCount = 0;
+    int clusterBandCount = 0;
+    std::array<float, 65> endpoints{};
+};
+
+struct SectorVolumetricResourceLayout {
+    SectorTopologyFogSettings::VolumetricQuality quality =
+            SectorTopologyFogSettings::VolumetricQuality::Off;
+    SectorVolumetricGridSize grid;
+    SectorVolumetricAtlasLayout atlas;
+    SectorVolumetricClusterListLayout clusters;
+    int integratedWidth = 0;
+    int integratedHeight = 0;
+    int lightDataWidth = SectorVolumetricLightRecordTexels;
+    int lightDataHeight = SectorVolumetricMaximumViewLights;
+    int volumeDataWidth = SectorVolumetricVolumeRecordTexels;
+    int volumeDataHeight = SectorVolumetricMaximumViewVolumes;
+};
+
 struct SectorLegacyAtmosphereQualityContract {
     float localFogTargetScale = 0.0f;
     int localFogMarchSteps = 0;
@@ -83,9 +105,37 @@ bool ComputeSectorVolumetricAtlasTexel(
         int froxelY,
         int froxelZ,
         SectorVolumetricAtlasTexel& outTexel);
+bool ComputeSectorVolumetricFroxel(
+        const SectorVolumetricAtlasLayout& layout,
+        int atlasX,
+        int atlasY,
+        int& outFroxelX,
+        int& outFroxelY,
+        int& outFroxelZ);
 SectorVolumetricClusterListLayout ComputeSectorVolumetricClusterListLayout(
         SectorVolumetricGridSize grid,
         int clusterBands);
+SectorVolumetricResourceLayout ComputeSectorVolumetricResourceLayout(
+        SectorTopologyFogSettings::VolumetricQuality quality,
+        int sceneWidth,
+        int sceneHeight);
+bool SectorVolumetricResourceLayoutFitsTextureLimit(
+        const SectorVolumetricResourceLayout& layout,
+        int maximumTextureSize);
+SectorVolumetricResourceLayout ResolveSectorVolumetricResourceLayout(
+        SectorTopologyFogSettings::VolumetricQuality requestedQuality,
+        int sceneWidth,
+        int sceneHeight,
+        int maximumTextureSize);
+bool ComputeSectorVolumetricDepthSliceLayout(
+        float startDistance,
+        float endDistance,
+        int sliceCount,
+        int clusterBandCount,
+        SectorVolumetricDepthSliceLayout& outLayout);
+int FindSectorVolumetricDepthSlice(
+        const SectorVolumetricDepthSliceLayout& layout,
+        float viewDepth);
 std::uint64_t EstimateSectorAtmosphereTargetBytes(
         int width,
         int height,

@@ -4,6 +4,7 @@
 
 #include <raylib.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 
@@ -50,12 +51,50 @@ inline Rectangle BuildSectorEditorPreviewDebugTabRect(
             tabHeight};
 }
 
-inline float SectorEditorPreviewOverlayExpandedHeight(PreviewDebugOverlayTab activeTab)
+inline float SectorEditorPreviewOverlayExpandedHeight(
+        PreviewDebugOverlayTab activeTab,
+        float viewportHeight = 0.0f)
 {
     if (activeTab == PreviewDebugOverlayTab::Pbr) return 610.0f;
-    if (activeTab == PreviewDebugOverlayTab::Atmosphere) return 690.0f;
+    if (activeTab == PreviewDebugOverlayTab::Atmosphere) {
+        const float desired = 600.0f;
+        return viewportHeight > 0.0f
+                ? std::min(desired, std::max(240.0f, viewportHeight - 64.0f))
+                : desired;
+    }
     if (activeTab == PreviewDebugOverlayTab::Navigation) return 760.0f;
     return 390.0f;
+}
+
+struct SectorEditorPreviewAtmosphereOverlayLayout {
+    Rectangle backend;
+    Rectangle capture;
+    Rectangle copyReport;
+    Rectangle diagnosticsScroll;
+};
+
+inline SectorEditorPreviewAtmosphereOverlayLayout
+BuildSectorEditorPreviewAtmosphereOverlayLayout(
+        Rectangle panel,
+        float padding,
+        float contentTop,
+        float rowHeight,
+        float gap)
+{
+    const float contentWidth = std::max(0.0f, panel.width - padding * 2.0f);
+    const float controlGap = 8.0f;
+    const float backendWidth = 220.0f;
+    const float actionWidth = 132.0f;
+    const float scrollTop = contentTop + rowHeight + gap;
+    return SectorEditorPreviewAtmosphereOverlayLayout{
+            Rectangle{panel.x + padding, contentTop, backendWidth, rowHeight},
+            Rectangle{panel.x + padding + backendWidth + controlGap,
+                    contentTop, actionWidth, rowHeight},
+            Rectangle{panel.x + padding + backendWidth + controlGap
+                            + actionWidth + controlGap,
+                    contentTop, actionWidth, rowHeight},
+            Rectangle{panel.x + padding, scrollTop, contentWidth,
+                    std::max(0.0f, panel.y + panel.height - padding - scrollTop)}};
 }
 
 } // namespace game

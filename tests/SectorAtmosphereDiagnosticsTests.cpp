@@ -92,6 +92,8 @@ void TestGridAtlasAndClusterLayouts()
           "Low atlas chooses the minimum-maximum-dimension near-square packing");
     const game::SectorVolumetricGridSize highGrid =
             game::ComputeSectorVolumetricGridSize(Quality::High, 1920, 1080);
+    const game::SectorVolumetricGridSize mediumGrid =
+            game::ComputeSectorVolumetricGridSize(Quality::Medium, 2560, 1080);
     const game::SectorVolumetricAtlasLayout highAtlas =
             game::ComputeSectorVolumetricAtlasLayout(highGrid);
     Check(highAtlas.tileColumns == 6 && highAtlas.tileRows == 11
@@ -105,6 +107,37 @@ void TestGridAtlasAndClusterLayouts()
     Check(!game::ComputeSectorVolumetricAtlasTexel(
                     highAtlas, 240, 0, 0, texel),
           "out-of-range froxel coordinates are rejected");
+    for (const game::SectorVolumetricGridSize grid
+         : {low, fourByThree, mediumGrid, highGrid}) {
+        const game::SectorVolumetricAtlasLayout atlas =
+                game::ComputeSectorVolumetricAtlasLayout(grid);
+        for (const int x : {0, grid.x - 1}) {
+            for (const int y : {0, grid.y - 1}) {
+                for (const int z : {0, grid.z - 1}) {
+                    game::SectorVolumetricAtlasTexel mapped;
+                    int roundX = -1;
+                    int roundY = -1;
+                    int roundZ = -1;
+                    Check(game::ComputeSectorVolumetricAtlasTexel(
+                                      atlas, x, y, z, mapped)
+                                    && game::ComputeSectorVolumetricFroxel(
+                                            atlas, mapped.x, mapped.y,
+                                            roundX, roundY, roundZ)
+                                    && roundX == x && roundY == y && roundZ == z,
+                          "atlas boundary coordinates round-trip without overlap");
+                }
+            }
+        }
+    }
+    int unusedX = 0;
+    int unusedY = 0;
+    int unusedZ = 0;
+    Check(!game::ComputeSectorVolumetricFroxel(
+                    highAtlas,
+                    highAtlas.width - 1,
+                    highAtlas.grid.y * highAtlas.tileRows - 1,
+                    unusedX, unusedY, unusedZ),
+          "unused padded atlas tiles do not decode to a froxel");
 
     const game::SectorVolumetricClusterListLayout clusters =
             game::ComputeSectorVolumetricClusterListLayout(highGrid, 8);
@@ -118,6 +151,41 @@ void TestGridAtlasAndClusterLayouts()
                     && game::SectorVolumetricFirstReservedIndex == 254
                     && game::SectorVolumetricListTerminator == 255,
           "final view, cluster, reserved-index, and terminator budgets are fixed");
+
+    const game::SectorVolumetricResourceLayout mediumFallback =
+            game::ResolveSectorVolumetricResourceLayout(
+                    Quality::High, 1920, 1080, 1000);
+    const game::SectorVolumetricResourceLayout lowFallback =
+            game::ResolveSectorVolumetricResourceLayout(
+                    Quality::High, 1920, 1080, 800);
+    const game::SectorVolumetricResourceLayout disabled =
+            game::ResolveSectorVolumetricResourceLayout(
+                    Quality::High, 1920, 1080, 500);
+    Check(mediumFallback.quality == Quality::Medium
+                    && lowFallback.quality == Quality::Low
+                    && disabled.quality == Quality::Off,
+          "texture-size fallback steps High to Medium to Low to Off");
+}
+
+void TestLogarithmicDepthSlices()
+{
+    game::SectorVolumetricDepthSliceLayout layout;
+    Check(game::ComputeSectorVolumetricDepthSliceLayout(
+                    0.05f, 256.0f, 64, 8, layout),
+          "valid High depth interval builds logarithmic slices");
+    bool monotonic = layout.endpoints[0] == 0.05f
+            && layout.endpoints[64] == 256.0f;
+    for (int index = 1; index <= layout.sliceCount; ++index) {
+        monotonic = monotonic
+                && std::isfinite(layout.endpoints[static_cast<size_t>(index)])
+                && layout.endpoints[static_cast<size_t>(index)]
+                        >= layout.endpoints[static_cast<size_t>(index - 1)];
+    }
+    Check(monotonic, "logarithmic depth endpoints are finite, monotonic, and exact");
+    Check(game::FindSectorVolumetricDepthSlice(layout, 0.05f) == 0
+                    && game::FindSectorVolumetricDepthSlice(layout, 256.0f) == 63
+                    && game::FindSectorVolumetricDepthSlice(layout, 300.0f) == -1,
+          "depth lookup covers the exact interval without out-of-range slices");
 }
 
 void TestStatisticsAndFormatting()
@@ -139,6 +207,9 @@ void TestStatisticsAndFormatting()
           "diagnostic byte formatter produces stable MiB text");
 
     game::SectorAtmosphereDiagnostics diagnostics;
+    diagnostics.backend = game::SectorAtmosphereBackend::Legacy;
+    diagnostics.requestedQuality =
+            game::SectorTopologyFogSettings::VolumetricQuality::Medium;
     diagnostics.effectiveQuality =
             game::SectorTopologyFogSettings::VolumetricQuality::Medium;
     diagnostics.sceneWidth = 2880;
@@ -168,6 +239,7 @@ void TestStatisticsAndFormatting()
 game::SectorAtmosphereCaptureMetadata MakeMetadata()
 {
     game::SectorAtmosphereCaptureMetadata metadata;
+    metadata.backend = game::SectorAtmosphereBackend::Legacy;
     metadata.quality = game::SectorTopologyFogSettings::VolumetricQuality::High;
     metadata.sceneWidth = 2880;
     metadata.sceneHeight = 1620;
@@ -264,6 +336,7 @@ int main()
 {
     TestQualityContractsAndLegacyParity();
     TestGridAtlasAndClusterLayouts();
+    TestLogarithmicDepthSlices();
     TestStatisticsAndFormatting();
     TestCaptureWarmupAndCompletion();
     TestCaptureAbortAndEmptyReport();

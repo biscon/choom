@@ -621,8 +621,24 @@ void TestPreviewNavigationTabLayout()
                   game::PreviewDebugOverlayTab::Navigation) >= 520.0f,
           "preview interaction bounds include Navigation controls and diagnostics");
     Check(game::SectorEditorPreviewOverlayExpandedHeight(
-                  game::PreviewDebugOverlayTab::Atmosphere) >= 600.0f,
-          "preview interaction bounds include atmosphere capture controls and report");
+                  game::PreviewDebugOverlayTab::Atmosphere, 720.0f) == 600.0f
+                  && game::SectorEditorPreviewOverlayExpandedHeight(
+                          game::PreviewDebugOverlayTab::Atmosphere, 560.0f)
+                          == 496.0f,
+          "atmosphere diagnostics use a bounded viewport-relative panel height");
+    const Rectangle atmospherePanel{32.0f, 32.0f, 700.0f, 600.0f};
+    const auto atmosphere = game::BuildSectorEditorPreviewAtmosphereOverlayLayout(
+            atmospherePanel, 10.0f, 104.0f, 24.0f, 6.0f);
+    Check(Contains(atmospherePanel, atmosphere.backend)
+                  && Contains(atmospherePanel, atmosphere.capture)
+                  && Contains(atmospherePanel, atmosphere.copyReport)
+                  && Contains(atmospherePanel, atmosphere.diagnosticsScroll),
+          "atmosphere controls and diagnostics scroll viewport stay inside the panel");
+    Check(!Overlaps(atmosphere.backend, atmosphere.capture)
+                  && !Overlaps(atmosphere.capture, atmosphere.copyReport)
+                  && atmosphere.diagnosticsScroll.y
+                          > atmosphere.backend.y + atmosphere.backend.height,
+          "pinned atmosphere controls do not overlap each other or scrolling diagnostics");
 }
 
 } // namespace

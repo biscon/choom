@@ -161,7 +161,8 @@ UIScrollAreaResult BeginScrollArea(
         Vector2 contentSize,
         UIScrollState& state,
         bool drawFrame = true,
-        float paddingPx = DefaultScrollAreaPaddingPx);
+        float paddingPx = DefaultScrollAreaPaddingPx,
+        bool inputEnabled = true);
 
 void EndScrollArea(
         UIContext& ui,

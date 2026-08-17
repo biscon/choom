@@ -326,7 +326,7 @@ private:
     SectorAtmosphereGpuProfiler atmosphereGpuProfiler;
     SectorAtmosphereDiagnostics atmosphereDiagnostics;
     SectorAtmosphereCapture atmosphereCapture;
-    SectorAtmosphereBackend atmosphereBackend = SectorAtmosphereBackend::Legacy;
+    SectorAtmosphereBackend atmosphereBackend = SectorAtmosphereBackend::Unified;
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;

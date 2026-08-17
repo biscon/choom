@@ -3573,7 +3573,9 @@ bool SectorEditor::IsPreviewOverlayMouseInteractive() const
 
 Rectangle SectorEditor::BuildPreviewOverlayInteractionRect() const
 {
-    return BuildSectorEditorPreviewOverlayInteractionRect(previewState.overlay.activePreviewDebugOverlayTab);
+    return BuildSectorEditorPreviewOverlayInteractionRect(
+            previewState.overlay.activePreviewDebugOverlayTab,
+            static_cast<float>(GetScreenHeight()));
 }
 
 void SectorEditor::DrawPreviewOverlay(

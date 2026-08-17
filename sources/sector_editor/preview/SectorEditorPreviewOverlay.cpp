@@ -217,13 +217,16 @@ void DrawSpotLightConeRing(
 
 } // namespace
 
-Rectangle BuildSectorEditorPreviewOverlayInteractionRect(PreviewDebugOverlayTab activeTab)
+Rectangle BuildSectorEditorPreviewOverlayInteractionRect(
+        PreviewDebugOverlayTab activeTab,
+        float viewportHeight)
 {
     constexpr float x = 32.0f;
     constexpr float y = 32.0f;
     constexpr float width = 700.0f;
     constexpr float collapsedHeight = 78.0f;
-    const float expandedHeight = SectorEditorPreviewOverlayExpandedHeight(activeTab);
+    const float expandedHeight = SectorEditorPreviewOverlayExpandedHeight(
+            activeTab, viewportHeight);
     return Rectangle{
             x,
             y,
@@ -636,63 +639,59 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             case PreviewDebugOverlayTab::Atmosphere: {
                 const SectorAtmosphereDiagnostics& diagnostics =
                         preview.AtmosphereDiagnostics();
-                addKeyValue("backend", SectorAtmosphereBackendName(
-                        diagnostics.backend));
                 addKeyValueStyled(
                         "summary",
                         FormatSectorAtmosphereDiagnosticsSummary(diagnostics),
                         smallConfig.mutedTextColor,
                         true);
-                addKeyValue("local fog", TextFormat(
-                        "%dx%d RGBA16F | %d steps | eligible/active %d/%d | %s",
-                        diagnostics.localFog.width,
-                        diagnostics.localFog.height,
-                        diagnostics.localFog.marchSteps,
-                        diagnostics.localFog.eligibleCount,
-                        diagnostics.localFog.activeCount,
-                        FormatSectorAtmosphereBytes(
-                                diagnostics.localFog.estimatedBytes).c_str()));
-                addKeyValue("haze", TextFormat(
-                        "%dx%d RGBA16F | %d steps | eligible/active %d/%d | %s",
-                        diagnostics.haze.width,
-                        diagnostics.haze.height,
-                        diagnostics.haze.marchSteps,
-                        diagnostics.haze.eligibleCount,
-                        diagnostics.haze.activeCount,
-                        FormatSectorAtmosphereBytes(
-                                diagnostics.haze.estimatedBytes).c_str()));
-                addKeyValue("unified", TextFormat(
-                        "%dx%d RGBA16F | %d steps | integrations %d | lights %d/%d | %s",
-                        diagnostics.unified.width,
-                        diagnostics.unified.height,
-                        diagnostics.unified.marchSteps,
-                        diagnostics.unifiedIntegrationCount,
-                        diagnostics.unifiedLightEligibleCount,
-                        diagnostics.unifiedLightActiveCount,
-                        FormatSectorAtmosphereBytes(
-                                diagnostics.unified.estimatedBytes).c_str()));
+                if (diagnostics.backend == SectorAtmosphereBackend::Legacy) {
+                    addKeyValue("legacy media", TextFormat(
+                            "fog %dx%d %d steps %d/%d | haze %dx%d %d steps %d/%d",
+                            diagnostics.localFog.width,
+                            diagnostics.localFog.height,
+                            diagnostics.localFog.marchSteps,
+                            diagnostics.localFog.eligibleCount,
+                            diagnostics.localFog.activeCount,
+                            diagnostics.haze.width,
+                            diagnostics.haze.height,
+                            diagnostics.haze.marchSteps,
+                            diagnostics.haze.eligibleCount,
+                            diagnostics.haze.activeCount));
+                } else {
+                    addKeyValue("froxels", TextFormat(
+                            "%dx%dx%d | atlas %dx%d | lists %dx%d | %s",
+                            diagnostics.unifiedGrid.x,
+                            diagnostics.unifiedGrid.y,
+                            diagnostics.unifiedGrid.z,
+                            diagnostics.unifiedAtlasWidth,
+                            diagnostics.unifiedAtlasHeight,
+                            diagnostics.unifiedClusterListWidth,
+                            diagnostics.unifiedClusterListHeight,
+                            FormatSectorAtmosphereBytes(
+                                    diagnostics.unified.estimatedBytes).c_str()));
+                    addKeyValueStyled("clustered", TextFormat(
+                            "lights %d/%d overflow view %d cluster %llu | volumes %d/%d overflow view %d cluster %llu",
+                            diagnostics.unifiedLightEligibleCount,
+                            diagnostics.unifiedLightActiveCount,
+                            diagnostics.unifiedLightViewOverflowCount,
+                            static_cast<unsigned long long>(
+                                    diagnostics.unifiedLightClusterOverflowCount),
+                            diagnostics.localFog.eligibleCount,
+                            diagnostics.localFog.activeCount,
+                            diagnostics.unifiedVolumeViewOverflowCount,
+                            static_cast<unsigned long long>(
+                                    diagnostics.unifiedVolumeClusterOverflowCount)),
+                            smallConfig.mutedTextColor,
+                            true);
+                }
                 addKeyValue("dust", TextFormat(
-                        "eligible/active %d/%d | visible particles %d",
+                        "%d/%d emitters | %d visible particles",
                         diagnostics.dustEligible,
                         diagnostics.dustActive,
                         diagnostics.dustVisibleParticles));
-                addKeyValueStyled("resources", TextFormat(
-                        "fog=%s | haze=%s | unified=%s | dust=%s | scratch=%s",
-                        diagnostics.localFog.resourceStatus.c_str(),
-                        diagnostics.haze.resourceStatus.c_str(),
-                        diagnostics.unified.resourceStatus.c_str(),
-                        diagnostics.dustResourceStatus.c_str(),
-                        diagnostics.scratchResourceStatus.c_str()),
-                        smallConfig.mutedTextColor, true);
-                addKeyValueStyled("GPU timestamps", TextFormat(
-                        "%s | skipped frames %llu",
-                        diagnostics.gpuTimingStatus.c_str(),
-                        static_cast<unsigned long long>(
-                                diagnostics.skippedGpuQueryFrames)),
-                        smallConfig.mutedTextColor, true);
                 if (diagnostics.latestGpuTimings.valid) {
-                    addKeyValue("latest GPU ms", TextFormat(
-                            "total %.3f | local fog %.3f | haze %.3f | unified %.3f | dust %.3f",
+                    addKeyValue("GPU ms", TextFormat(
+                            "total %.3f | fog %.3f | haze %.3f | unified %.3f | dust %.3f | skipped %llu",
                             diagnostics.latestGpuTimings.milliseconds[
                                     static_cast<size_t>(SectorAtmosphereGpuPass::Total)],
                             diagnostics.latestGpuTimings.milliseconds[
@@ -702,20 +701,34 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             diagnostics.latestGpuTimings.milliseconds[
                                     static_cast<size_t>(SectorAtmosphereGpuPass::Unified)],
                             diagnostics.latestGpuTimings.milliseconds[
-                                    static_cast<size_t>(SectorAtmosphereGpuPass::Dust)]));
+                                    static_cast<size_t>(SectorAtmosphereGpuPass::Dust)],
+                            static_cast<unsigned long long>(
+                                    diagnostics.skippedGpuQueryFrames)));
                 } else {
-                    addKeyValue("latest GPU ms", "waiting for delayed query results");
+                    addKeyValue("GPU", TextFormat(
+                            "%s | waiting for delayed results | skipped %llu",
+                            diagnostics.gpuTimingStatus.c_str(),
+                            static_cast<unsigned long long>(
+                                    diagnostics.skippedGpuQueryFrames)));
                 }
                 const SectorAtmosphereCapture& capture = preview.AtmosphereCapture();
                 addKeyValue("capture", TextFormat(
-                        "%s | %s | warmup %zu/60 | issued %zu/300 | resolved %zu/300",
+                        "%s | warmup %zu/60 | issued %zu/300 | resolved %zu/300 | report %s",
                         SectorAtmosphereCaptureStateName(capture.State()),
-                        capture.Status().c_str(),
                         capture.WarmupIssued(),
                         capture.CaptureIssued(),
-                        capture.SamplesResolved()));
-                if (!capture.Report().empty()) {
-                    addKeyValueStyled("report", capture.Report(),
+                        capture.SamplesResolved(),
+                        capture.Report().empty() ? "pending" : "ready (Copy Report)"));
+                const bool resourcesReady = diagnostics.backend
+                                == SectorAtmosphereBackend::Unified
+                        && diagnostics.unified.resourceStatus.rfind("ready:", 0) == 0
+                        && diagnostics.fallbackStatus == "unified backend active";
+                if (!resourcesReady) {
+                    addKeyValueStyled("resources", TextFormat(
+                            "%s | unified %s | dust %s",
+                            diagnostics.fallbackStatus.c_str(),
+                            diagnostics.unified.resourceStatus.c_str(),
+                            diagnostics.dustResourceStatus.c_str()),
                             smallConfig.mutedTextColor, true);
                 }
                 break;
@@ -1468,10 +1481,17 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         }
     }
 
+    const bool atmosphereTab = drawExpanded
+            && overlayState.activePreviewDebugOverlayTab
+                    == PreviewDebugOverlayTab::Atmosphere;
+    const float lineContentW = atmosphereTab
+            ? std::max(0.0f, contentW - config.scrollbarSize
+                    - engine::DefaultScrollAreaPaddingPx * 2.0f)
+            : contentW;
     float contentH = 0.0f;
     for (const OverlayLine& line : lines) {
         contentH += line.wrap
-                ? MeasureSectorEditorWrappedTextHeight(smallConfig, assets, smallFont, line.text.c_str(), contentW, 1)
+                ? MeasureSectorEditorWrappedTextHeight(smallConfig, assets, smallFont, line.text.c_str(), lineContentW, 1)
                 : rowH;
         contentH += 4.0f;
     }
@@ -1484,9 +1504,6 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
         contentH += rowH + 6.0f;
     }
-    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Atmosphere) {
-        contentH += (rowH + 6.0f) * 2.0f;
-    }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Pbr) {
         contentH += (rowH + 6.0f) * 4.0f;
     }
@@ -1496,11 +1513,17 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Navigation) {
         contentH += (rowH + 6.0f) * 6.0f;
     }
+    const float naturalPanelHeight =
+            padding + stripH + gap + tabH + contentH + padding;
     const Rectangle panel{
             basePanel.x,
             basePanel.y,
             basePanel.width,
-            padding + stripH + gap + tabH + contentH + padding};
+            atmosphereTab
+                    ? SectorEditorPreviewOverlayExpandedHeight(
+                            PreviewDebugOverlayTab::Atmosphere,
+                            static_cast<float>(GetScreenHeight()))
+                    : naturalPanelHeight};
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
@@ -1637,14 +1660,16 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         y += rowH + 6.0f;
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Atmosphere) {
+        const SectorEditorPreviewAtmosphereOverlayLayout atmosphereLayout =
+                BuildSectorEditorPreviewAtmosphereOverlayLayout(
+                        panel, padding, y, rowH, gap);
         const char* backendOptions[] = {"Legacy", "Unified"};
         int selectedBackend = static_cast<int>(preview.AtmosphereBackend());
-        const Rectangle backendRect{panel.x + padding, y, 220.0f, rowH};
         if (mouseInteractive) {
             if (engine::Option(
                         ui, smallConfig, input, assets,
                         "sector_editor_atmosphere_backend",
-                        backendRect, smallFont,
+                        atmosphereLayout.backend, smallFont,
                         backendOptions,
                         sizeof(backendOptions) / sizeof(backendOptions[0]),
                         selectedBackend)) {
@@ -1654,24 +1679,22 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         + SectorAtmosphereBackendName(preview.AtmosphereBackend());
             }
         } else {
-            DrawRectangleRec(backendRect, Color{24, 30, 38, 155});
-            DrawRectangleLinesEx(backendRect, config.borderThickness, config.borderColor);
-            engine::Text(smallConfig, assets, backendRect, smallFont,
+            DrawRectangleRec(atmosphereLayout.backend, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(atmosphereLayout.backend, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, atmosphereLayout.backend, smallFont,
                     SectorAtmosphereBackendName(preview.AtmosphereBackend()),
                     engine::UITextJustify::Center, smallConfig.mutedTextColor);
         }
-        y += rowH + 6.0f;
 
         const SectorAtmosphereCapture& capture = preview.AtmosphereCapture();
         const bool captureRunning = capture.State() == SectorAtmosphereCaptureState::Warmup
                 || capture.State() == SectorAtmosphereCaptureState::Capturing
                 || capture.State() == SectorAtmosphereCaptureState::Draining;
-        const Rectangle captureRect{panel.x + padding, y, 132.0f, rowH};
         if (mouseInteractive) {
             if (engine::Button(
                         ui, smallConfig, input, assets,
                         "sector_editor_atmosphere_capture",
-                        captureRect, smallFont,
+                        atmosphereLayout.capture, smallFont,
                         captureRunning ? "Cancel Capture" : "Capture 300")) {
                 if (captureRunning) {
                     preview.CancelAtmosphereCapture();
@@ -1680,32 +1703,29 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 }
             }
         } else {
-            DrawRectangleRec(captureRect, Color{24, 30, 38, 155});
-            DrawRectangleLinesEx(captureRect, config.borderThickness, config.borderColor);
-            engine::Text(smallConfig, assets, captureRect, smallFont,
+            DrawRectangleRec(atmosphereLayout.capture, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(atmosphereLayout.capture, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, atmosphereLayout.capture, smallFont,
                     captureRunning ? "Cancel Capture" : "Capture 300",
                     engine::UITextJustify::Center, smallConfig.mutedTextColor);
         }
-        y += rowH + 6.0f;
 
-        const Rectangle copyRect{panel.x + padding, y, 132.0f, rowH};
         const bool reportReady = !capture.Report().empty();
         if (mouseInteractive && reportReady) {
             if (engine::Button(
                         ui, smallConfig, input, assets,
                         "sector_editor_atmosphere_copy_report",
-                        copyRect, smallFont, "Copy Report")) {
+                        atmosphereLayout.copyReport, smallFont, "Copy Report")) {
                 SetClipboardText(capture.Report().c_str());
                 context.statusText = "Atmosphere capture report copied";
             }
         } else {
-            DrawRectangleRec(copyRect, Color{24, 30, 38, 155});
-            DrawRectangleLinesEx(copyRect, config.borderThickness, config.borderColor);
-            engine::Text(smallConfig, assets, copyRect, smallFont,
+            DrawRectangleRec(atmosphereLayout.copyReport, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(atmosphereLayout.copyReport, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, atmosphereLayout.copyReport, smallFont,
                     reportReady ? "Copy Report" : "Report Pending",
                     engine::UITextJustify::Center, smallConfig.mutedTextColor);
         }
-        y += rowH + 6.0f;
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Pbr) {
         SectorPbrContributionSettings settings = preview.PbrContributionSettings();
@@ -2084,20 +2104,60 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         }
         y += rowH + 6.0f;
     }
-    for (const OverlayLine& line : lines) {
-        const float lineH = line.wrap
-                ? MeasureSectorEditorWrappedTextHeight(smallConfig, assets, smallFont, line.text.c_str(), contentW, 1)
-                : rowH;
-        engine::Text(
+    if (atmosphereTab) {
+        const SectorEditorPreviewAtmosphereOverlayLayout atmosphereLayout =
+                BuildSectorEditorPreviewAtmosphereOverlayLayout(
+                        panel, padding, tabY + tabH + gap, rowH, gap);
+        engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
+                ui,
                 smallConfig,
-                assets,
-                Rectangle{panel.x + padding, y, contentW, lineH},
-                smallFont,
-                line.text.c_str(),
-                engine::UITextJustify::Left,
-                line.color,
-                line.wrap);
-        y += lineH + 4.0f;
+                input,
+                "sector_editor_preview_atmosphere_diagnostics_scroll",
+                atmosphereLayout.diagnosticsScroll,
+                Vector2{lineContentW, contentH},
+                overlayState.atmosphereDiagnosticsScroll,
+                false,
+                engine::DefaultScrollAreaPaddingPx,
+                mouseInteractive);
+        float localY = 0.0f;
+        for (const OverlayLine& line : lines) {
+            const float lineH = line.wrap
+                    ? MeasureSectorEditorWrappedTextHeight(
+                            smallConfig, assets, smallFont,
+                            line.text.c_str(), lineContentW, 1)
+                    : rowH;
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    Rectangle{0.0f, localY, lineContentW, lineH},
+                    smallFont,
+                    line.text.c_str(),
+                    engine::UITextJustify::Left,
+                    line.color,
+                    line.wrap);
+            localY += lineH + 4.0f;
+        }
+        engine::EndScrollArea(
+                ui, smallConfig, input, scroll,
+                overlayState.atmosphereDiagnosticsScroll);
+    } else {
+        for (const OverlayLine& line : lines) {
+            const float lineH = line.wrap
+                    ? MeasureSectorEditorWrappedTextHeight(
+                            smallConfig, assets, smallFont,
+                            line.text.c_str(), contentW, 1)
+                    : rowH;
+            engine::Text(
+                    smallConfig,
+                    assets,
+                    Rectangle{panel.x + padding, y, contentW, lineH},
+                    smallFont,
+                    line.text.c_str(),
+                    engine::UITextJustify::Left,
+                    line.color,
+                    line.wrap);
+            y += lineH + 4.0f;
+        }
     }
 
     (void)context.font;

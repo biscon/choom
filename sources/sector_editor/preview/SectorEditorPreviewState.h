@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorPreviewTypes.h"
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/SectorEditorSurfaceTypes.h"
@@ -26,6 +27,7 @@ struct SectorEditorPreviewOverlayState {
     bool showNavigationNpcAgents = true;
     bool showNavigationSelectedNpcOnly = false;
     PreviewDebugOverlayTab activePreviewDebugOverlayTab = PreviewDebugOverlayTab::None;
+    engine::UIScrollState atmosphereDiagnosticsScroll;
 };
 
 struct SectorEditorPreviewSelectionState {

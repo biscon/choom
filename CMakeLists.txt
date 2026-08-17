@@ -450,10 +450,12 @@ if(BUILD_TESTING)
             sources/engine/assets/ModelAssets.cpp
             sources/engine/assets/SpriteAnimationAssets.cpp
             sources/engine/assets/TextureAssets.cpp
+            sources/engine/render/ColorTransfer.cpp
             sources/sector_editor/SectorEditorHelpers.cpp
             sources/sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.cpp
             sources/sector_demo/SectorAssetPaths.cpp
             sources/sector_demo/SectorCollisionWorld.cpp
+            sources/sector_demo/SectorDynamicPointLightSelection.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorLightmapReport.cpp
@@ -465,6 +467,8 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorTopologyValidation.cpp
             sources/sector_demo/renderer/SectorLightAtmosphere.cpp
             sources/sector_demo/renderer/SectorLocalFogLighting.cpp
+            sources/sector_demo/renderer/SectorVolumetricAtmosphereClusters.cpp
+            sources/sector_demo/renderer/SectorVolumetricAtmosphereContracts.cpp
     )
     target_include_directories(sector_topology_lightmap_tests PRIVATE sources)
     target_compile_definitions(sector_topology_lightmap_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
