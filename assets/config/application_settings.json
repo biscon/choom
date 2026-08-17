@@ -13,7 +13,7 @@
     "volumetricQualityCap": "high",
     "shadowQuality": "high",
     "performanceOverlay": false,
-    "vsync": true,
+    "vsync": false,
     "horizontalFovDegrees": 95
   },
   "hdrBloom": {
@@ -40,14 +40,14 @@
     "sprintDrainPerSecond": 20.0,
     "jumpCost": 20.0,
     "regenerationPerSecond": 12.5,
-    "exhaustedRecoveryRatio": 0.2,
+    "exhaustedRecoveryRatio": 0.20000000298023224,
     "windedCamera": {
       "enabled": true,
-      "startThresholdRatio": 0.6,
-      "verticalAmplitudeWorld": 0.04,
+      "startThresholdRatio": 0.6000000238418579,
+      "verticalAmplitudeWorld": 0.03999999910593033,
       "pitchAmplitudeDegrees": 1.75,
-      "frequencyHz": 0.65,
-      "responseSeconds": 0.35
+      "frequencyHz": 0.6499999761581421,
+      "responseSeconds": 0.3499999940395355
     },
     "breathingAudio": {
       "thresholdRatio": 0.25,

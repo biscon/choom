@@ -199,16 +199,21 @@ void main() {
         enter=max(enter,0.0); exit=min(exit,sceneDistance); if(exit<=enter) continue;
         float segment=exit-enter; float geometricStep=segment/float(max(marchSteps,1)); int insideCount=0;
         for(int s=0;s<12;++s) { if(s>=marchSteps) break; bool inside; float boundary; vec3 grid;
-            shapeSample(i,cameraPosition+rd*(enter+(float(s)+0.5)*geometricStep),inside,boundary,grid); if(inside) insideCount++; }
+            vec3 p=cameraPosition+rd*(enter+(float(s)+0.5)*geometricStep);
+            shapeSample(i,p,inside,boundary,grid); if(inside) insideCount++; }
         if(insideCount==0) continue; float insideLength=geometricStep*float(insideCount);
         float thickness=hazeShapes[i]==0?hazeExtents[i]*2.0:max(hazeConeRadii[i]*2.0,0.1);
         float opticalStep=effectivePath(insideLength,thickness)/float(insideCount);
         float volumeDepth=0.0; vec3 volumeWeighted=vec3(0); vec4 a=hazeParamsA[i], b=hazeParamsB[i];
-        vec2 flow=vec2(cos(b.y),sin(b.y))*b.z*runtimeSeconds;
+        vec2 flowWorld=vec2(cos(b.y),sin(b.y))*b.z*runtimeSeconds;
+        float inverseNoiseScale=1.0/max(a.w,0.05);
         for(int s=0;s<12;++s) { if(s>=marchSteps) break; vec3 p=cameraPosition+rd*(enter+(float(s)+0.5)*geometricStep);
             bool inside; float boundary; vec3 grid; shapeSample(i,p,inside,boundary,grid); if(!inside) continue;
-            vec3 np=p/max(a.w,0.05); np.xz+=flow; float noise=mix(1.0,mix(0.35,1.35,valueNoise(np)),b.x);
-            float sampleDepth=a.x*boundary*noise*opticalStep; if(sampleDepth<=0.0) continue;
+            float noiseModulation=1.0;
+            if(b.x>0.0001) { vec3 noiseSamplePosition=p; noiseSamplePosition.xz-=flowWorld;
+                float coherentNoise=smoothstep(0.15,0.85,valueNoise(noiseSamplePosition*inverseNoiseScale));
+                noiseModulation=mix(1.0,2.0*coherentNoise,b.x); }
+            float sampleDepth=a.x*boundary*noiseModulation*opticalStep; if(sampleDepth<=0.0) continue;
             vec3 lighting=max(staticLighting(i,grid)+dynamicLighting(p),vec3(0));
             volumeDepth+=sampleDepth; volumeWeighted+=hazeColors[i]*lighting*distanceFogTransmittance(p)*sampleDepth; }
         float cap=-log(max(1.0-clamp(a.y,0.0,0.9999),0.0001)); float capped=min(volumeDepth,cap);

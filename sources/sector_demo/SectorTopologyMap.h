@@ -107,10 +107,10 @@ struct SectorCompiledLocalFogVolume {
     float density = 0.65f;
     float maxOpacity = 0.75f;
     float edgeSoftness = 0.35f;
-    float noiseScaleWorld = 1.0f;
-    float noiseAmount = 0.55f;
+    float noiseScaleWorld = 0.75f;
+    float noiseAmount = 0.75f;
     float flowDirectionDegrees = 0.0f;
-    float flowSpeedWorld = 0.12f;
+    float flowSpeedWorld = 0.20f;
 };
 
 // Derived runtime representation of an authoring-owned level marker.

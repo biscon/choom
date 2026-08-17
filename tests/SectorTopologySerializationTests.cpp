@@ -915,6 +915,12 @@ void TestDynamicSpotLightRoundTrip()
 
 void TestLightAtmosphereRoundTripAndDefaultOmission()
 {
+    const game::SectorLightHazeSettings hazeDefaults;
+    Check(Near(hazeDefaults.noiseAmount, 0.65f)
+                  && Near(hazeDefaults.noiseScaleWorld, 0.5f)
+                  && Near(hazeDefaults.flowSpeedWorld, 0.20f),
+          "light haze defaults provide readable coherent movement");
+
     SectorTopologyMap defaults = MakeSquare();
     defaults.staticLights.push_back(SectorTopologyStaticPointLight{});
     defaults.staticLights.back().id = 1;
@@ -976,6 +982,15 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
 
     SectorTopologyMap loaded;
     std::string error;
+    Json omittedNoise = defaultJson;
+    omittedNoise["staticLights"][0]["atmosphere"]["haze"] = Json{{"enabled", true}};
+    Check(LoadText(omittedNoise.dump(), loaded, error),
+          "light haze with omitted noise settings loads");
+    Check(loaded.staticLights.size() == 1
+                  && Near(loaded.staticLights[0].atmosphere.haze.noiseAmount, 0.65f)
+                  && Near(loaded.staticLights[0].atmosphere.haze.noiseScaleWorld, 0.5f)
+                  && Near(loaded.staticLights[0].atmosphere.haze.flowSpeedWorld, 0.20f),
+          "omitted light haze noise settings use the new global defaults");
     Check(LoadText(text, loaded, error), "light atmosphere JSON loads");
     const auto checkAtmosphere = [](const game::SectorLightAtmosphereSettings& value) {
         return value.haze.enabled

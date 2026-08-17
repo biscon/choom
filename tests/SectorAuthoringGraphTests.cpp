@@ -12836,6 +12836,10 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
         const game::SectorCompiledLocalFogVolume& compiled = result.topology.compiledLocalFogVolumes[0];
         Check(compiled.sourceAuthoringFogVolumeId == 1 && Near(compiled.centerWorld.y, 0.345f),
               "compiled fog volume uses source ID and floor-relative height");
+        Check(Near(compiled.noiseAmount, 0.75f)
+                      && Near(compiled.noiseScaleWorld, 0.75f)
+                      && Near(compiled.flowSpeedWorld, 0.20f),
+              "compiled fog volume preserves readable coherent-noise defaults");
     }
 
     graph.fogVolumes[0].x = 400;
@@ -12874,13 +12878,21 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
     Check(saved["authoringGraph"]["fogVolumes"].size() == 1
                   && !saved.contains("localFogVolumes"),
           "fog volumes serialize only inside authoring graph");
+    const Json& savedFog = saved["authoringGraph"]["fogVolumes"][0];
+    Check(!savedFog.contains("noiseAmount")
+                  && !savedFog.contains("noiseScaleWorld")
+                  && !savedFog.contains("flowSpeedWorld"),
+          "default fog noise settings remain omitted on save");
 
     game::SectorAuthoringDocument loaded;
     Check(game::LoadSectorAuthoringDocumentFromJsonString(json, loaded, &error),
           "authoring fog volume document loads");
     Check(loaded.graph.fogVolumes.size() == 1
                   && loaded.graph.fogVolumes[0].id == 7
-                  && Near(loaded.graph.fogVolumes[0].density, 1.25f),
+                  && Near(loaded.graph.fogVolumes[0].density, 1.25f)
+                  && Near(loaded.graph.fogVolumes[0].noiseAmount, 0.75f)
+                  && Near(loaded.graph.fogVolumes[0].noiseScaleWorld, 0.75f)
+                  && Near(loaded.graph.fogVolumes[0].flowSpeedWorld, 0.20f),
           "authoring fog volume properties round-trip");
 }
 

@@ -749,9 +749,8 @@
           },
           "edgeSoftness": 0.5,
           "noiseAmount": 0.75,
-          "noiseScaleWorld": 0.5,
           "flowDirectionDegrees": 90.0,
-          "flowSpeedWorld": 0.5
+          "flowSpeedWorld": 0.25
         },
         "dust": {
           "amount": 51,
@@ -837,9 +836,7 @@
             "a": 255
           },
           "edgeSoftness": 0.8999999761581421,
-          "noiseAmount": 1.0,
-          "noiseScaleWorld": 0.25,
-          "flowSpeedWorld": 0.10000000149011612
+          "noiseAmount": 1.0
         }
       }
     },
@@ -1222,9 +1219,7 @@
             "b": 230,
             "a": 255
           },
-          "edgeSoftness": 0.44999998807907104,
-          "noiseAmount": 0.550000011920929,
-          "noiseScaleWorld": 1.0
+          "edgeSoftness": 0.44999998807907104
         },
         "dust": {
           "enabled": true,
@@ -1309,14 +1304,15 @@
         "haze": {
           "enabled": true,
           "extentScale": 0.30000001192092896,
-          "density": 0.0024999999441206455,
+          "density": 0.0010000000474974513,
           "scatteringTint": {
             "r": 255,
             "g": 245,
             "b": 235,
             "a": 255
           },
-          "edgeSoftness": 0.5
+          "noiseScaleWorld": 0.3499999940395355,
+          "flowSpeedWorld": 0.15000000596046448
         },
         "dust": {
           "enabled": true,
@@ -1385,7 +1381,7 @@
     "maxOpacity": 0.6499999761581421,
     "referenceHeightWorld": 1.0,
     "heightFalloff": 0.0,
-    "localVolumeQuality": "medium"
+    "localVolumeQuality": "high"
   },
   "audio": {
     "music": "ambience/horror_ambience.wav",
@@ -10928,10 +10924,8 @@
         "density": 1.7000000476837158,
         "maxOpacity": 0.5,
         "edgeSoftness": 1.0,
-        "noiseScaleWorld": 0.10000000149011612,
         "noiseAmount": 1.0,
-        "flowDirectionDegrees": 90.0,
-        "flowSpeedWorld": 1.0
+        "flowDirectionDegrees": 90.0
       },
       {
         "id": 2,
@@ -10944,10 +10938,8 @@
         "density": 2.5,
         "maxOpacity": 0.5,
         "edgeSoftness": 0.699999988079071,
-        "noiseScaleWorld": 0.30000001192092896,
         "noiseAmount": 1.0,
-        "flowDirectionDegrees": 90.0,
-        "flowSpeedWorld": 1.0
+        "flowDirectionDegrees": 90.0
       },
       {
         "id": 3,
@@ -10960,10 +10952,8 @@
         "density": 1.75,
         "maxOpacity": 0.5,
         "edgeSoftness": 1.0,
-        "noiseScaleWorld": 0.20000000298023224,
         "noiseAmount": 1.0,
-        "flowDirectionDegrees": 90.0,
-        "flowSpeedWorld": 1.0
+        "flowDirectionDegrees": 90.0
       }
     ],
     "levelMarkers": [

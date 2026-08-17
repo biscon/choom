@@ -292,7 +292,19 @@ void main() {
         vec3 volumeWeightedScattering = vec3(0.0);
         vec4 paramsA = fogParamsA[volumeIndex];
         vec4 paramsB = fogParamsB[volumeIndex];
-        vec2 flow = vec2(cos(paramsB.y), sin(paramsB.y)) * paramsB.z * runtimeSeconds;
+        float noiseModulation = 1.0;
+        if (paramsB.x > 0.0001) {
+            vec3 noiseSamplePosition = cameraPosition
+                    + rayDirection * ((enterT + exitT) * 0.5);
+            vec2 flowWorld = vec2(cos(paramsB.y), sin(paramsB.y))
+                    * paramsB.z * runtimeSeconds;
+            noiseSamplePosition.xz -= flowWorld;
+            float coherentNoise = smoothstep(
+                    0.15,
+                    0.85,
+                    valueNoise(noiseSamplePosition / max(paramsA.w, 0.05)));
+            noiseModulation = mix(1.0, 2.0 * coherentNoise, paramsB.x);
+        }
         for (int stepIndex = 0; stepIndex < 12; ++stepIndex) {
             if (stepIndex >= marchSteps) break;
             float t = enterT + (float(stepIndex) + 0.5) * geometricStepLength;
@@ -301,10 +313,7 @@ void main() {
             float normalizedRadius = length(local);
             float softness = max(paramsA.z, 0.0001);
             float boundary = 1.0 - smoothstep(1.0 - softness, 1.0, normalizedRadius);
-            vec3 noisePosition = position / max(paramsA.w, 0.05);
-            noisePosition.xz += flow;
-            float noise = mix(1.0, mix(0.35, 1.35, valueNoise(noisePosition)), paramsB.x);
-            float sampleOpticalDepth = paramsA.x * boundary * noise * effectiveStepLength;
+            float sampleOpticalDepth = paramsA.x * boundary * effectiveStepLength;
             if (sampleOpticalDepth <= 0.0) continue;
             vec3 staticLighting = interpolateStaticLighting(volumeIndex, local.xz);
             vec3 sampleLighting = max(
@@ -316,7 +325,8 @@ void main() {
                     * sampleOpticalDepth;
         }
         float capOpticalDepth = -log(max(1.0 - clamp(paramsA.y, 0.0, 0.9999), 0.0001));
-        float cappedOpticalDepth = min(volumeOpticalDepth, capOpticalDepth);
+        float modulatedOpticalDepth = volumeOpticalDepth * noiseModulation;
+        float cappedOpticalDepth = min(modulatedOpticalDepth, capOpticalDepth);
         float capScale = volumeOpticalDepth > 0.00001
                 ? cappedOpticalDepth / volumeOpticalDepth
                 : 0.0;

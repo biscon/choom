@@ -461,6 +461,28 @@ void TestHdrEffectShaderAndPassPolicies()
                     && haze.find("dynamicLightingClamp")==std::string::npos
                     && dust.find("dynamicLightingClamp")==std::string::npos,
           "obsolete dynamic-light artistic ceilings stay removed from atmosphere");
+    const std::size_t fogNoiseSetup = fog.find("float noiseModulation = 1.0;");
+    const std::size_t fogNoiseSample = fog.find("valueNoise(", fogNoiseSetup);
+    const std::size_t fogMarch = fog.find("for (int stepIndex", fogNoiseSetup);
+    const std::size_t hazeCountMarch = haze.find("for(int s=0;s<12");
+    const std::size_t hazeLightingMarch = haze.find("for(int s=0;s<12", hazeCountMarch + 1);
+    const std::size_t hazeNoiseSample = haze.find("valueNoise(", hazeLightingMarch);
+    const std::size_t hazeSampleDepth = haze.find(
+            "sampleDepth=a.x*boundary*noiseModulation*opticalStep",
+            hazeLightingMarch);
+    Check(fogNoiseSetup!=std::string::npos
+                    && fogNoiseSample<fogMarch
+                    && fog.find("noiseSamplePosition.xz -= flowWorld;")!=std::string::npos
+                    && fog.find("modulatedOpticalDepth = volumeOpticalDepth * noiseModulation")
+                            !=std::string::npos
+                    && hazeLightingMarch!=std::string::npos
+                    && hazeSampleDepth!=std::string::npos
+                    && hazeNoiseSample>hazeLightingMarch
+                    && hazeNoiseSample<hazeSampleDepth
+                    && haze.find("noiseSamplePosition.xz-=flowWorld;")!=std::string::npos
+                    && haze.find("insidePositionSum")==std::string::npos
+                    && haze.find("modulatedDepth=volumeDepth*noiseModulation")==std::string::npos,
+          "fog uses coherent ray noise while haze samples world-speed noise at each lighting step");
     Check(bloom.find("65504.0")!=std::string::npos
                     && fog.find("65504.0")!=std::string::npos
                     && haze.find("65504.0")!=std::string::npos

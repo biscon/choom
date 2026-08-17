@@ -2369,10 +2369,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         drawFloat("sector_editor_fog_volume_density", "Density", selectedAuthoringFogVolume->density, 6, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::density);
         drawFloat("sector_editor_fog_volume_opacity", "Max opacity", selectedAuthoringFogVolume->maxOpacity, 7, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::maxOpacity);
         drawFloat("sector_editor_fog_volume_softness", "Edge softness", selectedAuthoringFogVolume->edgeSoftness, 8, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::edgeSoftness);
-        drawFloat("sector_editor_fog_volume_noise_scale", "Noise scale", selectedAuthoringFogVolume->noiseScaleWorld, 9, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::noiseScaleWorld);
+        drawFloat("sector_editor_fog_volume_noise_scale", "Noise scale (m)", selectedAuthoringFogVolume->noiseScaleWorld, 9, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::noiseScaleWorld);
         drawFloat("sector_editor_fog_volume_noise_amount", "Noise amount", selectedAuthoringFogVolume->noiseAmount, 10, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::noiseAmount);
         drawFloat("sector_editor_fog_volume_flow_direction", "Flow direction", selectedAuthoringFogVolume->flowDirectionDegrees, 11, 0.0f, 360.0f, 2, &SectorAuthoringFogVolume::flowDirectionDegrees);
-        drawFloat("sector_editor_fog_volume_flow_speed", "Flow speed", selectedAuthoringFogVolume->flowSpeedWorld, 12, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::flowSpeedWorld);
+        drawFloat("sector_editor_fog_volume_flow_speed", "Flow speed (m/s)", selectedAuthoringFogVolume->flowSpeedWorld, 12, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::flowSpeedWorld);
 
         for (int channel = 0; channel < 3; ++channel) {
             const char* labels[] = {"Color R", "Color G", "Color B"};
