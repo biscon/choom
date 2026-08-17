@@ -10,10 +10,10 @@
   "graphics": {
     "renderScale": 1.5,
     "fxaa": true,
-    "volumetricQualityCap": "high",
+    "volumetricQuality": "medium",
     "shadowQuality": "high",
     "performanceOverlay": false,
-    "vsync": false,
+    "vsync": true,
     "horizontalFovDegrees": 95
   },
   "hdrBloom": {

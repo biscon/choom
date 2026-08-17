@@ -21,6 +21,7 @@
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
+#include "sector_demo/SectorVolumetricQuality.h"
 
 #include <raylib.h>
 
@@ -146,13 +147,13 @@ public:
     void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
     void SetGraphicsQuality(
-            SectorTopologyFogSettings::LocalVolumeQuality volumetricCap,
+            SectorVolumetricQuality volumetricQuality,
             bool shadowsEnabled,
             int shadowMapResolution = DynamicSpotLightShadowMapResolution,
             float projectedShadowIntervalSeconds = 0.0f,
             int projectedShadowResolution = DynamicModelProjectedShadowResolution)
     {
-        volumetricQualityCap = volumetricCap;
+        this->volumetricQuality = volumetricQuality;
         shadowMapsEnabled = shadowsEnabled;
         if (shadowsEnabled) {
             dynamicLightState.SetShadowMapResolution(shadowMapResolution);
@@ -318,8 +319,7 @@ private:
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
-    SectorTopologyFogSettings::LocalVolumeQuality volumetricQualityCap =
-            SectorTopologyFogSettings::LocalVolumeQuality::High;
+    SectorVolumetricQuality volumetricQuality = SectorVolumetricQuality::High;
     bool shadowMapsEnabled = true;
     float dynamicModelShadowIntervalSeconds = 0.0f;
     float lastDynamicModelShadowRenderSeconds = -1000.0f;

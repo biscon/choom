@@ -29,6 +29,7 @@ bool SameLightAtmosphere(
     const SectorLightAtmosphereSettings b = NormalizeSectorLightAtmosphereSettings(right);
     return a.haze.enabled == b.haze.enabled
             && a.haze.extentScale == b.haze.extentScale
+            && a.haze.heightOffsetWorld == b.haze.heightOffsetWorld
             && a.haze.density == b.haze.density
             && SameColor(a.haze.scatteringTint, b.haze.scatteringTint)
             && a.haze.edgeSoftness == b.haze.edgeSoftness
@@ -111,7 +112,7 @@ float LightAtmosphereInspectorContentHeight(
         const SectorLightAtmosphereSettings& atmosphere)
 {
     float height = 2.0f * (26.0f + rowH + gap);
-    if (atmosphere.haze.enabled) height += 10.0f * (rowH + gap);
+    if (atmosphere.haze.enabled) height += 11.0f * (rowH + gap);
     if (atmosphere.dust.enabled) height += 10.0f * (rowH + gap);
     return height;
 }
@@ -203,6 +204,8 @@ void DrawLightAtmosphereInspector(
     if (atmosphere.haze.enabled) {
         drawFloat("sector_editor_light_haze_extent", "Extent scale:", atmosphere.haze.extentScale,
                 uiState.lightHazeExtentScaleInput, 0.05f, 2.0f, 3);
+        drawFloat("sector_editor_light_haze_height_offset", "Y offset (m):", atmosphere.haze.heightOffsetWorld,
+                uiState.lightHazeHeightOffsetInput, -100000.0f, 100000.0f, 3);
         drawFloat("sector_editor_light_haze_density", "Density:", atmosphere.haze.density,
                 uiState.lightHazeDensityInput, 0.0f, 2.0f, 3);
         drawFloat("sector_editor_light_haze_edge", "Edge softness:", atmosphere.haze.edgeSoftness,

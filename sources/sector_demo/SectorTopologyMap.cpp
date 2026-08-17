@@ -28,6 +28,10 @@ SectorLightHazeSettings NormalizeSectorLightHazeSettings(SectorLightHazeSettings
 {
     const SectorLightHazeSettings defaults;
     settings.extentScale = std::clamp(FiniteOr(settings.extentScale, defaults.extentScale), 0.05f, 2.0f);
+    settings.heightOffsetWorld = std::clamp(
+            FiniteOr(settings.heightOffsetWorld, defaults.heightOffsetWorld),
+            -100000.0f,
+            100000.0f);
     settings.density = std::clamp(FiniteOr(settings.density, defaults.density), 0.0f, 2.0f);
     settings.edgeSoftness = std::clamp(FiniteOr(settings.edgeSoftness, defaults.edgeSoftness), 0.01f, 1.0f);
     settings.noiseAmount = std::clamp(FiniteOr(settings.noiseAmount, defaults.noiseAmount), 0.0f, 1.0f);
@@ -87,6 +91,7 @@ bool IsDefaultSectorLightHazeSettings(const SectorLightHazeSettings& settings)
     const SectorLightHazeSettings defaults;
     return value.enabled == defaults.enabled
             && value.extentScale == defaults.extentScale
+            && value.heightOffsetWorld == defaults.heightOffsetWorld
             && value.density == defaults.density
             && SameRgb(value.scatteringTint, defaults.scatteringTint)
             && value.edgeSoftness == defaults.edgeSoftness

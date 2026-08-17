@@ -369,8 +369,7 @@ void TestPreviewSettingsScrollableContentHeightsReachLastControls()
             + 4.0f * (8.0f + 38.0f)
             + 36.0f + gap;
     const float fogLastControlBottom =
-            10.0f * (rowH + gap)
-            + 28.0f
+            9.0f * (rowH + gap)
             + 36.0f + gap
             + 38.0f
             + 36.0f + gap;
@@ -560,15 +559,6 @@ void TestPreviewSettingsModalFogDraftApplyAndReset()
     Check(!game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
           "preview settings modal reports unchanged fog settings");
 
-    modal.draftFogSettings.localVolumeQuality =
-            game::SectorTopologyFogSettings::LocalVolumeQuality::High;
-    Check(game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
-          "preview settings modal applies a quality-only fog change");
-    Check(map.fogSettings.localVolumeQuality
-                  == game::SectorTopologyFogSettings::LocalVolumeQuality::High,
-          "preview settings modal writes local fog quality");
-    Check(!game::ApplySectorPreviewFogSettings(map, modal.draftFogSettings),
-          "preview settings modal reports unchanged local fog quality");
     Check(game::ComputeSectorLightmapSourceHash(map) == lightmapHash,
           "preview fog settings do not change the lightmap source hash");
 

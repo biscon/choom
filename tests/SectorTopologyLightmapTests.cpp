@@ -1404,6 +1404,7 @@ void TestSourceHashChanges()
     changedLight = base;
     changedLight.staticLights[0].atmosphere.haze.enabled = true;
     changedLight.staticLights[0].atmosphere.haze.density = 0.25f;
+    changedLight.staticLights[0].atmosphere.haze.heightOffsetWorld = 0.75f;
     changedLight.staticLights[0].atmosphere.dust.enabled = true;
     changedLight.staticLights[0].atmosphere.dust.amount = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) == hash,
@@ -3271,14 +3272,16 @@ void TestLightAtmosphereVolumeShapesAndProbeFallback()
     point.positionWorld = Vector3{1.0f, 2.0f, 3.0f};
     point.rangeWorld = 10.0f;
     game::SectorLightAtmosphereVolume pointVolume;
-    Check(game::MakeSectorLightAtmosphereVolume(point, 0.5f, pointVolume)
-                  && Near(pointVolume.extentWorld, 5.0f),
+    Check(game::MakeSectorLightAtmosphereVolume(point, 0.5f, 1.25f, pointVolume)
+                  && Near(pointVolume.extentWorld, 5.0f)
+                  && SameVector(pointVolume.originWorld, Vector3{1.0f, 3.25f, 3.0f})
+                  && SameVector(pointVolume.boundsCenterWorld, Vector3{1.0f, 3.25f, 3.0f}),
           "point-light atmosphere extent scales the authored light range");
     Check(game::IsPointInsideSectorLightAtmosphereVolume(
-                  pointVolume, Vector3{1.0f, 2.0f, 7.9f})
+                  pointVolume, Vector3{1.0f, 3.25f, 7.9f})
                   && !game::IsPointInsideSectorLightAtmosphereVolume(
-                          pointVolume, Vector3{1.0f, 2.0f, 8.1f}),
-          "point-light atmosphere uses bounded spherical particle and haze containment");
+                          pointVolume, Vector3{1.0f, 3.25f, 8.1f}),
+          "point-light atmosphere applies a vertical offset to bounded containment");
 
     game::SectorLightAtmosphereSource spot;
     spot.shape = game::SectorLightAtmosphereShape::Cone;
@@ -3287,15 +3290,17 @@ void TestLightAtmosphereVolumeShapesAndProbeFallback()
     spot.rangeWorld = 8.0f;
     spot.outerConeCos = std::cos(30.0f * DEG2RAD);
     game::SectorLightAtmosphereVolume spotVolume;
-    Check(game::MakeSectorLightAtmosphereVolume(spot, 1.0f, spotVolume),
+    Check(game::MakeSectorLightAtmosphereVolume(spot, 1.0f, -0.5f, spotVolume)
+                  && SameVector(spotVolume.originWorld, Vector3{0.0f, -0.5f, 0.0f})
+                  && SameVector(spotVolume.boundsCenterWorld, Vector3{0.0f, -0.5f, 4.0f}),
           "spot-light atmosphere builds a bounded cone proxy");
     Check(game::IsPointInsideSectorLightAtmosphereVolume(
-                  spotVolume, Vector3{1.0f, 0.0f, 4.0f})
+                  spotVolume, Vector3{1.0f, -0.5f, 4.0f})
                   && !game::IsPointInsideSectorLightAtmosphereVolume(
-                          spotVolume, Vector3{3.0f, 0.0f, 4.0f})
+                          spotVolume, Vector3{3.0f, -0.5f, 4.0f})
                   && !game::IsPointInsideSectorLightAtmosphereVolume(
-                          spotVolume, Vector3{0.0f, 0.0f, 8.1f}),
-          "spot-light atmosphere bounds particles and haze to its finite cone");
+                          spotVolume, Vector3{0.0f, -0.5f, 8.1f}),
+          "spot-light atmosphere offsets and bounds its finite cone");
 
     game::SectorLightHazeStaticLightingSamples grid;
     for (std::size_t index = 0; index < grid.corners.size(); ++index) {
@@ -3316,7 +3321,7 @@ void TestLightAtmosphereVolumeShapesAndProbeFallback()
     point.ownerSectorId = 10;
     point.positionWorld = Vector3{2.0f, 1.0f, 2.0f};
     point.rangeWorld = 2.0f;
-    Check(game::MakeSectorLightAtmosphereVolume(point, 1.0f, pointVolume),
+    Check(game::MakeSectorLightAtmosphereVolume(point, 1.0f, 0.0f, pointVolume),
           "light atmosphere fallback volume builds");
     const game::SectorBakedObjectLightProbeRuntimeData noProbes;
     const game::SectorLightHazeStaticLightingSamples fallback =

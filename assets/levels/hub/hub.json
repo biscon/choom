@@ -1029,6 +1029,8 @@
       "atmosphere": {
         "haze": {
           "enabled": true,
+          "extentScale": 0.5,
+          "heightOffsetWorld": 0.25,
           "density": 0.009999999776482582,
           "scatteringTint": {
             "r": 200,
@@ -1162,6 +1164,7 @@
         "haze": {
           "enabled": true,
           "extentScale": 0.6000000238418579,
+          "heightOffsetWorld": 0.25,
           "density": 0.02500000037252903,
           "scatteringTint": {
             "r": 255,
@@ -1212,6 +1215,7 @@
         "haze": {
           "enabled": true,
           "extentScale": 0.6000000238418579,
+          "heightOffsetWorld": 0.25,
           "density": 0.02500000037252903,
           "scatteringTint": {
             "r": 255,
@@ -1303,8 +1307,9 @@
       "atmosphere": {
         "haze": {
           "enabled": true,
-          "extentScale": 0.30000001192092896,
-          "density": 0.0010000000474974513,
+          "extentScale": 0.6000000238418579,
+          "heightOffsetWorld": 0.25,
+          "density": 0.0020000000949949026,
           "scatteringTint": {
             "r": 255,
             "g": 245,
@@ -1380,8 +1385,7 @@
     "density": 0.05000000074505806,
     "maxOpacity": 0.6499999761581421,
     "referenceHeightWorld": 1.0,
-    "heightFalloff": 0.0,
-    "localVolumeQuality": "high"
+    "heightFalloff": 0.0
   },
   "audio": {
     "music": "ambience/horror_ambience.wav",

@@ -60,14 +60,14 @@ public:
     bool Init(engine::EngineContext& context);
     void Shutdown(engine::EngineContext& context);
     void SetPreviewGraphicsQuality(
-            SectorTopologyFogSettings::LocalVolumeQuality volumetricCap,
+            SectorVolumetricQuality volumetricQuality,
             bool shadowsEnabled,
             int shadowMapResolution,
             float projectedShadowIntervalSeconds,
             int projectedShadowResolution)
     {
         sceneRuntime.Renderer().SetGraphicsQuality(
-                volumetricCap, shadowsEnabled, shadowMapResolution,
+                volumetricQuality, shadowsEnabled, shadowMapResolution,
                 projectedShadowIntervalSeconds, projectedShadowResolution);
     }
     void SetPreviewVerticalFovDegrees(float value)

@@ -169,14 +169,14 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     y += rowHeight + 14.0f;
 
     const char* qualityOptions[] = {"Off", "Low", "Medium", "High"};
-    int volumetricQuality = static_cast<int>(draft.graphics.volumetricQualityCap);
+    int volumetricQuality = static_cast<int>(draft.graphics.volumetricQuality);
     engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
-            smallFont, "Volumetric quality cap", engine::UITextJustify::Left);
+            smallFont, "Volumetric fog quality", engine::UITextJustify::Left);
     if (engine::Option(ui, config, input, assets, "graphics_volumetric_quality",
                 Rectangle{controlX, y, controlWidth, rowHeight}, smallFont,
                 qualityOptions, 4, volumetricQuality)) {
-        draft.graphics.volumetricQualityCap =
-                static_cast<FpsVolumetricQualityCap>(volumetricQuality);
+        draft.graphics.volumetricQuality =
+                static_cast<SectorVolumetricQuality>(volumetricQuality);
     }
     y += rowHeight + 14.0f;
 

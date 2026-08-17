@@ -1449,24 +1449,6 @@ SectorTopologyFogSettings ReadFogSettings(const Json& value, const std::string& 
     readOptionalFloat("maxOpacity", settings.maxOpacity);
     readOptionalFloat("referenceHeightWorld", settings.referenceHeightWorld);
     readOptionalFloat("heightFalloff", settings.heightFalloff);
-    const auto qualityIt = value.find("localVolumeQuality");
-    if (qualityIt != value.end()) {
-        if (!qualityIt->is_string()) {
-            Fail(context + ".localVolumeQuality must be a string");
-        }
-        const std::string quality = qualityIt->get<std::string>();
-        if (quality == "off") {
-            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Off;
-        } else if (quality == "low") {
-            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Low;
-        } else if (quality == "medium") {
-            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::Medium;
-        } else if (quality == "high") {
-            settings.localVolumeQuality = SectorTopologyFogSettings::LocalVolumeQuality::High;
-        } else {
-            Fail(context + ".localVolumeQuality must be 'off', 'low', 'medium', or 'high'");
-        }
-    }
     return NormalizeSectorTopologyFogSettings(settings);
 }
 
@@ -2284,6 +2266,9 @@ Json WriteLightHazeSettings(const SectorLightHazeSettings& source)
     Json value = Json::object();
     if (settings.enabled != defaults.enabled) value["enabled"] = settings.enabled;
     if (settings.extentScale != defaults.extentScale) value["extentScale"] = settings.extentScale;
+    if (settings.heightOffsetWorld != defaults.heightOffsetWorld) {
+        value["heightOffsetWorld"] = settings.heightOffsetWorld;
+    }
     if (settings.density != defaults.density) value["density"] = settings.density;
     if (settings.scatteringTint.r != defaults.scatteringTint.r
             || settings.scatteringTint.g != defaults.scatteringTint.g
@@ -2532,20 +2517,6 @@ Json WriteFogSettings(const SectorTopologyFogSettings& settings)
             {"referenceHeightWorld", normalized.referenceHeightWorld},
             {"heightFalloff", normalized.heightFalloff}
     };
-    switch (normalized.localVolumeQuality) {
-        case SectorTopologyFogSettings::LocalVolumeQuality::Off:
-            result["localVolumeQuality"] = "off";
-            break;
-        case SectorTopologyFogSettings::LocalVolumeQuality::Low:
-            result["localVolumeQuality"] = "low";
-            break;
-        case SectorTopologyFogSettings::LocalVolumeQuality::Medium:
-            result["localVolumeQuality"] = "medium";
-            break;
-        case SectorTopologyFogSettings::LocalVolumeQuality::High:
-            result["localVolumeQuality"] = "high";
-            break;
-    }
     return result;
 }
 
@@ -2567,8 +2538,7 @@ bool IsDefaultFogSettings(const SectorTopologyFogSettings& settings)
             && normalized.density == defaults.density
             && normalized.maxOpacity == defaults.maxOpacity
             && normalized.referenceHeightWorld == defaults.referenceHeightWorld
-            && normalized.heightFalloff == defaults.heightFalloff
-            && normalized.localVolumeQuality == defaults.localVolumeQuality;
+            && normalized.heightFalloff == defaults.heightFalloff;
 }
 
 Json WriteIlluminationStatistics(const SectorIlluminationStatistics& statistics);
@@ -2822,6 +2792,13 @@ SectorLightHazeSettings ReadLightHazeSettings(const Json& value, const std::stri
     settings.enabled = ReadOptionalBool(value, "enabled", context, settings.enabled);
     settings.extentScale = ReadOptionalClampedFloat(
             value, "extentScale", context, settings.extentScale, 0.05f, 2.0f);
+    settings.heightOffsetWorld = ReadOptionalClampedFloat(
+            value,
+            "heightOffsetWorld",
+            context,
+            settings.heightOffsetWorld,
+            -100000.0f,
+            100000.0f);
     settings.density = ReadOptionalClampedFloat(
             value, "density", context, settings.density, 0.0f, 2.0f);
     const auto tintIt = value.find("scatteringTint");

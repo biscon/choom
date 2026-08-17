@@ -4,6 +4,7 @@
 #include "sector_demo/SectorLightmapTypes.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorPortalVisibility.h"
+#include "sector_demo/SectorVolumetricQuality.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
 #include "sector_demo/renderer/SectorLocalFogLighting.h"
@@ -23,7 +24,7 @@ public:
             RenderTexture2D& sceneTarget,
             RenderTexture2D& sceneScratch,
             const SectorTopologyMap& map,
-            SectorTopologyFogSettings::LocalVolumeQuality quality,
+            SectorVolumetricQuality quality,
             const Camera3D& camera,
             float runtimeSeconds,
             const SectorBakedObjectLightProbeRuntimeData& probes,
@@ -65,6 +66,7 @@ private:
         int colors = -1;
         int paramsA = -1;
         int paramsB = -1;
+        int ownerDynamicLightIndices = -1;
         int staticLighting = -1;
         int fogEnabled = -1;
         int fogColor = -1;

@@ -918,6 +918,7 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
     const game::SectorLightHazeSettings hazeDefaults;
     Check(Near(hazeDefaults.noiseAmount, 0.65f)
                   && Near(hazeDefaults.noiseScaleWorld, 0.5f)
+                  && Near(hazeDefaults.heightOffsetWorld, 0.0f)
                   && Near(hazeDefaults.flowSpeedWorld, 0.20f),
           "light haze defaults provide readable coherent movement");
 
@@ -936,10 +937,19 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
                   && !defaultJson["dynamicPointLights"][0].contains("atmosphere")
                   && !defaultJson["dynamicSpotLights"][0].contains("atmosphere"),
           "default-disabled light atmosphere is omitted for every light variant");
+    SectorTopologyMap defaultOffset = MakeSquare();
+    defaultOffset.staticLights.push_back(SectorTopologyStaticPointLight{});
+    defaultOffset.staticLights.back().id = 5;
+    defaultOffset.staticLights.back().atmosphere.haze.enabled = true;
+    const Json defaultOffsetJson = Json::parse(SaveText(defaultOffset));
+    Check(!defaultOffsetJson["staticLights"][0]["atmosphere"]["haze"].contains(
+                  "heightOffsetWorld"),
+          "default zero haze height offset is omitted");
 
     game::SectorLightAtmosphereSettings atmosphere;
     atmosphere.haze.enabled = true;
     atmosphere.haze.extentScale = 0.75f;
+    atmosphere.haze.heightOffsetWorld = 0.65f;
     atmosphere.haze.density = 0.125f;
     atmosphere.haze.scatteringTint = Color{210, 225, 240, 255};
     atmosphere.haze.edgeSoftness = 0.45f;
@@ -975,6 +985,7 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
               "enabled atmosphere serializes both haze and dust blocks");
         if (staticAtmosphere.contains("haze") && staticAtmosphere.contains("dust")) {
             Check(staticAtmosphere["haze"].value("enabled", false)
+                          && Near(staticAtmosphere["haze"].value("heightOffsetWorld", 0.0f), 0.65f)
                           && staticAtmosphere["dust"].value("enabled", false),
                   "enabled haze and dust flags are serialized");
         }
@@ -989,12 +1000,14 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
     Check(loaded.staticLights.size() == 1
                   && Near(loaded.staticLights[0].atmosphere.haze.noiseAmount, 0.65f)
                   && Near(loaded.staticLights[0].atmosphere.haze.noiseScaleWorld, 0.5f)
+                  && Near(loaded.staticLights[0].atmosphere.haze.heightOffsetWorld, 0.0f)
                   && Near(loaded.staticLights[0].atmosphere.haze.flowSpeedWorld, 0.20f),
           "omitted light haze noise settings use the new global defaults");
     Check(LoadText(text, loaded, error), "light atmosphere JSON loads");
     const auto checkAtmosphere = [](const game::SectorLightAtmosphereSettings& value) {
         return value.haze.enabled
                 && Near(value.haze.extentScale, 0.75f)
+                && Near(value.haze.heightOffsetWorld, 0.65f)
                 && Near(value.haze.density, 0.125f)
                 && value.haze.scatteringTint.r == 210
                 && Near(value.haze.flowDirectionDegrees, 35.0f)
@@ -2700,8 +2713,6 @@ void TestFogSettingsRoundTripAndValidation()
     original.fogSettings.maxOpacity = 0.8f;
     original.fogSettings.referenceHeightWorld = -2.25f;
     original.fogSettings.heightFalloff = 1.5f;
-    original.fogSettings.localVolumeQuality =
-            game::SectorTopologyFogSettings::LocalVolumeQuality::High;
 
     const Json saved = Json::parse(SaveText(original));
     Check(saved["fogSettings"].is_object(), "non-default fog settings are written");
@@ -2716,9 +2727,6 @@ void TestFogSettingsRoundTripAndValidation()
                   && Near(saved["fogSettings"]["referenceHeightWorld"].get<float>(), -2.25f)
                   && Near(saved["fogSettings"]["heightFalloff"].get<float>(), 1.5f),
           "fog settings serialize normalized values");
-    Check(saved["fogSettings"]["localVolumeQuality"] == "high",
-          "local fog quality serializes with preview fog settings");
-
     SectorTopologyMap loaded;
     std::string error;
     Check(LoadText(saved.dump(), loaded, error), "fog settings JSON loads");
@@ -2733,9 +2741,13 @@ void TestFogSettingsRoundTripAndValidation()
                   && Near(loaded.fogSettings.referenceHeightWorld, -2.25f)
                   && Near(loaded.fogSettings.heightFalloff, 1.5f),
           "fog settings round-trip");
-    Check(loaded.fogSettings.localVolumeQuality
-                  == game::SectorTopologyFogSettings::LocalVolumeQuality::High,
-          "local fog quality round-trips");
+    Json legacyQuality = saved;
+    legacyQuality["fogSettings"]["localVolumeQuality"] = "low";
+    Check(LoadText(legacyQuality.dump(), loaded, error),
+          "obsolete map-local fog quality is ignored on load");
+    Check(!Json::parse(SaveText(loaded))["fogSettings"].contains(
+                    "localVolumeQuality"),
+          "obsolete map-local fog quality is removed on save");
 
     Json missingFields = saved;
     for (const char* field : {"enabled", "startDistanceWorld", "density", "maxOpacity",

@@ -483,6 +483,14 @@ void TestHdrEffectShaderAndPassPolicies()
                     && haze.find("insidePositionSum")==std::string::npos
                     && haze.find("modulatedDepth=volumeDepth*noiseModulation")==std::string::npos,
           "fog uses coherent ray noise while haze samples world-speed noise at each lighting step");
+    Check(haze.find("volume.originWorld.y -= heightOffsetWorld")!=std::string::npos
+                    && haze.find("volume.boundsCenterWorld.y -= heightOffsetWorld")!=std::string::npos
+                    && haze.find("hazeOwnerDynamicLightIndices[volumeIndex]")!=std::string::npos
+                    && haze.find("?p-vec3(0,heightOffsetWorld,0):p")!=std::string::npos
+                    && haze.find("shadowVisibility(slot,lightingPosition)")!=std::string::npos
+                    && haze.find("dynamicLighting(p,i,b.w)")!=std::string::npos
+                    && haze.find("h.flowSpeedWorld,h.heightOffsetWorld")!=std::string::npos,
+          "haze translates its baked and owning dynamic-light illumination profile with its Y offset");
     Check(bloom.find("65504.0")!=std::string::npos
                     && fog.find("65504.0")!=std::string::npos
                     && haze.find("65504.0")!=std::string::npos
@@ -544,6 +552,12 @@ void TestHdrEffectShaderAndPassPolicies()
                             ==std::string::npos,
           "viewmodel keeps private depth while drawing directly into shared HDR color");
     const std::string sectorRenderer=ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    Check(sectorRenderer.find("map.fogSettings.localVolumeQuality")
+                            ==std::string::npos
+                    &&sectorRenderer.find(
+                               "map,\n            volumetricQuality,")
+                            !=std::string::npos,
+          "application volumetric quality directly controls local fog and light haze");
     Check(sectorRenderer.find("uniform sampler2D sourceDepth")==std::string::npos
                     &&sectorRenderer.find("float coverage=isnan(source.a)")
                             !=std::string::npos

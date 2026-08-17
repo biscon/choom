@@ -82,6 +82,7 @@ void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& 
         if (state != nullptr) *state = engine::UIIntInputState{};
     };
     resetFloat(uiState.atmosphere.hazeExtentScaleInput);
+    resetFloat(uiState.atmosphere.hazeHeightOffsetInput);
     resetFloat(uiState.atmosphere.hazeDensityInput);
     resetFloat(uiState.atmosphere.hazeEdgeSoftnessInput);
     resetFloat(uiState.atmosphere.hazeNoiseAmountInput);
@@ -184,6 +185,7 @@ bool SameAtmosphere(
     };
     return left.haze.enabled == right.haze.enabled
             && left.haze.extentScale == right.haze.extentScale
+            && left.haze.heightOffsetWorld == right.haze.heightOffsetWorld
             && left.haze.density == right.haze.density
             && sameColor(left.haze.scatteringTint, right.haze.scatteringTint)
             && left.haze.edgeSoftness == right.haze.edgeSoftness

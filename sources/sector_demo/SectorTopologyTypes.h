@@ -177,6 +177,7 @@ struct SectorTopologySector {
 struct SectorLightHazeSettings {
     bool enabled = false;
     float extentScale = 0.40f;
+    float heightOffsetWorld = 0.0f;
     float density = 0.04f;
     Color scatteringTint = WHITE;
     float edgeSoftness = 0.35f;

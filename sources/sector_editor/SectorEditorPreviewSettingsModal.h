@@ -52,13 +52,11 @@ inline float MeasureSectorPreviewSettingsFogContentHeight(
         float rowHeight,
         float gap)
 {
-    constexpr float qualityTitleHeight = 28.0f;
     constexpr float noteHeight = 36.0f;
     constexpr float colorTitleHeight = 38.0f;
     constexpr float swatchHeight = 36.0f;
     constexpr float trailingPadding = 12.0f;
-    return 10.0f * (rowHeight + gap)
-            + qualityTitleHeight
+    return 9.0f * (rowHeight + gap)
             + noteHeight + gap
             + colorTitleHeight
             + swatchHeight + gap
@@ -154,8 +152,7 @@ inline bool ApplySectorPreviewFogSettings(
             && current.density == draft.density
             && current.maxOpacity == draft.maxOpacity
             && current.referenceHeightWorld == draft.referenceHeightWorld
-            && current.heightFalloff == draft.heightFalloff
-            && current.localVolumeQuality == draft.localVolumeQuality;
+            && current.heightFalloff == draft.heightFalloff;
     if (same) {
         return false;
     }

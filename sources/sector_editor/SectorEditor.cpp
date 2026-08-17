@@ -7258,6 +7258,7 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
                             inspectorIdUiState,
                             {
                                     &uiState.lightHazeExtentScaleInput,
+                                    &uiState.lightHazeHeightOffsetInput,
                                     &uiState.lightHazeDensityInput,
                                     &uiState.lightHazeEdgeSoftnessInput,
                                     &uiState.lightHazeNoiseAmountInput,

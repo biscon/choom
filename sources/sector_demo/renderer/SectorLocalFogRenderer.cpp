@@ -635,7 +635,7 @@ bool SectorLocalFogRenderer::Apply(
         RenderTexture2D& sceneTarget,
         RenderTexture2D& sceneScratch,
         const SectorTopologyMap& map,
-        SectorTopologyFogSettings::LocalVolumeQuality quality,
+        SectorVolumetricQuality quality,
         const Camera3D& camera,
         float runtimeSeconds,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
@@ -644,7 +644,7 @@ bool SectorLocalFogRenderer::Apply(
     eligibleVolumeCount = 0;
     activeVolumeCount = 0;
     if (sceneTarget.texture.id == 0 || sceneTarget.depth.id == 0 || sceneTarget.depth.mipmaps <= 0
-            || quality == SectorTopologyFogSettings::LocalVolumeQuality::Off) return false;
+            || quality == SectorVolumetricQuality::Off) return false;
 
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());
@@ -664,9 +664,9 @@ bool SectorLocalFogRenderer::Apply(
     float scale = 0.5f;
     int steps = 8;
     int cap = 8;
-    if (quality == SectorTopologyFogSettings::LocalVolumeQuality::Low) {
+    if (quality == SectorVolumetricQuality::Low) {
         scale = 0.25f; steps = 4; cap = 4;
-    } else if (quality == SectorTopologyFogSettings::LocalVolumeQuality::High) {
+    } else if (quality == SectorVolumetricQuality::High) {
         scale = 1.0f; steps = 12; cap = 16;
     }
     if (!EnsureShaders() || !EnsureTargets(sceneTarget.texture.width, sceneTarget.texture.height, scale)) {
@@ -833,7 +833,7 @@ bool SectorLocalFogRenderer::Apply(
 
     const Vector2 fogTexelSize{1.0f / fogTarget.native.texture.width, 1.0f / fogTarget.native.texture.height};
     const int bilateral = quality ==
-            SectorTopologyFogSettings::LocalVolumeQuality::Medium ? 1 : 0;
+            SectorVolumetricQuality::Medium ? 1 : 0;
     rlDrawRenderBatchActive();
     BeginTextureMode(sceneScratch);
     ClearBackground(BLANK);

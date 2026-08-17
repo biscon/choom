@@ -411,32 +411,6 @@ void DrawPreviewSettingsModal(
                 modalState.fogScroll);
         const float contentW = scroll.viewport.width;
 
-        engine::Text(
-                ui, config, assets,
-                Rectangle{0.0f, contentY, contentW, 24.0f},
-                font, "Local volume quality", engine::UITextJustify::Left, config.textColor);
-        contentY += 28.0f;
-        const float qualityGap = 6.0f;
-        const float qualityWidth = (contentW - qualityGap * 3.0f) * 0.25f;
-        const SectorTopologyFogSettings::LocalVolumeQuality qualities[] = {
-                SectorTopologyFogSettings::LocalVolumeQuality::Off,
-                SectorTopologyFogSettings::LocalVolumeQuality::Low,
-                SectorTopologyFogSettings::LocalVolumeQuality::Medium,
-                SectorTopologyFogSettings::LocalVolumeQuality::High};
-        const char* qualityNames[] = {"Off", "Low", "Medium", "High"};
-        for (int qualityIndex = 0; qualityIndex < 4; ++qualityIndex) {
-            if (engine::ToolButton(
-                        ui, config, input, assets,
-                        TextFormat("sector_editor_preview_local_fog_quality_%d", qualityIndex),
-                        Rectangle{qualityIndex * (qualityWidth + qualityGap), contentY, qualityWidth, rowH},
-                        font,
-                        qualityNames[qualityIndex],
-                        modalState.draftFogSettings.localVolumeQuality == qualities[qualityIndex])) {
-                modalState.draftFogSettings.localVolumeQuality = qualities[qualityIndex];
-            }
-        }
-        contentY += rowH + gap;
-
         if (engine::Checkbox(
                     ui,
                     config,

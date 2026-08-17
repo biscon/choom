@@ -692,13 +692,13 @@ Json Vec(Vector3 value) { return Json::array({value.x, value.y, value.z}); }
 
 } // namespace
 
-const char* FpsVolumetricQualityCapName(FpsVolumetricQualityCap quality)
+const char* SectorVolumetricQualityName(SectorVolumetricQuality quality)
 {
     switch (quality) {
-        case FpsVolumetricQualityCap::Off: return "off";
-        case FpsVolumetricQualityCap::Low: return "low";
-        case FpsVolumetricQualityCap::Medium: return "medium";
-        case FpsVolumetricQualityCap::High: return "high";
+        case SectorVolumetricQuality::Off: return "off";
+        case SectorVolumetricQuality::Low: return "low";
+        case SectorVolumetricQuality::Medium: return "medium";
+        case SectorVolumetricQuality::High: return "high";
     }
     return "high";
 }
@@ -946,12 +946,17 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 if (name == "high") return 3;
                 Fail(std::string(context) + " must be off, low, medium, or high");
             };
-            const auto volumetrics = graphics->find("volumetricQualityCap");
+            auto volumetrics = graphics->find("volumetricQuality");
+            const char* volumetricsContext = "application settings.graphics.volumetricQuality";
+            if (volumetrics == graphics->end()) {
+                volumetrics = graphics->find("volumetricQualityCap");
+                volumetricsContext = "application settings.graphics.volumetricQualityCap";
+            }
             if (volumetrics != graphics->end()) {
-                parsed.graphics.volumetricQualityCap =
-                        static_cast<FpsVolumetricQualityCap>(parseQuality(
+                parsed.graphics.volumetricQuality =
+                        static_cast<SectorVolumetricQuality>(parseQuality(
                                 *volumetrics,
-                                "application settings.graphics.volumetricQualityCap"));
+                                volumetricsContext));
             }
             const auto shadows = graphics->find("shadowQuality");
             if (shadows != graphics->end()) {
@@ -1382,8 +1387,8 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
     root["graphics"] = {
             {"renderScale", graphics.renderScale},
             {"fxaa", graphics.fxaa},
-            {"volumetricQualityCap", FpsVolumetricQualityCapName(
-                    graphics.volumetricQualityCap)},
+            {"volumetricQuality", SectorVolumetricQualityName(
+                    graphics.volumetricQuality)},
             {"shadowQuality", FpsShadowQualityName(graphics.shadowQuality)},
             {"performanceOverlay", graphics.performanceOverlay},
             {"vsync", graphics.vsync},

@@ -16,13 +16,6 @@ namespace {
 constexpr const char* ApplicationSettingsPath =
         ASSETS_PATH "config/application_settings.json";
 
-SectorTopologyFogSettings::LocalVolumeQuality VolumetricQuality(
-        FpsVolumetricQualityCap quality)
-{
-    return static_cast<SectorTopologyFogSettings::LocalVolumeQuality>(
-            static_cast<int>(quality));
-}
-
 int ShadowMapResolution(FpsShadowQuality quality)
 {
     return quality == FpsShadowQuality::Low ? 512 : 1024;
@@ -406,7 +399,7 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
         gameScene.Renderer().SetGraphicsQuality(
-                VolumetricQuality(applicationSettings.graphics.volumetricQualityCap),
+                applicationSettings.graphics.volumetricQuality,
                 applicationSettings.graphics.shadowQuality != FpsShadowQuality::Off,
                 ShadowMapResolution(applicationSettings.graphics.shadowQuality),
                 ProjectedShadowInterval(applicationSettings.graphics.shadowQuality),
@@ -414,7 +407,7 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
         gameScene.RenderShadowMaps(context);
     } else {
         editor.SetPreviewGraphicsQuality(
-                VolumetricQuality(applicationSettings.graphics.volumetricQualityCap),
+                applicationSettings.graphics.volumetricQuality,
                 applicationSettings.graphics.shadowQuality != FpsShadowQuality::Off,
                 ShadowMapResolution(applicationSettings.graphics.shadowQuality),
                 ProjectedShadowInterval(applicationSettings.graphics.shadowQuality),

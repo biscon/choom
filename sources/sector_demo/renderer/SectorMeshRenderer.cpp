@@ -1539,16 +1539,11 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
     RenderTexture2D& nativeScene = sceneTarget.native;
     const SectorBillboardDynamicLightContext dynamicLightContext =
             BuildBillboardDynamicLightContext();
-    const auto effectiveVolumetricQuality =
-            static_cast<int>(map.fogSettings.localVolumeQuality)
-                    < static_cast<int>(volumetricQualityCap)
-            ? map.fogSettings.localVolumeQuality
-            : volumetricQualityCap;
     const bool localFogApplied = localFogRenderer.Apply(
             nativeScene,
             hdrSceneScratch.native,
             map,
-            effectiveVolumetricQuality,
+            volumetricQuality,
             camera,
             runtimeSeconds,
             objectLightProbes,
@@ -1561,7 +1556,7 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
                 foggedScene,
                 hdrSceneColorView,
                 map,
-                effectiveVolumetricQuality,
+                volumetricQuality,
                 camera,
                 runtimeSeconds,
                 objectLightProbes,
@@ -1576,7 +1571,7 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
                 nativeScene,
                 hdrSceneScratch.native,
                 map,
-                effectiveVolumetricQuality,
+                volumetricQuality,
                 camera,
                 runtimeSeconds,
                 objectLightProbes,

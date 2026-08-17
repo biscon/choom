@@ -58,6 +58,7 @@ void BuildSectorLightAtmosphereSources(
 bool MakeSectorLightAtmosphereVolume(
         const SectorLightAtmosphereSource& source,
         float extentScale,
+        float heightOffsetWorld,
         SectorLightAtmosphereVolume& outVolume);
 
 bool IsSectorLightAtmosphereSourceDynamic(const SectorLightAtmosphereSource& source);

@@ -503,8 +503,7 @@
     "density": 0.029999999329447746,
     "maxOpacity": 0.6499999761581421,
     "referenceHeightWorld": 1.0,
-    "heightFalloff": 0.5,
-    "localVolumeQuality": "medium"
+    "heightFalloff": 0.5
   },
   "audio": {
     "music": "ambience/horror_ambience.wav",

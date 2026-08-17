@@ -160,17 +160,21 @@ void BuildSectorLightAtmosphereSources(
 bool MakeSectorLightAtmosphereVolume(
         const SectorLightAtmosphereSource& source,
         float extentScale,
+        float heightOffsetWorld,
         SectorLightAtmosphereVolume& outVolume)
 {
     const float extent = source.rangeWorld * std::clamp(extentScale, 0.05f, 2.0f);
-    if (!std::isfinite(extent) || extent <= 0.0f) return false;
+    if (!std::isfinite(extent) || extent <= 0.0f || !std::isfinite(heightOffsetWorld)) return false;
+    const Vector3 originWorld = Vector3Add(
+            source.positionWorld,
+            Vector3{0.0f, heightOffsetWorld, 0.0f});
     outVolume = SectorLightAtmosphereVolume{};
     outVolume.source = &source;
-    outVolume.originWorld = source.positionWorld;
+    outVolume.originWorld = originWorld;
     outVolume.directionWorld = NormalizeDirection(source.directionWorld);
     outVolume.extentWorld = extent;
     if (source.shape == SectorLightAtmosphereShape::Sphere) {
-        outVolume.boundsCenterWorld = source.positionWorld;
+        outVolume.boundsCenterWorld = originWorld;
         outVolume.boundsRadiusWorld = extent;
         return true;
     }
@@ -178,7 +182,7 @@ bool MakeSectorLightAtmosphereVolume(
     const float proxyAngle = std::min(authoredAngle, SectorLightAtmosphereMaximumConeHalfAngleDegrees);
     outVolume.coneRadiusWorld = std::tan(proxyAngle * DEG2RAD) * extent;
     outVolume.boundsCenterWorld = Vector3Add(
-            source.positionWorld,
+            originWorld,
             Vector3Scale(outVolume.directionWorld, extent * 0.5f));
     outVolume.boundsRadiusWorld = std::sqrt(
             extent * extent * 0.25f + outVolume.coneRadiusWorld * outVolume.coneRadiusWorld);

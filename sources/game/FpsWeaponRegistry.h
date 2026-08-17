@@ -3,6 +3,7 @@
 #include "engine/assets/AssetHandles.h"
 #include "engine/render/HdrEffectPolicy.h"
 #include "game/PlayerStamina.h"
+#include "sector_demo/SectorVolumetricQuality.h"
 
 #include <raylib.h>
 
@@ -263,13 +264,6 @@ struct PlayerSoundApplicationSettings {
             PlayerSoundEventSettings{"land", "Land", 1.0f}};
 };
 
-enum class FpsVolumetricQualityCap {
-    Off,
-    Low,
-    Medium,
-    High
-};
-
 enum class FpsShadowQuality {
     Off,
     Low,
@@ -284,8 +278,8 @@ inline constexpr int DefaultFpsHorizontalFovDegrees = 108;
 struct FpsGraphicsSettings {
     float renderScale = 1.5f;
     bool fxaa = true;
-    FpsVolumetricQualityCap volumetricQualityCap =
-            FpsVolumetricQualityCap::High;
+    SectorVolumetricQuality volumetricQuality =
+            SectorVolumetricQuality::High;
     FpsShadowQuality shadowQuality = FpsShadowQuality::High;
     bool performanceOverlay = false;
     bool vsync = true;
@@ -304,7 +298,7 @@ struct FpsApplicationSettings {
     std::vector<FpsApplicationSettingsEntry> weapons;
 };
 
-const char* FpsVolumetricQualityCapName(FpsVolumetricQualityCap quality);
+const char* SectorVolumetricQualityName(SectorVolumetricQuality quality);
 const char* FpsShadowQualityName(FpsShadowQuality quality);
 FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings);
 float FpsVerticalFovDegrees(int horizontalFovDegrees, float aspectRatio);

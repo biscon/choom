@@ -138,6 +138,7 @@ struct SectorEditorUiState {
     engine::UIFloatInputState lightShadowStrengthInput;
     engine::UIFloatInputState lightShadowSoftnessInput;
     engine::UIFloatInputState lightHazeExtentScaleInput;
+    engine::UIFloatInputState lightHazeHeightOffsetInput;
     engine::UIFloatInputState lightHazeDensityInput;
     engine::UIFloatInputState lightHazeEdgeSoftnessInput;
     engine::UIFloatInputState lightHazeNoiseAmountInput;

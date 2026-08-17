@@ -73,6 +73,7 @@ struct SectorEditorLightEditingServiceContext {
         InspectorIdUiState& inspectorIdUiState;
         struct AtmosphereRefs {
             engine::UIFloatInputState* hazeExtentScaleInput = nullptr;
+            engine::UIFloatInputState* hazeHeightOffsetInput = nullptr;
             engine::UIFloatInputState* hazeDensityInput = nullptr;
             engine::UIFloatInputState* hazeEdgeSoftnessInput = nullptr;
             engine::UIFloatInputState* hazeNoiseAmountInput = nullptr;

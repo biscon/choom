@@ -576,7 +576,7 @@ Status: implemented; hardware acceptance measurements remain pending.
 
 - Application graphics settings now persist beside the existing application
   settings. The menu exposes transactional Apply/Cancel controls for render
-  scale, FXAA, the authored-volumetric quality cap, shadow quality, bloom, and
+  scale, FXAA, volumetric fog quality, shadow quality, bloom, and
   the F9 performance overlay. Required supersampled HDR targets are built
   before the settings file or live target set is changed; allocation failure
   keeps the previous working targets and settings.
