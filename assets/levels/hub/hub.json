@@ -1259,6 +1259,25 @@
         "b": 230,
         "a": 255
       }
+    },
+    {
+      "id": 2,
+      "position": [
+        -360.0,
+        -12.600000381469727,
+        96.0
+      ],
+      "radius": 84.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 55,
+        "b": 15,
+        "a": 255
+      },
+      "flicker": true,
+      "flickerSpeed": 0.5,
+      "flickerAmount": 1.0
     }
   ],
   "dynamicSpotLights": [
