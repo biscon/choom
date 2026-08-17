@@ -83,6 +83,8 @@ public:
     void RenderPreview3DOverlays();
     void RenderPreview3DHud(Rectangle playableViewport) const;
     void ApplyPreview3DWorldAtmosphere(engine::RenderTarget& sceneTarget);
+    void PreparePreview3DWorldAtmosphere(
+            const engine::RenderTarget& sceneTarget);
     void ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget);
     bool CompositePreview3DViewmodel(
             engine::RenderTarget& sceneTarget,

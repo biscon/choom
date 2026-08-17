@@ -152,6 +152,17 @@ void TestStatisticsAndFormatting()
                     && summary.find("haze 11/4") != std::string::npos
                     && summary.find("legacy backend active") != std::string::npos,
           "legacy diagnostic summary contains quality, counts, and status");
+    diagnostics.backend = game::SectorAtmosphereBackend::Unified;
+    diagnostics.unifiedIntegrationCount = 1;
+    const std::string unifiedSummary =
+            game::FormatSectorAtmosphereDiagnosticsSummary(diagnostics);
+    Check(unifiedSummary.find("Unified Medium") != std::string::npos
+                    && unifiedSummary.find("unified 1") != std::string::npos,
+          "unified diagnostic summary identifies its backend and one integration");
+    Check(std::string(game::SectorAtmosphereGpuPassName(
+                    game::SectorAtmosphereGpuPass::Unified))
+                    == "unified integration/composite",
+          "unified GPU subpass has a stable report name");
 }
 
 game::SectorAtmosphereCaptureMetadata MakeMetadata()
@@ -208,6 +219,14 @@ void TestCaptureAbortAndEmptyReport()
     Check(capture.State() == game::SectorAtmosphereCaptureState::Aborted
                     && capture.Report().find("camera") != std::string::npos,
           "capture aborts when its fixed view changes");
+
+    game::SectorAtmosphereCapture backendCapture;
+    backendCapture.Start(metadata, 0, 0);
+    game::SectorAtmosphereCaptureMetadata switched = metadata;
+    switched.backend = game::SectorAtmosphereBackend::Unified;
+    backendCapture.ValidateView(switched);
+    Check(backendCapture.State() == game::SectorAtmosphereCaptureState::Aborted,
+          "capture aborts when the comparison backend changes");
 
     std::array<game::SectorAtmosphereSampleStatistics,
             game::SectorAtmosphereGpuPassCount> empty{};

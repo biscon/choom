@@ -636,7 +636,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             case PreviewDebugOverlayTab::Atmosphere: {
                 const SectorAtmosphereDiagnostics& diagnostics =
                         preview.AtmosphereDiagnostics();
-                addKeyValue("backend", "Legacy");
+                addKeyValue("backend", SectorAtmosphereBackendName(
+                        diagnostics.backend));
                 addKeyValueStyled(
                         "summary",
                         FormatSectorAtmosphereDiagnosticsSummary(diagnostics),
@@ -660,15 +661,25 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         diagnostics.haze.activeCount,
                         FormatSectorAtmosphereBytes(
                                 diagnostics.haze.estimatedBytes).c_str()));
+                addKeyValue("unified", TextFormat(
+                        "%dx%d RGBA16F | %d steps | integrations %d | lights %d | %s",
+                        diagnostics.unified.width,
+                        diagnostics.unified.height,
+                        diagnostics.unified.marchSteps,
+                        diagnostics.unifiedIntegrationCount,
+                        diagnostics.unifiedDynamicLightCount,
+                        FormatSectorAtmosphereBytes(
+                                diagnostics.unified.estimatedBytes).c_str()));
                 addKeyValue("dust", TextFormat(
                         "eligible/active %d/%d | visible particles %d",
                         diagnostics.dustEligible,
                         diagnostics.dustActive,
                         diagnostics.dustVisibleParticles));
                 addKeyValueStyled("resources", TextFormat(
-                        "fog=%s | haze=%s | dust=%s | scratch=%s",
+                        "fog=%s | haze=%s | unified=%s | dust=%s | scratch=%s",
                         diagnostics.localFog.resourceStatus.c_str(),
                         diagnostics.haze.resourceStatus.c_str(),
+                        diagnostics.unified.resourceStatus.c_str(),
                         diagnostics.dustResourceStatus.c_str(),
                         diagnostics.scratchResourceStatus.c_str()),
                         smallConfig.mutedTextColor, true);
@@ -680,13 +691,15 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         smallConfig.mutedTextColor, true);
                 if (diagnostics.latestGpuTimings.valid) {
                     addKeyValue("latest GPU ms", TextFormat(
-                            "total %.3f | local fog %.3f | haze %.3f | dust %.3f",
+                            "total %.3f | local fog %.3f | haze %.3f | unified %.3f | dust %.3f",
                             diagnostics.latestGpuTimings.milliseconds[
                                     static_cast<size_t>(SectorAtmosphereGpuPass::Total)],
                             diagnostics.latestGpuTimings.milliseconds[
                                     static_cast<size_t>(SectorAtmosphereGpuPass::LocalFog)],
                             diagnostics.latestGpuTimings.milliseconds[
                                     static_cast<size_t>(SectorAtmosphereGpuPass::Haze)],
+                            diagnostics.latestGpuTimings.milliseconds[
+                                    static_cast<size_t>(SectorAtmosphereGpuPass::Unified)],
                             diagnostics.latestGpuTimings.milliseconds[
                                     static_cast<size_t>(SectorAtmosphereGpuPass::Dust)]));
                 } else {
@@ -1623,6 +1636,31 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         y += rowH + 6.0f;
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Atmosphere) {
+        const char* backendOptions[] = {"Legacy", "Unified"};
+        int selectedBackend = static_cast<int>(preview.AtmosphereBackend());
+        const Rectangle backendRect{panel.x + padding, y, 220.0f, rowH};
+        if (mouseInteractive) {
+            if (engine::Option(
+                        ui, smallConfig, input, assets,
+                        "sector_editor_atmosphere_backend",
+                        backendRect, smallFont,
+                        backendOptions,
+                        sizeof(backendOptions) / sizeof(backendOptions[0]),
+                        selectedBackend)) {
+                preview.SetAtmosphereBackend(
+                        static_cast<SectorAtmosphereBackend>(selectedBackend));
+                context.statusText = std::string("Atmosphere backend: ")
+                        + SectorAtmosphereBackendName(preview.AtmosphereBackend());
+            }
+        } else {
+            DrawRectangleRec(backendRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(backendRect, config.borderThickness, config.borderColor);
+            engine::Text(smallConfig, assets, backendRect, smallFont,
+                    SectorAtmosphereBackendName(preview.AtmosphereBackend()),
+                    engine::UITextJustify::Center, smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+
         const SectorAtmosphereCapture& capture = preview.AtmosphereCapture();
         const bool captureRunning = capture.State() == SectorAtmosphereCaptureState::Warmup
                 || capture.State() == SectorAtmosphereCaptureState::Capturing

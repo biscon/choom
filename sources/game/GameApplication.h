@@ -66,6 +66,7 @@ public:
     void Render3DViewmodel(engine::AssetManager& assets);
     void Render3DOverlays();
     void Apply3DWorldAtmosphere(engine::RenderTarget& sceneTarget);
+    void Prepare3DWorldAtmosphere(const engine::RenderTarget& sceneTarget);
     void Apply3DHdrBloom(engine::RenderTarget& sceneTarget);
     bool Composite3DViewmodel(
             engine::RenderTarget& sceneTarget,

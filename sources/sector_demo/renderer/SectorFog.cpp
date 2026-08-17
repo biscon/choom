@@ -6,11 +6,15 @@ namespace game {
 
 SectorFogRenderContext BuildSectorFogRenderContext(
         const SectorTopologyFogSettings& settings,
-        Vector3 cameraPosition)
+        Vector3 cameraPosition,
+        bool volumetricHandoffEnabled,
+        float volumetricMaximumDistanceWorld)
 {
     return SectorFogRenderContext{
             NormalizeSectorTopologyFogSettings(settings),
-            cameraPosition
+            cameraPosition,
+            volumetricHandoffEnabled,
+            volumetricMaximumDistanceWorld
     };
 }
 
@@ -25,6 +29,10 @@ SectorFogShaderLocations GetSectorFogShaderLocations(Shader shader)
     locations.maxOpacity = GetShaderLocation(shader, "fogMaxOpacity");
     locations.referenceHeightWorld = GetShaderLocation(shader, "fogReferenceHeightWorld");
     locations.heightFalloff = GetShaderLocation(shader, "fogHeightFalloff");
+    locations.volumetricHandoffEnabled = GetShaderLocation(
+            shader, "fogVolumetricHandoffEnabled");
+    locations.volumetricMaximumDistanceWorld = GetShaderLocation(
+            shader, "fogVolumetricMaximumDistanceWorld");
     return locations;
 }
 
@@ -76,6 +84,15 @@ void UploadSectorFogShaderValues(
                 locations.heightFalloff,
                 &settings.heightFalloff,
                 SHADER_UNIFORM_FLOAT);
+    }
+    if (locations.volumetricHandoffEnabled >= 0) {
+        const int enabled = context.volumetricHandoffEnabled ? 1 : 0;
+        SetShaderValue(shader, locations.volumetricHandoffEnabled,
+                &enabled, SHADER_UNIFORM_INT);
+    }
+    if (locations.volumetricMaximumDistanceWorld >= 0) {
+        SetShaderValue(shader, locations.volumetricMaximumDistanceWorld,
+                &context.volumetricMaximumDistanceWorld, SHADER_UNIFORM_FLOAT);
     }
 }
 

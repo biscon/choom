@@ -690,6 +690,16 @@ void SectorSceneRuntime::ApplyWorldAtmosphere(
             runtimeObjects.objectLightProbes);
 }
 
+void SectorSceneRuntime::PrepareWorldAtmosphere(
+        const engine::RenderTarget& sceneTarget,
+        const SectorTopologyMap& map)
+{
+    renderer.PrepareWorldAtmosphere(
+            sceneTarget,
+            map,
+            runtimeObjects.objectLightProbes);
+}
+
 void SectorSceneRuntime::ApplyHdrBloom(
         engine::RenderTarget& sceneTarget,
         const engine::HdrBloomSettings& settings,

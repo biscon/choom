@@ -55,7 +55,7 @@ When executing this plan:
 | Slice | Title | Status | Completed |
 |---|---|---|---|
 | 1 | Establish baseline measurements, diagnostics, and renderer contracts | Completed | 2026-08-17 |
-| 2 | Add the shared-medium screen-space renderer and comparison mode | Not Started | - |
+| 2 | Add the shared-medium screen-space renderer and comparison mode | Completed | 2026-08-17 |
 | 3 | Unify global fog and authored local fog under the final data model | Not Started | - |
 | 4 | Add the OpenGL 3.3 froxel atlas and clustered light lists | Not Started | - |
 | 5 | Add reconstruction, temporal stability, and supported volumetric shadows | Not Started | - |
@@ -900,3 +900,45 @@ Append one entry per attempted slice in this format:
 - Collision/sector lookup/physics behavior: Unchanged.
 - Legacy coexistence/removal state: The legacy local-fog, haze, and dust renderers remain active for comparison as required through Slice 6. No Unified renderer work or legacy removal was started.
 - Remaining follow-up within this plan: Slice 2 may use these exact sparse/dense transforms and legacy measurements for equal-setting Legacy/Unified comparison when explicitly requested.
+
+### 2026-08-17 — Slice 2 — Partial
+
+- Summary: Added the temporary `SectorVolumetricAtmosphereRenderer` GLSL 330 screen-space backend, the explicitly named `LegacyHazeComparisonAdapter`, one shared density/light/integration march, depth-aware HDR composition, analytic-fog tail handoff, and a nonserialized Legacy/Unified selector in the existing Atmo diagnostics tab. Unified uses the final quality contract's bounded XY target and Z count as prototype march steps while retaining the legacy comparison caps for local fog, haze, eight selected dynamic lights, and two spotlight shadow slots. Legacy remains the default and its local-fog/haze sequence remains available.
+- Decisions/deviations folded back into plan: Slice 2 uses the nonserialized final defaults of 32 world units maximum distance and 0.20 anisotropy until Slice 3 adds authored fields. A narrow pre-scene prepare step validates/allocates Unified resources before surface fog upload, so a failed Unified resource leaves the complete analytic fog path active instead of silently running Legacy. Cached local/haze probe lighting is extinction-weighted; selected dynamic lights are evaluated once after density combination. Temporal history, froxels, clustering, broader light lists, schema changes, and map migration were not started.
+- Files/modules materially affected: Focused volumetric renderer/math/comparison-adapter modules under `sources/sector_demo/renderer`; `SectorMeshRenderer` atmosphere preparation/sequencing/diagnostics; existing sector-editor Atmo diagnostics controls; focused math, diagnostics, shader-policy, and layout tests.
+- Automated verification: Passed `cmake --build cmake-build-debug -j2`; passed `ctest --test-dir cmake-build-debug --output-on-failure` (28/28); passed `git diff --check`; `git diff --stat` and `git status --short` reviewed.
+- GPU measurements: Not captured (user-owned GUI run). Slice remains Partial pending four dense-view captures: Legacy/Unified Medium and Legacy/Unified High.
+- Manual verification: Not performed (user-owned). One dense-view Legacy/Unified High visual comparison remains.
+- Cache invalidation behavior: No topology or visible cached 2D editor-state mutation was added. The backend selector and renderer resources are nonserialized preview/debug state; topology render-cache invalidation is unchanged.
+- Lightmap source-hash behavior: Unchanged. No map/light/fog schema, bake input, source-hash rule, or lightmap artifact changed; all new prototype state is visual-only and nonserialized.
+- Collision/sector lookup/physics behavior: Unchanged. Unified reconstruction reads the visual render camera and scene depth only; it does not feed camera motion, collision, sector lookup, portal traversal, or physics.
+- Legacy coexistence/removal state: Legacy remains the initial backend and the gameplay default. `SectorLocalFogRenderer`, `SectorLightHazeRenderer`, and their schema/UI remain intact for comparison; exactly one continuous backend executes per frame and dust remains afterward.
+- Remaining follow-up within this plan: At the recorded dense hub transform, capture Legacy Medium, Unified Medium, Legacy High, and Unified High without moving or changing graphics settings, then report the four capture blocks and whether one High toggle preserves intended fog/haze without glowing darkness or a severe foreground halo. Do not begin Slice 3 as part of that follow-up.
+
+### 2026-08-17 — Slice 2 — Completed
+
+- Summary: Closed Slice 2 with user-run same-view Legacy/Unified Medium and High captures plus visual A/B acceptance. The central cost hypothesis is confirmed: one low-resolution shared-medium integration substantially outperformed the legacy separate local-fog and per-volume haze marches while retaining all three local-fog volumes, all eight eligible haze volumes at High, and the six dust emitters.
+- Decisions/deviations folded back into plan: The comparison camera differs from the older Slice 1 dense baseline because exact WASD recreation was impractical, but all four Slice 2 captures use the identical transform, FOV, target, and media counts, so the internal Legacy/Unified ratios are valid. Unified is visually a little less intense than Legacy, resembling a slight density reduction; the user explicitly considered this acceptable rather than a bug. No tuning or Slice 3 data-model work was pulled into this completion follow-up.
+- Files/modules materially affected: Documentation only in this completion follow-up (`docs/volumetric_atmosphere_plan.md`).
+- Automated verification: C++ tests were not rerun because this follow-up changes documentation only. `git diff --check`, `git diff --stat`, and `git status --short` were run after the update. The Slice 2 implementation previously passed the debug build and all 28 CTest tests.
+- GPU measurements: User-run at target `2880x1620`, vertical FOV `63.088` degrees, camera position `(-7.427, 1.650, 12.048)`, yaw/pitch/roll `(-0.453, -0.102, 0.000)`, with zero skipped query frames in all four captures. Medium retained fog `3/3`, haze `8/4`, and dust `6/6`; High retained fog `3/3`, haze `8/8`, and dust `6/6`. Unified evaluated two selected dynamic lights.
+
+  ```text
+  Medium Legacy total:  median 1.765 ms | p95 1.769 ms
+  Medium Unified total: median 0.918 ms | p95 0.925 ms
+    Unified/Legacy:     52.01% median | 52.29% p95
+    Reduction:          47.99% median | 47.71% p95
+
+  High Legacy total:    median 7.030 ms | p95 7.053 ms
+  High Unified total:   median 1.383 ms | p95 1.393 ms
+    Unified/Legacy:     19.67% median | 19.75% p95
+    Reduction:          80.33% median | 80.25% p95
+  ```
+
+  Unified subpass medians were `0.895 ms` Medium and `1.360 ms` High. Legacy haze subpass medians were `1.293 ms` Medium and `6.393 ms` High. High clears the plan's 70%-median and 75%-p95 legacy ratios with substantial margin, and Unified Medium is not slower than Legacy Medium.
+- Manual verification: User confirmed every haze remained visible, with Unified appearing slightly less intense than Legacy. No darkness glow and no severe foreground halos were observed.
+- Cache invalidation behavior: Unchanged; this completion follow-up is documentation-only. Slice 2 added no topology or visible cached 2D editor-state mutation.
+- Lightmap source-hash behavior: Unchanged. Slice 2 added no serialized inputs or lightmap-affecting data; all prototype settings and backend selection remain visual-only and excluded from `ComputeSectorLightmapSourceHash()`.
+- Collision/sector lookup/physics behavior: Unchanged.
+- Legacy coexistence/removal state: Legacy remains available and is still the initial backend as required for the migration period. Slice 2 is complete; no legacy renderer/schema/UI removal occurred.
+- Remaining follow-up within this plan: Slice 3 may now begin when explicitly requested. Preserve the accepted slight intensity difference as a tuning reference; do not start Slice 3 or retune Slice 2 as part of this documentation-only closure.

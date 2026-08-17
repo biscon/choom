@@ -3443,6 +3443,13 @@ void SectorEditor::ApplyPreview3DWorldAtmosphere(engine::RenderTarget& sceneTarg
     sceneRuntime.ApplyWorldAtmosphere(sceneTarget, TopologyMap());
 }
 
+void SectorEditor::PreparePreview3DWorldAtmosphere(
+        const engine::RenderTarget& sceneTarget)
+{
+    if (state.mode != SectorEditorMode::Preview3D) return;
+    sceneRuntime.PrepareWorldAtmosphere(sceneTarget, TopologyMap());
+}
+
 void SectorEditor::ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget)
 {
     if (state.mode != SectorEditorMode::Preview3D) {

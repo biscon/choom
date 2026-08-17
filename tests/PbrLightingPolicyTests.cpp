@@ -444,17 +444,19 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::string bloom=ReadSource(BLOOM_SHADER_SOURCE_PATH);
     const std::string fog=ReadSource(LOCAL_FOG_SHADER_SOURCE_PATH);
     const std::string haze=ReadSource(HAZE_SHADER_SOURCE_PATH);
+    const std::string unified=ReadSource(UNIFIED_ATMOSPHERE_SHADER_SOURCE_PATH);
     const std::string dust=ReadSource(DUST_SHADER_SOURCE_PATH);
     const std::string muzzle=ReadSource(MUZZLE_SHADER_SOURCE_PATH);
     const std::string mainGraph=ReadSource(MAIN_RENDER_GRAPH_SOURCE_PATH);
     const std::string modelAssets=ReadSource(MODEL_ASSET_SOURCE_PATH);
     const std::string dynamicModelShadows=ReadSource(DYNAMIC_MODEL_SHADOW_SOURCE_PATH);
-    Check(!bloom.empty()&&!fog.empty()&&!haze.empty()&&!dust.empty()
+    Check(!bloom.empty()&&!fog.empty()&&!haze.empty()&&!unified.empty()&&!dust.empty()
                     &&!muzzle.empty()&&!mainGraph.empty()&&!dynamicModelShadows.empty(),
           "HDR effect policy can read every affected shader and pass graph");
     Check(bloom.find("Rgba8Unorm")==std::string::npos
                     && fog.find("Rgba8Unorm")==std::string::npos
                     && haze.find("Rgba8Unorm")==std::string::npos
+                    && unified.find("Rgba8Unorm")==std::string::npos
                     && dust.find("Rgba8Unorm")==std::string::npos,
           "radiance-bearing atmosphere and bloom targets never select RGBA8");
     Check(fog.find("dynamicLightingClamp")==std::string::npos
@@ -464,6 +466,7 @@ void TestHdrEffectShaderAndPassPolicies()
     Check(bloom.find("65504.0")!=std::string::npos
                     && fog.find("65504.0")!=std::string::npos
                     && haze.find("65504.0")!=std::string::npos
+                    && unified.find("65504.0")!=std::string::npos
                     && dust.find("65504.0")!=std::string::npos
                     && muzzle.find("65504.0")!=std::string::npos,
           "affected RGBA16F writes retain the named finite-half storage guard");
@@ -492,6 +495,7 @@ void TestHdrEffectShaderAndPassPolicies()
     Check(bloom.find("LinearToSrgb")==std::string::npos
                     && fog.find("LinearToSrgb")==std::string::npos
                     && haze.find("LinearToSrgb")==std::string::npos
+                    && unified.find("LinearToSrgb")==std::string::npos
                     && dust.find("LinearToSrgb")==std::string::npos
                     && muzzle.find("LinearToSrgb")==std::string::npos
                     && bloom.find("ToneMap")==std::string::npos,
@@ -527,6 +531,25 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::size_t dustPass = sectorRenderer.find("lightDustRenderer.Apply");
     Check(localFogPass < hazePass && hazePass < dustPass,
           "legacy atmosphere keeps local fog, haze, then dust pass order");
+    const std::size_t unifiedPass = sectorRenderer.find(
+            "volumetricAtmosphereRenderer.Apply");
+    Check(hazePass < unifiedPass && unifiedPass < dustPass
+                    && sectorRenderer.find(
+                               "atmosphereBackend == SectorAtmosphereBackend::Legacy")
+                            != std::string::npos
+                    && sectorRenderer.find(
+                               "atmosphereBackend == SectorAtmosphereBackend::Unified")
+                            != std::string::npos,
+          "comparison mode selects one continuous backend and keeps dust afterward");
+    Check(unified.find("for(int stepIndex=0;stepIndex<MAX_STEPS;++stepIndex)")
+                            != std::string::npos
+                    && unified.find("vec3 direct=dynamicLighting(p,rayDirection)")
+                            != std::string::npos
+                    && unified.find("uniform sampler2D sceneDepth")
+                            != std::string::npos
+                    && unified.find("atmosphere/=max(totalWeight,0.0001)")
+                            != std::string::npos,
+          "unified prototype performs one depth-clipped march and bilateral composite");
     Check(mainGraph.find("glBeginQuery(GL_TIME_ELAPSED") != std::string::npos
                     && mainGraph.find("RenderProfilePass::Atmosphere") != std::string::npos,
           "aggregate delayed GL_TIME_ELAPSED atmosphere timing remains intact");

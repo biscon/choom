@@ -10,10 +10,18 @@
 
 namespace game {
 
+enum class SectorAtmosphereBackend {
+    Legacy,
+    Unified
+};
+
+const char* SectorAtmosphereBackendName(SectorAtmosphereBackend backend);
+
 enum class SectorAtmosphereGpuPass : std::size_t {
     Total,
     LocalFog,
     Haze,
+    Unified,
     Dust,
     Count
 };
@@ -46,6 +54,7 @@ SectorAtmosphereSampleStatistics ComputeSectorAtmosphereSampleStatistics(
         std::size_t sampleCount);
 
 struct SectorAtmosphereCaptureMetadata {
+    SectorAtmosphereBackend backend = SectorAtmosphereBackend::Legacy;
     SectorTopologyFogSettings::LocalVolumeQuality quality =
             SectorTopologyFogSettings::LocalVolumeQuality::Off;
     int sceneWidth = 0;
@@ -54,6 +63,8 @@ struct SectorAtmosphereCaptureMetadata {
     int localFogActive = 0;
     int hazeEligible = 0;
     int hazeActive = 0;
+    int unifiedIntegrations = 0;
+    int unifiedDynamicLights = 0;
     int dustEligible = 0;
     int dustActive = 0;
     SectorViewPose cameraPose;
@@ -158,6 +169,7 @@ struct SectorAtmosphereTargetDiagnostics {
 };
 
 struct SectorAtmosphereDiagnostics {
+    SectorAtmosphereBackend backend = SectorAtmosphereBackend::Legacy;
     SectorTopologyFogSettings::LocalVolumeQuality effectiveQuality =
             SectorTopologyFogSettings::LocalVolumeQuality::Off;
     int sceneWidth = 0;
@@ -165,6 +177,9 @@ struct SectorAtmosphereDiagnostics {
     std::uint64_t estimatedIntermediateBytes = 0;
     SectorAtmosphereTargetDiagnostics localFog;
     SectorAtmosphereTargetDiagnostics haze;
+    SectorAtmosphereTargetDiagnostics unified;
+    int unifiedIntegrationCount = 0;
+    int unifiedDynamicLightCount = 0;
     int dustEligible = 0;
     int dustActive = 0;
     int dustVisibleParticles = 0;

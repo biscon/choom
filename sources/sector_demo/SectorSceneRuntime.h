@@ -69,6 +69,9 @@ public:
     void ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map);
+    void PrepareWorldAtmosphere(
+            const engine::RenderTarget& sceneTarget,
+            const SectorTopologyMap& map);
     void ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,

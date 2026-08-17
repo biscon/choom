@@ -81,6 +81,8 @@ uniform float fogDensity;
 uniform float fogMaxOpacity;
 uniform float fogReferenceHeightWorld;
 uniform float fogHeightFalloff;
+uniform int fogVolumetricHandoffEnabled;
+uniform float fogVolumetricMaximumDistanceWorld;
 
 #define DOOR_DEBUG_NORMAL 0
 #define DOOR_DEBUG_ALBEDO_ONLY 1
@@ -180,13 +182,34 @@ vec3 ApplySectorFog(
         return surfaceRgb;
     }
 
-    float fogDistance = max(length(worldPosition - fogCameraPosition) - fogStartDistanceWorld, 0.0);
+    vec3 cameraToPoint = worldPosition - fogCameraPosition;
+    float pathDistance = length(cameraToPoint);
+    float fogDistance = max(pathDistance - fogStartDistanceWorld, 0.0);
     float midpointHeight = (fogCameraPosition.y + worldPosition.y) * 0.5;
     float heightAboveReference = max(midpointHeight - fogReferenceHeightWorld, 0.0);
     float heightMultiplier = exp(-heightAboveReference * fogHeightFalloff);
     float fogAmount = min(
             1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
             fogMaxOpacity);
+    if (fogVolumetricHandoffEnabled != 0
+            && pathDistance > fogVolumetricMaximumDistanceWorld) {
+        float prefixDistance = max(fogVolumetricMaximumDistanceWorld, 0.0);
+        vec3 prefixPosition = fogCameraPosition
+                + cameraToPoint * (prefixDistance / max(pathDistance, 0.0001));
+        float prefixFogDistance = max(prefixDistance - fogStartDistanceWorld, 0.0);
+        float prefixMidpointHeight = (fogCameraPosition.y + prefixPosition.y) * 0.5;
+        float prefixHeightMultiplier = exp(-max(
+                prefixMidpointHeight - fogReferenceHeightWorld, 0.0)
+                * fogHeightFalloff);
+        float fullOpticalDepth = -log(max(1.0 - fogAmount, 0.0001));
+        float capOpticalDepth = -log(max(1.0 - fogMaxOpacity, 0.0001));
+        float prefixOpticalDepth = min(
+                fogDensity * prefixFogDistance * prefixHeightMultiplier,
+                capOpticalDepth);
+        fogAmount = 1.0 - exp(-max(fullOpticalDepth - prefixOpticalDepth, 0.0));
+    } else if (fogVolumetricHandoffEnabled != 0) {
+        fogAmount = 0.0;
+    }
     vec3 fogScattering = fogColor * max(staticAtmosphericLighting, vec3(0.0));
     return surfaceRgb * (1.0 - fogAmount) + fogScattering * fogAmount;
 }

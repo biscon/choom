@@ -460,6 +460,16 @@ void GameApplication::Apply3DWorldAtmosphere(
     }
 }
 
+void GameApplication::Prepare3DWorldAtmosphere(
+        const engine::RenderTarget& sceneTarget)
+{
+    if (BackgroundScreen() == ApplicationScreen::Game) {
+        gameScene.PrepareWorldAtmosphere(sceneTarget, gameSession.Map());
+    } else {
+        editor.PreparePreview3DWorldAtmosphere(sceneTarget);
+    }
+}
+
 void GameApplication::Apply3DHdrBloom(engine::RenderTarget& sceneTarget)
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {

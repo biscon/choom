@@ -53,7 +53,7 @@ inline Rectangle BuildSectorEditorPreviewDebugTabRect(
 inline float SectorEditorPreviewOverlayExpandedHeight(PreviewDebugOverlayTab activeTab)
 {
     if (activeTab == PreviewDebugOverlayTab::Pbr) return 610.0f;
-    if (activeTab == PreviewDebugOverlayTab::Atmosphere) return 650.0f;
+    if (activeTab == PreviewDebugOverlayTab::Atmosphere) return 690.0f;
     if (activeTab == PreviewDebugOverlayTab::Navigation) return 760.0f;
     return 390.0f;
 }

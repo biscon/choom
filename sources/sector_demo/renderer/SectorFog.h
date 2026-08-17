@@ -9,6 +9,8 @@ namespace game {
 struct SectorFogRenderContext {
     SectorTopologyFogSettings settings;
     Vector3 cameraPosition = {};
+    bool volumetricHandoffEnabled = false;
+    float volumetricMaximumDistanceWorld = 0.0f;
 };
 
 struct SectorFogShaderLocations {
@@ -20,11 +22,15 @@ struct SectorFogShaderLocations {
     int maxOpacity = -1;
     int referenceHeightWorld = -1;
     int heightFalloff = -1;
+    int volumetricHandoffEnabled = -1;
+    int volumetricMaximumDistanceWorld = -1;
 };
 
 SectorFogRenderContext BuildSectorFogRenderContext(
         const SectorTopologyFogSettings& settings,
-        Vector3 cameraPosition);
+        Vector3 cameraPosition,
+        bool volumetricHandoffEnabled = false,
+        float volumetricMaximumDistanceWorld = 0.0f);
 SectorFogShaderLocations GetSectorFogShaderLocations(Shader shader);
 void UploadSectorFogShaderValues(
         Shader shader,

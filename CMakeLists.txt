@@ -236,6 +236,16 @@ if(BUILD_TESTING)
     target_link_libraries(sector_atmosphere_diagnostics_tests PRIVATE raylib)
     add_test(NAME sector_atmosphere_diagnostics COMMAND sector_atmosphere_diagnostics_tests)
 
+    add_executable(sector_volumetric_atmosphere_tests
+            tests/SectorVolumetricAtmosphereTests.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
+            sources/sector_demo/SectorTopologyMap.cpp
+            sources/sector_demo/renderer/SectorVolumetricAtmosphereMath.cpp
+    )
+    target_include_directories(sector_volumetric_atmosphere_tests PRIVATE sources)
+    target_link_libraries(sector_volumetric_atmosphere_tests PRIVATE raylib)
+    add_test(NAME sector_volumetric_atmosphere COMMAND sector_volumetric_atmosphere_tests)
+
     add_executable(application_flow_tests
             tests/ApplicationFlowTests.cpp
             sources/game/ApplicationFlow.cpp
@@ -287,6 +297,7 @@ if(BUILD_TESTING)
             BLOOM_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorBloomRenderer.cpp"
             LOCAL_FOG_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLocalFogRenderer.cpp"
             HAZE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLightHazeRenderer.cpp"
+            UNIFIED_ATMOSPHERE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorVolumetricAtmosphereRenderer.cpp"
             DUST_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLightDustRenderer.cpp"
             MUZZLE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/game/FpsViewmodelEffectsRenderer.cpp"
             DYNAMIC_MODEL_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicModelShadowRenderer.cpp"

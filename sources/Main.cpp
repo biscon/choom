@@ -702,6 +702,8 @@ int main()
             application.Render3DShadowMaps(context);
             performanceProfiler.End(RenderProfilePass::Shadows);
 
+            application.Prepare3DWorldAtmosphere(worldTargetResource);
+
             performanceProfiler.Begin(RenderProfilePass::World);
             BeginTextureMode(worldTarget);
             ClearLinearSceneBackground(Color{8, 10, 14, 255});

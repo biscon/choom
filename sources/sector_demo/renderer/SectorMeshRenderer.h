@@ -17,6 +17,7 @@
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
 #include "sector_demo/renderer/SectorLightDustRenderer.h"
 #include "sector_demo/renderer/SectorLightHazeRenderer.h"
+#include "sector_demo/renderer/SectorVolumetricAtmosphereRenderer.h"
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
@@ -77,6 +78,10 @@ public:
             const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
     bool ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
+            const SectorTopologyMap& map,
+            const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);
+    bool PrepareWorldAtmosphere(
+            const engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);
     bool ApplyHdrBloom(
@@ -239,6 +244,8 @@ public:
     }
     void StartAtmosphereCapture();
     void CancelAtmosphereCapture();
+    SectorAtmosphereBackend AtmosphereBackend() const { return atmosphereBackend; }
+    void SetAtmosphereBackend(SectorAtmosphereBackend backend);
 
 private:
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
@@ -254,6 +261,7 @@ private:
             bool pipelineFailed,
             bool localFogApplied,
             bool lightHazeApplied,
+            bool unifiedApplied,
             bool lightDustApplied);
     engine::TextureHandle TextureForId(const std::string& textureId) const;
     engine::TextureHandle NormalTextureForId(const std::string& textureId) const;
@@ -313,10 +321,12 @@ private:
     SectorFogShaderLocations fogShaderLocations;
     SectorLocalFogRenderer localFogRenderer;
     SectorLightHazeRenderer lightHazeRenderer;
+    SectorVolumetricAtmosphereRenderer volumetricAtmosphereRenderer;
     SectorLightDustRenderer lightDustRenderer;
     SectorAtmosphereGpuProfiler atmosphereGpuProfiler;
     SectorAtmosphereDiagnostics atmosphereDiagnostics;
     SectorAtmosphereCapture atmosphereCapture;
+    SectorAtmosphereBackend atmosphereBackend = SectorAtmosphereBackend::Legacy;
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
     SectorPbrEnvironment pbrEnvironment;

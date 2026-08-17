@@ -26,12 +26,22 @@ bool SamePose(const SectorViewPose& left, const SectorViewPose& right)
 
 } // namespace
 
+const char* SectorAtmosphereBackendName(SectorAtmosphereBackend backend)
+{
+    switch (backend) {
+        case SectorAtmosphereBackend::Legacy: return "Legacy";
+        case SectorAtmosphereBackend::Unified: return "Unified";
+    }
+    return "Unknown";
+}
+
 const char* SectorAtmosphereGpuPassName(SectorAtmosphereGpuPass pass)
 {
     switch (pass) {
         case SectorAtmosphereGpuPass::Total: return "total";
         case SectorAtmosphereGpuPass::LocalFog: return "local fog";
         case SectorAtmosphereGpuPass::Haze: return "haze accumulation/composite";
+        case SectorAtmosphereGpuPass::Unified: return "unified integration/composite";
         case SectorAtmosphereGpuPass::Dust: return "dust";
         case SectorAtmosphereGpuPass::Count: break;
     }
@@ -71,7 +81,8 @@ bool SameSectorAtmosphereCaptureView(
         const SectorAtmosphereCaptureMetadata& left,
         const SectorAtmosphereCaptureMetadata& right)
 {
-    return left.quality == right.quality
+    return left.backend == right.backend
+            && left.quality == right.quality
             && left.sceneWidth == right.sceneWidth
             && left.sceneHeight == right.sceneHeight
             && SamePose(left.cameraPose, right.cameraPose)
@@ -130,7 +141,7 @@ void SectorAtmosphereCapture::ValidateView(
         return;
     }
     if (!SameSectorAtmosphereCaptureView(metadata, currentMetadata)) {
-        Cancel("camera, quality, FOV, or target size changed");
+        Cancel("backend, camera, quality, FOV, or target size changed");
     }
 }
 
@@ -272,12 +283,14 @@ std::string FormatSectorAtmosphereDiagnosticsSummary(
         const SectorAtmosphereDiagnostics& diagnostics)
 {
     std::ostringstream stream;
-    stream << "Legacy " << SectorVolumetricQualityName(diagnostics.effectiveQuality)
+    stream << SectorAtmosphereBackendName(diagnostics.backend) << ' '
+           << SectorVolumetricQualityName(diagnostics.effectiveQuality)
            << " | scene " << diagnostics.sceneWidth << 'x' << diagnostics.sceneHeight
            << " | fog " << diagnostics.localFog.eligibleCount << '/'
            << diagnostics.localFog.activeCount
            << " | haze " << diagnostics.haze.eligibleCount << '/'
            << diagnostics.haze.activeCount
+           << " | unified " << diagnostics.unifiedIntegrationCount
            << " | dust " << diagnostics.dustEligible << '/'
            << diagnostics.dustActive
            << " | " << FormatSectorAtmosphereBytes(
@@ -294,11 +307,14 @@ std::string FormatSectorAtmosphereCaptureReport(
 {
     std::ostringstream stream;
     stream << std::fixed << std::setprecision(3);
-    stream << "ATMOSPHERE_CAPTURE legacy "
+    stream << "ATMOSPHERE_CAPTURE "
+           << SectorAtmosphereBackendName(metadata.backend) << ' '
            << SectorVolumetricQualityName(metadata.quality)
            << " target=" << metadata.sceneWidth << 'x' << metadata.sceneHeight
            << " fog=" << metadata.localFogEligible << '/' << metadata.localFogActive
            << " haze=" << metadata.hazeEligible << '/' << metadata.hazeActive
+           << " unified=" << metadata.unifiedIntegrations
+           << " lights=" << metadata.unifiedDynamicLights
            << " dust=" << metadata.dustEligible << '/' << metadata.dustActive
            << " camera_pos=" << metadata.cameraPose.position.x << ','
            << metadata.cameraPose.position.y << ',' << metadata.cameraPose.position.z

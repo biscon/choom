@@ -11,6 +11,7 @@
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorUnits.h"
+#include "sector_demo/renderer/SectorVolumetricAtmosphereContracts.h"
 
 #include <raylib.h>
 #include <raymath.h>
@@ -168,6 +169,8 @@ uniform float fogDensity;
 uniform float fogMaxOpacity;
 uniform float fogReferenceHeightWorld;
 uniform float fogHeightFalloff;
+uniform int fogVolumetricHandoffEnabled;
+uniform float fogVolumetricMaximumDistanceWorld;
 
 #define MAX_DYNAMIC_LIGHTS 8
 #define MAX_DYNAMIC_SHADOW_CASTERS 2
@@ -310,13 +313,34 @@ vec3 ApplySectorFog(
         return surfaceRgb;
     }
 
-    float fogDistance = max(length(worldPosition - fogCameraPosition) - fogStartDistanceWorld, 0.0);
+    vec3 cameraToPoint = worldPosition - fogCameraPosition;
+    float pathDistance = length(cameraToPoint);
+    float fogDistance = max(pathDistance - fogStartDistanceWorld, 0.0);
     float midpointHeight = (fogCameraPosition.y + worldPosition.y) * 0.5;
     float heightAboveReference = max(midpointHeight - fogReferenceHeightWorld, 0.0);
     float heightMultiplier = exp(-heightAboveReference * fogHeightFalloff);
     float fogAmount = min(
             1.0 - exp(-fogDensity * fogDistance * heightMultiplier),
             fogMaxOpacity);
+    if (fogVolumetricHandoffEnabled != 0
+            && pathDistance > fogVolumetricMaximumDistanceWorld) {
+        float prefixDistance = max(fogVolumetricMaximumDistanceWorld, 0.0);
+        vec3 prefixPosition = fogCameraPosition
+                + cameraToPoint * (prefixDistance / max(pathDistance, 0.0001));
+        float prefixFogDistance = max(prefixDistance - fogStartDistanceWorld, 0.0);
+        float prefixMidpointHeight = (fogCameraPosition.y + prefixPosition.y) * 0.5;
+        float prefixHeightMultiplier = exp(-max(
+                prefixMidpointHeight - fogReferenceHeightWorld, 0.0)
+                * fogHeightFalloff);
+        float fullOpticalDepth = -log(max(1.0 - fogAmount, 0.0001));
+        float capOpticalDepth = -log(max(1.0 - fogMaxOpacity, 0.0001));
+        float prefixOpticalDepth = min(
+                fogDensity * prefixFogDistance * prefixHeightMultiplier,
+                capOpticalDepth);
+        fogAmount = 1.0 - exp(-max(fullOpticalDepth - prefixOpticalDepth, 0.0));
+    } else if (fogVolumetricHandoffEnabled != 0) {
+        fogAmount = 0.0;
+    }
     vec3 fogScattering = fogColor * max(staticAtmosphericLighting, vec3(0.0));
     return surfaceRgb * (1.0 - fogAmount) + fogScattering * fogAmount;
 }
@@ -924,7 +948,9 @@ bool SectorMeshRenderer::RebuildRendererResources(
     camera.projection = CAMERA_PERSPECTIVE;
     UpdateCamera();
     UpdateVisibilityDebug();
+    volumetricAtmosphereRenderer.Initialize();
     atmosphereGpuProfiler.Initialize();
+    atmosphereDiagnostics.backend = atmosphereBackend;
     atmosphereDiagnostics.gpuTimingStatus = atmosphereGpuProfiler.Status();
 
     initialized = true;
@@ -961,6 +987,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     runtimeSeconds = 0.0f;
     localFogRenderer.Shutdown();
     lightHazeRenderer.Shutdown();
+    volumetricAtmosphereRenderer.Shutdown();
     lightDustRenderer.Shutdown();
     UnloadHdrSceneColorView();
     if (!initialized
@@ -1075,8 +1102,14 @@ void SectorMeshRenderer::DrawScene(
     BeginMode3D(camera);
     skyRenderer.Draw(assets, camera);
 
-    const SectorFogRenderContext fogContext =
-            BuildSectorFogRenderContext(fogSettings, camera.position);
+    const bool volumetricHandoff = atmosphereBackend
+                    == SectorAtmosphereBackend::Unified
+            && volumetricAtmosphereRenderer.ReadyForAnalyticFogHandoff();
+    const SectorFogRenderContext fogContext = BuildSectorFogRenderContext(
+            fogSettings,
+            camera.position,
+            volumetricHandoff,
+            SectorVolumetricPrototypeMaximumDistanceWorld);
     UploadSectorFogShaderValues(material.shader, fogShaderLocations, fogContext);
 
     float useAo = useBakedAmbientOcclusion ? 1.0f : 0.0f;
@@ -1532,6 +1565,7 @@ bool SectorMeshRenderer::CompositeViewmodel(
 SectorAtmosphereCaptureMetadata SectorMeshRenderer::BuildAtmosphereCaptureMetadata() const
 {
     SectorAtmosphereCaptureMetadata metadata;
+    metadata.backend = atmosphereBackend;
     metadata.quality = atmosphereDiagnostics.effectiveQuality;
     metadata.sceneWidth = atmosphereDiagnostics.sceneWidth;
     metadata.sceneHeight = atmosphereDiagnostics.sceneHeight;
@@ -1539,11 +1573,26 @@ SectorAtmosphereCaptureMetadata SectorMeshRenderer::BuildAtmosphereCaptureMetada
     metadata.localFogActive = atmosphereDiagnostics.localFog.activeCount;
     metadata.hazeEligible = atmosphereDiagnostics.haze.eligibleCount;
     metadata.hazeActive = atmosphereDiagnostics.haze.activeCount;
+    metadata.unifiedIntegrations = atmosphereDiagnostics.unifiedIntegrationCount;
+    metadata.unifiedDynamicLights = atmosphereDiagnostics.unifiedDynamicLightCount;
     metadata.dustEligible = atmosphereDiagnostics.dustEligible;
     metadata.dustActive = atmosphereDiagnostics.dustActive;
     metadata.cameraPose = RendererPose();
     metadata.verticalFovDegrees = verticalFovDegrees;
     return metadata;
+}
+
+void SectorMeshRenderer::SetAtmosphereBackend(SectorAtmosphereBackend backend)
+{
+    if (backend == atmosphereBackend) return;
+    CancelAtmosphereCapture();
+    atmosphereBackend = backend;
+    volumetricAtmosphereRenderer.ResetPreparedFrame();
+    atmosphereGpuProfiler.Shutdown();
+    atmosphereGpuProfiler.Initialize();
+    atmosphereDiagnostics.latestGpuTimings = {};
+    atmosphereDiagnostics.backend = backend;
+    atmosphereDiagnostics.gpuTimingStatus = atmosphereGpuProfiler.Status();
 }
 
 void SectorMeshRenderer::StartAtmosphereCapture()
@@ -1574,8 +1623,10 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
         bool pipelineFailed,
         bool localFogApplied,
         bool lightHazeApplied,
+        bool unifiedApplied,
         bool lightDustApplied)
 {
+    atmosphereDiagnostics.backend = atmosphereBackend;
     atmosphereDiagnostics.effectiveQuality = quality;
     atmosphereDiagnostics.sceneWidth = sceneTarget.native.texture.width;
     atmosphereDiagnostics.sceneHeight = sceneTarget.native.texture.height;
@@ -1594,10 +1645,14 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
             qualityContract.localFogTargetScale);
     atmosphereDiagnostics.localFog.marchSteps = qualityContract.localFogMarchSteps;
     atmosphereDiagnostics.localFog.eligibleCount = targetSupported
-            ? localFogRenderer.EligibleVolumeCount()
+            ? (atmosphereBackend == SectorAtmosphereBackend::Unified
+                    ? volumetricAtmosphereRenderer.EligibleLocalVolumeCount()
+                    : localFogRenderer.EligibleVolumeCount())
             : 0;
     atmosphereDiagnostics.localFog.activeCount = targetSupported
-            ? localFogRenderer.ActiveVolumeCount()
+            ? (atmosphereBackend == SectorAtmosphereBackend::Unified
+                    ? volumetricAtmosphereRenderer.ActiveLocalVolumeCount()
+                    : localFogRenderer.ActiveVolumeCount())
             : 0;
     atmosphereDiagnostics.localFog.estimatedBytes =
             EstimateSectorAtmosphereTargetBytes(
@@ -1615,10 +1670,14 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
             qualityContract.hazeTargetScale);
     atmosphereDiagnostics.haze.marchSteps = qualityContract.hazeMarchSteps;
     atmosphereDiagnostics.haze.eligibleCount = targetSupported
-            ? lightHazeRenderer.EligibleCount()
+            ? (atmosphereBackend == SectorAtmosphereBackend::Unified
+                    ? volumetricAtmosphereRenderer.EligibleHazeVolumeCount()
+                    : lightHazeRenderer.EligibleCount())
             : 0;
     atmosphereDiagnostics.haze.activeCount = targetSupported
-            ? lightHazeRenderer.ActiveCount()
+            ? (atmosphereBackend == SectorAtmosphereBackend::Unified
+                    ? volumetricAtmosphereRenderer.ActiveHazeVolumeCount()
+                    : lightHazeRenderer.ActiveCount())
             : 0;
     atmosphereDiagnostics.haze.estimatedBytes = EstimateSectorAtmosphereTargetBytes(
             atmosphereDiagnostics.haze.width,
@@ -1626,6 +1685,31 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
             8);
     atmosphereDiagnostics.haze.resourceStatus =
             lightHazeRenderer.AccumulationDiagnostic();
+
+    atmosphereDiagnostics.unified.width =
+            volumetricAtmosphereRenderer.TargetWidth();
+    atmosphereDiagnostics.unified.height =
+            volumetricAtmosphereRenderer.TargetHeight();
+    atmosphereDiagnostics.unified.marchSteps =
+            volumetricAtmosphereRenderer.MarchSteps();
+    atmosphereDiagnostics.unified.eligibleCount =
+            atmosphereDiagnostics.localFog.eligibleCount
+            + atmosphereDiagnostics.haze.eligibleCount;
+    atmosphereDiagnostics.unified.activeCount =
+            atmosphereDiagnostics.localFog.activeCount
+            + atmosphereDiagnostics.haze.activeCount;
+    atmosphereDiagnostics.unified.estimatedBytes =
+            EstimateSectorAtmosphereTargetBytes(
+                    atmosphereDiagnostics.unified.width,
+                    atmosphereDiagnostics.unified.height,
+                    8);
+    atmosphereDiagnostics.unified.resourceStatus =
+            volumetricAtmosphereRenderer.ResourceDiagnostic();
+    atmosphereDiagnostics.unifiedIntegrationCount = unifiedApplied ? 1 : 0;
+    atmosphereDiagnostics.unifiedDynamicLightCount =
+            atmosphereBackend == SectorAtmosphereBackend::Unified
+            ? volumetricAtmosphereRenderer.ActiveDynamicLightCount()
+            : 0;
 
     atmosphereDiagnostics.dustEligible = targetSupported
             ? lightDustRenderer.EligibleEmitterCount()
@@ -1640,8 +1724,10 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
             lightDustRenderer.ResourceDiagnostic();
     atmosphereDiagnostics.scratchResourceStatus = hdrSceneScratchDiagnostic;
     atmosphereDiagnostics.estimatedIntermediateBytes =
-            atmosphereDiagnostics.localFog.estimatedBytes
-            + atmosphereDiagnostics.haze.estimatedBytes
+            (atmosphereBackend == SectorAtmosphereBackend::Unified
+                    ? atmosphereDiagnostics.unified.estimatedBytes
+                    : atmosphereDiagnostics.localFog.estimatedBytes
+                            + atmosphereDiagnostics.haze.estimatedBytes)
             + hdrSceneScratch.actual.estimatedAllocationBytes;
     atmosphereDiagnostics.gpuTimingStatus = atmosphereGpuProfiler.Status();
     atmosphereDiagnostics.skippedGpuQueryFrames =
@@ -1651,10 +1737,17 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
         atmosphereDiagnostics.fallbackStatus =
                 "disabled: unsupported scene target or scratch unavailable";
     } else if (pipelineFailed) {
-        atmosphereDiagnostics.fallbackStatus =
-                "disabled: legacy atmosphere composite failed";
+        atmosphereDiagnostics.fallbackStatus = atmosphereBackend
+                        == SectorAtmosphereBackend::Unified
+                ? "disabled: unified resources/composite failed; analytic fog active"
+                : "disabled: legacy atmosphere composite failed";
+    } else if (unifiedApplied) {
+        atmosphereDiagnostics.fallbackStatus = "unified backend active";
     } else if (localFogApplied || lightHazeApplied || lightDustApplied) {
-        atmosphereDiagnostics.fallbackStatus = "legacy backend active";
+        atmosphereDiagnostics.fallbackStatus = atmosphereBackend
+                        == SectorAtmosphereBackend::Unified
+                ? "unified medium inactive; dust only"
+                : "legacy backend active";
     } else if (quality == SectorTopologyFogSettings::LocalVolumeQuality::Off) {
         atmosphereDiagnostics.fallbackStatus =
                 "inactive: volumetric quality Off and no visible dust";
@@ -1662,6 +1755,33 @@ void SectorMeshRenderer::UpdateAtmosphereDiagnostics(
         atmosphereDiagnostics.fallbackStatus =
                 "inactive: no eligible visible atmosphere";
     }
+}
+
+bool SectorMeshRenderer::PrepareWorldAtmosphere(
+        const engine::RenderTarget& sceneTarget,
+        const SectorTopologyMap& map,
+        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes)
+{
+    if (atmosphereBackend != SectorAtmosphereBackend::Unified) {
+        volumetricAtmosphereRenderer.ResetPreparedFrame();
+        return true;
+    }
+    const auto effectiveQuality =
+            static_cast<int>(map.fogSettings.localVolumeQuality)
+                    < static_cast<int>(volumetricQualityCap)
+            ? map.fogSettings.localVolumeQuality
+            : volumetricQualityCap;
+    return volumetricAtmosphereRenderer.Prepare(
+            sceneTarget,
+            map,
+            effectiveQuality,
+            camera,
+            runtimeSeconds,
+            objectLightProbes,
+            BuildBillboardDynamicLightContext(),
+            lightAtmosphereSources,
+            visibilityResult,
+            meshes.sectorReceiverBounds);
 }
 
 bool SectorMeshRenderer::ApplyWorldAtmosphere(
@@ -1706,23 +1826,27 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
     RenderTexture2D& nativeScene = sceneTarget.native;
     const SectorBillboardDynamicLightContext dynamicLightContext =
             BuildBillboardDynamicLightContext();
+    bool localFogApplied = false;
+    bool lightHazeApplied = false;
+    bool unifiedApplied = false;
+    bool pipelineFailed = false;
 
     atmosphereGpuProfiler.Begin(SectorAtmosphereGpuPass::LocalFog);
-    const bool localFogApplied = targetSupported && localFogRenderer.Apply(
-            nativeScene,
-            hdrSceneScratch.native,
-            map,
-            effectiveVolumetricQuality,
-            camera,
-            runtimeSeconds,
-            objectLightProbes,
-            dynamicLightContext);
+    if (atmosphereBackend == SectorAtmosphereBackend::Legacy) {
+        localFogApplied = targetSupported && localFogRenderer.Apply(
+                nativeScene,
+                hdrSceneScratch.native,
+                map,
+                effectiveVolumetricQuality,
+                camera,
+                runtimeSeconds,
+                objectLightProbes,
+                dynamicLightContext);
+    }
     atmosphereGpuProfiler.End(SectorAtmosphereGpuPass::LocalFog);
 
-    bool lightHazeApplied = false;
-    bool pipelineFailed = false;
     atmosphereGpuProfiler.Begin(SectorAtmosphereGpuPass::Haze);
-    if (targetSupported) {
+    if (atmosphereBackend == SectorAtmosphereBackend::Legacy && targetSupported) {
         if (localFogApplied && EnsureHdrSceneColorView(sceneTarget)) {
             RenderTexture2D foggedScene = hdrSceneScratch.native;
             foggedScene.depth = nativeScene.depth;
@@ -1738,8 +1862,7 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
                     lightAtmosphereSources,
                     visibilityResult,
                     meshes.sectorReceiverBounds);
-            pipelineFailed = !lightHazeApplied
-                    && !CommitHdrScratch(sceneTarget);
+            pipelineFailed = !lightHazeApplied && !CommitHdrScratch(sceneTarget);
         } else {
             pipelineFailed = localFogApplied && !CommitHdrScratch(sceneTarget);
             if (!pipelineFailed) {
@@ -1755,15 +1878,28 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
                         lightAtmosphereSources,
                         visibilityResult,
                         meshes.sectorReceiverBounds);
-                pipelineFailed = lightHazeApplied
-                        && !CommitHdrScratch(sceneTarget);
+                pipelineFailed = lightHazeApplied && !CommitHdrScratch(sceneTarget);
             }
         }
     }
     atmosphereGpuProfiler.End(SectorAtmosphereGpuPass::Haze);
 
+    atmosphereGpuProfiler.Begin(SectorAtmosphereGpuPass::Unified);
+    if (atmosphereBackend == SectorAtmosphereBackend::Unified && targetSupported) {
+        pipelineFailed = volumetricAtmosphereRenderer.HasActiveMedia()
+                && !volumetricAtmosphereRenderer.ResourcesReady();
+        if (!pipelineFailed) {
+            unifiedApplied = volumetricAtmosphereRenderer.Apply(
+                    nativeScene, hdrSceneScratch.native);
+            pipelineFailed = unifiedApplied && !CommitHdrScratch(sceneTarget);
+        }
+    }
+    atmosphereGpuProfiler.End(SectorAtmosphereGpuPass::Unified);
+
     atmosphereGpuProfiler.Begin(SectorAtmosphereGpuPass::Dust);
-    const bool lightDustApplied = targetSupported && !pipelineFailed
+    const bool allowDust = atmosphereBackend == SectorAtmosphereBackend::Unified
+            || !pipelineFailed;
+    const bool lightDustApplied = targetSupported && allowDust
             && lightDustRenderer.Apply(
             nativeScene,
             hdrSceneScratch.native,
@@ -1793,9 +1929,11 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
             pipelineFailed,
             localFogApplied,
             lightHazeApplied,
+            unifiedApplied,
             lightDustApplied);
-    return !pipelineFailed
-            && (localFogApplied || lightHazeApplied || lightDustApplied);
+    return (atmosphereBackend == SectorAtmosphereBackend::Unified || !pipelineFailed)
+            && (localFogApplied || lightHazeApplied
+                    || unifiedApplied || lightDustApplied);
 }
 
 bool SectorMeshRenderer::ApplyHdrBloom(
