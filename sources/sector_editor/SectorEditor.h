@@ -67,12 +67,14 @@ public:
             int projectedShadowResolution,
             int maxDynamicLights,
             int maxShadowLightUpdatesPerFrame,
-            bool depthPrepass)
+            bool depthPrepass,
+            float dynamicLightFadeInSeconds)
     {
         sceneRuntime.Renderer().SetGraphicsQuality(
                 volumetricQuality, shadowsEnabled, shadowMapResolution,
                 projectedShadowIntervalSeconds, projectedShadowResolution,
-                maxDynamicLights, maxShadowLightUpdatesPerFrame, depthPrepass);
+                maxDynamicLights, maxShadowLightUpdatesPerFrame, depthPrepass,
+                dynamicLightFadeInSeconds);
     }
     void SetPreviewVerticalFovDegrees(float value)
     {

@@ -155,7 +155,8 @@ public:
             int projectedShadowResolution = DynamicModelProjectedShadowResolution,
             int maxDynamicLights = static_cast<int>(MaxDynamicLights),
             int maxShadowLightUpdatesPerFrame = 2,
-            bool depthPrepass = false)
+            bool depthPrepass = false,
+            float dynamicLightFadeInSeconds = DynamicLightDefaultFadeInSeconds)
     {
         this->volumetricQuality = volumetricQuality;
         shadowMapsEnabled = shadowsEnabled;
@@ -167,6 +168,8 @@ public:
         dynamicLightState.SetMaxShadowLightUpdatesPerFrame(
                 static_cast<std::size_t>(std::max(
                         maxShadowLightUpdatesPerFrame, 0)));
+        dynamicLightState.SetSelectionFadeInSeconds(
+                dynamicLightFadeInSeconds);
         depthPrepassEnabled = depthPrepass;
         dynamicModelShadowIntervalSeconds = std::max(
                 projectedShadowIntervalSeconds, 0.0f);

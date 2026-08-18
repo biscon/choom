@@ -12,6 +12,8 @@
 namespace game {
 
 constexpr std::size_t MaxDynamicLights = 32;
+constexpr float DynamicLightDefaultFadeInSeconds = 0.25f;
+constexpr float DynamicLightMaximumFadeInSeconds = 2.0f;
 // The atlas budget is independent from the forward-light budget. A spot uses
 // one slot and a dual-paraboloid point light uses two.
 constexpr std::size_t MaxDynamicSpotLightShadowCasters = 64;
@@ -55,8 +57,11 @@ struct SectorPreviewDynamicPointLightUniform {
     float radius = 0.0f;
     float innerConeCos = -1.0f;
     float outerConeCos = -1.0f;
-    // Authored/base intensity used for selection. Upload applies flicker to a local effective value.
+    // Authored/base intensity used for selection. Upload applies runtime-only
+    // flicker and selection-fade multipliers to a local effective value.
     float intensity = 0.0f;
+    float selectionFadeMultiplier = 1.0f;
+    bool selectionFadeEnabled = true;
     bool flicker = false;
     float flickerSpeed = DynamicLightFlickerDefaultSpeed;
     float flickerAmount = DynamicLightFlickerDefaultAmount;
@@ -121,6 +126,34 @@ struct SectorDynamicShadowSlotOwner {
     bool occupied = false;
     bool claimed = false;
 };
+
+struct SectorDynamicLightFadeEntry {
+    SectorPreviewDynamicLightKey lightKey{};
+    float startSeconds = 0.0f;
+    bool occupied = false;
+    bool seen = false;
+    bool started = false;
+    bool complete = false;
+};
+
+struct SectorDynamicLightFadeTracker {
+    std::array<SectorDynamicLightFadeEntry, MaxDynamicLights> entries{};
+    bool initialized = false;
+};
+
+void ResetSectorDynamicLightFadeTracker(
+        SectorDynamicLightFadeTracker& tracker);
+
+void SynchronizeSectorDynamicLightFadeTracker(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedLights,
+        SectorDynamicLightFadeTracker& tracker);
+
+float EvaluateSectorDynamicLightFadeMultiplier(
+        SectorDynamicLightFadeTracker& tracker,
+        SectorPreviewDynamicLightKey lightKey,
+        float runtimeSeconds,
+        float fadeInSeconds,
+        bool ready);
 
 void BuildSectorDynamicSpotShadowProjectionUpload(
         const SectorPreviewDynamicPointLightUniform& light,

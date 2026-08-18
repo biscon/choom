@@ -16,6 +16,16 @@ iteration-cap fallback draws the connected component rather than the whole map.
 Lights without a valid owner sector use conservative overlap against receiver
 bounds in the reachable component.
 
+Newly selected authored lights fade from zero to full upload intensity using a
+smoothstep envelope. `graphics.dynamicLightFadeInSeconds` controls the duration
+(default 0.25 seconds, valid range 0-2; zero disables the fade). The initial
+selection after a renderer reset starts fully illuminated. Losing portal
+eligibility removes a light immediately, while later re-admission restarts its
+fade, so closed doors never retain light leakage. Selection ranking, receiver
+culling, and shadow priority continue to use authored intensity rather than the
+fade multiplier. Transient runtime lights such as muzzle flashes bypass the
+fade.
+
 Dynamic shadows use one persistent 4096 x 4096 depth atlas. A spotlight uses
 one perspective-projected tile. A point light uses two adjacent
 dual-paraboloid tiles, one for each world-Z hemisphere. The DPSM geometry stage
@@ -60,6 +70,9 @@ limits work to a fair oldest-first number of lights per frame (default 2,
 always update atomically. Disabling dynamic lighting also skips dynamic atlas
 generation. Rebuilds conservatively cull sector, door, and model casters
 against each light volume and point-light hemisphere before drawing them.
+An entering shadow caster remains at zero intensity until its assigned spot
+tile, or both point-light hemisphere tiles, are valid, then begins fading. A
+light that does not receive an atlas slot fades in immediately as unshadowed.
 
 Forward sector batches use compact per-sector light lists derived from their
 receiver bounds. Shadow slots are remapped into each compact list while still

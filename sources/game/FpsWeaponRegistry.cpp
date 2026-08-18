@@ -732,6 +732,14 @@ FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings)
             settings.maxShadowLightUpdatesPerFrame,
             MinFpsShadowLightUpdatesPerFrame,
             MaxFpsShadowLightUpdatesPerFrame);
+    if (!std::isfinite(settings.dynamicLightFadeInSeconds)) {
+        settings.dynamicLightFadeInSeconds =
+                DefaultFpsDynamicLightFadeInSeconds;
+    }
+    settings.dynamicLightFadeInSeconds = std::clamp(
+            settings.dynamicLightFadeInSeconds,
+            MinFpsDynamicLightFadeInSeconds,
+            MaxFpsDynamicLightFadeInSeconds);
     return settings;
 }
 
@@ -918,6 +926,21 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                     Fail("application settings.graphics.fxaa must be a boolean");
                 }
                 parsed.graphics.fxaa = fxaa->get<bool>();
+            }
+            const auto dynamicLightFadeIn =
+                    graphics->find("dynamicLightFadeInSeconds");
+            if (dynamicLightFadeIn != graphics->end()) {
+                if (!dynamicLightFadeIn->is_number()) {
+                    Fail("application settings.graphics.dynamicLightFadeInSeconds must be a number");
+                }
+                const double value = dynamicLightFadeIn->get<double>();
+                if (!std::isfinite(value)
+                        || value < MinFpsDynamicLightFadeInSeconds
+                        || value > MaxFpsDynamicLightFadeInSeconds) {
+                    Fail("application settings.graphics.dynamicLightFadeInSeconds must be between 0.0 and 2.0");
+                }
+                parsed.graphics.dynamicLightFadeInSeconds =
+                        static_cast<float>(value);
             }
             const auto performanceOverlay = graphics->find("performanceOverlay");
             if (performanceOverlay != graphics->end()) {
@@ -1432,6 +1455,8 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"maxDynamicLights", graphics.maxDynamicLights},
             {"maxShadowLightUpdatesPerFrame",
                     graphics.maxShadowLightUpdatesPerFrame},
+            {"dynamicLightFadeInSeconds",
+                    graphics.dynamicLightFadeInSeconds},
             {"depthPrepass", graphics.depthPrepass},
             {"performanceOverlay", graphics.performanceOverlay},
             {"vsync", graphics.vsync},

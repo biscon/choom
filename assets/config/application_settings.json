@@ -14,6 +14,7 @@
     "shadowQuality": "high",
     "maxDynamicLights": 32,
     "maxShadowLightUpdatesPerFrame": 2,
+    "dynamicLightFadeInSeconds": 0.25,
     "depthPrepass": false,
     "performanceOverlay": false,
     "vsync": false,

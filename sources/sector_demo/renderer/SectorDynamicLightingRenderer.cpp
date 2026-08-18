@@ -773,6 +773,7 @@ void SectorDynamicLightingRenderer::Reset()
     candidates.clear();
     selectedLights.clear();
     selectedLightKeys.clear();
+    ResetSectorDynamicLightFadeTracker(selectionFadeTracker);
     lightingVisibility = {};
     cachedLightingStartSectorIds.clear();
     cachedLightingPortalBlockers.clear();
@@ -843,6 +844,17 @@ void SectorDynamicLightingRenderer::SetRuntimePointLight(
     runtimePointLight = light != nullptr
             ? *light
             : SectorPreviewDynamicPointLightSource{};
+    if (runtimePointLightActive) {
+        runtimePointLight.light.selectionFadeMultiplier = 1.0f;
+        runtimePointLight.light.selectionFadeEnabled = false;
+    }
+}
+
+void SectorDynamicLightingRenderer::SetSelectionFadeInSeconds(float seconds)
+{
+    selectionFadeInSeconds = std::isfinite(seconds)
+            ? std::clamp(seconds, 0.0f, DynamicLightMaximumFadeInSeconds)
+            : DynamicLightDefaultFadeInSeconds;
 }
 
 void SectorDynamicLightingRenderer::UpdateSelection(
@@ -874,6 +886,9 @@ void SectorDynamicLightingRenderer::UpdateSelection(
             selectedLights,
             &selectedLightKeys,
             &selectedLightKeys);
+    SynchronizeSectorDynamicLightFadeTracker(
+            selectedLights,
+            selectionFadeTracker);
     SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
             selectedLights,
             lightingVisibility,
@@ -1121,6 +1136,7 @@ void SectorDynamicLightingRenderer::BuildSectorLightContexts(
         bool shadowMapsEnabled,
         float runtimeSeconds)
 {
+    UpdateSelectionFadeMultipliers(shadowMapsEnabled, runtimeSeconds);
     sectorLightContexts.clear();
     for (const SectorReceiverBounds& bounds : sectorBounds) {
         sectorLightContexts.push_back(SectorDynamicLightSectorContext{
@@ -1130,6 +1146,66 @@ void SectorDynamicLightingRenderer::BuildSectorLightContexts(
                         dynamicLightingEnabled,
                         shadowMapsEnabled,
                         runtimeSeconds)});
+    }
+}
+
+bool SectorDynamicLightingRenderer::IsSelectionFadeShadowReady(
+        std::size_t selectedLightIndex,
+        bool shadowMapsEnabled) const
+{
+    if (!shadowMapsEnabled
+            || !HasShadowMapResources()
+            || !shadowMaterialLoaded
+            || selectedLightIndex >= selectedLights.size()
+            || !selectedLights[selectedLightIndex].castsShadow) {
+        return true;
+    }
+
+    const auto caster = std::find_if(
+            shadowCasters.begin(),
+            shadowCasters.end(),
+            [selectedLightIndex](
+                    const SectorPreviewDynamicSpotLightShadowCaster& candidate) {
+                return candidate.dynamicLightIndex
+                        == static_cast<int>(selectedLightIndex);
+            });
+    if (caster == shadowCasters.end() || caster->shadowSlot < 0) {
+        return true;
+    }
+
+    for (int offset = 0; offset < caster->shadowSlotCount; ++offset) {
+        const int slot = caster->shadowSlot + offset;
+        if (slot < 0
+                || static_cast<std::size_t>(slot)
+                        >= shadowAtlasTileStates.size()) {
+            return true;
+        }
+        const ShadowAtlasTileState& state =
+                shadowAtlasTileStates[static_cast<std::size_t>(slot)];
+        if (!state.assigned || !state.valid) return false;
+    }
+    return true;
+}
+
+void SectorDynamicLightingRenderer::UpdateSelectionFadeMultipliers(
+        bool shadowMapsEnabled,
+        float runtimeSeconds)
+{
+    for (std::size_t selectedIndex = 0;
+            selectedIndex < selectedLights.size();
+            ++selectedIndex) {
+        SectorPreviewDynamicPointLightUniform& light =
+                selectedLights[selectedIndex];
+        light.selectionFadeMultiplier = !light.selectionFadeEnabled
+                ? 1.0f
+                : EvaluateSectorDynamicLightFadeMultiplier(
+                        selectionFadeTracker,
+                        MakeSectorPreviewDynamicLightKey(light),
+                        runtimeSeconds,
+                        selectionFadeInSeconds,
+                        IsSelectionFadeShadowReady(
+                                selectedIndex,
+                                shadowMapsEnabled));
     }
 }
 

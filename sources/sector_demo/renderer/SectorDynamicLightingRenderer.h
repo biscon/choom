@@ -195,6 +195,7 @@ public:
     void SetMaxShadowLightUpdatesPerFrame(std::size_t count) {
         maxShadowLightUpdatesPerFrame = std::min(count, MaxDynamicLights);
     }
+    void SetSelectionFadeInSeconds(float seconds);
 
     const std::vector<SectorPreviewDynamicPointLightSource>& Sources() const { return sources; }
     const std::vector<SectorPreviewDynamicPointLightSource>& Candidates() const { return candidates; }
@@ -255,6 +256,12 @@ private:
             const RuntimeSectorVisibilityGraph* visibilityGraph,
             const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers);
     void UpdateSelectionStats(const RuntimePortalVisibilityResult& cameraVisibility);
+    void UpdateSelectionFadeMultipliers(
+            bool shadowMapsEnabled,
+            float runtimeSeconds);
+    bool IsSelectionFadeShadowReady(
+            std::size_t selectedLightIndex,
+            bool shadowMapsEnabled) const;
     void RefreshShadowTileRequirements();
     void BuildReceiverBounds(
             const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
@@ -267,6 +274,7 @@ private:
     std::vector<SectorPreviewDynamicPointLightSource> candidates;
     std::vector<SectorPreviewDynamicPointLightUniform> selectedLights;
     std::vector<SectorPreviewDynamicLightKey> selectedLightKeys;
+    SectorDynamicLightFadeTracker selectionFadeTracker;
     RuntimePortalVisibilityResult lightingVisibility;
     std::vector<int> cachedLightingStartSectorIds;
     std::vector<RuntimePortalDynamicBlocker> cachedLightingPortalBlockers;
@@ -305,6 +313,7 @@ private:
     int shadowMapResolution = DynamicSpotLightShadowMapResolution;
     std::size_t maxDynamicLights = MaxDynamicLights;
     std::size_t maxShadowLightUpdatesPerFrame = 2;
+    float selectionFadeInSeconds = DynamicLightDefaultFadeInSeconds;
     int shadowLightViewProjectionLoc = -1;
     int spotShadowCutoutLightViewProjectionLoc = -1;
     int shadowAlphaTestLoc = -1;

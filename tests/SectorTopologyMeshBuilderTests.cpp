@@ -2172,6 +2172,96 @@ void TestDynamicPointLightFlickerEffectiveIntensity()
     const float effective = game::DynamicLightEffectiveUploadIntensity(light, 0.75f);
     Check(std::isfinite(effective) && effective >= 0.0f && effective <= light.intensity,
           "enabled dynamic light flicker upload intensity remains within base intensity bounds");
+
+    light.flicker = false;
+    light.selectionFadeMultiplier = 0.5f;
+    Check(Near(game::DynamicLightEffectiveUploadIntensity(light, 0.75f), 1.125f),
+          "dynamic light upload intensity applies the selection fade multiplier");
+}
+
+void TestDynamicLightSelectionFadeTracking()
+{
+    game::SectorPreviewDynamicPointLightUniform point;
+    point.lightId = 3;
+    point.kind = game::SectorPreviewDynamicLightKind::Point;
+    point.intensity = 2.0f;
+
+    game::SectorPreviewDynamicPointLightUniform spot = point;
+    spot.kind = game::SectorPreviewDynamicLightKind::Spot;
+
+    game::SectorDynamicLightFadeTracker tracker;
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected = {point};
+    game::SynchronizeSectorDynamicLightFadeTracker(selected, tracker);
+    Check(Near(game::EvaluateSectorDynamicLightFadeMultiplier(
+                       tracker,
+                       game::MakeSectorPreviewDynamicLightKey(point),
+                       1.0f,
+                       0.25f,
+                       false),
+                 1.0f),
+          "the first selected dynamic-light set starts fully illuminated");
+
+    selected.push_back(spot);
+    game::SynchronizeSectorDynamicLightFadeTracker(selected, tracker);
+    const game::SectorPreviewDynamicLightKey spotKey =
+            game::MakeSectorPreviewDynamicLightKey(spot);
+    Check(Near(game::EvaluateSectorDynamicLightFadeMultiplier(
+                       tracker, spotKey, 2.0f, 0.25f, false),
+                 0.0f),
+          "a new shadowed light waits at zero for shadow readiness");
+    Check(Near(game::EvaluateSectorDynamicLightFadeMultiplier(
+                       tracker, spotKey, 2.0f, 0.25f, true),
+                 0.0f),
+          "a newly ready light begins its fade at zero");
+    Check(Near(game::EvaluateSectorDynamicLightFadeMultiplier(
+                       tracker, spotKey, 2.125f, 0.25f, true),
+                 0.5f),
+          "dynamic-light selection fade uses smoothstep easing");
+    Check(Near(game::EvaluateSectorDynamicLightFadeMultiplier(
+                       tracker, spotKey, 2.25f, 0.25f, true),
+                 1.0f),
+          "dynamic-light selection fade reaches full intensity on time");
+    Check(Near(game::EvaluateSectorDynamicLightFadeMultiplier(
+                       tracker,
+                       game::MakeSectorPreviewDynamicLightKey(point),
+                       2.125f,
+                       0.25f,
+                       true),
+                 1.0f),
+          "point and spotlight IDs remain distinct in fade tracking");
+
+    selected = {point};
+    game::SynchronizeSectorDynamicLightFadeTracker(selected, tracker);
+    selected.push_back(spot);
+    game::SynchronizeSectorDynamicLightFadeTracker(selected, tracker);
+    Check(Near(game::EvaluateSectorDynamicLightFadeMultiplier(
+                       tracker, spotKey, 3.0f, 0.25f, true),
+                 0.0f),
+          "a removed and reselected dynamic light restarts its fade");
+
+    game::SectorPreviewDynamicPointLightUniform runtimeLight = point;
+    runtimeLight.lightId = -1;
+    runtimeLight.selectionFadeEnabled = false;
+    selected.push_back(runtimeLight);
+    game::SynchronizeSectorDynamicLightFadeTracker(selected, tracker);
+    Check(Near(game::EvaluateSectorDynamicLightFadeMultiplier(
+                       tracker,
+                       game::MakeSectorPreviewDynamicLightKey(runtimeLight),
+                       3.0f,
+                       0.25f,
+                       false),
+                 1.0f),
+          "runtime lights without selection fading remain immediate");
+
+    game::ResetSectorDynamicLightFadeTracker(tracker);
+    selected = {point};
+    game::SynchronizeSectorDynamicLightFadeTracker(selected, tracker);
+    selected.push_back(spot);
+    game::SynchronizeSectorDynamicLightFadeTracker(selected, tracker);
+    Check(Near(game::EvaluateSectorDynamicLightFadeMultiplier(
+                       tracker, spotKey, 4.0f, 0.0f, false),
+                 1.0f),
+          "zero fade duration disables dynamic-light selection fading");
 }
 
 void TestDynamicPointLightFlickerDoesNotAffectSelection()
@@ -2561,6 +2651,7 @@ int main()
     TestDynamicSpotLightShadowUniformPacking();
     TestDynamicPointLightFlickerHelper();
     TestDynamicPointLightFlickerEffectiveIntensity();
+    TestDynamicLightSelectionFadeTracking();
     TestDynamicPointLightFlickerDoesNotAffectSelection();
     TestDynamicSpotLightFlickerDoesNotAffectSelection();
     TestDynamicPointLightFallbackUsesAllReceiverBounds();

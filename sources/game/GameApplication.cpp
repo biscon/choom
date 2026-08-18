@@ -406,7 +406,8 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
                 ProjectedShadowResolution(applicationSettings.graphics.shadowQuality),
                 applicationSettings.graphics.maxDynamicLights,
                 applicationSettings.graphics.maxShadowLightUpdatesPerFrame,
-                applicationSettings.graphics.depthPrepass);
+                applicationSettings.graphics.depthPrepass,
+                applicationSettings.graphics.dynamicLightFadeInSeconds);
         gameScene.RenderShadowMaps(context);
     } else {
         editor.SetPreviewGraphicsQuality(
@@ -417,7 +418,8 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
                 ProjectedShadowResolution(applicationSettings.graphics.shadowQuality),
                 applicationSettings.graphics.maxDynamicLights,
                 applicationSettings.graphics.maxShadowLightUpdatesPerFrame,
-                applicationSettings.graphics.depthPrepass);
+                applicationSettings.graphics.depthPrepass,
+                applicationSettings.graphics.dynamicLightFadeInSeconds);
         editor.RenderPreview3DShadowMaps(context.assets);
     }
 }

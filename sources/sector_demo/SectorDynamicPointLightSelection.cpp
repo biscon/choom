@@ -374,14 +374,106 @@ float DynamicLightEffectiveUploadIntensity(
         const SectorPreviewDynamicPointLightUniform& light,
         float runtimeSeconds)
 {
-    if (!light.flicker || light.flickerAmount <= 0.0f) {
-        return light.intensity;
+    const float fadeMultiplier = std::isfinite(light.selectionFadeMultiplier)
+            ? std::clamp(light.selectionFadeMultiplier, 0.0f, 1.0f)
+            : 1.0f;
+    const float flickerMultiplier = !light.flicker || light.flickerAmount <= 0.0f
+            ? 1.0f
+            : EvaluateDynamicLightFlickerMultiplier(
+                    light.lightId,
+                    runtimeSeconds,
+                    light.flickerSpeed,
+                    light.flickerAmount);
+    return light.intensity * fadeMultiplier * flickerMultiplier;
+}
+
+void ResetSectorDynamicLightFadeTracker(
+        SectorDynamicLightFadeTracker& tracker)
+{
+    tracker = {};
+}
+
+void SynchronizeSectorDynamicLightFadeTracker(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedLights,
+        SectorDynamicLightFadeTracker& tracker)
+{
+    for (SectorDynamicLightFadeEntry& entry : tracker.entries) {
+        entry.seen = false;
     }
-    return light.intensity * EvaluateDynamicLightFlickerMultiplier(
-            light.lightId,
-            runtimeSeconds,
-            light.flickerSpeed,
-            light.flickerAmount);
+
+    const bool initializeFullyVisible = !tracker.initialized;
+    tracker.initialized = true;
+    for (const SectorPreviewDynamicPointLightUniform& light : selectedLights) {
+        if (!light.selectionFadeEnabled) continue;
+        const SectorPreviewDynamicLightKey lightKey =
+                MakeSectorPreviewDynamicLightKey(light);
+        SectorDynamicLightFadeEntry* entry = nullptr;
+        for (SectorDynamicLightFadeEntry& candidate : tracker.entries) {
+            if (candidate.occupied && candidate.lightKey == lightKey) {
+                entry = &candidate;
+                break;
+            }
+        }
+        if (entry == nullptr) {
+            for (SectorDynamicLightFadeEntry& candidate : tracker.entries) {
+                if (!candidate.occupied) {
+                    candidate = {};
+                    candidate.lightKey = lightKey;
+                    candidate.occupied = true;
+                    candidate.complete = initializeFullyVisible;
+                    candidate.started = initializeFullyVisible;
+                    entry = &candidate;
+                    break;
+                }
+            }
+        }
+        if (entry != nullptr) entry->seen = true;
+    }
+
+    for (SectorDynamicLightFadeEntry& entry : tracker.entries) {
+        if (entry.occupied && !entry.seen) entry = {};
+    }
+}
+
+float EvaluateSectorDynamicLightFadeMultiplier(
+        SectorDynamicLightFadeTracker& tracker,
+        SectorPreviewDynamicLightKey lightKey,
+        float runtimeSeconds,
+        float fadeInSeconds,
+        bool ready)
+{
+    SectorDynamicLightFadeEntry* entry = nullptr;
+    for (SectorDynamicLightFadeEntry& candidate : tracker.entries) {
+        if (candidate.occupied && candidate.lightKey == lightKey) {
+            entry = &candidate;
+            break;
+        }
+    }
+    if (entry == nullptr || entry->complete) return 1.0f;
+    if (!std::isfinite(fadeInSeconds) || fadeInSeconds <= 0.0f) {
+        entry->complete = true;
+        entry->started = true;
+        return 1.0f;
+    }
+    if (!ready) return 0.0f;
+    if (!std::isfinite(runtimeSeconds)) {
+        entry->complete = true;
+        entry->started = true;
+        return 1.0f;
+    }
+    if (!entry->started) {
+        entry->startSeconds = runtimeSeconds;
+        entry->started = true;
+        return 0.0f;
+    }
+
+    const float elapsedSeconds = std::max(
+            runtimeSeconds - entry->startSeconds, 0.0f);
+    const float linear = std::clamp(
+            elapsedSeconds / fadeInSeconds, 0.0f, 1.0f);
+    const float multiplier = linear * linear * (3.0f - 2.0f * linear);
+    if (linear >= 1.0f) entry->complete = true;
+    return multiplier;
 }
 
 bool MakeSectorPreviewDynamicPointLightUniform(
@@ -406,6 +498,8 @@ bool MakeSectorPreviewDynamicPointLightUniform(
     outLight.innerConeCos = -1.0f;
     outLight.outerConeCos = -1.0f;
     outLight.intensity = light.intensity;
+    outLight.selectionFadeMultiplier = 1.0f;
+    outLight.selectionFadeEnabled = true;
     outLight.flicker = light.flicker;
     outLight.flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
     outLight.flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
@@ -458,6 +552,8 @@ bool MakeSectorPreviewDynamicSpotLightUniform(
     outLight.innerConeCos = ConeCosine(innerDegrees);
     outLight.outerConeCos = ConeCosine(outerDegrees);
     outLight.intensity = light.intensity;
+    outLight.selectionFadeMultiplier = 1.0f;
+    outLight.selectionFadeEnabled = true;
     outLight.flicker = light.flicker;
     outLight.flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
     outLight.flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
