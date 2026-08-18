@@ -49,6 +49,9 @@ private:
     int dynamicLightDirectionsLoc = -1;
     int dynamicLightInnerConeCosLoc = -1;
     int dynamicLightOuterConeCosLoc = -1;
+    int dynamicLightSpotShadowRightLoc = -1;
+    int dynamicLightSpotShadowProjectionLoc = -1;
+    int hasPointShadowsLoc = -1;
     int dynamicLightShadowSlotsLoc = -1;
     std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrixLocs = [] {
         std::array<int, MaxDynamicSpotLightShadowCasters> locs{};

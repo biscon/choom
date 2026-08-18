@@ -1358,7 +1358,7 @@
     }
   },
   "bakedLightmap": {
-    "path": "assets/levels/hub/hub.lightmap.bin",
+    "path": "assets/levels/hub2/hub2.lightmap.bin",
     "width": 2048,
     "height": 2048,
     "version": 1,
@@ -1381,7 +1381,7 @@
       "rgbChannelsAboveOne": 2141
     },
     "objectProbes": {
-      "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
+      "path": "assets/levels/hub2/hub2.lightmap.object_probes.bin",
       "version": 3,
       "sourceHash": "29ca235a6ed7c78e",
       "count": 2067,
@@ -1407,7 +1407,7 @@
       }
     },
     "staticModels": {
-      "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
+      "path": "assets/levels/hub2/hub2.lightmap.bin.static_models.bin",
       "version": 3,
       "sourceHash": "29ca235a6ed7c78e",
       "modelCount": 20,

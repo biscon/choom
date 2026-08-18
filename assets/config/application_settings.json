@@ -13,7 +13,8 @@
     "volumetricQuality": "medium",
     "shadowQuality": "high",
     "maxDynamicLights": 32,
-    "depthPrepass": true,
+    "maxShadowLightUpdatesPerFrame": 2,
+    "depthPrepass": false,
     "performanceOverlay": false,
     "vsync": false,
     "horizontalFovDegrees": 95

@@ -66,12 +66,13 @@ public:
             float projectedShadowIntervalSeconds,
             int projectedShadowResolution,
             int maxDynamicLights,
+            int maxShadowLightUpdatesPerFrame,
             bool depthPrepass)
     {
         sceneRuntime.Renderer().SetGraphicsQuality(
                 volumetricQuality, shadowsEnabled, shadowMapResolution,
                 projectedShadowIntervalSeconds, projectedShadowResolution,
-                maxDynamicLights, depthPrepass);
+                maxDynamicLights, maxShadowLightUpdatesPerFrame, depthPrepass);
     }
     void SetPreviewVerticalFovDegrees(float value)
     {

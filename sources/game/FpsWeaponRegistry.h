@@ -277,6 +277,9 @@ inline constexpr int DefaultFpsHorizontalFovDegrees = 108;
 inline constexpr int MinFpsDynamicLights = 0;
 inline constexpr int MaxFpsDynamicLights = 32;
 inline constexpr int DefaultFpsDynamicLights = 32;
+inline constexpr int MinFpsShadowLightUpdatesPerFrame = 0;
+inline constexpr int MaxFpsShadowLightUpdatesPerFrame = 32;
+inline constexpr int DefaultFpsShadowLightUpdatesPerFrame = 2;
 
 struct FpsGraphicsSettings {
     float renderScale = 1.5f;
@@ -285,7 +288,8 @@ struct FpsGraphicsSettings {
             SectorVolumetricQuality::High;
     FpsShadowQuality shadowQuality = FpsShadowQuality::High;
     int maxDynamicLights = DefaultFpsDynamicLights;
-    bool depthPrepass = true;
+    int maxShadowLightUpdatesPerFrame = DefaultFpsShadowLightUpdatesPerFrame;
+    bool depthPrepass = false;
     bool performanceOverlay = false;
     bool vsync = true;
     int horizontalFovDegrees = DefaultFpsHorizontalFovDegrees;

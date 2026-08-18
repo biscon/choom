@@ -59,6 +59,9 @@ struct SectorDynamicLightShaderLocations {
     int dynamicLightDirections = -1;
     int dynamicLightInnerConeCos = -1;
     int dynamicLightOuterConeCos = -1;
+    int dynamicLightSpotShadowRight = -1;
+    int dynamicLightSpotShadowProjection = -1;
+    int hasPointShadows = -1;
 };
 
 struct SectorDynamicSpotLightShadowShaderLocations {
@@ -85,12 +88,31 @@ struct SectorDynamicShadowRenderStats {
     bool cacheHit = false;
     bool atlasRendered = false;
     std::size_t renderedTiles = 0;
+    std::size_t updatedLights = 0;
+    std::size_t queuedLights = 0;
+    std::size_t validLights = 0;
+    std::size_t dirtyLights = 0;
+    std::size_t occupiedTiles = 0;
+    std::size_t pointLights = 0;
+    std::size_t spotLights = 0;
+    double cpuMilliseconds = 0.0;
     std::size_t sectorBatchesDrawn = 0;
     std::size_t sectorBatchesCulled = 0;
     std::size_t objectCastersDrawn = 0;
     std::size_t objectCastersCulled = 0;
     uint64_t doorCasterRevision = 0;
     uint64_t staticModelCasterRevision = 0;
+};
+
+struct SectorDynamicLightSelectionStats {
+    bool reachabilityCacheHit = false;
+    bool cameraVisibilityFallback = false;
+    int lightingStartSectorId = -1;
+    std::size_t dynamicPortalBlockerCount = 0;
+    std::size_t reachableSectorCount = 0;
+    std::size_t visibleReceiverCount = 0;
+    std::size_t visibleReceiverLightReferences = 0;
+    std::size_t maxVisibleReceiverLights = 0;
 };
 
 struct SectorBillboardDynamicLightContext {
@@ -104,6 +126,10 @@ struct SectorBillboardDynamicLightContext {
     std::array<Vector3, MaxDynamicLights> dynamicLightDirections{};
     std::array<float, MaxDynamicLights> dynamicLightInnerConeCos{};
     std::array<float, MaxDynamicLights> dynamicLightOuterConeCos{};
+    std::array<Vector3, MaxDynamicLights> dynamicLightSpotShadowRight{};
+    // x = inverse tan(outer half-angle), y = far / (far - near).
+    std::array<Vector2, MaxDynamicLights> dynamicLightSpotShadowProjection{};
+    int hasPointShadows = 0;
     SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms{};
     SectorDynamicShadowMapTextures shadowMaps{};
 };
@@ -144,6 +170,7 @@ public:
             size_t runtimeObjectCapacity);
     void UpdateSelection(
             const RuntimePortalVisibilityResult& visibility,
+            int lightingStartSectorId,
             const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
             engine::World* runtimeObjectWorld,
             const RuntimeSectorVisibilityGraph* visibilityGraph = nullptr,
@@ -165,11 +192,19 @@ public:
     void SetMaxDynamicLights(std::size_t count) {
         maxDynamicLights = std::min(count, MaxDynamicLights);
     }
+    void SetMaxShadowLightUpdatesPerFrame(std::size_t count) {
+        maxShadowLightUpdatesPerFrame = std::min(count, MaxDynamicLights);
+    }
 
     const std::vector<SectorPreviewDynamicPointLightSource>& Sources() const { return sources; }
     const std::vector<SectorPreviewDynamicPointLightSource>& Candidates() const { return candidates; }
     const std::vector<SectorPreviewDynamicPointLightUniform>& SelectedLights() const { return selectedLights; }
-    const std::vector<int>& SelectedLightIds() const { return selectedLightIds; }
+    const std::vector<SectorPreviewDynamicLightKey>& SelectedLightKeys() const {
+        return selectedLightKeys;
+    }
+    const SectorDynamicLightSelectionStats& SelectionStats() const {
+        return selectionStats;
+    }
     const std::vector<SectorPreviewDynamicSpotLightShadowCaster>& ShadowCasters() const { return shadowCasters; }
     const std::vector<SectorPreviewDynamicSpotLightShadowMatrix>& ShadowMatrices() const { return shadowMatrices; }
 
@@ -200,7 +235,27 @@ public:
     void RenderShadowMaps(const SectorDynamicSpotLightShadowRenderContext& context);
 
 private:
+    struct ShadowAtlasTileState {
+        SectorPreviewDynamicSpotLightShadowMatrix matrix{};
+        bool assigned = false;
+        bool valid = false;
+        bool dirty = true;
+        uint64_t dirtySerial = 0;
+    };
+
+    struct ShadowCasterBoundsRecord {
+        uint64_t key = 0;
+        BoundingBox bounds{};
+    };
+
     void ReserveSelectionBuffers();
+    void UpdateLightingReachability(
+            const RuntimePortalVisibilityResult& visibility,
+            int lightingStartSectorId,
+            const RuntimeSectorVisibilityGraph* visibilityGraph,
+            const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers);
+    void UpdateSelectionStats(const RuntimePortalVisibilityResult& cameraVisibility);
+    void RefreshShadowTileRequirements();
     void BuildReceiverBounds(
             const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
             engine::World* runtimeObjectWorld);
@@ -211,25 +266,47 @@ private:
     bool runtimePointLightActive = false;
     std::vector<SectorPreviewDynamicPointLightSource> candidates;
     std::vector<SectorPreviewDynamicPointLightUniform> selectedLights;
-    std::vector<int> selectedLightIds;
+    std::vector<SectorPreviewDynamicLightKey> selectedLightKeys;
+    RuntimePortalVisibilityResult lightingVisibility;
+    std::vector<int> cachedLightingStartSectorIds;
+    std::vector<RuntimePortalDynamicBlocker> cachedLightingPortalBlockers;
+    const RuntimeSectorVisibilityGraph* cachedLightingVisibilityGraph = nullptr;
+    bool lightingVisibilityCacheValid = false;
+    SectorDynamicLightSelectionStats selectionStats;
     std::vector<SectorReceiverBounds> receiverBounds;
     std::vector<SectorDynamicLightSectorContext> sectorLightContexts;
     std::vector<SectorPreviewDynamicSpotLightShadowCaster> shadowCasters;
     std::vector<SectorPreviewDynamicSpotLightShadowMatrix> shadowMatrices;
-    std::vector<SectorPreviewDynamicSpotLightShadowMatrix> cachedShadowMatrices;
-    bool shadowMapsCacheValid = false;
+    std::array<ShadowAtlasTileState, MaxDynamicSpotLightShadowCasters>
+            shadowAtlasTileStates{};
+    std::array<SectorDynamicShadowSlotOwner, MaxDynamicSpotLightShadowCasters>
+            shadowAtlasSlotOwners{};
+    std::vector<SectorDynamicShadowUpdateRequest> pendingShadowLightUpdates;
+    std::vector<ShadowCasterBoundsRecord> previousDoorShadowCasterBounds;
+    std::vector<ShadowCasterBoundsRecord> currentDoorShadowCasterBounds;
+    std::vector<ShadowCasterBoundsRecord> previousStaticShadowCasterBounds;
+    std::vector<ShadowCasterBoundsRecord> currentStaticShadowCasterBounds;
+    std::vector<BoundingBox> changedShadowCasterBounds;
+    uint64_t nextShadowDirtySerial = 1;
+    bool shadowAtlasNeedsFullClear = true;
+    bool doorShadowCasterBoundsInitialized = false;
+    bool staticShadowCasterBoundsInitialized = false;
     uint64_t cachedDoorShadowCasterRevision = 0;
     uint64_t cachedStaticModelShadowCasterRevision = 0;
     SectorDynamicShadowRenderStats shadowRenderStats;
     RenderTexture2D shadowAtlas{};
     Material shadowMaterial = {};
+    Material spotShadowCutoutMaterial = {};
     Material pointShadowMaterial = {};
     Texture2D shadowDefaultTexture = {};
+    Texture2D spotShadowCutoutDefaultTexture = {};
     Texture2D pointShadowDefaultTexture = {};
     bool shadowMaterialLoaded = false;
     int shadowMapResolution = DynamicSpotLightShadowMapResolution;
     std::size_t maxDynamicLights = MaxDynamicLights;
+    std::size_t maxShadowLightUpdatesPerFrame = 2;
     int shadowLightViewProjectionLoc = -1;
+    int spotShadowCutoutLightViewProjectionLoc = -1;
     int shadowAlphaTestLoc = -1;
     int shadowAlphaCutoffLoc = -1;
     int pointShadowLightPositionLoc = -1;

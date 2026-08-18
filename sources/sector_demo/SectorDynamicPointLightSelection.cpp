@@ -16,6 +16,70 @@
 
 namespace game {
 
+bool operator==(
+        const SectorPreviewDynamicLightKey& left,
+        const SectorPreviewDynamicLightKey& right)
+{
+    return left.kind == right.kind && left.lightId == right.lightId;
+}
+
+bool operator!=(
+        const SectorPreviewDynamicLightKey& left,
+        const SectorPreviewDynamicLightKey& right)
+{
+    return !(left == right);
+}
+
+SectorPreviewDynamicLightKey MakeSectorPreviewDynamicLightKey(
+        const SectorPreviewDynamicPointLightUniform& light)
+{
+    return SectorPreviewDynamicLightKey{light.kind, light.lightId};
+}
+
+void BuildSectorDynamicSpotShadowProjectionUpload(
+        const SectorPreviewDynamicPointLightUniform& light,
+        Vector3& outRight,
+        Vector2& outProjection)
+{
+    constexpr float NearPlane = 0.05f;
+    const Vector3 forward = Vector3LengthSqr(light.direction) > 0.00000001f
+            ? Vector3Normalize(light.direction)
+            : Vector3{0.0f, -1.0f, 0.0f};
+    const Vector3 upReference = std::fabs(forward.y) > 0.98f
+            ? Vector3{0.0f, 0.0f, 1.0f}
+            : Vector3{0.0f, 1.0f, 0.0f};
+    outRight = Vector3Normalize(Vector3CrossProduct(forward, upReference));
+    const float halfAngle = std::clamp(
+            std::acos(std::clamp(light.outerConeCos, -0.999f, 0.999f)),
+            0.5f * DEG2RAD,
+            89.0f * DEG2RAD);
+    const float farPlane = std::max(light.radius, NearPlane + 0.0001f);
+    outProjection = Vector2{
+            1.0f / std::tan(halfAngle),
+            farPlane / (farPlane - NearPlane)};
+}
+
+void SortSectorDynamicShadowUpdateRequests(
+        std::vector<SectorDynamicShadowUpdateRequest>& requests)
+{
+    std::sort(
+            requests.begin(), requests.end(),
+            [](const SectorDynamicShadowUpdateRequest& left,
+                    const SectorDynamicShadowUpdateRequest& right) {
+                if (left.invalid != right.invalid) return left.invalid;
+                return left.dirtySerial < right.dirtySerial;
+            });
+}
+
+std::size_t SectorDynamicShadowUpdateCount(
+        std::size_t pendingCount,
+        std::size_t maximumUpdatesPerFrame)
+{
+    return maximumUpdatesPerFrame == 0
+            ? pendingCount
+            : std::min(pendingCount, maximumUpdatesPerFrame);
+}
+
 namespace {
 
 constexpr float ReceiverBoundsPadding = 0.05f;
@@ -43,9 +107,19 @@ bool ContainsSectorId(const std::vector<int>& sectorIds, int sectorId)
     return std::find(sectorIds.begin(), sectorIds.end(), sectorId) != sectorIds.end();
 }
 
-bool ContainsLightId(const std::vector<int>& lightIds, int lightId)
+bool DynamicLightKeyLess(
+        const SectorPreviewDynamicLightKey& left,
+        const SectorPreviewDynamicLightKey& right)
 {
-    return std::find(lightIds.begin(), lightIds.end(), lightId) != lightIds.end();
+    if (left.lightId != right.lightId) return left.lightId < right.lightId;
+    return static_cast<int>(left.kind) < static_cast<int>(right.kind);
+}
+
+bool ContainsLightKey(
+        const std::vector<SectorPreviewDynamicLightKey>& lightKeys,
+        SectorPreviewDynamicLightKey lightKey)
+{
+    return std::find(lightKeys.begin(), lightKeys.end(), lightKey) != lightKeys.end();
 }
 
 float DistanceSq(Vector3 a, Vector3 b)
@@ -176,7 +250,9 @@ bool BetterScoredDynamicPointLight(
     if (lhs.score != rhs.score) {
         return lhs.score > rhs.score;
     }
-    return lhs.source->lightId < rhs.source->lightId;
+    return DynamicLightKeyLess(
+            MakeSectorPreviewDynamicLightKey(lhs.source->light),
+            MakeSectorPreviewDynamicLightKey(rhs.source->light));
 }
 
 bool BetterScoredDynamicSpotLightShadowCandidate(
@@ -189,15 +265,17 @@ bool BetterScoredDynamicSpotLightShadowCandidate(
     if (lhs.score != rhs.score) {
         return lhs.score > rhs.score;
     }
-    return lhs.light->lightId < rhs.light->lightId;
+    return DynamicLightKeyLess(
+            MakeSectorPreviewDynamicLightKey(*lhs.light),
+            MakeSectorPreviewDynamicLightKey(*rhs.light));
 }
 
 int FindSelectedLightIndex(
         const std::vector<ScoredDynamicPointLightCandidate>& selected,
-        int lightId)
+        SectorPreviewDynamicLightKey lightKey)
 {
     for (std::size_t i = 0; i < selected.size(); ++i) {
-        if (selected[i].source->lightId == lightId) {
+        if (MakeSectorPreviewDynamicLightKey(selected[i].source->light) == lightKey) {
             return static_cast<int>(i);
         }
     }
@@ -215,8 +293,10 @@ int FindWeakestPreviouslySelectedLightIndex(
         if (weakestIndex < 0
                 || selected[i].score < selected[static_cast<std::size_t>(weakestIndex)].score
                 || (selected[i].score == selected[static_cast<std::size_t>(weakestIndex)].score
-                    && selected[i].source->lightId
-                            > selected[static_cast<std::size_t>(weakestIndex)].source->lightId)) {
+                    && DynamicLightKeyLess(
+                            MakeSectorPreviewDynamicLightKey(
+                                    selected[static_cast<std::size_t>(weakestIndex)].source->light),
+                            MakeSectorPreviewDynamicLightKey(selected[i].source->light)))) {
             weakestIndex = static_cast<int>(i);
         }
     }
@@ -446,9 +526,7 @@ void CollectSectorPreviewDynamicPointLightCandidates(
         const std::vector<SectorPreviewDynamicPointLightSource>& sources,
         const RuntimePortalVisibilityResult& visibility,
         const std::vector<SectorReceiverBounds>& receiverBounds,
-        std::vector<SectorPreviewDynamicPointLightSource>& outCandidates,
-        const RuntimeSectorVisibilityGraph* visibilityGraph,
-        const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers)
+        std::vector<SectorPreviewDynamicPointLightSource>& outCandidates)
 {
     outCandidates.clear();
     outCandidates.reserve(sources.size());
@@ -456,35 +534,20 @@ void CollectSectorPreviewDynamicPointLightCandidates(
     const bool includeAll = !visibility.validStartSector || visibility.fallbackDrawAll;
     std::vector<const SectorReceiverBounds*> relevantBounds;
     BuildRelevantReceiverBounds(visibility, receiverBounds, relevantBounds);
-    const bool includeAllConservatively = includeAll || relevantBounds.empty();
 
     for (const SectorPreviewDynamicPointLightSource& source : sources) {
-        if (!includeAllConservatively
-                && visibilityGraph != nullptr
-                && source.ownerSectorId > 0) {
-            const RuntimePortalVisibilityResult lightReachability =
-                    TraverseRuntimeSectorVisibility(
-                            *visibilityGraph,
-                            source.ownerSectorId,
-                            dynamicPortalBlockers);
-            bool reachesVisibleSector = false;
-            for (const int sectorId : lightReachability.visibleSectorIds) {
-                if (ContainsSectorId(visibility.visibleSectorIds, sectorId)) {
-                    reachesVisibleSector = true;
-                    break;
-                }
-            }
-            if (!reachesVisibleSector) continue;
-        }
-        bool include = includeAllConservatively
+        bool include = includeAll
                 || (source.ownerSectorId > 0
                     && ContainsSectorId(visibility.visibleSectorIds, source.ownerSectorId));
 
-        if (!include) {
-            for (const SectorReceiverBounds* bounds : relevantBounds) {
-                if (SphereOverlapsBounds(source.light, *bounds)) {
-                    include = true;
-                    break;
+        if (!include && source.ownerSectorId <= 0) {
+            include = relevantBounds.empty();
+            if (!include) {
+                for (const SectorReceiverBounds* bounds : relevantBounds) {
+                    if (SphereOverlapsBounds(source.light, *bounds)) {
+                        include = true;
+                        break;
+                    }
                 }
             }
         }
@@ -501,18 +564,19 @@ void SelectRankedSectorPreviewDynamicPointLights(
         const std::vector<SectorReceiverBounds>& receiverBounds,
         std::size_t maxLights,
         std::vector<SectorPreviewDynamicPointLightUniform>& outSelectedLights,
-        std::vector<int>* outSelectedLightIds,
-        const std::vector<int>* previousSelectedLightIds)
+        std::vector<SectorPreviewDynamicLightKey>* outSelectedLightKeys,
+        const std::vector<SectorPreviewDynamicLightKey>* previousSelectedLightKeys)
 {
-    const std::vector<int> previousIds = previousSelectedLightIds != nullptr
-            ? *previousSelectedLightIds
-            : std::vector<int>{};
+    const std::vector<SectorPreviewDynamicLightKey> previousKeys =
+            previousSelectedLightKeys != nullptr
+            ? *previousSelectedLightKeys
+            : std::vector<SectorPreviewDynamicLightKey>{};
 
     outSelectedLights.clear();
     outSelectedLights.reserve(std::min(candidates.size(), maxLights));
-    if (outSelectedLightIds != nullptr) {
-        outSelectedLightIds->clear();
-        outSelectedLightIds->reserve(std::min(candidates.size(), maxLights));
+    if (outSelectedLightKeys != nullptr) {
+        outSelectedLightKeys->clear();
+        outSelectedLightKeys->reserve(std::min(candidates.size(), maxLights));
     }
     if (maxLights == 0) {
         return;
@@ -531,19 +595,22 @@ void SelectRankedSectorPreviewDynamicPointLights(
         ranked.push_back(ScoredDynamicPointLightCandidate{
                 &candidate,
                 score,
-                ContainsLightId(previousIds, candidate.lightId)});
+                ContainsLightKey(
+                        previousKeys,
+                        MakeSectorPreviewDynamicLightKey(candidate.light))});
     }
 
     std::sort(ranked.begin(), ranked.end(), BetterScoredDynamicPointLight);
 
-    if (previousIds.empty()) {
+    if (previousKeys.empty()) {
         for (const ScoredDynamicPointLightCandidate& candidate : ranked) {
             if (outSelectedLights.size() >= maxLights) {
                 break;
             }
             outSelectedLights.push_back(candidate.source->light);
-            if (outSelectedLightIds != nullptr) {
-                outSelectedLightIds->push_back(candidate.source->lightId);
+            if (outSelectedLightKeys != nullptr) {
+                outSelectedLightKeys->push_back(
+                        MakeSectorPreviewDynamicLightKey(candidate.source->light));
             }
         }
         return;
@@ -563,7 +630,9 @@ void SelectRankedSectorPreviewDynamicPointLights(
     }
 
     for (const ScoredDynamicPointLightCandidate& candidate : ranked) {
-        if (FindSelectedLightIndex(selected, candidate.source->lightId) >= 0) {
+        if (FindSelectedLightIndex(
+                    selected,
+                    MakeSectorPreviewDynamicLightKey(candidate.source->light)) >= 0) {
             continue;
         }
         if (candidate.previouslySelected && candidate.score <= 0.0f) {
@@ -593,8 +662,9 @@ void SelectRankedSectorPreviewDynamicPointLights(
     std::sort(selected.begin(), selected.end(), BetterScoredDynamicPointLight);
     for (const ScoredDynamicPointLightCandidate& candidate : selected) {
         outSelectedLights.push_back(candidate.source->light);
-        if (outSelectedLightIds != nullptr) {
-            outSelectedLightIds->push_back(candidate.source->lightId);
+        if (outSelectedLightKeys != nullptr) {
+            outSelectedLightKeys->push_back(
+                    MakeSectorPreviewDynamicLightKey(candidate.source->light));
         }
     }
 }
@@ -655,6 +725,119 @@ void SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
                 candidate.light->shadowSoftness,
                 static_cast<int>(requiredSlots)});
         usedSlots += requiredSlots;
+    }
+}
+
+void AssignPersistentSectorDynamicShadowSlots(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
+        std::size_t shadowSlotBudget,
+        std::vector<SectorPreviewDynamicSpotLightShadowCaster>& shadowCasters,
+        std::array<SectorDynamicShadowSlotOwner,
+                MaxDynamicSpotLightShadowCasters>& slotOwners)
+{
+    const std::size_t budget = std::min(
+            shadowSlotBudget,
+            slotOwners.size());
+    for (std::size_t slot = 0; slot < slotOwners.size(); ++slot) {
+        slotOwners[slot].claimed = false;
+        if (slot >= budget) {
+            slotOwners[slot] = {};
+        }
+    }
+    for (SectorPreviewDynamicSpotLightShadowCaster& caster : shadowCasters) {
+        caster.shadowSlot = -1;
+    }
+
+    const auto casterKey = [&selectedDynamicLights](
+            const SectorPreviewDynamicSpotLightShadowCaster& caster,
+            SectorPreviewDynamicLightKey& outKey) {
+        if (caster.dynamicLightIndex < 0
+                || static_cast<std::size_t>(caster.dynamicLightIndex)
+                        >= selectedDynamicLights.size()) {
+            return false;
+        }
+        outKey = MakeSectorPreviewDynamicLightKey(
+                selectedDynamicLights[static_cast<std::size_t>(
+                        caster.dynamicLightIndex)]);
+        return true;
+    };
+
+    for (SectorPreviewDynamicSpotLightShadowCaster& caster : shadowCasters) {
+        SectorPreviewDynamicLightKey key;
+        if (!casterKey(caster, key)
+                || caster.shadowSlotCount <= 0
+                || static_cast<std::size_t>(caster.shadowSlotCount) > budget) {
+            continue;
+        }
+        for (std::size_t slot = 0; slot < budget; ++slot) {
+            const SectorDynamicShadowSlotOwner& owner = slotOwners[slot];
+            if (!owner.occupied
+                    || owner.claimed
+                    || owner.lightKey != key
+                    || owner.spanStart != static_cast<int>(slot)
+                    || owner.spanCount != caster.shadowSlotCount
+                    || slot + static_cast<std::size_t>(owner.spanCount) > budget) {
+                continue;
+            }
+            bool compatible = true;
+            for (int offset = 0; offset < owner.spanCount; ++offset) {
+                const SectorDynamicShadowSlotOwner& spanOwner =
+                        slotOwners[slot + static_cast<std::size_t>(offset)];
+                compatible = compatible
+                        && spanOwner.occupied
+                        && !spanOwner.claimed
+                        && spanOwner.lightKey == key
+                        && spanOwner.spanStart == owner.spanStart
+                        && spanOwner.spanCount == owner.spanCount;
+            }
+            if (!compatible) continue;
+
+            caster.shadowSlot = static_cast<int>(slot);
+            for (int offset = 0; offset < owner.spanCount; ++offset) {
+                slotOwners[slot + static_cast<std::size_t>(offset)].claimed = true;
+            }
+            break;
+        }
+    }
+
+    for (std::size_t slot = 0; slot < budget; ++slot) {
+        if (!slotOwners[slot].claimed) {
+            slotOwners[slot] = {};
+        }
+    }
+
+    for (SectorPreviewDynamicSpotLightShadowCaster& caster : shadowCasters) {
+        if (caster.shadowSlot >= 0) continue;
+        SectorPreviewDynamicLightKey key;
+        if (!casterKey(caster, key)
+                || caster.shadowSlotCount <= 0
+                || static_cast<std::size_t>(caster.shadowSlotCount) > budget) {
+            continue;
+        }
+
+        const std::size_t spanCount = static_cast<std::size_t>(
+                caster.shadowSlotCount);
+        for (std::size_t slot = 0; slot + spanCount <= budget; ++slot) {
+            bool free = true;
+            for (std::size_t offset = 0; offset < spanCount; ++offset) {
+                if (slotOwners[slot + offset].occupied) {
+                    free = false;
+                    break;
+                }
+            }
+            if (!free) continue;
+
+            caster.shadowSlot = static_cast<int>(slot);
+            for (std::size_t offset = 0; offset < spanCount; ++offset) {
+                slotOwners[slot + offset] = SectorDynamicShadowSlotOwner{
+                        key,
+                        static_cast<int>(slot),
+                        caster.shadowSlotCount,
+                        true,
+                        true};
+            }
+            break;
+        }
     }
 }
 
@@ -771,7 +954,7 @@ SectorPreviewDynamicSpotLightShadowUniforms PackSectorPreviewDynamicSpotLightSha
 
         const SectorPreviewDynamicPointLightUniform& light =
                 selectedDynamicLights[static_cast<std::size_t>(matrix.dynamicLightIndex)];
-        if (light.lightId != matrix.lightId) {
+        if (light.lightId != matrix.lightId || light.kind != matrix.kind) {
             continue;
         }
 

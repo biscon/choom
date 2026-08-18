@@ -23,11 +23,28 @@ struct SectorReceiverBounds;
 struct SectorTopologyDynamicPointLight;
 struct SectorTopologyDynamicSpotLight;
 struct SectorTopologyMap;
+struct SectorPreviewDynamicPointLightUniform;
 
 enum class SectorPreviewDynamicLightKind {
     Point = 0,
     Spot = 1
 };
+
+struct SectorPreviewDynamicLightKey {
+    SectorPreviewDynamicLightKind kind = SectorPreviewDynamicLightKind::Point;
+    int lightId = 0;
+};
+
+bool operator==(
+        const SectorPreviewDynamicLightKey& left,
+        const SectorPreviewDynamicLightKey& right);
+
+bool operator!=(
+        const SectorPreviewDynamicLightKey& left,
+        const SectorPreviewDynamicLightKey& right);
+
+SectorPreviewDynamicLightKey MakeSectorPreviewDynamicLightKey(
+        const SectorPreviewDynamicPointLightUniform& light);
 
 struct SectorPreviewDynamicPointLightUniform {
     int lightId = 0;
@@ -90,6 +107,33 @@ struct SectorPreviewDynamicSpotLightShadowUniforms {
     int shadowAtlasTilesPerRow = 4;
 };
 
+struct SectorDynamicShadowUpdateRequest {
+    std::size_t casterIndex = 0;
+    bool invalid = true;
+    uint64_t dirtySerial = 0;
+    int shadowSlotCount = 1;
+};
+
+struct SectorDynamicShadowSlotOwner {
+    SectorPreviewDynamicLightKey lightKey{};
+    int spanStart = -1;
+    int spanCount = 0;
+    bool occupied = false;
+    bool claimed = false;
+};
+
+void BuildSectorDynamicSpotShadowProjectionUpload(
+        const SectorPreviewDynamicPointLightUniform& light,
+        Vector3& outRight,
+        Vector2& outProjection);
+
+void SortSectorDynamicShadowUpdateRequests(
+        std::vector<SectorDynamicShadowUpdateRequest>& requests);
+
+std::size_t SectorDynamicShadowUpdateCount(
+        std::size_t pendingCount,
+        std::size_t maximumUpdatesPerFrame);
+
 bool MakeSectorPreviewDynamicPointLightUniform(
         const SectorTopologyDynamicPointLight& light,
         SectorPreviewDynamicPointLightUniform& outLight);
@@ -117,9 +161,7 @@ void CollectSectorPreviewDynamicPointLightCandidates(
         const std::vector<SectorPreviewDynamicPointLightSource>& sources,
         const RuntimePortalVisibilityResult& visibility,
         const std::vector<SectorReceiverBounds>& receiverBounds,
-        std::vector<SectorPreviewDynamicPointLightSource>& outCandidates,
-        const RuntimeSectorVisibilityGraph* visibilityGraph = nullptr,
-        const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers = nullptr);
+        std::vector<SectorPreviewDynamicPointLightSource>& outCandidates);
 
 void SelectRankedSectorPreviewDynamicPointLights(
         std::vector<SectorPreviewDynamicPointLightSource>& candidates,
@@ -127,8 +169,8 @@ void SelectRankedSectorPreviewDynamicPointLights(
         const std::vector<SectorReceiverBounds>& receiverBounds,
         std::size_t maxLights,
         std::vector<SectorPreviewDynamicPointLightUniform>& outSelectedLights,
-        std::vector<int>* outSelectedLightIds = nullptr,
-        const std::vector<int>* previousSelectedLightIds = nullptr);
+        std::vector<SectorPreviewDynamicLightKey>* outSelectedLightKeys = nullptr,
+        const std::vector<SectorPreviewDynamicLightKey>* previousSelectedLightKeys = nullptr);
 
 void SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
         const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
@@ -136,6 +178,13 @@ void SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
         const std::vector<SectorReceiverBounds>& receiverBounds,
         std::size_t maxShadowCasters,
         std::vector<SectorPreviewDynamicSpotLightShadowCaster>& outShadowCasters);
+
+void AssignPersistentSectorDynamicShadowSlots(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
+        std::size_t shadowSlotBudget,
+        std::vector<SectorPreviewDynamicSpotLightShadowCaster>& shadowCasters,
+        std::array<SectorDynamicShadowSlotOwner,
+                MaxDynamicSpotLightShadowCasters>& slotOwners);
 
 bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
         const SectorPreviewDynamicPointLightUniform& light,

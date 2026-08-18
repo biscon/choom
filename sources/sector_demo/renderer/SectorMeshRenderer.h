@@ -144,6 +144,7 @@ public:
     const std::string& VisibilityDebugText() const { return visibilityDebugText; }
     const std::string& RenderDebugText() const { return renderDebugText; }
     bool DynamicLightingEnabled() const { return dynamicLightingEnabled; }
+    bool DepthPrepassEnabled() const { return depthPrepassEnabled; }
     void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
     void SetGraphicsQuality(
@@ -153,7 +154,8 @@ public:
             float projectedShadowIntervalSeconds = 0.0f,
             int projectedShadowResolution = DynamicModelProjectedShadowResolution,
             int maxDynamicLights = static_cast<int>(MaxDynamicLights),
-            bool depthPrepass = true)
+            int maxShadowLightUpdatesPerFrame = 2,
+            bool depthPrepass = false)
     {
         this->volumetricQuality = volumetricQuality;
         shadowMapsEnabled = shadowsEnabled;
@@ -162,6 +164,9 @@ public:
         }
         dynamicLightState.SetMaxDynamicLights(
                 static_cast<std::size_t>(std::max(maxDynamicLights, 0)));
+        dynamicLightState.SetMaxShadowLightUpdatesPerFrame(
+                static_cast<std::size_t>(std::max(
+                        maxShadowLightUpdatesPerFrame, 0)));
         depthPrepassEnabled = depthPrepass;
         dynamicModelShadowIntervalSeconds = std::max(
                 projectedShadowIntervalSeconds, 0.0f);
@@ -176,7 +181,12 @@ public:
     {
         return dynamicLightState.SelectedLights();
     }
-    const std::vector<int>& SelectedDynamicLightIds() const { return dynamicLightState.SelectedLightIds(); }
+    const std::vector<SectorPreviewDynamicLightKey>& SelectedDynamicLightKeys() const {
+        return dynamicLightState.SelectedLightKeys();
+    }
+    const SectorDynamicLightSelectionStats& DynamicLightSelectionStats() const {
+        return dynamicLightState.SelectionStats();
+    }
     size_t DynamicLightCandidateCount() const { return dynamicLightState.CandidateCount(); }
     size_t DynamicLightSourceCount() const { return dynamicLightState.SourceCount(); }
     const SectorDynamicShadowRenderStats& DynamicShadowRenderStats() const {
@@ -296,6 +306,9 @@ private:
     int dynamicLightDirectionsLoc = -1;
     int dynamicLightInnerConeCosLoc = -1;
     int dynamicLightOuterConeCosLoc = -1;
+    int dynamicLightSpotShadowRightLoc = -1;
+    int dynamicLightSpotShadowProjectionLoc = -1;
+    int hasPointShadowsLoc = -1;
     int dynamicLightShadowSlotsLoc = -1;
     std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrixLocs = [] {
         std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
@@ -306,7 +319,7 @@ private:
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
     int shadowAtlasTilesPerRowLoc = -1;
-    bool depthPrepassEnabled = true;
+    bool depthPrepassEnabled = false;
     SectorFogShaderLocations fogShaderLocations;
     SectorLocalFogRenderer localFogRenderer;
     SectorLightHazeRenderer lightHazeRenderer;

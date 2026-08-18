@@ -405,6 +405,7 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
                 ProjectedShadowInterval(applicationSettings.graphics.shadowQuality),
                 ProjectedShadowResolution(applicationSettings.graphics.shadowQuality),
                 applicationSettings.graphics.maxDynamicLights,
+                applicationSettings.graphics.maxShadowLightUpdatesPerFrame,
                 applicationSettings.graphics.depthPrepass);
         gameScene.RenderShadowMaps(context);
     } else {
@@ -415,6 +416,7 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
                 ProjectedShadowInterval(applicationSettings.graphics.shadowQuality),
                 ProjectedShadowResolution(applicationSettings.graphics.shadowQuality),
                 applicationSettings.graphics.maxDynamicLights,
+                applicationSettings.graphics.maxShadowLightUpdatesPerFrame,
                 applicationSettings.graphics.depthPrepass);
         editor.RenderPreview3DShadowMaps(context.assets);
     }

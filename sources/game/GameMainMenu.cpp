@@ -189,6 +189,30 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
             smallFont, lightBudgetText, engine::UITextJustify::Right);
     y += rowHeight + 14.0f;
 
+    engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
+            smallFont, "Shadow updates/frame", engine::UITextJustify::Left);
+    engine::IntSlider(
+            ui,
+            config,
+            input,
+            "graphics_shadow_updates_per_frame",
+            Rectangle{controlX, y, controlWidth - lightValueWidth, rowHeight},
+            MinFpsShadowLightUpdatesPerFrame,
+            MaxFpsShadowLightUpdatesPerFrame,
+            draft.graphics.maxShadowLightUpdatesPerFrame);
+    char shadowUpdateBudgetText[16];
+    if (draft.graphics.maxShadowLightUpdatesPerFrame == 0) {
+        std::snprintf(shadowUpdateBudgetText, sizeof(shadowUpdateBudgetText), "All");
+    } else {
+        std::snprintf(shadowUpdateBudgetText, sizeof(shadowUpdateBudgetText), "%d",
+                draft.graphics.maxShadowLightUpdatesPerFrame);
+    }
+    engine::Text(config, assets,
+            Rectangle{controlX + controlWidth - lightValueWidth, y,
+                    lightValueWidth, rowHeight},
+            smallFont, shadowUpdateBudgetText, engine::UITextJustify::Right);
+    y += rowHeight + 14.0f;
+
     const char* qualityOptions[] = {"Off", "Low", "Medium", "High"};
     int volumetricQuality = static_cast<int>(draft.graphics.volumetricQuality);
     engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},

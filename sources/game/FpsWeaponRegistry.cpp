@@ -728,6 +728,10 @@ FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings)
             settings.maxDynamicLights,
             MinFpsDynamicLights,
             MaxFpsDynamicLights);
+    settings.maxShadowLightUpdatesPerFrame = std::clamp(
+            settings.maxShadowLightUpdatesPerFrame,
+            MinFpsShadowLightUpdatesPerFrame,
+            MaxFpsShadowLightUpdatesPerFrame);
     return settings;
 }
 
@@ -977,6 +981,19 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                     Fail("application settings.graphics.maxDynamicLights must be between 0 and 32");
                 }
                 parsed.graphics.maxDynamicLights = value;
+            }
+            const auto maxShadowLightUpdates =
+                    graphics->find("maxShadowLightUpdatesPerFrame");
+            if (maxShadowLightUpdates != graphics->end()) {
+                if (!maxShadowLightUpdates->is_number_integer()) {
+                    Fail("application settings.graphics.maxShadowLightUpdatesPerFrame must be an integer");
+                }
+                const int value = maxShadowLightUpdates->get<int>();
+                if (value < MinFpsShadowLightUpdatesPerFrame
+                        || value > MaxFpsShadowLightUpdatesPerFrame) {
+                    Fail("application settings.graphics.maxShadowLightUpdatesPerFrame must be between 0 and 32");
+                }
+                parsed.graphics.maxShadowLightUpdatesPerFrame = value;
             }
             const auto depthPrepass = graphics->find("depthPrepass");
             if (depthPrepass != graphics->end()) {
@@ -1413,6 +1430,8 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
                     graphics.volumetricQuality)},
             {"shadowQuality", FpsShadowQualityName(graphics.shadowQuality)},
             {"maxDynamicLights", graphics.maxDynamicLights},
+            {"maxShadowLightUpdatesPerFrame",
+                    graphics.maxShadowLightUpdatesPerFrame},
             {"depthPrepass", graphics.depthPrepass},
             {"performanceOverlay", graphics.performanceOverlay},
             {"vsync", graphics.vsync},
