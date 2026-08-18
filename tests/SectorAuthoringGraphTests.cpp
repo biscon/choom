@@ -12,6 +12,7 @@
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
+#include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
@@ -10916,6 +10917,9 @@ void TestEditorUnifiedSelectPickOrderingCyclingAndDragGate()
     Check(game::IsSectorEditorPickTargetMovable(
                   game::SectorEditorPickTarget{game::SectorEditorPickKind::RuntimeObject, 4}),
           "runtime object pick target is movable");
+    Check(game::IsSectorEditorPickTargetMovable(
+                  game::SectorEditorPickTarget{game::SectorEditorPickKind::LevelMarker, 5}),
+          "Level Marker pick target is movable");
     Check(!game::IsSectorEditorPickTargetMovable(
                   game::SectorEditorPickTarget{game::SectorEditorPickKind::AuthoringLine, 9}),
           "authoring line pick target is selectable but not movable");
@@ -12069,9 +12073,14 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
     std::error_code error;
     std::filesystem::create_directories(root / "nested" / "deeper", error);
     Check(!error, "static model picker creates nested temp fixture directory");
+    std::filesystem::create_directories(root / "doors" / "swing", error);
+    Check(!error, "static model picker creates excluded door fixture directory");
     WriteTextFile(root / "alpha.gltf", "{}");
     WriteTextFile(root / "nested" / "beta.GLB", "");
     WriteTextFile(root / "nested" / "deeper" / "gamma.gLtF", "{}");
+    WriteTextFile(root / "doors" / "door.glb", "");
+    WriteTextFile(root / "doors" / "swing" / "leaf.gltf", "{}");
+    WriteTextFile(root / "z_doors.glb", "");
     WriteTextFile(root / "nested" / "mesh.bin", "");
     WriteTextFile(root / "nested" / "albedo.png", "");
     WriteTextFile(root / "notes.txt", "");
@@ -12085,13 +12094,15 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
     const std::vector<std::string> expected{
             "assets/models/alpha.gltf",
             "assets/models/nested/beta.GLB",
-            "assets/models/nested/deeper/gamma.gLtF"};
+            "assets/models/nested/deeper/gamma.gLtF",
+            "assets/models/z_doors.glb"};
     Check(state.modelPaths == expected,
-          "static model picker filters formats and sorts normalized asset-relative paths");
+          "static model picker filters formats and the door subtree while preserving similarly named models");
     const std::vector<std::string> expectedLabels{
             "alpha.gltf",
             "nested/beta.GLB",
-            "nested/deeper/gamma.gLtF"};
+            "nested/deeper/gamma.gLtF",
+            "z_doors.glb"};
     Check(state.optionLabelStorage == expectedLabels
                   && state.optionLabels.size() == expectedLabels.size()
                   && std::string(state.optionLabels[1]) == expectedLabels[1],
@@ -12117,7 +12128,7 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
     Check(!state.scanned && state.selectedModelIndex == -1,
           "reopening the model picker invalidates the previous opening scan");
     Check(picker.RefreshFromRoot(root, "assets/models")
-                  && state.modelPaths.size() == 4
+                  && state.modelPaths.size() == 5
                   && state.modelPaths[1] == "assets/models/nested/aardvark.glb"
                   && picker.SelectedModelPath() == expected[1],
           "model picker reopening discovers new models and restores the current selection");
@@ -12125,13 +12136,24 @@ void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
     picker.Open(
             "assets/models/characters/nested/beta.GLB",
             game::ModelPickerTarget::NpcDefinition);
-    Check(picker.RefreshFromRoot(root, "assets/models/characters")
+    const std::string npcModelPath = "assets/models/characters/nested/beta.GLB";
+    const bool npcRefreshed =
+            picker.RefreshFromRoot(root, "assets/models/characters");
+    const auto npcModel =
+            std::find(state.modelPaths.begin(), state.modelPaths.end(), npcModelPath);
+    const size_t npcModelIndex = static_cast<size_t>(
+            std::distance(state.modelPaths.begin(), npcModel));
+    Check(npcRefreshed
                   && state.target == game::ModelPickerTarget::NpcDefinition
-                  && state.modelPaths[2]
-                          == "assets/models/characters/nested/beta.GLB"
-                  && state.optionLabelStorage[2] == "nested/beta.GLB"
-                  && picker.SelectedModelPath()
-                          == "assets/models/characters/nested/beta.GLB",
+                  && npcModel != state.modelPaths.end()
+                  && npcModelIndex < state.optionLabelStorage.size()
+                  && state.optionLabelStorage[npcModelIndex] == "nested/beta.GLB"
+                  && std::find(
+                             state.modelPaths.begin(),
+                             state.modelPaths.end(),
+                             "assets/models/characters/doors/door.glb")
+                          != state.modelPaths.end()
+                  && picker.SelectedModelPath() == npcModelPath,
           "NPC model picker target uses character-relative asset paths and labels");
     picker.Close();
     Check(!state.open, "static model picker closes on cancel");
@@ -13013,6 +13035,75 @@ void TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache()
                   && documentState.lifecycle.topologyDocumentDirty
                   && !editorState.topologyRenderCache.valid,
           "Level Marker drag commits once at the supplied snapped coordinate");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    editorState.topologyRenderCache.valid = true;
+    game::ManipulationState manipulationState;
+    game::LightEditingState lightState;
+    game::RuntimeObjectDragState runtimeObjectDrag;
+    game::SectorEditorTool tool = game::SectorEditorTool::Select;
+    game::SectorEditorManipulationServiceContext manipulationContext{
+            tool,
+            documentState.map.topologyMap,
+            documentState.authoring.authoringGraph,
+            manipulationState,
+            lightState,
+            runtimeObjectDrag,
+            status};
+    manipulationContext.levelMarkerEditing = &editing;
+    manipulationContext.screenToMap = [](Vector2 screenPoint) {
+        return Vector2{screenPoint.x * 0.5f, screenPoint.y * 0.5f};
+    };
+    manipulationContext.snapMapPoint = [](Vector2 mapPoint) {
+        return Vector2{std::round(mapPoint.x), std::round(mapPoint.y)};
+    };
+
+    game::StartSectorEditorSelectedManipulation(
+            manipulationContext,
+            game::SectorEditorPickTarget{game::SectorEditorPickKind::LevelMarker, markerId},
+            Vector2{12.0f, 10.0f});
+    game::UpdateActiveSectorEditorMapPointManipulations(
+            manipulationContext,
+            Vector2{14.5f, 10.5f});
+    Check(editing.Drag().active
+                  && editing.Drag().previewX == 112
+                  && editing.Drag().previewZ == 80
+                  && documentState.authoring.authoringGraph.levelMarkers[0].x == 96
+                  && !documentState.lifecycle.topologyDocumentDirty,
+          "Select manipulation updates the Level Marker drag preview from screen coordinates");
+    game::FinishActiveSectorEditorManipulation(manipulationContext);
+    const game::SectorAuthoringLevelMarker& movedMarker =
+            documentState.authoring.authoringGraph.levelMarkers[0];
+    Check(movedMarker.x == 112
+                  && movedMarker.z == 80
+                  && Near(movedMarker.y, 0.0f)
+                  && movedMarker.referenceId == "default"
+                  && Near(movedMarker.orientationDegrees, 0.0f)
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && !editorState.topologyRenderCache.valid,
+          "Select manipulation commits snapped Level Marker X/Z and invalidates the cache");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    editorState.topologyRenderCache.valid = true;
+    game::StartSectorEditorSelectedManipulation(
+            manipulationContext,
+            game::SectorEditorPickTarget{game::SectorEditorPickKind::LevelMarker, markerId},
+            Vector2{14.0f, 10.0f});
+    game::UpdateActiveSectorEditorMapPointManipulations(
+            manipulationContext,
+            Vector2{16.5f, 10.5f});
+    game::CancelActiveSectorEditorManipulation(
+            manipulationContext,
+            "Cancelled Level Marker move",
+            "Cancelled light move",
+            "Cancelled object move");
+    Check(!editing.Drag().active
+                  && documentState.authoring.authoringGraph.levelMarkers[0].x == 112
+                  && !documentState.lifecycle.topologyDocumentDirty
+                  && editorState.topologyRenderCache.valid,
+          "cancelled Select manipulation leaves the Level Marker document unchanged");
     Check(!editing.RenameSelected("bad marker")
                   && documentState.authoring.authoringGraph.levelMarkers[0].referenceId == "default",
           "Level Marker service rejects invalid reference IDs");

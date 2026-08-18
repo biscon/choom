@@ -31,6 +31,15 @@ std::string NormalizeAssetPath(
     return combined.lexically_normal().generic_string();
 }
 
+bool ShouldExcludeGenericModelDirectory(
+        const std::string& assetRelativeRoot,
+        const std::filesystem::path& relativePath)
+{
+    return std::filesystem::path(assetRelativeRoot).lexically_normal().generic_string()
+                    == "assets/models"
+            && relativePath == std::filesystem::path("doors");
+}
+
 } // namespace
 
 SectorEditorStaticModelPickerService::SectorEditorStaticModelPickerService(
@@ -107,6 +116,16 @@ bool SectorEditorStaticModelPickerService::RefreshFromRoot(
     while (!error && it != end) {
         const std::filesystem::directory_entry& entry = *it;
         std::error_code entryError;
+        if (entry.is_directory(entryError) && !entryError) {
+            const std::filesystem::path relative =
+                    std::filesystem::relative(entry.path(), modelsRoot, entryError);
+            if (!entryError
+                    && ShouldExcludeGenericModelDirectory(
+                            assetRelativeRoot,
+                            relative)) {
+                it.disable_recursion_pending();
+            }
+        }
         if (entry.is_regular_file(entryError)
                 && !entryError
                 && IsSupportedStaticModelPath(entry.path())) {

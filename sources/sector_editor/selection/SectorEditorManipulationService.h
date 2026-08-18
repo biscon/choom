@@ -84,6 +84,9 @@ bool IsAnySectorEditorManipulationActive(const SectorEditorManipulationServiceCo
 void UpdateActiveSectorEditorManipulation(
         SectorEditorManipulationServiceContext& context,
         engine::Input& input);
+void UpdateActiveSectorEditorMapPointManipulations(
+        SectorEditorManipulationServiceContext& context,
+        Vector2 screenPoint);
 void FinishActiveSectorEditorManipulation(SectorEditorManipulationServiceContext& context);
 bool CancelFirstActiveSectorEditorManipulation(
         SectorEditorManipulationServiceContext& context,

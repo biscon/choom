@@ -104,6 +104,21 @@ struct ModelMaterialAsset {
             textureInfo = {};
 };
 
+struct ModelOrientedBounds {
+    Vector2 center = {};
+    Vector2 axisX = {1.0f, 0.0f};
+    Vector2 axisZ = {0.0f, 1.0f};
+    Vector2 halfExtents = {};
+    float bottom = 0.0f;
+    float top = 0.0f;
+};
+
+// Computes a tight XZ footprint after applying Model::transform. Model loading
+// calls this once so runtime collision never scans model vertices.
+bool ComputeModelOrientedBounds(
+        const Model& model,
+        ModelOrientedBounds& outBounds);
+
 struct ModelAsset {
     Model model = {};
     ModelAnimation* animations = nullptr;
@@ -114,8 +129,10 @@ struct ModelAsset {
     // generated once during model finalization and are used as a cheap raycast
     // broad phase; exact hits still test the current skinned triangles.
     BoundingBox animatedLocalBounds = {};
+    ModelOrientedBounds localCollisionBounds = {};
     bool hasLocalBounds = false;
     bool hasAnimatedLocalBounds = false;
+    bool hasLocalCollisionBounds = false;
 };
 
 enum class ModelState {

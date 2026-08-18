@@ -4,7 +4,7 @@
   "name": "Zombie",
   "hostile": true,
   "modelPath": "assets/models/characters/Zombie1.glb",
-  "animationBlendSeconds": 0.5,
+  "animationBlendSeconds": 0.25,
   "ambientVocalizations": {
     "sounds": [
       "npc/zombie/Zombie_Growl_01.wav",

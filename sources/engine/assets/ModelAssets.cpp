@@ -346,6 +346,41 @@ bool ComputeModelLocalBounds(const Model& model, BoundingBox& outBounds)
     return foundVertex;
 }
 
+float Cross(Vector2 origin, Vector2 a, Vector2 b)
+{
+    return (a.x - origin.x) * (b.y - origin.y)
+            - (a.y - origin.y) * (b.x - origin.x);
+}
+
+bool SetAxisAlignedOrientedBounds(
+        Vector2 minimum,
+        Vector2 maximum,
+        float bottom,
+        float top,
+        ModelOrientedBounds& outBounds)
+{
+    constexpr float epsilon = 0.000001f;
+    const Vector2 half{
+            (maximum.x - minimum.x) * 0.5f,
+            (maximum.y - minimum.y) * 0.5f};
+    if (!(half.x > epsilon)
+            || !(half.y > epsilon)
+            || !(top > bottom + epsilon)) {
+        outBounds = {};
+        return false;
+    }
+    outBounds = ModelOrientedBounds{
+            Vector2{
+                    (minimum.x + maximum.x) * 0.5f,
+                    (minimum.y + maximum.y) * 0.5f},
+            Vector2{1.0f, 0.0f},
+            Vector2{0.0f, 1.0f},
+            half,
+            bottom,
+            top};
+    return true;
+}
+
 struct ModelBoundsAccumulator {
     Vector3 minimum{};
     Vector3 maximum{};
@@ -520,6 +555,188 @@ bool ComputeAnimatedModelLocalBounds(
 }
 
 } // namespace
+
+bool ComputeModelOrientedBounds(
+        const Model& model,
+        ModelOrientedBounds& outBounds)
+{
+    constexpr float epsilon = 0.000001f;
+    outBounds = {};
+
+    size_t vertexCapacity = 0;
+    for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
+        const Mesh& mesh = model.meshes[meshIndex];
+        if (mesh.vertices != nullptr && mesh.vertexCount > 0) {
+            vertexCapacity += static_cast<size_t>(mesh.vertexCount);
+        }
+    }
+    std::vector<Vector2> points;
+    points.reserve(vertexCapacity);
+    Vector2 minimum{};
+    Vector2 maximum{};
+    float bottom = 0.0f;
+    float top = 0.0f;
+    bool foundVertex = false;
+    for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex) {
+        const Mesh& mesh = model.meshes[meshIndex];
+        if (mesh.vertices == nullptr || mesh.vertexCount <= 0) continue;
+        for (int vertexIndex = 0; vertexIndex < mesh.vertexCount; ++vertexIndex) {
+            const Vector3 source{
+                    mesh.vertices[vertexIndex * 3],
+                    mesh.vertices[vertexIndex * 3 + 1],
+                    mesh.vertices[vertexIndex * 3 + 2]};
+            const Vector3 transformed = Vector3Transform(source, model.transform);
+            if (!std::isfinite(transformed.x)
+                    || !std::isfinite(transformed.y)
+                    || !std::isfinite(transformed.z)) {
+                continue;
+            }
+            const Vector2 point{transformed.x, transformed.z};
+            points.push_back(point);
+            if (!foundVertex) {
+                minimum = point;
+                maximum = point;
+                bottom = transformed.y;
+                top = transformed.y;
+                foundVertex = true;
+            } else {
+                minimum.x = std::min(minimum.x, point.x);
+                minimum.y = std::min(minimum.y, point.y);
+                maximum.x = std::max(maximum.x, point.x);
+                maximum.y = std::max(maximum.y, point.y);
+                bottom = std::min(bottom, transformed.y);
+                top = std::max(top, transformed.y);
+            }
+        }
+    }
+    if (!foundVertex || points.size() < 3) return false;
+
+    std::sort(
+            points.begin(),
+            points.end(),
+            [](Vector2 a, Vector2 b) {
+                return a.x < b.x || (a.x == b.x && a.y < b.y);
+            });
+    points.erase(
+            std::unique(
+                    points.begin(),
+                    points.end(),
+                    [](Vector2 a, Vector2 b) {
+                        return a.x == b.x && a.y == b.y;
+                    }),
+            points.end());
+    if (points.size() < 3) {
+        return SetAxisAlignedOrientedBounds(
+                minimum, maximum, bottom, top, outBounds);
+    }
+
+    std::vector<Vector2> hull(points.size() * 2);
+    size_t hullCount = 0;
+    for (Vector2 point : points) {
+        while (hullCount >= 2
+                && Cross(hull[hullCount - 2], hull[hullCount - 1], point)
+                        <= epsilon) {
+            --hullCount;
+        }
+        hull[hullCount++] = point;
+    }
+    const size_t lowerCount = hullCount;
+    for (size_t pointIndex = points.size() - 1; pointIndex > 0; --pointIndex) {
+        const Vector2 point = points[pointIndex - 1];
+        while (hullCount > lowerCount
+                && Cross(hull[hullCount - 2], hull[hullCount - 1], point)
+                        <= epsilon) {
+            --hullCount;
+        }
+        hull[hullCount++] = point;
+    }
+    if (hullCount > 1) --hullCount;
+    hull.resize(hullCount);
+    if (hull.size() < 3) {
+        return SetAxisAlignedOrientedBounds(
+                minimum, maximum, bottom, top, outBounds);
+    }
+
+    float bestArea = std::numeric_limits<float>::infinity();
+    float bestAxisAlignment = -1.0f;
+    Vector2 bestAxisX{1.0f, 0.0f};
+    Vector2 bestAxisZ{0.0f, 1.0f};
+    float bestMinimumX = 0.0f;
+    float bestMaximumX = 0.0f;
+    float bestMinimumZ = 0.0f;
+    float bestMaximumZ = 0.0f;
+    for (size_t edgeIndex = 0; edgeIndex < hull.size(); ++edgeIndex) {
+        const Vector2 a = hull[edgeIndex];
+        const Vector2 b = hull[(edgeIndex + 1) % hull.size()];
+        Vector2 axisX{b.x - a.x, b.y - a.y};
+        const float length = std::sqrt(
+                axisX.x * axisX.x + axisX.y * axisX.y);
+        if (!(length > epsilon) || !std::isfinite(length)) continue;
+        axisX.x /= length;
+        axisX.y /= length;
+        if (axisX.x < 0.0f
+                || (std::fabs(axisX.x) <= epsilon && axisX.y < 0.0f)) {
+            axisX.x = -axisX.x;
+            axisX.y = -axisX.y;
+        }
+        const Vector2 axisZ{-axisX.y, axisX.x};
+        float minimumX = std::numeric_limits<float>::infinity();
+        float maximumX = -std::numeric_limits<float>::infinity();
+        float minimumZ = std::numeric_limits<float>::infinity();
+        float maximumZ = -std::numeric_limits<float>::infinity();
+        for (Vector2 point : hull) {
+            const float projectedX = point.x * axisX.x + point.y * axisX.y;
+            const float projectedZ = point.x * axisZ.x + point.y * axisZ.y;
+            minimumX = std::min(minimumX, projectedX);
+            maximumX = std::max(maximumX, projectedX);
+            minimumZ = std::min(minimumZ, projectedZ);
+            maximumZ = std::max(maximumZ, projectedZ);
+        }
+        const float area = (maximumX - minimumX) * (maximumZ - minimumZ);
+        const float alignment = std::fabs(axisX.x);
+        const float tieTolerance = std::isfinite(bestArea)
+                ? epsilon * std::max(1.0f, std::fabs(bestArea))
+                : 0.0f;
+        if (area < bestArea - tieTolerance
+                || (std::fabs(area - bestArea) <= tieTolerance
+                        && alignment > bestAxisAlignment + epsilon)) {
+            bestArea = area;
+            bestAxisAlignment = alignment;
+            bestAxisX = axisX;
+            bestAxisZ = axisZ;
+            bestMinimumX = minimumX;
+            bestMaximumX = maximumX;
+            bestMinimumZ = minimumZ;
+            bestMaximumZ = maximumZ;
+        }
+    }
+    if (!std::isfinite(bestArea)) {
+        return SetAxisAlignedOrientedBounds(
+                minimum, maximum, bottom, top, outBounds);
+    }
+
+    const Vector2 half{
+            (bestMaximumX - bestMinimumX) * 0.5f,
+            (bestMaximumZ - bestMinimumZ) * 0.5f};
+    if (!(half.x > epsilon)
+            || !(half.y > epsilon)
+            || !(top > bottom + epsilon)) {
+        return SetAxisAlignedOrientedBounds(
+                minimum, maximum, bottom, top, outBounds);
+    }
+    const float centerX = (bestMinimumX + bestMaximumX) * 0.5f;
+    const float centerZ = (bestMinimumZ + bestMaximumZ) * 0.5f;
+    outBounds = ModelOrientedBounds{
+            Vector2{
+                    bestAxisX.x * centerX + bestAxisZ.x * centerZ,
+                    bestAxisX.y * centerX + bestAxisZ.y * centerZ},
+            bestAxisX,
+            bestAxisZ,
+            half,
+            bottom,
+            top};
+    return true;
+}
 
 void ModelAssets::OnScopeCreated(AssetScopeHandle scope)
 {
@@ -748,12 +965,17 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
         ParsedModelMaterials parsed;
         BoundingBox localBounds{};
         BoundingBox animatedLocalBounds{};
+        ModelOrientedBounds localCollisionBounds{};
         bool hasLocalBounds = false;
         bool hasAnimatedLocalBounds = false;
+        bool hasLocalCollisionBounds = false;
         if (loadedModel) {
             parsed = ParseModelMaterials(path, loaded.materialCount);
             GenerateMissingTangents(loaded);
             hasLocalBounds = ComputeModelLocalBounds(loaded, localBounds);
+            hasLocalCollisionBounds = ComputeModelOrientedBounds(
+                    loaded,
+                    localCollisionBounds);
             hasAnimatedLocalBounds = ComputeAnimatedModelLocalBounds(
                     loaded,
                     loadedAnimations,
@@ -863,8 +1085,11 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                     slot.asset.materials = std::move(parsed.materials);
                     slot.asset.localBounds = localBounds;
                     slot.asset.animatedLocalBounds = animatedLocalBounds;
+                    slot.asset.localCollisionBounds = localCollisionBounds;
                     slot.asset.hasLocalBounds = hasLocalBounds;
                     slot.asset.hasAnimatedLocalBounds = hasAnimatedLocalBounds;
+                    slot.asset.hasLocalCollisionBounds =
+                            hasLocalCollisionBounds;
                     slot.state = ModelState::Ready;
                     slot.error.clear();
                     if (parsed.hasUnsupportedMaterial) {

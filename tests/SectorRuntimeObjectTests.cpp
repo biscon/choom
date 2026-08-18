@@ -7123,18 +7123,163 @@ game::SectorCollisionMoveResult ResolveStaticModelMovement(
             colliders);
 }
 
+engine::ModelOrientedBounds AxisAlignedModelBounds(BoundingBox bounds)
+{
+    return engine::ModelOrientedBounds{
+            Vector2{
+                    (bounds.min.x + bounds.max.x) * 0.5f,
+                    (bounds.min.z + bounds.max.z) * 0.5f},
+            Vector2{1.0f, 0.0f},
+            Vector2{0.0f, 1.0f},
+            Vector2{
+                    (bounds.max.x - bounds.min.x) * 0.5f,
+                    (bounds.max.z - bounds.min.z) * 0.5f},
+            bounds.min.y,
+            bounds.max.y};
+}
+
+void TestModelOrientedBoundsPreserveBakedMeshRotation()
+{
+    constexpr float intrinsicYaw = 0.35f;
+    const Vector3 localCenter{1.5f, 1.0f, -2.0f};
+    const Matrix intrinsicTransform = MatrixMultiply(
+            MatrixRotateY(intrinsicYaw),
+            MatrixTranslate(localCenter.x, 0.0f, localCenter.z));
+    std::array<float, 24> vertices{};
+    size_t offset = 0;
+    for (float x : {-3.0f, 3.0f}) {
+        for (float y : {0.0f, 2.0f}) {
+            for (float z : {-0.5f, 0.5f}) {
+                const Vector3 transformed = Vector3Transform(
+                        Vector3{x, y, z},
+                        intrinsicTransform);
+                vertices[offset++] = transformed.x;
+                vertices[offset++] = transformed.y;
+                vertices[offset++] = transformed.z;
+            }
+        }
+    }
+    Mesh mesh{};
+    mesh.vertexCount = 8;
+    mesh.vertices = vertices.data();
+    Model model{};
+    model.transform = MatrixIdentity();
+    model.meshCount = 1;
+    model.meshes = &mesh;
+
+    engine::ModelOrientedBounds bounds;
+    Check(engine::ComputeModelOrientedBounds(model, bounds),
+          "internally rotated model vertices produce collision bounds");
+    const Vector3 expectedAxisX3 = Vector3Transform(
+            Vector3{1.0f, 0.0f, 0.0f},
+            MatrixRotateY(intrinsicYaw));
+    const Vector3 expectedAxisZ3 = Vector3Transform(
+            Vector3{0.0f, 0.0f, 1.0f},
+            MatrixRotateY(intrinsicYaw));
+    const Vector2 expectedAxisX{expectedAxisX3.x, expectedAxisX3.z};
+    const Vector2 expectedAxisZ{expectedAxisZ3.x, expectedAxisZ3.z};
+    Check(Near(bounds.center, Vector2{localCenter.x, localCenter.z})
+                  && Near(bounds.axisX, expectedAxisX)
+                  && Near(bounds.axisZ, expectedAxisZ)
+                  && Near(bounds.halfExtents, Vector2{3.0f, 0.5f})
+                  && Near(bounds.bottom, 0.0f)
+                  && Near(bounds.top, 2.0f),
+          "collision metadata retains the baked mesh orientation and tight footprint");
+
+    offset = 0;
+    for (float x : {-3.0f, 3.0f}) {
+        for (float y : {0.0f, 2.0f}) {
+            for (float z : {-0.5f, 0.5f}) {
+                vertices[offset++] = x;
+                vertices[offset++] = y;
+                vertices[offset++] = z;
+            }
+        }
+    }
+    engine::ModelOrientedBounds axisAlignedBounds;
+    Check(engine::ComputeModelOrientedBounds(model, axisAlignedBounds)
+                  && Near(axisAlignedBounds.center, Vector2{})
+                  && Near(axisAlignedBounds.axisX, Vector2{1.0f, 0.0f})
+                  && Near(axisAlignedBounds.axisZ, Vector2{0.0f, 1.0f})
+                  && Near(
+                          axisAlignedBounds.halfExtents,
+                          Vector2{3.0f, 0.5f}),
+          "axis-aligned model footprints preserve legacy orientation and dimensions");
+
+    offset = 0;
+    for (float x : {-3.0f, 3.0f}) {
+        for (float y : {0.0f, 2.0f}) {
+            for (float z : {-0.5f, 0.5f}) {
+                const Vector3 transformed = Vector3Transform(
+                        Vector3{x, y, z},
+                        intrinsicTransform);
+                vertices[offset++] = transformed.x;
+                vertices[offset++] = transformed.y;
+                vertices[offset++] = transformed.z;
+            }
+        }
+    }
+
+    game::SectorObjectTransform transform;
+    transform.yawRadians = 0.25f;
+    game::SectorStaticModelCollider collider;
+    Check(game::BuildSectorStaticModelCollider(
+                  17,
+                  bounds,
+                  transform,
+                  1.0f,
+                  collider),
+          "authored yaw builds collision from oriented model metadata");
+    const Vector3 expectedAuthoredAxisX = Vector3Transform(
+            Vector3{expectedAxisX.x, 0.0f, expectedAxisX.y},
+            MatrixRotateY(transform.yawRadians));
+    Check(Near(
+                  collider.axisX,
+                  Vector2{expectedAuthoredAxisX.x, expectedAuthoredAxisX.z})
+                  && Near(collider.halfExtents, Vector2{3.0f, 0.5f}),
+          "authored yaw composes with the model's baked orientation");
+
+    transform.yawRadians = 0.0f;
+    Check(game::BuildSectorStaticModelCollider(
+                  17,
+                  bounds,
+                  transform,
+                  1.0f,
+                  collider),
+          "unmodified authored yaw preserves the baked collision orientation");
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{
+            localCenter.x,
+            0.0f,
+            localCenter.z + 1.9f};
+    state.currentSectorId = 10;
+    state.grounded = true;
+    const Vector2 destination{
+            localCenter.x,
+            localCenter.z + 1.2f};
+    const game::SectorCollisionMoveResult result = ResolveStaticModelMovement(
+            state,
+            destination,
+            game::SectorFpsControllerConfig{},
+            std::vector<game::SectorStaticModelCollider>{collider});
+    Check(Near(result.positionXZ, destination),
+          "tight oriented collision does not retain the old local-AABB invisible wall");
+}
+
 void TestStaticModelColliderBuildUsesFullAuthoredTransform()
 {
     const BoundingBox bounds{
             Vector3{-1.0f, -0.5f, -2.0f},
             Vector3{3.0f, 1.5f, 2.0f}};
+    const engine::ModelOrientedBounds orientedBounds =
+            AxisAlignedModelBounds(bounds);
     const game::SectorObjectTransform transform{
             Vector3{10.0f, 2.0f, 20.0f},
             PI * 0.5f};
     game::SectorStaticModelCollider collider;
     Check(game::BuildSectorStaticModelCollider(
                   7,
-                  bounds,
+                  orientedBounds,
                   transform,
                   2.0f,
                   collider),
@@ -7204,6 +7349,8 @@ void TestStaticModelXzRotationUsesSharedTransformAndEnclosingBounds()
     const BoundingBox bounds{
             Vector3{-1.0f, -0.5f, -2.0f},
             Vector3{1.0f, 0.5f, 2.0f}};
+    const engine::ModelOrientedBounds orientedBounds =
+            AxisAlignedModelBounds(bounds);
     const game::SectorObjectTransform tilted{
             position,
             0.0f,
@@ -7212,7 +7359,7 @@ void TestStaticModelXzRotationUsesSharedTransformAndEnclosingBounds()
     game::SectorStaticModelCollider collider;
     Check(game::BuildSectorStaticModelCollider(
                   8,
-                  bounds,
+                  orientedBounds,
                   tilted,
                   1.0f,
                   collider),
@@ -8121,6 +8268,7 @@ int main()
     TestSectorRuntimeObjectBakedLightingFallback();
     TestSectorRuntimeObjectBakedLightingUsesMapFallback();
     TestPropAndDoorStandingClearanceQueries();
+    TestModelOrientedBoundsPreserveBakedMeshRotation();
     TestStaticModelColliderBuildUsesFullAuthoredTransform();
     TestStaticModelXzRotationUsesSharedTransformAndEnclosingBounds();
     TestStaticModelColliderBlocksSweepsAndSlides();

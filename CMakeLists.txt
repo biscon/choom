@@ -333,6 +333,7 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorHelpers.cpp
             sources/sector_editor/SectorEditorMaterialActions.cpp
             sources/sector_editor/SectorEditorTextureActions.cpp
+            sources/sector_editor/selection/SectorEditorManipulationService.cpp
             sources/sector_editor/selection/SectorEditorSelectionService.cpp
             sources/sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.cpp
             sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
@@ -349,6 +350,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/texture_picker/SectorEditorTexturePickerService.cpp
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
+            sources/engine/input/Input.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
             sources/engine/audio/AudioSystem.cpp

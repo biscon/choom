@@ -10,6 +10,7 @@
 namespace engine {
 class AssetManager;
 class World;
+struct ModelOrientedBounds;
 }
 
 namespace game {
@@ -36,7 +37,7 @@ struct SectorStaticModelCollider {
 
 bool BuildSectorStaticModelCollider(
         int placedObjectId,
-        BoundingBox localBounds,
+        const engine::ModelOrientedBounds& localBounds,
         const SectorObjectTransform& transform,
         float scale,
         SectorStaticModelCollider& outCollider);

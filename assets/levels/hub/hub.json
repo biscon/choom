@@ -668,9 +668,9 @@
         "shadowMode": "dynamic"
       },
       "position": [
-        -208.0,
+        -233.0,
         -27.0,
-        96.0
+        145.0
       ],
       "yawDegrees": 180.0
     },
@@ -698,9 +698,347 @@
         "shadowMode": "dynamic"
       },
       "position": [
-        -424.0,
+        -354.0,
+        -27.0,
+        108.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 38,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/free_container_gameready.glb",
+        "collision": true
+      },
+      "position": [
+        -212.0,
+        -27.0,
+        152.0
+      ],
+      "yawDegrees": 10.0
+    },
+    {
+      "id": 39,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/free_container_gameready.glb",
+        "collision": true
+      },
+      "position": [
+        -264.0,
+        -27.0,
+        152.0
+      ],
+      "yawDegrees": 5.0
+    },
+    {
+      "id": 40,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/free_container_gameready.glb",
+        "collision": true
+      },
+      "position": [
+        -344.0,
+        -27.0,
+        152.0
+      ],
+      "yawDegrees": 10.0
+    },
+    {
+      "id": 41,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/free_container_gameready.glb",
+        "collision": true
+      },
+      "position": [
+        -400.0,
+        -27.0,
+        148.0
+      ],
+      "yawDegrees": -5.0
+    },
+    {
+      "id": 42,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/horizontal_fuel_tank.glb",
+        "collision": true
+      },
+      "position": [
+        -232.0,
+        -27.0,
+        12.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 43,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/garbage_container_blue.glb",
+        "scale": 1.5,
+        "collision": true
+      },
+      "position": [
+        -302.0,
         -27.0,
         176.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 44,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/furniture/welding_and_assembly_table_lowpoly.glb",
+        "scale": 1.149999976158142,
+        "collision": true
+      },
+      "position": [
+        -189.0,
+        -27.0,
+        53.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 45,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/storage_shelves.glb",
+        "collision": true
+      },
+      "position": [
+        -320.0,
+        -27.0,
+        3.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 46,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/container_on_wheels.glb",
+        "scale": 2.0,
+        "collision": true
+      },
+      "position": [
+        -293.0,
+        -27.0,
+        148.0
+      ],
+      "yawDegrees": 65.0
+    },
+    {
+      "id": 47,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/tall_wooden_box_lowpoly.glb",
+        "collision": true
+      },
+      "position": [
+        -274.0,
+        -27.0,
+        8.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 48,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/palletes.glb",
+        "scale": 2.5,
+        "collision": true
+      },
+      "position": [
+        -431.0,
+        -27.0,
+        90.0
+      ],
+      "yawDegrees": -65.0
+    },
+    {
+      "id": 49,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/pallet_of_bricks.glb",
+        "collision": true
+      },
+      "position": [
+        -319.0,
+        -27.0,
+        37.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 50,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/storage_shelves.glb",
+        "collision": true
+      },
+      "position": [
+        -444.0,
+        -27.0,
+        144.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 51,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/wooden_box.glb",
+        "collision": true
+      },
+      "position": [
+        -443.0,
+        -27.0,
+        70.0
+      ],
+      "yawDegrees": -3.0
+    },
+    {
+      "id": 52,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/tall_wooden_box_lowpoly.glb"
+      },
+      "position": [
+        -443.0,
+        -27.0,
+        56.0
+      ],
+      "yawDegrees": 4.0
+    },
+    {
+      "id": 53,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/environment/wooden_box.glb",
+        "collision": true
+      },
+      "position": [
+        -432.0,
+        -27.0,
+        185.0
+      ],
+      "yawDegrees": -94.99999237060547
+    },
+    {
+      "id": 54,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
+        "rotationXDegrees": -90.0,
+        "heightOffsetWorld": 1.5,
+        "scale": 2.0
+      },
+      "position": [
+        -136.0,
+        0.0,
+        84.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 55,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/light_fixture_ceiling_recessed.glb",
+        "heightOffsetWorld": 3.0999999046325684,
+        "scale": 1.5
+      },
+      "position": [
+        -158.0,
+        -25.0,
+        97.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 56,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
+        "rotationXDegrees": -90.0,
+        "heightOffsetWorld": 1.5,
+        "scale": 2.0
+      },
+      "position": [
+        -112.0,
+        0.0,
+        84.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 57,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
+        "rotationXDegrees": -90.0,
+        "heightOffsetWorld": 1.5,
+        "scale": 2.0
+      },
+      "position": [
+        -88.0,
+        0.0,
+        84.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 58,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
+        "rotationXDegrees": 90.0,
+        "heightOffsetWorld": 1.5,
+        "scale": 2.0
+      },
+      "position": [
+        -88.0,
+        0.0,
+        109.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 59,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
+        "rotationXDegrees": 90.0,
+        "heightOffsetWorld": 1.5,
+        "scale": 2.0
+      },
+      "position": [
+        -112.0,
+        0.0,
+        109.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 60,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
+        "rotationXDegrees": 90.0,
+        "heightOffsetWorld": 1.5,
+        "scale": 2.0
+      },
+      "position": [
+        -136.0,
+        0.0,
+        109.0
       ],
       "yawDegrees": 0.0
     }
@@ -986,6 +1324,24 @@
         "a": 255
       },
       "castsShadow": false
+    },
+    {
+      "id": 16,
+      "position": [
+        -158.0,
+        -1.9663769006729126,
+        97.0
+      ],
+      "radius": 8.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 0,
+        "b": 255,
+        "a": 255
+      },
+      "castsShadow": false
     }
   ],
   "staticSpotLights": [
@@ -1230,38 +1586,18 @@
   ],
   "dynamicPointLights": [
     {
-      "id": 1,
+      "id": 2,
       "position": [
-        -152.0,
-        -12.600000381469727,
+        -360.0,
+        20.0,
         96.0
       ],
-      "radius": 48.0,
-      "intensity": 1.0,
+      "radius": 110.0,
+      "intensity": 4.0,
       "color": {
         "r": 255,
         "g": 240,
         "b": 230,
-        "a": 255
-      },
-      "castsShadow": true,
-      "shadowBias": 0.001500000013038516,
-      "shadowStrength": 0.75,
-      "shadowSoftness": 4.0
-    },
-    {
-      "id": 2,
-      "position": [
-        -360.0,
-        -12.600000381469727,
-        96.0
-      ],
-      "radius": 95.0,
-      "intensity": 4.0,
-      "color": {
-        "r": 255,
-        "g": 55,
-        "b": 15,
         "a": 255
       },
       "flicker": true,
@@ -1275,15 +1611,15 @@
       "id": 3,
       "position": [
         -236.0,
-        -12.600000381469727,
+        20.0,
         96.0
       ],
-      "radius": 84.0,
+      "radius": 128.0,
       "intensity": 4.0,
       "color": {
         "r": 255,
-        "g": 255,
-        "b": 255,
+        "g": 245,
+        "b": 230,
         "a": 255
       },
       "castsShadow": true,
@@ -1346,6 +1682,33 @@
           }
         }
       }
+    },
+    {
+      "id": 2,
+      "position": [
+        -158.0,
+        -0.7666366100311279,
+        97.0
+      ],
+      "target": [
+        -154.0677032470703,
+        -33.16255569458008,
+        97.03539276123047
+      ],
+      "range": 48.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 220,
+        "a": 255
+      },
+      "innerConeDegrees": 25.0,
+      "outerConeDegrees": 45.0,
+      "castsShadow": true,
+      "shadowBias": 0.001500000013038516,
+      "shadowStrength": 0.75,
+      "shadowSoftness": 2.0
     }
   ],
   "lightmapSettings": {
@@ -1428,7 +1791,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "977289ee0e082d0b",
+    "sourceHash": "3b38f004e1e97792",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -1448,7 +1811,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "977289ee0e082d0b",
+      "sourceHash": "3b38f004e1e97792",
       "count": 2067,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -1474,9 +1837,9 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "977289ee0e082d0b",
-      "modelCount": 20,
-      "objectCount": 24,
+      "sourceHash": "3b38f004e1e97792",
+      "modelCount": 29,
+      "objectCount": 40,
       "format": "staticModelUvRemapF32LE"
     }
   },
@@ -11045,49 +11408,49 @@
       {
         "editorId": 9,
         "id": "marker_1",
-        "x": -3200,
+        "x": -3744,
         "y": -27.0,
-        "z": 2816,
+        "z": 2496,
         "orientationDegrees": 0.0
       },
       {
         "editorId": 10,
         "id": "marker_2",
-        "x": -5120,
+        "x": -5504,
         "y": -27.0,
-        "z": 1408,
+        "z": 1776,
         "orientationDegrees": 0.0
       },
       {
         "editorId": 11,
         "id": "marker_3",
-        "x": -6912,
+        "x": -6624,
         "y": -27.0,
-        "z": 256,
+        "z": 624,
         "orientationDegrees": 0.0
       },
       {
         "editorId": 12,
         "id": "marker_4",
-        "x": -6656,
+        "x": -6880,
         "y": -27.0,
-        "z": 2432,
+        "z": 2624,
         "orientationDegrees": 0.0
       },
       {
         "editorId": 13,
         "id": "marker_5",
-        "x": -3456,
+        "x": -4688,
         "y": -27.0,
-        "z": 384,
+        "z": 784,
         "orientationDegrees": 0.0
       },
       {
         "editorId": 14,
         "id": "marker_6",
-        "x": -3968,
+        "x": -4352,
         "y": -27.0,
-        "z": 1920,
+        "z": 1872,
         "orientationDegrees": 0.0
       },
       {

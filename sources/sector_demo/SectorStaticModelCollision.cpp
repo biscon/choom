@@ -360,7 +360,7 @@ bool ResolveCircleAgainstCollider(
 
 bool BuildSectorStaticModelCollider(
         int placedObjectId,
-        BoundingBox localBounds,
+        const engine::ModelOrientedBounds& localBounds,
         const SectorObjectTransform& transform,
         float scale,
         SectorStaticModelCollider& outCollider)
@@ -368,8 +368,12 @@ bool BuildSectorStaticModelCollider(
     outCollider = SectorStaticModelCollider{};
     outCollider.placedObjectId = placedObjectId;
     if (placedObjectId <= 0
-            || !IsFinite(localBounds.min)
-            || !IsFinite(localBounds.max)
+            || !IsFinite(localBounds.center)
+            || !IsFinite(localBounds.axisX)
+            || !IsFinite(localBounds.axisZ)
+            || !IsFinite(localBounds.halfExtents)
+            || !std::isfinite(localBounds.bottom)
+            || !std::isfinite(localBounds.top)
             || !IsFinite(transform.position)
             || !std::isfinite(transform.yawRadians)
             || !std::isfinite(transform.rotationXRadians)
@@ -380,10 +384,10 @@ bool BuildSectorStaticModelCollider(
         return false;
     }
 
-    const Vector3 localSize = Vector3Subtract(localBounds.max, localBounds.min);
-    if (localSize.x <= StaticModelCollisionEpsilon
-            || localSize.y <= StaticModelCollisionEpsilon
-            || localSize.z <= StaticModelCollisionEpsilon) {
+    if (localBounds.halfExtents.x <= StaticModelCollisionEpsilon
+            || localBounds.halfExtents.y <= StaticModelCollisionEpsilon
+            || localBounds.top <= localBounds.bottom
+                    + StaticModelCollisionEpsilon) {
         outCollider.failed = true;
         return false;
     }
@@ -394,13 +398,21 @@ bool BuildSectorStaticModelCollider(
             transform.yawRadians,
             transform.rotationZRadians,
             scale);
-    const float cosine = std::cos(transform.yawRadians);
-    const float sine = std::sin(transform.yawRadians);
+    const Matrix yawRotation = BuildSectorStaticModelRotation(
+            0.0f,
+            transform.yawRadians,
+            0.0f);
+    const Vector3 worldAxisX = Vector3Transform(
+            Vector3{localBounds.axisX.x, 0.0f, localBounds.axisX.y},
+            yawRotation);
+    const Vector3 worldAxisZ = Vector3Transform(
+            Vector3{localBounds.axisZ.x, 0.0f, localBounds.axisZ.y},
+            yawRotation);
     outCollider.axisX = NormalizeOrFallback(
-            Vector2{cosine, -sine},
+            Vector2{worldAxisX.x, worldAxisX.z},
             Vector2{1.0f, 0.0f});
     outCollider.axisZ = NormalizeOrFallback(
-            Vector2{sine, cosine},
+            Vector2{worldAxisZ.x, worldAxisZ.z},
             Vector2{0.0f, 1.0f});
 
     float minimumX = std::numeric_limits<float>::infinity();
@@ -409,11 +421,16 @@ bool BuildSectorStaticModelCollider(
     float maximumZ = -std::numeric_limits<float>::infinity();
     float minimumY = std::numeric_limits<float>::infinity();
     float maximumY = -std::numeric_limits<float>::infinity();
-    for (float x : {localBounds.min.x, localBounds.max.x}) {
-        for (float y : {localBounds.min.y, localBounds.max.y}) {
-            for (float z : {localBounds.min.z, localBounds.max.z}) {
+    for (float extentX : {-localBounds.halfExtents.x, localBounds.halfExtents.x}) {
+        for (float y : {localBounds.bottom, localBounds.top}) {
+            for (float extentZ : {-localBounds.halfExtents.y, localBounds.halfExtents.y}) {
+                const Vector2 localHorizontal = Add(
+                        localBounds.center,
+                        Add(
+                                Scale(localBounds.axisX, extentX),
+                                Scale(localBounds.axisZ, extentZ)));
                 const Vector3 world = Vector3Transform(
-                        Vector3{x, y, z},
+                        Vector3{localHorizontal.x, y, localHorizontal.y},
                         authoredTransform);
                 if (!IsFinite(world)) {
                     outCollider.failed = true;
@@ -485,10 +502,10 @@ bool UpdateSectorStaticModelColliderSystem(
                     return;
                 }
                 changed = true;
-                if (!asset->hasLocalBounds
+                if (!asset->hasLocalCollisionBounds
                         || !BuildSectorStaticModelCollider(
                                 staticModel.placedObjectId,
-                                asset->localBounds,
+                                asset->localCollisionBounds,
                                 transform,
                                 staticModel.scale,
                                 collider)) {
@@ -542,10 +559,10 @@ bool UpdateSectorStaticModelColliderSystem(
                 }
                 collider.resolved = false;
                 changed = true;
-                if (!asset->hasLocalBounds
+                if (!asset->hasLocalCollisionBounds
                         || !BuildSectorStaticModelCollider(
                                 dynamicModel.placedObjectId,
-                                asset->localBounds,
+                                asset->localCollisionBounds,
                                 transform,
                                 dynamicModel.scale,
                                 collider)) {

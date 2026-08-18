@@ -2549,6 +2549,12 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
             ? &levelMarkerEditingService.value()
             : nullptr;
     context.triggerEditing = triggerEditingService ? &triggerEditingService.value() : nullptr;
+    context.screenToMap = [this](Vector2 screenPoint) {
+        return ScreenToMap(screenPoint);
+    };
+    context.snapMapPoint = [this](Vector2 mapPoint) {
+        return SnapMapPoint(mapPoint);
+    };
     context.startAuthoringVertexDrag = [](void* userData, int vertexId, SectorTopologyCoordPoint point) {
         static_cast<SectorEditor*>(userData)->StartAuthoringVertexDrag(vertexId, point);
     };
