@@ -32,10 +32,17 @@ dual-paraboloid tiles, one for each world-Z hemisphere. The DPSM geometry stage
 adaptively subdivides large triangles, clips each generated triangle to the
 active hemisphere, and then applies the nonlinear projection. Clipping before
 rasterization prevents geometry crossing the paraboloid seam from producing
-invalid shadow footprints. The geometry stage also supplies the original
-triangle plane so the fragment shader can invert the paraboloid projection,
-intersect the resulting light ray with that plane, and write exact radial
-depth instead of deriving depth from an interpolated world position.
+invalid shadow footprints. Its 52-vertex output declaration is the exact
+worst case for the four-way subdivision and hemisphere clipping, keeping the
+expanded caster payload within the OpenGL 3.3 total-output-component limit.
+The geometry stage also supplies the original
+triangle origin and edges so the fragment shader can invert the paraboloid
+projection, intersect the resulting light ray with that plane, and write exact
+radial depth instead of deriving depth from an interpolated world position.
+The fragment stage reconstructs barycentric coordinates on the original
+source triangle and rejects projected chord overdraw outside it, preventing
+large floor triangles from spilling false shadows across nearby sector
+boundaries.
 
 Opaque and alpha-tested surface receivers compensate for point-shadow texel
 quantization by snapping each lookup to its actual atlas texel center and

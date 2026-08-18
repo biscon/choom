@@ -688,6 +688,34 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&pointBoneIndexBinding<geometryShaderLink
                     &&pointBoneWeightBinding<geometryShaderLink,
           "point-light geometry shader binds raylib bone VAO attributes before linking");
+    const std::size_t pointTrianglePayload=dynamicLightingShadows.find(
+            "flat out vec3 fragTriangleOrigin;");
+    const std::size_t pointShadowVertexBudget=dynamicLightingShadows.find(
+            "layout(triangle_strip, max_vertices = 52) out;");
+    const std::size_t pointTriangleContainment=dynamicLightingShadows.find(
+            "const float triangleContainmentTolerance = 0.0001;");
+    const std::size_t pointTriangleDiscard=dynamicLightingShadows.find(
+            "barycentricU + barycentricV\n"
+            "                    > 1.0 + triangleContainmentTolerance) discard;");
+    const std::size_t pointShadowDepthWrite=dynamicLightingShadows.find(
+            "gl_FragDepth = clamp(distanceToLight / pointLightRadius",
+            pointTriangleContainment);
+    Check(pointShadowVertexBudget!=std::string::npos
+                    &&pointTrianglePayload!=std::string::npos
+                    &&dynamicLightingShadows.find(
+                               "flat out vec3 fragTriangleEdge0;")
+                            !=std::string::npos
+                    &&dynamicLightingShadows.find(
+                               "flat out vec3 fragTriangleEdge1;")
+                            !=std::string::npos
+                    &&dynamicLightingShadows.find("fragTrianglePlane")
+                            ==std::string::npos
+                    &&pointTriangleContainment!=std::string::npos
+                    &&pointTriangleDiscard!=std::string::npos
+                    &&pointShadowDepthWrite!=std::string::npos
+                    &&pointTriangleContainment<pointTriangleDiscard
+                    &&pointTriangleDiscard<pointShadowDepthWrite,
+          "point-light shadow casters stay within the geometry output budget and reject paraboloid chord overdraw");
     const std::string pbrModels=ReadSource(PBR_SHADER_SOURCE_PATH);
     Check(pbrModels.find("dynamicLightContext.shadowMaps.shadowMap0")
                             !=std::string::npos

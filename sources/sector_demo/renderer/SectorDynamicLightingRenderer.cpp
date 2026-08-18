@@ -297,19 +297,26 @@ void main()
 // for large, low-poly sector triangles without changing source meshes. Each
 // generated triangle is clipped to the active hemisphere before projection so
 // triangles crossing the paraboloid seam cannot rasterize invalid footprints.
+// The fragment stage also rejects chord overdraw outside the original triangle.
 const char* SectorPointLightShadowGs = R"(
 #version 330
 layout(triangles) in;
-layout(triangle_strip, max_vertices = 64) out;
+// Four-way subdivision clipped by one plane can emit at most 52 vertices:
+// nine full triangles, four clipped quads, and three clipped triangles.
+layout(triangle_strip, max_vertices = 52) out;
 in vec3 worldPositionVs[];
 in vec2 texCoordVs[];
 noperspective out vec2 fragParaboloidPosition;
 noperspective out vec2 fragTexCoord;
-flat out vec4 fragTrianglePlane;
+flat out vec3 fragTriangleOrigin;
+flat out vec3 fragTriangleEdge0;
+flat out vec3 fragTriangleEdge1;
 uniform vec3 pointLightPosition;
 uniform int pointHemisphere;
 
-vec4 trianglePlane;
+vec3 triangleOrigin;
+vec3 triangleEdge0;
+vec3 triangleEdge1;
 
 vec3 worldAt(vec3 bary)
 {
@@ -326,7 +333,9 @@ vec2 texCoordAt(vec3 bary)
 void emitProjectedPoint(vec3 worldPosition, vec2 texCoord)
 {
     fragTexCoord = texCoord;
-    fragTrianglePlane = trianglePlane;
+    fragTriangleOrigin = triangleOrigin;
+    fragTriangleEdge0 = triangleEdge0;
+    fragTriangleEdge1 = triangleEdge1;
     vec3 local = worldPosition - pointLightPosition;
     float distanceToLight = max(length(local), 0.00001);
     float hemisphereZ = local.z * float(pointHemisphere);
@@ -407,17 +416,14 @@ void emitSubdividedTriangle(vec3 a, vec3 b, vec3 c)
 }
 void main()
 {
-    vec3 planeNormal = cross(
-            worldPositionVs[1] - worldPositionVs[0],
-            worldPositionVs[2] - worldPositionVs[0]);
+    triangleOrigin = worldPositionVs[0] - pointLightPosition;
+    triangleEdge0 = worldPositionVs[1] - worldPositionVs[0];
+    triangleEdge1 = worldPositionVs[2] - worldPositionVs[0];
+    vec3 planeNormal = cross(triangleEdge0, triangleEdge1);
     float planeNormalLengthSquared = dot(planeNormal, planeNormal);
     if (planeNormalLengthSquared <= 0.000000000001) return;
-    planeNormal *= inversesqrt(planeNormalLengthSquared);
-    trianglePlane = vec4(
-            planeNormal,
-            dot(planeNormal, worldPositionVs[0] - pointLightPosition));
 
-    vec3 lightVector0 = worldPositionVs[0] - pointLightPosition;
+    vec3 lightVector0 = triangleOrigin;
     vec3 lightVector1 = worldPositionVs[1] - pointLightPosition;
     vec3 lightVector2 = worldPositionVs[2] - pointLightPosition;
     float lengthSquared0 = dot(lightVector0, lightVector0);
@@ -453,7 +459,9 @@ const char* SectorPointLightShadowFs = R"(
 #version 330
 noperspective in vec2 fragParaboloidPosition;
 noperspective in vec2 fragTexCoord;
-flat in vec4 fragTrianglePlane;
+flat in vec3 fragTriangleOrigin;
+flat in vec3 fragTriangleEdge0;
+flat in vec3 fragTriangleEdge1;
 uniform sampler2D texture0;
 uniform int alphaTest;
 uniform float alphaCutoff;
@@ -473,10 +481,35 @@ void main()
                     * float(pointHemisphere));
     rayDirection = normalize(rayDirection);
 
-    float planeDirection = dot(fragTrianglePlane.xyz, rayDirection);
+    vec3 triangleNormal = cross(fragTriangleEdge0, fragTriangleEdge1);
+    float triangleNormalLengthSquared = dot(triangleNormal, triangleNormal);
+    if (triangleNormalLengthSquared <= 0.000000000001) discard;
+    triangleNormal *= inversesqrt(triangleNormalLengthSquared);
+    float planeDirection = dot(triangleNormal, rayDirection);
     if (abs(planeDirection) <= 0.000001) discard;
-    float distanceToLight = fragTrianglePlane.w / planeDirection;
+    float distanceToLight = dot(triangleNormal, fragTriangleOrigin)
+            / planeDirection;
     if (distanceToLight <= 0.00001 || distanceToLight > pointLightRadius) discard;
+
+    vec3 triangleRelativePosition = rayDirection * distanceToLight
+            - fragTriangleOrigin;
+    float edge00 = dot(fragTriangleEdge0, fragTriangleEdge0);
+    float edge01 = dot(fragTriangleEdge0, fragTriangleEdge1);
+    float edge11 = dot(fragTriangleEdge1, fragTriangleEdge1);
+    float position0 = dot(triangleRelativePosition, fragTriangleEdge0);
+    float position1 = dot(triangleRelativePosition, fragTriangleEdge1);
+    float barycentricDenominator = edge00 * edge11 - edge01 * edge01;
+    if (abs(barycentricDenominator) <= 0.000000000001) discard;
+    float inverseBarycentricDenominator = 1.0 / barycentricDenominator;
+    float barycentricU = (edge11 * position0 - edge01 * position1)
+            * inverseBarycentricDenominator;
+    float barycentricV = (edge00 * position1 - edge01 * position0)
+            * inverseBarycentricDenominator;
+    const float triangleContainmentTolerance = 0.0001;
+    if (barycentricU < -triangleContainmentTolerance
+            || barycentricV < -triangleContainmentTolerance
+            || barycentricU + barycentricV
+                    > 1.0 + triangleContainmentTolerance) discard;
     gl_FragDepth = clamp(distanceToLight / pointLightRadius, 0.0, 1.0);
 }
 )";
