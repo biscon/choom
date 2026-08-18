@@ -67,7 +67,11 @@ geometry and stationary casters reuse their tiles. Changed door and static
 model bounds dirty only intersecting lights when exact old/new bounds are
 available, with conservative all-light invalidation as the fallback. Compatible
 stale tiles remain sampleable while queued; new, moved, or reassigned tiles do
-not become sampleable until rendered. Slot ownership is persistent and keyed by
+not become sampleable until rendered. Routine updates clear only the affected
+scissored tiles. A full-atlas clear is reserved for atlas initialization or
+resource changes and invalidates every cached tile, including temporarily
+unassigned tiles, so a later returning light must rebuild erased depth data.
+Slot ownership is persistent and keyed by
 the composite light identity, so adding or removing another caster does not
 move or invalidate retained lights. A point retains one adjacent two-slot span;
 if fragmentation prevents a new pair, that newcomer remains temporarily

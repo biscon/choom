@@ -716,6 +716,31 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&pointTriangleContainment<pointTriangleDiscard
                     &&pointTriangleDiscard<pointShadowDepthWrite,
           "point-light shadow casters stay within the geometry output budget and reject paraboloid chord overdraw");
+    const std::size_t atlasReset=dynamicLightingShadows.find(
+            "if (shadowAtlasNeedsFullClear) {");
+    const std::size_t invalidateCachedTile=dynamicLightingShadows.find(
+            "state.valid = false;",atlasReset);
+    const std::size_t assignedTileFilter=dynamicLightingShadows.find(
+            "if (!state.assigned) continue;",invalidateCachedTile);
+    const std::size_t lifecycleFullClear=dynamicLightingShadows.find(
+            "const bool fullClear = shadowAtlasNeedsFullClear;",
+            assignedTileFilter);
+    const std::size_t incrementalTileClear=dynamicLightingShadows.find(
+            "if (!fullClear) glClear(GL_DEPTH_BUFFER_BIT);",
+            lifecycleFullClear);
+    Check(atlasReset!=std::string::npos
+                    &&invalidateCachedTile!=std::string::npos
+                    &&assignedTileFilter!=std::string::npos
+                    &&lifecycleFullClear!=std::string::npos
+                    &&incrementalTileClear!=std::string::npos
+                    &&atlasReset<invalidateCachedTile
+                    &&invalidateCachedTile<assignedTileFilter
+                    &&assignedTileFilter<lifecycleFullClear
+                    &&lifecycleFullClear<incrementalTileClear
+                    &&dynamicLightingShadows.find(
+                               "pendingShadowLightUpdates.size() == shadowCasters.size()")
+                            ==std::string::npos,
+          "full shadow-atlas clears invalidate every cached tile while routine updates clear only their scissored tiles");
     const std::string pbrModels=ReadSource(PBR_SHADER_SOURCE_PATH);
     Check(pbrModels.find("dynamicLightContext.shadowMaps.shadowMap0")
                             !=std::string::npos

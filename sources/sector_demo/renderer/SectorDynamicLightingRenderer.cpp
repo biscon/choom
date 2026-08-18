@@ -1605,8 +1605,8 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
 
     if (shadowAtlasNeedsFullClear) {
         for (ShadowAtlasTileState& state : shadowAtlasTileStates) {
-            if (!state.assigned) continue;
             state.valid = false;
+            if (!state.assigned) continue;
             state.dirty = true;
             if (state.dirtySerial == 0) {
                 state.dirtySerial = nextShadowDirtySerial++;
@@ -1848,9 +1848,7 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
     const std::size_t updateCount = SectorDynamicShadowUpdateCount(
             pendingShadowLightUpdates.size(), maxShadowLightUpdatesPerFrame);
     BeginTextureMode(*shadowMap);
-    const bool fullClear = shadowAtlasNeedsFullClear
-            || (updateCount == pendingShadowLightUpdates.size()
-                    && pendingShadowLightUpdates.size() == shadowCasters.size());
+    const bool fullClear = shadowAtlasNeedsFullClear;
     if (fullClear) {
         ClearBackground(WHITE);
         shadowAtlasNeedsFullClear = false;
