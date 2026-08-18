@@ -21,18 +21,6 @@ int ShadowMapResolution(FpsShadowQuality quality)
     return quality == FpsShadowQuality::Low ? 512 : 1024;
 }
 
-float ProjectedShadowInterval(FpsShadowQuality quality)
-{
-    if (quality == FpsShadowQuality::Low) return 1.0f / 15.0f;
-    if (quality == FpsShadowQuality::Medium) return 1.0f / 30.0f;
-    return 0.0f;
-}
-
-int ProjectedShadowResolution(FpsShadowQuality quality)
-{
-    return quality == FpsShadowQuality::Low ? 128 : 256;
-}
-
 } // namespace
 
 bool GameApplication::Init(
@@ -402,8 +390,6 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
                 applicationSettings.graphics.volumetricQuality,
                 applicationSettings.graphics.shadowQuality != FpsShadowQuality::Off,
                 ShadowMapResolution(applicationSettings.graphics.shadowQuality),
-                ProjectedShadowInterval(applicationSettings.graphics.shadowQuality),
-                ProjectedShadowResolution(applicationSettings.graphics.shadowQuality),
                 applicationSettings.graphics.maxDynamicLights,
                 applicationSettings.graphics.maxShadowLightUpdatesPerFrame,
                 applicationSettings.graphics.depthPrepass,
@@ -414,8 +400,6 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
                 applicationSettings.graphics.volumetricQuality,
                 applicationSettings.graphics.shadowQuality != FpsShadowQuality::Off,
                 ShadowMapResolution(applicationSettings.graphics.shadowQuality),
-                ProjectedShadowInterval(applicationSettings.graphics.shadowQuality),
-                ProjectedShadowResolution(applicationSettings.graphics.shadowQuality),
                 applicationSettings.graphics.maxDynamicLights,
                 applicationSettings.graphics.maxShadowLightUpdatesPerFrame,
                 applicationSettings.graphics.depthPrepass,

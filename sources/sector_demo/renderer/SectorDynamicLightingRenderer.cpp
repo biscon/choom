@@ -1,7 +1,11 @@
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 
 #include "engine/assets/AssetManager.h"
+#include "engine/components/AnimatedModel.h"
+#include "engine/ecs/World.h"
+#include "engine/systems/AnimatedModelSystem.h"
 #include "sector_demo/SectorBounds.h"
+#include "sector_demo/SectorDynamicModelShadowCasters.h"
 #include "sector_demo/SectorDoorRuntime.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorStaticModelShadow.h"
@@ -207,16 +211,32 @@ const char* SectorSpotLightShadowVs = R"(
 #version 330
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
+in vec4 vertexBoneIndices;
+in vec4 vertexBoneWeights;
 
 uniform mat4 lightViewProjection;
 uniform mat4 matModel;
+uniform int useSkinning;
+#define MAX_BONE_NUM 128
+uniform mat4 boneMatrices[MAX_BONE_NUM];
 
 out vec2 fragTexCoord;
 
 void main()
 {
+    vec4 localPosition = vec4(vertexPosition, 1.0);
+    if (useSkinning != 0) {
+        int bone0 = int(vertexBoneIndices.x);
+        int bone1 = int(vertexBoneIndices.y);
+        int bone2 = int(vertexBoneIndices.z);
+        int bone3 = int(vertexBoneIndices.w);
+        localPosition = vertexBoneWeights.x * (boneMatrices[bone0] * localPosition)
+                + vertexBoneWeights.y * (boneMatrices[bone1] * localPosition)
+                + vertexBoneWeights.z * (boneMatrices[bone2] * localPosition)
+                + vertexBoneWeights.w * (boneMatrices[bone3] * localPosition);
+    }
     fragTexCoord = vertexTexCoord;
-    gl_Position = lightViewProjection * matModel * vec4(vertexPosition, 1.0);
+    gl_Position = lightViewProjection * matModel * localPosition;
 }
 )";
 
@@ -245,12 +265,28 @@ const char* SectorPointLightShadowVs = R"(
 #version 330
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
+in vec4 vertexBoneIndices;
+in vec4 vertexBoneWeights;
 uniform mat4 matModel;
+uniform int useSkinning;
+#define MAX_BONE_NUM 128
+uniform mat4 boneMatrices[MAX_BONE_NUM];
 out vec3 worldPositionVs;
 out vec2 texCoordVs;
 void main()
 {
-    vec4 world = matModel * vec4(vertexPosition, 1.0);
+    vec4 localPosition = vec4(vertexPosition, 1.0);
+    if (useSkinning != 0) {
+        int bone0 = int(vertexBoneIndices.x);
+        int bone1 = int(vertexBoneIndices.y);
+        int bone2 = int(vertexBoneIndices.z);
+        int bone3 = int(vertexBoneIndices.w);
+        localPosition = vertexBoneWeights.x * (boneMatrices[bone0] * localPosition)
+                + vertexBoneWeights.y * (boneMatrices[bone1] * localPosition)
+                + vertexBoneWeights.z * (boneMatrices[bone2] * localPosition)
+                + vertexBoneWeights.w * (boneMatrices[bone3] * localPosition);
+    }
+    vec4 world = matModel * localPosition;
     worldPositionVs = world.xyz;
     texCoordVs = vertexTexCoord;
     gl_Position = world;
@@ -476,6 +512,25 @@ Shader LoadGeometryShader(const char* vertexSource, const char* geometrySource,
     glAttachShader(program, vertex);
     glAttachShader(program, geometry);
     glAttachShader(program, fragment);
+    // Mesh VAOs are uploaded against raylib's fixed attribute locations.
+    // Programs linked outside LoadShaderFromMemory() must preserve those
+    // bindings explicitly or skinned meshes read unrelated VAO streams.
+    glBindAttribLocation(
+            program,
+            RL_DEFAULT_SHADER_ATTRIB_LOCATION_POSITION,
+            "vertexPosition");
+    glBindAttribLocation(
+            program,
+            RL_DEFAULT_SHADER_ATTRIB_LOCATION_TEXCOORD,
+            "vertexTexCoord");
+    glBindAttribLocation(
+            program,
+            RL_DEFAULT_SHADER_ATTRIB_LOCATION_BONEINDICES,
+            "vertexBoneIndices");
+    glBindAttribLocation(
+            program,
+            RL_DEFAULT_SHADER_ATTRIB_LOCATION_BONEWEIGHTS,
+            "vertexBoneWeights");
     glLinkProgram(program);
     glDeleteShader(vertex);
     glDeleteShader(geometry);
@@ -795,13 +850,17 @@ void SectorDynamicLightingRenderer::Reset()
     currentDoorShadowCasterBounds.clear();
     previousStaticShadowCasterBounds.clear();
     currentStaticShadowCasterBounds.clear();
+    previousDynamicShadowCasterBounds.clear();
+    currentDynamicShadowCasterBounds.clear();
     changedShadowCasterBounds.clear();
     nextShadowDirtySerial = 1;
     shadowAtlasNeedsFullClear = true;
     doorShadowCasterBoundsInitialized = false;
     staticShadowCasterBoundsInitialized = false;
+    dynamicShadowCasterBoundsInitialized = false;
     cachedDoorShadowCasterRevision = 0;
     cachedStaticModelShadowCasterRevision = 0;
+    cachedDynamicModelShadowCasterRevision = 0;
     shadowRenderStats = {};
 }
 
@@ -833,7 +892,9 @@ void SectorDynamicLightingRenderer::ReserveReceiverBoundsCapacity(
     currentDoorShadowCasterBounds.reserve(runtimeObjectCapacity);
     previousStaticShadowCasterBounds.reserve(runtimeObjectCapacity);
     currentStaticShadowCasterBounds.reserve(runtimeObjectCapacity);
-    changedShadowCasterBounds.reserve(runtimeObjectCapacity * 4);
+    previousDynamicShadowCasterBounds.reserve(runtimeObjectCapacity);
+    currentDynamicShadowCasterBounds.reserve(runtimeObjectCapacity);
+    changedShadowCasterBounds.reserve(runtimeObjectCapacity * 6);
     cachedLightingPortalBlockers.reserve(runtimeObjectCapacity * 2);
 }
 
@@ -1340,21 +1401,36 @@ bool SectorDynamicLightingRenderer::LoadShadowMaterial()
             GetShaderLocationAttrib(shadowMaterial.shader, "vertexPosition");
     shadowMaterial.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] =
             GetShaderLocationAttrib(shadowMaterial.shader, "vertexTexCoord");
+    shadowMaterial.shader.locs[SHADER_LOC_VERTEX_BONEIDS] =
+            GetShaderLocationAttrib(shadowMaterial.shader, "vertexBoneIndices");
+    shadowMaterial.shader.locs[SHADER_LOC_VERTEX_BONEWEIGHTS] =
+            GetShaderLocationAttrib(shadowMaterial.shader, "vertexBoneWeights");
     shadowMaterial.shader.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(shadowMaterial.shader, "matModel");
+    shadowMaterial.shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] =
+            GetShaderLocation(shadowMaterial.shader, "boneMatrices");
     shadowMaterial.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(shadowMaterial.shader, "texture0");
     shadowLightViewProjectionLoc = GetShaderLocation(shadowMaterial.shader, "lightViewProjection");
+    shadowUseSkinningLoc = GetShaderLocation(shadowMaterial.shader, "useSkinning");
     shadowDefaultTexture = shadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture;
     spotShadowCutoutMaterial.shader = spotCutoutShader;
     spotShadowCutoutMaterial.shader.locs[SHADER_LOC_VERTEX_POSITION] =
             GetShaderLocationAttrib(spotCutoutShader, "vertexPosition");
     spotShadowCutoutMaterial.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] =
             GetShaderLocationAttrib(spotCutoutShader, "vertexTexCoord");
+    spotShadowCutoutMaterial.shader.locs[SHADER_LOC_VERTEX_BONEIDS] =
+            GetShaderLocationAttrib(spotCutoutShader, "vertexBoneIndices");
+    spotShadowCutoutMaterial.shader.locs[SHADER_LOC_VERTEX_BONEWEIGHTS] =
+            GetShaderLocationAttrib(spotCutoutShader, "vertexBoneWeights");
     spotShadowCutoutMaterial.shader.locs[SHADER_LOC_MATRIX_MODEL] =
             GetShaderLocation(spotCutoutShader, "matModel");
+    spotShadowCutoutMaterial.shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] =
+            GetShaderLocation(spotCutoutShader, "boneMatrices");
     spotShadowCutoutMaterial.shader.locs[SHADER_LOC_MAP_DIFFUSE] =
             GetShaderLocation(spotCutoutShader, "texture0");
     spotShadowCutoutLightViewProjectionLoc =
             GetShaderLocation(spotCutoutShader, "lightViewProjection");
+    spotShadowCutoutUseSkinningLoc =
+            GetShaderLocation(spotCutoutShader, "useSkinning");
     shadowAlphaTestLoc = GetShaderLocation(spotCutoutShader, "alphaTest");
     shadowAlphaCutoffLoc = GetShaderLocation(spotCutoutShader, "alphaCutoff");
     spotShadowCutoutDefaultTexture =
@@ -1364,13 +1440,20 @@ bool SectorDynamicLightingRenderer::LoadShadowMaterial()
             GetShaderLocationAttrib(pointShader, "vertexPosition");
     pointShadowMaterial.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] =
             GetShaderLocationAttrib(pointShader, "vertexTexCoord");
+    pointShadowMaterial.shader.locs[SHADER_LOC_VERTEX_BONEIDS] =
+            GetShaderLocationAttrib(pointShader, "vertexBoneIndices");
+    pointShadowMaterial.shader.locs[SHADER_LOC_VERTEX_BONEWEIGHTS] =
+            GetShaderLocationAttrib(pointShader, "vertexBoneWeights");
     pointShadowMaterial.shader.locs[SHADER_LOC_MATRIX_MODEL] =
             GetShaderLocation(pointShader, "matModel");
+    pointShadowMaterial.shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] =
+            GetShaderLocation(pointShader, "boneMatrices");
     pointShadowMaterial.shader.locs[SHADER_LOC_MAP_DIFFUSE] =
             GetShaderLocation(pointShader, "texture0");
     pointShadowLightPositionLoc = GetShaderLocation(pointShader, "pointLightPosition");
     pointShadowLightRadiusLoc = GetShaderLocation(pointShader, "pointLightRadius");
     pointShadowHemisphereLoc = GetShaderLocation(pointShader, "pointHemisphere");
+    pointShadowUseSkinningLoc = GetShaderLocation(pointShader, "useSkinning");
     pointShadowAlphaTestLoc = GetShaderLocation(pointShader, "alphaTest");
     pointShadowAlphaCutoffLoc = GetShaderLocation(pointShader, "alphaCutoff");
     pointShadowDefaultTexture = pointShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture;
@@ -1399,12 +1482,15 @@ void SectorDynamicLightingRenderer::UnloadShadowMaterial()
     pointShadowDefaultTexture = Texture2D{};
     shadowMaterialLoaded = false;
     shadowLightViewProjectionLoc = -1;
+    shadowUseSkinningLoc = -1;
     spotShadowCutoutLightViewProjectionLoc = -1;
+    spotShadowCutoutUseSkinningLoc = -1;
     shadowAlphaTestLoc = -1;
     shadowAlphaCutoffLoc = -1;
     pointShadowLightPositionLoc = -1;
     pointShadowLightRadiusLoc = -1;
     pointShadowHemisphereLoc = -1;
+    pointShadowUseSkinningLoc = -1;
     pointShadowAlphaTestLoc = -1;
     pointShadowAlphaCutoffLoc = -1;
 }
@@ -1470,6 +1556,8 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
     shadowRenderStats.doorCasterRevision = context.doorShadowCasterRevision;
     shadowRenderStats.staticModelCasterRevision =
             context.staticModelShadowCasterRevision;
+    shadowRenderStats.dynamicModelCasterRevision =
+            context.dynamicModelShadowCasterRevision;
     if (context.assets == nullptr
             || !IsShadowRenderReady()
             || context.sectorDrawRecords == nullptr
@@ -1497,10 +1585,14 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
             != cachedDoorShadowCasterRevision;
     const bool staticRevisionChanged = context.staticModelShadowCasterRevision
             != cachedStaticModelShadowCasterRevision;
+    const bool dynamicRevisionChanged = context.dynamicModelShadowCasterRevision
+            != cachedDynamicModelShadowCasterRevision;
     const bool refreshDoorBounds = doorRevisionChanged
             || !doorShadowCasterBoundsInitialized;
     const bool refreshStaticBounds = staticRevisionChanged
             || !staticShadowCasterBoundsInitialized;
+    const bool refreshDynamicBounds = dynamicRevisionChanged
+            || !dynamicShadowCasterBoundsInitialized;
     changedShadowCasterBounds.clear();
     bool preciseCasterChanges = true;
     const auto appendChangedBounds = [this](
@@ -1517,7 +1609,9 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                 continue;
             }
             if (std::memcmp(&previousIt->bounds,
-                        &currentRecord.bounds, sizeof(BoundingBox)) != 0) {
+                        &currentRecord.bounds, sizeof(BoundingBox)) != 0
+                    || previousIt->contentFingerprint
+                            != currentRecord.contentFingerprint) {
                 changedShadowCasterBounds.push_back(previousIt->bounds);
                 changedShadowCasterBounds.push_back(currentRecord.bounds);
             }
@@ -1594,6 +1688,41 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
         previousStaticShadowCasterBounds.swap(currentStaticShadowCasterBounds);
         staticShadowCasterBoundsInitialized = true;
     }
+    if (refreshDynamicBounds) {
+        currentDynamicShadowCasterBounds.clear();
+        if (context.dynamicModelShadowCasters != nullptr) {
+            for (const SectorDynamicModelShadowCaster& caster
+                    : *context.dynamicModelShadowCasters) {
+                const engine::ModelAsset* asset =
+                        context.assets->GetModelAsset(caster.model);
+                if (asset == nullptr) {
+                    preciseCasterChanges = false;
+                    continue;
+                }
+                const Matrix transform = MatrixMultiply(
+                        asset->model.transform,
+                        caster.transform);
+                const BoundingBox localBounds = asset->hasAnimatedLocalBounds
+                        ? asset->animatedLocalBounds
+                        : asset->localBounds;
+                currentDynamicShadowCasterBounds.push_back(
+                        ShadowCasterBoundsRecord{
+                                (uint64_t{4} << 32)
+                                        | static_cast<uint32_t>(
+                                                caster.placedObjectId),
+                                TransformSectorDoorModelBounds(
+                                        localBounds,
+                                        transform),
+                                caster.contentFingerprint});
+            }
+        }
+        appendChangedBounds(
+                currentDynamicShadowCasterBounds,
+                previousDynamicShadowCasterBounds);
+        previousDynamicShadowCasterBounds.swap(
+                currentDynamicShadowCasterBounds);
+        dynamicShadowCasterBoundsInitialized = true;
+    }
 
     const auto markCasterDirty = [this](
             const SectorPreviewDynamicSpotLightShadowCaster& caster) {
@@ -1606,7 +1735,7 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
             state.dirty = true;
         }
     };
-    if (refreshDoorBounds || refreshStaticBounds) {
+    if (refreshDoorBounds || refreshStaticBounds || refreshDynamicBounds) {
         for (const SectorPreviewDynamicSpotLightShadowCaster& caster
                 : shadowCasters) {
             bool affected = !preciseCasterChanges;
@@ -1639,6 +1768,8 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
     cachedDoorShadowCasterRevision = context.doorShadowCasterRevision;
     cachedStaticModelShadowCasterRevision =
             context.staticModelShadowCasterRevision;
+    cachedDynamicModelShadowCasterRevision =
+            context.dynamicModelShadowCasterRevision;
 
     pendingShadowLightUpdates.clear();
     for (std::size_t casterIndex = 0;
@@ -1728,6 +1859,8 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
         const SectorPreviewDynamicPointLightUniform& light =
                 selectedLights[static_cast<std::size_t>(matrix.dynamicLightIndex)];
         Material& activeMaterial = pointProjection ? pointShadowMaterial : shadowMaterial;
+        const int activeUseSkinningLoc = pointProjection
+                ? pointShadowUseSkinningLoc : shadowUseSkinningLoc;
         const int activeAlphaTestLoc = pointProjection
                 ? pointShadowAlphaTestLoc : -1;
         const int activeAlphaCutoffLoc = pointProjection
@@ -1748,6 +1881,21 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                     spotShadowCutoutMaterial.shader,
                     spotShadowCutoutLightViewProjectionLoc,
                     matrix.lightViewProjection);
+        }
+        const int noSkinning = 0;
+        if (activeUseSkinningLoc >= 0) {
+            SetShaderValue(
+                    activeMaterial.shader,
+                    activeUseSkinningLoc,
+                    &noSkinning,
+                    SHADER_UNIFORM_INT);
+        }
+        if (!pointProjection && spotShadowCutoutUseSkinningLoc >= 0) {
+            SetShaderValue(
+                    spotShadowCutoutMaterial.shader,
+                    spotShadowCutoutUseSkinningLoc,
+                    &noSkinning,
+                    SHADER_UNIFORM_INT);
         }
         for (const SectorMeshBatch& batch : *context.sectorDrawRecords) {
             const SectorReceiverBounds* bounds = FindSectorReceiverBounds(
@@ -1903,6 +2051,101 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                             activeMaterial,
                             modelTransform);
                 }
+            }
+            rlEnableBackfaceCulling();
+        }
+        if (context.dynamicModelShadowCasters != nullptr
+                && context.runtimeObjectWorld != nullptr) {
+            rlDisableBackfaceCulling();
+            for (const SectorDynamicModelShadowCaster& caster
+                    : *context.dynamicModelShadowCasters) {
+                const engine::ModelAsset* asset =
+                        context.assets->GetModelAsset(caster.model);
+                if (asset == nullptr) {
+                    if (!context.assets->HasFailed(caster.model)) {
+                        lightCacheable = false;
+                    }
+                    continue;
+                }
+                const Matrix modelTransform = MatrixMultiply(
+                        asset->model.transform,
+                        caster.transform);
+                const BoundingBox localBounds = asset->hasAnimatedLocalBounds
+                        ? asset->animatedLocalBounds
+                        : asset->localBounds;
+                const SectorAabb3 casterBounds = ToSectorAabb3(
+                        TransformSectorDoorModelBounds(
+                                localBounds,
+                                modelTransform));
+                if (!ShadowLightIntersectsBounds(
+                            light,
+                            matrix,
+                            casterBounds)) {
+                    ++shadowRenderStats.objectCastersCulled;
+                    continue;
+                }
+                if (!context.runtimeObjectWorld->IsAlive(caster.entity)
+                        || !context.runtimeObjectWorld
+                                ->Has<engine::AnimatedModelInstance>(
+                                        caster.entity)) {
+                    lightCacheable = false;
+                    continue;
+                }
+                engine::AnimatedModelInstance& instance =
+                        context.runtimeObjectWorld
+                                ->Get<engine::AnimatedModelInstance>(
+                                        caster.entity);
+                if (instance.model != caster.model
+                        || !instance.poseReady
+                        || instance.poseFailed) {
+                    lightCacheable = false;
+                    continue;
+                }
+                Model posedModel = engine::BuildAnimatedModelPoseView(
+                        *asset,
+                        instance);
+                const bool canSkin = posedModel.skeleton.boneCount > 0
+                        && posedModel.skeleton.boneCount
+                                <= engine::MaxAnimatedModelBones
+                        && posedModel.boneMatrices != nullptr
+                        && activeMaterial.shader
+                                   .locs[SHADER_LOC_MATRIX_BONETRANSFORMS]
+                                >= 0;
+                const int useSkinning = canSkin ? 1 : 0;
+                if (activeUseSkinningLoc >= 0) {
+                    SetShaderValue(
+                            activeMaterial.shader,
+                            activeUseSkinningLoc,
+                            &useSkinning,
+                            SHADER_UNIFORM_INT);
+                }
+                if (canSkin) {
+                    rlEnableShader(activeMaterial.shader.id);
+                    rlSetUniformMatrices(
+                            activeMaterial.shader
+                                    .locs[SHADER_LOC_MATRIX_BONETRANSFORMS],
+                            posedModel.boneMatrices,
+                            posedModel.skeleton.boneCount);
+                }
+                ++shadowRenderStats.objectCastersDrawn;
+                for (int meshIndex = 0;
+                        meshIndex < posedModel.meshCount;
+                        ++meshIndex) {
+                    if (posedModel.meshes[meshIndex].vertexCount <= 0) {
+                        continue;
+                    }
+                    DrawMesh(
+                            posedModel.meshes[meshIndex],
+                            activeMaterial,
+                            modelTransform);
+                }
+            }
+            if (activeUseSkinningLoc >= 0) {
+                SetShaderValue(
+                        activeMaterial.shader,
+                        activeUseSkinningLoc,
+                        &noSkinning,
+                        SHADER_UNIFORM_INT);
             }
             rlEnableBackfaceCulling();
         }

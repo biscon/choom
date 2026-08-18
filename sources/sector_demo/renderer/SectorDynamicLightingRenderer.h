@@ -23,6 +23,7 @@ struct SectorTopologyMap;
 struct SectorDoorShadowCaster;
 struct SectorDoorModelShadowCaster;
 struct SectorStaticModelShadowCaster;
+struct SectorDynamicModelShadowCaster;
 
 struct SectorDynamicSpotLightShadowRenderContext {
     using TextureResolver = const Texture2D* (*)(
@@ -36,13 +37,16 @@ struct SectorDynamicSpotLightShadowRenderContext {
             float& outHeight);
 
     engine::AssetManager* assets = nullptr;
+    engine::World* runtimeObjectWorld = nullptr;
     const std::vector<SectorMeshBatch>* sectorDrawRecords = nullptr;
     const std::vector<SectorDoorShadowCaster>* doorShadowCasters = nullptr;
     const std::vector<SectorDoorModelShadowCaster>* doorModelShadowCasters = nullptr;
     const std::vector<SectorStaticModelShadowCaster>* staticModelShadowCasters = nullptr;
+    const std::vector<SectorDynamicModelShadowCaster>* dynamicModelShadowCasters = nullptr;
     const std::vector<SectorReceiverBounds>* sectorReceiverBounds = nullptr;
     uint64_t doorShadowCasterRevision = 0;
     uint64_t staticModelShadowCasterRevision = 0;
+    uint64_t dynamicModelShadowCasterRevision = 0;
     void* userData = nullptr;
     void* doorMeshResolverUserData = nullptr;
     TextureResolver textureResolver = nullptr;
@@ -102,6 +106,7 @@ struct SectorDynamicShadowRenderStats {
     std::size_t objectCastersCulled = 0;
     uint64_t doorCasterRevision = 0;
     uint64_t staticModelCasterRevision = 0;
+    uint64_t dynamicModelCasterRevision = 0;
 };
 
 struct SectorDynamicLightSelectionStats {
@@ -247,6 +252,7 @@ private:
     struct ShadowCasterBoundsRecord {
         uint64_t key = 0;
         BoundingBox bounds{};
+        uint64_t contentFingerprint = 0;
     };
 
     void ReserveSelectionBuffers();
@@ -294,13 +300,17 @@ private:
     std::vector<ShadowCasterBoundsRecord> currentDoorShadowCasterBounds;
     std::vector<ShadowCasterBoundsRecord> previousStaticShadowCasterBounds;
     std::vector<ShadowCasterBoundsRecord> currentStaticShadowCasterBounds;
+    std::vector<ShadowCasterBoundsRecord> previousDynamicShadowCasterBounds;
+    std::vector<ShadowCasterBoundsRecord> currentDynamicShadowCasterBounds;
     std::vector<BoundingBox> changedShadowCasterBounds;
     uint64_t nextShadowDirtySerial = 1;
     bool shadowAtlasNeedsFullClear = true;
     bool doorShadowCasterBoundsInitialized = false;
     bool staticShadowCasterBoundsInitialized = false;
+    bool dynamicShadowCasterBoundsInitialized = false;
     uint64_t cachedDoorShadowCasterRevision = 0;
     uint64_t cachedStaticModelShadowCasterRevision = 0;
+    uint64_t cachedDynamicModelShadowCasterRevision = 0;
     SectorDynamicShadowRenderStats shadowRenderStats;
     RenderTexture2D shadowAtlas{};
     Material shadowMaterial = {};
@@ -315,12 +325,15 @@ private:
     std::size_t maxShadowLightUpdatesPerFrame = 2;
     float selectionFadeInSeconds = DynamicLightDefaultFadeInSeconds;
     int shadowLightViewProjectionLoc = -1;
+    int shadowUseSkinningLoc = -1;
     int spotShadowCutoutLightViewProjectionLoc = -1;
+    int spotShadowCutoutUseSkinningLoc = -1;
     int shadowAlphaTestLoc = -1;
     int shadowAlphaCutoffLoc = -1;
     int pointShadowLightPositionLoc = -1;
     int pointShadowLightRadiusLoc = -1;
     int pointShadowHemisphereLoc = -1;
+    int pointShadowUseSkinningLoc = -1;
     int pointShadowAlphaTestLoc = -1;
     int pointShadowAlphaCutoffLoc = -1;
 };

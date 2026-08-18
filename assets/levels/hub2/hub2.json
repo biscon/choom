@@ -233,7 +233,7 @@
         "modelPath": "assets/models/characters/TestCharacter.glb",
         "collision": true,
         "animation": "Sitting Idle",
-        "shadowMode": "projected_silhouette"
+        "shadowMode": "dynamic"
       },
       "position": [
         -72.0,
@@ -664,7 +664,8 @@
       "kind": "npc",
       "npc": {
         "definitionId": "Zombie1",
-        "instanceId": "zombie01"
+        "instanceId": "zombie01",
+        "shadowMode": "dynamic"
       },
       "position": [
         -208.0,
@@ -678,12 +679,13 @@
       "kind": "npc",
       "npc": {
         "definitionId": "Zombie1",
-        "instanceId": "zombie02"
+        "instanceId": "zombie02",
+        "shadowMode": "dynamic"
       },
       "position": [
-        -384.0,
+        -273.0,
         -27.0,
-        32.0
+        66.0
       ],
       "yawDegrees": 0.0
     },
@@ -692,12 +694,13 @@
       "kind": "npc",
       "npc": {
         "definitionId": "Zombie1",
-        "instanceId": "zombie03"
+        "instanceId": "zombie03",
+        "shadowMode": "dynamic"
       },
       "position": [
-        -424.0,
+        -260.0,
         -27.0,
-        176.0
+        108.0
       ],
       "yawDegrees": 0.0
     }
@@ -1188,7 +1191,9 @@
       "flickerSpeed": 0.5,
       "flickerAmount": 1.0,
       "castsShadow": true,
-      "shadowBias": 0.001500000013038516
+      "shadowBias": 0.001500000013038516,
+      "shadowStrength": 0.75,
+      "shadowSoftness": 2.0
     },
     {
       "id": 3,

@@ -74,6 +74,19 @@ An entering shadow caster remains at zero intensity until its assigned spot
 tile, or both point-light hemisphere tiles, are valid, then begins fading. A
 light that does not receive an atlas slot fades in immediately as unshadowed.
 
+Dynamic props and NPCs always receive available point- and spotlight atlas
+shadows through the world-model PBR path, on top of their baked object-probe or
+sector-ambient lighting. Their authored shadow mode controls casting only:
+`none` casts nothing, `contact` draws the local contact blob, and `dynamic`
+renders the current posed model into intersecting shared-atlas tiles. Animated
+bone poses, rendered transforms, visibility, and mode changes participate in
+the caster revision; unchanged objects retain cached tiles. A changed caster
+dirties only lights intersecting its previous or current bounds and those
+lights still honor `graphics.maxShadowLightUpdatesPerFrame`. `dynamic` has no
+contact fallback when global shadows are disabled, a light has no atlas slot,
+or its tile is not ready. Legacy authored `projected_silhouette` values load as
+`dynamic`; the separate projected-silhouette renderer no longer exists.
+
 Forward sector batches use compact per-sector light lists derived from their
 receiver bounds. Shadow slots are remapped into each compact list while still
 referencing the shared atlas. Receiver shaders reject back-facing,
@@ -98,4 +111,5 @@ the engine's existing projection precision.
 
 Dynamic point and spot lights are runtime preview/game lighting only. Their
 settings and shadow data are intentionally excluded from the baked lightmap
-source hash.
+source hash. Dynamic prop/NPC cast modes, transforms, and animation poses are
+also runtime-only and remain excluded.

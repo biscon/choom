@@ -1318,7 +1318,7 @@ void TestSourceHashChanges()
     dynamicPropMap.runtimeObjects[0].dynamicModel.animation = "Idle";
     dynamicPropMap.runtimeObjects[0].dynamicModel.animationSpeed = 2.0f;
     dynamicPropMap.runtimeObjects[0].dynamicModel.shadowMode =
-            game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+            game::SectorDynamicModelShadowMode::Dynamic;
     Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
           "hash excludes dynamic prop transform, playback, and runtime shadow changes");
 
@@ -1331,7 +1331,7 @@ void TestSourceHashChanges()
     npc.npc.definitionId = "fred";
     npc.npc.instanceId = "front_desk";
     npc.npc.scale = 1.5f;
-    npc.npc.shadowMode = game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+    npc.npc.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
     npcMap.runtimeObjects.push_back(npc);
     Check(game::ComputeSectorLightmapSourceHash(npcMap) == hash,
           "hash excludes NPCs because they are neither baked receivers nor occluders");

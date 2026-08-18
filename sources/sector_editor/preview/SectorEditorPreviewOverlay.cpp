@@ -673,13 +673,15 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             stats.sectorBatchesDrawn,
                             stats.sectorBatchesCulled));
                     addKeyValue("shadow objects", TextFormat(
-                            "draw/cull %zu/%zu | revisions door %llu static %llu",
+                            "draw/cull %zu/%zu | casters dynamic %zu",
                             stats.objectCastersDrawn,
                             stats.objectCastersCulled,
+                            preview.DynamicModelShadowCasterCount()));
+                    addKeyValue("shadow revisions", TextFormat(
+                            "door %llu | static %llu | dynamic %llu",
                             static_cast<unsigned long long>(stats.doorCasterRevision),
-                            static_cast<unsigned long long>(stats.staticModelCasterRevision)));
-                    addKeyValue("projected shadows", TextFormat(
-                            "%zu", preview.ActiveProjectedShadowCount()));
+                            static_cast<unsigned long long>(stats.staticModelCasterRevision),
+                            static_cast<unsigned long long>(stats.dynamicModelCasterRevision)));
                     addKeyValue("depth pre-pass",
                             preview.DepthPrepassEnabled() ? "on" : "off");
                 }

@@ -1924,7 +1924,7 @@ void TestDynamicModelRoundTripAndDefaultOmission()
     object.dynamicModel.animation = "Standard Walk";
     object.dynamicModel.loop = false;
     object.dynamicModel.animationSpeed = 1.25f;
-    object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+    object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
     map.runtimeObjects.push_back(object);
 
     const Json saved = Json::parse(SaveText(map));
@@ -1934,7 +1934,7 @@ void TestDynamicModelRoundTripAndDefaultOmission()
                   && payload["animation"] == "Standard Walk"
                   && !payload["loop"].get<bool>()
                   && Near(payload["animationSpeed"].get<float>(), 1.25f)
-                  && payload["shadowMode"] == "projected_silhouette"
+                  && payload["shadowMode"] == "dynamic"
                   && payload["collision"].get<bool>(),
           "dynamic prop writes model, animation, playback, shadow, and collision fields");
 
@@ -1949,7 +1949,7 @@ void TestDynamicModelRoundTripAndDefaultOmission()
                   && roundTripped->dynamicModel.animation == "Standard Walk"
                   && !roundTripped->dynamicModel.loop
                   && roundTripped->dynamicModel.shadowMode
-                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette
+                          == game::SectorDynamicModelShadowMode::Dynamic
                   && Near(roundTripped->dynamicModel.animationSpeed, 1.25f)
                   && Near(roundTripped->dynamicModel.rotationXRadians, 0.25f)
                   && Near(roundTripped->dynamicModel.rotationZRadians, -0.5f),
@@ -1974,6 +1974,21 @@ void TestDynamicModelRoundTripAndDefaultOmission()
     invalid["runtimeObjects"][0]["dynamicModel"]["shadowMode"] = "cinematic";
     Check(!LoadText(invalid.dump(), loaded, error),
           "dynamic prop rejects unknown shadow modes");
+
+    Json legacy = saved;
+    legacy["runtimeObjects"][0]["dynamicModel"]["shadowMode"] =
+            "projected_silhouette";
+    Check(LoadText(legacy.dump(), loaded, error),
+          "legacy projected dynamic prop shadow mode loads");
+    const SectorPlacedRuntimeObject* migrated =
+            game::FindSectorPlacedRuntimeObject(loaded, 41);
+    Check(migrated != nullptr
+                  && migrated->dynamicModel.shadowMode
+                          == game::SectorDynamicModelShadowMode::Dynamic,
+          "legacy projected dynamic prop shadow mode migrates to dynamic");
+    Check(Json::parse(SaveText(loaded))["runtimeObjects"][0]["dynamicModel"]["shadowMode"]
+                          == "dynamic",
+          "migrated dynamic prop shadow mode saves with the new value");
 }
 
 void TestNpcRoundTripDefaultsAndValidation()
@@ -1988,7 +2003,7 @@ void TestNpcRoundTripDefaultsAndValidation()
     object.npc.instanceId = "guard_at_gate";
     object.npc.scale = 1.25f;
     object.npc.shadowMode =
-            game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+            game::SectorDynamicModelShadowMode::Dynamic;
     map.runtimeObjects.push_back(object);
 
     const Json saved = Json::parse(SaveText(map));
@@ -1997,7 +2012,7 @@ void TestNpcRoundTripDefaultsAndValidation()
                   && payload["definitionId"] == "zombie_guard"
                   && payload["instanceId"] == "guard_at_gate"
                   && Near(payload["scale"].get<float>(), 1.25f)
-                  && payload["shadowMode"] == "projected_silhouette",
+                  && payload["shadowMode"] == "dynamic",
           "NPC placement writes definition, instance, scale, and shadow fields");
 
     SectorTopologyMap loaded;
@@ -2012,7 +2027,7 @@ void TestNpcRoundTripDefaultsAndValidation()
                   && roundTripped->npc.instanceId == "guard_at_gate"
                   && Near(roundTripped->npc.scale, 1.25f)
                   && roundTripped->npc.shadowMode
-                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette,
+                          == game::SectorDynamicModelShadowMode::Dynamic,
           "NPC placement fields round-trip");
 
     map.runtimeObjects[0].npc.instanceId.clear();
@@ -2035,6 +2050,18 @@ void TestNpcRoundTripDefaultsAndValidation()
     invalid = saved;
     invalid["runtimeObjects"][0]["npc"]["shadowMode"] = "blob";
     ExpectRejected(invalid, "NPC placement rejects an unknown shadow mode");
+
+    Json legacy = saved;
+    legacy["runtimeObjects"][0]["npc"]["shadowMode"] =
+            "projected_silhouette";
+    Check(LoadText(legacy.dump(), loaded, error),
+          "legacy projected NPC shadow mode loads");
+    const SectorPlacedRuntimeObject* migrated =
+            game::FindSectorPlacedRuntimeObject(loaded, 42);
+    Check(migrated != nullptr
+                  && migrated->npc.shadowMode
+                          == game::SectorDynamicModelShadowMode::Dynamic,
+          "legacy projected NPC shadow mode migrates to dynamic");
 
     Json duplicate = saved;
     Json second = duplicate["runtimeObjects"][0];

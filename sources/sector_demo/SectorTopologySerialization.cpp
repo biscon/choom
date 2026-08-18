@@ -968,10 +968,11 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
         model.shadowMode = SectorDynamicModelShadowMode::None;
     } else if (shadowMode == "contact") {
         model.shadowMode = SectorDynamicModelShadowMode::Contact;
-    } else if (shadowMode == "projected_silhouette") {
-        model.shadowMode = SectorDynamicModelShadowMode::ProjectedSilhouette;
+    } else if (shadowMode == "dynamic"
+            || shadowMode == "projected_silhouette") {
+        model.shadowMode = SectorDynamicModelShadowMode::Dynamic;
     } else {
-        Fail(context + ".shadowMode must be 'none', 'contact', or 'projected_silhouette'");
+        Fail(context + ".shadowMode must be 'none', 'contact', or 'dynamic'");
     }
     return model;
 }
@@ -991,10 +992,11 @@ SectorPlacedNpc ReadPlacedNpc(const Json& value, const std::string& context)
         npc.shadowMode = SectorDynamicModelShadowMode::None;
     } else if (shadowMode == "contact") {
         npc.shadowMode = SectorDynamicModelShadowMode::Contact;
-    } else if (shadowMode == "projected_silhouette") {
-        npc.shadowMode = SectorDynamicModelShadowMode::ProjectedSilhouette;
+    } else if (shadowMode == "dynamic"
+            || shadowMode == "projected_silhouette") {
+        npc.shadowMode = SectorDynamicModelShadowMode::Dynamic;
     } else {
-        Fail(context + ".shadowMode must be 'none', 'contact', or 'projected_silhouette'");
+        Fail(context + ".shadowMode must be 'none', 'contact', or 'dynamic'");
     }
     return npc;
 }
@@ -2034,7 +2036,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             }
             if (model.shadowMode != SectorDynamicModelShadowMode::None
                     && model.shadowMode != SectorDynamicModelShadowMode::Contact
-                    && model.shadowMode != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                    && model.shadowMode != SectorDynamicModelShadowMode::Dynamic) {
                 Fail(context + ".dynamicModel.shadowMode is invalid");
             }
             const float rotationXDegrees = RadiansToDegrees(model.rotationXRadians);
@@ -2051,8 +2053,8 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (model.animationSpeed != 1.0f) dynamicModel["animationSpeed"] = model.animationSpeed;
             if (model.shadowMode == SectorDynamicModelShadowMode::None) {
                 dynamicModel["shadowMode"] = "none";
-            } else if (model.shadowMode == SectorDynamicModelShadowMode::ProjectedSilhouette) {
-                dynamicModel["shadowMode"] = "projected_silhouette";
+            } else if (model.shadowMode == SectorDynamicModelShadowMode::Dynamic) {
+                dynamicModel["shadowMode"] = "dynamic";
             }
             json["kind"] = object.kind;
             json["dynamicModel"] = std::move(dynamicModel);
@@ -2070,7 +2072,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (object.npc.shadowMode != SectorDynamicModelShadowMode::None
                     && object.npc.shadowMode != SectorDynamicModelShadowMode::Contact
                     && object.npc.shadowMode
-                            != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                            != SectorDynamicModelShadowMode::Dynamic) {
                 Fail(context + ".npc.shadowMode is invalid");
             }
             Json npc{{"definitionId", object.npc.definitionId}};
@@ -2079,8 +2081,8 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (object.npc.shadowMode == SectorDynamicModelShadowMode::None) {
                 npc["shadowMode"] = "none";
             } else if (object.npc.shadowMode
-                    == SectorDynamicModelShadowMode::ProjectedSilhouette) {
-                npc["shadowMode"] = "projected_silhouette";
+                    == SectorDynamicModelShadowMode::Dynamic) {
+                npc["shadowMode"] = "dynamic";
             }
             json["kind"] = object.kind;
             json["npc"] = std::move(npc);
@@ -2750,7 +2752,7 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                 }
                 if (model.shadowMode != SectorDynamicModelShadowMode::None
                         && model.shadowMode != SectorDynamicModelShadowMode::Contact
-                        && model.shadowMode != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                        && model.shadowMode != SectorDynamicModelShadowMode::Dynamic) {
                     Fail(objectContext + ".dynamicModel.shadowMode is invalid");
                 }
             } else if (object.kind == RuntimeObjectKindNpc) {
@@ -2771,7 +2773,7 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                 if (object.npc.shadowMode != SectorDynamicModelShadowMode::None
                         && object.npc.shadowMode != SectorDynamicModelShadowMode::Contact
                         && object.npc.shadowMode
-                                != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                                != SectorDynamicModelShadowMode::Dynamic) {
                     Fail(objectContext + ".npc.shadowMode is invalid");
                 }
             } else if (object.kind == RuntimeObjectKindDoor) {

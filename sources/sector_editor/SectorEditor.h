@@ -63,8 +63,6 @@ public:
             SectorVolumetricQuality volumetricQuality,
             bool shadowsEnabled,
             int shadowMapResolution,
-            float projectedShadowIntervalSeconds,
-            int projectedShadowResolution,
             int maxDynamicLights,
             int maxShadowLightUpdatesPerFrame,
             bool depthPrepass,
@@ -72,7 +70,6 @@ public:
     {
         sceneRuntime.Renderer().SetGraphicsQuality(
                 volumetricQuality, shadowsEnabled, shadowMapResolution,
-                projectedShadowIntervalSeconds, projectedShadowResolution,
                 maxDynamicLights, maxShadowLightUpdatesPerFrame, depthPrepass,
                 dynamicLightFadeInSeconds);
     }

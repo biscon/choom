@@ -151,8 +151,6 @@ public:
             SectorVolumetricQuality volumetricQuality,
             bool shadowsEnabled,
             int shadowMapResolution = DynamicSpotLightShadowMapResolution,
-            float projectedShadowIntervalSeconds = 0.0f,
-            int projectedShadowResolution = DynamicModelProjectedShadowResolution,
             int maxDynamicLights = static_cast<int>(MaxDynamicLights),
             int maxShadowLightUpdatesPerFrame = 2,
             bool depthPrepass = false,
@@ -171,12 +169,6 @@ public:
         dynamicLightState.SetSelectionFadeInSeconds(
                 dynamicLightFadeInSeconds);
         depthPrepassEnabled = depthPrepass;
-        dynamicModelShadowIntervalSeconds = std::max(
-                projectedShadowIntervalSeconds, 0.0f);
-        if (shadowsEnabled) {
-            dynamicModelShadowRenderer.SetProjectedShadowResolution(
-                    projectedShadowResolution);
-        }
     }
     SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorRenderer.DoorLightingDebugMode(); }
     void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorRenderer.SetDoorLightingDebugMode(mode); }
@@ -195,8 +187,8 @@ public:
     const SectorDynamicShadowRenderStats& DynamicShadowRenderStats() const {
         return dynamicLightState.ShadowRenderStats();
     }
-    size_t ActiveProjectedShadowCount() const {
-        return dynamicModelShadowRenderer.ActiveProjectedShadowCount();
+    size_t DynamicModelShadowCasterCount() const {
+        return dynamicModelShadowRenderer.DynamicCasterCount();
     }
     size_t DoorConsideredCount() const { return doorRenderer.RenderStats().considered; }
     size_t DoorDrawnCount() const { return doorRenderer.RenderStats().drawn; }
@@ -353,8 +345,6 @@ private:
     bool dynamicLightingEnabled = true;
     SectorVolumetricQuality volumetricQuality = SectorVolumetricQuality::High;
     bool shadowMapsEnabled = true;
-    float dynamicModelShadowIntervalSeconds = 0.0f;
-    float lastDynamicModelShadowRenderSeconds = -1000.0f;
     int lightmapStatus = 0;
     bool surfaceLightmapBakeCurrent = false;
     bool objectProbeBakeCurrent = false;

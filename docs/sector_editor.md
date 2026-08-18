@@ -674,9 +674,19 @@ aligned procedural fallback, and a missing frame does not hide a ready leaf.
 
 Swing rendering uses the existing world-model PBR path, object-probe or sector
 ambient fallback lighting, dynamic point/spot lights, fog, environment
-reflections, and opaque dynamic spotlight shadows. Leaves and frames are runtime
+reflections, and opaque dynamic point/spot shadows. Leaves and frames are runtime
 visuals: they are not static lightmap receivers or baked occluders and their
 fields/assets do not affect the lightmap source hash.
+
+Dynamic props and NPCs use the same world-model PBR path and always receive
+available dynamic point/spot light shadows without darkening their baked
+object-probe or sector-ambient contribution. Their inspector shadow dropdown is
+`None`, `Contact`, or `Dynamic`. `None` disables casting, `Contact` draws only
+the floor contact blob, and `Dynamic` submits the current posed model to the
+shared point/spot shadow atlas. Atlas updates retain the configured per-frame
+light budget and do not fall back to contact shadows when unavailable. Older
+`projected_silhouette` map values load as `Dynamic` and save back as `dynamic`.
+These runtime shadow choices do not affect baked lightmaps or their source hash.
 
 Door interaction is deliberately small. Authored `autoOpen` doors open as the
 player approaches and close when the player leaves the configured distance.

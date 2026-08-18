@@ -483,8 +483,11 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::string mainGraph=ReadSource(MAIN_RENDER_GRAPH_SOURCE_PATH);
     const std::string modelAssets=ReadSource(MODEL_ASSET_SOURCE_PATH);
     const std::string dynamicModelShadows=ReadSource(DYNAMIC_MODEL_SHADOW_SOURCE_PATH);
+    const std::string dynamicLightingShadows=ReadSource(
+            DYNAMIC_LIGHTING_SHADOW_SOURCE_PATH);
     Check(!bloom.empty()&&!fog.empty()&&!haze.empty()&&!dust.empty()
-                    &&!muzzle.empty()&&!mainGraph.empty()&&!dynamicModelShadows.empty(),
+                    &&!muzzle.empty()&&!mainGraph.empty()&&!dynamicModelShadows.empty()
+                    &&!dynamicLightingShadows.empty(),
           "HDR effect policy can read every affected shader and pass graph");
     Check(bloom.find("Rgba8Unorm")==std::string::npos
                     && fog.find("Rgba8Unorm")==std::string::npos
@@ -618,10 +621,8 @@ void TestHdrEffectShaderAndPassPolicies()
           "muzzle keeps alpha-zero additive HDR semantics under direct viewmodel rendering");
     const std::size_t rgbOnlyShadowMask=dynamicModelShadows.find(
             "rlColorMask(true, true, true, false)");
-    const std::size_t projectedShadowDraw=dynamicModelShadows.find(
-            "DrawProjectedShadows(context)",rgbOnlyShadowMask);
     const std::size_t contactShadowDraw=dynamicModelShadows.find(
-            "DrawContactShadows(context)",projectedShadowDraw);
+            "DrawContactShadows(context)",rgbOnlyShadowMask);
     const std::size_t restoredShadowMask=dynamicModelShadows.find(
             "rlColorMask(true, true, true, true)",contactShadowDraw);
     Check(dynamicModelShadows.find("rlDrawRenderBatchActive")!=std::string::npos
@@ -636,26 +637,52 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&dynamicModelShadows.find("rlDisableShader")
                             !=std::string::npos
                     &&rgbOnlyShadowMask!=std::string::npos
-                    &&projectedShadowDraw!=std::string::npos
                     &&contactShadowDraw!=std::string::npos
                     &&restoredShadowMask!=std::string::npos,
-          "dynamic projected/contact shadows blend RGB without corrupting scene alpha and restore draw state");
-    Check(dynamicModelShadows.find(
-                      "const float kProjectedShadowOpacity = 0.45")
-                            !=std::string::npos
+          "dynamic contact shadows blend RGB without corrupting scene alpha and restore draw state");
+    Check(dynamicModelShadows.find("DrawProjectedShadows")==std::string::npos
+                    &&dynamicModelShadows.find("ProjectedSilhouette")
+                            ==std::string::npos
                     &&dynamicModelShadows.find(
-                               "distanceFade * 0.30")
-                            ==std::string::npos,
-          "projected silhouette opacity is fifty percent stronger without changing contact shadows");
-    Check(dynamicModelShadows.find(
-                      "for (const SectorTopologyStaticPointLight& source : map.staticLights) {\n"
-                      "        if (!source.castsShadow) continue;")
-                            !=std::string::npos
-                    &&dynamicModelShadows.find(
-                               "for (const SectorTopologyStaticSpotLight& source : map.staticSpotLights) {\n"
-                               "        if (!source.castsShadow) continue;")
+                               "!= SectorDynamicModelShadowMode::Contact")
                             !=std::string::npos,
-          "static point and spot shadow toggles filter projected dynamic-model shadow sources");
+          "contact shadows are mode-exclusive and the projected silhouette pass is removed");
+    const std::size_t firstSkinnedShadowVertex=dynamicLightingShadows.find(
+            "in vec4 vertexBoneIndices;");
+    const std::size_t secondSkinnedShadowVertex=dynamicLightingShadows.find(
+            "in vec4 vertexBoneIndices;",firstSkinnedShadowVertex+1);
+    Check(firstSkinnedShadowVertex!=std::string::npos
+                    &&secondSkinnedShadowVertex!=std::string::npos
+                    &&dynamicLightingShadows.find("BuildAnimatedModelPoseView")
+                            !=std::string::npos
+                    &&dynamicLightingShadows.find("dynamicModelShadowCasters")
+                            !=std::string::npos
+                    &&dynamicLightingShadows.find("contentFingerprint")
+                            !=std::string::npos,
+          "shared spotlight and point-light atlas passes render and invalidate posed dynamic-model casters");
+    const std::size_t geometryShaderLoader=dynamicLightingShadows.find(
+            "Shader LoadGeometryShader");
+    const std::size_t pointBoneIndexBinding=dynamicLightingShadows.find(
+            "RL_DEFAULT_SHADER_ATTRIB_LOCATION_BONEINDICES",
+            geometryShaderLoader);
+    const std::size_t pointBoneWeightBinding=dynamicLightingShadows.find(
+            "RL_DEFAULT_SHADER_ATTRIB_LOCATION_BONEWEIGHTS",
+            geometryShaderLoader);
+    const std::size_t geometryShaderLink=dynamicLightingShadows.find(
+            "glLinkProgram(program)",geometryShaderLoader);
+    Check(geometryShaderLoader!=std::string::npos
+                    &&pointBoneIndexBinding!=std::string::npos
+                    &&pointBoneWeightBinding!=std::string::npos
+                    &&geometryShaderLink!=std::string::npos
+                    &&pointBoneIndexBinding<geometryShaderLink
+                    &&pointBoneWeightBinding<geometryShaderLink,
+          "point-light geometry shader binds raylib bone VAO attributes before linking");
+    const std::string pbrModels=ReadSource(PBR_SHADER_SOURCE_PATH);
+    Check(pbrModels.find("dynamicLightContext.shadowMaps.shadowMap0")
+                            !=std::string::npos
+                    &&pbrModels.find("dynamicModel.shadowMode")
+                            ==std::string::npos,
+          "dynamic models receive shared atlas shadows independently of their caster mode");
     Check(bloom.find("failedForCurrentKey")!=std::string::npos
                     && bloom.find("rlDrawRenderBatchActive")!=std::string::npos
                     && bloom.find("rlDisableColorBlend")!=std::string::npos

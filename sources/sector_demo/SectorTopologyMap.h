@@ -143,7 +143,7 @@ struct SectorPlacedStaticModel {
 enum class SectorDynamicModelShadowMode {
     None,
     Contact,
-    ProjectedSilhouette
+    Dynamic
 };
 
 struct SectorPlacedDynamicModel {

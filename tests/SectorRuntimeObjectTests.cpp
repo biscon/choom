@@ -9,6 +9,7 @@
 
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorAudioOcclusion.h"
+#include "sector_demo/SectorDynamicModelShadowCasters.h"
 #include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorStaticModelTransform.h"
@@ -4821,7 +4822,7 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     object.dynamicModel.animation = "Standard Walk";
     object.dynamicModel.loop = false;
     object.dynamicModel.animationSpeed = 1.5f;
-    object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+    object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -4845,7 +4846,7 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
                   && Near(transform.rotationZRadians, -0.5f)
                   && Near(dynamic.scale, 1.75f)
                   && dynamic.shadowMode
-                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette,
+                          == game::SectorDynamicModelShadowMode::Dynamic,
           "dynamic prop copies the movable authored transform, scale, and shadow mode");
     Check(dynamic.requestedAnimation == "Standard Walk"
                   && !dynamic.animationResolved
@@ -4903,7 +4904,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     object.npc.instanceId = "guard_one";
     object.npc.scale = 1.4f;
     object.npc.shadowMode =
-            game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+            game::SectorDynamicModelShadowMode::Dynamic;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -4972,7 +4973,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     Check(dynamic.requestedAnimation == "Idle"
                   && Near(dynamic.scale, 1.4f)
                   && dynamic.shadowMode
-                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette
+                          == game::SectorDynamicModelShadowMode::Dynamic
                   && animator.loop
                   && animator.playing
                   && Near(animator.speed, 1.25f)
@@ -6257,6 +6258,105 @@ void TestStaticModelSpotlightShadowCasterCollectionAndRevision()
     game::UpdateSectorStaticModelShadowCasters(collection, &world);
     Check(collection.revision == hiddenRevision,
           "an unchanged empty static prop caster set keeps its revision stable");
+}
+
+void TestDynamicModelShadowCasterCollectionAndRevision()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 8);
+
+    const engine::Entity dynamic = world.CreateEntity();
+    const game::SectorObjectTransform transform{
+            Vector3{2.0f, 3.0f, -4.0f},
+            0.35f,
+            -0.2f,
+            0.1f};
+    world.Add(dynamic, transform);
+    world.Add(dynamic, game::SectorObject{7, true});
+    world.Add(dynamic, game::SectorObjectVisualOffset{
+            Vector3{0.25f, 0.5f, -0.75f}});
+    game::SectorDynamicModel model;
+    model.placedObjectId = 51;
+    model.scale = 1.75f;
+    model.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
+    world.Add(dynamic, model);
+    engine::AnimatedModelInstance instance;
+    instance.model = engine::ModelHandle{3, 5};
+    instance.boneMatrices.push_back(MatrixIdentity());
+    instance.poseReady = true;
+    world.Add(dynamic, instance);
+
+    const engine::Entity contact = world.CreateEntity();
+    world.Add(contact, game::SectorObjectTransform{});
+    world.Add(contact, game::SectorObject{7, true});
+    game::SectorDynamicModel contactModel;
+    contactModel.placedObjectId = 52;
+    contactModel.shadowMode = game::SectorDynamicModelShadowMode::Contact;
+    world.Add(contact, contactModel);
+    engine::AnimatedModelInstance contactInstance;
+    contactInstance.model = engine::ModelHandle{4, 2};
+    contactInstance.poseReady = true;
+    world.Add(contact, contactInstance);
+
+    game::SectorDynamicModelShadowCasterCollection collection;
+    game::ReserveSectorDynamicModelShadowCasters(collection, 8);
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+
+    Check(collection.casters.size() == 1,
+          "dynamic shadow collection includes only visible pose-ready Dynamic models");
+    const game::SectorDynamicModelShadowCaster& caster =
+            collection.casters.front();
+    const Matrix expected = game::BuildSectorStaticModelAuthoredTransform(
+            Vector3Add(
+                    transform.position,
+                    Vector3{0.25f, 0.5f, -0.75f}),
+            transform.rotationXRadians,
+            transform.yawRadians,
+            transform.rotationZRadians,
+            1.75f);
+    Check(caster.entity == dynamic
+                  && caster.placedObjectId == 51
+                  && caster.model == engine::ModelHandle{3, 5}
+                  && Near(
+                             Vector3Transform(Vector3{}, caster.transform),
+                             Vector3Transform(Vector3{}, expected))
+                  && Near(
+                             Vector3Transform(
+                                     Vector3{1.0f, 0.0f, 0.0f},
+                                     caster.transform),
+                             Vector3Transform(
+                                     Vector3{1.0f, 0.0f, 0.0f},
+                                     expected)),
+          "dynamic caster follows the rendered authored transform and visual offset");
+
+    const uint64_t initialRevision = collection.revision;
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    Check(collection.revision == initialRevision,
+          "unchanged dynamic caster transforms and poses preserve the cache revision");
+
+    world.Get<engine::AnimatedModelInstance>(dynamic).boneMatrices[0] =
+            MatrixTranslate(0.1f, 0.0f, 0.0f);
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    const uint64_t posedRevision = collection.revision;
+    Check(posedRevision != initialRevision,
+          "changing an animated pose invalidates the dynamic caster revision");
+
+    world.Get<game::SectorObjectVisualOffset>(dynamic).position.y += 0.2f;
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    const uint64_t movedRevision = collection.revision;
+    Check(movedRevision != posedRevision,
+          "changing the rendered dynamic-model transform invalidates its caster revision");
+
+    world.Get<game::SectorDynamicModel>(dynamic).shadowMode =
+            game::SectorDynamicModelShadowMode::None;
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    const uint64_t disabledRevision = collection.revision;
+    Check(collection.casters.empty()
+                  && disabledRevision != movedRevision,
+          "None removes a dynamic model from the atlas caster set");
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    Check(collection.revision == disabledRevision,
+          "an unchanged empty dynamic caster set keeps its revision stable");
 }
 
 void TestViewmodelMaterialOverrideResolution()
@@ -7995,6 +8095,7 @@ int main()
     TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
     TestStaticModelSpotlightShadowCasterCollectionAndRevision();
+    TestDynamicModelShadowCasterCollectionAndRevision();
     TestViewmodelMaterialOverrideResolution();
     TestSpawnPlacedDirectionalBillboardCopiesClipNames();
     TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate();

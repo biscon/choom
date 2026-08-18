@@ -216,7 +216,7 @@ void DrawSectorEditorNpcInspector(
 
     object = context.editing.SelectedObject(); if (object == nullptr) return;
     static const std::vector<std::string> shadowModes = {
-            "None", "Contact", "Silhouette"};
+            "None", "Contact", "Dynamic"};
     int shadowMode = static_cast<int>(object->npc.shadowMode);
     const int previousShadowMode = shadowMode;
     if (engine::Option(

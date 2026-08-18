@@ -12533,13 +12533,13 @@ void TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag()
                       object.dynamicModel.loop = false;
                       object.dynamicModel.animationSpeed = 1.5f;
                       object.dynamicModel.shadowMode =
-                              game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+                              game::SectorDynamicModelShadowMode::Dynamic;
                       return true;
                   })
                   && map.runtimeObjects[0].dynamicModel.animation == "Walk"
                   && !map.runtimeObjects[0].dynamicModel.loop
                   && map.runtimeObjects[0].dynamicModel.shadowMode
-                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette
+                          == game::SectorDynamicModelShadowMode::Dynamic
                   && Near(map.runtimeObjects[0].dynamicModel.animationSpeed, 1.5f),
           "dynamic prop inspector playback and shadow fields persist through the editing service");
 
