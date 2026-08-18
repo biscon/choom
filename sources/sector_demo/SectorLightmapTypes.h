@@ -68,10 +68,25 @@ struct SectorBakedObjectLightProbeSectorRange {
             SectorBakedObjectLightProbeLayer::Lower;
 };
 
+struct SectorBakedObjectLightProbePortal {
+    int adjacentSectorId = 0;
+    Vector2 startWorld = {};
+    Vector2 endWorld = {};
+};
+
+struct SectorBakedObjectLightProbePortalRange {
+    int sectorId = 0;
+    int begin = 0;
+    int count = 0;
+};
+
 struct SectorBakedObjectLightProbeRuntimeData {
     std::vector<SectorBakedObjectLightProbe> probes;
     std::vector<SectorBakedObjectLightProbeSectorRange> sectorRanges;
+    std::vector<SectorBakedObjectLightProbePortal> portals;
+    std::vector<SectorBakedObjectLightProbePortalRange> portalRanges;
     SectorBakedObjectLightProbeMetadata metadata;
+    bool portalAdjacencyPrepared = false;
 };
 
 struct SectorLightmapArtifactData {

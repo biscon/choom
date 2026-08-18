@@ -13,6 +13,7 @@
 #include "sector_demo/SectorUnits.h"
 
 #include <raylib.h>
+#include <external/glad.h>
 #include <raymath.h>
 #include <rlgl.h>
 
@@ -1095,6 +1096,8 @@ void SectorMeshRenderer::Shutdown(engine::AssetManager& assets)
 
 void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
 {
+    ShutdownAtmosphereGpuQueries();
+    atmosphereDiagnostics = SectorAtmosphereDiagnostics{};
     generatedGeometry = {};
     visibilityGraph = {};
     visibilityResult = {};
@@ -1748,21 +1751,160 @@ bool SectorMeshRenderer::CompositeViewmodel(
     return CommitHdrScratch(sceneTarget);
 }
 
+unsigned int SectorMeshRenderer::AtmosphereGpuQuery(
+        std::size_t pass,
+        std::size_t querySlot,
+        bool end) const
+{
+    const std::size_t queryIndex =
+            (querySlot * AtmosphereGpuPassCount + pass) * 2
+            + (end ? 1u : 0u);
+    return atmosphereGpuQueries[queryIndex];
+}
+
+bool SectorMeshRenderer::EnsureAtmosphereGpuQueries()
+{
+    if (atmosphereGpuQueriesInitialized) return true;
+    if (glQueryCounter == nullptr) return false;
+    glGenQueries(
+            static_cast<GLsizei>(atmosphereGpuQueries.size()),
+            atmosphereGpuQueries.data());
+    atmosphereGpuQueriesInitialized = atmosphereGpuQueries[0] != 0;
+    return atmosphereGpuQueriesInitialized;
+}
+
+void SectorMeshRenderer::ShutdownAtmosphereGpuQueries()
+{
+    if (atmosphereGpuQueriesInitialized) {
+        glDeleteQueries(
+                static_cast<GLsizei>(atmosphereGpuQueries.size()),
+                atmosphereGpuQueries.data());
+    }
+    atmosphereGpuQueries.fill(0);
+    atmosphereGpuIssuedMasks.fill(0);
+    atmosphereGpuFrameIndex = 0;
+    atmosphereGpuSlot = 0;
+    atmosphereGpuQueriesInitialized = false;
+    atmosphereGpuActive = false;
+}
+
+void SectorMeshRenderer::BeginAtmosphereGpuFrame(bool enabled)
+{
+    atmosphereGpuActive = false;
+    atmosphereGpuSlot = atmosphereGpuFrameIndex % AtmosphereGpuQueryLatency;
+    const std::uint8_t issuedMask =
+            atmosphereGpuIssuedMasks[atmosphereGpuSlot];
+    if (issuedMask != 0 && atmosphereGpuQueriesInitialized) {
+        bool ready = true;
+        for (std::size_t pass = 0; pass < AtmosphereGpuPassCount; ++pass) {
+            if ((issuedMask & (1u << pass)) == 0) continue;
+            GLint available = GL_FALSE;
+            glGetQueryObjectiv(
+                    AtmosphereGpuQuery(pass, atmosphereGpuSlot, true),
+                    GL_QUERY_RESULT_AVAILABLE,
+                    &available);
+            ready = ready && available == GL_TRUE;
+        }
+        if (ready) {
+            double* values[AtmosphereGpuPassCount] = {
+                    &atmosphereDiagnostics.localFogGpuMilliseconds,
+                    &atmosphereDiagnostics.lightHazeGpuMilliseconds,
+                    &atmosphereDiagnostics.dustGpuMilliseconds};
+            for (std::size_t pass = 0; pass < AtmosphereGpuPassCount; ++pass) {
+                if ((issuedMask & (1u << pass)) == 0) continue;
+                GLuint64 startNanoseconds = 0;
+                GLuint64 endNanoseconds = 0;
+                glGetQueryObjectui64v(
+                        AtmosphereGpuQuery(pass, atmosphereGpuSlot, false),
+                        GL_QUERY_RESULT,
+                        &startNanoseconds);
+                glGetQueryObjectui64v(
+                        AtmosphereGpuQuery(pass, atmosphereGpuSlot, true),
+                        GL_QUERY_RESULT,
+                        &endNanoseconds);
+                if (endNanoseconds >= startNanoseconds) {
+                    const double sample = static_cast<double>(
+                            endNanoseconds - startNanoseconds) / 1000000.0;
+                    *values[pass] = *values[pass] <= 0.0
+                            ? sample
+                            : *values[pass] * 0.85 + sample * 0.15;
+                }
+            }
+            atmosphereGpuIssuedMasks[atmosphereGpuSlot] = 0;
+        }
+    }
+    if (enabled && EnsureAtmosphereGpuQueries()
+            && atmosphereGpuIssuedMasks[atmosphereGpuSlot] == 0) {
+        atmosphereGpuActive = true;
+    }
+    ++atmosphereGpuFrameIndex;
+}
+
+void SectorMeshRenderer::BeginAtmosphereGpuPass(std::size_t pass)
+{
+    if (!atmosphereGpuActive || pass >= AtmosphereGpuPassCount) return;
+    glQueryCounter(
+            AtmosphereGpuQuery(pass, atmosphereGpuSlot, false),
+            GL_TIMESTAMP);
+}
+
+void SectorMeshRenderer::EndAtmosphereGpuPass(std::size_t pass)
+{
+    if (!atmosphereGpuActive || pass >= AtmosphereGpuPassCount) return;
+    glQueryCounter(
+            AtmosphereGpuQuery(pass, atmosphereGpuSlot, true),
+            GL_TIMESTAMP);
+    atmosphereGpuIssuedMasks[atmosphereGpuSlot] |=
+            static_cast<std::uint8_t>(1u << pass);
+}
+
+void SectorMeshRenderer::RefreshAtmosphereDiagnostics(
+        const SectorBillboardDynamicLightContext& dynamicLights)
+{
+    atmosphereDiagnostics.dynamicLightCount = dynamicLights.dynamicLightCount;
+    atmosphereDiagnostics.localFogEligibleCount =
+            localFogRenderer.EligibleVolumeCount();
+    atmosphereDiagnostics.localFogActiveCount =
+            localFogRenderer.ActiveVolumeCount();
+    atmosphereDiagnostics.localFogScissorCoverage =
+            localFogRenderer.ScissorCoverage();
+    atmosphereDiagnostics.localFogVolumeIds =
+            localFogRenderer.ActiveVolumeIds();
+    atmosphereDiagnostics.lightHazeEligibleCount =
+            lightHazeRenderer.EligibleCount();
+    atmosphereDiagnostics.lightHazeActiveCount =
+            lightHazeRenderer.ActiveCount();
+    atmosphereDiagnostics.lightHazeScissorCoverage =
+            lightHazeRenderer.ScissorCoverage();
+    atmosphereDiagnostics.lightHazeSources =
+            lightHazeRenderer.ActiveSources();
+    atmosphereDiagnostics.dustEligibleEmitterCount =
+            lightDustRenderer.EligibleEmitterCount();
+    atmosphereDiagnostics.dustActiveEmitterCount =
+            lightDustRenderer.ActiveEmitterCount();
+    atmosphereDiagnostics.dustVisibleParticleCount =
+            lightDustRenderer.VisibleParticleCount();
+}
+
 bool SectorMeshRenderer::ApplyWorldAtmosphere(
         engine::RenderTarget& sceneTarget,
         const SectorTopologyMap& map,
-        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes)
+        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+        bool collectGpuDiagnostics)
 {
+    BeginAtmosphereGpuFrame(collectGpuDiagnostics);
     if (sceneTarget.descriptor.colorFormat
                     != engine::RenderTargetColorFormat::Rgba16Float
             || sceneTarget.actual.depth
                     != engine::RenderTargetDepthKind::SampleableTexture
             || !EnsureHdrSceneScratch(sceneTarget)) {
+        RefreshAtmosphereDiagnostics(SectorBillboardDynamicLightContext{});
         return false;
     }
     RenderTexture2D& nativeScene = sceneTarget.native;
     const SectorBillboardDynamicLightContext dynamicLightContext =
             BuildBillboardDynamicLightContext();
+    BeginAtmosphereGpuPass(0);
     const bool localFogApplied = localFogRenderer.Apply(
             nativeScene,
             hdrSceneScratch.native,
@@ -1772,7 +1914,10 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
             runtimeSeconds,
             objectLightProbes,
             dynamicLightContext);
+    EndAtmosphereGpuPass(0);
+    BeginAtmosphereGpuPass(1);
     bool lightHazeApplied = false;
+    bool atmosphereFailed = false;
     if (localFogApplied && EnsureHdrSceneColorView(sceneTarget)) {
         RenderTexture2D foggedScene = hdrSceneScratch.native;
         foggedScene.depth = nativeScene.depth;
@@ -1788,23 +1933,37 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
                 lightAtmosphereSources,
                 visibilityResult,
                 meshes.sectorReceiverBounds);
-        if (!lightHazeApplied && !CommitHdrScratch(sceneTarget)) return false;
+        if (!lightHazeApplied && !CommitHdrScratch(sceneTarget)) {
+            atmosphereFailed = true;
+        }
     } else {
-        if (localFogApplied && !CommitHdrScratch(sceneTarget)) return false;
-        lightHazeApplied = lightHazeRenderer.Apply(
-                nativeScene,
-                hdrSceneScratch.native,
-                map,
-                volumetricQuality,
-                camera,
-                runtimeSeconds,
-                objectLightProbes,
-                dynamicLightContext,
-                lightAtmosphereSources,
-                visibilityResult,
-                meshes.sectorReceiverBounds);
-        if (lightHazeApplied && !CommitHdrScratch(sceneTarget)) return false;
+        if (localFogApplied && !CommitHdrScratch(sceneTarget)) {
+            atmosphereFailed = true;
+        }
+        if (!atmosphereFailed) {
+            lightHazeApplied = lightHazeRenderer.Apply(
+                    nativeScene,
+                    hdrSceneScratch.native,
+                    map,
+                    volumetricQuality,
+                    camera,
+                    runtimeSeconds,
+                    objectLightProbes,
+                    dynamicLightContext,
+                    lightAtmosphereSources,
+                    visibilityResult,
+                    meshes.sectorReceiverBounds);
+            if (lightHazeApplied && !CommitHdrScratch(sceneTarget)) {
+                atmosphereFailed = true;
+            }
+        }
     }
+    EndAtmosphereGpuPass(1);
+    if (atmosphereFailed) {
+        RefreshAtmosphereDiagnostics(dynamicLightContext);
+        return false;
+    }
+    BeginAtmosphereGpuPass(2);
     const bool lightDustApplied = lightDustRenderer.Apply(
             nativeScene,
             hdrSceneScratch.native,
@@ -1816,6 +1975,8 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
             lightAtmosphereSources,
             visibilityResult,
             meshes.sectorReceiverBounds);
+    EndAtmosphereGpuPass(2);
+    RefreshAtmosphereDiagnostics(dynamicLightContext);
     return localFogApplied || lightHazeApplied || lightDustApplied;
 }
 

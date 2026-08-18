@@ -15,9 +15,15 @@
 #include <cmath>
 #include <array>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <cstdio>
 #include <string>
 #include <utility>
+
+#if defined(__linux__)
+#include <time.h>
+#endif
 
 static constexpr int INTERNAL_WIDTH = 1920;
 static constexpr int INTERNAL_HEIGHT = 1080;
@@ -58,6 +64,7 @@ public:
 
     void BeginFrame(bool enabled)
     {
+        lastCpuMilliseconds.fill(0.0);
         active = enabled && initialized;
         activePass = PassCount;
         slot = frameIndex % QueryLatency;
@@ -101,7 +108,8 @@ public:
     void End(RenderProfilePass pass)
     {
         const std::size_t index = static_cast<std::size_t>(pass);
-        Smooth(cpuMilliseconds[index], (GetTime() - cpuStart[index]) * 1000.0);
+        lastCpuMilliseconds[index] = (GetTime() - cpuStart[index]) * 1000.0;
+        Smooth(cpuMilliseconds[index], lastCpuMilliseconds[index]);
         if (active && activePass == index) {
             glEndQuery(GL_TIME_ELAPSED);
             activePass = PassCount;
@@ -109,12 +117,25 @@ public:
         }
     }
 
-    void Draw(float renderScale, bool fxaa) const
+    double LastCpuMilliseconds(RenderProfilePass pass) const
+    {
+        return lastCpuMilliseconds[static_cast<std::size_t>(pass)];
+    }
+
+    double GpuMilliseconds(RenderProfilePass pass) const
+    {
+        return gpuMilliseconds[static_cast<std::size_t>(pass)];
+    }
+
+    void Draw(
+            float renderScale,
+            bool fxaa,
+            const game::SectorAtmosphereDiagnostics& atmosphere) const
     {
         static constexpr const char* Names[PassCount] = {
                 "shadows", "world", "atmosphere", "viewmodel", "bloom",
                 "presentation", "final"};
-        DrawRectangle(8, 42, 330, 24 + static_cast<int>(PassCount) * 20,
+        DrawRectangle(8, 42, 620, 104 + static_cast<int>(PassCount) * 20,
                 Color{0, 0, 0, 190});
         DrawText(TextFormat("Render %.0f%%  FXAA %s  CPU / GPU ms",
                          renderScale * 100.0f, fxaa ? "on" : "off"),
@@ -124,6 +145,44 @@ public:
                              cpuMilliseconds[pass], gpuMilliseconds[pass]),
                     16, 70 + static_cast<int>(pass) * 20, 16, RAYWHITE);
         }
+        const int detailY = 70 + static_cast<int>(PassCount) * 20;
+        DrawText(TextFormat(
+                         "atmo GPU fog/haze/dust %5.2f / %5.2f / %5.2f",
+                         atmosphere.localFogGpuMilliseconds,
+                         atmosphere.lightHazeGpuMilliseconds,
+                         atmosphere.dustGpuMilliseconds),
+                16, detailY, 16, SKYBLUE);
+        DrawText(TextFormat(
+                         "volumes fog %d/%d %3.0f%%  haze %d/%d %3.0f%%  lights %d",
+                         atmosphere.localFogActiveCount,
+                         atmosphere.localFogEligibleCount,
+                         atmosphere.localFogScissorCoverage * 100.0f,
+                         atmosphere.lightHazeActiveCount,
+                         atmosphere.lightHazeEligibleCount,
+                         atmosphere.lightHazeScissorCoverage * 100.0f,
+                         atmosphere.dynamicLightCount),
+                16, detailY + 20, 16, SKYBLUE);
+        DrawText(TextFormat(
+                         "dust %d/%d particles %d  fog ids %d,%d,%d,%d",
+                         atmosphere.dustActiveEmitterCount,
+                         atmosphere.dustEligibleEmitterCount,
+                         atmosphere.dustVisibleParticleCount,
+                         atmosphere.localFogVolumeIds[0],
+                         atmosphere.localFogVolumeIds[1],
+                         atmosphere.localFogVolumeIds[2],
+                         atmosphere.localFogVolumeIds[3]),
+                16, detailY + 40, 16, SKYBLUE);
+        DrawText(TextFormat(
+                         "haze kind:id %d:%d %d:%d %d:%d %d:%d",
+                         static_cast<int>(atmosphere.lightHazeSources[0].kind),
+                         atmosphere.lightHazeSources[0].lightId,
+                         static_cast<int>(atmosphere.lightHazeSources[1].kind),
+                         atmosphere.lightHazeSources[1].lightId,
+                         static_cast<int>(atmosphere.lightHazeSources[2].kind),
+                         atmosphere.lightHazeSources[2].lightId,
+                         static_cast<int>(atmosphere.lightHazeSources[3].kind),
+                         atmosphere.lightHazeSources[3].lightId),
+                16, detailY + 60, 16, SKYBLUE);
     }
 
 private:
@@ -140,6 +199,7 @@ private:
     std::array<GLuint, PassCount * QueryLatency> queries{};
     std::array<std::uint32_t, QueryLatency> issuedMasks{};
     std::array<double, PassCount> cpuStart{};
+    std::array<double, PassCount> lastCpuMilliseconds{};
     std::array<double, PassCount> cpuMilliseconds{};
     std::array<double, PassCount> gpuMilliseconds{};
     std::size_t frameIndex = 0;
@@ -147,6 +207,154 @@ private:
     std::size_t activePass = PassCount;
     bool initialized = false;
     bool active = false;
+};
+
+class FrameDipTrace {
+public:
+    void Initialize(int argc, char** argv)
+    {
+        static constexpr const char* ThresholdPrefix =
+                "--trace-frame-dips-ms=";
+        static constexpr const char* OutputPrefix =
+                "--frame-trace-output=";
+        const char* outputPath = nullptr;
+        for (int index = 1; index < argc; ++index) {
+            const char* argument = argv[index] != nullptr ? argv[index] : "";
+            if (std::strncmp(
+                        argument,
+                        ThresholdPrefix,
+                        std::strlen(ThresholdPrefix)) == 0) {
+                const double requested = std::strtod(
+                        argument + std::strlen(ThresholdPrefix),
+                        nullptr);
+                if (std::isfinite(requested) && requested > 0.0) {
+                    thresholdMilliseconds = requested;
+                }
+            } else if (std::strncmp(
+                               argument,
+                               OutputPrefix,
+                               std::strlen(OutputPrefix)) == 0) {
+                outputPath = argument + std::strlen(OutputPrefix);
+            }
+        }
+        if (thresholdMilliseconds <= 0.0) {
+            return;
+        }
+
+        output = stderr;
+        if (outputPath != nullptr && outputPath[0] != '\0') {
+            output = std::fopen(outputPath, "w");
+            ownsOutput = output != nullptr;
+            if (output == nullptr) {
+                output = stderr;
+                std::fprintf(
+                        stderr,
+                        "FRAME_TRACE: could not open %s; using stderr\n",
+                        outputPath);
+            }
+        }
+        std::fprintf(
+                output,
+                "# frame trace v2; dips >= %.3f ms; timestamps use CLOCK_MONOTONIC\n"
+                "# haze source kinds: 0=static-point 1=static-spot 2=dynamic-point 3=dynamic-spot\n"
+                "# mono_seconds total_ms pre_render_ms shadows_cpu_ms world_cpu_ms atmosphere_cpu_ms viewmodel_cpu_ms bloom_cpu_ms presentation_cpu_ms final_cpu_ms shadows_gpu_ms world_gpu_ms atmosphere_gpu_ms viewmodel_gpu_ms bloom_gpu_ms presentation_gpu_ms final_gpu_ms local_fog_gpu_ms light_haze_gpu_ms dust_gpu_ms fog_eligible fog_active fog_coverage haze_eligible haze_active haze_coverage dust_active dust_visible dynamic_lights fog_id0 fog_id1 fog_id2 fog_id3 fog_id4 fog_id5 fog_id6 fog_id7 fog_id8 fog_id9 fog_id10 fog_id11 fog_id12 fog_id13 fog_id14 fog_id15 haze_kind0 haze_id0 haze_kind1 haze_id1 haze_kind2 haze_id2 haze_kind3 haze_id3 haze_kind4 haze_id4 haze_kind5 haze_id5 haze_kind6 haze_id6 haze_kind7 haze_id7\n",
+                thresholdMilliseconds);
+        std::fflush(output);
+    }
+
+    void Shutdown()
+    {
+        if (ownsOutput && output != nullptr) {
+            std::fclose(output);
+        }
+        output = nullptr;
+        ownsOutput = false;
+    }
+
+    bool Enabled() const
+    {
+        return output != nullptr && thresholdMilliseconds > 0.0;
+    }
+
+    double TimestampSeconds() const
+    {
+#if defined(__linux__)
+        timespec timestamp{};
+        if (clock_gettime(CLOCK_MONOTONIC, &timestamp) == 0) {
+            return static_cast<double>(timestamp.tv_sec)
+                    + static_cast<double>(timestamp.tv_nsec) / 1000000000.0;
+        }
+#endif
+        return GetTime();
+    }
+
+    void Record(
+            double frameStartSeconds,
+            double preRenderEndSeconds,
+            const RenderPerformanceProfiler& profiler,
+            const game::SectorAtmosphereDiagnostics& atmosphere)
+    {
+        if (!Enabled()) {
+            return;
+        }
+        const double frameEndSeconds = TimestampSeconds();
+        const double totalMilliseconds =
+                (frameEndSeconds - frameStartSeconds) * 1000.0;
+        if (!std::isfinite(totalMilliseconds)
+                || totalMilliseconds < thresholdMilliseconds) {
+            return;
+        }
+        std::fprintf(
+                output,
+                "%.9f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %d %d %.4f %d %d %.4f %d %d %d",
+                frameEndSeconds,
+                totalMilliseconds,
+                (preRenderEndSeconds - frameStartSeconds) * 1000.0,
+                profiler.LastCpuMilliseconds(RenderProfilePass::Shadows),
+                profiler.LastCpuMilliseconds(RenderProfilePass::World),
+                profiler.LastCpuMilliseconds(RenderProfilePass::Atmosphere),
+                profiler.LastCpuMilliseconds(RenderProfilePass::Viewmodel),
+                profiler.LastCpuMilliseconds(RenderProfilePass::Bloom),
+                profiler.LastCpuMilliseconds(RenderProfilePass::Presentation),
+                profiler.LastCpuMilliseconds(RenderProfilePass::FinalComposite),
+                profiler.GpuMilliseconds(RenderProfilePass::Shadows),
+                profiler.GpuMilliseconds(RenderProfilePass::World),
+                profiler.GpuMilliseconds(RenderProfilePass::Atmosphere),
+                profiler.GpuMilliseconds(RenderProfilePass::Viewmodel),
+                profiler.GpuMilliseconds(RenderProfilePass::Bloom),
+                profiler.GpuMilliseconds(RenderProfilePass::Presentation),
+                profiler.GpuMilliseconds(RenderProfilePass::FinalComposite),
+                atmosphere.localFogGpuMilliseconds,
+                atmosphere.lightHazeGpuMilliseconds,
+                atmosphere.dustGpuMilliseconds,
+                atmosphere.localFogEligibleCount,
+                atmosphere.localFogActiveCount,
+                atmosphere.localFogScissorCoverage,
+                atmosphere.lightHazeEligibleCount,
+                atmosphere.lightHazeActiveCount,
+                atmosphere.lightHazeScissorCoverage,
+                atmosphere.dustActiveEmitterCount,
+                atmosphere.dustVisibleParticleCount,
+                atmosphere.dynamicLightCount);
+        for (const int fogVolumeId : atmosphere.localFogVolumeIds) {
+            std::fprintf(output, " %d", fogVolumeId);
+        }
+        for (const game::SectorLightHazeActiveSource& source
+                : atmosphere.lightHazeSources) {
+            std::fprintf(
+                    output,
+                    " %d %d",
+                    static_cast<int>(source.kind),
+                    source.lightId);
+        }
+        std::fputc('\n', output);
+        std::fflush(output);
+    }
+
+private:
+    std::FILE* output = nullptr;
+    double thresholdMilliseconds = 0.0;
+    bool ownsOutput = false;
 };
 
 #if defined(__APPLE__)
@@ -198,7 +406,7 @@ static void ClearLinearSceneBackground(Color displaySrgbColor)
     rlClearScreenBuffers();
 }
 
-int main()
+int main(int argc, char** argv)
 {
     engine::InstallDebugConsoleTraceLogBridge();
     game::FpsApplicationSettings startupSettings;
@@ -547,9 +755,14 @@ int main()
 
     RenderPerformanceProfiler performanceProfiler;
     performanceProfiler.Initialize();
+    FrameDipTrace frameDipTrace;
+    frameDipTrace.Initialize(argc, argv);
 
     while (!WindowShouldClose() && !application.QuitRequested())
     {
+        const double frameStartSeconds = frameDipTrace.Enabled()
+                ? frameDipTrace.TimestampSeconds()
+                : 0.0;
         assets.UpdateMainThread(2.0f);
 
         const float dt = GetFrameTime();
@@ -695,8 +908,12 @@ int main()
                 contentKind == game::ApplicationContentKind::Sector3D;
         const bool useWorldFxaa = application.ApplicationSettings().graphics.fxaa
                 && IsShaderValid(fxaaShader);
-        performanceProfiler.BeginFrame(
-                application.ApplicationSettings().graphics.performanceOverlay);
+        const double preRenderEndSeconds = frameDipTrace.Enabled()
+                ? frameDipTrace.TimestampSeconds()
+                : 0.0;
+        const bool collectPerformanceDiagnostics = frameDipTrace.Enabled()
+                || application.ApplicationSettings().graphics.performanceOverlay;
+        performanceProfiler.BeginFrame(collectPerformanceDiagnostics);
         if (application.ShouldRefreshBackground() && render3D) {
             performanceProfiler.Begin(RenderProfilePass::Shadows);
             application.Render3DShadowMaps(context);
@@ -710,7 +927,9 @@ int main()
             performanceProfiler.End(RenderProfilePass::World);
 
             performanceProfiler.Begin(RenderProfilePass::Atmosphere);
-            application.Apply3DWorldAtmosphere(worldTargetResource);
+            application.Apply3DWorldAtmosphere(
+                    worldTargetResource,
+                    collectPerformanceDiagnostics);
             performanceProfiler.End(RenderProfilePass::Atmosphere);
 
             performanceProfiler.Begin(RenderProfilePass::Viewmodel);
@@ -794,7 +1013,10 @@ int main()
             DrawTexturePro(uiTarget.texture, uiSrc, dst, {0,0}, 0.0f, WHITE);
             DrawFPS(10, 10);
             if (application.ApplicationSettings().graphics.performanceOverlay) {
-                performanceProfiler.Draw(currentWorldRenderScale, useWorldFxaa);
+                performanceProfiler.Draw(
+                        currentWorldRenderScale,
+                        useWorldFxaa,
+                        application.AtmosphereDiagnostics());
             }
             if (application.IsMenuOpen()) {
                 Rectangle menuSrc = GetFullscreenSrcRect(menuTarget.texture);
@@ -812,8 +1034,14 @@ int main()
         }
         EndDrawing();
         performanceProfiler.End(RenderProfilePass::FinalComposite);
+        frameDipTrace.Record(
+                frameStartSeconds,
+                preRenderEndSeconds,
+                performanceProfiler,
+                application.AtmosphereDiagnostics());
     }
 
+    frameDipTrace.Shutdown();
     performanceProfiler.Shutdown();
     application.Shutdown(context);
     unloadRenderResources();

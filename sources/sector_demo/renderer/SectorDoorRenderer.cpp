@@ -14,6 +14,14 @@ namespace game {
 
 namespace {
 
+bool SameMatrixExact(const Matrix& a, const Matrix& b)
+{
+    return a.m0 == b.m0 && a.m1 == b.m1 && a.m2 == b.m2 && a.m3 == b.m3
+            && a.m4 == b.m4 && a.m5 == b.m5 && a.m6 == b.m6 && a.m7 == b.m7
+            && a.m8 == b.m8 && a.m9 == b.m9 && a.m10 == b.m10 && a.m11 == b.m11
+            && a.m12 == b.m12 && a.m13 == b.m13 && a.m14 == b.m14 && a.m15 == b.m15;
+}
+
 const char* SectorDoorOpaqueVs = R"(
 #version 330
 in vec3 vertexPosition;
@@ -619,6 +627,7 @@ void SectorDoorRenderer::PrepareRuntimeDoorMeshes(
                     cacheEntry.height = render.height;
                     cacheEntry.thickness = render.thickness;
                     cacheEntry.faceUvs = render.faceUvs;
+                    cacheEntry.staticLightingValid = false;
                 }
             });
 
@@ -795,7 +804,15 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                     return;
                 }
 
-                if (!BuildSectorDoorStaticLightingColors(
+                const Matrix doorModel = BuildSectorDoorSlabModelMatrix(
+                        transform,
+                        anchor,
+                        render);
+                const bool staticLightingDirty = !cacheEntry->staticLightingValid
+                        || cacheEntry->staticLightingSectorId != object.currentSectorId
+                        || cacheEntry->staticLightingRevision != context.lighting.revision
+                        || !SameMatrixExact(cacheEntry->staticLightingModel, doorModel);
+                if (staticLightingDirty && !BuildSectorDoorStaticLightingColors(
                             cacheEntry->meshData,
                             transform,
                             object,
@@ -808,7 +825,8 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                             static_cast<size_t>(cacheEntry->mesh.vertexCount),
                             Vector3{1.0f, 1.0f, 1.0f});
                 }
-                if (cacheEntry->mesh.tangents != nullptr
+                if (staticLightingDirty
+                        && cacheEntry->mesh.tangents != nullptr
                         && cacheEntry->staticLightingValues.size() == static_cast<size_t>(cacheEntry->mesh.vertexCount)) {
                     for (int i = 0; i < cacheEntry->mesh.vertexCount; ++i) {
                         const Vector3 lighting = cacheEntry->staticLightingValues[static_cast<size_t>(i)];
@@ -824,6 +842,12 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                             cacheEntry->mesh.vertexCount * 4 * static_cast<int>(sizeof(float)),
                             0);
                 }
+                if (staticLightingDirty) {
+                    cacheEntry->staticLightingModel = doorModel;
+                    cacheEntry->staticLightingSectorId = object.currentSectorId;
+                    cacheEntry->staticLightingRevision = context.lighting.revision;
+                    cacheEntry->staticLightingValid = true;
+                }
 
                 if (doorOpaqueLocations.tint >= 0) {
                     const Vector4 tint = engine::SrgbColorBytesToLinearSceneRgba(
@@ -836,7 +860,7 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                 DrawMesh(
                         cacheEntry->mesh,
                         doorOpaqueMaterial,
-                        BuildSectorDoorSlabModelMatrix(transform, anchor, render));
+                        doorModel);
                 ++drawnCount;
             });
 

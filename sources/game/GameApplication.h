@@ -65,12 +65,15 @@ public:
     void Render3DScene(engine::EngineContext& context);
     void Render3DViewmodel(engine::AssetManager& assets);
     void Render3DOverlays();
-    void Apply3DWorldAtmosphere(engine::RenderTarget& sceneTarget);
+    void Apply3DWorldAtmosphere(
+            engine::RenderTarget& sceneTarget,
+            bool collectGpuDiagnostics = false);
     void Apply3DHdrBloom(engine::RenderTarget& sceneTarget);
     bool Composite3DViewmodel(
             engine::RenderTarget& sceneTarget,
             const engine::RenderTarget& viewmodelTarget);
     const engine::RenderTarget* HdrDebugPresentationSource() const;
+    const SectorAtmosphereDiagnostics& AtmosphereDiagnostics() const;
     void Render3DHud(
             engine::AssetManager& assets,
             engine::FontHandle font,

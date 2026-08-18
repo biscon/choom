@@ -285,6 +285,14 @@ if(BUILD_TESTING)
     target_link_libraries(pbr_lighting_policy_tests PRIVATE raylib)
     add_test(NAME pbr_lighting_policy COMMAND pbr_lighting_policy_tests)
 
+    add_executable(sector_atmosphere_culling_tests
+            tests/SectorAtmosphereCullingTests.cpp
+            sources/sector_demo/renderer/SectorAtmosphereCulling.cpp
+    )
+    target_include_directories(sector_atmosphere_culling_tests PRIVATE sources)
+    target_link_libraries(sector_atmosphere_culling_tests PRIVATE raylib)
+    add_test(NAME sector_atmosphere_culling COMMAND sector_atmosphere_culling_tests)
+
     add_executable(sector_utility_tests
             tests/SectorUtilityTests.cpp
     )

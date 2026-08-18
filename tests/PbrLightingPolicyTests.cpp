@@ -569,6 +569,17 @@ void TestHdrEffectShaderAndPassPolicies()
                     && muzzle.find("LinearToSrgb")==std::string::npos
                     && bloom.find("ToneMap")==std::string::npos,
           "effect shaders do not tone map or output-encode radiance locally");
+    Check(fog.find("uniform uint fogDynamicLightMasks[16]")!=std::string::npos
+                    &&fog.find("fogDynamicLightMasks[volumeIndex]")!=std::string::npos
+                    &&haze.find("uniform uint hazeDynamicLightMasks[8]")!=std::string::npos
+                    &&haze.find("hazeDynamicLightMasks[volumeIndex]")!=std::string::npos,
+          "volumetric shaders reject dynamically lit samples outside conservative volume masks");
+    Check(fog.find("scale = 0.5f")!=std::string::npos
+                    &&fog.find("steps = 8")!=std::string::npos
+                    &&fog.find("cap = 8")!=std::string::npos
+                    &&haze.find("int cap=4, steps=8; float renderScale=0.5f")
+                            !=std::string::npos,
+          "lossless atmosphere culling preserves medium volumetric quality settings");
     Check(bloom.find("ApplyEmissiveDecalBloom")==std::string::npos
                     && ReadSource(SECTOR_SHADER_SOURCE_PATH).find(
                                "emissiveRadiance * emissiveDecalAlpha")!=std::string::npos

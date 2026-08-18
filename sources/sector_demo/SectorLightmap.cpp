@@ -2389,8 +2389,24 @@ bool AddAdjacentObjectProbeSectorId(
     return true;
 }
 
+const SectorBakedObjectLightProbePortalRange* FindObjectProbePortalRange(
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        int sectorId)
+{
+    const auto it = std::lower_bound(
+            probes.portalRanges.begin(),
+            probes.portalRanges.end(),
+            sectorId,
+            [](const SectorBakedObjectLightProbePortalRange& range, int id) {
+                return range.sectorId < id;
+            });
+    return it != probes.portalRanges.end() && it->sectorId == sectorId
+            ? &*it
+            : nullptr;
+}
+
 void CollectAdjacentObjectProbeSectorIdsNearPortals(
-        const SectorTopologyMap& map,
+        const SectorBakedObjectLightProbeRuntimeData& probes,
         Vector3 worldPosition,
         int preferredSectorId,
         int (&adjacentSectorIds)[kObjectProbeMaxAdjacentBlendSectors],
@@ -2401,70 +2417,33 @@ void CollectAdjacentObjectProbeSectorIdsNearPortals(
     const float blendDistanceSquared =
             kObjectProbeAdjacentPortalBlendDistanceWorld * kObjectProbeAdjacentPortalBlendDistanceWorld;
 
-    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+    const SectorBakedObjectLightProbePortalRange* range =
+            FindObjectProbePortalRange(probes, preferredSectorId);
+    if (range == nullptr || range->count <= 0) {
+        return;
+    }
+
+    const int end = std::min(
+            range->begin + range->count,
+            static_cast<int>(probes.portals.size()));
+    for (int portalIndex = std::max(0, range->begin);
+            portalIndex < end;
+            ++portalIndex) {
         if (adjacentSectorCount >= kObjectProbeMaxAdjacentBlendSectors) {
             break;
         }
-        if (!IsValidSectorTopologyId(lineDef.frontSideDefId)
-                || !IsValidSectorTopologyId(lineDef.backSideDefId)) {
-            continue;
-        }
-
-        const SectorTopologySideDef* frontSide = FindSectorTopologySideDef(map, lineDef.frontSideDefId);
-        const SectorTopologySideDef* backSide = FindSectorTopologySideDef(map, lineDef.backSideDefId);
-        if (frontSide == nullptr
-                || backSide == nullptr
-                || frontSide->lineDefId != lineDef.id
-                || backSide->lineDefId != lineDef.id) {
-            continue;
-        }
-
-        const SectorTopologySideDef* fromSide = nullptr;
-        const SectorTopologySideDef* toSide = nullptr;
-        if (frontSide->sectorId == preferredSectorId) {
-            fromSide = frontSide;
-            toSide = backSide;
-        } else if (backSide->sectorId == preferredSectorId) {
-            fromSide = backSide;
-            toSide = frontSide;
-        } else {
-            continue;
-        }
-        if (toSide == nullptr || fromSide == nullptr || toSide->sectorId == preferredSectorId) {
-            continue;
-        }
-
-        const SectorTopologySector* fromSector = FindSectorTopologySector(map, fromSide->sectorId);
-        const SectorTopologySector* toSector = FindSectorTopologySector(map, toSide->sectorId);
-        if (fromSector == nullptr || toSector == nullptr) {
-            continue;
-        }
-
-        const float openBottom = std::max(
-                SectorAuthoringToWorldDistance(fromSector->floorZ),
-                SectorAuthoringToWorldDistance(toSector->floorZ));
-        const float openTop = std::min(
-                SectorAuthoringToWorldDistance(fromSector->ceilingZ),
-                SectorAuthoringToWorldDistance(toSector->ceilingZ));
-        if (!(openBottom < openTop)) {
-            continue;
-        }
-
-        const SectorTopologyVertex* start = FindSectorTopologyVertex(map, lineDef.startVertexId);
-        const SectorTopologyVertex* end = FindSectorTopologyVertex(map, lineDef.endVertexId);
-        if (start == nullptr || end == nullptr) {
-            continue;
-        }
-
-        const Vector2 a = SectorCoordToWorldPosition2(start->x, start->y);
-        const Vector2 b = SectorCoordToWorldPosition2(end->x, end->y);
-        const float distanceSquared = DistanceSquaredPointToSegment2(samplePosition, a, b);
+        const SectorBakedObjectLightProbePortal& portal =
+                probes.portals[static_cast<size_t>(portalIndex)];
+        const float distanceSquared = DistanceSquaredPointToSegment2(
+                samplePosition,
+                portal.startWorld,
+                portal.endWorld);
         if (!std::isfinite(distanceSquared) || distanceSquared > blendDistanceSquared) {
             continue;
         }
 
         AddAdjacentObjectProbeSectorId(
-                toSide->sectorId,
+                portal.adjacentSectorId,
                 preferredSectorId,
                 adjacentSectorIds,
                 adjacentSectorCount);
@@ -4374,7 +4353,127 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
     outData.probes = std::move(probes);
     outData.sectorRanges = std::move(sectorRanges);
     outData.metadata = std::move(loadedMetadata);
+    BuildSectorBakedObjectLightProbePortalAdjacency(map, outData);
     return true;
+}
+
+void BuildSectorBakedObjectLightProbePortalAdjacency(
+        const SectorTopologyMap& map,
+        SectorBakedObjectLightProbeRuntimeData& outData)
+{
+    struct DirectedPortal {
+        int sectorId = 0;
+        SectorBakedObjectLightProbePortal portal;
+    };
+
+    outData.portals.clear();
+    outData.portalRanges.clear();
+    outData.portalAdjacencyPrepared = true;
+
+    const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(map);
+    auto uniqueIndex = [](const auto& index, int id) -> const size_t* {
+        const auto it = index.find(id);
+        return it != index.end() && it->second.size() == 1
+                ? &it->second.front()
+                : nullptr;
+    };
+
+    std::vector<DirectedPortal> directed;
+    directed.reserve(map.lineDefs.size() * 2);
+    for (const SectorTopologyLineDef& lineDef : map.lineDefs) {
+        const size_t* frontIndex = uniqueIndex(
+                indexes.sideDefIndicesById,
+                lineDef.frontSideDefId);
+        const size_t* backIndex = uniqueIndex(
+                indexes.sideDefIndicesById,
+                lineDef.backSideDefId);
+        const size_t* startIndex = uniqueIndex(
+                indexes.vertexIndicesById,
+                lineDef.startVertexId);
+        const size_t* endIndex = uniqueIndex(
+                indexes.vertexIndicesById,
+                lineDef.endVertexId);
+        if (frontIndex == nullptr || backIndex == nullptr
+                || startIndex == nullptr || endIndex == nullptr
+                || *frontIndex >= map.sideDefs.size()
+                || *backIndex >= map.sideDefs.size()
+                || *startIndex >= map.vertices.size()
+                || *endIndex >= map.vertices.size()) {
+            continue;
+        }
+
+        const SectorTopologySideDef& front = map.sideDefs[*frontIndex];
+        const SectorTopologySideDef& back = map.sideDefs[*backIndex];
+        if (front.lineDefId != lineDef.id || back.lineDefId != lineDef.id
+                || front.sectorId == back.sectorId) {
+            continue;
+        }
+        const size_t* frontSectorIndex = uniqueIndex(
+                indexes.sectorIndicesById,
+                front.sectorId);
+        const size_t* backSectorIndex = uniqueIndex(
+                indexes.sectorIndicesById,
+                back.sectorId);
+        if (frontSectorIndex == nullptr || backSectorIndex == nullptr
+                || *frontSectorIndex >= map.sectors.size()
+                || *backSectorIndex >= map.sectors.size()) {
+            continue;
+        }
+
+        const SectorTopologySector& frontSector = map.sectors[*frontSectorIndex];
+        const SectorTopologySector& backSector = map.sectors[*backSectorIndex];
+        const float openBottom = std::max(
+                SectorAuthoringToWorldDistance(frontSector.floorZ),
+                SectorAuthoringToWorldDistance(backSector.floorZ));
+        const float openTop = std::min(
+                SectorAuthoringToWorldDistance(frontSector.ceilingZ),
+                SectorAuthoringToWorldDistance(backSector.ceilingZ));
+        if (!(openBottom < openTop)) {
+            continue;
+        }
+
+        const SectorTopologyVertex& start = map.vertices[*startIndex];
+        const SectorTopologyVertex& end = map.vertices[*endIndex];
+        const Vector2 startWorld = SectorCoordToWorldPosition2(start.x, start.y);
+        const Vector2 endWorld = SectorCoordToWorldPosition2(end.x, end.y);
+        directed.push_back(DirectedPortal{
+                front.sectorId,
+                SectorBakedObjectLightProbePortal{
+                        back.sectorId,
+                        startWorld,
+                        endWorld}});
+        directed.push_back(DirectedPortal{
+                back.sectorId,
+                SectorBakedObjectLightProbePortal{
+                        front.sectorId,
+                        startWorld,
+                        endWorld}});
+    }
+
+    std::stable_sort(
+            directed.begin(),
+            directed.end(),
+            [](const DirectedPortal& a, const DirectedPortal& b) {
+                return a.sectorId < b.sectorId;
+            });
+    outData.portals.reserve(directed.size());
+    outData.portalRanges.reserve(directed.size());
+    for (size_t begin = 0; begin < directed.size();) {
+        const int sectorId = directed[begin].sectorId;
+        size_t end = begin + 1;
+        while (end < directed.size() && directed[end].sectorId == sectorId) {
+            ++end;
+        }
+        const int portalBegin = static_cast<int>(outData.portals.size());
+        for (size_t index = begin; index < end; ++index) {
+            outData.portals.push_back(directed[index].portal);
+        }
+        outData.portalRanges.push_back(SectorBakedObjectLightProbePortalRange{
+                sectorId,
+                portalBegin,
+                static_cast<int>(end - begin)});
+        begin = end;
+    }
 }
 
 Vector3 EvaluateBakedObjectAmbientCubeLighting(
@@ -4461,11 +4560,12 @@ BakedObjectLightingVerticalSample SampleBakedObjectLightingVertical(
                         preferredRange->count,
                         selection);
 
-                if (mapForFallback != nullptr) {
+                if (mapForFallback != nullptr
+                        && probes.portalAdjacencyPrepared) {
                     int adjacentSectorIds[kObjectProbeMaxAdjacentBlendSectors] = {};
                     int adjacentSectorCount = 0;
                     CollectAdjacentObjectProbeSectorIdsNearPortals(
-                            *mapForFallback,
+                            probes,
                             worldPosition,
                             preferredSectorId,
                             adjacentSectorIds,
@@ -5590,6 +5690,15 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
 
 SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map)
 {
+    return GetSectorLightmapStatus(
+            map,
+            ComputeSectorLightmapSourceHash(map));
+}
+
+SectorLightmapStatus GetSectorLightmapStatus(
+        const SectorTopologyMap& map,
+        const std::string& currentSourceHash)
+{
     if (map.bakedLightmap.path.empty()
             || map.bakedLightmap.width <= 0
             || map.bakedLightmap.height <= 0
@@ -5597,7 +5706,7 @@ SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map)
         return SectorLightmapStatus::None;
     }
 
-    if (map.bakedLightmap.sourceHash != ComputeSectorLightmapSourceHash(map)) {
+    if (map.bakedLightmap.sourceHash != currentSourceHash) {
         return SectorLightmapStatus::Stale;
     }
     if (map.bakedLightmap.version != kSectorLightmapArtifactVersion
@@ -5605,15 +5714,24 @@ SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map)
         return SectorLightmapStatus::Stale;
     }
 
-    const std::vector<SectorLightmapAtlasMetadata> atlases =
-            GetSectorLightmapAtlases(map.bakedLightmap);
-    if (atlases.empty()) {
+    const auto atlasIsInvalid = [&map](const SectorLightmapAtlasMetadata& atlas) {
+        return atlas.path.empty() || atlas.width <= 0 || atlas.height <= 0
+                || atlas.width != map.bakedLightmap.width
+                || atlas.height != map.bakedLightmap.height;
+    };
+    const SectorLightmapAtlasMetadata primary{
+            map.bakedLightmap.path,
+            map.bakedLightmap.width,
+            map.bakedLightmap.height};
+    if (atlasIsInvalid(primary)) {
         return SectorLightmapStatus::Stale;
     }
-    for (const SectorLightmapAtlasMetadata& atlas : atlases) {
-        if (atlas.path.empty() || atlas.width <= 0 || atlas.height <= 0
-                || atlas.width != map.bakedLightmap.width
-                || atlas.height != map.bakedLightmap.height) {
+    if (!FileExistsResolved(ResolveSectorAssetPath(primary.path))) {
+        return SectorLightmapStatus::Missing;
+    }
+    for (const SectorLightmapAtlasMetadata& atlas :
+            map.bakedLightmap.additionalAtlases) {
+        if (atlasIsInvalid(atlas)) {
             return SectorLightmapStatus::Stale;
         }
         if (!FileExistsResolved(ResolveSectorAssetPath(atlas.path))) {

@@ -85,7 +85,9 @@ public:
     void RenderPreview3DViewmodel(engine::AssetManager& assets);
     void RenderPreview3DOverlays();
     void RenderPreview3DHud(Rectangle playableViewport) const;
-    void ApplyPreview3DWorldAtmosphere(engine::RenderTarget& sceneTarget);
+    void ApplyPreview3DWorldAtmosphere(
+            engine::RenderTarget& sceneTarget,
+            bool collectGpuDiagnostics = false);
     void ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget);
     bool CompositePreview3DViewmodel(
             engine::RenderTarget& sceneTarget,
@@ -93,6 +95,10 @@ public:
     const engine::RenderTarget* Preview3DHdrDebugPresentationSource() const
     {
         return sceneRuntime.HdrDebugPresentationSource();
+    }
+    const SectorAtmosphereDiagnostics& PreviewAtmosphereDiagnostics() const
+    {
+        return sceneRuntime.Renderer().AtmosphereDiagnostics();
     }
     void RenderUI(
             engine::UIContext& ui,

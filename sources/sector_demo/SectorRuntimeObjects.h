@@ -143,6 +143,7 @@ struct SectorRuntimeObjectState {
     std::string npcDefinitionCatalogWarning;
     SectorBakedObjectLightProbeRuntimeData objectLightProbes;
     std::string objectProbeStatus;
+    uint64_t staticLightingRevision = 1;
     SectorCollisionWorld objectSectorLookupWorld;
     bool objectSectorLookupWorldValid = false;
     bool doorSpatialStateChanged = true;

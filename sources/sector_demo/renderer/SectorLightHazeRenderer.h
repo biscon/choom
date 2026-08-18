@@ -13,13 +13,23 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
 namespace game {
 
+struct SectorLightHazeActiveSource {
+    SectorLightAtmosphereSourceKind kind =
+            SectorLightAtmosphereSourceKind::StaticPoint;
+    int lightId = 0;
+    int ownerSectorId = 0;
+};
+
 class SectorLightHazeRenderer {
 public:
+    static constexpr int MaxVolumes = 8;
+
     bool Apply(
             RenderTexture2D& sceneTarget,
             RenderTexture2D& sceneScratch,
@@ -36,6 +46,15 @@ public:
 
     int EligibleCount() const { return eligibleCount; }
     int ActiveCount() const { return activeCount; }
+    float ScissorCoverage() const { return scissorCoverage; }
+    const std::array<SectorLightHazeActiveSource, MaxVolumes>& ActiveSources() const
+    {
+        return activeSources;
+    }
+    const std::array<std::uint32_t, MaxVolumes>& DynamicLightMasks() const
+    {
+        return dynamicLightMasks;
+    }
     const engine::RenderTarget& AccumulationTarget() const { return hazeTarget; }
     const std::string& AccumulationDiagnostic() const { return accumulationDiagnostic; }
 
@@ -68,6 +87,7 @@ private:
         int paramsB = -1;
         int ownerDynamicLightIndices = -1;
         int staticLighting = -1;
+        int dynamicLightMasks = -1;
         int fogEnabled = -1;
         int fogColor = -1;
         int fogStartDistance = -1;
@@ -131,6 +151,9 @@ private:
     float failedScale = 0.0f;
     int eligibleCount = 0;
     int activeCount = 0;
+    float scissorCoverage = 0.0f;
+    std::array<SectorLightHazeActiveSource, MaxVolumes> activeSources{};
+    std::array<std::uint32_t, MaxVolumes> dynamicLightMasks{};
     bool warnedUnavailable = false;
     bool shaderFailed = false;
 };

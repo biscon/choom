@@ -26,6 +26,7 @@
 #include <raylib.h>
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -40,6 +41,25 @@ namespace game {
 
 struct SectorTopologyMap;
 struct SectorBakedObjectLightProbeRuntimeData;
+
+struct SectorAtmosphereDiagnostics {
+    double localFogGpuMilliseconds = 0.0;
+    double lightHazeGpuMilliseconds = 0.0;
+    double dustGpuMilliseconds = 0.0;
+    int dynamicLightCount = 0;
+    int localFogEligibleCount = 0;
+    int localFogActiveCount = 0;
+    float localFogScissorCoverage = 0.0f;
+    std::array<int, SectorLocalFogRenderer::MaxVolumes> localFogVolumeIds{};
+    int lightHazeEligibleCount = 0;
+    int lightHazeActiveCount = 0;
+    float lightHazeScissorCoverage = 0.0f;
+    std::array<SectorLightHazeActiveSource,
+            SectorLightHazeRenderer::MaxVolumes> lightHazeSources{};
+    int dustEligibleEmitterCount = 0;
+    int dustActiveEmitterCount = 0;
+    int dustVisibleParticleCount = 0;
+};
 
 class SectorMeshRenderer {
 public:
@@ -78,7 +98,8 @@ public:
     bool ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
-            const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);
+            const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+            bool collectGpuDiagnostics = false);
     bool ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,
@@ -245,13 +266,31 @@ public:
     {
         return hdrSceneScratchDiagnostic;
     }
+    const SectorAtmosphereDiagnostics& AtmosphereDiagnostics() const
+    {
+        return atmosphereDiagnostics;
+    }
 
 private:
+    static constexpr std::size_t AtmosphereGpuPassCount = 3;
+    static constexpr std::size_t AtmosphereGpuQueryLatency = 4;
+
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
     bool EnsureHdrSceneColorView(const engine::RenderTarget& sceneTarget);
     void UnloadHdrSceneColorView();
     bool EnsureHdrCompositeShader();
     bool CommitHdrScratch(engine::RenderTarget& sceneTarget);
+    bool EnsureAtmosphereGpuQueries();
+    void ShutdownAtmosphereGpuQueries();
+    void BeginAtmosphereGpuFrame(bool enabled);
+    void BeginAtmosphereGpuPass(std::size_t pass);
+    void EndAtmosphereGpuPass(std::size_t pass);
+    unsigned int AtmosphereGpuQuery(
+            std::size_t pass,
+            std::size_t slot,
+            bool end) const;
+    void RefreshAtmosphereDiagnostics(
+            const SectorBillboardDynamicLightContext& dynamicLights);
     engine::TextureHandle TextureForId(const std::string& textureId) const;
     engine::TextureHandle NormalTextureForId(const std::string& textureId) const;
     void UpdateCamera();
@@ -335,6 +374,16 @@ private:
     std::string hdrSceneScratchDiagnostic = "not allocated";
     int hdrSceneScratchFailedWidth = 0;
     int hdrSceneScratchFailedHeight = 0;
+    SectorAtmosphereDiagnostics atmosphereDiagnostics;
+    std::array<unsigned int,
+            AtmosphereGpuPassCount * AtmosphereGpuQueryLatency * 2>
+            atmosphereGpuQueries{};
+    std::array<std::uint8_t, AtmosphereGpuQueryLatency>
+            atmosphereGpuIssuedMasks{};
+    std::size_t atmosphereGpuFrameIndex = 0;
+    std::size_t atmosphereGpuSlot = 0;
+    bool atmosphereGpuQueriesInitialized = false;
+    bool atmosphereGpuActive = false;
     SectorBillboardRenderer billboardRenderer;
     SectorStaticModelRenderer staticModelRenderer;
     SectorStaticSpecularLightState staticSpecularLightState;

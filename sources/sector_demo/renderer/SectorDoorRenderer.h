@@ -39,6 +39,7 @@ const char* SectorDoorLightingDebugModeName(SectorDoorLightingDebugMode mode);
 struct SectorRuntimeDoorLightingContext {
     const SectorBakedObjectLightProbeRuntimeData* objectLightProbes = nullptr;
     const SectorTopologyMap* mapForFallback = nullptr;
+    uint64_t revision = 0;
 };
 
 struct SectorDoorRenderStats {
@@ -115,6 +116,10 @@ public:
         float thickness = 0.0f;
         SectorDoorFaceUvSet faceUvs;
         std::vector<Vector3> staticLightingValues;
+        Matrix staticLightingModel = {};
+        int staticLightingSectorId = -1;
+        uint64_t staticLightingRevision = 0;
+        bool staticLightingValid = false;
         bool seenThisFrame = false;
     };
 

@@ -364,20 +364,97 @@ void DrawWrappedTextLine(
     DrawTextWithFont(assets, font, line, position, fontSize, spacing, tint);
 }
 
-float MeasureTextRangeWidth(
+struct WrappedTextMetrics {
+    Font font = {};
+    float fontSize = 0.0f;
+    float spacing = 0.0f;
+    float scale = 0.0f;
+    bool valid = false;
+};
+
+WrappedTextMetrics ResolveWrappedTextMetrics(
         AssetManager& assets,
         FontHandle font,
-        const char* text,
-        size_t start,
-        size_t length,
         float fontSize,
         float spacing)
 {
-    char line[2048] = {};
-    const size_t copyLength = std::min(length, sizeof(line) - 1);
-    std::memcpy(line, text + start, copyLength);
-    line[copyLength] = '\0';
-    return MeasureTextWithFont(assets, font, line, fontSize, spacing).x;
+    WrappedTextMetrics metrics;
+    if (const FontAsset* fontAsset = assets.GetFont(font)) {
+        metrics.font = fontAsset->font;
+        metrics.fontSize = fontSize;
+        metrics.spacing = spacing;
+    } else {
+        metrics.font = GetFontDefault();
+        const int defaultFontSize = std::max(10, static_cast<int>(fontSize));
+        metrics.fontSize = static_cast<float>(defaultFontSize);
+        metrics.spacing = static_cast<float>(defaultFontSize / 10);
+    }
+    metrics.valid = metrics.font.texture.id != 0
+            && metrics.font.baseSize > 0
+            && metrics.font.glyphs != nullptr
+            && metrics.font.recs != nullptr;
+    metrics.scale = metrics.valid
+            ? metrics.fontSize / static_cast<float>(metrics.font.baseSize)
+            : 0.0f;
+    return metrics;
+}
+
+float MeasureTextRangeWidthLinear(
+        const WrappedTextMetrics& metrics,
+        const char* text,
+        size_t start,
+        size_t end)
+{
+    if (!metrics.valid || text == nullptr || start >= end) {
+        return 0.0f;
+    }
+
+    float width = 0.0f;
+    int glyphCount = 0;
+    for (size_t cursor = start; cursor < end;) {
+        int byteCount = 0;
+        const int codepoint = GetCodepointNext(text + cursor, &byteCount);
+        if (byteCount <= 0) {
+            byteCount = 1;
+        }
+        const int glyphIndex = GetGlyphIndex(metrics.font, codepoint);
+        if (glyphIndex >= 0 && glyphIndex < metrics.font.glyphCount) {
+            if (glyphCount > 0) {
+                width += metrics.spacing;
+            }
+            const GlyphInfo& glyph = metrics.font.glyphs[glyphIndex];
+            width += static_cast<float>(
+                    glyph.advanceX > 0
+                    ? glyph.advanceX
+                    : metrics.font.recs[glyphIndex].width + glyph.offsetX)
+                    * metrics.scale;
+            ++glyphCount;
+        }
+        cursor = std::min(end, cursor + static_cast<size_t>(byteCount));
+    }
+    return width;
+}
+
+float WrappedTextCodepointAdvance(
+        const WrappedTextMetrics& metrics,
+        int codepoint,
+        bool& outValidGlyph)
+{
+    outValidGlyph = false;
+    if (!metrics.valid) {
+        return 0.0f;
+    }
+    const int glyphIndex = GetGlyphIndex(metrics.font, codepoint);
+    if (glyphIndex < 0 || glyphIndex >= metrics.font.glyphCount) {
+        return 0.0f;
+    }
+    outValidGlyph = true;
+    const GlyphInfo& glyph = metrics.font.glyphs[glyphIndex];
+    return static_cast<float>(
+            glyph.advanceX > 0
+            ? glyph.advanceX
+            : metrics.font.recs[glyphIndex].width + glyph.offsetX)
+            * metrics.scale;
 }
 
 void DrawTextWrappedRaw(
@@ -398,6 +475,11 @@ void DrawTextWrappedRaw(
     const float lineHeight = config.fontSize;
     const float lineAdvance = config.fontSize + config.textSpacing;
     const Color textColor = ResolveTint(tint, config.textColor);
+    const WrappedTextMetrics metrics = ResolveWrappedTextMetrics(
+            assets,
+            font,
+            config.fontSize,
+            config.textSpacing);
 
     if (byteCount == 0 || contentWidth <= 0.0f || lineHeight <= 0.0f) {
         return;
@@ -407,6 +489,8 @@ void DrawTextWrappedRaw(
     size_t lineEnd = 0;
     size_t lastBreak = 0;
     bool hasBreak = false;
+    float currentLineWidth = 0.0f;
+    int currentLineGlyphCount = 0;
     float y = contentY;
 
     auto drawLine = [&](size_t start, size_t end) {
@@ -424,15 +508,11 @@ void DrawTextWrappedRaw(
             return true;
         }
 
-        const float lineWidth = MeasureTextRangeWidth(
-                assets,
-                font,
+        const float lineWidth = MeasureTextRangeWidthLinear(
+                metrics,
                 safeText,
                 start,
-                end - start,
-                config.fontSize,
-                config.textSpacing
-        );
+                end);
         float x = contentX;
         if (justify == UITextJustify::Center) {
             x = bounds.x + (bounds.width - lineWidth) * 0.5f;
@@ -467,21 +547,30 @@ void DrawTextWrappedRaw(
             lineEnd = next;
             lastBreak = next;
             hasBreak = false;
+            currentLineWidth = 0.0f;
+            currentLineGlyphCount = 0;
             cursor = next;
             continue;
         }
 
-        const float measuredWidth = MeasureTextRangeWidth(
-                assets,
-                font,
-                safeText,
-                lineStart,
-                next - lineStart,
-                config.fontSize,
-                config.textSpacing
-        );
+        int codepointByteCount = 0;
+        const int codepoint = GetCodepointNext(
+                safeText + cursor,
+                &codepointByteCount);
+        bool validGlyph = false;
+        const float glyphAdvance = WrappedTextCodepointAdvance(
+                metrics,
+                codepoint,
+                validGlyph);
+        const float measuredWidth = currentLineWidth
+                + (validGlyph && currentLineGlyphCount > 0
+                        ? metrics.spacing
+                        : 0.0f)
+                + glyphAdvance;
 
-        if (measuredWidth > contentWidth && lineEnd > lineStart) {
+        const bool lineBufferFull = next - lineStart >= 2048;
+        if ((measuredWidth > contentWidth || lineBufferFull)
+                && lineEnd > lineStart) {
             const size_t breakEnd = hasBreak && lastBreak > lineStart ? lastBreak : lineEnd;
             if (!drawLine(lineStart, breakEnd)) {
                 return;
@@ -494,10 +583,16 @@ void DrawTextWrappedRaw(
             lineEnd = lineStart;
             lastBreak = lineStart;
             hasBreak = false;
+            currentLineWidth = 0.0f;
+            currentLineGlyphCount = 0;
             continue;
         }
 
         lineEnd = next;
+        currentLineWidth = measuredWidth;
+        if (validGlyph) {
+            ++currentLineGlyphCount;
+        }
         if (ch == ' ' || ch == '\t') {
             lastBreak = next;
             hasBreak = true;

@@ -1,6 +1,7 @@
 #include "sector_demo/renderer/SectorLightHazeRenderer.h"
 
 #include "engine/render/ColorTransfer.h"
+#include "sector_demo/renderer/SectorAtmosphereCulling.h"
 #include "sector_demo/renderer/SectorFog.h"
 
 #include <raymath.h>
@@ -16,7 +17,6 @@
 namespace game {
 namespace {
 
-constexpr int MaxHazeVolumes = 8;
 constexpr float HazeMaximumOpacity = 0.30f;
 constexpr SectorLocalFogPathLimitSettings HazePathLimitSettings{};
 
@@ -73,6 +73,7 @@ uniform vec4 hazeParamsA[8];
 uniform vec4 hazeParamsB[8];
 uniform int hazeOwnerDynamicLightIndices[8];
 uniform vec3 hazeStaticLighting[64];
+uniform uint hazeDynamicLightMasks[8];
 
 uniform int fogEnabled;
 uniform vec3 fogColor;
@@ -208,6 +209,7 @@ float shadowVisibility(int lightIndex, int slot, vec3 p) {
 }
 vec3 dynamicLighting(vec3 p, int volumeIndex, float heightOffsetWorld) {
     vec3 result=vec3(0); for(int i=0;i<MAX_DYNAMIC_LIGHTS;++i) { if(i>=dynamicLightCount) break;
+        if((hazeDynamicLightMasks[volumeIndex] & (1u << uint(i)))==0u) continue;
         vec3 lightingPosition=i==hazeOwnerDynamicLightIndices[volumeIndex]
                 ?p-vec3(0,heightOffsetWorld,0):p;
         float radius=dynamicLightRadii[i]; vec3 toLight=dynamicLightPositions[i]-lightingPosition; float d2=dot(toLight,toLight);
@@ -374,6 +376,7 @@ bool SectorLightHazeRenderer::EnsureShaders()
     locations.paramsA=ArrayLoc(shader,"hazeParamsA"); locations.paramsB=ArrayLoc(shader,"hazeParamsB");
     locations.ownerDynamicLightIndices=ArrayLoc(shader,"hazeOwnerDynamicLightIndices");
     locations.staticLighting=ArrayLoc(shader,"hazeStaticLighting");
+    locations.dynamicLightMasks=ArrayLoc(shader,"hazeDynamicLightMasks");
     LOC(fogEnabled,"fogEnabled"); LOC(fogColor,"fogColor"); LOC(fogStartDistance,"fogStartDistance");
     LOC(fogDensity,"fogDensity"); LOC(fogMaxOpacity,"fogMaxOpacity"); LOC(fogReferenceHeight,"fogReferenceHeight");
     LOC(fogHeightFalloff,"fogHeightFalloff");
@@ -473,6 +476,9 @@ bool SectorLightHazeRenderer::Apply(
         const std::vector<SectorReceiverBounds>& receiverBounds)
 {
     eligibleCount=0; activeCount=0;
+    scissorCoverage=0.0f;
+    activeSources.fill(SectorLightHazeActiveSource{});
+    dynamicLightMasks.fill(0);
     if(sceneTarget.texture.id==0||sceneTarget.depth.id==0
             ||quality==SectorVolumetricQuality::Off) return false;
     const float nearPlane=static_cast<float>(rlGetCullDistanceNear()), farPlane=static_cast<float>(rlGetCullDistanceFar());
@@ -481,7 +487,7 @@ bool SectorLightHazeRenderer::Apply(
     int cap=4, steps=8; float renderScale=0.5f;
     if(quality==SectorVolumetricQuality::Low) { cap=2; steps=4; renderScale=0.25f; }
     else if(quality==SectorVolumetricQuality::High) { cap=8; steps=12; renderScale=1.0f; }
-    std::array<SectorLightAtmosphereVolume,MaxHazeVolumes> selected{}; std::array<float,MaxHazeVolumes> distances{};
+    std::array<SectorLightAtmosphereVolume,MaxVolumes> selected{}; std::array<float,MaxVolumes> distances{};
     distances.fill(std::numeric_limits<float>::max());
     for(const auto& source:sources) {
         if(!source.atmosphere.haze.enabled||source.atmosphere.haze.density<=0.0f||!IsSectorLightAtmosphereSourceSelected(source,dynamicLights)) continue;
@@ -499,21 +505,65 @@ bool SectorLightHazeRenderer::Apply(
         return false;
     }
     RefreshProbeIdentity(map,probes);
-    std::array<Vector3,MaxHazeVolumes> centers{},directions{},boundsCenters{},colors{};
-    std::array<float,MaxHazeVolumes> boundsRadii{},extents{},coneRadii{}; std::array<int,MaxHazeVolumes> shapes{};
-    std::array<int,MaxHazeVolumes> ownerDynamicLightIndices{}; ownerDynamicLightIndices.fill(-1);
-    std::array<Vector4,MaxHazeVolumes> paramsA{},paramsB{}; std::array<Vector3,MaxHazeVolumes*8> lighting{};
+    std::array<Vector3,MaxVolumes> centers{},directions{},boundsCenters{},colors{};
+    std::array<float,MaxVolumes> boundsRadii{},extents{},coneRadii{}; std::array<int,MaxVolumes> shapes{};
+    std::array<int,MaxVolumes> ownerDynamicLightIndices{}; ownerDynamicLightIndices.fill(-1);
+    std::array<Vector4,MaxVolumes> paramsA{},paramsB{}; std::array<Vector3,MaxVolumes*8> lighting{};
+    SectorAtmosphereScissorRect scissor{};
     for(int i=0;i<activeCount;++i) {
         const auto& v=selected[static_cast<std::size_t>(i)]; const auto& h=v.source->atmosphere.haze;
+        activeSources[static_cast<std::size_t>(i)] =
+                SectorLightHazeActiveSource{
+                        v.source->kind,
+                        v.source->lightId,
+                        v.source->ownerSectorId};
         centers[i]=v.originWorld; directions[i]=v.directionWorld; boundsCenters[i]=v.boundsCenterWorld; boundsRadii[i]=v.boundsRadiusWorld;
         shapes[i]=v.source->shape==SectorLightAtmosphereShape::Cone?1:0; extents[i]=v.extentWorld; coneRadii[i]=v.coneRadiusWorld;
         colors[i]=engine::SrgbColorBytesToLinearSceneRgb(h.scatteringTint);
         paramsA[i]=Vector4{h.density,HazeMaximumOpacity,h.edgeSoftness,h.noiseScaleWorld};
         paramsB[i]=Vector4{h.noiseAmount,h.flowDirectionDegrees*DEG2RAD,h.flowSpeedWorld,h.heightOffsetWorld};
         ownerDynamicLightIndices[i]=FindOwnerDynamicLightIndex(*v.source,dynamicLights);
+        const Vector3 boundsExtent{
+                v.boundsRadiusWorld,
+                v.boundsRadiusWorld,
+                v.boundsRadiusWorld};
+        const Vector3 boundsMin=Vector3Subtract(v.boundsCenterWorld,boundsExtent);
+        const Vector3 boundsMax=Vector3Add(v.boundsCenterWorld,boundsExtent);
+        dynamicLightMasks[static_cast<std::size_t>(i)] =
+                BuildSectorAtmosphereDynamicLightMask(
+                        dynamicLights,boundsMin,boundsMax);
+        const int ownerIndex=ownerDynamicLightIndices[i];
+        if(ownerIndex>=0) {
+            const Vector3 ownerOffset{0.0f,h.heightOffsetWorld,0.0f};
+            if(SectorAtmosphereDynamicLightIntersectsBounds(
+                        dynamicLights,
+                        ownerIndex,
+                        Vector3Subtract(boundsMin,ownerOffset),
+                        Vector3Subtract(boundsMax,ownerOffset))) {
+                dynamicLightMasks[static_cast<std::size_t>(i)] |=
+                        std::uint32_t{1} << static_cast<unsigned int>(ownerIndex);
+            }
+        }
+        scissor=UnionSectorAtmosphereScissors(
+                scissor,
+                ProjectSectorAtmosphereBoundsToScissor(
+                        camera,
+                        aspect,
+                        nearPlane,
+                        boundsMin,
+                        boundsMax,
+                        hazeTarget.native.texture.width,
+                        hazeTarget.native.texture.height),
+                hazeTarget.native.texture.width,
+                hazeTarget.native.texture.height);
         const SectorLightAtmosphereVolume lightingVolume=UndisplacedLightingVolume(v,h.heightOffsetWorld);
         const auto& grid=LightingFor(map,probes,lightingVolume); for(int j=0;j<8;++j) lighting[static_cast<std::size_t>(i*8+j)]=grid.corners[static_cast<std::size_t>(j)];
     }
+    scissorCoverage=SectorAtmosphereScissorCoverage(
+            scissor,
+            hazeTarget.native.texture.width,
+            hazeTarget.native.texture.height);
+    if(scissor.Empty()) return false;
     const Vector3 forward=Vector3Normalize(Vector3Subtract(camera.target,camera.position));
     const Vector3 right=Vector3Normalize(Vector3CrossProduct(forward,camera.up));
     const Vector3 up=Vector3Normalize(Vector3CrossProduct(right,forward)); const float tanHalf=std::tan(camera.fovy*DEG2RAD*0.5f);
@@ -545,9 +595,12 @@ bool SectorLightHazeRenderer::Apply(
     SetShaderValueV(shader,locations.paramsA,paramsA.data(),SHADER_UNIFORM_VEC4,activeCount); SetShaderValueV(shader,locations.paramsB,paramsB.data(),SHADER_UNIFORM_VEC4,activeCount);
     SetShaderValueV(shader,locations.ownerDynamicLightIndices,ownerDynamicLightIndices.data(),SHADER_UNIFORM_INT,activeCount);
     SetShaderValueV(shader,locations.staticLighting,lighting.data(),SHADER_UNIFORM_VEC3,activeCount*8);
+    SetShaderValueV(shader,locations.dynamicLightMasks,dynamicLightMasks.data(),SHADER_UNIFORM_UINT,activeCount);
     UploadSectorRendererDynamicPointLights(shader,locations.dynamicLights,dynamicLights); UploadSectorRendererDynamicSpotLightShadowUniforms(shader,locations.shadows,dynamicLights.shadowUniforms);
-    rlDisableColorBlend(); DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(hazeTarget.native.texture),{},0,WHITE);
-    rlDrawRenderBatchActive(); EndShaderMode(); rlEnableColorBlend(); EndTextureMode();
+    rlDisableColorBlend(); rlEnableScissorTest();
+    rlScissor(scissor.x,scissor.y,scissor.width,scissor.height);
+    DrawTexturePro(sceneTarget.texture,Src(sceneTarget.texture),Dst(hazeTarget.native.texture),{},0,WHITE);
+    rlDrawRenderBatchActive(); rlDisableScissorTest(); EndShaderMode(); rlEnableColorBlend(); EndTextureMode();
     const Vector2 texel{1.0f/hazeTarget.native.texture.width,1.0f/hazeTarget.native.texture.height}; const int bilateral=quality==SectorVolumetricQuality::Medium?1:0;
     rlDrawRenderBatchActive();
     BeginTextureMode(sceneScratch); ClearBackground(BLANK); BeginShaderMode(compositeShader);
@@ -564,6 +617,9 @@ void SectorLightHazeRenderer::Shutdown()
     shader={}; compositeShader={}; locations={}; compositeLocations={}; for(auto& entry:probeCache) entry={};
     cachedProbeData=nullptr; cachedProbeCount=0; cachedProbeHash=0; cachedMapProbeHash=0;
     failedWidth=0; failedHeight=0; failedScale=0.0f;
+    scissorCoverage=0.0f;
+    activeSources.fill(SectorLightHazeActiveSource{});
+    dynamicLightMasks.fill(0);
     shaderFailed=false;
     accumulationDiagnostic="not allocated";
 }

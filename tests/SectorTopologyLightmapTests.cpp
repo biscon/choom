@@ -1811,8 +1811,12 @@ void TestBakeVersionInvalidatesOldLightmaps()
     map.bakedLightmap.version = game::kSectorLightmapArtifactVersion;
     map.bakedLightmap.format = game::kSectorLightmapArtifactFormat;
     map.bakedLightmap.sourceHash = game::ComputeSectorLightmapSourceHash(map);
+    const std::string currentSourceHash = map.bakedLightmap.sourceHash;
     Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Valid,
           "current bake version source hash keeps existing lightmap valid");
+    Check(game::GetSectorLightmapStatus(map, currentSourceHash)
+                    == game::SectorLightmapStatus::Valid,
+          "precomputed source hash keeps existing lightmap status valid");
 
     const std::filesystem::path additionalAtlasPath =
             Phase01bSandboxDir() / "phase06a_status_lightmap.1.png";
@@ -1827,6 +1831,9 @@ void TestBakeVersionInvalidatesOldLightmaps()
     std::filesystem::remove(additionalAtlasPath);
     Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Missing,
           "missing additional atlas is reported distinctly");
+    Check(game::GetSectorLightmapStatus(map, currentSourceHash)
+                    == game::SectorLightmapStatus::Missing,
+          "precomputed source hash preserves missing-atlas status");
     WriteSolidAlphaTestTexture(additionalAtlasPath, 255);
 
     const std::filesystem::path objectProbePath =
@@ -1854,6 +1861,9 @@ void TestBakeVersionInvalidatesOldLightmaps()
     map.bakedLightmap.sourceHash = "pre-object-probe-source-hash";
     Check(game::GetSectorLightmapStatus(map) == game::SectorLightmapStatus::Stale,
           "old bake version source hash is stale after object probe bake output change");
+    Check(game::GetSectorLightmapStatus(map, currentSourceHash)
+                    == game::SectorLightmapStatus::Stale,
+          "precomputed source hash preserves stale metadata status");
     map.bakedLightmap.objectProbes.sourceHash = "pre-object-probe-source-hash";
     Check(game::GetSectorBakedObjectLightProbeStatus(map) == game::SectorLightmapStatus::Stale,
           "old bake version source hash is stale for object probe metadata");
@@ -2974,6 +2984,7 @@ void TestObjectLightProbeSamplingAdjacentPortalBlending()
             SamplingProbe(10, Vector3{-0.25f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}),
             SamplingProbe(20, Vector3{0.75f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}),
     });
+    game::BuildSectorBakedObjectLightProbePortalAdjacency(map, data);
 
     const game::BakedObjectLightingSample far =
             game::SampleBakedObjectLighting(data, Vector3{-2.0f, 0.0f, 0.0f}, 10, &map);
@@ -2995,6 +3006,7 @@ void TestObjectLightProbeSamplingAdjacentSectorDeduplicatesSplitPortal()
             SamplingProbe(10, Vector3{-0.25f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}),
             SamplingProbe(20, Vector3{0.75f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}),
     });
+    game::BuildSectorBakedObjectLightProbePortalAdjacency(map, data);
 
     const game::BakedObjectLightingSample sample =
             game::SampleBakedObjectLighting(data, Vector3{0.25f, 0.0f, 0.125f}, 10, &map);
@@ -3014,6 +3026,7 @@ void TestObjectLightProbeSamplingAdjacentSectorCapAndPreferredDeduplication()
         capProbes.push_back(SamplingProbe(20 + index, Vector3{x, 0.0f, 0.0f}, Vector3{red, 0.0f, 0.0f}));
     }
     game::SectorBakedObjectLightProbeRuntimeData capData = MakeSamplingRuntimeData(std::move(capProbes));
+    game::BuildSectorBakedObjectLightProbePortalAdjacency(capMap, capData);
 
     const game::BakedObjectLightingSample capped =
             game::SampleBakedObjectLighting(capData, Vector3{2.0f, 0.0f, 0.0f}, 10, &capMap);
@@ -3032,6 +3045,9 @@ void TestObjectLightProbeSamplingAdjacentSectorCapAndPreferredDeduplication()
             SamplingProbe(10, Vector3{0.85f, 0.0f, 0.0f}, Vector3{0.0f, 1.0f, 0.0f}),
             SamplingProbe(10, Vector3{0.95f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}),
     });
+    game::BuildSectorBakedObjectLightProbePortalAdjacency(
+            preferredLoopMap,
+            preferredLoopData);
 
     const game::BakedObjectLightingSample preferredBaseline =
             game::SampleBakedObjectLighting(preferredLoopData, Vector3{0.25f, 0.0f, 0.0f}, 10, nullptr);
@@ -3050,6 +3066,7 @@ void TestObjectLightProbeSamplingDoesNotBlendThroughClosedOrUnavailableAdjacency
             SamplingProbe(10, Vector3{-0.25f, 0.0f, 0.0f}, Vector3{1.0f, 0.0f, 0.0f}),
             SamplingProbe(20, Vector3{0.75f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}),
     });
+    game::BuildSectorBakedObjectLightProbePortalAdjacency(closedPortalMap, data);
 
     const game::BakedObjectLightingSample closed =
             game::SampleBakedObjectLighting(data, Vector3{0.25f, 0.0f, 0.0f}, 10, &closedPortalMap);

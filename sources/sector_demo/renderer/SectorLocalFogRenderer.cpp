@@ -1,6 +1,7 @@
 #include "sector_demo/renderer/SectorLocalFogRenderer.h"
 
 #include "engine/render/ColorTransfer.h"
+#include "sector_demo/renderer/SectorAtmosphereCulling.h"
 #include <raymath.h>
 #include <rlgl.h>
 
@@ -14,7 +15,6 @@
 namespace game {
 namespace {
 
-constexpr int MaxLocalFogVolumes = 16;
 constexpr SectorLocalFogPathLimitSettings LocalFogPathLimitSettings{};
 
 const char* FullscreenVs = R"(
@@ -68,6 +68,7 @@ uniform vec4 fogParamsB[16];
 uniform vec4 fogLightingA[16];
 uniform vec4 fogLightingB[16];
 uniform vec4 fogLightingC[16];
+uniform uint fogDynamicLightMasks[16];
 
 #define MAX_DYNAMIC_LIGHTS 32
 #define MAX_DYNAMIC_SHADOW_CASTERS 64
@@ -181,10 +182,12 @@ float dynamicLightShadowVisibility(int lightIndex, int shadowSlot, vec3 worldPos
     return visible * 0.25;
 }
 
-vec3 evaluateDynamicLighting(vec3 worldPosition) {
+vec3 evaluateDynamicLighting(vec3 worldPosition, int volumeIndex) {
     vec3 dynamicDirect = vec3(0.0);
     for (int lightIndex = 0; lightIndex < MAX_DYNAMIC_LIGHTS; ++lightIndex) {
         if (lightIndex >= dynamicLightCount) break;
+        if ((fogDynamicLightMasks[volumeIndex]
+                    & (1u << uint(lightIndex))) == 0u) continue;
         float radius = dynamicLightRadii[lightIndex];
         vec3 toLight = dynamicLightPositions[lightIndex] - worldPosition;
         float distanceSq = dot(toLight, toLight);
@@ -326,7 +329,7 @@ void main() {
             if (sampleOpticalDepth <= 0.0) continue;
             vec3 staticLighting = interpolateStaticLighting(volumeIndex, local.xz);
             vec3 sampleLighting = max(
-                    staticLighting + evaluateDynamicLighting(position),
+                    staticLighting + evaluateDynamicLighting(position, volumeIndex),
                     vec3(0.0));
             volumeOpticalDepth += sampleOpticalDepth;
             volumeWeightedScattering += fogColors[volumeIndex]
@@ -478,6 +481,8 @@ bool SectorLocalFogRenderer::EnsureShaders()
     accumulateLocations.fogLightingA = GetShaderLocationArrayBase(accumulateShader, "fogLightingA");
     accumulateLocations.fogLightingB = GetShaderLocationArrayBase(accumulateShader, "fogLightingB");
     accumulateLocations.fogLightingC = GetShaderLocationArrayBase(accumulateShader, "fogLightingC");
+    accumulateLocations.dynamicLightMasks =
+            GetShaderLocationArrayBase(accumulateShader, "fogDynamicLightMasks");
     accumulateLocations.dynamicLights.dynamicLightCount =
             GetShaderLocation(accumulateShader, "dynamicLightCount");
     accumulateLocations.dynamicLights.dynamicLightPositions =
@@ -654,6 +659,9 @@ bool SectorLocalFogRenderer::Apply(
 {
     eligibleVolumeCount = 0;
     activeVolumeCount = 0;
+    scissorCoverage = 0.0f;
+    activeVolumeIds.fill(0);
+    dynamicLightMasks.fill(0);
     if (sceneTarget.texture.id == 0 || sceneTarget.depth.id == 0 || sceneTarget.depth.mipmaps <= 0
             || quality == SectorVolumetricQuality::Off) return false;
 
@@ -689,8 +697,8 @@ bool SectorLocalFogRenderer::Apply(
     }
     RefreshStaticLightingCacheIdentity(map, objectLightProbes);
 
-    std::array<const SectorCompiledLocalFogVolume*, MaxLocalFogVolumes> selected{};
-    std::array<float, MaxLocalFogVolumes> selectedDistance2{};
+    std::array<const SectorCompiledLocalFogVolume*, MaxVolumes> selected{};
+    std::array<float, MaxVolumes> selectedDistance2{};
     selectedDistance2.fill(std::numeric_limits<float>::max());
     const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
     for (const SectorCompiledLocalFogVolume& volume : map.compiledLocalFogVolumes) {
@@ -715,16 +723,40 @@ bool SectorLocalFogRenderer::Apply(
     }
     if (activeVolumeCount == 0) return false;
 
-    std::array<float, MaxLocalFogVolumes * 3> centers{};
-    std::array<float, MaxLocalFogVolumes * 3> radii{};
-    std::array<float, MaxLocalFogVolumes * 3> colors{};
-    std::array<float, MaxLocalFogVolumes * 4> paramsA{};
-    std::array<float, MaxLocalFogVolumes * 4> paramsB{};
-    std::array<float, MaxLocalFogVolumes * 4> lightingA{};
-    std::array<float, MaxLocalFogVolumes * 4> lightingB{};
-    std::array<float, MaxLocalFogVolumes * 4> lightingC{};
+    std::array<float, MaxVolumes * 3> centers{};
+    std::array<float, MaxVolumes * 3> radii{};
+    std::array<float, MaxVolumes * 3> colors{};
+    std::array<float, MaxVolumes * 4> paramsA{};
+    std::array<float, MaxVolumes * 4> paramsB{};
+    std::array<float, MaxVolumes * 4> lightingA{};
+    std::array<float, MaxVolumes * 4> lightingB{};
+    std::array<float, MaxVolumes * 4> lightingC{};
+    const float aspect = static_cast<float>(sceneTarget.texture.width)
+            / sceneTarget.texture.height;
+    SectorAtmosphereScissorRect scissor{};
     for (int i = 0; i < activeVolumeCount; ++i) {
         const SectorCompiledLocalFogVolume& volume = *selected[static_cast<size_t>(i)];
+        activeVolumeIds[static_cast<std::size_t>(i)] =
+                volume.sourceAuthoringFogVolumeId;
+        const Vector3 boundsMin = Vector3Subtract(
+                volume.centerWorld, volume.radiiWorld);
+        const Vector3 boundsMax = Vector3Add(
+                volume.centerWorld, volume.radiiWorld);
+        dynamicLightMasks[static_cast<std::size_t>(i)] =
+                BuildSectorAtmosphereDynamicLightMask(
+                        dynamicLightContext, boundsMin, boundsMax);
+        scissor = UnionSectorAtmosphereScissors(
+                scissor,
+                ProjectSectorAtmosphereBoundsToScissor(
+                        camera,
+                        aspect,
+                        nearPlane,
+                        boundsMin,
+                        boundsMax,
+                        fogTarget.native.texture.width,
+                        fogTarget.native.texture.height),
+                fogTarget.native.texture.width,
+                fogTarget.native.texture.height);
         centers[static_cast<size_t>(i * 3 + 0)] = volume.centerWorld.x;
         centers[static_cast<size_t>(i * 3 + 1)] = volume.centerWorld.y;
         centers[static_cast<size_t>(i * 3 + 2)] = volume.centerWorld.z;
@@ -763,11 +795,15 @@ bool SectorLocalFogRenderer::Apply(
         lightingC[static_cast<size_t>(i * 4 + 2)] = positiveXPositiveZ.y;
         lightingC[static_cast<size_t>(i * 4 + 3)] = positiveXPositiveZ.z;
     }
+    scissorCoverage = SectorAtmosphereScissorCoverage(
+            scissor,
+            fogTarget.native.texture.width,
+            fogTarget.native.texture.height);
+    if (scissor.Empty()) return false;
 
     const Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, camera.up));
     const Vector3 correctedUp = Vector3Normalize(Vector3CrossProduct(right, forward));
     const float tanHalfFov = std::tan(camera.fovy * DEG2RAD * 0.5f);
-    const float aspect = static_cast<float>(sceneTarget.texture.width) / sceneTarget.texture.height;
     const Vector3 pathLimitSettings{
             LocalFogPathLimitSettings.minimumPathWorld,
             LocalFogPathLimitSettings.heightMultiplier,
@@ -826,6 +862,12 @@ bool SectorLocalFogRenderer::Apply(
     SetShaderValueV(accumulateShader, accumulateLocations.fogLightingA, lightingA.data(), SHADER_UNIFORM_VEC4, activeVolumeCount);
     SetShaderValueV(accumulateShader, accumulateLocations.fogLightingB, lightingB.data(), SHADER_UNIFORM_VEC4, activeVolumeCount);
     SetShaderValueV(accumulateShader, accumulateLocations.fogLightingC, lightingC.data(), SHADER_UNIFORM_VEC4, activeVolumeCount);
+    SetShaderValueV(
+            accumulateShader,
+            accumulateLocations.dynamicLightMasks,
+            dynamicLightMasks.data(),
+            SHADER_UNIFORM_UINT,
+            activeVolumeCount);
     UploadSectorRendererDynamicPointLights(
             accumulateShader,
             accumulateLocations.dynamicLights,
@@ -836,8 +878,11 @@ bool SectorLocalFogRenderer::Apply(
             dynamicLightContext.shadowUniforms);
     // Store premultiplied scattering and opacity without framebuffer blending.
     rlDisableColorBlend();
+    rlEnableScissorTest();
+    rlScissor(scissor.x, scissor.y, scissor.width, scissor.height);
     DrawTexturePro(sceneTarget.texture, SourceRect(sceneTarget.texture), DestinationRect(fogTarget.native.texture), Vector2{}, 0.0f, WHITE);
     rlDrawRenderBatchActive();
+    rlDisableScissorTest();
     EndShaderMode();
     rlEnableColorBlend();
     EndTextureMode();
@@ -879,6 +924,9 @@ void SectorLocalFogRenderer::Shutdown()
     cachedProbeCount = 0;
     cachedProbeSourceHashValue = 0;
     cachedMapProbeSourceHashValue = 0;
+    scissorCoverage = 0.0f;
+    activeVolumeIds.fill(0);
+    dynamicLightMasks.fill(0);
     failedWidth = 0;
     failedHeight = 0;
     failedScale = 0.0f;

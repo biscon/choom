@@ -250,6 +250,9 @@ bool BakeSectorLightmap(
 
 std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map);
 SectorLightmapStatus GetSectorLightmapStatus(const SectorTopologyMap& map);
+SectorLightmapStatus GetSectorLightmapStatus(
+        const SectorTopologyMap& map,
+        const std::string& currentSourceHash);
 SectorLightmapStatus GetSectorBakedObjectLightProbeStatus(const SectorTopologyMap& map);
 const char* SectorLightmapStatusText(SectorLightmapStatus status);
 bool IsSameLogicalSectorLightmapSurface(
@@ -291,6 +294,9 @@ bool LoadSectorBakedObjectLightProbeRuntimeData(
         const SectorTopologyMap& map,
         SectorBakedObjectLightProbeRuntimeData& outData,
         std::string& outError);
+void BuildSectorBakedObjectLightProbePortalAdjacency(
+        const SectorTopologyMap& map,
+        SectorBakedObjectLightProbeRuntimeData& outData);
 Vector3 EvaluateBakedObjectAmbientCubeLighting(
         const BakedObjectLightingSample& sample,
         Vector3 worldNormal);

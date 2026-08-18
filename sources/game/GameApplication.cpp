@@ -436,13 +436,27 @@ void GameApplication::Render3DOverlays()
 }
 
 void GameApplication::Apply3DWorldAtmosphere(
-        engine::RenderTarget& sceneTarget)
+        engine::RenderTarget& sceneTarget,
+        bool collectGpuDiagnostics)
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
-        gameScene.ApplyWorldAtmosphere(sceneTarget, gameSession.Map());
+        gameScene.ApplyWorldAtmosphere(
+                sceneTarget,
+                gameSession.Map(),
+                collectGpuDiagnostics);
     } else {
-        editor.ApplyPreview3DWorldAtmosphere(sceneTarget);
+        editor.ApplyPreview3DWorldAtmosphere(
+                sceneTarget,
+                collectGpuDiagnostics);
     }
+}
+
+const SectorAtmosphereDiagnostics& GameApplication::AtmosphereDiagnostics() const
+{
+    if (BackgroundScreen() == ApplicationScreen::Game) {
+        return gameScene.Renderer().AtmosphereDiagnostics();
+    }
+    return editor.PreviewAtmosphereDiagnostics();
 }
 
 void GameApplication::Apply3DHdrBloom(engine::RenderTarget& sceneTarget)
