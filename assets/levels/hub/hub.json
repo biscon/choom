@@ -233,7 +233,7 @@
         "modelPath": "assets/models/characters/TestCharacter.glb",
         "collision": true,
         "animation": "Sitting Idle",
-        "shadowMode": "projected_silhouette"
+        "shadowMode": "dynamic"
       },
       "position": [
         -72.0,
@@ -664,7 +664,8 @@
       "kind": "npc",
       "npc": {
         "definitionId": "Zombie1",
-        "instanceId": "zombie01"
+        "instanceId": "zombie01",
+        "shadowMode": "dynamic"
       },
       "position": [
         -208.0,
@@ -678,7 +679,8 @@
       "kind": "npc",
       "npc": {
         "definitionId": "Zombie1",
-        "instanceId": "zombie02"
+        "instanceId": "zombie02",
+        "shadowMode": "dynamic"
       },
       "position": [
         -384.0,
@@ -692,7 +694,8 @@
       "kind": "npc",
       "npc": {
         "definitionId": "Zombie1",
-        "instanceId": "zombie03"
+        "instanceId": "zombie03",
+        "shadowMode": "dynamic"
       },
       "position": [
         -424.0,
@@ -983,23 +986,6 @@
         "a": 255
       },
       "castsShadow": false
-    },
-    {
-      "id": 16,
-      "position": [
-        -248.0,
-        -12.600000381469727,
-        96.0
-      ],
-      "radius": 84.0,
-      "sourceRadius": 4.0,
-      "intensity": 4.0,
-      "color": {
-        "r": 255,
-        "g": 255,
-        "b": 255,
-        "a": 255
-      }
     }
   ],
   "staticSpotLights": [
@@ -1257,7 +1243,11 @@
         "g": 240,
         "b": 230,
         "a": 255
-      }
+      },
+      "castsShadow": true,
+      "shadowBias": 0.001500000013038516,
+      "shadowStrength": 0.75,
+      "shadowSoftness": 4.0
     },
     {
       "id": 2,
@@ -1266,8 +1256,8 @@
         -12.600000381469727,
         96.0
       ],
-      "radius": 84.0,
-      "intensity": 1.0,
+      "radius": 95.0,
+      "intensity": 4.0,
       "color": {
         "r": 255,
         "g": 55,
@@ -1276,7 +1266,30 @@
       },
       "flicker": true,
       "flickerSpeed": 0.5,
-      "flickerAmount": 1.0
+      "flickerAmount": 1.0,
+      "castsShadow": true,
+      "shadowBias": 0.001500000013038516,
+      "shadowSoftness": 2.0
+    },
+    {
+      "id": 3,
+      "position": [
+        -236.0,
+        -12.600000381469727,
+        96.0
+      ],
+      "radius": 84.0,
+      "intensity": 4.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "castsShadow": true,
+      "shadowBias": 0.001500000013038516,
+      "shadowStrength": 0.75,
+      "shadowSoftness": 2.0
     }
   ],
   "dynamicSpotLights": [
@@ -1415,7 +1428,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "2919426780826903",
+    "sourceHash": "977289ee0e082d0b",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -1423,19 +1436,19 @@
         0.0
       ],
       "rgbMax": [
-        2.64453125,
-        2.64453125,
-        2.64453125
+        2.216796875,
+        1.7001953125,
+        1.6220703125
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 9270
+      "rgbChannelsAboveOne": 2142
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "2919426780826903",
+      "sourceHash": "977289ee0e082d0b",
       "count": 2067,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -1448,20 +1461,20 @@
           0.0
         ],
         "rgbMax": [
-          2.564159631729126,
-          2.564159631729126,
-          2.564159631729126
+          2.4413819313049316,
+          2.232698678970337,
+          1.8481019735336304
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 12402,
-        "rgbChannelsAboveOne": 653
+        "rgbChannelsAboveOne": 41
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "2919426780826903",
+      "sourceHash": "977289ee0e082d0b",
       "modelCount": 20,
       "objectCount": 24,
       "format": "staticModelUvRemapF32LE"
@@ -10714,7 +10727,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.03999999910593033,
+        "ambientIntensity": 0.02500000037252903,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -10790,7 +10803,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.0,
+        "ambientIntensity": 0.02500000037252903,
         "defaultWall": {
           "textureId": "dirty_gray_concrete_wall_512",
           "uv": {
@@ -10867,7 +10880,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.009999999776482582,
+        "ambientIntensity": 0.02500000037252903,
         "defaultWall": {
           "textureId": "wall",
           "uv": {
@@ -10936,28 +10949,32 @@
         "x": 64,
         "y": 832,
         "bottomOffsetWorld": -0.25,
-        "radiusXWorld": 1.2000000476837158,
-        "radiusZWorld": 1.2999999523162842,
-        "heightWorld": 0.5,
-        "density": 2.5,
+        "radiusXWorld": 0.800000011920929,
+        "radiusZWorld": 0.800000011920929,
+        "heightWorld": 0.6000000238418579,
+        "density": 1.5,
         "maxOpacity": 0.5,
-        "edgeSoftness": 0.699999988079071,
-        "noiseAmount": 1.0,
-        "flowDirectionDegrees": 90.0
+        "edgeSoftness": 0.5,
+        "noiseScaleWorld": 0.3499999940395355,
+        "noiseAmount": 0.8500000238418579,
+        "flowDirectionDegrees": 90.0,
+        "flowSpeedWorld": 0.05000000074505806
       },
       {
         "id": 3,
         "x": 64,
         "y": 192,
         "bottomOffsetWorld": -0.25,
-        "radiusXWorld": 1.2000000476837158,
-        "radiusZWorld": 1.2999999523162842,
+        "radiusXWorld": 0.75,
+        "radiusZWorld": 0.8500000238418579,
         "heightWorld": 0.5,
         "density": 1.75,
         "maxOpacity": 0.5,
-        "edgeSoftness": 1.0,
-        "noiseAmount": 1.0,
-        "flowDirectionDegrees": 90.0
+        "edgeSoftness": 0.699999988079071,
+        "noiseScaleWorld": 0.3499999940395355,
+        "noiseAmount": 0.800000011920929,
+        "flowDirectionDegrees": 90.0,
+        "flowSpeedWorld": 0.15000000596046448
       }
     ],
     "levelMarkers": [

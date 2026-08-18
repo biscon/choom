@@ -8,7 +8,7 @@
     "landingImpactVolumeMultiplier": 1.350000023841858
   },
   "graphics": {
-    "renderScale": 1.5,
+    "renderScale": 1.25,
     "fxaa": true,
     "volumetricQuality": "medium",
     "shadowQuality": "high",
@@ -16,7 +16,7 @@
     "maxShadowLightUpdatesPerFrame": 2,
     "dynamicLightFadeInSeconds": 0.25,
     "depthPrepass": false,
-    "performanceOverlay": true,
+    "performanceOverlay": false,
     "vsync": true,
     "horizontalFovDegrees": 95
   },
