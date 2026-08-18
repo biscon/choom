@@ -126,7 +126,7 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     DrawRectangleRec(config.overlayBounds, Color{0, 0, 0, 128});
 
     constexpr float panelWidth = 620.0f;
-    constexpr float panelHeight = 790.0f;
+    constexpr float panelHeight = 914.0f;
     constexpr float padding = 44.0f;
     constexpr float rowHeight = 48.0f;
     const Rectangle panel{
@@ -166,6 +166,27 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
                 renderScaleOptions, 5, renderScaleIndex)) {
         draft.graphics.renderScale = renderScales[renderScaleIndex];
     }
+    y += rowHeight + 14.0f;
+
+    engine::Text(config, assets, Rectangle{panel.x + padding, y, labelWidth, rowHeight},
+            smallFont, "Dynamic light budget", engine::UITextJustify::Left);
+    constexpr float lightValueWidth = 64.0f;
+    engine::IntSlider(
+            ui,
+            config,
+            input,
+            "graphics_dynamic_light_budget",
+            Rectangle{controlX, y, controlWidth - lightValueWidth, rowHeight},
+            MinFpsDynamicLights,
+            MaxFpsDynamicLights,
+            draft.graphics.maxDynamicLights);
+    char lightBudgetText[16];
+    std::snprintf(lightBudgetText, sizeof(lightBudgetText), "%d",
+            draft.graphics.maxDynamicLights);
+    engine::Text(config, assets,
+            Rectangle{controlX + controlWidth - lightValueWidth, y,
+                    lightValueWidth, rowHeight},
+            smallFont, lightBudgetText, engine::UITextJustify::Right);
     y += rowHeight + 14.0f;
 
     const char* qualityOptions[] = {"Off", "Low", "Medium", "High"};
@@ -221,6 +242,10 @@ GameGraphicsSettingsAction DrawGameGraphicsSettings(
     engine::Checkbox(ui, config, input, assets, "graphics_fxaa",
             Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
             smallFont, "FXAA", draft.graphics.fxaa);
+    y += rowHeight + 8.0f;
+    engine::Checkbox(ui, config, input, assets, "graphics_depth_prepass",
+            Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},
+            smallFont, "Depth pre-pass", draft.graphics.depthPrepass);
     y += rowHeight + 8.0f;
     engine::Checkbox(ui, config, input, assets, "graphics_bloom",
             Rectangle{panel.x + padding, y, panel.width - padding * 2.0f, rowHeight},

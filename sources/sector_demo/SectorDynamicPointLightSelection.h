@@ -11,9 +11,12 @@
 
 namespace game {
 
-constexpr std::size_t MaxDynamicLights = 8;
-constexpr std::size_t MaxDynamicSpotLightShadowCasters = 2;
+constexpr std::size_t MaxDynamicLights = 32;
+// The atlas budget is independent from the forward-light budget. A spot uses
+// one slot and a dual-paraboloid point light uses two.
+constexpr std::size_t MaxDynamicSpotLightShadowCasters = 64;
 constexpr int DynamicSpotLightShadowMapResolution = 1024;
+constexpr int DynamicShadowAtlasResolution = 4096;
 
 class SectorCollisionWorld;
 struct SectorReceiverBounds;
@@ -62,12 +65,17 @@ struct SectorPreviewDynamicSpotLightShadowCaster {
     float shadowBias = DynamicSpotLightDefaultShadowBias;
     float shadowStrength = DynamicSpotLightDefaultShadowStrength;
     float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
+    int shadowSlotCount = 1;
 };
 
 struct SectorPreviewDynamicSpotLightShadowMatrix {
     int lightId = 0;
     int dynamicLightIndex = -1;
     int shadowSlot = -1;
+    SectorPreviewDynamicLightKind kind = SectorPreviewDynamicLightKind::Spot;
+    int pointHemisphere = 0;
+    Vector3 lightPosition = {};
+    float lightRadius = 0.0f;
     Matrix view = {};
     Matrix projection = {};
     Matrix lightViewProjection = {};
@@ -79,6 +87,7 @@ struct SectorPreviewDynamicSpotLightShadowUniforms {
     std::array<float, MaxDynamicSpotLightShadowCasters> shadowBias{};
     std::array<float, MaxDynamicSpotLightShadowCasters> shadowStrength{};
     std::array<float, MaxDynamicSpotLightShadowCasters> shadowSoftness{};
+    int shadowAtlasTilesPerRow = 4;
 };
 
 bool MakeSectorPreviewDynamicPointLightUniform(
@@ -108,7 +117,9 @@ void CollectSectorPreviewDynamicPointLightCandidates(
         const std::vector<SectorPreviewDynamicPointLightSource>& sources,
         const RuntimePortalVisibilityResult& visibility,
         const std::vector<SectorReceiverBounds>& receiverBounds,
-        std::vector<SectorPreviewDynamicPointLightSource>& outCandidates);
+        std::vector<SectorPreviewDynamicPointLightSource>& outCandidates,
+        const RuntimeSectorVisibilityGraph* visibilityGraph = nullptr,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers = nullptr);
 
 void SelectRankedSectorPreviewDynamicPointLights(
         std::vector<SectorPreviewDynamicPointLightSource>& candidates,

@@ -151,13 +151,18 @@ public:
             bool shadowsEnabled,
             int shadowMapResolution = DynamicSpotLightShadowMapResolution,
             float projectedShadowIntervalSeconds = 0.0f,
-            int projectedShadowResolution = DynamicModelProjectedShadowResolution)
+            int projectedShadowResolution = DynamicModelProjectedShadowResolution,
+            int maxDynamicLights = static_cast<int>(MaxDynamicLights),
+            bool depthPrepass = true)
     {
         this->volumetricQuality = volumetricQuality;
         shadowMapsEnabled = shadowsEnabled;
         if (shadowsEnabled) {
             dynamicLightState.SetShadowMapResolution(shadowMapResolution);
         }
+        dynamicLightState.SetMaxDynamicLights(
+                static_cast<std::size_t>(std::max(maxDynamicLights, 0)));
+        depthPrepassEnabled = depthPrepass;
         dynamicModelShadowIntervalSeconds = std::max(
                 projectedShadowIntervalSeconds, 0.0f);
         if (shadowsEnabled) {
@@ -174,6 +179,12 @@ public:
     const std::vector<int>& SelectedDynamicLightIds() const { return dynamicLightState.SelectedLightIds(); }
     size_t DynamicLightCandidateCount() const { return dynamicLightState.CandidateCount(); }
     size_t DynamicLightSourceCount() const { return dynamicLightState.SourceCount(); }
+    const SectorDynamicShadowRenderStats& DynamicShadowRenderStats() const {
+        return dynamicLightState.ShadowRenderStats();
+    }
+    size_t ActiveProjectedShadowCount() const {
+        return dynamicModelShadowRenderer.ActiveProjectedShadowCount();
+    }
     size_t DoorConsideredCount() const { return doorRenderer.RenderStats().considered; }
     size_t DoorDrawnCount() const { return doorRenderer.RenderStats().drawn; }
     size_t DoorSkippedCount() const { return doorRenderer.RenderStats().skipped; }
@@ -240,6 +251,7 @@ private:
     engine::TextureHandle NormalTextureForId(const std::string& textureId) const;
     void UpdateCamera();
     SectorBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
+    void DrawDepthPrepass(engine::AssetManager& assets, engine::World* runtimeObjectWorld);
     static const Texture2D* ResolveShadowCasterTexture(
             void* userData,
             engine::AssetManager& assets,
@@ -262,6 +274,8 @@ private:
     Material material = {};
     Texture2D defaultMaterialTexture = {};
     bool materialLoaded = false;
+    Material depthPrepassMaterial = {};
+    bool depthPrepassMaterialLoaded = false;
     int useLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
     int hasLightmapLoc = -1;
@@ -291,6 +305,8 @@ private:
     int shadowBiasLoc = -1;
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
+    int shadowAtlasTilesPerRowLoc = -1;
+    bool depthPrepassEnabled = true;
     SectorFogShaderLocations fogShaderLocations;
     SectorLocalFogRenderer localFogRenderer;
     SectorLightHazeRenderer lightHazeRenderer;

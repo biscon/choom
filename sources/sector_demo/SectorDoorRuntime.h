@@ -59,6 +59,12 @@ struct SectorDoorModelShadowCaster {
     Matrix transform = {};
 };
 
+struct SectorDoorShadowCasterRevisionState {
+    uint64_t fingerprint = 0;
+    uint64_t revision = 0;
+    bool fingerprintInitialized = false;
+};
+
 struct SectorDoor {
     int placedObjectId = 0;
     bool enabled = true;
@@ -358,6 +364,11 @@ void CollectSectorDoorModelShadowCasters(
         engine::World& world,
         engine::AssetManager& assets,
         std::vector<SectorDoorModelShadowCaster>& outCasters);
+
+void RefreshSectorDoorShadowCasterRevision(
+        SectorDoorShadowCasterRevisionState& state,
+        const std::vector<SectorDoorShadowCaster>& proceduralCasters,
+        const std::vector<SectorDoorModelShadowCaster>& modelCasters);
 
 bool AppendSectorDoorModelShadowCasters(
         engine::Entity entity,

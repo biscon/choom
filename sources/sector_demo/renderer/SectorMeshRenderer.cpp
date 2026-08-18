@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -169,8 +170,8 @@ uniform float fogMaxOpacity;
 uniform float fogReferenceHeightWorld;
 uniform float fogHeightFalloff;
 
-#define MAX_DYNAMIC_LIGHTS 8
-#define MAX_DYNAMIC_SHADOW_CASTERS 2
+#define MAX_DYNAMIC_LIGHTS 32
+#define MAX_DYNAMIC_SHADOW_CASTERS 64
 uniform int dynamicLightCount;
 uniform vec3 dynamicLightPositions[MAX_DYNAMIC_LIGHTS];
 uniform vec3 dynamicLightColors[MAX_DYNAMIC_LIGHTS];
@@ -181,10 +182,10 @@ uniform vec3 dynamicLightDirections[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
 uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
-uniform mat4 shadowLightMatrices[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowBias[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform int shadowAtlasTilesPerRow;
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
 
@@ -220,9 +221,37 @@ vec3 StoreFiniteHalfRadiance(vec3 value)
     return result;
 }
 
-float SampleShadowMap(int shadowSlot, vec2 uv)
+float SampleShadowMap(int shadowSlot, vec2 uv, out vec2 sampledUv)
 {
-    return shadowSlot == 0 ? texture(shadowMap0, uv).r : texture(shadowMap1, uv).r;
+    int tiles = max(shadowAtlasTilesPerRow, 1);
+    vec2 tile = vec2(shadowSlot % tiles, shadowSlot / tiles);
+    vec2 tileResolution = vec2(textureSize(shadowMap0, 0)) / float(tiles);
+    vec2 clampedUv = clamp(uv, vec2(0.001), vec2(0.999));
+    sampledUv = (floor(clampedUv * tileResolution) + vec2(0.5)) / tileResolution;
+    vec2 atlasUv = (tile + sampledUv) / float(tiles);
+    return texture(shadowMap0, atlasUv).r;
+}
+
+float PointReceiverPlaneDepth(
+        int hemisphere,
+        vec2 sampleUv,
+        vec3 receiverPlaneNormal,
+        float planeDistance,
+        float lightRadius,
+        float fallbackDepth)
+{
+    vec2 projected = sampleUv * 2.0 - 1.0;
+    float projectedRadiusSquared = dot(projected, projected);
+    if (projectedRadiusSquared > 1.0) return fallbackDepth;
+    float inverseDenominator = 1.0 / (1.0 + projectedRadiusSquared);
+    vec3 rayDirection = vec3(
+            projected * (2.0 * inverseDenominator),
+            (1.0 - projectedRadiusSquared) * inverseDenominator * float(hemisphere));
+    float planeDirection = dot(receiverPlaneNormal, rayDirection);
+    if (abs(planeDirection) <= 0.000001) return fallbackDepth;
+    float radialDepth = planeDistance / planeDirection;
+    if (radialDepth <= 0.00001 || radialDepth > lightRadius) return fallbackDepth;
+    return radialDepth / lightRadius;
 }
 
 vec3 SurfaceNormal(vec3 geometricNormal)
@@ -256,7 +285,8 @@ vec3 SurfaceNormal(vec3 geometricNormal)
             geometricNormal);
 }
 
-float DynamicSpotLightShadowVisibility(
+float DynamicLightShadowVisibility(
+        int lightIndex,
         int shadowSlot,
         vec3 worldPosition,
         vec3 worldNormal,
@@ -266,37 +296,73 @@ float DynamicSpotLightShadowVisibility(
         return 1.0;
     }
 
-    vec4 lightClip = shadowLightMatrices[shadowSlot] * vec4(worldPosition, 1.0);
-    if (lightClip.w <= 0.0) {
-        return 1.0;
+    bool pointProjection = dynamicLightTypes[lightIndex] == 0;
+    int pointHemisphere = 0;
+    vec3 shadowCoord;
+    if (pointProjection) {
+        vec3 fromLight = worldPosition - dynamicLightPositions[lightIndex];
+        float radialDepth = length(fromLight);
+        if (radialDepth <= 0.00001) return 1.0;
+        pointHemisphere = fromLight.z >= 0.0 ? 1 : -1;
+        shadowSlot += pointHemisphere > 0 ? 0 : 1;
+        float denominator = radialDepth + abs(fromLight.z);
+        shadowCoord = vec3(fromLight.xy / max(denominator, 0.00001) * 0.5 + 0.5,
+                radialDepth / max(dynamicLightRadii[lightIndex], 0.00001));
+    } else {
+        vec3 fromLight = worldPosition - dynamicLightPositions[lightIndex];
+        vec3 forward = SafeNormalize(dynamicLightDirections[lightIndex], vec3(0.0,-1.0,0.0));
+        vec3 upReference = abs(forward.y) > 0.98 ? vec3(0.0,0.0,1.0) : vec3(0.0,1.0,0.0);
+        vec3 right = SafeNormalize(cross(forward, upReference), vec3(1.0,0.0,0.0));
+        vec3 up = cross(right, forward);
+        float forwardDepth = dot(fromLight, forward);
+        if (forwardDepth <= 0.05) return 1.0;
+        float tangent = tan(min(acos(clamp(dynamicLightOuterConeCos[lightIndex],-0.999,0.999)),1.553343));
+        float farPlane = dynamicLightRadii[lightIndex];
+        float ndcDepth = (farPlane+0.05)/(farPlane-0.05)
+                - (2.0*farPlane*0.05)/((farPlane-0.05)*forwardDepth);
+        shadowCoord = vec3(vec2(dot(fromLight,right),dot(fromLight,up))
+                / max(2.0*forwardDepth*tangent,0.00001)+0.5, ndcDepth*0.5+0.5);
     }
-
-    vec3 lightNdc = lightClip.xyz / lightClip.w;
-    vec3 shadowCoord = lightNdc * 0.5 + 0.5;
     if (shadowCoord.x < 0.0 || shadowCoord.x > 1.0 ||
             shadowCoord.y < 0.0 || shadowCoord.y > 1.0 ||
             shadowCoord.z < 0.0 || shadowCoord.z > 1.0) {
         return 1.0;
     }
 
-    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap0, 0));
+    vec2 texelSize = vec2(float(max(shadowAtlasTilesPerRow, 1)))
+            / vec2(textureSize(shadowMap0, 0));
+    float pointPlaneDistance = pointProjection
+            ? dot(worldNormal, worldPosition - dynamicLightPositions[lightIndex])
+            : 0.0;
+    float pointLightRadius = max(dynamicLightRadii[lightIndex], 0.00001);
     float normalLightDot = max(dot(
             SafeNormalize(worldNormal, vec3(0.0, 1.0, 0.0)),
             SafeNormalize(surfaceToLightDirection, vec3(0.0, 1.0, 0.0))), 0.0);
     float effectiveBias = min(shadowBias[shadowSlot] * (1.0 + (1.0 - normalLightDot) * 2.0), 0.02);
-    float compareDepth = shadowCoord.z - effectiveBias;
     float softness = clamp(shadowSoftness[shadowSlot], 0.0, 8.0);
     if (softness <= 0.0) {
-        float shadowDepth = SampleShadowMap(shadowSlot, shadowCoord.xy);
-        return compareDepth <= shadowDepth ? 1.0 : 0.0;
+        vec2 sampledUv;
+        float shadowDepth = SampleShadowMap(shadowSlot, shadowCoord.xy, sampledUv);
+        float receiverDepth = pointProjection
+                ? PointReceiverPlaneDepth(
+                        pointHemisphere, sampledUv, worldNormal,
+                        pointPlaneDistance, pointLightRadius, shadowCoord.z)
+                : shadowCoord.z;
+        return receiverDepth - effectiveBias <= shadowDepth ? 1.0 : 0.0;
     }
 
     vec2 radius = max(0.25, softness) * texelSize;
     float visible = 0.0;
     for (int i = 0; i < 12; ++i) {
         vec2 sampleUv = clamp(shadowCoord.xy + kPoissonDisk[i] * radius, vec2(0.0), vec2(1.0));
-        float shadowDepth = SampleShadowMap(shadowSlot, sampleUv);
-        visible += compareDepth <= shadowDepth ? 1.0 : 0.0;
+        vec2 sampledUv;
+        float shadowDepth = SampleShadowMap(shadowSlot, sampleUv, sampledUv);
+        float receiverDepth = pointProjection
+                ? PointReceiverPlaneDepth(
+                        pointHemisphere, sampledUv, worldNormal,
+                        pointPlaneDistance, pointLightRadius, shadowCoord.z)
+                : shadowCoord.z;
+        visible += receiverDepth - effectiveBias <= shadowDepth ? 1.0 : 0.0;
     }
     return visible / 12.0;
 }
@@ -329,6 +395,13 @@ vec3 ApplySectorFog(
 
 void main()
 {
+    vec3 geometricNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
+    vec3 receiverPlaneNormal = SafeNormalize(
+            cross(dFdx(fragWorldPosition), dFdy(fragWorldPosition)),
+            geometricNormal);
+    if (dot(receiverPlaneNormal, geometricNormal) < 0.0) {
+        receiverPlaneNormal = -receiverPlaneNormal;
+    }
     vec4 baseColor = texture(texture0, fragTexCoord);
     if (alphaTest != 0 && baseColor.a < alphaCutoff) {
         discard;
@@ -354,7 +427,6 @@ void main()
     }
     vec4 bakedSample = (useLightmap > 0.5 && hasLightmap != 0) ? texture(texture1, fragTexCoord2) : vec4(0.0, 0.0, 0.0, 1.0);
     float aoFactor = (useBakedAmbientOcclusion > 0.5 && hasLightmap != 0) ? bakedSample.a : 1.0;
-    vec3 geometricNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
     vec3 worldNormal = SurfaceNormal(geometricNormal);
     vec3 ambient = fragColor.rgb * aoFactor;
     vec3 bakedDirect = bakedSample.rgb;
@@ -369,6 +441,8 @@ void main()
             float ndotl = max(dot(worldNormal, lightDirection), 0.0);
             float atten = clamp(1.0 - distanceToLight / radius, 0.0, 1.0);
             atten *= atten;
+            if (ndotl <= 0.0 || atten <= 0.0
+                    || dynamicLightIntensities[i] <= 0.0) continue;
             float coneAtten = 1.0;
             if (dynamicLightTypes[i] == 1) {
                 vec3 spotDirection = SafeNormalize(dynamicLightDirections[i], vec3(0.0, -1.0, 0.0));
@@ -381,15 +455,14 @@ void main()
                 coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
                         ? smoothstep(outerConeCos, innerConeCos, coneDot)
                         : step(innerConeCos, coneDot);
-                int shadowSlot = dynamicLightShadowSlots[i];
-                if (shadowSlot >= 0) {
-                    float visibility = DynamicSpotLightShadowVisibility(
-                            shadowSlot,
-                            fragWorldPosition,
-                            geometricNormal,
-                            lightDirection);
-                    coneAtten *= mix(1.0, visibility, clamp(shadowStrength[shadowSlot], 0.0, 1.0));
-                }
+            }
+            if (coneAtten <= 0.0) continue;
+            int shadowSlot = dynamicLightShadowSlots[i];
+            if (shadowSlot >= 0 && shadowStrength[shadowSlot] > 0.0) {
+                float visibility = DynamicLightShadowVisibility(
+                        i, shadowSlot, fragWorldPosition, receiverPlaneNormal, lightDirection);
+                coneAtten *= mix(1.0, visibility,
+                        clamp(shadowStrength[shadowSlot], 0.0, 1.0));
             }
             dynamicDirect += dynamicLightColors[i] * dynamicLightIntensities[i] * atten * ndotl * coneAtten;
         }
@@ -407,6 +480,18 @@ void main()
             fragWorldPosition)),
             clamp(baseColor.a * fragColor.a, 0.0, 1.0));
 }
+)";
+
+const char* SectorDepthPrepassVs = R"(
+#version 330
+in vec3 vertexPosition;
+uniform mat4 mvp;
+void main() { gl_Position = mvp * vec4(vertexPosition, 1.0); }
+)";
+
+const char* SectorDepthPrepassFs = R"(
+#version 330
+void main() { }
 )";
 
 int GetShaderLocationArrayBase(Shader shader, const char* name)
@@ -459,7 +544,7 @@ size_t CountDynamicSpotLightShadowCandidates(const std::vector<SectorPreviewDyna
 {
     size_t count = 0;
     for (const SectorPreviewDynamicPointLightUniform& light : selectedLights) {
-        if (light.kind == SectorPreviewDynamicLightKind::Spot && light.castsShadow) {
+        if (light.castsShadow) {
             ++count;
         }
     }
@@ -531,6 +616,7 @@ bool LoadPreviewMaterial(
         int& shadowBiasLoc,
         int& shadowStrengthLoc,
         int& shadowSoftnessLoc,
+        int& shadowAtlasTilesPerRowLoc,
         SectorFogShaderLocations& fogShaderLocations,
         std::string& error)
 {
@@ -578,6 +664,7 @@ bool LoadPreviewMaterial(
     shadowBiasLoc = GetShaderLocationArrayBase(material.shader, "shadowBias");
     shadowStrengthLoc = GetShaderLocationArrayBase(material.shader, "shadowStrength");
     shadowSoftnessLoc = GetShaderLocationArrayBase(material.shader, "shadowSoftness");
+    shadowAtlasTilesPerRowLoc = GetShaderLocation(material.shader, "shadowAtlasTilesPerRow");
     fogShaderLocations = GetSectorFogShaderLocations(material.shader);
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
@@ -907,11 +994,26 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 shadowBiasLoc,
                 shadowStrengthLoc,
                 shadowSoftnessLoc,
+                shadowAtlasTilesPerRowLoc,
                 fogShaderLocations,
                 error)) {
         Shutdown(assets);
         return false;
     }
+
+    depthPrepassMaterial = LoadMaterialDefault();
+    Shader depthShader = LoadShaderFromMemory(SectorDepthPrepassVs, SectorDepthPrepassFs);
+    if (depthShader.id == 0) {
+        Shutdown(assets);
+        error = "Preview failed: could not load depth pre-pass shader";
+        return false;
+    }
+    depthPrepassMaterial.shader = depthShader;
+    depthPrepassMaterial.shader.locs[SHADER_LOC_VERTEX_POSITION] =
+            GetShaderLocationAttrib(depthShader, "vertexPosition");
+    depthPrepassMaterial.shader.locs[SHADER_LOC_MATRIX_MVP] =
+            GetShaderLocation(depthShader, "mvp");
+    depthPrepassMaterialLoaded = true;
 
     sectorCount = map.sectors.size();
 
@@ -1022,6 +1124,11 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
         shadowStrengthLoc = -1;
         shadowSoftnessLoc = -1;
     }
+    if (depthPrepassMaterialLoaded) {
+        UnloadMaterial(depthPrepassMaterial);
+        depthPrepassMaterial = Material{};
+        depthPrepassMaterialLoaded = false;
+    }
 
     billboardRenderer.Shutdown();
     staticModelRenderer.Shutdown();
@@ -1075,15 +1182,26 @@ void SectorMeshRenderer::DrawScene(
 
     BeginMode3D(camera);
     skyRenderer.Draw(assets, camera);
+    if (depthPrepassEnabled && depthPrepassMaterialLoaded) {
+        rlDrawRenderBatchActive();
+        rlColorMask(false, false, false, false);
+        rlEnableDepthTest();
+        rlEnableDepthMask();
+        DrawDepthPrepass(assets, runtimeObjectWorld);
+        rlDrawRenderBatchActive();
+        rlColorMask(true, true, true, true);
+    }
 
     const SectorFogRenderContext fogContext =
             BuildSectorFogRenderContext(fogSettings, camera.position);
     UploadSectorFogShaderValues(material.shader, fogShaderLocations, fogContext);
 
     float useAo = useBakedAmbientOcclusion ? 1.0f : 0.0f;
-    const Texture2D* shadowMap0 = shadowMapsEnabled
+    const bool dynamicShadowsEnabled =
+            shadowMapsEnabled && dynamicLightingEnabled;
+    const Texture2D* shadowMap0 = dynamicShadowsEnabled
             ? dynamicLightState.ShadowMapDepthTexture(0) : nullptr;
-    const Texture2D* shadowMap1 = shadowMapsEnabled
+    const Texture2D* shadowMap1 = dynamicShadowsEnabled
             ? dynamicLightState.ShadowMapDepthTexture(1) : nullptr;
     material.maps[MATERIAL_MAP_ROUGHNESS].texture = shadowMap0 != nullptr ? *shadowMap0 : Texture2D{};
     material.maps[MATERIAL_MAP_OCCLUSION].texture = shadowMap1 != nullptr ? *shadowMap1 : Texture2D{};
@@ -1100,24 +1218,45 @@ void SectorMeshRenderer::DrawScene(
     dynamicLightLocations.dynamicLightDirections = dynamicLightDirectionsLoc;
     dynamicLightLocations.dynamicLightInnerConeCos = dynamicLightInnerConeCosLoc;
     dynamicLightLocations.dynamicLightOuterConeCos = dynamicLightOuterConeCosLoc;
-    UploadSectorRendererDynamicPointLights(
-            material.shader,
-            dynamicLightLocations,
-            dynamicLightingEnabled,
-            runtimeSeconds,
-            dynamicLightState.SelectedLights());
-    const SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
-            dynamicLightState.PackShadowUniforms(shadowMapsEnabled);
     SectorDynamicSpotLightShadowShaderLocations shadowLocations;
     shadowLocations.dynamicLightShadowSlots = dynamicLightShadowSlotsLoc;
     shadowLocations.shadowLightMatrices = shadowLightMatrixLocs;
     shadowLocations.shadowBias = shadowBiasLoc;
     shadowLocations.shadowStrength = shadowStrengthLoc;
     shadowLocations.shadowSoftness = shadowSoftnessLoc;
-    UploadSectorRendererDynamicSpotLightShadowUniforms(material.shader, shadowLocations, shadowUniforms);
+    shadowLocations.shadowAtlasTilesPerRow = shadowAtlasTilesPerRowLoc;
+    dynamicLightState.BuildSectorLightContexts(
+            meshes.sectorReceiverBounds,
+            dynamicLightingEnabled,
+            dynamicShadowsEnabled,
+            runtimeSeconds);
+    const SectorBillboardDynamicLightContext fallbackLightContext =
+            dynamicLightState.BuildLightContext(
+                    nullptr,
+                    dynamicLightingEnabled,
+                    dynamicShadowsEnabled,
+                    runtimeSeconds);
+    UploadSectorRendererDynamicSpotLightShadowUniforms(
+            material.shader,
+            shadowLocations,
+            fallbackLightContext.shadowUniforms);
+    int uploadedLightSectorId = std::numeric_limits<int>::min();
     for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
         if (!ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {
             continue;
+        }
+
+        if (batch.sectorId != uploadedLightSectorId) {
+            const SectorBillboardDynamicLightContext* lightContext =
+                    dynamicLightState.FindSectorLightContext(batch.sectorId);
+            if (lightContext == nullptr) lightContext = &fallbackLightContext;
+            UploadSectorRendererDynamicPointLights(
+                    material.shader, dynamicLightLocations, *lightContext);
+            UploadSectorRendererDynamicShadowSlots(
+                    material.shader,
+                    shadowLocations.dynamicLightShadowSlots,
+                    lightContext->shadowUniforms);
+            uploadedLightSectorId = batch.sectorId;
         }
 
         const engine::TextureHandle textureHandle = TextureForId(batch.textureId);
@@ -1263,32 +1402,71 @@ void SectorMeshRenderer::DrawScene(
     EndMode3D();
 }
 
+void SectorMeshRenderer::DrawDepthPrepass(
+        engine::AssetManager& assets,
+        engine::World* runtimeObjectWorld)
+{
+    for (const SectorMeshBatch& batch : meshes.sectorDrawRecords) {
+        if (batch.alphaTest
+                || !ShouldDrawSectorMeshRecordForVisibility(batch, visibilityResult)) {
+            continue;
+        }
+        DrawMesh(batch.mesh, depthPrepassMaterial, MatrixIdentity());
+    }
+    if (runtimeObjectWorld == nullptr) return;
+
+    SectorDynamicSpotLightShadowRenderContext context;
+    context.assets = &assets;
+    context.sectorDrawRecords = &meshes.sectorDrawRecords;
+    doorRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
+    staticModelRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
+
+    if (context.doorShadowCasters != nullptr && context.doorMeshResolver != nullptr) {
+        for (const SectorDoorShadowCaster& caster : *context.doorShadowCasters) {
+            float width = 0.0f;
+            float height = 0.0f;
+            const Mesh* mesh = context.doorMeshResolver(
+                    context.doorMeshResolverUserData, caster, width, height);
+            if (mesh == nullptr || mesh->vertexCount <= 0) continue;
+            DrawMesh(*mesh, depthPrepassMaterial,
+                    BuildSectorDoorShadowCasterModelMatrix(caster, width, height));
+        }
+    }
+    if (context.doorModelShadowCasters != nullptr) {
+        for (const SectorDoorModelShadowCaster& caster : *context.doorModelShadowCasters) {
+            const engine::ModelAsset* asset = assets.GetModelAsset(caster.model);
+            if (asset == nullptr) continue;
+            const Matrix transform = MatrixMultiply(asset->model.transform, caster.transform);
+            for (int i = 0; i < asset->model.meshCount; ++i) {
+                if (asset->model.meshes[i].vertexCount > 0) {
+                    DrawMesh(asset->model.meshes[i], depthPrepassMaterial, transform);
+                }
+            }
+        }
+    }
+    if (context.staticModelShadowCasters != nullptr) {
+        rlDisableBackfaceCulling();
+        for (const SectorStaticModelShadowCaster& caster : *context.staticModelShadowCasters) {
+            const engine::ModelAsset* asset = assets.GetModelAsset(caster.model);
+            if (asset == nullptr) continue;
+            const Matrix transform = MatrixMultiply(asset->model.transform, caster.transform);
+            for (int i = 0; i < asset->model.meshCount; ++i) {
+                if (asset->model.meshes[i].vertexCount > 0) {
+                    DrawMesh(asset->model.meshes[i], depthPrepassMaterial, transform);
+                }
+            }
+        }
+        rlEnableBackfaceCulling();
+    }
+}
+
 SectorBillboardDynamicLightContext SectorMeshRenderer::BuildBillboardDynamicLightContext() const
 {
-    SectorBillboardDynamicLightContext context;
-    context.dynamicLightCount = dynamicLightingEnabled
-            ? static_cast<int>(std::min(dynamicLightState.SelectedLights().size(), static_cast<size_t>(MaxDynamicLights)))
-            : 0;
-    context.shadowUniforms = dynamicLightState.PackShadowUniforms(shadowMapsEnabled);
-    context.shadowMaps = dynamicLightState.BuildShadowMapTextures(shadowMapsEnabled);
-
-    for (int i = 0; i < context.dynamicLightCount; ++i) {
-        const SectorPreviewDynamicPointLightUniform& light =
-                dynamicLightState.SelectedLights()[static_cast<size_t>(i)];
-        context.dynamicLightIds[static_cast<size_t>(i)] = light.lightId;
-        context.dynamicLightPositions[static_cast<size_t>(i)] = light.position;
-        context.dynamicLightColors[static_cast<size_t>(i)] = light.color;
-        context.dynamicLightRadii[static_cast<size_t>(i)] = light.radius;
-        context.dynamicLightIntensities[static_cast<size_t>(i)] = DynamicLightEffectiveUploadIntensity(
-                light,
-                runtimeSeconds);
-        context.dynamicLightTypes[static_cast<size_t>(i)] = static_cast<int>(light.kind);
-        context.dynamicLightDirections[static_cast<size_t>(i)] = light.direction;
-        context.dynamicLightInnerConeCos[static_cast<size_t>(i)] = light.innerConeCos;
-        context.dynamicLightOuterConeCos[static_cast<size_t>(i)] = light.outerConeCos;
-    }
-
-    return context;
+    return dynamicLightState.BuildLightContext(
+            nullptr,
+            dynamicLightingEnabled,
+            shadowMapsEnabled && dynamicLightingEnabled,
+            runtimeSeconds);
 }
 
 void SectorMeshRenderer::DrawViewmodel(
@@ -1345,13 +1523,16 @@ void SectorMeshRenderer::RenderDynamicSpotLightShadowMaps(
         engine::AssetManager& assets,
         engine::World* runtimeObjectWorld)
 {
+    dynamicLightState.BeginShadowFrame(
+            shadowMapsEnabled && dynamicLightingEnabled);
     if (!shadowMapsEnabled) {
         return;
     }
-    if (dynamicLightState.IsShadowRenderReady()) {
+    if (dynamicLightingEnabled && dynamicLightState.IsShadowRenderReady()) {
         SectorDynamicSpotLightShadowRenderContext context;
         context.assets = &assets;
         context.sectorDrawRecords = &meshes.sectorDrawRecords;
+        context.sectorReceiverBounds = &meshes.sectorReceiverBounds;
         context.userData = this;
         context.textureResolver = &SectorMeshRenderer::ResolveShadowCasterTexture;
         doorRenderer.PrepareShadowRenderContext(context, runtimeObjectWorld);
@@ -1715,7 +1896,12 @@ void SectorMeshRenderer::UpdateVisibilityDebug(
     visibilityDebugText = portalVisibilityDebugText;
     const size_t visibleDrawRecordCount =
             CountSectorMeshDrawRecordsForVisibility(meshes.sectorDrawRecords, visibilityResult);
-    dynamicLightState.UpdateSelection(visibilityResult, meshes.sectorReceiverBounds, runtimeObjectWorld);
+    dynamicLightState.UpdateSelection(
+            visibilityResult,
+            meshes.sectorReceiverBounds,
+            runtimeObjectWorld,
+            visibilityGraphValid ? &visibilityGraph : nullptr,
+            dynamicPortalBlockers);
     renderDebugText = "draw records: "
             + std::to_string(visibleDrawRecordCount)
             + " / "
@@ -1731,7 +1917,7 @@ void SectorMeshRenderer::UpdateVisibilityDebug(
             + FormatDynamicSpotLightShadowDebugText(
                     dynamicLightState.ShadowCasters().size(),
                     CountDynamicSpotLightShadowCandidates(dynamicLightState.SelectedLights()),
-                    MaxDynamicSpotLightShadowCasters,
+                    dynamicLightState.ShadowSlotBudget(),
                     dynamicLightState.ShadowCasters());
     AppendBillboardRenderDebugText(renderDebugText, billboardRenderer.DebugText());
     visibilityDebugText += " | " + renderDebugText;

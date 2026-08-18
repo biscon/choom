@@ -623,6 +623,29 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             light.position.y,
                             light.position.z));
                 }
+                {
+                    const SectorDynamicShadowRenderStats& stats =
+                            preview.DynamicShadowRenderStats();
+                    const char* atlasState = !stats.enabled
+                            ? "off"
+                            : stats.cacheHit
+                                    ? "cache hit"
+                                    : stats.atlasRendered ? "rebuilt" : "idle";
+                    addKeyValue("shadow atlas", TextFormat(
+                            "%s | tiles %zu | sector draw/cull %zu/%zu",
+                            atlasState,
+                            stats.renderedTiles,
+                            stats.sectorBatchesDrawn,
+                            stats.sectorBatchesCulled));
+                    addKeyValue("shadow objects", TextFormat(
+                            "draw/cull %zu/%zu | revisions door %llu static %llu",
+                            stats.objectCastersDrawn,
+                            stats.objectCastersCulled,
+                            static_cast<unsigned long long>(stats.doorCasterRevision),
+                            static_cast<unsigned long long>(stats.staticModelCasterRevision)));
+                    addKeyValue("projected shadows", TextFormat(
+                            "%zu", preview.ActiveProjectedShadowCount()));
+                }
                 addKeyValue("doors drawn now", TextFormat(
                         "%zu / %zu, skipped %zu",
                         preview.DoorDrawnCount(),

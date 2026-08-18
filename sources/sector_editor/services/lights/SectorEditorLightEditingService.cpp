@@ -970,6 +970,50 @@ bool SectorEditorLightEditingService::SetDynamicLightFlickerAmount(
     return true;
 }
 
+bool SectorEditorLightEditingService::SetDynamicLightCastsShadow(
+        SectorTopologyDynamicPointLight& light, bool castsShadow)
+{
+    if (!SetValue(light.castsShadow, castsShadow)) return false;
+    MarkEdited(TextFormat("Updated dynamic light %d shadows", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetDynamicLightShadowPriority(
+        SectorTopologyDynamicPointLight& light, int shadowPriority)
+{
+    shadowPriority = ClampDynamicSpotLightShadowPriority(shadowPriority);
+    if (!SetValue(light.shadowPriority, shadowPriority)) return false;
+    MarkEdited(TextFormat("Updated dynamic light %d shadow priority", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetDynamicLightShadowBias(
+        SectorTopologyDynamicPointLight& light, float shadowBias)
+{
+    shadowBias = ClampDynamicSpotLightShadowBias(shadowBias);
+    if (!SetValue(light.shadowBias, shadowBias)) return false;
+    MarkEdited(TextFormat("Updated dynamic light %d shadow bias", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetDynamicLightShadowStrength(
+        SectorTopologyDynamicPointLight& light, float shadowStrength)
+{
+    shadowStrength = ClampDynamicSpotLightShadowStrength(shadowStrength);
+    if (!SetValue(light.shadowStrength, shadowStrength)) return false;
+    MarkEdited(TextFormat("Updated dynamic light %d shadow strength", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetDynamicLightShadowSoftness(
+        SectorTopologyDynamicPointLight& light, float shadowSoftness)
+{
+    shadowSoftness = ClampDynamicSpotLightShadowSoftness(shadowSoftness);
+    if (!SetValue(light.shadowSoftness, shadowSoftness)) return false;
+    MarkEdited(TextFormat("Updated dynamic light %d shadow softness", light.id));
+    return true;
+}
+
 bool SectorEditorLightEditingService::SetDynamicLightPosition(
         SectorTopologyDynamicPointLight& light,
         Vector3 position)

@@ -1679,8 +1679,8 @@ void TestDynamicSpotLightShadowCasterSelection()
                   && HasShadowCasterLightId(shadowCasters, 11)
                   && !HasShadowCasterLightId(shadowCasters, 12),
           "dynamic spotlight shadow selection only assigns slots to already-selected dynamic lights");
-    Check(shadowCasters.size() == game::MaxDynamicSpotLightShadowCasters,
-          "dynamic spotlight shadow selection applies the default shadow caster cap");
+    Check(shadowCasters.size() == 2,
+          "dynamic shadow selection keeps all selected casters within the atlas budget");
     Check(shadowCasters.size() >= 2
                   && shadowCasters[0].dynamicLightIndex == 0
                   && shadowCasters[0].shadowSlot == 0
@@ -1703,8 +1703,13 @@ void TestDynamicSpotLightShadowCasterSelection()
             receiverBounds,
             game::MaxDynamicSpotLightShadowCasters,
             shadowCasters);
-    Check(shadowCasters.size() == 1 && shadowCasters[0].lightId == 22,
-          "dynamic spotlight shadow selection ignores dynamic points and castsShadow=false spotlights");
+    Check(shadowCasters.size() == 2
+                  && shadowCasters[0].lightId == 20
+                  && shadowCasters[0].shadowSlot == 0
+                  && shadowCasters[0].shadowSlotCount == 2
+                  && shadowCasters[1].lightId == 22
+                  && shadowCasters[1].shadowSlot == 2,
+          "dynamic shadow selection assigns two slots to points and ignores castsShadow=false spots");
 
     selected = {
             ShadowSpotLightSource(30, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 10.0f, 0).light,
@@ -1796,12 +1801,26 @@ void TestDynamicSpotLightShadowMatrices()
             game::SectorPreviewDynamicSpotLightShadowCaster{99, 99, 2, 0, 1.0f, 0.002f, 1.0f, 1.0f}};
     std::vector<game::SectorPreviewDynamicSpotLightShadowMatrix> matrices;
     game::BuildSectorPreviewDynamicSpotLightShadowMatrices(selected, shadowCasters, matrices);
-    Check(matrices.size() == game::MaxDynamicSpotLightShadowCasters
+    Check(matrices.size() == 2
                   && matrices[0].shadowSlot == 0
                   && matrices[1].shadowSlot == 1,
           "dynamic spotlight shadow matrix build respects selected caster slots and skips invalid indices");
     Check(game::DynamicSpotLightShadowMapResolution == 1024,
           "dynamic spotlight shadow map default resolution is 1024");
+
+    selected[0].kind = game::SectorPreviewDynamicLightKind::Point;
+    selected[0].castsShadow = true;
+    const std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> pointCaster = {
+            game::SectorPreviewDynamicSpotLightShadowCaster{
+                    40, 0, 3, 0, 1.0f, 0.002f, 1.0f, 1.0f, 2}};
+    game::BuildSectorPreviewDynamicSpotLightShadowMatrices(selected, pointCaster, matrices);
+    Check(matrices.size() == 2
+                  && matrices[0].kind == game::SectorPreviewDynamicLightKind::Point
+                  && matrices[0].shadowSlot == 3
+                  && matrices[0].pointHemisphere == 1
+                  && matrices[1].shadowSlot == 4
+                  && matrices[1].pointHemisphere == -1,
+          "dynamic point shadow matrix build emits adjacent front and back paraboloid passes");
 }
 
 void TestDynamicSpotLightShadowUniformPacking()

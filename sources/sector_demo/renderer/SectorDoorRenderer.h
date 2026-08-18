@@ -96,6 +96,7 @@ struct SectorDoorOpaqueShaderLocations {
     int shadowBias = -1;
     int shadowStrength = -1;
     int shadowSoftness = -1;
+    int shadowAtlasTilesPerRow = -1;
     int debugMode = -1;
     int tint = -1;
     SectorFogShaderLocations fog;
@@ -159,6 +160,7 @@ private:
     std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
     std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;
     std::vector<SectorDoorModelShadowCaster> runtimeDoorModelShadowCasters;
+    SectorDoorShadowCasterRevisionState shadowCasterRevisionState;
     Shader opaqueShader = {};
     SectorDoorOpaqueShaderLocations opaqueShaderLocations;
     bool opaqueShaderLoaded = false;

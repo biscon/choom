@@ -2552,6 +2552,65 @@ void TestSectorDoorShadowCasterUsesAnimatedTransform()
             "open door shadow caster moves away from the closed authoring anchor");
 }
 
+void TestSectorDoorShadowCasterRevisionTracksGeometryChanges()
+{
+    game::SectorDoorShadowCasterRevisionState state;
+    std::vector<game::SectorDoorShadowCaster> proceduralCasters;
+    std::vector<game::SectorDoorModelShadowCaster> modelCasters;
+
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    const uint64_t emptyRevision = state.revision;
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    Check(emptyRevision > 0 && state.revision == emptyRevision,
+            "door shadow revision remains stable while caster geometry is unchanged");
+
+    game::SectorDoorShadowCaster procedural;
+    procedural.placedObjectId = 7;
+    procedural.model = MatrixIdentity();
+    procedural.position = Vector3{1.0f, 2.0f, 3.0f};
+    procedural.width = 2.0f;
+    procedural.height = 2.5f;
+    procedural.thickness = 0.25f;
+    proceduralCasters.push_back(procedural);
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    const uint64_t proceduralRevision = state.revision;
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    Check(proceduralRevision == emptyRevision + 1
+                    && state.revision == proceduralRevision,
+            "door shadow revision changes once when a procedural caster is added");
+
+    proceduralCasters[0].model.m12 = 0.5f;
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    const uint64_t movedRevision = state.revision;
+    Check(movedRevision == proceduralRevision + 1,
+            "door shadow revision changes when a procedural caster moves");
+
+    game::SectorDoorModelShadowCaster model;
+    model.placedObjectId = 8;
+    model.model = engine::ModelHandle{3, 2};
+    model.transform = MatrixIdentity();
+    modelCasters.push_back(model);
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    const uint64_t modelRevision = state.revision;
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    Check(modelRevision == movedRevision + 1
+                    && state.revision == modelRevision,
+            "door shadow revision tracks model caster identity without changing every frame");
+
+    modelCasters[0].transform.m14 = -1.0f;
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    Check(state.revision == modelRevision + 1,
+            "door shadow revision changes when a model caster moves");
+}
+
 void TestSpawnPlacedDoorDerivesDefaultOpenDistance()
 {
     engine::World world;
@@ -7867,6 +7926,7 @@ int main()
     TestSectorDoorShadowCasterCollectionIncludesValidDoor();
     TestSectorDoorShadowCasterCollectionSkipsNonRenderableDoors();
     TestSectorDoorShadowCasterUsesAnimatedTransform();
+    TestSectorDoorShadowCasterRevisionTracksGeometryChanges();
     TestSectorDoorHorizontalSlideMotionUsesResolvedTangent();
     TestSectorSwingDoorCanonicalPoseKeepsHingesAndChoosesSide();
     TestSectorSwingDoorDerivedMatricesAndColliderAgree();

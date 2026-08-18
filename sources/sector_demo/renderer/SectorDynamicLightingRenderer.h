@@ -6,6 +6,7 @@
 #include <raylib.h>
 
 #include <array>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -39,6 +40,8 @@ struct SectorDynamicSpotLightShadowRenderContext {
     const std::vector<SectorDoorShadowCaster>* doorShadowCasters = nullptr;
     const std::vector<SectorDoorModelShadowCaster>* doorModelShadowCasters = nullptr;
     const std::vector<SectorStaticModelShadowCaster>* staticModelShadowCasters = nullptr;
+    const std::vector<SectorReceiverBounds>* sectorReceiverBounds = nullptr;
+    uint64_t doorShadowCasterRevision = 0;
     uint64_t staticModelShadowCasterRevision = 0;
     void* userData = nullptr;
     void* doorMeshResolverUserData = nullptr;
@@ -68,11 +71,26 @@ struct SectorDynamicSpotLightShadowShaderLocations {
     int shadowBias = -1;
     int shadowStrength = -1;
     int shadowSoftness = -1;
+    int shadowAtlasTilesPerRow = -1;
 };
 
 struct SectorDynamicShadowMapTextures {
+    const Texture2D* shadowAtlas = nullptr;
     const Texture2D* shadowMap0 = nullptr;
     const Texture2D* shadowMap1 = nullptr;
+};
+
+struct SectorDynamicShadowRenderStats {
+    bool enabled = false;
+    bool cacheHit = false;
+    bool atlasRendered = false;
+    std::size_t renderedTiles = 0;
+    std::size_t sectorBatchesDrawn = 0;
+    std::size_t sectorBatchesCulled = 0;
+    std::size_t objectCastersDrawn = 0;
+    std::size_t objectCastersCulled = 0;
+    uint64_t doorCasterRevision = 0;
+    uint64_t staticModelCasterRevision = 0;
 };
 
 struct SectorBillboardDynamicLightContext {
@@ -88,6 +106,11 @@ struct SectorBillboardDynamicLightContext {
     std::array<float, MaxDynamicLights> dynamicLightOuterConeCos{};
     SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms{};
     SectorDynamicShadowMapTextures shadowMaps{};
+};
+
+struct SectorDynamicLightSectorContext {
+    int sectorId = -1;
+    SectorBillboardDynamicLightContext lighting;
 };
 
 void UploadSectorRendererDynamicPointLights(
@@ -107,6 +130,11 @@ void UploadSectorRendererDynamicSpotLightShadowUniforms(
         const SectorDynamicSpotLightShadowShaderLocations& locations,
         const SectorPreviewDynamicSpotLightShadowUniforms& uniforms);
 
+void UploadSectorRendererDynamicShadowSlots(
+        Shader shader,
+        int dynamicLightShadowSlotsLocation,
+        const SectorPreviewDynamicSpotLightShadowUniforms& uniforms);
+
 class SectorDynamicLightingRenderer {
 public:
     void Reset();
@@ -117,9 +145,26 @@ public:
     void UpdateSelection(
             const RuntimePortalVisibilityResult& visibility,
             const std::vector<SectorReceiverBounds>& sectorReceiverBounds,
-            engine::World* runtimeObjectWorld);
+            engine::World* runtimeObjectWorld,
+            const RuntimeSectorVisibilityGraph* visibilityGraph = nullptr,
+            const std::vector<RuntimePortalDynamicBlocker>* dynamicPortalBlockers = nullptr);
+    void BuildSectorLightContexts(
+            const std::vector<SectorReceiverBounds>& sectorBounds,
+            bool dynamicLightingEnabled,
+            bool shadowMapsEnabled,
+            float runtimeSeconds);
+    const SectorBillboardDynamicLightContext* FindSectorLightContext(
+            int sectorId) const;
+    SectorBillboardDynamicLightContext BuildLightContext(
+            const SectorReceiverBounds* bounds,
+            bool dynamicLightingEnabled,
+            bool shadowMapsEnabled,
+            float runtimeSeconds) const;
     void SetRuntimePointLight(
             const SectorPreviewDynamicPointLightSource* light);
+    void SetMaxDynamicLights(std::size_t count) {
+        maxDynamicLights = std::min(count, MaxDynamicLights);
+    }
 
     const std::vector<SectorPreviewDynamicPointLightSource>& Sources() const { return sources; }
     const std::vector<SectorPreviewDynamicPointLightSource>& Candidates() const { return candidates; }
@@ -130,6 +175,9 @@ public:
 
     size_t SourceCount() const { return sources.size(); }
     size_t CandidateCount() const { return candidates.size(); }
+    std::size_t ShadowSlotBudget() const {
+        return shadowMapResolution <= 512 ? MaxDynamicSpotLightShadowCasters : 16u;
+    }
     SectorPreviewDynamicSpotLightShadowUniforms PackShadowUniforms(
             bool enabled = true) const;
     bool EnsureShadowMapResources();
@@ -140,6 +188,10 @@ public:
     void UnloadShadowMaterial();
     bool HasShadowMaterial() const { return shadowMaterialLoaded; }
     bool IsShadowRenderReady() const;
+    void BeginShadowFrame(bool enabled);
+    const SectorDynamicShadowRenderStats& ShadowRenderStats() const {
+        return shadowRenderStats;
+    }
     RenderTexture2D* ShadowMap(std::size_t index);
     const RenderTexture2D* ShadowMap(std::size_t index) const;
     const Texture2D* ShadowMapDepthTexture(std::size_t index) const;
@@ -161,19 +213,30 @@ private:
     std::vector<SectorPreviewDynamicPointLightUniform> selectedLights;
     std::vector<int> selectedLightIds;
     std::vector<SectorReceiverBounds> receiverBounds;
+    std::vector<SectorDynamicLightSectorContext> sectorLightContexts;
     std::vector<SectorPreviewDynamicSpotLightShadowCaster> shadowCasters;
     std::vector<SectorPreviewDynamicSpotLightShadowMatrix> shadowMatrices;
     std::vector<SectorPreviewDynamicSpotLightShadowMatrix> cachedShadowMatrices;
     bool shadowMapsCacheValid = false;
+    uint64_t cachedDoorShadowCasterRevision = 0;
     uint64_t cachedStaticModelShadowCasterRevision = 0;
-    std::array<RenderTexture2D, MaxDynamicSpotLightShadowCasters> shadowMaps{};
+    SectorDynamicShadowRenderStats shadowRenderStats;
+    RenderTexture2D shadowAtlas{};
     Material shadowMaterial = {};
+    Material pointShadowMaterial = {};
     Texture2D shadowDefaultTexture = {};
+    Texture2D pointShadowDefaultTexture = {};
     bool shadowMaterialLoaded = false;
     int shadowMapResolution = DynamicSpotLightShadowMapResolution;
+    std::size_t maxDynamicLights = MaxDynamicLights;
     int shadowLightViewProjectionLoc = -1;
     int shadowAlphaTestLoc = -1;
     int shadowAlphaCutoffLoc = -1;
+    int pointShadowLightPositionLoc = -1;
+    int pointShadowLightRadiusLoc = -1;
+    int pointShadowHemisphereLoc = -1;
+    int pointShadowAlphaTestLoc = -1;
+    int pointShadowAlphaCutoffLoc = -1;
 };
 
 } // namespace game

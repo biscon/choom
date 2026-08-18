@@ -79,6 +79,11 @@ bool AtmosphereSourceChanged(
             || !SameVector3(before.position, after.position)
             || before.intensity != after.intensity
             || before.radius != after.radius
+            || before.castsShadow != after.castsShadow
+            || before.shadowPriority != after.shadowPriority
+            || before.shadowBias != after.shadowBias
+            || before.shadowStrength != after.shadowStrength
+            || before.shadowSoftness != after.shadowSoftness
             || !SameColor(before.color, after.color)
             || !SameLightAtmosphere(before.atmosphere, after.atmosphere);
 }
@@ -305,6 +310,7 @@ float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError,
     height += rowH + gap; // Delete.
     height += rowH + gap; // Enabled.
     height += 3.0f * (rowH + gap); // Flicker controls.
+    height += 5.0f * (rowH + gap); // Shadow controls.
     height += 5.0f * (rowH + gap); // Position/intensity/radius.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
@@ -862,6 +868,57 @@ bool DrawSelectedDynamicLightInspector(
             3,
             DynamicLightFloatField::FlickerAmount);
 
+    bool castsShadow = light.castsShadow;
+    if (engine::Checkbox(ui, config, input, assets,
+                "sector_editor_dynamic_light_casts_shadow",
+                Rectangle{0.0f, y, contentW, rowH}, font,
+                "Cast Shadows (2 atlas slots)", castsShadow)
+            && castsShadow != light.castsShadow) {
+        lightEditing.SetDynamicLightCastsShadow(light, castsShadow);
+    }
+    y += rowH + gap;
+    {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightIntRowLayout(y, contentW, rowH, gap);
+        const SectorEditorIntInputResult result = DrawLabeledIntInput(
+                ui, config, input, assets, font,
+                "sector_editor_dynamic_light_shadow_priority",
+                "Shadow priority:", layout.labelRect, layout.inputRect,
+                engine::UITextJustify::Right, light.shadowPriority,
+                uiState.lightShadowPriorityInput,
+                DynamicSpotLightMinShadowPriority,
+                DynamicSpotLightMaxShadowPriority, 1);
+        if (result.changed) {
+            lightEditing.SetDynamicLightShadowPriority(light, result.value);
+        }
+        y += rowH + gap;
+    }
+    auto drawShadowFloat = [&](const char* id, const char* label, float value,
+            engine::UIFloatInputState& state, float minimum, float maximum,
+            int decimals, int field) {
+        const SectorEditorInspectorNumericRowLayout layout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
+                ui, config, input, assets, font, id, label,
+                layout.labelRect, layout.inputRect, engine::UITextJustify::Right,
+                value, state, minimum, maximum, decimals);
+        if (result.changed) {
+            if (field == 0) lightEditing.SetDynamicLightShadowBias(light, result.value);
+            else if (field == 1) lightEditing.SetDynamicLightShadowStrength(light, result.value);
+            else lightEditing.SetDynamicLightShadowSoftness(light, result.value);
+        }
+        y += rowH + gap;
+    };
+    drawShadowFloat("sector_editor_dynamic_light_shadow_bias", "Shadow bias:",
+            light.shadowBias, uiState.lightShadowBiasInput,
+            DynamicSpotLightMinShadowBias, DynamicSpotLightMaxShadowBias, 5, 0);
+    drawShadowFloat("sector_editor_dynamic_light_shadow_strength", "Shadow strength:",
+            light.shadowStrength, uiState.lightShadowStrengthInput,
+            DynamicSpotLightMinShadowStrength, DynamicSpotLightMaxShadowStrength, 3, 1);
+    drawShadowFloat("sector_editor_dynamic_light_shadow_softness", "Softness:",
+            light.shadowSoftness, uiState.lightShadowSoftnessInput,
+            DynamicSpotLightMinShadowSoftness, DynamicSpotLightMaxShadowSoftness, 3, 2);
+
     drawLightFloat("sector_editor_dynamic_light_x", "X:", light.position.x, uiState.lightXInput, -8192.0f, 8192.0f, 2, DynamicLightFloatField::PositionX);
     drawLightFloat("sector_editor_dynamic_light_y", "Y:", light.position.y, uiState.lightYInput, -512.0f, 512.0f, 2, DynamicLightFloatField::PositionY);
     drawLightFloat("sector_editor_dynamic_light_z", "Z:", light.position.z, uiState.lightZInput, -8192.0f, 8192.0f, 2, DynamicLightFloatField::PositionZ);
@@ -1075,8 +1132,7 @@ bool DrawSelectedDynamicSpotLightInspector(
     }
     y += rowH + gap;
     const char* shadowNote = TextFormat(
-            "Requests one of %zu shadow slots. Priority decides budget; over-budget spots still light.",
-            MaxDynamicSpotLightShadowCasters);
+            "Requests one shadow-atlas slot. Quality and priority decide the budget; over-budget spots still light.");
     const float shadowNoteHeight = MeasureSectorEditorWrappedTextHeight(
             smallConfig,
             assets,

@@ -666,6 +666,11 @@ void TestDynamicPointLightRoundTrip()
             2.5f,
             0.65f
     });
+    original.dynamicPointLights.back().castsShadow = true;
+    original.dynamicPointLights.back().shadowPriority = 7;
+    original.dynamicPointLights.back().shadowBias = 0.003f;
+    original.dynamicPointLights.back().shadowStrength = 0.75f;
+    original.dynamicPointLights.back().shadowSoftness = 2.0f;
 
     const std::string text = SaveText(original);
     const Json saved = Json::parse(text);
@@ -681,6 +686,12 @@ void TestDynamicPointLightRoundTrip()
                   && Near(saved["dynamicPointLights"][0]["flickerSpeed"].get<float>(), 2.5f)
                   && Near(saved["dynamicPointLights"][0]["flickerAmount"].get<float>(), 0.65f),
           "non-default dynamic point light flicker fields are written");
+    Check(saved["dynamicPointLights"][0]["castsShadow"] == true
+                  && saved["dynamicPointLights"][0]["shadowPriority"] == 7
+                  && Near(saved["dynamicPointLights"][0]["shadowBias"].get<float>(), 0.003f)
+                  && Near(saved["dynamicPointLights"][0]["shadowStrength"].get<float>(), 0.75f)
+                  && Near(saved["dynamicPointLights"][0]["shadowSoftness"].get<float>(), 2.0f),
+          "dynamic point shadow settings are written");
     Check(!saved["dynamicPointLights"][1].contains("flicker")
                   && !saved["dynamicPointLights"][1].contains("flickerSpeed")
                   && !saved["dynamicPointLights"][1].contains("flickerAmount"),
@@ -711,8 +722,13 @@ void TestDynamicPointLightRoundTrip()
     Check(flickerLight != nullptr
                   && flickerLight->flicker
                   && Near(flickerLight->flickerSpeed, 2.5f)
-                  && Near(flickerLight->flickerAmount, 0.65f),
-          "round-tripped dynamic point light preserves flicker settings");
+                  && Near(flickerLight->flickerAmount, 0.65f)
+                  && flickerLight->castsShadow
+                  && flickerLight->shadowPriority == 7
+                  && Near(flickerLight->shadowBias, 0.003f)
+                  && Near(flickerLight->shadowStrength, 0.75f)
+                  && Near(flickerLight->shadowSoftness, 2.0f),
+          "round-tripped dynamic point light preserves flicker and shadow settings");
     Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
           "topology with dynamic point lights validates");
 

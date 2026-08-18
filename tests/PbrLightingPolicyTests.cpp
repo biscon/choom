@@ -324,7 +324,7 @@ void TestRemovedShaderPathsStayRemoved()
                     == std::string::npos,
           "static authored lights do not duplicate baked diffuse lighting");
     Check(source.find(
-                      "float visibility = DynamicSpotLightShadowVisibility(")
+                      "float visibility = DynamicLightShadowVisibility(")
                             != std::string::npos
                     && source.find(
                                "dynamicLightContext.shadowMaps.shadowMap0")
@@ -527,7 +527,7 @@ void TestHdrEffectShaderAndPassPolicies()
                     && haze.find("volume.boundsCenterWorld.y -= heightOffsetWorld")!=std::string::npos
                     && haze.find("hazeOwnerDynamicLightIndices[volumeIndex]")!=std::string::npos
                     && haze.find("?p-vec3(0,heightOffsetWorld,0):p")!=std::string::npos
-                    && haze.find("shadowVisibility(slot,lightingPosition)")!=std::string::npos
+                    && haze.find("shadowVisibility(i,slot,lightingPosition)")!=std::string::npos
                     && haze.find("dynamicLighting(p,i,b.w)")!=std::string::npos
                     && haze.find("h.flowSpeedWorld,h.heightOffsetWorld")!=std::string::npos,
           "haze translates its baked and owning dynamic-light illumination profile with its Y offset");

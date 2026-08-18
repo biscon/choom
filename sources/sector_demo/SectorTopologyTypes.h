@@ -249,6 +249,11 @@ struct SectorTopologyDynamicPointLight {
     float flickerSpeed = DynamicLightFlickerDefaultSpeed;
     float flickerAmount = DynamicLightFlickerDefaultAmount;
     SectorLightAtmosphereSettings atmosphere;
+    bool castsShadow = false;
+    int shadowPriority = DynamicSpotLightDefaultShadowPriority;
+    float shadowBias = DynamicSpotLightDefaultShadowBias;
+    float shadowStrength = DynamicSpotLightDefaultShadowStrength;
+    float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
 };
 
 struct SectorTopologyDynamicSpotLight {

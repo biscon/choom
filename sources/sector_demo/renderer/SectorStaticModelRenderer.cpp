@@ -146,8 +146,8 @@ uniform float fogMaxOpacity;
 uniform float fogReferenceHeightWorld;
 uniform float fogHeightFalloff;
 
-#define MAX_DYNAMIC_LIGHTS 8
-#define MAX_DYNAMIC_SHADOW_CASTERS 2
+#define MAX_DYNAMIC_LIGHTS 32
+#define MAX_DYNAMIC_SHADOW_CASTERS 64
 uniform int dynamicLightCount;
 uniform vec3 dynamicLightPositions[MAX_DYNAMIC_LIGHTS];
 uniform vec3 dynamicLightColors[MAX_DYNAMIC_LIGHTS];
@@ -158,10 +158,10 @@ uniform vec3 dynamicLightDirections[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
 uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
-uniform mat4 shadowLightMatrices[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowBias[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform int shadowAtlasTilesPerRow;
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
 
@@ -288,21 +288,68 @@ vec2 EnvironmentBrdfApprox(float roughness, float ndotv)
     return vec2(-1.04, 1.04) * a004 + r.zw;
 }
 
-float SampleShadowMap(int shadowSlot, vec2 uv)
+float SampleShadowMap(int shadowSlot, vec2 uv, out vec2 sampledUv)
 {
-    return shadowSlot == 0 ? texture(shadowMap0, uv).r : texture(shadowMap1, uv).r;
+    int tiles = max(shadowAtlasTilesPerRow, 1);
+    vec2 tile = vec2(shadowSlot % tiles, shadowSlot / tiles);
+    vec2 tileResolution = vec2(textureSize(shadowMap0, 0)) / float(tiles);
+    vec2 clampedUv = clamp(uv, vec2(0.001), vec2(0.999));
+    sampledUv = (floor(clampedUv * tileResolution) + vec2(0.5)) / tileResolution;
+    return texture(shadowMap0, (tile + sampledUv) / float(tiles)).r;
 }
 
-float DynamicSpotLightShadowVisibility(
+float PointReceiverPlaneDepth(
+        int hemisphere,
+        vec2 sampleUv,
+        vec3 receiverPlaneNormal,
+        float planeDistance,
+        float lightRadius,
+        float fallbackDepth)
+{
+    vec2 projected = sampleUv * 2.0 - 1.0;
+    float projectedRadiusSquared = dot(projected, projected);
+    if (projectedRadiusSquared > 1.0) return fallbackDepth;
+    float inverseDenominator = 1.0 / (1.0 + projectedRadiusSquared);
+    vec3 rayDirection = vec3(
+            projected * (2.0 * inverseDenominator),
+            (1.0 - projectedRadiusSquared) * inverseDenominator * float(hemisphere));
+    float planeDirection = dot(receiverPlaneNormal, rayDirection);
+    if (abs(planeDirection) <= 0.000001) return fallbackDepth;
+    float radialDepth = planeDistance / planeDirection;
+    if (radialDepth <= 0.00001 || radialDepth > lightRadius) return fallbackDepth;
+    return radialDepth / lightRadius;
+}
+
+float DynamicLightShadowVisibility(
+        int lightIndex,
         int shadowSlot,
         vec3 worldPosition,
         vec3 worldNormal,
         vec3 surfaceToLightDirection)
 {
     if (shadowSlot < 0 || shadowSlot >= MAX_DYNAMIC_SHADOW_CASTERS) return 1.0;
-    vec4 lightClip = shadowLightMatrices[shadowSlot] * vec4(worldPosition, 1.0);
-    if (lightClip.w <= 0.0) return 1.0;
-    vec3 shadowCoord = lightClip.xyz / lightClip.w * 0.5 + 0.5;
+    bool pointProjection = dynamicLightTypes[lightIndex] == 0;
+    int pointHemisphere = 0;
+    vec3 shadowCoord;
+    if (pointProjection) {
+        vec3 fromLight = worldPosition - dynamicLightPositions[lightIndex];
+        float radialDepth = length(fromLight);
+        if (radialDepth <= 0.00001) return 1.0;
+        pointHemisphere = fromLight.z >= 0.0 ? 1 : -1;
+        shadowSlot += pointHemisphere > 0 ? 0 : 1;
+        shadowCoord = vec3(fromLight.xy / max(radialDepth + abs(fromLight.z), 0.00001) * 0.5 + 0.5,
+                radialDepth / max(dynamicLightRadii[lightIndex], 0.00001));
+    } else {
+        vec3 fromLight=worldPosition-dynamicLightPositions[lightIndex];
+        vec3 forward=SafeNormalize(dynamicLightDirections[lightIndex],vec3(0,-1,0));
+        vec3 upReference=abs(forward.y)>0.98?vec3(0,0,1):vec3(0,1,0);
+        vec3 right=SafeNormalize(cross(forward,upReference),vec3(1,0,0)); vec3 up=cross(right,forward);
+        float z=dot(fromLight,forward); if(z<=0.05)return 1.0;
+        float tangent=tan(min(acos(clamp(dynamicLightOuterConeCos[lightIndex],-0.999,0.999)),1.553343));
+        float farPlane=dynamicLightRadii[lightIndex];
+        float ndc=(farPlane+0.05)/(farPlane-0.05)-(2.0*farPlane*0.05)/((farPlane-0.05)*z);
+        shadowCoord=vec3(vec2(dot(fromLight,right),dot(fromLight,up))/max(2.0*z*tangent,0.00001)+0.5,ndc*0.5+0.5);
+    }
     if (shadowCoord.x < 0.0 || shadowCoord.x > 1.0 ||
             shadowCoord.y < 0.0 || shadowCoord.y > 1.0 ||
             shadowCoord.z < 0.0 || shadowCoord.z > 1.0) return 1.0;
@@ -313,17 +360,35 @@ float DynamicSpotLightShadowVisibility(
     float effectiveBias = min(
             shadowBias[shadowSlot] * (1.0 + (1.0 - normalLightDot) * 2.0),
             0.02);
-    float compareDepth = shadowCoord.z - effectiveBias;
+    float pointPlaneDistance = pointProjection
+            ? dot(worldNormal, worldPosition - dynamicLightPositions[lightIndex])
+            : 0.0;
+    float pointLightRadius = max(dynamicLightRadii[lightIndex], 0.00001);
     float softness = clamp(shadowSoftness[shadowSlot], 0.0, 8.0);
     if (softness <= 0.0) {
-        return compareDepth <= SampleShadowMap(shadowSlot, shadowCoord.xy) ? 1.0 : 0.0;
+        vec2 sampledUv;
+        float shadowDepth = SampleShadowMap(shadowSlot, shadowCoord.xy, sampledUv);
+        float receiverDepth = pointProjection
+                ? PointReceiverPlaneDepth(
+                        pointHemisphere, sampledUv, worldNormal,
+                        pointPlaneDistance, pointLightRadius, shadowCoord.z)
+                : shadowCoord.z;
+        return receiverDepth - effectiveBias <= shadowDepth ? 1.0 : 0.0;
     }
 
-    vec2 radius = max(0.25, softness) / vec2(textureSize(shadowMap0, 0));
+    vec2 radius = max(0.25, softness) * vec2(float(max(shadowAtlasTilesPerRow, 1)))
+            / vec2(textureSize(shadowMap0, 0));
     float visible = 0.0;
     for (int i = 0; i < 12; ++i) {
         vec2 uv = clamp(shadowCoord.xy + kPoissonDisk[i] * radius, vec2(0.0), vec2(1.0));
-        visible += compareDepth <= SampleShadowMap(shadowSlot, uv) ? 1.0 : 0.0;
+        vec2 sampledUv;
+        float shadowDepth = SampleShadowMap(shadowSlot, uv, sampledUv);
+        float receiverDepth = pointProjection
+                ? PointReceiverPlaneDepth(
+                        pointHemisphere, sampledUv, worldNormal,
+                        pointPlaneDistance, pointLightRadius, shadowCoord.z)
+                : shadowCoord.z;
+        visible += receiverDepth - effectiveBias <= shadowDepth ? 1.0 : 0.0;
     }
     return visible / 12.0;
 }
@@ -357,6 +422,12 @@ vec3 ApplySectorFog(
 void main()
 {
     vec3 geometricNormal = SafeNormalize(fragWorldNormal, vec3(0.0, 1.0, 0.0));
+    vec3 receiverPlaneNormal = SafeNormalize(
+            cross(dFdx(fragWorldPosition), dFdy(fragWorldPosition)),
+            geometricNormal);
+    if (dot(receiverPlaneNormal, geometricNormal) < 0.0) {
+        receiverPlaneNormal = -receiverPlaneNormal;
+    }
     vec3 tangent = SafeNormalize(
             fragWorldTangent - geometricNormal * dot(fragWorldTangent, geometricNormal),
             SafeNormalize(cross(abs(geometricNormal.y) < 0.999
@@ -403,8 +474,11 @@ void main()
             vec3 lightDirection = distanceToLight > 0.0001
                     ? toLight / distanceToLight
                     : worldNormal;
+            float ndotl = max(dot(worldNormal, lightDirection), 0.0);
             float atten = clamp(1.0 - distanceToLight / radius, 0.0, 1.0);
             atten *= atten;
+            if (ndotl <= 0.0 || atten <= 0.0
+                    || dynamicLightIntensities[i] <= 0.0) continue;
             float coneAtten = 1.0;
             if (dynamicLightTypes[i] == 1) {
                 vec3 spotDirection = SafeNormalize(
@@ -420,21 +494,16 @@ void main()
                                 dynamicLightInnerConeCos[i],
                                 coneDot)
                         : step(dynamicLightInnerConeCos[i], coneDot);
-                int shadowSlot = dynamicLightShadowSlots[i];
-                if (shadowSlot >= 0) {
-                    float visibility = DynamicSpotLightShadowVisibility(
-                            shadowSlot,
-                            fragWorldPosition,
-                            worldNormal,
-                            lightDirection);
-                    coneAtten *= mix(
-                            1.0,
-                            visibility,
-                            clamp(shadowStrength[shadowSlot], 0.0, 1.0));
-                }
             }
-            float ndotl = max(dot(worldNormal, lightDirection), 0.0);
-            if (ndotl > 0.0) {
+            if (coneAtten <= 0.0) continue;
+            int shadowSlot = dynamicLightShadowSlots[i];
+            if (shadowSlot >= 0 && shadowStrength[shadowSlot] > 0.0) {
+                float visibility = DynamicLightShadowVisibility(
+                        i, shadowSlot, fragWorldPosition, receiverPlaneNormal, lightDirection);
+                coneAtten *= mix(1.0, visibility,
+                        clamp(shadowStrength[shadowSlot], 0.0, 1.0));
+            }
+            {
                 vec3 halfway = SafeNormalize(viewDirection + lightDirection, worldNormal);
                 float distribution = DistributionGgx(worldNormal, halfway, roughness);
                 float geometry = GeometrySmith(worldNormal, viewDirection, lightDirection, roughness);
@@ -1032,6 +1101,7 @@ bool SectorStaticModelRenderer::Load()
     shadowBiasLoc = GetShaderLocationArrayBase(shader, "shadowBias");
     shadowStrengthLoc = GetShaderLocationArrayBase(shader, "shadowStrength");
     shadowSoftnessLoc = GetShaderLocationArrayBase(shader, "shadowSoftness");
+    shadowAtlasTilesPerRowLoc = GetShaderLocation(shader, "shadowAtlasTilesPerRow");
     shadowMap0Loc = GetShaderLocation(shader, "shadowMap0");
     shadowMap1Loc = GetShaderLocation(shader, "shadowMap1");
     shader.locs[
@@ -1518,6 +1588,7 @@ void SectorStaticModelRenderer::Draw(
     shadowLocations.shadowBias = shadowBiasLoc;
     shadowLocations.shadowStrength = shadowStrengthLoc;
     shadowLocations.shadowSoftness = shadowSoftnessLoc;
+    shadowLocations.shadowAtlasTilesPerRow = shadowAtlasTilesPerRowLoc;
     UploadSectorRendererDynamicSpotLightShadowUniforms(
             shader,
             shadowLocations,
@@ -2061,6 +2132,7 @@ void SectorStaticModelRenderer::DrawViewmodel(
     shadowLocations.shadowBias = shadowBiasLoc;
     shadowLocations.shadowStrength = shadowStrengthLoc;
     shadowLocations.shadowSoftness = shadowSoftnessLoc;
+    shadowLocations.shadowAtlasTilesPerRow = shadowAtlasTilesPerRowLoc;
     UploadSectorRendererDynamicSpotLightShadowUniforms(shader, shadowLocations, dynamicLightContext.shadowUniforms);
     UploadSectorFogShaderValues(shader, fogShaderLocations, SectorFogRenderContext{});
     if (cameraPositionLoc >= 0) SetShaderValue(shader, cameraPositionLoc, &camera.position, SHADER_UNIFORM_VEC3);

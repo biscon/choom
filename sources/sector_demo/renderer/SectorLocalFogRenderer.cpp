@@ -69,8 +69,8 @@ uniform vec4 fogLightingA[16];
 uniform vec4 fogLightingB[16];
 uniform vec4 fogLightingC[16];
 
-#define MAX_DYNAMIC_LIGHTS 8
-#define MAX_DYNAMIC_SHADOW_CASTERS 2
+#define MAX_DYNAMIC_LIGHTS 32
+#define MAX_DYNAMIC_SHADOW_CASTERS 64
 uniform int dynamicLightCount;
 uniform vec3 dynamicLightPositions[MAX_DYNAMIC_LIGHTS];
 uniform vec3 dynamicLightColors[MAX_DYNAMIC_LIGHTS];
@@ -81,10 +81,10 @@ uniform vec3 dynamicLightDirections[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
 uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
-uniform mat4 shadowLightMatrices[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowBias[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowStrength[MAX_DYNAMIC_SHADOW_CASTERS];
 uniform float shadowSoftness[MAX_DYNAMIC_SHADOW_CASTERS];
+uniform int shadowAtlasTilesPerRow;
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
 
@@ -138,15 +138,26 @@ vec3 safeNormalize(vec3 value, vec3 fallback) {
 }
 
 float sampleShadowMap(int shadowSlot, vec2 uv) {
-    return shadowSlot == 0 ? texture(shadowMap0, uv).r : texture(shadowMap1, uv).r;
+    int tiles=max(shadowAtlasTilesPerRow,1); vec2 tile=vec2(shadowSlot%tiles,shadowSlot/tiles);
+    return texture(shadowMap0,(tile+clamp(uv,vec2(0.001),vec2(0.999)))/float(tiles)).r;
 }
 
-float dynamicSpotLightShadowVisibility(int shadowSlot, vec3 worldPosition) {
+float dynamicLightShadowVisibility(int lightIndex, int shadowSlot, vec3 worldPosition) {
     if (shadowSlot < 0 || shadowSlot >= MAX_DYNAMIC_SHADOW_CASTERS) return 1.0;
-    vec4 lightClip = shadowLightMatrices[shadowSlot] * vec4(worldPosition, 1.0);
-    if (lightClip.w <= 0.0) return 1.0;
-    vec3 lightNdc = lightClip.xyz / lightClip.w;
-    vec3 shadowCoord = lightNdc * 0.5 + 0.5;
+    vec3 shadowCoord;
+    if(dynamicLightTypes[lightIndex]==0) { vec3 fromLight=worldPosition-dynamicLightPositions[lightIndex];
+        float radial=length(fromLight); if(radial<=0.00001)return 1.0; shadowSlot+=fromLight.z>=0.0?0:1;
+        shadowCoord=vec3(fromLight.xy/max(radial+abs(fromLight.z),0.00001)*0.5+0.5,
+                radial/max(dynamicLightRadii[lightIndex],0.00001)); }
+    else { vec3 fromLight=worldPosition-dynamicLightPositions[lightIndex];
+        vec3 forward=safeNormalize(dynamicLightDirections[lightIndex],vec3(0,-1,0));
+        vec3 upReference=abs(forward.y)>0.98?vec3(0,0,1):vec3(0,1,0);
+        vec3 right=safeNormalize(cross(forward,upReference),vec3(1,0,0)); vec3 up=cross(right,forward);
+        float z=dot(fromLight,forward); if(z<=0.05)return 1.0;
+        float tangent=tan(min(acos(clamp(dynamicLightOuterConeCos[lightIndex],-0.999,0.999)),1.553343));
+        float farPlane=dynamicLightRadii[lightIndex];
+        float ndc=(farPlane+0.05)/(farPlane-0.05)-(2.0*farPlane*0.05)/((farPlane-0.05)*z);
+        shadowCoord=vec3(vec2(dot(fromLight,right),dot(fromLight,up))/max(2.0*z*tangent,0.00001)+0.5,ndc*0.5+0.5); }
     if (shadowCoord.x < 0.0 || shadowCoord.x > 1.0
             || shadowCoord.y < 0.0 || shadowCoord.y > 1.0
             || shadowCoord.z < 0.0 || shadowCoord.z > 1.0) return 1.0;
@@ -157,7 +168,7 @@ float dynamicSpotLightShadowVisibility(int shadowSlot, vec3 worldPosition) {
         return compareDepth <= sampleShadowMap(shadowSlot, shadowCoord.xy) ? 1.0 : 0.0;
     }
 
-    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap0, 0));
+    vec2 texelSize = vec2(float(max(shadowAtlasTilesPerRow,1))) / vec2(textureSize(shadowMap0, 0));
     vec2 radius = max(0.25, softness) * texelSize;
     float visible = 0.0;
     for (int sampleIndex = 0; sampleIndex < 4; ++sampleIndex) {
@@ -199,14 +210,12 @@ vec3 evaluateDynamicLighting(vec3 worldPosition) {
             coneAttenuation = abs(innerConeCos - outerConeCos) > 0.0001
                     ? smoothstep(outerConeCos, innerConeCos, coneDot)
                     : step(innerConeCos, coneDot);
-            int shadowSlot = dynamicLightShadowSlots[lightIndex];
-            if (shadowSlot >= 0 && coneAttenuation > 0.0) {
-                float visibility = dynamicSpotLightShadowVisibility(shadowSlot, worldPosition);
-                coneAttenuation *= mix(
-                        1.0,
-                        visibility,
-                        clamp(shadowStrength[shadowSlot], 0.0, 1.0));
-            }
+        }
+        int shadowSlot = dynamicLightShadowSlots[lightIndex];
+        if (shadowSlot >= 0 && coneAttenuation > 0.0) {
+            float visibility = dynamicLightShadowVisibility(lightIndex, shadowSlot, worldPosition);
+            coneAttenuation *= mix(1.0, visibility,
+                    clamp(shadowStrength[shadowSlot], 0.0, 1.0));
         }
         dynamicDirect += dynamicLightColors[lightIndex]
                 * dynamicLightIntensities[lightIndex]
@@ -499,6 +508,8 @@ bool SectorLocalFogRenderer::EnsureShaders()
             GetShaderLocationArrayBase(accumulateShader, "shadowStrength");
     accumulateLocations.dynamicShadows.shadowSoftness =
             GetShaderLocationArrayBase(accumulateShader, "shadowSoftness");
+    accumulateLocations.dynamicShadows.shadowAtlasTilesPerRow =
+            GetShaderLocation(accumulateShader, "shadowAtlasTilesPerRow");
     accumulateLocations.shadowMap0 = GetShaderLocation(accumulateShader, "shadowMap0");
     accumulateLocations.shadowMap1 = GetShaderLocation(accumulateShader, "shadowMap1");
 

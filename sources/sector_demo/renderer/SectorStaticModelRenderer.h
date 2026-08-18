@@ -428,6 +428,7 @@ private:
     int shadowBiasLoc = -1;
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
+    int shadowAtlasTilesPerRowLoc = -1;
     int shadowMap0Loc = -1;
     int shadowMap1Loc = -1;
     SectorFogShaderLocations fogShaderLocations;

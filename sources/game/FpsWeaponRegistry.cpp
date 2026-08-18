@@ -724,6 +724,10 @@ FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings)
             settings.horizontalFovDegrees,
             MinFpsHorizontalFovDegrees,
             MaxFpsHorizontalFovDegrees);
+    settings.maxDynamicLights = std::clamp(
+            settings.maxDynamicLights,
+            MinFpsDynamicLights,
+            MaxFpsDynamicLights);
     return settings;
 }
 
@@ -962,6 +966,24 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             if (shadows != graphics->end()) {
                 parsed.graphics.shadowQuality = static_cast<FpsShadowQuality>(
                         parseQuality(*shadows, "application settings.graphics.shadowQuality"));
+            }
+            const auto maxDynamicLights = graphics->find("maxDynamicLights");
+            if (maxDynamicLights != graphics->end()) {
+                if (!maxDynamicLights->is_number_integer()) {
+                    Fail("application settings.graphics.maxDynamicLights must be an integer");
+                }
+                const int value = maxDynamicLights->get<int>();
+                if (value < MinFpsDynamicLights || value > MaxFpsDynamicLights) {
+                    Fail("application settings.graphics.maxDynamicLights must be between 0 and 32");
+                }
+                parsed.graphics.maxDynamicLights = value;
+            }
+            const auto depthPrepass = graphics->find("depthPrepass");
+            if (depthPrepass != graphics->end()) {
+                if (!depthPrepass->is_boolean()) {
+                    Fail("application settings.graphics.depthPrepass must be a boolean");
+                }
+                parsed.graphics.depthPrepass = depthPrepass->get<bool>();
             }
             parsed.graphics = NormalizeFpsGraphicsSettings(parsed.graphics);
         }
@@ -1390,6 +1412,8 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"volumetricQuality", SectorVolumetricQualityName(
                     graphics.volumetricQuality)},
             {"shadowQuality", FpsShadowQualityName(graphics.shadowQuality)},
+            {"maxDynamicLights", graphics.maxDynamicLights},
+            {"depthPrepass", graphics.depthPrepass},
             {"performanceOverlay", graphics.performanceOverlay},
             {"vsync", graphics.vsync},
             {"horizontalFovDegrees", graphics.horizontalFovDegrees}};

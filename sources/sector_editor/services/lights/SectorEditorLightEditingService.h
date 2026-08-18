@@ -150,6 +150,11 @@ public:
     bool SetDynamicLightFlicker(SectorTopologyDynamicPointLight& light, bool flicker);
     bool SetDynamicLightFlickerSpeed(SectorTopologyDynamicPointLight& light, float flickerSpeed);
     bool SetDynamicLightFlickerAmount(SectorTopologyDynamicPointLight& light, float flickerAmount);
+    bool SetDynamicLightCastsShadow(SectorTopologyDynamicPointLight& light, bool castsShadow);
+    bool SetDynamicLightShadowPriority(SectorTopologyDynamicPointLight& light, int shadowPriority);
+    bool SetDynamicLightShadowBias(SectorTopologyDynamicPointLight& light, float shadowBias);
+    bool SetDynamicLightShadowStrength(SectorTopologyDynamicPointLight& light, float shadowStrength);
+    bool SetDynamicLightShadowSoftness(SectorTopologyDynamicPointLight& light, float shadowSoftness);
     bool SetDynamicLightPosition(SectorTopologyDynamicPointLight& light, Vector3 position);
     bool SetDynamicLightIntensity(SectorTopologyDynamicPointLight& light, float intensity);
     bool SetDynamicLightRadius(SectorTopologyDynamicPointLight& light, float radius);
