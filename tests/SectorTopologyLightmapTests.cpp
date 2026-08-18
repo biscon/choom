@@ -3882,6 +3882,18 @@ CpuMeshFixture MakeSharedVertexCubeWithInvalidUv2()
     return fixture;
 }
 
+CpuMeshFixture MakeVerySmallCubeWithoutUv2()
+{
+    CpuMeshFixture fixture = MakeSharedVertexCubeWithInvalidUv2();
+    constexpr float scale = 0.0001f;
+    for (float& coordinate : fixture.positions) {
+        coordinate *= scale;
+    }
+    fixture.uv2.clear();
+    fixture.Bind();
+    return fixture;
+}
+
 void TestStaticModelUvPreparationAndImportedTransforms()
 {
     CpuMeshFixture authored = MakeAuthoredUv2Quad();
@@ -3948,6 +3960,108 @@ void TestStaticModelUvPreparationAndImportedTransforms()
         sameUvs = Near(a.x, b.x) && Near(a.y, b.y);
     }
     Check(sameUvs, "xatlas local UV output is deterministic");
+}
+
+void TestVerySmallStaticModelUvNormalization()
+{
+    CpuMeshFixture tiny = MakeVerySmallCubeWithoutUv2();
+    std::array<Mesh, 1> meshes{tiny.mesh};
+    Model model = {};
+    model.transform = MatrixIdentity();
+    model.meshCount = static_cast<int>(meshes.size());
+    model.meshes = meshes.data();
+
+    game::SectorStaticModelLightmapModel prepared;
+    std::string error;
+    Check(game::CopySectorStaticModelForLightmap(
+                  "tiny-fixture.gltf",
+                  "tiny-geometry",
+                  model,
+                  prepared,
+                  error),
+          "very small static model mesh is normalized for xatlas unwrapping");
+    Check(prepared.meshes.size() == 1,
+          "very small static model preparation preserves its mesh");
+    if (prepared.meshes.size() != 1) {
+        return;
+    }
+
+    const game::SectorStaticModelLightmapMesh& preparedMesh =
+            prepared.meshes.front();
+    bool finiteUvs = !preparedMesh.localLightmapUvs.empty();
+    for (const Vector2 uv : preparedMesh.localLightmapUvs) {
+        finiteUvs = finiteUvs && std::isfinite(uv.x) && std::isfinite(uv.y);
+    }
+    Check(!preparedMesh.preservesAuthoredUv2
+                  && preparedMesh.usableWidth >= 2
+                  && preparedMesh.usableHeight >= 2
+                  && !preparedMesh.indices.empty()
+                  && finiteUvs,
+          "normalized very small mesh produces a finite non-empty lightmap chart");
+    bool originalPositionsPreserved =
+            preparedMesh.importedPositions.size()
+            == preparedMesh.sourceVertexIndices.size();
+    for (size_t i = 0;
+            originalPositionsPreserved
+                    && i < preparedMesh.importedPositions.size();
+            ++i) {
+        const uint32_t sourceIndex = preparedMesh.sourceVertexIndices[i];
+        originalPositionsPreserved = sourceIndex
+                        < static_cast<uint32_t>(tiny.mesh.vertexCount)
+                && SameVector(
+                        preparedMesh.importedPositions[i],
+                        Vector3{
+                                tiny.positions[sourceIndex * 3],
+                                tiny.positions[sourceIndex * 3 + 1],
+                                tiny.positions[sourceIndex * 3 + 2]});
+    }
+    Check(originalPositionsPreserved,
+          "small-mesh normalization does not change imported bake geometry");
+
+    game::SectorStaticModelLightmapModel repeated;
+    Check(game::CopySectorStaticModelForLightmap(
+                  "tiny-fixture.gltf",
+                  "tiny-geometry",
+                  model,
+                  repeated,
+                  error),
+          "very small static model normalization can be repeated");
+    bool deterministic = repeated.meshes.size() == prepared.meshes.size();
+    if (deterministic) {
+        const auto& repeatedMesh = repeated.meshes.front();
+        deterministic = repeatedMesh.sourceVertexIndices
+                        == preparedMesh.sourceVertexIndices
+                && repeatedMesh.indices == preparedMesh.indices
+                && repeatedMesh.localLightmapUvs.size()
+                        == preparedMesh.localLightmapUvs.size();
+        for (size_t i = 0;
+                deterministic && i < preparedMesh.localLightmapUvs.size();
+                ++i) {
+            deterministic = Near(
+                                    repeatedMesh.localLightmapUvs[i].x,
+                                    preparedMesh.localLightmapUvs[i].x)
+                    && Near(
+                            repeatedMesh.localLightmapUvs[i].y,
+                            preparedMesh.localLightmapUvs[i].y);
+        }
+    }
+    Check(deterministic,
+          "very small static model normalization is deterministic");
+
+    CpuMeshFixture degenerate = MakeVerySmallCubeWithoutUv2();
+    std::fill(degenerate.positions.begin(), degenerate.positions.end(), 0.0f);
+    degenerate.Bind();
+    meshes[0] = degenerate.mesh;
+    game::SectorStaticModelLightmapModel rejected;
+    Check(!game::CopySectorStaticModelForLightmap(
+                   "degenerate-fixture.gltf",
+                   "degenerate-geometry",
+                   model,
+                   rejected,
+                   error)
+                  && error.find("could not produce one finite lightmap chart set")
+                          != std::string::npos,
+          "zero-extent static model mesh remains rejected with an unwrap diagnostic");
 }
 
 void TestStaticModelPreparationReusesReadyEditorModels()
@@ -4555,6 +4669,7 @@ int main()
     TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting();
     TestStaticSpotlightBakeBehavior();
     TestStaticModelUvPreparationAndImportedTransforms();
+    TestVerySmallStaticModelUvNormalization();
     TestStaticModelPreparationReusesReadyEditorModels();
     TestStaticModelChartPackingAndSidecarLifecycle();
     TestStaticModelFingerprintRefreshAndHashInputs();

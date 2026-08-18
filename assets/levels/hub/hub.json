@@ -3,6 +3,10 @@
   "topology": "authoringGraph",
   "coordSubdivisions": 16,
   "textures": {
+    "biker_chick": {
+      "path": "assets/images/biker_chick.png",
+      "filter": "anisotropic8x"
+    },
     "brick_repair_512": {
       "path": "assets/images/hub/brick_repair_512.png",
       "filter": "anisotropic8x"
@@ -1041,6 +1045,22 @@
         109.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 61,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/outdor_ceiling_light.glb",
+        "rotationZDegrees": 90.0,
+        "heightOffsetWorld": 4.949999809265137,
+        "scale": 2.0
+      },
+      "position": [
+        -155.0,
+        -27.0,
+        97.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -1334,14 +1354,132 @@
       ],
       "radius": 8.0,
       "sourceRadius": 4.0,
-      "intensity": 1.0,
+      "intensity": 4.0,
       "color": {
         "r": 255,
-        "g": 0,
-        "b": 255,
+        "g": 250,
+        "b": 245,
         "a": 255
-      },
-      "castsShadow": false
+      }
+    },
+    {
+      "id": 17,
+      "position": [
+        -136.0,
+        12.0,
+        85.0
+      ],
+      "radius": 20.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 240,
+        "b": 190,
+        "a": 255
+      }
+    },
+    {
+      "id": 18,
+      "position": [
+        -112.0,
+        12.0,
+        85.0
+      ],
+      "radius": 20.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 240,
+        "b": 190,
+        "a": 255
+      }
+    },
+    {
+      "id": 19,
+      "position": [
+        -88.0,
+        12.0,
+        85.0
+      ],
+      "radius": 20.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 240,
+        "b": 190,
+        "a": 255
+      }
+    },
+    {
+      "id": 20,
+      "position": [
+        -136.0,
+        12.0,
+        108.0
+      ],
+      "radius": 20.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 240,
+        "b": 190,
+        "a": 255
+      }
+    },
+    {
+      "id": 21,
+      "position": [
+        -112.0,
+        12.0,
+        108.0
+      ],
+      "radius": 20.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 240,
+        "b": 190,
+        "a": 255
+      }
+    },
+    {
+      "id": 22,
+      "position": [
+        -88.0,
+        12.0,
+        108.0
+      ],
+      "radius": 20.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 240,
+        "b": 190,
+        "a": 255
+      }
+    },
+    {
+      "id": 23,
+      "position": [
+        -154.0,
+        12.667535781860352,
+        97.0
+      ],
+      "radius": 24.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 240,
+        "b": 190,
+        "a": 255
+      }
     }
   ],
   "staticSpotLights": [
@@ -1700,7 +1838,7 @@
       "color": {
         "r": 255,
         "g": 250,
-        "b": 220,
+        "b": 245,
         "a": 255
       },
       "innerConeDegrees": 25.0,
@@ -1791,7 +1929,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "3b38f004e1e97792",
+    "sourceHash": "b5bb5a1009802d19",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -1811,7 +1949,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "3b38f004e1e97792",
+      "sourceHash": "b5bb5a1009802d19",
       "count": 2067,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -1837,9 +1975,9 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "3b38f004e1e97792",
-      "modelCount": 29,
-      "objectCount": 40,
+      "sourceHash": "b5bb5a1009802d19",
+      "modelCount": 31,
+      "objectCount": 48,
       "format": "staticModelUvRemapF32LE"
     }
   },
@@ -6979,6 +7117,27 @@
               0.0,
               -0.0
             ]
+          },
+          "decal": {
+            "textureId": "biker_chick",
+            "uv": {
+              "scale": [
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "offset": [
+                -0.25,
+                -0.949999988079071
+              ]
+            },
+            "opacity": 0.8500000238418579,
+            "emissive": false,
+            "tint": [
+              1.0,
+              1.0,
+              1.0
+            ],
+            "bloomIntensity": 1.0
           }
         },
         "upper": {
