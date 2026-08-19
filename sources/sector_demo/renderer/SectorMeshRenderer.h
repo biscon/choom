@@ -12,10 +12,13 @@
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorDynamicModelShadowRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
+#include "sector_demo/renderer/SectorDistanceFogRenderer.h"
+#include "sector_demo/renderer/SectorAnalyticFogRenderer.h"
 #include "sector_demo/renderer/SectorLocalFogRenderer.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
 #include "sector_demo/renderer/SectorLightDustRenderer.h"
 #include "sector_demo/renderer/SectorLightHazeRenderer.h"
+#include "sector_demo/renderer/SectorLightProxyRenderer.h"
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
@@ -43,19 +46,29 @@ struct SectorTopologyMap;
 struct SectorBakedObjectLightProbeRuntimeData;
 
 struct SectorAtmosphereDiagnostics {
+    double distanceFogGpuMilliseconds = 0.0;
     double localFogGpuMilliseconds = 0.0;
+    double analyticFogGpuMilliseconds = 0.0;
     double lightHazeGpuMilliseconds = 0.0;
+    double lightProxyGpuMilliseconds = 0.0;
     double dustGpuMilliseconds = 0.0;
     int dynamicLightCount = 0;
     int localFogEligibleCount = 0;
     int localFogActiveCount = 0;
     float localFogScissorCoverage = 0.0f;
     std::array<int, SectorLocalFogRenderer::MaxVolumes> localFogVolumeIds{};
+    int analyticFogEligibleCount = 0;
+    int analyticFogActiveCount = 0;
+    float analyticFogScissorCoverage = 0.0f;
     int lightHazeEligibleCount = 0;
     int lightHazeActiveCount = 0;
     float lightHazeScissorCoverage = 0.0f;
     std::array<SectorLightHazeActiveSource,
             SectorLightHazeRenderer::MaxVolumes> lightHazeSources{};
+    int lightProxyEligibleCount = 0;
+    int lightProxyHaloCount = 0;
+    int lightProxyShaftCount = 0;
+    int lightProxyDrawCallCount = 0;
     int dustEligibleEmitterCount = 0;
     int dustActiveEmitterCount = 0;
     int dustVisibleParticleCount = 0;
@@ -272,7 +285,7 @@ public:
     }
 
 private:
-    static constexpr std::size_t AtmosphereGpuPassCount = 3;
+    static constexpr std::size_t AtmosphereGpuPassCount = 6;
     static constexpr std::size_t AtmosphereGpuQueryLatency = 4;
 
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
@@ -355,8 +368,11 @@ private:
     int shadowAtlasTilesPerRowLoc = -1;
     bool depthPrepassEnabled = false;
     SectorFogShaderLocations fogShaderLocations;
+    SectorDistanceFogRenderer distanceFogRenderer;
     SectorLocalFogRenderer localFogRenderer;
+    SectorAnalyticFogRenderer analyticFogRenderer;
     SectorLightHazeRenderer lightHazeRenderer;
+    SectorLightProxyRenderer lightProxyRenderer;
     SectorLightDustRenderer lightDustRenderer;
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;

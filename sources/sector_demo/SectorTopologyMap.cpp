@@ -77,12 +77,50 @@ SectorLightDustSettings NormalizeSectorLightDustSettings(SectorLightDustSettings
     return settings;
 }
 
+SectorLightProxySettings NormalizeSectorLightProxySettings(SectorLightProxySettings settings)
+{
+    const SectorLightProxySettings defaults;
+    settings.tint.a = 255;
+    settings.halo.radiusWorld = std::clamp(
+            FiniteOr(settings.halo.radiusWorld, defaults.halo.radiusWorld), 0.01f, 64.0f);
+    settings.halo.brightness = std::clamp(
+            FiniteOr(settings.halo.brightness, defaults.halo.brightness), 0.0f, 16.0f);
+    settings.halo.edgeSoftness = std::clamp(
+            FiniteOr(settings.halo.edgeSoftness, defaults.halo.edgeSoftness), 0.01f, 1.0f);
+    settings.shaft.lengthScale = std::clamp(
+            FiniteOr(settings.shaft.lengthScale, defaults.shaft.lengthScale), 0.01f, 2.0f);
+    settings.shaft.widthScale = std::clamp(
+            FiniteOr(settings.shaft.widthScale, defaults.shaft.widthScale), 0.01f, 2.0f);
+    settings.shaft.brightness = std::clamp(
+            FiniteOr(settings.shaft.brightness, defaults.shaft.brightness), 0.0f, 16.0f);
+    settings.shaft.edgeSoftness = std::clamp(
+            FiniteOr(settings.shaft.edgeSoftness, defaults.shaft.edgeSoftness), 0.01f, 1.0f);
+    return settings;
+}
+
 SectorLightAtmosphereSettings NormalizeSectorLightAtmosphereSettings(
         SectorLightAtmosphereSettings settings)
 {
     settings.haze = NormalizeSectorLightHazeSettings(settings.haze);
+    settings.proxy = NormalizeSectorLightProxySettings(settings.proxy);
     settings.dust = NormalizeSectorLightDustSettings(settings.dust);
     return settings;
+}
+
+bool IsDefaultSectorLightProxySettings(const SectorLightProxySettings& settings)
+{
+    const SectorLightProxySettings value = NormalizeSectorLightProxySettings(settings);
+    const SectorLightProxySettings defaults;
+    return SameRgb(value.tint, defaults.tint)
+            && value.halo.enabled == defaults.halo.enabled
+            && value.halo.radiusWorld == defaults.halo.radiusWorld
+            && value.halo.brightness == defaults.halo.brightness
+            && value.halo.edgeSoftness == defaults.halo.edgeSoftness
+            && value.shaft.enabled == defaults.shaft.enabled
+            && value.shaft.lengthScale == defaults.shaft.lengthScale
+            && value.shaft.widthScale == defaults.shaft.widthScale
+            && value.shaft.brightness == defaults.shaft.brightness
+            && value.shaft.edgeSoftness == defaults.shaft.edgeSoftness;
 }
 
 bool IsDefaultSectorLightHazeSettings(const SectorLightHazeSettings& settings)
@@ -119,6 +157,7 @@ bool IsDefaultSectorLightDustSettings(const SectorLightDustSettings& settings)
 bool IsDefaultSectorLightAtmosphereSettings(const SectorLightAtmosphereSettings& settings)
 {
     return IsDefaultSectorLightHazeSettings(settings.haze)
+            && IsDefaultSectorLightProxySettings(settings.proxy)
             && IsDefaultSectorLightDustSettings(settings.dust);
 }
 namespace {
@@ -324,6 +363,15 @@ SectorTopologyFogSettings NormalizeSectorTopologyFogSettings(SectorTopologyFogSe
             FogStartDistanceMin,
             FogStartDistanceMax,
             defaults.startDistanceWorld);
+    settings.endDistanceWorld = ClampFinite(
+            settings.endDistanceWorld,
+            settings.startDistanceWorld + 0.01f,
+            4096.0f,
+            std::max(defaults.endDistanceWorld, settings.startDistanceWorld + 0.01f));
+    settings.falloffExponent = ClampFinite(
+            settings.falloffExponent, 0.05f, 8.0f, defaults.falloffExponent);
+    settings.brightness = ClampFinite(
+            settings.brightness, 0.0f, 16.0f, defaults.brightness);
     settings.density = ClampFinite(
             settings.density,
             FogDensityMin,

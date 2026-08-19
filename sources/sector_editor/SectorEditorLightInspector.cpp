@@ -37,6 +37,16 @@ bool SameLightAtmosphere(
             && a.haze.noiseScaleWorld == b.haze.noiseScaleWorld
             && a.haze.flowDirectionDegrees == b.haze.flowDirectionDegrees
             && a.haze.flowSpeedWorld == b.haze.flowSpeedWorld
+            && a.proxy.halo.enabled == b.proxy.halo.enabled
+            && a.proxy.halo.radiusWorld == b.proxy.halo.radiusWorld
+            && a.proxy.halo.brightness == b.proxy.halo.brightness
+            && a.proxy.halo.edgeSoftness == b.proxy.halo.edgeSoftness
+            && a.proxy.shaft.enabled == b.proxy.shaft.enabled
+            && a.proxy.shaft.lengthScale == b.proxy.shaft.lengthScale
+            && a.proxy.shaft.widthScale == b.proxy.shaft.widthScale
+            && a.proxy.shaft.brightness == b.proxy.shaft.brightness
+            && a.proxy.shaft.edgeSoftness == b.proxy.shaft.edgeSoftness
+            && SameColor(a.proxy.tint, b.proxy.tint)
             && a.dust.enabled == b.dust.enabled
             && a.dust.amount == b.dust.amount
             && a.dust.extentScale == b.dust.extentScale
@@ -54,6 +64,8 @@ bool AtmosphereSourceChanged(
 {
     return !SameVector3(before.position, after.position)
             || before.radius != after.radius
+            || before.intensity != after.intensity
+            || !SameColor(before.color, after.color)
             || !SameLightAtmosphere(before.atmosphere, after.atmosphere);
 }
 
@@ -65,6 +77,8 @@ bool AtmosphereSourceChanged(
             || !SameVector3(before.target, after.target)
             || before.range != after.range
             || before.outerConeDegrees != after.outerConeDegrees
+            || before.intensity != after.intensity
+            || !SameColor(before.color, after.color)
             || !SameLightAtmosphere(before.atmosphere, after.atmosphere);
 }
 
@@ -114,10 +128,16 @@ bool AtmosphereSourceChanged(
 float LightAtmosphereInspectorContentHeight(
         float rowH,
         float gap,
-        const SectorLightAtmosphereSettings& atmosphere)
+        const SectorLightAtmosphereSettings& atmosphere,
+        bool spotLight)
 {
-    float height = 2.0f * (26.0f + rowH + gap);
+    float height = 3.0f * 26.0f + 6.0f * (rowH + gap);
     if (atmosphere.haze.enabled) height += 11.0f * (rowH + gap);
+    if (atmosphere.proxy.halo.enabled) height += 3.0f * (rowH + gap);
+    if (spotLight) {
+        height += rowH + gap;
+        if (atmosphere.proxy.shaft.enabled) height += 4.0f * (rowH + gap);
+    }
     if (atmosphere.dust.enabled) height += 10.0f * (rowH + gap);
     return height;
 }
@@ -136,7 +156,8 @@ void DrawLightAtmosphereInspector(
         SectorLightAtmosphereSettings atmosphere,
         SectorEditorUiState& uiState,
         ApplyFn&& apply,
-        bool& sourceRefreshRequested)
+        bool& sourceRefreshRequested,
+        bool spotLight)
 {
     auto commit = [&]() {
         atmosphere = NormalizeSectorLightAtmosphereSettings(atmosphere);
@@ -199,7 +220,7 @@ void DrawLightAtmosphereInspector(
     };
 
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 22.0f}, font,
-            "Atmosphere: Haze", engine::UITextJustify::Left, config.textColor);
+            "Atmosphere: Raymarched haze", engine::UITextJustify::Left, config.textColor);
     y += 26.0f;
     if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_haze_enabled",
             Rectangle{0.0f, y, contentW, rowH}, font, "Haze enabled", atmosphere.haze.enabled)) {
@@ -227,6 +248,43 @@ void DrawLightAtmosphereInspector(
         drawChannel("sector_editor_light_haze_g", "Tint G:", atmosphere.haze.scatteringTint.g, uiState.lightHazeGreenInput);
         drawChannel("sector_editor_light_haze_b", "Tint B:", atmosphere.haze.scatteringTint.b, uiState.lightHazeBlueInput);
     }
+
+    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 22.0f}, font,
+            "Atmosphere: Cheap proxies", engine::UITextJustify::Left, config.textColor);
+    y += 26.0f;
+    if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_proxy_halo_enabled",
+            Rectangle{0.0f, y, contentW, rowH}, font, "Halo enabled", atmosphere.proxy.halo.enabled)) {
+        commit();
+    }
+    y += rowH + gap;
+    if (atmosphere.proxy.halo.enabled) {
+        drawFloat("sector_editor_light_proxy_halo_radius", "Halo radius (m):",
+                atmosphere.proxy.halo.radiusWorld, uiState.lightProxyHaloRadiusInput, 0.01f, 64.0f, 3);
+        drawFloat("sector_editor_light_proxy_halo_brightness", "Halo brightness:",
+                atmosphere.proxy.halo.brightness, uiState.lightProxyHaloBrightnessInput, 0.0f, 16.0f, 3);
+        drawFloat("sector_editor_light_proxy_halo_softness", "Halo softness:",
+                atmosphere.proxy.halo.edgeSoftness, uiState.lightProxyHaloSoftnessInput, 0.01f, 1.0f, 3);
+    }
+    if (spotLight) {
+        if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_proxy_shaft_enabled",
+                Rectangle{0.0f, y, contentW, rowH}, font, "Shaft enabled", atmosphere.proxy.shaft.enabled)) {
+            commit();
+        }
+        y += rowH + gap;
+        if (atmosphere.proxy.shaft.enabled) {
+            drawFloat("sector_editor_light_proxy_shaft_length", "Shaft length scale:",
+                    atmosphere.proxy.shaft.lengthScale, uiState.lightProxyShaftLengthInput, 0.01f, 2.0f, 3);
+            drawFloat("sector_editor_light_proxy_shaft_width", "Shaft width scale:",
+                    atmosphere.proxy.shaft.widthScale, uiState.lightProxyShaftWidthInput, 0.01f, 2.0f, 3);
+            drawFloat("sector_editor_light_proxy_shaft_brightness", "Shaft brightness:",
+                    atmosphere.proxy.shaft.brightness, uiState.lightProxyShaftBrightnessInput, 0.0f, 16.0f, 3);
+            drawFloat("sector_editor_light_proxy_shaft_softness", "Shaft softness:",
+                    atmosphere.proxy.shaft.edgeSoftness, uiState.lightProxyShaftSoftnessInput, 0.01f, 1.0f, 3);
+        }
+    }
+    drawChannel("sector_editor_light_proxy_r", "Proxy tint R:", atmosphere.proxy.tint.r, uiState.lightProxyRedInput);
+    drawChannel("sector_editor_light_proxy_g", "Proxy tint G:", atmosphere.proxy.tint.g, uiState.lightProxyGreenInput);
+    drawChannel("sector_editor_light_proxy_b", "Proxy tint B:", atmosphere.proxy.tint.b, uiState.lightProxyBlueInput);
 
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 22.0f}, font,
             "Atmosphere: Dust", engine::UITextJustify::Left, config.textColor);
@@ -278,7 +336,7 @@ float StaticLightInspectorContentHeight(float rowH, float gap, bool hasIdError, 
     height += 6.0f * (rowH + gap); // Position/intensity/radius/source radius.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
-    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
+    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, false);
     height += rowH + gap; // Bake.
     return height;
 }
@@ -295,7 +353,7 @@ float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdErr
     height += 12.0f * (rowH + gap); // Position/target/intensity/range/source/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
-    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
+    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, true);
     height += rowH + gap; // Bake.
     return height;
 }
@@ -314,7 +372,7 @@ float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError,
     height += 5.0f * (rowH + gap); // Position/intensity/radius.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
-    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
+    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, false);
     return height;
 }
 
@@ -333,7 +391,7 @@ float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdEr
     height += 11.0f * (rowH + gap); // Position/target/intensity/range/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
-    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere);
+    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, true);
     return height;
 }
 
@@ -518,7 +576,7 @@ bool DrawSelectedStaticLightInspector(
             [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
                 return lightEditing.SetStaticLightAtmosphere(light, settings);
             },
-            sourceRefreshRequested);
+            sourceRefreshRequested, false);
 
     if (engine::Button(ui, config, input, assets, "sector_editor_light_bake", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
         bakeRequested = true;
@@ -735,7 +793,7 @@ bool DrawSelectedStaticSpotLightInspector(
             [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
                 return lightEditing.SetStaticSpotLightAtmosphere(light, settings);
             },
-            sourceRefreshRequested);
+            sourceRefreshRequested, true);
 
     if (engine::Button(ui, config, input, assets, "sector_editor_static_spot_light_bake", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
         bakeRequested = true;
@@ -973,7 +1031,7 @@ bool DrawSelectedDynamicLightInspector(
             [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
                 return lightEditing.SetDynamicLightAtmosphere(light, settings);
             },
-            sourceRefreshRequested);
+            sourceRefreshRequested, false);
 
     sourceRefreshRequested = sourceRefreshRequested || AtmosphereSourceChanged(sourceBefore, light);
     return true;
@@ -1312,7 +1370,7 @@ bool DrawSelectedDynamicSpotLightInspector(
             [&lightEditing, &light](SectorLightAtmosphereSettings settings) {
                 return lightEditing.SetDynamicSpotLightAtmosphere(light, settings);
             },
-            sourceRefreshRequested);
+            sourceRefreshRequested, true);
 
     sourceRefreshRequested = sourceRefreshRequested || AtmosphereSourceChanged(sourceBefore, light);
     return true;

@@ -369,7 +369,7 @@ void TestPreviewSettingsScrollableContentHeightsReachLastControls()
             + 4.0f * (8.0f + 38.0f)
             + 36.0f + gap;
     const float fogLastControlBottom =
-            9.0f * (rowH + gap)
+            10.0f * (rowH + gap)
             + 36.0f + gap
             + 38.0f
             + 36.0f + gap;

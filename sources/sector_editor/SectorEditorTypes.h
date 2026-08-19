@@ -150,6 +150,16 @@ struct SectorEditorUiState {
     engine::UIIntInputState lightHazeRedInput;
     engine::UIIntInputState lightHazeGreenInput;
     engine::UIIntInputState lightHazeBlueInput;
+    engine::UIFloatInputState lightProxyHaloRadiusInput;
+    engine::UIFloatInputState lightProxyHaloBrightnessInput;
+    engine::UIFloatInputState lightProxyHaloSoftnessInput;
+    engine::UIFloatInputState lightProxyShaftLengthInput;
+    engine::UIFloatInputState lightProxyShaftWidthInput;
+    engine::UIFloatInputState lightProxyShaftBrightnessInput;
+    engine::UIFloatInputState lightProxyShaftSoftnessInput;
+    engine::UIIntInputState lightProxyRedInput;
+    engine::UIIntInputState lightProxyGreenInput;
+    engine::UIIntInputState lightProxyBlueInput;
     engine::UIIntInputState lightDustAmountInput;
     engine::UIFloatInputState lightDustExtentScaleInput;
     engine::UIFloatInputState lightDustMinimumSizeInput;

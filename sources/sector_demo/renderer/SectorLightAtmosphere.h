@@ -35,6 +35,8 @@ struct SectorLightAtmosphereSource {
     Vector3 directionWorld = {0.0f, -1.0f, 0.0f};
     float rangeWorld = 0.0f;
     float outerConeCos = -1.0f;
+    Color color = WHITE;
+    float intensity = 1.0f;
     SectorLightAtmosphereSettings atmosphere;
 };
 

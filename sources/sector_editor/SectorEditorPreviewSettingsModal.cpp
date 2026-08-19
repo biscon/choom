@@ -425,11 +425,31 @@ void DrawPreviewSettingsModal(
         }
         contentY += rowH + gap;
 
+        bool distanceMode = modalState.draftFogSettings.mode
+                == SectorTopologyFogMode::Distance;
+        if (engine::Checkbox(
+                    ui, config, input, assets,
+                    "sector_editor_preview_fog_distance_mode",
+                    Rectangle{0.0f, contentY, contentW, rowH},
+                    font, "HPL-style distance mode", distanceMode)) {
+            modalState.draftFogSettings.mode = distanceMode
+                    ? SectorTopologyFogMode::Distance
+                    : SectorTopologyFogMode::LegacyHeight;
+            modalState.errorMessage.clear();
+        }
+        contentY += rowH + gap;
+
         drawFloat(contentY, "sector_editor_preview_fog_start_distance", "Start distance", modalState.draftFogSettings.startDistanceWorld, modalState.fogStartDistanceInput, 0.0f, 512.0f, 2);
-        drawFloat(contentY, "sector_editor_preview_fog_density", "Density", modalState.draftFogSettings.density, modalState.fogDensityInput, 0.0f, 1.0f, 4);
         drawFloat(contentY, "sector_editor_preview_fog_max_opacity", "Maximum opacity", modalState.draftFogSettings.maxOpacity, modalState.fogMaxOpacityInput, 0.0f, 1.0f, 3);
-        drawFloat(contentY, "sector_editor_preview_fog_reference_height", "Reference height", modalState.draftFogSettings.referenceHeightWorld, modalState.fogReferenceHeightInput, -512.0f, 512.0f, 2);
-        drawFloat(contentY, "sector_editor_preview_fog_height_falloff", "Height falloff", modalState.draftFogSettings.heightFalloff, modalState.fogHeightFalloffInput, 0.0f, 16.0f, 3);
+        if (distanceMode) {
+            drawFloat(contentY, "sector_editor_preview_fog_end_distance", "End distance", modalState.draftFogSettings.endDistanceWorld, modalState.fogEndDistanceInput, 0.01f, 4096.0f, 2);
+            drawFloat(contentY, "sector_editor_preview_fog_falloff_exponent", "Falloff exponent", modalState.draftFogSettings.falloffExponent, modalState.fogFalloffExponentInput, 0.05f, 8.0f, 3);
+            drawFloat(contentY, "sector_editor_preview_fog_brightness", "Brightness", modalState.draftFogSettings.brightness, modalState.fogBrightnessInput, 0.0f, 16.0f, 3);
+        } else {
+            drawFloat(contentY, "sector_editor_preview_fog_density", "Density", modalState.draftFogSettings.density, modalState.fogDensityInput, 0.0f, 1.0f, 4);
+            drawFloat(contentY, "sector_editor_preview_fog_reference_height", "Reference height", modalState.draftFogSettings.referenceHeightWorld, modalState.fogReferenceHeightInput, -512.0f, 512.0f, 2);
+            drawFloat(contentY, "sector_editor_preview_fog_height_falloff", "Height falloff", modalState.draftFogSettings.heightFalloff, modalState.fogHeightFalloffInput, 0.0f, 16.0f, 3);
+        }
         modalState.draftFogSettings = NormalizeSectorTopologyFogSettings(modalState.draftFogSettings);
 
         engine::Text(
@@ -438,7 +458,9 @@ void DrawPreviewSettingsModal(
                 assets,
                 Rectangle{0.0f, contentY, contentW, 32.0f},
                 font,
-                "Height falloff 0 produces uniform distance fog.",
+                distanceMode
+                        ? "Fog reaches maximum opacity at the end distance."
+                        : "Height falloff 0 produces uniform exponential fog.",
                 engine::UITextJustify::Left,
                 config.mutedTextColor);
         contentY += 36.0f + gap;

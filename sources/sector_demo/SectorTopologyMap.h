@@ -62,14 +62,28 @@ struct SectorTopologyDirectionalLightSettings {
     float intensity = 1.0f;
 };
 
+enum class SectorTopologyFogMode {
+    LegacyHeight,
+    Distance
+};
+
 struct SectorTopologyFogSettings {
     bool enabled = false;
+    SectorTopologyFogMode mode = SectorTopologyFogMode::LegacyHeight;
     Color color = Color{80, 88, 84, 255};
     float startDistanceWorld = 2.0f;
+    float endDistanceWorld = 30.0f;
+    float falloffExponent = 1.0f;
+    float brightness = 1.0f;
     float density = 0.025f;
     float maxOpacity = 0.65f;
     float referenceHeightWorld = 1.0f;
     float heightFalloff = 0.35f;
+};
+
+enum class SectorLocalFogRenderMode {
+    Raymarched,
+    Analytic
 };
 
 enum class SectorSoundType {
@@ -95,11 +109,15 @@ struct SectorCompiledLocalFogVolume {
     int sourceAuthoringFogVolumeId = -1;
     int topologySectorId = -1;
     bool enabled = true;
+    SectorLocalFogRenderMode renderMode = SectorLocalFogRenderMode::Raymarched;
     Vector3 centerWorld = {};
     Vector3 radiiWorld = {1.5f, 0.325f, 1.5f};
     Color color = Color{105, 116, 110, 255};
     float density = 0.65f;
     float maxOpacity = 0.75f;
+    float analyticStartDistanceWorld = 0.0f;
+    float analyticEndDistanceWorld = 2.0f;
+    float analyticFalloffExponent = 1.0f;
     float edgeSoftness = 0.35f;
     float noiseScaleWorld = 0.75f;
     float noiseAmount = 0.75f;

@@ -199,17 +199,41 @@ struct SectorLightDustSettings {
     Color scatteringTint = WHITE;
 };
 
+struct SectorLightProxyHaloSettings {
+    bool enabled = false;
+    float radiusWorld = 0.5f;
+    float brightness = 0.12f;
+    float edgeSoftness = 0.5f;
+};
+
+struct SectorLightProxyShaftSettings {
+    bool enabled = false;
+    float lengthScale = 0.65f;
+    float widthScale = 0.75f;
+    float brightness = 0.05f;
+    float edgeSoftness = 0.5f;
+};
+
+struct SectorLightProxySettings {
+    Color tint = WHITE;
+    SectorLightProxyHaloSettings halo;
+    SectorLightProxyShaftSettings shaft;
+};
+
 struct SectorLightAtmosphereSettings {
     SectorLightHazeSettings haze;
+    SectorLightProxySettings proxy;
     SectorLightDustSettings dust;
 };
 
 SectorLightHazeSettings NormalizeSectorLightHazeSettings(SectorLightHazeSettings settings);
 SectorLightDustSettings NormalizeSectorLightDustSettings(SectorLightDustSettings settings);
+SectorLightProxySettings NormalizeSectorLightProxySettings(SectorLightProxySettings settings);
 SectorLightAtmosphereSettings NormalizeSectorLightAtmosphereSettings(
         SectorLightAtmosphereSettings settings);
 bool IsDefaultSectorLightHazeSettings(const SectorLightHazeSettings& settings);
 bool IsDefaultSectorLightDustSettings(const SectorLightDustSettings& settings);
+bool IsDefaultSectorLightProxySettings(const SectorLightProxySettings& settings);
 bool IsDefaultSectorLightAtmosphereSettings(const SectorLightAtmosphereSettings& settings);
 
 struct SectorTopologyStaticPointLight {

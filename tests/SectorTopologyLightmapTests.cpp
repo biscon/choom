@@ -1405,6 +1405,8 @@ void TestSourceHashChanges()
     changedLight.staticLights[0].atmosphere.haze.enabled = true;
     changedLight.staticLights[0].atmosphere.haze.density = 0.25f;
     changedLight.staticLights[0].atmosphere.haze.heightOffsetWorld = 0.75f;
+    changedLight.staticLights[0].atmosphere.proxy.halo.enabled = true;
+    changedLight.staticLights[0].atmosphere.proxy.halo.brightness = 2.0f;
     changedLight.staticLights[0].atmosphere.dust.enabled = true;
     changedLight.staticLights[0].atmosphere.dust.amount = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) == hash,
@@ -1680,8 +1682,12 @@ void TestSourceHashChanges()
 
     game::SectorTopologyMap changedFog = base;
     changedFog.fogSettings.enabled = true;
+    changedFog.fogSettings.mode = game::SectorTopologyFogMode::Distance;
     changedFog.fogSettings.color = Color{12, 34, 56, 255};
     changedFog.fogSettings.startDistanceWorld = 7.0f;
+    changedFog.fogSettings.endDistanceWorld = 70.0f;
+    changedFog.fogSettings.falloffExponent = 2.0f;
+    changedFog.fogSettings.brightness = 1.5f;
     changedFog.fogSettings.density = 0.15f;
     changedFog.fogSettings.maxOpacity = 0.9f;
     changedFog.fogSettings.referenceHeightWorld = -4.0f;
@@ -1691,6 +1697,8 @@ void TestSourceHashChanges()
     game::SectorTopologyMap changedLocalFog = base;
     game::SectorCompiledLocalFogVolume localFog;
     localFog.sourceAuthoringFogVolumeId = 1;
+    localFog.renderMode = game::SectorLocalFogRenderMode::Analytic;
+    localFog.analyticEndDistanceWorld = 4.0f;
     localFog.centerWorld = Vector3{1.0f, 0.5f, 2.0f};
     changedLocalFog.compiledLocalFogVolumes.push_back(localFog);
     Check(game::ComputeSectorLightmapSourceHash(changedLocalFog) == hash,
@@ -3271,6 +3279,11 @@ void TestLightAtmosphereVolumeShapesAndProbeFallback()
     game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
     Check(sources.empty(),
           "disabled light atmosphere does not create a per-frame renderer source");
+    sourceMap.staticLights[0].atmosphere.proxy.halo.enabled = true;
+    game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
+    Check(sources.size() == 1,
+          "cheap halo alone creates a light atmosphere renderer source");
+    sourceMap.staticLights[0].atmosphere.proxy.halo.enabled = false;
     sourceMap.staticLights[0].atmosphere.haze.enabled = true;
     game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
     Check(sources.size() == 1,

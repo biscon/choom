@@ -7,7 +7,7 @@
 namespace game {
 
 struct FogVolumeEditingUiState {
-    std::array<engine::UIFloatInputState, 13> floatInputs{};
+    std::array<engine::UIFloatInputState, 16> floatInputs{};
     std::array<engine::UIIntInputState, 3> colorInputs{};
 };
 

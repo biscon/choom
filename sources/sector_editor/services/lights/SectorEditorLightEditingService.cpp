@@ -92,6 +92,16 @@ void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& 
     resetInt(uiState.atmosphere.hazeRedInput);
     resetInt(uiState.atmosphere.hazeGreenInput);
     resetInt(uiState.atmosphere.hazeBlueInput);
+    resetFloat(uiState.atmosphere.proxyHaloRadiusInput);
+    resetFloat(uiState.atmosphere.proxyHaloBrightnessInput);
+    resetFloat(uiState.atmosphere.proxyHaloSoftnessInput);
+    resetFloat(uiState.atmosphere.proxyShaftLengthInput);
+    resetFloat(uiState.atmosphere.proxyShaftWidthInput);
+    resetFloat(uiState.atmosphere.proxyShaftBrightnessInput);
+    resetFloat(uiState.atmosphere.proxyShaftSoftnessInput);
+    resetInt(uiState.atmosphere.proxyRedInput);
+    resetInt(uiState.atmosphere.proxyGreenInput);
+    resetInt(uiState.atmosphere.proxyBlueInput);
     resetInt(uiState.atmosphere.dustAmountInput);
     resetFloat(uiState.atmosphere.dustExtentScaleInput);
     resetFloat(uiState.atmosphere.dustMinimumSizeInput);
@@ -193,6 +203,16 @@ bool SameAtmosphere(
             && left.haze.noiseScaleWorld == right.haze.noiseScaleWorld
             && left.haze.flowDirectionDegrees == right.haze.flowDirectionDegrees
             && left.haze.flowSpeedWorld == right.haze.flowSpeedWorld
+            && left.proxy.halo.enabled == right.proxy.halo.enabled
+            && left.proxy.halo.radiusWorld == right.proxy.halo.radiusWorld
+            && left.proxy.halo.brightness == right.proxy.halo.brightness
+            && left.proxy.halo.edgeSoftness == right.proxy.halo.edgeSoftness
+            && left.proxy.shaft.enabled == right.proxy.shaft.enabled
+            && left.proxy.shaft.lengthScale == right.proxy.shaft.lengthScale
+            && left.proxy.shaft.widthScale == right.proxy.shaft.widthScale
+            && left.proxy.shaft.brightness == right.proxy.shaft.brightness
+            && left.proxy.shaft.edgeSoftness == right.proxy.shaft.edgeSoftness
+            && sameColor(left.proxy.tint, right.proxy.tint)
             && left.dust.enabled == right.dust.enabled
             && left.dust.amount == right.dust.amount
             && left.dust.extentScale == right.dust.extentScale

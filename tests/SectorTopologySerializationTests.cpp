@@ -973,6 +973,13 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
     atmosphere.haze.noiseScaleWorld = 2.5f;
     atmosphere.haze.flowDirectionDegrees = 35.0f;
     atmosphere.haze.flowSpeedWorld = 0.08f;
+    atmosphere.proxy.tint = Color{180, 220, 255, 255};
+    atmosphere.proxy.halo.enabled = true;
+    atmosphere.proxy.halo.radiusWorld = 1.25f;
+    atmosphere.proxy.halo.brightness = 0.4f;
+    atmosphere.proxy.shaft.enabled = true;
+    atmosphere.proxy.shaft.lengthScale = 0.8f;
+    atmosphere.proxy.shaft.widthScale = 0.6f;
     atmosphere.dust.enabled = true;
     atmosphere.dust.amount = 47;
     atmosphere.dust.extentScale = 0.9f;
@@ -997,13 +1004,17 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
           "enabled haze and dust serialize for every light variant");
     if (allVariantsHaveAtmosphere) {
         const Json& staticAtmosphere = saved["staticLights"][0]["atmosphere"];
-        Check(staticAtmosphere.contains("haze") && staticAtmosphere.contains("dust"),
-              "enabled atmosphere serializes both haze and dust blocks");
-        if (staticAtmosphere.contains("haze") && staticAtmosphere.contains("dust")) {
+        Check(staticAtmosphere.contains("haze") && staticAtmosphere.contains("proxy")
+                      && staticAtmosphere.contains("dust"),
+              "enabled atmosphere serializes haze, proxy, and dust blocks");
+        if (staticAtmosphere.contains("haze") && staticAtmosphere.contains("proxy")
+                && staticAtmosphere.contains("dust")) {
             Check(staticAtmosphere["haze"].value("enabled", false)
                           && Near(staticAtmosphere["haze"].value("heightOffsetWorld", 0.0f), 0.65f)
+                          && staticAtmosphere["proxy"]["halo"].value("enabled", false)
+                          && staticAtmosphere["proxy"]["shaft"].value("enabled", false)
                           && staticAtmosphere["dust"].value("enabled", false),
-                  "enabled haze and dust flags are serialized");
+                  "enabled atmosphere flags are serialized");
         }
     }
 
@@ -1028,6 +1039,11 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
                 && value.haze.scatteringTint.r == 210
                 && Near(value.haze.flowDirectionDegrees, 35.0f)
                 && Near(value.haze.flowSpeedWorld, 0.08f)
+                && value.proxy.halo.enabled
+                && Near(value.proxy.halo.radiusWorld, 1.25f)
+                && value.proxy.shaft.enabled
+                && Near(value.proxy.shaft.lengthScale, 0.8f)
+                && value.proxy.tint.g == 220
                 && value.dust.enabled
                 && value.dust.amount == 47
                 && Near(value.dust.extentScale, 0.9f)
@@ -2750,8 +2766,12 @@ void TestFogSettingsRoundTripAndValidation()
 {
     SectorTopologyMap original = MakeSquare();
     original.fogSettings.enabled = true;
+    original.fogSettings.mode = game::SectorTopologyFogMode::Distance;
     original.fogSettings.color = Color{12, 34, 56, 128};
     original.fogSettings.startDistanceWorld = 3.5f;
+    original.fogSettings.endDistanceWorld = 48.0f;
+    original.fogSettings.falloffExponent = 1.75f;
+    original.fogSettings.brightness = 1.4f;
     original.fogSettings.density = 0.075f;
     original.fogSettings.maxOpacity = 0.8f;
     original.fogSettings.referenceHeightWorld = -2.25f;
@@ -2760,11 +2780,15 @@ void TestFogSettingsRoundTripAndValidation()
     const Json saved = Json::parse(SaveText(original));
     Check(saved["fogSettings"].is_object(), "non-default fog settings are written");
     Check(saved["fogSettings"]["enabled"].get<bool>()
+                  && saved["fogSettings"]["mode"].get<std::string>() == "distance"
                   && saved["fogSettings"]["color"]["r"].get<int>() == 12
                   && saved["fogSettings"]["color"]["g"].get<int>() == 34
                   && saved["fogSettings"]["color"]["b"].get<int>() == 56
                   && saved["fogSettings"]["color"]["a"].get<int>() == 255
                   && Near(saved["fogSettings"]["startDistanceWorld"].get<float>(), 3.5f)
+                  && Near(saved["fogSettings"]["endDistanceWorld"].get<float>(), 48.0f)
+                  && Near(saved["fogSettings"]["falloffExponent"].get<float>(), 1.75f)
+                  && Near(saved["fogSettings"]["brightness"].get<float>(), 1.4f)
                   && Near(saved["fogSettings"]["density"].get<float>(), 0.075f)
                   && Near(saved["fogSettings"]["maxOpacity"].get<float>(), 0.8f)
                   && Near(saved["fogSettings"]["referenceHeightWorld"].get<float>(), -2.25f)
@@ -2774,11 +2798,15 @@ void TestFogSettingsRoundTripAndValidation()
     std::string error;
     Check(LoadText(saved.dump(), loaded, error), "fog settings JSON loads");
     Check(loaded.fogSettings.enabled
+                  && loaded.fogSettings.mode == game::SectorTopologyFogMode::Distance
                   && loaded.fogSettings.color.r == 12
                   && loaded.fogSettings.color.g == 34
                   && loaded.fogSettings.color.b == 56
                   && loaded.fogSettings.color.a == 255
                   && Near(loaded.fogSettings.startDistanceWorld, 3.5f)
+                  && Near(loaded.fogSettings.endDistanceWorld, 48.0f)
+                  && Near(loaded.fogSettings.falloffExponent, 1.75f)
+                  && Near(loaded.fogSettings.brightness, 1.4f)
                   && Near(loaded.fogSettings.density, 0.075f)
                   && Near(loaded.fogSettings.maxOpacity, 0.8f)
                   && Near(loaded.fogSettings.referenceHeightWorld, -2.25f)
@@ -2845,7 +2873,11 @@ void TestFogSettingsRoundTripAndValidation()
     invalid = saved;
     invalid["fogSettings"]["color"]["r"] = "red";
     ExpectRejected(invalid, "wrong-type fog color channel is rejected");
-    for (const char* field : {"startDistanceWorld", "density", "maxOpacity",
+    invalid = saved;
+    invalid["fogSettings"]["mode"] = "volumetric";
+    ExpectRejected(invalid, "unknown fog mode is rejected");
+    for (const char* field : {"startDistanceWorld", "endDistanceWorld",
+                              "falloffExponent", "brightness", "density", "maxOpacity",
                               "referenceHeightWorld", "heightFalloff"}) {
         invalid = saved;
         invalid["fogSettings"][field] = "invalid";

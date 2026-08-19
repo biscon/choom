@@ -12845,6 +12845,8 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
     volume.id = 1;
     volume.x = 80;
     volume.y = 80;
+    volume.renderMode = game::SectorLocalFogRenderMode::Analytic;
+    volume.analyticEndDistanceWorld = 3.0f;
     graph.fogVolumes.push_back(volume);
 
     game::SectorAuthoringDerivationResult result =
@@ -12858,6 +12860,9 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
         const game::SectorCompiledLocalFogVolume& compiled = result.topology.compiledLocalFogVolumes[0];
         Check(compiled.sourceAuthoringFogVolumeId == 1 && Near(compiled.centerWorld.y, 0.345f),
               "compiled fog volume uses source ID and floor-relative height");
+        Check(compiled.renderMode == game::SectorLocalFogRenderMode::Analytic
+                      && Near(compiled.analyticEndDistanceWorld, 3.0f),
+              "compiled fog volume preserves analytic rendering controls");
         Check(Near(compiled.noiseAmount, 0.75f)
                       && Near(compiled.noiseScaleWorld, 0.75f)
                       && Near(compiled.flowSpeedWorld, 0.20f),
@@ -12889,6 +12894,10 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
     volume.y = 64;
     volume.color = Color{12, 34, 56, 255};
     volume.density = 1.25f;
+    volume.renderMode = game::SectorLocalFogRenderMode::Analytic;
+    volume.analyticStartDistanceWorld = 0.25f;
+    volume.analyticEndDistanceWorld = 3.5f;
+    volume.analyticFalloffExponent = 1.75f;
     document.graph.fogVolumes.push_back(volume);
     document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
 
@@ -12905,12 +12914,19 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
                   && !savedFog.contains("noiseScaleWorld")
                   && !savedFog.contains("flowSpeedWorld"),
           "default fog noise settings remain omitted on save");
+    Check(savedFog.value("renderMode", "") == "analytic"
+                  && Near(savedFog.value("analyticStartDistanceWorld", 0.0f), 0.25f)
+                  && Near(savedFog.value("analyticEndDistanceWorld", 0.0f), 3.5f),
+          "analytic fog mode and path controls serialize");
 
     game::SectorAuthoringDocument loaded;
     Check(game::LoadSectorAuthoringDocumentFromJsonString(json, loaded, &error),
           "authoring fog volume document loads");
     Check(loaded.graph.fogVolumes.size() == 1
                   && loaded.graph.fogVolumes[0].id == 7
+                  && loaded.graph.fogVolumes[0].renderMode
+                          == game::SectorLocalFogRenderMode::Analytic
+                  && Near(loaded.graph.fogVolumes[0].analyticFalloffExponent, 1.75f)
                   && Near(loaded.graph.fogVolumes[0].density, 1.25f)
                   && Near(loaded.graph.fogVolumes[0].noiseAmount, 0.75f)
                   && Near(loaded.graph.fogVolumes[0].noiseScaleWorld, 0.75f)

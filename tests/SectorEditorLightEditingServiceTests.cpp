@@ -588,6 +588,8 @@ void TestAtmosphereEditUsesDocumentMutationBoundary()
     game::SectorLightAtmosphereSettings atmosphere;
     atmosphere.haze.enabled = true;
     atmosphere.haze.heightOffsetWorld = 0.75f;
+    atmosphere.proxy.halo.enabled = true;
+    atmosphere.proxy.halo.brightness = 0.4f;
     atmosphere.dust.enabled = true;
     atmosphere.dust.amount = 35;
     Check(service.SetStaticLightAtmosphere(
@@ -595,6 +597,8 @@ void TestAtmosphereEditUsesDocumentMutationBoundary()
           "atmosphere edit reports a change");
     Check(documentState.map.topologyMap.staticLights.front().atmosphere.haze.enabled
                   && Near(documentState.map.topologyMap.staticLights.front().atmosphere.haze.heightOffsetWorld, 0.75f)
+                  && documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.enabled
+                  && Near(documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.brightness, 0.4f)
                   && documentState.map.topologyMap.staticLights.front().atmosphere.dust.enabled
                   && documentState.map.topologyMap.staticLights.front().atmosphere.dust.amount == 35,
           "atmosphere edit writes normalized light data");

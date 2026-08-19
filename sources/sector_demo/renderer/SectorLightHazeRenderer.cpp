@@ -569,7 +569,8 @@ bool SectorLightHazeRenderer::Apply(
     const Vector3 up=Vector3Normalize(Vector3CrossProduct(right,forward)); const float tanHalf=std::tan(camera.fovy*DEG2RAD*0.5f);
     const SectorFogRenderContext fog=BuildSectorFogRenderContext(map.fogSettings,camera.position);
     const SectorTopologyFogSettings& fogSettings=fog.settings;
-    const int fogEnabled=fogSettings.enabled?1:0;
+    const int fogEnabled=fogSettings.enabled
+            && fogSettings.mode == SectorTopologyFogMode::LegacyHeight ? 1 : 0;
     const Vector3 fogColor=engine::SrgbColorBytesToLinearSceneRgb(fogSettings.color);
     rlDrawRenderBatchActive();
     BeginTextureMode(hazeTarget.native); ClearBackground(BLANK); BeginShaderMode(shader);

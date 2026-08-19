@@ -539,7 +539,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             return 164.0f;
         }
         if (selectedAuthoringFogVolume != nullptr) {
-            return 38.0f + (rowH + gap) * 18.0f + 28.0f;
+            return 38.0f + (rowH + gap) * 20.0f + 28.0f;
         }
         if (selectedLevelMarker != nullptr) {
             return MeasureSectorEditorLevelMarkerInspectorContentHeight(
@@ -2303,6 +2303,25 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         }
         y += rowH + gap;
 
+        bool analyticMode = selectedAuthoringFogVolume->renderMode
+                == SectorLocalFogRenderMode::Analytic;
+        if (engine::Checkbox(
+                    ui, config, input, assets,
+                    "sector_editor_fog_volume_analytic_mode",
+                    Rectangle{0.0f, y, contentW, rowH},
+                    font, "Cheap analytic mode", analyticMode)) {
+            editing.MutateById(fogVolumeId, "Updated authoring fog volume mode",
+                    [analyticMode](SectorAuthoringFogVolume& volume) {
+                        const SectorLocalFogRenderMode mode = analyticMode
+                                ? SectorLocalFogRenderMode::Analytic
+                                : SectorLocalFogRenderMode::Raymarched;
+                        if (volume.renderMode == mode) return false;
+                        volume.renderMode = mode;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+
         const auto drawFloat = [&](const char* id,
                                    const char* label,
                                    float current,
@@ -2366,13 +2385,19 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         drawFloat("sector_editor_fog_volume_radius_x", "Radius X", selectedAuthoringFogVolume->radiusXWorld, 3, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusXWorld);
         drawFloat("sector_editor_fog_volume_radius_z", "Radius Z", selectedAuthoringFogVolume->radiusZWorld, 4, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusZWorld);
         drawFloat("sector_editor_fog_volume_height", "Height", selectedAuthoringFogVolume->heightWorld, 5, 0.05f, 32.0f, 3, &SectorAuthoringFogVolume::heightWorld);
-        drawFloat("sector_editor_fog_volume_density", "Density", selectedAuthoringFogVolume->density, 6, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::density);
         drawFloat("sector_editor_fog_volume_opacity", "Max opacity", selectedAuthoringFogVolume->maxOpacity, 7, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::maxOpacity);
-        drawFloat("sector_editor_fog_volume_softness", "Edge softness", selectedAuthoringFogVolume->edgeSoftness, 8, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::edgeSoftness);
-        drawFloat("sector_editor_fog_volume_noise_scale", "Noise scale (m)", selectedAuthoringFogVolume->noiseScaleWorld, 9, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::noiseScaleWorld);
-        drawFloat("sector_editor_fog_volume_noise_amount", "Noise amount", selectedAuthoringFogVolume->noiseAmount, 10, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::noiseAmount);
-        drawFloat("sector_editor_fog_volume_flow_direction", "Flow direction", selectedAuthoringFogVolume->flowDirectionDegrees, 11, 0.0f, 360.0f, 2, &SectorAuthoringFogVolume::flowDirectionDegrees);
-        drawFloat("sector_editor_fog_volume_flow_speed", "Flow speed (m/s)", selectedAuthoringFogVolume->flowSpeedWorld, 12, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::flowSpeedWorld);
+        if (analyticMode) {
+            drawFloat("sector_editor_fog_volume_analytic_start", "Path start (m)", selectedAuthoringFogVolume->analyticStartDistanceWorld, 13, 0.0f, 128.0f, 3, &SectorAuthoringFogVolume::analyticStartDistanceWorld);
+            drawFloat("sector_editor_fog_volume_analytic_end", "Path end (m)", selectedAuthoringFogVolume->analyticEndDistanceWorld, 14, 0.01f, 128.0f, 3, &SectorAuthoringFogVolume::analyticEndDistanceWorld);
+            drawFloat("sector_editor_fog_volume_analytic_exponent", "Falloff exponent", selectedAuthoringFogVolume->analyticFalloffExponent, 15, 0.05f, 8.0f, 3, &SectorAuthoringFogVolume::analyticFalloffExponent);
+        } else {
+            drawFloat("sector_editor_fog_volume_density", "Density", selectedAuthoringFogVolume->density, 6, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::density);
+            drawFloat("sector_editor_fog_volume_softness", "Edge softness", selectedAuthoringFogVolume->edgeSoftness, 8, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::edgeSoftness);
+            drawFloat("sector_editor_fog_volume_noise_scale", "Noise scale (m)", selectedAuthoringFogVolume->noiseScaleWorld, 9, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::noiseScaleWorld);
+            drawFloat("sector_editor_fog_volume_noise_amount", "Noise amount", selectedAuthoringFogVolume->noiseAmount, 10, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::noiseAmount);
+            drawFloat("sector_editor_fog_volume_flow_direction", "Flow direction", selectedAuthoringFogVolume->flowDirectionDegrees, 11, 0.0f, 360.0f, 2, &SectorAuthoringFogVolume::flowDirectionDegrees);
+            drawFloat("sector_editor_fog_volume_flow_speed", "Flow speed (m/s)", selectedAuthoringFogVolume->flowSpeedWorld, 12, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::flowSpeedWorld);
+        }
 
         for (int channel = 0; channel < 3; ++channel) {
             const char* labels[] = {"Color R", "Color G", "Color B"};

@@ -93,6 +93,16 @@ struct SectorEditorLightEditingServiceContext {
             engine::UIIntInputState* dustRedInput = nullptr;
             engine::UIIntInputState* dustGreenInput = nullptr;
             engine::UIIntInputState* dustBlueInput = nullptr;
+            engine::UIFloatInputState* proxyHaloRadiusInput = nullptr;
+            engine::UIFloatInputState* proxyHaloBrightnessInput = nullptr;
+            engine::UIFloatInputState* proxyHaloSoftnessInput = nullptr;
+            engine::UIFloatInputState* proxyShaftLengthInput = nullptr;
+            engine::UIFloatInputState* proxyShaftWidthInput = nullptr;
+            engine::UIFloatInputState* proxyShaftBrightnessInput = nullptr;
+            engine::UIFloatInputState* proxyShaftSoftnessInput = nullptr;
+            engine::UIIntInputState* proxyRedInput = nullptr;
+            engine::UIIntInputState* proxyGreenInput = nullptr;
+            engine::UIIntInputState* proxyBlueInput = nullptr;
         } atmosphere;
     } ui;
     std::string& statusText;

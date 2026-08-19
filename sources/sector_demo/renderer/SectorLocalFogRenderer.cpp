@@ -702,7 +702,8 @@ bool SectorLocalFogRenderer::Apply(
     selectedDistance2.fill(std::numeric_limits<float>::max());
     const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
     for (const SectorCompiledLocalFogVolume& volume : map.compiledLocalFogVolumes) {
-        if (!volume.enabled || volume.density <= 0.0f || volume.maxOpacity <= 0.0f) continue;
+        if (!volume.enabled || volume.renderMode != SectorLocalFogRenderMode::Raymarched
+                || volume.density <= 0.0f || volume.maxOpacity <= 0.0f) continue;
         const Vector3 toCenter = Vector3Subtract(volume.centerWorld, camera.position);
         const float maxRadius = std::max({volume.radiiWorld.x, volume.radiiWorld.y, volume.radiiWorld.z});
         if (Vector3DotProduct(toCenter, forward) < -maxRadius) continue;

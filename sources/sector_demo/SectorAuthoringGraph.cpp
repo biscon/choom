@@ -1769,6 +1769,7 @@ void CompileAuthoringFogVolumes(
         compiled.sourceAuthoringFogVolumeId = volume.id;
         compiled.topologySectorId = sector->id;
         compiled.enabled = volume.enabled;
+        compiled.renderMode = volume.renderMode;
         compiled.centerWorld = Vector3{
                 SectorAuthoringToWorldDistance(
                         static_cast<float>(volume.x) / static_cast<float>(SectorCoordSubdivisions)),
@@ -1782,6 +1783,9 @@ void CompileAuthoringFogVolumes(
         compiled.color = volume.color;
         compiled.density = volume.density;
         compiled.maxOpacity = volume.maxOpacity;
+        compiled.analyticStartDistanceWorld = volume.analyticStartDistanceWorld;
+        compiled.analyticEndDistanceWorld = volume.analyticEndDistanceWorld;
+        compiled.analyticFalloffExponent = volume.analyticFalloffExponent;
         compiled.edgeSoftness = volume.edgeSoftness;
         compiled.noiseScaleWorld = volume.noiseScaleWorld;
         compiled.noiseAmount = volume.noiseAmount;
@@ -2034,6 +2038,16 @@ SectorAuthoringFogVolume NormalizeSectorAuthoringFogVolume(SectorAuthoringFogVol
     volume.density = ClampFiniteFogValue(volume.density, FogDensityMin, FogDensityMax, defaults.density);
     volume.maxOpacity = ClampFiniteFogValue(
             volume.maxOpacity, FogOpacityMin, FogOpacityMax, defaults.maxOpacity);
+    volume.analyticStartDistanceWorld = ClampFiniteFogValue(
+            volume.analyticStartDistanceWorld, 0.0f, 128.0f, defaults.analyticStartDistanceWorld);
+    volume.analyticEndDistanceWorld = ClampFiniteFogValue(
+            volume.analyticEndDistanceWorld,
+            volume.analyticStartDistanceWorld + 0.01f,
+            128.0f,
+            std::max(defaults.analyticEndDistanceWorld,
+                    volume.analyticStartDistanceWorld + 0.01f));
+    volume.analyticFalloffExponent = ClampFiniteFogValue(
+            volume.analyticFalloffExponent, 0.05f, 8.0f, defaults.analyticFalloffExponent);
     volume.edgeSoftness = ClampFiniteFogValue(
             volume.edgeSoftness, FogSoftnessMin, FogSoftnessMax, defaults.edgeSoftness);
     volume.noiseScaleWorld = ClampFiniteFogValue(
@@ -2339,6 +2353,9 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
                 volume.heightWorld,
                 volume.density,
                 volume.maxOpacity,
+                volume.analyticStartDistanceWorld,
+                volume.analyticEndDistanceWorld,
+                volume.analyticFalloffExponent,
                 volume.edgeSoftness,
                 volume.noiseScaleWorld,
                 volume.noiseAmount,
@@ -2351,6 +2368,11 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
                 || volume.heightWorld < FogHeightMin || volume.heightWorld > FogHeightMax
                 || volume.density < FogDensityMin || volume.density > FogDensityMax
                 || volume.maxOpacity < FogOpacityMin || volume.maxOpacity > FogOpacityMax
+                || volume.analyticStartDistanceWorld < 0.0f
+                || volume.analyticEndDistanceWorld <= volume.analyticStartDistanceWorld
+                || volume.analyticEndDistanceWorld > 128.0f
+                || volume.analyticFalloffExponent < 0.05f
+                || volume.analyticFalloffExponent > 8.0f
                 || volume.edgeSoftness < FogSoftnessMin || volume.edgeSoftness > FogSoftnessMax
                 || volume.noiseScaleWorld < FogNoiseScaleMin || volume.noiseScaleWorld > FogNoiseScaleMax
                 || volume.noiseAmount < FogNoiseAmountMin || volume.noiseAmount > FogNoiseAmountMax

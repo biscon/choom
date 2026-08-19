@@ -1377,6 +1377,21 @@
         "g": 240,
         "b": 190,
         "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "tint": {
+            "r": 255,
+            "g": 240,
+            "b": 190,
+            "a": 255
+          },
+          "halo": {
+            "enabled": true,
+            "brightness": 0.02500000037252903,
+            "edgeSoftness": 0.75
+          }
+        }
       }
     },
     {
@@ -1743,7 +1758,23 @@
       "castsShadow": true,
       "shadowBias": 0.001500000013038516,
       "shadowStrength": 0.75,
-      "shadowSoftness": 2.0
+      "shadowSoftness": 2.0,
+      "atmosphere": {
+        "proxy": {
+          "tint": {
+            "r": 255,
+            "g": 240,
+            "b": 230,
+            "a": 255
+          },
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 1.0,
+            "brightness": 0.014999999664723873,
+            "edgeSoftness": 1.0
+          }
+        }
+      }
     },
     {
       "id": 3,
@@ -1763,7 +1794,23 @@
       "castsShadow": true,
       "shadowBias": 0.001500000013038516,
       "shadowStrength": 0.75,
-      "shadowSoftness": 2.0
+      "shadowSoftness": 2.0,
+      "atmosphere": {
+        "proxy": {
+          "tint": {
+            "r": 255,
+            "g": 0,
+            "b": 0,
+            "a": 255
+          },
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 1.0,
+            "brightness": 1.3200000524520874,
+            "edgeSoftness": 0.10000000149011612
+          }
+        }
+      }
     }
   ],
   "dynamicSpotLights": [
@@ -1849,7 +1896,6 @@
       "shadowSoftness": 2.0,
       "atmosphere": {
         "haze": {
-          "enabled": true,
           "extentScale": 0.6000000238418579,
           "heightOffsetWorld": 0.25,
           "density": 0.004999999888241291,
@@ -1860,6 +1906,23 @@
             "a": 255
           },
           "noiseAmount": 0.44999998807907104
+        },
+        "proxy": {
+          "tint": {
+            "r": 0,
+            "g": 0,
+            "b": 255,
+            "a": 255
+          },
+          "halo": {
+            "enabled": true,
+            "brightness": 0.05000000074505806
+          },
+          "shaft": {
+            "enabled": true,
+            "brightness": 0.10000000149011612,
+            "edgeSoftness": 0.3499999940395355
+          }
         },
         "dust": {
           "enabled": true,
@@ -1924,7 +1987,8 @@
     "density": 0.007499999832361937,
     "maxOpacity": 0.3499999940395355,
     "referenceHeightWorld": 1.0,
-    "heightFalloff": 0.0
+    "heightFalloff": 0.0,
+    "mode": "distance"
   },
   "audio": {
     "music": "ambience/horror_ambience.wav",

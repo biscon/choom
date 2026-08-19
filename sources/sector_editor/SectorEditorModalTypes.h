@@ -261,6 +261,9 @@ struct SectorPreviewSettingsModalState {
     engine::UIIntInputState lightColorGreenInput;
     engine::UIIntInputState lightColorBlueInput;
     engine::UIFloatInputState fogStartDistanceInput;
+    engine::UIFloatInputState fogEndDistanceInput;
+    engine::UIFloatInputState fogFalloffExponentInput;
+    engine::UIFloatInputState fogBrightnessInput;
     engine::UIFloatInputState fogDensityInput;
     engine::UIFloatInputState fogMaxOpacityInput;
     engine::UIFloatInputState fogReferenceHeightInput;

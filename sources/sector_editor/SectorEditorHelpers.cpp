@@ -1239,11 +1239,15 @@ bool SameFogSettings(
     const SectorTopologyFogSettings a = NormalizeSectorTopologyFogSettings(left);
     const SectorTopologyFogSettings b = NormalizeSectorTopologyFogSettings(right);
     return a.enabled == b.enabled
+            && a.mode == b.mode
             && a.color.r == b.color.r
             && a.color.g == b.color.g
             && a.color.b == b.color.b
             && a.color.a == b.color.a
             && a.startDistanceWorld == b.startDistanceWorld
+            && a.endDistanceWorld == b.endDistanceWorld
+            && a.falloffExponent == b.falloffExponent
+            && a.brightness == b.brightness
             && a.density == b.density
             && a.maxOpacity == b.maxOpacity
             && a.referenceHeightWorld == b.referenceHeightWorld

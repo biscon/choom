@@ -478,6 +478,9 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::string bloom=ReadSource(BLOOM_SHADER_SOURCE_PATH);
     const std::string fog=ReadSource(LOCAL_FOG_SHADER_SOURCE_PATH);
     const std::string haze=ReadSource(HAZE_SHADER_SOURCE_PATH);
+    const std::string distanceFog=ReadSource(DISTANCE_FOG_SHADER_SOURCE_PATH);
+    const std::string analyticFog=ReadSource(ANALYTIC_FOG_SHADER_SOURCE_PATH);
+    const std::string lightProxy=ReadSource(LIGHT_PROXY_SHADER_SOURCE_PATH);
     const std::string dust=ReadSource(DUST_SHADER_SOURCE_PATH);
     const std::string muzzle=ReadSource(MUZZLE_SHADER_SOURCE_PATH);
     const std::string mainGraph=ReadSource(MAIN_RENDER_GRAPH_SOURCE_PATH);
@@ -485,10 +488,30 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::string dynamicModelShadows=ReadSource(DYNAMIC_MODEL_SHADOW_SOURCE_PATH);
     const std::string dynamicLightingShadows=ReadSource(
             DYNAMIC_LIGHTING_SHADOW_SOURCE_PATH);
-    Check(!bloom.empty()&&!fog.empty()&&!haze.empty()&&!dust.empty()
+    Check(!bloom.empty()&&!fog.empty()&&!haze.empty()&&!distanceFog.empty()
+                    &&!analyticFog.empty()&&!lightProxy.empty()&&!dust.empty()
                     &&!muzzle.empty()&&!mainGraph.empty()&&!dynamicModelShadows.empty()
                     &&!dynamicLightingShadows.empty(),
           "HDR effect policy can read every affected shader and pass graph");
+    Check(distanceFog.find("for (") == std::string::npos
+                    && analyticFog.find("for (int stepIndex") == std::string::npos
+                    && lightProxy.find("for (int lightIndex") == std::string::npos
+                    && distanceFog.find("uniform sampler2D sceneDepth") != std::string::npos
+                    && analyticFog.find("intersectEllipsoid") != std::string::npos
+                    && lightProxy.find("BeginBlendMode(BLEND_ADD_COLORS)") != std::string::npos,
+          "cheap atmosphere paths use depth and analytic/proxy work without raymarch or light loops");
+    Check(lightProxy.find("shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(shader, \"sceneDepth\")")
+                            != std::string::npos
+                    && lightProxy.find("material.maps[MATERIAL_MAP_DIFFUSE].texture = sceneTarget.depth")
+                            != std::string::npos
+                    && lightProxy.find("SetShaderValueTexture(shader") == std::string::npos
+                    && lightProxy.find("sourceVisibility") == std::string::npos
+                    && lightProxy.find("fragSourceUv") == std::string::npos
+                    && lightProxy.find("float depthDelta = proxyForward - sceneForward;")
+                            != std::string::npos
+                    && lightProxy.find("float occlusionBias = fragProxyData.x < 0.5 ? 0.12 : 0.03;")
+                            != std::string::npos,
+          "light proxies bind mesh depth deterministically and use local depth occlusion only");
     Check(bloom.find("Rgba8Unorm")==std::string::npos
                     && fog.find("Rgba8Unorm")==std::string::npos
                     && haze.find("Rgba8Unorm")==std::string::npos
