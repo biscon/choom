@@ -40,15 +40,16 @@ bool SameLightAtmosphere(
             && a.proxy.halo.enabled == b.proxy.halo.enabled
             && a.proxy.halo.radiusWorld == b.proxy.halo.radiusWorld
             && a.proxy.halo.brightness == b.proxy.halo.brightness
-            && a.proxy.halo.maxOpacity == b.proxy.halo.maxOpacity
+            && a.proxy.halo.maxExtinction == b.proxy.halo.maxExtinction
             && a.proxy.halo.edgeSoftness == b.proxy.halo.edgeSoftness
+            && SameColor(a.proxy.halo.scatteringTint, b.proxy.halo.scatteringTint)
             && a.proxy.shaft.enabled == b.proxy.shaft.enabled
             && a.proxy.shaft.lengthScale == b.proxy.shaft.lengthScale
             && a.proxy.shaft.widthScale == b.proxy.shaft.widthScale
             && a.proxy.shaft.brightness == b.proxy.shaft.brightness
-            && a.proxy.shaft.maxOpacity == b.proxy.shaft.maxOpacity
+            && a.proxy.shaft.maxExtinction == b.proxy.shaft.maxExtinction
             && a.proxy.shaft.edgeSoftness == b.proxy.shaft.edgeSoftness
-            && SameColor(a.proxy.tint, b.proxy.tint)
+            && SameColor(a.proxy.shaft.scatteringTint, b.proxy.shaft.scatteringTint)
             && a.dust.enabled == b.dust.enabled
             && a.dust.amount == b.dust.amount
             && a.dust.extentScale == b.dust.extentScale
@@ -133,12 +134,12 @@ float LightAtmosphereInspectorContentHeight(
         const SectorLightAtmosphereSettings& atmosphere,
         bool spotLight)
 {
-    float height = 3.0f * 26.0f + 6.0f * (rowH + gap);
+    float height = 3.0f * 26.0f + 3.0f * (rowH + gap);
     if (atmosphere.haze.enabled) height += 11.0f * (rowH + gap);
-    if (atmosphere.proxy.halo.enabled) height += 4.0f * (rowH + gap);
+    if (atmosphere.proxy.halo.enabled) height += 7.0f * (rowH + gap);
     if (spotLight) {
         height += rowH + gap;
-        if (atmosphere.proxy.shaft.enabled) height += 5.0f * (rowH + gap);
+        if (atmosphere.proxy.shaft.enabled) height += 8.0f * (rowH + gap);
     }
     if (atmosphere.dust.enabled) height += 10.0f * (rowH + gap);
     return height;
@@ -264,10 +265,17 @@ void DrawLightAtmosphereInspector(
                 atmosphere.proxy.halo.radiusWorld, uiState.lightProxyHaloRadiusInput, 0.01f, 64.0f, 3);
         drawFloat("sector_editor_light_proxy_halo_brightness", "Halo brightness:",
                 atmosphere.proxy.halo.brightness, uiState.lightProxyHaloBrightnessInput, 0.0f, 16.0f, 3);
-        drawFloat("sector_editor_light_proxy_halo_max_opacity", "Maximum opacity:",
-                atmosphere.proxy.halo.maxOpacity, uiState.lightProxyHaloMaxOpacityInput, 0.0f, 1.0f, 3);
+        drawFloat("sector_editor_light_proxy_halo_max_extinction", "Maximum extinction:",
+                atmosphere.proxy.halo.maxExtinction,
+                uiState.lightProxyHaloMaxExtinctionInput, 0.0f, 1.0f, 3);
         drawFloat("sector_editor_light_proxy_halo_softness", "Halo softness:",
                 atmosphere.proxy.halo.edgeSoftness, uiState.lightProxyHaloSoftnessInput, 0.01f, 1.0f, 3);
+        drawChannel("sector_editor_light_proxy_halo_r", "Halo tint R:",
+                atmosphere.proxy.halo.scatteringTint.r, uiState.lightProxyHaloRedInput);
+        drawChannel("sector_editor_light_proxy_halo_g", "Halo tint G:",
+                atmosphere.proxy.halo.scatteringTint.g, uiState.lightProxyHaloGreenInput);
+        drawChannel("sector_editor_light_proxy_halo_b", "Halo tint B:",
+                atmosphere.proxy.halo.scatteringTint.b, uiState.lightProxyHaloBlueInput);
     }
     if (spotLight) {
         if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_proxy_shaft_enabled",
@@ -282,15 +290,19 @@ void DrawLightAtmosphereInspector(
                     atmosphere.proxy.shaft.widthScale, uiState.lightProxyShaftWidthInput, 0.01f, 2.0f, 3);
             drawFloat("sector_editor_light_proxy_shaft_brightness", "Shaft brightness:",
                     atmosphere.proxy.shaft.brightness, uiState.lightProxyShaftBrightnessInput, 0.0f, 16.0f, 3);
-            drawFloat("sector_editor_light_proxy_shaft_max_opacity", "Maximum opacity:",
-                    atmosphere.proxy.shaft.maxOpacity, uiState.lightProxyShaftMaxOpacityInput, 0.0f, 1.0f, 3);
+            drawFloat("sector_editor_light_proxy_shaft_max_extinction", "Maximum extinction:",
+                    atmosphere.proxy.shaft.maxExtinction,
+                    uiState.lightProxyShaftMaxExtinctionInput, 0.0f, 1.0f, 3);
             drawFloat("sector_editor_light_proxy_shaft_softness", "Shaft softness:",
                     atmosphere.proxy.shaft.edgeSoftness, uiState.lightProxyShaftSoftnessInput, 0.01f, 1.0f, 3);
+            drawChannel("sector_editor_light_proxy_shaft_r", "Shaft tint R:",
+                    atmosphere.proxy.shaft.scatteringTint.r, uiState.lightProxyShaftRedInput);
+            drawChannel("sector_editor_light_proxy_shaft_g", "Shaft tint G:",
+                    atmosphere.proxy.shaft.scatteringTint.g, uiState.lightProxyShaftGreenInput);
+            drawChannel("sector_editor_light_proxy_shaft_b", "Shaft tint B:",
+                    atmosphere.proxy.shaft.scatteringTint.b, uiState.lightProxyShaftBlueInput);
         }
     }
-    drawChannel("sector_editor_light_proxy_r", "Proxy tint R:", atmosphere.proxy.tint.r, uiState.lightProxyRedInput);
-    drawChannel("sector_editor_light_proxy_g", "Proxy tint G:", atmosphere.proxy.tint.g, uiState.lightProxyGreenInput);
-    drawChannel("sector_editor_light_proxy_b", "Proxy tint B:", atmosphere.proxy.tint.b, uiState.lightProxyBlueInput);
 
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 22.0f}, font,
             "Atmosphere: Dust", engine::UITextJustify::Left, config.textColor);

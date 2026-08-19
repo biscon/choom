@@ -35,7 +35,7 @@ uniform float farPlane;
 uniform vec3 sphereCenter;
 uniform float sphereRadius;
 uniform vec3 haloRadiance;
-uniform vec2 haloParams; // edge softness, maximum opacity
+uniform vec2 haloParams; // edge softness, maximum extinction
 uniform vec4 fogParamsA; // mode, start, end/density, maximum opacity
 uniform vec4 fogParamsB; // exponent, reference height, height falloff, unused
 
@@ -50,6 +50,11 @@ bool intersectSphere(vec3 rayOrigin, vec3 rayDirection,
     enterT = -b - root;
     exitT = -b + root;
     return exitT > max(enterT, 0.0);
+}
+
+vec3 safeNormalize(vec3 value, vec3 fallback) {
+    float lengthSquared = dot(value, value);
+    return lengthSquared > 0.00000001 ? value * inversesqrt(lengthSquared) : fallback;
 }
 
 float fogTransmittance(vec3 position) {
@@ -80,7 +85,6 @@ void main() {
     if (!intersectSphere(cameraPosition, rayDirection, enterT, exitT)) discard;
 
     float unclippedEnterT = max(enterT, 0.0);
-    float unclippedChord = max(exitT - unclippedEnterT, 0.00001);
     float depth = texture(sceneDepth, uv).r;
     float zNdc = depth * 2.0 - 1.0;
     float forwardDistance = (2.0 * nearPlane * farPlane)
@@ -99,17 +103,25 @@ void main() {
     float mappedSoftness = clamp(haloParams.x * 2.0, 0.02, 2.0);
     float baseSoftness = min(mappedSoftness, 1.0);
     float extraSoftness = max(mappedSoftness - 1.0, 0.0);
-    float profile = 1.0 - smoothstep(1.0 - baseSoftness, 1.0, radial);
-    profile = pow(clamp(profile, 0.0, 1.0), 1.0 + 2.0 * extraSoftness);
+    float broad = 1.0 - smoothstep(1.0 - baseSoftness, 1.0, radial);
+    float core = pow(max(1.0 - radial, 0.0), mix(8.0, 3.0, baseSoftness));
+    float profile = clamp(0.35 * broad + 0.65 * core, 0.0, 1.0);
+    profile = pow(profile, 1.0 + 1.5 * extraSoftness);
 
     float midpointT = (enterT + exitT) * 0.5;
     vec3 midpoint = cameraPosition + rayDirection * midpointT;
-    float opacity = clamp(haloParams.y, 0.0, 1.0)
-            * profile
-            * clamp(visibleChord / unclippedChord, 0.0, 1.0)
-            * fogTransmittance(midpoint);
-    if (opacity <= 0.00001) discard;
-    finalColor = vec4(min(max(haloRadiance, vec3(0.0)), vec3(65504.0)), opacity);
+    float normalizedChord = clamp(visibleChord / max(2.0 * sphereRadius, 0.0001), 0.0, 1.0);
+    float opticalThickness = 1.0 - exp(-2.5 * normalizedChord * profile);
+    float phaseT = mix(enterT, exitT, 0.35);
+    vec3 phasePosition = cameraPosition + rayDirection * phaseT;
+    vec3 lightTravel = safeNormalize(phasePosition - sphereCenter, -rayDirection);
+    float phaseFacing = clamp(dot(lightTravel, -rayDirection) * 0.5 + 0.5, 0.0, 1.0);
+    float phase = mix(0.35, 1.0, pow(phaseFacing, 3.0));
+    float scatterWeight = opticalThickness * phase * fogTransmittance(midpoint);
+    float extinction = clamp(haloParams.y, 0.0, 1.0) * opticalThickness;
+    if (scatterWeight <= 0.00001 && extinction <= 0.00001) discard;
+    vec3 inScattering = min(max(haloRadiance * scatterWeight, vec3(0.0)), vec3(65504.0));
+    finalColor = vec4(inScattering, extinction);
 }
 )";
 
@@ -189,7 +201,7 @@ bool SectorLightProxyRenderer::Apply(
         if (!IsSectorLightAtmosphereSourceSelected(source, dynamicLights)) continue;
         const SectorLightProxySettings& proxy = source.atmosphere.proxy;
         if (!proxy.halo.enabled || proxy.halo.brightness <= 0.0f
-                || proxy.halo.maxOpacity <= 0.0f || proxy.halo.radiusWorld <= 0.0f) continue;
+                || proxy.halo.radiusWorld <= 0.0f) continue;
         SectorLightAtmosphereVolume volume;
         volume.source = &source;
         volume.originWorld = source.positionWorld;
@@ -212,7 +224,8 @@ bool SectorLightProxyRenderer::Apply(
             lightColor = dynamicLights.dynamicLightColors[static_cast<std::size_t>(dynamicIndex)];
             intensity = dynamicLights.dynamicLightIntensities[static_cast<std::size_t>(dynamicIndex)];
         }
-        const Vector3 tint = engine::SrgbColorBytesToLinearSceneRgb(proxy.tint);
+        const Vector3 tint = engine::SrgbColorBytesToLinearSceneRgb(
+                proxy.halo.scatteringTint);
         visibleHalos.push_back(VisibleHalo{
                 &source,
                 scissor,
@@ -255,12 +268,12 @@ bool SectorLightProxyRenderer::Apply(
     SetShaderValue(shader, farPlaneLoc, &farPlane, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, fogParamsALoc, &fogA, SHADER_UNIFORM_VEC4);
     SetShaderValue(shader, fogParamsBLoc, &fogB, SHADER_UNIFORM_VEC4);
-    BeginBlendMode(BLEND_ALPHA);
+    BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
     rlColorMask(true, true, true, false);
     rlEnableScissorTest();
     for (const VisibleHalo& visible : visibleHalos) {
         const SectorLightProxyHaloSettings& settings = visible.source->atmosphere.proxy.halo;
-        const Vector2 haloParams{settings.edgeSoftness, settings.maxOpacity};
+        const Vector2 haloParams{settings.edgeSoftness, settings.maxExtinction};
         // rlDrawRenderBatchActive() clears raylib's auxiliary sampler slots.
         // Register sceneDepth after the flush so it remains bound for this draw.
         rlDrawRenderBatchActive();

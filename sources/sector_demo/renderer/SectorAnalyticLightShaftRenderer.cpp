@@ -37,7 +37,7 @@ uniform vec3 coneDirection;
 uniform float coneLength;
 uniform float coneBaseRadius;
 uniform vec3 shaftRadiance;
-uniform vec2 shaftParams; // edge softness, maximum opacity
+uniform vec2 shaftParams; // edge softness, maximum extinction
 uniform vec4 fogParamsA; // mode, start, end/density, maximum opacity
 uniform vec4 fogParamsB; // exponent, reference height, height falloff, unused
 
@@ -164,10 +164,15 @@ void main() {
             + 0.20 * extraSoftness, 0.55);
     float longitudinal = smoothstep(0.0, startFadeWidth, axial01)
             * (1.0 - smoothstep(1.0 - endFadeWidth, 1.0, axial01));
-    float opacity = clamp(shaftParams.y, 0.0, 1.0) * lateral * longitudinal
-            * fogTransmittance(midpoint);
-    if (opacity <= 0.00001) discard;
-    finalColor = vec4(min(max(shaftRadiance, vec3(0.0)), vec3(65504.0)), opacity);
+    float profile = lateral * longitudinal;
+    float opticalThickness = (1.0 - exp(-2.0 * coverage)) * profile;
+    float phaseFacing = clamp(dot(axis, -rayDirection) * 0.5 + 0.5, 0.0, 1.0);
+    float phase = mix(0.20, 1.0, pow(phaseFacing, 3.0));
+    float scatterWeight = opticalThickness * phase * fogTransmittance(midpoint);
+    float extinction = clamp(shaftParams.y, 0.0, 1.0) * opticalThickness;
+    if (scatterWeight <= 0.00001 && extinction <= 0.00001) discard;
+    vec3 inScattering = min(max(shaftRadiance * scatterWeight, vec3(0.0)), vec3(65504.0));
+    finalColor = vec4(inScattering, extinction);
 }
 )";
 
@@ -270,7 +275,7 @@ bool SectorAnalyticLightShaftRenderer::Apply(
     for (const SectorLightAtmosphereSource& source : sources) {
         const SectorLightProxyShaftSettings& settings = source.atmosphere.proxy.shaft;
         if (source.shape != SectorLightAtmosphereShape::Cone || !settings.enabled
-                || settings.brightness <= 0.0f || settings.maxOpacity <= 0.0f
+                || settings.brightness <= 0.0f
                 || !IsSectorLightAtmosphereSourceSelected(source, dynamicLights)) continue;
         SectorLightAtmosphereVolume volume;
         if (!MakeSectorLightAtmosphereVolume(source, settings.lengthScale, 0.0f, volume)) continue;
@@ -304,7 +309,8 @@ bool SectorAnalyticLightShaftRenderer::Apply(
             lightColor = dynamicLights.dynamicLightColors[static_cast<std::size_t>(dynamicIndex)];
             intensity = dynamicLights.dynamicLightIntensities[static_cast<std::size_t>(dynamicIndex)];
         }
-        const Vector3 tint = engine::SrgbColorBytesToLinearSceneRgb(source.atmosphere.proxy.tint);
+        const Vector3 tint = engine::SrgbColorBytesToLinearSceneRgb(
+                settings.scatteringTint);
         visibleShafts.push_back(VisibleShaft{
                 &source,
                 volume,
@@ -348,13 +354,13 @@ bool SectorAnalyticLightShaftRenderer::Apply(
     SetShaderValue(shader, farPlaneLoc, &farPlane, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, fogParamsALoc, &fogA, SHADER_UNIFORM_VEC4);
     SetShaderValue(shader, fogParamsBLoc, &fogB, SHADER_UNIFORM_VEC4);
-    BeginBlendMode(BLEND_ALPHA);
+    BeginBlendMode(BLEND_ALPHA_PREMULTIPLY);
     rlColorMask(true, true, true, false);
     rlEnableScissorTest();
     for (const VisibleShaft& visible : visibleShafts) {
         const SectorLightProxyShaftSettings& settings = visible.source->atmosphere.proxy.shaft;
         const float baseRadius = visible.volume.coneRadiusWorld;
-        const Vector2 shaftParams{settings.edgeSoftness, settings.maxOpacity};
+        const Vector2 shaftParams{settings.edgeSoftness, settings.maxExtinction};
         // rlDrawRenderBatchActive() clears raylib's auxiliary sampler slots.
         // Register sceneDepth after the flush so it remains bound for this draw.
         rlDrawRenderBatchActive();

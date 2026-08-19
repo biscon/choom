@@ -504,13 +504,17 @@ void TestHdrEffectShaderAndPassPolicies()
                     && lightProxy.find("rlEnableScissorTest") != std::string::npos
                     && analyticShaft.find("intersectFiniteCone") != std::string::npos
                     && analyticShaft.find("rlEnableScissorTest") != std::string::npos
-                    && analyticShaft.find("BeginBlendMode(BLEND_ALPHA)") != std::string::npos
-                    && lightProxy.find("BeginBlendMode(BLEND_ALPHA)") != std::string::npos,
-          "cheap atmosphere paths use scissored analytic work without raymarch or light loops");
+                    && analyticShaft.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos
+                    && lightProxy.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos,
+          "cheap atmosphere paths use scissored analytic work and premultiplied compositing");
     Check(lightProxy.find("float visibleChord = max(exitT - enterT, 0.0);")
                             != std::string::npos
-                    && lightProxy.find("clamp(visibleChord / unclippedChord, 0.0, 1.0)")
+                    && lightProxy.find("float opticalThickness = 1.0 - exp(")
                             != std::string::npos
+                    && lightProxy.find("0.35 * broad + 0.65 * core") != std::string::npos
+                    && lightProxy.find("haloRadiance * scatterWeight") != std::string::npos
+                    && lightProxy.find("float extinction = clamp(haloParams.y") != std::string::npos
+                    && lightProxy.find("proxy.halo.maxExtinction <= 0.0f") == std::string::npos
                     && lightProxy.find("mappedSoftness = clamp(haloParams.x * 2.0")
                             != std::string::npos
                     && lightProxy.find("DrawMesh") == std::string::npos
@@ -520,13 +524,16 @@ void TestHdrEffectShaderAndPassPolicies()
                     && analyticShaft.find("mappedSoftness = clamp(shaftParams.x * 2.0")
                             != std::string::npos
                     && analyticShaft.find("+ 2.0 * extraSoftness") != std::string::npos
+                    && analyticShaft.find("shaftRadiance * scatterWeight") != std::string::npos
+                    && analyticShaft.find("float extinction = clamp(shaftParams.y") != std::string::npos
+                    && analyticShaft.find("settings.maxExtinction <= 0.0f") == std::string::npos
                     && analyticShaft.find(
                             "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
                             != std::string::npos
                     && lightProxy.find(
                             "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
                             != std::string::npos,
-          "analytic halos and shafts depth-clip their volumes and recalibrate midpoint softness");
+          "analytic proxies depth-clip, use optical profiles, and separate radiance from extinction");
     Check(bloom.find("Rgba8Unorm")==std::string::npos
                     && fog.find("Rgba8Unorm")==std::string::npos
                     && haze.find("Rgba8Unorm")==std::string::npos

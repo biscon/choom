@@ -80,25 +80,26 @@ SectorLightDustSettings NormalizeSectorLightDustSettings(SectorLightDustSettings
 SectorLightProxySettings NormalizeSectorLightProxySettings(SectorLightProxySettings settings)
 {
     const SectorLightProxySettings defaults;
-    settings.tint.a = 255;
     settings.halo.radiusWorld = std::clamp(
             FiniteOr(settings.halo.radiusWorld, defaults.halo.radiusWorld), 0.01f, 64.0f);
     settings.halo.brightness = std::clamp(
             FiniteOr(settings.halo.brightness, defaults.halo.brightness), 0.0f, 16.0f);
-    settings.halo.maxOpacity = std::clamp(
-            FiniteOr(settings.halo.maxOpacity, defaults.halo.maxOpacity), 0.0f, 1.0f);
+    settings.halo.maxExtinction = std::clamp(
+            FiniteOr(settings.halo.maxExtinction, defaults.halo.maxExtinction), 0.0f, 1.0f);
     settings.halo.edgeSoftness = std::clamp(
             FiniteOr(settings.halo.edgeSoftness, defaults.halo.edgeSoftness), 0.01f, 1.0f);
+    settings.halo.scatteringTint.a = 255;
     settings.shaft.lengthScale = std::clamp(
             FiniteOr(settings.shaft.lengthScale, defaults.shaft.lengthScale), 0.01f, 2.0f);
     settings.shaft.widthScale = std::clamp(
             FiniteOr(settings.shaft.widthScale, defaults.shaft.widthScale), 0.01f, 2.0f);
     settings.shaft.brightness = std::clamp(
             FiniteOr(settings.shaft.brightness, defaults.shaft.brightness), 0.0f, 16.0f);
-    settings.shaft.maxOpacity = std::clamp(
-            FiniteOr(settings.shaft.maxOpacity, defaults.shaft.maxOpacity), 0.0f, 1.0f);
+    settings.shaft.maxExtinction = std::clamp(
+            FiniteOr(settings.shaft.maxExtinction, defaults.shaft.maxExtinction), 0.0f, 1.0f);
     settings.shaft.edgeSoftness = std::clamp(
             FiniteOr(settings.shaft.edgeSoftness, defaults.shaft.edgeSoftness), 0.01f, 1.0f);
+    settings.shaft.scatteringTint.a = 255;
     return settings;
 }
 
@@ -115,18 +116,19 @@ bool IsDefaultSectorLightProxySettings(const SectorLightProxySettings& settings)
 {
     const SectorLightProxySettings value = NormalizeSectorLightProxySettings(settings);
     const SectorLightProxySettings defaults;
-    return SameRgb(value.tint, defaults.tint)
-            && value.halo.enabled == defaults.halo.enabled
+    return value.halo.enabled == defaults.halo.enabled
             && value.halo.radiusWorld == defaults.halo.radiusWorld
             && value.halo.brightness == defaults.halo.brightness
-            && value.halo.maxOpacity == defaults.halo.maxOpacity
+            && value.halo.maxExtinction == defaults.halo.maxExtinction
             && value.halo.edgeSoftness == defaults.halo.edgeSoftness
+            && SameRgb(value.halo.scatteringTint, defaults.halo.scatteringTint)
             && value.shaft.enabled == defaults.shaft.enabled
             && value.shaft.lengthScale == defaults.shaft.lengthScale
             && value.shaft.widthScale == defaults.shaft.widthScale
             && value.shaft.brightness == defaults.shaft.brightness
-            && value.shaft.maxOpacity == defaults.shaft.maxOpacity
-            && value.shaft.edgeSoftness == defaults.shaft.edgeSoftness;
+            && value.shaft.maxExtinction == defaults.shaft.maxExtinction
+            && value.shaft.edgeSoftness == defaults.shaft.edgeSoftness
+            && SameRgb(value.shaft.scatteringTint, defaults.shaft.scatteringTint);
 }
 
 bool IsDefaultSectorLightHazeSettings(const SectorLightHazeSettings& settings)

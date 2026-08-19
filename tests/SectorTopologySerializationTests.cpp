@@ -968,10 +968,10 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
     defaultOpacity.staticSpotLights.back().atmosphere.proxy.shaft.enabled = true;
     const Json defaultOpacityJson = Json::parse(SaveText(defaultOpacity));
     Check(!defaultOpacityJson["staticSpotLights"][0]["atmosphere"]["proxy"]["halo"].contains(
-                      "maxOpacity")
+                      "maxExtinction")
                   && !defaultOpacityJson["staticSpotLights"][0]["atmosphere"]["proxy"]["shaft"].contains(
-                          "maxOpacity"),
-          "default proxy maximum opacity is omitted");
+                          "maxExtinction"),
+          "default proxy maximum extinction is omitted");
 
     game::SectorLightAtmosphereSettings atmosphere;
     atmosphere.haze.enabled = true;
@@ -984,15 +984,16 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
     atmosphere.haze.noiseScaleWorld = 2.5f;
     atmosphere.haze.flowDirectionDegrees = 35.0f;
     atmosphere.haze.flowSpeedWorld = 0.08f;
-    atmosphere.proxy.tint = Color{180, 220, 255, 255};
     atmosphere.proxy.halo.enabled = true;
     atmosphere.proxy.halo.radiusWorld = 1.25f;
     atmosphere.proxy.halo.brightness = 0.4f;
-    atmosphere.proxy.halo.maxOpacity = 0.6f;
+    atmosphere.proxy.halo.maxExtinction = 0.6f;
+    atmosphere.proxy.halo.scatteringTint = Color{180, 220, 255, 255};
     atmosphere.proxy.shaft.enabled = true;
     atmosphere.proxy.shaft.lengthScale = 0.8f;
     atmosphere.proxy.shaft.widthScale = 0.6f;
-    atmosphere.proxy.shaft.maxOpacity = 0.45f;
+    atmosphere.proxy.shaft.maxExtinction = 0.45f;
+    atmosphere.proxy.shaft.scatteringTint = Color{255, 190, 140, 255};
     atmosphere.dust.enabled = true;
     atmosphere.dust.amount = 47;
     atmosphere.dust.extentScale = 0.9f;
@@ -1025,9 +1026,12 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
             Check(staticAtmosphere["haze"].value("enabled", false)
                           && Near(staticAtmosphere["haze"].value("heightOffsetWorld", 0.0f), 0.65f)
                           && staticAtmosphere["proxy"]["halo"].value("enabled", false)
-                          && Near(staticAtmosphere["proxy"]["halo"].value("maxOpacity", 0.0f), 0.6f)
+                          && Near(staticAtmosphere["proxy"]["halo"].value("maxExtinction", 0.0f), 0.6f)
+                          && staticAtmosphere["proxy"]["halo"].contains("scatteringTint")
                           && staticAtmosphere["proxy"]["shaft"].value("enabled", false)
-                          && Near(staticAtmosphere["proxy"]["shaft"].value("maxOpacity", 0.0f), 0.45f)
+                          && Near(staticAtmosphere["proxy"]["shaft"].value("maxExtinction", 0.0f), 0.45f)
+                          && staticAtmosphere["proxy"]["shaft"].contains("scatteringTint")
+                          && !staticAtmosphere["proxy"].contains("tint")
                           && staticAtmosphere["dust"].value("enabled", false),
                   "enabled atmosphere flags are serialized");
         }
@@ -1056,11 +1060,12 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
                 && Near(value.haze.flowSpeedWorld, 0.08f)
                 && value.proxy.halo.enabled
                 && Near(value.proxy.halo.radiusWorld, 1.25f)
-                && Near(value.proxy.halo.maxOpacity, 0.6f)
+                && Near(value.proxy.halo.maxExtinction, 0.6f)
+                && value.proxy.halo.scatteringTint.g == 220
                 && value.proxy.shaft.enabled
                 && Near(value.proxy.shaft.lengthScale, 0.8f)
-                && Near(value.proxy.shaft.maxOpacity, 0.45f)
-                && value.proxy.tint.g == 220
+                && Near(value.proxy.shaft.maxExtinction, 0.45f)
+                && value.proxy.shaft.scatteringTint.g == 190
                 && value.dust.enabled
                 && value.dust.amount == 47
                 && Near(value.dust.extentScale, 0.9f)
@@ -1078,24 +1083,50 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
     Check(loaded.dynamicSpotLights.size() == 1 && checkAtmosphere(loaded.dynamicSpotLights[0].atmosphere),
           "dynamic spot atmosphere round-trips");
 
-    Json omittedOpacity = defaultJson;
-    omittedOpacity["staticSpotLights"][0]["atmosphere"]["proxy"] = Json{
+    Json omittedExtinction = defaultJson;
+    omittedExtinction["staticSpotLights"][0]["atmosphere"]["proxy"] = Json{
             {"halo", {{"enabled", true}}},
             {"shaft", {{"enabled", true}}}};
-    Check(LoadText(omittedOpacity.dump(), loaded, error),
-          "proxy settings with omitted maximum opacity load");
+    Check(LoadText(omittedExtinction.dump(), loaded, error),
+          "proxy settings with omitted maximum extinction load");
     Check(loaded.staticSpotLights.size() == 1
-                  && Near(loaded.staticSpotLights[0].atmosphere.proxy.halo.maxOpacity, 0.35f)
-                  && Near(loaded.staticSpotLights[0].atmosphere.proxy.shaft.maxOpacity, 0.25f),
-          "omitted proxy maximum opacity uses restrained defaults");
+                  && Near(loaded.staticSpotLights[0].atmosphere.proxy.halo.maxExtinction, 0.03f)
+                  && Near(loaded.staticSpotLights[0].atmosphere.proxy.shaft.maxExtinction, 0.08f),
+          "omitted proxy maximum extinction uses restrained defaults");
 
-    game::SectorLightProxySettings invalidOpacity;
-    invalidOpacity.halo.maxOpacity = -2.0f;
-    invalidOpacity.shaft.maxOpacity = 3.0f;
-    invalidOpacity = game::NormalizeSectorLightProxySettings(invalidOpacity);
-    Check(Near(invalidOpacity.halo.maxOpacity, 0.0f)
-                  && Near(invalidOpacity.shaft.maxOpacity, 1.0f),
-          "proxy maximum opacity is clamped to the compositing range");
+    game::SectorLightProxySettings invalidExtinction;
+    invalidExtinction.halo.maxExtinction = -2.0f;
+    invalidExtinction.shaft.maxExtinction = 3.0f;
+    invalidExtinction = game::NormalizeSectorLightProxySettings(invalidExtinction);
+    Check(Near(invalidExtinction.halo.maxExtinction, 0.0f)
+                  && Near(invalidExtinction.shaft.maxExtinction, 1.0f),
+          "proxy maximum extinction is clamped to the compositing range");
+
+    Json legacyProxy = defaultJson;
+    legacyProxy["staticSpotLights"][0]["atmosphere"]["proxy"] = Json{
+            {"tint", {{"r", 170}, {"g", 200}, {"b", 230}, {"a", 255}}},
+            {"halo", {{"enabled", true}, {"maxOpacity", 0.7f}}},
+            {"shaft", {
+                    {"enabled", true},
+                    {"maxOpacity", 0.6f},
+                    {"maxExtinction", 0.2f},
+                    {"scatteringTint", {{"r", 240}, {"g", 180}, {"b", 120}, {"a", 255}}}}}};
+    Check(LoadText(legacyProxy.dump(), loaded, error),
+          "legacy proxy tint and maximum opacity load");
+    const auto& migrated = loaded.staticSpotLights[0].atmosphere.proxy;
+    Check(migrated.halo.scatteringTint.r == 170
+                  && migrated.shaft.scatteringTint.r == 240
+                  && Near(migrated.halo.maxExtinction, 0.7f)
+                  && Near(migrated.shaft.maxExtinction, 0.2f),
+          "legacy proxy values migrate to both effects and new fields take precedence");
+    const Json migratedJson = Json::parse(SaveText(loaded));
+    const Json& migratedProxy = migratedJson["staticSpotLights"][0]["atmosphere"]["proxy"];
+    Check(!migratedProxy.contains("tint")
+                  && !migratedProxy["halo"].contains("maxOpacity")
+                  && !migratedProxy["shaft"].contains("maxOpacity")
+                  && migratedProxy["halo"].contains("scatteringTint")
+                  && migratedProxy["shaft"].contains("scatteringTint"),
+          "saving migrated proxies emits only the new schema");
 }
 
 void TestRuntimeObjectsRoundTripAndValidation()
