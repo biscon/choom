@@ -500,29 +500,33 @@ void TestHdrEffectShaderAndPassPolicies()
                     && analyticShaft.find("for (int stepIndex") == std::string::npos
                     && distanceFog.find("uniform sampler2D sceneDepth") != std::string::npos
                     && analyticFog.find("intersectEllipsoid") != std::string::npos
+                    && lightProxy.find("intersectSphere") != std::string::npos
+                    && lightProxy.find("rlEnableScissorTest") != std::string::npos
                     && analyticShaft.find("intersectFiniteCone") != std::string::npos
                     && analyticShaft.find("rlEnableScissorTest") != std::string::npos
                     && analyticShaft.find("BeginBlendMode(BLEND_ALPHA)") != std::string::npos
                     && lightProxy.find("BeginBlendMode(BLEND_ALPHA)") != std::string::npos,
-          "cheap atmosphere paths use depth and analytic/proxy work without raymarch or light loops");
-    Check(lightProxy.find("shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(shader, \"sceneDepth\")")
+          "cheap atmosphere paths use scissored analytic work without raymarch or light loops");
+    Check(lightProxy.find("float visibleChord = max(exitT - enterT, 0.0);")
                             != std::string::npos
-                    && lightProxy.find("material.maps[MATERIAL_MAP_DIFFUSE].texture = sceneTarget.depth")
+                    && lightProxy.find("clamp(visibleChord / unclippedChord, 0.0, 1.0)")
                             != std::string::npos
-                    && lightProxy.find("SetShaderValueTexture(shader") == std::string::npos
-                    && lightProxy.find("sourceVisibility") == std::string::npos
-                    && lightProxy.find("fragSourceUv") == std::string::npos
-                    && lightProxy.find("float depthDelta = proxyForward - sceneForward;")
+                    && lightProxy.find("mappedSoftness = clamp(haloParams.x * 2.0")
                             != std::string::npos
-                    && lightProxy.find("float occlusionBias = 0.12;") != std::string::npos
+                    && lightProxy.find("DrawMesh") == std::string::npos
                     && lightProxy.find("proxy.shaft") == std::string::npos
                     && analyticShaft.find("float coverage = clamp(chord / localDiameter")
                             != std::string::npos
-                    && analyticShaft.find("mix(0.2, 2.5, softness)") != std::string::npos
+                    && analyticShaft.find("mappedSoftness = clamp(shaftParams.x * 2.0")
+                            != std::string::npos
+                    && analyticShaft.find("+ 2.0 * extraSoftness") != std::string::npos
                     && analyticShaft.find(
                             "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
+                            != std::string::npos
+                    && lightProxy.find(
+                            "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
                             != std::string::npos,
-          "halos use local depth occlusion while analytic cone chords provide symmetric shaft softness");
+          "analytic halos and shafts depth-clip their volumes and recalibrate midpoint softness");
     Check(bloom.find("Rgba8Unorm")==std::string::npos
                     && fog.find("Rgba8Unorm")==std::string::npos
                     && haze.find("Rgba8Unorm")==std::string::npos

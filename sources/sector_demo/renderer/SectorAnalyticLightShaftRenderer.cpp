@@ -150,10 +150,18 @@ void main() {
     float axial01 = clamp(dot(midpoint - coneApex, axis) / max(coneLength, 0.0001), 0.0, 1.0);
     float localDiameter = max(2.0 * coneBaseRadius * max(axial01, 0.01), 0.0001);
     float coverage = clamp(chord / localDiameter, 0.0, 1.0);
-    float softness = clamp(shaftParams.x, 0.01, 1.0);
-    float lateral = pow(coverage, mix(0.2, 2.5, softness));
-    float startFadeWidth = mix(0.02, 0.18, softness);
-    float endFadeWidth = mix(0.04, 0.35, softness);
+    // The authored midpoint now matches the old maximum softness. The upper
+    // half adds a gentler tail without expanding the finite cone.
+    float mappedSoftness = clamp(shaftParams.x * 2.0, 0.02, 2.0);
+    float baseSoftness = min(mappedSoftness, 1.0);
+    float extraSoftness = max(mappedSoftness - 1.0, 0.0);
+    float lateralExponent = mix(0.2, 2.5, baseSoftness)
+            + 2.0 * extraSoftness;
+    float lateral = pow(coverage, lateralExponent);
+    float startFadeWidth = min(mix(0.02, 0.18, baseSoftness)
+            + 0.12 * extraSoftness, 0.30);
+    float endFadeWidth = min(mix(0.04, 0.35, baseSoftness)
+            + 0.20 * extraSoftness, 0.55);
     float longitudinal = smoothstep(0.0, startFadeWidth, axial01)
             * (1.0 - smoothstep(1.0 - endFadeWidth, 1.0, axial01));
     float opacity = clamp(shaftParams.y, 0.0, 1.0) * lateral * longitudinal

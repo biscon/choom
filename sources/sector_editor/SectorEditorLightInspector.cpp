@@ -255,7 +255,7 @@ void DrawLightAtmosphereInspector(
             "Atmosphere: Cheap lighting", engine::UITextJustify::Left, config.textColor);
     y += 26.0f;
     if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_proxy_halo_enabled",
-            Rectangle{0.0f, y, contentW, rowH}, font, "Halo enabled", atmosphere.proxy.halo.enabled)) {
+            Rectangle{0.0f, y, contentW, rowH}, font, "Analytic halo enabled", atmosphere.proxy.halo.enabled)) {
         commit();
     }
     y += rowH + gap;

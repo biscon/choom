@@ -8,51 +8,48 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 
 namespace game {
 namespace {
 
-const char* ProxyVs = R"(
+const char* ScreenVs = R"(
 #version 330
 in vec3 vertexPosition;
-in vec2 vertexTexCoord;
-in vec3 vertexNormal;
-in vec4 vertexColor;
 uniform mat4 mvp;
-out vec2 fragProxyUv;
-out vec3 fragWorldPosition;
-out vec3 fragRadiance;
-out vec2 fragProxyData;
-void main() {
-    fragProxyUv = vertexTexCoord;
-    fragWorldPosition = vertexPosition;
-    fragRadiance = vertexNormal;
-    fragProxyData = vertexColor.rg;
-    gl_Position = mvp * vec4(vertexPosition, 1.0);
-}
+void main() { gl_Position = mvp * vec4(vertexPosition, 1.0); }
 )";
 
-const char* ProxyFs = R"(
+const char* AnalyticHaloFs = R"(
 #version 330
-in vec2 fragProxyUv;
-in vec3 fragWorldPosition;
-in vec3 fragRadiance;
-in vec2 fragProxyData; // softness, maximum opacity
 out vec4 finalColor;
 uniform sampler2D sceneDepth;
 uniform vec2 viewportSize;
 uniform vec3 cameraPosition;
 uniform vec3 cameraForward;
+uniform vec3 cameraRight;
+uniform vec3 cameraUp;
+uniform float tanHalfFov;
+uniform float aspectRatio;
 uniform float nearPlane;
 uniform float farPlane;
-uniform vec4 fogParamsA; // mode, start, end/density, max opacity
+uniform vec3 sphereCenter;
+uniform float sphereRadius;
+uniform vec3 haloRadiance;
+uniform vec2 haloParams; // edge softness, maximum opacity
+uniform vec4 fogParamsA; // mode, start, end/density, maximum opacity
 uniform vec4 fogParamsB; // exponent, reference height, height falloff, unused
 
-float linearDepth(float depth) {
-    float zNdc = depth * 2.0 - 1.0;
-    return (2.0 * nearPlane * farPlane)
-            / max(farPlane + nearPlane - zNdc * (farPlane - nearPlane), 0.00001);
+bool intersectSphere(vec3 rayOrigin, vec3 rayDirection,
+        out float enterT, out float exitT) {
+    vec3 offset = rayOrigin - sphereCenter;
+    float b = dot(offset, rayDirection);
+    float c = dot(offset, offset) - sphereRadius * sphereRadius;
+    float discriminant = b * b - c;
+    if (discriminant < 0.0) return false;
+    float root = sqrt(max(discriminant, 0.0));
+    enterT = -b - root;
+    exitT = -b + root;
+    return exitT > max(enterT, 0.0);
 }
 
 float fogTransmittance(vec3 position) {
@@ -73,21 +70,46 @@ float fogTransmittance(vec3 position) {
 }
 
 void main() {
-    vec2 screenUv = gl_FragCoord.xy / max(viewportSize, vec2(1.0));
-    float sceneForward = linearDepth(texture(sceneDepth, screenUv).r);
-    float proxyForward = dot(fragWorldPosition - cameraPosition, cameraForward);
-    float depthDelta = proxyForward - sceneForward;
-    float occlusionBias = 0.12;
-    float occlusionFeather = 0.08;
-    float fragmentVisibility = 1.0 - smoothstep(
-            occlusionBias, occlusionBias + occlusionFeather, depthDelta);
-    float softness = clamp(fragProxyData.x, 0.01, 1.0);
-    float radius = length(fragProxyUv * 2.0 - 1.0);
-    float mask = 1.0 - smoothstep(1.0 - softness, 1.0, radius);
-    float opacity = clamp(fragProxyData.y, 0.0, 1.0) * mask
-            * fragmentVisibility * fogTransmittance(fragWorldPosition);
+    vec2 uv = gl_FragCoord.xy / max(viewportSize, vec2(1.0));
+    vec2 ndc = uv * 2.0 - 1.0;
+    vec3 rayDirection = normalize(cameraForward
+            + cameraRight * ndc.x * tanHalfFov * aspectRatio
+            + cameraUp * ndc.y * tanHalfFov);
+    float enterT = 0.0;
+    float exitT = 0.0;
+    if (!intersectSphere(cameraPosition, rayDirection, enterT, exitT)) discard;
+
+    float unclippedEnterT = max(enterT, 0.0);
+    float unclippedChord = max(exitT - unclippedEnterT, 0.00001);
+    float depth = texture(sceneDepth, uv).r;
+    float zNdc = depth * 2.0 - 1.0;
+    float forwardDistance = (2.0 * nearPlane * farPlane)
+            / max(farPlane + nearPlane - zNdc * (farPlane - nearPlane), 0.00001);
+    float sceneDistance = depth >= 0.999999 ? farPlane
+            : forwardDistance / max(dot(rayDirection, cameraForward), 0.0001);
+    enterT = unclippedEnterT;
+    exitT = min(exitT, sceneDistance);
+    float visibleChord = max(exitT - enterT, 0.0);
+    if (visibleChord <= 0.00001) discard;
+
+    float closestT = max(dot(sphereCenter - cameraPosition, rayDirection), 0.0);
+    vec3 closestPoint = cameraPosition + rayDirection * closestT;
+    float radial = clamp(length(closestPoint - sphereCenter)
+            / max(sphereRadius, 0.0001), 0.0, 1.0);
+    float mappedSoftness = clamp(haloParams.x * 2.0, 0.02, 2.0);
+    float baseSoftness = min(mappedSoftness, 1.0);
+    float extraSoftness = max(mappedSoftness - 1.0, 0.0);
+    float profile = 1.0 - smoothstep(1.0 - baseSoftness, 1.0, radial);
+    profile = pow(clamp(profile, 0.0, 1.0), 1.0 + 2.0 * extraSoftness);
+
+    float midpointT = (enterT + exitT) * 0.5;
+    vec3 midpoint = cameraPosition + rayDirection * midpointT;
+    float opacity = clamp(haloParams.y, 0.0, 1.0)
+            * profile
+            * clamp(visibleChord / unclippedChord, 0.0, 1.0)
+            * fogTransmittance(midpoint);
     if (opacity <= 0.00001) discard;
-    finalColor = vec4(min(max(fragRadiance, vec3(0.0)), vec3(65504.0)), opacity);
+    finalColor = vec4(min(max(haloRadiance, vec3(0.0)), vec3(65504.0)), opacity);
 }
 )";
 
@@ -113,63 +135,26 @@ Vector3 Multiply(Vector3 left, Vector3 right)
 
 void SectorLightProxyRenderer::Reserve(std::size_t sourceCount)
 {
-    EnsureCapacity(sourceCount);
     visibleHalos.reserve(sourceCount);
 }
 
-bool SectorLightProxyRenderer::EnsureResources()
+bool SectorLightProxyRenderer::EnsureShader()
 {
     if (shader.id != 0) return true;
     if (shaderFailed) return false;
-    shader = LoadShaderFromMemory(ProxyVs, ProxyFs);
+    shader = LoadShaderFromMemory(ScreenVs, AnalyticHaloFs);
     if (shader.id == 0) { shaderFailed = true; return false; }
-    shader.locs[SHADER_LOC_VERTEX_POSITION] = GetShaderLocation(shader, "vertexPosition");
-    shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] = GetShaderLocation(shader, "vertexTexCoord");
-    shader.locs[SHADER_LOC_VERTEX_NORMAL] = GetShaderLocation(shader, "vertexNormal");
-    shader.locs[SHADER_LOC_VERTEX_COLOR] = GetShaderLocation(shader, "vertexColor");
-    shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(shader, "sceneDepth");
-    viewportSizeLoc = GetShaderLocation(shader, "viewportSize");
-    cameraPositionLoc = GetShaderLocation(shader, "cameraPosition");
-    cameraForwardLoc = GetShaderLocation(shader, "cameraForward");
-    nearPlaneLoc = GetShaderLocation(shader, "nearPlane");
-    farPlaneLoc = GetShaderLocation(shader, "farPlane");
-    fogParamsALoc = GetShaderLocation(shader, "fogParamsA");
-    fogParamsBLoc = GetShaderLocation(shader, "fogParamsB");
-    material = LoadMaterialDefault();
-    material.shader = shader;
+#define LOC(field, name) field = GetShaderLocation(shader, name)
+    LOC(sceneDepthLoc, "sceneDepth"); LOC(viewportSizeLoc, "viewportSize");
+    LOC(cameraPositionLoc, "cameraPosition"); LOC(cameraForwardLoc, "cameraForward");
+    LOC(cameraRightLoc, "cameraRight"); LOC(cameraUpLoc, "cameraUp");
+    LOC(tanHalfFovLoc, "tanHalfFov"); LOC(aspectRatioLoc, "aspectRatio");
+    LOC(nearPlaneLoc, "nearPlane"); LOC(farPlaneLoc, "farPlane");
+    LOC(sphereCenterLoc, "sphereCenter"); LOC(sphereRadiusLoc, "sphereRadius");
+    LOC(haloRadianceLoc, "haloRadiance"); LOC(haloParamsLoc, "haloParams");
+    LOC(fogParamsALoc, "fogParamsA"); LOC(fogParamsBLoc, "fogParamsB");
+#undef LOC
     return true;
-}
-
-bool SectorLightProxyRenderer::EnsureCapacity(std::size_t requested)
-{
-    if (requested <= quadCapacity) return true;
-    if (mesh.vaoId != 0) UnloadMesh(mesh);
-    quadCapacity = std::max(requested, quadCapacity * 2 + 8);
-    const std::size_t vertexCapacity = quadCapacity * 6;
-    vertices.assign(vertexCapacity * 3, 0.0f);
-    texcoords.assign(vertexCapacity * 2, 0.0f);
-    normals.assign(vertexCapacity * 3, 0.0f);
-    colors.assign(vertexCapacity * 4, 0);
-    mesh = {};
-    mesh.vertexCount = static_cast<int>(vertexCapacity);
-    mesh.triangleCount = static_cast<int>(vertexCapacity / 3);
-    mesh.vertices = static_cast<float*>(MemAlloc(vertices.size() * sizeof(float)));
-    mesh.texcoords = static_cast<float*>(MemAlloc(texcoords.size() * sizeof(float)));
-    mesh.normals = static_cast<float*>(MemAlloc(normals.size() * sizeof(float)));
-    mesh.colors = static_cast<unsigned char*>(MemAlloc(colors.size() * sizeof(unsigned char)));
-    if (mesh.vertices == nullptr || mesh.texcoords == nullptr || mesh.normals == nullptr
-            || mesh.colors == nullptr) {
-        UnloadMesh(mesh);
-        mesh = {};
-        quadCapacity = 0;
-        return false;
-    }
-    std::memcpy(mesh.vertices, vertices.data(), vertices.size() * sizeof(float));
-    std::memcpy(mesh.texcoords, texcoords.data(), texcoords.size() * sizeof(float));
-    std::memcpy(mesh.normals, normals.data(), normals.size() * sizeof(float));
-    std::memcpy(mesh.colors, colors.data(), colors.size() * sizeof(unsigned char));
-    UploadMesh(&mesh, true);
-    return mesh.vaoId != 0;
 }
 
 bool SectorLightProxyRenderer::Apply(
@@ -184,23 +169,27 @@ bool SectorLightProxyRenderer::Apply(
         const std::vector<SectorReceiverBounds>& receiverBounds)
 {
     eligibleCount = haloCount = drawCallCount = 0;
+    scissorCoverage = 0.0f;
     visibleHalos.clear();
     if (quality == SectorVolumetricQuality::Off || sources.empty()
-            || sceneTarget.depth.id == 0 || colorOnlyTarget.id == 0
-            || !EnsureResources() || !EnsureCapacity(sources.size())) return false;
+            || sceneTarget.depth.id == 0 || colorOnlyTarget.id == 0 || !EnsureShader()) return false;
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());
+    if (!std::isfinite(nearPlane) || !std::isfinite(farPlane)
+            || nearPlane <= 0.0f || farPlane <= nearPlane) return false;
     const int width = sceneTarget.texture.width;
     const int height = sceneTarget.texture.height;
     const float aspect = static_cast<float>(width) / std::max(height, 1);
     const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
-    const Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(forward, camera.up));
-    const Vector3 cameraUp = Vector3Normalize(Vector3CrossProduct(cameraRight, forward));
+    const Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, camera.up));
+    const Vector3 up = Vector3Normalize(Vector3CrossProduct(right, forward));
+    const float tanHalfFov = std::tan(camera.fovy * DEG2RAD * 0.5f);
+    SectorAtmosphereScissorRect unionScissor{};
     for (const SectorLightAtmosphereSource& source : sources) {
         if (!IsSectorLightAtmosphereSourceSelected(source, dynamicLights)) continue;
         const SectorLightProxySettings& proxy = source.atmosphere.proxy;
         if (!proxy.halo.enabled || proxy.halo.brightness <= 0.0f
-                || proxy.halo.maxOpacity <= 0.0f) continue;
+                || proxy.halo.maxOpacity <= 0.0f || proxy.halo.radiusWorld <= 0.0f) continue;
         SectorLightAtmosphereVolume volume;
         volume.source = &source;
         volume.originWorld = source.positionWorld;
@@ -209,6 +198,13 @@ bool SectorLightProxyRenderer::Apply(
         volume.extentWorld = proxy.halo.radiusWorld;
         if (!IsSectorLightAtmosphereVolumeVisible(volume, visibility, receiverBounds,
                     camera, aspect, nearPlane, farPlane)) continue;
+        const Vector3 radiusVector{proxy.halo.radiusWorld,
+                proxy.halo.radiusWorld, proxy.halo.radiusWorld};
+        const Vector3 minimum = Vector3Subtract(source.positionWorld, radiusVector);
+        const Vector3 maximum = Vector3Add(source.positionWorld, radiusVector);
+        const SectorAtmosphereScissorRect scissor = ProjectSectorAtmosphereBoundsToScissor(
+                camera, aspect, nearPlane, minimum, maximum, width, height);
+        if (scissor.Empty()) continue;
         Vector3 lightColor = engine::SrgbColorBytesToLinearSceneRgb(source.color);
         float intensity = source.intensity;
         const int dynamicIndex = FindDynamicIndex(source, dynamicLights);
@@ -219,8 +215,10 @@ bool SectorLightProxyRenderer::Apply(
         const Vector3 tint = engine::SrgbColorBytesToLinearSceneRgb(proxy.tint);
         visibleHalos.push_back(VisibleHalo{
                 &source,
+                scissor,
                 Vector3Scale(Multiply(lightColor, tint), intensity * proxy.halo.brightness),
                 Vector3DistanceSqr(camera.position, source.positionWorld)});
+        unionScissor = UnionSectorAtmosphereScissors(unionScissor, scissor, width, height);
     }
     std::sort(visibleHalos.begin(), visibleHalos.end(), [](const auto& left, const auto& right) {
         if (left.distanceSquared != right.distanceSquared) {
@@ -232,44 +230,9 @@ bool SectorLightProxyRenderer::Apply(
         return static_cast<int>(left.source->kind) < static_cast<int>(right.source->kind);
     });
     eligibleCount = haloCount = static_cast<int>(visibleHalos.size());
+    scissorCoverage = SectorAtmosphereScissorCoverage(unionScissor, width, height);
     if (visibleHalos.empty()) return false;
 
-    std::size_t vertex = 0;
-    const auto appendQuad = [&](const Vector3 (&positions)[4], const Vector3 radiance,
-                                float softness, float maxOpacity) {
-        const int order[6] = {0, 1, 2, 0, 2, 3};
-        const Vector2 uv[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
-        for (int i = 0; i < 6; ++i, ++vertex) {
-            const int corner = order[i];
-            std::memcpy(&vertices[vertex * 3], &positions[corner], sizeof(Vector3));
-            std::memcpy(&normals[vertex * 3], &radiance, sizeof(Vector3));
-            texcoords[vertex * 2] = uv[corner].x;
-            texcoords[vertex * 2 + 1] = uv[corner].y;
-            colors[vertex * 4] = static_cast<unsigned char>(std::clamp(softness, 0.0f, 1.0f) * 255.0f);
-            colors[vertex * 4 + 1] = static_cast<unsigned char>(std::clamp(maxOpacity, 0.0f, 1.0f) * 255.0f);
-            colors[vertex * 4 + 2] = 0;
-            colors[vertex * 4 + 3] = 255;
-        }
-    };
-    for (const VisibleHalo& visible : visibleHalos) {
-        const SectorLightAtmosphereSource& source = *visible.source;
-        const SectorLightProxySettings& proxy = source.atmosphere.proxy;
-        const Vector3 horizontal = Vector3Scale(cameraRight, proxy.halo.radiusWorld);
-        const Vector3 vertical = Vector3Scale(cameraUp, proxy.halo.radiusWorld);
-        const Vector3 p[4] = {
-            Vector3Subtract(Vector3Subtract(source.positionWorld, horizontal), vertical),
-            Vector3Add(Vector3Subtract(source.positionWorld, vertical), horizontal),
-            Vector3Add(Vector3Add(source.positionWorld, horizontal), vertical),
-            Vector3Add(Vector3Subtract(source.positionWorld, horizontal), vertical)};
-        appendQuad(p, visible.radiance, proxy.halo.edgeSoftness, proxy.halo.maxOpacity);
-    }
-    if (vertex == 0) return false;
-    mesh.vertexCount = static_cast<int>(vertex);
-    mesh.triangleCount = static_cast<int>(vertex / 3);
-    UpdateMeshBuffer(mesh, 0, vertices.data(), static_cast<int>(vertex * 3 * sizeof(float)), 0);
-    UpdateMeshBuffer(mesh, 1, texcoords.data(), static_cast<int>(vertex * 2 * sizeof(float)), 0);
-    UpdateMeshBuffer(mesh, 2, normals.data(), static_cast<int>(vertex * 3 * sizeof(float)), 0);
-    UpdateMeshBuffer(mesh, 3, colors.data(), static_cast<int>(vertex * 4 * sizeof(unsigned char)), 0);
     const Vector2 viewport{static_cast<float>(width), static_cast<float>(height)};
     const SectorTopologyFogSettings fog = NormalizeSectorTopologyFogSettings(sourceFogSettings);
     const float fogMode = !fog.enabled ? 0.0f
@@ -278,53 +241,53 @@ bool SectorLightProxyRenderer::Apply(
             fog.mode == SectorTopologyFogMode::Distance ? fog.endDistanceWorld : fog.density,
             fog.maxOpacity};
     const Vector4 fogB{fog.falloffExponent, fog.referenceHeightWorld, fog.heightFalloff, 0.0f};
-    material.maps[MATERIAL_MAP_DIFFUSE].texture = sceneTarget.depth;
     rlDrawRenderBatchActive();
     BeginTextureMode(colorOnlyTarget);
-    BeginMode3D(camera);
+    BeginShaderMode(shader);
     SetShaderValue(shader, viewportSizeLoc, &viewport, SHADER_UNIFORM_VEC2);
     SetShaderValue(shader, cameraPositionLoc, &camera.position, SHADER_UNIFORM_VEC3);
     SetShaderValue(shader, cameraForwardLoc, &forward, SHADER_UNIFORM_VEC3);
+    SetShaderValue(shader, cameraRightLoc, &right, SHADER_UNIFORM_VEC3);
+    SetShaderValue(shader, cameraUpLoc, &up, SHADER_UNIFORM_VEC3);
+    SetShaderValue(shader, tanHalfFovLoc, &tanHalfFov, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, aspectRatioLoc, &aspect, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, nearPlaneLoc, &nearPlane, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, farPlaneLoc, &farPlane, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, fogParamsALoc, &fogA, SHADER_UNIFORM_VEC4);
     SetShaderValue(shader, fogParamsBLoc, &fogB, SHADER_UNIFORM_VEC4);
-    // Brightness controls HDR radiance while alpha independently caps coverage.
     BeginBlendMode(BLEND_ALPHA);
     rlColorMask(true, true, true, false);
-    rlDisableDepthTest();
-    rlDisableDepthMask();
-    rlDisableBackfaceCulling();
-    DrawMesh(mesh, material, MatrixIdentity());
-    ++drawCallCount;
-    rlEnableBackfaceCulling();
-    rlEnableDepthMask();
-    rlEnableDepthTest();
+    rlEnableScissorTest();
+    for (const VisibleHalo& visible : visibleHalos) {
+        const SectorLightProxyHaloSettings& settings = visible.source->atmosphere.proxy.halo;
+        const Vector2 haloParams{settings.edgeSoftness, settings.maxOpacity};
+        // rlDrawRenderBatchActive() clears raylib's auxiliary sampler slots.
+        // Register sceneDepth after the flush so it remains bound for this draw.
+        rlDrawRenderBatchActive();
+        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);
+        SetShaderValue(shader, sphereCenterLoc, &visible.source->positionWorld, SHADER_UNIFORM_VEC3);
+        SetShaderValue(shader, sphereRadiusLoc, &settings.radiusWorld, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(shader, haloRadianceLoc, &visible.radiance, SHADER_UNIFORM_VEC3);
+        SetShaderValue(shader, haloParamsLoc, &haloParams, SHADER_UNIFORM_VEC2);
+        rlScissor(visible.scissor.x, visible.scissor.y,
+                visible.scissor.width, visible.scissor.height);
+        DrawRectangle(0, 0, width, height, WHITE);
+        ++drawCallCount;
+    }
+    rlDrawRenderBatchActive();
+    rlDisableScissorTest();
     rlColorMask(true, true, true, true);
     EndBlendMode();
-    EndMode3D();
+    EndShaderMode();
     EndTextureMode();
-    material.maps[MATERIAL_MAP_DIFFUSE].texture = {};
     return true;
 }
 
 void SectorLightProxyRenderer::Shutdown()
 {
-    if (mesh.vaoId != 0) {
-        UnloadMesh(mesh);
-    }
-    mesh = {};
-    if (material.maps != nullptr) {
-        material.maps[MATERIAL_MAP_DIFFUSE].texture = {};
-        material.shader = {};
-        UnloadMaterial(material);
-    }
-    material = {};
     if (shader.id != 0) UnloadShader(shader);
     shader = {};
     shaderFailed = false;
-    quadCapacity = 0;
-    vertices.clear(); texcoords.clear(); normals.clear(); colors.clear();
     visibleHalos.clear();
     visibleHalos.shrink_to_fit();
 }

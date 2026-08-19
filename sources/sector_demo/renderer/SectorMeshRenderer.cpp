@@ -1910,6 +1910,7 @@ void SectorMeshRenderer::RefreshAtmosphereDiagnostics(
     atmosphereDiagnostics.analyticShaftDrawCallCount = analyticLightShaftRenderer.DrawCallCount();
     atmosphereDiagnostics.lightHaloEligibleCount = lightProxyRenderer.EligibleCount();
     atmosphereDiagnostics.lightHaloCount = lightProxyRenderer.HaloCount();
+    atmosphereDiagnostics.lightHaloScissorCoverage = lightProxyRenderer.ScissorCoverage();
     atmosphereDiagnostics.lightHaloDrawCallCount = lightProxyRenderer.DrawCallCount();
     atmosphereDiagnostics.dustEligibleEmitterCount =
             lightDustRenderer.EligibleEmitterCount();

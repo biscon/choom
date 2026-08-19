@@ -73,6 +73,7 @@ struct SectorAtmosphereDiagnostics {
     int analyticShaftDrawCallCount = 0;
     int lightHaloEligibleCount = 0;
     int lightHaloCount = 0;
+    float lightHaloScissorCoverage = 0.0f;
     int lightHaloDrawCallCount = 0;
     int dustEligibleEmitterCount = 0;
     int dustActiveEmitterCount = 0;

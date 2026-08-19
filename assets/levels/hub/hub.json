@@ -1382,14 +1382,15 @@
         "proxy": {
           "tint": {
             "r": 255,
-            "g": 240,
-            "b": 190,
+            "g": 250,
+            "b": 245,
             "a": 255
           },
           "halo": {
             "enabled": true,
-            "brightness": 0.02500000037252903,
-            "edgeSoftness": 0.75
+            "radiusWorld": 0.3499999940395355,
+            "brightness": 0.25,
+            "maxOpacity": 0.05000000074505806
           }
         }
       }
@@ -1409,6 +1410,22 @@
         "g": 240,
         "b": 190,
         "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "tint": {
+            "r": 255,
+            "g": 250,
+            "b": 245,
+            "a": 255
+          },
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.3499999940395355,
+            "brightness": 0.25,
+            "maxOpacity": 0.05000000074505806
+          }
+        }
       }
     },
     {
@@ -1426,6 +1443,22 @@
         "g": 240,
         "b": 190,
         "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "tint": {
+            "r": 255,
+            "g": 250,
+            "b": 245,
+            "a": 255
+          },
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.3499999940395355,
+            "brightness": 0.25,
+            "maxOpacity": 0.05000000074505806
+          }
+        }
       }
     },
     {
@@ -1443,6 +1476,22 @@
         "g": 240,
         "b": 190,
         "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "tint": {
+            "r": 255,
+            "g": 250,
+            "b": 245,
+            "a": 255
+          },
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.3499999940395355,
+            "brightness": 0.25,
+            "maxOpacity": 0.05000000074505806
+          }
+        }
       }
     },
     {
@@ -1460,6 +1509,22 @@
         "g": 240,
         "b": 190,
         "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "tint": {
+            "r": 255,
+            "g": 250,
+            "b": 245,
+            "a": 255
+          },
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.3499999940395355,
+            "brightness": 0.25,
+            "maxOpacity": 0.05000000074505806
+          }
+        }
       }
     },
     {
@@ -1477,6 +1542,22 @@
         "g": 240,
         "b": 190,
         "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "tint": {
+            "r": 255,
+            "g": 250,
+            "b": 245,
+            "a": 255
+          },
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.3499999940395355,
+            "brightness": 0.25,
+            "maxOpacity": 0.05000000074505806
+          }
+        }
       }
     },
     {
@@ -1494,6 +1575,21 @@
         "g": 240,
         "b": 190,
         "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "tint": {
+            "r": 255,
+            "g": 250,
+            "b": 245,
+            "a": 255
+          },
+          "halo": {
+            "enabled": true,
+            "brightness": 0.25,
+            "maxOpacity": 0.05000000074505806
+          }
+        }
       }
     }
   ],
@@ -1764,8 +1860,8 @@
           "halo": {
             "enabled": true,
             "radiusWorld": 2.5,
-            "brightness": 0.5,
-            "maxOpacity": 0.05000000074505806,
+            "brightness": 4.0,
+            "maxOpacity": 0.009999999776482582,
             "edgeSoftness": 1.0
           }
         }
@@ -1911,18 +2007,18 @@
           },
           "halo": {
             "enabled": true,
-            "brightness": 0.05000000074505806,
-            "maxOpacity": 0.15000000596046448,
-            "edgeSoftness": 1.0
+            "brightness": 0.10000000149011612,
+            "maxOpacity": 0.15000000596046448
           },
           "shaft": {
             "enabled": true,
             "widthScale": 0.8500000238418579,
             "maxOpacity": 0.15000000596046448,
-            "edgeSoftness": 1.0
+            "edgeSoftness": 0.699999988079071
           }
         },
         "dust": {
+          "enabled": true,
           "amount": 64,
           "scatteringTint": {
             "r": 155,
@@ -1980,12 +2076,15 @@
       "b": 26,
       "a": 255
     },
-    "startDistanceWorld": 1.5,
-    "density": 0.007499999832361937,
-    "maxOpacity": 0.3499999940395355,
+    "startDistanceWorld": 3.0,
+    "density": 0.05000000074505806,
+    "maxOpacity": 0.5,
     "referenceHeightWorld": 1.0,
     "heightFalloff": 0.0,
-    "mode": "distance"
+    "mode": "distance",
+    "endDistanceWorld": 25.0,
+    "falloffExponent": 0.75,
+    "brightness": 0.5
   },
   "audio": {
     "music": "ambience/horror_ambience.wav",
