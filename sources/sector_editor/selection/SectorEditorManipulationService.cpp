@@ -56,18 +56,15 @@ bool IsAnySectorEditorManipulationActive(const SectorEditorManipulationServiceCo
             || context.runtimeObjectDrag.active;
 }
 
-void UpdateActiveSectorEditorManipulation(
+void UpdateActiveSectorEditorMapPointManipulations(
         SectorEditorManipulationServiceContext& context,
-        engine::Input& input)
+        Vector2 screenPoint)
 {
-    if (context.manipulationState.authoringVertexDrag.active && context.updateAuthoringVertexDrag != nullptr) {
-        context.updateAuthoringVertexDrag(context.userData, input);
-    }
     if (context.manipulationState.authoringFogVolumeDrag.active
             && context.fogVolumeEditing != nullptr
             && context.screenToMap
             && context.snapMapPoint) {
-        const Vector2 snapped = context.snapMapPoint(context.screenToMap(input.MousePosition()));
+        const Vector2 snapped = context.snapMapPoint(context.screenToMap(screenPoint));
         SectorCoord x = 0;
         SectorCoord y = 0;
         if (VisibleAuthoringToSectorCoord(snapped.x, x)
@@ -80,11 +77,11 @@ void UpdateActiveSectorEditorManipulation(
             && context.screenToMap
             && context.snapMapPoint) {
         context.levelMarkerEditing->UpdateMove(
-                context.snapMapPoint(context.screenToMap(input.MousePosition())));
+                context.snapMapPoint(context.screenToMap(screenPoint)));
     }
     if (context.triggerEditing != nullptr && context.triggerEditing->IsMoving()
             && context.screenToMap && context.snapMapPoint) {
-        const Vector2 snapped = context.snapMapPoint(context.screenToMap(input.MousePosition()));
+        const Vector2 snapped = context.snapMapPoint(context.screenToMap(screenPoint));
         SectorCoord x = 0;
         SectorCoord z = 0;
         if (VisibleAuthoringToSectorCoord(snapped.x, x)
@@ -92,6 +89,16 @@ void UpdateActiveSectorEditorManipulation(
             context.triggerEditing->UpdateMove(SectorTriggerPoint{x, z});
         }
     }
+}
+
+void UpdateActiveSectorEditorManipulation(
+        SectorEditorManipulationServiceContext& context,
+        engine::Input& input)
+{
+    if (context.manipulationState.authoringVertexDrag.active && context.updateAuthoringVertexDrag != nullptr) {
+        context.updateAuthoringVertexDrag(context.userData, input);
+    }
+    UpdateActiveSectorEditorMapPointManipulations(context, input.MousePosition());
     if (context.lightState.lightDrag.active && context.updateLightDrag != nullptr) {
         context.updateLightDrag(context.userData, input);
     }

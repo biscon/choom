@@ -68,7 +68,8 @@ public:
             bool useBakedAmbientOcclusion = true);
     void ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
-            const SectorTopologyMap& map);
+            const SectorTopologyMap& map,
+            bool collectGpuDiagnostics = false);
     void ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,

@@ -229,7 +229,7 @@ void DrawSectorEditorDynamicModelInspector(
 
     object = context.editing.SelectedObject(); if (object == nullptr) return;
     static const std::vector<std::string> shadowModes = {
-            "None", "Contact", "Projected Silhouette"};
+            "None", "Contact", "Dynamic"};
     int shadowMode = static_cast<int>(object->dynamicModel.shadowMode);
     const int previousShadowMode = shadowMode;
     if (engine::Option(

@@ -20,6 +20,18 @@ namespace game {
 
 namespace {
 
+constexpr int EditorMarkerCircleSides = 16;
+
+void DrawEditorMarkerDisc(Vector2 center, float radius, Color color)
+{
+    DrawPoly(center, EditorMarkerCircleSides, radius, 0.0f, color);
+}
+
+void DrawEditorMarkerOutline(Vector2 center, float radius, Color color)
+{
+    DrawPolyLines(center, EditorMarkerCircleSides, radius, 0.0f, color);
+}
+
 Vector2 CachedMapToScreen(const SectorEditorTopologyDrawContext& context, Vector2 map)
 {
     const Vector2 canvasWorld = SectorAuthoringToWorldPosition(map);
@@ -1071,11 +1083,7 @@ void DrawCachedAuthoringGraphOverlay(
         if (!line.validEndpoints) {
             if (line.hasPartialEndpoint) {
                 const Vector2 point = CachedMapToScreen(context, line.partialEndpoint);
-                DrawCircleLines(
-                        static_cast<int>(std::round(point.x)),
-                        static_cast<int>(std::round(point.y)),
-                        13.0f,
-                        warningColor);
+                DrawEditorMarkerOutline(point, 13.0f, warningColor);
             }
             continue;
         }
@@ -1096,8 +1104,8 @@ void DrawCachedAuthoringGraphOverlay(
                 context.hoveredAuthoring.kind == SectorAuthoringSelectionKind::Vertex
                 && context.hoveredAuthoring.vertexId == vertex.vertexId;
         const Color fill = hovered ? hoveredVertexFill : vertexFill;
-        DrawCircleV(screen, hovered ? 7.0f : 6.0f, vertexOutline);
-        DrawCircleV(screen, hovered ? 4.5f : 3.5f, fill);
+        DrawEditorMarkerDisc(screen, hovered ? 7.0f : 6.0f, vertexOutline);
+        DrawEditorMarkerDisc(screen, hovered ? 4.5f : 3.5f, fill);
     }
 
     const Color voidFaceColor = Color{162, 160, 174, 160};
@@ -1175,8 +1183,8 @@ void DrawCachedAuthoringGraphOverlay(
                     context.selectedAuthoring,
                     selectedVertex->vertexId)) {
             const Vector2 screen = CachedMapToScreen(context, selectedVertex->map);
-            DrawCircleV(screen, 7.5f, vertexOutline);
-            DrawCircleV(screen, 4.5f, selectedVertexFill);
+            DrawEditorMarkerDisc(screen, 7.5f, vertexOutline);
+            DrawEditorMarkerDisc(screen, 4.5f, selectedVertexFill);
         }
     }
 }
@@ -1200,8 +1208,8 @@ void DrawCachedAuthoringDiagnostics(
         const Color fill = diagnostic.severity == SectorAuthoringValidationSeverity::Warning
                 ? warningFill
                 : errorFill;
-        DrawCircleV(center, 8.0f, outline);
-        DrawCircleV(center, 5.0f, fill);
+        DrawEditorMarkerDisc(center, 8.0f, outline);
+        DrawEditorMarkerDisc(center, 5.0f, fill);
         DrawLineEx(
                 Vector2{center.x - 5.0f, center.y - 5.0f},
                 Vector2{center.x + 5.0f, center.y + 5.0f},
@@ -1239,11 +1247,7 @@ void DrawCachedTopologyLineDefs(
         if (!lineDef.validEndpoints) {
             if (lineDef.hasPartialEndpoint) {
                 const Vector2 point = CachedMapToScreen(context, lineDef.partialEndpoint);
-                DrawCircleLines(
-                        static_cast<int>(std::round(point.x)),
-                        static_cast<int>(std::round(point.y)),
-                        11.0f,
-                        warningColor);
+                DrawEditorMarkerOutline(point, 11.0f, warningColor);
             }
             continue;
         }
@@ -1284,12 +1288,12 @@ void DrawCachedTopologyLineDefs(
         if (lineDef.hasFront) {
             const Vector2 frontEnd{mid.x + normal.x * 15.0f, mid.y + normal.y * 15.0f};
             DrawLineEx(mid, frontEnd, 2.0f, frontColor);
-            DrawCircleV(frontEnd, 3.0f, frontColor);
+            DrawEditorMarkerDisc(frontEnd, 3.0f, frontColor);
         }
         if (lineDef.hasBack) {
             const Vector2 backEnd{mid.x - normal.x * 15.0f, mid.y - normal.y * 15.0f};
             DrawLineEx(mid, backEnd, 2.0f, backColor);
-            DrawCircleV(backEnd, 3.0f, backColor);
+            DrawEditorMarkerDisc(backEnd, 3.0f, backColor);
         }
     }
 }
@@ -1309,26 +1313,14 @@ void DrawCachedTopologyVertices(
                 && vertex.vertexId == context.selectedVertexId;
         const bool hovered = context.hasHoveredVertex && vertex.vertexId == context.hoveredVertexId;
         if (selected) {
-            DrawCircleV(screen, 12.0f, selectedFill);
-            DrawCircleLines(
-                    static_cast<int>(std::round(screen.x)),
-                    static_cast<int>(std::round(screen.y)),
-                    13.0f,
-                    selectedOutline);
+            DrawEditorMarkerDisc(screen, 12.0f, selectedFill);
+            DrawEditorMarkerOutline(screen, 13.0f, selectedOutline);
         }
         if (hovered && !selected) {
-            DrawCircleLines(
-                    static_cast<int>(std::round(screen.x)),
-                    static_cast<int>(std::round(screen.y)),
-                    11.0f,
-                    hoverOutline);
+            DrawEditorMarkerOutline(screen, 11.0f, hoverOutline);
         }
-        DrawCircleV(screen, 4.5f, pointColor);
-        DrawCircleLines(
-                static_cast<int>(std::round(screen.x)),
-                static_cast<int>(std::round(screen.y)),
-                7.0f,
-                outlineColor);
+        DrawEditorMarkerDisc(screen, 4.5f, pointColor);
+        DrawEditorMarkerOutline(screen, 7.0f, outlineColor);
     }
 }
 
@@ -1365,10 +1357,9 @@ void DrawCachedTopologyStaticLights(
             }
         }
 
-        DrawCircleV(center, selected ? 7.0f : 5.5f, color);
-        DrawCircleLines(
-                static_cast<int>(std::round(center.x)),
-                static_cast<int>(std::round(center.y)),
+        DrawEditorMarkerDisc(center, selected ? 7.0f : 5.5f, color);
+        DrawEditorMarkerOutline(
+                center,
                 selected ? 11.0f : 9.0f,
                 Color{20, 24, 32, 255});
         DrawLineEx(Vector2{center.x - 10.0f, center.y}, Vector2{center.x + 10.0f, center.y}, 2.0f, color);
@@ -1501,12 +1492,11 @@ void DrawCachedTopologyStaticSpotLights(
         DrawLineEx(markerRight, markerBottom, 2.0f, outline);
         DrawLineEx(markerBottom, markerLeft, 2.0f, outline);
         DrawLineEx(markerLeft, markerTop, 2.0f, outline);
-        DrawCircleV(target, selected ? 5.5f : 4.5f, WithAlpha(color, selected ? 245 : 205));
-        DrawCircleLines(
-                static_cast<int>(std::round(target.x)),
-                static_cast<int>(std::round(target.y)),
-                selected ? 9.0f : 7.0f,
-                outline);
+        DrawEditorMarkerDisc(
+                target,
+                selected ? 5.5f : 4.5f,
+                WithAlpha(color, selected ? 245 : 205));
+        DrawEditorMarkerOutline(target, selected ? 9.0f : 7.0f, outline);
         DrawTopologyLightTypeLabel(origin, "SS");
     }
 }
@@ -1585,18 +1575,13 @@ void DrawCachedTopologyDynamicSpotLights(
         }
 
         DrawLineEx(origin, target, selected ? 3.0f : 2.0f, WithAlpha(color, selected ? 235 : 165));
-        DrawCircleV(origin, selected ? 7.5f : 6.0f, color);
-        DrawCircleLines(
-                static_cast<int>(std::round(origin.x)),
-                static_cast<int>(std::round(origin.y)),
-                selected ? 11.0f : 9.0f,
-                outline);
-        DrawCircleV(target, selected ? 5.5f : 4.5f, WithAlpha(color, selected ? 245 : 205));
-        DrawCircleLines(
-                static_cast<int>(std::round(target.x)),
-                static_cast<int>(std::round(target.y)),
-                selected ? 9.0f : 7.0f,
-                outline);
+        DrawEditorMarkerDisc(origin, selected ? 7.5f : 6.0f, color);
+        DrawEditorMarkerOutline(origin, selected ? 11.0f : 9.0f, outline);
+        DrawEditorMarkerDisc(
+                target,
+                selected ? 5.5f : 4.5f,
+                WithAlpha(color, selected ? 245 : 205));
+        DrawEditorMarkerOutline(target, selected ? 9.0f : 7.0f, outline);
         DrawTopologyLightTypeLabel(origin, "DS");
     }
 }
@@ -1688,8 +1673,8 @@ void DrawCachedRuntimeObjects(
                     activeDoorLine);
             if (object.doorSwingGuideValid) {
                 const Vector2 hinge = CachedMapToScreen(context, object.doorHinge);
-                DrawCircleV(hinge, selected ? 6.0f : 5.0f, outline);
-                DrawCircleV(hinge, selected ? 3.5f : 3.0f, guideColor);
+                DrawEditorMarkerDisc(hinge, selected ? 6.0f : 5.0f, outline);
+                DrawEditorMarkerDisc(hinge, selected ? 3.5f : 3.0f, guideColor);
             }
         }
 
@@ -1731,11 +1716,11 @@ void DrawCachedRuntimeObjects(
             drawLimb(handA, handB);
             drawLimb(hip, footA);
             drawLimb(hip, footB);
-            DrawCircleV(head, selected ? 6.0f : 5.5f, outline);
-            DrawCircleV(head, selected ? 3.5f : 3.0f, fill);
+            DrawEditorMarkerDisc(head, selected ? 6.0f : 5.5f, outline);
+            DrawEditorMarkerDisc(head, selected ? 3.5f : 3.0f, fill);
         } else {
-            DrawCircleV(center, radius + 3.0f, outline);
-            DrawCircleV(center, radius, fill);
+            DrawEditorMarkerDisc(center, radius + 3.0f, outline);
+            DrawEditorMarkerDisc(center, radius, fill);
         }
 
         if (!object.isDoor && !object.isNpc) {
@@ -1748,7 +1733,7 @@ void DrawCachedRuntimeObjects(
                     center.y + direction.y * 18.0f
             };
             DrawLineEx(center, tip, selected ? 3.0f : 2.0f, fill);
-            DrawCircleV(tip, selected ? 3.5f : 3.0f, fill);
+            DrawEditorMarkerDisc(tip, selected ? 3.5f : 3.0f, fill);
         }
 
         if (!object.definitionKnown) {
@@ -1800,13 +1785,13 @@ void DrawCachedLevelMarkers(
         DrawLineEx(right, bottom, 2.0f, outline);
         DrawLineEx(bottom, left, 2.0f, outline);
         DrawLineEx(left, top, 2.0f, outline);
-        DrawCircleV(center, selected ? 2.8f : 2.2f, outline);
+        DrawEditorMarkerDisc(center, selected ? 2.8f : 2.2f, outline);
 
         const float radians = marker.orientationDegrees * DegreesToRadians;
         const Vector2 direction{std::cos(radians), std::sin(radians)};
         const Vector2 tip{center.x + direction.x * 22.0f, center.y + direction.y * 22.0f};
         DrawLineEx(center, tip, selected ? 3.0f : 2.0f, color);
-        DrawCircleV(tip, selected ? 3.5f : 3.0f, color);
+        DrawEditorMarkerDisc(tip, selected ? 3.5f : 3.0f, color);
         DrawText(marker.referenceId.c_str(), static_cast<int>(center.x + 11.0f),
                 static_cast<int>(center.y - 16.0f), 12, color);
     }

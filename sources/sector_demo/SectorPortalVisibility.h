@@ -103,6 +103,12 @@ RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
         int startSectorId,
         const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr);
 
+RuntimePortalVisibilityResult TraverseRuntimeSectorVisibilityFromSeeds(
+        const RuntimeSectorVisibilityGraph& graph,
+        const std::vector<int>& startSectorIds,
+        int preferredStartSectorId = 0,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers = nullptr);
+
 RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromPoint(
         const RuntimeSectorVisibilityGraph& graph,
         const SectorCollisionWorld* collisionWorld,

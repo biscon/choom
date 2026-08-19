@@ -26,6 +26,7 @@
 #include <raylib.h>
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -40,6 +41,25 @@ namespace game {
 
 struct SectorTopologyMap;
 struct SectorBakedObjectLightProbeRuntimeData;
+
+struct SectorAtmosphereDiagnostics {
+    double localFogGpuMilliseconds = 0.0;
+    double lightHazeGpuMilliseconds = 0.0;
+    double dustGpuMilliseconds = 0.0;
+    int dynamicLightCount = 0;
+    int localFogEligibleCount = 0;
+    int localFogActiveCount = 0;
+    float localFogScissorCoverage = 0.0f;
+    std::array<int, SectorLocalFogRenderer::MaxVolumes> localFogVolumeIds{};
+    int lightHazeEligibleCount = 0;
+    int lightHazeActiveCount = 0;
+    float lightHazeScissorCoverage = 0.0f;
+    std::array<SectorLightHazeActiveSource,
+            SectorLightHazeRenderer::MaxVolumes> lightHazeSources{};
+    int dustEligibleEmitterCount = 0;
+    int dustActiveEmitterCount = 0;
+    int dustVisibleParticleCount = 0;
+};
 
 class SectorMeshRenderer {
 public:
@@ -78,7 +98,8 @@ public:
     bool ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
-            const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);
+            const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+            bool collectGpuDiagnostics = false);
     bool ApplyHdrBloom(
             engine::RenderTarget& sceneTarget,
             const engine::HdrBloomSettings& settings,
@@ -144,26 +165,31 @@ public:
     const std::string& VisibilityDebugText() const { return visibilityDebugText; }
     const std::string& RenderDebugText() const { return renderDebugText; }
     bool DynamicLightingEnabled() const { return dynamicLightingEnabled; }
+    bool DepthPrepassEnabled() const { return depthPrepassEnabled; }
     void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
     void SetGraphicsQuality(
             SectorVolumetricQuality volumetricQuality,
             bool shadowsEnabled,
             int shadowMapResolution = DynamicSpotLightShadowMapResolution,
-            float projectedShadowIntervalSeconds = 0.0f,
-            int projectedShadowResolution = DynamicModelProjectedShadowResolution)
+            int maxDynamicLights = static_cast<int>(MaxDynamicLights),
+            int maxShadowLightUpdatesPerFrame = 2,
+            bool depthPrepass = false,
+            float dynamicLightFadeInSeconds = DynamicLightDefaultFadeInSeconds)
     {
         this->volumetricQuality = volumetricQuality;
         shadowMapsEnabled = shadowsEnabled;
         if (shadowsEnabled) {
             dynamicLightState.SetShadowMapResolution(shadowMapResolution);
         }
-        dynamicModelShadowIntervalSeconds = std::max(
-                projectedShadowIntervalSeconds, 0.0f);
-        if (shadowsEnabled) {
-            dynamicModelShadowRenderer.SetProjectedShadowResolution(
-                    projectedShadowResolution);
-        }
+        dynamicLightState.SetMaxDynamicLights(
+                static_cast<std::size_t>(std::max(maxDynamicLights, 0)));
+        dynamicLightState.SetMaxShadowLightUpdatesPerFrame(
+                static_cast<std::size_t>(std::max(
+                        maxShadowLightUpdatesPerFrame, 0)));
+        dynamicLightState.SetSelectionFadeInSeconds(
+                dynamicLightFadeInSeconds);
+        depthPrepassEnabled = depthPrepass;
     }
     SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorRenderer.DoorLightingDebugMode(); }
     void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorRenderer.SetDoorLightingDebugMode(mode); }
@@ -171,9 +197,20 @@ public:
     {
         return dynamicLightState.SelectedLights();
     }
-    const std::vector<int>& SelectedDynamicLightIds() const { return dynamicLightState.SelectedLightIds(); }
+    const std::vector<SectorPreviewDynamicLightKey>& SelectedDynamicLightKeys() const {
+        return dynamicLightState.SelectedLightKeys();
+    }
+    const SectorDynamicLightSelectionStats& DynamicLightSelectionStats() const {
+        return dynamicLightState.SelectionStats();
+    }
     size_t DynamicLightCandidateCount() const { return dynamicLightState.CandidateCount(); }
     size_t DynamicLightSourceCount() const { return dynamicLightState.SourceCount(); }
+    const SectorDynamicShadowRenderStats& DynamicShadowRenderStats() const {
+        return dynamicLightState.ShadowRenderStats();
+    }
+    size_t DynamicModelShadowCasterCount() const {
+        return dynamicModelShadowRenderer.DynamicCasterCount();
+    }
     size_t DoorConsideredCount() const { return doorRenderer.RenderStats().considered; }
     size_t DoorDrawnCount() const { return doorRenderer.RenderStats().drawn; }
     size_t DoorSkippedCount() const { return doorRenderer.RenderStats().skipped; }
@@ -229,17 +266,36 @@ public:
     {
         return hdrSceneScratchDiagnostic;
     }
+    const SectorAtmosphereDiagnostics& AtmosphereDiagnostics() const
+    {
+        return atmosphereDiagnostics;
+    }
 
 private:
+    static constexpr std::size_t AtmosphereGpuPassCount = 3;
+    static constexpr std::size_t AtmosphereGpuQueryLatency = 4;
+
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
     bool EnsureHdrSceneColorView(const engine::RenderTarget& sceneTarget);
     void UnloadHdrSceneColorView();
     bool EnsureHdrCompositeShader();
     bool CommitHdrScratch(engine::RenderTarget& sceneTarget);
+    bool EnsureAtmosphereGpuQueries();
+    void ShutdownAtmosphereGpuQueries();
+    void BeginAtmosphereGpuFrame(bool enabled);
+    void BeginAtmosphereGpuPass(std::size_t pass);
+    void EndAtmosphereGpuPass(std::size_t pass);
+    unsigned int AtmosphereGpuQuery(
+            std::size_t pass,
+            std::size_t slot,
+            bool end) const;
+    void RefreshAtmosphereDiagnostics(
+            const SectorBillboardDynamicLightContext& dynamicLights);
     engine::TextureHandle TextureForId(const std::string& textureId) const;
     engine::TextureHandle NormalTextureForId(const std::string& textureId) const;
     void UpdateCamera();
     SectorBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
+    void DrawDepthPrepass(engine::AssetManager& assets, engine::World* runtimeObjectWorld);
     static const Texture2D* ResolveShadowCasterTexture(
             void* userData,
             engine::AssetManager& assets,
@@ -262,6 +318,8 @@ private:
     Material material = {};
     Texture2D defaultMaterialTexture = {};
     bool materialLoaded = false;
+    Material depthPrepassMaterial = {};
+    bool depthPrepassMaterialLoaded = false;
     int useLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
     int hasLightmapLoc = -1;
@@ -282,6 +340,9 @@ private:
     int dynamicLightDirectionsLoc = -1;
     int dynamicLightInnerConeCosLoc = -1;
     int dynamicLightOuterConeCosLoc = -1;
+    int dynamicLightSpotShadowRightLoc = -1;
+    int dynamicLightSpotShadowProjectionLoc = -1;
+    int hasPointShadowsLoc = -1;
     int dynamicLightShadowSlotsLoc = -1;
     std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrixLocs = [] {
         std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
@@ -291,6 +352,8 @@ private:
     int shadowBiasLoc = -1;
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
+    int shadowAtlasTilesPerRowLoc = -1;
+    bool depthPrepassEnabled = false;
     SectorFogShaderLocations fogShaderLocations;
     SectorLocalFogRenderer localFogRenderer;
     SectorLightHazeRenderer lightHazeRenderer;
@@ -311,6 +374,16 @@ private:
     std::string hdrSceneScratchDiagnostic = "not allocated";
     int hdrSceneScratchFailedWidth = 0;
     int hdrSceneScratchFailedHeight = 0;
+    SectorAtmosphereDiagnostics atmosphereDiagnostics;
+    std::array<unsigned int,
+            AtmosphereGpuPassCount * AtmosphereGpuQueryLatency * 2>
+            atmosphereGpuQueries{};
+    std::array<std::uint8_t, AtmosphereGpuQueryLatency>
+            atmosphereGpuIssuedMasks{};
+    std::size_t atmosphereGpuFrameIndex = 0;
+    std::size_t atmosphereGpuSlot = 0;
+    bool atmosphereGpuQueriesInitialized = false;
+    bool atmosphereGpuActive = false;
     SectorBillboardRenderer billboardRenderer;
     SectorStaticModelRenderer staticModelRenderer;
     SectorStaticSpecularLightState staticSpecularLightState;
@@ -321,8 +394,6 @@ private:
     bool dynamicLightingEnabled = true;
     SectorVolumetricQuality volumetricQuality = SectorVolumetricQuality::High;
     bool shadowMapsEnabled = true;
-    float dynamicModelShadowIntervalSeconds = 0.0f;
-    float lastDynamicModelShadowRenderSeconds = -1000.0f;
     int lightmapStatus = 0;
     bool surfaceLightmapBakeCurrent = false;
     bool objectProbeBakeCurrent = false;

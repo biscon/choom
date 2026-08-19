@@ -566,10 +566,17 @@ bool PreserveAuthoredUv2(
     return true;
 }
 
-bool UnwrapMesh(
+enum class XatlasUnwrapResult {
+    Success,
+    NoFiniteChartSet,
+    Failure
+};
+
+XatlasUnwrapResult UnwrapMeshWithPositions(
         const Mesh& mesh,
         const std::vector<uint32_t>& indices,
-        const std::vector<Vector3>& positions,
+        const std::vector<Vector3>& unwrapPositions,
+        const std::vector<Vector3>& importedPositions,
         const std::vector<Vector3>& normals,
         float texelsPerWorldUnit,
         SectorStaticModelLightmapMesh& outMesh,
@@ -578,15 +585,15 @@ bool UnwrapMesh(
     xatlas::Atlas* atlas = xatlas::Create();
     if (atlas == nullptr) {
         outError = "xatlas allocation failed";
-        return false;
+        return XatlasUnwrapResult::Failure;
     }
 
     xatlas::MeshDecl declaration;
-    declaration.vertexPositionData = positions.data();
+    declaration.vertexPositionData = unwrapPositions.data();
     declaration.vertexPositionStride = sizeof(Vector3);
     declaration.vertexNormalData = normals.empty() ? nullptr : normals.data();
     declaration.vertexNormalStride = sizeof(Vector3);
-    declaration.vertexCount = static_cast<uint32_t>(positions.size());
+    declaration.vertexCount = static_cast<uint32_t>(unwrapPositions.size());
     declaration.indexData = indices.data();
     declaration.indexCount = static_cast<uint32_t>(indices.size());
     declaration.indexFormat = xatlas::IndexFormat::UInt32;
@@ -596,7 +603,7 @@ bool UnwrapMesh(
         outError = std::string("xatlas rejected mesh: ")
                 + xatlas::StringForEnum(addResult);
         xatlas::Destroy(atlas);
-        return false;
+        return XatlasUnwrapResult::Failure;
     }
 
     xatlas::ChartOptions chartOptions;
@@ -621,7 +628,7 @@ bool UnwrapMesh(
             || atlas->meshes == nullptr) {
         outError = "xatlas could not produce one finite lightmap chart set";
         xatlas::Destroy(atlas);
-        return false;
+        return XatlasUnwrapResult::NoFiniteChartSet;
     }
     const xatlas::Mesh& result = atlas->meshes[0];
     if (result.vertexCount == 0
@@ -630,7 +637,7 @@ bool UnwrapMesh(
             || result.indexArray == nullptr) {
         outError = "xatlas produced an empty mesh";
         xatlas::Destroy(atlas);
-        return false;
+        return XatlasUnwrapResult::NoFiniteChartSet;
     }
 
     outMesh = {};
@@ -647,22 +654,118 @@ bool UnwrapMesh(
             result.indexArray + result.indexCount);
     for (uint32_t i = 0; i < result.vertexCount; ++i) {
         const xatlas::Vertex& vertex = result.vertexArray[i];
-        if (vertex.xref >= positions.size()
+        if (vertex.xref >= importedPositions.size()
                 || !std::isfinite(vertex.uv[0])
                 || !std::isfinite(vertex.uv[1])) {
             outError = "xatlas produced an invalid vertex remap";
             xatlas::Destroy(atlas);
-            return false;
+            return XatlasUnwrapResult::Failure;
         }
         outMesh.sourceVertexIndices[i] = vertex.xref;
-        outMesh.importedPositions[i] = positions[vertex.xref];
+        outMesh.importedPositions[i] = importedPositions[vertex.xref];
         outMesh.importedNormals[i] = normals[vertex.xref];
         outMesh.localLightmapUvs[i] = Vector2{
                 vertex.uv[0] / static_cast<float>(atlas->width),
                 vertex.uv[1] / static_cast<float>(atlas->height)};
     }
     xatlas::Destroy(atlas);
+    return XatlasUnwrapResult::Success;
+}
+
+bool BuildSmallMeshNormalization(
+        const std::vector<Vector3>& positions,
+        float texelsPerWorldUnit,
+        std::vector<Vector3>& outPositions,
+        float& outTexelsPerWorldUnit)
+{
+    if (positions.empty()) {
+        return false;
+    }
+    Vector3 minPosition = positions.front();
+    Vector3 maxPosition = positions.front();
+    for (const Vector3 position : positions) {
+        minPosition.x = std::min(minPosition.x, position.x);
+        minPosition.y = std::min(minPosition.y, position.y);
+        minPosition.z = std::min(minPosition.z, position.z);
+        maxPosition.x = std::max(maxPosition.x, position.x);
+        maxPosition.y = std::max(maxPosition.y, position.y);
+        maxPosition.z = std::max(maxPosition.z, position.z);
+    }
+    const Vector3 extent = Vector3Subtract(maxPosition, minPosition);
+    const float largestExtent = std::max({extent.x, extent.y, extent.z});
+    constexpr float normalizationTargetExtent = 1.0f;
+    if (!std::isfinite(largestExtent)
+            || largestExtent <= kPositionEpsilon
+            || largestExtent >= normalizationTargetExtent) {
+        return false;
+    }
+    const float scale = normalizationTargetExtent / largestExtent;
+    outTexelsPerWorldUnit = texelsPerWorldUnit / scale;
+    if (!std::isfinite(scale) || !std::isfinite(outTexelsPerWorldUnit)
+            || scale <= 1.0f || outTexelsPerWorldUnit <= 0.0f) {
+        return false;
+    }
+
+    outPositions.resize(positions.size());
+    for (size_t i = 0; i < positions.size(); ++i) {
+        outPositions[i] = Vector3Scale(
+                Vector3Subtract(positions[i], minPosition),
+                scale);
+    }
     return true;
+}
+
+bool UnwrapMesh(
+        const Mesh& mesh,
+        const std::vector<uint32_t>& indices,
+        const std::vector<Vector3>& positions,
+        const std::vector<Vector3>& normals,
+        float texelsPerWorldUnit,
+        SectorStaticModelLightmapMesh& outMesh,
+        std::string& outError)
+{
+    const XatlasUnwrapResult initialResult = UnwrapMeshWithPositions(
+            mesh,
+            indices,
+            positions,
+            positions,
+            normals,
+            texelsPerWorldUnit,
+            outMesh,
+            outError);
+    if (initialResult == XatlasUnwrapResult::Success) {
+        return true;
+    }
+    if (initialResult != XatlasUnwrapResult::NoFiniteChartSet) {
+        return false;
+    }
+
+    std::vector<Vector3> normalizedPositions;
+    float normalizedTexelsPerWorldUnit = 0.0f;
+    if (!BuildSmallMeshNormalization(
+                positions,
+                texelsPerWorldUnit,
+                normalizedPositions,
+                normalizedTexelsPerWorldUnit)) {
+        return false;
+    }
+
+    std::string normalizedError;
+    const XatlasUnwrapResult normalizedResult = UnwrapMeshWithPositions(
+            mesh,
+            indices,
+            normalizedPositions,
+            positions,
+            normals,
+            normalizedTexelsPerWorldUnit,
+            outMesh,
+            normalizedError);
+    if (normalizedResult == XatlasUnwrapResult::Success) {
+        return true;
+    }
+    outError = "xatlas small-mesh normalization retry failed: "
+            + normalizedError;
+    return false;
 }
 
 Vector3 StaticModelWorldPosition(const SectorPlacedRuntimeObject& object)

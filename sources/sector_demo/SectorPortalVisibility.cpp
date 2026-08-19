@@ -205,7 +205,8 @@ void AppendPointSeed(
 bool HasOpenPortalBetween(
         const RuntimeSectorVisibilityGraph& graph,
         int fromSectorId,
-        int toSectorId)
+        int toSectorId,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
 {
     const RuntimeSectorNode* node = FindRuntimeSectorVisibilityNode(graph, fromSectorId);
     if (node == nullptr) {
@@ -217,7 +218,9 @@ bool HasOpenPortalBetween(
             continue;
         }
         const RuntimePortalEdge& edge = graph.portals[static_cast<size_t>(edgeIndex)];
-        if (edge.open && edge.toSectorId == toSectorId) {
+        if (edge.open
+                && edge.toSectorId == toSectorId
+                && !IsRuntimePortalDynamicallyBlocked(edge, dynamicBlockers)) {
             return true;
         }
     }
@@ -246,7 +249,8 @@ std::vector<int> GatherRuntimeVisibilityStartSeeds(
         int preferredStartSectorId,
         float visibilitySeedRadiusWorld,
         float eyeYWorld,
-        bool validateEyeY)
+        bool validateEyeY,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
 {
     std::vector<int> seeds;
     seeds.reserve(6);
@@ -255,7 +259,44 @@ std::vector<int> GatherRuntimeVisibilityStartSeeds(
         seeds.push_back(preferredStartSectorId);
     }
 
-    AppendPointSeed(graph, collisionWorld, seeds, xz, eyeYWorld, validateEyeY);
+    const auto appendConnectedPointSeed = [
+            &graph,
+            collisionWorld,
+            &seeds,
+            eyeYWorld,
+            validateEyeY,
+            dynamicBlockers](Vector2 sample) {
+        const std::size_t previousSize = seeds.size();
+        AppendPointSeed(
+                graph,
+                collisionWorld,
+                seeds,
+                sample,
+                eyeYWorld,
+                validateEyeY);
+        if (seeds.size() == previousSize || previousSize == 0) {
+            return;
+        }
+
+        const int sampledSectorId = seeds.back();
+        bool connectedToAcceptedSeed = false;
+        for (std::size_t i = 0; i < previousSize; ++i) {
+            if (seeds[i] == sampledSectorId
+                    || HasOpenPortalBetween(
+                            graph,
+                            seeds[i],
+                            sampledSectorId,
+                            dynamicBlockers)) {
+                connectedToAcceptedSeed = true;
+                break;
+            }
+        }
+        if (!connectedToAcceptedSeed) {
+            seeds.pop_back();
+        }
+    };
+
+    appendConnectedPointSeed(xz);
 
     if (collisionWorld != nullptr
             && std::isfinite(visibilitySeedRadiusWorld)
@@ -268,32 +309,7 @@ std::vector<int> GatherRuntimeVisibilityStartSeeds(
 
         for (Vector2 offset : offsets) {
             const Vector2 sample{xz.x + offset.x, xz.y + offset.y};
-            const int beforeSize = static_cast<int>(seeds.size());
-            AppendPointSeed(graph, collisionWorld, seeds, sample, eyeYWorld, validateEyeY);
-            if (static_cast<int>(seeds.size()) == beforeSize) {
-                continue;
-            }
-
-            const int sampledSectorId = seeds.back();
-            if (sampledSectorId == preferredStartSectorId) {
-                continue;
-            }
-
-            bool connectedToAcceptedSeed = false;
-            for (size_t i = 0; i + 1 < seeds.size(); ++i) {
-                if (seeds[i] == sampledSectorId) {
-                    connectedToAcceptedSeed = true;
-                    break;
-                }
-                if (HasOpenPortalBetween(graph, seeds[i], sampledSectorId)
-                        || HasOpenPortalBetween(graph, sampledSectorId, seeds[i])) {
-                    connectedToAcceptedSeed = true;
-                    break;
-                }
-            }
-            if (!connectedToAcceptedSeed) {
-                seeds.pop_back();
-            }
+            appendConnectedPointSeed(sample);
         }
     }
 
@@ -523,10 +539,11 @@ bool AddReachedWindow(
         std::unordered_map<int, std::vector<AngularWindow>>& windowsBySector,
         int sectorId,
         AngularWindow window,
-        bool* outHitWindowCap = nullptr)
+        AngularWindow* outReachedWindow = nullptr,
+        bool* outCoalesced = nullptr)
 {
-    if (outHitWindowCap != nullptr) {
-        *outHitWindowCap = false;
+    if (outCoalesced != nullptr) {
+        *outCoalesced = false;
     }
 
     std::vector<AngularWindow>& windows = windowsBySector[sectorId];
@@ -536,14 +553,34 @@ bool AddReachedWindow(
         }
     }
 
-    if (windows.size() >= MaxWindowsPerSector) {
-        if (outHitWindowCap != nullptr) {
-            *outHitWindowCap = true;
+    AngularWindow reached = window;
+    for (std::size_t i = 0; i < windows.size();) {
+        const AngularWindow existing = windows[i];
+        if (reached.max + WindowEpsilon < existing.min
+                || existing.max + WindowEpsilon < reached.min) {
+            ++i;
+            continue;
         }
-        return false;
+        reached.min = std::min(reached.min, existing.min);
+        reached.max = std::max(reached.max, existing.max);
+        windows.erase(windows.begin() + static_cast<std::ptrdiff_t>(i));
     }
 
-    windows.push_back(window);
+    if (windows.size() >= MaxWindowsPerSector) {
+        for (const AngularWindow& existing : windows) {
+            reached.min = std::min(reached.min, existing.min);
+            reached.max = std::max(reached.max, existing.max);
+        }
+        windows.clear();
+        if (outCoalesced != nullptr) {
+            *outCoalesced = true;
+        }
+    }
+
+    windows.push_back(reached);
+    if (outReachedWindow != nullptr) {
+        *outReachedWindow = reached;
+    }
     return true;
 }
 
@@ -828,23 +865,27 @@ bool BuildRuntimeSectorVisibilityGraph(
     return true;
 }
 
-RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
+RuntimePortalVisibilityResult TraverseRuntimeSectorVisibilityFromSeeds(
         const RuntimeSectorVisibilityGraph& graph,
-        int startSectorId,
+        const std::vector<int>& startSectorIds,
+        int preferredStartSectorId,
         const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
 {
     RuntimePortalVisibilityResult result;
-    result.startSectorId = startSectorId;
-    if (startSectorId > 0) {
-        result.startSectorIds.push_back(startSectorId);
-    }
-    result.mode = "connected portal traversal";
+    result.startSectorIds = DeduplicateSortedSeeds(graph, startSectorIds);
+    result.startSectorId = std::binary_search(
+            result.startSectorIds.begin(),
+            result.startSectorIds.end(),
+            preferredStartSectorId)
+            ? preferredStartSectorId
+            : result.startSectorIds.empty() ? -1 : result.startSectorIds.front();
+    result.mode = "connected portal multi-seed traversal";
     result.totalSectorCount = graph.sectors.size();
 
-    if (FindRuntimeSectorVisibilityNode(graph, startSectorId) == nullptr) {
+    if (result.startSectorIds.empty()) {
         result.validStartSector = false;
         result.fallbackDrawAll = true;
-        result.status = "invalid start sector; fallback draw all";
+        result.status = "invalid start sectors; fallback draw all";
         return result;
     }
 
@@ -853,8 +894,10 @@ RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
 
     std::unordered_set<int> visited;
     std::deque<int> pending;
-    visited.insert(startSectorId);
-    pending.push_back(startSectorId);
+    for (const int startSectorId : result.startSectorIds) {
+        visited.insert(startSectorId);
+        pending.push_back(startSectorId);
+    }
 
     const size_t iterationCap = std::max<size_t>(graph.sectors.size() + graph.portals.size(), 1) * 4;
     size_t iterations = 0;
@@ -905,6 +948,20 @@ RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
     }
     FinalizeVisibilitySectorSets(result);
 
+    return result;
+}
+
+RuntimePortalVisibilityResult TraverseRuntimeSectorVisibility(
+        const RuntimeSectorVisibilityGraph& graph,
+        int startSectorId,
+        const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
+{
+    RuntimePortalVisibilityResult result = TraverseRuntimeSectorVisibilityFromSeeds(
+            graph,
+            std::vector<int>{startSectorId},
+            startSectorId,
+            dynamicBlockers);
+    result.mode = "connected portal traversal";
     return result;
 }
 
@@ -1042,7 +1099,7 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
             : iterationCap;
     size_t iterations = 0;
     bool hitIterationCap = false;
-    bool hitWindowCap = false;
+    bool coalescedWindowCoverage = false;
 
     while (!pending.empty()) {
         if (++iterations > cap) {
@@ -1080,35 +1137,40 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromViewSeeds(
 
             result.traversedPortalLineDefIds.push_back(edge.lineDefId);
             visible.insert(edge.toSectorId);
-            bool windowCapForSector = false;
+            AngularWindow reachedWindow = portalVisibility.clippedWindow;
+            bool coalescedForSector = false;
             if (AddReachedWindow(
                         windowsBySector,
                         edge.toSectorId,
                         portalVisibility.clippedWindow,
-                        &windowCapForSector)) {
-                pending.push_back(ViewTraversalItem{edge.toSectorId, portalVisibility.clippedWindow});
-            } else if (windowCapForSector) {
-                hitWindowCap = true;
-                break;
+                        &reachedWindow,
+                        &coalescedForSector)) {
+                coalescedWindowCoverage = coalescedWindowCoverage
+                        || coalescedForSector;
+                pending.push_back(ViewTraversalItem{
+                        edge.toSectorId,
+                        reachedWindow});
             }
-        }
-
-        if (hitWindowCap) {
-            break;
         }
     }
 
     if (hitIterationCap) {
-        result.fallbackDrawAll = true;
-        result.status = "portal traversal cap hit";
-        result.visibleSectorIds = AllSectorIds(graph);
-    } else if (hitWindowCap) {
-        result.fallbackDrawAll = true;
-        result.status = "portal visibility window cap hit";
-        result.visibleSectorIds = AllSectorIds(graph);
+        RuntimePortalVisibilityResult connected =
+                TraverseRuntimeSectorVisibilityFromSeeds(
+                        graph,
+                        seeds,
+                        result.startSectorId,
+                        dynamicBlockers);
+        connected.mode = "view-aware portal traversal";
+        connected.status = connected.fallbackDrawAll
+                ? "portal traversal cap hit; connected fallback failed"
+                : "portal traversal cap hit; fallback connected component";
+        return connected;
     } else {
         result.visibleSectorIds.assign(visible.begin(), visible.end());
-        result.status = "visibility traversal complete";
+        result.status = coalescedWindowCoverage
+                ? "visibility traversal complete; angular windows coalesced"
+                : "visibility traversal complete";
     }
 
     FinalizeVisibilitySectorSets(result);
@@ -1146,7 +1208,8 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
             preferredStartSectorId,
             ClampRuntimeVisibilitySeedRadiusWorld(visibilitySeedRadiusWorld),
             eyeYWorld,
-            validateEyeY);
+            validateEyeY,
+            dynamicBlockers);
 
     return ComputeRuntimeSectorVisibilityFromViewSeeds(
             graph,

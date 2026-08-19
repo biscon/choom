@@ -9,6 +9,7 @@
 
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorAudioOcclusion.h"
+#include "sector_demo/SectorDynamicModelShadowCasters.h"
 #include "sector_demo/SectorMath.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorStaticModelTransform.h"
@@ -2552,6 +2553,65 @@ void TestSectorDoorShadowCasterUsesAnimatedTransform()
             "open door shadow caster moves away from the closed authoring anchor");
 }
 
+void TestSectorDoorShadowCasterRevisionTracksGeometryChanges()
+{
+    game::SectorDoorShadowCasterRevisionState state;
+    std::vector<game::SectorDoorShadowCaster> proceduralCasters;
+    std::vector<game::SectorDoorModelShadowCaster> modelCasters;
+
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    const uint64_t emptyRevision = state.revision;
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    Check(emptyRevision > 0 && state.revision == emptyRevision,
+            "door shadow revision remains stable while caster geometry is unchanged");
+
+    game::SectorDoorShadowCaster procedural;
+    procedural.placedObjectId = 7;
+    procedural.model = MatrixIdentity();
+    procedural.position = Vector3{1.0f, 2.0f, 3.0f};
+    procedural.width = 2.0f;
+    procedural.height = 2.5f;
+    procedural.thickness = 0.25f;
+    proceduralCasters.push_back(procedural);
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    const uint64_t proceduralRevision = state.revision;
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    Check(proceduralRevision == emptyRevision + 1
+                    && state.revision == proceduralRevision,
+            "door shadow revision changes once when a procedural caster is added");
+
+    proceduralCasters[0].model.m12 = 0.5f;
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    const uint64_t movedRevision = state.revision;
+    Check(movedRevision == proceduralRevision + 1,
+            "door shadow revision changes when a procedural caster moves");
+
+    game::SectorDoorModelShadowCaster model;
+    model.placedObjectId = 8;
+    model.model = engine::ModelHandle{3, 2};
+    model.transform = MatrixIdentity();
+    modelCasters.push_back(model);
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    const uint64_t modelRevision = state.revision;
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    Check(modelRevision == movedRevision + 1
+                    && state.revision == modelRevision,
+            "door shadow revision tracks model caster identity without changing every frame");
+
+    modelCasters[0].transform.m14 = -1.0f;
+    game::RefreshSectorDoorShadowCasterRevision(
+            state, proceduralCasters, modelCasters);
+    Check(state.revision == modelRevision + 1,
+            "door shadow revision changes when a model caster moves");
+}
+
 void TestSpawnPlacedDoorDerivesDefaultOpenDistance()
 {
     engine::World world;
@@ -4762,7 +4822,7 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     object.dynamicModel.animation = "Standard Walk";
     object.dynamicModel.loop = false;
     object.dynamicModel.animationSpeed = 1.5f;
-    object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+    object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -4786,7 +4846,7 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
                   && Near(transform.rotationZRadians, -0.5f)
                   && Near(dynamic.scale, 1.75f)
                   && dynamic.shadowMode
-                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette,
+                          == game::SectorDynamicModelShadowMode::Dynamic,
           "dynamic prop copies the movable authored transform, scale, and shadow mode");
     Check(dynamic.requestedAnimation == "Standard Walk"
                   && !dynamic.animationResolved
@@ -4844,7 +4904,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     object.npc.instanceId = "guard_one";
     object.npc.scale = 1.4f;
     object.npc.shadowMode =
-            game::SectorDynamicModelShadowMode::ProjectedSilhouette;
+            game::SectorDynamicModelShadowMode::Dynamic;
     map.runtimeObjects.push_back(object);
 
     game::RefreshSectorRuntimeObjectMapData(state, map);
@@ -4913,7 +4973,7 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
     Check(dynamic.requestedAnimation == "Idle"
                   && Near(dynamic.scale, 1.4f)
                   && dynamic.shadowMode
-                          == game::SectorDynamicModelShadowMode::ProjectedSilhouette
+                          == game::SectorDynamicModelShadowMode::Dynamic
                   && animator.loop
                   && animator.playing
                   && Near(animator.speed, 1.25f)
@@ -6200,6 +6260,105 @@ void TestStaticModelSpotlightShadowCasterCollectionAndRevision()
           "an unchanged empty static prop caster set keeps its revision stable");
 }
 
+void TestDynamicModelShadowCasterCollectionAndRevision()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 8);
+
+    const engine::Entity dynamic = world.CreateEntity();
+    const game::SectorObjectTransform transform{
+            Vector3{2.0f, 3.0f, -4.0f},
+            0.35f,
+            -0.2f,
+            0.1f};
+    world.Add(dynamic, transform);
+    world.Add(dynamic, game::SectorObject{7, true});
+    world.Add(dynamic, game::SectorObjectVisualOffset{
+            Vector3{0.25f, 0.5f, -0.75f}});
+    game::SectorDynamicModel model;
+    model.placedObjectId = 51;
+    model.scale = 1.75f;
+    model.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
+    world.Add(dynamic, model);
+    engine::AnimatedModelInstance instance;
+    instance.model = engine::ModelHandle{3, 5};
+    instance.boneMatrices.push_back(MatrixIdentity());
+    instance.poseReady = true;
+    world.Add(dynamic, instance);
+
+    const engine::Entity contact = world.CreateEntity();
+    world.Add(contact, game::SectorObjectTransform{});
+    world.Add(contact, game::SectorObject{7, true});
+    game::SectorDynamicModel contactModel;
+    contactModel.placedObjectId = 52;
+    contactModel.shadowMode = game::SectorDynamicModelShadowMode::Contact;
+    world.Add(contact, contactModel);
+    engine::AnimatedModelInstance contactInstance;
+    contactInstance.model = engine::ModelHandle{4, 2};
+    contactInstance.poseReady = true;
+    world.Add(contact, contactInstance);
+
+    game::SectorDynamicModelShadowCasterCollection collection;
+    game::ReserveSectorDynamicModelShadowCasters(collection, 8);
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+
+    Check(collection.casters.size() == 1,
+          "dynamic shadow collection includes only visible pose-ready Dynamic models");
+    const game::SectorDynamicModelShadowCaster& caster =
+            collection.casters.front();
+    const Matrix expected = game::BuildSectorStaticModelAuthoredTransform(
+            Vector3Add(
+                    transform.position,
+                    Vector3{0.25f, 0.5f, -0.75f}),
+            transform.rotationXRadians,
+            transform.yawRadians,
+            transform.rotationZRadians,
+            1.75f);
+    Check(caster.entity == dynamic
+                  && caster.placedObjectId == 51
+                  && caster.model == engine::ModelHandle{3, 5}
+                  && Near(
+                             Vector3Transform(Vector3{}, caster.transform),
+                             Vector3Transform(Vector3{}, expected))
+                  && Near(
+                             Vector3Transform(
+                                     Vector3{1.0f, 0.0f, 0.0f},
+                                     caster.transform),
+                             Vector3Transform(
+                                     Vector3{1.0f, 0.0f, 0.0f},
+                                     expected)),
+          "dynamic caster follows the rendered authored transform and visual offset");
+
+    const uint64_t initialRevision = collection.revision;
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    Check(collection.revision == initialRevision,
+          "unchanged dynamic caster transforms and poses preserve the cache revision");
+
+    world.Get<engine::AnimatedModelInstance>(dynamic).boneMatrices[0] =
+            MatrixTranslate(0.1f, 0.0f, 0.0f);
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    const uint64_t posedRevision = collection.revision;
+    Check(posedRevision != initialRevision,
+          "changing an animated pose invalidates the dynamic caster revision");
+
+    world.Get<game::SectorObjectVisualOffset>(dynamic).position.y += 0.2f;
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    const uint64_t movedRevision = collection.revision;
+    Check(movedRevision != posedRevision,
+          "changing the rendered dynamic-model transform invalidates its caster revision");
+
+    world.Get<game::SectorDynamicModel>(dynamic).shadowMode =
+            game::SectorDynamicModelShadowMode::None;
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    const uint64_t disabledRevision = collection.revision;
+    Check(collection.casters.empty()
+                  && disabledRevision != movedRevision,
+          "None removes a dynamic model from the atlas caster set");
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    Check(collection.revision == disabledRevision,
+          "an unchanged empty dynamic caster set keeps its revision stable");
+}
+
 void TestViewmodelMaterialOverrideResolution()
 {
     float metallicFactor = 0.5f;
@@ -6964,18 +7123,163 @@ game::SectorCollisionMoveResult ResolveStaticModelMovement(
             colliders);
 }
 
+engine::ModelOrientedBounds AxisAlignedModelBounds(BoundingBox bounds)
+{
+    return engine::ModelOrientedBounds{
+            Vector2{
+                    (bounds.min.x + bounds.max.x) * 0.5f,
+                    (bounds.min.z + bounds.max.z) * 0.5f},
+            Vector2{1.0f, 0.0f},
+            Vector2{0.0f, 1.0f},
+            Vector2{
+                    (bounds.max.x - bounds.min.x) * 0.5f,
+                    (bounds.max.z - bounds.min.z) * 0.5f},
+            bounds.min.y,
+            bounds.max.y};
+}
+
+void TestModelOrientedBoundsPreserveBakedMeshRotation()
+{
+    constexpr float intrinsicYaw = 0.35f;
+    const Vector3 localCenter{1.5f, 1.0f, -2.0f};
+    const Matrix intrinsicTransform = MatrixMultiply(
+            MatrixRotateY(intrinsicYaw),
+            MatrixTranslate(localCenter.x, 0.0f, localCenter.z));
+    std::array<float, 24> vertices{};
+    size_t offset = 0;
+    for (float x : {-3.0f, 3.0f}) {
+        for (float y : {0.0f, 2.0f}) {
+            for (float z : {-0.5f, 0.5f}) {
+                const Vector3 transformed = Vector3Transform(
+                        Vector3{x, y, z},
+                        intrinsicTransform);
+                vertices[offset++] = transformed.x;
+                vertices[offset++] = transformed.y;
+                vertices[offset++] = transformed.z;
+            }
+        }
+    }
+    Mesh mesh{};
+    mesh.vertexCount = 8;
+    mesh.vertices = vertices.data();
+    Model model{};
+    model.transform = MatrixIdentity();
+    model.meshCount = 1;
+    model.meshes = &mesh;
+
+    engine::ModelOrientedBounds bounds;
+    Check(engine::ComputeModelOrientedBounds(model, bounds),
+          "internally rotated model vertices produce collision bounds");
+    const Vector3 expectedAxisX3 = Vector3Transform(
+            Vector3{1.0f, 0.0f, 0.0f},
+            MatrixRotateY(intrinsicYaw));
+    const Vector3 expectedAxisZ3 = Vector3Transform(
+            Vector3{0.0f, 0.0f, 1.0f},
+            MatrixRotateY(intrinsicYaw));
+    const Vector2 expectedAxisX{expectedAxisX3.x, expectedAxisX3.z};
+    const Vector2 expectedAxisZ{expectedAxisZ3.x, expectedAxisZ3.z};
+    Check(Near(bounds.center, Vector2{localCenter.x, localCenter.z})
+                  && Near(bounds.axisX, expectedAxisX)
+                  && Near(bounds.axisZ, expectedAxisZ)
+                  && Near(bounds.halfExtents, Vector2{3.0f, 0.5f})
+                  && Near(bounds.bottom, 0.0f)
+                  && Near(bounds.top, 2.0f),
+          "collision metadata retains the baked mesh orientation and tight footprint");
+
+    offset = 0;
+    for (float x : {-3.0f, 3.0f}) {
+        for (float y : {0.0f, 2.0f}) {
+            for (float z : {-0.5f, 0.5f}) {
+                vertices[offset++] = x;
+                vertices[offset++] = y;
+                vertices[offset++] = z;
+            }
+        }
+    }
+    engine::ModelOrientedBounds axisAlignedBounds;
+    Check(engine::ComputeModelOrientedBounds(model, axisAlignedBounds)
+                  && Near(axisAlignedBounds.center, Vector2{})
+                  && Near(axisAlignedBounds.axisX, Vector2{1.0f, 0.0f})
+                  && Near(axisAlignedBounds.axisZ, Vector2{0.0f, 1.0f})
+                  && Near(
+                          axisAlignedBounds.halfExtents,
+                          Vector2{3.0f, 0.5f}),
+          "axis-aligned model footprints preserve legacy orientation and dimensions");
+
+    offset = 0;
+    for (float x : {-3.0f, 3.0f}) {
+        for (float y : {0.0f, 2.0f}) {
+            for (float z : {-0.5f, 0.5f}) {
+                const Vector3 transformed = Vector3Transform(
+                        Vector3{x, y, z},
+                        intrinsicTransform);
+                vertices[offset++] = transformed.x;
+                vertices[offset++] = transformed.y;
+                vertices[offset++] = transformed.z;
+            }
+        }
+    }
+
+    game::SectorObjectTransform transform;
+    transform.yawRadians = 0.25f;
+    game::SectorStaticModelCollider collider;
+    Check(game::BuildSectorStaticModelCollider(
+                  17,
+                  bounds,
+                  transform,
+                  1.0f,
+                  collider),
+          "authored yaw builds collision from oriented model metadata");
+    const Vector3 expectedAuthoredAxisX = Vector3Transform(
+            Vector3{expectedAxisX.x, 0.0f, expectedAxisX.y},
+            MatrixRotateY(transform.yawRadians));
+    Check(Near(
+                  collider.axisX,
+                  Vector2{expectedAuthoredAxisX.x, expectedAuthoredAxisX.z})
+                  && Near(collider.halfExtents, Vector2{3.0f, 0.5f}),
+          "authored yaw composes with the model's baked orientation");
+
+    transform.yawRadians = 0.0f;
+    Check(game::BuildSectorStaticModelCollider(
+                  17,
+                  bounds,
+                  transform,
+                  1.0f,
+                  collider),
+          "unmodified authored yaw preserves the baked collision orientation");
+    game::SectorFpsControllerState state;
+    state.feetPosition = Vector3{
+            localCenter.x,
+            0.0f,
+            localCenter.z + 1.9f};
+    state.currentSectorId = 10;
+    state.grounded = true;
+    const Vector2 destination{
+            localCenter.x,
+            localCenter.z + 1.2f};
+    const game::SectorCollisionMoveResult result = ResolveStaticModelMovement(
+            state,
+            destination,
+            game::SectorFpsControllerConfig{},
+            std::vector<game::SectorStaticModelCollider>{collider});
+    Check(Near(result.positionXZ, destination),
+          "tight oriented collision does not retain the old local-AABB invisible wall");
+}
+
 void TestStaticModelColliderBuildUsesFullAuthoredTransform()
 {
     const BoundingBox bounds{
             Vector3{-1.0f, -0.5f, -2.0f},
             Vector3{3.0f, 1.5f, 2.0f}};
+    const engine::ModelOrientedBounds orientedBounds =
+            AxisAlignedModelBounds(bounds);
     const game::SectorObjectTransform transform{
             Vector3{10.0f, 2.0f, 20.0f},
             PI * 0.5f};
     game::SectorStaticModelCollider collider;
     Check(game::BuildSectorStaticModelCollider(
                   7,
-                  bounds,
+                  orientedBounds,
                   transform,
                   2.0f,
                   collider),
@@ -7045,6 +7349,8 @@ void TestStaticModelXzRotationUsesSharedTransformAndEnclosingBounds()
     const BoundingBox bounds{
             Vector3{-1.0f, -0.5f, -2.0f},
             Vector3{1.0f, 0.5f, 2.0f}};
+    const engine::ModelOrientedBounds orientedBounds =
+            AxisAlignedModelBounds(bounds);
     const game::SectorObjectTransform tilted{
             position,
             0.0f,
@@ -7053,7 +7359,7 @@ void TestStaticModelXzRotationUsesSharedTransformAndEnclosingBounds()
     game::SectorStaticModelCollider collider;
     Check(game::BuildSectorStaticModelCollider(
                   8,
-                  bounds,
+                  orientedBounds,
                   tilted,
                   1.0f,
                   collider),
@@ -7867,6 +8173,7 @@ int main()
     TestSectorDoorShadowCasterCollectionIncludesValidDoor();
     TestSectorDoorShadowCasterCollectionSkipsNonRenderableDoors();
     TestSectorDoorShadowCasterUsesAnimatedTransform();
+    TestSectorDoorShadowCasterRevisionTracksGeometryChanges();
     TestSectorDoorHorizontalSlideMotionUsesResolvedTangent();
     TestSectorSwingDoorCanonicalPoseKeepsHingesAndChoosesSide();
     TestSectorSwingDoorDerivedMatricesAndColliderAgree();
@@ -7935,6 +8242,7 @@ int main()
     TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();
     TestStaticModelSpotlightShadowCasterCollectionAndRevision();
+    TestDynamicModelShadowCasterCollectionAndRevision();
     TestViewmodelMaterialOverrideResolution();
     TestSpawnPlacedDirectionalBillboardCopiesClipNames();
     TestSpawnPlacedRuntimeObjectsRefreshDoesNotDuplicate();
@@ -7960,6 +8268,7 @@ int main()
     TestSectorRuntimeObjectBakedLightingFallback();
     TestSectorRuntimeObjectBakedLightingUsesMapFallback();
     TestPropAndDoorStandingClearanceQueries();
+    TestModelOrientedBoundsPreserveBakedMeshRotation();
     TestStaticModelColliderBuildUsesFullAuthoredTransform();
     TestStaticModelXzRotationUsesSharedTransformAndEnclosingBounds();
     TestStaticModelColliderBlocksSweepsAndSlides();

@@ -3,6 +3,8 @@
 .vs/
 cmake-build-debug/
 cmake-build-release/
+cmake-build-profile/
+profiles/
 bin/
 build/
 out/

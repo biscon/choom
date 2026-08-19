@@ -671,7 +671,8 @@ void SectorSceneRuntime::RenderScene(
             &context.world,
             SectorRuntimeDoorLightingContext{
                     &runtimeObjects.objectLightProbes,
-                    &map},
+                    &map,
+                    runtimeObjects.staticLightingRevision},
             map.fogSettings);
     BeginMode3D(renderer.RenderCamera());
     impactParticles.Draw(
@@ -682,12 +683,14 @@ void SectorSceneRuntime::RenderScene(
 
 void SectorSceneRuntime::ApplyWorldAtmosphere(
         engine::RenderTarget& sceneTarget,
-        const SectorTopologyMap& map)
+        const SectorTopologyMap& map,
+        bool collectGpuDiagnostics)
 {
     renderer.ApplyWorldAtmosphere(
             sceneTarget,
             map,
-            runtimeObjects.objectLightProbes);
+            runtimeObjects.objectLightProbes,
+            collectGpuDiagnostics);
 }
 
 void SectorSceneRuntime::ApplyHdrBloom(

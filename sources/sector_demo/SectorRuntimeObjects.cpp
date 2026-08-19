@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -677,10 +678,15 @@ void ClearSectorRuntimeObjects(
     const uint64_t keepSwingDoorCatalogRevision = state.swingDoorCatalogRevision;
     const uint64_t keepNpcDefinitionCatalogRevision =
             state.npcDefinitionCatalogRevision;
+    const uint64_t nextStaticLightingRevision =
+            state.staticLightingRevision == std::numeric_limits<uint64_t>::max()
+            ? 1
+            : state.staticLightingRevision + 1;
     state = SectorRuntimeObjectState{};
     state.worldReserved = keepReservation;
     state.swingDoorCatalogRevision = keepSwingDoorCatalogRevision;
     state.npcDefinitionCatalogRevision = keepNpcDefinitionCatalogRevision;
+    state.staticLightingRevision = nextStaticLightingRevision;
 }
 
 void ReloadSectorSwingDoorCatalog(SectorRuntimeObjectState& state)
@@ -697,6 +703,10 @@ void RefreshSectorRuntimeObjectMapData(
         SectorRuntimeObjectState& state,
         const SectorTopologyMap& map)
 {
+    state.staticLightingRevision =
+            state.staticLightingRevision == std::numeric_limits<uint64_t>::max()
+            ? 1
+            : state.staticLightingRevision + 1;
     ReloadSwingDoorCatalogData(state);
     ReloadNpcDefinitionCatalogData(state);
     RefreshDoorAnchorDiagnostics(state, map);

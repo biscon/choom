@@ -11,12 +11,15 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 namespace game {
 
 class SectorLocalFogRenderer {
 public:
+    static constexpr int MaxVolumes = 16;
+
     bool Apply(
             RenderTexture2D& sceneTarget,
             RenderTexture2D& sceneScratch,
@@ -30,6 +33,15 @@ public:
 
     int EligibleVolumeCount() const { return eligibleVolumeCount; }
     int ActiveVolumeCount() const { return activeVolumeCount; }
+    float ScissorCoverage() const { return scissorCoverage; }
+    const std::array<int, MaxVolumes>& ActiveVolumeIds() const
+    {
+        return activeVolumeIds;
+    }
+    const std::array<std::uint32_t, MaxVolumes>& DynamicLightMasks() const
+    {
+        return dynamicLightMasks;
+    }
     const engine::RenderTarget& AccumulationTarget() const { return fogTarget; }
     const std::string& AccumulationDiagnostic() const { return accumulationDiagnostic; }
 
@@ -57,6 +69,7 @@ private:
         int fogLightingA = -1;
         int fogLightingB = -1;
         int fogLightingC = -1;
+        int dynamicLightMasks = -1;
         SectorDynamicLightShaderLocations dynamicLights;
         SectorDynamicSpotLightShadowShaderLocations dynamicShadows;
         int shadowMap0 = -1;
@@ -116,6 +129,9 @@ private:
     bool warnedInvalidProjection = false;
     int eligibleVolumeCount = 0;
     int activeVolumeCount = 0;
+    float scissorCoverage = 0.0f;
+    std::array<int, MaxVolumes> activeVolumeIds{};
+    std::array<std::uint32_t, MaxVolumes> dynamicLightMasks{};
 };
 
 } // namespace game

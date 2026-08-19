@@ -968,10 +968,11 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
         model.shadowMode = SectorDynamicModelShadowMode::None;
     } else if (shadowMode == "contact") {
         model.shadowMode = SectorDynamicModelShadowMode::Contact;
-    } else if (shadowMode == "projected_silhouette") {
-        model.shadowMode = SectorDynamicModelShadowMode::ProjectedSilhouette;
+    } else if (shadowMode == "dynamic"
+            || shadowMode == "projected_silhouette") {
+        model.shadowMode = SectorDynamicModelShadowMode::Dynamic;
     } else {
-        Fail(context + ".shadowMode must be 'none', 'contact', or 'projected_silhouette'");
+        Fail(context + ".shadowMode must be 'none', 'contact', or 'dynamic'");
     }
     return model;
 }
@@ -991,10 +992,11 @@ SectorPlacedNpc ReadPlacedNpc(const Json& value, const std::string& context)
         npc.shadowMode = SectorDynamicModelShadowMode::None;
     } else if (shadowMode == "contact") {
         npc.shadowMode = SectorDynamicModelShadowMode::Contact;
-    } else if (shadowMode == "projected_silhouette") {
-        npc.shadowMode = SectorDynamicModelShadowMode::ProjectedSilhouette;
+    } else if (shadowMode == "dynamic"
+            || shadowMode == "projected_silhouette") {
+        npc.shadowMode = SectorDynamicModelShadowMode::Dynamic;
     } else {
-        Fail(context + ".shadowMode must be 'none', 'contact', or 'projected_silhouette'");
+        Fail(context + ".shadowMode must be 'none', 'contact', or 'dynamic'");
     }
     return npc;
 }
@@ -2034,7 +2036,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             }
             if (model.shadowMode != SectorDynamicModelShadowMode::None
                     && model.shadowMode != SectorDynamicModelShadowMode::Contact
-                    && model.shadowMode != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                    && model.shadowMode != SectorDynamicModelShadowMode::Dynamic) {
                 Fail(context + ".dynamicModel.shadowMode is invalid");
             }
             const float rotationXDegrees = RadiansToDegrees(model.rotationXRadians);
@@ -2051,8 +2053,8 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (model.animationSpeed != 1.0f) dynamicModel["animationSpeed"] = model.animationSpeed;
             if (model.shadowMode == SectorDynamicModelShadowMode::None) {
                 dynamicModel["shadowMode"] = "none";
-            } else if (model.shadowMode == SectorDynamicModelShadowMode::ProjectedSilhouette) {
-                dynamicModel["shadowMode"] = "projected_silhouette";
+            } else if (model.shadowMode == SectorDynamicModelShadowMode::Dynamic) {
+                dynamicModel["shadowMode"] = "dynamic";
             }
             json["kind"] = object.kind;
             json["dynamicModel"] = std::move(dynamicModel);
@@ -2070,7 +2072,7 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (object.npc.shadowMode != SectorDynamicModelShadowMode::None
                     && object.npc.shadowMode != SectorDynamicModelShadowMode::Contact
                     && object.npc.shadowMode
-                            != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                            != SectorDynamicModelShadowMode::Dynamic) {
                 Fail(context + ".npc.shadowMode is invalid");
             }
             Json npc{{"definitionId", object.npc.definitionId}};
@@ -2079,8 +2081,8 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             if (object.npc.shadowMode == SectorDynamicModelShadowMode::None) {
                 npc["shadowMode"] = "none";
             } else if (object.npc.shadowMode
-                    == SectorDynamicModelShadowMode::ProjectedSilhouette) {
-                npc["shadowMode"] = "projected_silhouette";
+                    == SectorDynamicModelShadowMode::Dynamic) {
+                npc["shadowMode"] = "dynamic";
             }
             json["kind"] = object.kind;
             json["npc"] = std::move(npc);
@@ -2412,6 +2414,40 @@ Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const st
     return lightJson;
 }
 
+Json WriteDynamicPointLight(const SectorTopologyDynamicPointLight& light, const std::string& context)
+{
+    RequireFinite(light.intensity, context + ".intensity");
+    RequireFinite(light.radius, context + ".radius");
+    RequireFinite(light.shadowBias, context + ".shadowBias");
+    RequireFinite(light.shadowStrength, context + ".shadowStrength");
+    RequireFinite(light.shadowSoftness, context + ".shadowSoftness");
+    const int shadowPriority = ClampDynamicSpotLightShadowPriority(light.shadowPriority);
+    const float shadowBias = ClampDynamicSpotLightShadowBias(light.shadowBias);
+    const float shadowStrength = ClampDynamicSpotLightShadowStrength(light.shadowStrength);
+    const float shadowSoftness = ClampDynamicSpotLightShadowSoftness(light.shadowSoftness);
+    Json lightJson{
+            {"id", light.id},
+            {"position", WriteVector3(light.position, context + ".position")},
+            {"radius", light.radius},
+            {"intensity", light.intensity},
+            {"color", WriteColor(light.color)}};
+    if (!light.enabled) lightJson["enabled"] = false;
+    WriteDynamicLightFlickerFields(lightJson, light, context);
+    if (light.castsShadow) lightJson["castsShadow"] = true;
+    if (shadowPriority != DynamicSpotLightDefaultShadowPriority) {
+        lightJson["shadowPriority"] = shadowPriority;
+    }
+    if (shadowBias != DynamicSpotLightDefaultShadowBias) lightJson["shadowBias"] = shadowBias;
+    if (shadowStrength != DynamicSpotLightDefaultShadowStrength) {
+        lightJson["shadowStrength"] = shadowStrength;
+    }
+    if (shadowSoftness != DynamicSpotLightDefaultShadowSoftness) {
+        lightJson["shadowSoftness"] = shadowSoftness;
+    }
+    WriteOptionalLightAtmosphere(lightJson, light);
+    return lightJson;
+}
+
 Json WriteStaticSpotLight(const SectorTopologyStaticSpotLight& light, const std::string& context)
 {
     RequireFinite(light.intensity, context + ".intensity");
@@ -2716,7 +2752,7 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                 }
                 if (model.shadowMode != SectorDynamicModelShadowMode::None
                         && model.shadowMode != SectorDynamicModelShadowMode::Contact
-                        && model.shadowMode != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                        && model.shadowMode != SectorDynamicModelShadowMode::Dynamic) {
                     Fail(objectContext + ".dynamicModel.shadowMode is invalid");
                 }
             } else if (object.kind == RuntimeObjectKindNpc) {
@@ -2737,7 +2773,7 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                 if (object.npc.shadowMode != SectorDynamicModelShadowMode::None
                         && object.npc.shadowMode != SectorDynamicModelShadowMode::Contact
                         && object.npc.shadowMode
-                                != SectorDynamicModelShadowMode::ProjectedSilhouette) {
+                                != SectorDynamicModelShadowMode::Dynamic) {
                     Fail(objectContext + ".npc.shadowMode is invalid");
                 }
             } else if (object.kind == RuntimeObjectKindDoor) {
@@ -3075,6 +3111,27 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
                     DynamicLightFlickerMinAmount,
                     DynamicLightFlickerMaxAmount);
             light.atmosphere = ReadOptionalLightAtmosphereSettings(value, context);
+            light.castsShadow = ReadOptionalBool(value, "castsShadow", context, false);
+            light.shadowPriority = ReadOptionalClampedInt(
+                    value, "shadowPriority", context,
+                    DynamicSpotLightDefaultShadowPriority,
+                    DynamicSpotLightMinShadowPriority,
+                    DynamicSpotLightMaxShadowPriority);
+            light.shadowBias = ReadOptionalClampedFloat(
+                    value, "shadowBias", context,
+                    DynamicSpotLightDefaultShadowBias,
+                    DynamicSpotLightMinShadowBias,
+                    DynamicSpotLightMaxShadowBias);
+            light.shadowStrength = ReadOptionalClampedFloat(
+                    value, "shadowStrength", context,
+                    DynamicSpotLightDefaultShadowStrength,
+                    DynamicSpotLightMinShadowStrength,
+                    DynamicSpotLightMaxShadowStrength);
+            light.shadowSoftness = ReadOptionalClampedFloat(
+                    value, "shadowSoftness", context,
+                    DynamicSpotLightDefaultShadowSoftness,
+                    DynamicSpotLightMinShadowSoftness,
+                    DynamicSpotLightMaxShadowSoftness);
             map.dynamicPointLights.push_back(light);
         }
     }
@@ -3519,21 +3576,7 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
     root["dynamicPointLights"] = Json::array();
     for (const SectorTopologyDynamicPointLight* light : SortedById(map.dynamicPointLights)) {
         const std::string context = "dynamic point light " + std::to_string(light->id);
-        RequireFinite(light->intensity, context + ".intensity");
-        RequireFinite(light->radius, context + ".radius");
-        Json lightJson{
-                {"id", light->id},
-                {"position", WriteVector3(light->position, context + ".position")},
-                {"radius", light->radius},
-                {"intensity", light->intensity},
-                {"color", WriteColor(light->color)}
-        };
-        if (!light->enabled) {
-            lightJson["enabled"] = false;
-        }
-        WriteDynamicLightFlickerFields(lightJson, *light, context);
-        WriteOptionalLightAtmosphere(lightJson, *light);
-        root["dynamicPointLights"].push_back(std::move(lightJson));
+        root["dynamicPointLights"].push_back(WriteDynamicPointLight(*light, context));
     }
 
     root["dynamicSpotLights"] = Json::array();
@@ -4086,21 +4129,7 @@ Json SerializeMap(const SectorTopologyMap& map)
     root["dynamicPointLights"] = Json::array();
     for (const SectorTopologyDynamicPointLight* light : SortedById(map.dynamicPointLights)) {
         const std::string context = "dynamic point light " + std::to_string(light->id);
-        RequireFinite(light->intensity, context + ".intensity");
-        RequireFinite(light->radius, context + ".radius");
-        Json lightJson{
-                {"id", light->id},
-                {"position", WriteVector3(light->position, context + ".position")},
-                {"radius", light->radius},
-                {"intensity", light->intensity},
-                {"color", WriteColor(light->color)}
-        };
-        if (!light->enabled) {
-            lightJson["enabled"] = false;
-        }
-        WriteDynamicLightFlickerFields(lightJson, *light, context);
-        WriteOptionalLightAtmosphere(lightJson, *light);
-        root["dynamicPointLights"].push_back(std::move(lightJson));
+        root["dynamicPointLights"].push_back(WriteDynamicPointLight(*light, context));
     }
 
     root["dynamicSpotLights"] = Json::array();

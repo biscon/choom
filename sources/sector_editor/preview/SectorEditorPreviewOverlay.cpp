@@ -596,20 +596,43 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 addKeyValue("AO", overlayState.useBakedAmbientOcclusion ? "on" : "off");
                 addKeyValue("lightmap", preview.RendererLightmapStatusText());
                 addKeyValue("door mode", SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()));
-                addKeyValue("selected dynamic", TextFormat(
-                        "%zu / %zu / %zu",
+                addKeyValue("dynamic lights", TextFormat(
+                        "selected %zu | portal eligible %zu | sources %zu",
                         preview.SelectedDynamicLights().size(),
                         preview.DynamicLightCandidateCount(),
                         preview.DynamicLightSourceCount()));
-                if (!preview.SelectedDynamicLightIds().empty()) {
+                if (!preview.SelectedDynamicLightKeys().empty()) {
                     std::ostringstream ids;
-                    for (size_t i = 0; i < preview.SelectedDynamicLightIds().size(); ++i) {
+                    for (size_t i = 0; i < preview.SelectedDynamicLightKeys().size(); ++i) {
                         if (i > 0) {
                             ids << ",";
                         }
-                        ids << preview.SelectedDynamicLightIds()[i];
+                        const SectorPreviewDynamicLightKey& key =
+                                preview.SelectedDynamicLightKeys()[i];
+                        ids << (key.kind == SectorPreviewDynamicLightKind::Spot
+                                        ? "spot:"
+                                        : "point:")
+                                << key.lightId;
                     }
                     addKeyValue("selected ids", ids.str());
+                }
+                {
+                    const SectorDynamicLightSelectionStats& stats =
+                            preview.DynamicLightSelectionStats();
+                    addKeyValue("lighting reach", TextFormat(
+                            "sectors %zu | %s | start %d | blockers %zu%s",
+                            stats.reachableSectorCount,
+                            stats.reachabilityCacheHit ? "cached" : "rebuilt",
+                            stats.lightingStartSectorId,
+                            stats.dynamicPortalBlockerCount,
+                            stats.cameraVisibilityFallback
+                                    ? " | camera fallback ignored"
+                                    : ""));
+                    addKeyValue("receiver light refs", TextFormat(
+                            "total/max %zu/%zu | bounds %zu",
+                            stats.visibleReceiverLightReferences,
+                            stats.maxVisibleReceiverLights,
+                            stats.visibleReceiverCount));
                 }
                 if (!preview.SelectedDynamicLights().empty()) {
                     const SectorPreviewDynamicPointLightUniform& light = preview.SelectedDynamicLights().front();
@@ -622,6 +645,45 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             light.position.x,
                             light.position.y,
                             light.position.z));
+                }
+                {
+                    const SectorDynamicShadowRenderStats& stats =
+                            preview.DynamicShadowRenderStats();
+                    const char* atlasState = !stats.enabled
+                            ? "off"
+                            : stats.cacheHit
+                                    ? "cache hit"
+                                    : stats.atlasRendered ? "rebuilt" : "idle";
+                    addKeyValue("shadow atlas", TextFormat(
+                            "%s | point/spot %zu/%zu | slots %zu",
+                            atlasState,
+                            stats.pointLights,
+                            stats.spotLights,
+                            stats.occupiedTiles));
+                    addKeyValue("shadow updates", TextFormat(
+                            "valid/dirty/queued %zu/%zu/%zu | lights/tiles rebuilt %zu/%zu | CPU %.3f ms",
+                            stats.validLights,
+                            stats.dirtyLights,
+                            stats.queuedLights,
+                            stats.updatedLights,
+                            stats.renderedTiles,
+                            stats.cpuMilliseconds));
+                    addKeyValue("shadow geometry", TextFormat(
+                            "sector draw/cull %zu/%zu",
+                            stats.sectorBatchesDrawn,
+                            stats.sectorBatchesCulled));
+                    addKeyValue("shadow objects", TextFormat(
+                            "draw/cull %zu/%zu | casters dynamic %zu",
+                            stats.objectCastersDrawn,
+                            stats.objectCastersCulled,
+                            preview.DynamicModelShadowCasterCount()));
+                    addKeyValue("shadow revisions", TextFormat(
+                            "door %llu | static %llu | dynamic %llu",
+                            static_cast<unsigned long long>(stats.doorCasterRevision),
+                            static_cast<unsigned long long>(stats.staticModelCasterRevision),
+                            static_cast<unsigned long long>(stats.dynamicModelCasterRevision)));
+                    addKeyValue("depth pre-pass",
+                            preview.DepthPrepassEnabled() ? "on" : "off");
                 }
                 addKeyValue("doors drawn now", TextFormat(
                         "%zu / %zu, skipped %zu",

@@ -49,6 +49,9 @@ private:
     int dynamicLightDirectionsLoc = -1;
     int dynamicLightInnerConeCosLoc = -1;
     int dynamicLightOuterConeCosLoc = -1;
+    int dynamicLightSpotShadowRightLoc = -1;
+    int dynamicLightSpotShadowProjectionLoc = -1;
+    int hasPointShadowsLoc = -1;
     int dynamicLightShadowSlotsLoc = -1;
     std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrixLocs = [] {
         std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
@@ -58,6 +61,7 @@ private:
     int shadowBiasLoc = -1;
     int shadowStrengthLoc = -1;
     int shadowSoftnessLoc = -1;
+    int shadowAtlasTilesPerRowLoc = -1;
     int shadowMap0Loc = -1;
     int shadowMap1Loc = -1;
     SectorFogShaderLocations fogShaderLocations;

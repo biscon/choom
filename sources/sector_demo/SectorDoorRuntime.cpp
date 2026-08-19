@@ -10,6 +10,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -18,6 +19,78 @@
 #include <raymath.h>
 
 namespace game {
+
+namespace {
+
+uint64_t HashDoorShadowBytes(uint64_t hash, const void* data, size_t size)
+{
+    constexpr uint64_t prime = 1099511628211ull;
+    const auto* bytes = static_cast<const unsigned char*>(data);
+    for (size_t index = 0; index < size; ++index) {
+        hash ^= bytes[index];
+        hash *= prime;
+    }
+    return hash;
+}
+
+uint64_t HashDoorShadowMatrix(uint64_t hash, const Matrix& matrix)
+{
+    const std::array<float, 16> values{
+            matrix.m0, matrix.m1, matrix.m2, matrix.m3,
+            matrix.m4, matrix.m5, matrix.m6, matrix.m7,
+            matrix.m8, matrix.m9, matrix.m10, matrix.m11,
+            matrix.m12, matrix.m13, matrix.m14, matrix.m15};
+    return HashDoorShadowBytes(
+            hash, values.data(), values.size() * sizeof(float));
+}
+
+uint64_t FingerprintDoorShadowCasters(
+        const std::vector<SectorDoorShadowCaster>& proceduralCasters,
+        const std::vector<SectorDoorModelShadowCaster>& modelCasters)
+{
+    uint64_t hash = 1469598103934665603ull;
+    const uint64_t proceduralCount =
+            static_cast<uint64_t>(proceduralCasters.size());
+    const uint64_t modelCount = static_cast<uint64_t>(modelCasters.size());
+    hash = HashDoorShadowBytes(
+            hash, &proceduralCount, sizeof(proceduralCount));
+    for (const SectorDoorShadowCaster& caster : proceduralCasters) {
+        hash = HashDoorShadowBytes(
+                hash, &caster.placedObjectId, sizeof(caster.placedObjectId));
+        hash = HashDoorShadowMatrix(hash, caster.model);
+        hash = HashDoorShadowBytes(hash, &caster.width, sizeof(caster.width));
+        hash = HashDoorShadowBytes(hash, &caster.height, sizeof(caster.height));
+        hash = HashDoorShadowBytes(
+                hash, &caster.thickness, sizeof(caster.thickness));
+    }
+    hash = HashDoorShadowBytes(hash, &modelCount, sizeof(modelCount));
+    for (const SectorDoorModelShadowCaster& caster : modelCasters) {
+        hash = HashDoorShadowBytes(
+                hash, &caster.placedObjectId, sizeof(caster.placedObjectId));
+        hash = HashDoorShadowBytes(
+                hash, &caster.model.index, sizeof(caster.model.index));
+        hash = HashDoorShadowBytes(
+                hash, &caster.model.generation, sizeof(caster.model.generation));
+        hash = HashDoorShadowMatrix(hash, caster.transform);
+    }
+    return hash;
+}
+
+} // namespace
+
+void RefreshSectorDoorShadowCasterRevision(
+        SectorDoorShadowCasterRevisionState& state,
+        const std::vector<SectorDoorShadowCaster>& proceduralCasters,
+        const std::vector<SectorDoorModelShadowCaster>& modelCasters)
+{
+    const uint64_t fingerprint =
+            FingerprintDoorShadowCasters(proceduralCasters, modelCasters);
+    if (!state.fingerprintInitialized || state.fingerprint != fingerprint) {
+        state.fingerprint = fingerprint;
+        ++state.revision;
+        state.fingerprintInitialized = true;
+    }
+}
 
 const char* SectorDoorFaceName(SectorDoorFace face)
 {

@@ -280,9 +280,18 @@ if(BUILD_TESTING)
             DUST_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLightDustRenderer.cpp"
             MUZZLE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/game/FpsViewmodelEffectsRenderer.cpp"
             DYNAMIC_MODEL_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicModelShadowRenderer.cpp"
+            DYNAMIC_LIGHTING_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicLightingRenderer.cpp"
             MAIN_RENDER_GRAPH_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/Main.cpp")
     target_link_libraries(pbr_lighting_policy_tests PRIVATE raylib)
     add_test(NAME pbr_lighting_policy COMMAND pbr_lighting_policy_tests)
+
+    add_executable(sector_atmosphere_culling_tests
+            tests/SectorAtmosphereCullingTests.cpp
+            sources/sector_demo/renderer/SectorAtmosphereCulling.cpp
+    )
+    target_include_directories(sector_atmosphere_culling_tests PRIVATE sources)
+    target_link_libraries(sector_atmosphere_culling_tests PRIVATE raylib)
+    add_test(NAME sector_atmosphere_culling COMMAND sector_atmosphere_culling_tests)
 
     add_executable(sector_utility_tests
             tests/SectorUtilityTests.cpp
@@ -324,6 +333,7 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorHelpers.cpp
             sources/sector_editor/SectorEditorMaterialActions.cpp
             sources/sector_editor/SectorEditorTextureActions.cpp
+            sources/sector_editor/selection/SectorEditorManipulationService.cpp
             sources/sector_editor/selection/SectorEditorSelectionService.cpp
             sources/sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.cpp
             sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
@@ -340,6 +350,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/texture_picker/SectorEditorTexturePickerService.cpp
             sources/sector_editor/SectorEditorTopologyActions.cpp
             sources/sector_editor/SectorEditorTopologyRenderCache.cpp
+            sources/engine/input/Input.cpp
             sources/engine/assets/AssetManager.cpp
             sources/engine/assets/AudioAssets.cpp
             sources/engine/audio/AudioSystem.cpp
@@ -554,6 +565,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorStaticModelShadow.cpp
+            sources/sector_demo/SectorDynamicModelShadowCasters.cpp
             sources/sector_demo/SectorBillboardRuntime.cpp
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorFpsController.cpp

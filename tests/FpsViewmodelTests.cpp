@@ -768,6 +768,10 @@ void SettingsResolutionAndPersistence()
     settings.graphics.volumetricQuality =
             game::SectorVolumetricQuality::Low;
     settings.graphics.shadowQuality = game::FpsShadowQuality::Medium;
+    settings.graphics.maxDynamicLights = 17;
+    settings.graphics.maxShadowLightUpdatesPerFrame = 7;
+    settings.graphics.dynamicLightFadeInSeconds = 0.35f;
+    settings.graphics.depthPrepass = false;
     settings.graphics.performanceOverlay = true;
     settings.graphics.vsync = false;
     settings.graphics.horizontalFovDegrees = 96;
@@ -804,6 +808,10 @@ void SettingsResolutionAndPersistence()
     assert(loaded.graphics.volumetricQuality
             == game::SectorVolumetricQuality::Low);
     assert(loaded.graphics.shadowQuality == game::FpsShadowQuality::Medium);
+    assert(loaded.graphics.maxDynamicLights == 17);
+    assert(loaded.graphics.maxShadowLightUpdatesPerFrame == 7);
+    assert(Near(loaded.graphics.dynamicLightFadeInSeconds, 0.35f));
+    assert(!loaded.graphics.depthPrepass);
     assert(loaded.graphics.performanceOverlay);
     assert(!loaded.graphics.vsync);
     assert(loaded.graphics.horizontalFovDegrees == 96);
@@ -963,6 +971,22 @@ void SettingsResolutionAndPersistence()
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"shadowQuality":false}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"maxDynamicLights":33}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"maxDynamicLights":2.5}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"maxShadowLightUpdatesPerFrame":33}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"maxShadowLightUpdatesPerFrame":2.5}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"dynamicLightFadeInSeconds":-0.01}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"dynamicLightFadeInSeconds":2.01}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"dynamicLightFadeInSeconds":"slow"}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
+            R"({"version":1,"graphics":{"depthPrepass":"yes"}})",loaded,&error));
+    assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"vsync":"yes"}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"horizontalFovDegrees":69}})",loaded,&error));
@@ -977,6 +1001,13 @@ void SettingsResolutionAndPersistence()
             loaded,
             &error));
     assert(loaded.consoleEnabled);
+    assert(loaded.graphics.maxDynamicLights == game::DefaultFpsDynamicLights);
+    assert(loaded.graphics.maxShadowLightUpdatesPerFrame
+            == game::DefaultFpsShadowLightUpdatesPerFrame);
+    assert(Near(
+            loaded.graphics.dynamicLightFadeInSeconds,
+            game::DefaultFpsDynamicLightFadeInSeconds));
+    assert(!loaded.graphics.depthPrepass);
     assert(loaded.footsteps.defaultSet == "Tile_Mono");
     assert(Near(loaded.footsteps.volume, 0.65f));
     assert(Near(loaded.footsteps.landingImpactVolumeMultiplier, 1.35f));
@@ -1004,6 +1035,22 @@ void SettingsResolutionAndPersistence()
     normalized.horizontalFovDegrees = 200;
     assert(game::NormalizeFpsGraphicsSettings(normalized).horizontalFovDegrees
             == game::MaxFpsHorizontalFovDegrees);
+    normalized.dynamicLightFadeInSeconds =
+            std::numeric_limits<float>::quiet_NaN();
+    assert(Near(
+            game::NormalizeFpsGraphicsSettings(normalized)
+                    .dynamicLightFadeInSeconds,
+            game::DefaultFpsDynamicLightFadeInSeconds));
+    normalized.dynamicLightFadeInSeconds = -1.0f;
+    assert(Near(
+            game::NormalizeFpsGraphicsSettings(normalized)
+                    .dynamicLightFadeInSeconds,
+            game::MinFpsDynamicLightFadeInSeconds));
+    normalized.dynamicLightFadeInSeconds = 3.0f;
+    assert(Near(
+            game::NormalizeFpsGraphicsSettings(normalized)
+                    .dynamicLightFadeInSeconds,
+            game::MaxFpsDynamicLightFadeInSeconds));
 
     const float defaultVerticalFov = game::FpsVerticalFovDegrees(
             game::DefaultFpsHorizontalFovDegrees, 16.0f / 9.0f);

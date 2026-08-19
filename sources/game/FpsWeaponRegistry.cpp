@@ -724,6 +724,22 @@ FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings)
             settings.horizontalFovDegrees,
             MinFpsHorizontalFovDegrees,
             MaxFpsHorizontalFovDegrees);
+    settings.maxDynamicLights = std::clamp(
+            settings.maxDynamicLights,
+            MinFpsDynamicLights,
+            MaxFpsDynamicLights);
+    settings.maxShadowLightUpdatesPerFrame = std::clamp(
+            settings.maxShadowLightUpdatesPerFrame,
+            MinFpsShadowLightUpdatesPerFrame,
+            MaxFpsShadowLightUpdatesPerFrame);
+    if (!std::isfinite(settings.dynamicLightFadeInSeconds)) {
+        settings.dynamicLightFadeInSeconds =
+                DefaultFpsDynamicLightFadeInSeconds;
+    }
+    settings.dynamicLightFadeInSeconds = std::clamp(
+            settings.dynamicLightFadeInSeconds,
+            MinFpsDynamicLightFadeInSeconds,
+            MaxFpsDynamicLightFadeInSeconds);
     return settings;
 }
 
@@ -911,6 +927,21 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
                 }
                 parsed.graphics.fxaa = fxaa->get<bool>();
             }
+            const auto dynamicLightFadeIn =
+                    graphics->find("dynamicLightFadeInSeconds");
+            if (dynamicLightFadeIn != graphics->end()) {
+                if (!dynamicLightFadeIn->is_number()) {
+                    Fail("application settings.graphics.dynamicLightFadeInSeconds must be a number");
+                }
+                const double value = dynamicLightFadeIn->get<double>();
+                if (!std::isfinite(value)
+                        || value < MinFpsDynamicLightFadeInSeconds
+                        || value > MaxFpsDynamicLightFadeInSeconds) {
+                    Fail("application settings.graphics.dynamicLightFadeInSeconds must be between 0.0 and 2.0");
+                }
+                parsed.graphics.dynamicLightFadeInSeconds =
+                        static_cast<float>(value);
+            }
             const auto performanceOverlay = graphics->find("performanceOverlay");
             if (performanceOverlay != graphics->end()) {
                 if (!performanceOverlay->is_boolean()) {
@@ -962,6 +993,37 @@ bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& 
             if (shadows != graphics->end()) {
                 parsed.graphics.shadowQuality = static_cast<FpsShadowQuality>(
                         parseQuality(*shadows, "application settings.graphics.shadowQuality"));
+            }
+            const auto maxDynamicLights = graphics->find("maxDynamicLights");
+            if (maxDynamicLights != graphics->end()) {
+                if (!maxDynamicLights->is_number_integer()) {
+                    Fail("application settings.graphics.maxDynamicLights must be an integer");
+                }
+                const int value = maxDynamicLights->get<int>();
+                if (value < MinFpsDynamicLights || value > MaxFpsDynamicLights) {
+                    Fail("application settings.graphics.maxDynamicLights must be between 0 and 32");
+                }
+                parsed.graphics.maxDynamicLights = value;
+            }
+            const auto maxShadowLightUpdates =
+                    graphics->find("maxShadowLightUpdatesPerFrame");
+            if (maxShadowLightUpdates != graphics->end()) {
+                if (!maxShadowLightUpdates->is_number_integer()) {
+                    Fail("application settings.graphics.maxShadowLightUpdatesPerFrame must be an integer");
+                }
+                const int value = maxShadowLightUpdates->get<int>();
+                if (value < MinFpsShadowLightUpdatesPerFrame
+                        || value > MaxFpsShadowLightUpdatesPerFrame) {
+                    Fail("application settings.graphics.maxShadowLightUpdatesPerFrame must be between 0 and 32");
+                }
+                parsed.graphics.maxShadowLightUpdatesPerFrame = value;
+            }
+            const auto depthPrepass = graphics->find("depthPrepass");
+            if (depthPrepass != graphics->end()) {
+                if (!depthPrepass->is_boolean()) {
+                    Fail("application settings.graphics.depthPrepass must be a boolean");
+                }
+                parsed.graphics.depthPrepass = depthPrepass->get<bool>();
             }
             parsed.graphics = NormalizeFpsGraphicsSettings(parsed.graphics);
         }
@@ -1390,6 +1452,12 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
             {"volumetricQuality", SectorVolumetricQualityName(
                     graphics.volumetricQuality)},
             {"shadowQuality", FpsShadowQualityName(graphics.shadowQuality)},
+            {"maxDynamicLights", graphics.maxDynamicLights},
+            {"maxShadowLightUpdatesPerFrame",
+                    graphics.maxShadowLightUpdatesPerFrame},
+            {"dynamicLightFadeInSeconds",
+                    graphics.dynamicLightFadeInSeconds},
+            {"depthPrepass", graphics.depthPrepass},
             {"performanceOverlay", graphics.performanceOverlay},
             {"vsync", graphics.vsync},
             {"horizontalFovDegrees", graphics.horizontalFovDegrees}};

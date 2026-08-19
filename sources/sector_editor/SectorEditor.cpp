@@ -596,6 +596,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 ApplyGameplayPoseToPreview();
             }
             UpdateFpsViewmodelTransformsAndLight();
+            UpdatePreview3DSelection(input);
             const Camera3D& camera = sceneRuntime.Renderer().RenderCamera();
             context.audio.SetListener(engine::AudioListener{
                     camera.position,
@@ -2104,7 +2105,6 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
     );
 
     if (controlModeToggled) {
-        UpdatePreview3DSelection(input);
         return;
     }
 
@@ -2120,12 +2120,6 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
             sceneRuntime.Renderer().ApplyRendererPose(
                     previewState.controller.freeflyController.pose,
                     false);
-            sceneRuntime.Renderer().UpdateVisibilityDebug(
-                    0,
-                    0.0f,
-                    false,
-                    &sceneRuntime.RuntimeObjects().dynamicPortalBlockers,
-                    &engineContext->world);
         } else {
             const float previousVisualEyeY = sceneRuntime.Renderer().RendererPose().position.y;
             input.ForEachEvent(
@@ -2220,20 +2214,11 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
             }
             ApplyGameplayPoseToPreview();
-            const SectorFpsControllerConfig normalizedVisibilityConfig =
-                    NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
-            sceneRuntime.Renderer().UpdateVisibilityDebug(
-                    previewState.controller.fpsControllerState.currentSectorId,
-                    ClampRuntimeVisibilitySeedRadiusWorld(normalizedVisibilityConfig.playerRadius),
-                    true,
-                    &sceneRuntime.RuntimeObjects().dynamicPortalBlockers,
-                    &engineContext->world);
             previewState.controller.freeflyController.pose =
                     ActiveSectorEditorPreviewPose(
                             previewState.controller,
                             sceneRuntime.Renderer());
         }
-        UpdatePreview3DSelection(input);
     }
 }
 
@@ -2564,6 +2549,12 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
             ? &levelMarkerEditingService.value()
             : nullptr;
     context.triggerEditing = triggerEditingService ? &triggerEditingService.value() : nullptr;
+    context.screenToMap = [this](Vector2 screenPoint) {
+        return ScreenToMap(screenPoint);
+    };
+    context.snapMapPoint = [this](Vector2 mapPoint) {
+        return SnapMapPoint(mapPoint);
+    };
     context.startAuthoringVertexDrag = [](void* userData, int vertexId, SectorTopologyCoordPoint point) {
         static_cast<SectorEditor*>(userData)->StartAuthoringVertexDrag(vertexId, point);
     };
@@ -3435,12 +3426,17 @@ void SectorEditor::RenderPreview3DViewmodel(
             sceneRuntime.RuntimeObjects(),
             preferredSectorId);
 }
-void SectorEditor::ApplyPreview3DWorldAtmosphere(engine::RenderTarget& sceneTarget)
+void SectorEditor::ApplyPreview3DWorldAtmosphere(
+        engine::RenderTarget& sceneTarget,
+        bool collectGpuDiagnostics)
 {
     if (state.mode != SectorEditorMode::Preview3D) {
         return;
     }
-    sceneRuntime.ApplyWorldAtmosphere(sceneTarget, TopologyMap());
+    sceneRuntime.ApplyWorldAtmosphere(
+            sceneTarget,
+            TopologyMap(),
+            collectGpuDiagnostics);
 }
 
 void SectorEditor::ApplyPreview3DHdrBloom(engine::RenderTarget& sceneTarget)
@@ -5470,7 +5466,13 @@ void SectorEditor::DrawStatusPanel(
     const std::string shortMapPath = Lifecycle().hasCurrentLevelPath
             ? Lifecycle().currentLevelPath
             : std::string{"<untitled>"};
-    const char* lightmapText = SectorLightmapStatusText(GetSectorLightmapStatus(TopologyMap()));
+    if (state.lightmapSourceHashRevision != state.topologyRenderRevision) {
+        state.lightmapSourceHash = ComputeSectorLightmapSourceHash(TopologyMap());
+        state.lightmapSourceHashRevision = state.topologyRenderRevision;
+    }
+    const char* lightmapText = SectorLightmapStatusText(GetSectorLightmapStatus(
+            TopologyMap(),
+            state.lightmapSourceHash));
     std::string status = statusText.empty() ? "Ready" : statusText;
     if (!state.topologyRenderWarning.empty()) {
         status += " | ";

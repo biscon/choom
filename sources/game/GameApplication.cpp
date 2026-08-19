@@ -21,18 +21,6 @@ int ShadowMapResolution(FpsShadowQuality quality)
     return quality == FpsShadowQuality::Low ? 512 : 1024;
 }
 
-float ProjectedShadowInterval(FpsShadowQuality quality)
-{
-    if (quality == FpsShadowQuality::Low) return 1.0f / 15.0f;
-    if (quality == FpsShadowQuality::Medium) return 1.0f / 30.0f;
-    return 0.0f;
-}
-
-int ProjectedShadowResolution(FpsShadowQuality quality)
-{
-    return quality == FpsShadowQuality::Low ? 128 : 256;
-}
-
 } // namespace
 
 bool GameApplication::Init(
@@ -402,16 +390,20 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
                 applicationSettings.graphics.volumetricQuality,
                 applicationSettings.graphics.shadowQuality != FpsShadowQuality::Off,
                 ShadowMapResolution(applicationSettings.graphics.shadowQuality),
-                ProjectedShadowInterval(applicationSettings.graphics.shadowQuality),
-                ProjectedShadowResolution(applicationSettings.graphics.shadowQuality));
+                applicationSettings.graphics.maxDynamicLights,
+                applicationSettings.graphics.maxShadowLightUpdatesPerFrame,
+                applicationSettings.graphics.depthPrepass,
+                applicationSettings.graphics.dynamicLightFadeInSeconds);
         gameScene.RenderShadowMaps(context);
     } else {
         editor.SetPreviewGraphicsQuality(
                 applicationSettings.graphics.volumetricQuality,
                 applicationSettings.graphics.shadowQuality != FpsShadowQuality::Off,
                 ShadowMapResolution(applicationSettings.graphics.shadowQuality),
-                ProjectedShadowInterval(applicationSettings.graphics.shadowQuality),
-                ProjectedShadowResolution(applicationSettings.graphics.shadowQuality));
+                applicationSettings.graphics.maxDynamicLights,
+                applicationSettings.graphics.maxShadowLightUpdatesPerFrame,
+                applicationSettings.graphics.depthPrepass,
+                applicationSettings.graphics.dynamicLightFadeInSeconds);
         editor.RenderPreview3DShadowMaps(context.assets);
     }
 }
@@ -444,13 +436,27 @@ void GameApplication::Render3DOverlays()
 }
 
 void GameApplication::Apply3DWorldAtmosphere(
-        engine::RenderTarget& sceneTarget)
+        engine::RenderTarget& sceneTarget,
+        bool collectGpuDiagnostics)
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
-        gameScene.ApplyWorldAtmosphere(sceneTarget, gameSession.Map());
+        gameScene.ApplyWorldAtmosphere(
+                sceneTarget,
+                gameSession.Map(),
+                collectGpuDiagnostics);
     } else {
-        editor.ApplyPreview3DWorldAtmosphere(sceneTarget);
+        editor.ApplyPreview3DWorldAtmosphere(
+                sceneTarget,
+                collectGpuDiagnostics);
     }
+}
+
+const SectorAtmosphereDiagnostics& GameApplication::AtmosphereDiagnostics() const
+{
+    if (BackgroundScreen() == ApplicationScreen::Game) {
+        return gameScene.Renderer().AtmosphereDiagnostics();
+    }
+    return editor.PreviewAtmosphereDiagnostics();
 }
 
 void GameApplication::Apply3DHdrBloom(engine::RenderTarget& sceneTarget)

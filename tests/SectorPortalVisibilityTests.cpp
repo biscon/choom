@@ -426,6 +426,45 @@ void TestConnectedAndDisconnectedTraversal()
           "disconnected sectors are not visible");
 }
 
+void TestConnectedTraversalFromMultipleSeeds()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    graph.sectors = {
+            game::RuntimeSectorNode{10, {0}},
+            game::RuntimeSectorNode{20, {1}},
+            game::RuntimeSectorNode{30, {}}};
+    graph.portals = {
+            game::RuntimePortalEdge{2, 2, 10, 20, {}, {}, 0.0f, 2.0f, true},
+            game::RuntimePortalEdge{2, 8, 20, 10, {}, {}, 0.0f, 2.0f, true}};
+
+    const game::RuntimePortalVisibilityResult result =
+            game::TraverseRuntimeSectorVisibilityFromSeeds(
+                    graph, {30, 10, 30, 999}, 30);
+    Check(result.validStartSector && !result.fallbackDrawAll,
+          "multi-seed connected traversal accepts valid seeds");
+    Check(result.startSectorId == 30
+                  && result.startSectorIds.size() == 2
+                  && result.startSectorIds[0] == 10
+                  && result.startSectorIds[1] == 30,
+          "multi-seed connected traversal keeps a preferred seed and sorted metadata");
+    Check(result.visibleSectorIds.size() == 3
+                  && Contains(result.visibleSectorIds, 10)
+                  && Contains(result.visibleSectorIds, 20)
+                  && Contains(result.visibleSectorIds, 30),
+          "multi-seed connected traversal unions disconnected seed components");
+
+    const std::vector<game::RuntimePortalDynamicBlocker> closed = {
+            game::RuntimePortalDynamicBlocker{2, 2, 10, 20, true}};
+    const game::RuntimePortalVisibilityResult blocked =
+            game::TraverseRuntimeSectorVisibilityFromSeeds(
+                    graph, {10, 30}, 10, &closed);
+    Check(blocked.visibleSectorIds.size() == 2
+                  && Contains(blocked.visibleSectorIds, 10)
+                  && Contains(blocked.visibleSectorIds, 30)
+                  && !Contains(blocked.visibleSectorIds, 20),
+          "multi-seed connected traversal respects closed dynamic portals");
+}
+
 void TestDynamicPortalBlockerTraversal()
 {
     game::RuntimeSectorVisibilityGraph graph;
@@ -701,6 +740,44 @@ void TestViewYawFacingAwayExcludesNeighbor()
           "preview yaw pi faces away from positive-X portal and excludes neighbor");
 }
 
+void TestConnectedLightingReachabilityIsYawIndependent()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(MakeAdjacent(), graph, &error),
+          "yaw-independent lighting graph builds");
+
+    const Vector2 camera = game::SectorCoordToWorldPosition2(32, 32);
+    const game::RuntimePortalVisibilityResult facing =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    nullptr,
+                    camera,
+                    ForwardFromPreviewYaw(0.0f),
+                    Degrees(70.0f),
+                    10);
+    const game::RuntimePortalVisibilityResult away =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    nullptr,
+                    camera,
+                    ForwardFromPreviewYaw(Pi),
+                    Degrees(70.0f),
+                    10);
+    Check(facing.visibleSectorIds != away.visibleSectorIds,
+          "camera portal visibility changes with yaw for the regression setup");
+
+    const game::RuntimePortalVisibilityResult facingLighting =
+            game::TraverseRuntimeSectorVisibilityFromSeeds(
+                    graph, facing.startSectorIds, facing.startSectorId);
+    const game::RuntimePortalVisibilityResult awayLighting =
+            game::TraverseRuntimeSectorVisibilityFromSeeds(
+                    graph, away.startSectorIds, away.startSectorId);
+    Check(facingLighting.visibleSectorIds == awayLighting.visibleSectorIds
+                  && Contains(facingLighting.visibleSectorIds, 20),
+          "connected lighting reachability remains stable across camera yaw");
+}
+
 void TestViewSidePortalOutsideFovExcluded()
 {
     game::RuntimeSectorVisibilityGraph graph;
@@ -888,7 +965,7 @@ void TestViewCycleTerminates()
           "view cycle visible sectors are deterministic");
 }
 
-void TestViewTraversalCapFallbackDrawsAll()
+void TestViewTraversalCapFallsBackToConnectedComponent()
 {
     game::RuntimeSectorVisibilityGraph graph;
     std::string error;
@@ -904,13 +981,15 @@ void TestViewTraversalCapFallbackDrawsAll()
                     Degrees(100.0f),
                     10,
                     1);
-    Check(result.fallbackDrawAll, "cap fallback requests draw-all");
-    Check(result.status == "portal traversal cap hit", "cap fallback reports exact status");
+    Check(!result.fallbackDrawAll,
+          "valid cap fallback remains limited to the connected component");
+    Check(result.status == "portal traversal cap hit; fallback connected component",
+          "cap fallback reports connected-component degradation");
     Check(result.visibleSectorIds.size() == 3
                   && Contains(result.visibleSectorIds, 10)
                   && Contains(result.visibleSectorIds, 20)
                   && Contains(result.visibleSectorIds, 30),
-          "cap fallback exposes all sectors as visible");
+          "cap fallback conservatively exposes the complete connected component");
 }
 
 void TestViewInvalidStartFallbackDrawsAll()
@@ -1137,16 +1216,101 @@ void TestViewMultiStartFallbackPropagates()
                     {20, 10},
                     10,
                     1);
-    Check(result.fallbackDrawAll, "multi-start cap fallback requests draw-all");
+    Check(!result.fallbackDrawAll,
+          "multi-start cap fallback remains a valid connected-component result");
     Check(result.visibleSectorIds.size() == 3
                   && Contains(result.visibleSectorIds, 10)
                   && Contains(result.visibleSectorIds, 20)
                   && Contains(result.visibleSectorIds, 30),
-          "multi-start fallback exposes all sectors as visible");
+          "multi-start fallback exposes all sectors connected to its seeds");
     Check(result.startSectorIds.size() == 2
                   && result.startSectorIds[0] == 10
                   && result.startSectorIds[1] == 20,
           "multi-start fallback keeps sorted seed metadata");
+}
+
+void TestViewFootprintSeedsRespectDynamicPortalBlockers()
+{
+    const SectorTopologyMap map = MakeAdjacent();
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(map, graph, &error),
+          "dynamic-blocker footprint seed graph builds");
+
+    game::SectorCollisionWorld world;
+    Check(world.BuildFromTopology(map, &error),
+          "dynamic-blocker footprint collision world builds");
+
+    const std::vector<game::RuntimePortalDynamicBlocker> closed = {
+            game::RuntimePortalDynamicBlocker{2, 2, 10, 20, true},
+            game::RuntimePortalDynamicBlocker{2, 8, 20, 10, true}};
+    const Vector2 nearDoor{0.45f, 0.25f};
+    const game::RuntimePortalVisibilityResult blocked =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    &world,
+                    nearDoor,
+                    ForwardFromPreviewYaw(0.0f),
+                    Degrees(90.0f),
+                    10,
+                    0,
+                    0.25f,
+                    0.75f,
+                    true,
+                    &closed);
+    Check(blocked.startSectorIds.size() == 1
+                  && blocked.startSectorIds[0] == 10,
+          "closed dynamic portal rejects footprint seeds from its far side");
+    Check(!Contains(blocked.visibleSectorIds, 20),
+          "closed dynamic portal cannot be bypassed by a footprint seed");
+
+    const game::RuntimePortalVisibilityResult open =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    &world,
+                    nearDoor,
+                    ForwardFromPreviewYaw(0.0f),
+                    Degrees(90.0f),
+                    10,
+                    0,
+                    0.25f,
+                    0.75f,
+                    true);
+    Check(open.startSectorIds.size() == 2
+                  && Contains(open.startSectorIds, 10)
+                  && Contains(open.startSectorIds, 20),
+          "open portal still admits footprint seeds from both sides");
+}
+
+void TestViewCapFallbackRespectsDynamicBlockers()
+{
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(
+                    MakeClippedChain(true), graph, &error),
+          "blocker-aware cap fallback graph builds");
+    const std::vector<game::RuntimePortalDynamicBlocker> closed = {
+            game::RuntimePortalDynamicBlocker{9, 9, 20, 30, true},
+            game::RuntimePortalDynamicBlocker{9, 19, 30, 20, true}};
+
+    const game::RuntimePortalVisibilityResult result =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    nullptr,
+                    game::SectorCoordToWorldPosition2(32, 32),
+                    ForwardFromPreviewYaw(0.0f),
+                    Degrees(90.0f),
+                    10,
+                    1,
+                    0.0f,
+                    0.0f,
+                    false,
+                    &closed);
+    Check(!result.fallbackDrawAll
+                  && Contains(result.visibleSectorIds, 10)
+                  && Contains(result.visibleSectorIds, 20)
+                  && !Contains(result.visibleSectorIds, 30),
+          "cap fallback stays inside the dynamically unblocked component");
 }
 
 void TestViewCenterSeedDiffersFromPreferredSeed()
@@ -1372,6 +1536,7 @@ int main()
     TestOneSidedWallCreatesNoPortal();
     TestClosedPortalDoesNotTraverse();
     TestConnectedAndDisconnectedTraversal();
+    TestConnectedTraversalFromMultipleSeeds();
     TestDynamicPortalBlockerTraversal();
     TestDynamicPortalBoundaryPromotionThroughAlternateRoute();
     TestDynamicPortalBlockerMismatchAndUnblockedEntries();
@@ -1381,6 +1546,7 @@ int main()
     TestSteepPitchIncludesSidePortal();
     TestViewYawFacingPortalIncludesNeighbor();
     TestViewYawFacingAwayExcludesNeighbor();
+    TestConnectedLightingReachabilityIsYawIndependent();
     TestViewSidePortalOutsideFovExcluded();
     TestViewPortalBarelyIntersectsFovEdge();
     TestViewPortalSegmentCrossesFovWedge();
@@ -1388,7 +1554,7 @@ int main()
     TestViewRecursivePortalClipping();
     TestViewRecursiveSliverRemainsVisible();
     TestViewCycleTerminates();
-    TestViewTraversalCapFallbackDrawsAll();
+    TestViewTraversalCapFallsBackToConnectedComponent();
     TestViewInvalidStartFallbackDrawsAll();
     TestViewClosedPortalDoesNotTraverse();
     TestViewDynamicPortalBlockerDoesNotTraverse();
@@ -1396,6 +1562,8 @@ int main()
     TestViewOneSidedVoidBoundaryDoesNotTraverse();
     TestViewMultiStartUnionAndSortedMetadata();
     TestViewMultiStartFallbackPropagates();
+    TestViewFootprintSeedsRespectDynamicPortalBlockers();
+    TestViewCapFallbackRespectsDynamicBlockers();
     TestViewCenterSeedDiffersFromPreferredSeed();
     TestViewFootprintSamplingAndRadiusCap();
     TestViewVerticalValidationIsTolerant();

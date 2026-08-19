@@ -11,20 +11,42 @@
 
 namespace game {
 
-constexpr std::size_t MaxDynamicLights = 8;
-constexpr std::size_t MaxDynamicSpotLightShadowCasters = 2;
+constexpr std::size_t MaxDynamicLights = 32;
+constexpr float DynamicLightDefaultFadeInSeconds = 0.25f;
+constexpr float DynamicLightMaximumFadeInSeconds = 2.0f;
+// The atlas budget is independent from the forward-light budget. A spot uses
+// one slot and a dual-paraboloid point light uses two.
+constexpr std::size_t MaxDynamicSpotLightShadowCasters = 64;
 constexpr int DynamicSpotLightShadowMapResolution = 1024;
+constexpr int DynamicShadowAtlasResolution = 4096;
 
 class SectorCollisionWorld;
 struct SectorReceiverBounds;
 struct SectorTopologyDynamicPointLight;
 struct SectorTopologyDynamicSpotLight;
 struct SectorTopologyMap;
+struct SectorPreviewDynamicPointLightUniform;
 
 enum class SectorPreviewDynamicLightKind {
     Point = 0,
     Spot = 1
 };
+
+struct SectorPreviewDynamicLightKey {
+    SectorPreviewDynamicLightKind kind = SectorPreviewDynamicLightKind::Point;
+    int lightId = 0;
+};
+
+bool operator==(
+        const SectorPreviewDynamicLightKey& left,
+        const SectorPreviewDynamicLightKey& right);
+
+bool operator!=(
+        const SectorPreviewDynamicLightKey& left,
+        const SectorPreviewDynamicLightKey& right);
+
+SectorPreviewDynamicLightKey MakeSectorPreviewDynamicLightKey(
+        const SectorPreviewDynamicPointLightUniform& light);
 
 struct SectorPreviewDynamicPointLightUniform {
     int lightId = 0;
@@ -35,8 +57,11 @@ struct SectorPreviewDynamicPointLightUniform {
     float radius = 0.0f;
     float innerConeCos = -1.0f;
     float outerConeCos = -1.0f;
-    // Authored/base intensity used for selection. Upload applies flicker to a local effective value.
+    // Authored/base intensity used for selection. Upload applies runtime-only
+    // flicker and selection-fade multipliers to a local effective value.
     float intensity = 0.0f;
+    float selectionFadeMultiplier = 1.0f;
+    bool selectionFadeEnabled = true;
     bool flicker = false;
     float flickerSpeed = DynamicLightFlickerDefaultSpeed;
     float flickerAmount = DynamicLightFlickerDefaultAmount;
@@ -62,12 +87,17 @@ struct SectorPreviewDynamicSpotLightShadowCaster {
     float shadowBias = DynamicSpotLightDefaultShadowBias;
     float shadowStrength = DynamicSpotLightDefaultShadowStrength;
     float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
+    int shadowSlotCount = 1;
 };
 
 struct SectorPreviewDynamicSpotLightShadowMatrix {
     int lightId = 0;
     int dynamicLightIndex = -1;
     int shadowSlot = -1;
+    SectorPreviewDynamicLightKind kind = SectorPreviewDynamicLightKind::Spot;
+    int pointHemisphere = 0;
+    Vector3 lightPosition = {};
+    float lightRadius = 0.0f;
     Matrix view = {};
     Matrix projection = {};
     Matrix lightViewProjection = {};
@@ -79,7 +109,63 @@ struct SectorPreviewDynamicSpotLightShadowUniforms {
     std::array<float, MaxDynamicSpotLightShadowCasters> shadowBias{};
     std::array<float, MaxDynamicSpotLightShadowCasters> shadowStrength{};
     std::array<float, MaxDynamicSpotLightShadowCasters> shadowSoftness{};
+    int shadowAtlasTilesPerRow = 4;
 };
+
+struct SectorDynamicShadowUpdateRequest {
+    std::size_t casterIndex = 0;
+    bool invalid = true;
+    uint64_t dirtySerial = 0;
+    int shadowSlotCount = 1;
+};
+
+struct SectorDynamicShadowSlotOwner {
+    SectorPreviewDynamicLightKey lightKey{};
+    int spanStart = -1;
+    int spanCount = 0;
+    bool occupied = false;
+    bool claimed = false;
+};
+
+struct SectorDynamicLightFadeEntry {
+    SectorPreviewDynamicLightKey lightKey{};
+    float startSeconds = 0.0f;
+    bool occupied = false;
+    bool seen = false;
+    bool started = false;
+    bool complete = false;
+};
+
+struct SectorDynamicLightFadeTracker {
+    std::array<SectorDynamicLightFadeEntry, MaxDynamicLights> entries{};
+    bool initialized = false;
+};
+
+void ResetSectorDynamicLightFadeTracker(
+        SectorDynamicLightFadeTracker& tracker);
+
+void SynchronizeSectorDynamicLightFadeTracker(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedLights,
+        SectorDynamicLightFadeTracker& tracker);
+
+float EvaluateSectorDynamicLightFadeMultiplier(
+        SectorDynamicLightFadeTracker& tracker,
+        SectorPreviewDynamicLightKey lightKey,
+        float runtimeSeconds,
+        float fadeInSeconds,
+        bool ready);
+
+void BuildSectorDynamicSpotShadowProjectionUpload(
+        const SectorPreviewDynamicPointLightUniform& light,
+        Vector3& outRight,
+        Vector2& outProjection);
+
+void SortSectorDynamicShadowUpdateRequests(
+        std::vector<SectorDynamicShadowUpdateRequest>& requests);
+
+std::size_t SectorDynamicShadowUpdateCount(
+        std::size_t pendingCount,
+        std::size_t maximumUpdatesPerFrame);
 
 bool MakeSectorPreviewDynamicPointLightUniform(
         const SectorTopologyDynamicPointLight& light,
@@ -116,8 +202,8 @@ void SelectRankedSectorPreviewDynamicPointLights(
         const std::vector<SectorReceiverBounds>& receiverBounds,
         std::size_t maxLights,
         std::vector<SectorPreviewDynamicPointLightUniform>& outSelectedLights,
-        std::vector<int>* outSelectedLightIds = nullptr,
-        const std::vector<int>* previousSelectedLightIds = nullptr);
+        std::vector<SectorPreviewDynamicLightKey>* outSelectedLightKeys = nullptr,
+        const std::vector<SectorPreviewDynamicLightKey>* previousSelectedLightKeys = nullptr);
 
 void SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
         const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
@@ -125,6 +211,13 @@ void SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
         const std::vector<SectorReceiverBounds>& receiverBounds,
         std::size_t maxShadowCasters,
         std::vector<SectorPreviewDynamicSpotLightShadowCaster>& outShadowCasters);
+
+void AssignPersistentSectorDynamicShadowSlots(
+        const std::vector<SectorPreviewDynamicPointLightUniform>& selectedDynamicLights,
+        std::size_t shadowSlotBudget,
+        std::vector<SectorPreviewDynamicSpotLightShadowCaster>& shadowCasters,
+        std::array<SectorDynamicShadowSlotOwner,
+                MaxDynamicSpotLightShadowCasters>& slotOwners);
 
 bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
         const SectorPreviewDynamicPointLightUniform& light,

@@ -72,6 +72,8 @@ struct SectorEditorState {
     std::string topologyRenderWarning;
     uint64_t topologyRenderRevision = 1;
     SectorEditorTopologyRenderCache topologyRenderCache;
+    uint64_t lightmapSourceHashRevision = 0;
+    std::string lightmapSourceHash;
 
     SectorEditorTool currentTool = SectorEditorTool::Select;
     SectorEditorMode mode = SectorEditorMode::Edit2D;

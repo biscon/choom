@@ -39,6 +39,7 @@ const char* SectorDoorLightingDebugModeName(SectorDoorLightingDebugMode mode);
 struct SectorRuntimeDoorLightingContext {
     const SectorBakedObjectLightProbeRuntimeData* objectLightProbes = nullptr;
     const SectorTopologyMap* mapForFallback = nullptr;
+    uint64_t revision = 0;
 };
 
 struct SectorDoorRenderStats {
@@ -87,6 +88,9 @@ struct SectorDoorOpaqueShaderLocations {
     int dynamicLightDirections = -1;
     int dynamicLightInnerConeCos = -1;
     int dynamicLightOuterConeCos = -1;
+    int dynamicLightSpotShadowRight = -1;
+    int dynamicLightSpotShadowProjection = -1;
+    int hasPointShadows = -1;
     int dynamicLightShadowSlots = -1;
     std::array<int, MaxDynamicSpotLightShadowCasters> shadowLightMatrices = [] {
         std::array<int, MaxDynamicSpotLightShadowCasters> locs{};
@@ -96,6 +100,7 @@ struct SectorDoorOpaqueShaderLocations {
     int shadowBias = -1;
     int shadowStrength = -1;
     int shadowSoftness = -1;
+    int shadowAtlasTilesPerRow = -1;
     int debugMode = -1;
     int tint = -1;
     SectorFogShaderLocations fog;
@@ -111,6 +116,10 @@ public:
         float thickness = 0.0f;
         SectorDoorFaceUvSet faceUvs;
         std::vector<Vector3> staticLightingValues;
+        Matrix staticLightingModel = {};
+        int staticLightingSectorId = -1;
+        uint64_t staticLightingRevision = 0;
+        bool staticLightingValid = false;
         bool seenThisFrame = false;
     };
 
@@ -159,6 +168,7 @@ private:
     std::unordered_map<int, DoorMeshCacheEntry> doorMeshCache;
     std::vector<SectorDoorShadowCaster> runtimeDoorShadowCasters;
     std::vector<SectorDoorModelShadowCaster> runtimeDoorModelShadowCasters;
+    SectorDoorShadowCasterRevisionState shadowCasterRevisionState;
     Shader opaqueShader = {};
     SectorDoorOpaqueShaderLocations opaqueShaderLocations;
     bool opaqueShaderLoaded = false;
