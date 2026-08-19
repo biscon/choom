@@ -202,6 +202,7 @@ struct SectorLightDustSettings {
 struct SectorLightProxyHaloSettings {
     bool enabled = false;
     float radiusWorld = 0.5f;
+    Vector3 centerOffsetWorld = {};
     float brightness = 0.12f;
     float maxExtinction = 0.03f;
     float edgeSoftness = 0.5f;

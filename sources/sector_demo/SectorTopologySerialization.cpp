@@ -2335,6 +2335,12 @@ Json WriteLightProxySettings(const SectorLightProxySettings& source)
     Json halo = Json::object();
     if (settings.halo.enabled != defaults.halo.enabled) halo["enabled"] = settings.halo.enabled;
     if (settings.halo.radiusWorld != defaults.halo.radiusWorld) halo["radiusWorld"] = settings.halo.radiusWorld;
+    if (settings.halo.centerOffsetWorld.x != defaults.halo.centerOffsetWorld.x
+            || settings.halo.centerOffsetWorld.y != defaults.halo.centerOffsetWorld.y
+            || settings.halo.centerOffsetWorld.z != defaults.halo.centerOffsetWorld.z) {
+        halo["centerOffsetWorld"] = WriteVector3(
+                settings.halo.centerOffsetWorld, "light atmosphere halo center offset");
+    }
     if (settings.halo.brightness != defaults.halo.brightness) halo["brightness"] = settings.halo.brightness;
     if (settings.halo.maxExtinction != defaults.halo.maxExtinction) halo["maxExtinction"] = settings.halo.maxExtinction;
     if (settings.halo.edgeSoftness != defaults.halo.edgeSoftness) halo["edgeSoftness"] = settings.halo.edgeSoftness;
@@ -2978,6 +2984,11 @@ SectorLightProxySettings ReadLightProxySettings(const Json& value, const std::st
         if (!haloIt->is_object()) Fail(context + ".halo must be an object");
         settings.halo.enabled = ReadOptionalBool(*haloIt, "enabled", context + ".halo", settings.halo.enabled);
         settings.halo.radiusWorld = ReadOptionalClampedFloat(*haloIt, "radiusWorld", context + ".halo", settings.halo.radiusWorld, 0.01f, 64.0f);
+        const auto centerOffsetIt = haloIt->find("centerOffsetWorld");
+        if (centerOffsetIt != haloIt->end()) {
+            settings.halo.centerOffsetWorld = ReadVector3(
+                    *centerOffsetIt, context + ".halo.centerOffsetWorld");
+        }
         settings.halo.brightness = ReadOptionalClampedFloat(*haloIt, "brightness", context + ".halo", settings.halo.brightness, 0.0f, 16.0f);
         settings.halo.maxExtinction = ReadOptionalClampedFloat(*haloIt, "maxOpacity", context + ".halo", settings.halo.maxExtinction, 0.0f, 1.0f);
         settings.halo.maxExtinction = ReadOptionalClampedFloat(*haloIt, "maxExtinction", context + ".halo", settings.halo.maxExtinction, 0.0f, 1.0f);

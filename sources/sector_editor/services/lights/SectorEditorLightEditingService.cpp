@@ -55,6 +55,42 @@ float ClampConeDegrees(float value)
     return std::clamp(value, 0.0f, 179.0f);
 }
 
+SectorLightAtmosphereSettings* FindAtmosphere(
+        SectorTopologyMap& map,
+        LightPilotKind kind,
+        int lightId)
+{
+    if (kind == LightPilotKind::StaticPoint) {
+        SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(map, lightId);
+        return light != nullptr ? &light->atmosphere : nullptr;
+    }
+    if (kind == LightPilotKind::StaticSpot) {
+        SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(map, lightId);
+        return light != nullptr ? &light->atmosphere : nullptr;
+    }
+    if (kind == LightPilotKind::DynamicPoint) {
+        SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(map, lightId);
+        return light != nullptr ? &light->atmosphere : nullptr;
+    }
+    if (kind == LightPilotKind::DynamicSpot) {
+        SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(map, lightId);
+        return light != nullptr ? &light->atmosphere : nullptr;
+    }
+    return nullptr;
+}
+
+const char* LightName(LightPilotKind kind)
+{
+    switch (kind) {
+        case LightPilotKind::StaticPoint: return "static light";
+        case LightPilotKind::StaticSpot: return "static spot";
+        case LightPilotKind::DynamicPoint: return "dynamic light";
+        case LightPilotKind::DynamicSpot: return "dynamic spot";
+        case LightPilotKind::None: return "light";
+    }
+    return "light";
+}
+
 void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& uiState)
 {
     uiState.inspectorScroll.offset = Vector2{};
@@ -93,6 +129,9 @@ void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& 
     resetInt(uiState.atmosphere.hazeGreenInput);
     resetInt(uiState.atmosphere.hazeBlueInput);
     resetFloat(uiState.atmosphere.proxyHaloRadiusInput);
+    resetFloat(uiState.atmosphere.proxyHaloOffsetXInput);
+    resetFloat(uiState.atmosphere.proxyHaloOffsetYInput);
+    resetFloat(uiState.atmosphere.proxyHaloOffsetZInput);
     resetFloat(uiState.atmosphere.proxyHaloBrightnessInput);
     resetFloat(uiState.atmosphere.proxyHaloMaxExtinctionInput);
     resetFloat(uiState.atmosphere.proxyHaloSoftnessInput);
@@ -210,6 +249,9 @@ bool SameAtmosphere(
             && left.haze.flowSpeedWorld == right.haze.flowSpeedWorld
             && left.proxy.halo.enabled == right.proxy.halo.enabled
             && left.proxy.halo.radiusWorld == right.proxy.halo.radiusWorld
+            && left.proxy.halo.centerOffsetWorld.x == right.proxy.halo.centerOffsetWorld.x
+            && left.proxy.halo.centerOffsetWorld.y == right.proxy.halo.centerOffsetWorld.y
+            && left.proxy.halo.centerOffsetWorld.z == right.proxy.halo.centerOffsetWorld.z
             && left.proxy.halo.brightness == right.proxy.halo.brightness
             && left.proxy.halo.maxExtinction == right.proxy.halo.maxExtinction
             && left.proxy.halo.edgeSoftness == right.proxy.halo.edgeSoftness
@@ -396,6 +438,11 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::DeleteSelectedL
             result.restoredLightPilot = context_.lightState.lightPilot;
             result.previewPoseRestoreNeeded = true;
             context_.lightState.lightPilot = LightPilotLightState{};
+        }
+        if (context_.lightState.haloPlacement.active
+                && context_.lightState.haloPlacement.kind == pilotKind
+                && context_.lightState.haloPlacement.lightId == lightId) {
+            context_.lightState.haloPlacement = HaloPlacementState{};
         }
         ClearLightSelection(context_.selection, context_.ui);
     }
@@ -747,6 +794,94 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::CancelLightPilo
             light->position = pilot.originalPosition;
             light->target = pilot.originalTarget;
         }
+    }
+    if (message != nullptr && message[0] != '\0') {
+        context_.statusText = message;
+    }
+    return result;
+}
+
+bool SectorEditorLightEditingService::BeginHaloPlacement(
+        LightPilotKind kind,
+        int lightId)
+{
+    SectorLightAtmosphereSettings* atmosphere = FindAtmosphere(context_.map, kind, lightId);
+    if (atmosphere == nullptr || !atmosphere->proxy.halo.enabled) {
+        return false;
+    }
+    context_.lightState.haloPlacement = HaloPlacementState{};
+    context_.lightState.haloPlacement.active = true;
+    context_.lightState.haloPlacement.kind = kind;
+    context_.lightState.haloPlacement.lightId = lightId;
+    context_.lightState.haloPlacement.originalOffsetWorld =
+            atmosphere->proxy.halo.centerOffsetWorld;
+    context_.statusText = TextFormat("Placing %s %d halo", LightName(kind), lightId);
+    return true;
+}
+
+SectorEditorLightMutationResult SectorEditorLightEditingService::PreviewHaloPlacement(
+        Vector3 centerOffsetWorld)
+{
+    const HaloPlacementState placement = context_.lightState.haloPlacement;
+    if (!placement.active) return {};
+    SectorLightAtmosphereSettings* atmosphere = FindAtmosphere(
+            context_.map, placement.kind, placement.lightId);
+    if (atmosphere == nullptr) {
+        return CancelHaloPlacementData("Halo placement cancelled: light missing");
+    }
+    SectorLightProxySettings normalized = atmosphere->proxy;
+    normalized.halo.centerOffsetWorld = centerOffsetWorld;
+    normalized = NormalizeSectorLightProxySettings(normalized);
+    if (!SetVector3(
+                atmosphere->proxy.halo.centerOffsetWorld,
+                normalized.halo.centerOffsetWorld)) {
+        return {};
+    }
+    SectorEditorLightMutationResult result;
+    result.changed = true;
+    result.dynamicLightRendererRefreshNeeded = true;
+    return result;
+}
+
+SectorEditorLightMutationResult SectorEditorLightEditingService::ApplyHaloPlacement()
+{
+    const HaloPlacementState placement = context_.lightState.haloPlacement;
+    if (!placement.active) return {};
+    SectorLightAtmosphereSettings* atmosphere = FindAtmosphere(
+            context_.map, placement.kind, placement.lightId);
+    if (atmosphere == nullptr) {
+        return CancelHaloPlacementData("Halo placement cancelled: light missing");
+    }
+    const bool changed = !SameVector3(
+            atmosphere->proxy.halo.centerOffsetWorld,
+            placement.originalOffsetWorld);
+    context_.lightState.haloPlacement = HaloPlacementState{};
+    SectorEditorLightMutationResult result;
+    result.changed = changed;
+    result.dynamicLightRendererRefreshNeeded = changed;
+    if (changed) {
+        MarkEdited(TextFormat(
+                "Placed %s %d halo", LightName(placement.kind), placement.lightId));
+    } else {
+        context_.statusText = "Halo placement unchanged";
+    }
+    return result;
+}
+
+SectorEditorLightMutationResult SectorEditorLightEditingService::CancelHaloPlacementData(
+        const char* message)
+{
+    const HaloPlacementState placement = context_.lightState.haloPlacement;
+    if (!placement.active) return {};
+    context_.lightState.haloPlacement = HaloPlacementState{};
+    SectorEditorLightMutationResult result;
+    SectorLightAtmosphereSettings* atmosphere = FindAtmosphere(
+            context_.map, placement.kind, placement.lightId);
+    if (atmosphere != nullptr) {
+        result.changed = SetVector3(
+                atmosphere->proxy.halo.centerOffsetWorld,
+                placement.originalOffsetWorld);
+        result.dynamicLightRendererRefreshNeeded = result.changed;
     }
     if (message != nullptr && message[0] != '\0') {
         context_.statusText = message;

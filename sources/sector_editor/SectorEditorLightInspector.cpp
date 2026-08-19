@@ -39,6 +39,7 @@ bool SameLightAtmosphere(
             && a.haze.flowSpeedWorld == b.haze.flowSpeedWorld
             && a.proxy.halo.enabled == b.proxy.halo.enabled
             && a.proxy.halo.radiusWorld == b.proxy.halo.radiusWorld
+            && SameVector3(a.proxy.halo.centerOffsetWorld, b.proxy.halo.centerOffsetWorld)
             && a.proxy.halo.brightness == b.proxy.halo.brightness
             && a.proxy.halo.maxExtinction == b.proxy.halo.maxExtinction
             && a.proxy.halo.edgeSoftness == b.proxy.halo.edgeSoftness
@@ -136,7 +137,7 @@ float LightAtmosphereInspectorContentHeight(
 {
     float height = 3.0f * 26.0f + 3.0f * (rowH + gap);
     if (atmosphere.haze.enabled) height += 11.0f * (rowH + gap);
-    if (atmosphere.proxy.halo.enabled) height += 7.0f * (rowH + gap);
+    if (atmosphere.proxy.halo.enabled) height += 11.0f * (rowH + gap);
     if (spotLight) {
         height += rowH + gap;
         if (atmosphere.proxy.shaft.enabled) height += 8.0f * (rowH + gap);
@@ -263,6 +264,22 @@ void DrawLightAtmosphereInspector(
     if (atmosphere.proxy.halo.enabled) {
         drawFloat("sector_editor_light_proxy_halo_radius", "Halo radius (m):",
                 atmosphere.proxy.halo.radiusWorld, uiState.lightProxyHaloRadiusInput, 0.01f, 64.0f, 3);
+        drawFloat("sector_editor_light_proxy_halo_offset_x", "Halo offset X (m):",
+                atmosphere.proxy.halo.centerOffsetWorld.x,
+                uiState.lightProxyHaloOffsetXInput, -100000.0f, 100000.0f, 3);
+        drawFloat("sector_editor_light_proxy_halo_offset_y", "Halo offset Y (m):",
+                atmosphere.proxy.halo.centerOffsetWorld.y,
+                uiState.lightProxyHaloOffsetYInput, -100000.0f, 100000.0f, 3);
+        drawFloat("sector_editor_light_proxy_halo_offset_z", "Halo offset Z (m):",
+                atmosphere.proxy.halo.centerOffsetWorld.z,
+                uiState.lightProxyHaloOffsetZInput, -100000.0f, 100000.0f, 3);
+        if (engine::Button(ui, config, input, assets,
+                    "sector_editor_light_proxy_halo_offset_reset",
+                    Rectangle{0.0f, y, contentW, rowH}, font, "Reset halo offset")) {
+            atmosphere.proxy.halo.centerOffsetWorld = {};
+            commit();
+        }
+        y += rowH + gap;
         drawFloat("sector_editor_light_proxy_halo_brightness", "Halo brightness:",
                 atmosphere.proxy.halo.brightness, uiState.lightProxyHaloBrightnessInput, 0.0f, 16.0f, 3);
         drawFloat("sector_editor_light_proxy_halo_max_extinction", "Maximum extinction:",

@@ -1,5 +1,6 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
+#include "sector_editor/preview/SectorEditorHaloPlacement.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
@@ -588,6 +589,56 @@ void TestPreviewNavigationTabLayout()
           "preview interaction bounds include Navigation controls and diagnostics");
 }
 
+void TestHaloPlacementMath()
+{
+    Vector3 intersection{};
+    Check(game::IntersectSectorEditorHaloPlacementPlane(
+                  Ray{Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}},
+                  Vector3{0.0f, 0.0f, 5.0f},
+                  Vector3{0.0f, 0.0f, 1.0f},
+                  intersection)
+                  && Near(intersection.z, 5.0f),
+          "halo placement ray intersects its camera-facing drag plane");
+    Check(!game::IntersectSectorEditorHaloPlacementPlane(
+                  Ray{Vector3{}, Vector3{1.0f, 0.0f, 0.0f}},
+                  Vector3{0.0f, 0.0f, 5.0f},
+                  Vector3{0.0f, 0.0f, 1.0f},
+                  intersection),
+          "halo placement rejects rays parallel to the drag plane");
+
+    const Vector3 dragged = game::ApplySectorEditorHaloPlacementDrag(
+            Vector3{1.0f, 2.0f, 3.0f},
+            Vector3{4.0f, 5.0f, 6.0f},
+            Vector3{6.0f, 8.0f, 10.0f},
+            false);
+    const Vector3 preciseDragged = game::ApplySectorEditorHaloPlacementDrag(
+            Vector3{1.0f, 2.0f, 3.0f},
+            Vector3{4.0f, 5.0f, 6.0f},
+            Vector3{6.0f, 8.0f, 10.0f},
+            true);
+    Check(Near(dragged.x, 3.0f) && Near(dragged.y, 5.0f) && Near(dragged.z, 7.0f),
+          "halo drag applies the full camera-plane delta");
+    Check(Near(preciseDragged.x, 1.2f)
+                  && Near(preciseDragged.y, 2.3f)
+                  && Near(preciseDragged.z, 3.4f),
+          "halo drag precision mode applies one tenth of the delta");
+
+    const Vector3 depth = game::ApplySectorEditorHaloPlacementDepth(
+            Vector3{0.0f, 0.0f, 10.0f},
+            Vector3{},
+            Vector3{0.0f, 0.0f, 1.0f},
+            1.0f,
+            false);
+    const Vector3 preciseDepth = game::ApplySectorEditorHaloPlacementDepth(
+            Vector3{0.0f, 0.0f, 10.0f},
+            Vector3{},
+            Vector3{0.0f, 0.0f, 1.0f},
+            1.0f,
+            true);
+    Check(Near(depth.z, 9.8f), "positive halo placement wheel motion moves toward the camera");
+    Check(Near(preciseDepth.z, 9.98f), "halo depth precision mode applies one tenth of the step");
+}
+
 } // namespace
 
 int main()
@@ -617,6 +668,7 @@ int main()
     TestNpcEditorModalSplitPaneLayout();
     TestPreviewSettingsModalFogDraftApplyAndReset();
     TestPreviewNavigationTabLayout();
+    TestHaloPlacementMath();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorUiLayoutTests failure(s)\n";

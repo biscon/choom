@@ -154,7 +154,7 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
         MaterialEditingUiState& materialUiState,
         std::string* statusText = nullptr,
         void* userData = nullptr,
-        void (*requestCancelLightPilotWithPreviewRestore)(void*, const char*) = nullptr,
+        void (*requestCancelInteractiveLightEdit)(void*, const char*) = nullptr,
         LightEditingState* lightState = nullptr)
 {
     SectorEditorAuthoringDocumentAccess authoring =
@@ -173,7 +173,7 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
             materialUiState,
             statusText,
             userData,
-            requestCancelLightPilotWithPreviewRestore,
+            requestCancelInteractiveLightEdit,
             lightState};
 }
 
@@ -2053,6 +2053,11 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_F2) {
+                    if (lightEditingState.haloPlacement.active) {
+                        statusText = "Finish halo placement before hiding the 3D UI";
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
                     previewState.overlay.previewUiHidden = !previewState.overlay.previewUiHidden;
                     if (previewState.overlay.previewUiHidden) {
                         previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
@@ -2065,8 +2070,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_F3) {
-                    if (lightEditingState.lightPilot.active) {
-                        statusText = "Finish light pilot before changing 3D control mode";
+                    if (lightEditingState.lightPilot.active
+                            || lightEditingState.haloPlacement.active) {
+                        statusText = "Finish light editing before changing 3D control mode";
                         engine::ConsumeEvent(event);
                         return;
                     }
@@ -2097,6 +2103,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
+                    CancelHaloPlacement(nullptr);
                     CancelLightPilotWithPreviewRestore(nullptr);
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
@@ -2230,7 +2237,8 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
             || previewState.overlay.previewUiHidden
             || state.texturePicker.open
             || state.soundPicker.open
-            || lightEditingState.lightPilot.active) {
+            || lightEditingState.lightPilot.active
+            || lightEditingState.haloPlacement.active) {
         previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
         return;
     }
@@ -2612,7 +2620,9 @@ SectorEditorSelectionServiceContext SectorEditor::BuildSelectionServiceContext()
             &statusText,
             this,
             [](void* userData, const char* message) {
-                static_cast<SectorEditor*>(userData)->CancelLightPilotWithPreviewRestore(message);
+                SectorEditor* editor = static_cast<SectorEditor*>(userData);
+                editor->CancelHaloPlacement(message);
+                editor->CancelLightPilotWithPreviewRestore(message);
             },
             &lightEditingState);
 }
@@ -3614,6 +3624,18 @@ void SectorEditor::DrawPreviewOverlay(
     }
     if (result.requestStartLightPilot) {
         StartLightPilot();
+    }
+    if (result.requestCancelHaloPlacement) {
+        CancelHaloPlacement("Halo placement cancelled");
+    }
+    if (result.requestApplyHaloPlacement) {
+        ApplyHaloPlacement();
+    }
+    if (result.requestStartHaloPlacement) {
+        StartHaloPlacement();
+    }
+    if (result.previewHaloOffsetChanged) {
+        PreviewHaloPlacementOffset(result.previewHaloOffsetWorld);
     }
     if (result.openPreviewSettings) {
         OpenPreviewSettingsModal();
@@ -5925,6 +5947,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 
 void SectorEditor::LeavePreview3D()
 {
+    CancelHaloPlacement(nullptr);
     CancelLightPilotWithPreviewRestore(nullptr);
     if (previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay) {
         ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
@@ -5993,6 +6016,10 @@ bool SectorEditor::StartLightPilot()
 {
     if (state.mode != SectorEditorMode::Preview3D || previewState.controller.previewControlMode != SectorPreviewControlMode::FreeFly) {
         statusText = "Light pilot requires 3D FreeFly mode";
+        return false;
+    }
+    if (lightEditingState.haloPlacement.active) {
+        statusText = "Finish halo placement before piloting the light";
         return false;
     }
 
@@ -6065,6 +6092,88 @@ bool SectorEditor::StartLightPilot()
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     statusText = TextFormat("Piloting %s %d", lightName, lightId);
     return true;
+}
+
+bool SectorEditor::StartHaloPlacement()
+{
+    if (state.mode != SectorEditorMode::Preview3D
+            || previewState.controller.previewControlMode != SectorPreviewControlMode::FreeFly) {
+        statusText = "Halo placement requires 3D FreeFly mode";
+        return false;
+    }
+    if (previewState.controller.freeflyController.mouseLookEnabled) {
+        statusText = "Unlock the cursor with F11 before placing a halo";
+        return false;
+    }
+    if (lightEditingState.lightPilot.active) {
+        statusText = "Finish light pilot before placing a halo";
+        return false;
+    }
+
+    LightPilotKind kind = LightPilotKind::None;
+    int lightId = -1;
+    bool haloEnabled = false;
+    if (const SectorTopologyStaticPointLight* light = SelectedTopologyLight()) {
+        kind = LightPilotKind::StaticPoint;
+        lightId = light->id;
+        haloEnabled = light->atmosphere.proxy.halo.enabled;
+    } else if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight()) {
+        kind = LightPilotKind::StaticSpot;
+        lightId = light->id;
+        haloEnabled = light->atmosphere.proxy.halo.enabled;
+    } else if (const SectorTopologyDynamicPointLight* light = SelectedTopologyDynamicLight()) {
+        kind = LightPilotKind::DynamicPoint;
+        lightId = light->id;
+        haloEnabled = light->atmosphere.proxy.halo.enabled;
+    } else if (const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight()) {
+        kind = LightPilotKind::DynamicSpot;
+        lightId = light->id;
+        haloEnabled = light->atmosphere.proxy.halo.enabled;
+    }
+    if (lightId < 0 || !haloEnabled) {
+        statusText = "Select a light with an enabled analytic halo";
+        return false;
+    }
+
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    return lightEditing.BeginHaloPlacement(kind, lightId);
+}
+
+bool SectorEditor::PreviewHaloPlacementOffset(Vector3 centerOffsetWorld)
+{
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    const SectorEditorLightMutationResult result =
+            lightEditing.PreviewHaloPlacement(centerOffsetWorld);
+    if (result.dynamicLightRendererRefreshNeeded
+            && state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()) {
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
+    }
+    return result.changed;
+}
+
+bool SectorEditor::ApplyHaloPlacement()
+{
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    const SectorEditorLightMutationResult result = lightEditing.ApplyHaloPlacement();
+    if (result.dynamicLightRendererRefreshNeeded
+            && state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()) {
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
+    }
+    return result.changed;
+}
+
+void SectorEditor::CancelHaloPlacement(const char* message)
+{
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    const SectorEditorLightMutationResult result =
+            lightEditing.CancelHaloPlacementData(message);
+    if (result.dynamicLightRendererRefreshNeeded
+            && state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()) {
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
+    }
 }
 
 bool SectorEditor::ApplyLightPilotFromPreviewPose()
@@ -7281,6 +7390,9 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
                                     &uiState.lightDustGreenInput,
                                     &uiState.lightDustBlueInput,
                                     &uiState.lightProxyHaloRadiusInput,
+                                    &uiState.lightProxyHaloOffsetXInput,
+                                    &uiState.lightProxyHaloOffsetYInput,
+                                    &uiState.lightProxyHaloOffsetZInput,
                                     &uiState.lightProxyHaloBrightnessInput,
                                     &uiState.lightProxyHaloMaxExtinctionInput,
                                     &uiState.lightProxyHaloSoftnessInput,

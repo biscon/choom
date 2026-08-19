@@ -1406,6 +1406,8 @@ void TestSourceHashChanges()
     changedLight.staticLights[0].atmosphere.haze.density = 0.25f;
     changedLight.staticLights[0].atmosphere.haze.heightOffsetWorld = 0.75f;
     changedLight.staticLights[0].atmosphere.proxy.halo.enabled = true;
+    changedLight.staticLights[0].atmosphere.proxy.halo.centerOffsetWorld =
+            Vector3{1.0f, 2.0f, 3.0f};
     changedLight.staticLights[0].atmosphere.proxy.halo.brightness = 2.0f;
     changedLight.staticLights[0].atmosphere.proxy.halo.maxExtinction = 0.8f;
     changedLight.staticLights[0].atmosphere.proxy.halo.scatteringTint = RED;

@@ -41,6 +41,7 @@ private:
 
     struct VisibleHalo {
         const SectorLightAtmosphereSource* source = nullptr;
+        Vector3 centerWorld = {};
         SectorAtmosphereScissorRect scissor;
         Vector3 radiance = {};
         float distanceSquared = 0.0f;

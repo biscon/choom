@@ -55,6 +55,11 @@ struct SectorEditorPreviewOverlayResult {
     bool requestStartLightPilot = false;
     bool requestApplyLightPilot = false;
     bool requestCancelLightPilot = false;
+    bool requestStartHaloPlacement = false;
+    bool requestApplyHaloPlacement = false;
+    bool requestCancelHaloPlacement = false;
+    bool previewHaloOffsetChanged = false;
+    Vector3 previewHaloOffsetWorld = {};
     bool openPreviewSettings = false;
     bool markTopologyDocumentEdited = false;
     bool requestNavigationRebuild = false;

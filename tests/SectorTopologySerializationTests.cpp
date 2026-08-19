@@ -969,9 +969,11 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
     const Json defaultOpacityJson = Json::parse(SaveText(defaultOpacity));
     Check(!defaultOpacityJson["staticSpotLights"][0]["atmosphere"]["proxy"]["halo"].contains(
                       "maxExtinction")
+                  && !defaultOpacityJson["staticSpotLights"][0]["atmosphere"]["proxy"]["halo"].contains(
+                          "centerOffsetWorld")
                   && !defaultOpacityJson["staticSpotLights"][0]["atmosphere"]["proxy"]["shaft"].contains(
                           "maxExtinction"),
-          "default proxy maximum extinction is omitted");
+          "default proxy maximum extinction and halo offset are omitted");
 
     game::SectorLightAtmosphereSettings atmosphere;
     atmosphere.haze.enabled = true;
@@ -986,6 +988,7 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
     atmosphere.haze.flowSpeedWorld = 0.08f;
     atmosphere.proxy.halo.enabled = true;
     atmosphere.proxy.halo.radiusWorld = 1.25f;
+    atmosphere.proxy.halo.centerOffsetWorld = Vector3{0.25f, -0.5f, 0.75f};
     atmosphere.proxy.halo.brightness = 0.4f;
     atmosphere.proxy.halo.maxExtinction = 0.6f;
     atmosphere.proxy.halo.scatteringTint = Color{180, 220, 255, 255};
@@ -1026,6 +1029,7 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
             Check(staticAtmosphere["haze"].value("enabled", false)
                           && Near(staticAtmosphere["haze"].value("heightOffsetWorld", 0.0f), 0.65f)
                           && staticAtmosphere["proxy"]["halo"].value("enabled", false)
+                          && staticAtmosphere["proxy"]["halo"].contains("centerOffsetWorld")
                           && Near(staticAtmosphere["proxy"]["halo"].value("maxExtinction", 0.0f), 0.6f)
                           && staticAtmosphere["proxy"]["halo"].contains("scatteringTint")
                           && staticAtmosphere["proxy"]["shaft"].value("enabled", false)
@@ -1060,6 +1064,9 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
                 && Near(value.haze.flowSpeedWorld, 0.08f)
                 && value.proxy.halo.enabled
                 && Near(value.proxy.halo.radiusWorld, 1.25f)
+                && Near(value.proxy.halo.centerOffsetWorld.x, 0.25f)
+                && Near(value.proxy.halo.centerOffsetWorld.y, -0.5f)
+                && Near(value.proxy.halo.centerOffsetWorld.z, 0.75f)
                 && Near(value.proxy.halo.maxExtinction, 0.6f)
                 && value.proxy.halo.scatteringTint.g == 220
                 && value.proxy.shaft.enabled
@@ -1096,11 +1103,16 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
 
     game::SectorLightProxySettings invalidExtinction;
     invalidExtinction.halo.maxExtinction = -2.0f;
+    invalidExtinction.halo.centerOffsetWorld = Vector3{
+            std::numeric_limits<float>::infinity(), -200000.0f, 200000.0f};
     invalidExtinction.shaft.maxExtinction = 3.0f;
     invalidExtinction = game::NormalizeSectorLightProxySettings(invalidExtinction);
     Check(Near(invalidExtinction.halo.maxExtinction, 0.0f)
-                  && Near(invalidExtinction.shaft.maxExtinction, 1.0f),
-          "proxy maximum extinction is clamped to the compositing range");
+                  && Near(invalidExtinction.shaft.maxExtinction, 1.0f)
+                  && Near(invalidExtinction.halo.centerOffsetWorld.x, 0.0f)
+                  && Near(invalidExtinction.halo.centerOffsetWorld.y, -100000.0f)
+                  && Near(invalidExtinction.halo.centerOffsetWorld.z, 100000.0f),
+          "proxy extinction and halo center offset are normalized to safe ranges");
 
     Json legacyProxy = defaultJson;
     legacyProxy["staticSpotLights"][0]["atmosphere"]["proxy"] = Json{

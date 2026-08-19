@@ -202,18 +202,20 @@ bool SectorLightProxyRenderer::Apply(
         const SectorLightProxySettings& proxy = source.atmosphere.proxy;
         if (!proxy.halo.enabled || proxy.halo.brightness <= 0.0f
                 || proxy.halo.radiusWorld <= 0.0f) continue;
+        const Vector3 centerWorld = Vector3Add(
+                source.positionWorld, proxy.halo.centerOffsetWorld);
         SectorLightAtmosphereVolume volume;
         volume.source = &source;
-        volume.originWorld = source.positionWorld;
-        volume.boundsCenterWorld = source.positionWorld;
+        volume.originWorld = centerWorld;
+        volume.boundsCenterWorld = centerWorld;
         volume.boundsRadiusWorld = proxy.halo.radiusWorld;
         volume.extentWorld = proxy.halo.radiusWorld;
         if (!IsSectorLightAtmosphereVolumeVisible(volume, visibility, receiverBounds,
                     camera, aspect, nearPlane, farPlane)) continue;
         const Vector3 radiusVector{proxy.halo.radiusWorld,
                 proxy.halo.radiusWorld, proxy.halo.radiusWorld};
-        const Vector3 minimum = Vector3Subtract(source.positionWorld, radiusVector);
-        const Vector3 maximum = Vector3Add(source.positionWorld, radiusVector);
+        const Vector3 minimum = Vector3Subtract(centerWorld, radiusVector);
+        const Vector3 maximum = Vector3Add(centerWorld, radiusVector);
         const SectorAtmosphereScissorRect scissor = ProjectSectorAtmosphereBoundsToScissor(
                 camera, aspect, nearPlane, minimum, maximum, width, height);
         if (scissor.Empty()) continue;
@@ -228,9 +230,10 @@ bool SectorLightProxyRenderer::Apply(
                 proxy.halo.scatteringTint);
         visibleHalos.push_back(VisibleHalo{
                 &source,
+                centerWorld,
                 scissor,
                 Vector3Scale(Multiply(lightColor, tint), intensity * proxy.halo.brightness),
-                Vector3DistanceSqr(camera.position, source.positionWorld)});
+                Vector3DistanceSqr(camera.position, centerWorld)});
         unionScissor = UnionSectorAtmosphereScissors(unionScissor, scissor, width, height);
     }
     std::sort(visibleHalos.begin(), visibleHalos.end(), [](const auto& left, const auto& right) {
@@ -278,7 +281,7 @@ bool SectorLightProxyRenderer::Apply(
         // Register sceneDepth after the flush so it remains bound for this draw.
         rlDrawRenderBatchActive();
         SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);
-        SetShaderValue(shader, sphereCenterLoc, &visible.source->positionWorld, SHADER_UNIFORM_VEC3);
+        SetShaderValue(shader, sphereCenterLoc, &visible.centerWorld, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, sphereRadiusLoc, &settings.radiusWorld, SHADER_UNIFORM_FLOAT);
         SetShaderValue(shader, haloRadianceLoc, &visible.radiance, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, haloParamsLoc, &haloParams, SHADER_UNIFORM_VEC2);

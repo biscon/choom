@@ -1,4 +1,5 @@
 #include "sector_editor/preview/SectorEditorPreviewOverlay.h"
+#include "sector_editor/preview/SectorEditorHaloPlacement.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 
 #include "engine/render/ColorTransfer.h"
@@ -54,6 +55,57 @@ const char* FpsFireRejectReasonLabel(FpsFireRejectReason reason)
 bool IsPreviewOverlayMouseInteractive(const SectorEditorPreviewControllerState& controllerState)
 {
     return !controllerState.freeflyController.mouseLookEnabled;
+}
+
+bool SelectedHaloPlacementInfo(
+        const SectorTopologyMap& topologyMap,
+        const SelectionState& selectionState,
+        LightPilotKind& outKind,
+        int& outLightId,
+        Vector3& outLightPositionWorld,
+        const SectorLightProxyHaloSettings*& outHalo)
+{
+    if (selectionState.topologySelectionKind == TopologySelectionKind::StaticLight) {
+        const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
+                topologyMap, selectionState.selectedTopologyLightId);
+        if (light == nullptr) return false;
+        outKind = LightPilotKind::StaticPoint;
+        outLightId = light->id;
+        outLightPositionWorld = SectorAuthoringToWorldPosition(light->position);
+        outHalo = &light->atmosphere.proxy.halo;
+        return true;
+    }
+    if (selectionState.topologySelectionKind == TopologySelectionKind::StaticSpotLight) {
+        const SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(
+                topologyMap, selectionState.selectedTopologyStaticSpotLightId);
+        if (light == nullptr) return false;
+        outKind = LightPilotKind::StaticSpot;
+        outLightId = light->id;
+        outLightPositionWorld = SectorAuthoringToWorldPosition(light->position);
+        outHalo = &light->atmosphere.proxy.halo;
+        return true;
+    }
+    if (selectionState.topologySelectionKind == TopologySelectionKind::DynamicLight) {
+        const SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(
+                topologyMap, selectionState.selectedTopologyDynamicLightId);
+        if (light == nullptr) return false;
+        outKind = LightPilotKind::DynamicPoint;
+        outLightId = light->id;
+        outLightPositionWorld = SectorAuthoringToWorldPosition(light->position);
+        outHalo = &light->atmosphere.proxy.halo;
+        return true;
+    }
+    if (selectionState.topologySelectionKind == TopologySelectionKind::DynamicSpotLight) {
+        const SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(
+                topologyMap, selectionState.selectedTopologyDynamicSpotLightId);
+        if (light == nullptr) return false;
+        outKind = LightPilotKind::DynamicSpot;
+        outLightId = light->id;
+        outLightPositionWorld = SectorAuthoringToWorldPosition(light->position);
+        outHalo = &light->atmosphere.proxy.halo;
+        return true;
+    }
+    return false;
 }
 
 bool IsValidPreviewSurfaceRef(
@@ -1431,6 +1483,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             case PreviewDebugOverlayTab::Controls:
                 if (context.lightState.lightPilot.active) {
                     addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down, hold Shift for precision movement. Unlock cursor with F11 to click Apply or Cancel.");
+                } else if (context.lightState.haloPlacement.active) {
+                    addWrappedLine("place halo: drag the halo handle across the view, use the mouse wheel for depth, and hold Shift for precision. Apply saves the offset; Cancel restores it.");
                 } else if (controllerState.previewControlMode == SectorPreviewControlMode::Gameplay) {
                     addWrappedLine("movement: WASD move, Space jump, Shift run, Ctrl toggle crouch, mouse look. F11 unlocks cursor for UI tabs.");
                 } else {
@@ -1473,13 +1527,173 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             basePanel.y,
             basePanel.width,
             padding + stripH + gap + tabH + contentH + padding};
+
+    LightPilotKind selectedLightKind = LightPilotKind::None;
+    int selectedLightId = -1;
+    Vector3 selectedLightPositionWorld = {};
+    const SectorLightProxyHaloSettings* selectedHalo = nullptr;
+    const bool hasSelectedLight = SelectedHaloPlacementInfo(
+            topologyMap,
+            selectionState,
+            selectedLightKind,
+            selectedLightId,
+            selectedLightPositionWorld,
+            selectedHalo);
+    const bool hasSelectedHalo = hasSelectedLight
+            && selectedHalo != nullptr
+            && selectedHalo->enabled;
+
+    HaloPlacementState& haloPlacement = context.lightState.haloPlacement;
+    if (haloPlacement.active) {
+        if (!hasSelectedHalo
+                || haloPlacement.kind != selectedLightKind
+                || haloPlacement.lightId != selectedLightId) {
+            result.requestCancelHaloPlacement = true;
+            haloPlacement.dragging = false;
+        } else {
+            const Camera3D camera = preview.RenderCamera();
+            Vector3 cameraForward = Vector3Subtract(camera.target, camera.position);
+            cameraForward = Vector3LengthSqr(cameraForward) > 0.000001f
+                    ? Vector3Normalize(cameraForward)
+                    : Vector3{0.0f, 0.0f, -1.0f};
+            Vector3 previewCenterWorld = Vector3Add(
+                    selectedLightPositionWorld, selectedHalo->centerOffsetWorld);
+            const Vector3 centerFromCamera = Vector3Subtract(
+                    previewCenterWorld, camera.position);
+            const bool centerInFront = Vector3DotProduct(
+                    centerFromCamera, cameraForward) > 0.001f;
+            const Vector2 centerScreen = GetWorldToScreenEx(
+                    previewCenterWorld,
+                    camera,
+                    static_cast<int>(EditorWidth),
+                    static_cast<int>(EditorHeight));
+            const Vector2 lightScreen = GetWorldToScreenEx(
+                    selectedLightPositionWorld,
+                    camera,
+                    static_cast<int>(EditorWidth),
+                    static_cast<int>(EditorHeight));
+            const Rectangle previewViewport{0.0f, 0.0f, EditorWidth, EditorHeight};
+            const Vector2 mousePosition = input.MousePosition();
+            const bool mouseOverWorld = Contains(previewViewport, mousePosition)
+                    && !Contains(panel, mousePosition);
+            const float handleDx = mousePosition.x - centerScreen.x;
+            const float handleDy = mousePosition.y - centerScreen.y;
+            constexpr float HaloHandleRadius = 18.0f;
+            const bool handleHovered = centerInFront
+                    && handleDx * handleDx + handleDy * handleDy
+                            <= HaloHandleRadius * HaloHandleRadius;
+            const bool precision = input.IsKeyDown(KEY_LEFT_SHIFT)
+                    || input.IsKeyDown(KEY_RIGHT_SHIFT);
+
+            input.ForEachEvent(
+                    engine::InputEventType::MouseButtonPressed,
+                    true,
+                    [&](engine::InputEvent& event) {
+                        if (event.mouseButton.button != MOUSE_LEFT_BUTTON
+                                || !mouseOverWorld || !handleHovered) return;
+                        const Ray ray = GetScreenToWorldRayEx(
+                                event.mouseButton.position,
+                                camera,
+                                static_cast<int>(EditorWidth),
+                                static_cast<int>(EditorHeight));
+                        Vector3 intersection = {};
+                        if (!IntersectSectorEditorHaloPlacementPlane(
+                                    ray,
+                                    previewCenterWorld,
+                                    cameraForward,
+                                    intersection)) return;
+                        haloPlacement.dragging = true;
+                        haloPlacement.dragPlanePointWorld = previewCenterWorld;
+                        haloPlacement.dragPlaneNormalWorld = cameraForward;
+                        haloPlacement.dragStartIntersectionWorld = intersection;
+                        haloPlacement.dragStartCenterWorld = previewCenterWorld;
+                        engine::ConsumeEvent(event);
+                    });
+
+            if (haloPlacement.dragging && input.IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+                const Ray ray = GetScreenToWorldRayEx(
+                        mousePosition,
+                        camera,
+                        static_cast<int>(EditorWidth),
+                        static_cast<int>(EditorHeight));
+                Vector3 intersection = {};
+                if (IntersectSectorEditorHaloPlacementPlane(
+                            ray,
+                            haloPlacement.dragPlanePointWorld,
+                            haloPlacement.dragPlaneNormalWorld,
+                            intersection)) {
+                    previewCenterWorld = ApplySectorEditorHaloPlacementDrag(
+                            haloPlacement.dragStartCenterWorld,
+                            haloPlacement.dragStartIntersectionWorld,
+                            intersection,
+                            precision);
+                    result.previewHaloOffsetChanged = true;
+                    result.previewHaloOffsetWorld = Vector3Subtract(
+                            previewCenterWorld, selectedLightPositionWorld);
+                }
+            }
+            input.ForEachEvent(
+                    engine::InputEventType::MouseButtonReleased,
+                    true,
+                    [&](engine::InputEvent& event) {
+                        if (event.mouseButton.button != MOUSE_LEFT_BUTTON
+                                || !haloPlacement.dragging) return;
+                        haloPlacement.dragging = false;
+                        engine::ConsumeEvent(event);
+                    });
+            input.ForEachEvent(
+                    engine::InputEventType::MouseWheel,
+                    true,
+                    [&](engine::InputEvent& event) {
+                        if (!mouseOverWorld) return;
+                        previewCenterWorld = ApplySectorEditorHaloPlacementDepth(
+                                previewCenterWorld,
+                                camera.position,
+                                cameraForward,
+                                event.wheel.value,
+                                precision);
+                        result.previewHaloOffsetChanged = true;
+                        result.previewHaloOffsetWorld = Vector3Subtract(
+                                previewCenterWorld, selectedLightPositionWorld);
+                        engine::ConsumeEvent(event);
+                    });
+
+            if (centerInFront) {
+                DrawLineEx(lightScreen, centerScreen, 2.0f, Color{255, 190, 72, 210});
+                DrawCircleV(centerScreen, HaloHandleRadius, Color{20, 22, 28, 220});
+                DrawCircleLines(
+                        static_cast<int>(std::round(centerScreen.x)),
+                        static_cast<int>(std::round(centerScreen.y)),
+                        HaloHandleRadius,
+                        handleHovered || haloPlacement.dragging
+                                ? Color{255, 236, 122, 255}
+                                : Color{255, 190, 72, 245});
+                DrawLineEx(
+                        Vector2{centerScreen.x - 8.0f, centerScreen.y},
+                        Vector2{centerScreen.x + 8.0f, centerScreen.y},
+                        2.0f,
+                        Color{255, 236, 122, 255});
+                DrawLineEx(
+                        Vector2{centerScreen.x, centerScreen.y - 8.0f},
+                        Vector2{centerScreen.x, centerScreen.y + 8.0f},
+                        2.0f,
+                        Color{255, 236, 122, 255});
+                engine::Text(
+                        smallConfig,
+                        assets,
+                        Rectangle{centerScreen.x + 24.0f, centerScreen.y - 12.0f, 190.0f, 24.0f},
+                        smallFont,
+                        "Halo center",
+                        engine::UITextJustify::Left,
+                        Color{255, 236, 122, 255},
+                        true);
+            }
+        }
+    }
+
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
-    const bool hasSelectedLight = SelectedTopologyStaticPointLight(topologyMap, selectionState) != nullptr
-            || SelectedTopologyStaticSpotLight(topologyMap, selectionState) != nullptr
-            || SelectedTopologyDynamicPointLight(topologyMap, selectionState) != nullptr
-            || SelectedTopologyDynamicSpotLight(topologyMap, selectionState) != nullptr;
     engine::Text(
             smallConfig,
             assets,
@@ -1487,8 +1701,9 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     panel.x + padding,
                     panel.y + padding,
                     mouseInteractive && (context.lightState.lightPilot.active
+                            || context.lightState.haloPlacement.active
                             || (hasSelectedLight && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly))
-                            ? contentW - 170.0f
+                            ? contentW - 300.0f
                             : contentW,
                     stripH},
             smallFont,
@@ -1524,6 +1739,43 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         "Apply")) {
                 result.requestApplyLightPilot = true;
             }
+        } else if (context.lightState.haloPlacement.active) {
+            if (engine::Button(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_halo_place_cancel",
+                        Rectangle{actionsRight - 72.0f, actionY, 72.0f, 28.0f},
+                        smallFont,
+                        "Cancel")) {
+                result.requestCancelHaloPlacement = true;
+            }
+            actionsRight -= 82.0f;
+            if (engine::Button(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_halo_place_apply",
+                        Rectangle{actionsRight - 66.0f, actionY, 66.0f, 28.0f},
+                        smallFont,
+                        "Apply")) {
+                result.requestApplyHaloPlacement = true;
+            }
+            actionsRight -= 76.0f;
+            if (engine::Button(
+                        ui,
+                        smallConfig,
+                        input,
+                        assets,
+                        "sector_editor_preview_halo_place_reset",
+                        Rectangle{actionsRight - 66.0f, actionY, 66.0f, 28.0f},
+                        smallFont,
+                        "Reset")) {
+                result.previewHaloOffsetChanged = true;
+                result.previewHaloOffsetWorld = {};
+            }
         } else if (hasSelectedLight && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly) {
             if (engine::Button(
                         ui,
@@ -1535,6 +1787,20 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         smallFont,
                         "Pilot")) {
                 result.requestStartLightPilot = true;
+            }
+            if (hasSelectedHalo) {
+                actionsRight -= 102.0f;
+                if (engine::Button(
+                            ui,
+                            smallConfig,
+                            input,
+                            assets,
+                            "sector_editor_preview_halo_place_start",
+                            Rectangle{actionsRight - 104.0f, actionY, 104.0f, 28.0f},
+                            smallFont,
+                            "Place Halo")) {
+                    result.requestStartHaloPlacement = true;
+                }
             }
         }
     }

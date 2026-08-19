@@ -245,6 +245,9 @@ void TestDeleteSelectedStaticLightDirtiesAndClearsState()
     lightState.lightPilot.active = true;
     lightState.lightPilot.kind = game::LightPilotKind::StaticPoint;
     lightState.lightPilot.lightId = 7;
+    lightState.haloPlacement.active = true;
+    lightState.haloPlacement.kind = game::LightPilotKind::StaticPoint;
+    lightState.haloPlacement.lightId = 7;
     std::string statusText;
     ResetDirty(state, documentState, statusText);
 
@@ -261,6 +264,8 @@ void TestDeleteSelectedStaticLightDirtiesAndClearsState()
     Check(!lightState.lightDrag.active && !lightState.lightEdit.active, "delete selected static light clears drag/edit state");
     Check(result.previewPoseRestoreNeeded && !lightState.lightPilot.active,
           "delete selected piloted point light requests preview-pose restoration");
+    Check(!lightState.haloPlacement.active,
+          "delete selected light clears its halo placement transaction");
     CheckDirtyOnce(state, documentState, statusText, "Deleted static light 7");
 }
 
@@ -615,6 +620,74 @@ void TestAtmosphereEditUsesDocumentMutationBoundary()
     CheckClean(state, documentState, statusText, "old");
 }
 
+void TestHaloPlacementApplyAndCancelTiming()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+    game::SectorTopologyStaticPointLight light;
+    light.id = 12;
+    light.atmosphere.proxy.halo.enabled = true;
+    documentState.map.topologyMap.staticLights.push_back(light);
+    game::SelectionState selectionState;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+
+    game::SectorEditorLightEditingService service = MakeService(
+            state,
+            documentState,
+            documentState.map.topologyMap,
+            TestPreviewSelectionState(),
+            selectionState,
+            manipulationState,
+            lightState,
+            uiState,
+            inspectorIdUiState,
+            statusText);
+    Check(service.BeginHaloPlacement(game::LightPilotKind::StaticPoint, 12),
+          "enabled analytic halo begins placement");
+    const game::SectorEditorLightMutationResult preview =
+            service.PreviewHaloPlacement(Vector3{1.0f, -2.0f, 3.0f});
+    Check(preview.changed && preview.dynamicLightRendererRefreshNeeded,
+          "halo placement preview requests only a renderer source refresh");
+    Check(Near(documentState.map.topologyMap.staticLights.front()
+                           .atmosphere.proxy.halo.centerOffsetWorld.x,
+                       1.0f),
+          "halo placement preview stages the offset on the selected light");
+    CheckClean(state, documentState, statusText, "Placing static light 12 halo");
+
+    const game::SectorEditorLightMutationResult applied = service.ApplyHaloPlacement();
+    Check(applied.changed && applied.dynamicLightRendererRefreshNeeded
+                  && !lightState.haloPlacement.active,
+          "applying halo placement finishes the transaction");
+    CheckDirtyOnce(state, documentState, statusText, "Placed static light 12 halo");
+
+    ResetDirty(state, documentState, statusText);
+    Check(service.BeginHaloPlacement(game::LightPilotKind::StaticPoint, 12),
+          "placed halo can begin another placement transaction");
+    service.PreviewHaloPlacement(Vector3{4.0f, 5.0f, 6.0f});
+    const game::SectorEditorLightMutationResult cancelled =
+            service.CancelHaloPlacementData("Halo placement cancelled");
+    const Vector3 restored = documentState.map.topologyMap.staticLights.front()
+                                     .atmosphere.proxy.halo.centerOffsetWorld;
+    Check(cancelled.changed && cancelled.dynamicLightRendererRefreshNeeded
+                  && !lightState.haloPlacement.active,
+          "cancelling halo placement finishes the transaction and refreshes preview");
+    Check(Near(restored.x, 1.0f) && Near(restored.y, -2.0f) && Near(restored.z, 3.0f),
+          "cancelling halo placement restores the original offset");
+    CheckClean(state, documentState, statusText, "Halo placement cancelled");
+
+    documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.enabled = false;
+    Check(!service.BeginHaloPlacement(game::LightPilotKind::StaticPoint, 12),
+          "disabled halo cannot begin placement");
+    Check(!service.BeginHaloPlacement(game::LightPilotKind::StaticPoint, 999),
+          "missing light cannot begin halo placement");
+}
+
 } // namespace
 
 int main()
@@ -630,6 +703,7 @@ int main()
     TestPointLightPilotApplyAndCancelTiming();
     TestStaticShadowEditsUseDocumentMutationBoundary();
     TestAtmosphereEditUsesDocumentMutationBoundary();
+    TestHaloPlacementApplyAndCancelTiming();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorLightEditingServiceTests failure(s)\n";

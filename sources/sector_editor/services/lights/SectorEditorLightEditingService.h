@@ -94,6 +94,9 @@ struct SectorEditorLightEditingServiceContext {
             engine::UIIntInputState* dustGreenInput = nullptr;
             engine::UIIntInputState* dustBlueInput = nullptr;
             engine::UIFloatInputState* proxyHaloRadiusInput = nullptr;
+            engine::UIFloatInputState* proxyHaloOffsetXInput = nullptr;
+            engine::UIFloatInputState* proxyHaloOffsetYInput = nullptr;
+            engine::UIFloatInputState* proxyHaloOffsetZInput = nullptr;
             engine::UIFloatInputState* proxyHaloBrightnessInput = nullptr;
             engine::UIFloatInputState* proxyHaloMaxExtinctionInput = nullptr;
             engine::UIFloatInputState* proxyHaloSoftnessInput = nullptr;
@@ -137,6 +140,11 @@ public:
 
     SectorEditorLightMutationResult ApplyLightPilot(Vector3 position, Vector3 target);
     SectorEditorLightMutationResult CancelLightPilotData(const char* message);
+
+    bool BeginHaloPlacement(LightPilotKind kind, int lightId);
+    SectorEditorLightMutationResult PreviewHaloPlacement(Vector3 centerOffsetWorld);
+    SectorEditorLightMutationResult ApplyHaloPlacement();
+    SectorEditorLightMutationResult CancelHaloPlacementData(const char* message);
 
     bool SetStaticLightPosition(SectorTopologyStaticPointLight& light, Vector3 position);
     bool SetStaticLightIntensity(SectorTopologyStaticPointLight& light, float intensity);

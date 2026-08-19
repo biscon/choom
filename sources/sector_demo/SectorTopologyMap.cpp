@@ -82,6 +82,18 @@ SectorLightProxySettings NormalizeSectorLightProxySettings(SectorLightProxySetti
     const SectorLightProxySettings defaults;
     settings.halo.radiusWorld = std::clamp(
             FiniteOr(settings.halo.radiusWorld, defaults.halo.radiusWorld), 0.01f, 64.0f);
+    settings.halo.centerOffsetWorld.x = std::clamp(
+            FiniteOr(settings.halo.centerOffsetWorld.x, defaults.halo.centerOffsetWorld.x),
+            -100000.0f,
+            100000.0f);
+    settings.halo.centerOffsetWorld.y = std::clamp(
+            FiniteOr(settings.halo.centerOffsetWorld.y, defaults.halo.centerOffsetWorld.y),
+            -100000.0f,
+            100000.0f);
+    settings.halo.centerOffsetWorld.z = std::clamp(
+            FiniteOr(settings.halo.centerOffsetWorld.z, defaults.halo.centerOffsetWorld.z),
+            -100000.0f,
+            100000.0f);
     settings.halo.brightness = std::clamp(
             FiniteOr(settings.halo.brightness, defaults.halo.brightness), 0.0f, 16.0f);
     settings.halo.maxExtinction = std::clamp(
@@ -118,6 +130,9 @@ bool IsDefaultSectorLightProxySettings(const SectorLightProxySettings& settings)
     const SectorLightProxySettings defaults;
     return value.halo.enabled == defaults.halo.enabled
             && value.halo.radiusWorld == defaults.halo.radiusWorld
+            && value.halo.centerOffsetWorld.x == defaults.halo.centerOffsetWorld.x
+            && value.halo.centerOffsetWorld.y == defaults.halo.centerOffsetWorld.y
+            && value.halo.centerOffsetWorld.z == defaults.halo.centerOffsetWorld.z
             && value.halo.brightness == defaults.halo.brightness
             && value.halo.maxExtinction == defaults.halo.maxExtinction
             && value.halo.edgeSoftness == defaults.halo.edgeSoftness
