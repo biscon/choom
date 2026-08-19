@@ -40,11 +40,13 @@ bool SameLightAtmosphere(
             && a.proxy.halo.enabled == b.proxy.halo.enabled
             && a.proxy.halo.radiusWorld == b.proxy.halo.radiusWorld
             && a.proxy.halo.brightness == b.proxy.halo.brightness
+            && a.proxy.halo.maxOpacity == b.proxy.halo.maxOpacity
             && a.proxy.halo.edgeSoftness == b.proxy.halo.edgeSoftness
             && a.proxy.shaft.enabled == b.proxy.shaft.enabled
             && a.proxy.shaft.lengthScale == b.proxy.shaft.lengthScale
             && a.proxy.shaft.widthScale == b.proxy.shaft.widthScale
             && a.proxy.shaft.brightness == b.proxy.shaft.brightness
+            && a.proxy.shaft.maxOpacity == b.proxy.shaft.maxOpacity
             && a.proxy.shaft.edgeSoftness == b.proxy.shaft.edgeSoftness
             && SameColor(a.proxy.tint, b.proxy.tint)
             && a.dust.enabled == b.dust.enabled
@@ -133,10 +135,10 @@ float LightAtmosphereInspectorContentHeight(
 {
     float height = 3.0f * 26.0f + 6.0f * (rowH + gap);
     if (atmosphere.haze.enabled) height += 11.0f * (rowH + gap);
-    if (atmosphere.proxy.halo.enabled) height += 3.0f * (rowH + gap);
+    if (atmosphere.proxy.halo.enabled) height += 4.0f * (rowH + gap);
     if (spotLight) {
         height += rowH + gap;
-        if (atmosphere.proxy.shaft.enabled) height += 4.0f * (rowH + gap);
+        if (atmosphere.proxy.shaft.enabled) height += 5.0f * (rowH + gap);
     }
     if (atmosphere.dust.enabled) height += 10.0f * (rowH + gap);
     return height;
@@ -250,7 +252,7 @@ void DrawLightAtmosphereInspector(
     }
 
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 22.0f}, font,
-            "Atmosphere: Cheap proxies", engine::UITextJustify::Left, config.textColor);
+            "Atmosphere: Cheap lighting", engine::UITextJustify::Left, config.textColor);
     y += 26.0f;
     if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_proxy_halo_enabled",
             Rectangle{0.0f, y, contentW, rowH}, font, "Halo enabled", atmosphere.proxy.halo.enabled)) {
@@ -262,12 +264,14 @@ void DrawLightAtmosphereInspector(
                 atmosphere.proxy.halo.radiusWorld, uiState.lightProxyHaloRadiusInput, 0.01f, 64.0f, 3);
         drawFloat("sector_editor_light_proxy_halo_brightness", "Halo brightness:",
                 atmosphere.proxy.halo.brightness, uiState.lightProxyHaloBrightnessInput, 0.0f, 16.0f, 3);
+        drawFloat("sector_editor_light_proxy_halo_max_opacity", "Maximum opacity:",
+                atmosphere.proxy.halo.maxOpacity, uiState.lightProxyHaloMaxOpacityInput, 0.0f, 1.0f, 3);
         drawFloat("sector_editor_light_proxy_halo_softness", "Halo softness:",
                 atmosphere.proxy.halo.edgeSoftness, uiState.lightProxyHaloSoftnessInput, 0.01f, 1.0f, 3);
     }
     if (spotLight) {
         if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_proxy_shaft_enabled",
-                Rectangle{0.0f, y, contentW, rowH}, font, "Shaft enabled", atmosphere.proxy.shaft.enabled)) {
+                Rectangle{0.0f, y, contentW, rowH}, font, "Analytic shaft enabled", atmosphere.proxy.shaft.enabled)) {
             commit();
         }
         y += rowH + gap;
@@ -278,6 +282,8 @@ void DrawLightAtmosphereInspector(
                     atmosphere.proxy.shaft.widthScale, uiState.lightProxyShaftWidthInput, 0.01f, 2.0f, 3);
             drawFloat("sector_editor_light_proxy_shaft_brightness", "Shaft brightness:",
                     atmosphere.proxy.shaft.brightness, uiState.lightProxyShaftBrightnessInput, 0.0f, 16.0f, 3);
+            drawFloat("sector_editor_light_proxy_shaft_max_opacity", "Maximum opacity:",
+                    atmosphere.proxy.shaft.maxOpacity, uiState.lightProxyShaftMaxOpacityInput, 0.0f, 1.0f, 3);
             drawFloat("sector_editor_light_proxy_shaft_softness", "Shaft softness:",
                     atmosphere.proxy.shaft.edgeSoftness, uiState.lightProxyShaftSoftnessInput, 0.01f, 1.0f, 3);
         }

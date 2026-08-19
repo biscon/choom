@@ -203,6 +203,7 @@ struct SectorLightProxyHaloSettings {
     bool enabled = false;
     float radiusWorld = 0.5f;
     float brightness = 0.12f;
+    float maxOpacity = 0.35f;
     float edgeSoftness = 0.5f;
 };
 
@@ -211,6 +212,7 @@ struct SectorLightProxyShaftSettings {
     float lengthScale = 0.65f;
     float widthScale = 0.75f;
     float brightness = 0.05f;
+    float maxOpacity = 0.25f;
     float edgeSoftness = 0.5f;
 };
 

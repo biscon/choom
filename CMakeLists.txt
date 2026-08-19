@@ -279,6 +279,7 @@ if(BUILD_TESTING)
             HAZE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLightHazeRenderer.cpp"
             DISTANCE_FOG_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDistanceFogRenderer.cpp"
             ANALYTIC_FOG_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorAnalyticFogRenderer.cpp"
+            ANALYTIC_SHAFT_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorAnalyticLightShaftRenderer.cpp"
             LIGHT_PROXY_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLightProxyRenderer.cpp"
             DUST_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorLightDustRenderer.cpp"
             MUZZLE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/game/FpsViewmodelEffectsRenderer.cpp"

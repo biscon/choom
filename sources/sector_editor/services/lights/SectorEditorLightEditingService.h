@@ -95,10 +95,12 @@ struct SectorEditorLightEditingServiceContext {
             engine::UIIntInputState* dustBlueInput = nullptr;
             engine::UIFloatInputState* proxyHaloRadiusInput = nullptr;
             engine::UIFloatInputState* proxyHaloBrightnessInput = nullptr;
+            engine::UIFloatInputState* proxyHaloMaxOpacityInput = nullptr;
             engine::UIFloatInputState* proxyHaloSoftnessInput = nullptr;
             engine::UIFloatInputState* proxyShaftLengthInput = nullptr;
             engine::UIFloatInputState* proxyShaftWidthInput = nullptr;
             engine::UIFloatInputState* proxyShaftBrightnessInput = nullptr;
+            engine::UIFloatInputState* proxyShaftMaxOpacityInput = nullptr;
             engine::UIFloatInputState* proxyShaftSoftnessInput = nullptr;
             engine::UIIntInputState* proxyRedInput = nullptr;
             engine::UIIntInputState* proxyGreenInput = nullptr;

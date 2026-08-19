@@ -94,10 +94,12 @@ void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& 
     resetInt(uiState.atmosphere.hazeBlueInput);
     resetFloat(uiState.atmosphere.proxyHaloRadiusInput);
     resetFloat(uiState.atmosphere.proxyHaloBrightnessInput);
+    resetFloat(uiState.atmosphere.proxyHaloMaxOpacityInput);
     resetFloat(uiState.atmosphere.proxyHaloSoftnessInput);
     resetFloat(uiState.atmosphere.proxyShaftLengthInput);
     resetFloat(uiState.atmosphere.proxyShaftWidthInput);
     resetFloat(uiState.atmosphere.proxyShaftBrightnessInput);
+    resetFloat(uiState.atmosphere.proxyShaftMaxOpacityInput);
     resetFloat(uiState.atmosphere.proxyShaftSoftnessInput);
     resetInt(uiState.atmosphere.proxyRedInput);
     resetInt(uiState.atmosphere.proxyGreenInput);
@@ -206,11 +208,13 @@ bool SameAtmosphere(
             && left.proxy.halo.enabled == right.proxy.halo.enabled
             && left.proxy.halo.radiusWorld == right.proxy.halo.radiusWorld
             && left.proxy.halo.brightness == right.proxy.halo.brightness
+            && left.proxy.halo.maxOpacity == right.proxy.halo.maxOpacity
             && left.proxy.halo.edgeSoftness == right.proxy.halo.edgeSoftness
             && left.proxy.shaft.enabled == right.proxy.shaft.enabled
             && left.proxy.shaft.lengthScale == right.proxy.shaft.lengthScale
             && left.proxy.shaft.widthScale == right.proxy.shaft.widthScale
             && left.proxy.shaft.brightness == right.proxy.shaft.brightness
+            && left.proxy.shaft.maxOpacity == right.proxy.shaft.maxOpacity
             && left.proxy.shaft.edgeSoftness == right.proxy.shaft.edgeSoftness
             && sameColor(left.proxy.tint, right.proxy.tint)
             && left.dust.enabled == right.dust.enabled

@@ -590,6 +590,7 @@ void TestAtmosphereEditUsesDocumentMutationBoundary()
     atmosphere.haze.heightOffsetWorld = 0.75f;
     atmosphere.proxy.halo.enabled = true;
     atmosphere.proxy.halo.brightness = 0.4f;
+    atmosphere.proxy.halo.maxOpacity = 0.6f;
     atmosphere.dust.enabled = true;
     atmosphere.dust.amount = 35;
     Check(service.SetStaticLightAtmosphere(
@@ -599,6 +600,7 @@ void TestAtmosphereEditUsesDocumentMutationBoundary()
                   && Near(documentState.map.topologyMap.staticLights.front().atmosphere.haze.heightOffsetWorld, 0.75f)
                   && documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.enabled
                   && Near(documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.brightness, 0.4f)
+                  && Near(documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.maxOpacity, 0.6f)
                   && documentState.map.topologyMap.staticLights.front().atmosphere.dust.enabled
                   && documentState.map.topologyMap.staticLights.front().atmosphere.dust.amount == 35,
           "atmosphere edit writes normalized light data");

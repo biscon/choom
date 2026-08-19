@@ -961,6 +961,17 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
     Check(!defaultOffsetJson["staticLights"][0]["atmosphere"]["haze"].contains(
                   "heightOffsetWorld"),
           "default zero haze height offset is omitted");
+    SectorTopologyMap defaultOpacity = MakeSquare();
+    defaultOpacity.staticSpotLights.push_back(SectorTopologyStaticSpotLight{});
+    defaultOpacity.staticSpotLights.back().id = 6;
+    defaultOpacity.staticSpotLights.back().atmosphere.proxy.halo.enabled = true;
+    defaultOpacity.staticSpotLights.back().atmosphere.proxy.shaft.enabled = true;
+    const Json defaultOpacityJson = Json::parse(SaveText(defaultOpacity));
+    Check(!defaultOpacityJson["staticSpotLights"][0]["atmosphere"]["proxy"]["halo"].contains(
+                      "maxOpacity")
+                  && !defaultOpacityJson["staticSpotLights"][0]["atmosphere"]["proxy"]["shaft"].contains(
+                          "maxOpacity"),
+          "default proxy maximum opacity is omitted");
 
     game::SectorLightAtmosphereSettings atmosphere;
     atmosphere.haze.enabled = true;
@@ -977,9 +988,11 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
     atmosphere.proxy.halo.enabled = true;
     atmosphere.proxy.halo.radiusWorld = 1.25f;
     atmosphere.proxy.halo.brightness = 0.4f;
+    atmosphere.proxy.halo.maxOpacity = 0.6f;
     atmosphere.proxy.shaft.enabled = true;
     atmosphere.proxy.shaft.lengthScale = 0.8f;
     atmosphere.proxy.shaft.widthScale = 0.6f;
+    atmosphere.proxy.shaft.maxOpacity = 0.45f;
     atmosphere.dust.enabled = true;
     atmosphere.dust.amount = 47;
     atmosphere.dust.extentScale = 0.9f;
@@ -1012,7 +1025,9 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
             Check(staticAtmosphere["haze"].value("enabled", false)
                           && Near(staticAtmosphere["haze"].value("heightOffsetWorld", 0.0f), 0.65f)
                           && staticAtmosphere["proxy"]["halo"].value("enabled", false)
+                          && Near(staticAtmosphere["proxy"]["halo"].value("maxOpacity", 0.0f), 0.6f)
                           && staticAtmosphere["proxy"]["shaft"].value("enabled", false)
+                          && Near(staticAtmosphere["proxy"]["shaft"].value("maxOpacity", 0.0f), 0.45f)
                           && staticAtmosphere["dust"].value("enabled", false),
                   "enabled atmosphere flags are serialized");
         }
@@ -1041,8 +1056,10 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
                 && Near(value.haze.flowSpeedWorld, 0.08f)
                 && value.proxy.halo.enabled
                 && Near(value.proxy.halo.radiusWorld, 1.25f)
+                && Near(value.proxy.halo.maxOpacity, 0.6f)
                 && value.proxy.shaft.enabled
                 && Near(value.proxy.shaft.lengthScale, 0.8f)
+                && Near(value.proxy.shaft.maxOpacity, 0.45f)
                 && value.proxy.tint.g == 220
                 && value.dust.enabled
                 && value.dust.amount == 47
@@ -1060,6 +1077,25 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
           "dynamic point atmosphere round-trips");
     Check(loaded.dynamicSpotLights.size() == 1 && checkAtmosphere(loaded.dynamicSpotLights[0].atmosphere),
           "dynamic spot atmosphere round-trips");
+
+    Json omittedOpacity = defaultJson;
+    omittedOpacity["staticSpotLights"][0]["atmosphere"]["proxy"] = Json{
+            {"halo", {{"enabled", true}}},
+            {"shaft", {{"enabled", true}}}};
+    Check(LoadText(omittedOpacity.dump(), loaded, error),
+          "proxy settings with omitted maximum opacity load");
+    Check(loaded.staticSpotLights.size() == 1
+                  && Near(loaded.staticSpotLights[0].atmosphere.proxy.halo.maxOpacity, 0.35f)
+                  && Near(loaded.staticSpotLights[0].atmosphere.proxy.shaft.maxOpacity, 0.25f),
+          "omitted proxy maximum opacity uses restrained defaults");
+
+    game::SectorLightProxySettings invalidOpacity;
+    invalidOpacity.halo.maxOpacity = -2.0f;
+    invalidOpacity.shaft.maxOpacity = 3.0f;
+    invalidOpacity = game::NormalizeSectorLightProxySettings(invalidOpacity);
+    Check(Near(invalidOpacity.halo.maxOpacity, 0.0f)
+                  && Near(invalidOpacity.shaft.maxOpacity, 1.0f),
+          "proxy maximum opacity is clamped to the compositing range");
 }
 
 void TestRuntimeObjectsRoundTripAndValidation()

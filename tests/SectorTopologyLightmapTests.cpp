@@ -1407,6 +1407,7 @@ void TestSourceHashChanges()
     changedLight.staticLights[0].atmosphere.haze.heightOffsetWorld = 0.75f;
     changedLight.staticLights[0].atmosphere.proxy.halo.enabled = true;
     changedLight.staticLights[0].atmosphere.proxy.halo.brightness = 2.0f;
+    changedLight.staticLights[0].atmosphere.proxy.halo.maxOpacity = 0.8f;
     changedLight.staticLights[0].atmosphere.dust.enabled = true;
     changedLight.staticLights[0].atmosphere.dust.amount = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) == hash,
@@ -1464,6 +1465,10 @@ void TestSourceHashChanges()
     changedStaticSpotLight.staticSpotLights.front().castsShadow = true;
     Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) == staticSpotHash,
           "default static spot shadow state preserves the existing source hash");
+    changedStaticSpotLight.staticSpotLights.front().atmosphere.proxy.shaft.enabled = true;
+    changedStaticSpotLight.staticSpotLights.front().atmosphere.proxy.shaft.maxOpacity = 0.9f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) == staticSpotHash,
+          "hash ignores visual-only analytic shaft settings");
 
     game::SectorTopologyMap changedDynamicLight = base;
     changedDynamicLight.dynamicPointLights.push_back(game::SectorTopologyDynamicPointLight{

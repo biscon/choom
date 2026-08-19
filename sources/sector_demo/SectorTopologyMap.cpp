@@ -85,6 +85,8 @@ SectorLightProxySettings NormalizeSectorLightProxySettings(SectorLightProxySetti
             FiniteOr(settings.halo.radiusWorld, defaults.halo.radiusWorld), 0.01f, 64.0f);
     settings.halo.brightness = std::clamp(
             FiniteOr(settings.halo.brightness, defaults.halo.brightness), 0.0f, 16.0f);
+    settings.halo.maxOpacity = std::clamp(
+            FiniteOr(settings.halo.maxOpacity, defaults.halo.maxOpacity), 0.0f, 1.0f);
     settings.halo.edgeSoftness = std::clamp(
             FiniteOr(settings.halo.edgeSoftness, defaults.halo.edgeSoftness), 0.01f, 1.0f);
     settings.shaft.lengthScale = std::clamp(
@@ -93,6 +95,8 @@ SectorLightProxySettings NormalizeSectorLightProxySettings(SectorLightProxySetti
             FiniteOr(settings.shaft.widthScale, defaults.shaft.widthScale), 0.01f, 2.0f);
     settings.shaft.brightness = std::clamp(
             FiniteOr(settings.shaft.brightness, defaults.shaft.brightness), 0.0f, 16.0f);
+    settings.shaft.maxOpacity = std::clamp(
+            FiniteOr(settings.shaft.maxOpacity, defaults.shaft.maxOpacity), 0.0f, 1.0f);
     settings.shaft.edgeSoftness = std::clamp(
             FiniteOr(settings.shaft.edgeSoftness, defaults.shaft.edgeSoftness), 0.01f, 1.0f);
     return settings;
@@ -115,11 +119,13 @@ bool IsDefaultSectorLightProxySettings(const SectorLightProxySettings& settings)
             && value.halo.enabled == defaults.halo.enabled
             && value.halo.radiusWorld == defaults.halo.radiusWorld
             && value.halo.brightness == defaults.halo.brightness
+            && value.halo.maxOpacity == defaults.halo.maxOpacity
             && value.halo.edgeSoftness == defaults.halo.edgeSoftness
             && value.shaft.enabled == defaults.shaft.enabled
             && value.shaft.lengthScale == defaults.shaft.lengthScale
             && value.shaft.widthScale == defaults.shaft.widthScale
             && value.shaft.brightness == defaults.shaft.brightness
+            && value.shaft.maxOpacity == defaults.shaft.maxOpacity
             && value.shaft.edgeSoftness == defaults.shaft.edgeSoftness;
 }
 

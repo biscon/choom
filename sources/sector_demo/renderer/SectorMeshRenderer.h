@@ -14,6 +14,7 @@
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorDistanceFogRenderer.h"
 #include "sector_demo/renderer/SectorAnalyticFogRenderer.h"
+#include "sector_demo/renderer/SectorAnalyticLightShaftRenderer.h"
 #include "sector_demo/renderer/SectorLocalFogRenderer.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
 #include "sector_demo/renderer/SectorLightDustRenderer.h"
@@ -50,7 +51,8 @@ struct SectorAtmosphereDiagnostics {
     double localFogGpuMilliseconds = 0.0;
     double analyticFogGpuMilliseconds = 0.0;
     double lightHazeGpuMilliseconds = 0.0;
-    double lightProxyGpuMilliseconds = 0.0;
+    double analyticShaftGpuMilliseconds = 0.0;
+    double lightHaloGpuMilliseconds = 0.0;
     double dustGpuMilliseconds = 0.0;
     int dynamicLightCount = 0;
     int localFogEligibleCount = 0;
@@ -65,10 +67,13 @@ struct SectorAtmosphereDiagnostics {
     float lightHazeScissorCoverage = 0.0f;
     std::array<SectorLightHazeActiveSource,
             SectorLightHazeRenderer::MaxVolumes> lightHazeSources{};
-    int lightProxyEligibleCount = 0;
-    int lightProxyHaloCount = 0;
-    int lightProxyShaftCount = 0;
-    int lightProxyDrawCallCount = 0;
+    int analyticShaftEligibleCount = 0;
+    int analyticShaftActiveCount = 0;
+    float analyticShaftScissorCoverage = 0.0f;
+    int analyticShaftDrawCallCount = 0;
+    int lightHaloEligibleCount = 0;
+    int lightHaloCount = 0;
+    int lightHaloDrawCallCount = 0;
     int dustEligibleEmitterCount = 0;
     int dustActiveEmitterCount = 0;
     int dustVisibleParticleCount = 0;
@@ -285,7 +290,7 @@ public:
     }
 
 private:
-    static constexpr std::size_t AtmosphereGpuPassCount = 6;
+    static constexpr std::size_t AtmosphereGpuPassCount = 7;
     static constexpr std::size_t AtmosphereGpuQueryLatency = 4;
 
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
@@ -372,6 +377,7 @@ private:
     SectorLocalFogRenderer localFogRenderer;
     SectorAnalyticFogRenderer analyticFogRenderer;
     SectorLightHazeRenderer lightHazeRenderer;
+    SectorAnalyticLightShaftRenderer analyticLightShaftRenderer;
     SectorLightProxyRenderer lightProxyRenderer;
     SectorLightDustRenderer lightDustRenderer;
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;

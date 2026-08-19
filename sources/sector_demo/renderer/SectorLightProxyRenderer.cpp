@@ -38,7 +38,7 @@ const char* ProxyFs = R"(
 in vec2 fragProxyUv;
 in vec3 fragWorldPosition;
 in vec3 fragRadiance;
-in vec2 fragProxyData; // kind, softness
+in vec2 fragProxyData; // softness, maximum opacity
 out vec4 finalColor;
 uniform sampler2D sceneDepth;
 uniform vec2 viewportSize;
@@ -77,26 +77,17 @@ void main() {
     float sceneForward = linearDepth(texture(sceneDepth, screenUv).r);
     float proxyForward = dot(fragWorldPosition - cameraPosition, cameraForward);
     float depthDelta = proxyForward - sceneForward;
-    float occlusionBias = fragProxyData.x < 0.5 ? 0.12 : 0.03;
-    float occlusionFeather = fragProxyData.x < 0.5 ? 0.08 : 0.07;
+    float occlusionBias = 0.12;
+    float occlusionFeather = 0.08;
     float fragmentVisibility = 1.0 - smoothstep(
             occlusionBias, occlusionBias + occlusionFeather, depthDelta);
-    float softness = clamp(fragProxyData.y, 0.01, 1.0);
-    float mask;
-    if (fragProxyData.x < 0.5) {
-        float radius = length(fragProxyUv * 2.0 - 1.0);
-        mask = 1.0 - smoothstep(1.0 - softness, 1.0, radius);
-    } else {
-        float lateral = abs(fragProxyUv.x * 2.0 - 1.0);
-        float side = 1.0 - smoothstep(1.0 - softness, 1.0, lateral);
-        float longitudinal = smoothstep(0.0, 0.12, fragProxyUv.y)
-                * (1.0 - smoothstep(0.72, 1.0, fragProxyUv.y));
-        mask = side * longitudinal;
-    }
-    float visibility = mask * fragmentVisibility * fogTransmittance(fragWorldPosition);
-    if (visibility <= 0.00001) discard;
-    finalColor = vec4(min(max(fragRadiance, vec3(0.0)) * visibility,
-            vec3(65504.0)), 0.0);
+    float softness = clamp(fragProxyData.x, 0.01, 1.0);
+    float radius = length(fragProxyUv * 2.0 - 1.0);
+    float mask = 1.0 - smoothstep(1.0 - softness, 1.0, radius);
+    float opacity = clamp(fragProxyData.y, 0.0, 1.0) * mask
+            * fragmentVisibility * fogTransmittance(fragWorldPosition);
+    if (opacity <= 0.00001) discard;
+    finalColor = vec4(min(max(fragRadiance, vec3(0.0)), vec3(65504.0)), opacity);
 }
 )";
 
@@ -122,7 +113,8 @@ Vector3 Multiply(Vector3 left, Vector3 right)
 
 void SectorLightProxyRenderer::Reserve(std::size_t sourceCount)
 {
-    EnsureCapacity(sourceCount * 2);
+    EnsureCapacity(sourceCount);
+    visibleHalos.reserve(sourceCount);
 }
 
 bool SectorLightProxyRenderer::EnsureResources()
@@ -191,10 +183,11 @@ bool SectorLightProxyRenderer::Apply(
         const RuntimePortalVisibilityResult& visibility,
         const std::vector<SectorReceiverBounds>& receiverBounds)
 {
-    eligibleCount = haloCount = shaftCount = drawCallCount = 0;
+    eligibleCount = haloCount = drawCallCount = 0;
+    visibleHalos.clear();
     if (quality == SectorVolumetricQuality::Off || sources.empty()
             || sceneTarget.depth.id == 0 || colorOnlyTarget.id == 0
-            || !EnsureResources() || !EnsureCapacity(sources.size() * 2)) return false;
+            || !EnsureResources() || !EnsureCapacity(sources.size())) return false;
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());
     const int width = sceneTarget.texture.width;
@@ -203,9 +196,47 @@ bool SectorLightProxyRenderer::Apply(
     const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
     const Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(forward, camera.up));
     const Vector3 cameraUp = Vector3Normalize(Vector3CrossProduct(cameraRight, forward));
+    for (const SectorLightAtmosphereSource& source : sources) {
+        if (!IsSectorLightAtmosphereSourceSelected(source, dynamicLights)) continue;
+        const SectorLightProxySettings& proxy = source.atmosphere.proxy;
+        if (!proxy.halo.enabled || proxy.halo.brightness <= 0.0f
+                || proxy.halo.maxOpacity <= 0.0f) continue;
+        SectorLightAtmosphereVolume volume;
+        volume.source = &source;
+        volume.originWorld = source.positionWorld;
+        volume.boundsCenterWorld = source.positionWorld;
+        volume.boundsRadiusWorld = proxy.halo.radiusWorld;
+        volume.extentWorld = proxy.halo.radiusWorld;
+        if (!IsSectorLightAtmosphereVolumeVisible(volume, visibility, receiverBounds,
+                    camera, aspect, nearPlane, farPlane)) continue;
+        Vector3 lightColor = engine::SrgbColorBytesToLinearSceneRgb(source.color);
+        float intensity = source.intensity;
+        const int dynamicIndex = FindDynamicIndex(source, dynamicLights);
+        if (dynamicIndex >= 0) {
+            lightColor = dynamicLights.dynamicLightColors[static_cast<std::size_t>(dynamicIndex)];
+            intensity = dynamicLights.dynamicLightIntensities[static_cast<std::size_t>(dynamicIndex)];
+        }
+        const Vector3 tint = engine::SrgbColorBytesToLinearSceneRgb(proxy.tint);
+        visibleHalos.push_back(VisibleHalo{
+                &source,
+                Vector3Scale(Multiply(lightColor, tint), intensity * proxy.halo.brightness),
+                Vector3DistanceSqr(camera.position, source.positionWorld)});
+    }
+    std::sort(visibleHalos.begin(), visibleHalos.end(), [](const auto& left, const auto& right) {
+        if (left.distanceSquared != right.distanceSquared) {
+            return left.distanceSquared > right.distanceSquared;
+        }
+        if (left.source->lightId != right.source->lightId) {
+            return left.source->lightId < right.source->lightId;
+        }
+        return static_cast<int>(left.source->kind) < static_cast<int>(right.source->kind);
+    });
+    eligibleCount = haloCount = static_cast<int>(visibleHalos.size());
+    if (visibleHalos.empty()) return false;
+
     std::size_t vertex = 0;
     const auto appendQuad = [&](const Vector3 (&positions)[4], const Vector3 radiance,
-                                float kind, float softness) {
+                                float softness, float maxOpacity) {
         const int order[6] = {0, 1, 2, 0, 2, 3};
         const Vector2 uv[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
         for (int i = 0; i < 6; ++i, ++vertex) {
@@ -214,74 +245,23 @@ bool SectorLightProxyRenderer::Apply(
             std::memcpy(&normals[vertex * 3], &radiance, sizeof(Vector3));
             texcoords[vertex * 2] = uv[corner].x;
             texcoords[vertex * 2 + 1] = uv[corner].y;
-            colors[vertex * 4] = static_cast<unsigned char>(kind > 0.5f ? 255 : 0);
-            colors[vertex * 4 + 1] = static_cast<unsigned char>(std::clamp(softness, 0.0f, 1.0f) * 255.0f);
+            colors[vertex * 4] = static_cast<unsigned char>(std::clamp(softness, 0.0f, 1.0f) * 255.0f);
+            colors[vertex * 4 + 1] = static_cast<unsigned char>(std::clamp(maxOpacity, 0.0f, 1.0f) * 255.0f);
             colors[vertex * 4 + 2] = 0;
             colors[vertex * 4 + 3] = 255;
         }
     };
-    for (const SectorLightAtmosphereSource& source : sources) {
-        if (!IsSectorLightAtmosphereSourceSelected(source, dynamicLights)) continue;
-        Vector3 lightColor = engine::SrgbColorBytesToLinearSceneRgb(source.color);
-        float intensity = source.intensity;
-        const int dynamicIndex = FindDynamicIndex(source, dynamicLights);
-        if (dynamicIndex >= 0) {
-            lightColor = dynamicLights.dynamicLightColors[static_cast<std::size_t>(dynamicIndex)];
-            intensity = dynamicLights.dynamicLightIntensities[static_cast<std::size_t>(dynamicIndex)];
-        }
+    for (const VisibleHalo& visible : visibleHalos) {
+        const SectorLightAtmosphereSource& source = *visible.source;
         const SectorLightProxySettings& proxy = source.atmosphere.proxy;
-        const Vector3 tint = engine::SrgbColorBytesToLinearSceneRgb(proxy.tint);
-        if (proxy.halo.enabled && proxy.halo.brightness > 0.0f) {
-            SectorLightAtmosphereVolume volume;
-            volume.source = &source;
-            volume.originWorld = source.positionWorld;
-            volume.boundsCenterWorld = source.positionWorld;
-            volume.boundsRadiusWorld = proxy.halo.radiusWorld;
-            volume.extentWorld = proxy.halo.radiusWorld;
-            if (IsSectorLightAtmosphereVolumeVisible(volume, visibility, receiverBounds,
-                        camera, aspect, nearPlane, farPlane)) {
-                ++eligibleCount;
-                const Vector3 horizontal = Vector3Scale(cameraRight, proxy.halo.radiusWorld);
-                const Vector3 vertical = Vector3Scale(cameraUp, proxy.halo.radiusWorld);
-                const Vector3 p[4] = {
-                    Vector3Subtract(Vector3Subtract(source.positionWorld, horizontal), vertical),
-                    Vector3Add(Vector3Subtract(source.positionWorld, vertical), horizontal),
-                    Vector3Add(Vector3Add(source.positionWorld, horizontal), vertical),
-                    Vector3Add(Vector3Subtract(source.positionWorld, horizontal), vertical)};
-                appendQuad(p, Vector3Scale(Multiply(lightColor, tint),
-                        intensity * proxy.halo.brightness), 0.0f,
-                        proxy.halo.edgeSoftness);
-                ++haloCount;
-            }
-        }
-        if (source.shape == SectorLightAtmosphereShape::Cone && proxy.shaft.enabled
-                && proxy.shaft.brightness > 0.0f) {
-            SectorLightAtmosphereVolume volume;
-            if (MakeSectorLightAtmosphereVolume(source, proxy.shaft.lengthScale, 0.0f, volume)
-                    && IsSectorLightAtmosphereVolumeVisible(volume, visibility, receiverBounds,
-                            camera, aspect, nearPlane, farPlane)) {
-                ++eligibleCount;
-                const float length = source.rangeWorld * proxy.shaft.lengthScale;
-                const float halfAngle = std::min(std::acos(std::clamp(source.outerConeCos, -1.0f, 1.0f)),
-                        SectorLightAtmosphereMaximumConeHalfAngleDegrees * DEG2RAD);
-                const float endWidth = std::tan(halfAngle) * length * proxy.shaft.widthScale;
-                const Vector3 start = Vector3Add(source.positionWorld,
-                        Vector3Scale(source.directionWorld, 0.05f));
-                const Vector3 end = Vector3Add(source.positionWorld,
-                        Vector3Scale(source.directionWorld, length));
-                Vector3 side = Vector3CrossProduct(source.directionWorld,
-                        Vector3Subtract(camera.position, Vector3Scale(Vector3Add(start, end), 0.5f)));
-                side = Vector3LengthSqr(side) > 0.000001f ? Vector3Normalize(side) : cameraRight;
-                const Vector3 startSide = Vector3Scale(side, std::max(endWidth * 0.04f, 0.01f));
-                const Vector3 endSide = Vector3Scale(side, endWidth);
-                const Vector3 p[4] = {Vector3Subtract(start, startSide), Vector3Add(start, startSide),
-                        Vector3Add(end, endSide), Vector3Subtract(end, endSide)};
-                appendQuad(p, Vector3Scale(Multiply(lightColor, tint),
-                        intensity * proxy.shaft.brightness), 1.0f,
-                        proxy.shaft.edgeSoftness);
-                ++shaftCount;
-            }
-        }
+        const Vector3 horizontal = Vector3Scale(cameraRight, proxy.halo.radiusWorld);
+        const Vector3 vertical = Vector3Scale(cameraUp, proxy.halo.radiusWorld);
+        const Vector3 p[4] = {
+            Vector3Subtract(Vector3Subtract(source.positionWorld, horizontal), vertical),
+            Vector3Add(Vector3Subtract(source.positionWorld, vertical), horizontal),
+            Vector3Add(Vector3Add(source.positionWorld, horizontal), vertical),
+            Vector3Add(Vector3Subtract(source.positionWorld, horizontal), vertical)};
+        appendQuad(p, visible.radiance, proxy.halo.edgeSoftness, proxy.halo.maxOpacity);
     }
     if (vertex == 0) return false;
     mesh.vertexCount = static_cast<int>(vertex);
@@ -309,8 +289,9 @@ bool SectorLightProxyRenderer::Apply(
     SetShaderValue(shader, farPlaneLoc, &farPlane, SHADER_UNIFORM_FLOAT);
     SetShaderValue(shader, fogParamsALoc, &fogA, SHADER_UNIFORM_VEC4);
     SetShaderValue(shader, fogParamsBLoc, &fogB, SHADER_UNIFORM_VEC4);
-    // The shader writes visibility-premultiplied HDR radiance.
-    BeginBlendMode(BLEND_ADD_COLORS);
+    // Brightness controls HDR radiance while alpha independently caps coverage.
+    BeginBlendMode(BLEND_ALPHA);
+    rlColorMask(true, true, true, false);
     rlDisableDepthTest();
     rlDisableDepthMask();
     rlDisableBackfaceCulling();
@@ -319,6 +300,7 @@ bool SectorLightProxyRenderer::Apply(
     rlEnableBackfaceCulling();
     rlEnableDepthMask();
     rlEnableDepthTest();
+    rlColorMask(true, true, true, true);
     EndBlendMode();
     EndMode3D();
     EndTextureMode();
@@ -343,6 +325,8 @@ void SectorLightProxyRenderer::Shutdown()
     shaderFailed = false;
     quadCapacity = 0;
     vertices.clear(); texcoords.clear(); normals.clear(); colors.clear();
+    visibleHalos.clear();
+    visibleHalos.shrink_to_fit();
 }
 
 } // namespace game

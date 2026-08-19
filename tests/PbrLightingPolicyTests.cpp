@@ -480,6 +480,7 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::string haze=ReadSource(HAZE_SHADER_SOURCE_PATH);
     const std::string distanceFog=ReadSource(DISTANCE_FOG_SHADER_SOURCE_PATH);
     const std::string analyticFog=ReadSource(ANALYTIC_FOG_SHADER_SOURCE_PATH);
+    const std::string analyticShaft=ReadSource(ANALYTIC_SHAFT_SHADER_SOURCE_PATH);
     const std::string lightProxy=ReadSource(LIGHT_PROXY_SHADER_SOURCE_PATH);
     const std::string dust=ReadSource(DUST_SHADER_SOURCE_PATH);
     const std::string muzzle=ReadSource(MUZZLE_SHADER_SOURCE_PATH);
@@ -489,16 +490,20 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::string dynamicLightingShadows=ReadSource(
             DYNAMIC_LIGHTING_SHADOW_SOURCE_PATH);
     Check(!bloom.empty()&&!fog.empty()&&!haze.empty()&&!distanceFog.empty()
-                    &&!analyticFog.empty()&&!lightProxy.empty()&&!dust.empty()
+                    &&!analyticFog.empty()&&!analyticShaft.empty()&&!lightProxy.empty()&&!dust.empty()
                     &&!muzzle.empty()&&!mainGraph.empty()&&!dynamicModelShadows.empty()
                     &&!dynamicLightingShadows.empty(),
           "HDR effect policy can read every affected shader and pass graph");
     Check(distanceFog.find("for (") == std::string::npos
                     && analyticFog.find("for (int stepIndex") == std::string::npos
                     && lightProxy.find("for (int lightIndex") == std::string::npos
+                    && analyticShaft.find("for (int stepIndex") == std::string::npos
                     && distanceFog.find("uniform sampler2D sceneDepth") != std::string::npos
                     && analyticFog.find("intersectEllipsoid") != std::string::npos
-                    && lightProxy.find("BeginBlendMode(BLEND_ADD_COLORS)") != std::string::npos,
+                    && analyticShaft.find("intersectFiniteCone") != std::string::npos
+                    && analyticShaft.find("rlEnableScissorTest") != std::string::npos
+                    && analyticShaft.find("BeginBlendMode(BLEND_ALPHA)") != std::string::npos
+                    && lightProxy.find("BeginBlendMode(BLEND_ALPHA)") != std::string::npos,
           "cheap atmosphere paths use depth and analytic/proxy work without raymarch or light loops");
     Check(lightProxy.find("shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(shader, \"sceneDepth\")")
                             != std::string::npos
@@ -509,9 +514,15 @@ void TestHdrEffectShaderAndPassPolicies()
                     && lightProxy.find("fragSourceUv") == std::string::npos
                     && lightProxy.find("float depthDelta = proxyForward - sceneForward;")
                             != std::string::npos
-                    && lightProxy.find("float occlusionBias = fragProxyData.x < 0.5 ? 0.12 : 0.03;")
+                    && lightProxy.find("float occlusionBias = 0.12;") != std::string::npos
+                    && lightProxy.find("proxy.shaft") == std::string::npos
+                    && analyticShaft.find("float coverage = clamp(chord / localDiameter")
+                            != std::string::npos
+                    && analyticShaft.find("mix(0.2, 2.5, softness)") != std::string::npos
+                    && analyticShaft.find(
+                            "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
                             != std::string::npos,
-          "light proxies bind mesh depth deterministically and use local depth occlusion only");
+          "halos use local depth occlusion while analytic cone chords provide symmetric shaft softness");
     Check(bloom.find("Rgba8Unorm")==std::string::npos
                     && fog.find("Rgba8Unorm")==std::string::npos
                     && haze.find("Rgba8Unorm")==std::string::npos

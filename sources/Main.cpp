@@ -135,7 +135,7 @@ public:
         static constexpr const char* Names[PassCount] = {
                 "shadows", "world", "atmosphere", "viewmodel", "bloom",
                 "presentation", "final"};
-        DrawRectangle(8, 42, 620, 104 + static_cast<int>(PassCount) * 20,
+        DrawRectangle(8, 42, 760, 104 + static_cast<int>(PassCount) * 20,
                 Color{0, 0, 0, 190});
         DrawText(TextFormat("Render %.0f%%  FXAA %s  CPU / GPU ms",
                          renderScale * 100.0f, fxaa ? "on" : "off"),
@@ -147,23 +147,26 @@ public:
         }
         const int detailY = 70 + static_cast<int>(PassCount) * 20;
         DrawText(TextFormat(
-                         "atmo GPU dist/analytic/ray/haze/proxy/dust %.2f/%.2f/%.2f/%.2f/%.2f/%.2f",
+                         "atmo GPU dist/analytic/ray/haze/shaft/halo/dust %.2f/%.2f/%.2f/%.2f/%.2f/%.2f/%.2f",
                          atmosphere.distanceFogGpuMilliseconds,
                          atmosphere.analyticFogGpuMilliseconds,
                          atmosphere.localFogGpuMilliseconds,
                          atmosphere.lightHazeGpuMilliseconds,
-                         atmosphere.lightProxyGpuMilliseconds,
+                         atmosphere.analyticShaftGpuMilliseconds,
+                         atmosphere.lightHaloGpuMilliseconds,
                          atmosphere.dustGpuMilliseconds),
                 16, detailY, 16, SKYBLUE);
         DrawText(TextFormat(
-                         "fog ray %d/%d ana %d/%d  proxy H%d S%d D%d  lights %d",
+                         "fog ray %d/%d ana %d/%d  shaft %d/%d D%d  halo %d D%d  lights %d",
                          atmosphere.localFogActiveCount,
                          atmosphere.localFogEligibleCount,
                          atmosphere.analyticFogActiveCount,
                          atmosphere.analyticFogEligibleCount,
-                         atmosphere.lightProxyHaloCount,
-                         atmosphere.lightProxyShaftCount,
-                         atmosphere.lightProxyDrawCallCount,
+                         atmosphere.analyticShaftActiveCount,
+                         atmosphere.analyticShaftEligibleCount,
+                         atmosphere.analyticShaftDrawCallCount,
+                         atmosphere.lightHaloCount,
+                         atmosphere.lightHaloDrawCallCount,
                          atmosphere.dynamicLightCount),
                 16, detailY + 20, 16, SKYBLUE);
         DrawText(TextFormat(
@@ -259,9 +262,9 @@ public:
         }
         std::fprintf(
                 output,
-                "# frame trace v2; dips >= %.3f ms; timestamps use CLOCK_MONOTONIC\n"
+                "# frame trace v3; dips >= %.3f ms; timestamps use CLOCK_MONOTONIC\n"
                 "# haze source kinds: 0=static-point 1=static-spot 2=dynamic-point 3=dynamic-spot\n"
-                "# mono_seconds total_ms pre_render_ms shadows_cpu_ms world_cpu_ms atmosphere_cpu_ms viewmodel_cpu_ms bloom_cpu_ms presentation_cpu_ms final_cpu_ms shadows_gpu_ms world_gpu_ms atmosphere_gpu_ms viewmodel_gpu_ms bloom_gpu_ms presentation_gpu_ms final_gpu_ms local_fog_gpu_ms light_haze_gpu_ms dust_gpu_ms fog_eligible fog_active fog_coverage haze_eligible haze_active haze_coverage dust_active dust_visible dynamic_lights distance_fog_gpu_ms analytic_fog_gpu_ms light_proxy_gpu_ms analytic_fog_eligible analytic_fog_active analytic_fog_coverage proxy_eligible proxy_halos proxy_shafts proxy_draws fog_id0 fog_id1 fog_id2 fog_id3 fog_id4 fog_id5 fog_id6 fog_id7 fog_id8 fog_id9 fog_id10 fog_id11 fog_id12 fog_id13 fog_id14 fog_id15 haze_kind0 haze_id0 haze_kind1 haze_id1 haze_kind2 haze_id2 haze_kind3 haze_id3 haze_kind4 haze_id4 haze_kind5 haze_id5 haze_kind6 haze_id6 haze_kind7 haze_id7\n",
+                "# mono_seconds total_ms pre_render_ms shadows_cpu_ms world_cpu_ms atmosphere_cpu_ms viewmodel_cpu_ms bloom_cpu_ms presentation_cpu_ms final_cpu_ms shadows_gpu_ms world_gpu_ms atmosphere_gpu_ms viewmodel_gpu_ms bloom_gpu_ms presentation_gpu_ms final_gpu_ms local_fog_gpu_ms light_haze_gpu_ms dust_gpu_ms fog_eligible fog_active fog_coverage haze_eligible haze_active haze_coverage dust_active dust_visible dynamic_lights distance_fog_gpu_ms analytic_fog_gpu_ms analytic_shaft_gpu_ms light_halo_gpu_ms analytic_fog_eligible analytic_fog_active analytic_fog_coverage shaft_eligible shaft_active shaft_coverage shaft_draws halo_eligible halo_count halo_draws fog_id0 fog_id1 fog_id2 fog_id3 fog_id4 fog_id5 fog_id6 fog_id7 fog_id8 fog_id9 fog_id10 fog_id11 fog_id12 fog_id13 fog_id14 fog_id15 haze_kind0 haze_id0 haze_kind1 haze_id1 haze_kind2 haze_id2 haze_kind3 haze_id3 haze_kind4 haze_id4 haze_kind5 haze_id5 haze_kind6 haze_id6 haze_kind7 haze_id7\n",
                 thresholdMilliseconds);
         std::fflush(output);
     }
@@ -310,7 +313,7 @@ public:
         }
         std::fprintf(
                 output,
-                "%.9f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %d %d %.4f %d %d %.4f %d %d %d %.3f %.3f %.3f %d %d %.4f %d %d %d %d",
+                "%.9f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %d %d %.4f %d %d %.4f %d %d %d %.3f %.3f %.3f %.3f %d %d %.4f %d %d %.4f %d %d %d %d",
                 frameEndSeconds,
                 totalMilliseconds,
                 (preRenderEndSeconds - frameStartSeconds) * 1000.0,
@@ -342,14 +345,18 @@ public:
                 atmosphere.dynamicLightCount,
                 atmosphere.distanceFogGpuMilliseconds,
                 atmosphere.analyticFogGpuMilliseconds,
-                atmosphere.lightProxyGpuMilliseconds,
+                atmosphere.analyticShaftGpuMilliseconds,
+                atmosphere.lightHaloGpuMilliseconds,
                 atmosphere.analyticFogEligibleCount,
                 atmosphere.analyticFogActiveCount,
                 atmosphere.analyticFogScissorCoverage,
-                atmosphere.lightProxyEligibleCount,
-                atmosphere.lightProxyHaloCount,
-                atmosphere.lightProxyShaftCount,
-                atmosphere.lightProxyDrawCallCount);
+                atmosphere.analyticShaftEligibleCount,
+                atmosphere.analyticShaftActiveCount,
+                atmosphere.analyticShaftScissorCoverage,
+                atmosphere.analyticShaftDrawCallCount,
+                atmosphere.lightHaloEligibleCount,
+                atmosphere.lightHaloCount,
+                atmosphere.lightHaloDrawCallCount);
         for (const int fogVolumeId : atmosphere.localFogVolumeIds) {
             std::fprintf(output, " %d", fogVolumeId);
         }

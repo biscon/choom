@@ -3,6 +3,7 @@
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorVolumetricQuality.h"
+#include "sector_demo/renderer/SectorAtmosphereCulling.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
 
@@ -15,7 +16,7 @@ namespace game {
 
 struct SectorReceiverBounds;
 
-class SectorLightProxyRenderer {
+class SectorAnalyticLightShaftRenderer {
 public:
     void Reserve(std::size_t sourceCount);
     bool Apply(
@@ -31,38 +32,45 @@ public:
     void Shutdown();
 
     int EligibleCount() const { return eligibleCount; }
-    int HaloCount() const { return haloCount; }
+    int ActiveCount() const { return activeCount; }
+    float ScissorCoverage() const { return scissorCoverage; }
     int DrawCallCount() const { return drawCallCount; }
 
 private:
-    bool EnsureResources();
-    bool EnsureCapacity(std::size_t quadCapacity);
-
-    struct VisibleHalo {
+    struct VisibleShaft {
         const SectorLightAtmosphereSource* source = nullptr;
+        SectorLightAtmosphereVolume volume;
+        SectorAtmosphereScissorRect scissor;
         Vector3 radiance = {};
         float distanceSquared = 0.0f;
     };
 
+    bool EnsureShader();
+
     Shader shader = {};
-    Material material = {};
-    Mesh mesh = {};
+    int sceneDepthLoc = -1;
     int viewportSizeLoc = -1;
     int cameraPositionLoc = -1;
     int cameraForwardLoc = -1;
+    int cameraRightLoc = -1;
+    int cameraUpLoc = -1;
+    int tanHalfFovLoc = -1;
+    int aspectRatioLoc = -1;
     int nearPlaneLoc = -1;
     int farPlaneLoc = -1;
+    int coneApexLoc = -1;
+    int coneDirectionLoc = -1;
+    int coneLengthLoc = -1;
+    int coneBaseRadiusLoc = -1;
+    int shaftRadianceLoc = -1;
+    int shaftParamsLoc = -1;
     int fogParamsALoc = -1;
     int fogParamsBLoc = -1;
     bool shaderFailed = false;
-    std::size_t quadCapacity = 0;
-    std::vector<float> vertices;
-    std::vector<float> texcoords;
-    std::vector<float> normals;
-    std::vector<unsigned char> colors;
-    std::vector<VisibleHalo> visibleHalos;
+    std::vector<VisibleShaft> visibleShafts;
     int eligibleCount = 0;
-    int haloCount = 0;
+    int activeCount = 0;
+    float scissorCoverage = 0.0f;
     int drawCallCount = 0;
 };
 

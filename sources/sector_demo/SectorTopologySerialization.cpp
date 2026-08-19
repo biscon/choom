@@ -2340,6 +2340,7 @@ Json WriteLightProxySettings(const SectorLightProxySettings& source)
     if (settings.halo.enabled != defaults.halo.enabled) halo["enabled"] = settings.halo.enabled;
     if (settings.halo.radiusWorld != defaults.halo.radiusWorld) halo["radiusWorld"] = settings.halo.radiusWorld;
     if (settings.halo.brightness != defaults.halo.brightness) halo["brightness"] = settings.halo.brightness;
+    if (settings.halo.maxOpacity != defaults.halo.maxOpacity) halo["maxOpacity"] = settings.halo.maxOpacity;
     if (settings.halo.edgeSoftness != defaults.halo.edgeSoftness) halo["edgeSoftness"] = settings.halo.edgeSoftness;
     if (!halo.empty()) value["halo"] = std::move(halo);
     Json shaft = Json::object();
@@ -2347,6 +2348,7 @@ Json WriteLightProxySettings(const SectorLightProxySettings& source)
     if (settings.shaft.lengthScale != defaults.shaft.lengthScale) shaft["lengthScale"] = settings.shaft.lengthScale;
     if (settings.shaft.widthScale != defaults.shaft.widthScale) shaft["widthScale"] = settings.shaft.widthScale;
     if (settings.shaft.brightness != defaults.shaft.brightness) shaft["brightness"] = settings.shaft.brightness;
+    if (settings.shaft.maxOpacity != defaults.shaft.maxOpacity) shaft["maxOpacity"] = settings.shaft.maxOpacity;
     if (settings.shaft.edgeSoftness != defaults.shaft.edgeSoftness) shaft["edgeSoftness"] = settings.shaft.edgeSoftness;
     if (!shaft.empty()) value["shaft"] = std::move(shaft);
     return value;
@@ -2967,6 +2969,7 @@ SectorLightProxySettings ReadLightProxySettings(const Json& value, const std::st
         settings.halo.enabled = ReadOptionalBool(*haloIt, "enabled", context + ".halo", settings.halo.enabled);
         settings.halo.radiusWorld = ReadOptionalClampedFloat(*haloIt, "radiusWorld", context + ".halo", settings.halo.radiusWorld, 0.01f, 64.0f);
         settings.halo.brightness = ReadOptionalClampedFloat(*haloIt, "brightness", context + ".halo", settings.halo.brightness, 0.0f, 16.0f);
+        settings.halo.maxOpacity = ReadOptionalClampedFloat(*haloIt, "maxOpacity", context + ".halo", settings.halo.maxOpacity, 0.0f, 1.0f);
         settings.halo.edgeSoftness = ReadOptionalClampedFloat(*haloIt, "edgeSoftness", context + ".halo", settings.halo.edgeSoftness, 0.01f, 1.0f);
     }
     const auto shaftIt = value.find("shaft");
@@ -2976,6 +2979,7 @@ SectorLightProxySettings ReadLightProxySettings(const Json& value, const std::st
         settings.shaft.lengthScale = ReadOptionalClampedFloat(*shaftIt, "lengthScale", context + ".shaft", settings.shaft.lengthScale, 0.01f, 2.0f);
         settings.shaft.widthScale = ReadOptionalClampedFloat(*shaftIt, "widthScale", context + ".shaft", settings.shaft.widthScale, 0.01f, 2.0f);
         settings.shaft.brightness = ReadOptionalClampedFloat(*shaftIt, "brightness", context + ".shaft", settings.shaft.brightness, 0.0f, 16.0f);
+        settings.shaft.maxOpacity = ReadOptionalClampedFloat(*shaftIt, "maxOpacity", context + ".shaft", settings.shaft.maxOpacity, 0.0f, 1.0f);
         settings.shaft.edgeSoftness = ReadOptionalClampedFloat(*shaftIt, "edgeSoftness", context + ".shaft", settings.shaft.edgeSoftness, 0.01f, 1.0f);
     }
     return NormalizeSectorLightProxySettings(settings);
