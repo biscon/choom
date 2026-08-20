@@ -3,6 +3,8 @@
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/SectorEditorHelpers.h"
 
+#include <raymath.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -53,6 +55,16 @@ bool SetColorValue(Color& target, Color value)
 float ClampConeDegrees(float value)
 {
     return std::clamp(value, 0.0f, 179.0f);
+}
+
+Vector3 TargetPointingDown(Vector3 position, Vector3 target)
+{
+    constexpr float MinimumUsableDistance = 0.0001f;
+    float distance = Vector3Distance(position, target);
+    if (!std::isfinite(distance) || distance <= MinimumUsableDistance) {
+        distance = SectorWorldToAuthoringDistance(1.0f);
+    }
+    return Vector3{position.x, position.y - distance, position.z};
 }
 
 SectorLightAtmosphereSettings* FindAtmosphere(
@@ -1040,6 +1052,16 @@ bool SectorEditorLightEditingService::SetStaticSpotLightTarget(
     return true;
 }
 
+bool SectorEditorLightEditingService::PointStaticSpotLightDown(
+        SectorTopologyStaticSpotLight& light)
+{
+    if (!SetVector3(light.target, TargetPointingDown(light.position, light.target))) {
+        return false;
+    }
+    MarkEdited(TextFormat("Pointed static spot %d down", light.id));
+    return true;
+}
+
 bool SectorEditorLightEditingService::SetStaticSpotLightRange(
         SectorTopologyStaticSpotLight& light,
         float range)
@@ -1406,6 +1428,16 @@ bool SectorEditorLightEditingService::SetDynamicSpotLightTarget(
         return false;
     }
     MarkEdited(TextFormat("Updated dynamic spot %d", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::PointDynamicSpotLightDown(
+        SectorTopologyDynamicSpotLight& light)
+{
+    if (!SetVector3(light.target, TargetPointingDown(light.position, light.target))) {
+        return false;
+    }
+    MarkEdited(TextFormat("Pointed dynamic spot %d down", light.id));
     return true;
 }
 

@@ -164,6 +164,7 @@ public:
 
     bool SetStaticSpotLightPosition(SectorTopologyStaticSpotLight& light, Vector3 position);
     bool SetStaticSpotLightTarget(SectorTopologyStaticSpotLight& light, Vector3 target);
+    bool PointStaticSpotLightDown(SectorTopologyStaticSpotLight& light);
     bool SetStaticSpotLightRange(SectorTopologyStaticSpotLight& light, float range);
     bool SetStaticSpotLightSourceRadius(SectorTopologyStaticSpotLight& light, float sourceRadius);
     bool SetStaticSpotLightInnerCone(SectorTopologyStaticSpotLight& light, float innerConeDegrees);
@@ -203,6 +204,7 @@ public:
     bool SetDynamicSpotLightShadowSoftness(SectorTopologyDynamicSpotLight& light, float shadowSoftness);
     bool SetDynamicSpotLightPosition(SectorTopologyDynamicSpotLight& light, Vector3 position);
     bool SetDynamicSpotLightTarget(SectorTopologyDynamicSpotLight& light, Vector3 target);
+    bool PointDynamicSpotLightDown(SectorTopologyDynamicSpotLight& light);
     bool SetDynamicSpotLightIntensity(SectorTopologyDynamicSpotLight& light, float intensity);
     bool SetDynamicSpotLightRange(SectorTopologyDynamicSpotLight& light, float range);
     bool SetDynamicSpotLightInnerCone(SectorTopologyDynamicSpotLight& light, float innerConeDegrees);

@@ -402,7 +402,7 @@ float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdErr
     }
     height += rowH + gap; // Delete.
     height += rowH + gap; // Shadow.
-    height += 12.0f * (rowH + gap); // Position/target/intensity/range/source/cones.
+    height += 12.0f * (rowH + gap); // Position/target/point down/intensity/range/source/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
     height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, true);
@@ -440,7 +440,7 @@ float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdEr
     height += 3.0f * (rowH + gap); // Flicker controls.
     height += 5.0f * (rowH + gap); // Shadow controls.
     height += shadowNoteHeight + gap; // Shadow budget note.
-    height += 11.0f * (rowH + gap); // Position/target/intensity/range/cones.
+    height += 11.0f * (rowH + gap); // Position/target/point down/intensity/range/cones.
     height += 3.0f * (rowH + gap); // RGB.
     height += 36.0f + gap; // Swatch.
     height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, true);
@@ -767,6 +767,18 @@ bool DrawSelectedStaticSpotLightInspector(
     drawLightFloat("sector_editor_static_spot_light_target_x", "Target X:", light.target.x, uiState.lightTargetXInput, -8192.0f, 8192.0f, 2, StaticSpotFloatField::TargetX);
     drawLightFloat("sector_editor_static_spot_light_target_y", "Target Y:", light.target.y, uiState.lightTargetYInput, -512.0f, 512.0f, 2, StaticSpotFloatField::TargetY);
     drawLightFloat("sector_editor_static_spot_light_target_z", "Target Z:", light.target.z, uiState.lightTargetZInput, -8192.0f, 8192.0f, 2, StaticSpotFloatField::TargetZ);
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_static_spot_light_point_down",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Point Down")) {
+        lightEditing.PointStaticSpotLightDown(light);
+    }
+    y += rowH + gap;
     drawLightFloat("sector_editor_static_spot_light_range", "Radius:", light.range, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2, StaticSpotFloatField::Range);
     {
         const SectorEditorInspectorNumericRowLayout layout =
@@ -1369,6 +1381,18 @@ bool DrawSelectedDynamicSpotLightInspector(
     drawLightFloat("sector_editor_dynamic_spot_light_target_x", "Target X:", light.target.x, uiState.lightTargetXInput, -8192.0f, 8192.0f, 2, DynamicSpotFloatField::TargetX);
     drawLightFloat("sector_editor_dynamic_spot_light_target_y", "Target Y:", light.target.y, uiState.lightTargetYInput, -512.0f, 512.0f, 2, DynamicSpotFloatField::TargetY);
     drawLightFloat("sector_editor_dynamic_spot_light_target_z", "Target Z:", light.target.z, uiState.lightTargetZInput, -8192.0f, 8192.0f, 2, DynamicSpotFloatField::TargetZ);
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                "sector_editor_dynamic_spot_light_point_down",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Point Down")) {
+        lightEditing.PointDynamicSpotLightDown(light);
+    }
+    y += rowH + gap;
     drawLightFloat("sector_editor_dynamic_spot_light_intensity", "Intensity:", light.intensity, uiState.lightIntensityInput, 0.0f, 8.0f, 3, DynamicSpotFloatField::Intensity);
     drawLightFloat("sector_editor_dynamic_spot_light_range", "Range:", light.range, uiState.lightRadiusInput, SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), 2, DynamicSpotFloatField::Range);
     drawLightFloat("sector_editor_dynamic_spot_light_inner_cone", "Inner cone:", light.innerConeDegrees, uiState.lightInnerConeInput, 0.0f, 179.0f, 2, DynamicSpotFloatField::InnerCone);

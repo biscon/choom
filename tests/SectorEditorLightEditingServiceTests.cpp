@@ -5,8 +5,11 @@
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_demo/SectorUnits.h"
 
+#include <raymath.h>
+
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <string>
 
 namespace {
@@ -521,6 +524,145 @@ void TestPointLightPilotApplyAndCancelTiming()
     CheckClean(state, documentState, statusText, "Light pilot cancelled");
 }
 
+void TestPointSpotLightsDown()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+
+    game::SectorTopologyStaticSpotLight staticSpot;
+    staticSpot.id = 23;
+    staticSpot.position = Vector3{10.0f, 20.0f, 30.0f};
+    staticSpot.target = Vector3{13.0f, 24.0f, 30.0f};
+    staticSpot.color = Color{10, 20, 30, 255};
+    staticSpot.intensity = 2.5f;
+    staticSpot.range = 48.0f;
+    staticSpot.innerConeDegrees = 18.0f;
+    staticSpot.outerConeDegrees = 42.0f;
+    staticSpot.sourceRadius = 3.0f;
+    staticSpot.castsShadow = false;
+    staticSpot.atmosphere.haze.enabled = true;
+    staticSpot.atmosphere.haze.density = 0.35f;
+    documentState.map.topologyMap.staticSpotLights.push_back(staticSpot);
+
+    game::SectorTopologyDynamicSpotLight dynamicSpot;
+    dynamicSpot.id = 24;
+    dynamicSpot.position = Vector3{-2.0f, 8.0f, 5.0f};
+    dynamicSpot.target = dynamicSpot.position;
+    dynamicSpot.color = Color{40, 50, 60, 255};
+    dynamicSpot.intensity = 1.75f;
+    dynamicSpot.range = 64.0f;
+    dynamicSpot.innerConeDegrees = 12.0f;
+    dynamicSpot.outerConeDegrees = 28.0f;
+    dynamicSpot.enabled = false;
+    dynamicSpot.flicker = true;
+    dynamicSpot.flickerSpeed = 3.0f;
+    dynamicSpot.flickerAmount = 0.4f;
+    dynamicSpot.castsShadow = true;
+    dynamicSpot.shadowPriority = 7;
+    dynamicSpot.shadowBias = 0.002f;
+    dynamicSpot.shadowStrength = 0.8f;
+    dynamicSpot.shadowSoftness = 0.6f;
+    dynamicSpot.atmosphere.dust.enabled = true;
+    dynamicSpot.atmosphere.dust.amount = 12;
+    documentState.map.topologyMap.dynamicSpotLights.push_back(dynamicSpot);
+
+    game::SelectionState selectionState;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+
+    game::SectorEditorLightEditingService service = MakeService(
+            state,
+            documentState,
+            documentState.map.topologyMap,
+            TestPreviewSelectionState(),
+            selectionState,
+            manipulationState,
+            lightState,
+            uiState,
+            inspectorIdUiState,
+            statusText);
+
+    game::SectorTopologyStaticSpotLight& editedStatic =
+            documentState.map.topologyMap.staticSpotLights.front();
+    const game::SectorTopologyStaticSpotLight staticBefore = editedStatic;
+    Check(service.PointStaticSpotLightDown(editedStatic),
+          "point-down changes a non-vertical static spotlight");
+    Check(Near(editedStatic.target.x, editedStatic.position.x)
+                  && Near(editedStatic.target.y, 15.0f)
+                  && Near(editedStatic.target.z, editedStatic.position.z)
+                  && Near(Vector3Distance(editedStatic.position, editedStatic.target), 5.0f),
+          "static spotlight points along world negative Y while preserving target distance");
+    Check(Near(editedStatic.position.x, staticBefore.position.x)
+                  && Near(editedStatic.position.y, staticBefore.position.y)
+                  && Near(editedStatic.position.z, staticBefore.position.z)
+                  && editedStatic.color.r == staticBefore.color.r
+                  && editedStatic.color.g == staticBefore.color.g
+                  && editedStatic.color.b == staticBefore.color.b
+                  && Near(editedStatic.intensity, staticBefore.intensity)
+                  && Near(editedStatic.range, staticBefore.range)
+                  && Near(editedStatic.innerConeDegrees, staticBefore.innerConeDegrees)
+                  && Near(editedStatic.outerConeDegrees, staticBefore.outerConeDegrees)
+                  && Near(editedStatic.sourceRadius, staticBefore.sourceRadius)
+                  && editedStatic.castsShadow == staticBefore.castsShadow
+                  && editedStatic.atmosphere.haze.enabled == staticBefore.atmosphere.haze.enabled
+                  && Near(editedStatic.atmosphere.haze.density, staticBefore.atmosphere.haze.density),
+          "static point-down preserves all non-target spotlight settings");
+    CheckDirtyOnce(state, documentState, statusText, "Pointed static spot 23 down");
+
+    ResetDirty(state, documentState, statusText);
+    Check(!service.PointStaticSpotLightDown(editedStatic),
+          "point-down is a no-op for an already downward static spotlight");
+    CheckClean(state, documentState, statusText, "old");
+
+    ResetDirty(state, documentState, statusText);
+    game::SectorTopologyDynamicSpotLight& editedDynamic =
+            documentState.map.topologyMap.dynamicSpotLights.front();
+    const game::SectorTopologyDynamicSpotLight dynamicBefore = editedDynamic;
+    Check(service.PointDynamicSpotLightDown(editedDynamic),
+          "point-down repairs a coincident dynamic spotlight target");
+    const float fallbackDistance = game::SectorWorldToAuthoringDistance(1.0f);
+    Check(Near(editedDynamic.target.x, editedDynamic.position.x)
+                  && Near(editedDynamic.target.y, editedDynamic.position.y - fallbackDistance)
+                  && Near(editedDynamic.target.z, editedDynamic.position.z)
+                  && Near(Vector3Distance(editedDynamic.position, editedDynamic.target), fallbackDistance),
+          "coincident dynamic spotlight target uses the one-world-meter fallback");
+    Check(Near(editedDynamic.position.x, dynamicBefore.position.x)
+                  && Near(editedDynamic.position.y, dynamicBefore.position.y)
+                  && Near(editedDynamic.position.z, dynamicBefore.position.z)
+                  && editedDynamic.color.r == dynamicBefore.color.r
+                  && editedDynamic.color.g == dynamicBefore.color.g
+                  && editedDynamic.color.b == dynamicBefore.color.b
+                  && Near(editedDynamic.intensity, dynamicBefore.intensity)
+                  && Near(editedDynamic.range, dynamicBefore.range)
+                  && Near(editedDynamic.innerConeDegrees, dynamicBefore.innerConeDegrees)
+                  && Near(editedDynamic.outerConeDegrees, dynamicBefore.outerConeDegrees)
+                  && editedDynamic.enabled == dynamicBefore.enabled
+                  && editedDynamic.flicker == dynamicBefore.flicker
+                  && Near(editedDynamic.flickerSpeed, dynamicBefore.flickerSpeed)
+                  && Near(editedDynamic.flickerAmount, dynamicBefore.flickerAmount)
+                  && editedDynamic.castsShadow == dynamicBefore.castsShadow
+                  && editedDynamic.shadowPriority == dynamicBefore.shadowPriority
+                  && Near(editedDynamic.shadowBias, dynamicBefore.shadowBias)
+                  && Near(editedDynamic.shadowStrength, dynamicBefore.shadowStrength)
+                  && Near(editedDynamic.shadowSoftness, dynamicBefore.shadowSoftness)
+                  && editedDynamic.atmosphere.dust.enabled == dynamicBefore.atmosphere.dust.enabled
+                  && editedDynamic.atmosphere.dust.amount == dynamicBefore.atmosphere.dust.amount,
+          "dynamic point-down preserves all non-target spotlight settings");
+    CheckDirtyOnce(state, documentState, statusText, "Pointed dynamic spot 24 down");
+
+    editedStatic.target.x = std::numeric_limits<float>::infinity();
+    ResetDirty(state, documentState, statusText);
+    Check(service.PointStaticSpotLightDown(editedStatic)
+                  && Near(Vector3Distance(editedStatic.position, editedStatic.target), fallbackDistance),
+          "point-down replaces a non-finite target with the one-world-meter fallback");
+    CheckDirtyOnce(state, documentState, statusText, "Pointed static spot 23 down");
+}
+
 void TestStaticShadowEditsUseDocumentMutationBoundary()
 {
     game::SectorEditorState state;
@@ -781,6 +923,7 @@ int main()
     TestLightDragFinishNoOpDoesNotDirty();
     TestSpotLightPilotApplyAndCancelTiming();
     TestPointLightPilotApplyAndCancelTiming();
+    TestPointSpotLightsDown();
     TestStaticShadowEditsUseDocumentMutationBoundary();
     TestAtmosphereEditUsesDocumentMutationBoundary();
     TestProxyPlacementApplyAndCancelTiming();
