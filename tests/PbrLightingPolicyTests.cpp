@@ -538,10 +538,13 @@ void TestHdrEffectShaderAndPassPolicies()
                     && analyticShaft.find(
                             "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
                             != std::string::npos
+                    && analyticFog.find(
+                            "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
+                            != std::string::npos
                     && lightProxy.find(
                             "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
                             != std::string::npos,
-          "analytic proxies depth-clip, use optical profiles, and separate radiance from extinction");
+          "analytic fog and proxies preserve depth bindings across render-batch flushes");
     Check(bloom.find("Rgba8Unorm")==std::string::npos
                     && fog.find("Rgba8Unorm")==std::string::npos
                     && haze.find("Rgba8Unorm")==std::string::npos

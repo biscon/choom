@@ -154,7 +154,6 @@ bool SectorAnalyticFogRenderer::Apply(
     rlDrawRenderBatchActive();
     BeginTextureMode(colorOnlyTarget);
     BeginShaderMode(shader);
-    SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);
     SetShaderValue(shader, viewportSizeLoc, &viewport, SHADER_UNIFORM_VEC2);
     SetShaderValue(shader, cameraPositionLoc, &camera.position, SHADER_UNIFORM_VEC3);
     SetShaderValue(shader, cameraForwardLoc, &forward, SHADER_UNIFORM_VEC3);
@@ -176,7 +175,10 @@ bool SectorAnalyticFogRenderer::Apply(
         const Vector4 params{volume.analyticStartDistanceWorld,
                 volume.analyticEndDistanceWorld, volume.analyticFalloffExponent,
                 volume.maxOpacity};
+        // rlDrawRenderBatchActive() clears raylib's auxiliary sampler slots.
+        // Register sceneDepth after the flush so it remains bound for this draw.
         rlDrawRenderBatchActive();
+        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);
         SetShaderValue(shader, centerLoc, &volume.centerWorld, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, radiiLoc, &volume.radiiWorld, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, colorLoc, &color, SHADER_UNIFORM_VEC3);
