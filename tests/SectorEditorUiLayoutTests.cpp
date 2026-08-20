@@ -1,5 +1,6 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
+#include "sector_editor/preview/SectorEditorLightProxyPlacement.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
@@ -173,6 +174,35 @@ void TestInspectorNumericWidthsMatchControlKinds()
           "integer steppers reserve enough width for buttons and value text");
     Check(intLayout.inputRect.width > floatLayout.inputRect.width,
           "integer steppers are wider than float fields");
+}
+
+void TestFogVolumeInspectorLayoutIncludesConditionalRows()
+{
+    constexpr float rowH = 40.0f;
+    constexpr float gap = 8.0f;
+    game::SectorAuthoringFogVolume volume;
+
+    const float fogStyleRowHeight =
+            game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;
+    Check(Near(
+                  game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+                          volume, rowH, gap),
+                  38.0f + 21.0f * (rowH + gap) + fogStyleRowHeight),
+          "ellipsoid fog inspector includes style and path controls");
+
+    volume.shape = game::SectorLocalFogShape::Box;
+    Check(Near(
+                  game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+                          volume, rowH, gap),
+                  38.0f + 22.0f * (rowH + gap) + fogStyleRowHeight),
+          "box fog inspector includes style, yaw, and reaches the delete row");
+
+    const game::SectorEditorInspectorNumericRowLayout rgbLayout =
+            game::BuildSectorEditorInspectorRightRgb8RowLayout(
+                    0.0f, 320.0f, rowH, gap);
+    Check(Near(rgbLayout.inputRect.width, game::SectorEditorInspectorRgb8InputWidth)
+                  && rgbLayout.inputRect.width > game::SectorEditorInspectorIntInputWidth,
+          "fog RGB steppers reserve extra width for three-digit values");
 }
 
 void TestTextureRowHeight()
@@ -369,7 +399,7 @@ void TestPreviewSettingsScrollableContentHeightsReachLastControls()
             + 4.0f * (8.0f + 38.0f)
             + 36.0f + gap;
     const float fogLastControlBottom =
-            9.0f * (rowH + gap)
+            10.0f * (rowH + gap)
             + 36.0f + gap
             + 38.0f
             + 36.0f + gap;
@@ -586,6 +616,74 @@ void TestPreviewNavigationTabLayout()
     Check(game::SectorEditorPreviewOverlayExpandedHeight(
                   game::PreviewDebugOverlayTab::Navigation) >= 520.0f,
           "preview interaction bounds include Navigation controls and diagnostics");
+
+    const game::SectorEditorPreviewLightStartActionLayout lightActions =
+            game::BuildSectorEditorPreviewLightStartActionLayout(
+                    panel,
+                    10.0f,
+                    40.0f,
+                    true,
+                    true);
+    Check(Contains(panel, lightActions.pilot)
+                  && Contains(panel, lightActions.halo)
+                  && Contains(panel, lightActions.shaft),
+          "preview light placement actions fit inside the panel");
+    Check(!Overlaps(lightActions.pilot, lightActions.halo)
+                  && !Overlaps(lightActions.halo, lightActions.shaft)
+                  && !Overlaps(lightActions.pilot, lightActions.shaft),
+          "Pilot, Place Halo, and Place Shaft actions do not overlap");
+    Check(lightActions.reservedWidth >= 326.0f,
+          "preview status reserves the full light action strip width");
+}
+
+void TestLightProxyPlacementMath()
+{
+    Vector3 intersection{};
+    Check(game::IntersectSectorEditorLightProxyPlacementPlane(
+                  Ray{Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}},
+                  Vector3{0.0f, 0.0f, 5.0f},
+                  Vector3{0.0f, 0.0f, 1.0f},
+                  intersection)
+                  && Near(intersection.z, 5.0f),
+          "halo placement ray intersects its camera-facing drag plane");
+    Check(!game::IntersectSectorEditorLightProxyPlacementPlane(
+                  Ray{Vector3{}, Vector3{1.0f, 0.0f, 0.0f}},
+                  Vector3{0.0f, 0.0f, 5.0f},
+                  Vector3{0.0f, 0.0f, 1.0f},
+                  intersection),
+          "halo placement rejects rays parallel to the drag plane");
+
+    const Vector3 dragged = game::ApplySectorEditorLightProxyPlacementDrag(
+            Vector3{1.0f, 2.0f, 3.0f},
+            Vector3{4.0f, 5.0f, 6.0f},
+            Vector3{6.0f, 8.0f, 10.0f},
+            false);
+    const Vector3 preciseDragged = game::ApplySectorEditorLightProxyPlacementDrag(
+            Vector3{1.0f, 2.0f, 3.0f},
+            Vector3{4.0f, 5.0f, 6.0f},
+            Vector3{6.0f, 8.0f, 10.0f},
+            true);
+    Check(Near(dragged.x, 3.0f) && Near(dragged.y, 5.0f) && Near(dragged.z, 7.0f),
+          "halo drag applies the full camera-plane delta");
+    Check(Near(preciseDragged.x, 1.2f)
+                  && Near(preciseDragged.y, 2.3f)
+                  && Near(preciseDragged.z, 3.4f),
+          "halo drag precision mode applies one tenth of the delta");
+
+    const Vector3 depth = game::ApplySectorEditorLightProxyPlacementDepth(
+            Vector3{0.0f, 0.0f, 10.0f},
+            Vector3{},
+            Vector3{0.0f, 0.0f, 1.0f},
+            1.0f,
+            false);
+    const Vector3 preciseDepth = game::ApplySectorEditorLightProxyPlacementDepth(
+            Vector3{0.0f, 0.0f, 10.0f},
+            Vector3{},
+            Vector3{0.0f, 0.0f, 1.0f},
+            1.0f,
+            true);
+    Check(Near(depth.z, 9.8f), "positive halo placement wheel motion moves toward the camera");
+    Check(Near(preciseDepth.z, 9.98f), "halo depth precision mode applies one tenth of the step");
 }
 
 } // namespace
@@ -601,6 +699,7 @@ int main()
     TestRightIntNumericRow();
     TestRightNumericRowClamps();
     TestInspectorNumericWidthsMatchControlKinds();
+    TestFogVolumeInspectorLayoutIncludesConditionalRows();
     TestTextureRowHeight();
     TestStackedOptionRow();
     TestRuntimeObjectInspectorHeightCountsBillboardRows();
@@ -617,6 +716,7 @@ int main()
     TestNpcEditorModalSplitPaneLayout();
     TestPreviewSettingsModalFogDraftApplyAndReset();
     TestPreviewNavigationTabLayout();
+    TestLightProxyPlacementMath();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorUiLayoutTests failure(s)\n";

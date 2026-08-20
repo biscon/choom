@@ -76,7 +76,7 @@ struct SectorEditorSelectionServiceContext {
     MaterialEditingUiState& materialUiState;
     std::string* statusText = nullptr;
     void* userData = nullptr;
-    void (*requestCancelLightPilotWithPreviewRestore)(void* userData, const char* message) = nullptr;
+    void (*requestCancelInteractiveLightEdit)(void* userData, const char* message) = nullptr;
     LightEditingState* lightState = nullptr;
 };
 

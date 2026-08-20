@@ -3,6 +3,8 @@
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/SectorEditorHelpers.h"
 
+#include <raymath.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -55,6 +57,85 @@ float ClampConeDegrees(float value)
     return std::clamp(value, 0.0f, 179.0f);
 }
 
+Vector3 TargetPointingDown(Vector3 position, Vector3 target)
+{
+    constexpr float MinimumUsableDistance = 0.0001f;
+    float distance = Vector3Distance(position, target);
+    if (!std::isfinite(distance) || distance <= MinimumUsableDistance) {
+        distance = SectorWorldToAuthoringDistance(1.0f);
+    }
+    return Vector3{position.x, position.y - distance, position.z};
+}
+
+SectorLightAtmosphereSettings* FindAtmosphere(
+        SectorTopologyMap& map,
+        LightPilotKind kind,
+        int lightId)
+{
+    if (kind == LightPilotKind::StaticPoint) {
+        SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(map, lightId);
+        return light != nullptr ? &light->atmosphere : nullptr;
+    }
+    if (kind == LightPilotKind::StaticSpot) {
+        SectorTopologyStaticSpotLight* light = FindSectorTopologyStaticSpotLight(map, lightId);
+        return light != nullptr ? &light->atmosphere : nullptr;
+    }
+    if (kind == LightPilotKind::DynamicPoint) {
+        SectorTopologyDynamicPointLight* light = FindSectorTopologyDynamicLight(map, lightId);
+        return light != nullptr ? &light->atmosphere : nullptr;
+    }
+    if (kind == LightPilotKind::DynamicSpot) {
+        SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(map, lightId);
+        return light != nullptr ? &light->atmosphere : nullptr;
+    }
+    return nullptr;
+}
+
+Vector3* FindProxyOffset(
+        SectorTopologyMap& map,
+        LightProxyPlacementKind proxyKind,
+        LightPilotKind lightKind,
+        int lightId)
+{
+    SectorLightAtmosphereSettings* atmosphere = FindAtmosphere(map, lightKind, lightId);
+    if (atmosphere == nullptr) return nullptr;
+    if (proxyKind == LightProxyPlacementKind::Halo) {
+        return atmosphere->proxy.halo.enabled
+                ? &atmosphere->proxy.halo.centerOffsetWorld
+                : nullptr;
+    }
+    const bool spotLight = lightKind == LightPilotKind::StaticSpot
+            || lightKind == LightPilotKind::DynamicSpot;
+    if (proxyKind == LightProxyPlacementKind::Shaft
+            && spotLight
+            && atmosphere->proxy.shaft.enabled) {
+        return &atmosphere->proxy.shaft.originOffsetWorld;
+    }
+    return nullptr;
+}
+
+const char* ProxyName(LightProxyPlacementKind kind)
+{
+    switch (kind) {
+        case LightProxyPlacementKind::Halo: return "halo";
+        case LightProxyPlacementKind::Shaft: return "shaft";
+        case LightProxyPlacementKind::None: return "proxy";
+    }
+    return "proxy";
+}
+
+const char* LightName(LightPilotKind kind)
+{
+    switch (kind) {
+        case LightPilotKind::StaticPoint: return "static light";
+        case LightPilotKind::StaticSpot: return "static spot";
+        case LightPilotKind::DynamicPoint: return "dynamic light";
+        case LightPilotKind::DynamicSpot: return "dynamic spot";
+        case LightPilotKind::None: return "light";
+    }
+    return "light";
+}
+
 void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& uiState)
 {
     uiState.inspectorScroll.offset = Vector2{};
@@ -81,17 +162,27 @@ void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& 
     const auto resetInt = [](engine::UIIntInputState* state) {
         if (state != nullptr) *state = engine::UIIntInputState{};
     };
-    resetFloat(uiState.atmosphere.hazeExtentScaleInput);
-    resetFloat(uiState.atmosphere.hazeHeightOffsetInput);
-    resetFloat(uiState.atmosphere.hazeDensityInput);
-    resetFloat(uiState.atmosphere.hazeEdgeSoftnessInput);
-    resetFloat(uiState.atmosphere.hazeNoiseAmountInput);
-    resetFloat(uiState.atmosphere.hazeNoiseScaleInput);
-    resetFloat(uiState.atmosphere.hazeFlowDirectionInput);
-    resetFloat(uiState.atmosphere.hazeFlowSpeedInput);
-    resetInt(uiState.atmosphere.hazeRedInput);
-    resetInt(uiState.atmosphere.hazeGreenInput);
-    resetInt(uiState.atmosphere.hazeBlueInput);
+    resetFloat(uiState.atmosphere.proxyHaloRadiusInput);
+    resetFloat(uiState.atmosphere.proxyHaloOffsetXInput);
+    resetFloat(uiState.atmosphere.proxyHaloOffsetYInput);
+    resetFloat(uiState.atmosphere.proxyHaloOffsetZInput);
+    resetFloat(uiState.atmosphere.proxyHaloBrightnessInput);
+    resetFloat(uiState.atmosphere.proxyHaloMaxExtinctionInput);
+    resetFloat(uiState.atmosphere.proxyHaloSoftnessInput);
+    resetInt(uiState.atmosphere.proxyHaloRedInput);
+    resetInt(uiState.atmosphere.proxyHaloGreenInput);
+    resetInt(uiState.atmosphere.proxyHaloBlueInput);
+    resetFloat(uiState.atmosphere.proxyShaftOffsetXInput);
+    resetFloat(uiState.atmosphere.proxyShaftOffsetYInput);
+    resetFloat(uiState.atmosphere.proxyShaftOffsetZInput);
+    resetFloat(uiState.atmosphere.proxyShaftLengthInput);
+    resetFloat(uiState.atmosphere.proxyShaftWidthInput);
+    resetFloat(uiState.atmosphere.proxyShaftBrightnessInput);
+    resetFloat(uiState.atmosphere.proxyShaftMaxExtinctionInput);
+    resetFloat(uiState.atmosphere.proxyShaftSoftnessInput);
+    resetInt(uiState.atmosphere.proxyShaftRedInput);
+    resetInt(uiState.atmosphere.proxyShaftGreenInput);
+    resetInt(uiState.atmosphere.proxyShaftBlueInput);
     resetInt(uiState.atmosphere.dustAmountInput);
     resetFloat(uiState.atmosphere.dustExtentScaleInput);
     resetFloat(uiState.atmosphere.dustMinimumSizeInput);
@@ -183,16 +274,25 @@ bool SameAtmosphere(
     const auto sameColor = [](Color a, Color b) {
         return a.r == b.r && a.g == b.g && a.b == b.b;
     };
-    return left.haze.enabled == right.haze.enabled
-            && left.haze.extentScale == right.haze.extentScale
-            && left.haze.heightOffsetWorld == right.haze.heightOffsetWorld
-            && left.haze.density == right.haze.density
-            && sameColor(left.haze.scatteringTint, right.haze.scatteringTint)
-            && left.haze.edgeSoftness == right.haze.edgeSoftness
-            && left.haze.noiseAmount == right.haze.noiseAmount
-            && left.haze.noiseScaleWorld == right.haze.noiseScaleWorld
-            && left.haze.flowDirectionDegrees == right.haze.flowDirectionDegrees
-            && left.haze.flowSpeedWorld == right.haze.flowSpeedWorld
+    return left.proxy.halo.enabled == right.proxy.halo.enabled
+            && left.proxy.halo.radiusWorld == right.proxy.halo.radiusWorld
+            && left.proxy.halo.centerOffsetWorld.x == right.proxy.halo.centerOffsetWorld.x
+            && left.proxy.halo.centerOffsetWorld.y == right.proxy.halo.centerOffsetWorld.y
+            && left.proxy.halo.centerOffsetWorld.z == right.proxy.halo.centerOffsetWorld.z
+            && left.proxy.halo.brightness == right.proxy.halo.brightness
+            && left.proxy.halo.maxExtinction == right.proxy.halo.maxExtinction
+            && left.proxy.halo.edgeSoftness == right.proxy.halo.edgeSoftness
+            && sameColor(left.proxy.halo.scatteringTint, right.proxy.halo.scatteringTint)
+            && left.proxy.shaft.enabled == right.proxy.shaft.enabled
+            && left.proxy.shaft.originOffsetWorld.x == right.proxy.shaft.originOffsetWorld.x
+            && left.proxy.shaft.originOffsetWorld.y == right.proxy.shaft.originOffsetWorld.y
+            && left.proxy.shaft.originOffsetWorld.z == right.proxy.shaft.originOffsetWorld.z
+            && left.proxy.shaft.lengthScale == right.proxy.shaft.lengthScale
+            && left.proxy.shaft.widthScale == right.proxy.shaft.widthScale
+            && left.proxy.shaft.brightness == right.proxy.shaft.brightness
+            && left.proxy.shaft.maxExtinction == right.proxy.shaft.maxExtinction
+            && left.proxy.shaft.edgeSoftness == right.proxy.shaft.edgeSoftness
+            && sameColor(left.proxy.shaft.scatteringTint, right.proxy.shaft.scatteringTint)
             && left.dust.enabled == right.dust.enabled
             && left.dust.amount == right.dust.amount
             && left.dust.extentScale == right.dust.extentScale
@@ -368,6 +468,11 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::DeleteSelectedL
             result.restoredLightPilot = context_.lightState.lightPilot;
             result.previewPoseRestoreNeeded = true;
             context_.lightState.lightPilot = LightPilotLightState{};
+        }
+        if (context_.lightState.proxyPlacement.active
+                && context_.lightState.proxyPlacement.kind == pilotKind
+                && context_.lightState.proxyPlacement.lightId == lightId) {
+            context_.lightState.proxyPlacement = LightProxyPlacementState{};
         }
         ClearLightSelection(context_.selection, context_.ui);
     }
@@ -726,6 +831,103 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::CancelLightPilo
     return result;
 }
 
+bool SectorEditorLightEditingService::BeginProxyPlacement(
+        LightProxyPlacementKind proxyKind,
+        LightPilotKind kind,
+        int lightId)
+{
+    Vector3* offset = FindProxyOffset(context_.map, proxyKind, kind, lightId);
+    if (offset == nullptr) return false;
+    context_.lightState.proxyPlacement = LightProxyPlacementState{};
+    context_.lightState.proxyPlacement.active = true;
+    context_.lightState.proxyPlacement.proxyKind = proxyKind;
+    context_.lightState.proxyPlacement.kind = kind;
+    context_.lightState.proxyPlacement.lightId = lightId;
+    context_.lightState.proxyPlacement.originalOffsetWorld = *offset;
+    context_.statusText = TextFormat(
+            "Placing %s %d %s", LightName(kind), lightId, ProxyName(proxyKind));
+    return true;
+}
+
+SectorEditorLightMutationResult SectorEditorLightEditingService::PreviewProxyPlacement(
+        Vector3 offsetWorld)
+{
+    const LightProxyPlacementState placement = context_.lightState.proxyPlacement;
+    if (!placement.active) return {};
+    SectorLightAtmosphereSettings* atmosphere = FindAtmosphere(
+            context_.map, placement.kind, placement.lightId);
+    if (atmosphere == nullptr) {
+        return CancelProxyPlacementData("Proxy placement cancelled: light missing");
+    }
+    SectorLightProxySettings normalized = atmosphere->proxy;
+    if (placement.proxyKind == LightProxyPlacementKind::Halo) {
+        normalized.halo.centerOffsetWorld = offsetWorld;
+    } else if (placement.proxyKind == LightProxyPlacementKind::Shaft) {
+        normalized.shaft.originOffsetWorld = offsetWorld;
+    } else {
+        return CancelProxyPlacementData("Proxy placement cancelled: invalid effect");
+    }
+    normalized = NormalizeSectorLightProxySettings(normalized);
+    Vector3* currentOffset = FindProxyOffset(
+            context_.map, placement.proxyKind, placement.kind, placement.lightId);
+    const Vector3 normalizedOffset = placement.proxyKind == LightProxyPlacementKind::Halo
+            ? normalized.halo.centerOffsetWorld
+            : normalized.shaft.originOffsetWorld;
+    if (currentOffset == nullptr || !SetVector3(*currentOffset, normalizedOffset)) {
+        return {};
+    }
+    SectorEditorLightMutationResult result;
+    result.changed = true;
+    result.dynamicLightRendererRefreshNeeded = true;
+    return result;
+}
+
+SectorEditorLightMutationResult SectorEditorLightEditingService::ApplyProxyPlacement()
+{
+    const LightProxyPlacementState placement = context_.lightState.proxyPlacement;
+    if (!placement.active) return {};
+    Vector3* offset = FindProxyOffset(
+            context_.map, placement.proxyKind, placement.kind, placement.lightId);
+    if (offset == nullptr) {
+        return CancelProxyPlacementData("Proxy placement cancelled: light missing");
+    }
+    const bool changed = !SameVector3(*offset, placement.originalOffsetWorld);
+    context_.lightState.proxyPlacement = LightProxyPlacementState{};
+    SectorEditorLightMutationResult result;
+    result.changed = changed;
+    result.dynamicLightRendererRefreshNeeded = changed;
+    if (changed) {
+        MarkEdited(TextFormat(
+                "Placed %s %d %s",
+                LightName(placement.kind),
+                placement.lightId,
+                ProxyName(placement.proxyKind)));
+    } else {
+        context_.statusText = TextFormat(
+                "%s placement unchanged", ProxyName(placement.proxyKind));
+    }
+    return result;
+}
+
+SectorEditorLightMutationResult SectorEditorLightEditingService::CancelProxyPlacementData(
+        const char* message)
+{
+    const LightProxyPlacementState placement = context_.lightState.proxyPlacement;
+    if (!placement.active) return {};
+    context_.lightState.proxyPlacement = LightProxyPlacementState{};
+    SectorEditorLightMutationResult result;
+    Vector3* offset = FindProxyOffset(
+            context_.map, placement.proxyKind, placement.kind, placement.lightId);
+    if (offset != nullptr) {
+        result.changed = SetVector3(*offset, placement.originalOffsetWorld);
+        result.dynamicLightRendererRefreshNeeded = result.changed;
+    }
+    if (message != nullptr && message[0] != '\0') {
+        context_.statusText = message;
+    }
+    return result;
+}
+
 bool SectorEditorLightEditingService::SetStaticLightPosition(
         SectorTopologyStaticPointLight& light,
         Vector3 position)
@@ -826,6 +1028,16 @@ bool SectorEditorLightEditingService::SetStaticSpotLightTarget(
         return false;
     }
     MarkEdited(TextFormat("Updated static spot %d", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::PointStaticSpotLightDown(
+        SectorTopologyStaticSpotLight& light)
+{
+    if (!SetVector3(light.target, TargetPointingDown(light.position, light.target))) {
+        return false;
+    }
+    MarkEdited(TextFormat("Pointed static spot %d down", light.id));
     return true;
 }
 
@@ -1195,6 +1407,16 @@ bool SectorEditorLightEditingService::SetDynamicSpotLightTarget(
         return false;
     }
     MarkEdited(TextFormat("Updated dynamic spot %d", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::PointDynamicSpotLightDown(
+        SectorTopologyDynamicSpotLight& light)
+{
+    if (!SetVector3(light.target, TargetPointingDown(light.position, light.target))) {
+        return false;
+    }
+    MarkEdited(TextFormat("Pointed dynamic spot %d down", light.id));
     return true;
 }
 

@@ -97,6 +97,8 @@ SectorLightAtmosphereSource MakePointSource(
     source.lightId = light.id;
     source.positionWorld = SectorAuthoringToWorldPosition(light.position);
     source.rangeWorld = SectorAuthoringToWorldDistance(light.radius);
+    source.color = light.color;
+    source.intensity = light.intensity;
     source.ownerSectorId = OwnerSector(sectorLookupWorld, source.positionWorld);
     source.atmosphere = NormalizeSectorLightAtmosphereSettings(light.atmosphere);
     return source;
@@ -117,6 +119,8 @@ SectorLightAtmosphereSource MakeSpotSource(
     source.directionWorld = NormalizeDirection(Vector3Subtract(targetWorld, source.positionWorld));
     source.rangeWorld = SectorAuthoringToWorldDistance(light.range);
     source.outerConeCos = std::cos(std::clamp(light.outerConeDegrees, 0.0f, 179.0f) * DEG2RAD);
+    source.color = light.color;
+    source.intensity = light.intensity;
     source.ownerSectorId = OwnerSector(sectorLookupWorld, source.positionWorld);
     source.atmosphere = NormalizeSectorLightAtmosphereSettings(light.atmosphere);
     return source;
@@ -136,22 +140,26 @@ void BuildSectorLightAtmosphereSources(
             + map.dynamicPointLights.size()
             + map.dynamicSpotLights.size());
     for (const SectorTopologyStaticPointLight& light : map.staticLights) {
-        if (light.atmosphere.haze.enabled || light.atmosphere.dust.enabled) {
+        if (light.atmosphere.proxy.halo.enabled
+                || light.atmosphere.dust.enabled) {
             outSources.push_back(MakePointSource(light, SectorLightAtmosphereSourceKind::StaticPoint, sectorLookupWorld));
         }
     }
     for (const SectorTopologyStaticSpotLight& light : map.staticSpotLights) {
-        if (light.atmosphere.haze.enabled || light.atmosphere.dust.enabled) {
+        if (light.atmosphere.proxy.halo.enabled
+                || light.atmosphere.proxy.shaft.enabled || light.atmosphere.dust.enabled) {
             outSources.push_back(MakeSpotSource(light, SectorLightAtmosphereSourceKind::StaticSpot, sectorLookupWorld));
         }
     }
     for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
-        if (light.enabled && (light.atmosphere.haze.enabled || light.atmosphere.dust.enabled)) {
+        if (light.enabled && (light.atmosphere.proxy.halo.enabled
+                || light.atmosphere.dust.enabled)) {
             outSources.push_back(MakePointSource(light, SectorLightAtmosphereSourceKind::DynamicPoint, sectorLookupWorld));
         }
     }
     for (const SectorTopologyDynamicSpotLight& light : map.dynamicSpotLights) {
-        if (light.enabled && (light.atmosphere.haze.enabled || light.atmosphere.dust.enabled)) {
+        if (light.enabled && (light.atmosphere.proxy.halo.enabled
+                || light.atmosphere.proxy.shaft.enabled || light.atmosphere.dust.enabled)) {
             outSources.push_back(MakeSpotSource(light, SectorLightAtmosphereSourceKind::DynamicSpot, sectorLookupWorld));
         }
     }
@@ -163,11 +171,25 @@ bool MakeSectorLightAtmosphereVolume(
         float heightOffsetWorld,
         SectorLightAtmosphereVolume& outVolume)
 {
+    return MakeSectorLightAtmosphereVolume(
+            source,
+            extentScale,
+            Vector3{0.0f, heightOffsetWorld, 0.0f},
+            outVolume);
+}
+
+bool MakeSectorLightAtmosphereVolume(
+        const SectorLightAtmosphereSource& source,
+        float extentScale,
+        Vector3 originOffsetWorld,
+        SectorLightAtmosphereVolume& outVolume)
+{
     const float extent = source.rangeWorld * std::clamp(extentScale, 0.05f, 2.0f);
-    if (!std::isfinite(extent) || extent <= 0.0f || !std::isfinite(heightOffsetWorld)) return false;
-    const Vector3 originWorld = Vector3Add(
-            source.positionWorld,
-            Vector3{0.0f, heightOffsetWorld, 0.0f});
+    if (!std::isfinite(extent) || extent <= 0.0f
+            || !std::isfinite(originOffsetWorld.x)
+            || !std::isfinite(originOffsetWorld.y)
+            || !std::isfinite(originOffsetWorld.z)) return false;
+    const Vector3 originWorld = Vector3Add(source.positionWorld, originOffsetWorld);
     outVolume = SectorLightAtmosphereVolume{};
     outVolume.source = &source;
     outVolume.originWorld = originWorld;

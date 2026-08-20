@@ -387,7 +387,6 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
         gameScene.Renderer().SetGraphicsQuality(
-                applicationSettings.graphics.volumetricQuality,
                 applicationSettings.graphics.shadowQuality != FpsShadowQuality::Off,
                 ShadowMapResolution(applicationSettings.graphics.shadowQuality),
                 applicationSettings.graphics.maxDynamicLights,
@@ -397,7 +396,6 @@ void GameApplication::Render3DShadowMaps(engine::EngineContext& context)
         gameScene.RenderShadowMaps(context);
     } else {
         editor.SetPreviewGraphicsQuality(
-                applicationSettings.graphics.volumetricQuality,
                 applicationSettings.graphics.shadowQuality != FpsShadowQuality::Off,
                 ShadowMapResolution(applicationSettings.graphics.shadowQuality),
                 applicationSettings.graphics.maxDynamicLights,

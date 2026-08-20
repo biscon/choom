@@ -4,6 +4,7 @@
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
+#include "sector_demo/renderer/SectorLightAtmosphere.h"
 #include "sector_demo/renderer/SectorLocalFogLighting.h"
 
 #include <raymath.h>
@@ -1402,9 +1403,12 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedLight) == hash,
           "default static light shadow state preserves the existing source hash");
     changedLight = base;
-    changedLight.staticLights[0].atmosphere.haze.enabled = true;
-    changedLight.staticLights[0].atmosphere.haze.density = 0.25f;
-    changedLight.staticLights[0].atmosphere.haze.heightOffsetWorld = 0.75f;
+    changedLight.staticLights[0].atmosphere.proxy.halo.enabled = true;
+    changedLight.staticLights[0].atmosphere.proxy.halo.centerOffsetWorld =
+            Vector3{1.0f, 2.0f, 3.0f};
+    changedLight.staticLights[0].atmosphere.proxy.halo.brightness = 2.0f;
+    changedLight.staticLights[0].atmosphere.proxy.halo.maxExtinction = 0.8f;
+    changedLight.staticLights[0].atmosphere.proxy.halo.scatteringTint = RED;
     changedLight.staticLights[0].atmosphere.dust.enabled = true;
     changedLight.staticLights[0].atmosphere.dust.amount = 64;
     Check(game::ComputeSectorLightmapSourceHash(changedLight) == hash,
@@ -1462,6 +1466,13 @@ void TestSourceHashChanges()
     changedStaticSpotLight.staticSpotLights.front().castsShadow = true;
     Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) == staticSpotHash,
           "default static spot shadow state preserves the existing source hash");
+    changedStaticSpotLight.staticSpotLights.front().atmosphere.proxy.shaft.enabled = true;
+    changedStaticSpotLight.staticSpotLights.front().atmosphere.proxy.shaft.originOffsetWorld =
+            Vector3{1.0f, 2.0f, 3.0f};
+    changedStaticSpotLight.staticSpotLights.front().atmosphere.proxy.shaft.maxExtinction = 0.9f;
+    changedStaticSpotLight.staticSpotLights.front().atmosphere.proxy.shaft.scatteringTint = BLUE;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) == staticSpotHash,
+          "hash ignores visual-only shaft settings");
 
     game::SectorTopologyMap changedDynamicLight = base;
     changedDynamicLight.dynamicPointLights.push_back(game::SectorTopologyDynamicPointLight{
@@ -1680,8 +1691,12 @@ void TestSourceHashChanges()
 
     game::SectorTopologyMap changedFog = base;
     changedFog.fogSettings.enabled = true;
+    changedFog.fogSettings.mode = game::SectorTopologyFogMode::Distance;
     changedFog.fogSettings.color = Color{12, 34, 56, 255};
     changedFog.fogSettings.startDistanceWorld = 7.0f;
+    changedFog.fogSettings.endDistanceWorld = 70.0f;
+    changedFog.fogSettings.falloffExponent = 2.0f;
+    changedFog.fogSettings.brightness = 1.5f;
     changedFog.fogSettings.density = 0.15f;
     changedFog.fogSettings.maxOpacity = 0.9f;
     changedFog.fogSettings.referenceHeightWorld = -4.0f;
@@ -1691,6 +1706,10 @@ void TestSourceHashChanges()
     game::SectorTopologyMap changedLocalFog = base;
     game::SectorCompiledLocalFogVolume localFog;
     localFog.sourceAuthoringFogVolumeId = 1;
+    localFog.shape = game::SectorLocalFogShape::Box;
+    localFog.analyticStyle = game::SectorAnalyticFogStyle::Room;
+    localFog.yawRadians = 0.75f;
+    localFog.analyticEndDistanceWorld = 4.0f;
     localFog.centerWorld = Vector3{1.0f, 0.5f, 2.0f};
     changedLocalFog.compiledLocalFogVolumes.push_back(localFog);
     Check(game::ComputeSectorLightmapSourceHash(changedLocalFog) == hash,
@@ -3137,31 +3156,6 @@ void TestObjectLightProbeSamplingFallbacksAndFiniteOutput()
     }
 }
 
-void TestLocalFogEffectivePathLengthSaturatesGrazingTraversal()
-{
-    const game::SectorLocalFogPathLimitSettings settings;
-    const float shortPath = game::ComputeSectorLocalFogEffectivePathLength(0.25f, 0.5f, settings);
-    Check(shortPath > 0.249f && shortPath <= 0.25f,
-          "local fog path limit preserves short traversals");
-
-    const float mediumPath = game::ComputeSectorLocalFogEffectivePathLength(2.0f, 0.5f, settings);
-    const float longPath = game::ComputeSectorLocalFogEffectivePathLength(20.0f, 0.5f, settings);
-    Check(mediumPath > shortPath && longPath > mediumPath,
-          "local fog effective path remains monotonic");
-    Check(longPath <= 1.5f && longPath > 1.49f,
-          "local fog grazing path saturates at three times volume height");
-
-    const float tinyVolumeLongPath =
-            game::ComputeSectorLocalFogEffectivePathLength(20.0f, 0.05f, settings);
-    Check(tinyVolumeLongPath <= 0.5f && tinyVolumeLongPath > 0.49f,
-          "local fog path limit enforces the half-metre minimum cap");
-
-    const float stepLength =
-            game::ComputeSectorLocalFogEffectiveStepLength(20.0f, 0.5f, 8, settings);
-    Check(Near(stepLength * 8.0f, longPath, 0.0001f),
-          "local fog distributes capped optical distance across march samples exactly once");
-}
-
 void TestLocalFogProbeLightingReductionInterpolationAndFallback()
 {
     game::BakedObjectLightingSample cube;
@@ -3260,25 +3254,29 @@ void TestObjectAmbientCubeNormalBlending()
           "ambient cube non-finite normal falls back safely");
 }
 
-void TestLightAtmosphereVolumeShapesAndProbeFallback()
+void TestLightAtmosphereVolumeShapesAndSources()
 {
     game::SectorTopologyMap sourceMap;
     game::SectorTopologyStaticPointLight disabledAtmosphere;
     disabledAtmosphere.id = 1;
-    disabledAtmosphere.atmosphere.haze.density = 0.2f;
     sourceMap.staticLights.push_back(disabledAtmosphere);
     std::vector<game::SectorLightAtmosphereSource> sources;
     game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
     Check(sources.empty(),
           "disabled light atmosphere does not create a per-frame renderer source");
-    sourceMap.staticLights[0].atmosphere.haze.enabled = true;
+    sourceMap.staticLights[0].atmosphere.proxy.halo.enabled = true;
     game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
     Check(sources.size() == 1,
-          "enabled static-light haze creates one bounded renderer source");
+          "enabled haze creates a light atmosphere renderer source");
+    sourceMap.staticLights[0].atmosphere.proxy.halo.enabled = false;
+    sourceMap.staticLights[0].atmosphere.dust.enabled = true;
+    game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
+    Check(sources.size() == 1,
+          "enabled static-light dust creates one bounded renderer source");
     game::SectorTopologyDynamicPointLight disabledDynamic;
     disabledDynamic.id = 2;
     disabledDynamic.enabled = false;
-    disabledDynamic.atmosphere.haze.enabled = true;
+    disabledDynamic.atmosphere.proxy.halo.enabled = true;
     sourceMap.dynamicPointLights.push_back(disabledDynamic);
     game::BuildSectorLightAtmosphereSources(sourceMap, nullptr, sources);
     Check(sources.size() == 1,
@@ -3319,34 +3317,17 @@ void TestLightAtmosphereVolumeShapesAndProbeFallback()
                           spotVolume, Vector3{0.0f, -0.5f, 8.1f}),
           "spot-light atmosphere offsets and bounds its finite cone");
 
-    game::SectorLightHazeStaticLightingSamples grid;
-    for (std::size_t index = 0; index < grid.corners.size(); ++index) {
-        const float value = static_cast<float>(index);
-        grid.corners[index] = Vector3{value, value, value};
-    }
-    Check(SameVector(
-                  game::InterpolateSectorLightHazeStaticLighting(grid, Vector3{0.5f, 0.5f, 0.5f}),
-                  Vector3{3.5f, 3.5f, 3.5f}),
-          "light haze trilinearly interpolates the representative 2x2x2 probe grid");
+    game::SectorLightAtmosphereVolume translatedSpotVolume;
+    Check(game::MakeSectorLightAtmosphereVolume(
+                  spot,
+                  1.0f,
+                  Vector3{1.5f, 2.0f, -0.25f},
+                  translatedSpotVolume)
+                  && SameVector(translatedSpotVolume.originWorld, Vector3{1.5f, 2.0f, -0.25f})
+                  && SameVector(translatedSpotVolume.directionWorld, spotVolume.directionWorld)
+                  && SameVector(translatedSpotVolume.boundsCenterWorld, Vector3{1.5f, 2.0f, 3.75f}),
+          "spot-light atmosphere translates its full cone without changing direction");
 
-    game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
-    game::SectorTopologySector* sector = game::FindSectorTopologySector(map, 10);
-    Check(sector != nullptr, "light atmosphere fallback sector fixture exists");
-    if (sector == nullptr) return;
-    sector->ambientColor = Color{64, 128, 255, 255};
-    sector->ambientIntensity = 0.5f;
-    point.ownerSectorId = 10;
-    point.positionWorld = Vector3{2.0f, 1.0f, 2.0f};
-    point.rangeWorld = 2.0f;
-    Check(game::MakeSectorLightAtmosphereVolume(point, 1.0f, 0.0f, pointVolume),
-          "light atmosphere fallback volume builds");
-    const game::SectorBakedObjectLightProbeRuntimeData noProbes;
-    const game::SectorLightHazeStaticLightingSamples fallback =
-            game::SampleSectorLightHazeStaticLighting(map, noProbes, pointVolume);
-    for (const Vector3& corner : fallback.corners) {
-        Check(SameVector(corner, Vector3{0.125490f, 0.250980f, 0.5f}),
-              "light atmosphere without probes uses sector ambient rather than emissive tint");
-    }
 }
 
 void TestObjectLightProbeBakeWritesSidecarAndStats()
@@ -4637,9 +4618,8 @@ int main()
     TestObjectLightProbeSamplingKeepsAllProbeFallbackWithoutPreferredProbes();
     TestObjectLightProbeSamplingFallbacksAndFiniteOutput();
     TestObjectAmbientCubeNormalBlending();
-    TestLocalFogEffectivePathLengthSaturatesGrazingTraversal();
     TestLocalFogProbeLightingReductionInterpolationAndFallback();
-    TestLightAtmosphereVolumeShapesAndProbeFallback();
+    TestLightAtmosphereVolumeShapesAndSources();
     TestObjectLightProbeBakeWritesSidecarAndStats();
     TestObjectLightProbeBakeCancellationDoesNotMarkValid();
     TestObjectLightProbePlacementGridCounts();

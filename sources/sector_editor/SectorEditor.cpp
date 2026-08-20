@@ -154,7 +154,7 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
         MaterialEditingUiState& materialUiState,
         std::string* statusText = nullptr,
         void* userData = nullptr,
-        void (*requestCancelLightPilotWithPreviewRestore)(void*, const char*) = nullptr,
+        void (*requestCancelInteractiveLightEdit)(void*, const char*) = nullptr,
         LightEditingState* lightState = nullptr)
 {
     SectorEditorAuthoringDocumentAccess authoring =
@@ -173,7 +173,7 @@ SectorEditorSelectionServiceContext BuildSelectionServiceContextFromState(
             materialUiState,
             statusText,
             userData,
-            requestCancelLightPilotWithPreviewRestore,
+            requestCancelInteractiveLightEdit,
             lightState};
 }
 
@@ -2053,6 +2053,11 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_F2) {
+                    if (lightEditingState.proxyPlacement.active) {
+                        statusText = "Finish proxy placement before hiding the 3D UI";
+                        engine::ConsumeEvent(event);
+                        return;
+                    }
                     previewState.overlay.previewUiHidden = !previewState.overlay.previewUiHidden;
                     if (previewState.overlay.previewUiHidden) {
                         previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
@@ -2065,8 +2070,9 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_F3) {
-                    if (lightEditingState.lightPilot.active) {
-                        statusText = "Finish light pilot before changing 3D control mode";
+                    if (lightEditingState.lightPilot.active
+                            || lightEditingState.proxyPlacement.active) {
+                        statusText = "Finish light editing before changing 3D control mode";
                         engine::ConsumeEvent(event);
                         return;
                     }
@@ -2097,6 +2103,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_TAB || event.key.key == KEY_ESCAPE) {
+                    CancelLightProxyPlacement(nullptr);
                     CancelLightPilotWithPreviewRestore(nullptr);
                     LeavePreview3D();
                     engine::ConsumeEvent(event);
@@ -2230,7 +2237,8 @@ void SectorEditor::UpdatePreview3DSelection(engine::Input& input)
             || previewState.overlay.previewUiHidden
             || state.texturePicker.open
             || state.soundPicker.open
-            || lightEditingState.lightPilot.active) {
+            || lightEditingState.lightPilot.active
+            || lightEditingState.proxyPlacement.active) {
         previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
         return;
     }
@@ -2612,7 +2620,9 @@ SectorEditorSelectionServiceContext SectorEditor::BuildSelectionServiceContext()
             &statusText,
             this,
             [](void* userData, const char* message) {
-                static_cast<SectorEditor*>(userData)->CancelLightPilotWithPreviewRestore(message);
+                SectorEditor* editor = static_cast<SectorEditor*>(userData);
+                editor->CancelLightProxyPlacement(message);
+                editor->CancelLightPilotWithPreviewRestore(message);
             },
             &lightEditingState);
 }
@@ -3615,6 +3625,21 @@ void SectorEditor::DrawPreviewOverlay(
     if (result.requestStartLightPilot) {
         StartLightPilot();
     }
+    if (result.requestCancelProxyPlacement) {
+        CancelLightProxyPlacement(
+                lightEditingState.proxyPlacement.proxyKind == LightProxyPlacementKind::Shaft
+                        ? "Shaft placement cancelled"
+                        : "Halo placement cancelled");
+    }
+    if (result.requestApplyProxyPlacement) {
+        ApplyLightProxyPlacement();
+    }
+    if (result.requestStartProxyPlacement != LightProxyPlacementKind::None) {
+        StartLightProxyPlacement(result.requestStartProxyPlacement);
+    }
+    if (result.previewProxyOffsetChanged) {
+        PreviewLightProxyPlacementOffset(result.previewProxyOffsetWorld);
+    }
     if (result.openPreviewSettings) {
         OpenPreviewSettingsModal();
     }
@@ -3876,17 +3901,77 @@ void SectorEditor::DrawAuthoringFogVolumes() const
         const float radiusY = std::max(2.0f, std::fabs(edgeZ.y - center.y));
         Color fill = volume.enabled ? volume.color : Color{112, 118, 122, 255};
         fill.a = 46;
-        DrawEllipse(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, fill);
-        DrawEllipseLines(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, outline);
-        const float innerScale = std::clamp(1.0f - volume.edgeSoftness, 0.05f, 1.0f);
+        const bool drawBox = volume.shape == SectorLocalFogShape::Box;
+        float innerScaleX = std::clamp(1.0f - volume.edgeSoftness, 0.05f, 1.0f);
+        float innerScaleZ = innerScaleX;
+        const bool roomStyle = volume.analyticStyle == SectorAnalyticFogStyle::Room;
+        const float minimumFraction = roomStyle ? 0.005f : 0.01f;
+        const float maximumFraction = roomStyle ? 0.20f : 0.45f;
+        const float minimumHalfExtent = std::min(
+                {volume.radiusXWorld, volume.heightWorld * 0.5f, volume.radiusZWorld});
+        const float normalizedSoftness = std::clamp(
+                volume.edgeSoftness, 0.0f, 1.0f);
+        const float edgeWidth = minimumHalfExtent
+                * (minimumFraction
+                        + (maximumFraction - minimumFraction) * normalizedSoftness);
+        innerScaleX = std::clamp(
+                1.0f - edgeWidth / std::max(volume.radiusXWorld, 0.0001f),
+                0.05f,
+                1.0f);
+        innerScaleZ = std::clamp(
+                1.0f - edgeWidth / std::max(volume.radiusZWorld, 0.0001f),
+                0.05f,
+                1.0f);
         Color inner = outline;
         inner.a = 130;
-        DrawEllipseLines(
-                static_cast<int>(center.x),
-                static_cast<int>(center.y),
-                radiusX * innerScale,
-                radiusY * innerScale,
-                inner);
+        if (drawBox) {
+            const float cosine = std::cos(volume.yawDegrees * DEG2RAD);
+            const float sine = std::sin(volume.yawDegrees * DEG2RAD);
+            const auto boxCorners = [&](float scaleX, float scaleZ) {
+                std::array<Vector2, 4> corners{};
+                constexpr std::array<Vector2, 4> signs = {
+                        Vector2{-1.0f, -1.0f},
+                        Vector2{1.0f, -1.0f},
+                        Vector2{1.0f, 1.0f},
+                        Vector2{-1.0f, 1.0f}};
+                for (std::size_t index = 0; index < signs.size(); ++index) {
+                    const float localX = signs[index].x * volume.radiusXWorld * scaleX;
+                    const float localZ = signs[index].y * volume.radiusZWorld * scaleZ;
+                    const Vector2 mapCorner{
+                            mapCenter.x + SectorWorldToAuthoringDistance(
+                                    cosine * localX + sine * localZ),
+                            mapCenter.y + SectorWorldToAuthoringDistance(
+                                    -sine * localX + cosine * localZ)};
+                    corners[index] = MapToScreen(mapCorner);
+                }
+                return corners;
+            };
+            const auto outerCorners = boxCorners(1.0f, 1.0f);
+            DrawTriangle(outerCorners[0], outerCorners[1], outerCorners[2], fill);
+            DrawTriangle(outerCorners[0], outerCorners[2], outerCorners[3], fill);
+            for (std::size_t index = 0; index < outerCorners.size(); ++index) {
+                DrawLineV(
+                        outerCorners[index],
+                        outerCorners[(index + 1) % outerCorners.size()],
+                        outline);
+            }
+            const auto innerCorners = boxCorners(innerScaleX, innerScaleZ);
+            for (std::size_t index = 0; index < innerCorners.size(); ++index) {
+                DrawLineV(
+                        innerCorners[index],
+                        innerCorners[(index + 1) % innerCorners.size()],
+                        inner);
+            }
+        } else {
+            DrawEllipse(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, fill);
+            DrawEllipseLines(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, outline);
+            DrawEllipseLines(
+                    static_cast<int>(center.x),
+                    static_cast<int>(center.y),
+                    radiusX * innerScaleX,
+                    radiusY * innerScaleZ,
+                    inner);
+        }
         if (!resolved) {
             DrawLineEx(
                     Vector2{center.x - 8.0f, center.y - 8.0f},
@@ -5925,6 +6010,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 
 void SectorEditor::LeavePreview3D()
 {
+    CancelLightProxyPlacement(nullptr);
     CancelLightPilotWithPreviewRestore(nullptr);
     if (previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay) {
         ResetFpsCameraRecoil(fpsPlayer.State().firing.cameraRecoil);
@@ -5993,6 +6079,10 @@ bool SectorEditor::StartLightPilot()
 {
     if (state.mode != SectorEditorMode::Preview3D || previewState.controller.previewControlMode != SectorPreviewControlMode::FreeFly) {
         statusText = "Light pilot requires 3D FreeFly mode";
+        return false;
+    }
+    if (lightEditingState.proxyPlacement.active) {
+        statusText = "Finish proxy placement before piloting the light";
         return false;
     }
 
@@ -6065,6 +6155,98 @@ bool SectorEditor::StartLightPilot()
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     statusText = TextFormat("Piloting %s %d", lightName, lightId);
     return true;
+}
+
+bool SectorEditor::StartLightProxyPlacement(LightProxyPlacementKind proxyKind)
+{
+    const bool shaft = proxyKind == LightProxyPlacementKind::Shaft;
+    const char* proxyName = shaft ? "shaft" : "haze";
+    if (proxyKind == LightProxyPlacementKind::None) return false;
+    if (state.mode != SectorEditorMode::Preview3D
+            || previewState.controller.previewControlMode != SectorPreviewControlMode::FreeFly) {
+        statusText = TextFormat("%s placement requires 3D FreeFly mode", proxyName);
+        return false;
+    }
+    if (previewState.controller.freeflyController.mouseLookEnabled) {
+        statusText = TextFormat("Unlock the cursor with F11 before placing a %s", proxyName);
+        return false;
+    }
+    if (lightEditingState.lightPilot.active) {
+        statusText = TextFormat("Finish light pilot before placing a %s", proxyName);
+        return false;
+    }
+
+    LightPilotKind kind = LightPilotKind::None;
+    int lightId = -1;
+    bool proxyEnabled = false;
+    if (const SectorTopologyStaticPointLight* light = SelectedTopologyLight()) {
+        kind = LightPilotKind::StaticPoint;
+        lightId = light->id;
+        proxyEnabled = !shaft && light->atmosphere.proxy.halo.enabled;
+    } else if (const SectorTopologyStaticSpotLight* light = SelectedTopologyStaticSpotLight()) {
+        kind = LightPilotKind::StaticSpot;
+        lightId = light->id;
+        proxyEnabled = shaft
+                ? light->atmosphere.proxy.shaft.enabled
+                : light->atmosphere.proxy.halo.enabled;
+    } else if (const SectorTopologyDynamicPointLight* light = SelectedTopologyDynamicLight()) {
+        kind = LightPilotKind::DynamicPoint;
+        lightId = light->id;
+        proxyEnabled = !shaft && light->atmosphere.proxy.halo.enabled;
+    } else if (const SectorTopologyDynamicSpotLight* light = SelectedTopologyDynamicSpotLight()) {
+        kind = LightPilotKind::DynamicSpot;
+        lightId = light->id;
+        proxyEnabled = shaft
+                ? light->atmosphere.proxy.shaft.enabled
+                : light->atmosphere.proxy.halo.enabled;
+    }
+    if (lightId < 0 || !proxyEnabled) {
+        statusText = TextFormat(
+                "Select a %s with enabled %s",
+                shaft ? "spotlight" : "light",
+                proxyName);
+        return false;
+    }
+
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    return lightEditing.BeginProxyPlacement(proxyKind, kind, lightId);
+}
+
+bool SectorEditor::PreviewLightProxyPlacementOffset(Vector3 offsetWorld)
+{
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    const SectorEditorLightMutationResult result =
+            lightEditing.PreviewProxyPlacement(offsetWorld);
+    if (result.dynamicLightRendererRefreshNeeded
+            && state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()) {
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
+    }
+    return result.changed;
+}
+
+bool SectorEditor::ApplyLightProxyPlacement()
+{
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    const SectorEditorLightMutationResult result = lightEditing.ApplyProxyPlacement();
+    if (result.dynamicLightRendererRefreshNeeded
+            && state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()) {
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
+    }
+    return result.changed;
+}
+
+void SectorEditor::CancelLightProxyPlacement(const char* message)
+{
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    const SectorEditorLightMutationResult result =
+            lightEditing.CancelProxyPlacementData(message);
+    if (result.dynamicLightRendererRefreshNeeded
+            && state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()) {
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
+    }
 }
 
 bool SectorEditor::ApplyLightPilotFromPreviewPose()
@@ -7259,17 +7441,6 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
                             uiState.lightBlueInput,
                             inspectorIdUiState,
                             {
-                                    &uiState.lightHazeExtentScaleInput,
-                                    &uiState.lightHazeHeightOffsetInput,
-                                    &uiState.lightHazeDensityInput,
-                                    &uiState.lightHazeEdgeSoftnessInput,
-                                    &uiState.lightHazeNoiseAmountInput,
-                                    &uiState.lightHazeNoiseScaleInput,
-                                    &uiState.lightHazeFlowDirectionInput,
-                                    &uiState.lightHazeFlowSpeedInput,
-                                    &uiState.lightHazeRedInput,
-                                    &uiState.lightHazeGreenInput,
-                                    &uiState.lightHazeBlueInput,
                                     &uiState.lightDustAmountInput,
                                     &uiState.lightDustExtentScaleInput,
                                     &uiState.lightDustMinimumSizeInput,
@@ -7280,6 +7451,27 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
                                     &uiState.lightDustRedInput,
                                     &uiState.lightDustGreenInput,
                                     &uiState.lightDustBlueInput,
+                                    &uiState.lightProxyHaloRadiusInput,
+                                    &uiState.lightProxyHaloOffsetXInput,
+                                    &uiState.lightProxyHaloOffsetYInput,
+                                    &uiState.lightProxyHaloOffsetZInput,
+                                    &uiState.lightProxyHaloBrightnessInput,
+                                    &uiState.lightProxyHaloMaxExtinctionInput,
+                                    &uiState.lightProxyHaloSoftnessInput,
+                                    &uiState.lightProxyHaloRedInput,
+                                    &uiState.lightProxyHaloGreenInput,
+                                    &uiState.lightProxyHaloBlueInput,
+                                    &uiState.lightProxyShaftOffsetXInput,
+                                    &uiState.lightProxyShaftOffsetYInput,
+                                    &uiState.lightProxyShaftOffsetZInput,
+                                    &uiState.lightProxyShaftLengthInput,
+                                    &uiState.lightProxyShaftWidthInput,
+                                    &uiState.lightProxyShaftBrightnessInput,
+                                    &uiState.lightProxyShaftMaxExtinctionInput,
+                                    &uiState.lightProxyShaftSoftnessInput,
+                                    &uiState.lightProxyShaftRedInput,
+                                    &uiState.lightProxyShaftGreenInput,
+                                    &uiState.lightProxyShaftBlueInput,
                             },
                     },
                     statusText}};

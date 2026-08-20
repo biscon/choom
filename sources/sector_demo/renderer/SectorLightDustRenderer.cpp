@@ -637,7 +637,8 @@ bool SectorLightDustRenderer::Apply(
     const Vector2 viewportSize{static_cast<float>(sceneTarget.texture.width), static_cast<float>(sceneTarget.texture.height)};
     const SectorFogRenderContext fog = BuildSectorFogRenderContext(map.fogSettings, camera.position);
     const SectorTopologyFogSettings& fogSettings = fog.settings;
-    const int fogEnabled = fogSettings.enabled ? 1 : 0;
+    const int fogEnabled = fogSettings.enabled
+            && fogSettings.mode == SectorTopologyFogMode::LegacyHeight ? 1 : 0;
     material.maps[MATERIAL_MAP_DIFFUSE].texture = sceneTarget.depth;
     material.maps[MATERIAL_MAP_ROUGHNESS].texture =
             dynamicLights.shadowMaps.shadowMap0 != nullptr

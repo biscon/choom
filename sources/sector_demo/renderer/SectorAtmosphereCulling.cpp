@@ -42,6 +42,57 @@ Vector3 Corner(Vector3 minimum, Vector3 maximum, int index)
 
 } // namespace
 
+Vector3 ComputeSectorAtmosphereYawedHalfExtents(
+        Vector3 localHalfExtents,
+        float yawRadians)
+{
+    const Vector3 extents{
+            std::fabs(localHalfExtents.x),
+            std::fabs(localHalfExtents.y),
+            std::fabs(localHalfExtents.z)};
+    if (!std::isfinite(yawRadians)) return extents;
+    const float cosine = std::fabs(std::cos(yawRadians));
+    const float sine = std::fabs(std::sin(yawRadians));
+    return Vector3{
+            cosine * extents.x + sine * extents.z,
+            extents.y,
+            sine * extents.x + cosine * extents.z};
+}
+
+float ComputeSectorAnalyticFogEdgeWidth(
+        Vector3 radiiWorld,
+        float edgeSoftness,
+        bool roomStyle)
+{
+    const float minimumRadius = std::min(
+            {std::fabs(radiiWorld.x),
+                    std::fabs(radiiWorld.y),
+                    std::fabs(radiiWorld.z)});
+    const float softness = std::clamp(
+            std::isfinite(edgeSoftness) ? edgeSoftness : 0.0f,
+            0.0f,
+            1.0f);
+    const float minimumFraction = roomStyle ? 0.005f : 0.01f;
+    const float maximumFraction = roomStyle ? 0.20f : 0.45f;
+    return minimumRadius
+            * (minimumFraction
+                    + (maximumFraction - minimumFraction) * softness);
+}
+
+float ComputeSectorAnalyticFogCloudyEdgeExpansion(
+        Vector3 radiiWorld,
+        float edgeSoftness,
+        float noiseAmount)
+{
+    const float amount = std::clamp(
+            std::isfinite(noiseAmount) ? noiseAmount : 0.0f,
+            0.0f,
+            1.0f);
+    return ComputeSectorAnalyticFogEdgeWidth(
+            radiiWorld, edgeSoftness, false)
+            * 0.60f * std::sqrt(amount);
+}
+
 SectorAtmosphereScissorRect ProjectSectorAtmosphereBoundsToScissor(
         const Camera3D& camera,
         float aspectRatio,

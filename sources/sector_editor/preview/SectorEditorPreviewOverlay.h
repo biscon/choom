@@ -55,6 +55,11 @@ struct SectorEditorPreviewOverlayResult {
     bool requestStartLightPilot = false;
     bool requestApplyLightPilot = false;
     bool requestCancelLightPilot = false;
+    LightProxyPlacementKind requestStartProxyPlacement = LightProxyPlacementKind::None;
+    bool requestApplyProxyPlacement = false;
+    bool requestCancelProxyPlacement = false;
+    bool previewProxyOffsetChanged = false;
+    Vector3 previewProxyOffsetWorld = {};
     bool openPreviewSettings = false;
     bool markTopologyDocumentEdited = false;
     bool requestNavigationRebuild = false;

@@ -765,8 +765,6 @@ void SettingsResolutionAndPersistence()
     settings.hdrBloom={true,2.0f,0.25f,0.5f,2.0f};
     settings.graphics.renderScale = 1.25f;
     settings.graphics.fxaa = false;
-    settings.graphics.volumetricQuality =
-            game::SectorVolumetricQuality::Low;
     settings.graphics.shadowQuality = game::FpsShadowQuality::Medium;
     settings.graphics.maxDynamicLights = 17;
     settings.graphics.maxShadowLightUpdatesPerFrame = 7;
@@ -795,8 +793,6 @@ void SettingsResolutionAndPersistence()
     const std::string savedSettings{
             std::istreambuf_iterator<char>(savedSettingsInput),
             std::istreambuf_iterator<char>()};
-    assert(savedSettings.find("\"volumetricQuality\"") != std::string::npos);
-    assert(savedSettings.find("\"volumetricQualityCap\"") == std::string::npos);
     game::FpsApplicationSettings loaded;
     assert(game::LoadFpsApplicationSettings(path.string(), loaded, &error));
     assert(loaded.firstLevel == "test4");
@@ -805,8 +801,6 @@ void SettingsResolutionAndPersistence()
             && Near(loaded.hdrBloom.radius,2.0f));
     assert(Near(loaded.graphics.renderScale, 1.25f));
     assert(!loaded.graphics.fxaa);
-    assert(loaded.graphics.volumetricQuality
-            == game::SectorVolumetricQuality::Low);
     assert(loaded.graphics.shadowQuality == game::FpsShadowQuality::Medium);
     assert(loaded.graphics.maxDynamicLights == 17);
     assert(loaded.graphics.maxShadowLightUpdatesPerFrame == 7);
@@ -954,20 +948,6 @@ void SettingsResolutionAndPersistence()
             R"({"version":1,"graphics":{"renderScale":2.1}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"renderScale":"fast"}})",loaded,&error));
-    assert(!game::ParseFpsApplicationSettings(
-            R"({"version":1,"graphics":{"volumetricQuality":"ultra"}})",loaded,&error));
-    assert(!game::ParseFpsApplicationSettings(
-            R"({"version":1,"graphics":{"volumetricQualityCap":"ultra"}})",loaded,&error));
-    assert(game::ParseFpsApplicationSettings(
-            R"({"version":1,"graphics":{"volumetricQualityCap":"low"}})",loaded,&error));
-    assert(loaded.graphics.volumetricQuality
-            == game::SectorVolumetricQuality::Low);
-    assert(game::ParseFpsApplicationSettings(
-            R"({"version":1,"graphics":{"volumetricQuality":"high","volumetricQualityCap":"low"}})",
-            loaded,
-            &error));
-    assert(loaded.graphics.volumetricQuality
-            == game::SectorVolumetricQuality::High);
     assert(!game::ParseFpsApplicationSettings(
             R"({"version":1,"graphics":{"shadowQuality":false}})",loaded,&error));
     assert(!game::ParseFpsApplicationSettings(

@@ -20,8 +20,6 @@ constexpr float FogRadiusMin = 0.05f;
 constexpr float FogRadiusMax = 64.0f;
 constexpr float FogHeightMin = 0.05f;
 constexpr float FogHeightMax = 32.0f;
-constexpr float FogDensityMin = 0.0f;
-constexpr float FogDensityMax = 8.0f;
 constexpr float FogOpacityMin = 0.0f;
 constexpr float FogOpacityMax = 1.0f;
 constexpr float FogSoftnessMin = 0.0f;
@@ -1769,6 +1767,9 @@ void CompileAuthoringFogVolumes(
         compiled.sourceAuthoringFogVolumeId = volume.id;
         compiled.topologySectorId = sector->id;
         compiled.enabled = volume.enabled;
+        compiled.shape = volume.shape;
+        compiled.analyticStyle = volume.analyticStyle;
+        compiled.yawRadians = volume.yawDegrees * DEG2RAD;
         compiled.centerWorld = Vector3{
                 SectorAuthoringToWorldDistance(
                         static_cast<float>(volume.x) / static_cast<float>(SectorCoordSubdivisions)),
@@ -1780,8 +1781,10 @@ void CompileAuthoringFogVolumes(
                 volume.heightWorld * 0.5f,
                 volume.radiusZWorld};
         compiled.color = volume.color;
-        compiled.density = volume.density;
         compiled.maxOpacity = volume.maxOpacity;
+        compiled.analyticStartDistanceWorld = volume.analyticStartDistanceWorld;
+        compiled.analyticEndDistanceWorld = volume.analyticEndDistanceWorld;
+        compiled.analyticFalloffExponent = volume.analyticFalloffExponent;
         compiled.edgeSoftness = volume.edgeSoftness;
         compiled.noiseScaleWorld = volume.noiseScaleWorld;
         compiled.noiseAmount = volume.noiseAmount;
@@ -2022,6 +2025,21 @@ const SectorAuthoringTrigger* FindSectorAuthoringTriggerByReferenceId(
 SectorAuthoringFogVolume NormalizeSectorAuthoringFogVolume(SectorAuthoringFogVolume volume)
 {
     const SectorAuthoringFogVolume defaults;
+    if (volume.shape != SectorLocalFogShape::Ellipsoid
+            && volume.shape != SectorLocalFogShape::Box) {
+        volume.shape = defaults.shape;
+    }
+    if (volume.analyticStyle != SectorAnalyticFogStyle::Cloudy
+            && volume.analyticStyle != SectorAnalyticFogStyle::Room) {
+        volume.analyticStyle = defaults.analyticStyle;
+    }
+    if (!std::isfinite(volume.yawDegrees)) {
+        volume.yawDegrees = defaults.yawDegrees;
+    }
+    volume.yawDegrees = std::fmod(volume.yawDegrees, 360.0f);
+    if (volume.yawDegrees < 0.0f) {
+        volume.yawDegrees += 360.0f;
+    }
     volume.bottomOffsetWorld = ClampFiniteFogValue(
             volume.bottomOffsetWorld, FogBottomOffsetMin, FogBottomOffsetMax, defaults.bottomOffsetWorld);
     volume.radiusXWorld = ClampFiniteFogValue(
@@ -2031,9 +2049,18 @@ SectorAuthoringFogVolume NormalizeSectorAuthoringFogVolume(SectorAuthoringFogVol
     volume.heightWorld = ClampFiniteFogValue(
             volume.heightWorld, FogHeightMin, FogHeightMax, defaults.heightWorld);
     volume.color.a = 255;
-    volume.density = ClampFiniteFogValue(volume.density, FogDensityMin, FogDensityMax, defaults.density);
     volume.maxOpacity = ClampFiniteFogValue(
             volume.maxOpacity, FogOpacityMin, FogOpacityMax, defaults.maxOpacity);
+    volume.analyticStartDistanceWorld = ClampFiniteFogValue(
+            volume.analyticStartDistanceWorld, 0.0f, 128.0f, defaults.analyticStartDistanceWorld);
+    volume.analyticEndDistanceWorld = ClampFiniteFogValue(
+            volume.analyticEndDistanceWorld,
+            volume.analyticStartDistanceWorld + 0.01f,
+            128.0f,
+            std::max(defaults.analyticEndDistanceWorld,
+                    volume.analyticStartDistanceWorld + 0.01f));
+    volume.analyticFalloffExponent = ClampFiniteFogValue(
+            volume.analyticFalloffExponent, 0.05f, 8.0f, defaults.analyticFalloffExponent);
     volume.edgeSoftness = ClampFiniteFogValue(
             volume.edgeSoftness, FogSoftnessMin, FogSoftnessMax, defaults.edgeSoftness);
     volume.noiseScaleWorld = ClampFiniteFogValue(
@@ -2333,12 +2360,15 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
             AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Duplicate authoring fog volume ID");
         }
         const float values[] = {
+                volume.yawDegrees,
                 volume.bottomOffsetWorld,
                 volume.radiusXWorld,
                 volume.radiusZWorld,
                 volume.heightWorld,
-                volume.density,
                 volume.maxOpacity,
+                volume.analyticStartDistanceWorld,
+                volume.analyticEndDistanceWorld,
+                volume.analyticFalloffExponent,
                 volume.edgeSoftness,
                 volume.noiseScaleWorld,
                 volume.noiseAmount,
@@ -2346,11 +2376,20 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
                 volume.flowSpeedWorld};
         if (std::any_of(std::begin(values), std::end(values), [](float value) { return !std::isfinite(value); })) {
             AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Authoring fog volume has non-finite settings");
-        } else if (volume.radiusXWorld < FogRadiusMin || volume.radiusXWorld > FogRadiusMax
+        } else if ((volume.shape != SectorLocalFogShape::Ellipsoid
+                            && volume.shape != SectorLocalFogShape::Box)
+                || (volume.analyticStyle != SectorAnalyticFogStyle::Cloudy
+                            && volume.analyticStyle != SectorAnalyticFogStyle::Room)
+                || volume.yawDegrees < 0.0f || volume.yawDegrees >= 360.0f
+                || volume.radiusXWorld < FogRadiusMin || volume.radiusXWorld > FogRadiusMax
                 || volume.radiusZWorld < FogRadiusMin || volume.radiusZWorld > FogRadiusMax
                 || volume.heightWorld < FogHeightMin || volume.heightWorld > FogHeightMax
-                || volume.density < FogDensityMin || volume.density > FogDensityMax
                 || volume.maxOpacity < FogOpacityMin || volume.maxOpacity > FogOpacityMax
+                || volume.analyticStartDistanceWorld < 0.0f
+                || volume.analyticEndDistanceWorld <= volume.analyticStartDistanceWorld
+                || volume.analyticEndDistanceWorld > 128.0f
+                || volume.analyticFalloffExponent < 0.05f
+                || volume.analyticFalloffExponent > 8.0f
                 || volume.edgeSoftness < FogSoftnessMin || volume.edgeSoftness > FogSoftnessMax
                 || volume.noiseScaleWorld < FogNoiseScaleMin || volume.noiseScaleWorld > FogNoiseScaleMax
                 || volume.noiseAmount < FogNoiseAmountMin || volume.noiseAmount > FogNoiseAmountMax

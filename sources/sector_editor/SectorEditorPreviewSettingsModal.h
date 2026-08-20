@@ -56,7 +56,7 @@ inline float MeasureSectorPreviewSettingsFogContentHeight(
     constexpr float colorTitleHeight = 38.0f;
     constexpr float swatchHeight = 36.0f;
     constexpr float trailingPadding = 12.0f;
-    return 9.0f * (rowHeight + gap)
+    return 10.0f * (rowHeight + gap)
             + noteHeight + gap
             + colorTitleHeight
             + swatchHeight + gap
@@ -128,6 +128,9 @@ inline void ResetSectorPreviewSettingsModalFogDefaults(
 {
     modalState.draftFogSettings = DefaultSectorTopologyFogSettings();
     modalState.fogStartDistanceInput = engine::UIFloatInputState{};
+    modalState.fogEndDistanceInput = engine::UIFloatInputState{};
+    modalState.fogFalloffExponentInput = engine::UIFloatInputState{};
+    modalState.fogBrightnessInput = engine::UIFloatInputState{};
     modalState.fogDensityInput = engine::UIFloatInputState{};
     modalState.fogMaxOpacityInput = engine::UIFloatInputState{};
     modalState.fogReferenceHeightInput = engine::UIFloatInputState{};
@@ -144,11 +147,15 @@ inline bool ApplySectorPreviewFogSettings(
     const SectorTopologyFogSettings draft = NormalizeSectorTopologyFogSettings(draftSettings);
     const SectorTopologyFogSettings current = NormalizeSectorTopologyFogSettings(map.fogSettings);
     const bool same = current.enabled == draft.enabled
+            && current.mode == draft.mode
             && current.color.r == draft.color.r
             && current.color.g == draft.color.g
             && current.color.b == draft.color.b
             && current.color.a == draft.color.a
             && current.startDistanceWorld == draft.startDistanceWorld
+            && current.endDistanceWorld == draft.endDistanceWorld
+            && current.falloffExponent == draft.falloffExponent
+            && current.brightness == draft.brightness
             && current.density == draft.density
             && current.maxOpacity == draft.maxOpacity
             && current.referenceHeightWorld == draft.referenceHeightWorld

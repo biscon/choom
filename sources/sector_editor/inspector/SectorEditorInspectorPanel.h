@@ -143,6 +143,20 @@ inline float MeasureSectorEditorAuthoringFaceInspectorContentHeight(
     return height;
 }
 
+inline float MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+        const SectorAuthoringFogVolume& volume,
+        float rowHeight,
+        float gap)
+{
+    int rowCount = 21; // Common controls, shape, path controls, color, and delete.
+    if (volume.shape == SectorLocalFogShape::Box) {
+        ++rowCount; // Yaw.
+    }
+    float height = 38.0f + static_cast<float>(rowCount) * (rowHeight + gap);
+    height += SectorEditorInspectorStackedOptionRowHeight(rowHeight, gap) + gap;
+    return height;
+}
+
 SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         SectorEditorInspectorPanelContext& context);
 

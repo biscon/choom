@@ -72,17 +72,6 @@ struct SectorEditorLightEditingServiceContext {
         engine::UIIntInputState& lightBlueInput;
         InspectorIdUiState& inspectorIdUiState;
         struct AtmosphereRefs {
-            engine::UIFloatInputState* hazeExtentScaleInput = nullptr;
-            engine::UIFloatInputState* hazeHeightOffsetInput = nullptr;
-            engine::UIFloatInputState* hazeDensityInput = nullptr;
-            engine::UIFloatInputState* hazeEdgeSoftnessInput = nullptr;
-            engine::UIFloatInputState* hazeNoiseAmountInput = nullptr;
-            engine::UIFloatInputState* hazeNoiseScaleInput = nullptr;
-            engine::UIFloatInputState* hazeFlowDirectionInput = nullptr;
-            engine::UIFloatInputState* hazeFlowSpeedInput = nullptr;
-            engine::UIIntInputState* hazeRedInput = nullptr;
-            engine::UIIntInputState* hazeGreenInput = nullptr;
-            engine::UIIntInputState* hazeBlueInput = nullptr;
             engine::UIIntInputState* dustAmountInput = nullptr;
             engine::UIFloatInputState* dustExtentScaleInput = nullptr;
             engine::UIFloatInputState* dustMinimumSizeInput = nullptr;
@@ -93,6 +82,27 @@ struct SectorEditorLightEditingServiceContext {
             engine::UIIntInputState* dustRedInput = nullptr;
             engine::UIIntInputState* dustGreenInput = nullptr;
             engine::UIIntInputState* dustBlueInput = nullptr;
+            engine::UIFloatInputState* proxyHaloRadiusInput = nullptr;
+            engine::UIFloatInputState* proxyHaloOffsetXInput = nullptr;
+            engine::UIFloatInputState* proxyHaloOffsetYInput = nullptr;
+            engine::UIFloatInputState* proxyHaloOffsetZInput = nullptr;
+            engine::UIFloatInputState* proxyHaloBrightnessInput = nullptr;
+            engine::UIFloatInputState* proxyHaloMaxExtinctionInput = nullptr;
+            engine::UIFloatInputState* proxyHaloSoftnessInput = nullptr;
+            engine::UIIntInputState* proxyHaloRedInput = nullptr;
+            engine::UIIntInputState* proxyHaloGreenInput = nullptr;
+            engine::UIIntInputState* proxyHaloBlueInput = nullptr;
+            engine::UIFloatInputState* proxyShaftOffsetXInput = nullptr;
+            engine::UIFloatInputState* proxyShaftOffsetYInput = nullptr;
+            engine::UIFloatInputState* proxyShaftOffsetZInput = nullptr;
+            engine::UIFloatInputState* proxyShaftLengthInput = nullptr;
+            engine::UIFloatInputState* proxyShaftWidthInput = nullptr;
+            engine::UIFloatInputState* proxyShaftBrightnessInput = nullptr;
+            engine::UIFloatInputState* proxyShaftMaxExtinctionInput = nullptr;
+            engine::UIFloatInputState* proxyShaftSoftnessInput = nullptr;
+            engine::UIIntInputState* proxyShaftRedInput = nullptr;
+            engine::UIIntInputState* proxyShaftGreenInput = nullptr;
+            engine::UIIntInputState* proxyShaftBlueInput = nullptr;
         } atmosphere;
     } ui;
     std::string& statusText;
@@ -123,6 +133,14 @@ public:
     SectorEditorLightMutationResult ApplyLightPilot(Vector3 position, Vector3 target);
     SectorEditorLightMutationResult CancelLightPilotData(const char* message);
 
+    bool BeginProxyPlacement(
+            LightProxyPlacementKind proxyKind,
+            LightPilotKind kind,
+            int lightId);
+    SectorEditorLightMutationResult PreviewProxyPlacement(Vector3 offsetWorld);
+    SectorEditorLightMutationResult ApplyProxyPlacement();
+    SectorEditorLightMutationResult CancelProxyPlacementData(const char* message);
+
     bool SetStaticLightPosition(SectorTopologyStaticPointLight& light, Vector3 position);
     bool SetStaticLightIntensity(SectorTopologyStaticPointLight& light, float intensity);
     bool SetStaticLightRadius(SectorTopologyStaticPointLight& light, float radius);
@@ -135,6 +153,7 @@ public:
 
     bool SetStaticSpotLightPosition(SectorTopologyStaticSpotLight& light, Vector3 position);
     bool SetStaticSpotLightTarget(SectorTopologyStaticSpotLight& light, Vector3 target);
+    bool PointStaticSpotLightDown(SectorTopologyStaticSpotLight& light);
     bool SetStaticSpotLightRange(SectorTopologyStaticSpotLight& light, float range);
     bool SetStaticSpotLightSourceRadius(SectorTopologyStaticSpotLight& light, float sourceRadius);
     bool SetStaticSpotLightInnerCone(SectorTopologyStaticSpotLight& light, float innerConeDegrees);
@@ -174,6 +193,7 @@ public:
     bool SetDynamicSpotLightShadowSoftness(SectorTopologyDynamicSpotLight& light, float shadowSoftness);
     bool SetDynamicSpotLightPosition(SectorTopologyDynamicSpotLight& light, Vector3 position);
     bool SetDynamicSpotLightTarget(SectorTopologyDynamicSpotLight& light, Vector3 target);
+    bool PointDynamicSpotLightDown(SectorTopologyDynamicSpotLight& light);
     bool SetDynamicSpotLightIntensity(SectorTopologyDynamicSpotLight& light, float intensity);
     bool SetDynamicSpotLightRange(SectorTopologyDynamicSpotLight& light, float range);
     bool SetDynamicSpotLightInnerCone(SectorTopologyDynamicSpotLight& light, float innerConeDegrees);

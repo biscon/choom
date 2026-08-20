@@ -5,8 +5,11 @@
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_demo/SectorUnits.h"
 
+#include <raymath.h>
+
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <string>
 
 namespace {
@@ -245,6 +248,10 @@ void TestDeleteSelectedStaticLightDirtiesAndClearsState()
     lightState.lightPilot.active = true;
     lightState.lightPilot.kind = game::LightPilotKind::StaticPoint;
     lightState.lightPilot.lightId = 7;
+    lightState.proxyPlacement.active = true;
+    lightState.proxyPlacement.proxyKind = game::LightProxyPlacementKind::Halo;
+    lightState.proxyPlacement.kind = game::LightPilotKind::StaticPoint;
+    lightState.proxyPlacement.lightId = 7;
     std::string statusText;
     ResetDirty(state, documentState, statusText);
 
@@ -261,6 +268,8 @@ void TestDeleteSelectedStaticLightDirtiesAndClearsState()
     Check(!lightState.lightDrag.active && !lightState.lightEdit.active, "delete selected static light clears drag/edit state");
     Check(result.previewPoseRestoreNeeded && !lightState.lightPilot.active,
           "delete selected piloted point light requests preview-pose restoration");
+    Check(!lightState.proxyPlacement.active,
+          "delete selected light clears its proxy placement transaction");
     CheckDirtyOnce(state, documentState, statusText, "Deleted static light 7");
 }
 
@@ -515,6 +524,147 @@ void TestPointLightPilotApplyAndCancelTiming()
     CheckClean(state, documentState, statusText, "Light pilot cancelled");
 }
 
+void TestPointSpotLightsDown()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+
+    game::SectorTopologyStaticSpotLight staticSpot;
+    staticSpot.id = 23;
+    staticSpot.position = Vector3{10.0f, 20.0f, 30.0f};
+    staticSpot.target = Vector3{13.0f, 24.0f, 30.0f};
+    staticSpot.color = Color{10, 20, 30, 255};
+    staticSpot.intensity = 2.5f;
+    staticSpot.range = 48.0f;
+    staticSpot.innerConeDegrees = 18.0f;
+    staticSpot.outerConeDegrees = 42.0f;
+    staticSpot.sourceRadius = 3.0f;
+    staticSpot.castsShadow = false;
+    staticSpot.atmosphere.proxy.shaft.enabled = true;
+    staticSpot.atmosphere.proxy.shaft.brightness = 0.35f;
+    documentState.map.topologyMap.staticSpotLights.push_back(staticSpot);
+
+    game::SectorTopologyDynamicSpotLight dynamicSpot;
+    dynamicSpot.id = 24;
+    dynamicSpot.position = Vector3{-2.0f, 8.0f, 5.0f};
+    dynamicSpot.target = dynamicSpot.position;
+    dynamicSpot.color = Color{40, 50, 60, 255};
+    dynamicSpot.intensity = 1.75f;
+    dynamicSpot.range = 64.0f;
+    dynamicSpot.innerConeDegrees = 12.0f;
+    dynamicSpot.outerConeDegrees = 28.0f;
+    dynamicSpot.enabled = false;
+    dynamicSpot.flicker = true;
+    dynamicSpot.flickerSpeed = 3.0f;
+    dynamicSpot.flickerAmount = 0.4f;
+    dynamicSpot.castsShadow = true;
+    dynamicSpot.shadowPriority = 7;
+    dynamicSpot.shadowBias = 0.002f;
+    dynamicSpot.shadowStrength = 0.8f;
+    dynamicSpot.shadowSoftness = 0.6f;
+    dynamicSpot.atmosphere.dust.enabled = true;
+    dynamicSpot.atmosphere.dust.amount = 12;
+    documentState.map.topologyMap.dynamicSpotLights.push_back(dynamicSpot);
+
+    game::SelectionState selectionState;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+
+    game::SectorEditorLightEditingService service = MakeService(
+            state,
+            documentState,
+            documentState.map.topologyMap,
+            TestPreviewSelectionState(),
+            selectionState,
+            manipulationState,
+            lightState,
+            uiState,
+            inspectorIdUiState,
+            statusText);
+
+    game::SectorTopologyStaticSpotLight& editedStatic =
+            documentState.map.topologyMap.staticSpotLights.front();
+    const game::SectorTopologyStaticSpotLight staticBefore = editedStatic;
+    Check(service.PointStaticSpotLightDown(editedStatic),
+          "point-down changes a non-vertical static spotlight");
+    Check(Near(editedStatic.target.x, editedStatic.position.x)
+                  && Near(editedStatic.target.y, 15.0f)
+                  && Near(editedStatic.target.z, editedStatic.position.z)
+                  && Near(Vector3Distance(editedStatic.position, editedStatic.target), 5.0f),
+          "static spotlight points along world negative Y while preserving target distance");
+    Check(Near(editedStatic.position.x, staticBefore.position.x)
+                  && Near(editedStatic.position.y, staticBefore.position.y)
+                  && Near(editedStatic.position.z, staticBefore.position.z)
+                  && editedStatic.color.r == staticBefore.color.r
+                  && editedStatic.color.g == staticBefore.color.g
+                  && editedStatic.color.b == staticBefore.color.b
+                  && Near(editedStatic.intensity, staticBefore.intensity)
+                  && Near(editedStatic.range, staticBefore.range)
+                  && Near(editedStatic.innerConeDegrees, staticBefore.innerConeDegrees)
+                  && Near(editedStatic.outerConeDegrees, staticBefore.outerConeDegrees)
+                  && Near(editedStatic.sourceRadius, staticBefore.sourceRadius)
+                  && editedStatic.castsShadow == staticBefore.castsShadow
+                  && editedStatic.atmosphere.proxy.shaft.enabled
+                          == staticBefore.atmosphere.proxy.shaft.enabled
+                  && Near(editedStatic.atmosphere.proxy.shaft.brightness,
+                          staticBefore.atmosphere.proxy.shaft.brightness),
+          "static point-down preserves all non-target spotlight settings");
+    CheckDirtyOnce(state, documentState, statusText, "Pointed static spot 23 down");
+
+    ResetDirty(state, documentState, statusText);
+    Check(!service.PointStaticSpotLightDown(editedStatic),
+          "point-down is a no-op for an already downward static spotlight");
+    CheckClean(state, documentState, statusText, "old");
+
+    ResetDirty(state, documentState, statusText);
+    game::SectorTopologyDynamicSpotLight& editedDynamic =
+            documentState.map.topologyMap.dynamicSpotLights.front();
+    const game::SectorTopologyDynamicSpotLight dynamicBefore = editedDynamic;
+    Check(service.PointDynamicSpotLightDown(editedDynamic),
+          "point-down repairs a coincident dynamic spotlight target");
+    const float fallbackDistance = game::SectorWorldToAuthoringDistance(1.0f);
+    Check(Near(editedDynamic.target.x, editedDynamic.position.x)
+                  && Near(editedDynamic.target.y, editedDynamic.position.y - fallbackDistance)
+                  && Near(editedDynamic.target.z, editedDynamic.position.z)
+                  && Near(Vector3Distance(editedDynamic.position, editedDynamic.target), fallbackDistance),
+          "coincident dynamic spotlight target uses the one-world-meter fallback");
+    Check(Near(editedDynamic.position.x, dynamicBefore.position.x)
+                  && Near(editedDynamic.position.y, dynamicBefore.position.y)
+                  && Near(editedDynamic.position.z, dynamicBefore.position.z)
+                  && editedDynamic.color.r == dynamicBefore.color.r
+                  && editedDynamic.color.g == dynamicBefore.color.g
+                  && editedDynamic.color.b == dynamicBefore.color.b
+                  && Near(editedDynamic.intensity, dynamicBefore.intensity)
+                  && Near(editedDynamic.range, dynamicBefore.range)
+                  && Near(editedDynamic.innerConeDegrees, dynamicBefore.innerConeDegrees)
+                  && Near(editedDynamic.outerConeDegrees, dynamicBefore.outerConeDegrees)
+                  && editedDynamic.enabled == dynamicBefore.enabled
+                  && editedDynamic.flicker == dynamicBefore.flicker
+                  && Near(editedDynamic.flickerSpeed, dynamicBefore.flickerSpeed)
+                  && Near(editedDynamic.flickerAmount, dynamicBefore.flickerAmount)
+                  && editedDynamic.castsShadow == dynamicBefore.castsShadow
+                  && editedDynamic.shadowPriority == dynamicBefore.shadowPriority
+                  && Near(editedDynamic.shadowBias, dynamicBefore.shadowBias)
+                  && Near(editedDynamic.shadowStrength, dynamicBefore.shadowStrength)
+                  && Near(editedDynamic.shadowSoftness, dynamicBefore.shadowSoftness)
+                  && editedDynamic.atmosphere.dust.enabled == dynamicBefore.atmosphere.dust.enabled
+                  && editedDynamic.atmosphere.dust.amount == dynamicBefore.atmosphere.dust.amount,
+          "dynamic point-down preserves all non-target spotlight settings");
+    CheckDirtyOnce(state, documentState, statusText, "Pointed dynamic spot 24 down");
+
+    editedStatic.target.x = std::numeric_limits<float>::infinity();
+    ResetDirty(state, documentState, statusText);
+    Check(service.PointStaticSpotLightDown(editedStatic)
+                  && Near(Vector3Distance(editedStatic.position, editedStatic.target), fallbackDistance),
+          "point-down replaces a non-finite target with the one-world-meter fallback");
+    CheckDirtyOnce(state, documentState, statusText, "Pointed static spot 23 down");
+}
+
 void TestStaticShadowEditsUseDocumentMutationBoundary()
 {
     game::SectorEditorState state;
@@ -586,15 +736,19 @@ void TestAtmosphereEditUsesDocumentMutationBoundary()
             inspectorIdUiState,
             statusText);
     game::SectorLightAtmosphereSettings atmosphere;
-    atmosphere.haze.enabled = true;
-    atmosphere.haze.heightOffsetWorld = 0.75f;
+    atmosphere.proxy.halo.enabled = true;
+    atmosphere.proxy.halo.brightness = 0.4f;
+    atmosphere.proxy.halo.maxExtinction = 0.6f;
+    atmosphere.proxy.halo.scatteringTint = Color{180, 210, 240, 255};
     atmosphere.dust.enabled = true;
     atmosphere.dust.amount = 35;
     Check(service.SetStaticLightAtmosphere(
                   documentState.map.topologyMap.staticLights.front(), atmosphere),
           "atmosphere edit reports a change");
-    Check(documentState.map.topologyMap.staticLights.front().atmosphere.haze.enabled
-                  && Near(documentState.map.topologyMap.staticLights.front().atmosphere.haze.heightOffsetWorld, 0.75f)
+    Check(documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.enabled
+                  && Near(documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.brightness, 0.4f)
+                  && Near(documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.maxExtinction, 0.6f)
+                  && documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.scatteringTint.g == 210
                   && documentState.map.topologyMap.staticLights.front().atmosphere.dust.enabled
                   && documentState.map.topologyMap.staticLights.front().atmosphere.dust.amount == 35,
           "atmosphere edit writes normalized light data");
@@ -605,6 +759,153 @@ void TestAtmosphereEditUsesDocumentMutationBoundary()
                   documentState.map.topologyMap.staticLights.front(), atmosphere),
           "unchanged atmosphere edit reports no change");
     CheckClean(state, documentState, statusText, "old");
+}
+
+void TestProxyPlacementApplyAndCancelTiming()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+    game::SectorTopologyStaticPointLight light;
+    light.id = 12;
+    light.atmosphere.proxy.halo.enabled = true;
+    documentState.map.topologyMap.staticLights.push_back(light);
+    game::SelectionState selectionState;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+
+    game::SectorEditorLightEditingService service = MakeService(
+            state,
+            documentState,
+            documentState.map.topologyMap,
+            TestPreviewSelectionState(),
+            selectionState,
+            manipulationState,
+            lightState,
+            uiState,
+            inspectorIdUiState,
+            statusText);
+    Check(service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Halo,
+                  game::LightPilotKind::StaticPoint,
+                  12),
+          "enabled haze begins placement");
+    const game::SectorEditorLightMutationResult preview =
+            service.PreviewProxyPlacement(Vector3{1.0f, -2.0f, 3.0f});
+    Check(preview.changed && preview.dynamicLightRendererRefreshNeeded,
+          "halo placement preview requests only a renderer source refresh");
+    Check(Near(documentState.map.topologyMap.staticLights.front()
+                           .atmosphere.proxy.halo.centerOffsetWorld.x,
+                       1.0f),
+          "halo placement preview stages the offset on the selected light");
+    CheckClean(state, documentState, statusText, "Placing static light 12 halo");
+
+    const game::SectorEditorLightMutationResult applied = service.ApplyProxyPlacement();
+    Check(applied.changed && applied.dynamicLightRendererRefreshNeeded
+                  && !lightState.proxyPlacement.active,
+          "applying halo placement finishes the transaction");
+    CheckDirtyOnce(state, documentState, statusText, "Placed static light 12 halo");
+
+    ResetDirty(state, documentState, statusText);
+    Check(service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Halo,
+                  game::LightPilotKind::StaticPoint,
+                  12),
+          "placed halo can begin another placement transaction");
+    service.PreviewProxyPlacement(Vector3{4.0f, 5.0f, 6.0f});
+    const game::SectorEditorLightMutationResult cancelled =
+            service.CancelProxyPlacementData("Halo placement cancelled");
+    const Vector3 restored = documentState.map.topologyMap.staticLights.front()
+                                     .atmosphere.proxy.halo.centerOffsetWorld;
+    Check(cancelled.changed && cancelled.dynamicLightRendererRefreshNeeded
+                  && !lightState.proxyPlacement.active,
+          "cancelling halo placement finishes the transaction and refreshes preview");
+    Check(Near(restored.x, 1.0f) && Near(restored.y, -2.0f) && Near(restored.z, 3.0f),
+          "cancelling halo placement restores the original offset");
+    CheckClean(state, documentState, statusText, "Halo placement cancelled");
+
+    documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.enabled = false;
+    Check(!service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Halo,
+                  game::LightPilotKind::StaticPoint,
+                  12),
+          "disabled halo cannot begin placement");
+    Check(!service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Halo,
+                  game::LightPilotKind::StaticPoint,
+                  999),
+          "missing light cannot begin halo placement");
+
+    game::SectorTopologyStaticSpotLight spot;
+    spot.id = 13;
+    spot.atmosphere.proxy.shaft.enabled = true;
+    documentState.map.topologyMap.staticSpotLights.push_back(spot);
+    ResetDirty(state, documentState, statusText);
+    Check(service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Shaft,
+                  game::LightPilotKind::StaticSpot,
+                  13),
+          "enabled shaft begins placement for a spotlight");
+    const game::SectorEditorLightMutationResult shaftPreview =
+            service.PreviewProxyPlacement(Vector3{0.25f, 0.75f, -0.5f});
+    const Vector3 stagedShaftOffset = documentState.map.topologyMap.staticSpotLights.front()
+                                                .atmosphere.proxy.shaft.originOffsetWorld;
+    Check(shaftPreview.changed && shaftPreview.dynamicLightRendererRefreshNeeded
+                  && Near(stagedShaftOffset.x, 0.25f)
+                  && Near(stagedShaftOffset.y, 0.75f)
+                  && Near(stagedShaftOffset.z, -0.5f),
+          "shaft placement preview stages its independent origin offset");
+    CheckClean(state, documentState, statusText, "Placing static spot 13 shaft");
+    const game::SectorEditorLightMutationResult shaftApplied = service.ApplyProxyPlacement();
+    Check(shaftApplied.changed && shaftApplied.dynamicLightRendererRefreshNeeded
+                  && !lightState.proxyPlacement.active,
+          "applying shaft placement finishes the transaction");
+    CheckDirtyOnce(state, documentState, statusText, "Placed static spot 13 shaft");
+
+    ResetDirty(state, documentState, statusText);
+    Check(service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Shaft,
+                  game::LightPilotKind::StaticSpot,
+                  13),
+          "placed shaft can begin another placement transaction");
+    service.PreviewProxyPlacement(Vector3{5.0f, 6.0f, 7.0f});
+    const game::SectorEditorLightMutationResult shaftCancelled =
+            service.CancelProxyPlacementData("Shaft placement cancelled");
+    const Vector3 restoredShaftOffset = documentState.map.topologyMap.staticSpotLights.front()
+                                                 .atmosphere.proxy.shaft.originOffsetWorld;
+    Check(shaftCancelled.changed && shaftCancelled.dynamicLightRendererRefreshNeeded
+                  && Near(restoredShaftOffset.x, 0.25f)
+                  && Near(restoredShaftOffset.y, 0.75f)
+                  && Near(restoredShaftOffset.z, -0.5f),
+          "cancelling shaft placement restores its original offset");
+    CheckClean(state, documentState, statusText, "Shaft placement cancelled");
+
+    Check(!service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Shaft,
+                  game::LightPilotKind::StaticPoint,
+                  12),
+          "point lights cannot begin shaft placement");
+    documentState.map.topologyMap.staticSpotLights.front().atmosphere.proxy.shaft.enabled = false;
+    Check(!service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Shaft,
+                  game::LightPilotKind::StaticSpot,
+                  13),
+          "disabled shaft cannot begin placement");
+
+    game::SectorTopologyDynamicSpotLight dynamicSpot;
+    dynamicSpot.id = 14;
+    dynamicSpot.atmosphere.proxy.shaft.enabled = true;
+    documentState.map.topologyMap.dynamicSpotLights.push_back(dynamicSpot);
+    Check(service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Shaft,
+                  game::LightPilotKind::DynamicSpot,
+                  14),
+          "enabled dynamic spotlight shaft begins placement");
+    service.CancelProxyPlacementData(nullptr);
 }
 
 } // namespace
@@ -620,8 +921,10 @@ int main()
     TestLightDragFinishNoOpDoesNotDirty();
     TestSpotLightPilotApplyAndCancelTiming();
     TestPointLightPilotApplyAndCancelTiming();
+    TestPointSpotLightsDown();
     TestStaticShadowEditsUseDocumentMutationBoundary();
     TestAtmosphereEditUsesDocumentMutationBoundary();
+    TestProxyPlacementApplyAndCancelTiming();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorLightEditingServiceTests failure(s)\n";

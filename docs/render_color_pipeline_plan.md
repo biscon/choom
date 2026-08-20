@@ -133,12 +133,12 @@ Runtime scene textures requested as `SceneSrgb` now receive `GL_SRGB8` or
 `GL_SRGB8_ALPHA8` storage, including the generated vertical environment
 cubemap. raylib-loaded glTF base-color and emissive textures retain their
 explicit shader decode because they bypass the asset manager. Scene swatches
-for dynamic lights, fog, local fog, haze, dust, door/decal/billboard tints,
+for dynamic lights, fog volumes, haze, shafts, dust, door/decal/billboard tints,
 sky cap, clear color, and muzzle lighting/effects are decoded explicitly.
 Sector ambient, probe-derived lighting, lightmaps, glTF material factors, and
 glTF vertex colors remain linear and unchanged.
 
-The existing bloom, local fog, haze, and dust effects remain active. Their
+The existing bloom, fog-volume, haze, shaft, and dust effects remain active. Their
 low-resolution RGBA8 intermediates represent bounded linear effect quantities:
 they contain no local tone mapping or sRGB encoding, and their own radiance may
 clip until slice 4. Full-scene copies and composite staging are `RGBA16_FLOAT`,
@@ -403,7 +403,7 @@ Pass graph and target ownership:
 - Opaque sector geometry, doors, billboards, and static/dynamic PBR models draw
   into the original supersampled linear `RGBA16F` world target. The simple
   distance-fog equation remains integrated in those material shaders. Local
-  fog, light haze, and dust then compose in world space. The isolated
+  fog volumes, light haze/shafts, and dust then compose in world space. The isolated
   `RGBA32F` viewmodel target receives the captured-position muzzle flash first
   and opaque arms/weapon second, so the weapon depth-correctly occludes the
   flash without letting world atmosphere fog the viewmodel.
@@ -436,13 +436,10 @@ Finite HDR and atmosphere contracts:
   normalization, tone mapping, or exposure changes. Alpha is sanitized and
   bounded independently. This named storage guard replaces neither the removed
   `dynamicLightingClamp` nor the obsolete `[0,1]` and `4.0` radiance ceilings.
-- Local fog and haze accumulation targets are bilinear/clamp `RGBA16F` at their
-  existing quality-dependent scale. RGB is premultiplied linear in-scattered
-  radiance and alpha is bounded opacity (`1-transmittance`); composition is
-  `scene * (1-alpha) + RGB`. Their depth-aware bilateral upsample and the
-  existing geometry/thickness path-length saturation remain intact. Selected
-  overlapping volumes retain deterministic distance/ID selection and existing
-  capped-opacity integration; Slice 4 adds no general OIT system.
+- Fog volumes, haze, and shafts use bounded analytical intersections against
+  the sampleable scene depth and compose directly into the HDR scene through
+  color-only framebuffer views. They require no quality-scaled accumulation
+  targets or depth-aware upsampling.
 - Dust is exactly-once sRGB-decoded in its shader, multiplies accepted HDR probe
   and dynamic-light inputs without an upper artistic clamp, and adds
   premultiplied radiance with alpha zero into the shared float scratch. The
@@ -576,7 +573,7 @@ Status: implemented; hardware acceptance measurements remain pending.
 
 - Application graphics settings now persist beside the existing application
   settings. The menu exposes transactional Apply/Cancel controls for render
-  scale, FXAA, volumetric fog quality, shadow quality, bloom, and
+  scale, FXAA, shadow quality, bloom, and
   the F9 performance overlay. Required supersampled HDR targets are built
   before the settings file or live target set is changed; allocation failure
   keeps the previous working targets and settings.
@@ -593,15 +590,9 @@ Status: implemented; hardware acceptance measurements remain pending.
   composite to the alternate HDR target. Gameplay presentation consumes that
   target without copying it back; editor preview retains the commit because
   its post-bloom depth-tested authoring overlays still target world color.
-- Low volumetrics use quarter-resolution accumulation with bilinear upscale;
-  medium uses half resolution and a five-tap depth-aware cross; high retains
-  full resolution. The application cap is combined with the map-authored
-  quality by taking the lower setting, so it never silently raises authored
-  cost. Analytic distance fog and dust remain independent of that cap.
-- When local fog and light haze are both active, their composites now ping-pong
-  through the shared scratch and a color-only world framebuffer view. This
-  removes the intermediate and final full-scene scratch commits while keeping
-  the world depth texture read-only and available to both effects.
+- Fog volumes, haze, and shafts use full-resolution scissored analytical draws
+  with the world depth texture kept read-only. Their authored enable flags are
+  the only runtime switches; no application volumetric-quality tier remains.
 - Static spotlight shadow maps are retained while selected lights/matrices and
   alpha-caster texture readiness remain unchanged. Door shadow casters keep
   the cache invalid so moving doors remain correct. Shadow Off disables both

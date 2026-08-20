@@ -174,19 +174,6 @@ struct SectorTopologySector {
     SectorTopologyWallPartSettings defaultUpper;
 };
 
-struct SectorLightHazeSettings {
-    bool enabled = false;
-    float extentScale = 0.40f;
-    float heightOffsetWorld = 0.0f;
-    float density = 0.04f;
-    Color scatteringTint = WHITE;
-    float edgeSoftness = 0.35f;
-    float noiseAmount = 0.65f;
-    float noiseScaleWorld = 0.5f;
-    float flowDirectionDegrees = 0.0f;
-    float flowSpeedWorld = 0.20f;
-};
-
 struct SectorLightDustSettings {
     bool enabled = false;
     int amount = 24;
@@ -199,17 +186,43 @@ struct SectorLightDustSettings {
     Color scatteringTint = WHITE;
 };
 
+struct SectorLightProxyHaloSettings {
+    bool enabled = false;
+    float radiusWorld = 0.5f;
+    Vector3 centerOffsetWorld = {};
+    float brightness = 0.12f;
+    float maxExtinction = 0.03f;
+    float edgeSoftness = 0.5f;
+    Color scatteringTint = WHITE;
+};
+
+struct SectorLightProxyShaftSettings {
+    bool enabled = false;
+    Vector3 originOffsetWorld = {};
+    float lengthScale = 0.65f;
+    float widthScale = 0.75f;
+    float brightness = 0.05f;
+    float maxExtinction = 0.08f;
+    float edgeSoftness = 0.5f;
+    Color scatteringTint = WHITE;
+};
+
+struct SectorLightProxySettings {
+    SectorLightProxyHaloSettings halo;
+    SectorLightProxyShaftSettings shaft;
+};
+
 struct SectorLightAtmosphereSettings {
-    SectorLightHazeSettings haze;
+    SectorLightProxySettings proxy;
     SectorLightDustSettings dust;
 };
 
-SectorLightHazeSettings NormalizeSectorLightHazeSettings(SectorLightHazeSettings settings);
 SectorLightDustSettings NormalizeSectorLightDustSettings(SectorLightDustSettings settings);
+SectorLightProxySettings NormalizeSectorLightProxySettings(SectorLightProxySettings settings);
 SectorLightAtmosphereSettings NormalizeSectorLightAtmosphereSettings(
         SectorLightAtmosphereSettings settings);
-bool IsDefaultSectorLightHazeSettings(const SectorLightHazeSettings& settings);
 bool IsDefaultSectorLightDustSettings(const SectorLightDustSettings& settings);
+bool IsDefaultSectorLightProxySettings(const SectorLightProxySettings& settings);
 bool IsDefaultSectorLightAtmosphereSettings(const SectorLightAtmosphereSettings& settings);
 
 struct SectorTopologyStaticPointLight {

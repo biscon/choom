@@ -24,33 +24,6 @@ float FiniteOr(float value, float fallback)
 
 } // namespace
 
-SectorLightHazeSettings NormalizeSectorLightHazeSettings(SectorLightHazeSettings settings)
-{
-    const SectorLightHazeSettings defaults;
-    settings.extentScale = std::clamp(FiniteOr(settings.extentScale, defaults.extentScale), 0.05f, 2.0f);
-    settings.heightOffsetWorld = std::clamp(
-            FiniteOr(settings.heightOffsetWorld, defaults.heightOffsetWorld),
-            -100000.0f,
-            100000.0f);
-    settings.density = std::clamp(FiniteOr(settings.density, defaults.density), 0.0f, 2.0f);
-    settings.edgeSoftness = std::clamp(FiniteOr(settings.edgeSoftness, defaults.edgeSoftness), 0.01f, 1.0f);
-    settings.noiseAmount = std::clamp(FiniteOr(settings.noiseAmount, defaults.noiseAmount), 0.0f, 1.0f);
-    settings.noiseScaleWorld = std::clamp(
-            FiniteOr(settings.noiseScaleWorld, defaults.noiseScaleWorld),
-            0.05f,
-            16.0f);
-    settings.flowDirectionDegrees = std::clamp(
-            FiniteOr(settings.flowDirectionDegrees, defaults.flowDirectionDegrees),
-            -360.0f,
-            360.0f);
-    settings.flowSpeedWorld = std::clamp(
-            FiniteOr(settings.flowSpeedWorld, defaults.flowSpeedWorld),
-            0.0f,
-            2.0f);
-    settings.scatteringTint.a = 255;
-    return settings;
-}
-
 SectorLightDustSettings NormalizeSectorLightDustSettings(SectorLightDustSettings settings)
 {
     const SectorLightDustSettings defaults;
@@ -77,28 +50,87 @@ SectorLightDustSettings NormalizeSectorLightDustSettings(SectorLightDustSettings
     return settings;
 }
 
+SectorLightProxySettings NormalizeSectorLightProxySettings(SectorLightProxySettings settings)
+{
+    const SectorLightProxySettings defaults;
+    settings.halo.radiusWorld = std::clamp(
+            FiniteOr(settings.halo.radiusWorld, defaults.halo.radiusWorld), 0.01f, 64.0f);
+    settings.halo.centerOffsetWorld.x = std::clamp(
+            FiniteOr(settings.halo.centerOffsetWorld.x, defaults.halo.centerOffsetWorld.x),
+            -100000.0f,
+            100000.0f);
+    settings.halo.centerOffsetWorld.y = std::clamp(
+            FiniteOr(settings.halo.centerOffsetWorld.y, defaults.halo.centerOffsetWorld.y),
+            -100000.0f,
+            100000.0f);
+    settings.halo.centerOffsetWorld.z = std::clamp(
+            FiniteOr(settings.halo.centerOffsetWorld.z, defaults.halo.centerOffsetWorld.z),
+            -100000.0f,
+            100000.0f);
+    settings.halo.brightness = std::clamp(
+            FiniteOr(settings.halo.brightness, defaults.halo.brightness), 0.0f, 16.0f);
+    settings.halo.maxExtinction = std::clamp(
+            FiniteOr(settings.halo.maxExtinction, defaults.halo.maxExtinction), 0.0f, 1.0f);
+    settings.halo.edgeSoftness = std::clamp(
+            FiniteOr(settings.halo.edgeSoftness, defaults.halo.edgeSoftness), 0.01f, 1.0f);
+    settings.halo.scatteringTint.a = 255;
+    settings.shaft.originOffsetWorld.x = std::clamp(
+            FiniteOr(settings.shaft.originOffsetWorld.x, defaults.shaft.originOffsetWorld.x),
+            -100000.0f,
+            100000.0f);
+    settings.shaft.originOffsetWorld.y = std::clamp(
+            FiniteOr(settings.shaft.originOffsetWorld.y, defaults.shaft.originOffsetWorld.y),
+            -100000.0f,
+            100000.0f);
+    settings.shaft.originOffsetWorld.z = std::clamp(
+            FiniteOr(settings.shaft.originOffsetWorld.z, defaults.shaft.originOffsetWorld.z),
+            -100000.0f,
+            100000.0f);
+    settings.shaft.lengthScale = std::clamp(
+            FiniteOr(settings.shaft.lengthScale, defaults.shaft.lengthScale), 0.01f, 2.0f);
+    settings.shaft.widthScale = std::clamp(
+            FiniteOr(settings.shaft.widthScale, defaults.shaft.widthScale), 0.01f, 2.0f);
+    settings.shaft.brightness = std::clamp(
+            FiniteOr(settings.shaft.brightness, defaults.shaft.brightness), 0.0f, 16.0f);
+    settings.shaft.maxExtinction = std::clamp(
+            FiniteOr(settings.shaft.maxExtinction, defaults.shaft.maxExtinction), 0.0f, 1.0f);
+    settings.shaft.edgeSoftness = std::clamp(
+            FiniteOr(settings.shaft.edgeSoftness, defaults.shaft.edgeSoftness), 0.01f, 1.0f);
+    settings.shaft.scatteringTint.a = 255;
+    return settings;
+}
+
 SectorLightAtmosphereSettings NormalizeSectorLightAtmosphereSettings(
         SectorLightAtmosphereSettings settings)
 {
-    settings.haze = NormalizeSectorLightHazeSettings(settings.haze);
+    settings.proxy = NormalizeSectorLightProxySettings(settings.proxy);
     settings.dust = NormalizeSectorLightDustSettings(settings.dust);
     return settings;
 }
 
-bool IsDefaultSectorLightHazeSettings(const SectorLightHazeSettings& settings)
+bool IsDefaultSectorLightProxySettings(const SectorLightProxySettings& settings)
 {
-    const SectorLightHazeSettings value = NormalizeSectorLightHazeSettings(settings);
-    const SectorLightHazeSettings defaults;
-    return value.enabled == defaults.enabled
-            && value.extentScale == defaults.extentScale
-            && value.heightOffsetWorld == defaults.heightOffsetWorld
-            && value.density == defaults.density
-            && SameRgb(value.scatteringTint, defaults.scatteringTint)
-            && value.edgeSoftness == defaults.edgeSoftness
-            && value.noiseAmount == defaults.noiseAmount
-            && value.noiseScaleWorld == defaults.noiseScaleWorld
-            && value.flowDirectionDegrees == defaults.flowDirectionDegrees
-            && value.flowSpeedWorld == defaults.flowSpeedWorld;
+    const SectorLightProxySettings value = NormalizeSectorLightProxySettings(settings);
+    const SectorLightProxySettings defaults;
+    return value.halo.enabled == defaults.halo.enabled
+            && value.halo.radiusWorld == defaults.halo.radiusWorld
+            && value.halo.centerOffsetWorld.x == defaults.halo.centerOffsetWorld.x
+            && value.halo.centerOffsetWorld.y == defaults.halo.centerOffsetWorld.y
+            && value.halo.centerOffsetWorld.z == defaults.halo.centerOffsetWorld.z
+            && value.halo.brightness == defaults.halo.brightness
+            && value.halo.maxExtinction == defaults.halo.maxExtinction
+            && value.halo.edgeSoftness == defaults.halo.edgeSoftness
+            && SameRgb(value.halo.scatteringTint, defaults.halo.scatteringTint)
+            && value.shaft.enabled == defaults.shaft.enabled
+            && value.shaft.originOffsetWorld.x == defaults.shaft.originOffsetWorld.x
+            && value.shaft.originOffsetWorld.y == defaults.shaft.originOffsetWorld.y
+            && value.shaft.originOffsetWorld.z == defaults.shaft.originOffsetWorld.z
+            && value.shaft.lengthScale == defaults.shaft.lengthScale
+            && value.shaft.widthScale == defaults.shaft.widthScale
+            && value.shaft.brightness == defaults.shaft.brightness
+            && value.shaft.maxExtinction == defaults.shaft.maxExtinction
+            && value.shaft.edgeSoftness == defaults.shaft.edgeSoftness
+            && SameRgb(value.shaft.scatteringTint, defaults.shaft.scatteringTint);
 }
 
 bool IsDefaultSectorLightDustSettings(const SectorLightDustSettings& settings)
@@ -118,7 +150,7 @@ bool IsDefaultSectorLightDustSettings(const SectorLightDustSettings& settings)
 
 bool IsDefaultSectorLightAtmosphereSettings(const SectorLightAtmosphereSettings& settings)
 {
-    return IsDefaultSectorLightHazeSettings(settings.haze)
+    return IsDefaultSectorLightProxySettings(settings.proxy)
             && IsDefaultSectorLightDustSettings(settings.dust);
 }
 namespace {
@@ -324,6 +356,15 @@ SectorTopologyFogSettings NormalizeSectorTopologyFogSettings(SectorTopologyFogSe
             FogStartDistanceMin,
             FogStartDistanceMax,
             defaults.startDistanceWorld);
+    settings.endDistanceWorld = ClampFinite(
+            settings.endDistanceWorld,
+            settings.startDistanceWorld + 0.01f,
+            4096.0f,
+            std::max(defaults.endDistanceWorld, settings.startDistanceWorld + 0.01f));
+    settings.falloffExponent = ClampFinite(
+            settings.falloffExponent, 0.05f, 8.0f, defaults.falloffExponent);
+    settings.brightness = ClampFinite(
+            settings.brightness, 0.0f, 16.0f, defaults.brightness);
     settings.density = ClampFinite(
             settings.density,
             FogDensityMin,

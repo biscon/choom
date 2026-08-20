@@ -35,6 +35,8 @@ struct SectorLightAtmosphereSource {
     Vector3 directionWorld = {0.0f, -1.0f, 0.0f};
     float rangeWorld = 0.0f;
     float outerConeCos = -1.0f;
+    Color color = WHITE;
+    float intensity = 1.0f;
     SectorLightAtmosphereSettings atmosphere;
 };
 
@@ -59,6 +61,12 @@ bool MakeSectorLightAtmosphereVolume(
         const SectorLightAtmosphereSource& source,
         float extentScale,
         float heightOffsetWorld,
+        SectorLightAtmosphereVolume& outVolume);
+
+bool MakeSectorLightAtmosphereVolume(
+        const SectorLightAtmosphereSource& source,
+        float extentScale,
+        Vector3 originOffsetWorld,
         SectorLightAtmosphereVolume& outVolume);
 
 bool IsSectorLightAtmosphereSourceDynamic(const SectorLightAtmosphereSource& source);

@@ -60,7 +60,6 @@ public:
     bool Init(engine::EngineContext& context);
     void Shutdown(engine::EngineContext& context);
     void SetPreviewGraphicsQuality(
-            SectorVolumetricQuality volumetricQuality,
             bool shadowsEnabled,
             int shadowMapResolution,
             int maxDynamicLights,
@@ -69,7 +68,7 @@ public:
             float dynamicLightFadeInSeconds)
     {
         sceneRuntime.Renderer().SetGraphicsQuality(
-                volumetricQuality, shadowsEnabled, shadowMapResolution,
+                shadowsEnabled, shadowMapResolution,
                 maxDynamicLights, maxShadowLightUpdatesPerFrame, depthPrepass,
                 dynamicLightFadeInSeconds);
     }
@@ -375,6 +374,10 @@ private:
     bool StartLightPilot();
     bool ApplyLightPilotFromPreviewPose();
     void CancelLightPilotWithPreviewRestore(const char* message);
+    bool StartLightProxyPlacement(LightProxyPlacementKind proxyKind);
+    bool PreviewLightProxyPlacementOffset(Vector3 offsetWorld);
+    bool ApplyLightProxyPlacement();
+    void CancelLightProxyPlacement(const char* message);
     bool RebuildSectorCollisionWorld();
     SectorFpsVerticalContext BuildGameplayVerticalContext();
     void RefreshGameplaySectorAndVerticalContext();

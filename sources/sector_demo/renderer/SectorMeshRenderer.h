@@ -12,16 +12,17 @@
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorDynamicModelShadowRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
-#include "sector_demo/renderer/SectorLocalFogRenderer.h"
+#include "sector_demo/renderer/SectorDistanceFogRenderer.h"
+#include "sector_demo/renderer/SectorAnalyticFogRenderer.h"
+#include "sector_demo/renderer/SectorAnalyticLightShaftRenderer.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
 #include "sector_demo/renderer/SectorLightDustRenderer.h"
-#include "sector_demo/renderer/SectorLightHazeRenderer.h"
+#include "sector_demo/renderer/SectorLightProxyRenderer.h"
 #include "sector_demo/renderer/SectorSkyRenderer.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/renderer/SectorStaticModelRenderer.h"
 #include "sector_demo/SectorRuntimeObjects.h"
 #include "sector_demo/SectorViewPose.h"
-#include "sector_demo/SectorVolumetricQuality.h"
 
 #include <raylib.h>
 
@@ -43,19 +44,23 @@ struct SectorTopologyMap;
 struct SectorBakedObjectLightProbeRuntimeData;
 
 struct SectorAtmosphereDiagnostics {
-    double localFogGpuMilliseconds = 0.0;
-    double lightHazeGpuMilliseconds = 0.0;
+    double distanceFogGpuMilliseconds = 0.0;
+    double analyticFogGpuMilliseconds = 0.0;
+    double analyticShaftGpuMilliseconds = 0.0;
+    double lightHaloGpuMilliseconds = 0.0;
     double dustGpuMilliseconds = 0.0;
     int dynamicLightCount = 0;
-    int localFogEligibleCount = 0;
-    int localFogActiveCount = 0;
-    float localFogScissorCoverage = 0.0f;
-    std::array<int, SectorLocalFogRenderer::MaxVolumes> localFogVolumeIds{};
-    int lightHazeEligibleCount = 0;
-    int lightHazeActiveCount = 0;
-    float lightHazeScissorCoverage = 0.0f;
-    std::array<SectorLightHazeActiveSource,
-            SectorLightHazeRenderer::MaxVolumes> lightHazeSources{};
+    int analyticFogEligibleCount = 0;
+    int analyticFogActiveCount = 0;
+    float analyticFogScissorCoverage = 0.0f;
+    int analyticShaftEligibleCount = 0;
+    int analyticShaftActiveCount = 0;
+    float analyticShaftScissorCoverage = 0.0f;
+    int analyticShaftDrawCallCount = 0;
+    int lightHaloEligibleCount = 0;
+    int lightHaloCount = 0;
+    float lightHaloScissorCoverage = 0.0f;
+    int lightHaloDrawCallCount = 0;
     int dustEligibleEmitterCount = 0;
     int dustActiveEmitterCount = 0;
     int dustVisibleParticleCount = 0;
@@ -169,7 +174,6 @@ public:
     void SetDynamicLightingEnabled(bool enabled) { dynamicLightingEnabled = enabled; }
     void ToggleDynamicLightingEnabled() { dynamicLightingEnabled = !dynamicLightingEnabled; }
     void SetGraphicsQuality(
-            SectorVolumetricQuality volumetricQuality,
             bool shadowsEnabled,
             int shadowMapResolution = DynamicSpotLightShadowMapResolution,
             int maxDynamicLights = static_cast<int>(MaxDynamicLights),
@@ -177,7 +181,6 @@ public:
             bool depthPrepass = false,
             float dynamicLightFadeInSeconds = DynamicLightDefaultFadeInSeconds)
     {
-        this->volumetricQuality = volumetricQuality;
         shadowMapsEnabled = shadowsEnabled;
         if (shadowsEnabled) {
             dynamicLightState.SetShadowMapResolution(shadowMapResolution);
@@ -242,22 +245,6 @@ public:
     {
         return bloomRenderer.Diagnostics();
     }
-    const engine::RenderTarget& LocalFogAccumulationTarget() const
-    {
-        return localFogRenderer.AccumulationTarget();
-    }
-    const engine::RenderTarget& HazeAccumulationTarget() const
-    {
-        return lightHazeRenderer.AccumulationTarget();
-    }
-    const std::string& LocalFogAccumulationDiagnostic() const
-    {
-        return localFogRenderer.AccumulationDiagnostic();
-    }
-    const std::string& HazeAccumulationDiagnostic() const
-    {
-        return lightHazeRenderer.AccumulationDiagnostic();
-    }
     const std::string& DustResourceDiagnostic() const
     {
         return lightDustRenderer.ResourceDiagnostic();
@@ -272,7 +259,7 @@ public:
     }
 
 private:
-    static constexpr std::size_t AtmosphereGpuPassCount = 3;
+    static constexpr std::size_t AtmosphereGpuPassCount = 5;
     static constexpr std::size_t AtmosphereGpuQueryLatency = 4;
 
     bool EnsureHdrSceneScratch(const engine::RenderTarget& sceneTarget);
@@ -355,8 +342,10 @@ private:
     int shadowAtlasTilesPerRowLoc = -1;
     bool depthPrepassEnabled = false;
     SectorFogShaderLocations fogShaderLocations;
-    SectorLocalFogRenderer localFogRenderer;
-    SectorLightHazeRenderer lightHazeRenderer;
+    SectorDistanceFogRenderer distanceFogRenderer;
+    SectorAnalyticFogRenderer analyticFogRenderer;
+    SectorAnalyticLightShaftRenderer analyticLightShaftRenderer;
+    SectorLightProxyRenderer lightProxyRenderer;
     SectorLightDustRenderer lightDustRenderer;
     std::vector<SectorLightAtmosphereSource> lightAtmosphereSources;
     SectorSkyRenderer skyRenderer;
@@ -392,7 +381,6 @@ private:
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;
     float runtimeSeconds = 0.0f;
     bool dynamicLightingEnabled = true;
-    SectorVolumetricQuality volumetricQuality = SectorVolumetricQuality::High;
     bool shadowMapsEnabled = true;
     int lightmapStatus = 0;
     bool surfaceLightmapBakeCurrent = false;

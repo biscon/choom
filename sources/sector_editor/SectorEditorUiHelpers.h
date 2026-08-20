@@ -18,6 +18,7 @@ inline constexpr float SectorEditorInspectorCompactInputLabelWidth = 82.0f;
 inline constexpr float SectorEditorInspectorCompactInputWidth = 104.0f;
 inline constexpr float SectorEditorInspectorFloatInputWidth = 112.0f;
 inline constexpr float SectorEditorInspectorIntInputWidth = 150.0f;
+inline constexpr float SectorEditorInspectorRgb8InputWidth = 176.0f;
 inline constexpr float SectorEditorInspectorStackedLabelHeight = 26.0f;
 
 inline std::string_view SectorEditorModelFilename(std::string_view modelPath)
@@ -154,6 +155,20 @@ inline SectorEditorInspectorNumericRowLayout BuildSectorEditorInspectorRightIntR
             rowH,
             gap,
             SectorEditorInspectorIntInputWidth);
+}
+
+inline SectorEditorInspectorNumericRowLayout BuildSectorEditorInspectorRightRgb8RowLayout(
+        float y,
+        float contentW,
+        float rowH,
+        float gap)
+{
+    return BuildSectorEditorInspectorRightNumericRowLayout(
+            y,
+            contentW,
+            rowH,
+            gap,
+            SectorEditorInspectorRgb8InputWidth);
 }
 
 inline float SectorEditorInspectorStackedOptionRowHeight(float rowH, float gap)

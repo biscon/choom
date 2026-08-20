@@ -974,9 +974,14 @@ bool SectorMeshRenderer::RebuildRendererResources(
             lightAtmosphereSources);
     doorRenderer.ReserveRuntimeDoorCapacity(runtimeObjectCapacity);
     runtimeSeconds = 0.0f;
-    localFogRenderer.Shutdown();
-    lightHazeRenderer.Shutdown();
+    distanceFogRenderer.Shutdown();
+    analyticFogRenderer.Shutdown();
+    analyticLightShaftRenderer.Shutdown();
+    lightProxyRenderer.Shutdown();
     lightDustRenderer.Shutdown();
+    analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
+    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
+    lightProxyRenderer.Reserve(lightAtmosphereSources.size());
     UnloadHdrSceneColorView();
 
     if (!dynamicLightState.EnsureShadowMapResources()) {
@@ -1117,8 +1122,10 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     doorRenderer.ClearPreparedShadowCasters();
     dynamicModelShadowRenderer.ClearPreparedShadowCasters();
     runtimeSeconds = 0.0f;
-    localFogRenderer.Shutdown();
-    lightHazeRenderer.Shutdown();
+    distanceFogRenderer.Shutdown();
+    analyticFogRenderer.Shutdown();
+    analyticLightShaftRenderer.Shutdown();
+    lightProxyRenderer.Shutdown();
     lightDustRenderer.Shutdown();
     UnloadHdrSceneColorView();
     if (!initialized
@@ -1247,8 +1254,13 @@ void SectorMeshRenderer::DrawScene(
         rlColorMask(true, true, true, true);
     }
 
+    SectorTopologyFogSettings materialFogSettings = fogSettings;
+    if (NormalizeSectorTopologyFogSettings(fogSettings).mode
+            == SectorTopologyFogMode::Distance) {
+        materialFogSettings.enabled = false;
+    }
     const SectorFogRenderContext fogContext =
-            BuildSectorFogRenderContext(fogSettings, camera.position);
+            BuildSectorFogRenderContext(materialFogSettings, camera.position);
     UploadSectorFogShaderValues(material.shader, fogShaderLocations, fogContext);
 
     float useAo = useBakedAmbientOcclusion ? 1.0f : 0.0f;
@@ -1807,8 +1819,10 @@ void SectorMeshRenderer::BeginAtmosphereGpuFrame(bool enabled)
         }
         if (ready) {
             double* values[AtmosphereGpuPassCount] = {
-                    &atmosphereDiagnostics.localFogGpuMilliseconds,
-                    &atmosphereDiagnostics.lightHazeGpuMilliseconds,
+                    &atmosphereDiagnostics.distanceFogGpuMilliseconds,
+                    &atmosphereDiagnostics.analyticFogGpuMilliseconds,
+                    &atmosphereDiagnostics.analyticShaftGpuMilliseconds,
+                    &atmosphereDiagnostics.lightHaloGpuMilliseconds,
                     &atmosphereDiagnostics.dustGpuMilliseconds};
             for (std::size_t pass = 0; pass < AtmosphereGpuPassCount; ++pass) {
                 if ((issuedMask & (1u << pass)) == 0) continue;
@@ -1862,22 +1876,20 @@ void SectorMeshRenderer::RefreshAtmosphereDiagnostics(
         const SectorBillboardDynamicLightContext& dynamicLights)
 {
     atmosphereDiagnostics.dynamicLightCount = dynamicLights.dynamicLightCount;
-    atmosphereDiagnostics.localFogEligibleCount =
-            localFogRenderer.EligibleVolumeCount();
-    atmosphereDiagnostics.localFogActiveCount =
-            localFogRenderer.ActiveVolumeCount();
-    atmosphereDiagnostics.localFogScissorCoverage =
-            localFogRenderer.ScissorCoverage();
-    atmosphereDiagnostics.localFogVolumeIds =
-            localFogRenderer.ActiveVolumeIds();
-    atmosphereDiagnostics.lightHazeEligibleCount =
-            lightHazeRenderer.EligibleCount();
-    atmosphereDiagnostics.lightHazeActiveCount =
-            lightHazeRenderer.ActiveCount();
-    atmosphereDiagnostics.lightHazeScissorCoverage =
-            lightHazeRenderer.ScissorCoverage();
-    atmosphereDiagnostics.lightHazeSources =
-            lightHazeRenderer.ActiveSources();
+    atmosphereDiagnostics.analyticFogEligibleCount =
+            analyticFogRenderer.EligibleVolumeCount();
+    atmosphereDiagnostics.analyticFogActiveCount =
+            analyticFogRenderer.ActiveVolumeCount();
+    atmosphereDiagnostics.analyticFogScissorCoverage =
+            analyticFogRenderer.ScissorCoverage();
+    atmosphereDiagnostics.analyticShaftEligibleCount = analyticLightShaftRenderer.EligibleCount();
+    atmosphereDiagnostics.analyticShaftActiveCount = analyticLightShaftRenderer.ActiveCount();
+    atmosphereDiagnostics.analyticShaftScissorCoverage = analyticLightShaftRenderer.ScissorCoverage();
+    atmosphereDiagnostics.analyticShaftDrawCallCount = analyticLightShaftRenderer.DrawCallCount();
+    atmosphereDiagnostics.lightHaloEligibleCount = lightProxyRenderer.EligibleCount();
+    atmosphereDiagnostics.lightHaloCount = lightProxyRenderer.HaloCount();
+    atmosphereDiagnostics.lightHaloScissorCoverage = lightProxyRenderer.ScissorCoverage();
+    atmosphereDiagnostics.lightHaloDrawCallCount = lightProxyRenderer.DrawCallCount();
     atmosphereDiagnostics.dustEligibleEmitterCount =
             lightDustRenderer.EligibleEmitterCount();
     atmosphereDiagnostics.dustActiveEmitterCount =
@@ -1904,66 +1916,51 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
     RenderTexture2D& nativeScene = sceneTarget.native;
     const SectorBillboardDynamicLightContext dynamicLightContext =
             BuildBillboardDynamicLightContext();
-    BeginAtmosphereGpuPass(0);
-    const bool localFogApplied = localFogRenderer.Apply(
-            nativeScene,
-            hdrSceneScratch.native,
-            map,
-            volumetricQuality,
-            camera,
-            runtimeSeconds,
-            objectLightProbes,
-            dynamicLightContext);
-    EndAtmosphereGpuPass(0);
-    BeginAtmosphereGpuPass(1);
-    bool lightHazeApplied = false;
     bool atmosphereFailed = false;
-    if (localFogApplied && EnsureHdrSceneColorView(sceneTarget)) {
-        RenderTexture2D foggedScene = hdrSceneScratch.native;
-        foggedScene.depth = nativeScene.depth;
-        lightHazeApplied = lightHazeRenderer.Apply(
-                foggedScene,
-                hdrSceneColorView,
-                map,
-                volumetricQuality,
-                camera,
-                runtimeSeconds,
-                objectLightProbes,
-                dynamicLightContext,
-                lightAtmosphereSources,
-                visibilityResult,
-                meshes.sectorReceiverBounds);
-        if (!lightHazeApplied && !CommitHdrScratch(sceneTarget)) {
-            atmosphereFailed = true;
-        }
-    } else {
-        if (localFogApplied && !CommitHdrScratch(sceneTarget)) {
-            atmosphereFailed = true;
-        }
-        if (!atmosphereFailed) {
-            lightHazeApplied = lightHazeRenderer.Apply(
-                    nativeScene,
-                    hdrSceneScratch.native,
-                    map,
-                    volumetricQuality,
-                    camera,
-                    runtimeSeconds,
-                    objectLightProbes,
-                    dynamicLightContext,
-                    lightAtmosphereSources,
-                    visibilityResult,
-                    meshes.sectorReceiverBounds);
-            if (lightHazeApplied && !CommitHdrScratch(sceneTarget)) {
-                atmosphereFailed = true;
-            }
-        }
-    }
-    EndAtmosphereGpuPass(1);
+    BeginAtmosphereGpuPass(0);
+    const bool distanceFogApplied = distanceFogRenderer.Apply(
+            nativeScene, hdrSceneScratch.native, map.fogSettings, camera);
+    if (distanceFogApplied && !CommitHdrScratch(sceneTarget)) atmosphereFailed = true;
+    EndAtmosphereGpuPass(0);
     if (atmosphereFailed) {
         RefreshAtmosphereDiagnostics(dynamicLightContext);
         return false;
     }
+
+    BeginAtmosphereGpuPass(1);
+    bool analyticFogApplied = false;
+    if (EnsureHdrSceneColorView(sceneTarget)) {
+        analyticFogApplied = analyticFogRenderer.Apply(
+                nativeScene,
+                hdrSceneColorView,
+                map,
+                camera,
+                runtimeSeconds,
+                objectLightProbes);
+    }
+    EndAtmosphereGpuPass(1);
+
     BeginAtmosphereGpuPass(2);
+    bool analyticShaftApplied = false;
+    if (EnsureHdrSceneColorView(sceneTarget)) {
+        analyticShaftApplied = analyticLightShaftRenderer.Apply(
+                nativeScene, hdrSceneColorView, map.fogSettings,
+                camera, dynamicLightContext, lightAtmosphereSources,
+                visibilityResult, meshes.sectorReceiverBounds);
+    }
+    EndAtmosphereGpuPass(2);
+
+    BeginAtmosphereGpuPass(3);
+    bool lightHaloApplied = false;
+    if (EnsureHdrSceneColorView(sceneTarget)) {
+        lightHaloApplied = lightProxyRenderer.Apply(
+                nativeScene, hdrSceneColorView, map.fogSettings,
+                camera, dynamicLightContext, lightAtmosphereSources,
+                visibilityResult, meshes.sectorReceiverBounds);
+    }
+    EndAtmosphereGpuPass(3);
+
+    BeginAtmosphereGpuPass(4);
     const bool lightDustApplied = lightDustRenderer.Apply(
             nativeScene,
             hdrSceneScratch.native,
@@ -1975,9 +1972,10 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
             lightAtmosphereSources,
             visibilityResult,
             meshes.sectorReceiverBounds);
-    EndAtmosphereGpuPass(2);
+    EndAtmosphereGpuPass(4);
     RefreshAtmosphereDiagnostics(dynamicLightContext);
-    return localFogApplied || lightHazeApplied || lightDustApplied;
+    return distanceFogApplied || analyticFogApplied || analyticShaftApplied
+            || lightHaloApplied || lightDustApplied;
 }
 
 bool SectorMeshRenderer::ApplyHdrBloom(
@@ -2058,6 +2056,9 @@ void SectorMeshRenderer::RefreshDynamicLightSources(const SectorTopologyMap& map
             map,
             visibilityLookupWorldValid ? &visibilityLookupWorld : nullptr,
             lightAtmosphereSources);
+    analyticFogRenderer.Reserve(map.compiledLocalFogVolumes.size());
+    analyticLightShaftRenderer.Reserve(lightAtmosphereSources.size());
+    lightProxyRenderer.Reserve(lightAtmosphereSources.size());
     UpdateVisibilityDebug();
 }
 
