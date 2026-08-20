@@ -10,6 +10,7 @@
 
 #include <raymath.h>
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -1920,7 +1921,7 @@ void TestDynamicSpotLightShadowMatrices()
         pointFacesValid = faceMatrix.kind
                         == game::SectorPreviewDynamicLightKind::Point
                 && faceMatrix.shadowSlot == 3 + face
-                && faceMatrix.pointFace == face
+                && faceMatrix.cubeFace == face
                 && FiniteMatrix(faceMatrix.view)
                 && FiniteMatrix(faceMatrix.projection)
                 && FiniteMatrix(faceMatrix.lightViewProjection)
@@ -2782,9 +2783,108 @@ void TestDynamicRectLightPackingAndShadow()
                     && Near(uniform.outerConeCos, 0.5f),
           "dynamic rect uniform carries world half-size");
     game::SectorPreviewDynamicSpotLightShadowMatrix matrix;
-    Check(game::MakeSectorPreviewDynamicSpotLightShadowMatrix(uniform, 0, 0, matrix)
-                    && matrix.kind == game::SectorPreviewDynamicLightKind::Rect,
-          "dynamic rect light uses one projected shadow matrix");
+    Check(!game::MakeSectorPreviewDynamicSpotLightShadowMatrix(
+                    uniform, 0, 0, matrix),
+          "dynamic rect light does not use the spotlight projection");
+
+    std::vector<game::SectorPreviewDynamicPointLightUniform> selected = {uniform};
+    game::RuntimePortalVisibilityResult visibility;
+    std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> casters;
+    game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            selected, visibility, {}, 4, casters);
+    Check(casters.empty(),
+          "dynamic rect shadow is skipped when five adjacent atlas slots are unavailable");
+    game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            selected, visibility, {}, 5, casters);
+    Check(casters.size() == 1
+                    && casters[0].shadowSlot == 0
+                    && casters[0].shadowSlotCount
+                            == game::DynamicRectLightShadowFaceCount,
+          "dynamic rect shadow reserves five adjacent atlas slots");
+
+    casters[0].shadowSlot = 3;
+    std::vector<game::SectorPreviewDynamicSpotLightShadowMatrix> matrices;
+    game::BuildSectorPreviewDynamicSpotLightShadowMatrices(
+            selected, casters, matrices);
+    const Vector3 forward = Vector3Normalize(uniform.direction);
+    const Vector3 right = Vector3Normalize(uniform.rectRight);
+    const Vector3 emitterUp = Vector3Normalize(
+            Vector3CrossProduct(right, forward));
+    const Vector3 cubeUp = Vector3Negate(emitterUp);
+    const std::array<Vector3, game::DynamicRectLightShadowFaceCount>
+            faceDirections = {{
+                    right,
+                    Vector3Negate(right),
+                    cubeUp,
+                    emitterUp,
+                    forward}};
+    constexpr std::array<Vector3, game::DynamicRectLightShadowFaceCount>
+            offAxisLocalDirections = {{
+                    {1.0f, 0.5f, -0.5f},
+                    {-1.0f, 0.5f, 0.5f},
+                    {0.5f, 1.0f, -0.5f},
+                    {0.5f, -1.0f, 0.5f},
+                    {0.5f, 0.5f, 1.0f}}};
+    const float expectedShadowRadius = uniform.radius + std::sqrt(
+            uniform.innerConeCos * uniform.innerConeCos
+            + uniform.outerConeCos * uniform.outerConeCos);
+    bool rectFacesValid = matrices.size()
+            == static_cast<std::size_t>(
+                    game::DynamicRectLightShadowFaceCount);
+    for (int face = 0;
+            rectFacesValid && face < game::DynamicRectLightShadowFaceCount;
+            ++face) {
+        const auto& faceMatrix = matrices[static_cast<std::size_t>(face)];
+        const Vector3 faceCenter = Vector3Add(
+                uniform.position,
+                Vector3Scale(
+                        faceDirections[static_cast<std::size_t>(face)],
+                        2.0f));
+        const Vector4 clip = TransformHomogeneous(
+                faceCenter, faceMatrix.lightViewProjection);
+        const Vector3 offAxisLocal = offAxisLocalDirections[
+                static_cast<std::size_t>(face)];
+        const Vector3 offAxisWorld = Vector3Add(
+                uniform.position,
+                Vector3Add(
+                        Vector3Scale(right, offAxisLocal.x),
+                        Vector3Add(
+                                Vector3Scale(cubeUp, offAxisLocal.y),
+                                Vector3Scale(forward, offAxisLocal.z))));
+        const Vector4 offAxisClip = TransformHomogeneous(
+                offAxisWorld, faceMatrix.lightViewProjection);
+        const float offAxisU = offAxisClip.x / offAxisClip.w * 0.5f + 0.5f;
+        const float offAxisV = offAxisClip.y / offAxisClip.w * 0.5f + 0.5f;
+        rectFacesValid = faceMatrix.kind
+                        == game::SectorPreviewDynamicLightKind::Rect
+                && faceMatrix.shadowSlot == 3 + face
+                && faceMatrix.cubeFace == face
+                && Near(faceMatrix.lightRadius, expectedShadowRadius)
+                && FiniteMatrix(faceMatrix.lightViewProjection)
+                && clip.w > 0.0f
+                && std::fabs(clip.x / clip.w) < 0.001f
+                && std::fabs(clip.y / clip.w) < 0.001f
+                && offAxisClip.w > 0.0f
+                && Near(offAxisU, 0.75f, 0.001f)
+                && Near(offAxisV, 0.25f, 0.001f);
+    }
+    Check(rectFacesValid,
+          "dynamic rect shadow emits five oriented 90-degree hemisphere faces with expanded range");
+
+    const game::SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms =
+            game::PackSectorPreviewDynamicSpotLightShadowUniforms(
+                    selected, casters, matrices);
+    bool rectUniformsValid = shadowUniforms.dynamicLightShadowSlots[0] == 3;
+    for (int face = 0;
+            rectUniformsValid && face < game::DynamicRectLightShadowFaceCount;
+            ++face) {
+        rectUniformsValid = FiniteMatrix(
+                shadowUniforms.shadowLightMatrices[
+                        static_cast<std::size_t>(3 + face)]);
+    }
+    Check(rectUniformsValid,
+          "dynamic rect shadow uniforms expose every face from the span base slot");
+
     game::SectorTopologyMap map;
     map.dynamicRectLights.push_back(authored);
     std::vector<game::SectorPreviewDynamicPointLightSource> sources;

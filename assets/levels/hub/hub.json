@@ -3613,12 +3613,12 @@
       ],
       "width": 8.0,
       "height": 2.0,
-      "range": 64.0,
+      "range": 53.0,
       "intensity": 1.5,
       "color": {
         "r": 255,
-        "g": 255,
-        "b": 255,
+        "g": 245,
+        "b": 240,
         "a": 255
       },
       "rollDegrees": 90.0,
@@ -3626,10 +3626,23 @@
         "proxy": {
           "shaft": {
             "enabled": true,
+            "originOffsetWorld": [
+              0.0016965866088867188,
+              0.33855175971984863,
+              0.0066089630126953125
+            ],
+            "lengthScale": 0.4000000059604645,
             "widthScale": 1.0,
-            "brightness": 0.15000000596046448,
-            "edgeSoftness": 0.25
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75
           }
+        },
+        "dust": {
+          "enabled": true,
+          "amount": 32,
+          "extentScale": 0.25,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.012000000104308128
         }
       }
     }
@@ -4042,8 +4055,8 @@
       ],
       "width": 8.0,
       "height": 2.0,
-      "range": 64.0,
-      "intensity": 2.0,
+      "range": 53.0,
+      "intensity": 1.5,
       "color": {
         "r": 255,
         "g": 255,
@@ -4051,7 +4064,7 @@
         "a": 255
       },
       "rollDegrees": 89.19446563720703,
-      "enabled": false,
+      "castsShadow": true,
       "shadowBias": 0.001500000013038516
     }
   ],
@@ -4062,7 +4075,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -4139,7 +4153,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "5c29652d3b90c133",
+    "sourceHash": "07596e68e69da9f8",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -4147,19 +4161,19 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.466796875,
-        1.400390625
+        2.2421875,
+        1.462890625,
+        1.396484375
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 768
+      "sampleCount": 8388608,
+      "rgbChannelsAboveOne": 1178
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "5c29652d3b90c133",
+      "sourceHash": "07596e68e69da9f8",
       "count": 2221,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -4172,24 +4186,31 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9531444311141968,
-          1.866882562637329
+          2.19494366645813,
+          1.9372471570968628,
+          1.850536823272705
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 13326,
-        "rgbChannelsAboveOne": 33
+        "rgbChannelsAboveOne": 32
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "5c29652d3b90c133",
+      "sourceHash": "07596e68e69da9f8",
       "modelCount": 34,
       "objectCount": 85,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "editorSettings": {
     "gridSize": 1

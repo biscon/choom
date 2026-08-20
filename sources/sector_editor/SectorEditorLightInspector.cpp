@@ -152,7 +152,8 @@ void DrawLightAtmosphereInspector(
         SectorEditorUiState& uiState,
         ApplyFn&& apply,
         bool& sourceRefreshRequested,
-        bool spotLight)
+        bool spotLight,
+        bool rectLight = false)
 {
     auto commit = [&]() {
         atmosphere = NormalizeSectorLightAtmosphereSettings(atmosphere);
@@ -280,7 +281,8 @@ void DrawLightAtmosphereInspector(
             y += rowH + gap;
             drawFloat("sector_editor_light_proxy_shaft_length", "Shaft length scale:",
                     atmosphere.proxy.shaft.lengthScale, uiState.lightProxyShaftLengthInput, 0.01f, 2.0f, 3);
-            drawFloat("sector_editor_light_proxy_shaft_width", "Shaft width scale:",
+            drawFloat("sector_editor_light_proxy_shaft_width",
+                    rectLight ? "Shaft spread scale:" : "Shaft width scale:",
                     atmosphere.proxy.shaft.widthScale, uiState.lightProxyShaftWidthInput, 0.01f, 2.0f, 3);
             drawFloat("sector_editor_light_proxy_shaft_brightness", "Shaft brightness:",
                     atmosphere.proxy.shaft.brightness, uiState.lightProxyShaftBrightnessInput, 0.0f, 16.0f, 3);
@@ -1638,7 +1640,7 @@ bool DrawRectLightInspector(
             [&editing, &light](SectorLightAtmosphereSettings settings) {
                 if constexpr (Dynamic) return editing.SetDynamicRectLightAtmosphere(light, settings);
                 else return editing.SetStaticRectLightAtmosphere(light, settings);
-            }, sourceRefreshRequested, true);
+            }, sourceRefreshRequested, true, true);
     if (bakeRequested != nullptr && engine::Button(ui, config, input, assets,
                 "sector_editor_static_rect_bake", {0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
         *bakeRequested = true;

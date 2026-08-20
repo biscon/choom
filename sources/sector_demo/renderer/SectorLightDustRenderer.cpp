@@ -133,42 +133,55 @@ vec3 pointShadowRay(int face,vec2 uv) {
     if(face==4)return vec3(projected.x,-projected.y,1.0);
     return vec3(-projected.x,-projected.y,-1.0);
 }
-float pointShadowDepth(int baseSlot,int sourceFace,vec2 sourceUv) {
+float pointShadowDepth(int baseSlot,int sourceFace,vec2 sourceUv,bool frontHemisphereOnly) {
     vec3 ray=pointShadowRay(sourceFace,sourceUv);
     int face=pointShadowFace(ray);
+    if(frontHemisphereOnly&&face==5)return 1.0;
     return shadowDepth(baseSlot+face,pointShadowUv(face,ray));
 }
 float shadowVisibility(int lightIndex, int slot, vec3 position) {
     if (slot < 0 || slot >= MAX_DYNAMIC_SHADOW_CASTERS) return 1.0;
     vec3 fromLight=position-dynamicLightPositions[lightIndex];
     vec3 coordinate;
-    int pointFace=-1;
-    if(dynamicLightTypes[lightIndex]==0) {
-        vec3 magnitude=abs(fromLight); float forwardDepth=max(magnitude.x,max(magnitude.y,magnitude.z));
+    int cubeFace=-1;
+    bool rectProjection=dynamicLightTypes[lightIndex]==2;
+    if(dynamicLightTypes[lightIndex]==0||rectProjection) {
+        vec3 cubeFromLight=fromLight;
         float lightRadius=max(dynamicLightRadii[lightIndex],0.00001);
+        if(rectProjection) {
+            vec3 forward=safeNormalize(dynamicLightDirections[lightIndex],vec3(0,-1,0));
+            vec3 right=safeNormalize(dynamicLightSpotShadowRight[lightIndex],vec3(1,0,0));
+            vec3 emitterUp=safeNormalize(cross(right,forward),vec3(0,0,1));
+            vec3 cubeUp=-emitterUp;
+            cubeFromLight=vec3(dot(fromLight,right),dot(fromLight,cubeUp),dot(fromLight,forward));
+            if(cubeFromLight.z<=0.0)return 1.0;
+            lightRadius+=length(vec2(max(dynamicLightInnerConeCos[lightIndex],0.0),
+                    max(dynamicLightOuterConeCos[lightIndex],0.0)));
+        }
+        vec3 magnitude=abs(cubeFromLight); float forwardDepth=max(magnitude.x,max(magnitude.y,magnitude.z));
         if(forwardDepth<=0.05||forwardDepth>lightRadius)return 1.0;
-        pointFace=pointShadowFace(fromLight); float farCoefficient=lightRadius/max(lightRadius-0.05,0.00001);
-        coordinate=vec3(pointShadowUv(pointFace,fromLight),farCoefficient*(1.0-0.05/forwardDepth)); }
+        cubeFace=pointShadowFace(cubeFromLight); if(rectProjection&&cubeFace==5)return 1.0;
+        float farCoefficient=lightRadius/max(lightRadius-0.05,0.00001);
+        coordinate=vec3(pointShadowUv(cubeFace,cubeFromLight),farCoefficient*(1.0-0.05/forwardDepth)); }
     else { vec3 forward=safeNormalize(dynamicLightDirections[lightIndex],vec3(0,-1,0));
-        vec3 upReference=abs(forward.y)>0.98?vec3(0,0,1):vec3(0,1,0); vec3 right=dynamicLightTypes[lightIndex]==2
-                ? safeNormalize(dynamicLightSpotShadowRight[lightIndex],vec3(1,0,0))
-                : safeNormalize(cross(forward,upReference),vec3(1,0,0));
+        vec3 upReference=abs(forward.y)>0.98?vec3(0,0,1):vec3(0,1,0);
+        vec3 right=safeNormalize(cross(forward,upReference),vec3(1,0,0));
         vec3 up=cross(right,forward); float z=dot(fromLight,forward); if(z<=0.05)return 1.0;
-        float tangent=dynamicLightTypes[lightIndex]==2?tan(1.553343):tan(min(acos(clamp(dynamicLightOuterConeCos[lightIndex],-0.999,0.999)),1.553343)); float farPlane=dynamicLightRadii[lightIndex];
+        float tangent=tan(min(acos(clamp(dynamicLightOuterConeCos[lightIndex],-0.999,0.999)),1.553343)); float farPlane=dynamicLightRadii[lightIndex];
         float ndc=(farPlane+0.05)/(farPlane-0.05)-(2.0*farPlane*0.05)/((farPlane-0.05)*z);
         coordinate=vec3(vec2(dot(fromLight,right),dot(fromLight,up))/max(2.0*z*tangent,0.00001)+0.5,ndc*0.5+0.5); }
     if (any(lessThan(coordinate, vec3(0.0))) || any(greaterThan(coordinate, vec3(1.0)))) return 1.0;
     float compareDepth = coordinate.z - min(max(shadowBias[slot], 0.0), 0.02);
     float softness = clamp(shadowSoftness[slot], 0.0, 8.0);
     if (softness <= 0.0) {
-        float blockerDepth=pointFace>=0?pointShadowDepth(slot,pointFace,coordinate.xy):shadowDepth(slot,coordinate.xy);
+        float blockerDepth=cubeFace>=0?pointShadowDepth(slot,cubeFace,coordinate.xy,rectProjection):shadowDepth(slot,coordinate.xy);
         return compareDepth <= blockerDepth ? 1.0 : 0.0;
     }
     vec2 texel = vec2(float(max(shadowAtlasTilesPerRow,1))) / vec2(textureSize(shadowMap0, 0));
     float visible = 0.0;
     for (int sampleIndex = 0; sampleIndex < 4; ++sampleIndex) {
         vec2 uv = coordinate.xy + kShadowDisk[sampleIndex] * max(0.25, softness) * texel;
-        float blockerDepth=pointFace>=0?pointShadowDepth(slot,pointFace,uv):shadowDepth(slot,uv);
+        float blockerDepth=cubeFace>=0?pointShadowDepth(slot,cubeFace,uv,rectProjection):shadowDepth(slot,uv);
         visible += compareDepth <= blockerDepth ? 1.0 : 0.0;
     }
     return visible * 0.25;

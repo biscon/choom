@@ -36,10 +36,11 @@ uniform vec3 coneApex;
 uniform vec3 coneDirection;
 uniform float coneLength;
 uniform float coneBaseRadius;
-uniform int shaftShape; // 0 cone, 1 rectangular prism
+uniform int shaftShape; // 0 cone, 1 rectangular frustum
 uniform vec3 rectRight;
 uniform vec3 rectUp;
-uniform vec2 rectHalfSize;
+uniform vec2 rectNearHalfSize;
+uniform vec2 rectFarHalfSize;
 uniform vec3 shaftRadiance;
 uniform vec2 shaftParams; // edge softness, maximum extinction
 uniform vec4 fogParamsA; // mode, start, end/density, maximum opacity
@@ -112,25 +113,48 @@ bool intersectFiniteCone(vec3 rayOrigin, vec3 rayDirection,
     return hitCount >= 2 && exitT - enterT > epsilon;
 }
 
-bool intersectRectPrism(vec3 rayOrigin, vec3 rayDirection,
+bool clipRectFrustumPlane(
+        vec3 localOrigin,
+        vec3 localDirection,
+        vec3 planeNormal,
+        float planeLimit,
+        inout float enterT,
+        inout float exitT) {
+    float originDistance = dot(planeNormal, localOrigin) - planeLimit;
+    float directionDistance = dot(planeNormal, localDirection);
+    const float epsilon = 0.000001;
+    if (abs(directionDistance) <= epsilon) return originDistance <= epsilon;
+    float t = -originDistance / directionDistance;
+    if (directionDistance < 0.0) enterT = max(enterT, t);
+    else exitT = min(exitT, t);
+    return enterT <= exitT + epsilon;
+}
+
+bool intersectRectFrustum(vec3 rayOrigin, vec3 rayDirection,
         out float enterT, out float exitT) {
     vec3 axis = safeNormalize(coneDirection, vec3(0.0, -1.0, 0.0));
-    vec3 center = coneApex + axis * coneLength * 0.5;
-    vec3 offset = rayOrigin - center;
+    vec3 offset = rayOrigin - coneApex;
     vec3 localOrigin = vec3(dot(offset, rectRight), dot(offset, rectUp), dot(offset, axis));
     vec3 localDirection = vec3(dot(rayDirection, rectRight), dot(rayDirection, rectUp), dot(rayDirection, axis));
-    vec3 halfSize = vec3(max(rectHalfSize, vec2(0.0001)), max(coneLength * 0.5, 0.0001));
-    vec3 safeDirection = vec3(
-            abs(localDirection.x) > 0.000001 ? localDirection.x : (localDirection.x < 0.0 ? -0.000001 : 0.000001),
-            abs(localDirection.y) > 0.000001 ? localDirection.y : (localDirection.y < 0.0 ? -0.000001 : 0.000001),
-            abs(localDirection.z) > 0.000001 ? localDirection.z : (localDirection.z < 0.0 ? -0.000001 : 0.000001));
-    vec3 first = (-halfSize - localOrigin) / safeDirection;
-    vec3 second = (halfSize - localOrigin) / safeDirection;
-    vec3 nearHit = min(first, second);
-    vec3 farHit = max(first, second);
-    enterT = max(max(nearHit.x, nearHit.y), nearHit.z);
-    exitT = min(min(farHit.x, farHit.y), farHit.z);
-    return exitT - enterT > 0.000001;
+    float length = max(coneLength, 0.0001);
+    vec2 nearHalfSize = max(rectNearHalfSize, vec2(0.0001));
+    vec2 farHalfSize = max(rectFarHalfSize, nearHalfSize);
+    vec2 sideSlope = (farHalfSize - nearHalfSize) / length;
+    enterT = -1e30;
+    exitT = 1e30;
+    return clipRectFrustumPlane(localOrigin, localDirection,
+                    vec3(0.0, 0.0, -1.0), 0.0, enterT, exitT)
+            && clipRectFrustumPlane(localOrigin, localDirection,
+                    vec3(0.0, 0.0, 1.0), length, enterT, exitT)
+            && clipRectFrustumPlane(localOrigin, localDirection,
+                    vec3(1.0, 0.0, -sideSlope.x), nearHalfSize.x, enterT, exitT)
+            && clipRectFrustumPlane(localOrigin, localDirection,
+                    vec3(-1.0, 0.0, -sideSlope.x), nearHalfSize.x, enterT, exitT)
+            && clipRectFrustumPlane(localOrigin, localDirection,
+                    vec3(0.0, 1.0, -sideSlope.y), nearHalfSize.y, enterT, exitT)
+            && clipRectFrustumPlane(localOrigin, localDirection,
+                    vec3(0.0, -1.0, -sideSlope.y), nearHalfSize.y, enterT, exitT)
+            && exitT - enterT > 0.000001;
 }
 
 float fogTransmittance(vec3 position) {
@@ -163,9 +187,9 @@ float shaftOpticalProfileAt(
             dot(samplePosition - coneApex, axis) / max(coneLength, 0.0001),
             0.0,
             1.0);
-    float localDiameter = shaftShape == 1
-            ? max(2.0 * max(rectHalfSize.x, rectHalfSize.y), 0.0001)
-            : max(2.0 * coneBaseRadius * max(axial01, 0.01), 0.0001);
+    float localDiameter = max(
+            2.0 * coneBaseRadius * max(axial01, 0.01),
+            0.0001);
     // The old hard clamp exposed a contour where chord/localDiameter crossed
     // one. Smooth that transition before applying the authored edge profile.
     float rawCoverage = max(visibleChord / localDiameter, 0.0);
@@ -174,6 +198,39 @@ float shaftOpticalProfileAt(
     float longitudinal = smoothstep(0.0, startFadeWidth, axial01)
             * (1.0 - smoothstep(1.0 - endFadeWidth, 1.0, axial01));
     return (1.0 - exp(-2.0 * coverage)) * lateral * longitudinal;
+}
+
+float rectShaftDensityAt(
+        float sampleT,
+        vec3 rayDirection,
+        vec3 axis,
+        float edgeFeather,
+        float cornerExponent,
+        float startFadeWidth,
+        float endFadeWidth) {
+    vec3 samplePosition = cameraPosition + rayDirection * sampleT;
+    vec3 sampleOffset = samplePosition - coneApex;
+    float axial01 = clamp(
+            dot(sampleOffset, axis) / max(coneLength, 0.0001),
+            0.0,
+            1.0);
+    vec2 localHalfSize = max(
+            mix(rectNearHalfSize, rectFarHalfSize, axial01),
+            vec2(0.0001));
+    vec2 normalizedLateral = abs(vec2(
+            dot(sampleOffset, rectRight),
+            dot(sampleOffset, rectUp))) / localHalfSize;
+    float roundedRectDistance = pow(
+            pow(normalizedLateral.x, cornerExponent)
+                    + pow(normalizedLateral.y, cornerExponent),
+            1.0 / cornerExponent);
+    float lateral = 1.0 - smoothstep(
+            1.0 - edgeFeather,
+            1.0,
+            roundedRectDistance);
+    float longitudinal = smoothstep(0.0, startFadeWidth, axial01)
+            * (1.0 - smoothstep(1.0 - endFadeWidth, 1.0, axial01));
+    return lateral * longitudinal;
 }
 
 void main() {
@@ -185,7 +242,7 @@ void main() {
     float enterT = 0.0;
     float exitT = 0.0;
     bool hit = shaftShape == 1
-            ? intersectRectPrism(cameraPosition, rayDirection, enterT, exitT)
+            ? intersectRectFrustum(cameraPosition, rayDirection, enterT, exitT)
             : intersectFiniteCone(cameraPosition, rayDirection, enterT, exitT);
     if (!hit) discard;
     float depth = texture(sceneDepth, uv).r;
@@ -212,33 +269,82 @@ void main() {
             + 0.12 * extraSoftness, 0.30);
     float endFadeWidth = min(mix(0.04, 0.35, baseSoftness)
             + 0.20 * extraSoftness, 0.55);
-    // Fixed, unrolled samples avoid the single-midpoint profile trough that
-    // becomes visible when an authored shaft origin is displaced.
-    float opticalThickness = (
-            shaftOpticalProfileAt(
-                    enterT + chord * (1.0 / 6.0),
-                    rayDirection,
-                    chord,
-                    axis,
-                    lateralExponent,
-                    startFadeWidth,
-                    endFadeWidth)
-            + shaftOpticalProfileAt(
-                    enterT + chord * 0.5,
-                    rayDirection,
-                    chord,
-                    axis,
-                    lateralExponent,
-                    startFadeWidth,
-                    endFadeWidth)
-            + shaftOpticalProfileAt(
-                    enterT + chord * (5.0 / 6.0),
-                    rayDirection,
-                    chord,
-                    axis,
-                    lateralExponent,
-                    startFadeWidth,
-                    endFadeWidth)) / 3.0;
+    float opticalThickness = 0.0;
+    if (shaftShape == 1) {
+        float rectSoftness = clamp((shaftParams.x - 0.01) / 0.99, 0.0, 1.0);
+        float edgeFeather = mix(0.02, 0.45, rectSoftness);
+        float cornerExponent = mix(24.0, 4.0, rectSoftness);
+        vec3 midpointOffset = midpoint - coneApex;
+        float midpointAxial01 = clamp(
+                dot(midpointOffset, axis) / max(coneLength, 0.0001),
+                0.0,
+                1.0);
+        vec2 midpointHalfSize = mix(
+                rectNearHalfSize,
+                rectFarHalfSize,
+                midpointAxial01);
+        float localDiameter = max(
+                2.0 * max(midpointHalfSize.x, midpointHalfSize.y),
+                0.0001);
+        // Saturating within half a local diameter prevents changes in the
+        // intersected frustum face from drawing corner rays through the fog.
+        float pathCoverage = smoothstep(
+                0.0,
+                0.5,
+                max(chord / localDiameter, 0.0));
+        // Fixed five-point Gauss-Legendre integration keeps the rounded
+        // density stable as the view crosses the frustum's planar edges.
+        float integratedDensity =
+                0.1184634430 * rectShaftDensityAt(
+                        enterT + chord * 0.0469100770,
+                        rayDirection, axis, edgeFeather, cornerExponent,
+                        startFadeWidth, endFadeWidth)
+                + 0.2393143352 * rectShaftDensityAt(
+                        enterT + chord * 0.2307653449,
+                        rayDirection, axis, edgeFeather, cornerExponent,
+                        startFadeWidth, endFadeWidth)
+                + 0.2844444444 * rectShaftDensityAt(
+                        enterT + chord * 0.5,
+                        rayDirection, axis, edgeFeather, cornerExponent,
+                        startFadeWidth, endFadeWidth)
+                + 0.2393143352 * rectShaftDensityAt(
+                        enterT + chord * 0.7692346551,
+                        rayDirection, axis, edgeFeather, cornerExponent,
+                        startFadeWidth, endFadeWidth)
+                + 0.1184634430 * rectShaftDensityAt(
+                        enterT + chord * 0.9530899230,
+                        rayDirection, axis, edgeFeather, cornerExponent,
+                        startFadeWidth, endFadeWidth);
+        opticalThickness = 0.8646647168 * pathCoverage * integratedDensity;
+    } else {
+        // Fixed, unrolled samples avoid the single-midpoint profile trough that
+        // becomes visible when an authored shaft origin is displaced.
+        opticalThickness = (
+                shaftOpticalProfileAt(
+                        enterT + chord * (1.0 / 6.0),
+                        rayDirection,
+                        chord,
+                        axis,
+                        lateralExponent,
+                        startFadeWidth,
+                        endFadeWidth)
+                + shaftOpticalProfileAt(
+                        enterT + chord * 0.5,
+                        rayDirection,
+                        chord,
+                        axis,
+                        lateralExponent,
+                        startFadeWidth,
+                        endFadeWidth)
+                + shaftOpticalProfileAt(
+                        enterT + chord * (5.0 / 6.0),
+                        rayDirection,
+                        chord,
+                        axis,
+                        lateralExponent,
+                        startFadeWidth,
+                        endFadeWidth)) / 3.0;
+    }
     float phaseFacing = clamp(dot(axis, -rayDirection) * 0.5 + 0.5, 0.0, 1.0);
     float phase = mix(0.20, 1.0, pow(phaseFacing, 3.0));
     float scatterWeight = opticalThickness * phase * fogTransmittance(midpoint);
@@ -291,6 +397,22 @@ void ConeBounds(
             std::max(apex.z, base.z + diskExtent.z)};
 }
 
+Vector2 RectShaftFarHalfSize(
+        const SectorLightAtmosphereVolume& volume,
+        float spreadScale)
+{
+    constexpr float SpreadDegreesAtScaleOne = 15.0f;
+    const float spreadHalfAngleDegrees = std::clamp(
+            SpreadDegreesAtScaleOne * spreadScale,
+            SpreadDegreesAtScaleOne * 0.01f,
+            SpreadDegreesAtScaleOne * 2.0f);
+    const float expansion = volume.extentWorld
+            * std::tan(spreadHalfAngleDegrees * DEG2RAD);
+    return Vector2{
+            volume.halfWidthWorld + expansion,
+            volume.halfHeightWorld + expansion};
+}
+
 } // namespace
 
 void SectorAnalyticLightShaftRenderer::Reserve(std::size_t sourceCount)
@@ -313,7 +435,8 @@ bool SectorAnalyticLightShaftRenderer::EnsureShader()
     LOC(coneApexLoc, "coneApex"); LOC(coneDirectionLoc, "coneDirection");
     LOC(coneLengthLoc, "coneLength"); LOC(coneBaseRadiusLoc, "coneBaseRadius");
     LOC(shaftShapeLoc, "shaftShape"); LOC(rectRightLoc, "rectRight");
-    LOC(rectUpLoc, "rectUp"); LOC(rectHalfSizeLoc, "rectHalfSize");
+    LOC(rectUpLoc, "rectUp"); LOC(rectNearHalfSizeLoc, "rectNearHalfSize");
+    LOC(rectFarHalfSizeLoc, "rectFarHalfSize");
     LOC(shaftRadianceLoc, "shaftRadiance"); LOC(shaftParamsLoc, "shaftParams");
     LOC(fogParamsALoc, "fogParamsA"); LOC(fogParamsBLoc, "fogParamsB");
 #undef LOC
@@ -369,10 +492,10 @@ bool SectorAnalyticLightShaftRenderer::Apply(
         volume.extentWorld = authoredExtent;
         if (source.shape == SectorLightAtmosphereShape::Cone) {
             volume.coneRadiusWorld *= settings.widthScale;
-        } else {
-            volume.halfWidthWorld *= settings.widthScale;
-            volume.halfHeightWorld *= settings.widthScale;
         }
+        const Vector2 rectFarHalfSize = source.shape == SectorLightAtmosphereShape::RectPrism
+                ? RectShaftFarHalfSize(volume, settings.widthScale)
+                : Vector2{};
         volume.boundsCenterWorld = Vector3Add(
                 volume.originWorld,
                 Vector3Scale(volume.directionWorld, volume.extentWorld * 0.5f));
@@ -380,8 +503,8 @@ bool SectorAnalyticLightShaftRenderer::Apply(
                 ? std::sqrt(volume.extentWorld * volume.extentWorld * 0.25f
                         + volume.coneRadiusWorld * volume.coneRadiusWorld)
                 : std::sqrt(volume.extentWorld * volume.extentWorld * 0.25f
-                        + volume.halfWidthWorld * volume.halfWidthWorld
-                        + volume.halfHeightWorld * volume.halfHeightWorld);
+                        + rectFarHalfSize.x * rectFarHalfSize.x
+                        + rectFarHalfSize.y * rectFarHalfSize.y);
         if (!IsSectorLightAtmosphereVolumeVisible(volume, visibility, receiverBounds,
                         camera, aspect, nearPlane, farPlane)) continue;
         const float baseRadius = volume.coneRadiusWorld;
@@ -394,14 +517,14 @@ bool SectorAnalyticLightShaftRenderer::Apply(
             const Vector3 center = volume.boundsCenterWorld;
             const Vector3 extent{
                     std::fabs(volume.directionWorld.x) * volume.extentWorld * 0.5f
-                            + std::fabs(volume.rightWorld.x) * volume.halfWidthWorld
-                            + std::fabs(volume.upWorld.x) * volume.halfHeightWorld,
+                            + std::fabs(volume.rightWorld.x) * rectFarHalfSize.x
+                            + std::fabs(volume.upWorld.x) * rectFarHalfSize.y,
                     std::fabs(volume.directionWorld.y) * volume.extentWorld * 0.5f
-                            + std::fabs(volume.rightWorld.y) * volume.halfWidthWorld
-                            + std::fabs(volume.upWorld.y) * volume.halfHeightWorld,
+                            + std::fabs(volume.rightWorld.y) * rectFarHalfSize.x
+                            + std::fabs(volume.upWorld.y) * rectFarHalfSize.y,
                     std::fabs(volume.directionWorld.z) * volume.extentWorld * 0.5f
-                            + std::fabs(volume.rightWorld.z) * volume.halfWidthWorld
-                            + std::fabs(volume.upWorld.z) * volume.halfHeightWorld};
+                            + std::fabs(volume.rightWorld.z) * rectFarHalfSize.x
+                            + std::fabs(volume.upWorld.z) * rectFarHalfSize.y};
             minimum = Vector3Subtract(center, extent);
             maximum = Vector3Add(center, extent);
         }
@@ -420,6 +543,7 @@ bool SectorAnalyticLightShaftRenderer::Apply(
         visibleShafts.push_back(VisibleShaft{
                 &source,
                 volume,
+                rectFarHalfSize,
                 scissor,
                 Vector3Scale(Multiply(lightColor, tint), intensity * settings.brightness),
                 Vector3DistanceSqr(camera.position, volume.boundsCenterWorld)});
@@ -476,11 +600,14 @@ bool SectorAnalyticLightShaftRenderer::Apply(
         SetShaderValue(shader, coneLengthLoc, &visible.volume.extentWorld, SHADER_UNIFORM_FLOAT);
         SetShaderValue(shader, coneBaseRadiusLoc, &baseRadius, SHADER_UNIFORM_FLOAT);
         const int shaftShape = visible.source->shape == SectorLightAtmosphereShape::RectPrism ? 1 : 0;
-        const Vector2 rectHalfSize{visible.volume.halfWidthWorld, visible.volume.halfHeightWorld};
+        const Vector2 rectNearHalfSize{
+                visible.volume.halfWidthWorld,
+                visible.volume.halfHeightWorld};
         SetShaderValue(shader, shaftShapeLoc, &shaftShape, SHADER_UNIFORM_INT);
         SetShaderValue(shader, rectRightLoc, &visible.volume.rightWorld, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, rectUpLoc, &visible.volume.upWorld, SHADER_UNIFORM_VEC3);
-        SetShaderValue(shader, rectHalfSizeLoc, &rectHalfSize, SHADER_UNIFORM_VEC2);
+        SetShaderValue(shader, rectNearHalfSizeLoc, &rectNearHalfSize, SHADER_UNIFORM_VEC2);
+        SetShaderValue(shader, rectFarHalfSizeLoc, &visible.rectFarHalfSize, SHADER_UNIFORM_VEC2);
         SetShaderValue(shader, shaftRadianceLoc, &visible.radiance, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, shaftParamsLoc, &shaftParams, SHADER_UNIFORM_VEC2);
         rlScissor(visible.scissor.x, visible.scissor.y,

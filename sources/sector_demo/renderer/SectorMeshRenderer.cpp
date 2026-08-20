@@ -420,6 +420,15 @@ int GetShaderLocationArrayElement(Shader shader, const char* name, std::size_t i
     return GetShaderLocation(shader, indexedName.c_str());
 }
 
+const char* DynamicLightDebugPrefix(SectorPreviewDynamicLightKind kind)
+{
+    return kind == SectorPreviewDynamicLightKind::Spot
+            ? "spot:"
+            : kind == SectorPreviewDynamicLightKind::Rect
+                    ? "rect:"
+                    : "point:";
+}
+
 std::string FormatDynamicLightDebugText(
         bool dynamicLightingEnabled,
         size_t selectedCount,
@@ -443,9 +452,7 @@ std::string FormatDynamicLightDebugText(
             if (i > 0) {
                 out << ",";
             }
-            out << (selectedKeys[i].kind == SectorPreviewDynamicLightKind::Spot
-                            ? "spot:"
-                            : "point:")
+            out << DynamicLightDebugPrefix(selectedKeys[i].kind)
                     << selectedKeys[i].lightId;
         }
     }
@@ -490,9 +497,7 @@ std::string FormatDynamicSpotLightShadowDebugText(
                     ? selectedLights[static_cast<std::size_t>(
                             caster.dynamicLightIndex)].kind
                     : SectorPreviewDynamicLightKind::Spot;
-            out << (kind == SectorPreviewDynamicLightKind::Spot
-                            ? "spot:"
-                            : "point:")
+            out << DynamicLightDebugPrefix(kind)
                     << caster.lightId;
         }
     }

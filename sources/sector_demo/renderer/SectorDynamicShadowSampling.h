@@ -61,10 +61,12 @@ float PointShadowSampleVisibility(
         float planeDistance,
         float lightRadius,
         float fallbackDepth,
-        float effectiveBias)
+        float effectiveBias,
+        bool frontHemisphereOnly)
 {
     vec3 sourceRay = PointShadowFaceRay(sourceFace, sourceUv);
     int sampleFace = PointShadowFace(sourceRay);
+    if (frontHemisphereOnly && sampleFace == 5) return 1.0;
     vec2 sampleUv = PointShadowFaceUv(sampleFace, sourceRay);
     ivec2 localTexel = clamp(
             ivec2(floor(sampleUv * vec2(tileResolution))),
@@ -106,6 +108,7 @@ float DynamicLightShadowVisibility(
 
     vec3 fromLight = worldPosition - dynamicLightPositions[lightIndex];
     bool pointProjection = dynamicLightTypes[lightIndex] == 0;
+    bool rectProjection = dynamicLightTypes[lightIndex] == 2;
     float normalLightDot = max(dot(
             SafeNormalize(worldNormal, vec3(0.0, 1.0, 0.0)),
             SafeNormalize(surfaceToLightDirection, vec3(0.0, 1.0, 0.0))), 0.0);
@@ -117,16 +120,40 @@ float DynamicLightShadowVisibility(
     int atlasTiles = max(shadowAtlasTilesPerRow, 1);
     ivec2 tileResolution = textureSize(shadowMap0, 0) / atlasTiles;
 
-    if (pointProjection) {
+    if (pointProjection || rectProjection) {
         float lightRadius = max(dynamicLightRadii[lightIndex], 0.00001);
-        vec3 magnitude = abs(fromLight);
+        vec3 cubeFromLight = fromLight;
+        vec3 cubePlaneNormal = worldNormal;
+        if (rectProjection) {
+            vec3 forward = SafeNormalize(
+                    dynamicLightDirections[lightIndex], vec3(0.0, -1.0, 0.0));
+            vec3 right = SafeNormalize(
+                    dynamicLightSpotShadowRight[lightIndex], vec3(1.0, 0.0, 0.0));
+            vec3 emitterUp = SafeNormalize(
+                    cross(right, forward), vec3(0.0, 0.0, 1.0));
+            vec3 cubeUp = -emitterUp;
+            cubeFromLight = vec3(
+                    dot(fromLight, right),
+                    dot(fromLight, cubeUp),
+                    dot(fromLight, forward));
+            if (cubeFromLight.z <= 0.0) return 1.0;
+            cubePlaneNormal = vec3(
+                    dot(worldNormal, right),
+                    dot(worldNormal, cubeUp),
+                    dot(worldNormal, forward));
+            lightRadius += length(vec2(
+                    max(dynamicLightInnerConeCos[lightIndex], 0.0),
+                    max(dynamicLightOuterConeCos[lightIndex], 0.0)));
+        }
+        vec3 magnitude = abs(cubeFromLight);
         float forwardDepth = max(magnitude.x, max(magnitude.y, magnitude.z));
         if (forwardDepth <= 0.05 || forwardDepth > lightRadius) return 1.0;
-        int face = PointShadowFace(fromLight);
-        vec2 uv = PointShadowFaceUv(face, fromLight);
+        int face = PointShadowFace(cubeFromLight);
+        if (rectProjection && face == 5) return 1.0;
+        vec2 uv = PointShadowFaceUv(face, cubeFromLight);
         float receiverDepth = PointShadowPerspectiveDepth(
                 forwardDepth, lightRadius);
-        float planeDistance = dot(worldNormal, fromLight);
+        float planeDistance = dot(cubePlaneNormal, cubeFromLight);
 
         if (softness <= 0.0) {
             vec2 texelPosition = uv * vec2(tileResolution) - vec2(0.5);
@@ -141,8 +168,8 @@ float DynamicLightShadowVisibility(
                             * (y == 0 ? 1.0 - blend.y : blend.y);
                     visible += weight * PointShadowSampleVisibility(
                             shadowSlot, face, sourceUv, tileResolution,
-                            worldNormal, planeDistance, lightRadius,
-                            receiverDepth, effectiveBias);
+                            cubePlaneNormal, planeDistance, lightRadius,
+                            receiverDepth, effectiveBias, rectProjection);
                 }
             }
             return visible;
@@ -156,11 +183,12 @@ float DynamicLightShadowVisibility(
                     face,
                     uv + kPoissonDisk[i] * radius,
                     tileResolution,
-                    worldNormal,
+                    cubePlaneNormal,
                     planeDistance,
                     lightRadius,
                     receiverDepth,
-                    effectiveBias);
+                    effectiveBias,
+                    rectProjection);
         }
         return visible / 12.0;
     }

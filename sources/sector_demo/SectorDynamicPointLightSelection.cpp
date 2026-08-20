@@ -52,13 +52,19 @@ void BuildSectorDynamicSpotShadowProjectionUpload(
     outRight = light.kind == SectorPreviewDynamicLightKind::Rect
             ? light.rectRight
             : Vector3Normalize(Vector3CrossProduct(forward, upReference));
-    const float halfAngle = light.kind == SectorPreviewDynamicLightKind::Rect
-            ? 89.0f * DEG2RAD
-            : std::clamp(
-                    std::acos(std::clamp(light.outerConeCos, -0.999f, 0.999f)),
-                    0.5f * DEG2RAD,
-                    89.0f * DEG2RAD);
     const float farPlane = std::max(light.radius, NearPlane + 0.0001f);
+    if (light.kind == SectorPreviewDynamicLightKind::Rect) {
+        // Rect shadows use five rect-local cube faces. The x component is not
+        // sampled for rects, but keep a finite neutral upload for shared shaders.
+        outProjection = Vector2{
+                1.0f,
+                farPlane / (farPlane - NearPlane)};
+        return;
+    }
+    const float halfAngle = std::clamp(
+            std::acos(std::clamp(light.outerConeCos, -0.999f, 0.999f)),
+            0.5f * DEG2RAD,
+            89.0f * DEG2RAD);
     outProjection = Vector2{
             1.0f / std::tan(halfAngle),
             farPlane / (farPlane - NearPlane)};
@@ -869,10 +875,8 @@ void SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
 
     std::size_t usedSlots = 0;
     for (const ScoredDynamicSpotLightShadowCandidate& candidate : ranked) {
-        const std::size_t requiredSlots = candidate.light->kind
-                == SectorPreviewDynamicLightKind::Point
-                ? static_cast<std::size_t>(DynamicPointLightShadowFaceCount)
-                : 1u;
+        const std::size_t requiredSlots = static_cast<std::size_t>(
+                SectorDynamicShadowFaceCount(candidate.light->kind));
         if (usedSlots + requiredSlots > maxShadowCasters) {
             continue;
         }
@@ -1010,8 +1014,7 @@ bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
         int shadowSlot,
         SectorPreviewDynamicSpotLightShadowMatrix& outMatrix)
 {
-    if ((light.kind != SectorPreviewDynamicLightKind::Spot
-                && light.kind != SectorPreviewDynamicLightKind::Rect)
+    if (light.kind != SectorPreviewDynamicLightKind::Spot
             || light.radius <= ShadowNearPlane
             || !std::isfinite(light.radius)
             || !IsFiniteVector3(light.position)
@@ -1025,15 +1028,11 @@ bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
         return false;
     }
 
-    const float outerHalfAngleRadians = light.kind == SectorPreviewDynamicLightKind::Rect
-            ? 89.0f * DegreesToRadians
-            : std::acos(std::clamp(light.outerConeCos, -0.999f, 0.999f));
+    const float outerHalfAngleRadians =
+            std::acos(std::clamp(light.outerConeCos, -0.999f, 0.999f));
     const float fovyRadians = std::clamp(outerHalfAngleRadians * 2.0f, 1.0f * DegreesToRadians, 178.0f * DegreesToRadians);
     const Vector3 target = Vector3Add(light.position, direction);
-    const Vector3 up = light.kind == SectorPreviewDynamicLightKind::Rect
-            ? NormalizeOrFallback(Vector3CrossProduct(light.rectRight, direction),
-                    SpotlightShadowUpVector(direction))
-            : SpotlightShadowUpVector(direction);
+    const Vector3 up = SpotlightShadowUpVector(direction);
     const Matrix view = MatrixLookAt(light.position, target, up);
     const Matrix projection = MatrixPerspective(static_cast<double>(fovyRadians), 1.0, ShadowNearPlane, light.radius);
     const Matrix lightViewProjection = MatrixMultiply(view, projection);
@@ -1046,7 +1045,7 @@ bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
     outMatrix.dynamicLightIndex = dynamicLightIndex;
     outMatrix.shadowSlot = shadowSlot;
     outMatrix.kind = light.kind;
-    outMatrix.pointFace = -1;
+    outMatrix.cubeFace = -1;
     outMatrix.lightPosition = light.position;
     outMatrix.lightRadius = light.radius;
     outMatrix.view = view;
@@ -1106,13 +1105,97 @@ void BuildSectorPreviewDynamicSpotLightShadowMatrices(
                 matrix.dynamicLightIndex = caster.dynamicLightIndex;
                 matrix.shadowSlot = caster.shadowSlot + face;
                 matrix.kind = SectorPreviewDynamicLightKind::Point;
-                matrix.pointFace = face;
+                matrix.cubeFace = face;
                 matrix.lightPosition = light.position;
                 matrix.lightRadius = light.radius;
                 matrix.view = MatrixLookAt(
                         light.position,
                         Vector3Add(light.position, FaceDirections[face]),
                         FaceUpVectors[face]);
+                matrix.projection = projection;
+                matrix.lightViewProjection = MatrixMultiply(
+                        matrix.view, matrix.projection);
+                if (!IsFiniteMatrix(matrix.view)
+                        || !IsFiniteMatrix(matrix.projection)
+                        || !IsFiniteMatrix(matrix.lightViewProjection)) {
+                    continue;
+                }
+                outMatrices.push_back(matrix);
+            }
+            continue;
+        }
+
+        if (light.kind == SectorPreviewDynamicLightKind::Rect) {
+            if (light.radius <= ShadowNearPlane
+                    || !std::isfinite(light.radius)
+                    || !IsFiniteVector3(light.position)
+                    || !IsFiniteVector3(light.direction)
+                    || !IsFiniteVector3(light.rectRight)
+                    || caster.shadowSlot < 0
+                    || caster.shadowSlotCount
+                            != DynamicRectLightShadowFaceCount) {
+                continue;
+            }
+            const Vector3 forward = NormalizeOrFallback(
+                    light.direction, Vector3{0.0f, -1.0f, 0.0f});
+            const Vector3 right = NormalizeOrFallback(
+                    light.rectRight,
+                    NormalizeOrFallback(
+                            Vector3CrossProduct(
+                                    forward,
+                                    SpotlightShadowUpVector(forward)),
+                            Vector3{1.0f, 0.0f, 0.0f}));
+            const Vector3 emitterUp = NormalizeOrFallback(
+                    Vector3CrossProduct(right, forward),
+                    SpotlightShadowUpVector(forward));
+            // The rect basis uses right x forward for its authored up axis.
+            // Negating that axis gives the right-handed cube coordinates used
+            // by PointShadowFaceUv and the existing point-face matrices.
+            const Vector3 cubeUp = Vector3Negate(emitterUp);
+            const std::array<Vector3, DynamicRectLightShadowFaceCount>
+                    faceDirections = {{
+                            right,
+                            Vector3Negate(right),
+                            cubeUp,
+                            emitterUp,
+                            forward}};
+            const std::array<Vector3, DynamicRectLightShadowFaceCount>
+                    faceUpVectors = {{
+                            emitterUp,
+                            emitterUp,
+                            forward,
+                            Vector3Negate(forward),
+                            emitterUp}};
+            const float sourceHalfDiagonal = std::sqrt(
+                    light.innerConeCos * light.innerConeCos
+                    + light.outerConeCos * light.outerConeCos);
+            const float shadowRadius = light.radius + sourceHalfDiagonal;
+            if (!std::isfinite(shadowRadius)
+                    || shadowRadius <= ShadowNearPlane) {
+                continue;
+            }
+            const Matrix projection = MatrixPerspective(
+                    90.0 * static_cast<double>(DegreesToRadians),
+                    1.0,
+                    ShadowNearPlane,
+                    shadowRadius);
+            for (int face = 0;
+                    face < DynamicRectLightShadowFaceCount;
+                    ++face) {
+                SectorPreviewDynamicSpotLightShadowMatrix matrix;
+                matrix.lightId = light.lightId;
+                matrix.dynamicLightIndex = caster.dynamicLightIndex;
+                matrix.shadowSlot = caster.shadowSlot + face;
+                matrix.kind = SectorPreviewDynamicLightKind::Rect;
+                matrix.cubeFace = face;
+                matrix.lightPosition = light.position;
+                matrix.lightRadius = shadowRadius;
+                matrix.view = MatrixLookAt(
+                        light.position,
+                        Vector3Add(
+                                light.position,
+                                faceDirections[static_cast<std::size_t>(face)]),
+                        faceUpVectors[static_cast<std::size_t>(face)]);
                 matrix.projection = projection;
                 matrix.lightViewProjection = MatrixMultiply(
                         matrix.view, matrix.projection);

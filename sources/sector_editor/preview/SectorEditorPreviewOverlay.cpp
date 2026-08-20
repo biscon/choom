@@ -780,10 +780,11 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                                     ? "cache hit"
                                     : stats.atlasRendered ? "rebuilt" : "idle";
                     addKeyValue("shadow atlas", TextFormat(
-                            "%s | point/spot %zu/%zu | slots %zu",
+                            "%s | point/spot/rect %zu/%zu/%zu | slots %zu",
                             atlasState,
                             stats.pointLights,
                             stats.spotLights,
+                            stats.rectLights,
                             stats.occupiedTiles));
                     addKeyValue("shadow updates", TextFormat(
                             "valid/dirty/queued %zu/%zu/%zu | lights/tiles rebuilt %zu/%zu | CPU %.3f ms",

@@ -29,7 +29,7 @@ bool ShadowMatrixMatches(
     return left.lightId == right.lightId
             && left.shadowSlot == right.shadowSlot
             && left.kind == right.kind
-            && left.pointFace == right.pointFace
+            && left.cubeFace == right.cubeFace
             && std::memcmp(&left.lightPosition,
                     &right.lightPosition, sizeof(Vector3)) == 0
             && left.lightRadius == right.lightRadius
@@ -142,18 +142,43 @@ bool ShadowLightIntersectsBounds(
     if (!SphereIntersectsAabb(light.position, influenceRadius, bounds)) {
         return false;
     }
-    if (light.kind == SectorPreviewDynamicLightKind::Point) {
+    if (light.kind == SectorPreviewDynamicLightKind::Point
+            || light.kind == SectorPreviewDynamicLightKind::Rect) {
         constexpr std::array<Vector3, DynamicPointLightShadowFaceCount>
-                FaceDirections = {{
+                PointFaceDirections = {{
                         {1.0f, 0.0f, 0.0f},
                         {-1.0f, 0.0f, 0.0f},
                         {0.0f, 1.0f, 0.0f},
                         {0.0f, -1.0f, 0.0f},
                         {0.0f, 0.0f, 1.0f},
                         {0.0f, 0.0f, -1.0f}}};
-        if (matrix.pointFace < 0
-                || matrix.pointFace >= DynamicPointLightShadowFaceCount) {
+        const int faceCount = SectorDynamicShadowFaceCount(light.kind);
+        if (matrix.cubeFace < 0 || matrix.cubeFace >= faceCount) {
             return true;
+        }
+        Vector3 faceDirection = PointFaceDirections[
+                static_cast<std::size_t>(matrix.cubeFace)];
+        if (light.kind == SectorPreviewDynamicLightKind::Rect) {
+            const Vector3 forward = Vector3LengthSqr(light.direction)
+                            > 0.00000001f
+                    ? Vector3Normalize(light.direction)
+                    : Vector3{0.0f, -1.0f, 0.0f};
+            const Vector3 right = Vector3LengthSqr(light.rectRight)
+                            > 0.00000001f
+                    ? Vector3Normalize(light.rectRight)
+                    : Vector3{1.0f, 0.0f, 0.0f};
+            const Vector3 emitterUp = Vector3Normalize(
+                    Vector3CrossProduct(right, forward));
+            const Vector3 cubeUp = Vector3Negate(emitterUp);
+            const std::array<Vector3, DynamicRectLightShadowFaceCount>
+                    rectFaceDirections = {{
+                            right,
+                            Vector3Negate(right),
+                            cubeUp,
+                            emitterUp,
+                            forward}};
+            faceDirection = rectFaceDirections[
+                    static_cast<std::size_t>(matrix.cubeFace)];
         }
         const Vector3 center = SectorAabb3Center(bounds);
         const Vector3 halfExtents = Vector3Scale(
@@ -164,9 +189,9 @@ bool ShadowLightIntersectsBounds(
         if (distanceSquared <= boundsRadius * boundsRadius) return true;
         const float axialDistance = Vector3DotProduct(
                 fromLight,
-                FaceDirections[static_cast<std::size_t>(matrix.pointFace)]);
+                faceDirection);
         if (axialDistance < -boundsRadius
-                || axialDistance > light.radius + boundsRadius) {
+                || axialDistance > matrix.lightRadius + boundsRadius) {
             return false;
         }
         const float radialDistance = std::sqrt(std::max(
@@ -845,8 +870,8 @@ void SectorDynamicLightingRenderer::RefreshShadowTileRequirements()
         }
     }
 
-    // Both point-light hemispheres form one cache entry and must always be
-    // rebuilt together. Give both slots the oldest serial in the pair.
+    // Multi-face point and rect shadows form one cache entry and must always be
+    // rebuilt together. Give every face the oldest serial in its span.
     for (const SectorPreviewDynamicSpotLightShadowCaster& caster : shadowCasters) {
         if (caster.shadowSlot < 0 || caster.shadowSlotCount <= 0) continue;
         uint64_t serial = 0;
@@ -928,7 +953,8 @@ SectorBillboardDynamicLightContext SectorDynamicLightingRenderer::BuildLightCont
         }
         const int shadowSlot = globalShadowSlots[selectedIndex];
         context.shadowUniforms.dynamicLightShadowSlots[localIndex] = shadowSlot;
-        if (light.kind == SectorPreviewDynamicLightKind::Point
+        if ((light.kind == SectorPreviewDynamicLightKind::Point
+                    || light.kind == SectorPreviewDynamicLightKind::Rect)
                 && shadowSlot >= 0
                 && static_cast<std::size_t>(shadowSlot)
                         < context.shadowUniforms.shadowStrength.size()
@@ -1051,9 +1077,8 @@ SectorPreviewDynamicSpotLightShadowUniforms SectorDynamicLightingRenderer::PackS
         }
         const ShadowAtlasTileState& state =
                 shadowAtlasTileStates[static_cast<std::size_t>(slot)];
-        const int requiredSlots = selectedLights[lightIndex].kind
-                        == SectorPreviewDynamicLightKind::Point
-                ? DynamicPointLightShadowFaceCount : 1;
+        const int requiredSlots = SectorDynamicShadowFaceCount(
+                selectedLights[lightIndex].kind);
         bool valid = state.assigned && state.valid;
         for (int offset = 1; valid && offset < requiredSlots; ++offset) {
             const std::size_t adjacent = static_cast<std::size_t>(slot + offset);
@@ -1535,10 +1560,20 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
         if (valid) ++shadowRenderStats.validLights;
         shadowRenderStats.occupiedTiles +=
                 static_cast<std::size_t>(caster.shadowSlotCount);
-        if (caster.shadowSlotCount == DynamicPointLightShadowFaceCount) {
+        const SectorPreviewDynamicLightKind lightKind =
+                caster.dynamicLightIndex >= 0
+                        && static_cast<std::size_t>(caster.dynamicLightIndex)
+                                < selectedLights.size()
+                ? selectedLights[static_cast<std::size_t>(
+                        caster.dynamicLightIndex)].kind
+                : SectorPreviewDynamicLightKind::Spot;
+        if (lightKind == SectorPreviewDynamicLightKind::Point) {
             ++shadowRenderStats.pointLights;
+        } else if (lightKind == SectorPreviewDynamicLightKind::Rect) {
+            ++shadowRenderStats.rectLights;
+        } else {
+            ++shadowRenderStats.spotLights;
         }
-        else ++shadowRenderStats.spotLights;
         if (!dirty) continue;
         ++shadowRenderStats.dirtyLights;
         pendingShadowLightUpdates.push_back(SectorDynamicShadowUpdateRequest{
