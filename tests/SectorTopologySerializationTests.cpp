@@ -931,13 +931,6 @@ void TestDynamicSpotLightRoundTrip()
 
 void TestLightAtmosphereRoundTripAndDefaultOmission()
 {
-    const game::SectorLightHazeSettings hazeDefaults;
-    Check(Near(hazeDefaults.noiseAmount, 0.65f)
-                  && Near(hazeDefaults.noiseScaleWorld, 0.5f)
-                  && Near(hazeDefaults.heightOffsetWorld, 0.0f)
-                  && Near(hazeDefaults.flowSpeedWorld, 0.20f),
-          "light haze defaults provide readable coherent movement");
-
     SectorTopologyMap defaults = MakeSquare();
     defaults.staticLights.push_back(SectorTopologyStaticPointLight{});
     defaults.staticLights.back().id = 1;
@@ -953,14 +946,6 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
                   && !defaultJson["dynamicPointLights"][0].contains("atmosphere")
                   && !defaultJson["dynamicSpotLights"][0].contains("atmosphere"),
           "default-disabled light atmosphere is omitted for every light variant");
-    SectorTopologyMap defaultOffset = MakeSquare();
-    defaultOffset.staticLights.push_back(SectorTopologyStaticPointLight{});
-    defaultOffset.staticLights.back().id = 5;
-    defaultOffset.staticLights.back().atmosphere.haze.enabled = true;
-    const Json defaultOffsetJson = Json::parse(SaveText(defaultOffset));
-    Check(!defaultOffsetJson["staticLights"][0]["atmosphere"]["haze"].contains(
-                  "heightOffsetWorld"),
-          "default zero haze height offset is omitted");
     SectorTopologyMap defaultOpacity = MakeSquare();
     defaultOpacity.staticSpotLights.push_back(SectorTopologyStaticSpotLight{});
     defaultOpacity.staticSpotLights.back().id = 6;
@@ -978,16 +963,6 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
           "default proxy maximum extinction and placement offsets are omitted");
 
     game::SectorLightAtmosphereSettings atmosphere;
-    atmosphere.haze.enabled = true;
-    atmosphere.haze.extentScale = 0.75f;
-    atmosphere.haze.heightOffsetWorld = 0.65f;
-    atmosphere.haze.density = 0.125f;
-    atmosphere.haze.scatteringTint = Color{210, 225, 240, 255};
-    atmosphere.haze.edgeSoftness = 0.45f;
-    atmosphere.haze.noiseAmount = 0.6f;
-    atmosphere.haze.noiseScaleWorld = 2.5f;
-    atmosphere.haze.flowDirectionDegrees = 35.0f;
-    atmosphere.haze.flowSpeedWorld = 0.08f;
     atmosphere.proxy.halo.enabled = true;
     atmosphere.proxy.halo.radiusWorld = 1.25f;
     atmosphere.proxy.halo.centerOffsetWorld = Vector3{0.25f, -0.5f, 0.75f};
@@ -1021,17 +996,15 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
             && saved["dynamicPointLights"][0].contains("atmosphere")
             && saved["dynamicSpotLights"][0].contains("atmosphere");
     Check(allVariantsHaveAtmosphere,
-          "enabled haze and dust serialize for every light variant");
+          "enabled light atmosphere serializes for every light variant");
     if (allVariantsHaveAtmosphere) {
         const Json& staticAtmosphere = saved["staticLights"][0]["atmosphere"];
-        Check(staticAtmosphere.contains("haze") && staticAtmosphere.contains("proxy")
+        Check(staticAtmosphere.contains("proxy")
                       && staticAtmosphere.contains("dust"),
-              "enabled atmosphere serializes haze, proxy, and dust blocks");
-        if (staticAtmosphere.contains("haze") && staticAtmosphere.contains("proxy")
+              "enabled atmosphere serializes only proxy and dust blocks");
+        if (staticAtmosphere.contains("proxy")
                 && staticAtmosphere.contains("dust")) {
-            Check(staticAtmosphere["haze"].value("enabled", false)
-                          && Near(staticAtmosphere["haze"].value("heightOffsetWorld", 0.0f), 0.65f)
-                          && staticAtmosphere["proxy"]["halo"].value("enabled", false)
+            Check(staticAtmosphere["proxy"]["halo"].value("enabled", false)
                           && staticAtmosphere["proxy"]["halo"].contains("centerOffsetWorld")
                           && Near(staticAtmosphere["proxy"]["halo"].value("maxExtinction", 0.0f), 0.6f)
                           && staticAtmosphere["proxy"]["halo"].contains("scatteringTint")
@@ -1047,26 +1020,9 @@ void TestLightAtmosphereRoundTripAndDefaultOmission()
 
     SectorTopologyMap loaded;
     std::string error;
-    Json omittedNoise = defaultJson;
-    omittedNoise["staticLights"][0]["atmosphere"]["haze"] = Json{{"enabled", true}};
-    Check(LoadText(omittedNoise.dump(), loaded, error),
-          "light haze with omitted noise settings loads");
-    Check(loaded.staticLights.size() == 1
-                  && Near(loaded.staticLights[0].atmosphere.haze.noiseAmount, 0.65f)
-                  && Near(loaded.staticLights[0].atmosphere.haze.noiseScaleWorld, 0.5f)
-                  && Near(loaded.staticLights[0].atmosphere.haze.heightOffsetWorld, 0.0f)
-                  && Near(loaded.staticLights[0].atmosphere.haze.flowSpeedWorld, 0.20f),
-          "omitted light haze noise settings use the new global defaults");
     Check(LoadText(text, loaded, error), "light atmosphere JSON loads");
     const auto checkAtmosphere = [](const game::SectorLightAtmosphereSettings& value) {
-        return value.haze.enabled
-                && Near(value.haze.extentScale, 0.75f)
-                && Near(value.haze.heightOffsetWorld, 0.65f)
-                && Near(value.haze.density, 0.125f)
-                && value.haze.scatteringTint.r == 210
-                && Near(value.haze.flowDirectionDegrees, 35.0f)
-                && Near(value.haze.flowSpeedWorld, 0.08f)
-                && value.proxy.halo.enabled
+        return value.proxy.halo.enabled
                 && Near(value.proxy.halo.radiusWorld, 1.25f)
                 && Near(value.proxy.halo.centerOffsetWorld.x, 0.25f)
                 && Near(value.proxy.halo.centerOffsetWorld.y, -0.5f)

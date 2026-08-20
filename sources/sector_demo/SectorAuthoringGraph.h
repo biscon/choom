@@ -75,7 +75,6 @@ struct SectorAuthoringFogVolume {
     SectorCoord x = 0;
     SectorCoord y = 0;
     bool enabled = true;
-    SectorLocalFogRenderMode renderMode = SectorLocalFogRenderMode::Raymarched;
     SectorLocalFogShape shape = SectorLocalFogShape::Ellipsoid;
     SectorAnalyticFogStyle analyticStyle = SectorAnalyticFogStyle::Cloudy;
     float yawDegrees = 0.0f;
@@ -84,7 +83,6 @@ struct SectorAuthoringFogVolume {
     float radiusZWorld = 1.5f;
     float heightWorld = 0.65f;
     Color color = Color{105, 116, 110, 255};
-    float density = 0.65f;
     float maxOpacity = 0.75f;
     float analyticStartDistanceWorld = 0.0f;
     float analyticEndDistanceWorld = 2.0f;

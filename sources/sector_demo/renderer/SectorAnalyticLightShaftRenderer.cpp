@@ -293,7 +293,6 @@ bool SectorAnalyticLightShaftRenderer::Apply(
         RenderTexture2D& sceneTarget,
         RenderTexture2D& colorOnlyTarget,
         const SectorTopologyFogSettings& sourceFogSettings,
-        SectorVolumetricQuality quality,
         const Camera3D& camera,
         const SectorBillboardDynamicLightContext& dynamicLights,
         const std::vector<SectorLightAtmosphereSource>& sources,
@@ -303,7 +302,7 @@ bool SectorAnalyticLightShaftRenderer::Apply(
     eligibleCount = activeCount = drawCallCount = 0;
     scissorCoverage = 0.0f;
     visibleShafts.clear();
-    if (quality == SectorVolumetricQuality::Off || sources.empty()
+    if (sources.empty()
             || sceneTarget.depth.id == 0 || colorOnlyTarget.id == 0 || !EnsureShader()) return false;
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());
@@ -328,7 +327,7 @@ bool SectorAnalyticLightShaftRenderer::Apply(
                     settings.lengthScale,
                     settings.originOffsetWorld,
                     volume)) continue;
-        // The shared volume helper has a haze-oriented 0.05 lower scale bound;
+        // The shared volume helper has a general 0.05 lower scale bound;
         // shafts deliberately support the authored 0.01 minimum.
         const float authoredExtent = source.rangeWorld * settings.lengthScale;
         if (!std::isfinite(authoredExtent) || authoredExtent <= 0.0f) continue;

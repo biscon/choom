@@ -2,7 +2,6 @@
 
 #include "sector_demo/SectorPortalVisibility.h"
 #include "sector_demo/SectorTopologyMap.h"
-#include "sector_demo/SectorVolumetricQuality.h"
 #include "sector_demo/renderer/SectorAtmosphereCulling.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
@@ -23,7 +22,6 @@ public:
             RenderTexture2D& sceneTarget,
             RenderTexture2D& colorOnlyTarget,
             const SectorTopologyFogSettings& fogSettings,
-            SectorVolumetricQuality quality,
             const Camera3D& camera,
             const SectorBillboardDynamicLightContext& dynamicLights,
             const std::vector<SectorLightAtmosphereSource>& sources,

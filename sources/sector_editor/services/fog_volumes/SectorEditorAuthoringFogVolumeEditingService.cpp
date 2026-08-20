@@ -235,8 +235,7 @@ int SectorEditorAuthoringFogVolumeEditingService::FindAtMapPoint(
         const float radiusY = SectorWorldToAuthoringDistance(volume.radiusZWorld) + extraToleranceMap;
         const float dx = mapPoint.x - center.x;
         const float dy = mapPoint.y - center.y;
-        const bool boxShape = volume.renderMode == SectorLocalFogRenderMode::Analytic
-                && volume.shape == SectorLocalFogShape::Box;
+        const bool boxShape = volume.shape == SectorLocalFogShape::Box;
         bool contains = false;
         if (boxShape) {
             const float yaw = volume.yawDegrees * DEG2RAD;

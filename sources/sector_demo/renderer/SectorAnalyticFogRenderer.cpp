@@ -450,7 +450,6 @@ bool SectorAnalyticFogRenderer::Apply(
         RenderTexture2D& sceneTarget,
         RenderTexture2D& colorOnlyTarget,
         const SectorTopologyMap& map,
-        SectorVolumetricQuality quality,
         const Camera3D& camera,
         float runtimeSeconds,
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes)
@@ -459,7 +458,7 @@ bool SectorAnalyticFogRenderer::Apply(
     activeCount = 0;
     scissorCoverage = 0.0f;
     visibleVolumes.clear();
-    if (quality == SectorVolumetricQuality::Off || sceneTarget.texture.id == 0
+    if (sceneTarget.texture.id == 0
             || sceneTarget.depth.id == 0 || colorOnlyTarget.id == 0) return false;
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());
@@ -474,8 +473,7 @@ bool SectorAnalyticFogRenderer::Apply(
     const float tanHalfFov = std::tan(camera.fovy * DEG2RAD * 0.5f);
     SectorAtmosphereScissorRect unionScissor{};
     for (const SectorCompiledLocalFogVolume& volume : map.compiledLocalFogVolumes) {
-        if (!volume.enabled || volume.renderMode != SectorLocalFogRenderMode::Analytic
-                || volume.maxOpacity <= 0.0f) continue;
+        if (!volume.enabled || volume.maxOpacity <= 0.0f) continue;
         const bool roomStyle = volume.analyticStyle == SectorAnalyticFogStyle::Room;
         const float edgeExpansion = roomStyle
                 ? 0.0f

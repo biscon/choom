@@ -1571,20 +1571,6 @@
         "a": 255
       },
       "atmosphere": {
-        "haze": {
-          "extentScale": 0.3499999940395355,
-          "density": 0.019999999552965164,
-          "scatteringTint": {
-            "r": 210,
-            "g": 200,
-            "b": 190,
-            "a": 255
-          },
-          "edgeSoftness": 0.5,
-          "noiseAmount": 0.75,
-          "flowDirectionDegrees": 90.0,
-          "flowSpeedWorld": 0.25
-        },
         "proxy": {
           "halo": {
             "enabled": true,
@@ -1635,17 +1621,6 @@
         "a": 255
       },
       "atmosphere": {
-        "haze": {
-          "extentScale": 0.30000001192092896,
-          "density": 0.02500000037252903,
-          "scatteringTint": {
-            "r": 255,
-            "g": 225,
-            "b": 100,
-            "a": 255
-          },
-          "edgeSoftness": 0.5
-        },
         "proxy": {
           "halo": {
             "enabled": true,
@@ -1694,20 +1669,6 @@
         "g": 50,
         "b": 15,
         "a": 255
-      },
-      "atmosphere": {
-        "haze": {
-          "extentScale": 0.3499999940395355,
-          "density": 0.10000000149011612,
-          "scatteringTint": {
-            "r": 255,
-            "g": 50,
-            "b": 15,
-            "a": 255
-          },
-          "edgeSoftness": 0.8999999761581421,
-          "noiseAmount": 1.0
-        }
       }
     },
     {
@@ -1727,17 +1688,6 @@
         "a": 255
       },
       "atmosphere": {
-        "haze": {
-          "extentScale": 0.30000001192092896,
-          "density": 0.10000000149011612,
-          "scatteringTint": {
-            "r": 155,
-            "g": 145,
-            "b": 140,
-            "a": 255
-          },
-          "edgeSoftness": 0.5
-        },
         "proxy": {
           "halo": {
             "enabled": true,
@@ -1776,17 +1726,6 @@
         "a": 255
       },
       "atmosphere": {
-        "haze": {
-          "extentScale": 0.30000001192092896,
-          "density": 0.10000000149011612,
-          "scatteringTint": {
-            "r": 155,
-            "g": 145,
-            "b": 135,
-            "a": 255
-          },
-          "edgeSoftness": 0.5
-        },
         "proxy": {
           "halo": {
             "enabled": true,
@@ -3282,17 +3221,6 @@
       "innerConeDegrees": 25.0,
       "outerConeDegrees": 45.0,
       "atmosphere": {
-        "haze": {
-          "extentScale": 0.5,
-          "heightOffsetWorld": 0.25,
-          "density": 0.009999999776482582,
-          "scatteringTint": {
-            "r": 200,
-            "g": 190,
-            "b": 145,
-            "a": 255
-          }
-        },
         "proxy": {
           "shaft": {
             "enabled": true,
@@ -3350,16 +3278,6 @@
         "a": 255
       },
       "atmosphere": {
-        "haze": {
-          "extentScale": 0.5,
-          "density": 0.4000000059604645,
-          "scatteringTint": {
-            "r": 255,
-            "g": 50,
-            "b": 15,
-            "a": 255
-          }
-        },
         "proxy": {
           "shaft": {
             "enabled": true,
@@ -3402,17 +3320,6 @@
       "innerConeDegrees": 35.0,
       "outerConeDegrees": 45.0,
       "atmosphere": {
-        "haze": {
-          "extentScale": 0.30000001192092896,
-          "density": 0.05000000074505806,
-          "scatteringTint": {
-            "r": 255,
-            "g": 245,
-            "b": 90,
-            "a": 255
-          },
-          "edgeSoftness": 0.5
-        },
         "proxy": {
           "shaft": {
             "enabled": true,
@@ -3470,18 +3377,6 @@
       },
       "innerConeDegrees": 25.0,
       "atmosphere": {
-        "haze": {
-          "extentScale": 0.6000000238418579,
-          "heightOffsetWorld": 0.25,
-          "density": 0.02500000037252903,
-          "scatteringTint": {
-            "r": 255,
-            "g": 245,
-            "b": 230,
-            "a": 255
-          },
-          "edgeSoftness": 0.44999998807907104
-        },
         "proxy": {
           "shaft": {
             "enabled": true,
@@ -3540,18 +3435,6 @@
       },
       "innerConeDegrees": 25.0,
       "atmosphere": {
-        "haze": {
-          "extentScale": 0.6000000238418579,
-          "heightOffsetWorld": 0.25,
-          "density": 0.02500000037252903,
-          "scatteringTint": {
-            "r": 255,
-            "g": 245,
-            "b": 230,
-            "a": 255
-          },
-          "edgeSoftness": 0.44999998807907104
-        },
         "proxy": {
           "halo": {
             "radiusWorld": 0.25,
@@ -3733,19 +3616,6 @@
       "castsShadow": true,
       "shadowSoftness": 4.0,
       "atmosphere": {
-        "haze": {
-          "extentScale": 0.6000000238418579,
-          "heightOffsetWorld": 0.25,
-          "density": 0.0020000000949949026,
-          "scatteringTint": {
-            "r": 255,
-            "g": 245,
-            "b": 235,
-            "a": 255
-          },
-          "noiseScaleWorld": 0.3499999940395355,
-          "flowSpeedWorld": 0.15000000596046448
-        },
         "proxy": {
           "shaft": {
             "enabled": true,
@@ -3809,18 +3679,6 @@
       "shadowStrength": 0.75,
       "shadowSoftness": 2.0,
       "atmosphere": {
-        "haze": {
-          "extentScale": 0.30000001192092896,
-          "heightOffsetWorld": 0.25,
-          "density": 0.004999999888241291,
-          "scatteringTint": {
-            "r": 155,
-            "g": 155,
-            "b": 155,
-            "a": 255
-          },
-          "noiseAmount": 0.44999998807907104
-        },
         "proxy": {
           "halo": {
             "radiusWorld": 1.0,
@@ -16917,7 +16775,6 @@
         "id": 1,
         "x": 64,
         "y": 1472,
-        "renderMode": "analytic",
         "yawDegrees": 135.0,
         "bottomOffsetWorld": -0.5,
         "radiusXWorld": 1.2000000476837158,
@@ -16929,7 +16786,6 @@
           "b": 140,
           "a": 255
         },
-        "density": 1.7000000476837158,
         "maxOpacity": 0.800000011920929,
         "analyticFalloffExponent": 2.0,
         "edgeSoftness": 1.0,
@@ -16942,7 +16798,6 @@
         "id": 2,
         "x": 64,
         "y": 832,
-        "renderMode": "analytic",
         "yawDegrees": 35.0,
         "bottomOffsetWorld": -0.5,
         "radiusXWorld": 1.0,
@@ -16954,7 +16809,6 @@
           "b": 205,
           "a": 255
         },
-        "density": 1.5,
         "maxOpacity": 0.5,
         "analyticFalloffExponent": 2.0,
         "edgeSoftness": 1.0,
@@ -16967,7 +16821,6 @@
         "id": 3,
         "x": 64,
         "y": 192,
-        "renderMode": "analytic",
         "yawDegrees": 65.0,
         "bottomOffsetWorld": -0.5,
         "radiusXWorld": 1.0,
@@ -16979,7 +16832,6 @@
           "b": 210,
           "a": 255
         },
-        "density": 1.75,
         "maxOpacity": 0.800000011920929,
         "analyticFalloffExponent": 2.0,
         "edgeSoftness": 1.0,
@@ -16992,7 +16844,6 @@
         "id": 4,
         "x": 64,
         "y": -528,
-        "renderMode": "analytic",
         "shape": "box",
         "analyticStyle": "room",
         "bottomOffsetWorld": 0.0,

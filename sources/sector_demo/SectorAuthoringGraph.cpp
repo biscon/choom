@@ -20,8 +20,6 @@ constexpr float FogRadiusMin = 0.05f;
 constexpr float FogRadiusMax = 64.0f;
 constexpr float FogHeightMin = 0.05f;
 constexpr float FogHeightMax = 32.0f;
-constexpr float FogDensityMin = 0.0f;
-constexpr float FogDensityMax = 8.0f;
 constexpr float FogOpacityMin = 0.0f;
 constexpr float FogOpacityMax = 1.0f;
 constexpr float FogSoftnessMin = 0.0f;
@@ -1769,7 +1767,6 @@ void CompileAuthoringFogVolumes(
         compiled.sourceAuthoringFogVolumeId = volume.id;
         compiled.topologySectorId = sector->id;
         compiled.enabled = volume.enabled;
-        compiled.renderMode = volume.renderMode;
         compiled.shape = volume.shape;
         compiled.analyticStyle = volume.analyticStyle;
         compiled.yawRadians = volume.yawDegrees * DEG2RAD;
@@ -1784,7 +1781,6 @@ void CompileAuthoringFogVolumes(
                 volume.heightWorld * 0.5f,
                 volume.radiusZWorld};
         compiled.color = volume.color;
-        compiled.density = volume.density;
         compiled.maxOpacity = volume.maxOpacity;
         compiled.analyticStartDistanceWorld = volume.analyticStartDistanceWorld;
         compiled.analyticEndDistanceWorld = volume.analyticEndDistanceWorld;
@@ -2053,7 +2049,6 @@ SectorAuthoringFogVolume NormalizeSectorAuthoringFogVolume(SectorAuthoringFogVol
     volume.heightWorld = ClampFiniteFogValue(
             volume.heightWorld, FogHeightMin, FogHeightMax, defaults.heightWorld);
     volume.color.a = 255;
-    volume.density = ClampFiniteFogValue(volume.density, FogDensityMin, FogDensityMax, defaults.density);
     volume.maxOpacity = ClampFiniteFogValue(
             volume.maxOpacity, FogOpacityMin, FogOpacityMax, defaults.maxOpacity);
     volume.analyticStartDistanceWorld = ClampFiniteFogValue(
@@ -2370,7 +2365,6 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
                 volume.radiusXWorld,
                 volume.radiusZWorld,
                 volume.heightWorld,
-                volume.density,
                 volume.maxOpacity,
                 volume.analyticStartDistanceWorld,
                 volume.analyticEndDistanceWorld,
@@ -2390,7 +2384,6 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
                 || volume.radiusXWorld < FogRadiusMin || volume.radiusXWorld > FogRadiusMax
                 || volume.radiusZWorld < FogRadiusMin || volume.radiusZWorld > FogRadiusMax
                 || volume.heightWorld < FogHeightMin || volume.heightWorld > FogHeightMax
-                || volume.density < FogDensityMin || volume.density > FogDensityMax
                 || volume.maxOpacity < FogOpacityMin || volume.maxOpacity > FogOpacityMax
                 || volume.analyticStartDistanceWorld < 0.0f
                 || volume.analyticEndDistanceWorld <= volume.analyticStartDistanceWorld

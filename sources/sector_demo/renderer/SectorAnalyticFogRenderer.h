@@ -1,7 +1,6 @@
 #pragma once
 
 #include "sector_demo/SectorTopologyMap.h"
-#include "sector_demo/SectorVolumetricQuality.h"
 #include "sector_demo/renderer/SectorAtmosphereCulling.h"
 #include "sector_demo/renderer/SectorLocalFogLighting.h"
 
@@ -20,7 +19,6 @@ public:
             RenderTexture2D& sceneTarget,
             RenderTexture2D& colorOnlyTarget,
             const SectorTopologyMap& map,
-            SectorVolumetricQuality quality,
             const Camera3D& camera,
             float runtimeSeconds,
             const SectorBakedObjectLightProbeRuntimeData& objectLightProbes);

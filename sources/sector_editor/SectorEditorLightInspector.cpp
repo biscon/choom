@@ -27,17 +27,7 @@ bool SameLightAtmosphere(
 {
     const SectorLightAtmosphereSettings a = NormalizeSectorLightAtmosphereSettings(left);
     const SectorLightAtmosphereSettings b = NormalizeSectorLightAtmosphereSettings(right);
-    return a.haze.enabled == b.haze.enabled
-            && a.haze.extentScale == b.haze.extentScale
-            && a.haze.heightOffsetWorld == b.haze.heightOffsetWorld
-            && a.haze.density == b.haze.density
-            && SameColor(a.haze.scatteringTint, b.haze.scatteringTint)
-            && a.haze.edgeSoftness == b.haze.edgeSoftness
-            && a.haze.noiseAmount == b.haze.noiseAmount
-            && a.haze.noiseScaleWorld == b.haze.noiseScaleWorld
-            && a.haze.flowDirectionDegrees == b.haze.flowDirectionDegrees
-            && a.haze.flowSpeedWorld == b.haze.flowSpeedWorld
-            && a.proxy.halo.enabled == b.proxy.halo.enabled
+    return a.proxy.halo.enabled == b.proxy.halo.enabled
             && a.proxy.halo.radiusWorld == b.proxy.halo.radiusWorld
             && SameVector3(a.proxy.halo.centerOffsetWorld, b.proxy.halo.centerOffsetWorld)
             && a.proxy.halo.brightness == b.proxy.halo.brightness
@@ -136,8 +126,7 @@ float LightAtmosphereInspectorContentHeight(
         const SectorLightAtmosphereSettings& atmosphere,
         bool spotLight)
 {
-    float height = 3.0f * 26.0f + 3.0f * (rowH + gap);
-    if (atmosphere.haze.enabled) height += 11.0f * (rowH + gap);
+    float height = 2.0f * 26.0f + 2.0f * (rowH + gap);
     if (atmosphere.proxy.halo.enabled) height += 11.0f * (rowH + gap);
     if (spotLight) {
         height += rowH + gap;
@@ -225,79 +214,49 @@ void DrawLightAtmosphereInspector(
     };
 
     engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 22.0f}, font,
-            "Atmosphere: Raymarched haze", engine::UITextJustify::Left, config.textColor);
-    y += 26.0f;
-    if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_haze_enabled",
-            Rectangle{0.0f, y, contentW, rowH}, font, "Haze enabled", atmosphere.haze.enabled)) {
-        commit();
-    }
-    y += rowH + gap;
-    if (atmosphere.haze.enabled) {
-        drawFloat("sector_editor_light_haze_extent", "Extent scale:", atmosphere.haze.extentScale,
-                uiState.lightHazeExtentScaleInput, 0.05f, 2.0f, 3);
-        drawFloat("sector_editor_light_haze_height_offset", "Y offset (m):", atmosphere.haze.heightOffsetWorld,
-                uiState.lightHazeHeightOffsetInput, -100000.0f, 100000.0f, 3);
-        drawFloat("sector_editor_light_haze_density", "Density:", atmosphere.haze.density,
-                uiState.lightHazeDensityInput, 0.0f, 2.0f, 3);
-        drawFloat("sector_editor_light_haze_edge", "Edge softness:", atmosphere.haze.edgeSoftness,
-                uiState.lightHazeEdgeSoftnessInput, 0.01f, 1.0f, 3);
-        drawFloat("sector_editor_light_haze_noise", "Noise amount:", atmosphere.haze.noiseAmount,
-                uiState.lightHazeNoiseAmountInput, 0.0f, 1.0f, 3);
-        drawFloat("sector_editor_light_haze_noise_scale", "Noise scale (m):", atmosphere.haze.noiseScaleWorld,
-                uiState.lightHazeNoiseScaleInput, 0.05f, 16.0f, 3);
-        drawFloat("sector_editor_light_haze_flow_direction", "Flow direction:", atmosphere.haze.flowDirectionDegrees,
-                uiState.lightHazeFlowDirectionInput, -360.0f, 360.0f, 2);
-        drawFloat("sector_editor_light_haze_flow_speed", "Flow speed (m/s):", atmosphere.haze.flowSpeedWorld,
-                uiState.lightHazeFlowSpeedInput, 0.0f, 2.0f, 3);
-        drawChannel("sector_editor_light_haze_r", "Tint R:", atmosphere.haze.scatteringTint.r, uiState.lightHazeRedInput);
-        drawChannel("sector_editor_light_haze_g", "Tint G:", atmosphere.haze.scatteringTint.g, uiState.lightHazeGreenInput);
-        drawChannel("sector_editor_light_haze_b", "Tint B:", atmosphere.haze.scatteringTint.b, uiState.lightHazeBlueInput);
-    }
-
-    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 22.0f}, font,
-            "Atmosphere: Cheap lighting", engine::UITextJustify::Left, config.textColor);
+            "Atmosphere", engine::UITextJustify::Left, config.textColor);
     y += 26.0f;
     if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_proxy_halo_enabled",
-            Rectangle{0.0f, y, contentW, rowH}, font, "Analytic halo enabled", atmosphere.proxy.halo.enabled)) {
+            Rectangle{0.0f, y, contentW, rowH}, font, "Haze enabled", atmosphere.proxy.halo.enabled)) {
         commit();
     }
     y += rowH + gap;
     if (atmosphere.proxy.halo.enabled) {
-        drawFloat("sector_editor_light_proxy_halo_radius", "Halo radius (m):",
+        drawFloat("sector_editor_light_proxy_halo_radius", "Haze radius (m):",
                 atmosphere.proxy.halo.radiusWorld, uiState.lightProxyHaloRadiusInput, 0.01f, 64.0f, 3);
-        drawFloat("sector_editor_light_proxy_halo_offset_x", "Halo offset X (m):",
+        drawFloat("sector_editor_light_proxy_halo_offset_x", "Haze offset X (m):",
                 atmosphere.proxy.halo.centerOffsetWorld.x,
                 uiState.lightProxyHaloOffsetXInput, -100000.0f, 100000.0f, 3);
-        drawFloat("sector_editor_light_proxy_halo_offset_y", "Halo offset Y (m):",
+        drawFloat("sector_editor_light_proxy_halo_offset_y", "Haze offset Y (m):",
                 atmosphere.proxy.halo.centerOffsetWorld.y,
                 uiState.lightProxyHaloOffsetYInput, -100000.0f, 100000.0f, 3);
-        drawFloat("sector_editor_light_proxy_halo_offset_z", "Halo offset Z (m):",
+        drawFloat("sector_editor_light_proxy_halo_offset_z", "Haze offset Z (m):",
                 atmosphere.proxy.halo.centerOffsetWorld.z,
                 uiState.lightProxyHaloOffsetZInput, -100000.0f, 100000.0f, 3);
         if (engine::Button(ui, config, input, assets,
                     "sector_editor_light_proxy_halo_offset_reset",
-                    Rectangle{0.0f, y, contentW, rowH}, font, "Reset halo offset")) {
+                    Rectangle{0.0f, y, contentW, rowH}, font, "Reset haze offset")) {
             atmosphere.proxy.halo.centerOffsetWorld = {};
             commit();
         }
         y += rowH + gap;
-        drawFloat("sector_editor_light_proxy_halo_brightness", "Halo brightness:",
+        drawFloat("sector_editor_light_proxy_halo_brightness", "Haze brightness:",
                 atmosphere.proxy.halo.brightness, uiState.lightProxyHaloBrightnessInput, 0.0f, 16.0f, 3);
         drawFloat("sector_editor_light_proxy_halo_max_extinction", "Maximum extinction:",
                 atmosphere.proxy.halo.maxExtinction,
                 uiState.lightProxyHaloMaxExtinctionInput, 0.0f, 1.0f, 3);
-        drawFloat("sector_editor_light_proxy_halo_softness", "Halo softness:",
+        drawFloat("sector_editor_light_proxy_halo_softness", "Haze softness:",
                 atmosphere.proxy.halo.edgeSoftness, uiState.lightProxyHaloSoftnessInput, 0.01f, 1.0f, 3);
-        drawChannel("sector_editor_light_proxy_halo_r", "Halo tint R:",
+        drawChannel("sector_editor_light_proxy_halo_r", "Haze tint R:",
                 atmosphere.proxy.halo.scatteringTint.r, uiState.lightProxyHaloRedInput);
-        drawChannel("sector_editor_light_proxy_halo_g", "Halo tint G:",
+        drawChannel("sector_editor_light_proxy_halo_g", "Haze tint G:",
                 atmosphere.proxy.halo.scatteringTint.g, uiState.lightProxyHaloGreenInput);
-        drawChannel("sector_editor_light_proxy_halo_b", "Halo tint B:",
+        drawChannel("sector_editor_light_proxy_halo_b", "Haze tint B:",
                 atmosphere.proxy.halo.scatteringTint.b, uiState.lightProxyHaloBlueInput);
     }
     if (spotLight) {
         if (engine::Checkbox(ui, config, input, assets, "sector_editor_light_proxy_shaft_enabled",
-                Rectangle{0.0f, y, contentW, rowH}, font, "Analytic shaft enabled", atmosphere.proxy.shaft.enabled)) {
+                Rectangle{0.0f, y, contentW, rowH}, font, "Shaft enabled", atmosphere.proxy.shaft.enabled)) {
             commit();
         }
         y += rowH + gap;

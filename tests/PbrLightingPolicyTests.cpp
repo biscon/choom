@@ -476,8 +476,6 @@ void TestDistanceFogUsesDarknessGatedScattering()
 void TestHdrEffectShaderAndPassPolicies()
 {
     const std::string bloom=ReadSource(BLOOM_SHADER_SOURCE_PATH);
-    const std::string fog=ReadSource(LOCAL_FOG_SHADER_SOURCE_PATH);
-    const std::string haze=ReadSource(HAZE_SHADER_SOURCE_PATH);
     const std::string distanceFog=ReadSource(DISTANCE_FOG_SHADER_SOURCE_PATH);
     const std::string analyticFog=ReadSource(ANALYTIC_FOG_SHADER_SOURCE_PATH);
     const std::string analyticShaft=ReadSource(ANALYTIC_SHAFT_SHADER_SOURCE_PATH);
@@ -489,8 +487,8 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::string dynamicModelShadows=ReadSource(DYNAMIC_MODEL_SHADOW_SOURCE_PATH);
     const std::string dynamicLightingShadows=ReadSource(
             DYNAMIC_LIGHTING_SHADOW_SOURCE_PATH);
-    Check(!bloom.empty()&&!fog.empty()&&!haze.empty()&&!distanceFog.empty()
-                    &&!analyticFog.empty()&&!analyticShaft.empty()&&!lightProxy.empty()&&!dust.empty()
+    Check(!bloom.empty()&&!distanceFog.empty()&&!analyticFog.empty()
+                    &&!analyticShaft.empty()&&!lightProxy.empty()&&!dust.empty()
                     &&!muzzle.empty()&&!mainGraph.empty()&&!dynamicModelShadows.empty()
                     &&!dynamicLightingShadows.empty(),
           "HDR effect policy can read every affected shader and pass graph");
@@ -506,7 +504,7 @@ void TestHdrEffectShaderAndPassPolicies()
                     && analyticShaft.find("rlEnableScissorTest") != std::string::npos
                     && analyticShaft.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos
                     && lightProxy.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos,
-          "cheap atmosphere paths use scissored analytic work and premultiplied compositing");
+          "atmosphere paths use scissored closed-form work and premultiplied compositing");
     Check(lightProxy.find("float visibleChord = max(exitT - enterT, 0.0);")
                             != std::string::npos
                     && lightProxy.find("float opticalThickness = 1.0 - exp(")
@@ -544,7 +542,7 @@ void TestHdrEffectShaderAndPassPolicies()
                     && lightProxy.find(
                             "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
                             != std::string::npos,
-          "analytic fog and proxies preserve depth bindings across render-batch flushes");
+          "fog, haze, and shaft effects preserve depth bindings across render-batch flushes");
     Check(analyticFog.find("bool intersectBox(") != std::string::npos
                     && analyticFog.find("uniform int fogShape") != std::string::npos
                     && analyticFog.find("uniform int fogStyle") != std::string::npos
@@ -596,55 +594,22 @@ void TestHdrEffectShaderAndPassPolicies()
                             == std::string::npos
                     && analyticFog.find("dynamicLightCount") == std::string::npos
                     && analyticFog.find("for (int stepIndex") == std::string::npos,
-          "analytic fog separates shape from style with feathered noisy silhouettes, filtered fixed interior taps, conservative bounds, alpha blending, and cached baked lighting without marching or dynamic-light loops");
+          "fog separates shape from style with feathered noisy silhouettes, filtered fixed interior taps, conservative bounds, alpha blending, and cached baked lighting without marching or dynamic-light loops");
     Check(bloom.find("Rgba8Unorm")==std::string::npos
-                    && fog.find("Rgba8Unorm")==std::string::npos
-                    && haze.find("Rgba8Unorm")==std::string::npos
+                    && analyticFog.find("Rgba8Unorm")==std::string::npos
+                    && analyticShaft.find("Rgba8Unorm")==std::string::npos
+                    && lightProxy.find("Rgba8Unorm")==std::string::npos
                     && dust.find("Rgba8Unorm")==std::string::npos,
           "radiance-bearing atmosphere and bloom targets never select RGBA8");
-    Check(fog.find("dynamicLightingClamp")==std::string::npos
-                    && haze.find("dynamicLightingClamp")==std::string::npos
+    Check(analyticFog.find("dynamicLightingClamp")==std::string::npos
+                    && analyticShaft.find("dynamicLightingClamp")==std::string::npos
+                    && lightProxy.find("dynamicLightingClamp")==std::string::npos
                     && dust.find("dynamicLightingClamp")==std::string::npos,
           "obsolete dynamic-light artistic ceilings stay removed from atmosphere");
-    const std::size_t fogNoiseSetup = fog.find("float noiseModulation = 1.0;");
-    const std::size_t fogNoiseSample = fog.find("valueNoise(", fogNoiseSetup);
-    const std::size_t fogMarch = fog.find("for (int stepIndex", fogNoiseSetup);
-    const std::size_t hazeLightingMarch = haze.find("for(int s=0;s<12");
-    const std::size_t hazeSecondMarch = haze.find("for(int s=0;s<12", hazeLightingMarch + 1);
-    const std::size_t hazeNoiseSample = haze.find("valueNoise(", hazeLightingMarch);
-    const std::size_t hazeSampleDepth = haze.find(
-            "sampleDepth=a.x*boundary*noiseModulation*opticalStep",
-            hazeLightingMarch);
-    Check(fogNoiseSetup!=std::string::npos
-                    && fogNoiseSample<fogMarch
-                    && fog.find("noiseSamplePosition.xz -= flowWorld;")!=std::string::npos
-                    && fog.find("modulatedOpticalDepth = volumeOpticalDepth * noiseModulation")
-                            !=std::string::npos
-                    && hazeLightingMarch!=std::string::npos
-                    && hazeSecondMarch==std::string::npos
-                    && hazeSampleDepth!=std::string::npos
-                    && hazeNoiseSample>hazeLightingMarch
-                    && hazeNoiseSample<hazeSampleDepth
-                    && haze.find("noiseSamplePosition.xz-=flowWorld;")!=std::string::npos
-                    && haze.find("insidePositionSum")==std::string::npos
-                    && haze.find("modulatedDepth=volumeDepth*noiseModulation")==std::string::npos,
-          "fog uses coherent ray noise while haze samples world-speed noise at each lighting step");
-    Check(haze.find("bool intersectFiniteCone(")!=std::string::npos
-                    && haze.find("if(hazeShapes[i]!=0) { float coneEnter,coneExit;")!=std::string::npos
-                    && haze.find("effectivePath(segment,thickness)/float(stepCount)")!=std::string::npos
-                    && haze.find("insideCount")==std::string::npos,
-          "haze marches once across exact sphere or finite-cone ray intervals");
-    Check(haze.find("volume.originWorld.y -= heightOffsetWorld")!=std::string::npos
-                    && haze.find("volume.boundsCenterWorld.y -= heightOffsetWorld")!=std::string::npos
-                    && haze.find("hazeOwnerDynamicLightIndices[volumeIndex]")!=std::string::npos
-                    && haze.find("?p-vec3(0,heightOffsetWorld,0):p")!=std::string::npos
-                    && haze.find("shadowVisibility(i,slot,lightingPosition)")!=std::string::npos
-                    && haze.find("dynamicLighting(p,i,b.w)")!=std::string::npos
-                    && haze.find("h.flowSpeedWorld,h.heightOffsetWorld")!=std::string::npos,
-          "haze translates its baked and owning dynamic-light illumination profile with its Y offset");
     Check(bloom.find("65504.0")!=std::string::npos
-                    && fog.find("65504.0")!=std::string::npos
-                    && haze.find("65504.0")!=std::string::npos
+                    && analyticFog.find("65504.0")!=std::string::npos
+                    && analyticShaft.find("65504.0")!=std::string::npos
+                    && lightProxy.find("65504.0")!=std::string::npos
                     && dust.find("65504.0")!=std::string::npos
                     && muzzle.find("65504.0")!=std::string::npos,
           "affected RGBA16F writes retain the named finite-half storage guard");
@@ -652,11 +617,6 @@ void TestHdrEffectShaderAndPassPolicies()
                     !=std::string::npos
                     && bloom.find("SafeAlpha(scene.a)")!=std::string::npos,
           "bloom buffers ignore alpha energy and composition preserves scene alpha");
-    Check(fog.find("* (1.0 - SanitizeOpacity(fog.a))")!=std::string::npos
-                    && fog.find("+ SanitizeIntermediateRadiance(fog.rgb)")!=std::string::npos
-                    && haze.find("*(1.0-SanitizeOpacity(haze.a))")!=std::string::npos
-                    && haze.find("+SanitizeIntermediateRadiance(haze.rgb)")!=std::string::npos,
-          "fog and haze use sanitized premultiplied scattering plus transmittance");
     Check(muzzle.find("srgbToLinear")!=std::string::npos
                     && muzzle.find("radianceStrength")!=std::string::npos
                     && muzzle.find("BeginBlendMode(BLEND_ADD_COLORS)")!=std::string::npos
@@ -671,23 +631,13 @@ void TestHdrEffectShaderAndPassPolicies()
                     ==std::string::npos,
           "models are not tagged as whole-object bloom sources");
     Check(bloom.find("LinearToSrgb")==std::string::npos
-                    && fog.find("LinearToSrgb")==std::string::npos
-                    && haze.find("LinearToSrgb")==std::string::npos
+                    && analyticFog.find("LinearToSrgb")==std::string::npos
+                    && analyticShaft.find("LinearToSrgb")==std::string::npos
+                    && lightProxy.find("LinearToSrgb")==std::string::npos
                     && dust.find("LinearToSrgb")==std::string::npos
                     && muzzle.find("LinearToSrgb")==std::string::npos
                     && bloom.find("ToneMap")==std::string::npos,
           "effect shaders do not tone map or output-encode radiance locally");
-    Check(fog.find("uniform uint fogDynamicLightMasks[16]")!=std::string::npos
-                    &&fog.find("fogDynamicLightMasks[volumeIndex]")!=std::string::npos
-                    &&haze.find("uniform uint hazeDynamicLightMasks[8]")!=std::string::npos
-                    &&haze.find("hazeDynamicLightMasks[volumeIndex]")!=std::string::npos,
-          "volumetric shaders reject dynamically lit samples outside conservative volume masks");
-    Check(fog.find("scale = 0.5f")!=std::string::npos
-                    &&fog.find("steps = 8")!=std::string::npos
-                    &&fog.find("cap = 8")!=std::string::npos
-                    &&haze.find("int cap=4, steps=8; float renderScale=0.5f")
-                            !=std::string::npos,
-          "lossless atmosphere culling preserves medium volumetric quality settings");
     Check(bloom.find("ApplyEmissiveDecalBloom")==std::string::npos
                     && ReadSource(SECTOR_SHADER_SOURCE_PATH).find(
                                "emissiveRadiance * emissiveDecalAlpha")!=std::string::npos
@@ -714,12 +664,6 @@ void TestHdrEffectShaderAndPassPolicies()
                             ==std::string::npos,
           "viewmodel keeps private depth while drawing directly into shared HDR color");
     const std::string sectorRenderer=ReadSource(SECTOR_SHADER_SOURCE_PATH);
-    Check(sectorRenderer.find("map.fogSettings.localVolumeQuality")
-                            ==std::string::npos
-                    &&sectorRenderer.find(
-                               "map,\n            volumetricQuality,")
-                            !=std::string::npos,
-          "application volumetric quality directly controls local fog and light haze");
     Check(sectorRenderer.find("uniform sampler2D sourceDepth")==std::string::npos
                     &&sectorRenderer.find("float coverage=isnan(source.a)")
                             !=std::string::npos

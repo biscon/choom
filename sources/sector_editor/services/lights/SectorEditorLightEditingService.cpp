@@ -162,17 +162,6 @@ void ResetLightInspectorUiState(SectorEditorLightEditingServiceContext::UiRefs& 
     const auto resetInt = [](engine::UIIntInputState* state) {
         if (state != nullptr) *state = engine::UIIntInputState{};
     };
-    resetFloat(uiState.atmosphere.hazeExtentScaleInput);
-    resetFloat(uiState.atmosphere.hazeHeightOffsetInput);
-    resetFloat(uiState.atmosphere.hazeDensityInput);
-    resetFloat(uiState.atmosphere.hazeEdgeSoftnessInput);
-    resetFloat(uiState.atmosphere.hazeNoiseAmountInput);
-    resetFloat(uiState.atmosphere.hazeNoiseScaleInput);
-    resetFloat(uiState.atmosphere.hazeFlowDirectionInput);
-    resetFloat(uiState.atmosphere.hazeFlowSpeedInput);
-    resetInt(uiState.atmosphere.hazeRedInput);
-    resetInt(uiState.atmosphere.hazeGreenInput);
-    resetInt(uiState.atmosphere.hazeBlueInput);
     resetFloat(uiState.atmosphere.proxyHaloRadiusInput);
     resetFloat(uiState.atmosphere.proxyHaloOffsetXInput);
     resetFloat(uiState.atmosphere.proxyHaloOffsetYInput);
@@ -285,17 +274,7 @@ bool SameAtmosphere(
     const auto sameColor = [](Color a, Color b) {
         return a.r == b.r && a.g == b.g && a.b == b.b;
     };
-    return left.haze.enabled == right.haze.enabled
-            && left.haze.extentScale == right.haze.extentScale
-            && left.haze.heightOffsetWorld == right.haze.heightOffsetWorld
-            && left.haze.density == right.haze.density
-            && sameColor(left.haze.scatteringTint, right.haze.scatteringTint)
-            && left.haze.edgeSoftness == right.haze.edgeSoftness
-            && left.haze.noiseAmount == right.haze.noiseAmount
-            && left.haze.noiseScaleWorld == right.haze.noiseScaleWorld
-            && left.haze.flowDirectionDegrees == right.haze.flowDirectionDegrees
-            && left.haze.flowSpeedWorld == right.haze.flowSpeedWorld
-            && left.proxy.halo.enabled == right.proxy.halo.enabled
+    return left.proxy.halo.enabled == right.proxy.halo.enabled
             && left.proxy.halo.radiusWorld == right.proxy.halo.radiusWorld
             && left.proxy.halo.centerOffsetWorld.x == right.proxy.halo.centerOffsetWorld.x
             && left.proxy.halo.centerOffsetWorld.y == right.proxy.halo.centerOffsetWorld.y

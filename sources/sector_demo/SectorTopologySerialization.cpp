@@ -2272,32 +2272,6 @@ Json WriteColor(Color color)
     };
 }
 
-Json WriteLightHazeSettings(const SectorLightHazeSettings& source)
-{
-    const SectorLightHazeSettings settings = NormalizeSectorLightHazeSettings(source);
-    const SectorLightHazeSettings defaults;
-    Json value = Json::object();
-    if (settings.enabled != defaults.enabled) value["enabled"] = settings.enabled;
-    if (settings.extentScale != defaults.extentScale) value["extentScale"] = settings.extentScale;
-    if (settings.heightOffsetWorld != defaults.heightOffsetWorld) {
-        value["heightOffsetWorld"] = settings.heightOffsetWorld;
-    }
-    if (settings.density != defaults.density) value["density"] = settings.density;
-    if (settings.scatteringTint.r != defaults.scatteringTint.r
-            || settings.scatteringTint.g != defaults.scatteringTint.g
-            || settings.scatteringTint.b != defaults.scatteringTint.b) {
-        value["scatteringTint"] = WriteColor(settings.scatteringTint);
-    }
-    if (settings.edgeSoftness != defaults.edgeSoftness) value["edgeSoftness"] = settings.edgeSoftness;
-    if (settings.noiseAmount != defaults.noiseAmount) value["noiseAmount"] = settings.noiseAmount;
-    if (settings.noiseScaleWorld != defaults.noiseScaleWorld) value["noiseScaleWorld"] = settings.noiseScaleWorld;
-    if (settings.flowDirectionDegrees != defaults.flowDirectionDegrees) {
-        value["flowDirectionDegrees"] = settings.flowDirectionDegrees;
-    }
-    if (settings.flowSpeedWorld != defaults.flowSpeedWorld) value["flowSpeedWorld"] = settings.flowSpeedWorld;
-    return value;
-}
-
 Json WriteLightDustSettings(const SectorLightDustSettings& source)
 {
     const SectorLightDustSettings settings = NormalizeSectorLightDustSettings(source);
@@ -2376,9 +2350,6 @@ Json WriteLightAtmosphereSettings(const SectorLightAtmosphereSettings& source)
 {
     const SectorLightAtmosphereSettings settings = NormalizeSectorLightAtmosphereSettings(source);
     Json value = Json::object();
-    if (!IsDefaultSectorLightHazeSettings(settings.haze)) {
-        value["haze"] = WriteLightHazeSettings(settings.haze);
-    }
     if (!IsDefaultSectorLightProxySettings(settings.proxy)) {
         value["proxy"] = WriteLightProxySettings(settings.proxy);
     }
@@ -2898,46 +2869,6 @@ void ReadTextures(const Json& root, SectorTopologyMap& map)
     }
 }
 
-SectorLightHazeSettings ReadLightHazeSettings(const Json& value, const std::string& context)
-{
-    if (!value.is_object()) {
-        Fail(context + " must be an object");
-    }
-    SectorLightHazeSettings settings;
-    settings.enabled = ReadOptionalBool(value, "enabled", context, settings.enabled);
-    settings.extentScale = ReadOptionalClampedFloat(
-            value, "extentScale", context, settings.extentScale, 0.05f, 2.0f);
-    settings.heightOffsetWorld = ReadOptionalClampedFloat(
-            value,
-            "heightOffsetWorld",
-            context,
-            settings.heightOffsetWorld,
-            -100000.0f,
-            100000.0f);
-    settings.density = ReadOptionalClampedFloat(
-            value, "density", context, settings.density, 0.0f, 2.0f);
-    const auto tintIt = value.find("scatteringTint");
-    if (tintIt != value.end()) {
-        settings.scatteringTint = ReadColor(*tintIt, context + ".scatteringTint");
-    }
-    settings.edgeSoftness = ReadOptionalClampedFloat(
-            value, "edgeSoftness", context, settings.edgeSoftness, 0.01f, 1.0f);
-    settings.noiseAmount = ReadOptionalClampedFloat(
-            value, "noiseAmount", context, settings.noiseAmount, 0.0f, 1.0f);
-    settings.noiseScaleWorld = ReadOptionalClampedFloat(
-            value, "noiseScaleWorld", context, settings.noiseScaleWorld, 0.05f, 16.0f);
-    settings.flowDirectionDegrees = ReadOptionalClampedFloat(
-            value,
-            "flowDirectionDegrees",
-            context,
-            settings.flowDirectionDegrees,
-            -360.0f,
-            360.0f);
-    settings.flowSpeedWorld = ReadOptionalClampedFloat(
-            value, "flowSpeedWorld", context, settings.flowSpeedWorld, 0.0f, 2.0f);
-    return NormalizeSectorLightHazeSettings(settings);
-}
-
 SectorLightDustSettings ReadLightDustSettings(const Json& value, const std::string& context)
 {
     if (!value.is_object()) {
@@ -3040,10 +2971,6 @@ SectorLightAtmosphereSettings ReadOptionalLightAtmosphereSettings(
     }
     if (!atmosphereIt->is_object()) {
         Fail(context + ".atmosphere must be an object");
-    }
-    const auto hazeIt = atmosphereIt->find("haze");
-    if (hazeIt != atmosphereIt->end()) {
-        settings.haze = ReadLightHazeSettings(*hazeIt, context + ".atmosphere.haze");
     }
     const auto proxyIt = atmosphereIt->find("proxy");
     if (proxyIt != atmosphereIt->end()) {
@@ -3504,14 +3431,6 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
             volume.x = ReadCoord(fogJson, "x", context);
             volume.y = ReadCoord(fogJson, "y", context);
             volume.enabled = ReadOptionalBool(fogJson, "enabled", context, volume.enabled);
-            const auto renderModeIt = fogJson.find("renderMode");
-            if (renderModeIt != fogJson.end()) {
-                if (!renderModeIt->is_string()) Fail(context + ".renderMode must be a string");
-                const std::string mode = renderModeIt->get<std::string>();
-                if (mode == "raymarched") volume.renderMode = SectorLocalFogRenderMode::Raymarched;
-                else if (mode == "analytic") volume.renderMode = SectorLocalFogRenderMode::Analytic;
-                else Fail(context + ".renderMode must be 'raymarched' or 'analytic'");
-            }
             const auto shapeIt = fogJson.find("shape");
             if (shapeIt != fogJson.end()) {
                 if (!shapeIt->is_string()) Fail(context + ".shape must be a string");
@@ -3557,7 +3476,6 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
                         ReadOptionalColorChannel(*colorIt, "b", context + ".color", volume.color.b),
                         255};
             }
-            volume.density = ReadOptionalFloat(fogJson, "density", context, volume.density);
             volume.maxOpacity = ReadOptionalFloat(fogJson, "maxOpacity", context, volume.maxOpacity);
             volume.analyticStartDistanceWorld = ReadOptionalFloat(
                     fogJson, "analyticStartDistanceWorld", context, volume.analyticStartDistanceWorld);
@@ -3894,7 +3812,6 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             RequireFinite(source->radiusXWorld, context + ".radiusXWorld");
             RequireFinite(source->radiusZWorld, context + ".radiusZWorld");
             RequireFinite(source->heightWorld, context + ".heightWorld");
-            RequireFinite(source->density, context + ".density");
             RequireFinite(source->maxOpacity, context + ".maxOpacity");
             RequireFinite(source->analyticStartDistanceWorld, context + ".analyticStartDistanceWorld");
             RequireFinite(source->analyticEndDistanceWorld, context + ".analyticEndDistanceWorld");
@@ -3907,7 +3824,6 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             const SectorAuthoringFogVolume volume = NormalizeSectorAuthoringFogVolume(*source);
             Json fogJson{{"id", volume.id}, {"x", volume.x}, {"y", volume.y}};
             if (volume.enabled != defaults.enabled) fogJson["enabled"] = volume.enabled;
-            if (volume.renderMode != defaults.renderMode) fogJson["renderMode"] = "analytic";
             if (volume.shape != defaults.shape) fogJson["shape"] = "box";
             if (volume.analyticStyle != defaults.analyticStyle) fogJson["analyticStyle"] = "room";
             if (volume.yawDegrees != defaults.yawDegrees) fogJson["yawDegrees"] = volume.yawDegrees;
@@ -3917,7 +3833,6 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             if (volume.heightWorld != defaults.heightWorld) fogJson["heightWorld"] = volume.heightWorld;
             if (volume.color.r != defaults.color.r || volume.color.g != defaults.color.g
                     || volume.color.b != defaults.color.b) fogJson["color"] = WriteColor(volume.color);
-            if (volume.density != defaults.density) fogJson["density"] = volume.density;
             if (volume.maxOpacity != defaults.maxOpacity) fogJson["maxOpacity"] = volume.maxOpacity;
             if (volume.analyticStartDistanceWorld != defaults.analyticStartDistanceWorld) fogJson["analyticStartDistanceWorld"] = volume.analyticStartDistanceWorld;
             if (volume.analyticEndDistanceWorld != defaults.analyticEndDistanceWorld) fogJson["analyticEndDistanceWorld"] = volume.analyticEndDistanceWorld;

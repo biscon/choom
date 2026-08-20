@@ -3901,30 +3901,27 @@ void SectorEditor::DrawAuthoringFogVolumes() const
         const float radiusY = std::max(2.0f, std::fabs(edgeZ.y - center.y));
         Color fill = volume.enabled ? volume.color : Color{112, 118, 122, 255};
         fill.a = 46;
-        const bool drawBox = volume.renderMode == SectorLocalFogRenderMode::Analytic
-                && volume.shape == SectorLocalFogShape::Box;
+        const bool drawBox = volume.shape == SectorLocalFogShape::Box;
         float innerScaleX = std::clamp(1.0f - volume.edgeSoftness, 0.05f, 1.0f);
         float innerScaleZ = innerScaleX;
-        if (volume.renderMode == SectorLocalFogRenderMode::Analytic) {
-            const bool roomStyle = volume.analyticStyle == SectorAnalyticFogStyle::Room;
-            const float minimumFraction = roomStyle ? 0.005f : 0.01f;
-            const float maximumFraction = roomStyle ? 0.20f : 0.45f;
-            const float minimumHalfExtent = std::min(
-                    {volume.radiusXWorld, volume.heightWorld * 0.5f, volume.radiusZWorld});
-            const float normalizedSoftness = std::clamp(
-                    volume.edgeSoftness, 0.0f, 1.0f);
-            const float edgeWidth = minimumHalfExtent
-                    * (minimumFraction
-                            + (maximumFraction - minimumFraction) * normalizedSoftness);
-            innerScaleX = std::clamp(
-                    1.0f - edgeWidth / std::max(volume.radiusXWorld, 0.0001f),
-                    0.05f,
-                    1.0f);
-            innerScaleZ = std::clamp(
-                    1.0f - edgeWidth / std::max(volume.radiusZWorld, 0.0001f),
-                    0.05f,
-                    1.0f);
-        }
+        const bool roomStyle = volume.analyticStyle == SectorAnalyticFogStyle::Room;
+        const float minimumFraction = roomStyle ? 0.005f : 0.01f;
+        const float maximumFraction = roomStyle ? 0.20f : 0.45f;
+        const float minimumHalfExtent = std::min(
+                {volume.radiusXWorld, volume.heightWorld * 0.5f, volume.radiusZWorld});
+        const float normalizedSoftness = std::clamp(
+                volume.edgeSoftness, 0.0f, 1.0f);
+        const float edgeWidth = minimumHalfExtent
+                * (minimumFraction
+                        + (maximumFraction - minimumFraction) * normalizedSoftness);
+        innerScaleX = std::clamp(
+                1.0f - edgeWidth / std::max(volume.radiusXWorld, 0.0001f),
+                0.05f,
+                1.0f);
+        innerScaleZ = std::clamp(
+                1.0f - edgeWidth / std::max(volume.radiusZWorld, 0.0001f),
+                0.05f,
+                1.0f);
         Color inner = outline;
         inner.a = 130;
         if (drawBox) {
@@ -6163,7 +6160,7 @@ bool SectorEditor::StartLightPilot()
 bool SectorEditor::StartLightProxyPlacement(LightProxyPlacementKind proxyKind)
 {
     const bool shaft = proxyKind == LightProxyPlacementKind::Shaft;
-    const char* proxyName = shaft ? "shaft" : "halo";
+    const char* proxyName = shaft ? "shaft" : "haze";
     if (proxyKind == LightProxyPlacementKind::None) return false;
     if (state.mode != SectorEditorMode::Preview3D
             || previewState.controller.previewControlMode != SectorPreviewControlMode::FreeFly) {
@@ -6205,7 +6202,7 @@ bool SectorEditor::StartLightProxyPlacement(LightProxyPlacementKind proxyKind)
     }
     if (lightId < 0 || !proxyEnabled) {
         statusText = TextFormat(
-                "Select a %s with an enabled analytic %s",
+                "Select a %s with enabled %s",
                 shaft ? "spotlight" : "light",
                 proxyName);
         return false;
@@ -7444,17 +7441,6 @@ SectorEditorLightEditingService SectorEditor::BuildLightEditingService()
                             uiState.lightBlueInput,
                             inspectorIdUiState,
                             {
-                                    &uiState.lightHazeExtentScaleInput,
-                                    &uiState.lightHazeHeightOffsetInput,
-                                    &uiState.lightHazeDensityInput,
-                                    &uiState.lightHazeEdgeSoftnessInput,
-                                    &uiState.lightHazeNoiseAmountInput,
-                                    &uiState.lightHazeNoiseScaleInput,
-                                    &uiState.lightHazeFlowDirectionInput,
-                                    &uiState.lightHazeFlowSpeedInput,
-                                    &uiState.lightHazeRedInput,
-                                    &uiState.lightHazeGreenInput,
-                                    &uiState.lightHazeBlueInput,
                                     &uiState.lightDustAmountInput,
                                     &uiState.lightDustExtentScaleInput,
                                     &uiState.lightDustMinimumSizeInput,

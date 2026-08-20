@@ -3,7 +3,6 @@
 #include "engine/assets/AssetHandles.h"
 #include "engine/render/HdrEffectPolicy.h"
 #include "game/PlayerStamina.h"
-#include "sector_demo/SectorVolumetricQuality.h"
 
 #include <raylib.h>
 
@@ -287,8 +286,6 @@ inline constexpr int DefaultFpsShadowLightUpdatesPerFrame = 2;
 struct FpsGraphicsSettings {
     float renderScale = 1.5f;
     bool fxaa = true;
-    SectorVolumetricQuality volumetricQuality =
-            SectorVolumetricQuality::High;
     FpsShadowQuality shadowQuality = FpsShadowQuality::High;
     int maxDynamicLights = DefaultFpsDynamicLights;
     int maxShadowLightUpdatesPerFrame = DefaultFpsShadowLightUpdatesPerFrame;
@@ -311,7 +308,6 @@ struct FpsApplicationSettings {
     std::vector<FpsApplicationSettingsEntry> weapons;
 };
 
-const char* SectorVolumetricQualityName(SectorVolumetricQuality quality);
 const char* FpsShadowQualityName(FpsShadowQuality quality);
 FpsGraphicsSettings NormalizeFpsGraphicsSettings(FpsGraphicsSettings settings);
 float FpsVerticalFovDegrees(int horizontalFovDegrees, float aspectRatio);

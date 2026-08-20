@@ -81,11 +81,6 @@ struct SectorTopologyFogSettings {
     float heightFalloff = 0.35f;
 };
 
-enum class SectorLocalFogRenderMode {
-    Raymarched,
-    Analytic
-};
-
 enum class SectorLocalFogShape {
     Ellipsoid,
     Box
@@ -119,14 +114,12 @@ struct SectorCompiledLocalFogVolume {
     int sourceAuthoringFogVolumeId = -1;
     int topologySectorId = -1;
     bool enabled = true;
-    SectorLocalFogRenderMode renderMode = SectorLocalFogRenderMode::Raymarched;
     SectorLocalFogShape shape = SectorLocalFogShape::Ellipsoid;
     SectorAnalyticFogStyle analyticStyle = SectorAnalyticFogStyle::Cloudy;
     float yawRadians = 0.0f;
     Vector3 centerWorld = {};
     Vector3 radiiWorld = {1.5f, 0.325f, 1.5f};
     Color color = Color{105, 116, 110, 255};
-    float density = 0.65f;
     float maxOpacity = 0.75f;
     float analyticStartDistanceWorld = 0.0f;
     float analyticEndDistanceWorld = 2.0f;

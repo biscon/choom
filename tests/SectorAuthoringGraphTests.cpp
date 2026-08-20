@@ -12845,7 +12845,6 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
     volume.id = 1;
     volume.x = 80;
     volume.y = 80;
-    volume.renderMode = game::SectorLocalFogRenderMode::Analytic;
     volume.shape = game::SectorLocalFogShape::Box;
     volume.analyticStyle = game::SectorAnalyticFogStyle::Room;
     volume.yawDegrees = 90.0f;
@@ -12872,8 +12871,7 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
         const game::SectorCompiledLocalFogVolume& compiled = result.topology.compiledLocalFogVolumes[0];
         Check(compiled.sourceAuthoringFogVolumeId == 1 && Near(compiled.centerWorld.y, 0.345f),
               "compiled fog volume uses source ID and floor-relative height");
-        Check(compiled.renderMode == game::SectorLocalFogRenderMode::Analytic
-                      && compiled.shape == game::SectorLocalFogShape::Box
+        Check(compiled.shape == game::SectorLocalFogShape::Box
                       && compiled.analyticStyle == game::SectorAnalyticFogStyle::Room
                       && Near(compiled.yawRadians, PI * 0.5f)
                       && Near(compiled.analyticEndDistanceWorld, 3.0f),
@@ -12908,8 +12906,6 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
     volume.x = 48;
     volume.y = 64;
     volume.color = Color{12, 34, 56, 255};
-    volume.density = 1.25f;
-    volume.renderMode = game::SectorLocalFogRenderMode::Analytic;
     volume.shape = game::SectorLocalFogShape::Box;
     volume.analyticStyle = game::SectorAnalyticFogStyle::Room;
     volume.yawDegrees = 270.0f;
@@ -12932,13 +12928,12 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
                   && !savedFog.contains("noiseScaleWorld")
                   && !savedFog.contains("flowSpeedWorld"),
           "default fog noise settings remain omitted on save");
-    Check(savedFog.value("renderMode", "") == "analytic"
-                  && savedFog.value("shape", "") == "box"
+    Check(savedFog.value("shape", "") == "box"
                   && savedFog.value("analyticStyle", "") == "room"
                   && Near(savedFog.value("yawDegrees", 0.0f), 270.0f)
                   && Near(savedFog.value("analyticStartDistanceWorld", 0.0f), 0.25f)
                   && Near(savedFog.value("analyticEndDistanceWorld", 0.0f), 3.5f),
-          "analytic fog mode and path controls serialize");
+          "fog shape and path controls serialize");
 
     game::SectorAuthoringDocument defaultsDocument = document;
     defaultsDocument.graph.fogVolumes[0].shape = game::SectorLocalFogShape::Ellipsoid;
@@ -12960,14 +12955,11 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
           "authoring fog volume document loads");
     Check(loaded.graph.fogVolumes.size() == 1
                   && loaded.graph.fogVolumes[0].id == 7
-                  && loaded.graph.fogVolumes[0].renderMode
-                          == game::SectorLocalFogRenderMode::Analytic
                   && loaded.graph.fogVolumes[0].shape == game::SectorLocalFogShape::Box
                   && loaded.graph.fogVolumes[0].analyticStyle
                           == game::SectorAnalyticFogStyle::Room
                   && Near(loaded.graph.fogVolumes[0].yawDegrees, 270.0f)
                   && Near(loaded.graph.fogVolumes[0].analyticFalloffExponent, 1.75f)
-                  && Near(loaded.graph.fogVolumes[0].density, 1.25f)
                   && Near(loaded.graph.fogVolumes[0].noiseAmount, 0.75f)
                   && Near(loaded.graph.fogVolumes[0].noiseScaleWorld, 0.75f)
                   && Near(loaded.graph.fogVolumes[0].flowSpeedWorld, 0.20f),
@@ -13080,7 +13072,6 @@ void TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce()
     editorState.topologyRenderCache.valid = true;
     Check(editing.MutateById(id, "Updated authoring fog volume shape",
                   [](game::SectorAuthoringFogVolume& volume) {
-                      volume.renderMode = game::SectorLocalFogRenderMode::Analytic;
                       volume.shape = game::SectorLocalFogShape::Box;
                       volume.analyticStyle = game::SectorAnalyticFogStyle::Room;
                       volume.yawDegrees = 90.0f;

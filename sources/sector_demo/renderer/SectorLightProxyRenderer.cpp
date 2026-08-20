@@ -173,7 +173,6 @@ bool SectorLightProxyRenderer::Apply(
         RenderTexture2D& sceneTarget,
         RenderTexture2D& colorOnlyTarget,
         const SectorTopologyFogSettings& sourceFogSettings,
-        SectorVolumetricQuality quality,
         const Camera3D& camera,
         const SectorBillboardDynamicLightContext& dynamicLights,
         const std::vector<SectorLightAtmosphereSource>& sources,
@@ -183,7 +182,7 @@ bool SectorLightProxyRenderer::Apply(
     eligibleCount = haloCount = drawCallCount = 0;
     scissorCoverage = 0.0f;
     visibleHalos.clear();
-    if (quality == SectorVolumetricQuality::Off || sources.empty()
+    if (sources.empty()
             || sceneTarget.depth.id == 0 || colorOnlyTarget.id == 0 || !EnsureShader()) return false;
     const float nearPlane = static_cast<float>(rlGetCullDistanceNear());
     const float farPlane = static_cast<float>(rlGetCullDistanceFar());

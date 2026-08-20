@@ -147,21 +147,18 @@ public:
         }
         const int detailY = 70 + static_cast<int>(PassCount) * 20;
         DrawText(TextFormat(
-                         "atmo GPU dist/analytic/ray/haze/shaft/halo/dust %.2f/%.2f/%.2f/%.2f/%.2f/%.2f/%.2f",
+                         "atmo GPU dist/fog/shaft/haze/dust %.2f/%.2f/%.2f/%.2f/%.2f",
                          atmosphere.distanceFogGpuMilliseconds,
                          atmosphere.analyticFogGpuMilliseconds,
-                         atmosphere.localFogGpuMilliseconds,
-                         atmosphere.lightHazeGpuMilliseconds,
                          atmosphere.analyticShaftGpuMilliseconds,
                          atmosphere.lightHaloGpuMilliseconds,
                          atmosphere.dustGpuMilliseconds),
                 16, detailY, 16, SKYBLUE);
         DrawText(TextFormat(
-                         "fog ray %d/%d ana %d/%d  shaft %d/%d D%d  halo %d S%.2f D%d  lights %d",
-                         atmosphere.localFogActiveCount,
-                         atmosphere.localFogEligibleCount,
+                         "fog %d/%d S%.2f  shaft %d/%d D%d  haze %d S%.2f D%d  lights %d",
                          atmosphere.analyticFogActiveCount,
                          atmosphere.analyticFogEligibleCount,
+                         atmosphere.analyticFogScissorCoverage,
                          atmosphere.analyticShaftActiveCount,
                          atmosphere.analyticShaftEligibleCount,
                          atmosphere.analyticShaftDrawCallCount,
@@ -171,26 +168,11 @@ public:
                          atmosphere.dynamicLightCount),
                 16, detailY + 20, 16, SKYBLUE);
         DrawText(TextFormat(
-                         "dust %d/%d particles %d  fog ids %d,%d,%d,%d",
+                         "dust %d/%d particles %d",
                          atmosphere.dustActiveEmitterCount,
                          atmosphere.dustEligibleEmitterCount,
-                         atmosphere.dustVisibleParticleCount,
-                         atmosphere.localFogVolumeIds[0],
-                         atmosphere.localFogVolumeIds[1],
-                         atmosphere.localFogVolumeIds[2],
-                         atmosphere.localFogVolumeIds[3]),
+                         atmosphere.dustVisibleParticleCount),
                 16, detailY + 40, 16, SKYBLUE);
-        DrawText(TextFormat(
-                         "haze kind:id %d:%d %d:%d %d:%d %d:%d",
-                         static_cast<int>(atmosphere.lightHazeSources[0].kind),
-                         atmosphere.lightHazeSources[0].lightId,
-                         static_cast<int>(atmosphere.lightHazeSources[1].kind),
-                         atmosphere.lightHazeSources[1].lightId,
-                         static_cast<int>(atmosphere.lightHazeSources[2].kind),
-                         atmosphere.lightHazeSources[2].lightId,
-                         static_cast<int>(atmosphere.lightHazeSources[3].kind),
-                         atmosphere.lightHazeSources[3].lightId),
-                16, detailY + 60, 16, SKYBLUE);
     }
 
 private:
@@ -263,9 +245,8 @@ public:
         }
         std::fprintf(
                 output,
-                "# frame trace v4; dips >= %.3f ms; timestamps use CLOCK_MONOTONIC\n"
-                "# haze source kinds: 0=static-point 1=static-spot 2=dynamic-point 3=dynamic-spot\n"
-                "# mono_seconds total_ms pre_render_ms shadows_cpu_ms world_cpu_ms atmosphere_cpu_ms viewmodel_cpu_ms bloom_cpu_ms presentation_cpu_ms final_cpu_ms shadows_gpu_ms world_gpu_ms atmosphere_gpu_ms viewmodel_gpu_ms bloom_gpu_ms presentation_gpu_ms final_gpu_ms local_fog_gpu_ms light_haze_gpu_ms dust_gpu_ms fog_eligible fog_active fog_coverage haze_eligible haze_active haze_coverage dust_active dust_visible dynamic_lights distance_fog_gpu_ms analytic_fog_gpu_ms analytic_shaft_gpu_ms light_halo_gpu_ms analytic_fog_eligible analytic_fog_active analytic_fog_coverage shaft_eligible shaft_active shaft_coverage shaft_draws halo_eligible halo_count halo_coverage halo_draws fog_id0 fog_id1 fog_id2 fog_id3 fog_id4 fog_id5 fog_id6 fog_id7 fog_id8 fog_id9 fog_id10 fog_id11 fog_id12 fog_id13 fog_id14 fog_id15 haze_kind0 haze_id0 haze_kind1 haze_id1 haze_kind2 haze_id2 haze_kind3 haze_id3 haze_kind4 haze_id4 haze_kind5 haze_id5 haze_kind6 haze_id6 haze_kind7 haze_id7\n",
+                "# frame trace v5; dips >= %.3f ms; timestamps use CLOCK_MONOTONIC\n"
+                "# mono_seconds total_ms pre_render_ms shadows_cpu_ms world_cpu_ms atmosphere_cpu_ms viewmodel_cpu_ms bloom_cpu_ms presentation_cpu_ms final_cpu_ms shadows_gpu_ms world_gpu_ms atmosphere_gpu_ms viewmodel_gpu_ms bloom_gpu_ms presentation_gpu_ms final_gpu_ms distance_fog_gpu_ms fog_gpu_ms shaft_gpu_ms haze_gpu_ms dust_gpu_ms fog_eligible fog_active fog_coverage shaft_eligible shaft_active shaft_coverage shaft_draws haze_eligible haze_active haze_coverage haze_draws dust_active dust_eligible dust_visible dynamic_lights\n",
                 thresholdMilliseconds);
         std::fflush(output);
     }
@@ -314,7 +295,7 @@ public:
         }
         std::fprintf(
                 output,
-                "%.9f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %d %d %.4f %d %d %.4f %d %d %d %.3f %.3f %.3f %.3f %d %d %.4f %d %d %.4f %d %d %.4f %d",
+                "%.9f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
                 frameEndSeconds,
                 totalMilliseconds,
                 (preRenderEndSeconds - frameStartSeconds) * 1000.0,
@@ -331,23 +312,15 @@ public:
                 profiler.GpuMilliseconds(RenderProfilePass::Viewmodel),
                 profiler.GpuMilliseconds(RenderProfilePass::Bloom),
                 profiler.GpuMilliseconds(RenderProfilePass::Presentation),
-                profiler.GpuMilliseconds(RenderProfilePass::FinalComposite),
-                atmosphere.localFogGpuMilliseconds,
-                atmosphere.lightHazeGpuMilliseconds,
-                atmosphere.dustGpuMilliseconds,
-                atmosphere.localFogEligibleCount,
-                atmosphere.localFogActiveCount,
-                atmosphere.localFogScissorCoverage,
-                atmosphere.lightHazeEligibleCount,
-                atmosphere.lightHazeActiveCount,
-                atmosphere.lightHazeScissorCoverage,
-                atmosphere.dustActiveEmitterCount,
-                atmosphere.dustVisibleParticleCount,
-                atmosphere.dynamicLightCount,
+                profiler.GpuMilliseconds(RenderProfilePass::FinalComposite));
+        std::fprintf(
+                output,
+                " %.3f %.3f %.3f %.3f %.3f %d %d %.4f %d %d %.4f %d %d %d %.4f %d %d %d %d",
                 atmosphere.distanceFogGpuMilliseconds,
                 atmosphere.analyticFogGpuMilliseconds,
                 atmosphere.analyticShaftGpuMilliseconds,
                 atmosphere.lightHaloGpuMilliseconds,
+                atmosphere.dustGpuMilliseconds,
                 atmosphere.analyticFogEligibleCount,
                 atmosphere.analyticFogActiveCount,
                 atmosphere.analyticFogScissorCoverage,
@@ -358,18 +331,11 @@ public:
                 atmosphere.lightHaloEligibleCount,
                 atmosphere.lightHaloCount,
                 atmosphere.lightHaloScissorCoverage,
-                atmosphere.lightHaloDrawCallCount);
-        for (const int fogVolumeId : atmosphere.localFogVolumeIds) {
-            std::fprintf(output, " %d", fogVolumeId);
-        }
-        for (const game::SectorLightHazeActiveSource& source
-                : atmosphere.lightHazeSources) {
-            std::fprintf(
-                    output,
-                    " %d %d",
-                    static_cast<int>(source.kind),
-                    source.lightId);
-        }
+                atmosphere.lightHaloDrawCallCount,
+                atmosphere.dustActiveEmitterCount,
+                atmosphere.dustEligibleEmitterCount,
+                atmosphere.dustVisibleParticleCount,
+                atmosphere.dynamicLightCount);
         std::fputc('\n', output);
         std::fflush(output);
     }
@@ -489,7 +455,7 @@ int main(int argc, char** argv)
                             1},
                     world, &error)) {
             TraceLog(LOG_WARNING,
-                    "PREVIEW: sampleable depth target unavailable; local fog disabled");
+                    "PREVIEW: sampleable depth target unavailable; atmosphere disabled");
             if (!engine::LoadRenderTarget(
                         engine::RenderTargetDescriptor{
                                 "world", width, height,

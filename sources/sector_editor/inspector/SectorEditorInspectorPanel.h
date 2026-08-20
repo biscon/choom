@@ -148,19 +148,12 @@ inline float MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
         float rowHeight,
         float gap)
 {
-    int rowCount = 18; // Common toggles, dimensions, noise, color, and delete.
-    if (volume.renderMode == SectorLocalFogRenderMode::Analytic) {
-        rowCount += 4; // Shape toggle and three analytic path controls.
-        if (volume.shape == SectorLocalFogShape::Box) {
-            ++rowCount; // Yaw.
-        }
-    } else {
-        ++rowCount; // Raymarched density.
+    int rowCount = 21; // Common controls, shape, path controls, color, and delete.
+    if (volume.shape == SectorLocalFogShape::Box) {
+        ++rowCount; // Yaw.
     }
     float height = 38.0f + static_cast<float>(rowCount) * (rowHeight + gap);
-    if (volume.renderMode == SectorLocalFogRenderMode::Analytic) {
-        height += SectorEditorInspectorStackedOptionRowHeight(rowHeight, gap) + gap;
-    }
+    height += SectorEditorInspectorStackedOptionRowHeight(rowHeight, gap) + gap;
     return height;
 }
 

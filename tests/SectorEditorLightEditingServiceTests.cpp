@@ -541,8 +541,8 @@ void TestPointSpotLightsDown()
     staticSpot.outerConeDegrees = 42.0f;
     staticSpot.sourceRadius = 3.0f;
     staticSpot.castsShadow = false;
-    staticSpot.atmosphere.haze.enabled = true;
-    staticSpot.atmosphere.haze.density = 0.35f;
+    staticSpot.atmosphere.proxy.shaft.enabled = true;
+    staticSpot.atmosphere.proxy.shaft.brightness = 0.35f;
     documentState.map.topologyMap.staticSpotLights.push_back(staticSpot);
 
     game::SectorTopologyDynamicSpotLight dynamicSpot;
@@ -609,8 +609,10 @@ void TestPointSpotLightsDown()
                   && Near(editedStatic.outerConeDegrees, staticBefore.outerConeDegrees)
                   && Near(editedStatic.sourceRadius, staticBefore.sourceRadius)
                   && editedStatic.castsShadow == staticBefore.castsShadow
-                  && editedStatic.atmosphere.haze.enabled == staticBefore.atmosphere.haze.enabled
-                  && Near(editedStatic.atmosphere.haze.density, staticBefore.atmosphere.haze.density),
+                  && editedStatic.atmosphere.proxy.shaft.enabled
+                          == staticBefore.atmosphere.proxy.shaft.enabled
+                  && Near(editedStatic.atmosphere.proxy.shaft.brightness,
+                          staticBefore.atmosphere.proxy.shaft.brightness),
           "static point-down preserves all non-target spotlight settings");
     CheckDirtyOnce(state, documentState, statusText, "Pointed static spot 23 down");
 
@@ -734,8 +736,6 @@ void TestAtmosphereEditUsesDocumentMutationBoundary()
             inspectorIdUiState,
             statusText);
     game::SectorLightAtmosphereSettings atmosphere;
-    atmosphere.haze.enabled = true;
-    atmosphere.haze.heightOffsetWorld = 0.75f;
     atmosphere.proxy.halo.enabled = true;
     atmosphere.proxy.halo.brightness = 0.4f;
     atmosphere.proxy.halo.maxExtinction = 0.6f;
@@ -745,9 +745,7 @@ void TestAtmosphereEditUsesDocumentMutationBoundary()
     Check(service.SetStaticLightAtmosphere(
                   documentState.map.topologyMap.staticLights.front(), atmosphere),
           "atmosphere edit reports a change");
-    Check(documentState.map.topologyMap.staticLights.front().atmosphere.haze.enabled
-                  && Near(documentState.map.topologyMap.staticLights.front().atmosphere.haze.heightOffsetWorld, 0.75f)
-                  && documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.enabled
+    Check(documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.enabled
                   && Near(documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.brightness, 0.4f)
                   && Near(documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.maxExtinction, 0.6f)
                   && documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.scatteringTint.g == 210
@@ -795,7 +793,7 @@ void TestProxyPlacementApplyAndCancelTiming()
                   game::LightProxyPlacementKind::Halo,
                   game::LightPilotKind::StaticPoint,
                   12),
-          "enabled analytic halo begins placement");
+          "enabled haze begins placement");
     const game::SectorEditorLightMutationResult preview =
             service.PreviewProxyPlacement(Vector3{1.0f, -2.0f, 3.0f});
     Check(preview.changed && preview.dynamicLightRendererRefreshNeeded,
@@ -851,7 +849,7 @@ void TestProxyPlacementApplyAndCancelTiming()
                   game::LightProxyPlacementKind::Shaft,
                   game::LightPilotKind::StaticSpot,
                   13),
-          "enabled analytic shaft begins placement for a spotlight");
+          "enabled shaft begins placement for a spotlight");
     const game::SectorEditorLightMutationResult shaftPreview =
             service.PreviewProxyPlacement(Vector3{0.25f, 0.75f, -0.5f});
     const Vector3 stagedShaftOffset = documentState.map.topologyMap.staticSpotLights.front()

@@ -2011,9 +2011,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         y+=rowH+6.0f;
 
         const char* atmosphereStatus=TextFormat(
-                "fog=%s; haze=%s; dust=%s; scratch=%s; fog/haze RGB=premul, A=opacity",
-                preview.LocalFogAccumulationDiagnostic().c_str(),
-                preview.HazeAccumulationDiagnostic().c_str(),
+                "dust=%s; scratch=%s",
                 preview.DustResourceDiagnostic().c_str(),
                 preview.HdrSceneScratchDiagnostic().c_str());
         engine::Text(smallConfig,assets,

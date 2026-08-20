@@ -174,19 +174,6 @@ struct SectorTopologySector {
     SectorTopologyWallPartSettings defaultUpper;
 };
 
-struct SectorLightHazeSettings {
-    bool enabled = false;
-    float extentScale = 0.40f;
-    float heightOffsetWorld = 0.0f;
-    float density = 0.04f;
-    Color scatteringTint = WHITE;
-    float edgeSoftness = 0.35f;
-    float noiseAmount = 0.65f;
-    float noiseScaleWorld = 0.5f;
-    float flowDirectionDegrees = 0.0f;
-    float flowSpeedWorld = 0.20f;
-};
-
 struct SectorLightDustSettings {
     bool enabled = false;
     int amount = 24;
@@ -226,17 +213,14 @@ struct SectorLightProxySettings {
 };
 
 struct SectorLightAtmosphereSettings {
-    SectorLightHazeSettings haze;
     SectorLightProxySettings proxy;
     SectorLightDustSettings dust;
 };
 
-SectorLightHazeSettings NormalizeSectorLightHazeSettings(SectorLightHazeSettings settings);
 SectorLightDustSettings NormalizeSectorLightDustSettings(SectorLightDustSettings settings);
 SectorLightProxySettings NormalizeSectorLightProxySettings(SectorLightProxySettings settings);
 SectorLightAtmosphereSettings NormalizeSectorLightAtmosphereSettings(
         SectorLightAtmosphereSettings settings);
-bool IsDefaultSectorLightHazeSettings(const SectorLightHazeSettings& settings);
 bool IsDefaultSectorLightDustSettings(const SectorLightDustSettings& settings);
 bool IsDefaultSectorLightProxySettings(const SectorLightProxySettings& settings);
 bool IsDefaultSectorLightAtmosphereSettings(const SectorLightAtmosphereSettings& settings);

@@ -2306,80 +2306,57 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         }
         y += rowH + gap;
 
-        bool analyticMode = selectedAuthoringFogVolume->renderMode
-                == SectorLocalFogRenderMode::Analytic;
+        bool boxShape = selectedAuthoringFogVolume->shape == SectorLocalFogShape::Box;
         if (engine::Checkbox(
                     ui, config, input, assets,
-                    "sector_editor_fog_volume_analytic_mode",
+                    "sector_editor_fog_volume_box_shape",
                     Rectangle{0.0f, y, contentW, rowH},
-                    font, "Cheap analytic mode", analyticMode)) {
-            editing.MutateById(fogVolumeId, "Updated authoring fog volume mode",
-                    [analyticMode](SectorAuthoringFogVolume& volume) {
-                        const SectorLocalFogRenderMode mode = analyticMode
-                                ? SectorLocalFogRenderMode::Analytic
-                                : SectorLocalFogRenderMode::Raymarched;
-                        if (volume.renderMode == mode) return false;
-                        volume.renderMode = mode;
+                    font, "Box shape", boxShape)) {
+            editing.MutateById(fogVolumeId, "Updated authoring fog volume shape",
+                    [boxShape](SectorAuthoringFogVolume& volume) {
+                        const SectorLocalFogShape shape = boxShape
+                                ? SectorLocalFogShape::Box
+                                : SectorLocalFogShape::Ellipsoid;
+                        if (volume.shape == shape) return false;
+                        volume.shape = shape;
                         return true;
                     });
         }
         y += rowH + gap;
 
-        bool boxShape = selectedAuthoringFogVolume->shape == SectorLocalFogShape::Box;
-        if (analyticMode) {
-            if (engine::Checkbox(
-                        ui, config, input, assets,
-                        "sector_editor_fog_volume_box_shape",
-                        Rectangle{0.0f, y, contentW, rowH},
-                        font, "Box shape", boxShape)) {
-                editing.MutateById(fogVolumeId, "Updated authoring fog volume shape",
-                        [boxShape](SectorAuthoringFogVolume& volume) {
-                            const SectorLocalFogShape shape = boxShape
-                                    ? SectorLocalFogShape::Box
-                                    : SectorLocalFogShape::Ellipsoid;
-                            if (volume.shape == shape) return false;
-                            volume.shape = shape;
-                            return true;
-                        });
-            }
-            y += rowH + gap;
+        const SectorEditorInspectorStackedOptionRowLayout fogStyleLayout =
+                BuildSectorEditorInspectorStackedOptionRowLayout(
+                        y, contentW, rowH, gap);
+        engine::Text(
+                ui, config, assets, fogStyleLayout.labelRect, font,
+                "Fog style", engine::UITextJustify::Left,
+                config.mutedTextColor);
+        const char* const fogStyleOptions[] = {"Cloudy volume", "Room fog"};
+        int selectedFogStyle = selectedAuthoringFogVolume->analyticStyle
+                        == SectorAnalyticFogStyle::Room
+                ? 1
+                : 0;
+        if (engine::Option(
+                    ui, config, input, assets,
+                    "sector_editor_fog_volume_style",
+                    fogStyleLayout.fieldRect,
+                    font,
+                    fogStyleOptions,
+                    std::size(fogStyleOptions),
+                    selectedFogStyle)) {
+            const SectorAnalyticFogStyle fogStyle = selectedFogStyle == 1
+                    ? SectorAnalyticFogStyle::Room
+                    : SectorAnalyticFogStyle::Cloudy;
+            editing.MutateById(
+                    fogVolumeId,
+                    "Updated authoring fog volume style",
+                    [fogStyle](SectorAuthoringFogVolume& volume) {
+                        if (volume.analyticStyle == fogStyle) return false;
+                        volume.analyticStyle = fogStyle;
+                        return true;
+                    });
         }
-
-        if (analyticMode) {
-            const SectorEditorInspectorStackedOptionRowLayout analyticStyleLayout =
-                    BuildSectorEditorInspectorStackedOptionRowLayout(
-                            y, contentW, rowH, gap);
-            engine::Text(
-                    ui, config, assets, analyticStyleLayout.labelRect, font,
-                    "Fog style", engine::UITextJustify::Left,
-                    config.mutedTextColor);
-            const char* const analyticStyleOptions[] = {"Cloudy volume", "Room fog"};
-            int selectedAnalyticStyle = selectedAuthoringFogVolume->analyticStyle
-                            == SectorAnalyticFogStyle::Room
-                    ? 1
-                    : 0;
-            if (engine::Option(
-                        ui, config, input, assets,
-                        "sector_editor_fog_volume_analytic_style",
-                        analyticStyleLayout.fieldRect,
-                        font,
-                        analyticStyleOptions,
-                        std::size(analyticStyleOptions),
-                        selectedAnalyticStyle)) {
-                const SectorAnalyticFogStyle analyticStyle = selectedAnalyticStyle == 1
-                        ? SectorAnalyticFogStyle::Room
-                        : SectorAnalyticFogStyle::Cloudy;
-                editing.MutateById(
-                        fogVolumeId,
-                        "Updated authoring fog volume analytic style",
-                        [analyticStyle](SectorAuthoringFogVolume& volume) {
-                            if (volume.analyticStyle == analyticStyle) return false;
-                            volume.analyticStyle = analyticStyle;
-                            return true;
-                        });
-            }
-            y += analyticStyleLayout.height + gap;
-        }
+        y += fogStyleLayout.height + gap;
 
         const auto drawFloat = [&](const char* id,
                                    const char* label,
@@ -2440,21 +2417,17 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
         drawPosition("sector_editor_fog_volume_x", "Center X", true, 0);
         drawPosition("sector_editor_fog_volume_z", "Center Z", false, 1);
-        if (analyticMode && boxShape) {
+        if (boxShape) {
             drawFloat("sector_editor_fog_volume_yaw", "Yaw (degrees)", selectedAuthoringFogVolume->yawDegrees, 16, 0.0f, 360.0f, 2, &SectorAuthoringFogVolume::yawDegrees);
         }
         drawFloat("sector_editor_fog_volume_bottom", "Bottom offset", selectedAuthoringFogVolume->bottomOffsetWorld, 2, -16.0f, 16.0f, 3, &SectorAuthoringFogVolume::bottomOffsetWorld);
-        drawFloat("sector_editor_fog_volume_radius_x", analyticMode && boxShape ? "Half extent X" : "Radius X", selectedAuthoringFogVolume->radiusXWorld, 3, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusXWorld);
-        drawFloat("sector_editor_fog_volume_radius_z", analyticMode && boxShape ? "Half extent Z" : "Radius Z", selectedAuthoringFogVolume->radiusZWorld, 4, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusZWorld);
+        drawFloat("sector_editor_fog_volume_radius_x", boxShape ? "Half extent X" : "Radius X", selectedAuthoringFogVolume->radiusXWorld, 3, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusXWorld);
+        drawFloat("sector_editor_fog_volume_radius_z", boxShape ? "Half extent Z" : "Radius Z", selectedAuthoringFogVolume->radiusZWorld, 4, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusZWorld);
         drawFloat("sector_editor_fog_volume_height", "Height", selectedAuthoringFogVolume->heightWorld, 5, 0.05f, 32.0f, 3, &SectorAuthoringFogVolume::heightWorld);
         drawFloat("sector_editor_fog_volume_opacity", "Max opacity", selectedAuthoringFogVolume->maxOpacity, 7, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::maxOpacity);
-        if (analyticMode) {
-            drawFloat("sector_editor_fog_volume_analytic_start", "Path start (m)", selectedAuthoringFogVolume->analyticStartDistanceWorld, 13, 0.0f, 128.0f, 3, &SectorAuthoringFogVolume::analyticStartDistanceWorld);
-            drawFloat("sector_editor_fog_volume_analytic_end", "Path end (m)", selectedAuthoringFogVolume->analyticEndDistanceWorld, 14, 0.01f, 128.0f, 3, &SectorAuthoringFogVolume::analyticEndDistanceWorld);
-            drawFloat("sector_editor_fog_volume_analytic_exponent", "Falloff exponent", selectedAuthoringFogVolume->analyticFalloffExponent, 15, 0.05f, 8.0f, 3, &SectorAuthoringFogVolume::analyticFalloffExponent);
-        } else {
-            drawFloat("sector_editor_fog_volume_density", "Density", selectedAuthoringFogVolume->density, 6, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::density);
-        }
+        drawFloat("sector_editor_fog_volume_path_start", "Path start (m)", selectedAuthoringFogVolume->analyticStartDistanceWorld, 13, 0.0f, 128.0f, 3, &SectorAuthoringFogVolume::analyticStartDistanceWorld);
+        drawFloat("sector_editor_fog_volume_path_end", "Path end (m)", selectedAuthoringFogVolume->analyticEndDistanceWorld, 14, 0.01f, 128.0f, 3, &SectorAuthoringFogVolume::analyticEndDistanceWorld);
+        drawFloat("sector_editor_fog_volume_falloff_exponent", "Falloff exponent", selectedAuthoringFogVolume->analyticFalloffExponent, 15, 0.05f, 8.0f, 3, &SectorAuthoringFogVolume::analyticFalloffExponent);
         drawFloat("sector_editor_fog_volume_softness", "Edge softness", selectedAuthoringFogVolume->edgeSoftness, 8, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::edgeSoftness);
         drawFloat("sector_editor_fog_volume_noise_scale", "Noise scale (m)", selectedAuthoringFogVolume->noiseScaleWorld, 9, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::noiseScaleWorld);
         drawFloat("sector_editor_fog_volume_noise_amount", "Noise amount", selectedAuthoringFogVolume->noiseAmount, 10, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::noiseAmount);

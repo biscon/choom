@@ -40,7 +40,7 @@ linear-format 8-bit GPU textures (GL_R8 / GL_RGB8 / GL_RGBA8)
                          v
              2880x1620 GL_RGBA8 world target
                          |
-       LDR bloom -> local fog -> haze -> additive dust
+       LDR bloom -> fog volumes -> shafts/haze -> additive dust
        (all GL_RGBA8; values clip on every target write)
                          |
         GL_RGBA8 viewmodel target composited with alpha
@@ -97,8 +97,8 @@ The absence of a semantic flag also means two requests for the same key/path/fil
 | Baked lightmap RGB | Project-defined normalized linear lighting coefficients | Float bake values are clamped and written directly to byte channels (`SectorLightmap.cpp:4595-4605`), exported as RGBA8 PNG (`4664-4679`), uploaded as `GL_RGBA8`, and sampled raw (`SectorMeshRenderer.cpp:295-300`) | Numerically consistent round trip, but undocumented/fragile and LDR-clipped |
 | Baked AO in lightmap alpha | Linear non-color visibility factor | Written directly to alpha and sampled raw (`SectorLightmap.cpp:4476-4498`, `4600-4605`; `SectorMeshRenderer.cpp:295-300`) | Correct; sRGB hardware would not transform alpha either |
 | PBR environment cubemap | Stored as sRGB bytes | Sky source bytes are sampled into a generated RGBA8 cubemap; mip averages explicitly decode-average-encode (`SectorPbrEnvironment.cpp:22-35`, `82-95`, `98-172`); shader explicitly decodes samples (`SectorStaticModelRenderer.cpp:424-436`) | Internally coherent for this path |
-| Fog/haze colors | Authored byte colors; intended space undocumented | Divided by 255 and used directly (`SectorFog.cpp:29-47`; local fog/haze upload code) | Questionable/mixed, not linearized |
-| Procedural fog/haze noise | Non-color procedural scalar data | GLSL value noise, not a texture (`SectorLocalFogRenderer.cpp:91`, `291-294`; `SectorLightHazeRenderer.cpp:100`, `197-198`) | Correct/non-color; no transfer function applies |
+| Fog/haze colors | Authored byte colors; intended space undocumented | Divided by 255 and used directly (`SectorFog.cpp:29-47`; atmospheric renderer uploads) | Questionable/mixed, not linearized |
+| Procedural fog noise | Non-color procedural scalar data | GLSL value noise in `SectorAnalyticFogRenderer.cpp`, not a texture | Correct/non-color; no transfer function applies |
 | UI/font/sprite textures and UI colors | Normally display-encoded UI assets/colors | Uploaded as ordinary RGBA8 and drawn through raylib’s raw multiply shader (`UI.cpp:293-315`, `2535-2557`; `SpriteRenderSystem.cpp:34-63`; raylib `rlgl.h:5059-5070`) | Reasonable only when composited after scene encoding; current UI targets/blending remain ambiguous and gamma-space |
 
 ### Lighting and Lightmaps
@@ -145,7 +145,7 @@ The source hash correctly includes bake constants/settings, directional lighting
 
 ### Render Targets and Precision
 
-raylib `LoadRenderTexture()` always creates an 8-bit `PIXELFORMAT_UNCOMPRESSED_R8G8B8A8` color texture in this build (`raylib rtextures.c:4249-4286`), which maps to `GL_RGBA8`. The project's custom sampleable-depth world target also explicitly creates `PIXELFORMAT_UNCOMPRESSED_R8G8B8A8` (`SectorLocalFogRenderer.cpp:393-414`). No project render target uses the float formats that raylib can map to `GL_RGBA16F`/`GL_RGBA32F` (`raylib rlgl.h:3656-3661`).
+raylib `LoadRenderTexture()` always creates an 8-bit `PIXELFORMAT_UNCOMPRESSED_R8G8B8A8` color texture in the audited build (`raylib rtextures.c:4249-4286`), which maps to `GL_RGBA8`. No audited render target used the float formats that raylib can map to `GL_RGBA16F`/`GL_RGBA32F` (`raylib rlgl.h:3656-3661`).
 
 | Target | Size | Proven color format | Purpose/dynamic-range consequence |
 |---|---:|---|---|
@@ -187,7 +187,7 @@ The model ACES path is active for static models, animated/dynamic models, and vi
 - `environmentExposure` scales only environment specular, not total scene exposure (`SectorStaticModelRenderer.cpp:423-436`);
 - `outputBrightnessMultiplier` is a model/viewmodel artistic multiplier before ACES, not a display setting (`446-450`).
 
-Postprocessing order is proven by `SectorSceneRuntime::ApplyPostProcessing()`: LDR emissive-decal bloom first, then local fog; the renderer's local-fog wrapper subsequently applies haze and dust (`SectorSceneRuntime.cpp:337-350`; `SectorMeshRenderer.cpp:1196-1254`). The separate viewmodel is rendered and composited after all world postprocessing, and editor 3D overlays are drawn after that (`Main.cpp:309-328`).
+Postprocessing applied LDR emissive-decal bloom before atmospheric fog, haze, and dust. The separate viewmodel was rendered and composited after world postprocessing, with editor 3D overlays drawn afterward.
 
 ### Final Output Encoding
 
@@ -239,7 +239,7 @@ For the normal 3D path:
 8. Draw cutout billboards with mixed-space lighting/fog.
 9. End world 3D pass; the `GL_RGBA8` write has already clipped every surface.
 10. Apply LDR emissive-decal bloom.
-11. Apply local volumetric fog, then light haze, then additive dust.
+11. Apply fog volumes, light shafts/haze, then additive dust.
 12. Render models/viewmodel with local ACES/sRGB into a separate RGBA8 target; draw additive muzzle flash into it.
 13. Alpha-composite the viewmodel target over the world target.
 14. Draw editor 3D overlays into the world target when applicable.
@@ -516,9 +516,10 @@ Primary project files:
 - `sources/sector_demo/renderer/SectorPbrEnvironment.cpp`
 - `sources/sector_demo/renderer/SectorFog.cpp`
 - `sources/sector_demo/renderer/SectorBloomRenderer.cpp`
-- `sources/sector_demo/renderer/SectorLocalFogRenderer.cpp`
+- `sources/sector_demo/renderer/SectorAnalyticFogRenderer.cpp`
 - `sources/sector_demo/renderer/SectorLocalFogLighting.cpp`
-- `sources/sector_demo/renderer/SectorLightHazeRenderer.cpp`
+- `sources/sector_demo/renderer/SectorAnalyticLightShaftRenderer.cpp`
+- `sources/sector_demo/renderer/SectorLightProxyRenderer.cpp`
 - `sources/sector_demo/renderer/SectorLightDustRenderer.cpp`
 - `sources/sector_editor/SectorEditor.cpp`
 - `sources/sector_editor/SectorEditorPreviewSettingsModal.cpp`

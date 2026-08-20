@@ -24,33 +24,6 @@ float FiniteOr(float value, float fallback)
 
 } // namespace
 
-SectorLightHazeSettings NormalizeSectorLightHazeSettings(SectorLightHazeSettings settings)
-{
-    const SectorLightHazeSettings defaults;
-    settings.extentScale = std::clamp(FiniteOr(settings.extentScale, defaults.extentScale), 0.05f, 2.0f);
-    settings.heightOffsetWorld = std::clamp(
-            FiniteOr(settings.heightOffsetWorld, defaults.heightOffsetWorld),
-            -100000.0f,
-            100000.0f);
-    settings.density = std::clamp(FiniteOr(settings.density, defaults.density), 0.0f, 2.0f);
-    settings.edgeSoftness = std::clamp(FiniteOr(settings.edgeSoftness, defaults.edgeSoftness), 0.01f, 1.0f);
-    settings.noiseAmount = std::clamp(FiniteOr(settings.noiseAmount, defaults.noiseAmount), 0.0f, 1.0f);
-    settings.noiseScaleWorld = std::clamp(
-            FiniteOr(settings.noiseScaleWorld, defaults.noiseScaleWorld),
-            0.05f,
-            16.0f);
-    settings.flowDirectionDegrees = std::clamp(
-            FiniteOr(settings.flowDirectionDegrees, defaults.flowDirectionDegrees),
-            -360.0f,
-            360.0f);
-    settings.flowSpeedWorld = std::clamp(
-            FiniteOr(settings.flowSpeedWorld, defaults.flowSpeedWorld),
-            0.0f,
-            2.0f);
-    settings.scatteringTint.a = 255;
-    return settings;
-}
-
 SectorLightDustSettings NormalizeSectorLightDustSettings(SectorLightDustSettings settings)
 {
     const SectorLightDustSettings defaults;
@@ -130,7 +103,6 @@ SectorLightProxySettings NormalizeSectorLightProxySettings(SectorLightProxySetti
 SectorLightAtmosphereSettings NormalizeSectorLightAtmosphereSettings(
         SectorLightAtmosphereSettings settings)
 {
-    settings.haze = NormalizeSectorLightHazeSettings(settings.haze);
     settings.proxy = NormalizeSectorLightProxySettings(settings.proxy);
     settings.dust = NormalizeSectorLightDustSettings(settings.dust);
     return settings;
@@ -161,22 +133,6 @@ bool IsDefaultSectorLightProxySettings(const SectorLightProxySettings& settings)
             && SameRgb(value.shaft.scatteringTint, defaults.shaft.scatteringTint);
 }
 
-bool IsDefaultSectorLightHazeSettings(const SectorLightHazeSettings& settings)
-{
-    const SectorLightHazeSettings value = NormalizeSectorLightHazeSettings(settings);
-    const SectorLightHazeSettings defaults;
-    return value.enabled == defaults.enabled
-            && value.extentScale == defaults.extentScale
-            && value.heightOffsetWorld == defaults.heightOffsetWorld
-            && value.density == defaults.density
-            && SameRgb(value.scatteringTint, defaults.scatteringTint)
-            && value.edgeSoftness == defaults.edgeSoftness
-            && value.noiseAmount == defaults.noiseAmount
-            && value.noiseScaleWorld == defaults.noiseScaleWorld
-            && value.flowDirectionDegrees == defaults.flowDirectionDegrees
-            && value.flowSpeedWorld == defaults.flowSpeedWorld;
-}
-
 bool IsDefaultSectorLightDustSettings(const SectorLightDustSettings& settings)
 {
     const SectorLightDustSettings value = NormalizeSectorLightDustSettings(settings);
@@ -194,8 +150,7 @@ bool IsDefaultSectorLightDustSettings(const SectorLightDustSettings& settings)
 
 bool IsDefaultSectorLightAtmosphereSettings(const SectorLightAtmosphereSettings& settings)
 {
-    return IsDefaultSectorLightHazeSettings(settings.haze)
-            && IsDefaultSectorLightProxySettings(settings.proxy)
+    return IsDefaultSectorLightProxySettings(settings.proxy)
             && IsDefaultSectorLightDustSettings(settings.dust);
 }
 namespace {

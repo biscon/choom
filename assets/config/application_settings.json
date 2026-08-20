@@ -10,7 +10,6 @@
   "graphics": {
     "renderScale": 1.5,
     "fxaa": true,
-    "volumetricQuality": "medium",
     "shadowQuality": "high",
     "maxDynamicLights": 32,
     "maxShadowLightUpdatesPerFrame": 2,
