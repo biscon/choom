@@ -36,6 +36,10 @@ uniform vec3 coneApex;
 uniform vec3 coneDirection;
 uniform float coneLength;
 uniform float coneBaseRadius;
+uniform int shaftShape; // 0 cone, 1 rectangular prism
+uniform vec3 rectRight;
+uniform vec3 rectUp;
+uniform vec2 rectHalfSize;
 uniform vec3 shaftRadiance;
 uniform vec2 shaftParams; // edge softness, maximum extinction
 uniform vec4 fogParamsA; // mode, start, end/density, maximum opacity
@@ -108,6 +112,27 @@ bool intersectFiniteCone(vec3 rayOrigin, vec3 rayDirection,
     return hitCount >= 2 && exitT - enterT > epsilon;
 }
 
+bool intersectRectPrism(vec3 rayOrigin, vec3 rayDirection,
+        out float enterT, out float exitT) {
+    vec3 axis = safeNormalize(coneDirection, vec3(0.0, -1.0, 0.0));
+    vec3 center = coneApex + axis * coneLength * 0.5;
+    vec3 offset = rayOrigin - center;
+    vec3 localOrigin = vec3(dot(offset, rectRight), dot(offset, rectUp), dot(offset, axis));
+    vec3 localDirection = vec3(dot(rayDirection, rectRight), dot(rayDirection, rectUp), dot(rayDirection, axis));
+    vec3 halfSize = vec3(max(rectHalfSize, vec2(0.0001)), max(coneLength * 0.5, 0.0001));
+    vec3 safeDirection = vec3(
+            abs(localDirection.x) > 0.000001 ? localDirection.x : (localDirection.x < 0.0 ? -0.000001 : 0.000001),
+            abs(localDirection.y) > 0.000001 ? localDirection.y : (localDirection.y < 0.0 ? -0.000001 : 0.000001),
+            abs(localDirection.z) > 0.000001 ? localDirection.z : (localDirection.z < 0.0 ? -0.000001 : 0.000001));
+    vec3 first = (-halfSize - localOrigin) / safeDirection;
+    vec3 second = (halfSize - localOrigin) / safeDirection;
+    vec3 nearHit = min(first, second);
+    vec3 farHit = max(first, second);
+    enterT = max(max(nearHit.x, nearHit.y), nearHit.z);
+    exitT = min(min(farHit.x, farHit.y), farHit.z);
+    return exitT - enterT > 0.000001;
+}
+
 float fogTransmittance(vec3 position) {
     if (fogParamsA.x < 0.5) return 1.0;
     float amount = 0.0;
@@ -138,9 +163,9 @@ float shaftOpticalProfileAt(
             dot(samplePosition - coneApex, axis) / max(coneLength, 0.0001),
             0.0,
             1.0);
-    float localDiameter = max(
-            2.0 * coneBaseRadius * max(axial01, 0.01),
-            0.0001);
+    float localDiameter = shaftShape == 1
+            ? max(2.0 * max(rectHalfSize.x, rectHalfSize.y), 0.0001)
+            : max(2.0 * coneBaseRadius * max(axial01, 0.01), 0.0001);
     // The old hard clamp exposed a contour where chord/localDiameter crossed
     // one. Smooth that transition before applying the authored edge profile.
     float rawCoverage = max(visibleChord / localDiameter, 0.0);
@@ -159,7 +184,10 @@ void main() {
             + cameraUp * ndc.y * tanHalfFov);
     float enterT = 0.0;
     float exitT = 0.0;
-    if (!intersectFiniteCone(cameraPosition, rayDirection, enterT, exitT)) discard;
+    bool hit = shaftShape == 1
+            ? intersectRectPrism(cameraPosition, rayDirection, enterT, exitT)
+            : intersectFiniteCone(cameraPosition, rayDirection, enterT, exitT);
+    if (!hit) discard;
     float depth = texture(sceneDepth, uv).r;
     float zNdc = depth * 2.0 - 1.0;
     float forwardDistance = (2.0 * nearPlane * farPlane)
@@ -226,7 +254,8 @@ int FindDynamicIndex(
         const SectorBillboardDynamicLightContext& lights)
 {
     if (!IsSectorLightAtmosphereSourceDynamic(source)) return -1;
-    const int type = source.kind == SectorLightAtmosphereSourceKind::DynamicSpot ? 1 : 0;
+    const int type = source.kind == SectorLightAtmosphereSourceKind::DynamicSpot ? 1
+            : source.kind == SectorLightAtmosphereSourceKind::DynamicRect ? 2 : 0;
     for (int index = 0; index < lights.dynamicLightCount; ++index) {
         if (lights.dynamicLightIds[static_cast<std::size_t>(index)] == source.lightId
                 && lights.dynamicLightTypes[static_cast<std::size_t>(index)] == type) return index;
@@ -283,6 +312,8 @@ bool SectorAnalyticLightShaftRenderer::EnsureShader()
     LOC(nearPlaneLoc, "nearPlane"); LOC(farPlaneLoc, "farPlane");
     LOC(coneApexLoc, "coneApex"); LOC(coneDirectionLoc, "coneDirection");
     LOC(coneLengthLoc, "coneLength"); LOC(coneBaseRadiusLoc, "coneBaseRadius");
+    LOC(shaftShapeLoc, "shaftShape"); LOC(rectRightLoc, "rectRight");
+    LOC(rectUpLoc, "rectUp"); LOC(rectHalfSizeLoc, "rectHalfSize");
     LOC(shaftRadianceLoc, "shaftRadiance"); LOC(shaftParamsLoc, "shaftParams");
     LOC(fogParamsALoc, "fogParamsA"); LOC(fogParamsBLoc, "fogParamsB");
 #undef LOC
@@ -318,7 +349,8 @@ bool SectorAnalyticLightShaftRenderer::Apply(
     SectorAtmosphereScissorRect unionScissor{};
     for (const SectorLightAtmosphereSource& source : sources) {
         const SectorLightProxyShaftSettings& settings = source.atmosphere.proxy.shaft;
-        if (source.shape != SectorLightAtmosphereShape::Cone || !settings.enabled
+        if ((source.shape != SectorLightAtmosphereShape::Cone
+                    && source.shape != SectorLightAtmosphereShape::RectPrism) || !settings.enabled
                 || settings.brightness <= 0.0f
                 || !IsSectorLightAtmosphereSourceSelected(source, dynamicLights)) continue;
         SectorLightAtmosphereVolume volume;
@@ -331,22 +363,48 @@ bool SectorAnalyticLightShaftRenderer::Apply(
         // shafts deliberately support the authored 0.01 minimum.
         const float authoredExtent = source.rangeWorld * settings.lengthScale;
         if (!std::isfinite(authoredExtent) || authoredExtent <= 0.0f) continue;
-        volume.coneRadiusWorld *= authoredExtent / volume.extentWorld;
+        if (source.shape == SectorLightAtmosphereShape::Cone) {
+            volume.coneRadiusWorld *= authoredExtent / volume.extentWorld;
+        }
         volume.extentWorld = authoredExtent;
-        volume.coneRadiusWorld *= settings.widthScale;
+        if (source.shape == SectorLightAtmosphereShape::Cone) {
+            volume.coneRadiusWorld *= settings.widthScale;
+        } else {
+            volume.halfWidthWorld *= settings.widthScale;
+            volume.halfHeightWorld *= settings.widthScale;
+        }
         volume.boundsCenterWorld = Vector3Add(
                 volume.originWorld,
                 Vector3Scale(volume.directionWorld, volume.extentWorld * 0.5f));
-        volume.boundsRadiusWorld = std::sqrt(
-                volume.extentWorld * volume.extentWorld * 0.25f
-                + volume.coneRadiusWorld * volume.coneRadiusWorld);
+        volume.boundsRadiusWorld = source.shape == SectorLightAtmosphereShape::Cone
+                ? std::sqrt(volume.extentWorld * volume.extentWorld * 0.25f
+                        + volume.coneRadiusWorld * volume.coneRadiusWorld)
+                : std::sqrt(volume.extentWorld * volume.extentWorld * 0.25f
+                        + volume.halfWidthWorld * volume.halfWidthWorld
+                        + volume.halfHeightWorld * volume.halfHeightWorld);
         if (!IsSectorLightAtmosphereVolumeVisible(volume, visibility, receiverBounds,
                         camera, aspect, nearPlane, farPlane)) continue;
         const float baseRadius = volume.coneRadiusWorld;
         Vector3 minimum;
         Vector3 maximum;
-        ConeBounds(volume.originWorld, volume.directionWorld, volume.extentWorld,
-                baseRadius, minimum, maximum);
+        if (source.shape == SectorLightAtmosphereShape::Cone) {
+            ConeBounds(volume.originWorld, volume.directionWorld, volume.extentWorld,
+                    baseRadius, minimum, maximum);
+        } else {
+            const Vector3 center = volume.boundsCenterWorld;
+            const Vector3 extent{
+                    std::fabs(volume.directionWorld.x) * volume.extentWorld * 0.5f
+                            + std::fabs(volume.rightWorld.x) * volume.halfWidthWorld
+                            + std::fabs(volume.upWorld.x) * volume.halfHeightWorld,
+                    std::fabs(volume.directionWorld.y) * volume.extentWorld * 0.5f
+                            + std::fabs(volume.rightWorld.y) * volume.halfWidthWorld
+                            + std::fabs(volume.upWorld.y) * volume.halfHeightWorld,
+                    std::fabs(volume.directionWorld.z) * volume.extentWorld * 0.5f
+                            + std::fabs(volume.rightWorld.z) * volume.halfWidthWorld
+                            + std::fabs(volume.upWorld.z) * volume.halfHeightWorld};
+            minimum = Vector3Subtract(center, extent);
+            maximum = Vector3Add(center, extent);
+        }
         const SectorAtmosphereScissorRect scissor = ProjectSectorAtmosphereBoundsToScissor(
                 camera, aspect, nearPlane, minimum, maximum, width, height);
         if (scissor.Empty()) continue;
@@ -417,6 +475,12 @@ bool SectorAnalyticLightShaftRenderer::Apply(
         SetShaderValue(shader, coneDirectionLoc, &visible.volume.directionWorld, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, coneLengthLoc, &visible.volume.extentWorld, SHADER_UNIFORM_FLOAT);
         SetShaderValue(shader, coneBaseRadiusLoc, &baseRadius, SHADER_UNIFORM_FLOAT);
+        const int shaftShape = visible.source->shape == SectorLightAtmosphereShape::RectPrism ? 1 : 0;
+        const Vector2 rectHalfSize{visible.volume.halfWidthWorld, visible.volume.halfHeightWorld};
+        SetShaderValue(shader, shaftShapeLoc, &shaftShape, SHADER_UNIFORM_INT);
+        SetShaderValue(shader, rectRightLoc, &visible.volume.rightWorld, SHADER_UNIFORM_VEC3);
+        SetShaderValue(shader, rectUpLoc, &visible.volume.upWorld, SHADER_UNIFORM_VEC3);
+        SetShaderValue(shader, rectHalfSizeLoc, &rectHalfSize, SHADER_UNIFORM_VEC2);
         SetShaderValue(shader, shaftRadianceLoc, &visible.radiance, SHADER_UNIFORM_VEC3);
         SetShaderValue(shader, shaftParamsLoc, &shaftParams, SHADER_UNIFORM_VEC2);
         rlScissor(visible.scissor.x, visible.scissor.y,

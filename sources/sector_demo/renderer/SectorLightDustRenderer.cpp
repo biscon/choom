@@ -80,6 +80,7 @@ uniform float dynamicLightRadii[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightIntensities[MAX_DYNAMIC_LIGHTS];
 uniform int dynamicLightTypes[MAX_DYNAMIC_LIGHTS];
 uniform vec3 dynamicLightDirections[MAX_DYNAMIC_LIGHTS];
+uniform vec3 dynamicLightSpotShadowRight[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightInnerConeCos[MAX_DYNAMIC_LIGHTS];
 uniform float dynamicLightOuterConeCos[MAX_DYNAMIC_LIGHTS];
 uniform int dynamicLightShadowSlots[MAX_DYNAMIC_LIGHTS];
@@ -149,9 +150,11 @@ float shadowVisibility(int lightIndex, int slot, vec3 position) {
         pointFace=pointShadowFace(fromLight); float farCoefficient=lightRadius/max(lightRadius-0.05,0.00001);
         coordinate=vec3(pointShadowUv(pointFace,fromLight),farCoefficient*(1.0-0.05/forwardDepth)); }
     else { vec3 forward=safeNormalize(dynamicLightDirections[lightIndex],vec3(0,-1,0));
-        vec3 upReference=abs(forward.y)>0.98?vec3(0,0,1):vec3(0,1,0); vec3 right=safeNormalize(cross(forward,upReference),vec3(1,0,0));
+        vec3 upReference=abs(forward.y)>0.98?vec3(0,0,1):vec3(0,1,0); vec3 right=dynamicLightTypes[lightIndex]==2
+                ? safeNormalize(dynamicLightSpotShadowRight[lightIndex],vec3(1,0,0))
+                : safeNormalize(cross(forward,upReference),vec3(1,0,0));
         vec3 up=cross(right,forward); float z=dot(fromLight,forward); if(z<=0.05)return 1.0;
-        float tangent=tan(min(acos(clamp(dynamicLightOuterConeCos[lightIndex],-0.999,0.999)),1.553343)); float farPlane=dynamicLightRadii[lightIndex];
+        float tangent=dynamicLightTypes[lightIndex]==2?tan(1.553343):tan(min(acos(clamp(dynamicLightOuterConeCos[lightIndex],-0.999,0.999)),1.553343)); float farPlane=dynamicLightRadii[lightIndex];
         float ndc=(farPlane+0.05)/(farPlane-0.05)-(2.0*farPlane*0.05)/((farPlane-0.05)*z);
         coordinate=vec3(vec2(dot(fromLight,right),dot(fromLight,up))/max(2.0*z*tangent,0.00001)+0.5,ndc*0.5+0.5); }
     if (any(lessThan(coordinate, vec3(0.0))) || any(greaterThan(coordinate, vec3(1.0)))) return 1.0;
@@ -176,13 +179,25 @@ vec3 dynamicLighting(vec3 position) {
         if (index >= dynamicLightCount) break;
         float radius = dynamicLightRadii[index];
         vec3 toLight = dynamicLightPositions[index] - position;
+        float emitter = 1.0;
+        if (dynamicLightTypes[index] == 2) {
+            vec3 normal = safeNormalize(dynamicLightDirections[index], vec3(0,-1,0));
+            vec3 right = safeNormalize(dynamicLightSpotShadowRight[index], vec3(1,0,0));
+            vec3 up = safeNormalize(cross(right,normal), vec3(0,0,1));
+            vec3 relative = position-dynamicLightPositions[index];
+            vec3 nearest=dynamicLightPositions[index]
+                    +right*clamp(dot(relative,right),-dynamicLightInnerConeCos[index],dynamicLightInnerConeCos[index])
+                    +up*clamp(dot(relative,up),-dynamicLightOuterConeCos[index],dynamicLightOuterConeCos[index]);
+            toLight=nearest-position;
+            emitter=max(dot(normal,safeNormalize(position-nearest,normal)),0.0);
+        }
         float distanceSquared = dot(toLight, toLight);
         if (radius <= 0.0 || distanceSquared >= radius * radius) continue;
         float distanceToLight = sqrt(max(distanceSquared, 0.0));
         vec3 lightDirection = distanceToLight > 0.0001 ? toLight / distanceToLight : vec3(0.0, 1.0, 0.0);
         float attenuation = clamp(1.0 - distanceToLight / radius, 0.0, 1.0);
         attenuation *= attenuation;
-        float cone = 1.0;
+        float cone = emitter;
         if (dynamicLightTypes[index] == 1) {
             vec3 spotDirection = safeNormalize(dynamicLightDirections[index], vec3(0.0, -1.0, 0.0));
             float coneDot = dot(spotDirection, distanceToLight > 0.0001 ? -lightDirection : spotDirection);
@@ -265,6 +280,12 @@ Vector3 SafeNormalize(Vector3 value, Vector3 fallback)
 
 void VolumeBasis(const SectorLightAtmosphereVolume& volume, Vector3& outRight, Vector3& outUp)
 {
+    if (volume.source != nullptr
+            && volume.source->shape == SectorLightAtmosphereShape::RectPrism) {
+        outRight = volume.rightWorld;
+        outUp = volume.upWorld;
+        return;
+    }
     const Vector3 reference = std::fabs(volume.directionWorld.y) > 0.98f
             ? Vector3{0.0f, 0.0f, 1.0f}
             : Vector3{0.0f, 1.0f, 0.0f};
@@ -284,6 +305,14 @@ Vector3 RandomPositionInVolume(const SectorLightAtmosphereVolume& volume, std::u
         const float planar = std::sqrt(std::max(1.0f - z * z, 0.0f));
         return Vector3Add(volume.originWorld, Vector3Scale(
                 Vector3{std::cos(angle) * planar, z, std::sin(angle) * planar}, radius));
+    }
+    if (volume.source->shape == SectorLightAtmosphereShape::RectPrism) {
+        return Vector3Add(
+                Vector3Add(volume.originWorld,
+                        Vector3Scale(volume.directionWorld, u * volume.extentWorld)),
+                Vector3Add(
+                        Vector3Scale(volume.rightWorld, (v * 2.0f - 1.0f) * volume.halfWidthWorld),
+                        Vector3Scale(volume.upWorld, (w * 2.0f - 1.0f) * volume.halfHeightWorld)));
     }
     Vector3 right;
     Vector3 up;
@@ -347,6 +376,7 @@ bool SectorLightDustRenderer::EnsureShader()
     locations.dynamicLights.dynamicLightIntensities = ArrayLocation(shader, "dynamicLightIntensities");
     locations.dynamicLights.dynamicLightTypes = ArrayLocation(shader, "dynamicLightTypes");
     locations.dynamicLights.dynamicLightDirections = ArrayLocation(shader, "dynamicLightDirections");
+    locations.dynamicLights.dynamicLightSpotShadowRight = ArrayLocation(shader, "dynamicLightSpotShadowRight");
     locations.dynamicLights.dynamicLightInnerConeCos = ArrayLocation(shader, "dynamicLightInnerConeCos");
     locations.dynamicLights.dynamicLightOuterConeCos = ArrayLocation(shader, "dynamicLightOuterConeCos");
     locations.shadows.dynamicLightShadowSlots = ArrayLocation(shader, "dynamicLightShadowSlots");

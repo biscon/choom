@@ -244,6 +244,33 @@ bool MakeSpotSource(
     return true;
 }
 
+bool MakeRectSource(
+        const SectorTopologyStaticRectLight& authored,
+        const SectorCollisionWorld* sectorLookupWorld,
+        SectorStaticSpecularLightSource& outSource)
+{
+    const Vector3 position = SectorAuthoringToWorldPosition(authored.position);
+    const Vector3 target = SectorAuthoringToWorldPosition(authored.target);
+    const float radius = SectorAuthoringToWorldDistance(authored.range);
+    if (authored.id <= 0 || !IsFinite(position) || !IsFinite(target)
+            || !std::isfinite(radius) || radius <= 0.0f
+            || !std::isfinite(authored.intensity) || authored.intensity <= 0.0f) return false;
+    outSource = {};
+    outSource.lightId = authored.id;
+    outSource.ownerSectorId = sectorLookupWorld != nullptr
+            ? sectorLookupWorld->FindSectorContainingPoint({position.x, position.z}) : 0;
+    outSource.kind = SectorStaticSpecularLightKind::Spot;
+    outSource.position = position;
+    outSource.direction = Vector3Normalize(Vector3Subtract(target, position));
+    if (!IsFinite(outSource.direction)) outSource.direction = {0.0f, -1.0f, 0.0f};
+    outSource.color = engine::SrgbColorBytesToLinearSceneRgb(authored.color);
+    outSource.radius = radius;
+    outSource.intensity = authored.intensity;
+    outSource.innerConeCos = 0.0f;
+    outSource.outerConeCos = 0.0f;
+    return true;
+}
+
 } // namespace
 
 void ResetSectorStaticSpecularLights(
@@ -261,7 +288,7 @@ void RebuildSectorStaticSpecularLights(
 {
     outState.sources.clear();
     outState.sources.reserve(
-            map.staticLights.size() + map.staticSpotLights.size());
+            map.staticLights.size() + map.staticSpotLights.size() + map.staticRectLights.size());
     for (const SectorTopologyStaticPointLight& authored : map.staticLights) {
         SectorStaticSpecularLightSource source;
         if (MakePointSource(authored, sectorLookupWorld, source)) {
@@ -271,6 +298,12 @@ void RebuildSectorStaticSpecularLights(
     for (const SectorTopologyStaticSpotLight& authored : map.staticSpotLights) {
         SectorStaticSpecularLightSource source;
         if (MakeSpotSource(authored, sectorLookupWorld, source)) {
+            outState.sources.push_back(source);
+        }
+    }
+    for (const SectorTopologyStaticRectLight& authored : map.staticRectLights) {
+        SectorStaticSpecularLightSource source;
+        if (MakeRectSource(authored, sectorLookupWorld, source)) {
             outState.sources.push_back(source);
         }
     }

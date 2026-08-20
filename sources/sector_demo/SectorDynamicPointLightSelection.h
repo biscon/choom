@@ -27,12 +27,14 @@ class SectorCollisionWorld;
 struct SectorReceiverBounds;
 struct SectorTopologyDynamicPointLight;
 struct SectorTopologyDynamicSpotLight;
+struct SectorTopologyDynamicRectLight;
 struct SectorTopologyMap;
 struct SectorPreviewDynamicPointLightUniform;
 
 enum class SectorPreviewDynamicLightKind {
     Point = 0,
-    Spot = 1
+    Spot = 1,
+    Rect = 2
 };
 
 struct SectorPreviewDynamicLightKey {
@@ -56,6 +58,7 @@ struct SectorPreviewDynamicPointLightUniform {
     SectorPreviewDynamicLightKind kind = SectorPreviewDynamicLightKind::Point;
     Vector3 position = {};
     Vector3 direction = {0.0f, -1.0f, 0.0f};
+    Vector3 rectRight = {1.0f, 0.0f, 0.0f};
     Vector3 color = {};
     float radius = 0.0f;
     float innerConeCos = -1.0f;
@@ -176,6 +179,10 @@ bool MakeSectorPreviewDynamicPointLightUniform(
 
 bool MakeSectorPreviewDynamicSpotLightUniform(
         const SectorTopologyDynamicSpotLight& light,
+        SectorPreviewDynamicPointLightUniform& outLight);
+
+bool MakeSectorPreviewDynamicRectLightUniform(
+        const SectorTopologyDynamicRectLight& light,
         SectorPreviewDynamicPointLightUniform& outLight);
 
 float EvaluateDynamicLightFlickerMultiplier(

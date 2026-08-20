@@ -60,6 +60,10 @@ private:
     int coneDirectionLoc = -1;
     int coneLengthLoc = -1;
     int coneBaseRadiusLoc = -1;
+    int shaftShapeLoc = -1;
+    int rectRightLoc = -1;
+    int rectUpLoc = -1;
+    int rectHalfSizeLoc = -1;
     int shaftRadianceLoc = -1;
     int shaftParamsLoc = -1;
     int fogParamsALoc = -1;

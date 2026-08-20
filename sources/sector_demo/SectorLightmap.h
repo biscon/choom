@@ -116,6 +116,7 @@ struct SectorLightmapBakeResult {
     int bvhMaxTrianglesInLeaf = 0;
     int staticLightCount = 0;
     int staticSpotLightCount = 0;
+    int staticRectLightCount = 0;
     SectorLightmapBakeQualityPreset qualityPreset =
             SectorLightmapBakeQualityPreset::Standard;
     SectorLightmapBakeQualityParameters qualityParameters;

@@ -331,6 +331,18 @@ void main()
     for (int i = 0; i < dynamicLightCount && i < MAX_DYNAMIC_LIGHTS; ++i) {
         float radius = dynamicLightRadii[i];
         vec3 toLight = dynamicLightPositions[i] - fragWorldPosition;
+        float emitterAtten = 1.0;
+        if (dynamicLightTypes[i] == 2) {
+            vec3 emitterNormal = SafeNormalize(dynamicLightDirections[i], vec3(0.0, -1.0, 0.0));
+            vec3 emitterRight = SafeNormalize(dynamicLightSpotShadowRight[i], vec3(1.0, 0.0, 0.0));
+            vec3 emitterUp = SafeNormalize(cross(emitterRight, emitterNormal), vec3(0.0, 0.0, 1.0));
+            vec3 relative = fragWorldPosition - dynamicLightPositions[i];
+            vec3 nearest = dynamicLightPositions[i]
+                    + emitterRight * clamp(dot(relative, emitterRight), -dynamicLightInnerConeCos[i], dynamicLightInnerConeCos[i])
+                    + emitterUp * clamp(dot(relative, emitterUp), -dynamicLightOuterConeCos[i], dynamicLightOuterConeCos[i]);
+            toLight = nearest - fragWorldPosition;
+            emitterAtten = max(dot(emitterNormal, SafeNormalize(fragWorldPosition - nearest, emitterNormal)), 0.0);
+        }
         float distanceSq = dot(toLight, toLight);
         if (radius > 0.0 && distanceSq < radius * radius) {
             float distanceToLight = sqrt(max(distanceSq, 0.0));
@@ -340,7 +352,7 @@ void main()
             atten *= atten;
             if (ndotl <= 0.0 || atten <= 0.0
                     || dynamicLightIntensities[i] <= 0.0) continue;
-            float coneAtten = 1.0;
+            float coneAtten = emitterAtten;
             if (dynamicLightTypes[i] == 1) {
                 vec3 spotDirection = SafeNormalize(dynamicLightDirections[i], vec3(0.0, -1.0, 0.0));
                 vec3 fragmentDirectionFromLight = distanceToLight > 0.0001

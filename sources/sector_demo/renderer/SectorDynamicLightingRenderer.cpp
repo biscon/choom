@@ -135,7 +135,11 @@ bool ShadowLightIntersectsBounds(
         const SectorPreviewDynamicSpotLightShadowMatrix& matrix,
         const SectorAabb3& bounds)
 {
-    if (!SphereIntersectsAabb(light.position, light.radius, bounds)) {
+    const float influenceRadius = light.kind == SectorPreviewDynamicLightKind::Rect
+            ? light.radius + std::sqrt(light.innerConeCos * light.innerConeCos
+                    + light.outerConeCos * light.outerConeCos)
+            : light.radius;
+    if (!SphereIntersectsAabb(light.position, influenceRadius, bounds)) {
         return false;
     }
     if (light.kind == SectorPreviewDynamicLightKind::Point) {
@@ -175,6 +179,7 @@ bool ShadowLightIntersectsBounds(
                 + boundsRadius / CubeFaceCornerCosine;
     }
 
+    if (light.kind == SectorPreviewDynamicLightKind::Rect) return true;
     const Vector3 center = SectorAabb3Center(bounds);
     const Vector3 halfExtents = Vector3Scale(SectorAabb3Extents(bounds), 0.5f);
     const float boundsRadius = Vector3Length(halfExtents);
@@ -203,13 +208,18 @@ bool DynamicLightIntersectsBounds(
         const SectorPreviewDynamicPointLightUniform& light,
         const SectorAabb3& bounds)
 {
-    if (!SphereIntersectsAabb(light.position, light.radius, bounds)) {
+    const float influenceRadius = light.kind == SectorPreviewDynamicLightKind::Rect
+            ? light.radius + std::sqrt(light.innerConeCos * light.innerConeCos
+                    + light.outerConeCos * light.outerConeCos)
+            : light.radius;
+    if (!SphereIntersectsAabb(light.position, influenceRadius, bounds)) {
         return false;
     }
     if (light.kind == SectorPreviewDynamicLightKind::Point) {
         return true;
     }
 
+    if (light.kind == SectorPreviewDynamicLightKind::Rect) return true;
     const Vector3 center = SectorAabb3Center(bounds);
     const Vector3 halfExtents = Vector3Scale(SectorAabb3Extents(bounds), 0.5f);
     const float boundsRadius = Vector3Length(halfExtents);
@@ -369,7 +379,7 @@ void UploadSectorRendererDynamicPointLights(
                 runtimeSeconds);
         types[static_cast<size_t>(i)] = static_cast<int>(lights[static_cast<size_t>(i)].kind);
         directions[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].kind
-                        == SectorPreviewDynamicLightKind::Spot
+                        != SectorPreviewDynamicLightKind::Point
                 ? (Vector3LengthSqr(lights[static_cast<size_t>(i)].direction)
                                 > 0.00000001f
                         ? Vector3Normalize(lights[static_cast<size_t>(i)].direction)
@@ -378,7 +388,7 @@ void UploadSectorRendererDynamicPointLights(
         innerConeCos[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].innerConeCos;
         outerConeCos[static_cast<size_t>(i)] = lights[static_cast<size_t>(i)].outerConeCos;
         if (lights[static_cast<size_t>(i)].kind
-                == SectorPreviewDynamicLightKind::Spot) {
+                != SectorPreviewDynamicLightKind::Point) {
             BuildSectorDynamicSpotShadowProjectionUpload(
                     lights[static_cast<size_t>(i)],
                     spotShadowRight[static_cast<size_t>(i)],
@@ -903,14 +913,14 @@ SectorBillboardDynamicLightContext SectorDynamicLightingRenderer::BuildLightCont
                 DynamicLightEffectiveUploadIntensity(light, runtimeSeconds);
         context.dynamicLightTypes[localIndex] = static_cast<int>(light.kind);
         context.dynamicLightDirections[localIndex] = light.kind
-                        == SectorPreviewDynamicLightKind::Spot
+                        != SectorPreviewDynamicLightKind::Point
                 ? (Vector3LengthSqr(light.direction) > 0.00000001f
                         ? Vector3Normalize(light.direction)
                         : Vector3{0.0f, -1.0f, 0.0f})
                 : light.direction;
         context.dynamicLightInnerConeCos[localIndex] = light.innerConeCos;
         context.dynamicLightOuterConeCos[localIndex] = light.outerConeCos;
-        if (light.kind == SectorPreviewDynamicLightKind::Spot) {
+        if (light.kind != SectorPreviewDynamicLightKind::Point) {
             BuildSectorDynamicSpotShadowProjectionUpload(
                     light,
                     context.dynamicLightSpotShadowRight[localIndex],

@@ -2763,6 +2763,36 @@ void TestStaticSpecularReceiverBoundsTransform()
           "static specular receiver bounds follow model transforms");
 }
 
+void TestDynamicRectLightPackingAndShadow()
+{
+    game::SectorTopologyDynamicRectLight authored;
+    authored.id = 301;
+    authored.position = {0.0f, 32.0f, 0.0f};
+    authored.target = {0.0f, 16.0f, 0.0f};
+    authored.width = 32.0f;
+    authored.height = 8.0f;
+    authored.rollDegrees = 25.0f;
+    authored.range = 128.0f;
+    authored.castsShadow = true;
+    game::SectorPreviewDynamicPointLightUniform uniform;
+    Check(game::MakeSectorPreviewDynamicRectLightUniform(authored, uniform),
+          "dynamic rect light packs into a preview uniform");
+    Check(uniform.kind == game::SectorPreviewDynamicLightKind::Rect
+                    && Near(uniform.innerConeCos, 2.0f)
+                    && Near(uniform.outerConeCos, 0.5f),
+          "dynamic rect uniform carries world half-size");
+    game::SectorPreviewDynamicSpotLightShadowMatrix matrix;
+    Check(game::MakeSectorPreviewDynamicSpotLightShadowMatrix(uniform, 0, 0, matrix)
+                    && matrix.kind == game::SectorPreviewDynamicLightKind::Rect,
+          "dynamic rect light uses one projected shadow matrix");
+    game::SectorTopologyMap map;
+    map.dynamicRectLights.push_back(authored);
+    std::vector<game::SectorPreviewDynamicPointLightSource> sources;
+    game::BuildSectorPreviewDynamicPointLightSources(map, nullptr, sources);
+    Check(sources.size() == 1 && sources[0].light.kind == game::SectorPreviewDynamicLightKind::Rect,
+          "dynamic rect lights participate in runtime source building");
+}
+
 } // namespace
 
 int main()
@@ -2814,6 +2844,7 @@ int main()
     TestStaticSpecularLightRebuildRankingAndCap();
     TestStaticSpecularSpotConeAndPortalVisibility();
     TestStaticSpecularReceiverBoundsTransform();
+    TestDynamicRectLightPackingAndShadow();
     if (failures == 0) {
         std::puts("Sector topology mesh builder tests passed");
     }

@@ -2,6 +2,7 @@
 
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorDynamicPointLightSelection.h"
+#include "sector_demo/SectorRectLight.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorUnits.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
@@ -126,6 +127,32 @@ SectorLightAtmosphereSource MakeSpotSource(
     return source;
 }
 
+template<typename Light>
+SectorLightAtmosphereSource MakeRectSource(
+        const Light& light,
+        SectorLightAtmosphereSourceKind kind,
+        const SectorCollisionWorld* sectorLookupWorld)
+{
+    SectorLightAtmosphereSource source;
+    source.kind = kind;
+    source.shape = SectorLightAtmosphereShape::RectPrism;
+    source.lightId = light.id;
+    source.positionWorld = SectorAuthoringToWorldPosition(light.position);
+    const Vector3 target = SectorAuthoringToWorldPosition(light.target);
+    const SectorRectLightBasis basis = BuildSectorRectLightBasis(
+            source.positionWorld, target, light.rollDegrees);
+    source.directionWorld = basis.forward;
+    source.rightWorld = basis.right;
+    source.widthWorld = SectorAuthoringToWorldDistance(light.width);
+    source.heightWorld = SectorAuthoringToWorldDistance(light.height);
+    source.rangeWorld = SectorAuthoringToWorldDistance(light.range);
+    source.color = light.color;
+    source.intensity = light.intensity;
+    source.ownerSectorId = OwnerSector(sectorLookupWorld, source.positionWorld);
+    source.atmosphere = NormalizeSectorLightAtmosphereSettings(light.atmosphere);
+    return source;
+}
+
 } // namespace
 
 void BuildSectorLightAtmosphereSources(
@@ -137,8 +164,10 @@ void BuildSectorLightAtmosphereSources(
     outSources.reserve(
             map.staticLights.size()
             + map.staticSpotLights.size()
+            + map.staticRectLights.size()
             + map.dynamicPointLights.size()
-            + map.dynamicSpotLights.size());
+            + map.dynamicSpotLights.size()
+            + map.dynamicRectLights.size());
     for (const SectorTopologyStaticPointLight& light : map.staticLights) {
         if (light.atmosphere.proxy.halo.enabled
                 || light.atmosphere.dust.enabled) {
@@ -151,6 +180,13 @@ void BuildSectorLightAtmosphereSources(
             outSources.push_back(MakeSpotSource(light, SectorLightAtmosphereSourceKind::StaticSpot, sectorLookupWorld));
         }
     }
+    for (const SectorTopologyStaticRectLight& light : map.staticRectLights) {
+        if (light.atmosphere.proxy.halo.enabled
+                || light.atmosphere.proxy.shaft.enabled || light.atmosphere.dust.enabled) {
+            outSources.push_back(MakeRectSource(
+                    light, SectorLightAtmosphereSourceKind::StaticRect, sectorLookupWorld));
+        }
+    }
     for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
         if (light.enabled && (light.atmosphere.proxy.halo.enabled
                 || light.atmosphere.dust.enabled)) {
@@ -161,6 +197,13 @@ void BuildSectorLightAtmosphereSources(
         if (light.enabled && (light.atmosphere.proxy.halo.enabled
                 || light.atmosphere.proxy.shaft.enabled || light.atmosphere.dust.enabled)) {
             outSources.push_back(MakeSpotSource(light, SectorLightAtmosphereSourceKind::DynamicSpot, sectorLookupWorld));
+        }
+    }
+    for (const SectorTopologyDynamicRectLight& light : map.dynamicRectLights) {
+        if (light.enabled && (light.atmosphere.proxy.halo.enabled
+                || light.atmosphere.proxy.shaft.enabled || light.atmosphere.dust.enabled)) {
+            outSources.push_back(MakeRectSource(
+                    light, SectorLightAtmosphereSourceKind::DynamicRect, sectorLookupWorld));
         }
     }
 }
@@ -200,6 +243,19 @@ bool MakeSectorLightAtmosphereVolume(
         outVolume.boundsRadiusWorld = extent;
         return true;
     }
+    if (source.shape == SectorLightAtmosphereShape::RectPrism) {
+        outVolume.rightWorld = NormalizeDirection(source.rightWorld);
+        outVolume.upWorld = NormalizeDirection(Vector3CrossProduct(
+                outVolume.rightWorld, outVolume.directionWorld));
+        outVolume.halfWidthWorld = source.widthWorld * 0.5f;
+        outVolume.halfHeightWorld = source.heightWorld * 0.5f;
+        outVolume.boundsCenterWorld = Vector3Add(originWorld,
+                Vector3Scale(outVolume.directionWorld, extent * 0.5f));
+        outVolume.boundsRadiusWorld = std::sqrt(extent * extent * 0.25f
+                + outVolume.halfWidthWorld * outVolume.halfWidthWorld
+                + outVolume.halfHeightWorld * outVolume.halfHeightWorld);
+        return std::isfinite(outVolume.boundsRadiusWorld) && outVolume.boundsRadiusWorld > 0.0f;
+    }
     const float authoredAngle = std::acos(std::clamp(source.outerConeCos, -1.0f, 1.0f)) * RAD2DEG;
     const float proxyAngle = std::min(authoredAngle, SectorLightAtmosphereMaximumConeHalfAngleDegrees);
     outVolume.coneRadiusWorld = std::tan(proxyAngle * DEG2RAD) * extent;
@@ -214,7 +270,8 @@ bool MakeSectorLightAtmosphereVolume(
 bool IsSectorLightAtmosphereSourceDynamic(const SectorLightAtmosphereSource& source)
 {
     return source.kind == SectorLightAtmosphereSourceKind::DynamicPoint
-            || source.kind == SectorLightAtmosphereSourceKind::DynamicSpot;
+            || source.kind == SectorLightAtmosphereSourceKind::DynamicSpot
+            || source.kind == SectorLightAtmosphereSourceKind::DynamicRect;
 }
 
 bool IsSectorLightAtmosphereSourceSelected(
@@ -222,7 +279,8 @@ bool IsSectorLightAtmosphereSourceSelected(
         const SectorBillboardDynamicLightContext& dynamicLights)
 {
     if (!IsSectorLightAtmosphereSourceDynamic(source)) return true;
-    const int expectedType = source.kind == SectorLightAtmosphereSourceKind::DynamicSpot ? 1 : 0;
+    const int expectedType = source.kind == SectorLightAtmosphereSourceKind::DynamicSpot ? 1
+            : source.kind == SectorLightAtmosphereSourceKind::DynamicRect ? 2 : 0;
     for (int index = 0; index < dynamicLights.dynamicLightCount; ++index) {
         if (dynamicLights.dynamicLightIds[static_cast<std::size_t>(index)] == source.lightId
                 && dynamicLights.dynamicLightTypes[static_cast<std::size_t>(index)] == expectedType) {
@@ -240,6 +298,12 @@ bool IsPointInsideSectorLightAtmosphereVolume(
     const Vector3 offset = Vector3Subtract(worldPosition, volume.originWorld);
     if (volume.source->shape == SectorLightAtmosphereShape::Sphere) {
         return Vector3LengthSqr(offset) <= volume.extentWorld * volume.extentWorld;
+    }
+    if (volume.source->shape == SectorLightAtmosphereShape::RectPrism) {
+        const float axial = Vector3DotProduct(offset, volume.directionWorld);
+        return axial >= 0.0f && axial <= volume.extentWorld
+                && std::fabs(Vector3DotProduct(offset, volume.rightWorld)) <= volume.halfWidthWorld
+                && std::fabs(Vector3DotProduct(offset, volume.upWorld)) <= volume.halfHeightWorld;
     }
     const float axial = Vector3DotProduct(offset, volume.directionWorld);
     if (axial < 0.0f || axial > volume.extentWorld) return false;

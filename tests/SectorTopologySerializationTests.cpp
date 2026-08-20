@@ -31,6 +31,8 @@ using game::SectorTopologyDynamicSpotLight;
 using game::SectorPlacedRuntimeObject;
 using game::SectorTopologyStaticPointLight;
 using game::SectorTopologyStaticSpotLight;
+using game::SectorTopologyStaticRectLight;
+using game::SectorTopologyDynamicRectLight;
 using game::SectorTopologyVertex;
 using Json = nlohmann::ordered_json;
 
@@ -4663,6 +4665,50 @@ void TestAuthoringEditorSettingsRoundTripAndValidation()
           "non-object authoring editor settings are rejected");
 }
 
+void TestRectLightRoundTrip()
+{
+    SectorTopologyMap map = MakeSquare();
+    SectorTopologyStaticRectLight staticLight;
+    staticLight.id = 21;
+    staticLight.position = {2.0f, 24.0f, 3.0f};
+    staticLight.target = {4.0f, 20.0f, 7.0f};
+    staticLight.rollDegrees = 32.0f;
+    staticLight.width = 40.0f;
+    staticLight.height = 12.0f;
+    staticLight.range = 96.0f;
+    staticLight.intensity = 2.5f;
+    staticLight.castsShadow = false;
+    map.staticRectLights.push_back(staticLight);
+    SectorTopologyDynamicRectLight dynamicLight;
+    dynamicLight.id = 22;
+    dynamicLight.position = {6.0f, 32.0f, 8.0f};
+    dynamicLight.target = {6.0f, 16.0f, 9.0f};
+    dynamicLight.width = 24.0f;
+    dynamicLight.height = 8.0f;
+    dynamicLight.rollDegrees = -15.0f;
+    dynamicLight.castsShadow = true;
+    dynamicLight.flicker = true;
+    map.dynamicRectLights.push_back(dynamicLight);
+
+    const Json saved = Json::parse(SaveText(map));
+    Check(saved["staticRectLights"].size() == 1
+                  && Near(saved["staticRectLights"][0]["rollDegrees"].get<float>(), 32.0f),
+          "static rect light serializes dimensions and roll");
+    Check(saved["dynamicRectLights"][0]["castsShadow"] == true,
+          "dynamic rect light serializes shadow request");
+    SectorTopologyMap loaded;
+    std::string error;
+    Check(LoadText(saved.dump(), loaded, error), "rect lights deserialize");
+    Check(loaded.staticRectLights.size() == 1
+                  && Near(loaded.staticRectLights[0].width, 40.0f)
+                  && !loaded.staticRectLights[0].castsShadow,
+          "static rect light round-trips");
+    Check(loaded.dynamicRectLights.size() == 1
+                  && Near(loaded.dynamicRectLights[0].height, 8.0f)
+                  && loaded.dynamicRectLights[0].flicker,
+          "dynamic rect light round-trips");
+}
+
 } // namespace
 
 int main()
@@ -4674,6 +4720,7 @@ int main()
     TestStaticSpotLightRoundTrip();
     TestDynamicPointLightRoundTrip();
     TestDynamicSpotLightRoundTrip();
+    TestRectLightRoundTrip();
     TestLightAtmosphereRoundTripAndDefaultOmission();
     TestRuntimeObjectsRoundTripAndValidation();
     TestDynamicModelRoundTripAndDefaultOmission();

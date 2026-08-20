@@ -94,10 +94,11 @@ std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& resul
     report << TextFormat("  Average triangles per leaf: %.2f\n", result.bvhAverageTrianglesPerLeaf);
     report << TextFormat("  Max triangles in leaf: %d\n", result.bvhMaxTrianglesInLeaf);
     report << TextFormat(
-            "  Static lights: %d (%d point, %d spot)\n\n",
+            "  Static lights: %d (%d point, %d spot, %d rect)\n\n",
             result.staticLightCount,
-            result.staticLightCount - result.staticSpotLightCount,
-            result.staticSpotLightCount);
+            result.staticLightCount - result.staticSpotLightCount - result.staticRectLightCount,
+            result.staticSpotLightCount,
+            result.staticRectLightCount);
     report << TextFormat("  Object light probes: %d\n", result.objectProbes.count);
     appendIlluminationStatistics(
             "Stored/reopened probe F32",

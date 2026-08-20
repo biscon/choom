@@ -319,6 +319,16 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     auto selectedStaticSpotLight = [&]() { return SelectedSectorEditorTopologyStaticSpotLight(selection); };
     auto selectedDynamicLight = [&]() { return SelectedSectorEditorTopologyDynamicLight(selection); };
     auto selectedDynamicSpotLight = [&]() { return SelectedSectorEditorTopologyDynamicSpotLight(selection); };
+    auto selectedStaticRectLight = [&]() {
+        return selectionState.topologySelectionKind == TopologySelectionKind::StaticRectLight
+                ? FindSectorTopologyStaticRectLight(context.topologyMap,
+                        selectionState.selectedTopologyStaticSpotLightId) : nullptr;
+    };
+    auto selectedDynamicRectLight = [&]() {
+        return selectionState.topologySelectionKind == TopologySelectionKind::DynamicRectLight
+                ? FindSectorTopologyDynamicRectLight(context.topologyMap,
+                        selectionState.selectedTopologyDynamicSpotLightId) : nullptr;
+    };
     auto selectedRuntimeObject = [&]() {
         return runtimeObjectEditing.SelectedObject();
     };
@@ -346,6 +356,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
     const bool hasSelectedStaticSpotLight = selectedStaticSpotLight() != nullptr;
     const bool hasSelectedDynamicLight = selectedDynamicLight() != nullptr;
     const bool hasSelectedDynamicSpotLight = selectedDynamicSpotLight() != nullptr;
+    const bool hasSelectedStaticRectLight = selectedStaticRectLight() != nullptr;
+    const bool hasSelectedDynamicRectLight = selectedDynamicRectLight() != nullptr;
     const bool hasSelectedRuntimeObject = selectedRuntimeObject() != nullptr;
     const bool authoringDerivationCurrent =
             IsSectorEditorAuthoringDerivationCurrent(context.derivation);
@@ -396,6 +408,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             && !hasSelectedStaticSpotLight
             && !hasSelectedDynamicLight
             && !hasSelectedDynamicSpotLight
+            && !hasSelectedStaticRectLight
+            && !hasSelectedDynamicRectLight
             && state.currentTool == SectorEditorTool::Move
             && inspectedVertex != nullptr;
 
@@ -458,6 +472,16 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     !context.inspectorIdUiState.idEditError.empty(),
                     shadowNoteHeight,
                     selectedDynamicSpotLight()->atmosphere);
+        }
+        if (hasSelectedStaticRectLight) {
+            return RectLightInspectorContentHeight(rowH, gap,
+                    !context.inspectorIdUiState.idEditError.empty(), false,
+                    selectedStaticRectLight()->atmosphere);
+        }
+        if (hasSelectedDynamicRectLight) {
+            return RectLightInspectorContentHeight(rowH, gap,
+                    !context.inspectorIdUiState.idEditError.empty(), true,
+                    selectedDynamicRectLight()->atmosphere);
         }
         if (hasSelectedTopologySector && allowLegacyTopologyInspector) {
             return SectorInspectorContentHeight(rowH, gap, !context.inspectorIdUiState.idEditError.empty());
@@ -900,6 +924,35 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         if (sourceRefreshRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         }
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
+    if (hasSelectedStaticRectLight) {
+        bool deleteRequested = false;
+        bool bakeRequested = false;
+        bool refreshRequested = false;
+        DrawSelectedStaticRectLightInspector(ui, config, input, assets, font, scroll,
+                contentW, rowH, gap, *selectedStaticRectLight(), uiState,
+                context.inspectorIdUiState, lightEditing, deleteRequested,
+                bakeRequested, refreshRequested);
+        if (deleteRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        if (bakeRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
+        if (refreshRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
+    if (hasSelectedDynamicRectLight) {
+        bool deleteRequested = false;
+        bool refreshRequested = false;
+        DrawSelectedDynamicRectLightInspector(ui, config, input, assets, font, scroll,
+                contentW, rowH, gap, *selectedDynamicRectLight(), uiState,
+                context.inspectorIdUiState, lightEditing, deleteRequested, refreshRequested);
+        if (deleteRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        if (refreshRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
         return result;

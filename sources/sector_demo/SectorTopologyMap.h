@@ -306,8 +306,10 @@ struct SectorTopologyMap {
     std::vector<SectorTopologySector> sectors;
     std::vector<SectorTopologyStaticPointLight> staticLights;
     std::vector<SectorTopologyStaticSpotLight> staticSpotLights;
+    std::vector<SectorTopologyStaticRectLight> staticRectLights;
     std::vector<SectorTopologyDynamicPointLight> dynamicPointLights;
     std::vector<SectorTopologyDynamicSpotLight> dynamicSpotLights;
+    std::vector<SectorTopologyDynamicRectLight> dynamicRectLights;
     std::vector<SectorPlacedRuntimeObject> runtimeObjects;
     std::vector<SectorCompiledLevelMarker> levelMarkers;
     std::vector<SectorCompiledTrigger> triggers;
@@ -356,8 +358,10 @@ int AllocateSectorTopologySideDefId(const SectorTopologyMap& map);
 int AllocateSectorTopologySectorId(const SectorTopologyMap& map);
 int AllocateSectorTopologyStaticLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyStaticSpotLightId(const SectorTopologyMap& map);
+int AllocateSectorTopologyStaticRectLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyDynamicLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyDynamicSpotLightId(const SectorTopologyMap& map);
+int AllocateSectorTopologyDynamicRectLightId(const SectorTopologyMap& map);
 int AllocateSectorPlacedRuntimeObjectId(const SectorTopologyMap& map);
 
 const SectorTopologyVertex* FindSectorTopologyVertex(const SectorTopologyMap& map, int id);
@@ -382,6 +386,10 @@ SectorTopologyStaticSpotLight* FindSectorTopologyStaticSpotLight(SectorTopologyM
 
 bool RemoveSectorTopologyStaticSpotLight(SectorTopologyMap& map, int id);
 
+const SectorTopologyStaticRectLight* FindSectorTopologyStaticRectLight(const SectorTopologyMap& map, int id);
+SectorTopologyStaticRectLight* FindSectorTopologyStaticRectLight(SectorTopologyMap& map, int id);
+bool RemoveSectorTopologyStaticRectLight(SectorTopologyMap& map, int id);
+
 const SectorTopologyDynamicPointLight* FindSectorTopologyDynamicLight(const SectorTopologyMap& map, int id);
 SectorTopologyDynamicPointLight* FindSectorTopologyDynamicLight(SectorTopologyMap& map, int id);
 
@@ -391,6 +399,10 @@ const SectorTopologyDynamicSpotLight* FindSectorTopologyDynamicSpotLight(const S
 SectorTopologyDynamicSpotLight* FindSectorTopologyDynamicSpotLight(SectorTopologyMap& map, int id);
 
 bool RemoveSectorTopologyDynamicSpotLight(SectorTopologyMap& map, int id);
+
+const SectorTopologyDynamicRectLight* FindSectorTopologyDynamicRectLight(const SectorTopologyMap& map, int id);
+SectorTopologyDynamicRectLight* FindSectorTopologyDynamicRectLight(SectorTopologyMap& map, int id);
+bool RemoveSectorTopologyDynamicRectLight(SectorTopologyMap& map, int id);
 
 const SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(const SectorTopologyMap& map, int id);
 SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);

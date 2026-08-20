@@ -4,6 +4,7 @@
 #include "sector_demo/SectorBounds.h"
 #include "sector_demo/SectorCollisionWorld.h"
 #include "sector_demo/SectorMath.h"
+#include "sector_demo/SectorRectLight.h"
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/SectorTopologyTypes.h"
 #include "sector_demo/SectorUnits.h"
@@ -48,11 +49,15 @@ void BuildSectorDynamicSpotShadowProjectionUpload(
     const Vector3 upReference = std::fabs(forward.y) > 0.98f
             ? Vector3{0.0f, 0.0f, 1.0f}
             : Vector3{0.0f, 1.0f, 0.0f};
-    outRight = Vector3Normalize(Vector3CrossProduct(forward, upReference));
-    const float halfAngle = std::clamp(
-            std::acos(std::clamp(light.outerConeCos, -0.999f, 0.999f)),
-            0.5f * DEG2RAD,
-            89.0f * DEG2RAD);
+    outRight = light.kind == SectorPreviewDynamicLightKind::Rect
+            ? light.rectRight
+            : Vector3Normalize(Vector3CrossProduct(forward, upReference));
+    const float halfAngle = light.kind == SectorPreviewDynamicLightKind::Rect
+            ? 89.0f * DEG2RAD
+            : std::clamp(
+                    std::acos(std::clamp(light.outerConeCos, -0.999f, 0.999f)),
+                    0.5f * DEG2RAD,
+                    89.0f * DEG2RAD);
     const float farPlane = std::max(light.radius, NearPlane + 0.0001f);
     outProjection = Vector2{
             1.0f / std::tan(halfAngle),
@@ -176,7 +181,12 @@ void BuildRelevantReceiverBounds(
 bool SphereOverlapsBounds(const SectorPreviewDynamicPointLightUniform& light, const SectorReceiverBounds& bounds)
 {
     const Vector3 closest = ClampToBounds(light.position, bounds);
-    return DistanceSq(light.position, closest) <= light.radius * light.radius;
+    const float planeExtent = light.kind == SectorPreviewDynamicLightKind::Rect
+            ? std::sqrt(light.innerConeCos * light.innerConeCos
+                    + light.outerConeCos * light.outerConeCos)
+            : 0.0f;
+    const float influenceRadius = light.radius + planeExtent;
+    return DistanceSq(light.position, closest) <= influenceRadius * influenceRadius;
 }
 
 float NearestDistanceToBounds(
@@ -194,7 +204,11 @@ float NearestDistanceToBounds(
 
     return bestDistanceSq == std::numeric_limits<float>::max()
             ? std::numeric_limits<float>::infinity()
-            : std::sqrt(bestDistanceSq);
+            : std::max(0.0f, std::sqrt(bestDistanceSq)
+                    - (light.kind == SectorPreviewDynamicLightKind::Rect
+                        ? std::sqrt(light.innerConeCos * light.innerConeCos
+                                + light.outerConeCos * light.outerConeCos)
+                        : 0.0f));
 }
 
 float DynamicPointLightBrightness(Vector3 color)
@@ -573,13 +587,53 @@ bool MakeSectorPreviewDynamicSpotLightUniform(
             && std::isfinite(outLight.outerConeCos);
 }
 
+bool MakeSectorPreviewDynamicRectLightUniform(
+        const SectorTopologyDynamicRectLight& light,
+        SectorPreviewDynamicPointLightUniform& outLight)
+{
+    if (!light.enabled || light.range <= 0.0f || light.width <= 0.0f
+            || light.height <= 0.0f || light.intensity <= 0.0f
+            || !std::isfinite(light.range) || !std::isfinite(light.width)
+            || !std::isfinite(light.height) || !std::isfinite(light.rollDegrees)
+            || !std::isfinite(light.intensity) || !IsFiniteVector3(light.position)
+            || !IsFiniteVector3(light.target)) return false;
+    const Vector3 position = SectorAuthoringToWorldPosition(light.position);
+    const Vector3 target = SectorAuthoringToWorldPosition(light.target);
+    const SectorRectLightBasis basis = BuildSectorRectLightBasis(
+            position, target, light.rollDegrees);
+    outLight.lightId = light.id;
+    outLight.kind = SectorPreviewDynamicLightKind::Rect;
+    outLight.position = position;
+    outLight.direction = basis.forward;
+    outLight.rectRight = basis.right;
+    outLight.color = engine::SrgbColorBytesToLinearSceneRgb(light.color);
+    outLight.radius = SectorAuthoringToWorldDistance(light.range);
+    // Rect lights reuse the cone scalar channels for half-size; shaders branch on kind.
+    outLight.innerConeCos = 0.5f * SectorAuthoringToWorldDistance(light.width);
+    outLight.outerConeCos = 0.5f * SectorAuthoringToWorldDistance(light.height);
+    outLight.intensity = light.intensity;
+    outLight.selectionFadeMultiplier = 1.0f;
+    outLight.selectionFadeEnabled = true;
+    outLight.flicker = light.flicker;
+    outLight.flickerSpeed = ClampDynamicLightFlickerSpeed(light.flickerSpeed);
+    outLight.flickerAmount = ClampDynamicLightFlickerAmount(light.flickerAmount);
+    outLight.castsShadow = light.castsShadow;
+    outLight.shadowPriority = ClampDynamicSpotLightShadowPriority(light.shadowPriority);
+    outLight.shadowBias = ClampDynamicSpotLightShadowBias(light.shadowBias);
+    outLight.shadowStrength = ClampDynamicSpotLightShadowStrength(light.shadowStrength);
+    outLight.shadowSoftness = ClampDynamicSpotLightShadowSoftness(light.shadowSoftness);
+    return IsFiniteVector3(outLight.position) && IsFiniteVector3(outLight.direction)
+            && IsFiniteVector3(outLight.rectRight) && IsFiniteVector3(outLight.color);
+}
+
 void BuildSectorPreviewDynamicPointLightSources(
         const SectorTopologyMap& map,
         const SectorCollisionWorld* sectorLookupWorld,
         std::vector<SectorPreviewDynamicPointLightSource>& outSources)
 {
     outSources.clear();
-    outSources.reserve(map.dynamicPointLights.size() + map.dynamicSpotLights.size());
+    outSources.reserve(map.dynamicPointLights.size() + map.dynamicSpotLights.size()
+            + map.dynamicRectLights.size());
 
     for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
         SectorPreviewDynamicPointLightUniform uniformLight;
@@ -615,6 +669,17 @@ void BuildSectorPreviewDynamicPointLightSources(
                 light.id,
                 ownerSectorId,
                 uniformLight});
+    }
+
+    for (const SectorTopologyDynamicRectLight& light : map.dynamicRectLights) {
+        SectorPreviewDynamicPointLightUniform uniformLight;
+        if (!MakeSectorPreviewDynamicRectLightUniform(light, uniformLight)) continue;
+        int ownerSectorId = 0;
+        if (sectorLookupWorld != nullptr) {
+            ownerSectorId = sectorLookupWorld->FindSectorContainingPoint(
+                    Vector2{uniformLight.position.x, uniformLight.position.z});
+        }
+        outSources.push_back({light.id, ownerSectorId, uniformLight});
     }
 }
 
@@ -945,7 +1010,8 @@ bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
         int shadowSlot,
         SectorPreviewDynamicSpotLightShadowMatrix& outMatrix)
 {
-    if (light.kind != SectorPreviewDynamicLightKind::Spot
+    if ((light.kind != SectorPreviewDynamicLightKind::Spot
+                && light.kind != SectorPreviewDynamicLightKind::Rect)
             || light.radius <= ShadowNearPlane
             || !std::isfinite(light.radius)
             || !IsFiniteVector3(light.position)
@@ -959,10 +1025,16 @@ bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
         return false;
     }
 
-    const float outerHalfAngleRadians = std::acos(std::clamp(light.outerConeCos, -0.999f, 0.999f));
+    const float outerHalfAngleRadians = light.kind == SectorPreviewDynamicLightKind::Rect
+            ? 89.0f * DegreesToRadians
+            : std::acos(std::clamp(light.outerConeCos, -0.999f, 0.999f));
     const float fovyRadians = std::clamp(outerHalfAngleRadians * 2.0f, 1.0f * DegreesToRadians, 178.0f * DegreesToRadians);
     const Vector3 target = Vector3Add(light.position, direction);
-    const Matrix view = MatrixLookAt(light.position, target, SpotlightShadowUpVector(direction));
+    const Vector3 up = light.kind == SectorPreviewDynamicLightKind::Rect
+            ? NormalizeOrFallback(Vector3CrossProduct(light.rectRight, direction),
+                    SpotlightShadowUpVector(direction))
+            : SpotlightShadowUpVector(direction);
+    const Matrix view = MatrixLookAt(light.position, target, up);
     const Matrix projection = MatrixPerspective(static_cast<double>(fovyRadians), 1.0, ShadowNearPlane, light.radius);
     const Matrix lightViewProjection = MatrixMultiply(view, projection);
 
@@ -973,7 +1045,7 @@ bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
     outMatrix.lightId = light.lightId;
     outMatrix.dynamicLightIndex = dynamicLightIndex;
     outMatrix.shadowSlot = shadowSlot;
-    outMatrix.kind = SectorPreviewDynamicLightKind::Spot;
+    outMatrix.kind = light.kind;
     outMatrix.pointFace = -1;
     outMatrix.lightPosition = light.position;
     outMatrix.lightRadius = light.radius;
