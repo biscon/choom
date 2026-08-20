@@ -235,8 +235,25 @@ int SectorEditorAuthoringFogVolumeEditingService::FindAtMapPoint(
         const float radiusY = SectorWorldToAuthoringDistance(volume.radiusZWorld) + extraToleranceMap;
         const float dx = mapPoint.x - center.x;
         const float dy = mapPoint.y - center.y;
-        if (radiusX <= 0.0f || radiusY <= 0.0f
-                || dx * dx / (radiusX * radiusX) + dy * dy / (radiusY * radiusY) > 1.0f) {
+        const bool boxShape = volume.renderMode == SectorLocalFogRenderMode::Analytic
+                && volume.shape == SectorLocalFogShape::Box;
+        bool contains = false;
+        if (boxShape) {
+            const float yaw = volume.yawDegrees * DEG2RAD;
+            const float cosine = std::cos(yaw);
+            const float sine = std::sin(yaw);
+            const float localX = cosine * dx - sine * dy;
+            const float localZ = sine * dx + cosine * dy;
+            contains = radiusX > 0.0f && radiusY > 0.0f
+                    && std::fabs(localX) <= radiusX
+                    && std::fabs(localZ) <= radiusY;
+        } else {
+            contains = radiusX > 0.0f && radiusY > 0.0f
+                    && dx * dx / (radiusX * radiusX)
+                                    + dy * dy / (radiusY * radiusY)
+                            <= 1.0f;
+        }
+        if (!contains) {
             continue;
         }
         const float distance2 = dx * dx + dy * dy;

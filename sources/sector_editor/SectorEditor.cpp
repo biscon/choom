@@ -3901,17 +3901,80 @@ void SectorEditor::DrawAuthoringFogVolumes() const
         const float radiusY = std::max(2.0f, std::fabs(edgeZ.y - center.y));
         Color fill = volume.enabled ? volume.color : Color{112, 118, 122, 255};
         fill.a = 46;
-        DrawEllipse(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, fill);
-        DrawEllipseLines(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, outline);
-        const float innerScale = std::clamp(1.0f - volume.edgeSoftness, 0.05f, 1.0f);
+        const bool drawBox = volume.renderMode == SectorLocalFogRenderMode::Analytic
+                && volume.shape == SectorLocalFogShape::Box;
+        float innerScaleX = std::clamp(1.0f - volume.edgeSoftness, 0.05f, 1.0f);
+        float innerScaleZ = innerScaleX;
+        if (drawBox) {
+            const bool roomStyle = volume.boxStyle == SectorAnalyticFogBoxStyle::Room;
+            const float minimumFraction = roomStyle ? 0.005f : 0.01f;
+            const float maximumFraction = roomStyle ? 0.20f : 0.45f;
+            const float minimumHalfExtent = std::min(
+                    {volume.radiusXWorld, volume.heightWorld * 0.5f, volume.radiusZWorld});
+            const float normalizedSoftness = std::clamp(
+                    volume.edgeSoftness, 0.0f, 1.0f);
+            const float edgeWidth = minimumHalfExtent
+                    * (minimumFraction
+                            + (maximumFraction - minimumFraction) * normalizedSoftness);
+            innerScaleX = std::clamp(
+                    1.0f - edgeWidth / std::max(volume.radiusXWorld, 0.0001f),
+                    0.05f,
+                    1.0f);
+            innerScaleZ = std::clamp(
+                    1.0f - edgeWidth / std::max(volume.radiusZWorld, 0.0001f),
+                    0.05f,
+                    1.0f);
+        }
         Color inner = outline;
         inner.a = 130;
-        DrawEllipseLines(
-                static_cast<int>(center.x),
-                static_cast<int>(center.y),
-                radiusX * innerScale,
-                radiusY * innerScale,
-                inner);
+        if (drawBox) {
+            const float cosine = std::cos(volume.yawDegrees * DEG2RAD);
+            const float sine = std::sin(volume.yawDegrees * DEG2RAD);
+            const auto boxCorners = [&](float scaleX, float scaleZ) {
+                std::array<Vector2, 4> corners{};
+                constexpr std::array<Vector2, 4> signs = {
+                        Vector2{-1.0f, -1.0f},
+                        Vector2{1.0f, -1.0f},
+                        Vector2{1.0f, 1.0f},
+                        Vector2{-1.0f, 1.0f}};
+                for (std::size_t index = 0; index < signs.size(); ++index) {
+                    const float localX = signs[index].x * volume.radiusXWorld * scaleX;
+                    const float localZ = signs[index].y * volume.radiusZWorld * scaleZ;
+                    const Vector2 mapCorner{
+                            mapCenter.x + SectorWorldToAuthoringDistance(
+                                    cosine * localX + sine * localZ),
+                            mapCenter.y + SectorWorldToAuthoringDistance(
+                                    -sine * localX + cosine * localZ)};
+                    corners[index] = MapToScreen(mapCorner);
+                }
+                return corners;
+            };
+            const auto outerCorners = boxCorners(1.0f, 1.0f);
+            DrawTriangle(outerCorners[0], outerCorners[1], outerCorners[2], fill);
+            DrawTriangle(outerCorners[0], outerCorners[2], outerCorners[3], fill);
+            for (std::size_t index = 0; index < outerCorners.size(); ++index) {
+                DrawLineV(
+                        outerCorners[index],
+                        outerCorners[(index + 1) % outerCorners.size()],
+                        outline);
+            }
+            const auto innerCorners = boxCorners(innerScaleX, innerScaleZ);
+            for (std::size_t index = 0; index < innerCorners.size(); ++index) {
+                DrawLineV(
+                        innerCorners[index],
+                        innerCorners[(index + 1) % innerCorners.size()],
+                        inner);
+            }
+        } else {
+            DrawEllipse(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, fill);
+            DrawEllipseLines(static_cast<int>(center.x), static_cast<int>(center.y), radiusX, radiusY, outline);
+            DrawEllipseLines(
+                    static_cast<int>(center.x),
+                    static_cast<int>(center.y),
+                    radiusX * innerScaleX,
+                    radiusY * innerScaleZ,
+                    inner);
+        }
         if (!resolved) {
             DrawLineEx(
                     Vector2{center.x - 8.0f, center.y - 8.0f},

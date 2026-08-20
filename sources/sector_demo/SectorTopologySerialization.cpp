@@ -3512,6 +3512,24 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
                 else if (mode == "analytic") volume.renderMode = SectorLocalFogRenderMode::Analytic;
                 else Fail(context + ".renderMode must be 'raymarched' or 'analytic'");
             }
+            const auto shapeIt = fogJson.find("shape");
+            if (shapeIt != fogJson.end()) {
+                if (!shapeIt->is_string()) Fail(context + ".shape must be a string");
+                const std::string shape = shapeIt->get<std::string>();
+                if (shape == "ellipsoid") volume.shape = SectorLocalFogShape::Ellipsoid;
+                else if (shape == "box") volume.shape = SectorLocalFogShape::Box;
+                else Fail(context + ".shape must be 'ellipsoid' or 'box'");
+            }
+            const auto boxStyleIt = fogJson.find("boxStyle");
+            if (boxStyleIt != fogJson.end()) {
+                if (!boxStyleIt->is_string()) Fail(context + ".boxStyle must be a string");
+                const std::string boxStyle = boxStyleIt->get<std::string>();
+                if (boxStyle == "cloudy") volume.boxStyle = SectorAnalyticFogBoxStyle::Cloudy;
+                else if (boxStyle == "room") volume.boxStyle = SectorAnalyticFogBoxStyle::Room;
+                else Fail(context + ".boxStyle must be 'cloudy' or 'room'");
+            }
+            volume.yawDegrees = ReadOptionalFloat(
+                    fogJson, "yawDegrees", context, volume.yawDegrees);
             volume.bottomOffsetWorld = ReadOptionalFloat(
                     fogJson, "bottomOffsetWorld", context, volume.bottomOffsetWorld);
             volume.radiusXWorld = ReadOptionalFloat(fogJson, "radiusXWorld", context, volume.radiusXWorld);
@@ -3861,6 +3879,7 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         for (const SectorAuthoringFogVolume* source : SortedById(graph.fogVolumes)) {
             const std::string context = "authoring fog volume " + std::to_string(source->id);
             RequireFinite(source->bottomOffsetWorld, context + ".bottomOffsetWorld");
+            RequireFinite(source->yawDegrees, context + ".yawDegrees");
             RequireFinite(source->radiusXWorld, context + ".radiusXWorld");
             RequireFinite(source->radiusZWorld, context + ".radiusZWorld");
             RequireFinite(source->heightWorld, context + ".heightWorld");
@@ -3878,6 +3897,9 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             Json fogJson{{"id", volume.id}, {"x", volume.x}, {"y", volume.y}};
             if (volume.enabled != defaults.enabled) fogJson["enabled"] = volume.enabled;
             if (volume.renderMode != defaults.renderMode) fogJson["renderMode"] = "analytic";
+            if (volume.shape != defaults.shape) fogJson["shape"] = "box";
+            if (volume.boxStyle != defaults.boxStyle) fogJson["boxStyle"] = "room";
+            if (volume.yawDegrees != defaults.yawDegrees) fogJson["yawDegrees"] = volume.yawDegrees;
             if (volume.bottomOffsetWorld != defaults.bottomOffsetWorld) fogJson["bottomOffsetWorld"] = volume.bottomOffsetWorld;
             if (volume.radiusXWorld != defaults.radiusXWorld) fogJson["radiusXWorld"] = volume.radiusXWorld;
             if (volume.radiusZWorld != defaults.radiusZWorld) fogJson["radiusZWorld"] = volume.radiusZWorld;

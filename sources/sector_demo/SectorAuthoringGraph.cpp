@@ -1770,6 +1770,9 @@ void CompileAuthoringFogVolumes(
         compiled.topologySectorId = sector->id;
         compiled.enabled = volume.enabled;
         compiled.renderMode = volume.renderMode;
+        compiled.shape = volume.shape;
+        compiled.boxStyle = volume.boxStyle;
+        compiled.yawRadians = volume.yawDegrees * DEG2RAD;
         compiled.centerWorld = Vector3{
                 SectorAuthoringToWorldDistance(
                         static_cast<float>(volume.x) / static_cast<float>(SectorCoordSubdivisions)),
@@ -2026,6 +2029,21 @@ const SectorAuthoringTrigger* FindSectorAuthoringTriggerByReferenceId(
 SectorAuthoringFogVolume NormalizeSectorAuthoringFogVolume(SectorAuthoringFogVolume volume)
 {
     const SectorAuthoringFogVolume defaults;
+    if (volume.shape != SectorLocalFogShape::Ellipsoid
+            && volume.shape != SectorLocalFogShape::Box) {
+        volume.shape = defaults.shape;
+    }
+    if (volume.boxStyle != SectorAnalyticFogBoxStyle::Cloudy
+            && volume.boxStyle != SectorAnalyticFogBoxStyle::Room) {
+        volume.boxStyle = defaults.boxStyle;
+    }
+    if (!std::isfinite(volume.yawDegrees)) {
+        volume.yawDegrees = defaults.yawDegrees;
+    }
+    volume.yawDegrees = std::fmod(volume.yawDegrees, 360.0f);
+    if (volume.yawDegrees < 0.0f) {
+        volume.yawDegrees += 360.0f;
+    }
     volume.bottomOffsetWorld = ClampFiniteFogValue(
             volume.bottomOffsetWorld, FogBottomOffsetMin, FogBottomOffsetMax, defaults.bottomOffsetWorld);
     volume.radiusXWorld = ClampFiniteFogValue(
@@ -2347,6 +2365,7 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
             AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Duplicate authoring fog volume ID");
         }
         const float values[] = {
+                volume.yawDegrees,
                 volume.bottomOffsetWorld,
                 volume.radiusXWorld,
                 volume.radiusZWorld,
@@ -2363,7 +2382,12 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
                 volume.flowSpeedWorld};
         if (std::any_of(std::begin(values), std::end(values), [](float value) { return !std::isfinite(value); })) {
             AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Authoring fog volume has non-finite settings");
-        } else if (volume.radiusXWorld < FogRadiusMin || volume.radiusXWorld > FogRadiusMax
+        } else if ((volume.shape != SectorLocalFogShape::Ellipsoid
+                            && volume.shape != SectorLocalFogShape::Box)
+                || (volume.boxStyle != SectorAnalyticFogBoxStyle::Cloudy
+                            && volume.boxStyle != SectorAnalyticFogBoxStyle::Room)
+                || volume.yawDegrees < 0.0f || volume.yawDegrees >= 360.0f
+                || volume.radiusXWorld < FogRadiusMin || volume.radiusXWorld > FogRadiusMax
                 || volume.radiusZWorld < FogRadiusMin || volume.radiusZWorld > FogRadiusMax
                 || volume.heightWorld < FogHeightMin || volume.heightWorld > FogHeightMax
                 || volume.density < FogDensityMin || volume.density > FogDensityMax

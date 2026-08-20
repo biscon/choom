@@ -80,6 +80,27 @@ void TestProjectedScissors()
     assert(combined.height >= visible.y + visible.height);
 }
 
+void TestYawedBounds()
+{
+    const Vector3 axisAligned = game::ComputeSectorAtmosphereYawedHalfExtents(
+            Vector3{2.0f, 0.5f, 1.0f}, 0.0f);
+    assert(std::fabs(axisAligned.x - 2.0f) < 0.0001f);
+    assert(std::fabs(axisAligned.y - 0.5f) < 0.0001f);
+    assert(std::fabs(axisAligned.z - 1.0f) < 0.0001f);
+
+    const Vector3 quarterTurn = game::ComputeSectorAtmosphereYawedHalfExtents(
+            Vector3{2.0f, 0.5f, 1.0f}, PI * 0.5f);
+    assert(std::fabs(quarterTurn.x - 1.0f) < 0.0001f);
+    assert(std::fabs(quarterTurn.y - 0.5f) < 0.0001f);
+    assert(std::fabs(quarterTurn.z - 2.0f) < 0.0001f);
+
+    const Vector3 diagonal = game::ComputeSectorAtmosphereYawedHalfExtents(
+            Vector3{2.0f, 0.5f, 1.0f}, PI * 0.25f);
+    const float expected = 3.0f / std::sqrt(2.0f);
+    assert(std::fabs(diagonal.x - expected) < 0.0001f);
+    assert(std::fabs(diagonal.z - expected) < 0.0001f);
+}
+
 void TestDynamicLightMasks()
 {
     game::SectorBillboardDynamicLightContext lights;
@@ -127,6 +148,7 @@ void TestDynamicLightMasks()
 int main()
 {
     TestProjectedScissors();
+    TestYawedBounds();
     TestDynamicLightMasks();
     return 0;
 }

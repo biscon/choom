@@ -86,6 +86,16 @@ enum class SectorLocalFogRenderMode {
     Analytic
 };
 
+enum class SectorLocalFogShape {
+    Ellipsoid,
+    Box
+};
+
+enum class SectorAnalyticFogBoxStyle {
+    Cloudy,
+    Room
+};
+
 enum class SectorSoundType {
     Sound,
     Music
@@ -110,6 +120,9 @@ struct SectorCompiledLocalFogVolume {
     int topologySectorId = -1;
     bool enabled = true;
     SectorLocalFogRenderMode renderMode = SectorLocalFogRenderMode::Raymarched;
+    SectorLocalFogShape shape = SectorLocalFogShape::Ellipsoid;
+    SectorAnalyticFogBoxStyle boxStyle = SectorAnalyticFogBoxStyle::Cloudy;
+    float yawRadians = 0.0f;
     Vector3 centerWorld = {};
     Vector3 radiiWorld = {1.5f, 0.325f, 1.5f};
     Color color = Color{105, 116, 110, 255};

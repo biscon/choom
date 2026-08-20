@@ -17,6 +17,10 @@ struct SectorAtmosphereScissorRect {
     bool Empty() const { return width <= 0 || height <= 0; }
 };
 
+Vector3 ComputeSectorAtmosphereYawedHalfExtents(
+        Vector3 localHalfExtents,
+        float yawRadians);
+
 SectorAtmosphereScissorRect ProjectSectorAtmosphereBoundsToScissor(
         const Camera3D& camera,
         float aspectRatio,

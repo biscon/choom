@@ -1953,7 +1953,13 @@ bool SectorMeshRenderer::ApplyWorldAtmosphere(
     bool analyticFogApplied = false;
     if (EnsureHdrSceneColorView(sceneTarget)) {
         analyticFogApplied = analyticFogRenderer.Apply(
-                nativeScene, hdrSceneColorView, map, volumetricQuality, camera);
+                nativeScene,
+                hdrSceneColorView,
+                map,
+                volumetricQuality,
+                camera,
+                runtimeSeconds,
+                objectLightProbes);
     }
     EndAtmosphereGpuPass(1);
 

@@ -63,19 +63,32 @@ SectorLocalFogStaticLightingSamples SampleSectorLocalFogStaticLighting(
         const SectorBakedObjectLightProbeRuntimeData& probes,
         const SectorCompiledLocalFogVolume& volume)
 {
+    return SampleSectorLocalFogStaticLighting(map, probes, volume, 0.0f);
+}
+
+SectorLocalFogStaticLightingSamples SampleSectorLocalFogStaticLighting(
+        const SectorTopologyMap& map,
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        const SectorCompiledLocalFogVolume& volume,
+        float yawRadians)
+{
     SectorLocalFogStaticLightingSamples samples;
     constexpr std::array<Vector2, 4> offsets = {
             Vector2{-1.0f, -1.0f},
             Vector2{1.0f, -1.0f},
             Vector2{-1.0f, 1.0f},
             Vector2{1.0f, 1.0f}};
+    const float cosine = std::cos(yawRadians);
+    const float sine = std::sin(yawRadians);
     for (std::size_t index = 0; index < offsets.size(); ++index) {
+        const float localX = offsets[index].x * volume.radiiWorld.x
+                * SectorLocalFogProbeFootprintFraction;
+        const float localZ = offsets[index].y * volume.radiiWorld.z
+                * SectorLocalFogProbeFootprintFraction;
         const Vector3 position{
-                volume.centerWorld.x
-                        + offsets[index].x * volume.radiiWorld.x * SectorLocalFogProbeFootprintFraction,
+                volume.centerWorld.x + cosine * localX + sine * localZ,
                 volume.centerWorld.y,
-                volume.centerWorld.z
-                        + offsets[index].y * volume.radiiWorld.z * SectorLocalFogProbeFootprintFraction};
+                volume.centerWorld.z - sine * localX + cosine * localZ};
         samples.corners[index] = EvaluateSectorLocalFogProbeLighting(
                 SampleBakedObjectLighting(probes, position, volume.topologySectorId, &map));
     }

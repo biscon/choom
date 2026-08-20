@@ -42,6 +42,23 @@ Vector3 Corner(Vector3 minimum, Vector3 maximum, int index)
 
 } // namespace
 
+Vector3 ComputeSectorAtmosphereYawedHalfExtents(
+        Vector3 localHalfExtents,
+        float yawRadians)
+{
+    const Vector3 extents{
+            std::fabs(localHalfExtents.x),
+            std::fabs(localHalfExtents.y),
+            std::fabs(localHalfExtents.z)};
+    if (!std::isfinite(yawRadians)) return extents;
+    const float cosine = std::fabs(std::cos(yawRadians));
+    const float sine = std::fabs(std::sin(yawRadians));
+    return Vector3{
+            cosine * extents.x + sine * extents.z,
+            extents.y,
+            sine * extents.x + cosine * extents.z};
+}
+
 SectorAtmosphereScissorRect ProjectSectorAtmosphereBoundsToScissor(
         const Camera3D& camera,
         float aspectRatio,

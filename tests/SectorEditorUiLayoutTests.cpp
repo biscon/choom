@@ -176,6 +176,42 @@ void TestInspectorNumericWidthsMatchControlKinds()
           "integer steppers are wider than float fields");
 }
 
+void TestFogVolumeInspectorLayoutIncludesConditionalRows()
+{
+    constexpr float rowH = 40.0f;
+    constexpr float gap = 8.0f;
+    game::SectorAuthoringFogVolume volume;
+
+    Check(Near(
+                  game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+                          volume, rowH, gap),
+                  38.0f + 19.0f * (rowH + gap)),
+          "raymarched fog inspector reaches its delete row with bottom padding");
+
+    volume.renderMode = game::SectorLocalFogRenderMode::Analytic;
+    Check(Near(
+                  game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+                          volume, rowH, gap),
+                  38.0f + 22.0f * (rowH + gap)),
+          "analytic ellipsoid fog inspector includes its extra controls");
+
+    volume.shape = game::SectorLocalFogShape::Box;
+    const float boxStyleRowHeight =
+            game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;
+    Check(Near(
+                  game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+                          volume, rowH, gap),
+                  38.0f + 23.0f * (rowH + gap) + boxStyleRowHeight),
+          "analytic box fog inspector includes style, yaw, and reaches the delete row");
+
+    const game::SectorEditorInspectorNumericRowLayout rgbLayout =
+            game::BuildSectorEditorInspectorRightRgb8RowLayout(
+                    0.0f, 320.0f, rowH, gap);
+    Check(Near(rgbLayout.inputRect.width, game::SectorEditorInspectorRgb8InputWidth)
+                  && rgbLayout.inputRect.width > game::SectorEditorInspectorIntInputWidth,
+          "fog RGB steppers reserve extra width for three-digit values");
+}
+
 void TestTextureRowHeight()
 {
     Check(Near(game::SectorEditorInspectorTextureRowHeight(), 60.0f),
@@ -670,6 +706,7 @@ int main()
     TestRightIntNumericRow();
     TestRightNumericRowClamps();
     TestInspectorNumericWidthsMatchControlKinds();
+    TestFogVolumeInspectorLayoutIncludesConditionalRows();
     TestTextureRowHeight();
     TestStackedOptionRow();
     TestRuntimeObjectInspectorHeightCountsBillboardRows();

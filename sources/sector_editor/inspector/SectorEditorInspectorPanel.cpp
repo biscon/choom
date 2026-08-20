@@ -539,7 +539,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             return 164.0f;
         }
         if (selectedAuthoringFogVolume != nullptr) {
-            return 38.0f + (rowH + gap) * 20.0f + 28.0f;
+            return MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+                    *selectedAuthoringFogVolume,
+                    rowH,
+                    gap);
         }
         if (selectedLevelMarker != nullptr) {
             return MeasureSectorEditorLevelMarkerInspectorContentHeight(
@@ -2322,6 +2325,62 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         }
         y += rowH + gap;
 
+        bool boxShape = selectedAuthoringFogVolume->shape == SectorLocalFogShape::Box;
+        if (analyticMode) {
+            if (engine::Checkbox(
+                        ui, config, input, assets,
+                        "sector_editor_fog_volume_box_shape",
+                        Rectangle{0.0f, y, contentW, rowH},
+                        font, "Box shape", boxShape)) {
+                editing.MutateById(fogVolumeId, "Updated authoring fog volume shape",
+                        [boxShape](SectorAuthoringFogVolume& volume) {
+                            const SectorLocalFogShape shape = boxShape
+                                    ? SectorLocalFogShape::Box
+                                    : SectorLocalFogShape::Ellipsoid;
+                            if (volume.shape == shape) return false;
+                            volume.shape = shape;
+                            return true;
+                        });
+            }
+            y += rowH + gap;
+        }
+
+        if (analyticMode && boxShape) {
+            const SectorEditorInspectorStackedOptionRowLayout boxStyleLayout =
+                    BuildSectorEditorInspectorStackedOptionRowLayout(
+                            y, contentW, rowH, gap);
+            engine::Text(
+                    ui, config, assets, boxStyleLayout.labelRect, font,
+                    "Box style", engine::UITextJustify::Left,
+                    config.mutedTextColor);
+            const char* const boxStyleOptions[] = {"Cloudy volume", "Room fog"};
+            int selectedBoxStyle = selectedAuthoringFogVolume->boxStyle
+                            == SectorAnalyticFogBoxStyle::Room
+                    ? 1
+                    : 0;
+            if (engine::Option(
+                        ui, config, input, assets,
+                        "sector_editor_fog_volume_box_style",
+                        boxStyleLayout.fieldRect,
+                        font,
+                        boxStyleOptions,
+                        std::size(boxStyleOptions),
+                        selectedBoxStyle)) {
+                const SectorAnalyticFogBoxStyle boxStyle = selectedBoxStyle == 1
+                        ? SectorAnalyticFogBoxStyle::Room
+                        : SectorAnalyticFogBoxStyle::Cloudy;
+                editing.MutateById(
+                        fogVolumeId,
+                        "Updated authoring fog volume box style",
+                        [boxStyle](SectorAuthoringFogVolume& volume) {
+                            if (volume.boxStyle == boxStyle) return false;
+                            volume.boxStyle = boxStyle;
+                            return true;
+                        });
+            }
+            y += boxStyleLayout.height + gap;
+        }
+
         const auto drawFloat = [&](const char* id,
                                    const char* label,
                                    float current,
@@ -2381,9 +2440,12 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
         drawPosition("sector_editor_fog_volume_x", "Center X", true, 0);
         drawPosition("sector_editor_fog_volume_z", "Center Z", false, 1);
+        if (analyticMode && boxShape) {
+            drawFloat("sector_editor_fog_volume_yaw", "Yaw (degrees)", selectedAuthoringFogVolume->yawDegrees, 16, 0.0f, 360.0f, 2, &SectorAuthoringFogVolume::yawDegrees);
+        }
         drawFloat("sector_editor_fog_volume_bottom", "Bottom offset", selectedAuthoringFogVolume->bottomOffsetWorld, 2, -16.0f, 16.0f, 3, &SectorAuthoringFogVolume::bottomOffsetWorld);
-        drawFloat("sector_editor_fog_volume_radius_x", "Radius X", selectedAuthoringFogVolume->radiusXWorld, 3, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusXWorld);
-        drawFloat("sector_editor_fog_volume_radius_z", "Radius Z", selectedAuthoringFogVolume->radiusZWorld, 4, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusZWorld);
+        drawFloat("sector_editor_fog_volume_radius_x", analyticMode && boxShape ? "Half extent X" : "Radius X", selectedAuthoringFogVolume->radiusXWorld, 3, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusXWorld);
+        drawFloat("sector_editor_fog_volume_radius_z", analyticMode && boxShape ? "Half extent Z" : "Radius Z", selectedAuthoringFogVolume->radiusZWorld, 4, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::radiusZWorld);
         drawFloat("sector_editor_fog_volume_height", "Height", selectedAuthoringFogVolume->heightWorld, 5, 0.05f, 32.0f, 3, &SectorAuthoringFogVolume::heightWorld);
         drawFloat("sector_editor_fog_volume_opacity", "Max opacity", selectedAuthoringFogVolume->maxOpacity, 7, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::maxOpacity);
         if (analyticMode) {
@@ -2392,12 +2454,12 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             drawFloat("sector_editor_fog_volume_analytic_exponent", "Falloff exponent", selectedAuthoringFogVolume->analyticFalloffExponent, 15, 0.05f, 8.0f, 3, &SectorAuthoringFogVolume::analyticFalloffExponent);
         } else {
             drawFloat("sector_editor_fog_volume_density", "Density", selectedAuthoringFogVolume->density, 6, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::density);
-            drawFloat("sector_editor_fog_volume_softness", "Edge softness", selectedAuthoringFogVolume->edgeSoftness, 8, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::edgeSoftness);
-            drawFloat("sector_editor_fog_volume_noise_scale", "Noise scale (m)", selectedAuthoringFogVolume->noiseScaleWorld, 9, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::noiseScaleWorld);
-            drawFloat("sector_editor_fog_volume_noise_amount", "Noise amount", selectedAuthoringFogVolume->noiseAmount, 10, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::noiseAmount);
-            drawFloat("sector_editor_fog_volume_flow_direction", "Flow direction", selectedAuthoringFogVolume->flowDirectionDegrees, 11, 0.0f, 360.0f, 2, &SectorAuthoringFogVolume::flowDirectionDegrees);
-            drawFloat("sector_editor_fog_volume_flow_speed", "Flow speed (m/s)", selectedAuthoringFogVolume->flowSpeedWorld, 12, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::flowSpeedWorld);
         }
+        drawFloat("sector_editor_fog_volume_softness", "Edge softness", selectedAuthoringFogVolume->edgeSoftness, 8, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::edgeSoftness);
+        drawFloat("sector_editor_fog_volume_noise_scale", "Noise scale (m)", selectedAuthoringFogVolume->noiseScaleWorld, 9, 0.05f, 64.0f, 3, &SectorAuthoringFogVolume::noiseScaleWorld);
+        drawFloat("sector_editor_fog_volume_noise_amount", "Noise amount", selectedAuthoringFogVolume->noiseAmount, 10, 0.0f, 1.0f, 3, &SectorAuthoringFogVolume::noiseAmount);
+        drawFloat("sector_editor_fog_volume_flow_direction", "Flow direction", selectedAuthoringFogVolume->flowDirectionDegrees, 11, 0.0f, 360.0f, 2, &SectorAuthoringFogVolume::flowDirectionDegrees);
+        drawFloat("sector_editor_fog_volume_flow_speed", "Flow speed (m/s)", selectedAuthoringFogVolume->flowSpeedWorld, 12, 0.0f, 8.0f, 3, &SectorAuthoringFogVolume::flowSpeedWorld);
 
         for (int channel = 0; channel < 3; ++channel) {
             const char* labels[] = {"Color R", "Color G", "Color B"};
@@ -2410,7 +2472,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     selectedAuthoringFogVolume->color.g,
                     selectedAuthoringFogVolume->color.b};
             const SectorEditorInspectorNumericRowLayout layout =
-                    BuildSectorEditorInspectorRightIntRowLayout(y, contentW, rowH, gap);
+                    BuildSectorEditorInspectorRightRgb8RowLayout(y, contentW, rowH, gap);
             const SectorEditorIntInputResult value = DrawLabeledIntInput(
                     ui, config, input, assets, font,
                     ids[channel], labels[channel],

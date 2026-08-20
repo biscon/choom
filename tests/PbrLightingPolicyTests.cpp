@@ -545,6 +545,27 @@ void TestHdrEffectShaderAndPassPolicies()
                             "rlDrawRenderBatchActive();\n        SetShaderValueTexture(shader, sceneDepthLoc, sceneTarget.depth);")
                             != std::string::npos,
           "analytic fog and proxies preserve depth bindings across render-batch flushes");
+    Check(analyticFog.find("bool intersectBox(") != std::string::npos
+                    && analyticFog.find("uniform int fogShape") != std::string::npos
+                    && analyticFog.find("uniform int fogBoxStyle") != std::string::npos
+                    && analyticFog.find("float cloudyBoxBoundary(") != std::string::npos
+                    && analyticFog.find("float roomBoxBoundary(") != std::string::npos
+                    && analyticFog.find("mix(enterT, exitT, 0.20)") != std::string::npos
+                    && analyticFog.find("mix(enterT, exitT, 0.80)") != std::string::npos
+                    && analyticFog.find("nearNoise * 0.25") != std::string::npos
+                    && analyticFog.find("middleNoise * 0.50") != std::string::npos
+                    && analyticFog.find("farNoise * 0.25") != std::string::npos
+                    && analyticFog.find("mix(0.80, 1.20") != std::string::npos
+                    && analyticFog.find("valueNoise(noisePosition / max(fogNoiseParams.y, 0.05))")
+                            != std::string::npos
+                    && analyticFog.find("float shapedPath = chord * boundary * noiseModulation;")
+                            != std::string::npos
+                    && analyticFog.find("fogColor * staticLighting") != std::string::npos
+                    && analyticFog.find("SampleSectorLocalFogStaticLighting(")
+                            != std::string::npos
+                    && analyticFog.find("dynamicLightCount") == std::string::npos
+                    && analyticFog.find("for (int stepIndex") == std::string::npos,
+          "analytic fog supports cloudy and room box profiles with fixed noise taps and cached baked lighting without marching or dynamic-light loops");
     Check(bloom.find("Rgba8Unorm")==std::string::npos
                     && fog.find("Rgba8Unorm")==std::string::npos
                     && haze.find("Rgba8Unorm")==std::string::npos

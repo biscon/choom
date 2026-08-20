@@ -46,6 +46,12 @@ SectorLocalFogStaticLightingSamples SampleSectorLocalFogStaticLighting(
         const SectorBakedObjectLightProbeRuntimeData& probes,
         const SectorCompiledLocalFogVolume& volume);
 
+SectorLocalFogStaticLightingSamples SampleSectorLocalFogStaticLighting(
+        const SectorTopologyMap& map,
+        const SectorBakedObjectLightProbeRuntimeData& probes,
+        const SectorCompiledLocalFogVolume& volume,
+        float yawRadians);
+
 Vector3 InterpolateSectorLocalFogStaticLighting(
         const SectorLocalFogStaticLightingSamples& samples,
         Vector2 normalizedLocalXZ);
