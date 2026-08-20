@@ -237,6 +237,12 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
+    void DrawLightmapBakeSetupModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
     void DrawAddMapTextureModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -476,7 +482,8 @@ private:
             const char* status,
             const std::function<bool(SectorPlacedRuntimeObject&)>& mutate);
     void RefreshRuntimeObjectsAfterAuthoringEdit();
-    bool StartLightmapBake();
+    bool OpenLightmapBakeSetup();
+    bool StartLightmapBake(SectorLightmapBakeQualityPreset qualityPreset);
     void PollLightmapBakeResult(engine::AssetManager& assets);
     bool InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
     SectorEditorState state;

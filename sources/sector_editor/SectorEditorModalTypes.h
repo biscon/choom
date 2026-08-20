@@ -209,6 +209,13 @@ struct DoorTextureSettingsModalState {
     std::string statusMessage;
 };
 
+struct SectorLightmapBakeSetupModalState {
+    bool open = false;
+    SectorLightmapBakeQualityPreset selectedQuality =
+            SectorLightmapBakeQualityPreset::Standard;
+    std::string errorMessage;
+};
+
 struct SectorPreviewSettingsModalState {
     bool open = false;
     PreviewSettingsTab activeTab = PreviewSettingsTab::General;

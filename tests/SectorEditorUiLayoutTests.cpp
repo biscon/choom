@@ -1,4 +1,5 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/SectorEditorLightmapModal.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/preview/SectorEditorLightProxyPlacement.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
@@ -33,6 +34,27 @@ bool Overlaps(Rectangle a, Rectangle b)
             && a.x + a.width > b.x
             && a.y < b.y + b.height
             && a.y + a.height > b.y;
+}
+
+void TestLightmapBakeSetupModalStateLifecycle()
+{
+    game::SectorLightmapBakeSetupModalState state;
+    state.errorMessage = "old error";
+    game::OpenSectorEditorLightmapBakeSetupModal(
+            state,
+            game::SectorLightmapBakeQualityPreset::High);
+    Check(state.open
+                  && state.selectedQuality
+                             == game::SectorLightmapBakeQualityPreset::High
+                  && state.errorMessage.empty(),
+          "lightmap bake setup opens on the level's current preset");
+
+    game::CloseSectorEditorLightmapBakeSetupModal(state);
+    Check(!state.open
+                  && state.selectedQuality
+                             == game::SectorLightmapBakeQualityPreset::Standard
+                  && state.errorMessage.empty(),
+          "cancelling lightmap bake setup clears draft modal state");
 }
 
 bool Contains(Rectangle outer, Rectangle inner)
@@ -690,6 +712,7 @@ void TestLightProxyPlacementMath()
 
 int main()
 {
+    TestLightmapBakeSetupModalStateLifecycle();
     TestModelFilenameExtraction();
     TestAudioAssetPickerScrollSession();
     TestTextureRowWithoutClear();

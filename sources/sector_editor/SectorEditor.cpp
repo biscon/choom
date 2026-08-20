@@ -669,6 +669,12 @@ void SectorEditor::RenderUI(
             engine::EndUI(ui, config, input, assets);
             return;
         }
+        if (state.lightmapBakeSetupModal.open) {
+            DrawLightmapBakeSetupModal(ui, config, input, assets, font);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
         if (previewState.overlay.previewUiHidden) {
             ui.hotId = 0;
             ui.activeId = 0;
@@ -720,6 +726,12 @@ void SectorEditor::RenderUI(
     engine::BeginUI(ui, input);
     if (lightmapBake.IsBlocking()) {
         DrawLightmapBakeModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
+    if (state.lightmapBakeSetupModal.open) {
+        DrawLightmapBakeSetupModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -3167,7 +3179,42 @@ void SectorEditor::RefreshRuntimeObjectsAfterAuthoringEdit()
     editing.RefreshPreviewObjects();
 }
 
-bool SectorEditor::StartLightmapBake()
+bool SectorEditor::OpenLightmapBakeSetup()
+{
+    if (!lightmapBake.CanStart()) {
+        statusText = "Lightmap bake already running";
+        return false;
+    }
+    if (!Lifecycle().hasCurrentLevelPath) {
+        statusText = "Save the level before baking lightmaps";
+        return false;
+    }
+    std::string gateMessage;
+    if (!CanUseCurrentAuthoringDerivedTopologyForLightmapBake(
+                MakeLiveConstDerivationAccess(documentState.derivation),
+                &gateMessage)) {
+        statusText = gateMessage.empty()
+                ? "Bake failed: derived topology is not current"
+                : gateMessage;
+        return false;
+    }
+    if (TopologyMap().sectors.empty()) {
+        statusText = "Bake failed: no sectors";
+        return false;
+    }
+    if (engineContext == nullptr) {
+        statusText = "Bake failed: asset manager is unavailable";
+        return false;
+    }
+
+    OpenSectorEditorLightmapBakeSetupModal(
+            state.lightmapBakeSetupModal,
+            TopologyMap().lightmapSettings.qualityPreset);
+    return true;
+}
+
+bool SectorEditor::StartLightmapBake(
+        SectorLightmapBakeQualityPreset qualityPreset)
 {
     if (!lightmapBake.CanStart()) {
         statusText = "Lightmap bake already running";
@@ -3205,6 +3252,13 @@ bool SectorEditor::StartLightmapBake()
         statusText = "Bake failed: asset manager is unavailable";
         return false;
     }
+
+    const SectorLightmapBakeQualityPreset previousQuality =
+            NormalizeSectorLightmapBakeQualityPreset(
+                    TopologyMap().lightmapSettings.qualityPreset);
+    const SectorLightmapBakeQualityPreset selectedQuality =
+            NormalizeSectorLightmapBakeQualityPreset(qualityPreset);
+    TopologyMap().lightmapSettings.qualityPreset = selectedQuality;
     SectorStaticModelLightmapData preparedStaticModels;
     std::string staticModelError;
     if (!PrepareSectorStaticModelsForLightmapBake(
@@ -3213,6 +3267,7 @@ bool SectorEditor::StartLightmapBake()
                 {},
                 preparedStaticModels,
                 staticModelError)) {
+        TopologyMap().lightmapSettings.qualityPreset = previousQuality;
         statusText = staticModelError.empty()
                 ? "Bake failed: could not prepare static models"
                 : staticModelError;
@@ -3228,8 +3283,19 @@ bool SectorEditor::StartLightmapBake()
 
     std::string startStatus;
     if (!lightmapBake.StartBake(std::move(request), startStatus)) {
+        TopologyMap().lightmapSettings.qualityPreset = previousQuality;
         statusText = startStatus.empty() ? "Lightmap bake already running" : startStatus;
         return false;
+    }
+
+    if (selectedQuality != previousQuality) {
+        Lifecycle().hasUnsavedChanges = true;
+        Lifecycle().topologyDocumentDirty = true;
+        state.lightmapSourceHashRevision = 0;
+        if (state.mode == SectorEditorMode::Preview3D
+                && sceneRuntime.Renderer().IsRendererReady()) {
+            RebuildPreviewMeshesPreservingView(*engineContext);
+        }
     }
 
     statusText = startStatus.empty() ? "Baking lightmap..." : startStatus;
@@ -4741,6 +4807,7 @@ void SectorEditor::DrawToolsPanel(
             value = result.value;
             Lifecycle().hasUnsavedChanges = true;
             Lifecycle().topologyDocumentDirty = true;
+            state.lightmapSourceHashRevision = 0;
             statusText = status;
         }
         y += rowH + gap;
@@ -4792,7 +4859,7 @@ void SectorEditor::DrawToolsPanel(
     );
 
     if (engine::Button(ui, config, input, assets, "sector_editor_bake_lightmaps", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
-        StartLightmapBake();
+        OpenLightmapBakeSetup();
     }
     y += rowH + gap;
 
@@ -4946,7 +5013,7 @@ void SectorEditor::DrawSectorsPanel(
                     });
             break;
         case SectorEditorInspectorPanelRequestKind::BakeLightmaps:
-            StartLightmapBake();
+            OpenLightmapBakeSetup();
             break;
         case SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources:
             if (state.mode == SectorEditorMode::Preview3D && sceneRuntime.Renderer().IsRendererReady()) {
@@ -5499,6 +5566,35 @@ void SectorEditor::DrawLightmapBakeModal(
     game::DrawLightmapBakeModal(ui, config, input, assets, font, lightmapBake.BuildModalView(), callbacks);
 }
 
+void SectorEditor::DrawLightmapBakeSetupModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    const SectorEditorLightmapBakeSetupModalResult result =
+            game::DrawLightmapBakeSetupModal(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    state.lightmapBakeSetupModal);
+    if (result != SectorEditorLightmapBakeSetupModalResult::BakeRequested) {
+        return;
+    }
+
+    const SectorLightmapBakeQualityPreset selectedQuality =
+            state.lightmapBakeSetupModal.selectedQuality;
+    if (StartLightmapBake(selectedQuality)) {
+        CloseSectorEditorLightmapBakeSetupModal(
+                state.lightmapBakeSetupModal);
+        return;
+    }
+    state.lightmapBakeSetupModal.errorMessage = statusText;
+}
+
 void SectorEditor::DrawStatusPanel(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -5903,6 +5999,7 @@ bool SectorEditor::HasDocumentModalOpen() const
             || state.setAllModal.open
             || state.decalTintModal.open
             || state.doorTextureSettingsModal.open
+            || state.lightmapBakeSetupModal.open
             || state.previewSettingsModal.open;
 }
 

@@ -110,6 +110,7 @@ struct SectorEditorState {
     SectorEditorSetAllModalState setAllModal;
     DecalTintModalState decalTintModal;
     DoorTextureSettingsModalState doorTextureSettingsModal;
+    SectorLightmapBakeSetupModalState lightmapBakeSetupModal;
     SectorPreviewSettingsModalState previewSettingsModal;
 };
 

@@ -191,6 +191,8 @@ void TestLightmapBakeReportFormatting()
 
     const std::string report = game::FormatSectorLightmapBakeReport(result);
     Check(report.find("Lightmap bake report\n  Atlases: 1\n") == 0
+                  && report.find("Quality: Standard (8 texels/world, 8 soft-shadow, 12 AO, 8 bounce samples)")
+                          != std::string::npos
                   && report.find("CPU F32 linear, disk RGBA16F LE, GPU RGBA16F")
                           != std::string::npos
                   && report.find("Stored/reopened binary16 RGB min/max:")
@@ -1962,6 +1964,92 @@ void TestLayoutSmoke()
           "one-sky portal keeps upper-wall chart");
 }
 
+void TestLightmapQualityPresetResolutionAndLayoutScaling()
+{
+    const game::SectorLightmapBakeQualityParameters draft =
+            game::ResolveSectorLightmapBakeQuality(
+                    game::SectorLightmapBakeQualityPreset::Draft);
+    const game::SectorLightmapBakeQualityParameters standard =
+            game::ResolveSectorLightmapBakeQuality(
+                    game::SectorLightmapBakeQualityPreset::Standard);
+    const game::SectorLightmapBakeQualityParameters high =
+            game::ResolveSectorLightmapBakeQuality(
+                    game::SectorLightmapBakeQualityPreset::High);
+    Check(Near(draft.texelsPerWorldUnit, 4.0f)
+                  && draft.directSoftShadowSampleCount == 4
+                  && draft.ambientOcclusionSampleCount == 6
+                  && draft.indirectBounceSampleCount == 4,
+          "Draft lightmap quality resolves to the fast preset values");
+    Check(Near(standard.texelsPerWorldUnit, 8.0f)
+                  && standard.directSoftShadowSampleCount == 8
+                  && standard.ambientOcclusionSampleCount == 12
+                  && standard.indirectBounceSampleCount == 8,
+          "Standard lightmap quality preserves the previous bake values");
+    Check(Near(high.texelsPerWorldUnit, 16.0f)
+                  && high.directSoftShadowSampleCount == 12
+                  && high.ambientOcclusionSampleCount == 18
+                  && high.indirectBounceSampleCount == 12,
+          "High lightmap quality resolves to the detailed preset values");
+
+    game::SectorTopologyMap map = MakeSquare();
+    game::SectorLightmapLayout draftLayout;
+    game::SectorLightmapLayout standardLayout;
+    game::SectorLightmapLayout highLayout;
+    std::string error;
+    map.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::Draft;
+    const bool draftBuilt = game::BuildSectorLightmapLayout(
+            map, draftLayout, error);
+    map.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::Standard;
+    const bool standardBuilt = game::BuildSectorLightmapLayout(
+            map, standardLayout, error);
+    map.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::High;
+    const bool highBuilt = game::BuildSectorLightmapLayout(
+            map, highLayout, error);
+    Check(draftBuilt && standardBuilt && highBuilt,
+          "all lightmap quality presets build topology layouts");
+    Check(Near(draftLayout.texelsPerWorldUnit, 4.0f)
+                  && Near(standardLayout.texelsPerWorldUnit, 8.0f)
+                  && Near(highLayout.texelsPerWorldUnit, 16.0f)
+                  && draftLayout.atlasWidth == game::SectorLightmapAtlasWidth
+                  && highLayout.atlasHeight == game::SectorLightmapAtlasHeight,
+          "quality changes chart density while atlas dimensions stay fixed");
+
+    const auto usablePixels = [](const game::SectorLightmapLayout& layout) {
+        long long total = 0;
+        for (const game::SectorLightmapChart& chart : layout.charts) {
+            total += static_cast<long long>(chart.usableWidth)
+                    * static_cast<long long>(chart.usableHeight);
+        }
+        return total;
+    };
+    Check(usablePixels(draftLayout) < usablePixels(standardLayout)
+                  && usablePixels(standardLayout) < usablePixels(highLayout),
+          "higher lightmap quality allocates progressively more chart texels");
+
+    game::SectorTopologyMap defaultStandard = MakeSquare();
+    game::SectorTopologyMap explicitStandard = defaultStandard;
+    explicitStandard.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::Standard;
+    game::SectorTopologyMap draftHashMap = defaultStandard;
+    draftHashMap.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::Draft;
+    game::SectorTopologyMap highHashMap = defaultStandard;
+    highHashMap.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::High;
+    const std::string standardHash =
+            game::ComputeSectorLightmapSourceHash(defaultStandard);
+    Check(game::ComputeSectorLightmapSourceHash(explicitStandard)
+                          == standardHash
+                  && game::ComputeSectorLightmapSourceHash(draftHashMap)
+                          != standardHash
+                  && game::ComputeSectorLightmapSourceHash(highHashMap)
+                          != standardHash,
+          "resolved quality participates in the lightmap source hash");
+}
+
 void TestTopologyLayoutRollsIntoAdditionalAtlases()
 {
     game::SectorLightmapLayout layout;
@@ -1988,7 +2076,9 @@ void TestSmallSyntheticMultiAtlasBake()
 {
     game::SectorTopologyMap map = MakeSquare();
     map.staticLights.clear();
-    map.lightmapSettings.ambientOcclusionStrength = 0.0f;
+    map.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::Draft;
+    map.lightmapSettings.ambientOcclusionStrength = 0.5f;
     map.lightmapSettings.indirectBounceStrength = 0.0f;
     game::SectorGeneratedGeometry geometry;
     game::SectorLightmapLayout layout;
@@ -2053,6 +2143,13 @@ void TestSmallSyntheticMultiAtlasBake()
                   && first.width == 8
                   && second.width == 8,
           "multi-atlas bake result reports and writes every indexed HDR artifact");
+    Check(result.qualityPreset
+                          == game::SectorLightmapBakeQualityPreset::Draft
+                  && Near(result.qualityParameters.texelsPerWorldUnit, 4.0f)
+                  && result.ambientOcclusionStats.raysCast
+                             == static_cast<uint64_t>(result.validChartTexels)
+                                     * 6u,
+          "bake result and AO ray count use the selected Draft quality parameters");
     std::filesystem::remove(outputPath);
     std::filesystem::remove(secondPath);
     std::filesystem::remove(
@@ -4637,6 +4734,7 @@ int main()
     TestBakeVersionInvalidatesOldLightmaps();
     TestLogicalSelfComparison();
     TestLayoutSmoke();
+    TestLightmapQualityPresetResolutionAndLayoutScaling();
     TestTopologyLayoutRollsIntoAdditionalAtlases();
     TestSmallSyntheticMultiAtlasBake();
     TestHdrBakeAccumulationPreservesAboveOneRadiance();

@@ -737,6 +737,35 @@ SectorDoorSwingSide ReadSectorDoorSwingSide(
     Fail(context + "." + field + " must be 'front' or 'back'");
 }
 
+SectorLightmapBakeQualityPreset ReadLightmapQualityPreset(
+        const Json& object,
+        const std::string& context)
+{
+    const std::string value = ReadOptionalString(
+            object,
+            "qualityPreset",
+            context,
+            "standard");
+    if (value == "draft") return SectorLightmapBakeQualityPreset::Draft;
+    if (value == "standard") return SectorLightmapBakeQualityPreset::Standard;
+    if (value == "high") return SectorLightmapBakeQualityPreset::High;
+    Fail(context + ".qualityPreset must be 'draft', 'standard', or 'high'");
+}
+
+const char* WriteLightmapQualityPreset(
+        SectorLightmapBakeQualityPreset preset)
+{
+    switch (NormalizeSectorLightmapBakeQualityPreset(preset)) {
+        case SectorLightmapBakeQualityPreset::Draft:
+            return "draft";
+        case SectorLightmapBakeQualityPreset::High:
+            return "high";
+        case SectorLightmapBakeQualityPreset::Standard:
+            return "standard";
+    }
+    return "standard";
+}
+
 SectorCoord ReadCoordPairElement(const Json& value, size_t index, const std::string& context)
 {
     if (index >= value.size()) {
@@ -1212,6 +1241,7 @@ SectorLightmapBakeSettings ReadLightmapSettings(const Json& value, const std::st
     }
 
     SectorLightmapBakeSettings settings;
+    settings.qualityPreset = ReadLightmapQualityPreset(value, context);
     settings.ambientOcclusionRadius = std::clamp(
             ReadFloat(value, "ambientOcclusionRadius", context),
             SectorWorldToAuthoringDistance(0.05f),
@@ -2211,7 +2241,7 @@ void RequireFinite(float value, const std::string& context)
 
 Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
 {
-    return Json{
+    Json value{
             {"ambientOcclusionRadius", std::clamp(
                     settings.ambientOcclusionRadius,
                     SectorWorldToAuthoringDistance(0.05f),
@@ -2226,6 +2256,12 @@ Json WriteLightmapSettings(const SectorLightmapBakeSettings& settings)
             {"objectProbeLowerHeightWorld", std::clamp(settings.objectProbeLowerHeightWorld, 0.0f, 16.0f)},
             {"objectProbeUpperHeightWorld", std::clamp(settings.objectProbeUpperHeightWorld, 0.0f, 16.0f)}
     };
+    const SectorLightmapBakeQualityPreset qualityPreset =
+            NormalizeSectorLightmapBakeQualityPreset(settings.qualityPreset);
+    if (qualityPreset != SectorLightmapBakeQualityPreset::Standard) {
+        value["qualityPreset"] = WriteLightmapQualityPreset(qualityPreset);
+    }
+    return value;
 }
 
 Json WritePreviewSettings(const SectorPreviewSettings& settings)

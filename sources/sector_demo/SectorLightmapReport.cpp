@@ -51,6 +51,13 @@ std::string FormatSectorLightmapBakeReport(const SectorLightmapBakeResult& resul
     report << TextFormat("  Atlases: %zu\n", atlasCount);
     report << TextFormat("  Atlas size: %d x %d\n", result.width, result.height);
     report << TextFormat(
+            "  Quality: %s (%.0f texels/world, %d soft-shadow, %d AO, %d bounce samples)\n",
+            SectorLightmapBakeQualityPresetName(result.qualityPreset),
+            result.qualityParameters.texelsPerWorldUnit,
+            result.qualityParameters.directSoftShadowSampleCount,
+            result.qualityParameters.ambientOcclusionSampleCount,
+            result.qualityParameters.indirectBounceSampleCount);
+    report << TextFormat(
             "  Artifact: v%d %s (CPU F32 linear, disk RGBA16F LE, GPU RGBA16F)\n",
             result.artifactVersion,
             result.artifactFormat.c_str());

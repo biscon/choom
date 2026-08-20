@@ -2172,6 +2172,8 @@ void TestRuntimeObjectEditAndDeleteHelpers()
 void TestLightmapMetadataRoundTrip()
 {
     SectorTopologyMap original = MakeSquare();
+    original.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::High;
     original.lightmapSettings.ambientOcclusionRadius = 3.5f;
     original.lightmapSettings.ambientOcclusionStrength = 0.25f;
     original.lightmapSettings.indirectBounceRadius = 9.0f;
@@ -2198,6 +2200,8 @@ void TestLightmapMetadataRoundTrip()
     const std::string text = SaveText(original);
     const Json saved = Json::parse(text);
     Check(saved["lightmapSettings"].is_object(), "topology lightmap settings are written");
+    Check(saved["lightmapSettings"]["qualityPreset"] == "high",
+          "non-default lightmap quality preset is written");
     Check(saved["bakedLightmap"].is_object(), "topology baked lightmap metadata is written");
     Check(saved["bakedLightmap"]["path"].get<std::string>() == original.bakedLightmap.path,
           "topology baked lightmap path is serialized");
@@ -2210,7 +2214,9 @@ void TestLightmapMetadataRoundTrip()
     SectorTopologyMap loaded;
     std::string error;
     Check(LoadText(text, loaded, error), "topology lightmap metadata JSON loads");
-    Check(std::fabs(loaded.lightmapSettings.ambientOcclusionRadius - 3.5f) <= 0.0001f
+    Check(loaded.lightmapSettings.qualityPreset
+                          == game::SectorLightmapBakeQualityPreset::High
+                  && std::fabs(loaded.lightmapSettings.ambientOcclusionRadius - 3.5f) <= 0.0001f
                   && std::fabs(loaded.lightmapSettings.ambientOcclusionStrength - 0.25f) <= 0.0001f
                   && std::fabs(loaded.lightmapSettings.indirectBounceRadius - 9.0f) <= 0.0001f
                   && std::fabs(loaded.lightmapSettings.indirectBounceStrength - 0.35f) <= 0.0001f
@@ -2218,6 +2224,13 @@ void TestLightmapMetadataRoundTrip()
                   && Near(loaded.lightmapSettings.objectProbeLowerHeightWorld, 0.7f)
                   && Near(loaded.lightmapSettings.objectProbeUpperHeightWorld, 1.4f),
           "topology lightmap settings round-trip");
+
+    SectorTopologyMap standardQuality = original;
+    standardQuality.lightmapSettings.qualityPreset =
+            game::SectorLightmapBakeQualityPreset::Standard;
+    const Json standardQualitySaved = Json::parse(SaveText(standardQuality));
+    Check(!standardQualitySaved["lightmapSettings"].contains("qualityPreset"),
+          "default Standard lightmap quality preset is omitted");
     Check(loaded.bakedLightmap.path == original.bakedLightmap.path
                   && loaded.bakedLightmap.width == 2048
                   && loaded.bakedLightmap.height == 2048
@@ -2253,15 +2266,25 @@ void TestLightmapMetadataRoundTrip()
           "omitted baked lightmap metadata loads empty");
 
     Json oldSettings = saved;
+    oldSettings["lightmapSettings"].erase("qualityPreset");
     oldSettings["lightmapSettings"].erase("objectProbeSpacingWorld");
     oldSettings["lightmapSettings"].erase("objectProbeLowerHeightWorld");
     oldSettings["lightmapSettings"].erase("objectProbeUpperHeightWorld");
     SectorTopologyMap oldSettingsStyle;
     Check(LoadText(oldSettings.dump(), oldSettingsStyle, error), "old topology lightmap settings load");
-    Check(Near(oldSettingsStyle.lightmapSettings.objectProbeSpacingWorld, 4.0f)
+    Check(oldSettingsStyle.lightmapSettings.qualityPreset
+                          == game::SectorLightmapBakeQualityPreset::Standard
+                  && Near(oldSettingsStyle.lightmapSettings.objectProbeSpacingWorld, 4.0f)
                   && Near(oldSettingsStyle.lightmapSettings.objectProbeLowerHeightWorld, 0.6f)
                   && Near(oldSettingsStyle.lightmapSettings.objectProbeUpperHeightWorld, 1.5f),
           "old topology lightmap settings default object probe settings");
+
+    Json invalidQuality = saved;
+    invalidQuality["lightmapSettings"]["qualityPreset"] = "ultra";
+    SectorTopologyMap rejectedQuality;
+    Check(!LoadText(invalidQuality.dump(), rejectedQuality, error)
+                  && error.find("qualityPreset") != std::string::npos,
+          "unknown lightmap quality preset is rejected clearly");
 
     Json legacyProbeHeight = saved;
     legacyProbeHeight["lightmapSettings"].erase("objectProbeLowerHeightWorld");

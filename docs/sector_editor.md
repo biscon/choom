@@ -783,8 +783,21 @@ and transparent alpha-blended sprites are still deferred.
 ## Baked Lightmaps
 
 `Bake Lightmaps` uses topology generated geometry, topology static lights, and
-the optional map-level outdoor directional light. Each atlas remains
-2048x2048. The primary PNG is written to:
+the optional map-level outdoor directional light. Pressing any bake button first
+opens an authoring-only quality dialog. The selected preset is stored per level
+and becomes the default the next time that level is baked:
+
+| Preset | Texels/world | Soft-shadow samples | AO samples | Bounce samples | Approximate ray work |
+|---|---:|---:|---:|---:|---:|
+| Draft | 4 | 4 | 6 | 4 | ~0.125x |
+| Standard | 8 | 8 | 12 | 8 | 1x |
+| High | 16 | 12 | 18 | 12 | ~6x |
+
+The relative-work figures compare ray-heavy stages on the same map; fixed bake
+work and light distribution make actual times vary. Existing levels without a
+`qualityPreset` field use Standard, which matches the previous hard-coded bake.
+
+Each atlas remains 2048x2048. The primary artifact is written to:
 
 ```text
 assets/levels/<level_name>/<level_name>.lightmap.png
@@ -798,8 +811,14 @@ backward-compatible, while the optional `additionalAtlases` array records the
 ordered extra atlas paths and dimensions.
 
 The topology JSON stores bake settings in `lightmapSettings` and installed bake
-metadata in `bakedLightmap`. Bake settings include ambient occlusion radius and
-strength, plus indirect bounce radius and strength.
+metadata in `bakedLightmap`. Bake settings include the optional quality preset,
+ambient occlusion radius and strength, plus indirect bounce radius and strength.
+Quality changes chart density for both topology surfaces and static models;
+packing allocates another atlas only when the current one no longer fits the
+charts. A 2048x2048 RGBA16F atlas uses about 32 MiB of disk/GPU payload. Higher
+lightmap resolution does not increase the number of screen fragments, but it
+does increase memory, upload, and texture-cache costs and can add atlas-bound
+draw batches.
 
 `Preview Settings -> Lighting` edits the map-level outdoor directional light.
 Its `directionToLight` vector points from the shaded surface toward the light
@@ -816,8 +835,9 @@ for the bake. If the document changed during the bake, the temporary result is
 discarded.
 
 The source hash is deterministic over the topology lightmap bake version
-(`13`), atlas and sample constants, coordinate subdivision value, map texture
-definitions referenced by baked surface fields, vertex/linedef/sidedef/sector
+(`15`), atlas constants, resolved quality density/sample counts, coordinate
+subdivision value, map texture definitions referenced by baked surface fields,
+vertex/linedef/sidedef/sector
 IDs and geometry, sector and sidedef texture and UV fields, static lights, and
 bake settings. Directional light enabled state, normalized direction, RGB color,
 and intensity are included, so directional changes invalidate baked lightmaps.
@@ -825,7 +845,7 @@ Middle texture receiver data is included because it affects lightmap chart
 layout. Sky visual settings do not invalidate baked lightmaps. The hash does not
 include the installed baked-lightmap metadata itself.
 
-Each baked PNG stores direct static-light contribution and one-bounce indirect
+Each baked artifact stores direct static-light contribution and one-bounce indirect
 light in RGB, and ambient occlusion in alpha. 3D Mode binds the atlas assigned
 to each topology batch or static-model mesh. Baked lighting is used only when
 metadata exists, every atlas file is present, and the stored source hash matches
