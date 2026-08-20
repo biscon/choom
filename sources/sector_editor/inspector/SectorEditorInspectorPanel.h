@@ -158,8 +158,7 @@ inline float MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
         ++rowCount; // Raymarched density.
     }
     float height = 38.0f + static_cast<float>(rowCount) * (rowHeight + gap);
-    if (volume.renderMode == SectorLocalFogRenderMode::Analytic
-            && volume.shape == SectorLocalFogShape::Box) {
+    if (volume.renderMode == SectorLocalFogRenderMode::Analytic) {
         height += SectorEditorInspectorStackedOptionRowHeight(rowHeight, gap) + gap;
     }
     return height;

@@ -101,6 +101,43 @@ void TestYawedBounds()
     assert(std::fabs(diagonal.z - expected) < 0.0001f);
 }
 
+void TestAnalyticFogEdgeBounds()
+{
+    const Vector3 radii{2.0f, 0.5f, 1.0f};
+    const float cloudyWidth = game::ComputeSectorAnalyticFogEdgeWidth(
+            radii, 1.0f, false);
+    const float roomWidth = game::ComputeSectorAnalyticFogEdgeWidth(
+            radii, 1.0f, true);
+    assert(std::fabs(cloudyWidth - 0.225f) < 0.0001f);
+    assert(std::fabs(roomWidth - 0.1f) < 0.0001f);
+
+    const float noNoiseExpansion =
+            game::ComputeSectorAnalyticFogCloudyEdgeExpansion(
+                    radii, 1.0f, 0.0f);
+    const float fullNoiseExpansion =
+            game::ComputeSectorAnalyticFogCloudyEdgeExpansion(
+                    radii, 1.0f, 1.0f);
+    const float quarterNoiseExpansion =
+            game::ComputeSectorAnalyticFogCloudyEdgeExpansion(
+                    radii, 1.0f, 0.25f);
+    assert(std::fabs(noNoiseExpansion) < 0.0001f);
+    assert(std::fabs(fullNoiseExpansion - cloudyWidth * 0.60f) < 0.0001f);
+    assert(std::fabs(quarterNoiseExpansion - fullNoiseExpansion * 0.5f)
+            < 0.0001f);
+
+    const Vector3 expanded{
+            radii.x + fullNoiseExpansion,
+            radii.y + fullNoiseExpansion,
+            radii.z + fullNoiseExpansion};
+    const Vector3 yawed = game::ComputeSectorAtmosphereYawedHalfExtents(
+            expanded, PI * 0.25f);
+    const Vector3 unexpandedYawed = game::ComputeSectorAtmosphereYawedHalfExtents(
+            radii, PI * 0.25f);
+    assert(yawed.x > unexpandedYawed.x);
+    assert(yawed.y > unexpandedYawed.y);
+    assert(yawed.z > unexpandedYawed.z);
+}
+
 void TestDynamicLightMasks()
 {
     game::SectorBillboardDynamicLightContext lights;
@@ -149,6 +186,7 @@ int main()
 {
     TestProjectedScissors();
     TestYawedBounds();
+    TestAnalyticFogEdgeBounds();
     TestDynamicLightMasks();
     return 0;
 }

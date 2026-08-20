@@ -91,7 +91,7 @@ enum class SectorLocalFogShape {
     Box
 };
 
-enum class SectorAnalyticFogBoxStyle {
+enum class SectorAnalyticFogStyle {
     Cloudy,
     Room
 };
@@ -121,7 +121,7 @@ struct SectorCompiledLocalFogVolume {
     bool enabled = true;
     SectorLocalFogRenderMode renderMode = SectorLocalFogRenderMode::Raymarched;
     SectorLocalFogShape shape = SectorLocalFogShape::Ellipsoid;
-    SectorAnalyticFogBoxStyle boxStyle = SectorAnalyticFogBoxStyle::Cloudy;
+    SectorAnalyticFogStyle analyticStyle = SectorAnalyticFogStyle::Cloudy;
     float yawRadians = 0.0f;
     Vector3 centerWorld = {};
     Vector3 radiiWorld = {1.5f, 0.325f, 1.5f};

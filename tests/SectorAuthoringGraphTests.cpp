@@ -12847,7 +12847,7 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
     volume.y = 80;
     volume.renderMode = game::SectorLocalFogRenderMode::Analytic;
     volume.shape = game::SectorLocalFogShape::Box;
-    volume.boxStyle = game::SectorAnalyticFogBoxStyle::Room;
+    volume.analyticStyle = game::SectorAnalyticFogStyle::Room;
     volume.yawDegrees = 90.0f;
     volume.analyticEndDistanceWorld = 3.0f;
     game::SectorAuthoringFogVolume wrappedYaw = volume;
@@ -12855,10 +12855,10 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
     Check(Near(game::NormalizeSectorAuthoringFogVolume(wrappedYaw).yawDegrees, 90.0f),
           "fog volume normalization wraps yaw into one turn");
     game::SectorAuthoringFogVolume invalidStyle = volume;
-    invalidStyle.boxStyle = static_cast<game::SectorAnalyticFogBoxStyle>(-1);
-    Check(game::NormalizeSectorAuthoringFogVolume(invalidStyle).boxStyle
-                  == game::SectorAnalyticFogBoxStyle::Cloudy,
-          "fog volume normalization restores an invalid box style to Cloudy");
+    invalidStyle.analyticStyle = static_cast<game::SectorAnalyticFogStyle>(-1);
+    Check(game::NormalizeSectorAuthoringFogVolume(invalidStyle).analyticStyle
+                  == game::SectorAnalyticFogStyle::Cloudy,
+          "fog volume normalization restores an invalid analytic style to Cloudy");
     graph.fogVolumes.push_back(volume);
 
     game::SectorAuthoringDerivationResult result =
@@ -12874,10 +12874,10 @@ void TestAuthoringFogVolumeDerivationAndUnresolvedWarning()
               "compiled fog volume uses source ID and floor-relative height");
         Check(compiled.renderMode == game::SectorLocalFogRenderMode::Analytic
                       && compiled.shape == game::SectorLocalFogShape::Box
-                      && compiled.boxStyle == game::SectorAnalyticFogBoxStyle::Room
+                      && compiled.analyticStyle == game::SectorAnalyticFogStyle::Room
                       && Near(compiled.yawRadians, PI * 0.5f)
                       && Near(compiled.analyticEndDistanceWorld, 3.0f),
-              "compiled fog volume preserves analytic shape, box style, yaw, and path controls");
+              "compiled fog volume preserves independent analytic shape, style, yaw, and path controls");
         Check(Near(compiled.noiseAmount, 0.75f)
                       && Near(compiled.noiseScaleWorld, 0.75f)
                       && Near(compiled.flowSpeedWorld, 0.20f),
@@ -12911,7 +12911,7 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
     volume.density = 1.25f;
     volume.renderMode = game::SectorLocalFogRenderMode::Analytic;
     volume.shape = game::SectorLocalFogShape::Box;
-    volume.boxStyle = game::SectorAnalyticFogBoxStyle::Room;
+    volume.analyticStyle = game::SectorAnalyticFogStyle::Room;
     volume.yawDegrees = 270.0f;
     volume.analyticStartDistanceWorld = 0.25f;
     volume.analyticEndDistanceWorld = 3.5f;
@@ -12934,7 +12934,7 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
           "default fog noise settings remain omitted on save");
     Check(savedFog.value("renderMode", "") == "analytic"
                   && savedFog.value("shape", "") == "box"
-                  && savedFog.value("boxStyle", "") == "room"
+                  && savedFog.value("analyticStyle", "") == "room"
                   && Near(savedFog.value("yawDegrees", 0.0f), 270.0f)
                   && Near(savedFog.value("analyticStartDistanceWorld", 0.0f), 0.25f)
                   && Near(savedFog.value("analyticEndDistanceWorld", 0.0f), 3.5f),
@@ -12942,7 +12942,7 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
 
     game::SectorAuthoringDocument defaultsDocument = document;
     defaultsDocument.graph.fogVolumes[0].shape = game::SectorLocalFogShape::Ellipsoid;
-    defaultsDocument.graph.fogVolumes[0].boxStyle = game::SectorAnalyticFogBoxStyle::Cloudy;
+    defaultsDocument.graph.fogVolumes[0].analyticStyle = game::SectorAnalyticFogStyle::Cloudy;
     defaultsDocument.graph.fogVolumes[0].yawDegrees = 0.0f;
     std::string defaultsJson;
     Check(game::SaveSectorAuthoringDocumentToJsonString(
@@ -12951,9 +12951,9 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
     const Json savedDefaults = Json::parse(defaultsJson);
     const Json& savedDefaultFog = savedDefaults["authoringGraph"]["fogVolumes"][0];
     Check(!savedDefaultFog.contains("shape")
-                  && !savedDefaultFog.contains("boxStyle")
+                  && !savedDefaultFog.contains("analyticStyle")
                   && !savedDefaultFog.contains("yawDegrees"),
-          "default fog shape, box style, and yaw remain omitted on save");
+          "default fog shape, analytic style, and yaw remain omitted on save");
 
     game::SectorAuthoringDocument loaded;
     Check(game::LoadSectorAuthoringDocumentFromJsonString(json, loaded, &error),
@@ -12963,8 +12963,8 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
                   && loaded.graph.fogVolumes[0].renderMode
                           == game::SectorLocalFogRenderMode::Analytic
                   && loaded.graph.fogVolumes[0].shape == game::SectorLocalFogShape::Box
-                  && loaded.graph.fogVolumes[0].boxStyle
-                          == game::SectorAnalyticFogBoxStyle::Room
+                  && loaded.graph.fogVolumes[0].analyticStyle
+                          == game::SectorAnalyticFogStyle::Room
                   && Near(loaded.graph.fogVolumes[0].yawDegrees, 270.0f)
                   && Near(loaded.graph.fogVolumes[0].analyticFalloffExponent, 1.75f)
                   && Near(loaded.graph.fogVolumes[0].density, 1.25f)
@@ -12975,32 +12975,50 @@ void TestAuthoringFogVolumeSerializationRoundTrip()
 
     Json legacy = saved;
     legacy["authoringGraph"]["fogVolumes"][0].erase("shape");
-    legacy["authoringGraph"]["fogVolumes"][0].erase("boxStyle");
+    legacy["authoringGraph"]["fogVolumes"][0].erase("analyticStyle");
     legacy["authoringGraph"]["fogVolumes"][0].erase("yawDegrees");
     game::SectorAuthoringDocument legacyLoaded;
     Check(game::LoadSectorAuthoringDocumentFromJsonString(
                   legacy.dump(), legacyLoaded, &error)
                   && legacyLoaded.graph.fogVolumes[0].shape
                           == game::SectorLocalFogShape::Ellipsoid
-                  && legacyLoaded.graph.fogVolumes[0].boxStyle
-                          == game::SectorAnalyticFogBoxStyle::Cloudy
+                  && legacyLoaded.graph.fogVolumes[0].analyticStyle
+                          == game::SectorAnalyticFogStyle::Cloudy
                   && Near(legacyLoaded.graph.fogVolumes[0].yawDegrees, 0.0f),
           "older fog volumes default to a cloudy unrotated ellipsoid");
 
+    Json legacyBoxStyle = saved;
+    legacyBoxStyle["authoringGraph"]["fogVolumes"][0].erase("analyticStyle");
+    legacyBoxStyle["authoringGraph"]["fogVolumes"][0]["boxStyle"] = "room";
+    game::SectorAuthoringDocument legacyBoxStyleLoaded;
+    Check(game::LoadSectorAuthoringDocumentFromJsonString(
+                  legacyBoxStyle.dump(), legacyBoxStyleLoaded, &error)
+                  && legacyBoxStyleLoaded.graph.fogVolumes[0].analyticStyle
+                          == game::SectorAnalyticFogStyle::Room,
+          "legacy boxStyle loads as the shape-independent analytic style");
+
+    Json conflictingStyles = saved;
+    conflictingStyles["authoringGraph"]["fogVolumes"][0]["boxStyle"] = "cloudy";
+    game::SectorAuthoringDocument rejected;
+    Check(!game::LoadSectorAuthoringDocumentFromJsonString(
+                  conflictingStyles.dump(), rejected, &error)
+                  && error.find("both .analyticStyle and legacy .boxStyle")
+                          != std::string::npos,
+          "documents with both analytic style fields fail clearly");
+
     Json invalidShape = saved;
     invalidShape["authoringGraph"]["fogVolumes"][0]["shape"] = "capsule";
-    game::SectorAuthoringDocument rejected;
     Check(!game::LoadSectorAuthoringDocumentFromJsonString(
                   invalidShape.dump(), rejected, &error)
                   && error.find(".shape") != std::string::npos,
           "unknown fog volume shapes fail clearly");
 
-    Json invalidBoxStyle = saved;
-    invalidBoxStyle["authoringGraph"]["fogVolumes"][0]["boxStyle"] = "plume";
+    Json invalidAnalyticStyle = saved;
+    invalidAnalyticStyle["authoringGraph"]["fogVolumes"][0]["analyticStyle"] = "plume";
     Check(!game::LoadSectorAuthoringDocumentFromJsonString(
-                  invalidBoxStyle.dump(), rejected, &error)
-                  && error.find(".boxStyle") != std::string::npos,
-          "unknown analytical fog box styles fail clearly");
+                  invalidAnalyticStyle.dump(), rejected, &error)
+                  && error.find(".analyticStyle") != std::string::npos,
+          "unknown analytical fog styles fail clearly");
 }
 
 void TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce()
@@ -13064,7 +13082,7 @@ void TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce()
                   [](game::SectorAuthoringFogVolume& volume) {
                       volume.renderMode = game::SectorLocalFogRenderMode::Analytic;
                       volume.shape = game::SectorLocalFogShape::Box;
-                      volume.boxStyle = game::SectorAnalyticFogBoxStyle::Room;
+                      volume.analyticStyle = game::SectorAnalyticFogStyle::Room;
                       volume.yawDegrees = 90.0f;
                       volume.radiusXWorld = 0.5f;
                       volume.radiusZWorld = 2.0f;
@@ -13075,10 +13093,10 @@ void TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce()
           "fog shape mutation re-derives and invalidates the 2D cache");
     const game::SectorAuthoringFogVolume& box =
             documentState.authoring.authoringGraph.fogVolumes[0];
-    Check(box.boxStyle == game::SectorAnalyticFogBoxStyle::Room
-                  && documentState.map.topologyMap.compiledLocalFogVolumes[0].boxStyle
-                          == game::SectorAnalyticFogBoxStyle::Room,
-          "fog box style mutation reaches compiled rendering data");
+    Check(box.analyticStyle == game::SectorAnalyticFogStyle::Room
+                  && documentState.map.topologyMap.compiledLocalFogVolumes[0].analyticStyle
+                          == game::SectorAnalyticFogStyle::Room,
+          "fog analytic style mutation reaches compiled rendering data");
     const Vector2 boxCenter{
             game::SectorCoordToVisibleAuthoring(box.x),
             game::SectorCoordToVisibleAuthoring(box.y)};

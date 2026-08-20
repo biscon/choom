@@ -189,19 +189,19 @@ void TestFogVolumeInspectorLayoutIncludesConditionalRows()
           "raymarched fog inspector reaches its delete row with bottom padding");
 
     volume.renderMode = game::SectorLocalFogRenderMode::Analytic;
-    Check(Near(
-                  game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
-                          volume, rowH, gap),
-                  38.0f + 22.0f * (rowH + gap)),
-          "analytic ellipsoid fog inspector includes its extra controls");
-
-    volume.shape = game::SectorLocalFogShape::Box;
-    const float boxStyleRowHeight =
+    const float analyticStyleRowHeight =
             game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;
     Check(Near(
                   game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
                           volume, rowH, gap),
-                  38.0f + 23.0f * (rowH + gap) + boxStyleRowHeight),
+                  38.0f + 22.0f * (rowH + gap) + analyticStyleRowHeight),
+          "analytic ellipsoid fog inspector includes style and path controls");
+
+    volume.shape = game::SectorLocalFogShape::Box;
+    Check(Near(
+                  game::MeasureSectorEditorAuthoringFogVolumeInspectorContentHeight(
+                          volume, rowH, gap),
+                  38.0f + 23.0f * (rowH + gap) + analyticStyleRowHeight),
           "analytic box fog inspector includes style, yaw, and reaches the delete row");
 
     const game::SectorEditorInspectorNumericRowLayout rgbLayout =

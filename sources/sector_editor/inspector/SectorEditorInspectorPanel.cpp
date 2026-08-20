@@ -2345,40 +2345,40 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             y += rowH + gap;
         }
 
-        if (analyticMode && boxShape) {
-            const SectorEditorInspectorStackedOptionRowLayout boxStyleLayout =
+        if (analyticMode) {
+            const SectorEditorInspectorStackedOptionRowLayout analyticStyleLayout =
                     BuildSectorEditorInspectorStackedOptionRowLayout(
                             y, contentW, rowH, gap);
             engine::Text(
-                    ui, config, assets, boxStyleLayout.labelRect, font,
-                    "Box style", engine::UITextJustify::Left,
+                    ui, config, assets, analyticStyleLayout.labelRect, font,
+                    "Fog style", engine::UITextJustify::Left,
                     config.mutedTextColor);
-            const char* const boxStyleOptions[] = {"Cloudy volume", "Room fog"};
-            int selectedBoxStyle = selectedAuthoringFogVolume->boxStyle
-                            == SectorAnalyticFogBoxStyle::Room
+            const char* const analyticStyleOptions[] = {"Cloudy volume", "Room fog"};
+            int selectedAnalyticStyle = selectedAuthoringFogVolume->analyticStyle
+                            == SectorAnalyticFogStyle::Room
                     ? 1
                     : 0;
             if (engine::Option(
                         ui, config, input, assets,
-                        "sector_editor_fog_volume_box_style",
-                        boxStyleLayout.fieldRect,
+                        "sector_editor_fog_volume_analytic_style",
+                        analyticStyleLayout.fieldRect,
                         font,
-                        boxStyleOptions,
-                        std::size(boxStyleOptions),
-                        selectedBoxStyle)) {
-                const SectorAnalyticFogBoxStyle boxStyle = selectedBoxStyle == 1
-                        ? SectorAnalyticFogBoxStyle::Room
-                        : SectorAnalyticFogBoxStyle::Cloudy;
+                        analyticStyleOptions,
+                        std::size(analyticStyleOptions),
+                        selectedAnalyticStyle)) {
+                const SectorAnalyticFogStyle analyticStyle = selectedAnalyticStyle == 1
+                        ? SectorAnalyticFogStyle::Room
+                        : SectorAnalyticFogStyle::Cloudy;
                 editing.MutateById(
                         fogVolumeId,
-                        "Updated authoring fog volume box style",
-                        [boxStyle](SectorAuthoringFogVolume& volume) {
-                            if (volume.boxStyle == boxStyle) return false;
-                            volume.boxStyle = boxStyle;
+                        "Updated authoring fog volume analytic style",
+                        [analyticStyle](SectorAuthoringFogVolume& volume) {
+                            if (volume.analyticStyle == analyticStyle) return false;
+                            volume.analyticStyle = analyticStyle;
                             return true;
                         });
             }
-            y += boxStyleLayout.height + gap;
+            y += analyticStyleLayout.height + gap;
         }
 
         const auto drawFloat = [&](const char* id,

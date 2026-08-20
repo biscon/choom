@@ -1771,7 +1771,7 @@ void CompileAuthoringFogVolumes(
         compiled.enabled = volume.enabled;
         compiled.renderMode = volume.renderMode;
         compiled.shape = volume.shape;
-        compiled.boxStyle = volume.boxStyle;
+        compiled.analyticStyle = volume.analyticStyle;
         compiled.yawRadians = volume.yawDegrees * DEG2RAD;
         compiled.centerWorld = Vector3{
                 SectorAuthoringToWorldDistance(
@@ -2033,9 +2033,9 @@ SectorAuthoringFogVolume NormalizeSectorAuthoringFogVolume(SectorAuthoringFogVol
             && volume.shape != SectorLocalFogShape::Box) {
         volume.shape = defaults.shape;
     }
-    if (volume.boxStyle != SectorAnalyticFogBoxStyle::Cloudy
-            && volume.boxStyle != SectorAnalyticFogBoxStyle::Room) {
-        volume.boxStyle = defaults.boxStyle;
+    if (volume.analyticStyle != SectorAnalyticFogStyle::Cloudy
+            && volume.analyticStyle != SectorAnalyticFogStyle::Room) {
+        volume.analyticStyle = defaults.analyticStyle;
     }
     if (!std::isfinite(volume.yawDegrees)) {
         volume.yawDegrees = defaults.yawDegrees;
@@ -2384,8 +2384,8 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
             AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Authoring fog volume has non-finite settings");
         } else if ((volume.shape != SectorLocalFogShape::Ellipsoid
                             && volume.shape != SectorLocalFogShape::Box)
-                || (volume.boxStyle != SectorAnalyticFogBoxStyle::Cloudy
-                            && volume.boxStyle != SectorAnalyticFogBoxStyle::Room)
+                || (volume.analyticStyle != SectorAnalyticFogStyle::Cloudy
+                            && volume.analyticStyle != SectorAnalyticFogStyle::Room)
                 || volume.yawDegrees < 0.0f || volume.yawDegrees >= 360.0f
                 || volume.radiusXWorld < FogRadiusMin || volume.radiusXWorld > FogRadiusMax
                 || volume.radiusZWorld < FogRadiusMin || volume.radiusZWorld > FogRadiusMax

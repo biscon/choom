@@ -3272,7 +3272,7 @@
       ],
       "range": 64.0,
       "sourceRadius": 1.0,
-      "intensity": 3.75,
+      "intensity": 2.5,
       "color": {
         "r": 255,
         "g": 245,
@@ -4097,7 +4097,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "f79d38964d962e57",
+    "sourceHash": "ed2ba824fdd36aca",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -4106,18 +4106,18 @@
       ],
       "rgbMax": [
         2.216796875,
-        1.4716796875,
+        1.4560546875,
         1.3896484375
       ],
       "auxiliaryMin": 0.350830078125,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 2221
+      "rgbChannelsAboveOne": 746
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "f79d38964d962e57",
+      "sourceHash": "ed2ba824fdd36aca",
       "count": 2061,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -4130,20 +4130,20 @@
           0.0
         ],
         "rgbMax": [
-          2.436002492904663,
-          2.2277867794036865,
+          2.192941665649414,
+          1.940624713897705,
           1.8537602424621582
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 12366,
-        "rgbChannelsAboveOne": 39
+        "rgbChannelsAboveOne": 33
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "f79d38964d962e57",
+      "sourceHash": "ed2ba824fdd36aca",
       "modelCount": 33,
       "objectCount": 78,
       "format": "staticModelUvRemapF32LE"
@@ -16918,46 +16918,48 @@
         "x": 64,
         "y": 1472,
         "renderMode": "analytic",
-        "shape": "box",
         "yawDegrees": 135.0,
-        "bottomOffsetWorld": -0.25,
-        "radiusXWorld": 0.8999999761581421,
+        "bottomOffsetWorld": -0.5,
+        "radiusXWorld": 1.2000000476837158,
         "radiusZWorld": 1.0,
-        "heightWorld": 0.75,
+        "heightWorld": 1.0,
         "color": {
-          "r": 80,
-          "g": 80,
-          "b": 80,
+          "r": 140,
+          "g": 140,
+          "b": 140,
           "a": 255
         },
         "density": 1.7000000476837158,
-        "maxOpacity": 0.5,
+        "maxOpacity": 0.800000011920929,
+        "analyticFalloffExponent": 2.0,
         "edgeSoftness": 1.0,
-        "noiseAmount": 1.0,
-        "flowDirectionDegrees": 90.0
+        "noiseScaleWorld": 0.15000000596046448,
+        "noiseAmount": 0.25,
+        "flowDirectionDegrees": 90.0,
+        "flowSpeedWorld": 0.07999999821186066
       },
       {
         "id": 2,
         "x": 64,
         "y": 832,
         "renderMode": "analytic",
-        "shape": "box",
         "yawDegrees": 35.0,
-        "bottomOffsetWorld": 0.0,
-        "radiusXWorld": 0.800000011920929,
-        "radiusZWorld": 0.800000011920929,
+        "bottomOffsetWorld": -0.5,
+        "radiusXWorld": 1.0,
+        "radiusZWorld": 1.100000023841858,
         "heightWorld": 1.0,
         "color": {
-          "r": 210,
+          "r": 220,
           "g": 210,
-          "b": 210,
+          "b": 205,
           "a": 255
         },
         "density": 1.5,
-        "maxOpacity": 0.800000011920929,
+        "maxOpacity": 0.5,
+        "analyticFalloffExponent": 2.0,
         "edgeSoftness": 1.0,
-        "noiseScaleWorld": 0.5,
-        "noiseAmount": 0.8500000238418579,
+        "noiseScaleWorld": 0.15000000596046448,
+        "noiseAmount": 0.25,
         "flowDirectionDegrees": 90.0,
         "flowSpeedWorld": 0.05000000074505806
       },
@@ -16966,19 +16968,49 @@
         "x": 64,
         "y": 192,
         "renderMode": "analytic",
-        "shape": "box",
         "yawDegrees": 65.0,
-        "bottomOffsetWorld": -0.25,
-        "radiusXWorld": 0.75,
-        "radiusZWorld": 0.8500000238418579,
-        "heightWorld": 0.5,
+        "bottomOffsetWorld": -0.5,
+        "radiusXWorld": 1.0,
+        "radiusZWorld": 0.949999988079071,
+        "heightWorld": 1.0,
+        "color": {
+          "r": 255,
+          "g": 210,
+          "b": 210,
+          "a": 255
+        },
         "density": 1.75,
-        "maxOpacity": 0.5,
-        "edgeSoftness": 0.75,
-        "noiseScaleWorld": 0.3499999940395355,
-        "noiseAmount": 0.800000011920929,
+        "maxOpacity": 0.800000011920929,
+        "analyticFalloffExponent": 2.0,
+        "edgeSoftness": 1.0,
+        "noiseScaleWorld": 0.15000000596046448,
+        "noiseAmount": 0.25,
         "flowDirectionDegrees": 90.0,
-        "flowSpeedWorld": 0.15000000596046448
+        "flowSpeedWorld": 0.07500000298023224
+      },
+      {
+        "id": 4,
+        "x": 64,
+        "y": -528,
+        "renderMode": "analytic",
+        "shape": "box",
+        "analyticStyle": "room",
+        "bottomOffsetWorld": 0.0,
+        "radiusZWorld": 2.5,
+        "heightWorld": 3.0,
+        "color": {
+          "r": 150,
+          "g": 150,
+          "b": 150,
+          "a": 255
+        },
+        "maxOpacity": 0.3499999940395355,
+        "analyticEndDistanceWorld": 10.0,
+        "analyticFalloffExponent": 2.0,
+        "edgeSoftness": 1.0,
+        "noiseScaleWorld": 0.15000000596046448,
+        "noiseAmount": 0.25,
+        "flowDirectionDegrees": 90.0
       }
     ],
     "levelMarkers": [

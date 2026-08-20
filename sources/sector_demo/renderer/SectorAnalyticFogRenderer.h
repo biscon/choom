@@ -75,10 +75,11 @@ private:
     int colorLoc = -1;
     int fogParamsLoc = -1;
     int fogShapeLoc = -1;
-    int fogBoxStyleLoc = -1;
+    int fogStyleLoc = -1;
     int fogYawLoc = -1;
     int fogNoiseParamsLoc = -1;
     int fogFlowLoc = -1;
+    int fogEdgeParamsLoc = -1;
     std::array<int, 4> fogLightingLocs{};
     bool shaderFailed = false;
     std::vector<VisibleVolume> visibleVolumes;

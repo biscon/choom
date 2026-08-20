@@ -1710,7 +1710,7 @@ void TestSourceHashChanges()
     localFog.sourceAuthoringFogVolumeId = 1;
     localFog.renderMode = game::SectorLocalFogRenderMode::Analytic;
     localFog.shape = game::SectorLocalFogShape::Box;
-    localFog.boxStyle = game::SectorAnalyticFogBoxStyle::Room;
+    localFog.analyticStyle = game::SectorAnalyticFogStyle::Room;
     localFog.yawRadians = 0.75f;
     localFog.analyticEndDistanceWorld = 4.0f;
     localFog.centerWorld = Vector3{1.0f, 0.5f, 2.0f};

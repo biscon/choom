@@ -3905,8 +3905,8 @@ void SectorEditor::DrawAuthoringFogVolumes() const
                 && volume.shape == SectorLocalFogShape::Box;
         float innerScaleX = std::clamp(1.0f - volume.edgeSoftness, 0.05f, 1.0f);
         float innerScaleZ = innerScaleX;
-        if (drawBox) {
-            const bool roomStyle = volume.boxStyle == SectorAnalyticFogBoxStyle::Room;
+        if (volume.renderMode == SectorLocalFogRenderMode::Analytic) {
+            const bool roomStyle = volume.analyticStyle == SectorAnalyticFogStyle::Room;
             const float minimumFraction = roomStyle ? 0.005f : 0.01f;
             const float maximumFraction = roomStyle ? 0.20f : 0.45f;
             const float minimumHalfExtent = std::min(

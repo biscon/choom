@@ -3520,13 +3520,24 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
                 else if (shape == "box") volume.shape = SectorLocalFogShape::Box;
                 else Fail(context + ".shape must be 'ellipsoid' or 'box'");
             }
-            const auto boxStyleIt = fogJson.find("boxStyle");
-            if (boxStyleIt != fogJson.end()) {
-                if (!boxStyleIt->is_string()) Fail(context + ".boxStyle must be a string");
-                const std::string boxStyle = boxStyleIt->get<std::string>();
-                if (boxStyle == "cloudy") volume.boxStyle = SectorAnalyticFogBoxStyle::Cloudy;
-                else if (boxStyle == "room") volume.boxStyle = SectorAnalyticFogBoxStyle::Room;
-                else Fail(context + ".boxStyle must be 'cloudy' or 'room'");
+            const auto analyticStyleIt = fogJson.find("analyticStyle");
+            const auto legacyBoxStyleIt = fogJson.find("boxStyle");
+            if (analyticStyleIt != fogJson.end()
+                    && legacyBoxStyleIt != fogJson.end()) {
+                Fail(context + " cannot contain both .analyticStyle and legacy .boxStyle");
+            }
+            const auto styleIt = analyticStyleIt != fogJson.end()
+                    ? analyticStyleIt
+                    : legacyBoxStyleIt;
+            if (styleIt != fogJson.end()) {
+                const char* field = analyticStyleIt != fogJson.end()
+                        ? ".analyticStyle"
+                        : ".boxStyle";
+                if (!styleIt->is_string()) Fail(context + field + " must be a string");
+                const std::string analyticStyle = styleIt->get<std::string>();
+                if (analyticStyle == "cloudy") volume.analyticStyle = SectorAnalyticFogStyle::Cloudy;
+                else if (analyticStyle == "room") volume.analyticStyle = SectorAnalyticFogStyle::Room;
+                else Fail(context + field + " must be 'cloudy' or 'room'");
             }
             volume.yawDegrees = ReadOptionalFloat(
                     fogJson, "yawDegrees", context, volume.yawDegrees);
@@ -3898,7 +3909,7 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             if (volume.enabled != defaults.enabled) fogJson["enabled"] = volume.enabled;
             if (volume.renderMode != defaults.renderMode) fogJson["renderMode"] = "analytic";
             if (volume.shape != defaults.shape) fogJson["shape"] = "box";
-            if (volume.boxStyle != defaults.boxStyle) fogJson["boxStyle"] = "room";
+            if (volume.analyticStyle != defaults.analyticStyle) fogJson["analyticStyle"] = "room";
             if (volume.yawDegrees != defaults.yawDegrees) fogJson["yawDegrees"] = volume.yawDegrees;
             if (volume.bottomOffsetWorld != defaults.bottomOffsetWorld) fogJson["bottomOffsetWorld"] = volume.bottomOffsetWorld;
             if (volume.radiusXWorld != defaults.radiusXWorld) fogJson["radiusXWorld"] = volume.radiusXWorld;
