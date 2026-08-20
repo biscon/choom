@@ -283,6 +283,7 @@ if(BUILD_TESTING)
             MUZZLE_SHADER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/game/FpsViewmodelEffectsRenderer.cpp"
             DYNAMIC_MODEL_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicModelShadowRenderer.cpp"
             DYNAMIC_LIGHTING_SHADOW_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicLightingRenderer.cpp"
+            DYNAMIC_SHADOW_SAMPLING_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/sector_demo/renderer/SectorDynamicShadowSampling.h"
             MAIN_RENDER_GRAPH_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sources/Main.cpp")
     target_link_libraries(pbr_lighting_policy_tests PRIVATE raylib)
     add_test(NAME pbr_lighting_policy COMMAND pbr_lighting_policy_tests)

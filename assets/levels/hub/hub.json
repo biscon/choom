@@ -3479,7 +3479,7 @@
     {
       "id": 2,
       "position": [
-        -360.0,
+        -392.0,
         20.0,
         96.0
       ],
@@ -3491,11 +3491,9 @@
         "b": 230,
         "a": 255
       },
-      "enabled": false,
       "flickerSpeed": 0.5,
       "flickerAmount": 1.0,
       "castsShadow": true,
-      "shadowBias": 0.001500000013038516,
       "shadowStrength": 0.75,
       "shadowSoftness": 2.0,
       "atmosphere": {

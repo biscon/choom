@@ -29,7 +29,7 @@ bool ShadowMatrixMatches(
     return left.lightId == right.lightId
             && left.shadowSlot == right.shadowSlot
             && left.kind == right.kind
-            && left.pointHemisphere == right.pointHemisphere
+            && left.pointFace == right.pointFace
             && std::memcmp(&left.lightPosition,
                     &right.lightPosition, sizeof(Vector3)) == 0
             && left.lightRadius == right.lightRadius
@@ -139,13 +139,40 @@ bool ShadowLightIntersectsBounds(
         return false;
     }
     if (light.kind == SectorPreviewDynamicLightKind::Point) {
-        if (matrix.pointHemisphere > 0 && bounds.max.z < light.position.z) {
+        constexpr std::array<Vector3, DynamicPointLightShadowFaceCount>
+                FaceDirections = {{
+                        {1.0f, 0.0f, 0.0f},
+                        {-1.0f, 0.0f, 0.0f},
+                        {0.0f, 1.0f, 0.0f},
+                        {0.0f, -1.0f, 0.0f},
+                        {0.0f, 0.0f, 1.0f},
+                        {0.0f, 0.0f, -1.0f}}};
+        if (matrix.pointFace < 0
+                || matrix.pointFace >= DynamicPointLightShadowFaceCount) {
+            return true;
+        }
+        const Vector3 center = SectorAabb3Center(bounds);
+        const Vector3 halfExtents = Vector3Scale(
+                SectorAabb3Extents(bounds), 0.5f);
+        const float boundsRadius = Vector3Length(halfExtents);
+        const Vector3 fromLight = Vector3Subtract(center, light.position);
+        const float distanceSquared = Vector3LengthSqr(fromLight);
+        if (distanceSquared <= boundsRadius * boundsRadius) return true;
+        const float axialDistance = Vector3DotProduct(
+                fromLight,
+                FaceDirections[static_cast<std::size_t>(matrix.pointFace)]);
+        if (axialDistance < -boundsRadius
+                || axialDistance > light.radius + boundsRadius) {
             return false;
         }
-        if (matrix.pointHemisphere < 0 && bounds.min.z > light.position.z) {
-            return false;
-        }
-        return true;
+        const float radialDistance = std::sqrt(std::max(
+                distanceSquared - axialDistance * axialDistance, 0.0f));
+        constexpr float CubeFaceCornerTangent = 1.41421356237f;
+        constexpr float CubeFaceCornerCosine = 0.57735026919f;
+        const float coneRadius = std::max(axialDistance, 0.0f)
+                * CubeFaceCornerTangent;
+        return radialDistance <= coneRadius
+                + boundsRadius / CubeFaceCornerCosine;
     }
 
     const Vector3 center = SectorAabb3Center(bounds);
@@ -261,333 +288,6 @@ void main()
 }
 )";
 
-const char* SectorPointLightShadowVs = R"(
-#version 330
-in vec3 vertexPosition;
-in vec2 vertexTexCoord;
-in vec4 vertexBoneIndices;
-in vec4 vertexBoneWeights;
-uniform mat4 matModel;
-uniform int useSkinning;
-#define MAX_BONE_NUM 128
-uniform mat4 boneMatrices[MAX_BONE_NUM];
-out vec3 worldPositionVs;
-out vec2 texCoordVs;
-void main()
-{
-    vec4 localPosition = vec4(vertexPosition, 1.0);
-    if (useSkinning != 0) {
-        int bone0 = int(vertexBoneIndices.x);
-        int bone1 = int(vertexBoneIndices.y);
-        int bone2 = int(vertexBoneIndices.z);
-        int bone3 = int(vertexBoneIndices.w);
-        localPosition = vertexBoneWeights.x * (boneMatrices[bone0] * localPosition)
-                + vertexBoneWeights.y * (boneMatrices[bone1] * localPosition)
-                + vertexBoneWeights.z * (boneMatrices[bone2] * localPosition)
-                + vertexBoneWeights.w * (boneMatrices[bone3] * localPosition);
-    }
-    vec4 world = matModel * localPosition;
-    worldPositionVs = world.xyz;
-    texCoordVs = vertexTexCoord;
-    gl_Position = world;
-}
-)";
-
-// Adaptive edge subdivision keeps the nonlinear paraboloid projection stable
-// for large, low-poly sector triangles without changing source meshes. Each
-// generated triangle is clipped to the active hemisphere before projection so
-// triangles crossing the paraboloid seam cannot rasterize invalid footprints.
-// The fragment stage also rejects chord overdraw outside the original triangle.
-const char* SectorPointLightShadowGs = R"(
-#version 330
-layout(triangles) in;
-// Four-way subdivision clipped by one plane can emit at most 52 vertices:
-// nine full triangles, four clipped quads, and three clipped triangles.
-layout(triangle_strip, max_vertices = 52) out;
-in vec3 worldPositionVs[];
-in vec2 texCoordVs[];
-noperspective out vec2 fragParaboloidPosition;
-noperspective out vec2 fragTexCoord;
-flat out vec3 fragTriangleOrigin;
-flat out vec3 fragTriangleEdge0;
-flat out vec3 fragTriangleEdge1;
-uniform vec3 pointLightPosition;
-uniform int pointHemisphere;
-
-vec3 triangleOrigin;
-vec3 triangleEdge0;
-vec3 triangleEdge1;
-
-vec3 worldAt(vec3 bary)
-{
-    return worldPositionVs[0] * bary.x
-            + worldPositionVs[1] * bary.y
-            + worldPositionVs[2] * bary.z;
-}
-vec2 texCoordAt(vec3 bary)
-{
-    return texCoordVs[0] * bary.x
-            + texCoordVs[1] * bary.y
-            + texCoordVs[2] * bary.z;
-}
-void emitProjectedPoint(vec3 worldPosition, vec2 texCoord)
-{
-    fragTexCoord = texCoord;
-    fragTriangleOrigin = triangleOrigin;
-    fragTriangleEdge0 = triangleEdge0;
-    fragTriangleEdge1 = triangleEdge1;
-    vec3 local = worldPosition - pointLightPosition;
-    float distanceToLight = max(length(local), 0.00001);
-    float hemisphereZ = local.z * float(pointHemisphere);
-    float denominator = distanceToLight + max(hemisphereZ, 0.0);
-    vec2 projected = local.xy / max(denominator, 0.00001);
-    fragParaboloidPosition = projected;
-    gl_Position = vec4(projected, 0.0, 1.0);
-    EmitVertex();
-}
-
-float hemisphereDistance(vec3 worldPosition)
-{
-    return (worldPosition.z - pointLightPosition.z) * float(pointHemisphere);
-}
-
-void clipAndEmitTriangle(
-        vec3 world0, vec2 texCoord0,
-        vec3 world1, vec2 texCoord1,
-        vec3 world2, vec2 texCoord2)
-{
-    vec3 sourceWorld[3];
-    vec2 sourceTexCoord[3];
-    sourceWorld[0] = world0;
-    sourceWorld[1] = world1;
-    sourceWorld[2] = world2;
-    sourceTexCoord[0] = texCoord0;
-    sourceTexCoord[1] = texCoord1;
-    sourceTexCoord[2] = texCoord2;
-
-    vec3 clippedWorld[4];
-    vec2 clippedTexCoord[4];
-    int clippedCount = 0;
-    for (int currentIndex = 0; currentIndex < 3; ++currentIndex) {
-        int previousIndex = currentIndex == 0 ? 2 : currentIndex - 1;
-        float previousDistance = hemisphereDistance(sourceWorld[previousIndex]);
-        float currentDistance = hemisphereDistance(sourceWorld[currentIndex]);
-        bool previousInside = previousDistance >= 0.0;
-        bool currentInside = currentDistance >= 0.0;
-
-        if (previousInside != currentInside) {
-            float denominator = previousDistance - currentDistance;
-            float amount = clamp(previousDistance / denominator, 0.0, 1.0);
-            clippedWorld[clippedCount] = mix(
-                    sourceWorld[previousIndex], sourceWorld[currentIndex], amount);
-            clippedTexCoord[clippedCount] = mix(
-                    sourceTexCoord[previousIndex], sourceTexCoord[currentIndex], amount);
-            ++clippedCount;
-        }
-        if (currentInside) {
-            clippedWorld[clippedCount] = sourceWorld[currentIndex];
-            clippedTexCoord[clippedCount] = sourceTexCoord[currentIndex];
-            ++clippedCount;
-        }
-    }
-
-    if (clippedCount == 3) {
-        emitProjectedPoint(clippedWorld[0], clippedTexCoord[0]);
-        emitProjectedPoint(clippedWorld[1], clippedTexCoord[1]);
-        emitProjectedPoint(clippedWorld[2], clippedTexCoord[2]);
-        EndPrimitive();
-    } else if (clippedCount == 4) {
-        // A convex polygon ordered around its perimeter becomes a valid strip
-        // when the final two vertices are swapped.
-        emitProjectedPoint(clippedWorld[0], clippedTexCoord[0]);
-        emitProjectedPoint(clippedWorld[1], clippedTexCoord[1]);
-        emitProjectedPoint(clippedWorld[3], clippedTexCoord[3]);
-        emitProjectedPoint(clippedWorld[2], clippedTexCoord[2]);
-        EndPrimitive();
-    }
-}
-
-void emitSubdividedTriangle(vec3 a, vec3 b, vec3 c)
-{
-    clipAndEmitTriangle(
-            worldAt(a), texCoordAt(a),
-            worldAt(b), texCoordAt(b),
-            worldAt(c), texCoordAt(c));
-}
-void main()
-{
-    triangleOrigin = worldPositionVs[0] - pointLightPosition;
-    triangleEdge0 = worldPositionVs[1] - worldPositionVs[0];
-    triangleEdge1 = worldPositionVs[2] - worldPositionVs[0];
-    vec3 planeNormal = cross(triangleEdge0, triangleEdge1);
-    float planeNormalLengthSquared = dot(planeNormal, planeNormal);
-    if (planeNormalLengthSquared <= 0.000000000001) return;
-
-    vec3 lightVector0 = triangleOrigin;
-    vec3 lightVector1 = worldPositionVs[1] - pointLightPosition;
-    vec3 lightVector2 = worldPositionVs[2] - pointLightPosition;
-    float lengthSquared0 = dot(lightVector0, lightVector0);
-    float lengthSquared1 = dot(lightVector1, lightVector1);
-    float lengthSquared2 = dot(lightVector2, lightVector2);
-    float minimumDot = -1.0;
-    if (lengthSquared0 > 0.00000001
-            && lengthSquared1 > 0.00000001
-            && lengthSquared2 > 0.00000001) {
-        vec3 d0 = lightVector0 * inversesqrt(lengthSquared0);
-        vec3 d1 = lightVector1 * inversesqrt(lengthSquared1);
-        vec3 d2 = lightVector2 * inversesqrt(lengthSquared2);
-        minimumDot = min(dot(d0, d1), min(dot(d1, d2), dot(d2, d0)));
-    }
-    int divisions = minimumDot > 0.995 ? 1 : (minimumDot > 0.96 ? 2 : 4);
-    float inverseDivisions = 1.0 / float(divisions);
-    for (int i = 0; i < divisions; ++i) {
-        for (int j = 0; j < divisions - i; ++j) {
-            vec3 a = vec3(float(divisions-i-j), float(i), float(j)) * inverseDivisions;
-            vec3 b = vec3(float(divisions-i-j-1), float(i+1), float(j)) * inverseDivisions;
-            vec3 c = vec3(float(divisions-i-j-1), float(i), float(j+1)) * inverseDivisions;
-            emitSubdividedTriangle(a, b, c);
-            if (j < divisions - i - 1) {
-                vec3 d = vec3(float(divisions-i-j-2), float(i+1), float(j+1)) * inverseDivisions;
-                emitSubdividedTriangle(b, d, c);
-            }
-        }
-    }
-}
-)";
-
-const char* SectorPointLightShadowFs = R"(
-#version 330
-noperspective in vec2 fragParaboloidPosition;
-noperspective in vec2 fragTexCoord;
-flat in vec3 fragTriangleOrigin;
-flat in vec3 fragTriangleEdge0;
-flat in vec3 fragTriangleEdge1;
-uniform sampler2D texture0;
-uniform int alphaTest;
-uniform float alphaCutoff;
-uniform float pointLightRadius;
-uniform int pointHemisphere;
-void main()
-{
-    if (alphaTest != 0 && texture(texture0, fragTexCoord).a < alphaCutoff) discard;
-
-    float projectedRadiusSquared = dot(fragParaboloidPosition, fragParaboloidPosition);
-    if (projectedRadiusSquared > 1.00001) discard;
-    projectedRadiusSquared = min(projectedRadiusSquared, 1.0);
-    float inverseProjectionDenominator = 1.0 / (1.0 + projectedRadiusSquared);
-    vec3 rayDirection = vec3(
-            fragParaboloidPosition * (2.0 * inverseProjectionDenominator),
-            (1.0 - projectedRadiusSquared) * inverseProjectionDenominator
-                    * float(pointHemisphere));
-    rayDirection = normalize(rayDirection);
-
-    vec3 triangleNormal = cross(fragTriangleEdge0, fragTriangleEdge1);
-    float triangleNormalLengthSquared = dot(triangleNormal, triangleNormal);
-    if (triangleNormalLengthSquared <= 0.000000000001) discard;
-    triangleNormal *= inversesqrt(triangleNormalLengthSquared);
-    float planeDirection = dot(triangleNormal, rayDirection);
-    if (abs(planeDirection) <= 0.000001) discard;
-    float distanceToLight = dot(triangleNormal, fragTriangleOrigin)
-            / planeDirection;
-    if (distanceToLight <= 0.00001 || distanceToLight > pointLightRadius) discard;
-
-    vec3 triangleRelativePosition = rayDirection * distanceToLight
-            - fragTriangleOrigin;
-    float edge00 = dot(fragTriangleEdge0, fragTriangleEdge0);
-    float edge01 = dot(fragTriangleEdge0, fragTriangleEdge1);
-    float edge11 = dot(fragTriangleEdge1, fragTriangleEdge1);
-    float position0 = dot(triangleRelativePosition, fragTriangleEdge0);
-    float position1 = dot(triangleRelativePosition, fragTriangleEdge1);
-    float barycentricDenominator = edge00 * edge11 - edge01 * edge01;
-    if (abs(barycentricDenominator) <= 0.000000000001) discard;
-    float inverseBarycentricDenominator = 1.0 / barycentricDenominator;
-    float barycentricU = (edge11 * position0 - edge01 * position1)
-            * inverseBarycentricDenominator;
-    float barycentricV = (edge00 * position1 - edge01 * position0)
-            * inverseBarycentricDenominator;
-    const float triangleContainmentTolerance = 0.0001;
-    if (barycentricU < -triangleContainmentTolerance
-            || barycentricV < -triangleContainmentTolerance
-            || barycentricU + barycentricV
-                    > 1.0 + triangleContainmentTolerance) discard;
-    gl_FragDepth = clamp(distanceToLight / pointLightRadius, 0.0, 1.0);
-}
-)";
-
-unsigned int CompileShaderStage(unsigned int type, const char* source)
-{
-    const unsigned int shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, nullptr);
-    glCompileShader(shader);
-    int compiled = 0;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-    if (compiled == GL_TRUE) return shader;
-    char log[2048]{};
-    glGetShaderInfoLog(shader, static_cast<int>(sizeof(log)), nullptr, log);
-    TraceLog(LOG_ERROR, "DPSM shader compile failed: %s", log);
-    glDeleteShader(shader);
-    return 0;
-}
-
-Shader LoadGeometryShader(const char* vertexSource, const char* geometrySource,
-        const char* fragmentSource)
-{
-    const unsigned int vertex = CompileShaderStage(GL_VERTEX_SHADER, vertexSource);
-    const unsigned int geometry = CompileShaderStage(GL_GEOMETRY_SHADER, geometrySource);
-    const unsigned int fragment = CompileShaderStage(GL_FRAGMENT_SHADER, fragmentSource);
-    if (vertex == 0 || geometry == 0 || fragment == 0) {
-        if (vertex != 0) glDeleteShader(vertex);
-        if (geometry != 0) glDeleteShader(geometry);
-        if (fragment != 0) glDeleteShader(fragment);
-        return Shader{};
-    }
-    const unsigned int program = glCreateProgram();
-    glAttachShader(program, vertex);
-    glAttachShader(program, geometry);
-    glAttachShader(program, fragment);
-    // Mesh VAOs are uploaded against raylib's fixed attribute locations.
-    // Programs linked outside LoadShaderFromMemory() must preserve those
-    // bindings explicitly or skinned meshes read unrelated VAO streams.
-    glBindAttribLocation(
-            program,
-            RL_DEFAULT_SHADER_ATTRIB_LOCATION_POSITION,
-            "vertexPosition");
-    glBindAttribLocation(
-            program,
-            RL_DEFAULT_SHADER_ATTRIB_LOCATION_TEXCOORD,
-            "vertexTexCoord");
-    glBindAttribLocation(
-            program,
-            RL_DEFAULT_SHADER_ATTRIB_LOCATION_BONEINDICES,
-            "vertexBoneIndices");
-    glBindAttribLocation(
-            program,
-            RL_DEFAULT_SHADER_ATTRIB_LOCATION_BONEWEIGHTS,
-            "vertexBoneWeights");
-    glLinkProgram(program);
-    glDeleteShader(vertex);
-    glDeleteShader(geometry);
-    glDeleteShader(fragment);
-    int linked = 0;
-    glGetProgramiv(program, GL_LINK_STATUS, &linked);
-    if (linked != GL_TRUE) {
-        char log[2048]{};
-        glGetProgramInfoLog(program, static_cast<int>(sizeof(log)), nullptr, log);
-        TraceLog(LOG_ERROR, "DPSM shader link failed: %s", log);
-        glDeleteProgram(program);
-        return Shader{};
-    }
-    Shader result{};
-    result.id = program;
-    result.locs = static_cast<int*>(MemAlloc(RL_MAX_SHADER_LOCATIONS * sizeof(int)));
-    if (result.locs == nullptr) {
-        glDeleteProgram(program);
-        return Shader{};
-    }
-    for (int i = 0; i < RL_MAX_SHADER_LOCATIONS; ++i) result.locs[i] = -1;
-    return result;
-}
-
 RenderTexture2D LoadDepthOnlyRenderTexture(int width, int height)
 {
     RenderTexture2D target{};
@@ -609,6 +309,9 @@ RenderTexture2D LoadDepthOnlyRenderTexture(int width, int height)
 
     if (!rlFramebufferComplete(target.id)) {
         rlDisableFramebuffer();
+        if (target.depth.id > 0) {
+            rlUnloadTexture(target.depth.id);
+        }
         rlUnloadFramebuffer(target.id);
         return RenderTexture2D{};
     }
@@ -619,6 +322,9 @@ RenderTexture2D LoadDepthOnlyRenderTexture(int width, int height)
 
 void UnloadDepthOnlyRenderTexture(RenderTexture2D& target)
 {
+    if (target.depth.id > 0) {
+        rlUnloadTexture(target.depth.id);
+    }
     if (target.id > 0) {
         rlUnloadFramebuffer(target.id);
     }
@@ -1318,7 +1024,7 @@ SectorPreviewDynamicSpotLightShadowUniforms SectorDynamicLightingRenderer::PackS
     if (!enabled) {
         SectorPreviewDynamicSpotLightShadowUniforms result;
         result.dynamicLightShadowSlots.fill(-1);
-        result.shadowAtlasTilesPerRow = DynamicShadowAtlasResolution / shadowMapResolution;
+        result.shadowAtlasTilesPerRow = DynamicShadowAtlasTilesPerRow;
         return result;
     }
     SectorPreviewDynamicSpotLightShadowUniforms result =
@@ -1337,7 +1043,7 @@ SectorPreviewDynamicSpotLightShadowUniforms SectorDynamicLightingRenderer::PackS
                 shadowAtlasTileStates[static_cast<std::size_t>(slot)];
         const int requiredSlots = selectedLights[lightIndex].kind
                         == SectorPreviewDynamicLightKind::Point
-                ? 2 : 1;
+                ? DynamicPointLightShadowFaceCount : 1;
         bool valid = state.assigned && state.valid;
         for (int offset = 1; valid && offset < requiredSlots; ++offset) {
             const std::size_t adjacent = static_cast<std::size_t>(slot + offset);
@@ -1347,7 +1053,7 @@ SectorPreviewDynamicSpotLightShadowUniforms SectorDynamicLightingRenderer::PackS
         }
         if (!valid) result.dynamicLightShadowSlots[lightIndex] = -1;
     }
-    result.shadowAtlasTilesPerRow = DynamicShadowAtlasResolution / shadowMapResolution;
+    result.shadowAtlasTilesPerRow = DynamicShadowAtlasTilesPerRow;
     return result;
 }
 
@@ -1356,9 +1062,47 @@ bool SectorDynamicLightingRenderer::EnsureShadowMapResources()
     if (shadowAtlas.id != 0 && shadowAtlas.depth.id != 0) {
         return true;
     }
-    shadowAtlas = LoadDepthOnlyRenderTexture(
-            DynamicShadowAtlasResolution, DynamicShadowAtlasResolution);
+    const int requestedFaceResolution = shadowMapResolution <= 512
+            ? 512 : DynamicSpotLightShadowMapResolution;
+    const int requestedAtlasResolution = requestedFaceResolution
+            * DynamicShadowAtlasTilesPerRow;
+    int maximumTextureSize = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximumTextureSize);
+    const bool requiresFallback = requestedAtlasResolution
+            > maximumTextureSize;
+    if (!requiresFallback) {
+        shadowAtlas = LoadDepthOnlyRenderTexture(
+                requestedAtlasResolution, requestedAtlasResolution);
+    }
+    effectiveShadowMapResolution = requestedFaceResolution;
+    shadowAtlasResolution = requestedAtlasResolution;
+    if ((shadowAtlas.id == 0 || shadowAtlas.depth.id == 0)
+            && requestedAtlasResolution > DynamicShadowAtlasLowResolution) {
+        effectiveShadowMapResolution = 512;
+        shadowAtlasResolution = DynamicShadowAtlasLowResolution;
+        shadowAtlas = LoadDepthOnlyRenderTexture(
+                shadowAtlasResolution, shadowAtlasResolution);
+        if (!shadowAtlasFallbackWarningLogged) {
+            TraceLog(
+                    LOG_WARNING,
+                    "Dynamic shadow atlas: requested %dx%d with %dpx faces, "
+                    "falling back to %dx%d with %dpx faces (GL max %d)",
+                    requestedAtlasResolution,
+                    requestedAtlasResolution,
+                    requestedFaceResolution,
+                    shadowAtlasResolution,
+                    shadowAtlasResolution,
+                    effectiveShadowMapResolution,
+                    maximumTextureSize);
+            shadowAtlasFallbackWarningLogged = true;
+        }
+    }
     if (shadowAtlas.id == 0 || shadowAtlas.depth.id == 0) {
+        TraceLog(
+                LOG_ERROR,
+                "Dynamic shadow atlas allocation failed at %dx%d",
+                shadowAtlasResolution,
+                shadowAtlasResolution);
         UnloadShadowMapResources();
         return false;
     }
@@ -1370,7 +1114,7 @@ bool SectorDynamicLightingRenderer::EnsureShadowMapResources()
 
 void SectorDynamicLightingRenderer::SetShadowMapResolution(int resolution)
 {
-    resolution = std::clamp(resolution, 256, 2048);
+    resolution = resolution <= 512 ? 512 : DynamicSpotLightShadowMapResolution;
     if (shadowMapResolution == resolution) {
         return;
     }
@@ -1413,22 +1157,6 @@ bool SectorDynamicLightingRenderer::LoadShadowMaterial()
         spotShadowCutoutMaterial = Material{};
         return false;
     }
-    pointShadowMaterial = LoadMaterialDefault();
-    Shader pointShader = LoadGeometryShader(
-            SectorPointLightShadowVs,
-            SectorPointLightShadowGs,
-            SectorPointLightShadowFs);
-    if (pointShader.id == 0) {
-        UnloadShader(shader);
-        UnloadShader(spotCutoutShader);
-        UnloadMaterial(shadowMaterial);
-        UnloadMaterial(spotShadowCutoutMaterial);
-        UnloadMaterial(pointShadowMaterial);
-        shadowMaterial = Material{};
-        spotShadowCutoutMaterial = Material{};
-        pointShadowMaterial = Material{};
-        return false;
-    }
     shadowMaterial.shader = shader;
     shadowMaterial.shader.locs[SHADER_LOC_VERTEX_POSITION] =
             GetShaderLocationAttrib(shadowMaterial.shader, "vertexPosition");
@@ -1468,28 +1196,6 @@ bool SectorDynamicLightingRenderer::LoadShadowMaterial()
     shadowAlphaCutoffLoc = GetShaderLocation(spotCutoutShader, "alphaCutoff");
     spotShadowCutoutDefaultTexture =
             spotShadowCutoutMaterial.maps[MATERIAL_MAP_DIFFUSE].texture;
-    pointShadowMaterial.shader = pointShader;
-    pointShadowMaterial.shader.locs[SHADER_LOC_VERTEX_POSITION] =
-            GetShaderLocationAttrib(pointShader, "vertexPosition");
-    pointShadowMaterial.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] =
-            GetShaderLocationAttrib(pointShader, "vertexTexCoord");
-    pointShadowMaterial.shader.locs[SHADER_LOC_VERTEX_BONEIDS] =
-            GetShaderLocationAttrib(pointShader, "vertexBoneIndices");
-    pointShadowMaterial.shader.locs[SHADER_LOC_VERTEX_BONEWEIGHTS] =
-            GetShaderLocationAttrib(pointShader, "vertexBoneWeights");
-    pointShadowMaterial.shader.locs[SHADER_LOC_MATRIX_MODEL] =
-            GetShaderLocation(pointShader, "matModel");
-    pointShadowMaterial.shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] =
-            GetShaderLocation(pointShader, "boneMatrices");
-    pointShadowMaterial.shader.locs[SHADER_LOC_MAP_DIFFUSE] =
-            GetShaderLocation(pointShader, "texture0");
-    pointShadowLightPositionLoc = GetShaderLocation(pointShader, "pointLightPosition");
-    pointShadowLightRadiusLoc = GetShaderLocation(pointShader, "pointLightRadius");
-    pointShadowHemisphereLoc = GetShaderLocation(pointShader, "pointHemisphere");
-    pointShadowUseSkinningLoc = GetShaderLocation(pointShader, "useSkinning");
-    pointShadowAlphaTestLoc = GetShaderLocation(pointShader, "alphaTest");
-    pointShadowAlphaCutoffLoc = GetShaderLocation(pointShader, "alphaCutoff");
-    pointShadowDefaultTexture = pointShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture;
     shadowMaterialLoaded = true;
     return true;
 }
@@ -1503,16 +1209,12 @@ void SectorDynamicLightingRenderer::UnloadShadowMaterial()
     shadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = shadowDefaultTexture;
     spotShadowCutoutMaterial.maps[MATERIAL_MAP_DIFFUSE].texture =
             spotShadowCutoutDefaultTexture;
-    pointShadowMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = pointShadowDefaultTexture;
     UnloadMaterial(shadowMaterial);
     UnloadMaterial(spotShadowCutoutMaterial);
-    UnloadMaterial(pointShadowMaterial);
     shadowMaterial = Material{};
     spotShadowCutoutMaterial = Material{};
-    pointShadowMaterial = Material{};
     shadowDefaultTexture = Texture2D{};
     spotShadowCutoutDefaultTexture = Texture2D{};
-    pointShadowDefaultTexture = Texture2D{};
     shadowMaterialLoaded = false;
     shadowLightViewProjectionLoc = -1;
     shadowUseSkinningLoc = -1;
@@ -1520,12 +1222,6 @@ void SectorDynamicLightingRenderer::UnloadShadowMaterial()
     spotShadowCutoutUseSkinningLoc = -1;
     shadowAlphaTestLoc = -1;
     shadowAlphaCutoffLoc = -1;
-    pointShadowLightPositionLoc = -1;
-    pointShadowLightRadiusLoc = -1;
-    pointShadowHemisphereLoc = -1;
-    pointShadowUseSkinningLoc = -1;
-    pointShadowAlphaTestLoc = -1;
-    pointShadowAlphaCutoffLoc = -1;
 }
 
 bool SectorDynamicLightingRenderer::IsShadowRenderReady() const
@@ -1533,7 +1229,6 @@ bool SectorDynamicLightingRenderer::IsShadowRenderReady() const
     return shadowMaterialLoaded
             && shadowMaterial.shader.id != 0
             && spotShadowCutoutMaterial.shader.id != 0
-            && pointShadowMaterial.shader.id != 0
             && shadowLightViewProjectionLoc >= 0
             && spotShadowCutoutLightViewProjectionLoc >= 0
             && !shadowMatrices.empty();
@@ -1830,7 +1525,9 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
         if (valid) ++shadowRenderStats.validLights;
         shadowRenderStats.occupiedTiles +=
                 static_cast<std::size_t>(caster.shadowSlotCount);
-        if (caster.shadowSlotCount == 2) ++shadowRenderStats.pointLights;
+        if (caster.shadowSlotCount == DynamicPointLightShadowFaceCount) {
+            ++shadowRenderStats.pointLights;
+        }
         else ++shadowRenderStats.spotLights;
         if (!dirty) continue;
         ++shadowRenderStats.dirtyLights;
@@ -1878,41 +1575,35 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                             >= selectedLights.size()) {
                 continue;
             }
-        const int tilesPerRow = DynamicShadowAtlasResolution / shadowMapResolution;
-        const int tileX = (matrix.shadowSlot % tilesPerRow) * shadowMapResolution;
-        const int tileY = (matrix.shadowSlot / tilesPerRow) * shadowMapResolution;
-        rlViewport(tileX, tileY, shadowMapResolution, shadowMapResolution);
-        rlScissor(tileX, tileY, shadowMapResolution, shadowMapResolution);
+        const int tilesPerRow = DynamicShadowAtlasTilesPerRow;
+        const int tileX = (matrix.shadowSlot % tilesPerRow)
+                * effectiveShadowMapResolution;
+        const int tileY = (matrix.shadowSlot / tilesPerRow)
+                * effectiveShadowMapResolution;
+        rlViewport(
+                tileX, tileY,
+                effectiveShadowMapResolution, effectiveShadowMapResolution);
+        rlScissor(
+                tileX, tileY,
+                effectiveShadowMapResolution, effectiveShadowMapResolution);
         if (!fullClear) glClear(GL_DEPTH_BUFFER_BIT);
 
-        const bool pointProjection = matrix.kind == SectorPreviewDynamicLightKind::Point;
         ++shadowRenderStats.renderedTiles;
         const SectorPreviewDynamicPointLightUniform& light =
                 selectedLights[static_cast<std::size_t>(matrix.dynamicLightIndex)];
-        Material& activeMaterial = pointProjection ? pointShadowMaterial : shadowMaterial;
-        const int activeUseSkinningLoc = pointProjection
-                ? pointShadowUseSkinningLoc : shadowUseSkinningLoc;
-        const int activeAlphaTestLoc = pointProjection
-                ? pointShadowAlphaTestLoc : -1;
-        const int activeAlphaCutoffLoc = pointProjection
-                ? pointShadowAlphaCutoffLoc : -1;
-        const Texture2D activeDefaultTexture = pointProjection
-                ? pointShadowDefaultTexture : shadowDefaultTexture;
-        if (pointProjection) {
-            SetShaderValue(activeMaterial.shader, pointShadowLightPositionLoc,
-                    &light.position, SHADER_UNIFORM_VEC3);
-            SetShaderValue(activeMaterial.shader, pointShadowLightRadiusLoc,
-                    &light.radius, SHADER_UNIFORM_FLOAT);
-            SetShaderValue(activeMaterial.shader, pointShadowHemisphereLoc,
-                    &matrix.pointHemisphere, SHADER_UNIFORM_INT);
-        } else {
-            SetShaderValueMatrix(activeMaterial.shader, shadowLightViewProjectionLoc,
-                    matrix.lightViewProjection);
-            SetShaderValueMatrix(
-                    spotShadowCutoutMaterial.shader,
-                    spotShadowCutoutLightViewProjectionLoc,
-                    matrix.lightViewProjection);
-        }
+        Material& activeMaterial = shadowMaterial;
+        const int activeUseSkinningLoc = shadowUseSkinningLoc;
+        const int activeAlphaTestLoc = -1;
+        const int activeAlphaCutoffLoc = -1;
+        const Texture2D activeDefaultTexture = shadowDefaultTexture;
+        SetShaderValueMatrix(
+                activeMaterial.shader,
+                shadowLightViewProjectionLoc,
+                matrix.lightViewProjection);
+        SetShaderValueMatrix(
+                spotShadowCutoutMaterial.shader,
+                spotShadowCutoutLightViewProjectionLoc,
+                matrix.lightViewProjection);
         const int noSkinning = 0;
         if (activeUseSkinningLoc >= 0) {
             SetShaderValue(
@@ -1921,7 +1612,7 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                     &noSkinning,
                     SHADER_UNIFORM_INT);
         }
-        if (!pointProjection && spotShadowCutoutUseSkinningLoc >= 0) {
+        if (spotShadowCutoutUseSkinningLoc >= 0) {
             SetShaderValue(
                     spotShadowCutoutMaterial.shader,
                     spotShadowCutoutUseSkinningLoc,
@@ -1947,13 +1638,13 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                     lightCacheable = false;
                 }
             }
-            Material& batchMaterial = !pointProjection && batch.alphaTest
+            Material& batchMaterial = batch.alphaTest
                     ? spotShadowCutoutMaterial : activeMaterial;
-            const int batchAlphaTestLoc = !pointProjection && batch.alphaTest
+            const int batchAlphaTestLoc = batch.alphaTest
                     ? shadowAlphaTestLoc : activeAlphaTestLoc;
-            const int batchAlphaCutoffLoc = !pointProjection && batch.alphaTest
+            const int batchAlphaCutoffLoc = batch.alphaTest
                     ? shadowAlphaCutoffLoc : activeAlphaCutoffLoc;
-            const Texture2D batchDefaultTexture = !pointProjection && batch.alphaTest
+            const Texture2D batchDefaultTexture = batch.alphaTest
                     ? spotShadowCutoutDefaultTexture : activeDefaultTexture;
             batchMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = (texture != nullptr)
                     ? *texture

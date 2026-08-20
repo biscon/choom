@@ -26,41 +26,42 @@ culling, and shadow priority continue to use authored intensity rather than the
 fade multiplier. Transient runtime lights such as muzzle flashes bypass the
 fade.
 
-Dynamic shadows use one persistent 4096 x 4096 depth atlas. A spotlight uses
-one perspective-projected tile. A point light uses two adjacent
-dual-paraboloid tiles, one for each world-Z hemisphere. The DPSM geometry stage
-adaptively subdivides large triangles, clips each generated triangle to the
-active hemisphere, and then applies the nonlinear projection. Clipping before
-rasterization prevents geometry crossing the paraboloid seam from producing
-invalid shadow footprints. Its 52-vertex output declaration is the exact
-worst case for the four-way subdivision and hemisphere clipping, keeping the
-expanded caster payload within the OpenGL 3.3 total-output-component limit.
-The geometry stage also supplies the original
-triangle origin and edges so the fragment shader can invert the paraboloid
-projection, intersect the resulting light ray with that plane, and write exact
-radial depth instead of deriving depth from an interpolated world position.
-The fragment stage reconstructs barycentric coordinates on the original
-source triangle and rejects projected chord overdraw outside it, preventing
-large floor triangles from spilling false shadows across nearby sector
-boundaries.
+Dynamic shadows use one persistent 8 x 8 depth-tile atlas. A spotlight uses
+one perspective-projected tile. A point light uses six adjacent 90-degree
+perspective tiles in +X, -X, +Y, -Y, +Z, -Z order. Point and spot casters share
+the same planar opaque, alpha-tested, and skinned shadow shaders. This avoids
+the nonlinear stretching and chord overdraw produced by dual-paraboloid
+projection on large sector triangles.
 
-Opaque and alpha-tested surface receivers compensate for point-shadow texel
-quantization by snapping each lookup to its actual atlas texel center and
-intersecting that texel's light ray with the receiver plane. The resulting
-receiver depth is compared with the stored blocker depth, leaving the authored
-shadow bias to cover numerical precision instead of grazing-angle depth slope.
-Volumetric receivers retain the simpler point-sample comparison because they
-do not have a surface plane.
+Point-shadow receivers select the dominant-axis face and use ordinary
+perspective depth. Surface receivers snap comparisons to the actual atlas
+texel center and intersect that face ray with the receiver plane, leaving the
+authored shadow bias to cover numerical precision instead of grazing-angle
+depth slope. Hard point shadows use a weighted 2 x 2 comparison so individual
+square texels do not turn into isolated dots. Soft point-shadow samples are
+offset in face space, converted back to a world ray, and reselect the dominant
+face before lookup; samples therefore cross cube-face boundaries without
+clamping or atlas seams. Volumetric receivers use the same face mapping with a
+simpler point-depth comparison because they do not have a surface plane.
 
-Shadow quality controls tile size and therefore capacity:
+Shadow quality controls face resolution while capacity remains fixed:
 
-- Low: 512 x 512 tiles, at most 64 occupied slots.
-- Medium/High: 1024 x 1024 tiles, at most 16 occupied slots.
+- Low: a 4096 x 4096 atlas with 512 x 512 tiles.
+- Medium/High: requests an 8192 x 8192 atlas with 1024 x 1024 tiles.
 - Off: no dynamic atlas sampling or generation.
 
-A spot consumes one occupied slot and a point consumes two. Lights that do not
-fit remain active and unshadowed. Shadow priority is the primary allocation
-key, followed by estimated receiver contribution and stable light ID.
+The renderer queries `GL_MAX_TEXTURE_SIZE` and verifies framebuffer allocation.
+If the 8192 atlas is unavailable, it logs a warning and falls back to a 4096
+atlas with 512 tiles without reducing capacity. If fallback allocation also
+fails, dynamic shadow generation and sampling are disabled safely. A 32-bit
+depth atlas is approximately 256 MiB at 8192 and 64 MiB at 4096.
+
+A spot consumes one occupied slot and a point consumes six, so the shared rule
+is `6 * point shadows + spot shadows <= 64`. This permits ten point shadows at
+every enabled quality, or ten point shadows plus four spots when the atlas is
+exactly full. Lights that do not fit remain active and unshadowed. Shadow
+priority is the primary allocation key, followed by estimated receiver
+contribution and stable light ID.
 
 The atlas persists across frames with validity tracked per light. Static
 geometry and stationary casters reuse their tiles. Changed door and static
@@ -73,16 +74,16 @@ resource changes and invalidates every cached tile, including temporarily
 unassigned tiles, so a later returning light must rebuild erased depth data.
 Slot ownership is persistent and keyed by
 the composite light identity, so adding or removing another caster does not
-move or invalidate retained lights. A point retains one adjacent two-slot span;
-if fragmentation prevents a new pair, that newcomer remains temporarily
+move or invalidate retained lights. A point retains one adjacent six-slot span;
+if fragmentation prevents a new span, that newcomer remains temporarily
 unshadowed instead of forcing atlas compaction. `graphics.maxShadowLightUpdatesPerFrame`
 limits work to a fair oldest-first number of lights per frame (default 2,
-0 means unlimited), prioritizing invalid tiles. A point light's two hemispheres
+0 means unlimited), prioritizing invalid tiles. A point light's six faces
 always update atomically. Disabling dynamic lighting also skips dynamic atlas
 generation. Rebuilds conservatively cull sector, door, and model casters
-against each light volume and point-light hemisphere before drawing them.
+against each light volume and point-light face before drawing them.
 An entering shadow caster remains at zero intensity until its assigned spot
-tile, or both point-light hemisphere tiles, are valid, then begins fading. A
+tile, or all six point-light face tiles, are valid, then begins fading. A
 light that does not receive an atlas slot fades in immediately as unshadowed.
 
 Dynamic props and NPCs always receive available point- and spotlight atlas

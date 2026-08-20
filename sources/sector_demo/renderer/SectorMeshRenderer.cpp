@@ -1,5 +1,7 @@
 #include "sector_demo/renderer/SectorMeshRenderer.h"
 
+#include "sector_demo/renderer/SectorDynamicShadowSampling.h"
+
 #include "engine/assets/TextureLoadFlags.h"
 #include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorAssetPaths.h"
@@ -225,51 +227,9 @@ vec3 StoreFiniteHalfRadiance(vec3 value)
     return result;
 }
 
-float SampleSpotShadowMap(vec2 atlasTile, float atlasScale, vec2 uv)
-{
-    return texture(shadowMap0,
-            (atlasTile + clamp(uv, vec2(0.001), vec2(0.999)))
-                    * atlasScale).r;
-}
-
-float SamplePointShadowMap(
-        ivec2 atlasTile,
-        ivec2 tileResolution,
-        vec2 uv,
-        out vec2 sampledUv)
-{
-    ivec2 localTexel = clamp(
-            ivec2(floor(clamp(uv, vec2(0.0), vec2(0.999999))
-                    * vec2(tileResolution))),
-            ivec2(0),
-            tileResolution - ivec2(1));
-    sampledUv = (vec2(localTexel) + vec2(0.5)) / vec2(tileResolution);
-    return texelFetch(shadowMap0,
-            atlasTile * tileResolution + localTexel, 0).r;
-}
-
-float PointReceiverPlaneDepth(
-        int hemisphere,
-        vec2 sampleUv,
-        vec3 receiverPlaneNormal,
-        float planeDistance,
-        float lightRadius,
-        float fallbackDepth)
-{
-    vec2 projected = sampleUv * 2.0 - 1.0;
-    float projectedRadiusSquared = dot(projected, projected);
-    if (projectedRadiusSquared > 1.0) return fallbackDepth;
-    float inverseDenominator = 1.0 / (1.0 + projectedRadiusSquared);
-    vec3 rayDirection = vec3(
-            projected * (2.0 * inverseDenominator),
-            (1.0 - projectedRadiusSquared) * inverseDenominator * float(hemisphere));
-    float planeDirection = dot(receiverPlaneNormal, rayDirection);
-    if (abs(planeDirection) <= 0.000001) return fallbackDepth;
-    float radialDepth = planeDistance / planeDirection;
-    if (radialDepth <= 0.00001 || radialDepth > lightRadius) return fallbackDepth;
-    return radialDepth / lightRadius;
-}
-
+)"
+SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL
+R"(
 vec3 SurfaceNormal(vec3 geometricNormal)
 {
     if (hasNormalMap == 0) {
@@ -299,98 +259,6 @@ vec3 SurfaceNormal(vec3 geometricNormal)
                     bitangent * inverseBasisLength,
                     geometricNormal) * mappedNormal,
             geometricNormal);
-}
-
-float DynamicLightShadowVisibility(
-        int lightIndex,
-        int shadowSlot,
-        vec3 worldPosition,
-        vec3 worldNormal,
-        vec3 surfaceToLightDirection)
-{
-    if (shadowSlot < 0 || shadowSlot >= MAX_DYNAMIC_SHADOW_CASTERS) {
-        return 1.0;
-    }
-
-    bool pointProjection = dynamicLightTypes[lightIndex] == 0;
-    int pointHemisphere = 0;
-    vec3 shadowCoord;
-    if (pointProjection) {
-        vec3 fromLight = worldPosition - dynamicLightPositions[lightIndex];
-        float radialDepth = length(fromLight);
-        if (radialDepth <= 0.00001) return 1.0;
-        pointHemisphere = fromLight.z >= 0.0 ? 1 : -1;
-        shadowSlot += pointHemisphere > 0 ? 0 : 1;
-        float denominator = radialDepth + abs(fromLight.z);
-        shadowCoord = vec3(fromLight.xy / max(denominator, 0.00001) * 0.5 + 0.5,
-                radialDepth / max(dynamicLightRadii[lightIndex], 0.00001));
-    } else {
-        vec3 fromLight = worldPosition - dynamicLightPositions[lightIndex];
-        vec3 forward = dynamicLightDirections[lightIndex];
-        vec3 right = dynamicLightSpotShadowRight[lightIndex];
-        vec3 up = cross(right, forward);
-        float forwardDepth = dot(fromLight, forward);
-        if (forwardDepth <= 0.05) return 1.0;
-        vec2 projection = dynamicLightSpotShadowProjection[lightIndex];
-        float depth = projection.y * (1.0 - 0.05 / forwardDepth);
-        shadowCoord = vec3(vec2(dot(fromLight,right),dot(fromLight,up))
-                * projection.x / max(2.0*forwardDepth,0.00001)+0.5, depth);
-    }
-    if (shadowCoord.x < 0.0 || shadowCoord.x > 1.0 ||
-            shadowCoord.y < 0.0 || shadowCoord.y > 1.0 ||
-            shadowCoord.z < 0.0 || shadowCoord.z > 1.0) {
-        return 1.0;
-    }
-
-    int atlasTiles = max(shadowAtlasTilesPerRow, 1);
-    ivec2 atlasTile = ivec2(shadowSlot % atlasTiles, shadowSlot / atlasTiles);
-    ivec2 tileResolution = textureSize(shadowMap0, 0) / atlasTiles;
-    float atlasScale = 1.0 / float(atlasTiles);
-    vec2 texelSize = 1.0 / vec2(tileResolution);
-    float pointPlaneDistance = pointProjection
-            ? dot(worldNormal, worldPosition - dynamicLightPositions[lightIndex])
-            : 0.0;
-    float pointLightRadius = max(dynamicLightRadii[lightIndex], 0.00001);
-    float normalLightDot = max(dot(
-            SafeNormalize(worldNormal, vec3(0.0, 1.0, 0.0)),
-            SafeNormalize(surfaceToLightDirection, vec3(0.0, 1.0, 0.0))), 0.0);
-    float effectiveBias = min(shadowBias[shadowSlot] * (1.0 + (1.0 - normalLightDot) * 2.0), 0.02);
-    float softness = clamp(shadowSoftness[shadowSlot], 0.0, 8.0);
-    if (softness <= 0.0) {
-        vec2 sampledUv;
-        float shadowDepth = pointProjection
-                ? SamplePointShadowMap(
-                        atlasTile, tileResolution, shadowCoord.xy, sampledUv)
-                : SampleSpotShadowMap(
-                        vec2(atlasTile), atlasScale, shadowCoord.xy);
-        if (!pointProjection) sampledUv = shadowCoord.xy;
-        float receiverDepth = pointProjection
-                ? PointReceiverPlaneDepth(
-                        pointHemisphere, sampledUv, worldNormal,
-                        pointPlaneDistance, pointLightRadius, shadowCoord.z)
-                : shadowCoord.z;
-        return receiverDepth - effectiveBias <= shadowDepth ? 1.0 : 0.0;
-    }
-
-    vec2 radius = max(0.25, softness) * texelSize;
-    float visible = 0.0;
-    for (int i = 0; i < 12; ++i) {
-        vec2 sampleUv = clamp(shadowCoord.xy + kPoissonDisk[i] * radius, vec2(0.0), vec2(1.0));
-        vec2 sampledUv;
-        float shadowDepth = pointProjection
-                ? SamplePointShadowMap(
-                        atlasTile, tileResolution, sampleUv, sampledUv)
-                : SampleSpotShadowMap(
-                        vec2(atlasTile), atlasScale, sampleUv);
-        if (!pointProjection) sampledUv = sampleUv;
-        float receiverDepth = pointProjection
-                ? PointReceiverPlaneDepth(
-                        pointHemisphere, sampledUv, worldNormal,
-                        pointPlaneDistance, pointLightRadius, shadowCoord.z)
-                : shadowCoord.z;
-        visible += receiverDepth - effectiveBias <= shadowDepth ? 1.0 : 0.0;
-    }
-    return visible / 12.0;
 }
 
 vec3 ApplySectorFog(

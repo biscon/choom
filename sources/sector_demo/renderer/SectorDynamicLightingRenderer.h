@@ -217,7 +217,7 @@ public:
     size_t SourceCount() const { return sources.size(); }
     size_t CandidateCount() const { return candidates.size(); }
     std::size_t ShadowSlotBudget() const {
-        return shadowMapResolution <= 512 ? MaxDynamicSpotLightShadowCasters : 16u;
+        return MaxDynamicSpotLightShadowCasters;
     }
     SectorPreviewDynamicSpotLightShadowUniforms PackShadowUniforms(
             bool enabled = true) const;
@@ -315,12 +315,13 @@ private:
     RenderTexture2D shadowAtlas{};
     Material shadowMaterial = {};
     Material spotShadowCutoutMaterial = {};
-    Material pointShadowMaterial = {};
     Texture2D shadowDefaultTexture = {};
     Texture2D spotShadowCutoutDefaultTexture = {};
-    Texture2D pointShadowDefaultTexture = {};
     bool shadowMaterialLoaded = false;
     int shadowMapResolution = DynamicSpotLightShadowMapResolution;
+    int effectiveShadowMapResolution = DynamicSpotLightShadowMapResolution;
+    int shadowAtlasResolution = DynamicShadowAtlasHighResolution;
+    bool shadowAtlasFallbackWarningLogged = false;
     std::size_t maxDynamicLights = MaxDynamicLights;
     std::size_t maxShadowLightUpdatesPerFrame = 2;
     float selectionFadeInSeconds = DynamicLightDefaultFadeInSeconds;
@@ -330,12 +331,6 @@ private:
     int spotShadowCutoutUseSkinningLoc = -1;
     int shadowAlphaTestLoc = -1;
     int shadowAlphaCutoffLoc = -1;
-    int pointShadowLightPositionLoc = -1;
-    int pointShadowLightRadiusLoc = -1;
-    int pointShadowHemisphereLoc = -1;
-    int pointShadowUseSkinningLoc = -1;
-    int pointShadowAlphaTestLoc = -1;
-    int pointShadowAlphaCutoffLoc = -1;
 };
 
 } // namespace game

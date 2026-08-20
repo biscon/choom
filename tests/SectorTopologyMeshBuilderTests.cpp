@@ -1736,10 +1736,12 @@ void TestDynamicSpotLightShadowCasterSelection()
     Check(shadowCasters.size() == 2
                   && shadowCasters[0].lightId == 20
                   && shadowCasters[0].shadowSlot == 0
-                  && shadowCasters[0].shadowSlotCount == 2
+                  && shadowCasters[0].shadowSlotCount
+                          == game::DynamicPointLightShadowFaceCount
                   && shadowCasters[1].lightId == 22
-                  && shadowCasters[1].shadowSlot == 2,
-          "dynamic shadow selection assigns two slots to points and ignores castsShadow=false spots");
+                  && shadowCasters[1].shadowSlot
+                          == game::DynamicPointLightShadowFaceCount,
+          "dynamic shadow selection assigns six face slots to points and ignores castsShadow=false spots");
 
     selected = {
             ShadowSpotLightSource(30, 10, Vector3{0.5f, 0.5f, 0.5f}, 8.0f, 10.0f, 0).light,
@@ -1758,6 +1760,40 @@ void TestDynamicSpotLightShadowCasterSelection()
                   && shadowCasters[2].lightId == 32
                   && shadowCasters[3].lightId == 33,
           "dynamic spotlight shadow selection orders by priority then score then light id");
+
+    selected.clear();
+    for (int index = 0; index < 10; ++index) {
+        game::SectorPreviewDynamicPointLightUniform point = LightSource(
+                100 + index,
+                10,
+                Vector3{0.5f, 0.5f, 0.5f},
+                8.0f,
+                1.0f).light;
+        point.castsShadow = true;
+        selected.push_back(point);
+    }
+    for (int index = 0; index < 4; ++index) {
+        selected.push_back(ShadowSpotLightSource(
+                200 + index,
+                10,
+                Vector3{0.5f, 0.5f, 0.5f},
+                8.0f,
+                1.0f).light);
+    }
+    game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
+            selected,
+            visible,
+            receiverBounds,
+            game::MaxDynamicSpotLightShadowCasters,
+            shadowCasters);
+    std::size_t occupiedSlots = 0;
+    for (const game::SectorPreviewDynamicSpotLightShadowCaster& caster
+            : shadowCasters) {
+        occupiedSlots += static_cast<std::size_t>(caster.shadowSlotCount);
+    }
+    Check(shadowCasters.size() == 14
+                  && occupiedSlots == game::MaxDynamicSpotLightShadowCasters,
+          "ten point shadows and four spot shadows exactly fill the stable 64-slot atlas");
 
     game::SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
             selected,
@@ -1837,20 +1873,68 @@ void TestDynamicSpotLightShadowMatrices()
           "dynamic spotlight shadow matrix build respects selected caster slots and skips invalid indices");
     Check(game::DynamicSpotLightShadowMapResolution == 1024,
           "dynamic spotlight shadow map default resolution is 1024");
+    Check(game::DynamicShadowAtlasTilesPerRow == 8
+                  && game::MaxDynamicSpotLightShadowCasters == 64,
+          "dynamic shadow atlas exposes a stable eight-by-eight slot grid");
 
     selected[0].kind = game::SectorPreviewDynamicLightKind::Point;
     selected[0].castsShadow = true;
     const std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> pointCaster = {
             game::SectorPreviewDynamicSpotLightShadowCaster{
-                    40, 0, 3, 0, 1.0f, 0.002f, 1.0f, 1.0f, 2}};
+                    40, 0, 3, 0, 1.0f, 0.002f, 1.0f, 1.0f,
+                    game::DynamicPointLightShadowFaceCount}};
     game::BuildSectorPreviewDynamicSpotLightShadowMatrices(selected, pointCaster, matrices);
-    Check(matrices.size() == 2
-                  && matrices[0].kind == game::SectorPreviewDynamicLightKind::Point
-                  && matrices[0].shadowSlot == 3
-                  && matrices[0].pointHemisphere == 1
-                  && matrices[1].shadowSlot == 4
-                  && matrices[1].pointHemisphere == -1,
-          "dynamic point shadow matrix build emits adjacent front and back paraboloid passes");
+    constexpr std::array<Vector3, game::DynamicPointLightShadowFaceCount>
+            faceDirections = {{
+                    {1.0f, 0.0f, 0.0f},
+                    {-1.0f, 0.0f, 0.0f},
+                    {0.0f, 1.0f, 0.0f},
+                    {0.0f, -1.0f, 0.0f},
+                    {0.0f, 0.0f, 1.0f},
+                    {0.0f, 0.0f, -1.0f}}};
+    constexpr std::array<Vector3, game::DynamicPointLightShadowFaceCount>
+            offAxisFaceDirections = {{
+                    {1.0f, 0.5f, -0.5f},
+                    {-1.0f, 0.5f, 0.5f},
+                    {0.5f, 1.0f, -0.5f},
+                    {0.5f, -1.0f, 0.5f},
+                    {0.5f, 0.5f, 1.0f},
+                    {-0.5f, 0.5f, -1.0f}}};
+    bool pointFacesValid = matrices.size()
+            == static_cast<std::size_t>(game::DynamicPointLightShadowFaceCount);
+    for (int face = 0;
+            pointFacesValid && face < game::DynamicPointLightShadowFaceCount;
+            ++face) {
+        const game::SectorPreviewDynamicSpotLightShadowMatrix& faceMatrix =
+                matrices[static_cast<std::size_t>(face)];
+        const Vector3 faceCenter = Vector3Add(
+                selected[0].position,
+                Vector3Scale(faceDirections[static_cast<std::size_t>(face)], 2.0f));
+        const Vector4 clip = TransformHomogeneous(
+                faceCenter, faceMatrix.lightViewProjection);
+        const Vector4 offAxisClip = TransformHomogeneous(
+                Vector3Add(
+                        selected[0].position,
+                        offAxisFaceDirections[static_cast<std::size_t>(face)]),
+                faceMatrix.lightViewProjection);
+        pointFacesValid = faceMatrix.kind
+                        == game::SectorPreviewDynamicLightKind::Point
+                && faceMatrix.shadowSlot == 3 + face
+                && faceMatrix.pointFace == face
+                && FiniteMatrix(faceMatrix.view)
+                && FiniteMatrix(faceMatrix.projection)
+                && FiniteMatrix(faceMatrix.lightViewProjection)
+                && clip.w > 0.0f
+                && std::fabs(clip.x / clip.w) < 0.001f
+                && std::fabs(clip.y / clip.w) < 0.001f
+                && offAxisClip.w > 0.0f
+                && Near(offAxisClip.x / offAxisClip.w * 0.5f + 0.5f,
+                        0.75f, 0.001f)
+                && Near(offAxisClip.y / offAxisClip.w * 0.5f + 0.5f,
+                        0.25f, 0.001f);
+    }
+    Check(pointFacesValid,
+          "dynamic point shadow matrix build emits six adjacent centered perspective faces");
 }
 
 void TestCompactDynamicSpotShadowProjection()
@@ -1907,14 +1991,15 @@ void TestDynamicShadowUpdateScheduling()
     std::vector<game::SectorDynamicShadowUpdateRequest> pending;
     for (std::size_t index = 0; index < 5; ++index) {
         pending.push_back(game::SectorDynamicShadowUpdateRequest{
-                index, index == 3, static_cast<uint64_t>(index + 1), 2});
+                index, index == 3, static_cast<uint64_t>(index + 1),
+                game::DynamicPointLightShadowFaceCount});
     }
     game::SortSectorDynamicShadowUpdateRequests(pending);
     Check(pending.front().casterIndex == 3,
           "invalid shadow atlas entries update before compatible stale entries");
 
     const std::size_t expectedLightUpdates[] = {2, 2, 1};
-    const std::size_t expectedTileUpdates[] = {4, 4, 2};
+    const std::size_t expectedTileUpdates[] = {12, 12, 6};
     for (std::size_t frame = 0; frame < 3; ++frame) {
         const std::size_t lightUpdates = game::SectorDynamicShadowUpdateCount(
                 pending.size(), 2);
@@ -1925,7 +2010,7 @@ void TestDynamicShadowUpdateScheduling()
         }
         Check(lightUpdates == expectedLightUpdates[frame]
                         && tileUpdates == expectedTileUpdates[frame],
-              "five point shadows update atomically in 2+2+1 light batches");
+              "five six-face point shadows update atomically in 2+2+1 light batches");
         pending.erase(
                 pending.begin(),
                 pending.begin() + static_cast<std::ptrdiff_t>(lightUpdates));
@@ -1972,10 +2057,10 @@ void TestPersistentDynamicShadowSlotOwnership()
             point(4)};
     std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> casters = {
             caster(1, 0, 1),
-            caster(3, 1, 2),
-            caster(4, 2, 2)};
+            caster(3, 1, game::DynamicPointLightShadowFaceCount),
+            caster(4, 2, game::DynamicPointLightShadowFaceCount)};
     game::AssignPersistentSectorDynamicShadowSlots(
-            selected, 16, casters, owners);
+            selected, game::MaxDynamicSpotLightShadowCasters, casters, owners);
     const int spotSlot = findSlot(casters, 1);
     const int point3Slot = findSlot(casters, 3);
     const int point4Slot = findSlot(casters, 4);
@@ -1986,26 +2071,68 @@ void TestPersistentDynamicShadowSlotOwnership()
 
     selected = {point(2), selected[0], selected[1], selected[2]};
     casters = {
-            caster(2, 0, 2),
+            caster(2, 0, game::DynamicPointLightShadowFaceCount),
             caster(1, 1, 1),
-            caster(3, 2, 2),
-            caster(4, 3, 2)};
+            caster(3, 2, game::DynamicPointLightShadowFaceCount),
+            caster(4, 3, game::DynamicPointLightShadowFaceCount)};
     game::AssignPersistentSectorDynamicShadowSlots(
-            selected, 16, casters, owners);
+            selected, game::MaxDynamicSpotLightShadowCasters, casters, owners);
     Check(findSlot(casters, 1) == spotSlot
                   && findSlot(casters, 3) == point3Slot
                   && findSlot(casters, 4) == point4Slot,
           "adding an unrelated point caster does not move retained local shadows");
     const int point2Slot = findSlot(casters, 2);
-    Check(point2Slot >= 0
-                  && point2Slot + 1 < 16
-                  && owners[static_cast<std::size_t>(point2Slot)].occupied
-                  && owners[static_cast<std::size_t>(point2Slot + 1)].occupied
-                  && owners[static_cast<std::size_t>(point2Slot)].lightKey
-                          == DynamicLightKey(2)
-                  && owners[static_cast<std::size_t>(point2Slot + 1)].lightKey
-                          == DynamicLightKey(2),
-          "new point caster receives one adjacent persistent hemisphere pair");
+    bool point2SpanValid = point2Slot >= 0
+            && point2Slot + game::DynamicPointLightShadowFaceCount
+                    <= static_cast<int>(game::MaxDynamicSpotLightShadowCasters);
+    for (int face = 0;
+            point2SpanValid && face < game::DynamicPointLightShadowFaceCount;
+            ++face) {
+        const game::SectorDynamicShadowSlotOwner& owner = owners[
+                static_cast<std::size_t>(point2Slot + face)];
+        point2SpanValid = owner.occupied
+                && owner.lightKey == DynamicLightKey(2)
+                && owner.spanStart == point2Slot
+                && owner.spanCount == game::DynamicPointLightShadowFaceCount;
+    }
+    Check(point2SpanValid,
+          "new point caster receives one adjacent persistent six-face span");
+
+    owners = {};
+    selected.clear();
+    casters.clear();
+    for (int index = 0; index < 6; ++index) {
+        selected.push_back(ShadowSpotLightSource(
+                1000 + index,
+                10,
+                Vector3{0.0f, 2.0f, 0.0f},
+                8.0f,
+                1.0f).light);
+        casters.push_back(caster(1000 + index, index, 1));
+        const int slot = index * 2;
+        owners[static_cast<std::size_t>(slot)] =
+                game::SectorDynamicShadowSlotOwner{
+                        DynamicLightKey(
+                                1000 + index,
+                                game::SectorPreviewDynamicLightKind::Spot),
+                        slot,
+                        1,
+                        true,
+                        false};
+    }
+    selected.push_back(point(2000));
+    casters.push_back(caster(
+            2000, 6, game::DynamicPointLightShadowFaceCount));
+    game::AssignPersistentSectorDynamicShadowSlots(
+            selected, 12, casters, owners);
+    bool retainedFragmentedSpots = true;
+    for (int index = 0; index < 6; ++index) {
+        retainedFragmentedSpots = retainedFragmentedSpots
+                && casters[static_cast<std::size_t>(index)].shadowSlot
+                        == index * 2;
+    }
+    Check(retainedFragmentedSpots && casters.back().shadowSlot == -1,
+          "fragmentation leaves a new six-face point unshadowed without moving retained slots");
 }
 
 void TestDynamicSpotLightShadowUniformPacking()
@@ -2020,6 +2147,9 @@ void TestDynamicSpotLightShadowUniformPacking()
     selected[0].shadowSoftness = 2.0f;
     selected[1].lightId = 51;
     selected[1].castsShadow = true;
+    selected[1].shadowBias = 0.008f;
+    selected[1].shadowStrength = 0.625f;
+    selected[1].shadowSoftness = 1.5f;
     selected[2].lightId = 52;
     selected[2].shadowBias = 0.006f;
     selected[2].shadowStrength = 0.5f;
@@ -2046,6 +2176,30 @@ void TestDynamicSpotLightShadowUniformPacking()
           "dynamic spotlight shadow uniform packing carries per-slot bias strength and softness");
     Check(FiniteMatrix(uniforms.shadowLightMatrices[0]) && FiniteMatrix(uniforms.shadowLightMatrices[1]),
           "dynamic spotlight shadow uniform packing carries finite light-space matrices");
+
+    const std::vector<game::SectorPreviewDynamicSpotLightShadowCaster>
+            pointShadowCaster = {
+                    game::SectorPreviewDynamicSpotLightShadowCaster{
+                            51, 1, 2, 0, 1.0f, 0.008f, 0.625f, 1.5f,
+                            game::DynamicPointLightShadowFaceCount}};
+    game::BuildSectorPreviewDynamicSpotLightShadowMatrices(
+            selected, pointShadowCaster, matrices);
+    const game::SectorPreviewDynamicSpotLightShadowUniforms pointUniforms =
+            game::PackSectorPreviewDynamicSpotLightShadowUniforms(
+                    selected, pointShadowCaster, matrices);
+    bool pointUniformsPropagated = pointUniforms.dynamicLightShadowSlots[1] == 2;
+    for (int face = 0;
+            pointUniformsPropagated
+                    && face < game::DynamicPointLightShadowFaceCount;
+            ++face) {
+        const std::size_t slot = static_cast<std::size_t>(2 + face);
+        pointUniformsPropagated = Near(pointUniforms.shadowBias[slot], 0.008f)
+                && Near(pointUniforms.shadowStrength[slot], 0.625f)
+                && Near(pointUniforms.shadowSoftness[slot], 1.5f)
+                && FiniteMatrix(pointUniforms.shadowLightMatrices[slot]);
+    }
+    Check(pointUniformsPropagated,
+          "dynamic point shadow uniform packing propagates settings across all six faces");
 
     const std::vector<game::SectorPreviewDynamicSpotLightShadowCaster> oneShadowCaster = {
             game::SectorPreviewDynamicSpotLightShadowCaster{50, 0, 0, 0, 1.0f, 0.004f, 0.75f, 2.0f}};

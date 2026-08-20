@@ -805,7 +805,9 @@ void SelectRankedSectorPreviewDynamicSpotLightShadowCasters(
     std::size_t usedSlots = 0;
     for (const ScoredDynamicSpotLightShadowCandidate& candidate : ranked) {
         const std::size_t requiredSlots = candidate.light->kind
-                == SectorPreviewDynamicLightKind::Point ? 2u : 1u;
+                == SectorPreviewDynamicLightKind::Point
+                ? static_cast<std::size_t>(DynamicPointLightShadowFaceCount)
+                : 1u;
         if (usedSlots + requiredSlots > maxShadowCasters) {
             continue;
         }
@@ -972,7 +974,7 @@ bool MakeSectorPreviewDynamicSpotLightShadowMatrix(
     outMatrix.dynamicLightIndex = dynamicLightIndex;
     outMatrix.shadowSlot = shadowSlot;
     outMatrix.kind = SectorPreviewDynamicLightKind::Spot;
-    outMatrix.pointHemisphere = 0;
+    outMatrix.pointFace = -1;
     outMatrix.lightPosition = light.position;
     outMatrix.lightRadius = light.radius;
     outMatrix.view = view;
@@ -987,7 +989,7 @@ void BuildSectorPreviewDynamicSpotLightShadowMatrices(
         std::vector<SectorPreviewDynamicSpotLightShadowMatrix>& outMatrices)
 {
     outMatrices.clear();
-    outMatrices.reserve(shadowCasters.size());
+    outMatrices.reserve(MaxDynamicSpotLightShadowCasters);
 
     for (const SectorPreviewDynamicSpotLightShadowCaster& caster : shadowCasters) {
         if (caster.dynamicLightIndex < 0
@@ -998,18 +1000,55 @@ void BuildSectorPreviewDynamicSpotLightShadowMatrices(
         const SectorPreviewDynamicPointLightUniform& light =
                 selectedDynamicLights[static_cast<std::size_t>(caster.dynamicLightIndex)];
         if (light.kind == SectorPreviewDynamicLightKind::Point) {
-            for (int hemisphere = 0; hemisphere < 2; ++hemisphere) {
+            if (light.radius <= ShadowNearPlane
+                    || !std::isfinite(light.radius)
+                    || !IsFiniteVector3(light.position)
+                    || caster.shadowSlot < 0
+                    || caster.shadowSlotCount != DynamicPointLightShadowFaceCount) {
+                continue;
+            }
+            constexpr std::array<Vector3, DynamicPointLightShadowFaceCount>
+                    FaceDirections = {{
+                            {1.0f, 0.0f, 0.0f},
+                            {-1.0f, 0.0f, 0.0f},
+                            {0.0f, 1.0f, 0.0f},
+                            {0.0f, -1.0f, 0.0f},
+                            {0.0f, 0.0f, 1.0f},
+                            {0.0f, 0.0f, -1.0f}}};
+            constexpr std::array<Vector3, DynamicPointLightShadowFaceCount>
+                    FaceUpVectors = {{
+                            {0.0f, -1.0f, 0.0f},
+                            {0.0f, -1.0f, 0.0f},
+                            {0.0f, 0.0f, 1.0f},
+                            {0.0f, 0.0f, -1.0f},
+                            {0.0f, -1.0f, 0.0f},
+                            {0.0f, -1.0f, 0.0f}}};
+            const Matrix projection = MatrixPerspective(
+                    90.0 * static_cast<double>(DegreesToRadians),
+                    1.0,
+                    ShadowNearPlane,
+                    light.radius);
+            for (int face = 0; face < DynamicPointLightShadowFaceCount; ++face) {
                 SectorPreviewDynamicSpotLightShadowMatrix matrix;
                 matrix.lightId = light.lightId;
                 matrix.dynamicLightIndex = caster.dynamicLightIndex;
-                matrix.shadowSlot = caster.shadowSlot + hemisphere;
+                matrix.shadowSlot = caster.shadowSlot + face;
                 matrix.kind = SectorPreviewDynamicLightKind::Point;
-                matrix.pointHemisphere = hemisphere == 0 ? 1 : -1;
+                matrix.pointFace = face;
                 matrix.lightPosition = light.position;
                 matrix.lightRadius = light.radius;
-                matrix.view = MatrixIdentity();
-                matrix.projection = MatrixIdentity();
-                matrix.lightViewProjection = MatrixIdentity();
+                matrix.view = MatrixLookAt(
+                        light.position,
+                        Vector3Add(light.position, FaceDirections[face]),
+                        FaceUpVectors[face]);
+                matrix.projection = projection;
+                matrix.lightViewProjection = MatrixMultiply(
+                        matrix.view, matrix.projection);
+                if (!IsFiniteMatrix(matrix.view)
+                        || !IsFiniteMatrix(matrix.projection)
+                        || !IsFiniteMatrix(matrix.lightViewProjection)) {
+                    continue;
+                }
                 outMatrices.push_back(matrix);
             }
             continue;
@@ -1058,7 +1097,9 @@ SectorPreviewDynamicSpotLightShadowUniforms PackSectorPreviewDynamicSpotLightSha
         for (const SectorPreviewDynamicSpotLightShadowCaster& candidate : shadowCasters) {
             if (candidate.lightId == matrix.lightId
                     && candidate.dynamicLightIndex == matrix.dynamicLightIndex
-                    && candidate.shadowSlot == matrix.shadowSlot) {
+                    && matrix.shadowSlot >= candidate.shadowSlot
+                    && matrix.shadowSlot
+                            < candidate.shadowSlot + candidate.shadowSlotCount) {
                 caster = &candidate;
                 break;
             }
@@ -1073,13 +1114,6 @@ SectorPreviewDynamicSpotLightShadowUniforms PackSectorPreviewDynamicSpotLightSha
         uniforms.shadowBias[shadowSlot] = ClampDynamicSpotLightShadowBias(caster->shadowBias);
         uniforms.shadowStrength[shadowSlot] = ClampDynamicSpotLightShadowStrength(caster->shadowStrength);
         uniforms.shadowSoftness[shadowSlot] = ClampDynamicSpotLightShadowSoftness(caster->shadowSoftness);
-        if (caster->shadowSlotCount == 2
-                && matrix.shadowSlot == caster->shadowSlot
-                && shadowSlot + 1 < uniforms.shadowBias.size()) {
-            uniforms.shadowBias[shadowSlot + 1] = uniforms.shadowBias[shadowSlot];
-            uniforms.shadowStrength[shadowSlot + 1] = uniforms.shadowStrength[shadowSlot];
-            uniforms.shadowSoftness[shadowSlot + 1] = uniforms.shadowSoftness[shadowSlot];
-        }
     }
 
     return uniforms;
