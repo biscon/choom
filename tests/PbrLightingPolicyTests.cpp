@@ -508,6 +508,11 @@ void TestHdrEffectShaderAndPassPolicies()
                     && analyticShaft.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos
                     && lightProxy.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos,
           "atmosphere paths use scissored closed-form work and premultiplied compositing");
+    Check(analyticFog.find("ShouldDrawRuntimeSectorForVisibility(")
+                            != std::string::npos
+                    && analyticFog.find("volume.topologySectorId, visibility")
+                            != std::string::npos,
+          "local fog candidates are culled by their runtime-visible owner sector");
     Check(lightProxy.find("float visibleChord = max(exitT - enterT, 0.0);")
                             != std::string::npos
                     && lightProxy.find("float opticalThickness = 1.0 - exp(")
