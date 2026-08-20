@@ -103,6 +103,9 @@ struct SectorEditorLightEditingServiceContext {
             engine::UIIntInputState* proxyHaloRedInput = nullptr;
             engine::UIIntInputState* proxyHaloGreenInput = nullptr;
             engine::UIIntInputState* proxyHaloBlueInput = nullptr;
+            engine::UIFloatInputState* proxyShaftOffsetXInput = nullptr;
+            engine::UIFloatInputState* proxyShaftOffsetYInput = nullptr;
+            engine::UIFloatInputState* proxyShaftOffsetZInput = nullptr;
             engine::UIFloatInputState* proxyShaftLengthInput = nullptr;
             engine::UIFloatInputState* proxyShaftWidthInput = nullptr;
             engine::UIFloatInputState* proxyShaftBrightnessInput = nullptr;
@@ -141,10 +144,13 @@ public:
     SectorEditorLightMutationResult ApplyLightPilot(Vector3 position, Vector3 target);
     SectorEditorLightMutationResult CancelLightPilotData(const char* message);
 
-    bool BeginHaloPlacement(LightPilotKind kind, int lightId);
-    SectorEditorLightMutationResult PreviewHaloPlacement(Vector3 centerOffsetWorld);
-    SectorEditorLightMutationResult ApplyHaloPlacement();
-    SectorEditorLightMutationResult CancelHaloPlacementData(const char* message);
+    bool BeginProxyPlacement(
+            LightProxyPlacementKind proxyKind,
+            LightPilotKind kind,
+            int lightId);
+    SectorEditorLightMutationResult PreviewProxyPlacement(Vector3 offsetWorld);
+    SectorEditorLightMutationResult ApplyProxyPlacement();
+    SectorEditorLightMutationResult CancelProxyPlacementData(const char* message);
 
     bool SetStaticLightPosition(SectorTopologyStaticPointLight& light, Vector3 position);
     bool SetStaticLightIntensity(SectorTopologyStaticPointLight& light, float intensity);

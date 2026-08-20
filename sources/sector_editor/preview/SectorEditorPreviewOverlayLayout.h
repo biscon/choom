@@ -4,6 +4,7 @@
 
 #include <raylib.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 
@@ -13,6 +14,13 @@ struct SectorEditorPreviewDebugTabDefinition {
     PreviewDebugOverlayTab tab;
     const char* id;
     const char* label;
+};
+
+struct SectorEditorPreviewLightStartActionLayout {
+    Rectangle pilot = {};
+    Rectangle halo = {};
+    Rectangle shaft = {};
+    float reservedWidth = 0.0f;
 };
 
 inline constexpr std::array<SectorEditorPreviewDebugTabDefinition, 10>
@@ -54,6 +62,31 @@ inline float SectorEditorPreviewOverlayExpandedHeight(PreviewDebugOverlayTab act
     if (activeTab == PreviewDebugOverlayTab::Pbr) return 610.0f;
     if (activeTab == PreviewDebugOverlayTab::Navigation) return 760.0f;
     return 390.0f;
+}
+
+inline SectorEditorPreviewLightStartActionLayout BuildSectorEditorPreviewLightStartActionLayout(
+        Rectangle panel,
+        float padding,
+        float actionY,
+        bool hasHalo,
+        bool hasShaft)
+{
+    SectorEditorPreviewLightStartActionLayout layout;
+    const float right = panel.x + panel.width - padding;
+    float actionsRight = right;
+    layout.pilot = Rectangle{actionsRight - 92.0f, actionY, 92.0f, 28.0f};
+    if (hasHalo) {
+        actionsRight -= 102.0f;
+        layout.halo = Rectangle{actionsRight - 104.0f, actionY, 104.0f, 28.0f};
+    }
+    if (hasShaft) {
+        actionsRight -= 114.0f;
+        layout.shaft = Rectangle{actionsRight - 110.0f, actionY, 110.0f, 28.0f};
+    }
+    layout.reservedWidth = right - std::min(
+            layout.pilot.x,
+            hasShaft ? layout.shaft.x : (hasHalo ? layout.halo.x : layout.pilot.x));
+    return layout;
 }
 
 } // namespace game

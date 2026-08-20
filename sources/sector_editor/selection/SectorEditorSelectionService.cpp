@@ -29,9 +29,9 @@ bool HasDifferentInteractiveLightEdit(
     return (lightState->lightPilot.active
                     && (lightState->lightPilot.kind != kind
                             || lightState->lightPilot.lightId != lightId))
-            || (lightState->haloPlacement.active
-                    && (lightState->haloPlacement.kind != kind
-                            || lightState->haloPlacement.lightId != lightId));
+            || (lightState->proxyPlacement.active
+                    && (lightState->proxyPlacement.kind != kind
+                            || lightState->proxyPlacement.lightId != lightId));
 }
 
 void SetStatusText(SectorEditorSelectionServiceContext& context, const std::string& status)

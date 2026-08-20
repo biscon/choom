@@ -1,6 +1,6 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
-#include "sector_editor/preview/SectorEditorHaloPlacement.h"
+#include "sector_editor/preview/SectorEditorLightProxyPlacement.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
@@ -587,31 +587,49 @@ void TestPreviewNavigationTabLayout()
     Check(game::SectorEditorPreviewOverlayExpandedHeight(
                   game::PreviewDebugOverlayTab::Navigation) >= 520.0f,
           "preview interaction bounds include Navigation controls and diagnostics");
+
+    const game::SectorEditorPreviewLightStartActionLayout lightActions =
+            game::BuildSectorEditorPreviewLightStartActionLayout(
+                    panel,
+                    10.0f,
+                    40.0f,
+                    true,
+                    true);
+    Check(Contains(panel, lightActions.pilot)
+                  && Contains(panel, lightActions.halo)
+                  && Contains(panel, lightActions.shaft),
+          "preview light placement actions fit inside the panel");
+    Check(!Overlaps(lightActions.pilot, lightActions.halo)
+                  && !Overlaps(lightActions.halo, lightActions.shaft)
+                  && !Overlaps(lightActions.pilot, lightActions.shaft),
+          "Pilot, Place Halo, and Place Shaft actions do not overlap");
+    Check(lightActions.reservedWidth >= 326.0f,
+          "preview status reserves the full light action strip width");
 }
 
-void TestHaloPlacementMath()
+void TestLightProxyPlacementMath()
 {
     Vector3 intersection{};
-    Check(game::IntersectSectorEditorHaloPlacementPlane(
+    Check(game::IntersectSectorEditorLightProxyPlacementPlane(
                   Ray{Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.0f, 0.0f, 1.0f}},
                   Vector3{0.0f, 0.0f, 5.0f},
                   Vector3{0.0f, 0.0f, 1.0f},
                   intersection)
                   && Near(intersection.z, 5.0f),
           "halo placement ray intersects its camera-facing drag plane");
-    Check(!game::IntersectSectorEditorHaloPlacementPlane(
+    Check(!game::IntersectSectorEditorLightProxyPlacementPlane(
                   Ray{Vector3{}, Vector3{1.0f, 0.0f, 0.0f}},
                   Vector3{0.0f, 0.0f, 5.0f},
                   Vector3{0.0f, 0.0f, 1.0f},
                   intersection),
           "halo placement rejects rays parallel to the drag plane");
 
-    const Vector3 dragged = game::ApplySectorEditorHaloPlacementDrag(
+    const Vector3 dragged = game::ApplySectorEditorLightProxyPlacementDrag(
             Vector3{1.0f, 2.0f, 3.0f},
             Vector3{4.0f, 5.0f, 6.0f},
             Vector3{6.0f, 8.0f, 10.0f},
             false);
-    const Vector3 preciseDragged = game::ApplySectorEditorHaloPlacementDrag(
+    const Vector3 preciseDragged = game::ApplySectorEditorLightProxyPlacementDrag(
             Vector3{1.0f, 2.0f, 3.0f},
             Vector3{4.0f, 5.0f, 6.0f},
             Vector3{6.0f, 8.0f, 10.0f},
@@ -623,13 +641,13 @@ void TestHaloPlacementMath()
                   && Near(preciseDragged.z, 3.4f),
           "halo drag precision mode applies one tenth of the delta");
 
-    const Vector3 depth = game::ApplySectorEditorHaloPlacementDepth(
+    const Vector3 depth = game::ApplySectorEditorLightProxyPlacementDepth(
             Vector3{0.0f, 0.0f, 10.0f},
             Vector3{},
             Vector3{0.0f, 0.0f, 1.0f},
             1.0f,
             false);
-    const Vector3 preciseDepth = game::ApplySectorEditorHaloPlacementDepth(
+    const Vector3 preciseDepth = game::ApplySectorEditorLightProxyPlacementDepth(
             Vector3{0.0f, 0.0f, 10.0f},
             Vector3{},
             Vector3{0.0f, 0.0f, 1.0f},
@@ -668,7 +686,7 @@ int main()
     TestNpcEditorModalSplitPaneLayout();
     TestPreviewSettingsModalFogDraftApplyAndReset();
     TestPreviewNavigationTabLayout();
-    TestHaloPlacementMath();
+    TestLightProxyPlacementMath();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorUiLayoutTests failure(s)\n";

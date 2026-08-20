@@ -8,7 +8,7 @@
 
 namespace game {
 
-inline bool IntersectSectorEditorHaloPlacementPlane(
+inline bool IntersectSectorEditorLightProxyPlacementPlane(
         Ray ray,
         Vector3 planePoint,
         Vector3 planeNormal,
@@ -27,7 +27,7 @@ inline bool IntersectSectorEditorHaloPlacementPlane(
             && std::isfinite(outIntersection.z);
 }
 
-inline Vector3 ApplySectorEditorHaloPlacementDrag(
+inline Vector3 ApplySectorEditorLightProxyPlacementDrag(
         Vector3 dragStartCenter,
         Vector3 dragStartIntersection,
         Vector3 currentIntersection,
@@ -41,7 +41,7 @@ inline Vector3 ApplySectorEditorHaloPlacementDrag(
                     scale));
 }
 
-inline Vector3 ApplySectorEditorHaloPlacementDepth(
+inline Vector3 ApplySectorEditorLightProxyPlacementDepth(
         Vector3 center,
         Vector3 cameraPosition,
         Vector3 cameraForward,

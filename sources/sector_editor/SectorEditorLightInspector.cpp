@@ -45,6 +45,7 @@ bool SameLightAtmosphere(
             && a.proxy.halo.edgeSoftness == b.proxy.halo.edgeSoftness
             && SameColor(a.proxy.halo.scatteringTint, b.proxy.halo.scatteringTint)
             && a.proxy.shaft.enabled == b.proxy.shaft.enabled
+            && SameVector3(a.proxy.shaft.originOffsetWorld, b.proxy.shaft.originOffsetWorld)
             && a.proxy.shaft.lengthScale == b.proxy.shaft.lengthScale
             && a.proxy.shaft.widthScale == b.proxy.shaft.widthScale
             && a.proxy.shaft.brightness == b.proxy.shaft.brightness
@@ -140,7 +141,7 @@ float LightAtmosphereInspectorContentHeight(
     if (atmosphere.proxy.halo.enabled) height += 11.0f * (rowH + gap);
     if (spotLight) {
         height += rowH + gap;
-        if (atmosphere.proxy.shaft.enabled) height += 8.0f * (rowH + gap);
+        if (atmosphere.proxy.shaft.enabled) height += 12.0f * (rowH + gap);
     }
     if (atmosphere.dust.enabled) height += 10.0f * (rowH + gap);
     return height;
@@ -301,6 +302,22 @@ void DrawLightAtmosphereInspector(
         }
         y += rowH + gap;
         if (atmosphere.proxy.shaft.enabled) {
+            drawFloat("sector_editor_light_proxy_shaft_offset_x", "Shaft offset X (m):",
+                    atmosphere.proxy.shaft.originOffsetWorld.x,
+                    uiState.lightProxyShaftOffsetXInput, -100000.0f, 100000.0f, 3);
+            drawFloat("sector_editor_light_proxy_shaft_offset_y", "Shaft offset Y (m):",
+                    atmosphere.proxy.shaft.originOffsetWorld.y,
+                    uiState.lightProxyShaftOffsetYInput, -100000.0f, 100000.0f, 3);
+            drawFloat("sector_editor_light_proxy_shaft_offset_z", "Shaft offset Z (m):",
+                    atmosphere.proxy.shaft.originOffsetWorld.z,
+                    uiState.lightProxyShaftOffsetZInput, -100000.0f, 100000.0f, 3);
+            if (engine::Button(ui, config, input, assets,
+                        "sector_editor_light_proxy_shaft_offset_reset",
+                        Rectangle{0.0f, y, contentW, rowH}, font, "Reset shaft offset")) {
+                atmosphere.proxy.shaft.originOffsetWorld = {};
+                commit();
+            }
+            y += rowH + gap;
             drawFloat("sector_editor_light_proxy_shaft_length", "Shaft length scale:",
                     atmosphere.proxy.shaft.lengthScale, uiState.lightProxyShaftLengthInput, 0.01f, 2.0f, 3);
             drawFloat("sector_editor_light_proxy_shaft_width", "Shaft width scale:",

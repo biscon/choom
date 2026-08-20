@@ -125,6 +125,32 @@ float fogTransmittance(vec3 position) {
     return 1.0 - clamp(amount, 0.0, 1.0);
 }
 
+float shaftOpticalProfileAt(
+        float sampleT,
+        vec3 rayDirection,
+        float visibleChord,
+        vec3 axis,
+        float lateralExponent,
+        float startFadeWidth,
+        float endFadeWidth) {
+    vec3 samplePosition = cameraPosition + rayDirection * sampleT;
+    float axial01 = clamp(
+            dot(samplePosition - coneApex, axis) / max(coneLength, 0.0001),
+            0.0,
+            1.0);
+    float localDiameter = max(
+            2.0 * coneBaseRadius * max(axial01, 0.01),
+            0.0001);
+    // The old hard clamp exposed a contour where chord/localDiameter crossed
+    // one. Smooth that transition before applying the authored edge profile.
+    float rawCoverage = max(visibleChord / localDiameter, 0.0);
+    float coverage = smoothstep(0.0, 1.0, rawCoverage);
+    float lateral = pow(coverage, lateralExponent);
+    float longitudinal = smoothstep(0.0, startFadeWidth, axial01)
+            * (1.0 - smoothstep(1.0 - endFadeWidth, 1.0, axial01));
+    return (1.0 - exp(-2.0 * coverage)) * lateral * longitudinal;
+}
+
 void main() {
     vec2 uv = gl_FragCoord.xy / max(viewportSize, vec2(1.0));
     vec2 ndc = uv * 2.0 - 1.0;
@@ -147,9 +173,6 @@ void main() {
     float midpointT = (enterT + exitT) * 0.5;
     vec3 midpoint = cameraPosition + rayDirection * midpointT;
     vec3 axis = safeNormalize(coneDirection, vec3(0.0, -1.0, 0.0));
-    float axial01 = clamp(dot(midpoint - coneApex, axis) / max(coneLength, 0.0001), 0.0, 1.0);
-    float localDiameter = max(2.0 * coneBaseRadius * max(axial01, 0.01), 0.0001);
-    float coverage = clamp(chord / localDiameter, 0.0, 1.0);
     // The authored midpoint now matches the old maximum softness. The upper
     // half adds a gentler tail without expanding the finite cone.
     float mappedSoftness = clamp(shaftParams.x * 2.0, 0.02, 2.0);
@@ -157,15 +180,37 @@ void main() {
     float extraSoftness = max(mappedSoftness - 1.0, 0.0);
     float lateralExponent = mix(0.2, 2.5, baseSoftness)
             + 2.0 * extraSoftness;
-    float lateral = pow(coverage, lateralExponent);
     float startFadeWidth = min(mix(0.02, 0.18, baseSoftness)
             + 0.12 * extraSoftness, 0.30);
     float endFadeWidth = min(mix(0.04, 0.35, baseSoftness)
             + 0.20 * extraSoftness, 0.55);
-    float longitudinal = smoothstep(0.0, startFadeWidth, axial01)
-            * (1.0 - smoothstep(1.0 - endFadeWidth, 1.0, axial01));
-    float profile = lateral * longitudinal;
-    float opticalThickness = (1.0 - exp(-2.0 * coverage)) * profile;
+    // Fixed, unrolled samples avoid the single-midpoint profile trough that
+    // becomes visible when an authored shaft origin is displaced.
+    float opticalThickness = (
+            shaftOpticalProfileAt(
+                    enterT + chord * (1.0 / 6.0),
+                    rayDirection,
+                    chord,
+                    axis,
+                    lateralExponent,
+                    startFadeWidth,
+                    endFadeWidth)
+            + shaftOpticalProfileAt(
+                    enterT + chord * 0.5,
+                    rayDirection,
+                    chord,
+                    axis,
+                    lateralExponent,
+                    startFadeWidth,
+                    endFadeWidth)
+            + shaftOpticalProfileAt(
+                    enterT + chord * (5.0 / 6.0),
+                    rayDirection,
+                    chord,
+                    axis,
+                    lateralExponent,
+                    startFadeWidth,
+                    endFadeWidth)) / 3.0;
     float phaseFacing = clamp(dot(axis, -rayDirection) * 0.5 + 0.5, 0.0, 1.0);
     float phase = mix(0.20, 1.0, pow(phaseFacing, 3.0));
     float scatterWeight = opticalThickness * phase * fogTransmittance(midpoint);
@@ -278,7 +323,11 @@ bool SectorAnalyticLightShaftRenderer::Apply(
                 || settings.brightness <= 0.0f
                 || !IsSectorLightAtmosphereSourceSelected(source, dynamicLights)) continue;
         SectorLightAtmosphereVolume volume;
-        if (!MakeSectorLightAtmosphereVolume(source, settings.lengthScale, 0.0f, volume)) continue;
+        if (!MakeSectorLightAtmosphereVolume(
+                    source,
+                    settings.lengthScale,
+                    settings.originOffsetWorld,
+                    volume)) continue;
         // The shared volume helper has a haze-oriented 0.05 lower scale bound;
         // shafts deliberately support the authored 0.01 minimum.
         const float authoredExtent = source.rangeWorld * settings.lengthScale;

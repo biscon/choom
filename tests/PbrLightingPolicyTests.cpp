@@ -519,8 +519,16 @@ void TestHdrEffectShaderAndPassPolicies()
                             != std::string::npos
                     && lightProxy.find("DrawMesh") == std::string::npos
                     && lightProxy.find("proxy.shaft") == std::string::npos
-                    && analyticShaft.find("float coverage = clamp(chord / localDiameter")
+                    && analyticShaft.find("float shaftOpticalProfileAt(")
                             != std::string::npos
+                    && analyticShaft.find("float coverage = smoothstep(0.0, 1.0, rawCoverage);")
+                            != std::string::npos
+                    && analyticShaft.find("chord * (1.0 / 6.0)")
+                            != std::string::npos
+                    && analyticShaft.find("chord * (5.0 / 6.0)")
+                            != std::string::npos
+                    && analyticShaft.find("float coverage = clamp(chord / localDiameter")
+                            == std::string::npos
                     && analyticShaft.find("mappedSoftness = clamp(shaftParams.x * 2.0")
                             != std::string::npos
                     && analyticShaft.find("+ 2.0 * extraSoftness") != std::string::npos

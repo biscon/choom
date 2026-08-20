@@ -63,6 +63,12 @@ bool MakeSectorLightAtmosphereVolume(
         float heightOffsetWorld,
         SectorLightAtmosphereVolume& outVolume);
 
+bool MakeSectorLightAtmosphereVolume(
+        const SectorLightAtmosphereSource& source,
+        float extentScale,
+        Vector3 originOffsetWorld,
+        SectorLightAtmosphereVolume& outVolume);
+
 bool IsSectorLightAtmosphereSourceDynamic(const SectorLightAtmosphereSource& source);
 bool IsSectorLightAtmosphereSourceSelected(
         const SectorLightAtmosphereSource& source,

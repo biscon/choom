@@ -39,9 +39,16 @@ struct LightPilotLightState {
     float targetDistanceWorld = 4.0f;
 };
 
-struct HaloPlacementState {
+enum class LightProxyPlacementKind {
+    None,
+    Halo,
+    Shaft
+};
+
+struct LightProxyPlacementState {
     bool active = false;
     bool dragging = false;
+    LightProxyPlacementKind proxyKind = LightProxyPlacementKind::None;
     LightPilotKind kind = LightPilotKind::None;
     int lightId = -1;
     Vector3 originalOffsetWorld = {};
@@ -55,7 +62,7 @@ struct LightEditingState {
     LightDragState lightDrag;
     LightEditTransactionState lightEdit;
     LightPilotLightState lightPilot;
-    HaloPlacementState haloPlacement;
+    LightProxyPlacementState proxyPlacement;
 };
 
 } // namespace game

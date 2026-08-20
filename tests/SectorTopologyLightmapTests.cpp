@@ -1469,6 +1469,8 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) == staticSpotHash,
           "default static spot shadow state preserves the existing source hash");
     changedStaticSpotLight.staticSpotLights.front().atmosphere.proxy.shaft.enabled = true;
+    changedStaticSpotLight.staticSpotLights.front().atmosphere.proxy.shaft.originOffsetWorld =
+            Vector3{1.0f, 2.0f, 3.0f};
     changedStaticSpotLight.staticSpotLights.front().atmosphere.proxy.shaft.maxExtinction = 0.9f;
     changedStaticSpotLight.staticSpotLights.front().atmosphere.proxy.shaft.scatteringTint = BLUE;
     Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) == staticSpotHash,
@@ -3340,6 +3342,17 @@ void TestLightAtmosphereVolumeShapesAndProbeFallback()
                   && !game::IsPointInsideSectorLightAtmosphereVolume(
                           spotVolume, Vector3{0.0f, -0.5f, 8.1f}),
           "spot-light atmosphere offsets and bounds its finite cone");
+
+    game::SectorLightAtmosphereVolume translatedSpotVolume;
+    Check(game::MakeSectorLightAtmosphereVolume(
+                  spot,
+                  1.0f,
+                  Vector3{1.5f, 2.0f, -0.25f},
+                  translatedSpotVolume)
+                  && SameVector(translatedSpotVolume.originWorld, Vector3{1.5f, 2.0f, -0.25f})
+                  && SameVector(translatedSpotVolume.directionWorld, spotVolume.directionWorld)
+                  && SameVector(translatedSpotVolume.boundsCenterWorld, Vector3{1.5f, 2.0f, 3.75f}),
+          "spot-light atmosphere translates its full cone without changing direction");
 
     game::SectorLightHazeStaticLightingSamples grid;
     for (std::size_t index = 0; index < grid.corners.size(); ++index) {

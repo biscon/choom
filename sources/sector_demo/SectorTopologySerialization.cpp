@@ -2352,6 +2352,12 @@ Json WriteLightProxySettings(const SectorLightProxySettings& source)
     if (!halo.empty()) value["halo"] = std::move(halo);
     Json shaft = Json::object();
     if (settings.shaft.enabled != defaults.shaft.enabled) shaft["enabled"] = settings.shaft.enabled;
+    if (settings.shaft.originOffsetWorld.x != defaults.shaft.originOffsetWorld.x
+            || settings.shaft.originOffsetWorld.y != defaults.shaft.originOffsetWorld.y
+            || settings.shaft.originOffsetWorld.z != defaults.shaft.originOffsetWorld.z) {
+        shaft["originOffsetWorld"] = WriteVector3(
+                settings.shaft.originOffsetWorld, "light atmosphere shaft origin offset");
+    }
     if (settings.shaft.lengthScale != defaults.shaft.lengthScale) shaft["lengthScale"] = settings.shaft.lengthScale;
     if (settings.shaft.widthScale != defaults.shaft.widthScale) shaft["widthScale"] = settings.shaft.widthScale;
     if (settings.shaft.brightness != defaults.shaft.brightness) shaft["brightness"] = settings.shaft.brightness;
@@ -3003,6 +3009,11 @@ SectorLightProxySettings ReadLightProxySettings(const Json& value, const std::st
     if (shaftIt != value.end()) {
         if (!shaftIt->is_object()) Fail(context + ".shaft must be an object");
         settings.shaft.enabled = ReadOptionalBool(*shaftIt, "enabled", context + ".shaft", settings.shaft.enabled);
+        const auto originOffsetIt = shaftIt->find("originOffsetWorld");
+        if (originOffsetIt != shaftIt->end()) {
+            settings.shaft.originOffsetWorld = ReadVector3(
+                    *originOffsetIt, context + ".shaft.originOffsetWorld");
+        }
         settings.shaft.lengthScale = ReadOptionalClampedFloat(*shaftIt, "lengthScale", context + ".shaft", settings.shaft.lengthScale, 0.01f, 2.0f);
         settings.shaft.widthScale = ReadOptionalClampedFloat(*shaftIt, "widthScale", context + ".shaft", settings.shaft.widthScale, 0.01f, 2.0f);
         settings.shaft.brightness = ReadOptionalClampedFloat(*shaftIt, "brightness", context + ".shaft", settings.shaft.brightness, 0.0f, 16.0f);

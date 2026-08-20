@@ -211,6 +211,7 @@ struct SectorLightProxyHaloSettings {
 
 struct SectorLightProxyShaftSettings {
     bool enabled = false;
+    Vector3 originOffsetWorld = {};
     float lengthScale = 0.65f;
     float widthScale = 0.75f;
     float brightness = 0.05f;

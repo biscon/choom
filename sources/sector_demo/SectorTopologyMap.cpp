@@ -101,6 +101,18 @@ SectorLightProxySettings NormalizeSectorLightProxySettings(SectorLightProxySetti
     settings.halo.edgeSoftness = std::clamp(
             FiniteOr(settings.halo.edgeSoftness, defaults.halo.edgeSoftness), 0.01f, 1.0f);
     settings.halo.scatteringTint.a = 255;
+    settings.shaft.originOffsetWorld.x = std::clamp(
+            FiniteOr(settings.shaft.originOffsetWorld.x, defaults.shaft.originOffsetWorld.x),
+            -100000.0f,
+            100000.0f);
+    settings.shaft.originOffsetWorld.y = std::clamp(
+            FiniteOr(settings.shaft.originOffsetWorld.y, defaults.shaft.originOffsetWorld.y),
+            -100000.0f,
+            100000.0f);
+    settings.shaft.originOffsetWorld.z = std::clamp(
+            FiniteOr(settings.shaft.originOffsetWorld.z, defaults.shaft.originOffsetWorld.z),
+            -100000.0f,
+            100000.0f);
     settings.shaft.lengthScale = std::clamp(
             FiniteOr(settings.shaft.lengthScale, defaults.shaft.lengthScale), 0.01f, 2.0f);
     settings.shaft.widthScale = std::clamp(
@@ -138,6 +150,9 @@ bool IsDefaultSectorLightProxySettings(const SectorLightProxySettings& settings)
             && value.halo.edgeSoftness == defaults.halo.edgeSoftness
             && SameRgb(value.halo.scatteringTint, defaults.halo.scatteringTint)
             && value.shaft.enabled == defaults.shaft.enabled
+            && value.shaft.originOffsetWorld.x == defaults.shaft.originOffsetWorld.x
+            && value.shaft.originOffsetWorld.y == defaults.shaft.originOffsetWorld.y
+            && value.shaft.originOffsetWorld.z == defaults.shaft.originOffsetWorld.z
             && value.shaft.lengthScale == defaults.shaft.lengthScale
             && value.shaft.widthScale == defaults.shaft.widthScale
             && value.shaft.brightness == defaults.shaft.brightness

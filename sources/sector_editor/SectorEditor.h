@@ -375,10 +375,10 @@ private:
     bool StartLightPilot();
     bool ApplyLightPilotFromPreviewPose();
     void CancelLightPilotWithPreviewRestore(const char* message);
-    bool StartHaloPlacement();
-    bool PreviewHaloPlacementOffset(Vector3 centerOffsetWorld);
-    bool ApplyHaloPlacement();
-    void CancelHaloPlacement(const char* message);
+    bool StartLightProxyPlacement(LightProxyPlacementKind proxyKind);
+    bool PreviewLightProxyPlacementOffset(Vector3 offsetWorld);
+    bool ApplyLightProxyPlacement();
+    void CancelLightProxyPlacement(const char* message);
     bool RebuildSectorCollisionWorld();
     SectorFpsVerticalContext BuildGameplayVerticalContext();
     void RefreshGameplaySectorAndVerticalContext();

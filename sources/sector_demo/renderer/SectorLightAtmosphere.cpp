@@ -171,11 +171,25 @@ bool MakeSectorLightAtmosphereVolume(
         float heightOffsetWorld,
         SectorLightAtmosphereVolume& outVolume)
 {
+    return MakeSectorLightAtmosphereVolume(
+            source,
+            extentScale,
+            Vector3{0.0f, heightOffsetWorld, 0.0f},
+            outVolume);
+}
+
+bool MakeSectorLightAtmosphereVolume(
+        const SectorLightAtmosphereSource& source,
+        float extentScale,
+        Vector3 originOffsetWorld,
+        SectorLightAtmosphereVolume& outVolume)
+{
     const float extent = source.rangeWorld * std::clamp(extentScale, 0.05f, 2.0f);
-    if (!std::isfinite(extent) || extent <= 0.0f || !std::isfinite(heightOffsetWorld)) return false;
-    const Vector3 originWorld = Vector3Add(
-            source.positionWorld,
-            Vector3{0.0f, heightOffsetWorld, 0.0f});
+    if (!std::isfinite(extent) || extent <= 0.0f
+            || !std::isfinite(originOffsetWorld.x)
+            || !std::isfinite(originOffsetWorld.y)
+            || !std::isfinite(originOffsetWorld.z)) return false;
+    const Vector3 originWorld = Vector3Add(source.positionWorld, originOffsetWorld);
     outVolume = SectorLightAtmosphereVolume{};
     outVolume.source = &source;
     outVolume.originWorld = originWorld;

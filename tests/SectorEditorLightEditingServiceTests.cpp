@@ -245,9 +245,10 @@ void TestDeleteSelectedStaticLightDirtiesAndClearsState()
     lightState.lightPilot.active = true;
     lightState.lightPilot.kind = game::LightPilotKind::StaticPoint;
     lightState.lightPilot.lightId = 7;
-    lightState.haloPlacement.active = true;
-    lightState.haloPlacement.kind = game::LightPilotKind::StaticPoint;
-    lightState.haloPlacement.lightId = 7;
+    lightState.proxyPlacement.active = true;
+    lightState.proxyPlacement.proxyKind = game::LightProxyPlacementKind::Halo;
+    lightState.proxyPlacement.kind = game::LightPilotKind::StaticPoint;
+    lightState.proxyPlacement.lightId = 7;
     std::string statusText;
     ResetDirty(state, documentState, statusText);
 
@@ -264,8 +265,8 @@ void TestDeleteSelectedStaticLightDirtiesAndClearsState()
     Check(!lightState.lightDrag.active && !lightState.lightEdit.active, "delete selected static light clears drag/edit state");
     Check(result.previewPoseRestoreNeeded && !lightState.lightPilot.active,
           "delete selected piloted point light requests preview-pose restoration");
-    Check(!lightState.haloPlacement.active,
-          "delete selected light clears its halo placement transaction");
+    Check(!lightState.proxyPlacement.active,
+          "delete selected light clears its proxy placement transaction");
     CheckDirtyOnce(state, documentState, statusText, "Deleted static light 7");
 }
 
@@ -620,7 +621,7 @@ void TestAtmosphereEditUsesDocumentMutationBoundary()
     CheckClean(state, documentState, statusText, "old");
 }
 
-void TestHaloPlacementApplyAndCancelTiming()
+void TestProxyPlacementApplyAndCancelTiming()
 {
     game::SectorEditorState state;
     game::SectorEditorDocumentState documentState;
@@ -648,10 +649,13 @@ void TestHaloPlacementApplyAndCancelTiming()
             uiState,
             inspectorIdUiState,
             statusText);
-    Check(service.BeginHaloPlacement(game::LightPilotKind::StaticPoint, 12),
+    Check(service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Halo,
+                  game::LightPilotKind::StaticPoint,
+                  12),
           "enabled analytic halo begins placement");
     const game::SectorEditorLightMutationResult preview =
-            service.PreviewHaloPlacement(Vector3{1.0f, -2.0f, 3.0f});
+            service.PreviewProxyPlacement(Vector3{1.0f, -2.0f, 3.0f});
     Check(preview.changed && preview.dynamicLightRendererRefreshNeeded,
           "halo placement preview requests only a renderer source refresh");
     Check(Near(documentState.map.topologyMap.staticLights.front()
@@ -660,32 +664,108 @@ void TestHaloPlacementApplyAndCancelTiming()
           "halo placement preview stages the offset on the selected light");
     CheckClean(state, documentState, statusText, "Placing static light 12 halo");
 
-    const game::SectorEditorLightMutationResult applied = service.ApplyHaloPlacement();
+    const game::SectorEditorLightMutationResult applied = service.ApplyProxyPlacement();
     Check(applied.changed && applied.dynamicLightRendererRefreshNeeded
-                  && !lightState.haloPlacement.active,
+                  && !lightState.proxyPlacement.active,
           "applying halo placement finishes the transaction");
     CheckDirtyOnce(state, documentState, statusText, "Placed static light 12 halo");
 
     ResetDirty(state, documentState, statusText);
-    Check(service.BeginHaloPlacement(game::LightPilotKind::StaticPoint, 12),
+    Check(service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Halo,
+                  game::LightPilotKind::StaticPoint,
+                  12),
           "placed halo can begin another placement transaction");
-    service.PreviewHaloPlacement(Vector3{4.0f, 5.0f, 6.0f});
+    service.PreviewProxyPlacement(Vector3{4.0f, 5.0f, 6.0f});
     const game::SectorEditorLightMutationResult cancelled =
-            service.CancelHaloPlacementData("Halo placement cancelled");
+            service.CancelProxyPlacementData("Halo placement cancelled");
     const Vector3 restored = documentState.map.topologyMap.staticLights.front()
                                      .atmosphere.proxy.halo.centerOffsetWorld;
     Check(cancelled.changed && cancelled.dynamicLightRendererRefreshNeeded
-                  && !lightState.haloPlacement.active,
+                  && !lightState.proxyPlacement.active,
           "cancelling halo placement finishes the transaction and refreshes preview");
     Check(Near(restored.x, 1.0f) && Near(restored.y, -2.0f) && Near(restored.z, 3.0f),
           "cancelling halo placement restores the original offset");
     CheckClean(state, documentState, statusText, "Halo placement cancelled");
 
     documentState.map.topologyMap.staticLights.front().atmosphere.proxy.halo.enabled = false;
-    Check(!service.BeginHaloPlacement(game::LightPilotKind::StaticPoint, 12),
+    Check(!service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Halo,
+                  game::LightPilotKind::StaticPoint,
+                  12),
           "disabled halo cannot begin placement");
-    Check(!service.BeginHaloPlacement(game::LightPilotKind::StaticPoint, 999),
+    Check(!service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Halo,
+                  game::LightPilotKind::StaticPoint,
+                  999),
           "missing light cannot begin halo placement");
+
+    game::SectorTopologyStaticSpotLight spot;
+    spot.id = 13;
+    spot.atmosphere.proxy.shaft.enabled = true;
+    documentState.map.topologyMap.staticSpotLights.push_back(spot);
+    ResetDirty(state, documentState, statusText);
+    Check(service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Shaft,
+                  game::LightPilotKind::StaticSpot,
+                  13),
+          "enabled analytic shaft begins placement for a spotlight");
+    const game::SectorEditorLightMutationResult shaftPreview =
+            service.PreviewProxyPlacement(Vector3{0.25f, 0.75f, -0.5f});
+    const Vector3 stagedShaftOffset = documentState.map.topologyMap.staticSpotLights.front()
+                                                .atmosphere.proxy.shaft.originOffsetWorld;
+    Check(shaftPreview.changed && shaftPreview.dynamicLightRendererRefreshNeeded
+                  && Near(stagedShaftOffset.x, 0.25f)
+                  && Near(stagedShaftOffset.y, 0.75f)
+                  && Near(stagedShaftOffset.z, -0.5f),
+          "shaft placement preview stages its independent origin offset");
+    CheckClean(state, documentState, statusText, "Placing static spot 13 shaft");
+    const game::SectorEditorLightMutationResult shaftApplied = service.ApplyProxyPlacement();
+    Check(shaftApplied.changed && shaftApplied.dynamicLightRendererRefreshNeeded
+                  && !lightState.proxyPlacement.active,
+          "applying shaft placement finishes the transaction");
+    CheckDirtyOnce(state, documentState, statusText, "Placed static spot 13 shaft");
+
+    ResetDirty(state, documentState, statusText);
+    Check(service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Shaft,
+                  game::LightPilotKind::StaticSpot,
+                  13),
+          "placed shaft can begin another placement transaction");
+    service.PreviewProxyPlacement(Vector3{5.0f, 6.0f, 7.0f});
+    const game::SectorEditorLightMutationResult shaftCancelled =
+            service.CancelProxyPlacementData("Shaft placement cancelled");
+    const Vector3 restoredShaftOffset = documentState.map.topologyMap.staticSpotLights.front()
+                                                 .atmosphere.proxy.shaft.originOffsetWorld;
+    Check(shaftCancelled.changed && shaftCancelled.dynamicLightRendererRefreshNeeded
+                  && Near(restoredShaftOffset.x, 0.25f)
+                  && Near(restoredShaftOffset.y, 0.75f)
+                  && Near(restoredShaftOffset.z, -0.5f),
+          "cancelling shaft placement restores its original offset");
+    CheckClean(state, documentState, statusText, "Shaft placement cancelled");
+
+    Check(!service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Shaft,
+                  game::LightPilotKind::StaticPoint,
+                  12),
+          "point lights cannot begin shaft placement");
+    documentState.map.topologyMap.staticSpotLights.front().atmosphere.proxy.shaft.enabled = false;
+    Check(!service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Shaft,
+                  game::LightPilotKind::StaticSpot,
+                  13),
+          "disabled shaft cannot begin placement");
+
+    game::SectorTopologyDynamicSpotLight dynamicSpot;
+    dynamicSpot.id = 14;
+    dynamicSpot.atmosphere.proxy.shaft.enabled = true;
+    documentState.map.topologyMap.dynamicSpotLights.push_back(dynamicSpot);
+    Check(service.BeginProxyPlacement(
+                  game::LightProxyPlacementKind::Shaft,
+                  game::LightPilotKind::DynamicSpot,
+                  14),
+          "enabled dynamic spotlight shaft begins placement");
+    service.CancelProxyPlacementData(nullptr);
 }
 
 } // namespace
@@ -703,7 +783,7 @@ int main()
     TestPointLightPilotApplyAndCancelTiming();
     TestStaticShadowEditsUseDocumentMutationBoundary();
     TestAtmosphereEditUsesDocumentMutationBoundary();
-    TestHaloPlacementApplyAndCancelTiming();
+    TestProxyPlacementApplyAndCancelTiming();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorLightEditingServiceTests failure(s)\n";

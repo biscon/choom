@@ -1,5 +1,5 @@
 #include "sector_editor/preview/SectorEditorPreviewOverlay.h"
-#include "sector_editor/preview/SectorEditorHaloPlacement.h"
+#include "sector_editor/preview/SectorEditorLightProxyPlacement.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 
 #include "engine/render/ColorTransfer.h"
@@ -57,13 +57,14 @@ bool IsPreviewOverlayMouseInteractive(const SectorEditorPreviewControllerState& 
     return !controllerState.freeflyController.mouseLookEnabled;
 }
 
-bool SelectedHaloPlacementInfo(
+bool SelectedLightProxyPlacementInfo(
         const SectorTopologyMap& topologyMap,
         const SelectionState& selectionState,
         LightPilotKind& outKind,
         int& outLightId,
         Vector3& outLightPositionWorld,
-        const SectorLightProxyHaloSettings*& outHalo)
+        const SectorLightProxySettings*& outProxy,
+        bool& outSpotLight)
 {
     if (selectionState.topologySelectionKind == TopologySelectionKind::StaticLight) {
         const SectorTopologyStaticPointLight* light = FindSectorTopologyStaticLight(
@@ -72,7 +73,8 @@ bool SelectedHaloPlacementInfo(
         outKind = LightPilotKind::StaticPoint;
         outLightId = light->id;
         outLightPositionWorld = SectorAuthoringToWorldPosition(light->position);
-        outHalo = &light->atmosphere.proxy.halo;
+        outProxy = &light->atmosphere.proxy;
+        outSpotLight = false;
         return true;
     }
     if (selectionState.topologySelectionKind == TopologySelectionKind::StaticSpotLight) {
@@ -82,7 +84,8 @@ bool SelectedHaloPlacementInfo(
         outKind = LightPilotKind::StaticSpot;
         outLightId = light->id;
         outLightPositionWorld = SectorAuthoringToWorldPosition(light->position);
-        outHalo = &light->atmosphere.proxy.halo;
+        outProxy = &light->atmosphere.proxy;
+        outSpotLight = true;
         return true;
     }
     if (selectionState.topologySelectionKind == TopologySelectionKind::DynamicLight) {
@@ -92,7 +95,8 @@ bool SelectedHaloPlacementInfo(
         outKind = LightPilotKind::DynamicPoint;
         outLightId = light->id;
         outLightPositionWorld = SectorAuthoringToWorldPosition(light->position);
-        outHalo = &light->atmosphere.proxy.halo;
+        outProxy = &light->atmosphere.proxy;
+        outSpotLight = false;
         return true;
     }
     if (selectionState.topologySelectionKind == TopologySelectionKind::DynamicSpotLight) {
@@ -102,7 +106,8 @@ bool SelectedHaloPlacementInfo(
         outKind = LightPilotKind::DynamicSpot;
         outLightId = light->id;
         outLightPositionWorld = SectorAuthoringToWorldPosition(light->position);
-        outHalo = &light->atmosphere.proxy.halo;
+        outProxy = &light->atmosphere.proxy;
+        outSpotLight = true;
         return true;
     }
     return false;
@@ -1483,8 +1488,15 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             case PreviewDebugOverlayTab::Controls:
                 if (context.lightState.lightPilot.active) {
                     addWrappedLine("pilot light: WASD move, mouse look, Space/Ctrl up/down, hold Shift for precision movement. Unlock cursor with F11 to click Apply or Cancel.");
-                } else if (context.lightState.haloPlacement.active) {
-                    addWrappedLine("place halo: drag the halo handle across the view, use the mouse wheel for depth, and hold Shift for precision. Apply saves the offset; Cancel restores it.");
+                } else if (context.lightState.proxyPlacement.active) {
+                    const char* proxyName = context.lightState.proxyPlacement.proxyKind
+                                    == LightProxyPlacementKind::Shaft
+                            ? "shaft"
+                            : "halo";
+                    addWrappedLine(TextFormat(
+                            "place %s: drag the %s handle across the view, use the mouse wheel for depth, and hold Shift for precision. Apply saves the offset; Cancel restores it.",
+                            proxyName,
+                            proxyName));
                 } else if (controllerState.previewControlMode == SectorPreviewControlMode::Gameplay) {
                     addWrappedLine("movement: WASD move, Space jump, Shift run, Ctrl toggle crouch, mouse look. F11 unlocks cursor for UI tabs.");
                 } else {
@@ -1531,33 +1543,48 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     LightPilotKind selectedLightKind = LightPilotKind::None;
     int selectedLightId = -1;
     Vector3 selectedLightPositionWorld = {};
-    const SectorLightProxyHaloSettings* selectedHalo = nullptr;
-    const bool hasSelectedLight = SelectedHaloPlacementInfo(
+    const SectorLightProxySettings* selectedProxy = nullptr;
+    bool selectedSpotLight = false;
+    const bool hasSelectedLight = SelectedLightProxyPlacementInfo(
             topologyMap,
             selectionState,
             selectedLightKind,
             selectedLightId,
             selectedLightPositionWorld,
-            selectedHalo);
+            selectedProxy,
+            selectedSpotLight);
     const bool hasSelectedHalo = hasSelectedLight
-            && selectedHalo != nullptr
-            && selectedHalo->enabled;
+            && selectedProxy != nullptr
+            && selectedProxy->halo.enabled;
+    const bool hasSelectedShaft = hasSelectedLight
+            && selectedSpotLight
+            && selectedProxy != nullptr
+            && selectedProxy->shaft.enabled;
 
-    HaloPlacementState& haloPlacement = context.lightState.haloPlacement;
-    if (haloPlacement.active) {
-        if (!hasSelectedHalo
-                || haloPlacement.kind != selectedLightKind
-                || haloPlacement.lightId != selectedLightId) {
-            result.requestCancelHaloPlacement = true;
-            haloPlacement.dragging = false;
+    LightProxyPlacementState& proxyPlacement = context.lightState.proxyPlacement;
+    if (proxyPlacement.active) {
+        const bool selectedEffectAvailable = proxyPlacement.proxyKind
+                        == LightProxyPlacementKind::Halo
+                ? hasSelectedHalo
+                : hasSelectedShaft;
+        if (!selectedEffectAvailable
+                || proxyPlacement.kind != selectedLightKind
+                || proxyPlacement.lightId != selectedLightId) {
+            result.requestCancelProxyPlacement = true;
+            proxyPlacement.dragging = false;
         } else {
+            const bool placingShaft = proxyPlacement.proxyKind
+                    == LightProxyPlacementKind::Shaft;
+            const Vector3 offsetWorld = placingShaft
+                    ? selectedProxy->shaft.originOffsetWorld
+                    : selectedProxy->halo.centerOffsetWorld;
             const Camera3D camera = preview.RenderCamera();
             Vector3 cameraForward = Vector3Subtract(camera.target, camera.position);
             cameraForward = Vector3LengthSqr(cameraForward) > 0.000001f
                     ? Vector3Normalize(cameraForward)
                     : Vector3{0.0f, 0.0f, -1.0f};
             Vector3 previewCenterWorld = Vector3Add(
-                    selectedLightPositionWorld, selectedHalo->centerOffsetWorld);
+                    selectedLightPositionWorld, offsetWorld);
             const Vector3 centerFromCamera = Vector3Subtract(
                     previewCenterWorld, camera.position);
             const bool centerInFront = Vector3DotProduct(
@@ -1578,10 +1605,10 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     && !Contains(panel, mousePosition);
             const float handleDx = mousePosition.x - centerScreen.x;
             const float handleDy = mousePosition.y - centerScreen.y;
-            constexpr float HaloHandleRadius = 18.0f;
+            constexpr float ProxyHandleRadius = 18.0f;
             const bool handleHovered = centerInFront
                     && handleDx * handleDx + handleDy * handleDy
-                            <= HaloHandleRadius * HaloHandleRadius;
+                            <= ProxyHandleRadius * ProxyHandleRadius;
             const bool precision = input.IsKeyDown(KEY_LEFT_SHIFT)
                     || input.IsKeyDown(KEY_RIGHT_SHIFT);
 
@@ -1597,38 +1624,38 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                                 static_cast<int>(EditorWidth),
                                 static_cast<int>(EditorHeight));
                         Vector3 intersection = {};
-                        if (!IntersectSectorEditorHaloPlacementPlane(
+                        if (!IntersectSectorEditorLightProxyPlacementPlane(
                                     ray,
                                     previewCenterWorld,
                                     cameraForward,
                                     intersection)) return;
-                        haloPlacement.dragging = true;
-                        haloPlacement.dragPlanePointWorld = previewCenterWorld;
-                        haloPlacement.dragPlaneNormalWorld = cameraForward;
-                        haloPlacement.dragStartIntersectionWorld = intersection;
-                        haloPlacement.dragStartCenterWorld = previewCenterWorld;
+                        proxyPlacement.dragging = true;
+                        proxyPlacement.dragPlanePointWorld = previewCenterWorld;
+                        proxyPlacement.dragPlaneNormalWorld = cameraForward;
+                        proxyPlacement.dragStartIntersectionWorld = intersection;
+                        proxyPlacement.dragStartCenterWorld = previewCenterWorld;
                         engine::ConsumeEvent(event);
                     });
 
-            if (haloPlacement.dragging && input.IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+            if (proxyPlacement.dragging && input.IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
                 const Ray ray = GetScreenToWorldRayEx(
                         mousePosition,
                         camera,
                         static_cast<int>(EditorWidth),
                         static_cast<int>(EditorHeight));
                 Vector3 intersection = {};
-                if (IntersectSectorEditorHaloPlacementPlane(
+                if (IntersectSectorEditorLightProxyPlacementPlane(
                             ray,
-                            haloPlacement.dragPlanePointWorld,
-                            haloPlacement.dragPlaneNormalWorld,
+                            proxyPlacement.dragPlanePointWorld,
+                            proxyPlacement.dragPlaneNormalWorld,
                             intersection)) {
-                    previewCenterWorld = ApplySectorEditorHaloPlacementDrag(
-                            haloPlacement.dragStartCenterWorld,
-                            haloPlacement.dragStartIntersectionWorld,
+                    previewCenterWorld = ApplySectorEditorLightProxyPlacementDrag(
+                            proxyPlacement.dragStartCenterWorld,
+                            proxyPlacement.dragStartIntersectionWorld,
                             intersection,
                             precision);
-                    result.previewHaloOffsetChanged = true;
-                    result.previewHaloOffsetWorld = Vector3Subtract(
+                    result.previewProxyOffsetChanged = true;
+                    result.previewProxyOffsetWorld = Vector3Subtract(
                             previewCenterWorld, selectedLightPositionWorld);
                 }
             }
@@ -1637,8 +1664,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     true,
                     [&](engine::InputEvent& event) {
                         if (event.mouseButton.button != MOUSE_LEFT_BUTTON
-                                || !haloPlacement.dragging) return;
-                        haloPlacement.dragging = false;
+                                || !proxyPlacement.dragging) return;
+                        proxyPlacement.dragging = false;
                         engine::ConsumeEvent(event);
                     });
             input.ForEachEvent(
@@ -1646,26 +1673,26 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     true,
                     [&](engine::InputEvent& event) {
                         if (!mouseOverWorld) return;
-                        previewCenterWorld = ApplySectorEditorHaloPlacementDepth(
+                        previewCenterWorld = ApplySectorEditorLightProxyPlacementDepth(
                                 previewCenterWorld,
                                 camera.position,
                                 cameraForward,
                                 event.wheel.value,
                                 precision);
-                        result.previewHaloOffsetChanged = true;
-                        result.previewHaloOffsetWorld = Vector3Subtract(
+                        result.previewProxyOffsetChanged = true;
+                        result.previewProxyOffsetWorld = Vector3Subtract(
                                 previewCenterWorld, selectedLightPositionWorld);
                         engine::ConsumeEvent(event);
                     });
 
             if (centerInFront) {
                 DrawLineEx(lightScreen, centerScreen, 2.0f, Color{255, 190, 72, 210});
-                DrawCircleV(centerScreen, HaloHandleRadius, Color{20, 22, 28, 220});
+                DrawCircleV(centerScreen, ProxyHandleRadius, Color{20, 22, 28, 220});
                 DrawCircleLines(
                         static_cast<int>(std::round(centerScreen.x)),
                         static_cast<int>(std::round(centerScreen.y)),
-                        HaloHandleRadius,
-                        handleHovered || haloPlacement.dragging
+                        ProxyHandleRadius,
+                        handleHovered || proxyPlacement.dragging
                                 ? Color{255, 236, 122, 255}
                                 : Color{255, 190, 72, 245});
                 DrawLineEx(
@@ -1683,7 +1710,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         assets,
                         Rectangle{centerScreen.x + 24.0f, centerScreen.y - 12.0f, 190.0f, 24.0f},
                         smallFont,
-                        "Halo center",
+                        placingShaft ? "Shaft origin" : "Halo center",
                         engine::UITextJustify::Left,
                         Color{255, 236, 122, 255},
                         true);
@@ -1694,16 +1721,32 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     DrawRectangleRec(panel, Color{12, 15, 20, 205});
     DrawRectangleLinesEx(panel, config.borderThickness, config.borderColor);
 
+    const float actionY = panel.y + padding - 2.0f;
+    const SectorEditorPreviewLightStartActionLayout lightStartActions =
+            BuildSectorEditorPreviewLightStartActionLayout(
+                    panel,
+                    padding,
+                    actionY,
+                    hasSelectedHalo,
+                    hasSelectedShaft);
+    float actionReservedWidth = 0.0f;
+    if (mouseInteractive && context.lightState.lightPilot.active) {
+        actionReservedWidth = 158.0f;
+    } else if (mouseInteractive && context.lightState.proxyPlacement.active) {
+        actionReservedWidth = 234.0f;
+    } else if (mouseInteractive
+            && hasSelectedLight
+            && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly) {
+        actionReservedWidth = lightStartActions.reservedWidth + 10.0f;
+    }
     engine::Text(
             smallConfig,
             assets,
             Rectangle{
                     panel.x + padding,
                     panel.y + padding,
-                    mouseInteractive && (context.lightState.lightPilot.active
-                            || context.lightState.haloPlacement.active
-                            || (hasSelectedLight && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly))
-                            ? contentW - 300.0f
+                    actionReservedWidth > 0.0f
+                            ? contentW - actionReservedWidth
                             : contentW,
                     stripH},
             smallFont,
@@ -1713,7 +1756,6 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             true);
 
     float actionsRight = panel.x + panel.width - padding;
-    const float actionY = panel.y + padding - 2.0f;
     if (mouseInteractive) {
         if (context.lightState.lightPilot.active) {
             if (engine::Button(
@@ -1739,17 +1781,20 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         "Apply")) {
                 result.requestApplyLightPilot = true;
             }
-        } else if (context.lightState.haloPlacement.active) {
+        } else if (context.lightState.proxyPlacement.active) {
+            const bool placingShaft = context.lightState.proxyPlacement.proxyKind
+                    == LightProxyPlacementKind::Shaft;
+            const char* proxyId = placingShaft ? "shaft" : "halo";
             if (engine::Button(
                         ui,
                         smallConfig,
                         input,
                         assets,
-                        "sector_editor_preview_halo_place_cancel",
+                        TextFormat("sector_editor_preview_%s_place_cancel", proxyId),
                         Rectangle{actionsRight - 72.0f, actionY, 72.0f, 28.0f},
                         smallFont,
                         "Cancel")) {
-                result.requestCancelHaloPlacement = true;
+                result.requestCancelProxyPlacement = true;
             }
             actionsRight -= 82.0f;
             if (engine::Button(
@@ -1757,11 +1802,11 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         smallConfig,
                         input,
                         assets,
-                        "sector_editor_preview_halo_place_apply",
+                        TextFormat("sector_editor_preview_%s_place_apply", proxyId),
                         Rectangle{actionsRight - 66.0f, actionY, 66.0f, 28.0f},
                         smallFont,
                         "Apply")) {
-                result.requestApplyHaloPlacement = true;
+                result.requestApplyProxyPlacement = true;
             }
             actionsRight -= 76.0f;
             if (engine::Button(
@@ -1769,12 +1814,12 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         smallConfig,
                         input,
                         assets,
-                        "sector_editor_preview_halo_place_reset",
+                        TextFormat("sector_editor_preview_%s_place_reset", proxyId),
                         Rectangle{actionsRight - 66.0f, actionY, 66.0f, 28.0f},
                         smallFont,
                         "Reset")) {
-                result.previewHaloOffsetChanged = true;
-                result.previewHaloOffsetWorld = {};
+                result.previewProxyOffsetChanged = true;
+                result.previewProxyOffsetWorld = {};
             }
         } else if (hasSelectedLight && controllerState.previewControlMode == SectorPreviewControlMode::FreeFly) {
             if (engine::Button(
@@ -1783,23 +1828,35 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                         input,
                         assets,
                         "sector_editor_preview_light_pilot_start",
-                        Rectangle{actionsRight - 92.0f, actionY, 92.0f, 28.0f},
+                        lightStartActions.pilot,
                         smallFont,
                         "Pilot")) {
                 result.requestStartLightPilot = true;
             }
             if (hasSelectedHalo) {
-                actionsRight -= 102.0f;
                 if (engine::Button(
                             ui,
                             smallConfig,
                             input,
                             assets,
                             "sector_editor_preview_halo_place_start",
-                            Rectangle{actionsRight - 104.0f, actionY, 104.0f, 28.0f},
+                            lightStartActions.halo,
                             smallFont,
                             "Place Halo")) {
-                    result.requestStartHaloPlacement = true;
+                    result.requestStartProxyPlacement = LightProxyPlacementKind::Halo;
+                }
+            }
+            if (hasSelectedShaft) {
+                if (engine::Button(
+                            ui,
+                            smallConfig,
+                            input,
+                            assets,
+                            "sector_editor_preview_shaft_place_start",
+                            lightStartActions.shaft,
+                            smallFont,
+                            "Place Shaft")) {
+                    result.requestStartProxyPlacement = LightProxyPlacementKind::Shaft;
                 }
             }
         }
