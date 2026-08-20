@@ -3266,9 +3266,9 @@
         56.01646423339844
       ],
       "target": [
-        3.7954633235931396,
-        -1.6873607635498047,
-        53.14130783081055
+        3.82033371925354,
+        -1.8612327575683594,
+        56.01646423339844
       ],
       "range": 64.0,
       "sourceRadius": 1.0,
@@ -3301,6 +3301,7 @@
               0.2674705982208252,
               -0.004815578460693359
             ],
+            "lengthScale": 0.44999998807907104,
             "widthScale": 0.8500000238418579,
             "brightness": 0.014999999664723873,
             "edgeSoftness": 0.75,
@@ -3415,6 +3416,11 @@
         "proxy": {
           "shaft": {
             "enabled": true,
+            "originOffsetWorld": [
+              0.08790206909179688,
+              0.12577760219573975,
+              -0.025377273559570313
+            ],
             "lengthScale": 0.44999998807907104,
             "brightness": 0.009999999776482582,
             "maxExtinction": 0.0,
@@ -3449,8 +3455,8 @@
         60.96747589111328
       ],
       "target": [
-        -32.10551071166992,
-        -11.602777481079102,
+        -36.0379638671875,
+        -11.840578079223633,
         60.96747589111328
       ],
       "range": 32.0,
@@ -3479,6 +3485,11 @@
         "proxy": {
           "shaft": {
             "enabled": true,
+            "originOffsetWorld": [
+              0.0011873245239257813,
+              0.3449280261993408,
+              -0.00266265869140625
+            ],
             "widthScale": 0.8500000238418579,
             "brightness": 0.02500000037252903,
             "maxExtinction": 0.0,
@@ -3514,9 +3525,9 @@
         72.0
       ],
       "target": [
-        -32.06818389892578,
-        -11.697576522827148,
-        72.07078552246094
+        -36.0,
+        -11.935380935668945,
+        72.0
       ],
       "range": 32.0,
       "sourceRadius": 1.0,
@@ -3548,6 +3559,11 @@
           },
           "shaft": {
             "enabled": true,
+            "originOffsetWorld": [
+              0.008668899536132813,
+              0.31891441345214844,
+              0.0028028488159179688
+            ],
             "widthScale": 0.8500000238418579,
             "brightness": 0.02500000037252903,
             "edgeSoftness": 0.75,
@@ -3700,9 +3716,9 @@
         96.0
       ],
       "target": [
-        -53.366363525390625,
-        -15.17047119140625,
-        96.0287857055664
+        -49.0,
+        -15.434520721435547,
+        96.0
       ],
       "range": 48.0,
       "intensity": 2.5,
@@ -3738,6 +3754,7 @@
               0.20992684364318848,
               -0.002960205078125
             ],
+            "lengthScale": 0.44999998807907104,
             "widthScale": 1.0,
             "brightness": 0.02500000037252903,
             "maxExtinction": 0.0,
@@ -3773,9 +3790,9 @@
         97.0
       ],
       "target": [
-        -154.06756591796875,
-        -32.86256408691406,
-        97.01179504394531
+        -158.0,
+        -33.100364685058594,
+        97.0
       ],
       "range": 48.0,
       "intensity": 2.0,
@@ -3898,6 +3915,11 @@
           },
           "shaft": {
             "enabled": true,
+            "originOffsetWorld": [
+              0.06975936889648438,
+              -0.0824432373046875,
+              0.2708120346069336
+            ],
             "lengthScale": 0.75,
             "widthScale": 1.0,
             "brightness": 0.004999999888241291,
@@ -3958,6 +3980,11 @@
           },
           "shaft": {
             "enabled": true,
+            "originOffsetWorld": [
+              0.08431625366210938,
+              -0.0730212926864624,
+              0.23136043548583984
+            ],
             "lengthScale": 0.75,
             "widthScale": 1.0,
             "brightness": 0.004999999888241291,
@@ -4070,7 +4097,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "dc6a993bdffeed28",
+    "sourceHash": "f79d38964d962e57",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -4079,18 +4106,18 @@
       ],
       "rgbMax": [
         2.216796875,
-        1.7001953125,
-        1.623046875
+        1.4716796875,
+        1.3896484375
       ],
       "auxiliaryMin": 0.350830078125,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 2171
+      "rgbChannelsAboveOne": 2221
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "dc6a993bdffeed28",
+      "sourceHash": "f79d38964d962e57",
       "count": 2061,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -4103,20 +4130,20 @@
           0.0
         ],
         "rgbMax": [
-          2.4413819313049316,
-          2.232698678970337,
+          2.436002492904663,
+          2.2277867794036865,
           1.8537602424621582
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 12366,
-        "rgbChannelsAboveOne": 41
+        "rgbChannelsAboveOne": 39
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "dc6a993bdffeed28",
+      "sourceHash": "f79d38964d962e57",
       "modelCount": 33,
       "objectCount": 78,
       "format": "staticModelUvRemapF32LE"
@@ -16890,6 +16917,7 @@
         "id": 1,
         "x": 64,
         "y": 1472,
+        "renderMode": "analytic",
         "bottomOffsetWorld": -0.25,
         "radiusXWorld": 0.8999999761581421,
         "radiusZWorld": 1.0,
@@ -16910,6 +16938,7 @@
         "id": 2,
         "x": 64,
         "y": 832,
+        "renderMode": "analytic",
         "bottomOffsetWorld": -0.25,
         "radiusXWorld": 0.800000011920929,
         "radiusZWorld": 0.800000011920929,
@@ -16926,6 +16955,7 @@
         "id": 3,
         "x": 64,
         "y": 192,
+        "renderMode": "analytic",
         "bottomOffsetWorld": -0.25,
         "radiusXWorld": 0.75,
         "radiusZWorld": 0.8500000238418579,
