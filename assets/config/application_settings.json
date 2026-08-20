@@ -17,7 +17,7 @@
     "dynamicLightFadeInSeconds": 0.25,
     "depthPrepass": false,
     "performanceOverlay": false,
-    "vsync": false,
+    "vsync": true,
     "horizontalFovDegrees": 95
   },
   "hdrBloom": {
