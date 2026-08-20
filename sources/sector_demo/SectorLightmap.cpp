@@ -30,6 +30,38 @@
 
 namespace game {
 
+SectorLightmapBakeQualityParameters ResolveSectorLightmapBakeQuality(
+        SectorLightmapBakeQualityPreset preset)
+{
+    switch (NormalizeSectorLightmapBakeQualityPreset(preset)) {
+        case SectorLightmapBakeQualityPreset::Draft:
+            return SectorLightmapBakeQualityParameters{4.0f, 4, 6, 4};
+        case SectorLightmapBakeQualityPreset::High:
+            return SectorLightmapBakeQualityParameters{16.0f, 12, 18, 12};
+        case SectorLightmapBakeQualityPreset::Standard:
+            return SectorLightmapBakeQualityParameters{
+                    SectorLightmapTexelsPerWorldUnit,
+                    kDirectSoftShadowSampleCount,
+                    kAmbientOcclusionSampleCount,
+                    kIndirectBounceSampleCount};
+    }
+    return SectorLightmapBakeQualityParameters{};
+}
+
+const char* SectorLightmapBakeQualityPresetName(
+        SectorLightmapBakeQualityPreset preset)
+{
+    switch (NormalizeSectorLightmapBakeQualityPreset(preset)) {
+        case SectorLightmapBakeQualityPreset::Draft:
+            return "Draft";
+        case SectorLightmapBakeQualityPreset::High:
+            return "High";
+        case SectorLightmapBakeQualityPreset::Standard:
+            return "Standard";
+    }
+    return "Standard";
+}
+
 namespace {
 
 struct BakeTriangle {
@@ -1969,6 +2001,7 @@ Vector3 EvaluateDirectLight(
         const std::vector<BakeTriangle>& triangles,
         const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
         SectorLightmapAlphaMaskCache& alphaMaskCache,
+        int softShadowSampleCount,
         BakeRayStats& stats)
 {
     if (light.radius <= 0.0f || light.intensity <= 0.0f) {
@@ -1993,8 +2026,8 @@ Vector3 EvaluateDirectLight(
     }
 
     Vector3 direct{};
-    for (int i = 0; i < kDirectSoftShadowSampleCount; ++i) {
-        const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, kDirectSoftShadowSampleCount), sourceRadius);
+    for (int i = 0; i < softShadowSampleCount; ++i) {
+        const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, softShadowSampleCount), sourceRadius);
         const Vector3 samplePosition = Vector3Add(light.position, sampleOffset);
         direct = Vector3Add(
                 direct,
@@ -2012,7 +2045,7 @@ Vector3 EvaluateDirectLight(
                         true,
                         stats));
     }
-    return Vector3Scale(direct, 1.0f / static_cast<float>(kDirectSoftShadowSampleCount));
+    return Vector3Scale(direct, 1.0f / static_cast<float>(softShadowSampleCount));
 }
 
 Vector3 EvaluateDirectLight(
@@ -2025,6 +2058,7 @@ Vector3 EvaluateDirectLight(
         const std::vector<BakeTriangle>& triangles,
         const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
         SectorLightmapAlphaMaskCache& alphaMaskCache,
+        int softShadowSampleCount,
         BakeRayStats& stats)
 {
     if (light.range <= 0.0f || light.intensity <= 0.0f) {
@@ -2049,8 +2083,8 @@ Vector3 EvaluateDirectLight(
     }
 
     Vector3 direct{};
-    for (int i = 0; i < kDirectSoftShadowSampleCount; ++i) {
-        const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, kDirectSoftShadowSampleCount), sourceRadius);
+    for (int i = 0; i < softShadowSampleCount; ++i) {
+        const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, softShadowSampleCount), sourceRadius);
         const Vector3 samplePosition = Vector3Add(light.position, sampleOffset);
         direct = Vector3Add(
                 direct,
@@ -2068,7 +2102,7 @@ Vector3 EvaluateDirectLight(
                         true,
                         stats));
     }
-    return Vector3Scale(direct, 1.0f / static_cast<float>(kDirectSoftShadowSampleCount));
+    return Vector3Scale(direct, 1.0f / static_cast<float>(softShadowSampleCount));
 }
 
 bool IsSkyOwnedLightmapSurface(
@@ -2459,6 +2493,7 @@ Vector3 EvaluateProbePointLight(
         const std::vector<BakeTriangle>& triangles,
         const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
         SectorLightmapAlphaMaskCache& alphaMaskCache,
+        int softShadowSampleCount,
         BakeRayStats& stats)
 {
     RasterHit hit;
@@ -2476,6 +2511,7 @@ Vector3 EvaluateProbePointLight(
             triangles,
             alphaOccluders,
             alphaMaskCache,
+            softShadowSampleCount,
             stats);
 }
 
@@ -2488,6 +2524,7 @@ Vector3 EvaluateProbeSpotLight(
         const std::vector<BakeTriangle>& triangles,
         const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
         SectorLightmapAlphaMaskCache& alphaMaskCache,
+        int softShadowSampleCount,
         BakeRayStats& stats)
 {
     RasterHit hit;
@@ -2505,6 +2542,7 @@ Vector3 EvaluateProbeSpotLight(
             triangles,
             alphaOccluders,
             alphaMaskCache,
+            softShadowSampleCount,
             stats);
 }
 
@@ -2549,6 +2587,7 @@ void BakeProbeAmbientCube(
         const std::vector<BakeTriangle>& triangles,
         const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
         SectorLightmapAlphaMaskCache& alphaMaskCache,
+        int softShadowSampleCount,
         BakeRayStats& stats,
         SectorBakedObjectLightProbe& probe)
 {
@@ -2576,6 +2615,7 @@ void BakeProbeAmbientCube(
                             triangles,
                             alphaOccluders,
                             alphaMaskCache,
+                            softShadowSampleCount,
                             stats));
         }
         for (const LightmapWorldSpotLight& light : worldSpotLights) {
@@ -2590,6 +2630,7 @@ void BakeProbeAmbientCube(
                             triangles,
                             alphaOccluders,
                             alphaMaskCache,
+                            softShadowSampleCount,
                             stats));
         }
         rgb = Vector3Add(
@@ -2655,6 +2696,7 @@ float BakeAmbientOcclusion(
         int surfaceIndex,
         float radius,
         float strength,
+        int sampleCount,
         const SectorLightmapBvh& bvh,
         const std::vector<BakeTriangle>& triangles,
         BakeRayStats& stats)
@@ -2665,8 +2707,8 @@ float BakeAmbientOcclusion(
 
     const Vector3 origin = Vector3Add(hit.position, Vector3Scale(hit.normal, RayOriginEpsilon));
     float occlusion = 0.0f;
-    for (int i = 0; i < kAmbientOcclusionSampleCount; ++i) {
-        const Vector3 direction = CosineHemisphereSample(hit.normal, i, kAmbientOcclusionSampleCount);
+    for (int i = 0; i < sampleCount; ++i) {
+        const Vector3 direction = CosineHemisphereSample(hit.normal, i, sampleCount);
         const RayHit rayHit = TraceRay(origin, direction, radius, surfaceRef, surfaceIndex, hit.triangleIndex, &stats.ambientOcclusion, bvh, triangles);
         if (!rayHit.hit) {
             continue;
@@ -2675,7 +2717,7 @@ float BakeAmbientOcclusion(
         occlusion += 1.0f - std::clamp(rayHit.distance / radius, 0.0f, 1.0f);
     }
 
-    const float averageOcclusion = occlusion / static_cast<float>(kAmbientOcclusionSampleCount);
+    const float averageOcclusion = occlusion / static_cast<float>(sampleCount);
     return std::clamp(1.0f - strength * averageOcclusion, 0.0f, 1.0f);
 }
 
@@ -2838,7 +2880,12 @@ std::vector<SectorLightmapAlphaOccluderTriangle> BuildAlphaTestOccluderTriangles
     return triangles;
 }
 
-Vector2 ChartLocalToAtlasUv(const SectorLightmapChart& chart, const SectorGeneratedSurface& surface, Vector2 local)
+Vector2 ChartLocalToAtlasUv(
+        const SectorLightmapChart& chart,
+        const SectorGeneratedSurface& surface,
+        Vector2 local,
+        int atlasWidth,
+        int atlasHeight)
 {
     const float localU = surface.chartWidth <= BakeEpsilon ? 0.0f : std::clamp(local.x / surface.chartWidth, 0.0f, 1.0f);
     const float localV = surface.chartHeight <= BakeEpsilon ? 0.0f : std::clamp(local.y / surface.chartHeight, 0.0f, 1.0f);
@@ -2847,8 +2894,8 @@ Vector2 ChartLocalToAtlasUv(const SectorLightmapChart& chart, const SectorGenera
     const float maxX = static_cast<float>(chart.usableX + chart.usableWidth) - 0.5f;
     const float maxY = static_cast<float>(chart.usableY + chart.usableHeight) - 0.5f;
     return Vector2{
-            (minX + (maxX - minX) * localU) / static_cast<float>(SectorLightmapAtlasWidth),
-            (minY + (maxY - minY) * localV) / static_cast<float>(SectorLightmapAtlasHeight)
+            (minX + (maxX - minX) * localU) / static_cast<float>(atlasWidth),
+            (minY + (maxY - minY) * localV) / static_cast<float>(atlasHeight)
     };
 }
 
@@ -3054,10 +3101,12 @@ bool CheckBakeCancelled(const SectorLightmapBakeCallbacks& callbacks, std::strin
 
 bool BuildSectorLightmapLayoutFromGeometry(
         const SectorGeneratedGeometry& geometry,
+        float texelsPerWorldUnit,
         SectorLightmapLayout& outLayout,
         std::string& outError)
 {
     outLayout = SectorLightmapLayout{};
+    outLayout.texelsPerWorldUnit = texelsPerWorldUnit;
     outLayout.charts.resize(geometry.surfaces.size());
     int shelfX = 0;
     int shelfY = 0;
@@ -3069,8 +3118,8 @@ bool BuildSectorLightmapLayoutFromGeometry(
         if (!surface.receivesLightmap) {
             continue;
         }
-        const int usableWidth = std::max(2, static_cast<int>(std::ceil(surface.chartWidth * SectorLightmapTexelsPerWorldUnit)));
-        const int usableHeight = std::max(2, static_cast<int>(std::ceil(surface.chartHeight * SectorLightmapTexelsPerWorldUnit)));
+        const int usableWidth = std::max(2, static_cast<int>(std::ceil(surface.chartWidth * texelsPerWorldUnit)));
+        const int usableHeight = std::max(2, static_cast<int>(std::ceil(surface.chartHeight * texelsPerWorldUnit)));
         const int chartWidth = usableWidth + SectorLightmapGutterTexels * 2;
         const int chartHeight = usableHeight + SectorLightmapGutterTexels * 2;
 
@@ -3105,7 +3154,12 @@ bool BuildSectorLightmapLayoutFromGeometry(
         chart.usableHeight = usableHeight;
         chart.vertexUvs.reserve(surface.vertices.size());
         for (const SectorGeneratedVertex& vertex : surface.vertices) {
-            chart.vertexUvs.push_back(ChartLocalToAtlasUv(chart, surface, vertex.chartUv));
+            chart.vertexUvs.push_back(ChartLocalToAtlasUv(
+                    chart,
+                    surface,
+                    vertex.chartUv,
+                    outLayout.atlasWidth,
+                    outLayout.atlasHeight));
         }
         outLayout.charts[surfaceIndex] = std::move(chart);
 
@@ -3211,6 +3265,8 @@ void FnvAppendLightmapBakeConstantsAndSettings(
         uint64_t& hash,
         const SectorLightmapBakeSettings& settings)
 {
+    const SectorLightmapBakeQualityParameters quality =
+            ResolveSectorLightmapBakeQuality(settings.qualityPreset);
     FnvAppendString(hash, "slice3-linear-hdr-baked-illumination");
     FnvAppendString(hash, "authored-static-light-swatches-srgb-decode-once");
     FnvAppendString(hash, kSectorLightmapArtifactFormat);
@@ -3224,11 +3280,11 @@ void FnvAppendLightmapBakeConstantsAndSettings(
     FnvAppendInt(hash, SectorLightmapAtlasWidth);
     FnvAppendInt(hash, SectorLightmapAtlasHeight);
     FnvAppendInt(hash, SectorLightmapGutterTexels);
-    FnvAppendFloat(hash, SectorLightmapTexelsPerWorldUnit);
+    FnvAppendFloat(hash, quality.texelsPerWorldUnit);
     FnvAppendFloat(hash, kSectorWorldUnitsPerAuthoringUnit);
-    FnvAppendInt(hash, kDirectSoftShadowSampleCount);
-    FnvAppendInt(hash, kAmbientOcclusionSampleCount);
-    FnvAppendInt(hash, kIndirectBounceSampleCount);
+    FnvAppendInt(hash, quality.directSoftShadowSampleCount);
+    FnvAppendInt(hash, quality.ambientOcclusionSampleCount);
+    FnvAppendInt(hash, quality.indirectBounceSampleCount);
     FnvAppendFloat(hash, kNeutralBounceAlbedo);
     FnvAppendFloat(hash, std::clamp(SectorAuthoringToWorldDistance(settings.ambientOcclusionRadius), 0.05f, 16.0f));
     FnvAppendFloat(hash, std::clamp(settings.ambientOcclusionStrength, 0.0f, 1.0f));
@@ -3309,6 +3365,8 @@ void BakeObjectProbeAmbientCubesInScene(
         const std::vector<SectorLightmapAlphaOccluderTriangle>& alphaOccluders,
         std::vector<SectorBakedObjectLightProbe>& probes)
 {
+    const int softShadowSampleCount = ResolveSectorLightmapBakeQuality(
+            map.lightmapSettings.qualityPreset).directSoftShadowSampleCount;
     std::vector<LightmapWorldPointLight> worldLights;
     worldLights.reserve(map.staticLights.size());
     for (const SectorTopologyStaticPointLight& light : map.staticLights) {
@@ -3335,6 +3393,7 @@ void BakeObjectProbeAmbientCubesInScene(
                 triangles,
                 alphaOccluders,
                 alphaMaskCache,
+                softShadowSampleCount,
                 stats,
                 probe);
     }
@@ -3940,7 +3999,13 @@ bool BakeSectorBakedObjectLightProbeAmbientCubes(
     }
 
     SectorLightmapLayout layout;
-    if (!BuildSectorLightmapLayoutFromGeometry(geometry, layout, outError)) {
+    const SectorLightmapBakeQualityParameters quality =
+            ResolveSectorLightmapBakeQuality(map.lightmapSettings.qualityPreset);
+    if (!BuildSectorLightmapLayoutFromGeometry(
+                geometry,
+                quality.texelsPerWorldUnit,
+                layout,
+                outError)) {
         return false;
     }
 
@@ -4711,7 +4776,13 @@ bool BuildSectorLightmapLayout(
         return false;
     }
 
-    return BuildSectorLightmapLayoutFromGeometry(geometry, outLayout, outError);
+    const SectorLightmapBakeQualityParameters quality =
+            ResolveSectorLightmapBakeQuality(map.lightmapSettings.qualityPreset);
+    return BuildSectorLightmapLayoutFromGeometry(
+            geometry,
+            quality.texelsPerWorldUnit,
+            outLayout,
+            outError);
 }
 
 bool BakeSectorLightmap(
@@ -4737,6 +4808,13 @@ bool BakeSectorLightmapForMap(
 {
     outResult = SectorLightmapBakeResult{};
     outError.clear();
+    const SectorLightmapBakeQualityPreset qualityPreset =
+            NormalizeSectorLightmapBakeQualityPreset(
+                    map.lightmapSettings.qualityPreset);
+    const SectorLightmapBakeQualityParameters quality =
+            ResolveSectorLightmapBakeQuality(qualityPreset);
+    outResult.qualityPreset = qualityPreset;
+    outResult.qualityParameters = quality;
     if (outputPath == nullptr || outputPath[0] == '\0') {
         outError = "Bake failed: missing output path";
         return false;
@@ -5009,6 +5087,7 @@ bool BakeSectorLightmapForMap(
                                 triangles,
                                 alphaOccluders,
                                 alphaMaskCache,
+                                quality.directSoftShadowSampleCount,
                                 stats));
             }
             for (const LightmapWorldSpotLight& light : worldSpotLights) {
@@ -5024,6 +5103,7 @@ bool BakeSectorLightmapForMap(
                                 triangles,
                                 alphaOccluders,
                                 alphaMaskCache,
+                                quality.directSoftShadowSampleCount,
                                 stats));
             }
             if (IsSkyOwnedLightmapSurface(map, texel.surfaceRef)) {
@@ -5066,7 +5146,16 @@ bool BakeSectorLightmapForMap(
             hit.normal = texel.geometricNormal;
             hit.geometricNormal = texel.geometricNormal;
             hit.triangleIndex = texel.triangleIndex;
-            ambientOcclusionFloat[texel.pixelIndex] = BakeAmbientOcclusion(hit, texel.surfaceRef, texel.sourceSurfaceIndex, aoRadius, aoStrength, bvh, triangles, stats);
+            ambientOcclusionFloat[texel.pixelIndex] = BakeAmbientOcclusion(
+                    hit,
+                    texel.surfaceRef,
+                    texel.sourceSurfaceIndex,
+                    aoRadius,
+                    aoStrength,
+                    quality.ambientOcclusionSampleCount,
+                    bvh,
+                    triangles,
+                    stats);
             ++completedTexels;
             if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
                 ReportProgress(callbacks, SectorLightmapBakePhase::AmbientOcclusion, completedTexels, static_cast<uint32_t>(bakeTexels.size()));
@@ -5108,11 +5197,11 @@ bool BakeSectorLightmapForMap(
                     texel.position,
                     Vector3Scale(texel.geometricNormal, RayOriginEpsilon));
             Vector3 gathered{};
-            for (int i = 0; i < kIndirectBounceSampleCount; ++i) {
+            for (int i = 0; i < quality.indirectBounceSampleCount; ++i) {
                 const Vector3 direction = CosineHemisphereSample(
                         texel.geometricNormal,
                         i,
-                        kIndirectBounceSampleCount);
+                        quality.indirectBounceSampleCount);
                 const RayHit rayHit = TraceRay(
                         origin,
                         direction,
@@ -5143,7 +5232,8 @@ bool BakeSectorLightmapForMap(
                 gathered = Vector3Add(gathered, Vector3Scale(sampledDirect, scale));
             }
 
-            const float averageScale = indirectBounceStrength / static_cast<float>(kIndirectBounceSampleCount);
+            const float averageScale = indirectBounceStrength
+                    / static_cast<float>(quality.indirectBounceSampleCount);
             indirectLightingFloat[texel.pixelIndex] = Vector3Scale(gathered, averageScale);
             ++completedTexels;
             if ((completedTexels % kSectorLightmapProgressChunk) == 0) {

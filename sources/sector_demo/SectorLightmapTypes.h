@@ -10,6 +10,31 @@
 
 namespace game {
 
+enum class SectorLightmapBakeQualityPreset : unsigned int {
+    Draft = 0,
+    Standard = 1,
+    High = 2
+};
+
+inline SectorLightmapBakeQualityPreset NormalizeSectorLightmapBakeQualityPreset(
+        SectorLightmapBakeQualityPreset preset)
+{
+    switch (preset) {
+        case SectorLightmapBakeQualityPreset::Draft:
+        case SectorLightmapBakeQualityPreset::Standard:
+        case SectorLightmapBakeQualityPreset::High:
+            return preset;
+    }
+    return SectorLightmapBakeQualityPreset::Standard;
+}
+
+struct SectorLightmapBakeQualityParameters {
+    float texelsPerWorldUnit = 8.0f;
+    int directSoftShadowSampleCount = 8;
+    int ambientOcclusionSampleCount = 12;
+    int indirectBounceSampleCount = 8;
+};
+
 struct SectorIlluminationStatistics {
     Vector3 rgbMin = {};
     Vector3 rgbMax = {};
@@ -20,6 +45,8 @@ struct SectorIlluminationStatistics {
 };
 
 struct SectorLightmapBakeSettings {
+    SectorLightmapBakeQualityPreset qualityPreset =
+            SectorLightmapBakeQualityPreset::Standard;
     float ambientOcclusionRadius = SectorWorldToAuthoringDistance(1.25f);
     float ambientOcclusionStrength = 0.55f;
     float indirectBounceRadius = SectorWorldToAuthoringDistance(4.0f);

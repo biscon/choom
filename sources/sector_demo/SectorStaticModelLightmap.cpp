@@ -921,10 +921,11 @@ bool RefreshSectorStaticModelGeometryFingerprints(
     return true;
 }
 
-bool CopySectorStaticModelForLightmap(
+static bool CopySectorStaticModelForLightmapAtDensity(
         const std::string& modelPath,
         const std::string& geometryFingerprint,
         const Model& model,
+        float texelsPerWorldUnit,
         SectorStaticModelLightmapModel& outModel,
         std::string& outError)
 {
@@ -1007,14 +1008,14 @@ bool CopySectorStaticModelForLightmap(
                     indices,
                     positions,
                     normals,
-                    SectorLightmapTexelsPerWorldUnit,
+                    texelsPerWorldUnit,
                     prepared)
                 && !UnwrapMesh(
                         mesh,
                         indices,
                         positions,
                         normals,
-                        SectorLightmapTexelsPerWorldUnit,
+                        texelsPerWorldUnit,
                         prepared,
                         outError)) {
             outError = "mesh " + std::to_string(meshIndex)
@@ -1024,6 +1025,22 @@ bool CopySectorStaticModelForLightmap(
         outModel.meshes.push_back(std::move(prepared));
     }
     return true;
+}
+
+bool CopySectorStaticModelForLightmap(
+        const std::string& modelPath,
+        const std::string& geometryFingerprint,
+        const Model& model,
+        SectorStaticModelLightmapModel& outModel,
+        std::string& outError)
+{
+    return CopySectorStaticModelForLightmapAtDensity(
+            modelPath,
+            geometryFingerprint,
+            model,
+            SectorLightmapTexelsPerWorldUnit,
+            outModel,
+            outError);
 }
 
 bool PrepareSectorStaticModelsForLightmapBake(
@@ -1046,6 +1063,8 @@ bool PrepareSectorStaticModelsForLightmapBake(
     if (!RefreshSectorStaticModelGeometryFingerprints(map, outError)) {
         return false;
     }
+    const float texelsPerWorldUnit = ResolveSectorLightmapBakeQuality(
+            map.lightmapSettings.qualityPreset).texelsPerWorldUnit;
 
     std::vector<SectorPlacedRuntimeObject*> objects;
     for (SectorPlacedRuntimeObject& object : map.runtimeObjects) {
@@ -1120,10 +1139,11 @@ bool PrepareSectorStaticModelsForLightmapBake(
         }
 
         std::string copyError;
-        if (!CopySectorStaticModelForLightmap(
+        if (!CopySectorStaticModelForLightmapAtDensity(
                     object.staticModel.modelPath,
                     object.staticModel.geometryFingerprint,
                     *readyModel,
+                    texelsPerWorldUnit,
                     outData.models[
                             static_cast<size_t>(
                                     modelIndexByPath[path])],
@@ -1215,10 +1235,11 @@ bool PrepareSectorStaticModelsForLightmapBake(
             return false;
         }
         std::string copyError;
-        if (!CopySectorStaticModelForLightmap(
+        if (!CopySectorStaticModelForLightmapAtDensity(
                     object.staticModel.modelPath,
                     object.staticModel.geometryFingerprint,
                     *model,
+                    texelsPerWorldUnit,
                     outData.models[
                             static_cast<size_t>(
                                     modelIndexByPath[path])],

@@ -107,8 +107,16 @@
       "path": "assets/images/hub/wood_beam_512x128.png",
       "filter": "anisotropic8x"
     },
+    "worn_dark_red_carpet_512": {
+      "path": "assets/images/floors/worn_dark_red_carpet_512.png",
+      "filter": "anisotropic8x"
+    },
     "worn_gray_metal_step_512": {
       "path": "assets/images/worn_gray_metal_step_512.png",
+      "filter": "anisotropic8x"
+    },
+    "worn_office_oak_floor_512": {
+      "path": "assets/images/floors/worn_office_oak_floor_512.png",
       "filter": "anisotropic8x"
     },
     "worn_white_ceiling_512": {
@@ -465,8 +473,8 @@
           "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 292,
-          "backSideDefId": 293,
+          "frontSideDefId": 326,
+          "backSideDefId": 327,
           "endpointA": [
             -704,
             1296
@@ -504,8 +512,8 @@
           "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 262,
-          "backSideDefId": 282,
+          "frontSideDefId": 296,
+          "backSideDefId": 316,
           "endpointA": [
             -992,
             1456
@@ -572,8 +580,8 @@
           "lineDefId": 127,
           "frontSectorId": 33,
           "backSectorId": 26,
-          "frontSideDefId": 192,
-          "backSideDefId": 207,
+          "frontSideDefId": 210,
+          "backSideDefId": 225,
           "endpointA": [
             -2560,
             1376
@@ -687,7 +695,7 @@
         "shadowMode": "dynamic"
       },
       "position": [
-        -293.0,
+        -288.0,
         -27.0,
         25.0
       ],
@@ -1532,6 +1540,45 @@
         -367.20001220703125,
         -27.0,
         68.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 92,
+      "kind": "door",
+      "door": {
+        "anchor": {
+          "lineDefId": 234,
+          "frontSectorId": 50,
+          "backSectorId": 43,
+          "frontSideDefId": 182,
+          "backSideDefId": 195,
+          "endpointA": [
+            -2944,
+            592
+          ],
+          "endpointB": [
+            -2944,
+            432
+          ]
+        },
+        "width": 1.25,
+        "height": 2.8125,
+        "normalOffset": -0.125,
+        "heightOffsetWorld": -0.054999999701976776,
+        "visual": "model",
+        "modelAssetId": "wooden_interior_003",
+        "motion": "swing",
+        "angularSpeedDegrees": 100.0,
+        "openDistance": 2.8125,
+        "interactionDistance": 2.5,
+        "openSoundId": "door_open_01",
+        "closeSoundId": "door_close_02"
+      },
+      "position": [
+        -184.0,
+        -14.5,
+        32.0
       ],
       "yawDegrees": 0.0
     }
@@ -3479,7 +3526,7 @@
     {
       "id": 2,
       "position": [
-        -360.0,
+        -392.0,
         20.0,
         96.0
       ],
@@ -3495,9 +3542,8 @@
       "flickerSpeed": 0.5,
       "flickerAmount": 1.0,
       "castsShadow": true,
-      "shadowBias": 0.001500000013038516,
       "shadowStrength": 0.75,
-      "shadowSoftness": 2.0,
+      "shadowSoftness": 4.0,
       "atmosphere": {
         "proxy": {
           "halo": {
@@ -3750,7 +3796,6 @@
       },
       "castsShadow": true,
       "shadowStrength": 0.8999999761581421,
-      "shadowSoftness": 2.0,
       "atmosphere": {
         "proxy": {
           "halo": {
@@ -3826,7 +3871,6 @@
       },
       "castsShadow": true,
       "shadowStrength": 0.8999999761581421,
-      "shadowSoftness": 2.0,
       "atmosphere": {
         "proxy": {
           "halo": {
@@ -3878,7 +3922,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "draft"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -3955,7 +4000,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "ed2ba824fdd36aca",
+    "sourceHash": "2f077a739cb1a688",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -3963,20 +4008,20 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.4560546875,
-        1.3896484375
+        2.19921875,
+        1.44921875,
+        1.3828125
       ],
-      "auxiliaryMin": 0.350830078125,
+      "auxiliaryMin": 0.3505859375,
       "auxiliaryMax": 1.0,
       "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 746
+      "rgbChannelsAboveOne": 180
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "ed2ba824fdd36aca",
-      "count": 2061,
+      "sourceHash": "2f077a739cb1a688",
+      "count": 2221,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -3988,20 +4033,20 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.940624713897705,
-          1.8537602424621582
+          2.204270601272583,
+          1.9356169700622559,
+          1.848981261253357
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 12366,
-        "rgbChannelsAboveOne": 33
+        "sampleCount": 13326,
+        "rgbChannelsAboveOne": 182
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "ed2ba824fdd36aca",
+      "sourceHash": "2f077a739cb1a688",
       "modelCount": 33,
       "objectCount": 78,
       "format": "staticModelUvRemapF32LE"
@@ -4971,6 +5016,106 @@
         "id": 204,
         "x": -3712,
         "y": 640
+      },
+      {
+        "id": 205,
+        "x": -2944,
+        "y": 432
+      },
+      {
+        "id": 206,
+        "x": -2912,
+        "y": 432
+      },
+      {
+        "id": 207,
+        "x": -2912,
+        "y": 592
+      },
+      {
+        "id": 208,
+        "x": -2944,
+        "y": 592
+      },
+      {
+        "id": 209,
+        "x": -2912,
+        "y": 304
+      },
+      {
+        "id": 211,
+        "x": -2048,
+        "y": 720
+      },
+      {
+        "id": 212,
+        "x": -2912,
+        "y": 720
+      },
+      {
+        "id": 213,
+        "x": -2432,
+        "y": 304
+      },
+      {
+        "id": 214,
+        "x": -2432,
+        "y": -1920
+      },
+      {
+        "id": 215,
+        "x": -2048,
+        "y": -1920
+      },
+      {
+        "id": 216,
+        "x": -2912,
+        "y": 384
+      },
+      {
+        "id": 217,
+        "x": -2384,
+        "y": 368
+      },
+      {
+        "id": 218,
+        "x": -2368,
+        "y": -1904
+      },
+      {
+        "id": 219,
+        "x": -2112,
+        "y": -1904
+      },
+      {
+        "id": 220,
+        "x": -2128,
+        "y": 624
+      },
+      {
+        "id": 221,
+        "x": -2912,
+        "y": 640
+      },
+      {
+        "id": 222,
+        "x": -2416,
+        "y": 384
+      },
+      {
+        "id": 223,
+        "x": -2368,
+        "y": 336
+      },
+      {
+        "id": 224,
+        "x": -2160,
+        "y": 640
+      },
+      {
+        "id": 225,
+        "x": -2112,
+        "y": 592
       }
     ],
     "lines": [
@@ -6011,11 +6156,6 @@
         "endVertexId": 189
       },
       {
-        "id": 305,
-        "startVertexId": 185,
-        "endVertexId": 190
-      },
-      {
         "id": 306,
         "startVertexId": 190,
         "endVertexId": 114
@@ -6129,6 +6269,126 @@
         "id": 340,
         "startVertexId": 194,
         "endVertexId": 204
+      },
+      {
+        "id": 342,
+        "startVertexId": 205,
+        "endVertexId": 190
+      },
+      {
+        "id": 343,
+        "startVertexId": 205,
+        "endVertexId": 206
+      },
+      {
+        "id": 344,
+        "startVertexId": 206,
+        "endVertexId": 207
+      },
+      {
+        "id": 345,
+        "startVertexId": 185,
+        "endVertexId": 208
+      },
+      {
+        "id": 346,
+        "startVertexId": 208,
+        "endVertexId": 205
+      },
+      {
+        "id": 347,
+        "startVertexId": 207,
+        "endVertexId": 208
+      },
+      {
+        "id": 350,
+        "startVertexId": 215,
+        "endVertexId": 211
+      },
+      {
+        "id": 351,
+        "startVertexId": 211,
+        "endVertexId": 212
+      },
+      {
+        "id": 353,
+        "startVertexId": 209,
+        "endVertexId": 213
+      },
+      {
+        "id": 355,
+        "startVertexId": 213,
+        "endVertexId": 214
+      },
+      {
+        "id": 357,
+        "startVertexId": 214,
+        "endVertexId": 215
+      },
+      {
+        "id": 358,
+        "startVertexId": 206,
+        "endVertexId": 216
+      },
+      {
+        "id": 359,
+        "startVertexId": 216,
+        "endVertexId": 209
+      },
+      {
+        "id": 362,
+        "startVertexId": 218,
+        "endVertexId": 219
+      },
+      {
+        "id": 364,
+        "startVertexId": 212,
+        "endVertexId": 221
+      },
+      {
+        "id": 365,
+        "startVertexId": 221,
+        "endVertexId": 207
+      },
+      {
+        "id": 367,
+        "startVertexId": 216,
+        "endVertexId": 222
+      },
+      {
+        "id": 368,
+        "startVertexId": 222,
+        "endVertexId": 217
+      },
+      {
+        "id": 369,
+        "startVertexId": 217,
+        "endVertexId": 223
+      },
+      {
+        "id": 370,
+        "startVertexId": 223,
+        "endVertexId": 218
+      },
+      {
+        "id": 371,
+        "startVertexId": 220,
+        "endVertexId": 224
+      },
+      {
+        "id": 372,
+        "startVertexId": 224,
+        "endVertexId": 221
+      },
+      {
+        "id": 373,
+        "startVertexId": 219,
+        "endVertexId": 225
+      },
+      {
+        "id": 374,
+        "startVertexId": 225,
+        "endVertexId": 220
       }
     ],
     "lineSides": [
@@ -12398,49 +12658,6 @@
         }
       },
       {
-        "lineId": 305,
-        "side": "back",
-        "wall": {
-          "textureId": "dirty_gray_concrete_wall_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              -0.9375
-            ]
-          }
-        },
-        "lower": {
-          "textureId": "dirty_gray_concrete_wall_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "textureId": "dirty_gray_concrete_wall_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 306,
         "side": "back",
         "wall": {
@@ -12935,6 +13152,1038 @@
             "scale": [
               1.0,
               8.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 342,
+        "side": "back",
+        "wall": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 343,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 344,
+        "side": "back",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "worn_gray_metal_step_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 345,
+        "side": "back",
+        "wall": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 346,
+        "side": "back",
+        "wall": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 347,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_gray_concrete_wall_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 350,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 351,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 353,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 355,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 357,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 358,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 359,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 362,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "worn_dark_red_carpet_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 364,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 365,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 367,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "worn_dark_red_carpet_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 368,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "worn_dark_red_carpet_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 369,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "worn_dark_red_carpet_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 370,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "worn_dark_red_carpet_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 371,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "worn_dark_red_carpet_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 372,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "worn_dark_red_carpet_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 373,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "worn_dark_red_carpet_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 374,
+        "side": "back",
+        "wall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "worn_dark_red_carpet_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
             ],
             "offset": [
               0.0,
@@ -14789,7 +16038,7 @@
         "y": 838,
         "floorZ": 0.0,
         "ceilingZ": 27.0,
-        "floorTextureId": "large_industrial_tiles_512",
+        "floorTextureId": "worn_office_oak_floor_512",
         "ceilingTextureId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
@@ -14857,7 +16106,7 @@
             ]
           }
         },
-        "footstepSet": "PavementTiles_Mono"
+        "footstepSet": "Parquet_Floor_Mono"
       },
       {
         "id": 25,
@@ -16768,6 +18017,236 @@
           }
         },
         "footstepSet": "LowMetal_Mono"
+      },
+      {
+        "id": 50,
+        "name": "Sector 50",
+        "x": -2929,
+        "y": 446,
+        "floorZ": -14.5,
+        "ceilingZ": 6.650000095367432,
+        "floorTextureId": "worn_gray_metal_step_512",
+        "ceilingTextureId": "dirty_gray_concrete_wall_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.03999999910593033,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 51,
+        "name": "Sector 51",
+        "x": -2751,
+        "y": 510,
+        "floorZ": -14.800000190734863,
+        "ceilingZ": 15.0,
+        "floorTextureId": "worn_dark_red_carpet_512",
+        "ceilingTextureId": "worn_white_ceiling_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "footstepSet": "BootsLinoleum"
+      },
+      {
+        "id": 52,
+        "name": "Sector 52",
+        "x": -2874,
+        "y": 679,
+        "floorZ": -15.0,
+        "ceilingZ": 15.0,
+        "floorTextureId": "worn_office_oak_floor_512",
+        "ceilingTextureId": "worn_white_ceiling_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 1.0,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "footstepSet": "Parquet_Floor_Mono"
       }
     ],
     "fogVolumes": [

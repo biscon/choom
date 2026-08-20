@@ -116,6 +116,9 @@ struct SectorLightmapBakeResult {
     int bvhMaxTrianglesInLeaf = 0;
     int staticLightCount = 0;
     int staticSpotLightCount = 0;
+    SectorLightmapBakeQualityPreset qualityPreset =
+            SectorLightmapBakeQualityPreset::Standard;
+    SectorLightmapBakeQualityParameters qualityParameters;
     long long directShadowRays = 0;
     long long softShadowSourceRays = 0;
     long long ambientOcclusionRays = 0;
@@ -200,6 +203,11 @@ constexpr int kDirectSoftShadowSampleCount = 8;
 constexpr int kAmbientOcclusionSampleCount = 12;
 constexpr int kIndirectBounceSampleCount = 8;
 constexpr float kNeutralBounceAlbedo = 0.55f;
+
+SectorLightmapBakeQualityParameters ResolveSectorLightmapBakeQuality(
+        SectorLightmapBakeQualityPreset preset);
+const char* SectorLightmapBakeQualityPresetName(
+        SectorLightmapBakeQualityPreset preset);
 
 bool BuildSectorLightmapLayout(
         const SectorTopologyMap& map,

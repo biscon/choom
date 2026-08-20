@@ -452,7 +452,8 @@ bool SectorAnalyticFogRenderer::Apply(
         const SectorTopologyMap& map,
         const Camera3D& camera,
         float runtimeSeconds,
-        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes)
+        const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
+        const RuntimePortalVisibilityResult& visibility)
 {
     eligibleCount = 0;
     activeCount = 0;
@@ -473,7 +474,12 @@ bool SectorAnalyticFogRenderer::Apply(
     const float tanHalfFov = std::tan(camera.fovy * DEG2RAD * 0.5f);
     SectorAtmosphereScissorRect unionScissor{};
     for (const SectorCompiledLocalFogVolume& volume : map.compiledLocalFogVolumes) {
-        if (!volume.enabled || volume.maxOpacity <= 0.0f) continue;
+        if (!volume.enabled
+                || volume.maxOpacity <= 0.0f
+                || !ShouldDrawRuntimeSectorForVisibility(
+                        volume.topologySectorId, visibility)) {
+            continue;
+        }
         const bool roomStyle = volume.analyticStyle == SectorAnalyticFogStyle::Room;
         const float edgeExpansion = roomStyle
                 ? 0.0f

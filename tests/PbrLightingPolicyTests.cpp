@@ -487,10 +487,13 @@ void TestHdrEffectShaderAndPassPolicies()
     const std::string dynamicModelShadows=ReadSource(DYNAMIC_MODEL_SHADOW_SOURCE_PATH);
     const std::string dynamicLightingShadows=ReadSource(
             DYNAMIC_LIGHTING_SHADOW_SOURCE_PATH);
+    const std::string dynamicShadowSampling=ReadSource(
+            DYNAMIC_SHADOW_SAMPLING_SOURCE_PATH);
     Check(!bloom.empty()&&!distanceFog.empty()&&!analyticFog.empty()
                     &&!analyticShaft.empty()&&!lightProxy.empty()&&!dust.empty()
                     &&!muzzle.empty()&&!mainGraph.empty()&&!dynamicModelShadows.empty()
-                    &&!dynamicLightingShadows.empty(),
+                    &&!dynamicLightingShadows.empty()
+                    &&!dynamicShadowSampling.empty(),
           "HDR effect policy can read every affected shader and pass graph");
     Check(distanceFog.find("for (") == std::string::npos
                     && analyticFog.find("for (int stepIndex") == std::string::npos
@@ -505,6 +508,11 @@ void TestHdrEffectShaderAndPassPolicies()
                     && analyticShaft.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos
                     && lightProxy.find("BeginBlendMode(BLEND_ALPHA_PREMULTIPLY)") != std::string::npos,
           "atmosphere paths use scissored closed-form work and premultiplied compositing");
+    Check(analyticFog.find("ShouldDrawRuntimeSectorForVisibility(")
+                            != std::string::npos
+                    && analyticFog.find("volume.topologySectorId, visibility")
+                            != std::string::npos,
+          "local fog candidates are culled by their runtime-visible owner sector");
     Check(lightProxy.find("float visibleChord = max(exitT - enterT, 0.0);")
                             != std::string::npos
                     && lightProxy.find("float opticalThickness = 1.0 - exp(")
@@ -712,10 +720,13 @@ void TestHdrEffectShaderAndPassPolicies()
           "contact shadows are mode-exclusive and the projected silhouette pass is removed");
     const std::size_t firstSkinnedShadowVertex=dynamicLightingShadows.find(
             "in vec4 vertexBoneIndices;");
-    const std::size_t secondSkinnedShadowVertex=dynamicLightingShadows.find(
-            "in vec4 vertexBoneIndices;",firstSkinnedShadowVertex+1);
     Check(firstSkinnedShadowVertex!=std::string::npos
-                    &&secondSkinnedShadowVertex!=std::string::npos
+                    &&dynamicLightingShadows.find(
+                               "SectorSpotLightShadowVs, SectorSpotLightShadowOpaqueFs")
+                            !=std::string::npos
+                    &&dynamicLightingShadows.find(
+                               "SectorSpotLightShadowVs, SectorSpotLightShadowCutoutFs")
+                            !=std::string::npos
                     &&dynamicLightingShadows.find("BuildAnimatedModelPoseView")
                             !=std::string::npos
                     &&dynamicLightingShadows.find("dynamicModelShadowCasters")
@@ -723,51 +734,53 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&dynamicLightingShadows.find("contentFingerprint")
                             !=std::string::npos,
           "shared spotlight and point-light atlas passes render and invalidate posed dynamic-model casters");
-    const std::size_t geometryShaderLoader=dynamicLightingShadows.find(
-            "Shader LoadGeometryShader");
-    const std::size_t pointBoneIndexBinding=dynamicLightingShadows.find(
-            "RL_DEFAULT_SHADER_ATTRIB_LOCATION_BONEINDICES",
-            geometryShaderLoader);
-    const std::size_t pointBoneWeightBinding=dynamicLightingShadows.find(
-            "RL_DEFAULT_SHADER_ATTRIB_LOCATION_BONEWEIGHTS",
-            geometryShaderLoader);
-    const std::size_t geometryShaderLink=dynamicLightingShadows.find(
-            "glLinkProgram(program)",geometryShaderLoader);
-    Check(geometryShaderLoader!=std::string::npos
-                    &&pointBoneIndexBinding!=std::string::npos
-                    &&pointBoneWeightBinding!=std::string::npos
-                    &&geometryShaderLink!=std::string::npos
-                    &&pointBoneIndexBinding<geometryShaderLink
-                    &&pointBoneWeightBinding<geometryShaderLink,
-          "point-light geometry shader binds raylib bone VAO attributes before linking");
-    const std::size_t pointTrianglePayload=dynamicLightingShadows.find(
-            "flat out vec3 fragTriangleOrigin;");
-    const std::size_t pointShadowVertexBudget=dynamicLightingShadows.find(
-            "layout(triangle_strip, max_vertices = 52) out;");
-    const std::size_t pointTriangleContainment=dynamicLightingShadows.find(
-            "const float triangleContainmentTolerance = 0.0001;");
-    const std::size_t pointTriangleDiscard=dynamicLightingShadows.find(
-            "barycentricU + barycentricV\n"
-            "                    > 1.0 + triangleContainmentTolerance) discard;");
-    const std::size_t pointShadowDepthWrite=dynamicLightingShadows.find(
-            "gl_FragDepth = clamp(distanceToLight / pointLightRadius",
-            pointTriangleContainment);
-    Check(pointShadowVertexBudget!=std::string::npos
-                    &&pointTrianglePayload!=std::string::npos
-                    &&dynamicLightingShadows.find(
-                               "flat out vec3 fragTriangleEdge0;")
-                            !=std::string::npos
-                    &&dynamicLightingShadows.find(
-                               "flat out vec3 fragTriangleEdge1;")
-                            !=std::string::npos
-                    &&dynamicLightingShadows.find("fragTrianglePlane")
+    Check(dynamicLightingShadows.find("LoadGeometryShader")
                             ==std::string::npos
-                    &&pointTriangleContainment!=std::string::npos
-                    &&pointTriangleDiscard!=std::string::npos
-                    &&pointShadowDepthWrite!=std::string::npos
-                    &&pointTriangleContainment<pointTriangleDiscard
-                    &&pointTriangleDiscard<pointShadowDepthWrite,
-          "point-light shadow casters stay within the geometry output budget and reject paraboloid chord overdraw");
+                    &&dynamicLightingShadows.find("GL_GEOMETRY_SHADER")
+                            ==std::string::npos
+                    &&dynamicLightingShadows.find(
+                               "DynamicPointLightShadowFaceCount")
+                            !=std::string::npos
+                    &&dynamicLightingShadows.find(
+                               "effectiveShadowMapResolution")
+                            !=std::string::npos,
+          "point-light shadows use six ordinary planar atlas passes without a geometry shader");
+    Check(dynamicLightingShadows.find("GL_MAX_TEXTURE_SIZE")
+                            !=std::string::npos
+                    &&dynamicLightingShadows.find(
+                               "DynamicShadowAtlasLowResolution")
+                            !=std::string::npos
+                    &&dynamicLightingShadows.find("falling back to")
+                            !=std::string::npos,
+          "high-quality dynamic shadow allocation checks GPU limits and exposes the 4K fallback");
+    Check(dynamicShadowSampling.find("int PointShadowFace(vec3 ray)")
+                            !=std::string::npos
+                    &&dynamicShadowSampling.find(
+                               "vec3 PointShadowFaceRay(int face, vec2 uv)")
+                            !=std::string::npos
+                    &&dynamicShadowSampling.find(
+                               "sampleSlot = baseSlot + sampleFace")
+                            !=std::string::npos
+                    &&dynamicShadowSampling.find(
+                               "ivec2 baseTexel = ivec2(floor(texelPosition))")
+                            !=std::string::npos
+                    &&dynamicShadowSampling.find("paraboloid")
+                            ==std::string::npos,
+          "surface point-shadow sampling reselects cube faces across seams and filters hard edges over four texels");
+    Check(ReadSource(SECTOR_SHADER_SOURCE_PATH).find(
+                          "SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL")
+                            !=std::string::npos
+                    &&ReadSource(DOOR_SHADER_SOURCE_PATH).find(
+                               "SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL")
+                            !=std::string::npos
+                    &&ReadSource(PBR_SHADER_SOURCE_PATH).find(
+                               "SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL")
+                            !=std::string::npos
+                    &&ReadSource(BILLBOARD_SHADER_SOURCE_PATH).find(
+                               "SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL")
+                            !=std::string::npos
+                    &&dust.find("pointShadowFace")!=std::string::npos,
+          "all surface and volumetric receivers use the six-face point-shadow projection");
     const std::size_t atlasReset=dynamicLightingShadows.find(
             "if (shadowAtlasNeedsFullClear) {");
     const std::size_t invalidateCachedTile=dynamicLightingShadows.find(

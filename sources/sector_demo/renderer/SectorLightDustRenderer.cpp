@@ -107,13 +107,48 @@ float shadowDepth(int slot, vec2 uv) {
     int tiles=max(shadowAtlasTilesPerRow,1); vec2 tile=vec2(slot%tiles,slot/tiles);
     return texture(shadowMap0,(tile+clamp(uv,vec2(0.001),vec2(0.999)))/float(tiles)).r;
 }
+int pointShadowFace(vec3 ray) {
+    vec3 magnitude=abs(ray);
+    if(magnitude.x>=magnitude.y&&magnitude.x>=magnitude.z)return ray.x>=0.0?0:1;
+    if(magnitude.y>=magnitude.z)return ray.y>=0.0?2:3;
+    return ray.z>=0.0?4:5;
+}
+vec2 pointShadowUv(int face,vec3 ray) {
+    vec3 magnitude=max(abs(ray),vec3(0.00001)); vec2 projected;
+    if(face==0)projected=vec2(-ray.z,-ray.y)/magnitude.x;
+    else if(face==1)projected=vec2(ray.z,-ray.y)/magnitude.x;
+    else if(face==2)projected=vec2(ray.x,ray.z)/magnitude.y;
+    else if(face==3)projected=vec2(ray.x,-ray.z)/magnitude.y;
+    else if(face==4)projected=vec2(ray.x,-ray.y)/magnitude.z;
+    else projected=vec2(-ray.x,-ray.y)/magnitude.z;
+    return projected*0.5+0.5;
+}
+vec3 pointShadowRay(int face,vec2 uv) {
+    vec2 projected=uv*2.0-1.0;
+    if(face==0)return vec3(1.0,-projected.y,-projected.x);
+    if(face==1)return vec3(-1.0,-projected.y,projected.x);
+    if(face==2)return vec3(projected.x,1.0,projected.y);
+    if(face==3)return vec3(projected.x,-1.0,-projected.y);
+    if(face==4)return vec3(projected.x,-projected.y,1.0);
+    return vec3(-projected.x,-projected.y,-1.0);
+}
+float pointShadowDepth(int baseSlot,int sourceFace,vec2 sourceUv) {
+    vec3 ray=pointShadowRay(sourceFace,sourceUv);
+    int face=pointShadowFace(ray);
+    return shadowDepth(baseSlot+face,pointShadowUv(face,ray));
+}
 float shadowVisibility(int lightIndex, int slot, vec3 position) {
     if (slot < 0 || slot >= MAX_DYNAMIC_SHADOW_CASTERS) return 1.0;
+    vec3 fromLight=position-dynamicLightPositions[lightIndex];
     vec3 coordinate;
-    if(dynamicLightTypes[lightIndex]==0) { vec3 fromLight=position-dynamicLightPositions[lightIndex]; float radial=length(fromLight);
-        if(radial<=0.00001)return 1.0; slot+=fromLight.z>=0.0?0:1;
-        coordinate=vec3(fromLight.xy/max(radial+abs(fromLight.z),0.00001)*0.5+0.5,radial/max(dynamicLightRadii[lightIndex],0.00001)); }
-    else { vec3 fromLight=position-dynamicLightPositions[lightIndex]; vec3 forward=safeNormalize(dynamicLightDirections[lightIndex],vec3(0,-1,0));
+    int pointFace=-1;
+    if(dynamicLightTypes[lightIndex]==0) {
+        vec3 magnitude=abs(fromLight); float forwardDepth=max(magnitude.x,max(magnitude.y,magnitude.z));
+        float lightRadius=max(dynamicLightRadii[lightIndex],0.00001);
+        if(forwardDepth<=0.05||forwardDepth>lightRadius)return 1.0;
+        pointFace=pointShadowFace(fromLight); float farCoefficient=lightRadius/max(lightRadius-0.05,0.00001);
+        coordinate=vec3(pointShadowUv(pointFace,fromLight),farCoefficient*(1.0-0.05/forwardDepth)); }
+    else { vec3 forward=safeNormalize(dynamicLightDirections[lightIndex],vec3(0,-1,0));
         vec3 upReference=abs(forward.y)>0.98?vec3(0,0,1):vec3(0,1,0); vec3 right=safeNormalize(cross(forward,upReference),vec3(1,0,0));
         vec3 up=cross(right,forward); float z=dot(fromLight,forward); if(z<=0.05)return 1.0;
         float tangent=tan(min(acos(clamp(dynamicLightOuterConeCos[lightIndex],-0.999,0.999)),1.553343)); float farPlane=dynamicLightRadii[lightIndex];
@@ -122,13 +157,16 @@ float shadowVisibility(int lightIndex, int slot, vec3 position) {
     if (any(lessThan(coordinate, vec3(0.0))) || any(greaterThan(coordinate, vec3(1.0)))) return 1.0;
     float compareDepth = coordinate.z - min(max(shadowBias[slot], 0.0), 0.02);
     float softness = clamp(shadowSoftness[slot], 0.0, 8.0);
-    if (softness <= 0.0) return compareDepth <= shadowDepth(slot, coordinate.xy) ? 1.0 : 0.0;
+    if (softness <= 0.0) {
+        float blockerDepth=pointFace>=0?pointShadowDepth(slot,pointFace,coordinate.xy):shadowDepth(slot,coordinate.xy);
+        return compareDepth <= blockerDepth ? 1.0 : 0.0;
+    }
     vec2 texel = vec2(float(max(shadowAtlasTilesPerRow,1))) / vec2(textureSize(shadowMap0, 0));
     float visible = 0.0;
     for (int sampleIndex = 0; sampleIndex < 4; ++sampleIndex) {
-        vec2 uv = clamp(coordinate.xy + kShadowDisk[sampleIndex] * max(0.25, softness) * texel,
-                vec2(0.0), vec2(1.0));
-        visible += compareDepth <= shadowDepth(slot, uv) ? 1.0 : 0.0;
+        vec2 uv = coordinate.xy + kShadowDisk[sampleIndex] * max(0.25, softness) * texel;
+        float blockerDepth=pointFace>=0?pointShadowDepth(slot,pointFace,uv):shadowDepth(slot,uv);
+        visible += compareDepth <= blockerDepth ? 1.0 : 0.0;
     }
     return visible * 0.25;
 }
