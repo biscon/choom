@@ -3491,11 +3491,12 @@
         "b": 230,
         "a": 255
       },
+      "enabled": false,
       "flickerSpeed": 0.5,
       "flickerAmount": 1.0,
       "castsShadow": true,
       "shadowStrength": 0.75,
-      "shadowSoftness": 2.0,
+      "shadowSoftness": 4.0,
       "atmosphere": {
         "proxy": {
           "halo": {
