@@ -38,8 +38,10 @@ enum class TopologySelectionKind {
     LineDef,
     StaticLight,
     StaticSpotLight,
+    StaticRectLight,
     DynamicLight,
-    DynamicSpotLight
+    DynamicSpotLight,
+    DynamicRectLight
 };
 
 enum class SectorAuthoringSelectionKind {
@@ -115,8 +117,10 @@ enum class SectorEditorPickKind {
     None,
     RuntimeObject,
     DynamicSpotLight,
+    DynamicRectLight,
     DynamicLight,
     StaticSpotLight,
+    StaticRectLight,
     StaticLight,
     AuthoringVertex,
     AuthoringLine,

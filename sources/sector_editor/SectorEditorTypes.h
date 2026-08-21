@@ -40,8 +40,10 @@ enum class SectorEditorTool {
     LevelMarker,
     StaticLight,
     StaticSpotLight,
+    StaticRectLight,
     DynamicLight,
     DynamicSpotLight,
+    DynamicRectLight,
     Move
 };
 

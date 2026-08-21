@@ -6,6 +6,7 @@
 #include "sector_demo/SectorUnits.h"
 
 #include <algorithm>
+#include <type_traits>
 
 namespace game {
 
@@ -151,7 +152,8 @@ void DrawLightAtmosphereInspector(
         SectorEditorUiState& uiState,
         ApplyFn&& apply,
         bool& sourceRefreshRequested,
-        bool spotLight)
+        bool spotLight,
+        bool rectLight = false)
 {
     auto commit = [&]() {
         atmosphere = NormalizeSectorLightAtmosphereSettings(atmosphere);
@@ -279,7 +281,8 @@ void DrawLightAtmosphereInspector(
             y += rowH + gap;
             drawFloat("sector_editor_light_proxy_shaft_length", "Shaft length scale:",
                     atmosphere.proxy.shaft.lengthScale, uiState.lightProxyShaftLengthInput, 0.01f, 2.0f, 3);
-            drawFloat("sector_editor_light_proxy_shaft_width", "Shaft width scale:",
+            drawFloat("sector_editor_light_proxy_shaft_width",
+                    rectLight ? "Shaft spread scale:" : "Shaft width scale:",
                     atmosphere.proxy.shaft.widthScale, uiState.lightProxyShaftWidthInput, 0.01f, 2.0f, 3);
             drawFloat("sector_editor_light_proxy_shaft_brightness", "Shaft brightness:",
                     atmosphere.proxy.shaft.brightness, uiState.lightProxyShaftBrightnessInput, 0.0f, 16.0f, 3);
@@ -1409,6 +1412,266 @@ bool DrawSelectedDynamicSpotLightInspector(
 
     sourceRefreshRequested = sourceRefreshRequested || AtmosphereSourceChanged(sourceBefore, light);
     return true;
+}
+
+float RectLightInspectorContentHeight(
+        float rowH, float gap, bool hasIdError, bool dynamic,
+        const SectorLightAtmosphereSettings& atmosphere)
+{
+    float height = 38.0f + rowH + gap + (hasIdError ? 36.0f : 0.0f);
+    height += rowH + gap; // Delete.
+    height += (dynamic ? 9.0f : 1.0f) * (rowH + gap); // Runtime and shadow controls.
+    height += 13.0f * (rowH + gap); // Position, target, Point Down, roll, size, range, intensity.
+    height += 3.0f * (rowH + gap) + 36.0f + gap;
+    height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, true);
+    if (!dynamic) height += rowH + gap;
+    return height;
+}
+
+template<typename Light>
+bool DrawRectLightInspector(
+        engine::UIContext& ui, const engine::UIConfig& config, engine::Input& input,
+        engine::AssetManager& assets, engine::FontHandle font,
+        engine::UIScrollAreaResult scroll, float contentW, float rowH, float gap,
+        Light& light, SectorEditorUiState& uiState, InspectorIdUiState& inspectorIdUiState,
+        SectorEditorLightEditingService& editing, bool& deleteRequested,
+        bool* bakeRequested, bool& sourceRefreshRequested)
+{
+    constexpr bool Dynamic = std::is_same_v<Light, SectorTopologyDynamicRectLight>;
+    float y = 0.0f;
+    engine::Text(ui, config, assets, {0.0f, y, contentW, 34.0f}, font,
+            TextFormat("%s Rect Light: %d", Dynamic ? "Dynamic" : "Static", light.id),
+            engine::UITextJustify::Left, config.textColor);
+    y += 38.0f;
+    engine::Text(ui, config, assets, {0.0f, y, 88.0f, rowH}, font, "Id",
+            engine::UITextJustify::Left, config.mutedTextColor);
+    engine::Text(ui, config, assets, {88.0f, y, contentW - 88.0f, rowH}, font,
+            TextFormat("%d", light.id), engine::UITextJustify::Left, config.textColor);
+    y += rowH + gap;
+    if (!inspectorIdUiState.idEditError.empty()) {
+        engine::Text(ui, config, assets, {0.0f, y, contentW, 34.0f}, font,
+                inspectorIdUiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
+        y += 36.0f;
+    }
+    if (engine::Button(ui, config, input, assets, Dynamic
+                ? "sector_editor_delete_dynamic_rect_light" : "sector_editor_delete_static_rect_light",
+                {0.0f, y, contentW, rowH}, font, "Delete Light")) {
+        deleteRequested = true;
+        return true;
+    }
+    y += rowH + gap;
+    if constexpr (Dynamic) {
+        bool enabled = light.enabled;
+        if (engine::Checkbox(ui, config, input, assets, "sector_editor_dynamic_rect_enabled",
+                    {0.0f, y, contentW, rowH}, font, "Enabled", enabled)
+                && editing.SetDynamicRectLightEnabled(light, enabled)) sourceRefreshRequested = true;
+        y += rowH + gap;
+        bool flicker = light.flicker;
+        if (engine::Checkbox(ui, config, input, assets, "sector_editor_dynamic_rect_flicker",
+                    {0.0f, y, contentW, rowH}, font, "Flicker", flicker)
+                && editing.SetDynamicRectLightFlicker(light, flicker)) sourceRefreshRequested = true;
+        y += rowH + gap;
+        auto dynamicFloatRow = [&](const char* id, const char* label, float value,
+                engine::UIFloatInputState& state, float minimum, float maximum,
+                int decimals, auto setter) {
+            const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+            const auto result = DrawLabeledFloatInput(ui, config, input, assets, font,
+                    id, label, layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right, value, state, minimum, maximum, decimals);
+            if (result.changed && result.value != value
+                    && (editing.*setter)(light, result.value)) sourceRefreshRequested = true;
+            y += rowH + gap;
+        };
+        dynamicFloatRow("sector_editor_dynamic_rect_flicker_speed", "Flicker speed:",
+                light.flickerSpeed, uiState.lightFlickerSpeedInput,
+                DynamicLightFlickerMinSpeed, DynamicLightFlickerMaxSpeed, 3,
+                &SectorEditorLightEditingService::SetDynamicRectLightFlickerSpeed);
+        dynamicFloatRow("sector_editor_dynamic_rect_flicker_amount", "Flicker amount:",
+                light.flickerAmount, uiState.lightFlickerAmountInput,
+                DynamicLightFlickerMinAmount, DynamicLightFlickerMaxAmount, 3,
+                &SectorEditorLightEditingService::SetDynamicRectLightFlickerAmount);
+    }
+    bool shadow = light.castsShadow;
+    if (engine::Checkbox(ui, config, input, assets, Dynamic
+                ? "sector_editor_dynamic_rect_shadow" : "sector_editor_static_rect_shadow",
+                {0.0f, y, contentW, rowH}, font, "Shadow", shadow)) {
+        const bool changed = [&]() {
+            if constexpr (Dynamic) return editing.SetDynamicRectLightCastsShadow(light, shadow);
+            else return editing.SetStaticRectLightCastsShadow(light, shadow);
+        }();
+        sourceRefreshRequested = sourceRefreshRequested || changed;
+    }
+    y += rowH + gap;
+    if constexpr (Dynamic) {
+        {
+            const auto layout = BuildSectorEditorInspectorRightIntRowLayout(y, contentW, rowH, gap);
+            const auto result = DrawLabeledIntInput(ui, config, input, assets, font,
+                    "sector_editor_dynamic_rect_shadow_priority", "Shadow priority:",
+                    layout.labelRect, layout.inputRect, engine::UITextJustify::Right,
+                    light.shadowPriority, uiState.lightShadowPriorityInput,
+                    DynamicSpotLightMinShadowPriority, DynamicSpotLightMaxShadowPriority, 1);
+            if (result.changed && result.value != light.shadowPriority
+                    && editing.SetDynamicRectLightShadowPriority(light, result.value)) {
+                sourceRefreshRequested = true;
+            }
+            y += rowH + gap;
+        }
+        auto shadowFloatRow = [&](const char* id, const char* label, float value,
+                engine::UIFloatInputState& state, float minimum, float maximum,
+                int decimals, auto setter) {
+            const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+            const auto result = DrawLabeledFloatInput(ui, config, input, assets, font,
+                    id, label, layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right, value, state, minimum, maximum, decimals);
+            if (result.changed && result.value != value
+                    && (editing.*setter)(light, result.value)) sourceRefreshRequested = true;
+            y += rowH + gap;
+        };
+        shadowFloatRow("sector_editor_dynamic_rect_shadow_bias", "Shadow bias:",
+                light.shadowBias, uiState.lightShadowBiasInput,
+                DynamicSpotLightMinShadowBias, DynamicSpotLightMaxShadowBias, 5,
+                &SectorEditorLightEditingService::SetDynamicRectLightShadowBias);
+        shadowFloatRow("sector_editor_dynamic_rect_shadow_strength", "Shadow strength:",
+                light.shadowStrength, uiState.lightShadowStrengthInput,
+                DynamicSpotLightMinShadowStrength, DynamicSpotLightMaxShadowStrength, 3,
+                &SectorEditorLightEditingService::SetDynamicRectLightShadowStrength);
+        shadowFloatRow("sector_editor_dynamic_rect_shadow_softness", "Softness:",
+                light.shadowSoftness, uiState.lightShadowSoftnessInput,
+                DynamicSpotLightMinShadowSoftness, DynamicSpotLightMaxShadowSoftness, 3,
+                &SectorEditorLightEditingService::SetDynamicRectLightShadowSoftness);
+    }
+
+    enum Field { PX, PY, PZ, TX, TY, TZ, Roll, Width, Height, Range, Intensity };
+    auto row = [&](const char* id, const char* label, float value,
+            engine::UIFloatInputState& state, float minimum, float maximum, Field field) {
+        const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+        const auto result = DrawLabeledFloatInput(ui, config, input, assets, font, id, label,
+                layout.labelRect, layout.inputRect, engine::UITextJustify::Right,
+                value, state, minimum, maximum, 2);
+        if (result.changed && result.value != value) {
+            bool changed = false;
+            if (field <= PZ) {
+                Vector3 v = light.position; (&v.x)[field] = result.value;
+                if constexpr (Dynamic) changed = editing.SetDynamicRectLightPosition(light, v);
+                else changed = editing.SetStaticRectLightPosition(light, v);
+            } else if (field <= TZ) {
+                Vector3 v = light.target; (&v.x)[field - TX] = result.value;
+                if constexpr (Dynamic) changed = editing.SetDynamicRectLightTarget(light, v);
+                else changed = editing.SetStaticRectLightTarget(light, v);
+            } else if (field == Roll) {
+                if constexpr (Dynamic) changed = editing.SetDynamicRectLightRoll(light, result.value);
+                else changed = editing.SetStaticRectLightRoll(light, result.value);
+            } else if (field == Width) {
+                if constexpr (Dynamic) changed = editing.SetDynamicRectLightWidth(light, result.value);
+                else changed = editing.SetStaticRectLightWidth(light, result.value);
+            } else if (field == Height) {
+                if constexpr (Dynamic) changed = editing.SetDynamicRectLightHeight(light, result.value);
+                else changed = editing.SetStaticRectLightHeight(light, result.value);
+            } else if (field == Range) {
+                if constexpr (Dynamic) changed = editing.SetDynamicRectLightRange(light, result.value);
+                else changed = editing.SetStaticRectLightRange(light, result.value);
+            } else {
+                if constexpr (Dynamic) changed = editing.SetDynamicRectLightIntensity(light, result.value);
+                else changed = editing.SetStaticRectLightIntensity(light, result.value);
+            }
+            sourceRefreshRequested = sourceRefreshRequested || changed;
+        }
+        y += rowH + gap;
+    };
+    const char* prefix = Dynamic ? "dynamic_rect" : "static_rect";
+    row(TextFormat("%s_px", prefix), "Position X:", light.position.x, uiState.lightXInput, -8192, 8192, PX);
+    row(TextFormat("%s_py", prefix), "Position Y:", light.position.y, uiState.lightYInput, -512, 512, PY);
+    row(TextFormat("%s_pz", prefix), "Position Z:", light.position.z, uiState.lightZInput, -8192, 8192, PZ);
+    row(TextFormat("%s_tx", prefix), "Target X:", light.target.x, uiState.lightTargetXInput, -8192, 8192, TX);
+    row(TextFormat("%s_ty", prefix), "Target Y:", light.target.y, uiState.lightTargetYInput, -512, 512, TY);
+    row(TextFormat("%s_tz", prefix), "Target Z:", light.target.z, uiState.lightTargetZInput, -8192, 8192, TZ);
+    if (engine::Button(
+                ui,
+                config,
+                input,
+                assets,
+                Dynamic ? "sector_editor_dynamic_rect_light_point_down"
+                        : "sector_editor_static_rect_light_point_down",
+                Rectangle{0.0f, y, contentW, rowH},
+                font,
+                "Point Down")) {
+        const bool changed = [&]() {
+            if constexpr (Dynamic) return editing.PointDynamicRectLightDown(light);
+            else return editing.PointStaticRectLightDown(light);
+        }();
+        sourceRefreshRequested = sourceRefreshRequested || changed;
+    }
+    y += rowH + gap;
+    row(TextFormat("%s_roll", prefix), "Roll:", light.rollDegrees, uiState.lightSourceRadiusInput, -180, 180, Roll);
+    row(TextFormat("%s_width", prefix), "Width:", light.width, uiState.lightInnerConeInput,
+            SectorWorldToAuthoringDistance(0.05f), SectorWorldToAuthoringDistance(64.0f), Width);
+    row(TextFormat("%s_height", prefix), "Height:", light.height, uiState.lightOuterConeInput,
+            SectorWorldToAuthoringDistance(0.05f), SectorWorldToAuthoringDistance(64.0f), Height);
+    row(TextFormat("%s_range", prefix), "Range:", light.range, uiState.lightRadiusInput,
+            SectorWorldToAuthoringDistance(0.1f), SectorWorldToAuthoringDistance(64.0f), Range);
+    row(TextFormat("%s_intensity", prefix), "Intensity:", light.intensity, uiState.lightIntensityInput, 0, 8, Intensity);
+
+    auto colorRow = [&](const char* suffix, const char* label, unsigned char& channel,
+            engine::UIIntInputState& state) {
+        const auto result = DrawRgb8ChannelInput(ui, config, input, assets, font,
+                TextFormat("%s_%s", prefix, suffix), label, {0.0f, y, 126.0f, rowH},
+                {126.0f, y, contentW - 126.0f, rowH}, engine::UITextJustify::Right,
+                channel, state);
+        if (result.changed) {
+            Color value = light.color;
+            if (&channel == &light.color.r) value.r = result.channel;
+            else if (&channel == &light.color.g) value.g = result.channel;
+            else value.b = result.channel;
+            if constexpr (Dynamic) editing.SetDynamicRectLightColor(light, value);
+            else editing.SetStaticRectLightColor(light, value);
+            sourceRefreshRequested = true;
+        }
+        y += rowH + gap;
+    };
+    colorRow("r", "R:", light.color.r, uiState.lightRedInput);
+    colorRow("g", "G:", light.color.g, uiState.lightGreenInput);
+    colorRow("b", "B:", light.color.b, uiState.lightBlueInput);
+    DrawColorSwatch(config, {scroll.viewport.x + std::max(0.0f, contentW - 120.0f),
+            scroll.viewport.y - uiState.inspectorScroll.offset.y + y + 2.0f, 120.0f, 28.0f},
+            light.color, 1.0f);
+    y += 36.0f + gap;
+    DrawLightAtmosphereInspector(ui, config, input, assets, font, contentW, rowH, gap, y,
+            light.atmosphere, uiState,
+            [&editing, &light](SectorLightAtmosphereSettings settings) {
+                if constexpr (Dynamic) return editing.SetDynamicRectLightAtmosphere(light, settings);
+                else return editing.SetStaticRectLightAtmosphere(light, settings);
+            }, sourceRefreshRequested, true, true);
+    if (bakeRequested != nullptr && engine::Button(ui, config, input, assets,
+                "sector_editor_static_rect_bake", {0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
+        *bakeRequested = true;
+    }
+    return true;
+}
+
+bool DrawSelectedStaticRectLightInspector(
+        engine::UIContext& ui, const engine::UIConfig& config, engine::Input& input,
+        engine::AssetManager& assets, engine::FontHandle font, engine::UIScrollAreaResult scroll,
+        float contentW, float rowH, float gap, SectorTopologyStaticRectLight& light,
+        SectorEditorUiState& state, InspectorIdUiState& idState,
+        SectorEditorLightEditingService& editing, bool& deleteRequested,
+        bool& bakeRequested, bool& sourceRefreshRequested)
+{
+    return DrawRectLightInspector(ui, config, input, assets, font, scroll, contentW,
+            rowH, gap, light, state, idState, editing, deleteRequested,
+            &bakeRequested, sourceRefreshRequested);
+}
+
+bool DrawSelectedDynamicRectLightInspector(
+        engine::UIContext& ui, const engine::UIConfig& config, engine::Input& input,
+        engine::AssetManager& assets, engine::FontHandle font, engine::UIScrollAreaResult scroll,
+        float contentW, float rowH, float gap, SectorTopologyDynamicRectLight& light,
+        SectorEditorUiState& state, InspectorIdUiState& idState,
+        SectorEditorLightEditingService& editing, bool& deleteRequested,
+        bool& sourceRefreshRequested)
+{
+    return DrawRectLightInspector(ui, config, input, assets, font, scroll, contentW,
+            rowH, gap, light, state, idState, editing, deleteRequested,
+            nullptr, sourceRefreshRequested);
 }
 
 } // namespace game

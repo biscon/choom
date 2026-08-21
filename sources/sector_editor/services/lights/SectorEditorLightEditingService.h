@@ -121,8 +121,10 @@ public:
 
     SectorEditorLightMutationResult AddStaticLight(int sectorId, Vector2 mapPoint);
     SectorEditorLightMutationResult AddStaticSpotLight(int sectorId, Vector2 mapPoint);
+    SectorEditorLightMutationResult AddStaticRectLight(int sectorId, Vector2 mapPoint);
     SectorEditorLightMutationResult AddDynamicLight(int sectorId, Vector2 mapPoint);
     SectorEditorLightMutationResult AddDynamicSpotLight(int sectorId, Vector2 mapPoint);
+    SectorEditorLightMutationResult AddDynamicRectLight(int sectorId, Vector2 mapPoint);
     SectorEditorLightMutationResult DeleteSelectedLightConfirmed();
 
     bool BeginLightDrag(TopologySelectionKind kind, int topologyLightId, SpotLightHandle spotHandle);
@@ -130,7 +132,10 @@ public:
     SectorEditorLightMutationResult FinishLightDrag();
     SectorEditorLightMutationResult CancelLightDragData(const char* message);
 
-    SectorEditorLightMutationResult ApplyLightPilot(Vector3 position, Vector3 target);
+    SectorEditorLightMutationResult ApplyLightPilot(
+            Vector3 position,
+            Vector3 target,
+            float rectRollDeltaDegrees = 0.0f);
     SectorEditorLightMutationResult CancelLightPilotData(const char* message);
 
     bool BeginProxyPlacement(
@@ -202,6 +207,37 @@ public:
     bool SetDynamicSpotLightAtmosphere(
             SectorTopologyDynamicSpotLight& light,
             SectorLightAtmosphereSettings settings);
+
+    bool SetStaticRectLightPosition(SectorTopologyStaticRectLight& light, Vector3 value);
+    bool SetStaticRectLightTarget(SectorTopologyStaticRectLight& light, Vector3 value);
+    bool PointStaticRectLightDown(SectorTopologyStaticRectLight& light);
+    bool SetStaticRectLightRoll(SectorTopologyStaticRectLight& light, float value);
+    bool SetStaticRectLightWidth(SectorTopologyStaticRectLight& light, float value);
+    bool SetStaticRectLightHeight(SectorTopologyStaticRectLight& light, float value);
+    bool SetStaticRectLightRange(SectorTopologyStaticRectLight& light, float value);
+    bool SetStaticRectLightIntensity(SectorTopologyStaticRectLight& light, float value);
+    bool SetStaticRectLightCastsShadow(SectorTopologyStaticRectLight& light, bool value);
+    bool SetStaticRectLightColor(SectorTopologyStaticRectLight& light, Color value);
+    bool SetStaticRectLightAtmosphere(SectorTopologyStaticRectLight& light, SectorLightAtmosphereSettings value);
+    bool SetDynamicRectLightPosition(SectorTopologyDynamicRectLight& light, Vector3 value);
+    bool SetDynamicRectLightTarget(SectorTopologyDynamicRectLight& light, Vector3 value);
+    bool PointDynamicRectLightDown(SectorTopologyDynamicRectLight& light);
+    bool SetDynamicRectLightRoll(SectorTopologyDynamicRectLight& light, float value);
+    bool SetDynamicRectLightWidth(SectorTopologyDynamicRectLight& light, float value);
+    bool SetDynamicRectLightHeight(SectorTopologyDynamicRectLight& light, float value);
+    bool SetDynamicRectLightRange(SectorTopologyDynamicRectLight& light, float value);
+    bool SetDynamicRectLightIntensity(SectorTopologyDynamicRectLight& light, float value);
+    bool SetDynamicRectLightEnabled(SectorTopologyDynamicRectLight& light, bool value);
+    bool SetDynamicRectLightFlicker(SectorTopologyDynamicRectLight& light, bool value);
+    bool SetDynamicRectLightFlickerSpeed(SectorTopologyDynamicRectLight& light, float value);
+    bool SetDynamicRectLightFlickerAmount(SectorTopologyDynamicRectLight& light, float value);
+    bool SetDynamicRectLightCastsShadow(SectorTopologyDynamicRectLight& light, bool value);
+    bool SetDynamicRectLightShadowPriority(SectorTopologyDynamicRectLight& light, int value);
+    bool SetDynamicRectLightShadowBias(SectorTopologyDynamicRectLight& light, float value);
+    bool SetDynamicRectLightShadowStrength(SectorTopologyDynamicRectLight& light, float value);
+    bool SetDynamicRectLightShadowSoftness(SectorTopologyDynamicRectLight& light, float value);
+    bool SetDynamicRectLightColor(SectorTopologyDynamicRectLight& light, Color value);
+    bool SetDynamicRectLightAtmosphere(SectorTopologyDynamicRectLight& light, SectorLightAtmosphereSettings value);
 
 private:
     void MarkEdited(const char* status);

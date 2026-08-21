@@ -593,8 +593,10 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
     ValidateIds(map.sectors, SectorTopologyObjectKind::Sector, issues);
     ValidateIds(map.staticLights, SectorTopologyObjectKind::StaticLight, issues);
     ValidateIds(map.staticSpotLights, SectorTopologyObjectKind::StaticLight, issues);
+    ValidateIds(map.staticRectLights, SectorTopologyObjectKind::StaticLight, issues);
     ValidateIds(map.dynamicPointLights, SectorTopologyObjectKind::DynamicLight, issues);
     ValidateIds(map.dynamicSpotLights, SectorTopologyObjectKind::DynamicLight, issues);
+    ValidateIds(map.dynamicRectLights, SectorTopologyObjectKind::DynamicLight, issues);
 
     std::unordered_set<int> markerSourceIds;
     std::unordered_set<std::string> markerReferenceIds;
@@ -705,6 +707,37 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
         }
     }
 
+    for (const SectorTopologyStaticRectLight& light : map.staticRectLights) {
+        const auto finiteVector = [](Vector3 value) {
+            return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+        };
+        if (!finiteVector(light.position)) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "position values must be finite");
+        }
+        if (!finiteVector(light.target)) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "target values must be finite");
+        }
+        if (!std::isfinite(light.rollDegrees)) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "roll degrees must be finite");
+        }
+        if (!std::isfinite(light.width) || light.width <= 0.0f
+                || !std::isfinite(light.height) || light.height <= 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "width and height must be finite and positive");
+        }
+        if (!std::isfinite(light.intensity) || light.intensity < 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "intensity must be finite and non-negative");
+        }
+        if (!std::isfinite(light.range) || light.range <= 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::StaticLight, light.id,
+                     "range must be finite and positive");
+        }
+    }
+
     for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
         if (!std::isfinite(light.position.x)
                 || !std::isfinite(light.position.y)
@@ -774,6 +807,41 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
         if (!std::isfinite(light.flickerAmount)) {
             AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
                      "flicker amount must be finite");
+        }
+    }
+
+    for (const SectorTopologyDynamicRectLight& light : map.dynamicRectLights) {
+        const auto finiteVector = [](Vector3 value) {
+            return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+        };
+        if (!finiteVector(light.position)) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "position values must be finite");
+        }
+        if (!finiteVector(light.target)) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "target values must be finite");
+        }
+        if (!std::isfinite(light.rollDegrees)) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "roll degrees must be finite");
+        }
+        if (!std::isfinite(light.width) || light.width <= 0.0f
+                || !std::isfinite(light.height) || light.height <= 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "width and height must be finite and positive");
+        }
+        if (!std::isfinite(light.intensity) || light.intensity < 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "intensity must be finite and non-negative");
+        }
+        if (!std::isfinite(light.range) || light.range <= 0.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "range must be finite and positive");
+        }
+        if (!std::isfinite(light.flickerSpeed) || !std::isfinite(light.flickerAmount)) {
+            AddIssue(&issues, SectorTopologyObjectKind::DynamicLight, light.id,
+                     "flicker settings must be finite");
         }
     }
 

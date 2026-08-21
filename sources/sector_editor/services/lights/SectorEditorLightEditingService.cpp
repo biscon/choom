@@ -67,6 +67,13 @@ Vector3 TargetPointingDown(Vector3 position, Vector3 target)
     return Vector3{position.x, position.y - distance, position.z};
 }
 
+float AddNormalizedDegrees(float baseDegrees, float deltaDegrees)
+{
+    if (!std::isfinite(baseDegrees)) baseDegrees = 0.0f;
+    if (!std::isfinite(deltaDegrees)) deltaDegrees = 0.0f;
+    return std::remainder(baseDegrees + deltaDegrees, 360.0f);
+}
+
 SectorLightAtmosphereSettings* FindAtmosphere(
         SectorTopologyMap& map,
         LightPilotKind kind,
@@ -88,6 +95,14 @@ SectorLightAtmosphereSettings* FindAtmosphere(
         SectorTopologyDynamicSpotLight* light = FindSectorTopologyDynamicSpotLight(map, lightId);
         return light != nullptr ? &light->atmosphere : nullptr;
     }
+    if (kind == LightPilotKind::StaticRect) {
+        auto* light = FindSectorTopologyStaticRectLight(map, lightId);
+        return light != nullptr ? &light->atmosphere : nullptr;
+    }
+    if (kind == LightPilotKind::DynamicRect) {
+        auto* light = FindSectorTopologyDynamicRectLight(map, lightId);
+        return light != nullptr ? &light->atmosphere : nullptr;
+    }
     return nullptr;
 }
 
@@ -105,7 +120,9 @@ Vector3* FindProxyOffset(
                 : nullptr;
     }
     const bool spotLight = lightKind == LightPilotKind::StaticSpot
-            || lightKind == LightPilotKind::DynamicSpot;
+            || lightKind == LightPilotKind::DynamicSpot
+            || lightKind == LightPilotKind::StaticRect
+            || lightKind == LightPilotKind::DynamicRect;
     if (proxyKind == LightProxyPlacementKind::Shaft
             && spotLight
             && atmosphere->proxy.shaft.enabled) {
@@ -131,6 +148,8 @@ const char* LightName(LightPilotKind kind)
         case LightPilotKind::StaticSpot: return "static spot";
         case LightPilotKind::DynamicPoint: return "dynamic light";
         case LightPilotKind::DynamicSpot: return "dynamic spot";
+        case LightPilotKind::StaticRect: return "static rect light";
+        case LightPilotKind::DynamicRect: return "dynamic rect light";
         case LightPilotKind::None: return "light";
     }
     return "light";
@@ -247,9 +266,11 @@ void SelectLight(
 
     state.topologySelectionKind = kind;
     state.selectedTopologyLightId = kind == TopologySelectionKind::StaticLight ? lightId : -1;
-    state.selectedTopologyStaticSpotLightId = kind == TopologySelectionKind::StaticSpotLight ? lightId : -1;
+    state.selectedTopologyStaticSpotLightId = (kind == TopologySelectionKind::StaticSpotLight
+            || kind == TopologySelectionKind::StaticRectLight) ? lightId : -1;
     state.selectedTopologyDynamicLightId = kind == TopologySelectionKind::DynamicLight ? lightId : -1;
-    state.selectedTopologyDynamicSpotLightId = kind == TopologySelectionKind::DynamicSpotLight ? lightId : -1;
+    state.selectedTopologyDynamicSpotLightId = (kind == TopologySelectionKind::DynamicSpotLight
+            || kind == TopologySelectionKind::DynamicRectLight) ? lightId : -1;
     std::snprintf(uiState.inspectorIdUiState.selectedLightIdBuffer, sizeof(uiState.inspectorIdUiState.selectedLightIdBuffer), "%d", lightId);
     uiState.inspectorIdUiState.idBufferLightIndex = lightId;
     uiState.inspectorIdUiState.idBufferSectorIndex = -1;
@@ -417,6 +438,26 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::AddDynamicSpotL
     return FinishLightMutationResult(true);
 }
 
+SectorEditorLightMutationResult SectorEditorLightEditingService::AddStaticRectLight(
+        int sectorId, Vector2 mapPoint)
+{
+    const auto add = AddStaticRectLightToSector(context_.map, sectorId, mapPoint);
+    if (!add.changed) { context_.statusText = add.status; return {}; }
+    SelectLight(context_.selection, context_.ui, TopologySelectionKind::StaticRectLight, add.lightId);
+    FinishTopologyActionResult({true, add.status});
+    return FinishLightMutationResult(true);
+}
+
+SectorEditorLightMutationResult SectorEditorLightEditingService::AddDynamicRectLight(
+        int sectorId, Vector2 mapPoint)
+{
+    const auto add = AddDynamicRectLightToSector(context_.map, sectorId, mapPoint);
+    if (!add.changed) { context_.statusText = add.status; return {}; }
+    SelectLight(context_.selection, context_.ui, TopologySelectionKind::DynamicRectLight, add.lightId);
+    FinishTopologyActionResult({true, add.status});
+    return FinishLightMutationResult(true);
+}
+
 SectorEditorLightMutationResult SectorEditorLightEditingService::DeleteSelectedLightConfirmed()
 {
     SectorEditorTopologyActionResult deleteResult;
@@ -438,6 +479,14 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::DeleteSelectedL
             && context_.selection.selectedTopologyDynamicSpotLightId >= 0) {
         lightId = context_.selection.selectedTopologyDynamicSpotLightId;
         deleteResult = DeleteDynamicSpotLight(context_.map, lightId);
+    } else if (kind == TopologySelectionKind::StaticRectLight
+            && context_.selection.selectedTopologyStaticSpotLightId >= 0) {
+        lightId = context_.selection.selectedTopologyStaticSpotLightId;
+        deleteResult = DeleteStaticRectLight(context_.map, lightId);
+    } else if (kind == TopologySelectionKind::DynamicRectLight
+            && context_.selection.selectedTopologyDynamicSpotLightId >= 0) {
+        lightId = context_.selection.selectedTopologyDynamicSpotLightId;
+        deleteResult = DeleteDynamicRectLight(context_.map, lightId);
     } else {
         return {};
     }
@@ -454,6 +503,10 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::DeleteSelectedL
             || (kind == TopologySelectionKind::DynamicLight
                     && context_.selection.selectedTopologyDynamicLightId == lightId)
             || (kind == TopologySelectionKind::DynamicSpotLight
+                    && context_.selection.selectedTopologyDynamicSpotLightId == lightId)
+            || (kind == TopologySelectionKind::StaticRectLight
+                    && context_.selection.selectedTopologyStaticSpotLightId == lightId)
+            || (kind == TopologySelectionKind::DynamicRectLight
                     && context_.selection.selectedTopologyDynamicSpotLightId == lightId)) {
         const LightPilotKind pilotKind = kind == TopologySelectionKind::StaticLight
                 ? LightPilotKind::StaticPoint
@@ -461,7 +514,11 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::DeleteSelectedL
                         ? LightPilotKind::StaticSpot
                         : (kind == TopologySelectionKind::DynamicLight
                                 ? LightPilotKind::DynamicPoint
-                                : LightPilotKind::DynamicSpot));
+                                : (kind == TopologySelectionKind::DynamicSpotLight
+                                        ? LightPilotKind::DynamicSpot
+                                        : (kind == TopologySelectionKind::StaticRectLight
+                                                ? LightPilotKind::StaticRect
+                                                : LightPilotKind::DynamicRect))));
         if (context_.lightState.lightPilot.active
                 && context_.lightState.lightPilot.kind == pilotKind
                 && context_.lightState.lightPilot.lightId == lightId) {
@@ -534,6 +591,18 @@ bool SectorEditorLightEditingService::BeginLightDrag(
         context_.statusText = spotHandle == SpotLightHandle::Target
                 ? TextFormat("Aiming dynamic spot %d", light->id)
                 : TextFormat("Moving dynamic spot %d", light->id);
+    } else if (kind == TopologySelectionKind::StaticRectLight) {
+        const auto* light = FindSectorTopologyStaticRectLight(context_.map, topologyLightId);
+        if (light == nullptr) return false;
+        edit.originalPosition = light->position;
+        edit.originalTarget = light->target;
+        context_.statusText = TextFormat("Moving static rect light %d", light->id);
+    } else if (kind == TopologySelectionKind::DynamicRectLight) {
+        const auto* light = FindSectorTopologyDynamicRectLight(context_.map, topologyLightId);
+        if (light == nullptr) return false;
+        edit.originalPosition = light->position;
+        edit.originalTarget = light->target;
+        context_.statusText = TextFormat("Moving dynamic rect light %d", light->id);
     } else if (kind == TopologySelectionKind::DynamicLight) {
         const SectorTopologyDynamicPointLight* light =
                 FindSectorTopologyDynamicLight(context_.map, topologyLightId);
@@ -575,6 +644,29 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::ApplyLightDragT
         light->position.y = edit.originalPosition.y;
         light->position.z = snappedPosition.z;
         context_.statusText = TextFormat("Moving dynamic light %d", light->id);
+        return {};
+    }
+
+    if (edit.kind == TopologySelectionKind::StaticRectLight
+            || edit.kind == TopologySelectionKind::DynamicRectLight) {
+        Vector3* position = nullptr;
+        Vector3* target = nullptr;
+        if (edit.kind == TopologySelectionKind::StaticRectLight) {
+            if (auto* light = FindSectorTopologyStaticRectLight(context_.map, edit.topologyLightId)) {
+                position = &light->position; target = &light->target;
+            }
+        } else if (auto* light = FindSectorTopologyDynamicRectLight(context_.map, edit.topologyLightId)) {
+            position = &light->position; target = &light->target;
+        }
+        if (position == nullptr || target == nullptr) return {};
+        if (edit.spotHandle == SpotLightHandle::Target) {
+            target->x = snappedPosition.x; target->z = snappedPosition.z;
+        } else {
+            const float dx = snappedPosition.x - edit.originalPosition.x;
+            const float dz = snappedPosition.z - edit.originalPosition.z;
+            position->x = snappedPosition.x; position->z = snappedPosition.z;
+            target->x = edit.originalTarget.x + dx; target->z = edit.originalTarget.z + dz;
+        }
         return {};
     }
 
@@ -654,6 +746,26 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::FinishLightDrag
                 FinishMoveDynamicLight(context_.map, edit.topologyLightId, edit.originalPosition)));
     }
 
+    if (edit.kind == TopologySelectionKind::StaticRectLight
+            || edit.kind == TopologySelectionKind::DynamicRectLight) {
+        const Vector3* position = nullptr;
+        const Vector3* target = nullptr;
+        if (edit.kind == TopologySelectionKind::StaticRectLight) {
+            if (const auto* light = FindSectorTopologyStaticRectLight(context_.map, edit.topologyLightId)) {
+                position = &light->position; target = &light->target;
+            }
+        } else if (const auto* light = FindSectorTopologyDynamicRectLight(context_.map, edit.topologyLightId)) {
+            position = &light->position; target = &light->target;
+        }
+        if (position == nullptr || target == nullptr) return {};
+        SelectLight(context_.selection, context_.ui, edit.kind, edit.topologyLightId);
+        const bool changed = !SameVector3(*position, edit.originalPosition)
+                || !SameVector3(*target, edit.originalTarget);
+        return FinishLightMutationResult(FinishTopologyActionResult({changed,
+                changed ? TextFormat("Moved rect light %d", edit.topologyLightId)
+                        : TextFormat("Rect light %d unchanged", edit.topologyLightId)}));
+    }
+
     if (edit.kind == TopologySelectionKind::DynamicSpotLight) {
         const SectorTopologyDynamicSpotLight* light =
                 FindSectorTopologyDynamicSpotLight(context_.map, edit.topologyLightId);
@@ -725,6 +837,16 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::CancelLightDrag
                 light->target = edit.originalTarget;
                 SelectLight(context_.selection, context_.ui, TopologySelectionKind::StaticSpotLight, light->id);
             }
+        } else if (edit.kind == TopologySelectionKind::StaticRectLight) {
+            if (auto* light = FindSectorTopologyStaticRectLight(context_.map, edit.topologyLightId)) {
+                light->position = edit.originalPosition; light->target = edit.originalTarget;
+                SelectLight(context_.selection, context_.ui, edit.kind, light->id);
+            }
+        } else if (edit.kind == TopologySelectionKind::DynamicRectLight) {
+            if (auto* light = FindSectorTopologyDynamicRectLight(context_.map, edit.topologyLightId)) {
+                light->position = edit.originalPosition; light->target = edit.originalTarget;
+                SelectLight(context_.selection, context_.ui, edit.kind, light->id);
+            }
         } else if (SectorTopologyStaticPointLight* light =
                        FindSectorTopologyStaticLight(context_.map, edit.topologyLightId)) {
             light->position = edit.originalPosition;
@@ -740,7 +862,8 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::CancelLightDrag
 
 SectorEditorLightMutationResult SectorEditorLightEditingService::ApplyLightPilot(
         Vector3 position,
-        Vector3 target)
+        Vector3 target,
+        float rectRollDeltaDegrees)
 {
     const LightPilotLightState pilot = context_.lightState.lightPilot;
     if (!pilot.active) {
@@ -759,8 +882,13 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::ApplyLightPilot
     SectorTopologyDynamicSpotLight* dynamicSpot = pilot.kind == LightPilotKind::DynamicSpot
             ? FindSectorTopologyDynamicSpotLight(context_.map, pilot.lightId)
             : nullptr;
+    SectorTopologyStaticRectLight* staticRect = pilot.kind == LightPilotKind::StaticRect
+            ? FindSectorTopologyStaticRectLight(context_.map, pilot.lightId) : nullptr;
+    SectorTopologyDynamicRectLight* dynamicRect = pilot.kind == LightPilotKind::DynamicRect
+            ? FindSectorTopologyDynamicRectLight(context_.map, pilot.lightId) : nullptr;
     if (staticPoint == nullptr && staticSpot == nullptr
-            && dynamicPoint == nullptr && dynamicSpot == nullptr) {
+            && dynamicPoint == nullptr && dynamicSpot == nullptr
+            && staticRect == nullptr && dynamicRect == nullptr) {
         return CancelLightPilotData("Light pilot cancelled: light missing");
     }
 
@@ -776,10 +904,22 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::ApplyLightPilot
     } else if (dynamicPoint != nullptr) {
         dynamicPoint->position = position;
         lightName = "dynamic light";
-    } else {
+    } else if (dynamicSpot != nullptr) {
         dynamicSpot->position = position;
         dynamicSpot->target = target;
         lightName = "dynamic spot";
+    } else if (staticRect != nullptr) {
+        staticRect->position = position;
+        staticRect->target = target;
+        staticRect->rollDegrees = AddNormalizedDegrees(
+                pilot.originalRollDegrees, rectRollDeltaDegrees);
+        lightName = "static rect light";
+    } else {
+        dynamicRect->position = position;
+        dynamicRect->target = target;
+        dynamicRect->rollDegrees = AddNormalizedDegrees(
+                pilot.originalRollDegrees, rectRollDeltaDegrees);
+        lightName = "dynamic rect light";
     }
     context_.lightState.lightPilot = LightPilotLightState{};
     MarkEdited(TextFormat("Piloted %s %d", lightName, lightId));
@@ -823,6 +963,16 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::CancelLightPilo
                     FindSectorTopologyDynamicSpotLight(context_.map, pilot.lightId)) {
             light->position = pilot.originalPosition;
             light->target = pilot.originalTarget;
+        }
+    } else if (pilot.kind == LightPilotKind::StaticRect) {
+        if (auto* light = FindSectorTopologyStaticRectLight(context_.map, pilot.lightId)) {
+            light->position = pilot.originalPosition; light->target = pilot.originalTarget;
+            light->rollDegrees = pilot.originalRollDegrees;
+        }
+    } else if (pilot.kind == LightPilotKind::DynamicRect) {
+        if (auto* light = FindSectorTopologyDynamicRectLight(context_.map, pilot.lightId)) {
+            light->position = pilot.originalPosition; light->target = pilot.originalTarget;
+            light->rollDegrees = pilot.originalRollDegrees;
         }
     }
     if (message != nullptr && message[0] != '\0') {
@@ -1490,5 +1640,66 @@ bool SectorEditorLightEditingService::SetDynamicSpotLightAtmosphere(
     MarkEdited(TextFormat("Updated dynamic spot %d atmosphere", light.id));
     return true;
 }
+
+#define RECT_SETTER(method, Type, field, ValueType, clampExpression, label) \
+bool SectorEditorLightEditingService::method(Type& light, ValueType value) \
+{ \
+    value = (clampExpression); \
+    if (!SetValue(light.field, value)) return false; \
+    MarkEdited(TextFormat("Updated %s %d", label, light.id)); \
+    return true; \
+}
+
+bool SectorEditorLightEditingService::SetStaticRectLightPosition(SectorTopologyStaticRectLight& light, Vector3 value)
+{ if (!SetVector3(light.position, value)) return false; MarkEdited(TextFormat("Updated static rect light %d", light.id)); return true; }
+bool SectorEditorLightEditingService::SetStaticRectLightTarget(SectorTopologyStaticRectLight& light, Vector3 value)
+{ if (!SetVector3(light.target, value)) return false; MarkEdited(TextFormat("Updated static rect light %d", light.id)); return true; }
+bool SectorEditorLightEditingService::PointStaticRectLightDown(SectorTopologyStaticRectLight& light)
+{
+    if (!SetVector3(light.target, TargetPointingDown(light.position, light.target))) return false;
+    MarkEdited(TextFormat("Pointed static rect light %d down", light.id));
+    return true;
+}
+RECT_SETTER(SetStaticRectLightRoll, SectorTopologyStaticRectLight, rollDegrees, float, value, "static rect light")
+RECT_SETTER(SetStaticRectLightWidth, SectorTopologyStaticRectLight, width, float, ClampLightRadius(value), "static rect light")
+RECT_SETTER(SetStaticRectLightHeight, SectorTopologyStaticRectLight, height, float, ClampLightRadius(value), "static rect light")
+RECT_SETTER(SetStaticRectLightRange, SectorTopologyStaticRectLight, range, float, ClampLightRadius(value), "static rect light")
+RECT_SETTER(SetStaticRectLightIntensity, SectorTopologyStaticRectLight, intensity, float, ClampLightIntensity(value), "static rect light")
+RECT_SETTER(SetStaticRectLightCastsShadow, SectorTopologyStaticRectLight, castsShadow, bool, value, "static rect light")
+bool SectorEditorLightEditingService::SetStaticRectLightColor(SectorTopologyStaticRectLight& light, Color value)
+{ if (!SetColorValue(light.color, value)) return false; MarkEdited(TextFormat("Updated static rect light %d", light.id)); return true; }
+bool SectorEditorLightEditingService::SetStaticRectLightAtmosphere(SectorTopologyStaticRectLight& light, SectorLightAtmosphereSettings value)
+{ value = NormalizeSectorLightAtmosphereSettings(value); if (SameAtmosphere(light.atmosphere, value)) return false; light.atmosphere = value; MarkEdited(TextFormat("Updated static rect light %d atmosphere", light.id)); return true; }
+
+bool SectorEditorLightEditingService::SetDynamicRectLightPosition(SectorTopologyDynamicRectLight& light, Vector3 value)
+{ if (!SetVector3(light.position, value)) return false; MarkEdited(TextFormat("Updated dynamic rect light %d", light.id)); return true; }
+bool SectorEditorLightEditingService::SetDynamicRectLightTarget(SectorTopologyDynamicRectLight& light, Vector3 value)
+{ if (!SetVector3(light.target, value)) return false; MarkEdited(TextFormat("Updated dynamic rect light %d", light.id)); return true; }
+bool SectorEditorLightEditingService::PointDynamicRectLightDown(SectorTopologyDynamicRectLight& light)
+{
+    if (!SetVector3(light.target, TargetPointingDown(light.position, light.target))) return false;
+    MarkEdited(TextFormat("Pointed dynamic rect light %d down", light.id));
+    return true;
+}
+RECT_SETTER(SetDynamicRectLightRoll, SectorTopologyDynamicRectLight, rollDegrees, float, value, "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightWidth, SectorTopologyDynamicRectLight, width, float, ClampLightRadius(value), "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightHeight, SectorTopologyDynamicRectLight, height, float, ClampLightRadius(value), "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightRange, SectorTopologyDynamicRectLight, range, float, ClampLightRadius(value), "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightIntensity, SectorTopologyDynamicRectLight, intensity, float, ClampLightIntensity(value), "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightEnabled, SectorTopologyDynamicRectLight, enabled, bool, value, "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightFlicker, SectorTopologyDynamicRectLight, flicker, bool, value, "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightFlickerSpeed, SectorTopologyDynamicRectLight, flickerSpeed, float, ClampDynamicLightFlickerSpeed(value), "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightFlickerAmount, SectorTopologyDynamicRectLight, flickerAmount, float, ClampDynamicLightFlickerAmount(value), "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightCastsShadow, SectorTopologyDynamicRectLight, castsShadow, bool, value, "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightShadowPriority, SectorTopologyDynamicRectLight, shadowPriority, int, ClampDynamicSpotLightShadowPriority(value), "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightShadowBias, SectorTopologyDynamicRectLight, shadowBias, float, ClampDynamicSpotLightShadowBias(value), "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightShadowStrength, SectorTopologyDynamicRectLight, shadowStrength, float, ClampDynamicSpotLightShadowStrength(value), "dynamic rect light")
+RECT_SETTER(SetDynamicRectLightShadowSoftness, SectorTopologyDynamicRectLight, shadowSoftness, float, ClampDynamicSpotLightShadowSoftness(value), "dynamic rect light")
+bool SectorEditorLightEditingService::SetDynamicRectLightColor(SectorTopologyDynamicRectLight& light, Color value)
+{ if (!SetColorValue(light.color, value)) return false; MarkEdited(TextFormat("Updated dynamic rect light %d", light.id)); return true; }
+bool SectorEditorLightEditingService::SetDynamicRectLightAtmosphere(SectorTopologyDynamicRectLight& light, SectorLightAtmosphereSettings value)
+{ value = NormalizeSectorLightAtmosphereSettings(value); if (SameAtmosphere(light.atmosphere, value)) return false; light.atmosphere = value; MarkEdited(TextFormat("Updated dynamic rect light %d atmosphere", light.id)); return true; }
+
+#undef RECT_SETTER
 
 } // namespace game

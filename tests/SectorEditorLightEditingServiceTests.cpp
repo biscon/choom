@@ -205,6 +205,59 @@ void TestAddDynamicLightDirtiesAndSelects()
     CheckDirtyOnce(state, documentState, statusText, "Added dynamic light 1");
 }
 
+void TestAddRectLightsPointDownByDefault()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+    game::SelectionState selectionState;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+
+    game::SectorEditorLightEditingService service = MakeService(
+            state, documentState, documentState.map.topologyMap,
+            TestPreviewSelectionState(), selectionState, manipulationState,
+            lightState, uiState, inspectorIdUiState, statusText);
+    const auto staticResult = service.AddStaticRectLight(1, Vector2{2.0f, 3.0f});
+    const game::SectorTopologyStaticRectLight& staticRect =
+            documentState.map.topologyMap.staticRectLights.front();
+    Check(staticResult.changed
+                  && Near(staticRect.position.x, staticRect.target.x)
+                  && Near(staticRect.position.z, staticRect.target.z)
+                  && Near(staticRect.position.y - staticRect.target.y,
+                          game::SectorWorldToAuthoringDistance(0.8f))
+                  && Near(staticRect.rollDegrees, 0.0f),
+          "new static rect lights point directly down with zero roll");
+    CheckDirtyOnce(state, documentState, statusText, "Added static rect light 1");
+
+    ResetDirty(state, documentState, statusText);
+    const auto dynamicResult = service.AddDynamicRectLight(1, Vector2{4.0f, 5.0f});
+    const game::SectorTopologyDynamicRectLight& dynamicRect =
+            documentState.map.topologyMap.dynamicRectLights.front();
+    Check(dynamicResult.changed
+                  && Near(dynamicRect.position.x, dynamicRect.target.x)
+                  && Near(dynamicRect.position.z, dynamicRect.target.z)
+                  && Near(dynamicRect.position.y - dynamicRect.target.y,
+                          game::SectorWorldToAuthoringDistance(0.8f))
+                  && Near(dynamicRect.rollDegrees, 0.0f),
+          "new dynamic rect lights point directly down with zero roll");
+    CheckDirtyOnce(state, documentState, statusText, "Added dynamic rect light 1");
+
+    const game::SectorTopologyStaticRectLight defaultStatic;
+    const game::SectorTopologyDynamicRectLight defaultDynamic;
+    Check(Near(defaultStatic.position.x, defaultStatic.target.x)
+                  && Near(defaultStatic.position.z, defaultStatic.target.z)
+                  && defaultStatic.target.y < defaultStatic.position.y
+                  && Near(defaultDynamic.position.x, defaultDynamic.target.x)
+                  && Near(defaultDynamic.position.z, defaultDynamic.target.z)
+                  && defaultDynamic.target.y < defaultDynamic.position.y,
+          "default-constructed rect lights point directly down");
+}
+
 void TestAddNoOpDoesNotDirty()
 {
     game::SectorEditorState state;
@@ -524,6 +577,80 @@ void TestPointLightPilotApplyAndCancelTiming()
     CheckClean(state, documentState, statusText, "Light pilot cancelled");
 }
 
+void TestRectLightPilotUsesRelativeRoll()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+    game::SectorTopologyStaticRectLight staticRect;
+    staticRect.id = 27;
+    staticRect.position = {1.0f, 2.0f, 3.0f};
+    staticRect.target = {1.0f, -6.0f, 3.0f};
+    staticRect.rollDegrees = 90.0f;
+    documentState.map.topologyMap.staticRectLights.push_back(staticRect);
+    game::SectorTopologyDynamicRectLight dynamicRect;
+    dynamicRect.id = 28;
+    dynamicRect.position = {4.0f, 5.0f, 6.0f};
+    dynamicRect.target = {4.0f, -3.0f, 6.0f};
+    dynamicRect.rollDegrees = 170.0f;
+    documentState.map.topologyMap.dynamicRectLights.push_back(dynamicRect);
+
+    game::SelectionState selectionState;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(
+            state, documentState, documentState.map.topologyMap,
+            TestPreviewSelectionState(), selectionState, manipulationState,
+            lightState, uiState, inspectorIdUiState, statusText);
+
+    lightState.lightPilot.active = true;
+    lightState.lightPilot.kind = game::LightPilotKind::StaticRect;
+    lightState.lightPilot.lightId = 27;
+    lightState.lightPilot.originalPosition = staticRect.position;
+    lightState.lightPilot.originalTarget = staticRect.target;
+    lightState.lightPilot.originalRollDegrees = staticRect.rollDegrees;
+    service.ApplyLightPilot({2.0f, 3.0f, 4.0f}, {2.0f, -5.0f, 4.0f}, 0.0f);
+    Check(Near(documentState.map.topologyMap.staticRectLights.front().rollDegrees, 90.0f),
+          "applying an upright rect pilot preserves the authored roll");
+    CheckDirtyOnce(state, documentState, statusText, "Applied static rect light 27 pilot pose");
+
+    ResetDirty(state, documentState, statusText);
+    lightState.lightPilot.active = true;
+    lightState.lightPilot.kind = game::LightPilotKind::DynamicRect;
+    lightState.lightPilot.lightId = 28;
+    lightState.lightPilot.originalPosition = dynamicRect.position;
+    lightState.lightPilot.originalTarget = dynamicRect.target;
+    lightState.lightPilot.originalRollDegrees = dynamicRect.rollDegrees;
+    service.ApplyLightPilot({5.0f, 6.0f, 7.0f}, {5.0f, -2.0f, 7.0f}, 25.0f);
+    Check(Near(documentState.map.topologyMap.dynamicRectLights.front().rollDegrees, -165.0f),
+          "rect pilot roll is a normalized delta from the authored roll");
+    CheckDirtyOnce(state, documentState, statusText, "Applied dynamic rect light 28 pilot pose");
+
+    ResetDirty(state, documentState, statusText);
+    game::SectorTopologyStaticRectLight& editedStatic =
+            documentState.map.topologyMap.staticRectLights.front();
+    editedStatic.position = {8.0f, 9.0f, 10.0f};
+    editedStatic.target = {8.0f, 1.0f, 10.0f};
+    editedStatic.rollDegrees = 45.0f;
+    lightState.lightPilot.active = true;
+    lightState.lightPilot.kind = game::LightPilotKind::StaticRect;
+    lightState.lightPilot.lightId = 27;
+    lightState.lightPilot.originalPosition = {2.0f, 3.0f, 4.0f};
+    lightState.lightPilot.originalTarget = {2.0f, -5.0f, 4.0f};
+    lightState.lightPilot.originalRollDegrees = 90.0f;
+    const auto cancel = service.CancelLightPilotData("Light pilot cancelled");
+    Check(cancel.previewPoseRestoreNeeded
+                  && Near(editedStatic.position.x, 2.0f)
+                  && Near(editedStatic.target.y, -5.0f)
+                  && Near(editedStatic.rollDegrees, 90.0f),
+          "cancelling rect pilot restores position, target, and authored roll");
+    CheckClean(state, documentState, statusText, "Light pilot cancelled");
+}
+
 void TestPointSpotLightsDown()
 {
     game::SectorEditorState state;
@@ -566,6 +693,20 @@ void TestPointSpotLightsDown()
     dynamicSpot.atmosphere.dust.enabled = true;
     dynamicSpot.atmosphere.dust.amount = 12;
     documentState.map.topologyMap.dynamicSpotLights.push_back(dynamicSpot);
+
+    game::SectorTopologyStaticRectLight staticRect;
+    staticRect.id = 25;
+    staticRect.position = Vector3{4.0f, 18.0f, 6.0f};
+    staticRect.target = Vector3{7.0f, 22.0f, 6.0f};
+    staticRect.rollDegrees = 90.0f;
+    documentState.map.topologyMap.staticRectLights.push_back(staticRect);
+
+    game::SectorTopologyDynamicRectLight dynamicRect;
+    dynamicRect.id = 26;
+    dynamicRect.position = Vector3{-4.0f, 10.0f, 2.0f};
+    dynamicRect.target = dynamicRect.position;
+    dynamicRect.rollDegrees = -35.0f;
+    documentState.map.topologyMap.dynamicRectLights.push_back(dynamicRect);
 
     game::SelectionState selectionState;
     game::ManipulationState manipulationState;
@@ -656,6 +797,29 @@ void TestPointSpotLightsDown()
                   && editedDynamic.atmosphere.dust.amount == dynamicBefore.atmosphere.dust.amount,
           "dynamic point-down preserves all non-target spotlight settings");
     CheckDirtyOnce(state, documentState, statusText, "Pointed dynamic spot 24 down");
+
+    ResetDirty(state, documentState, statusText);
+    game::SectorTopologyStaticRectLight& editedStaticRect =
+            documentState.map.topologyMap.staticRectLights.front();
+    Check(service.PointStaticRectLightDown(editedStaticRect)
+                  && Near(editedStaticRect.target.x, editedStaticRect.position.x)
+                  && Near(editedStaticRect.target.y, 13.0f)
+                  && Near(editedStaticRect.target.z, editedStaticRect.position.z)
+                  && Near(editedStaticRect.rollDegrees, 90.0f),
+          "static rect Point Down preserves target distance and authored roll");
+    CheckDirtyOnce(state, documentState, statusText, "Pointed static rect light 25 down");
+
+    ResetDirty(state, documentState, statusText);
+    game::SectorTopologyDynamicRectLight& editedDynamicRect =
+            documentState.map.topologyMap.dynamicRectLights.front();
+    Check(service.PointDynamicRectLightDown(editedDynamicRect)
+                  && Near(editedDynamicRect.target.x, editedDynamicRect.position.x)
+                  && Near(editedDynamicRect.target.y,
+                          editedDynamicRect.position.y - fallbackDistance)
+                  && Near(editedDynamicRect.target.z, editedDynamicRect.position.z)
+                  && Near(editedDynamicRect.rollDegrees, -35.0f),
+          "coincident dynamic rect Point Down uses the fallback and preserves roll");
+    CheckDirtyOnce(state, documentState, statusText, "Pointed dynamic rect light 26 down");
 
     editedStatic.target.x = std::numeric_limits<float>::infinity();
     ResetDirty(state, documentState, statusText);
@@ -914,6 +1078,7 @@ int main()
 {
     TestAddStaticLightDirtiesAndSelects();
     TestAddDynamicLightDirtiesAndSelects();
+    TestAddRectLightsPointDownByDefault();
     TestAddNoOpDoesNotDirty();
     TestDeleteSelectedStaticLightDirtiesAndClearsState();
     TestDeleteSelectedDynamicLightDirties();
@@ -921,6 +1086,7 @@ int main()
     TestLightDragFinishNoOpDoesNotDirty();
     TestSpotLightPilotApplyAndCancelTiming();
     TestPointLightPilotApplyAndCancelTiming();
+    TestRectLightPilotUsesRelativeRoll();
     TestPointSpotLightsDown();
     TestStaticShadowEditsUseDocumentMutationBoundary();
     TestAtmosphereEditUsesDocumentMutationBoundary();

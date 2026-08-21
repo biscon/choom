@@ -47,12 +47,22 @@ bool SelectPickTarget(
         case SectorEditorPickKind::DynamicSpotLight:
             SelectSectorEditorTopologyDynamicSpotLight(selectionContext, target.id);
             return context.selectionState.selectedTopologyDynamicSpotLightId == target.id;
+        case SectorEditorPickKind::DynamicRectLight:
+            ClearSectorEditorSelection(selectionContext);
+            context.selectionState.topologySelectionKind = TopologySelectionKind::DynamicRectLight;
+            context.selectionState.selectedTopologyDynamicSpotLightId = target.id;
+            return true;
         case SectorEditorPickKind::DynamicLight:
             SelectSectorEditorTopologyDynamicLight(selectionContext, target.id);
             return context.selectionState.selectedTopologyDynamicLightId == target.id;
         case SectorEditorPickKind::StaticSpotLight:
             SelectSectorEditorTopologyStaticSpotLight(selectionContext, target.id);
             return context.selectionState.selectedTopologyStaticSpotLightId == target.id;
+        case SectorEditorPickKind::StaticRectLight:
+            ClearSectorEditorSelection(selectionContext);
+            context.selectionState.topologySelectionKind = TopologySelectionKind::StaticRectLight;
+            context.selectionState.selectedTopologyStaticSpotLightId = target.id;
+            return true;
         case SectorEditorPickKind::StaticLight:
             SelectSectorEditorTopologyLight(selectionContext, target.id);
             return context.selectionState.selectedTopologyLightId == target.id;

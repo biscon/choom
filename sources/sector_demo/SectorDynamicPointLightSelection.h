@@ -15,9 +15,11 @@ constexpr std::size_t MaxDynamicLights = 32;
 constexpr float DynamicLightDefaultFadeInSeconds = 0.25f;
 constexpr float DynamicLightMaximumFadeInSeconds = 2.0f;
 // The atlas budget is independent from the forward-light budget. A spot uses
-// one slot and a point light uses six planar cube faces.
+// one slot, a rect uses the five cube faces in its emitting hemisphere, and a
+// point light uses all six planar cube faces.
 constexpr std::size_t MaxDynamicSpotLightShadowCasters = 64;
 constexpr int DynamicPointLightShadowFaceCount = 6;
+constexpr int DynamicRectLightShadowFaceCount = 5;
 constexpr int DynamicShadowAtlasTilesPerRow = 8;
 constexpr int DynamicSpotLightShadowMapResolution = 1024;
 constexpr int DynamicShadowAtlasLowResolution = 4096;
@@ -27,13 +29,25 @@ class SectorCollisionWorld;
 struct SectorReceiverBounds;
 struct SectorTopologyDynamicPointLight;
 struct SectorTopologyDynamicSpotLight;
+struct SectorTopologyDynamicRectLight;
 struct SectorTopologyMap;
 struct SectorPreviewDynamicPointLightUniform;
 
 enum class SectorPreviewDynamicLightKind {
     Point = 0,
-    Spot = 1
+    Spot = 1,
+    Rect = 2
 };
+
+constexpr int SectorDynamicShadowFaceCount(
+        SectorPreviewDynamicLightKind kind)
+{
+    return kind == SectorPreviewDynamicLightKind::Point
+            ? DynamicPointLightShadowFaceCount
+            : kind == SectorPreviewDynamicLightKind::Rect
+                    ? DynamicRectLightShadowFaceCount
+                    : 1;
+}
 
 struct SectorPreviewDynamicLightKey {
     SectorPreviewDynamicLightKind kind = SectorPreviewDynamicLightKind::Point;
@@ -56,6 +70,7 @@ struct SectorPreviewDynamicPointLightUniform {
     SectorPreviewDynamicLightKind kind = SectorPreviewDynamicLightKind::Point;
     Vector3 position = {};
     Vector3 direction = {0.0f, -1.0f, 0.0f};
+    Vector3 rectRight = {1.0f, 0.0f, 0.0f};
     Vector3 color = {};
     float radius = 0.0f;
     float innerConeCos = -1.0f;
@@ -98,7 +113,7 @@ struct SectorPreviewDynamicSpotLightShadowMatrix {
     int dynamicLightIndex = -1;
     int shadowSlot = -1;
     SectorPreviewDynamicLightKind kind = SectorPreviewDynamicLightKind::Spot;
-    int pointFace = -1;
+    int cubeFace = -1;
     Vector3 lightPosition = {};
     float lightRadius = 0.0f;
     Matrix view = {};
@@ -176,6 +191,10 @@ bool MakeSectorPreviewDynamicPointLightUniform(
 
 bool MakeSectorPreviewDynamicSpotLightUniform(
         const SectorTopologyDynamicSpotLight& light,
+        SectorPreviewDynamicPointLightUniform& outLight);
+
+bool MakeSectorPreviewDynamicRectLightUniform(
+        const SectorTopologyDynamicRectLight& light,
         SectorPreviewDynamicPointLightUniform& outLight);
 
 float EvaluateDynamicLightFlickerMultiplier(

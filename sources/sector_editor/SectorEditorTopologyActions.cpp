@@ -200,6 +200,38 @@ SectorEditorAddDynamicSpotLightResult AddDynamicSpotLightToSector(
             TextFormat("Added dynamic spot %d", lightId)};
 }
 
+SectorEditorAddStaticRectLightResult AddStaticRectLightToSector(
+        SectorTopologyMap& map, int sectorId, Vector2 mapPoint)
+{
+    const SectorTopologySector* sector = FindSectorTopologySector(map, sectorId);
+    if (sector == nullptr) return {false, -1, "Static rect placement failed: click inside a sector"};
+    const int lightId = AllocateSectorTopologyStaticRectLightId(map);
+    if (!IsValidSectorTopologyId(lightId)) return {false, -1, "Static rect placement failed: no light IDs available"};
+    SectorTopologyStaticRectLight light;
+    light.id = lightId;
+    light.position = {mapPoint.x, sector->floorZ + SectorWorldToAuthoringDistance(1.8f), mapPoint.y};
+    light.target = {mapPoint.x,
+            sector->floorZ + SectorWorldToAuthoringDistance(1.0f), mapPoint.y};
+    map.staticRectLights.push_back(light);
+    return {true, lightId, TextFormat("Added static rect light %d", lightId)};
+}
+
+SectorEditorAddDynamicRectLightResult AddDynamicRectLightToSector(
+        SectorTopologyMap& map, int sectorId, Vector2 mapPoint)
+{
+    const SectorTopologySector* sector = FindSectorTopologySector(map, sectorId);
+    if (sector == nullptr) return {false, -1, "Dynamic rect placement failed: click inside a sector"};
+    const int lightId = AllocateSectorTopologyDynamicRectLightId(map);
+    if (!IsValidSectorTopologyId(lightId)) return {false, -1, "Dynamic rect placement failed: no light IDs available"};
+    SectorTopologyDynamicRectLight light;
+    light.id = lightId;
+    light.position = {mapPoint.x, sector->floorZ + SectorWorldToAuthoringDistance(1.8f), mapPoint.y};
+    light.target = {mapPoint.x,
+            sector->floorZ + SectorWorldToAuthoringDistance(1.0f), mapPoint.y};
+    map.dynamicRectLights.push_back(light);
+    return {true, lightId, TextFormat("Added dynamic rect light %d", lightId)};
+}
+
 SectorEditorAddBillboardResult AddBillboardToSector(
         SectorTopologyMap& map,
         int sectorId,
@@ -379,6 +411,22 @@ SectorEditorTopologyActionResult DeleteDynamicSpotLight(
     }
 
     return Changed(TextFormat("Deleted dynamic spot %d", lightId));
+}
+
+SectorEditorTopologyActionResult DeleteStaticRectLight(SectorTopologyMap& map, int lightId)
+{
+    if (!RemoveSectorTopologyStaticRectLight(map, lightId)) {
+        return Unchanged("Select a static rect light to delete.");
+    }
+    return Changed(TextFormat("Deleted static rect light %d", lightId));
+}
+
+SectorEditorTopologyActionResult DeleteDynamicRectLight(SectorTopologyMap& map, int lightId)
+{
+    if (!RemoveSectorTopologyDynamicRectLight(map, lightId)) {
+        return Unchanged("Select a dynamic rect light to delete.");
+    }
+    return Changed(TextFormat("Deleted dynamic rect light %d", lightId));
 }
 
 SectorEditorTopologyActionResult FinishMoveStaticLight(

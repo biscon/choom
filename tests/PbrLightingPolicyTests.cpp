@@ -527,6 +527,35 @@ void TestHdrEffectShaderAndPassPolicies()
                     && lightProxy.find("proxy.shaft") == std::string::npos
                     && analyticShaft.find("float shaftOpticalProfileAt(")
                             != std::string::npos
+                    && analyticShaft.find("bool intersectRectFrustum(")
+                            != std::string::npos
+                    && analyticShaft.find("intersectRectPrism")
+                            == std::string::npos
+                    && analyticShaft.find(
+                            "vec2 sideSlope = (farHalfSize - nearHalfSize) / length;")
+                            != std::string::npos
+                    && analyticShaft.find(
+                            "mix(rectNearHalfSize, rectFarHalfSize, axial01)")
+                            != std::string::npos
+                    && analyticShaft.find("float rectShaftDensityAt(")
+                            != std::string::npos
+                    && analyticShaft.find("(shaftParams.x - 0.01) / 0.99")
+                            != std::string::npos
+                    && analyticShaft.find("mix(0.02, 0.45, rectSoftness)")
+                            != std::string::npos
+                    && analyticShaft.find("mix(24.0, 4.0, rectSoftness)")
+                            != std::string::npos
+                    && analyticShaft.find("0.1184634430 * rectShaftDensityAt(")
+                            != std::string::npos
+                    && analyticShaft.find("chord * 0.9530899230")
+                            != std::string::npos
+                    && analyticShaft.find(
+                            "0.8646647168 * pathCoverage * integratedDensity")
+                            != std::string::npos
+                    && analyticShaft.find("Vector2 RectShaftFarHalfSize(")
+                            != std::string::npos
+                    && analyticShaft.find("SpreadDegreesAtScaleOne = 15.0f")
+                            != std::string::npos
                     && analyticShaft.find("float coverage = smoothstep(0.0, 1.0, rawCoverage);")
                             != std::string::npos
                     && analyticShaft.find("chord * (1.0 / 6.0)")
@@ -745,6 +774,14 @@ void TestHdrEffectShaderAndPassPolicies()
                                "effectiveShadowMapResolution")
                             !=std::string::npos,
           "point-light shadows use six ordinary planar atlas passes without a geometry shader");
+    Check(dynamicLightingShadows.find("DynamicRectLightShadowFaceCount")
+                            !=std::string::npos
+                    &&dynamicLightingShadows.find(
+                               "SectorPreviewDynamicLightKind::Rect")
+                            !=std::string::npos
+                    &&dynamicLightingShadows.find("rectFaceDirections")
+                            !=std::string::npos,
+          "rect-light shadows use five oriented planar atlas faces");
     Check(dynamicLightingShadows.find("GL_MAX_TEXTURE_SIZE")
                             !=std::string::npos
                     &&dynamicLightingShadows.find(
@@ -767,6 +804,18 @@ void TestHdrEffectShaderAndPassPolicies()
                     &&dynamicShadowSampling.find("paraboloid")
                             ==std::string::npos,
           "surface point-shadow sampling reselects cube faces across seams and filters hard edges over four texels");
+    Check(dynamicShadowSampling.find("bool rectProjection")
+                            !=std::string::npos
+                    &&dynamicShadowSampling.find("vec3 cubeFromLight")
+                            !=std::string::npos
+                    &&dynamicShadowSampling.find(
+                               "frontHemisphereOnly && sampleFace == 5")
+                            !=std::string::npos
+                    &&dust.find("bool rectProjection")!=std::string::npos
+                    &&dust.find("cubeFromLight")!=std::string::npos
+                    &&dust.find("frontHemisphereOnly&&face==5")
+                            !=std::string::npos,
+          "surface and dust rect shadows sample a rect-local cube and reject the omitted back face");
     Check(ReadSource(SECTOR_SHADER_SOURCE_PATH).find(
                           "SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL")
                             !=std::string::npos
@@ -780,7 +829,7 @@ void TestHdrEffectShaderAndPassPolicies()
                                "SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL")
                             !=std::string::npos
                     &&dust.find("pointShadowFace")!=std::string::npos,
-          "all surface and volumetric receivers use the six-face point-shadow projection");
+          "all surface and volumetric receivers share cube-face shadow projection helpers");
     const std::size_t atlasReset=dynamicLightingShadows.find(
             "if (shadowAtlasNeedsFullClear) {");
     const std::size_t invalidateCachedTile=dynamicLightingShadows.find(

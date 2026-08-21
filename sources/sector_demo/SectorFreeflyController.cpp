@@ -21,7 +21,6 @@ void ResetSectorFreeflyController(
         const SectorViewPose& pose)
 {
     state.pose = pose;
-    state.pose.rollRadians = 0.0f;
     state.mouseLookEnabled = true;
     state.mouseLookWarmupFrames = 0;
 }

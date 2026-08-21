@@ -250,6 +250,22 @@ struct SectorTopologyStaticSpotLight {
     bool castsShadow = true;
 };
 
+// A one-sided rectangular emitter. The target defines the emitting normal;
+// roll rotates the width/height axes around that normal.
+struct SectorTopologyStaticRectLight {
+    int id = -1;
+    Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
+    Vector3 target = {0.0f, SectorWorldToAuthoringDistance(1.0f), 0.0f};
+    float rollDegrees = 0.0f;
+    float width = SectorWorldToAuthoringDistance(1.0f);
+    float height = SectorWorldToAuthoringDistance(0.25f);
+    Color color = WHITE;
+    float intensity = 1.0f;
+    float range = SectorWorldToAuthoringDistance(8.0f);
+    SectorLightAtmosphereSettings atmosphere;
+    bool castsShadow = true;
+};
+
 struct SectorTopologyDynamicPointLight {
     int id = -1;
     Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
@@ -278,6 +294,28 @@ struct SectorTopologyDynamicSpotLight {
     float range = SectorWorldToAuthoringDistance(8.0f);
     float innerConeDegrees = 20.0f;
     float outerConeDegrees = 35.0f;
+    bool enabled = true;
+    bool flicker = false;
+    float flickerSpeed = DynamicLightFlickerDefaultSpeed;
+    float flickerAmount = DynamicLightFlickerDefaultAmount;
+    bool castsShadow = false;
+    int shadowPriority = DynamicSpotLightDefaultShadowPriority;
+    float shadowBias = DynamicSpotLightDefaultShadowBias;
+    float shadowStrength = DynamicSpotLightDefaultShadowStrength;
+    float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
+    SectorLightAtmosphereSettings atmosphere;
+};
+
+struct SectorTopologyDynamicRectLight {
+    int id = -1;
+    Vector3 position = {0.0f, SectorWorldToAuthoringDistance(1.8f), 0.0f};
+    Vector3 target = {0.0f, SectorWorldToAuthoringDistance(1.0f), 0.0f};
+    float rollDegrees = 0.0f;
+    float width = SectorWorldToAuthoringDistance(1.0f);
+    float height = SectorWorldToAuthoringDistance(0.25f);
+    Color color = WHITE;
+    float intensity = 1.0f;
+    float range = SectorWorldToAuthoringDistance(8.0f);
     bool enabled = true;
     bool flicker = false;
     float flickerSpeed = DynamicLightFlickerDefaultSpeed;

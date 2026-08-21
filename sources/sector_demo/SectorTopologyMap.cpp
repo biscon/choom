@@ -532,6 +532,11 @@ int AllocateSectorTopologyStaticSpotLightId(const SectorTopologyMap& map)
     return AllocateNextId(map.staticSpotLights);
 }
 
+int AllocateSectorTopologyStaticRectLightId(const SectorTopologyMap& map)
+{
+    return AllocateNextId(map.staticRectLights);
+}
+
 int AllocateSectorTopologyDynamicLightId(const SectorTopologyMap& map)
 {
     return AllocateNextId(map.dynamicPointLights);
@@ -540,6 +545,11 @@ int AllocateSectorTopologyDynamicLightId(const SectorTopologyMap& map)
 int AllocateSectorTopologyDynamicSpotLightId(const SectorTopologyMap& map)
 {
     return AllocateNextId(map.dynamicSpotLights);
+}
+
+int AllocateSectorTopologyDynamicRectLightId(const SectorTopologyMap& map)
+{
+    return AllocateNextId(map.dynamicRectLights);
 }
 
 int AllocateSectorPlacedRuntimeObjectId(const SectorTopologyMap& map)
@@ -643,6 +653,27 @@ bool RemoveSectorTopologyStaticSpotLight(SectorTopologyMap& map, int id)
     return true;
 }
 
+const SectorTopologyStaticRectLight* FindSectorTopologyStaticRectLight(const SectorTopologyMap& map, int id)
+{
+    return FindById(map.staticRectLights, id);
+}
+
+SectorTopologyStaticRectLight* FindSectorTopologyStaticRectLight(SectorTopologyMap& map, int id)
+{
+    return FindById(map.staticRectLights, id);
+}
+
+bool RemoveSectorTopologyStaticRectLight(SectorTopologyMap& map, int id)
+{
+    if (!IsValidSectorTopologyId(id)) return false;
+    const auto found = std::find_if(
+            map.staticRectLights.begin(), map.staticRectLights.end(),
+            [id](const SectorTopologyStaticRectLight& light) { return light.id == id; });
+    if (found == map.staticRectLights.end()) return false;
+    map.staticRectLights.erase(found);
+    return true;
+}
+
 const SectorTopologyDynamicPointLight* FindSectorTopologyDynamicLight(const SectorTopologyMap& map, int id)
 {
     return FindById(map.dynamicPointLights, id);
@@ -696,6 +727,27 @@ bool RemoveSectorTopologyDynamicSpotLight(SectorTopologyMap& map, int id)
     }
 
     map.dynamicSpotLights.erase(found);
+    return true;
+}
+
+const SectorTopologyDynamicRectLight* FindSectorTopologyDynamicRectLight(const SectorTopologyMap& map, int id)
+{
+    return FindById(map.dynamicRectLights, id);
+}
+
+SectorTopologyDynamicRectLight* FindSectorTopologyDynamicRectLight(SectorTopologyMap& map, int id)
+{
+    return FindById(map.dynamicRectLights, id);
+}
+
+bool RemoveSectorTopologyDynamicRectLight(SectorTopologyMap& map, int id)
+{
+    if (!IsValidSectorTopologyId(id)) return false;
+    const auto found = std::find_if(
+            map.dynamicRectLights.begin(), map.dynamicRectLights.end(),
+            [id](const SectorTopologyDynamicRectLight& light) { return light.id == id; });
+    if (found == map.dynamicRectLights.end()) return false;
+    map.dynamicRectLights.erase(found);
     return true;
 }
 

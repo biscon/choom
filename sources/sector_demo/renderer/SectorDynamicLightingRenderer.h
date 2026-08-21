@@ -99,6 +99,7 @@ struct SectorDynamicShadowRenderStats {
     std::size_t occupiedTiles = 0;
     std::size_t pointLights = 0;
     std::size_t spotLights = 0;
+    std::size_t rectLights = 0;
     double cpuMilliseconds = 0.0;
     std::size_t sectorBatchesDrawn = 0;
     std::size_t sectorBatchesCulled = 0;
@@ -132,7 +133,8 @@ struct SectorBillboardDynamicLightContext {
     std::array<float, MaxDynamicLights> dynamicLightInnerConeCos{};
     std::array<float, MaxDynamicLights> dynamicLightOuterConeCos{};
     std::array<Vector3, MaxDynamicLights> dynamicLightSpotShadowRight{};
-    // x = inverse tan(outer half-angle), y = far / (far - near).
+    // x = spot inverse tan(outer half-angle), y = far / (far - near).
+    // Rect cube shadows use only the uploaded right axis.
     std::array<Vector2, MaxDynamicLights> dynamicLightSpotShadowProjection{};
     int hasPointShadows = 0;
     SectorPreviewDynamicSpotLightShadowUniforms shadowUniforms{};

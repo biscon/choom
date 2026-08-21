@@ -1581,6 +1581,133 @@
         32.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 93,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.0,
+        "scale": 0.25
+      },
+      "position": [
+        -168.0,
+        -15.0,
+        19.0
+      ],
+      "yawDegrees": -90.0
+    },
+    {
+      "id": 94,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.0,
+        "scale": 0.25
+      },
+      "position": [
+        -168.0,
+        -15.0,
+        45.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 95,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.0,
+        "scale": 0.25
+      },
+      "position": [
+        -140.0,
+        -15.0,
+        45.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 96,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.0,
+        "scale": 0.25
+      },
+      "position": [
+        -128.0,
+        -15.0,
+        8.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 97,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.0,
+        "scale": 0.25
+      },
+      "position": [
+        -152.0,
+        -15.0,
+        8.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 98,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.0,
+        "scale": 0.25
+      },
+      "position": [
+        -152.0,
+        -15.0,
+        -24.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 99,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/cozy_wall_lamp.glb",
+        "heightOffsetWorld": 2.0,
+        "scale": 0.25
+      },
+      "position": [
+        -128.0,
+        -15.0,
+        -24.0
+      ],
+      "yawDegrees": 180.0
+    },
+    {
+      "id": 100,
+      "kind": "static_model",
+      "staticModel": {},
+      "position": [
+        -152.0,
+        -15.0,
+        -56.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 101,
+      "kind": "static_model",
+      "staticModel": {},
+      "position": [
+        -128.0,
+        -15.0,
+        -56.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -1716,94 +1843,6 @@
         "g": 50,
         "b": 15,
         "a": 255
-      }
-    },
-    {
-      "id": 10,
-      "position": [
-        -96.0,
-        24.0,
-        52.0
-      ],
-      "radius": 48.0,
-      "sourceRadius": 4.0,
-      "intensity": 1.5,
-      "color": {
-        "r": 255,
-        "g": 245,
-        "b": 240,
-        "a": 255
-      },
-      "atmosphere": {
-        "proxy": {
-          "halo": {
-            "enabled": true,
-            "radiusWorld": 1.5,
-            "centerOffsetWorld": [
-              0.0717458724975586,
-              0.30500364303588867,
-              0.0021028518676757813
-            ],
-            "brightness": 0.20000000298023224,
-            "edgeSoftness": 0.6000000238418579,
-            "scatteringTint": {
-              "r": 240,
-              "g": 245,
-              "b": 255,
-              "a": 255
-            }
-          }
-        }
-      }
-    },
-    {
-      "id": 11,
-      "position": [
-        -72.0,
-        24.0,
-        52.0
-      ],
-      "radius": 48.0,
-      "sourceRadius": 4.0,
-      "intensity": 1.5,
-      "color": {
-        "r": 255,
-        "g": 245,
-        "b": 240,
-        "a": 255
-      },
-      "atmosphere": {
-        "proxy": {
-          "halo": {
-            "enabled": true,
-            "radiusWorld": 1.5,
-            "centerOffsetWorld": [
-              -0.02285289764404297,
-              0.34609317779541016,
-              -0.0010762214660644531
-            ],
-            "brightness": 0.20000000298023224,
-            "edgeSoftness": 0.6000000238418579,
-            "scatteringTint": {
-              "r": 240,
-              "g": 245,
-              "b": 255,
-              "a": 255
-            }
-          }
-        },
-        "dust": {
-          "amount": 64,
-          "extentScale": 0.25,
-          "minimumSizeWorld": 0.004999999888241291,
-          "maximumSizeWorld": 0.01600000075995922,
-          "scatteringTint": {
-            "r": 255,
-            "g": 245,
-            "b": 240,
-            "a": 255
-          }
-        }
       }
     },
     {
@@ -3241,6 +3280,191 @@
           }
         }
       }
+    },
+    {
+      "id": 50,
+      "position": [
+        -167.99473571777344,
+        0.1999616175889969,
+        22.766605377197266
+      ],
+      "radius": 14.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 229,
+        "g": 181,
+        "b": 126,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              -0.016969680786132813,
+              0.16600780189037323,
+              -0.141340970993042
+            ],
+            "brightness": 0.15000000596046448,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 229,
+              "g": 181,
+              "b": 126,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 51,
+      "position": [
+        -167.96575927734375,
+        0.4333912134170532,
+        40.43359375
+      ],
+      "radius": 14.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 229,
+        "g": 181,
+        "b": 126,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              0.02135467529296875,
+              0.11820162832736969,
+              0.23581790924072266
+            ],
+            "brightness": 0.15000000596046448,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 229,
+              "g": 181,
+              "b": 126,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 52,
+      "position": [
+        -139.99679565429688,
+        0.2060820609331131,
+        40.200016021728516
+      ],
+      "radius": 14.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 229,
+        "g": 181,
+        "b": 126,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              -0.002010345458984375,
+              0.136686310172081,
+              0.2716097831726074
+            ],
+            "brightness": 0.15000000596046448,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 229,
+              "g": 181,
+              "b": 126,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 53,
+      "position": [
+        -132.60040283203125,
+        0.4004102945327759,
+        7.9824113845825195
+      ],
+      "radius": 14.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 229,
+        "g": 181,
+        "b": 126,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              0.2532062530517578,
+              0.12238925695419312,
+              -0.022289276123046875
+            ],
+            "brightness": 0.15000000596046448,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 229,
+              "g": 181,
+              "b": 126,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 54,
+      "position": [
+        -147.60008239746094,
+        0.4984501898288727,
+        8.00784969329834
+      ],
+      "radius": 14.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 229,
+        "g": 181,
+        "b": 126,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              -0.22228431701660156,
+              0.10900665819644928,
+              0.011556386947631836
+            ],
+            "brightness": 0.15000000596046448,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 229,
+              "g": 181,
+              "b": 126,
+              "a": 255
+            }
+          }
+        }
+      }
     }
   ],
   "staticSpotLights": [
@@ -3428,9 +3652,9 @@
           "shaft": {
             "enabled": true,
             "originOffsetWorld": [
-              0.0011873245239257813,
-              0.3449280261993408,
-              -0.00266265869140625
+              0.015790939331054688,
+              0.2855651378631592,
+              0.006740570068359375
             ],
             "widthScale": 0.8500000238418579,
             "brightness": 0.02500000037252903,
@@ -3518,6 +3742,114 @@
             "b": 230,
             "a": 255
           }
+        }
+      }
+    }
+  ],
+  "staticRectLights": [
+    {
+      "id": 1,
+      "position": [
+        -72.0,
+        26.0,
+        52.0
+      ],
+      "target": [
+        -72.0,
+        -7.23991584777832,
+        52.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 53.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 242,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.0016965866088867188,
+              0.33855175971984863,
+              0.0066089630126953125
+            ],
+            "lengthScale": 0.4000000059604645,
+            "widthScale": 1.0,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 242,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "amount": 32,
+          "extentScale": 0.25,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.012000000104308128
+        }
+      }
+    },
+    {
+      "id": 2,
+      "position": [
+        -96.0,
+        26.0,
+        52.0
+      ],
+      "target": [
+        -96.0,
+        8.0,
+        52.0
+      ],
+      "width": 8.0,
+      "height": 2.0,
+      "range": 53.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 242,
+        "a": 255
+      },
+      "rollDegrees": 90.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.0,
+              0.33899998664855957,
+              0.0
+            ],
+            "lengthScale": 0.4000000059604645,
+            "widthScale": 1.0,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 242,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "amount": 32,
+          "extentScale": 0.25,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.012000000104308128
         }
       }
     }
@@ -3654,7 +3986,7 @@
       "color": {
         "r": 255,
         "g": 245,
-        "b": 230,
+        "b": 242,
         "a": 255
       },
       "innerConeDegrees": 35.0,
@@ -3672,7 +4004,7 @@
             ],
             "lengthScale": 0.44999998807907104,
             "widthScale": 1.0,
-            "brightness": 0.02500000037252903,
+            "brightness": 0.014999999664723873,
             "maxExtinction": 0.0,
             "edgeSoftness": 0.75,
             "scatteringTint": {
@@ -3685,14 +4017,15 @@
         },
         "dust": {
           "enabled": true,
-          "amount": 64,
+          "amount": 32,
           "extentScale": 0.30000001192092896,
           "minimumSizeWorld": 0.004999999888241291,
           "maximumSizeWorld": 0.01600000075995922,
+          "opacity": 0.11999999731779099,
           "scatteringTint": {
-            "r": 155,
-            "g": 145,
-            "b": 135,
+            "r": 210,
+            "g": 210,
+            "b": 210,
             "a": 255
           }
         }
@@ -3915,15 +4248,16 @@
       }
     }
   ],
+  "dynamicRectLights": [],
   "lightmapSettings": {
     "ambientOcclusionRadius": 10.0,
-    "ambientOcclusionStrength": 0.6499999761581421,
+    "ambientOcclusionStrength": 0.550000011920929,
     "indirectBounceRadius": 32.0,
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "draft"
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -4000,7 +4334,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "2f077a739cb1a688",
+    "sourceHash": "52f156b85b67e15f",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -4008,19 +4342,19 @@
         0.0
       ],
       "rgbMax": [
-        2.19921875,
-        1.44921875,
-        1.3828125
+        2.2421875,
+        1.462890625,
+        1.396484375
       ],
-      "auxiliaryMin": 0.3505859375,
+      "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 180
+      "sampleCount": 8388608,
+      "rgbChannelsAboveOne": 1179
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "2f077a739cb1a688",
+      "sourceHash": "52f156b85b67e15f",
       "count": 2221,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -4033,24 +4367,31 @@
           0.0
         ],
         "rgbMax": [
-          2.204270601272583,
-          1.9356169700622559,
-          1.848981261253357
+          2.19494366645813,
+          1.9382474422454834,
+          1.8512030839920044
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 13326,
-        "rgbChannelsAboveOne": 182
+        "rgbChannelsAboveOne": 32
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "2f077a739cb1a688",
-      "modelCount": 33,
-      "objectCount": 78,
+      "sourceHash": "52f156b85b67e15f",
+      "modelCount": 34,
+      "objectCount": 85,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "editorSettings": {
     "gridSize": 1
@@ -18124,12 +18465,12 @@
           ]
         },
         "ambientColor": {
-          "r": 255,
-          "g": 255,
-          "b": 255,
+          "r": 230,
+          "g": 196,
+          "b": 158,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.019999999552965164,
         "defaultWall": {
           "textureId": "dirty_office_wall_baseboard_512",
           "uv": {
@@ -18201,12 +18542,12 @@
           ]
         },
         "ambientColor": {
-          "r": 255,
-          "g": 255,
-          "b": 255,
+          "r": 230,
+          "g": 196,
+          "b": 158,
           "a": 255
         },
-        "ambientIntensity": 1.0,
+        "ambientIntensity": 0.019999999552965164,
         "defaultWall": {
           "textureId": "wall",
           "uv": {

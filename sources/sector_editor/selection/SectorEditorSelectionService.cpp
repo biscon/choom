@@ -262,6 +262,11 @@ void ClearStaleSectorEditorTopologySelection(SectorEditorSelectionServiceContext
                 || FindSectorTopologyStaticSpotLight(
                         context.topologyMap,
                         selection.selectedTopologyStaticSpotLightId) == nullptr;
+    } else if (selection.topologySelectionKind == TopologySelectionKind::StaticRectLight) {
+        stale = selection.selectedTopologyStaticSpotLightId < 0
+                || FindSectorTopologyStaticRectLight(
+                        context.topologyMap,
+                        selection.selectedTopologyStaticSpotLightId) == nullptr;
     } else if (selection.topologySelectionKind == TopologySelectionKind::DynamicLight) {
         stale = selection.selectedTopologyDynamicLightId < 0
                 || FindSectorTopologyDynamicLight(
@@ -270,6 +275,11 @@ void ClearStaleSectorEditorTopologySelection(SectorEditorSelectionServiceContext
     } else if (selection.topologySelectionKind == TopologySelectionKind::DynamicSpotLight) {
         stale = selection.selectedTopologyDynamicSpotLightId < 0
                 || FindSectorTopologyDynamicSpotLight(
+                        context.topologyMap,
+                        selection.selectedTopologyDynamicSpotLightId) == nullptr;
+    } else if (selection.topologySelectionKind == TopologySelectionKind::DynamicRectLight) {
+        stale = selection.selectedTopologyDynamicSpotLightId < 0
+                || FindSectorTopologyDynamicRectLight(
                         context.topologyMap,
                         selection.selectedTopologyDynamicSpotLightId) == nullptr;
     }

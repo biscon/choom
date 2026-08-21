@@ -10,8 +10,10 @@ enum class LightPilotKind {
     None,
     StaticPoint,
     StaticSpot,
+    StaticRect,
     DynamicPoint,
-    DynamicSpot
+    DynamicSpot,
+    DynamicRect
 };
 
 struct LightDragState {
@@ -36,6 +38,7 @@ struct LightPilotLightState {
     int lightId = -1;
     Vector3 originalPosition = {};
     Vector3 originalTarget = {};
+    float originalRollDegrees = 0.0f;
     float targetDistanceWorld = 4.0f;
 };
 

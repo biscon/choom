@@ -1,4 +1,5 @@
 #include "sector_editor/preview/SectorEditorPreviewOverlay.h"
+#include "sector_demo/SectorRectLight.h"
 #include "sector_editor/preview/SectorEditorLightProxyPlacement.h"
 #include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 
@@ -104,6 +105,28 @@ bool SelectedLightProxyPlacementInfo(
                 topologyMap, selectionState.selectedTopologyDynamicSpotLightId);
         if (light == nullptr) return false;
         outKind = LightPilotKind::DynamicSpot;
+        outLightId = light->id;
+        outLightPositionWorld = SectorAuthoringToWorldPosition(light->position);
+        outProxy = &light->atmosphere.proxy;
+        outSpotLight = true;
+        return true;
+    }
+    if (selectionState.topologySelectionKind == TopologySelectionKind::StaticRectLight) {
+        const SectorTopologyStaticRectLight* light = FindSectorTopologyStaticRectLight(
+                topologyMap, selectionState.selectedTopologyStaticSpotLightId);
+        if (light == nullptr) return false;
+        outKind = LightPilotKind::StaticRect;
+        outLightId = light->id;
+        outLightPositionWorld = SectorAuthoringToWorldPosition(light->position);
+        outProxy = &light->atmosphere.proxy;
+        outSpotLight = true;
+        return true;
+    }
+    if (selectionState.topologySelectionKind == TopologySelectionKind::DynamicRectLight) {
+        const SectorTopologyDynamicRectLight* light = FindSectorTopologyDynamicRectLight(
+                topologyMap, selectionState.selectedTopologyDynamicSpotLightId);
+        if (light == nullptr) return false;
+        outKind = LightPilotKind::DynamicRect;
         outLightId = light->id;
         outLightPositionWorld = SectorAuthoringToWorldPosition(light->position);
         outProxy = &light->atmosphere.proxy;
@@ -376,6 +399,51 @@ void DrawSectorEditorPreviewSpotLightOverlay(
         const SectorMeshRenderer& preview)
 {
     if (!preview.IsRendererReady() || previewControllerState.freeflyController.mouseLookEnabled) {
+        return;
+    }
+
+    const SectorTopologyStaticRectLight* staticRect =
+            selectionState.topologySelectionKind == TopologySelectionKind::StaticRectLight
+            ? FindSectorTopologyStaticRectLight(topologyMap,
+                    selectionState.selectedTopologyStaticSpotLightId) : nullptr;
+    const SectorTopologyDynamicRectLight* dynamicRect =
+            selectionState.topologySelectionKind == TopologySelectionKind::DynamicRectLight
+            ? FindSectorTopologyDynamicRectLight(topologyMap,
+                    selectionState.selectedTopologyDynamicSpotLightId) : nullptr;
+    if (staticRect != nullptr || dynamicRect != nullptr) {
+        const Vector3 authoredPosition = staticRect != nullptr ? staticRect->position : dynamicRect->position;
+        const Vector3 authoredTarget = staticRect != nullptr ? staticRect->target : dynamicRect->target;
+        const float roll = staticRect != nullptr ? staticRect->rollDegrees : dynamicRect->rollDegrees;
+        const float width = SectorAuthoringToWorldDistance(staticRect != nullptr ? staticRect->width : dynamicRect->width);
+        const float height = SectorAuthoringToWorldDistance(staticRect != nullptr ? staticRect->height : dynamicRect->height);
+        const float range = SectorAuthoringToWorldDistance(staticRect != nullptr ? staticRect->range : dynamicRect->range);
+        const Vector3 origin = SectorAuthoringToWorldPosition(authoredPosition);
+        const Vector3 target = SectorAuthoringToWorldPosition(authoredTarget);
+        const SectorRectLightBasis basis = BuildSectorRectLightBasis(origin, target, roll);
+        const Vector3 right = Vector3Scale(basis.right, width * 0.5f);
+        const Vector3 up = Vector3Scale(basis.up, height * 0.5f);
+        const Vector3 corners[4] = {
+                Vector3Add(origin, Vector3Add(right, up)),
+                Vector3Add(origin, Vector3Subtract(right, up)),
+                Vector3Subtract(origin, Vector3Add(right, up)),
+                Vector3Add(origin, Vector3Subtract(up, right))};
+        const Color color = staticRect != nullptr ? Color{112, 232, 204, 255} : Color{255, 190, 82, 255};
+        BeginMode3D(preview.RenderCamera());
+        for (int i = 0; i < 4; ++i) DrawLine3D(corners[i], corners[(i + 1) % 4], LinearOverlaySwatch(color));
+        DrawLine3D(origin, target, LinearOverlaySwatch(color));
+        for (int i = 0; i < 4; ++i) {
+            const Vector3 farCorner = Vector3Add(corners[i], Vector3Scale(basis.forward, range));
+            DrawLine3D(corners[i], farCorner, LinearOverlaySwatch(WithAlpha(color, 150)));
+            DrawLine3D(farCorner,
+                    Vector3Add(corners[(i + 1) % 4], Vector3Scale(basis.forward, range)),
+                    LinearOverlaySwatch(WithAlpha(color, 150)));
+        }
+        // Width and height resize handles.
+        DrawSphereWires(Vector3Add(origin, right), 0.08f, 6, 8, RED);
+        DrawSphereWires(Vector3Subtract(origin, right), 0.08f, 6, 8, RED);
+        DrawSphereWires(Vector3Add(origin, up), 0.08f, 6, 8, BLUE);
+        DrawSphereWires(Vector3Subtract(origin, up), 0.08f, 6, 8, BLUE);
+        EndMode3D();
         return;
     }
 
@@ -712,10 +780,11 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                                     ? "cache hit"
                                     : stats.atlasRendered ? "rebuilt" : "idle";
                     addKeyValue("shadow atlas", TextFormat(
-                            "%s | point/spot %zu/%zu | slots %zu",
+                            "%s | point/spot/rect %zu/%zu/%zu | slots %zu",
                             atlasState,
                             stats.pointLights,
                             stats.spotLights,
+                            stats.rectLights,
                             stats.occupiedTiles));
                     addKeyValue("shadow updates", TextFormat(
                             "valid/dirty/queued %zu/%zu/%zu | lights/tiles rebuilt %zu/%zu | CPU %.3f ms",

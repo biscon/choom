@@ -1476,6 +1476,31 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedStaticSpotLight) == staticSpotHash,
           "hash ignores visual-only shaft settings");
 
+    game::SectorTopologyMap changedStaticRect = base;
+    game::SectorTopologyStaticRectLight rect;
+    rect.id = 90;
+    rect.position = {16.0f, 32.0f, 16.0f};
+    rect.target = {16.0f, 16.0f, 16.0f};
+    changedStaticRect.staticRectLights.push_back(rect);
+    const std::string staticRectHash = game::ComputeSectorLightmapSourceHash(changedStaticRect);
+    Check(staticRectHash != hash, "hash includes added static rect lights");
+    changedStaticRect.staticRectLights[0].width += 1.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticRect) != staticRectHash,
+          "hash changes when static rect width changes");
+    changedStaticRect = base;
+    changedStaticRect.staticRectLights.push_back(rect);
+    const std::string staticRectRollHash = game::ComputeSectorLightmapSourceHash(changedStaticRect);
+    changedStaticRect.staticRectLights[0].rollDegrees += 10.0f;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticRect) != staticRectRollHash,
+          "hash changes when static rect roll changes");
+
+    game::SectorTopologyMap changedDynamicRect = base;
+    game::SectorTopologyDynamicRectLight dynamicRect;
+    dynamicRect.id = 91;
+    changedDynamicRect.dynamicRectLights.push_back(dynamicRect);
+    Check(game::ComputeSectorLightmapSourceHash(changedDynamicRect) == hash,
+          "hash ignores dynamic rect lights");
+
     game::SectorTopologyMap changedDynamicLight = base;
     changedDynamicLight.dynamicPointLights.push_back(game::SectorTopologyDynamicPointLight{
             1, Vector3{1.0f, 2.0f, 3.0f}, WHITE, 1.0f, 8.0f, true});

@@ -130,7 +130,8 @@ int FindDynamicIndex(
         const SectorBillboardDynamicLightContext& lights)
 {
     if (!IsSectorLightAtmosphereSourceDynamic(source)) return -1;
-    const int type = source.kind == SectorLightAtmosphereSourceKind::DynamicSpot ? 1 : 0;
+    const int type = source.kind == SectorLightAtmosphereSourceKind::DynamicSpot ? 1
+            : source.kind == SectorLightAtmosphereSourceKind::DynamicRect ? 2 : 0;
     for (int index = 0; index < lights.dynamicLightCount; ++index) {
         if (lights.dynamicLightIds[static_cast<std::size_t>(index)] == source.lightId
                 && lights.dynamicLightTypes[static_cast<std::size_t>(index)] == type) return index;

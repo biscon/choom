@@ -38,6 +38,7 @@ private:
     struct VisibleShaft {
         const SectorLightAtmosphereSource* source = nullptr;
         SectorLightAtmosphereVolume volume;
+        Vector2 rectFarHalfSize = {};
         SectorAtmosphereScissorRect scissor;
         Vector3 radiance = {};
         float distanceSquared = 0.0f;
@@ -60,6 +61,11 @@ private:
     int coneDirectionLoc = -1;
     int coneLengthLoc = -1;
     int coneBaseRadiusLoc = -1;
+    int shaftShapeLoc = -1;
+    int rectRightLoc = -1;
+    int rectUpLoc = -1;
+    int rectNearHalfSizeLoc = -1;
+    int rectFarHalfSizeLoc = -1;
     int shaftRadianceLoc = -1;
     int shaftParamsLoc = -1;
     int fogParamsALoc = -1;

@@ -280,8 +280,10 @@ void StartSectorEditorSelectedManipulation(
             }
             break;
         case SectorEditorPickKind::DynamicSpotLight:
+        case SectorEditorPickKind::DynamicRectLight:
         case SectorEditorPickKind::DynamicLight:
         case SectorEditorPickKind::StaticSpotLight:
+        case SectorEditorPickKind::StaticRectLight:
         case SectorEditorPickKind::StaticLight:
             if (context.startLightDrag != nullptr) {
                 context.startLightDrag(context.userData, target.id, target.spotHandle);

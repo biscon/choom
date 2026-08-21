@@ -660,8 +660,10 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::LevelMarker: return "Level Marker";
         case SectorEditorTool::StaticLight: return "Static Light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot";
+        case SectorEditorTool::StaticRectLight: return "Static Rect Light";
         case SectorEditorTool::DynamicLight: return "Dynamic Light";
         case SectorEditorTool::DynamicSpotLight: return "Dynamic Spot";
+        case SectorEditorTool::DynamicRectLight: return "Dynamic Rect Light";
         case SectorEditorTool::Move: return "Move";
     }
     return "Unknown";
@@ -704,8 +706,10 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
         case SectorEditorPickKind::None: return "none";
         case SectorEditorPickKind::RuntimeObject: return "object";
         case SectorEditorPickKind::DynamicSpotLight: return "dynamic spot";
+        case SectorEditorPickKind::DynamicRectLight: return "dynamic rect light";
         case SectorEditorPickKind::DynamicLight: return "dynamic light";
         case SectorEditorPickKind::StaticSpotLight: return "static spot";
+        case SectorEditorPickKind::StaticRectLight: return "static rect light";
         case SectorEditorPickKind::StaticLight: return "static light";
         case SectorEditorPickKind::AuthoringVertex: return "authoring vertex";
         case SectorEditorPickKind::AuthoringLine: return "authoring line";
@@ -729,8 +733,10 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
     switch (target.kind) {
         case SectorEditorPickKind::RuntimeObject:
         case SectorEditorPickKind::DynamicSpotLight:
+        case SectorEditorPickKind::DynamicRectLight:
         case SectorEditorPickKind::DynamicLight:
         case SectorEditorPickKind::StaticSpotLight:
+        case SectorEditorPickKind::StaticRectLight:
         case SectorEditorPickKind::StaticLight:
         case SectorEditorPickKind::AuthoringVertex:
         case SectorEditorPickKind::AuthoringFogVolume:
@@ -759,8 +765,10 @@ int SectorEditorPickPriority(SectorEditorPickKind kind)
         case SectorEditorPickKind::LevelMarker: return 0;
         case SectorEditorPickKind::RuntimeObject: return 1;
         case SectorEditorPickKind::DynamicSpotLight: return 2;
+        case SectorEditorPickKind::DynamicRectLight: return 2;
         case SectorEditorPickKind::DynamicLight: return 3;
         case SectorEditorPickKind::StaticSpotLight: return 4;
+        case SectorEditorPickKind::StaticRectLight: return 4;
         case SectorEditorPickKind::StaticLight: return 5;
         case SectorEditorPickKind::AuthoringVertex: return 6;
         case SectorEditorPickKind::AuthoringLine: return 7;

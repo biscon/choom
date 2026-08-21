@@ -17,13 +17,16 @@ struct SectorReceiverBounds;
 enum class SectorLightAtmosphereSourceKind {
     StaticPoint,
     StaticSpot,
+    StaticRect,
     DynamicPoint,
-    DynamicSpot
+    DynamicSpot,
+    DynamicRect
 };
 
 enum class SectorLightAtmosphereShape {
     Sphere,
-    Cone
+    Cone,
+    RectPrism
 };
 
 struct SectorLightAtmosphereSource {
@@ -33,6 +36,9 @@ struct SectorLightAtmosphereSource {
     int ownerSectorId = 0;
     Vector3 positionWorld = {};
     Vector3 directionWorld = {0.0f, -1.0f, 0.0f};
+    Vector3 rightWorld = {1.0f, 0.0f, 0.0f};
+    float widthWorld = 0.0f;
+    float heightWorld = 0.0f;
     float rangeWorld = 0.0f;
     float outerConeCos = -1.0f;
     Color color = WHITE;
@@ -48,6 +54,10 @@ struct SectorLightAtmosphereVolume {
     float boundsRadiusWorld = 0.0f;
     float extentWorld = 0.0f;
     float coneRadiusWorld = 0.0f;
+    Vector3 rightWorld = {1.0f, 0.0f, 0.0f};
+    Vector3 upWorld = {0.0f, 0.0f, 1.0f};
+    float halfWidthWorld = 0.0f;
+    float halfHeightWorld = 0.0f;
 };
 
 constexpr float SectorLightAtmosphereMaximumConeHalfAngleDegrees = 85.0f;
