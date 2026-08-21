@@ -4068,7 +4068,12 @@ void SectorEditor::DrawTopologyDocument()
     DrawCachedTopologyStaticSpotLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyDynamicLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyDynamicSpotLights(state.topologyRenderCache, drawContext);
-    const auto drawRectLight = [this](Vector3 position, Vector3 target, Color color, bool selected) {
+    const auto drawRectLight = [this](
+            Vector3 position,
+            Vector3 target,
+            Color color,
+            bool selected,
+            const char* label) {
         const Vector2 origin = MapToScreen({position.x, position.z});
         const Vector2 aim = MapToScreen({target.x, target.z});
         const Color drawColor = selected ? YELLOW : color;
@@ -4076,16 +4081,24 @@ void SectorEditor::DrawTopologyDocument()
         DrawRectangleLinesEx(Rectangle{origin.x - 7.0f, origin.y - 4.0f, 14.0f, 8.0f},
                 selected ? 2.0f : 1.0f, drawColor);
         DrawCircleV(aim, 3.0f, drawColor);
+        DrawText(
+                label,
+                static_cast<int>(origin.x + 12.0f),
+                static_cast<int>(origin.y - 22.0f),
+                18,
+                Color{92, 255, 176, 255});
     };
     for (const auto& light : TopologyMap().staticRectLights) {
         drawRectLight(light.position, light.target, SKYBLUE,
                 selectionState.topologySelectionKind == TopologySelectionKind::StaticRectLight
-                        && selectionState.selectedTopologyStaticSpotLightId == light.id);
+                        && selectionState.selectedTopologyStaticSpotLightId == light.id,
+                "SR");
     }
     for (const auto& light : TopologyMap().dynamicRectLights) {
         drawRectLight(light.position, light.target, ORANGE,
                 selectionState.topologySelectionKind == TopologySelectionKind::DynamicRectLight
-                        && selectionState.selectedTopologyDynamicSpotLightId == light.id);
+                        && selectionState.selectedTopologyDynamicSpotLightId == light.id,
+                "DR");
     }
     DrawCachedRuntimeObjects(state.topologyRenderCache, drawContext);
     DrawCachedLevelMarkers(
