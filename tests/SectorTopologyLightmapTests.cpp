@@ -1685,6 +1685,10 @@ void TestSourceHashChanges()
     changedPreview.previewSettings.objectProbeDebugDrawMaxDistanceWorld = 96.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
           "hash ignores object probe debug draw distance");
+    changedPreview = base;
+    changedPreview.previewSettings.npcToNpcCollisionEnabled = false;
+    Check(game::ComputeSectorLightmapSourceHash(changedPreview) == hash,
+          "hash ignores NPC-to-NPC collision policy");
 
     game::SectorTopologyMap changedAudio = base;
     changedAudio.audioSettings.musicPath = "music/level_theme.ogg";

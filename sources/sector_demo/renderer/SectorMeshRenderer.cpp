@@ -1980,7 +1980,9 @@ void SectorMeshRenderer::UpdateVisibilityDebug(
             CountSectorMeshDrawRecordsForVisibility(meshes.sectorDrawRecords, visibilityResult);
     dynamicLightState.UpdateSelection(
             visibilityResult,
-            preferredStartSectorId,
+            visibilityResult.validStartSector
+                    ? visibilityResult.startSectorId
+                    : preferredStartSectorId,
             meshes.sectorReceiverBounds,
             runtimeObjectWorld,
             visibilityGraphValid ? &visibilityGraph : nullptr,

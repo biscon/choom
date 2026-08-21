@@ -987,7 +987,8 @@ void UpdateNpcNavigationAndLocomotionSystem(
             navSettings.agentRadius,
             navSettings.agentHeight,
             navSettings.agentMaximumClimb,
-            4};
+            4,
+            true};
 
     for (NpcNavigationRecord& record : runtime.records) {
         record.footstepEvent = false;
@@ -1263,13 +1264,15 @@ void UpdateNpcNavigationAndLocomotionSystem(
                         moveConfig,
                         sectorContext,
                         staticColliders);
-                result = ResolveNpcCollisionCylindersForMovement(
-                        moveState,
-                        result,
-                        moveConfig,
-                        record.placedObjectId,
-                        runtime.collisionCylinders.data(),
-                        runtime.collisionCylinders.size());
+                if (map.previewSettings.npcToNpcCollisionEnabled) {
+                    result = ResolveNpcCollisionCylindersForMovement(
+                            moveState,
+                            result,
+                            moveConfig,
+                            record.placedObjectId,
+                            runtime.collisionCylinders.data(),
+                            runtime.collisionCylinders.size());
+                }
                 if (playerObstacle != nullptr) {
                     const NpcCollisionCylinder playerCylinder{
                             -1,

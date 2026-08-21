@@ -181,7 +181,7 @@ void DrawPreviewSettingsModal(
 
     auto drawGeneralTab = [&]() {
         float contentY = 0.0f;
-        const float contentH = 11.0f * (rowH + gap) + 12.0f;
+        const float contentH = 12.0f * (rowH + gap) + 12.0f;
         engine::UIScrollAreaResult scroll = engine::BeginScrollArea(
                 ui,
                 config,
@@ -203,6 +203,19 @@ void DrawPreviewSettingsModal(
         drawFloat(contentY, "sector_editor_preview_jump_height", "Jump height", modalState.draftConfig.jumpHeight, modalState.jumpHeightInput, 0.0f, 3.0f, 2);
         drawFloat(contentY, "sector_editor_preview_head_bob_strength", "Head bob strength", modalState.draftConfig.headBobStrength, modalState.headBobStrengthInput, 0.0f, 0.25f, 3);
         drawFloat(contentY, "sector_editor_preview_head_bob_frequency", "Head bob frequency", modalState.draftConfig.headBobFrequency, modalState.headBobFrequencyInput, 0.0f, 20.0f, 2);
+        if (engine::Checkbox(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    "sector_editor_preview_npc_to_npc_collision",
+                    Rectangle{0.0f, contentY, contentW, rowH},
+                    font,
+                    "NPC-to-NPC collision",
+                    modalState.draftNpcToNpcCollisionEnabled)) {
+            modalState.errorMessage.clear();
+        }
+        contentY += rowH + gap;
         engine::EndScrollArea(ui, config, input, scroll, modalState.generalScroll);
     };
 
@@ -728,6 +741,8 @@ void DrawPreviewSettingsModal(
             modalState.skyTopColorBlueInput = engine::UIIntInputState{};
         } else {
             modalState.draftConfig = DefaultSectorFpsControllerConfig();
+            modalState.draftNpcToNpcCollisionEnabled =
+                    DefaultSectorPreviewSettings().npcToNpcCollisionEnabled;
             modalState.walkSpeedInput = engine::UIFloatInputState{};
             modalState.runSpeedInput = engine::UIFloatInputState{};
             modalState.mouseSensitivityInput = engine::UIFloatInputState{};

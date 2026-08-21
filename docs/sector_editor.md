@@ -160,9 +160,14 @@ Gameplay horizontal collision is based on 2D topology plus sector
 floor/ceiling heights, not generated render meshes. One-sided edges block
 movement. Two-sided portal edges are passable only when the destination sector
 allows the current cylinder height and grounded upward steps are within the
-configured step height. Small upward and downward floor differences within step
-height snap immediately; larger downward drops start falling under gravity
-instead of teleporting to the lower floor. A two-sided portal linedef with
+configured step height. Small upward floor differences within step height snap
+immediately. For downward transitions, a grounded controller keeps its current
+supporting floor while any part of its circular footprint still overlaps that
+sector; after the footprint clears, a small drop snaps down and a larger drop
+starts falling under gravity instead of teleporting to the lower floor. Portal
+step eligibility is measured from the controller's physical feet height so a
+controller retained on a stair lip can move back onto that stair without a
+spurious reverse-step push. A two-sided portal linedef with
 `Blocks Player` enabled behaves like a blocking wall for Gameplay movement,
 regardless of portal height passability. Middle textures do not independently
 block movement or add collision; middle texture plus `Blocks Player` is the
@@ -514,7 +519,12 @@ The left tools pane `Settings` button opens editor-session preview settings.
 The same settings are available from the 3D preview overlay `Controls` tab while
 its UI is visible. The modal edits walk speed, run speed, mouse sensitivity,
 camera eye height, gravity, player radius, player height, step height, jump
-height, head bob strength, and head bob frequency. Gameplay Preview Settings use
+height, head bob strength, head bob frequency, and solid NPC-to-NPC collision.
+NPC-to-NPC collision defaults on for backward compatibility. Turning it off
+keeps Crowd local avoidance and separation active but skips the final solid
+NPC cylinder collision pass, allowing occasional overlap instead of forcing
+contact resolution. NPC collision with the player remains enabled.
+Gameplay Preview Settings use
 runtime/world units or simple unitless multipliers, not authored units. The
 gameplay controller stores a feet/body position; the camera eye is computed by
 adding the configured eye height, while player height is the collision cylinder
@@ -535,8 +545,9 @@ explicit per-light haze effect rather than being added automatically by
 distance fog.
 
 Grounded Gameplay movement snaps feet to same-height floors and small up/down
-floor changes within step height. The physics feet/body position still snaps
-immediately for collision correctness, but the rendered Gameplay camera eases
+floor changes within step height. Downward snaps wait until the controller
+footprint clears its previous supporting floor. The physics feet/body position
+then snaps immediately for collision correctness, but the rendered Gameplay camera eases
 small step-up and snap-down eye-height changes visually. Larger drops start
 falling under gravity and are not step-smoothed; jumping is grounded-only and
 sets vertical velocity from `sqrt(2 * gravity * jumpHeight)`. Airborne players

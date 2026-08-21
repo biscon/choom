@@ -313,12 +313,12 @@ enum class PortalBlockReason {
     None,
     PlayerFlag,
     Step,
+    Drop,
     Ceiling
 };
 
 PortalBlockReason PortalBlockReasonForMove(
         const SectorCollisionWorld& world,
-        int currentSectorId,
         const SectorCollisionEdge& edge,
         const SectorCollisionMoveState& moveState,
         const SectorCollisionMoveConfig& config)
@@ -330,17 +330,20 @@ PortalBlockReason PortalBlockReasonForMove(
         return PortalBlockReason::PlayerFlag;
     }
 
-    SectorCollisionHeights currentHeights;
     SectorCollisionHeights neighborHeights;
-    if (!world.GetSectorFloorCeiling(currentSectorId, &currentHeights)
-        || !world.GetSectorFloorCeiling(edge.neighborSectorId, &neighborHeights)) {
+    if (!world.GetSectorFloorCeiling(edge.neighborSectorId, &neighborHeights)) {
         return PortalBlockReason::Ceiling;
     }
 
     if (moveState.grounded) {
-        const float floorDelta = neighborHeights.floorZ - currentHeights.floorZ;
-        if (floorDelta > config.stepHeight + CollisionMoveEpsilon) {
+        const float rise = neighborHeights.floorZ - moveState.feetY;
+        if (rise > config.stepHeight + CollisionMoveEpsilon) {
             return PortalBlockReason::Step;
+        }
+        const float drop = moveState.feetY - neighborHeights.floorZ;
+        if (config.constrainGroundedDropsToStepHeight
+                && drop > config.stepHeight + CollisionMoveEpsilon) {
+            return PortalBlockReason::Drop;
         }
         if (neighborHeights.floorZ + config.playerHeight
             > neighborHeights.ceilingZ + CollisionMoveEpsilon) {
@@ -369,29 +372,6 @@ bool ShouldApplyRadiusCorrectionForBlockedEdge(
     }
 
     return Dot(remaining, inward) < -CollisionMoveEpsilon;
-}
-
-bool ProjectPointToSegmentRange(
-        Vector2 point,
-        Vector2 a,
-        Vector2 b,
-        float* outT)
-{
-    const float lengthSquared = DistanceSquared(a, b);
-    if (!(lengthSquared > CollisionMoveEpsilon) || !std::isfinite(lengthSquared)) {
-        return false;
-    }
-
-    const float t = Dot(Subtract(point, a), Subtract(b, a)) / lengthSquared;
-    const float length = std::sqrt(lengthSquared);
-    const float tolerance = CollisionPointEpsilon / length;
-    if (t < -tolerance || t > 1.0f + tolerance) {
-        return false;
-    }
-    if (outT != nullptr) {
-        *outT = t;
-    }
-    return true;
 }
 
 bool CircleOverlapsSegment(Vector2 center, float radius, Vector2 a, Vector2 b)
@@ -600,50 +580,18 @@ int SectorCollisionWorld::FindSectorForPlayerFootprint(
         return pointSectorId;
     }
 
-    (void)feetY;
     const float drop = currentHeights.floorZ - candidateHeights.floorZ;
-    if (drop <= config.stepHeight + CollisionMoveEpsilon) {
+    if (drop <= CollisionMoveEpsilon) {
         return pointSectorId;
     }
-
-    const std::vector<SectorCollisionEdge>* edges = GetSectorEdges(currentSectorId);
-    if (edges == nullptr) {
+    if (std::fabs(feetY - currentHeights.floorZ) > CollisionPointEpsilon) {
         return pointSectorId;
     }
-
-    const SectorCollisionEdge* bestEdge = nullptr;
-    float bestAbsSignedDistance = 0.0f;
-    float bestClearance = 0.0f;
-    for (const SectorCollisionEdge& edge : *edges) {
-        if (edge.kind != SectorCollisionEdgeKind::Portal
-                || edge.neighborSectorId != pointSectorId) {
-            continue;
-        }
-        if (!ProjectPointToSegmentRange(xz, edge.a, edge.b, nullptr)) {
-            continue;
-        }
-
-        const Vector2 inward = GetSectorCollisionEdgeInwardNormal(edge);
-        if (LengthSquared(inward) <= CollisionMoveEpsilon) {
-            continue;
-        }
-        const Vector2 destinationNormal = Scale(inward, -1.0f);
-        const float clearance = Dot(Subtract(xz, edge.a), destinationNormal);
-        const float absSignedDistance = std::fabs(clearance);
-        if (bestEdge == nullptr || absSignedDistance < bestAbsSignedDistance) {
-            bestEdge = &edge;
-            bestAbsSignedDistance = absSignedDistance;
-            bestClearance = clearance;
-        }
-    }
-
-    if (bestEdge == nullptr) {
-        return pointSectorId;
-    }
-    if (bestClearance >= config.radius + CollisionMoveEpsilon) {
-        return pointSectorId;
-    }
-    return currentSectorId;
+    const SectorCollisionSector* currentSector = FindSector(currentSectorId);
+    return currentSector != nullptr
+                    && SectorOverlapsFootprint(*currentSector, xz, config.radius)
+            ? currentSectorId
+            : pointSectorId;
 }
 
 SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
@@ -706,7 +654,6 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
                     if (edge.kind != SectorCollisionEdgeKind::Portal
                             || PortalBlockReasonForMove(
                                     *this,
-                                    traversalSectorId,
                                     edge,
                                     moveState,
                                     config) != PortalBlockReason::None
@@ -748,7 +695,6 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
                     if (!blocking) {
                         portalReason = PortalBlockReasonForMove(
                                 *this,
-                                collisionSectorId,
                                 edge,
                                 moveState,
                                 config);
@@ -793,6 +739,8 @@ SectorCollisionMoveResult SectorCollisionWorld::ResolveMovement(
                             || portalReason == PortalBlockReason::PlayerFlag;
                     result.blockedByStep =
                             result.blockedByStep || portalReason == PortalBlockReason::Step;
+                    result.blockedByDrop =
+                            result.blockedByDrop || portalReason == PortalBlockReason::Drop;
                     result.blockedByCeiling =
                             result.blockedByCeiling || portalReason == PortalBlockReason::Ceiling;
                     changed = true;
@@ -975,6 +923,38 @@ bool SectorCollisionWorld::SectorContainsPoint(
         }
     }
     return true;
+}
+
+bool SectorCollisionWorld::SectorOverlapsFootprint(
+        const SectorCollisionSector& sector,
+        Vector2 xz,
+        float radius) const
+{
+    if (SectorContainsPoint(sector, xz)) {
+        return true;
+    }
+
+    const auto overlapsLoop = [&](const SectorCollisionLoop& loop) {
+        for (size_t index = 0; index < loop.points.size(); ++index) {
+            if (CircleOverlapsSegment(
+                        xz,
+                        radius,
+                        loop.points[index],
+                        loop.points[(index + 1) % loop.points.size()])) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (overlapsLoop(sector.outerLoop)) {
+        return true;
+    }
+    for (const SectorCollisionLoop& hole : sector.holeLoops) {
+        if (overlapsLoop(hole)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace game

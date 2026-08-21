@@ -298,9 +298,11 @@ Editor gameplay preview:
 
 First visibility pass should use:
 
-- Existing current sector from gameplay preview when available.
-- Otherwise brute-force `FindSectorContainingPoint()` or a new equivalent
-  topology helper for the camera XZ position.
+- The sector containing the rendered camera XZ position as the authoritative
+  visibility start.
+- The gameplay collision sector only as a directly connected boundary hint, or
+  as a fallback when camera point lookup fails. Footprint support retention can
+  intentionally keep this sector behind the camera near stair and ledge edges.
 - Later optimization can use current-sector plus neighbor tracking or a spatial
   hash. Brute force is safest for first pass because maps are small and it
   avoids coupling visibility correctness to movement state.
@@ -452,16 +454,19 @@ Implementation location:
 
 Simplest safe strategy:
 
-- If editor gameplay preview has `fpsControllerState.currentSectorId != 0`, use
-  it.
-- Otherwise find the current sector from camera/player XZ position:
+- Find the current sector from the rendered camera XZ position:
   - Use `SectorCollisionWorld::FindSectorContainingPoint()` if the collision
     world exists and is valid.
   - If visibility is needed outside the editor gameplay path, provide a small
     visibility/topology lookup helper that brute-forces point-in-sector using
     extracted loops, or build lookup loops into the visibility graph.
+- Treat editor gameplay `fpsControllerState.currentSectorId` as a hint rather
+  than authoritative render state. Include it conservatively only when it is
+  the camera sector or is connected through an open portal; otherwise use it
+  only when camera lookup has no valid result.
 - If no sector contains the camera/player, return invalid start sector and draw
-  all sectors as fallback in phase 2.
+  all sectors as fallback in phase 2 unless a valid gameplay-sector fallback is
+  available.
 
 Later optimizations:
 

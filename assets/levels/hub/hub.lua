@@ -86,7 +86,7 @@ local function patrolNpc(instanceId)
             end
 
             previousMarkerIndex = markerIndex
-            delay(math.random(3000, 15000))
+            delay(math.random(2000, 5000))
         end
     end
 end

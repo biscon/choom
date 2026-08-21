@@ -221,6 +221,7 @@ struct SectorPreviewSettingsModalState {
     PreviewSettingsTab activeTab = PreviewSettingsTab::General;
     std::string weaponId;
     SectorFpsControllerConfig draftConfig;
+    bool draftNpcToNpcCollisionEnabled = true;
     SectorTopologySkySettings draftSkySettings;
     SectorTopologyDirectionalLightSettings draftDirectionalLight;
     SectorTopologyFogSettings draftFogSettings;

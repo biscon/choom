@@ -182,24 +182,23 @@ bool IsVerticallyPlausibleSeed(
             && eyeYWorld - VisibilitySeedVerticalToleranceWorld <= heights.ceilingZ;
 }
 
-void AppendPointSeed(
+int FindPointSeed(
         const RuntimeSectorVisibilityGraph& graph,
         const SectorCollisionWorld* collisionWorld,
-        std::vector<int>& seeds,
         Vector2 xz,
         float eyeYWorld,
         bool validateEyeY)
 {
     if (collisionWorld == nullptr) {
-        return;
+        return 0;
     }
     const int sectorId = collisionWorld->FindSectorContainingPoint(xz);
     if (sectorId == 0
             || FindRuntimeSectorVisibilityNode(graph, sectorId) == nullptr
             || !IsVerticallyPlausibleSeed(collisionWorld, sectorId, eyeYWorld, validateEyeY, false)) {
-        return;
+        return 0;
     }
-    seeds.push_back(sectorId);
+    return sectorId;
 }
 
 bool HasOpenPortalBetween(
@@ -242,7 +241,12 @@ std::vector<int> DeduplicateSortedSeeds(
     return seeds;
 }
 
-std::vector<int> GatherRuntimeVisibilityStartSeeds(
+struct GatheredRuntimeVisibilitySeeds {
+    std::vector<int> sectorIds;
+    int primarySectorId = -1;
+};
+
+GatheredRuntimeVisibilitySeeds GatherRuntimeVisibilityStartSeeds(
         const RuntimeSectorVisibilityGraph& graph,
         const SectorCollisionWorld* collisionWorld,
         Vector2 xz,
@@ -252,11 +256,33 @@ std::vector<int> GatherRuntimeVisibilityStartSeeds(
         bool validateEyeY,
         const std::vector<RuntimePortalDynamicBlocker>* dynamicBlockers)
 {
-    std::vector<int> seeds;
+    GatheredRuntimeVisibilitySeeds gathered;
+    std::vector<int>& seeds = gathered.sectorIds;
     seeds.reserve(6);
 
+    const int cameraSectorId = FindPointSeed(
+            graph,
+            collisionWorld,
+            xz,
+            eyeYWorld,
+            validateEyeY);
+    if (cameraSectorId > 0) {
+        seeds.push_back(cameraSectorId);
+        gathered.primarySectorId = cameraSectorId;
+    }
+
     if (FindRuntimeSectorVisibilityNode(graph, preferredStartSectorId) != nullptr) {
-        seeds.push_back(preferredStartSectorId);
+        if (seeds.empty()) {
+            seeds.push_back(preferredStartSectorId);
+            gathered.primarySectorId = preferredStartSectorId;
+        } else if (preferredStartSectorId == cameraSectorId
+                || HasOpenPortalBetween(
+                        graph,
+                        cameraSectorId,
+                        preferredStartSectorId,
+                        dynamicBlockers)) {
+            seeds.push_back(preferredStartSectorId);
+        }
     }
 
     const auto appendConnectedPointSeed = [
@@ -265,38 +291,40 @@ std::vector<int> GatherRuntimeVisibilityStartSeeds(
             &seeds,
             eyeYWorld,
             validateEyeY,
-            dynamicBlockers](Vector2 sample) {
-        const std::size_t previousSize = seeds.size();
-        AppendPointSeed(
+            dynamicBlockers,
+            &gathered](Vector2 sample) {
+        const int sampledSectorId = FindPointSeed(
                 graph,
                 collisionWorld,
-                seeds,
                 sample,
                 eyeYWorld,
                 validateEyeY);
-        if (seeds.size() == previousSize || previousSize == 0) {
+        if (sampledSectorId == 0
+                || std::find(seeds.begin(), seeds.end(), sampledSectorId) != seeds.end()) {
             return;
         }
 
-        const int sampledSectorId = seeds.back();
+        if (seeds.empty()) {
+            seeds.push_back(sampledSectorId);
+            gathered.primarySectorId = sampledSectorId;
+            return;
+        }
+
         bool connectedToAcceptedSeed = false;
-        for (std::size_t i = 0; i < previousSize; ++i) {
-            if (seeds[i] == sampledSectorId
-                    || HasOpenPortalBetween(
+        for (const int seed : seeds) {
+            if (HasOpenPortalBetween(
                             graph,
-                            seeds[i],
+                            seed,
                             sampledSectorId,
                             dynamicBlockers)) {
                 connectedToAcceptedSeed = true;
                 break;
             }
         }
-        if (!connectedToAcceptedSeed) {
-            seeds.pop_back();
+        if (connectedToAcceptedSeed) {
+            seeds.push_back(sampledSectorId);
         }
     };
-
-    appendConnectedPointSeed(xz);
 
     if (collisionWorld != nullptr
             && std::isfinite(visibilitySeedRadiusWorld)
@@ -313,7 +341,8 @@ std::vector<int> GatherRuntimeVisibilityStartSeeds(
         }
     }
 
-    return DeduplicateSortedSeeds(graph, seeds);
+    gathered.sectorIds = DeduplicateSortedSeeds(graph, seeds);
+    return gathered;
 }
 
 float RelativeAngle(Vector2 origin, Vector2 forward, Vector2 point)
@@ -1201,7 +1230,7 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
         return result;
     }
 
-    const std::vector<int> seeds = GatherRuntimeVisibilityStartSeeds(
+    const GatheredRuntimeVisibilitySeeds seeds = GatherRuntimeVisibilityStartSeeds(
             graph,
             collisionWorld,
             xz,
@@ -1216,8 +1245,8 @@ RuntimePortalVisibilityResult ComputeRuntimeSectorVisibilityFromView(
             xz,
             forward,
             horizontalFovRadians,
-            seeds,
-            preferredStartSectorId,
+            seeds.sectorIds,
+            seeds.primarySectorId,
             iterationCap,
             dynamicBlockers);
 }

@@ -476,6 +476,7 @@ void TestPreviewSettingsModalResetPreservesSessionView()
     modal.viewmodelScroll.offset.y = 55.0f;
     modal.weaponScroll.offset.y = 66.0f;
     modal.draftConfig.walkSpeed = 123.0f;
+    modal.draftNpcToNpcCollisionEnabled = false;
     modal.errorMessage = "discard me";
 
     game::ResetSectorPreviewSettingsModalPreservingView(modal);
@@ -491,7 +492,8 @@ void TestPreviewSettingsModalResetPreservesSessionView()
                   && Near(modal.weaponScroll.offset.y, 66.0f),
           "preview settings reset preserves every tab scroll offset");
     Check(modal.errorMessage.empty()
-                  && !Near(modal.draftConfig.walkSpeed, 123.0f),
+                  && !Near(modal.draftConfig.walkSpeed, 123.0f)
+                  && modal.draftNpcToNpcCollisionEnabled,
           "preview settings reset discards transient drafts and errors");
 }
 

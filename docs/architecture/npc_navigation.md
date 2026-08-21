@@ -35,7 +35,12 @@ advances the bounded navigation build, reconciles dynamic TileCache obstacles,
 updates NPC paths and locomotion, then updates remaining runtime object state.
 Crowd only supplies local steering. Physical positions still come from the
 topology-based `SectorCollisionWorld`; visual offsets never affect navigation,
-sector lookup, or physics.
+sector lookup, or physics. Navigation locomotion enables the collision world's
+grounded drop constraint: downward portal changes up to the configured agent
+maximum climb remain valid stair connections, while larger drops behave as
+blocking ledges. This prevents avoidance steering from moving a non-falling NPC
+off the navigation surface; NPC gravity and airborne traversal remain out of
+scope.
 
 Normal-frame query and steering data use fixed arrays or pre-reserved vectors.
 Agent, path, obstacle, diagnostic, and script-operation capacity overruns remain

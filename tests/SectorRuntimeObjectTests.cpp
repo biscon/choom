@@ -340,6 +340,45 @@ game::SectorTopologyMap MakeNavigationStairMap()
     return map;
 }
 
+game::SectorTopologyMap MakeNavigationDropMap()
+{
+    game::SectorTopologyMap map;
+    map.vertices = {
+            {1, 0, 0},
+            {2, 512, 0},
+            {3, 512, 512},
+            {4, 0, 512},
+            {5, 1024, 0},
+            {6, 1024, 512}};
+    map.lineDefs = {
+            {1, 1, 2, 1, -1},
+            {2, 2, 3, 2, 8},
+            {3, 3, 4, 3, -1},
+            {4, 4, 1, 4, -1},
+            {5, 2, 5, 5, -1},
+            {6, 5, 6, 6, -1},
+            {7, 6, 3, 7, -1}};
+    AddSide(map, 1, 1, game::SectorTopologySideKind::Front, 1);
+    AddSide(map, 2, 2, game::SectorTopologySideKind::Front, 1);
+    AddSide(map, 3, 3, game::SectorTopologySideKind::Front, 1);
+    AddSide(map, 4, 4, game::SectorTopologySideKind::Front, 1);
+    AddSide(map, 5, 5, game::SectorTopologySideKind::Front, 2);
+    AddSide(map, 6, 6, game::SectorTopologySideKind::Front, 2);
+    AddSide(map, 7, 7, game::SectorTopologySideKind::Front, 2);
+    AddSide(map, 8, 2, game::SectorTopologySideKind::Back, 2);
+
+    game::SectorTopologySector upper = Sector(1);
+    upper.floorZ = 8.0f;
+    upper.ceilingZ = 32.0f;
+    map.sectors.push_back(upper);
+    game::SectorTopologySector lower = Sector(2);
+    lower.floorZ = 0.0f;
+    lower.ceilingZ = 32.0f;
+    map.sectors.push_back(lower);
+    map.previewSettings.stepHeight = 0.4f;
+    return map;
+}
+
 void FinishNavigationBuild(
         game::SectorNavigationWorld& navigation,
         const game::SectorTopologyMap& map,
@@ -5566,7 +5605,8 @@ void TestCrowdFactionAwarePlayerAvoidanceAndHostileContact()
 
 void TestCrowdHeadOnNpcAgentsAvoidEachOther()
 {
-    const game::SectorTopologyMap map = MakeNavigationSquareMap();
+    game::SectorTopologyMap map = MakeNavigationSquareMap();
+    map.previewSettings.npcToNpcCollisionEnabled = false;
     game::SectorCollisionWorld collisionWorld;
     std::string collisionError;
     Check(collisionWorld.BuildFromTopology(map, &collisionError),
@@ -5617,7 +5657,7 @@ void TestCrowdHeadOnNpcAgentsAvoidEachOther()
         }
     }
     Check(minimumDistance >= 0.499f && maximumLateralOffset > 0.05f,
-          "head-on Crowd agents separate laterally without physical overlap");
+          "head-on Crowd agents avoid each other with solid NPC collision disabled");
     Check(game::GetNpcMoveStatus(runtime, "left_agent").phase
                         == game::NpcMovePhase::Arrived
                   && game::GetNpcMoveStatus(runtime, "right_agent").phase
@@ -5844,6 +5884,66 @@ void TestNpcNavigationSmoothsSectorGeometryStairsVisually()
                           == game::NpcAction::Idle
                   && Near(world.Get<game::SectorObjectVisualOffset>(npcEntity).position.y, 0.0f),
           "map teardown cancels locomotion, restores Idle, and clears visual smoothing state");
+}
+
+void TestNpcNavigationMovementStaysOnWalkableSideOfDrop()
+{
+    const game::SectorTopologyMap map = MakeNavigationDropMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "NPC ledge collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize(game::BuildSectorNavigationSettingsForMap(map));
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "NPC ledge navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 1);
+    const engine::Entity npcEntity = SpawnNavigationTestNpc(
+            world, "ledge_npc", 202, {3.0f, 1.0f, 2.0f}, 1, 3.0f, 3.0f);
+    game::NpcNavigationRuntime npcNavigation;
+    game::InitializeNpcNavigationRuntime(world, navigation, npcNavigation);
+    Check(game::RequestNpcMove(
+                  world, navigation, collisionWorld, npcNavigation,
+                  "ledge_npc", {2.0f, 2.0f}, game::NpcMoveGait::Walk).accepted,
+          "NPC accepts an initial route on the upper navigation surface");
+
+    Check(npcNavigation.records.size() == 1,
+          "NPC ledge fixture creates one navigation record");
+    if (npcNavigation.records.size() == 1) {
+        game::NpcNavigationRecord& record = npcNavigation.records.front();
+        record.doorPhase = game::NpcDoorTraversalPhase::Crossing;
+        record.doorLanding = {6.0f, 0.0f, 2.0f};
+        record.cornerCount = 1;
+        record.nextCorner = 0;
+    }
+
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> colliders;
+    for (int frame = 0; frame < 3; ++frame) {
+        game::UpdateNpcNavigationAndLocomotionSystem(
+                world, assets, navigation, npcNavigation, definitions,
+                collisionWorld, doors, colliders, probes, map, 0.2f);
+    }
+
+    const game::SectorObjectTransform& transform =
+            world.Get<game::SectorObjectTransform>(npcEntity);
+    const game::SectorObject& object = world.Get<game::SectorObject>(npcEntity);
+    Check(transform.position.x <= 3.751f
+                  && Near(transform.position.y, 1.0f, 0.001f)
+                  && object.currentSectorId == 1,
+          "navigation locomotion blocks an NPC before a drop above maximum climb");
+    Check(game::GetNpcMoveStatus(npcNavigation, "ledge_npc").phase
+                    == game::NpcMovePhase::FollowingPath,
+          "blocked NPC remains active for steering or bounded replan recovery");
+    game::ShutdownNpcNavigationRuntime(world, navigation, npcNavigation);
+    navigation.Shutdown();
 }
 
 void TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip()
@@ -8235,6 +8335,7 @@ int main()
     TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions();
     TestNpcWeaponDamageOcclusionAndCorpseFade();
     TestNpcNavigationSmoothsSectorGeometryStairsVisually();
+    TestNpcNavigationMovementStaysOnWalkableSideOfDrop();
     TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip();
     TestAnimatedModelSelectionAndBlendApi();
     TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose();

@@ -127,6 +127,42 @@ SectorTopologyMap MakeAdjacent(float leftFloor, float rightFloor, float rightCei
     return map;
 }
 
+SectorTopologyMap MakeAdjacentDestinationExtendsPastPortal(
+        float leftFloor,
+        float rightFloor)
+{
+    SectorTopologyMap map;
+    map.vertices = {
+            {1, Coord(0), Coord(0)},
+            {2, Coord(64), Coord(0)},
+            {3, Coord(64), Coord(64)},
+            {4, Coord(0), Coord(64)},
+            {5, Coord(128), Coord(0)},
+            {6, Coord(128), Coord(128)},
+            {7, Coord(64), Coord(128)}};
+    map.lineDefs = {
+            {1, 1, 2, 1, -1},
+            {2, 2, 3, 2, 9},
+            {3, 3, 4, 3, -1},
+            {4, 4, 1, 4, -1},
+            {5, 2, 5, 5, -1},
+            {6, 5, 6, 6, -1},
+            {7, 6, 7, 7, -1},
+            {8, 7, 3, 8, -1}};
+    AddSide(map, 1, 1, SectorTopologySideKind::Front, 10);
+    AddSide(map, 2, 2, SectorTopologySideKind::Front, 10);
+    AddSide(map, 3, 3, SectorTopologySideKind::Front, 10);
+    AddSide(map, 4, 4, SectorTopologySideKind::Front, 10);
+    AddSide(map, 5, 5, SectorTopologySideKind::Front, 20);
+    AddSide(map, 6, 6, SectorTopologySideKind::Front, 20);
+    AddSide(map, 7, 7, SectorTopologySideKind::Front, 20);
+    AddSide(map, 8, 8, SectorTopologySideKind::Front, 20);
+    AddSide(map, 9, 2, SectorTopologySideKind::Back, 20);
+    map.sectors.push_back(Sector(10, leftFloor, 24.0f));
+    map.sectors.push_back(Sector(20, rightFloor, 24.0f));
+    return map;
+}
+
 SectorTopologyMap MakeRoomLandingAndBlockedPortal(
         float landingWidth,
         float roomFloor,
@@ -198,12 +234,18 @@ game::SectorCollisionMoveResult Move(
         float feetY = 0.0f,
         float stepHeight = 0.25f,
         float playerHeight = 1.6f,
-        float radius = 0.25f)
+        float radius = 0.25f,
+        bool constrainGroundedDropsToStepHeight = false)
 {
     return world.ResolveMovement(
             game::SectorCollisionMoveState{position, feetY, sectorId, grounded},
             delta,
-            game::SectorCollisionMoveConfig{radius, playerHeight, stepHeight, 4});
+            game::SectorCollisionMoveConfig{
+                    radius,
+                    playerHeight,
+                    stepHeight,
+                    4,
+                    constrainGroundedDropsToStepHeight});
 }
 
 void TestBlockingWallStopsAndSlides()
@@ -645,6 +687,78 @@ void TestDownwardPortalFootprintCommit()
     }
 }
 
+void TestStepDownPortalFootprintCommit()
+{
+    const game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(2.0f, 0.0f));
+    const float portalX = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).x;
+    const float z = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).y;
+    const float feetY = game::SectorAuthoringToWorldDistance(2.0f);
+    const float radius = 0.5f;
+    const Vector2 start{portalX - 0.01f, z};
+
+    game::SectorCollisionMoveResult moveResult = Move(
+            world,
+            start,
+            Vector2{radius * 0.75f, 0.0f},
+            10,
+            true,
+            feetY,
+            0.25f,
+            1.6f,
+            radius);
+    Check(moveResult.currentSectorId == 10,
+          "ordinary step-down retains upper support while the footprint overlaps it");
+    game::SectorFpsVerticalResult verticalResult =
+            UpdateVerticalForMoveResult(world, moveResult, feetY);
+    Check(verticalResult.transition == game::SectorFpsVerticalTransition::StayedGrounded,
+          "ordinary step-down does not snap while the upper tread still supports the footprint");
+
+    moveResult = Move(
+            world,
+            start,
+            Vector2{radius + 0.02f, 0.0f},
+            10,
+            true,
+            feetY,
+            0.25f,
+            1.6f,
+            radius);
+    Check(moveResult.currentSectorId == 20,
+          "ordinary step-down commits after the footprint clears the upper tread");
+    verticalResult = UpdateVerticalForMoveResult(world, moveResult, feetY);
+    Check(verticalResult.transition == game::SectorFpsVerticalTransition::SnappedDown,
+          "ordinary step-down snaps to the lower tread after support clearance");
+}
+
+void TestStepDownFootprintSupportAtPortalCorner()
+{
+    const game::SectorCollisionWorld world = BuildWorld(
+            MakeAdjacentDestinationExtendsPastPortal(2.0f, 0.0f));
+    const Vector2 portalEnd =
+            game::SectorCoordToWorldPosition2(Coord(64), Coord(64));
+    const float feetY = game::SectorAuthoringToWorldDistance(2.0f);
+    const float radius = 0.5f;
+    const game::SectorCollisionMoveConfig config{radius, 1.6f, 0.25f, 4};
+
+    int sectorId = world.FindSectorForPlayerFootprint(
+            Vector2{portalEnd.x + 0.2f, portalEnd.y + 0.2f},
+            10,
+            feetY,
+            true,
+            config);
+    Check(sectorId == 10,
+          "diagonal step-down retains support while the footprint overlaps the tread corner");
+
+    sectorId = world.FindSectorForPlayerFootprint(
+            Vector2{portalEnd.x + 0.4f, portalEnd.y + 0.4f},
+            10,
+            feetY,
+            true,
+            config);
+    Check(sectorId == 20,
+          "diagonal step-down releases support after clearing the tread corner");
+}
+
 void TestDownwardPortalOffAxisFootprintCommit()
 {
     const game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(4.0f, 0.0f));
@@ -816,29 +930,68 @@ void TestJumpingPlayerCannotAutoStepThroughPortal()
           "grounded player can still step through higher-floor portal within step height");
 }
 
-void TestLowerSectorMovementIntoTooHighPortalStillBlocks()
+void TestFeetHeightControlsReverseStepBlocking()
 {
     const game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(4.0f, 0.0f));
     const float portalX = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).x;
     const float z = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).y;
-    const float feetY = game::SectorAuthoringToWorldDistance(4.0f);
     const float radius = 1.5f;
     const Vector2 start{portalX + radius + 0.1f, z};
-    const game::SectorCollisionMoveResult result = Move(
+    game::SectorCollisionMoveResult result = Move(
             world,
             start,
             Vector2{-0.75f, 0.0f},
             20,
             true,
-            feetY,
+            0.0f,
             0.25f,
             1.6f,
             radius);
 
     Check(result.currentSectorId == 20 && result.blockedByStep,
-          "movement from lower sector into too-high portal is still blocked by step");
+          "movement from the lower floor into a too-high portal remains blocked");
     Check(result.positionXZ.x >= portalX + radius - 0.001f,
-          "too-high reverse portal still applies radius clearance when moving into it");
+          "too-high portal keeps radius clearance for feet on the lower floor");
+
+    result = Move(
+            world,
+            start,
+            Vector2{-0.75f, 0.0f},
+            20,
+            true,
+            game::SectorAuthoringToWorldDistance(4.0f),
+            0.25f,
+            1.6f,
+            radius);
+    Check(result.currentSectorId == 20 && !result.blockedByStep,
+          "feet retained at the upper stair height can approach that stair from the lower sector");
+    Check(result.positionXZ.x < start.x - 0.7f,
+          "retained stair-height feet are not pushed away by the lower sector id");
+}
+
+void TestGroundedDropConstraint()
+{
+    const game::SectorCollisionWorld world = BuildWorld(MakeAdjacent(4.0f, 0.0f));
+    const float portalX = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).x;
+    const float z = game::SectorCoordToWorldPosition2(Coord(64), Coord(32)).y;
+    const float radius = 0.5f;
+    const Vector2 start{portalX - radius - 0.1f, z};
+    const game::SectorCollisionMoveResult result = Move(
+            world,
+            start,
+            Vector2{0.75f, 0.0f},
+            10,
+            true,
+            game::SectorAuthoringToWorldDistance(4.0f),
+            0.25f,
+            1.6f,
+            radius,
+            true);
+
+    Check(result.currentSectorId == 10 && result.blockedByDrop,
+          "navigation-style grounded movement blocks drops above step height");
+    Check(!result.blockedByStep && result.positionXZ.x <= portalX - radius + 0.001f,
+          "blocked drop reports its own reason and preserves ledge clearance");
 }
 
 void TestSectorFallbackAndBoundary()
@@ -866,12 +1019,15 @@ int main()
     TestBlockedPortalBeyondWideLandingPreservesStepUp();
     TestDownwardPortalVerticalTransitions();
     TestDownwardPortalFootprintCommit();
+    TestStepDownPortalFootprintCommit();
+    TestStepDownFootprintSupportAtPortalCorner();
     TestDownwardPortalOffAxisFootprintCommit();
     TestDownwardPortalFootprintLookupWaitsAfterBarelyCrossing();
     TestLowerSectorNearReversePortalDoesNotApplyRadiusNudge();
     TestAirbornePortalRules();
     TestJumpingPlayerCannotAutoStepThroughPortal();
-    TestLowerSectorMovementIntoTooHighPortalStillBlocks();
+    TestFeetHeightControlsReverseStepBlocking();
+    TestGroundedDropConstraint();
     TestSectorFallbackAndBoundary();
     if (failures == 0) {
         std::puts("Sector collision movement tests passed");

@@ -75,6 +75,7 @@ struct SectorCollisionMoveConfig {
     float playerHeight = 1.6f;
     float stepHeight = 0.25f;
     int maxIterations = 4;
+    bool constrainGroundedDropsToStepHeight = false;
 };
 
 struct SectorCollisionMoveState {
@@ -89,6 +90,7 @@ struct SectorCollisionMoveResult {
     int currentSectorId = 0;
     bool hitWall = false;
     bool blockedByStep = false;
+    bool blockedByDrop = false;
     bool blockedByCeiling = false;
 };
 
@@ -122,6 +124,10 @@ public:
 
 private:
     bool SectorContainsPoint(const SectorCollisionSector& sector, Vector2 xz) const;
+    bool SectorOverlapsFootprint(
+            const SectorCollisionSector& sector,
+            Vector2 xz,
+            float radius) const;
 
     std::vector<SectorCollisionSector> sectors;
     // ResolveMovement() reuses this queue so footprint portal traversal does not

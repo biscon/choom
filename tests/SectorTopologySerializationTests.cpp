@@ -2323,6 +2323,7 @@ void TestPreviewSettingsRoundTripAndValidation()
     original.previewSettings.headBobStrength = 0.08f;
     original.previewSettings.headBobFrequency = 10.5f;
     original.previewSettings.objectProbeDebugDrawMaxDistanceWorld = 96.0f;
+    original.previewSettings.npcToNpcCollisionEnabled = false;
 
     const std::string text = SaveText(original);
     const Json saved = Json::parse(text);
@@ -2338,7 +2339,8 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(saved["previewSettings"]["jumpHeight"].get<float>(), 0.75f)
                   && Near(saved["previewSettings"]["headBobStrength"].get<float>(), 0.08f)
                   && Near(saved["previewSettings"]["headBobFrequency"].get<float>(), 10.5f)
-                  && Near(saved["previewSettings"]["objectProbeDebugDrawMaxDistanceWorld"].get<float>(), 96.0f),
+                  && Near(saved["previewSettings"]["objectProbeDebugDrawMaxDistanceWorld"].get<float>(), 96.0f)
+                  && !saved["previewSettings"]["npcToNpcCollisionEnabled"].get<bool>(),
           "preview settings values are serialized");
 
     SectorTopologyMap loaded;
@@ -2355,7 +2357,8 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(loaded.previewSettings.jumpHeight, 0.75f)
                   && Near(loaded.previewSettings.headBobStrength, 0.08f)
                   && Near(loaded.previewSettings.headBobFrequency, 10.5f)
-                  && Near(loaded.previewSettings.objectProbeDebugDrawMaxDistanceWorld, 96.0f),
+                  && Near(loaded.previewSettings.objectProbeDebugDrawMaxDistanceWorld, 96.0f)
+                  && !loaded.previewSettings.npcToNpcCollisionEnabled,
           "preview settings round-trip");
 
     Json withoutGravity = saved;
@@ -2376,6 +2379,13 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(loaded.previewSettings.stepHeight, game::DefaultSectorPreviewSettings().stepHeight)
                   && Near(loaded.previewSettings.jumpHeight, game::DefaultSectorPreviewSettings().jumpHeight),
           "omitted collision preview fields load defaults");
+
+    Json withoutNpcCollision = saved;
+    withoutNpcCollision["previewSettings"].erase("npcToNpcCollisionEnabled");
+    Check(LoadText(withoutNpcCollision.dump(), loaded, error),
+          "omitted NPC-to-NPC collision setting is accepted");
+    Check(loaded.previewSettings.npcToNpcCollisionEnabled,
+          "omitted NPC-to-NPC collision setting preserves solid collision");
 
     Json withoutJumpHeight = saved;
     withoutJumpHeight["previewSettings"].erase("jumpHeight");
@@ -2419,7 +2429,9 @@ void TestPreviewSettingsRoundTripAndValidation()
                   && Near(oldStyle.previewSettings.headBobFrequency, defaults.headBobFrequency)
                   && Near(
                           oldStyle.previewSettings.objectProbeDebugDrawMaxDistanceWorld,
-                          defaults.objectProbeDebugDrawMaxDistanceWorld),
+                          defaults.objectProbeDebugDrawMaxDistanceWorld)
+                  && oldStyle.previewSettings.npcToNpcCollisionEnabled
+                          == defaults.npcToNpcCollisionEnabled,
           "omitted preview settings load defaults");
 
     Json invalid = saved;
@@ -2445,6 +2457,10 @@ void TestPreviewSettingsRoundTripAndValidation()
         invalid["previewSettings"][field] = "invalid";
         ExpectRejected(invalid, "wrong-type preview settings field is rejected");
     }
+
+    invalid = saved;
+    invalid["previewSettings"]["npcToNpcCollisionEnabled"] = "invalid";
+    ExpectRejected(invalid, "wrong-type NPC-to-NPC collision setting is rejected");
 
     const std::string marker = "\"__NONFINITE__\"";
 

@@ -45,6 +45,7 @@ struct SectorPreviewSettings {
     float headBobStrength = 0.020f;
     float headBobFrequency = 2.0f;
     float objectProbeDebugDrawMaxDistanceWorld = 48.0f;
+    bool npcToNpcCollisionEnabled = true;
 };
 
 struct SectorTopologySkySettings {

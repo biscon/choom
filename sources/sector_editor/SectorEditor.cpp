@@ -6689,6 +6689,9 @@ void SectorEditor::OpenPreviewSettingsModal()
             state.previewSettingsModal);
     state.previewSettingsModal.open = true;
     state.previewSettingsModal.draftConfig = NormalizeSectorFpsControllerConfig(previewState.controller.fpsControllerConfig);
+    state.previewSettingsModal.draftNpcToNpcCollisionEnabled =
+            NormalizeSectorPreviewSettings(
+                    TopologyMap().previewSettings).npcToNpcCollisionEnabled;
     state.previewSettingsModal.draftSkySettings = NormalizeSectorTopologySkySettings(TopologyMap().skySettings);
     state.previewSettingsModal.draftDirectionalLight =
             NormalizeSectorTopologyDirectionalLightSettings(TopologyMap().directionalLight);
@@ -6751,6 +6754,8 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     draftPreviewSettings.objectProbeDebugDrawMaxDistanceWorld =
             NormalizeSectorPreviewSettings(
                     TopologyMap().previewSettings).objectProbeDebugDrawMaxDistanceWorld;
+    draftPreviewSettings.npcToNpcCollisionEnabled =
+            state.previewSettingsModal.draftNpcToNpcCollisionEnabled;
     const SectorTopologySkySettings draftSkySettings = NormalizeSectorTopologySkySettings(
             state.previewSettingsModal.draftSkySettings);
     const SectorTopologyDirectionalLightSettings draftDirectionalLight =

@@ -1278,7 +1278,8 @@ bool SamePreviewSettings(const SectorPreviewSettings& left, const SectorPreviewS
             && a.headBobStrength == b.headBobStrength
             && a.headBobFrequency == b.headBobFrequency
             && a.objectProbeDebugDrawMaxDistanceWorld
-                    == b.objectProbeDebugDrawMaxDistanceWorld;
+                    == b.objectProbeDebugDrawMaxDistanceWorld
+            && a.npcToNpcCollisionEnabled == b.npcToNpcCollisionEnabled;
 }
 
 float Cross(Vector2 a, Vector2 b, Vector2 c)

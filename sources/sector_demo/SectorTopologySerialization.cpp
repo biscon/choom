@@ -1371,6 +1371,11 @@ SectorPreviewSettings ReadPreviewSettings(const Json& value, const std::string& 
         settings.objectProbeDebugDrawMaxDistanceWorld =
                 ReadFloat(value, "objectProbeDebugDrawMaxDistanceWorld", context);
     }
+    settings.npcToNpcCollisionEnabled = ReadOptionalBool(
+            value,
+            "npcToNpcCollisionEnabled",
+            context,
+            settings.npcToNpcCollisionEnabled);
     return NormalizeSectorPreviewSettings(settings);
 }
 
@@ -2294,7 +2299,8 @@ Json WritePreviewSettings(const SectorPreviewSettings& settings)
             {"headBobStrength", normalized.headBobStrength},
             {"headBobFrequency", normalized.headBobFrequency},
             {"objectProbeDebugDrawMaxDistanceWorld",
-             normalized.objectProbeDebugDrawMaxDistanceWorld}
+             normalized.objectProbeDebugDrawMaxDistanceWorld},
+            {"npcToNpcCollisionEnabled", normalized.npcToNpcCollisionEnabled}
     };
 }
 

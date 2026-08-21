@@ -137,6 +137,24 @@ SectorTopologyMap MakeAdjacent()
     return map;
 }
 
+SectorTopologyMap MakeAdjacentWithDiagonalSupportHint()
+{
+    SectorTopologyMap map = MakeAdjacent();
+    map.vertices.push_back(SectorTopologyVertex{7, -64, -64});
+    map.vertices.push_back(SectorTopologyVertex{8, 0, -64});
+    map.vertices.push_back(SectorTopologyVertex{9, -64, 0});
+    map.lineDefs.push_back(SectorTopologyLineDef{8, 7, 8, 9, -1});
+    map.lineDefs.push_back(SectorTopologyLineDef{9, 8, 1, 10, -1});
+    map.lineDefs.push_back(SectorTopologyLineDef{10, 1, 9, 11, -1});
+    map.lineDefs.push_back(SectorTopologyLineDef{11, 9, 7, 12, -1});
+    AddSide(map, 9, 8, SectorTopologySideKind::Front, 30);
+    AddSide(map, 10, 9, SectorTopologySideKind::Front, 30);
+    AddSide(map, 11, 10, SectorTopologySideKind::Front, 30);
+    AddSide(map, 12, 11, SectorTopologySideKind::Front, 30);
+    map.sectors.push_back(Sector(30, 2.0f, 16.0f));
+    return map;
+}
+
 SectorTopologyMap MakeDisconnected()
 {
     SectorTopologyMap map;
@@ -1332,13 +1350,73 @@ void TestViewCenterSeedDiffersFromPreferredSeed()
                     ForwardFromPreviewYaw(0.0f),
                     Degrees(60.0f),
                     20);
-    Check(result.startSectorId == 20, "preferred gameplay sector remains primary");
+    Check(result.startSectorId == 10, "camera center sector is the primary visibility start");
     Check(result.startSectorIds.size() == 2
                   && result.startSectorIds[0] == 10
                   && result.startSectorIds[1] == 20,
-          "camera center sector is added as a full-FOV seed");
+          "directly connected gameplay sector remains a conservative boundary seed");
     Check(Contains(result.visibleSectorIds, 10),
           "center sector full-FOV seed reveals sector missed from preferred seed alone");
+}
+
+void TestViewCameraSeedOverridesDiagonalRetainedSupportSector()
+{
+    const SectorTopologyMap map = MakeAdjacentWithDiagonalSupportHint();
+    game::RuntimeSectorVisibilityGraph graph;
+    std::string error;
+    Check(game::BuildRuntimeSectorVisibilityGraph(map, graph, &error),
+          "diagonal retained-support visibility graph builds");
+
+    game::SectorCollisionWorld world;
+    Check(world.BuildFromTopology(map, &error),
+          "diagonal retained-support collision world builds");
+
+    const Vector2 camera = game::SectorCoordToWorldPosition2(4, 4);
+    const float supportFloorY = game::SectorAuthoringToWorldDistance(2.0f);
+    const game::SectorCollisionMoveConfig moveConfig{0.1f, 1.6f, 0.4f, 4};
+    const int retainedSupportSectorId = world.FindSectorForPlayerFootprint(
+            camera,
+            30,
+            supportFloorY,
+            true,
+            moveConfig);
+    Check(retainedSupportSectorId == 30,
+          "collision retains the diagonally touching higher support sector");
+
+    const game::RuntimePortalVisibilityResult result =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    &world,
+                    camera,
+                    ForwardFromPreviewYaw(0.0f),
+                    Degrees(70.0f),
+                    retainedSupportSectorId,
+                    0,
+                    0.0f,
+                    supportFloorY + 1.0f,
+                    true);
+    Check(result.validStartSector && !result.fallbackDrawAll,
+          "diagonal retained-support visibility has a valid camera start");
+    Check(result.startSectorId == 10
+                  && result.startSectorIds.size() == 1
+                  && result.startSectorIds[0] == 10,
+          "non-adjacent retained support cannot replace or veto the camera sector");
+    Check(Contains(result.visibleSectorIds, 10)
+                  && Contains(result.visibleSectorIds, 20),
+          "camera visibility continues through the forward portal chain");
+
+    const game::RuntimePortalVisibilityResult fallback =
+            game::ComputeRuntimeSectorVisibilityFromView(
+                    graph,
+                    &world,
+                    game::SectorCoordToWorldPosition2(512, 512),
+                    ForwardFromPreviewYaw(0.0f),
+                    Degrees(70.0f),
+                    30);
+    Check(fallback.validStartSector
+                  && fallback.startSectorId == 30
+                  && fallback.startSectorIds.size() == 1,
+          "gameplay sector remains the fallback when camera point lookup fails");
 }
 
 void TestViewFootprintSamplingAndRadiusCap()
@@ -1565,6 +1643,7 @@ int main()
     TestViewFootprintSeedsRespectDynamicPortalBlockers();
     TestViewCapFallbackRespectsDynamicBlockers();
     TestViewCenterSeedDiffersFromPreferredSeed();
+    TestViewCameraSeedOverridesDiagonalRetainedSupportSector();
     TestViewFootprintSamplingAndRadiusCap();
     TestViewVerticalValidationIsTolerant();
     TestViewSolidBoundaryDoesNotCreateSeed();

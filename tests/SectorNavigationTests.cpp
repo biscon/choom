@@ -586,6 +586,9 @@ void TestBuildInputAndSourceHash()
     map.previewSettings.mouseSensitivity += 0.25f;
     const uint64_t visual = game::ComputeSectorNavigationSourceHash(map, colliders, {});
     Check(base == visual, "navigation source hash ignores visual preview settings");
+    map.previewSettings.npcToNpcCollisionEnabled = false;
+    Check(game::ComputeSectorNavigationSourceHash(map, colliders, {}) == base,
+          "navigation source hash ignores NPC-to-NPC collision policy");
     map.lineDefs.front().flags.blocksPlayer = true;
     const uint64_t blocking = game::ComputeSectorNavigationSourceHash(map, colliders, {});
     Check(blocking != visual, "navigation source hash includes player-blocking topology flags");
