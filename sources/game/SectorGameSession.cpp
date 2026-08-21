@@ -498,8 +498,8 @@ void SectorGameSession::Update(
                             : nullptr,
                     request.rayOrigin,
                     request.rayDirection,
-                    fpsPlayer.State().firing.definition.maximumRangeWorld,
-                    fpsPlayer.State().firing.definition.impact,
+                    fpsPlayer.State().firing.shotSequence,
+                    fpsPlayer.State().firing.definition,
                     resolvedShot);
             fpsPlayer.RecordShotResolution(resolvedShot);
             ApplyPlayerPose(scene);

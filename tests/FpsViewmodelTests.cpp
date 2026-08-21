@@ -118,6 +118,11 @@ void RegistrySuccess()
     assert(Near(pistol->crosshair.outlineThicknessPixels, 1.0f));
     assert(Near(pistol->firing.shotIntervalSeconds, 0.18f));
     assert(Near(pistol->firing.maximumRangeWorld, 100.0f));
+    assert(!pistol->firing.pellets.enabled
+            && pistol->firing.pellets.count == 8
+            && Near(
+                    pistol->firing.pellets.spreadHalfAngleDegrees,
+                    6.0f));
     assert(pistol->firing.impact.damage == 0
             && !pistol->firing.impact.blood.enabled
             && !pistol->firing.impact.surfaceDebris.enabled);
@@ -318,6 +323,7 @@ void RegistryRoundTripAndSharedArmsConfiguration()
     rifle.id = "rifle";
     rifle.weaponSlot = 2;
     rifle.firing.shotIntervalSeconds = 0.09f;
+    rifle.firing.pellets = {true, 12, 7.5f};
     rifle.viewmodel.attachment.gripCorrection.translation.x = 0.11f;
     registry.weapons.push_back(rifle);
 
@@ -338,6 +344,13 @@ void RegistryRoundTripAndSharedArmsConfiguration()
             pistol->firing.shotIntervalSeconds,
             loadedRifle->firing.shotIntervalSeconds));
     assert(pistol->weaponSlot == 1 && loadedRifle->weaponSlot == 2);
+    assert(!pistol->firing.pellets.enabled);
+    assert(loadedRifle->firing.pellets.enabled
+            && loadedRifle->firing.pellets.count == 12
+            && Near(
+                    loadedRifle->firing.pellets.spreadHalfAngleDegrees,
+                    7.5f));
+    assert(serialized.find("\"pellets\"") != std::string::npos);
     assert(serialized.find("initialWeaponId") == std::string::npos);
 
     game::FpsApplicationSettings settings;
@@ -356,6 +369,44 @@ void RegistryRoundTripAndSharedArmsConfiguration()
     roundTrip.weapons.back().id = "pistol";
     assert(!game::ValidateFpsWeaponRegistry(roundTrip, &error));
     assert(error.find("duplicate weapon id") != std::string::npos);
+    roundTrip.weapons.back().id = "rifle";
+    roundTrip.weapons.back().firing.pellets.count =
+            game::MaxFpsWeaponPellets + 1;
+    assert(!game::ValidateFpsWeaponRegistry(roundTrip, &error));
+    assert(error.find("pellets contains an invalid count")
+            != std::string::npos);
+}
+
+void PelletDirectionGeneration()
+{
+    const Vector3 aim{0.0f, 0.0f, 1.0f};
+    game::FpsWeaponPelletDefinition pellets{true, 8, 6.0f};
+    assert(Near(
+            game::FpsWeaponPelletDirection(aim, pellets, 0, 17),
+            aim));
+
+    constexpr float Pi = 3.14159265358979323846f;
+    const float minimumDot = std::cos(6.0f * Pi / 180.0f);
+    bool sequenceChangedPattern = false;
+    for (int pelletIndex = 1; pelletIndex < pellets.count; ++pelletIndex) {
+        const Vector3 first = game::FpsWeaponPelletDirection(
+                aim, pellets, pelletIndex, 17);
+        const Vector3 duplicate = game::FpsWeaponPelletDirection(
+                aim, pellets, pelletIndex, 17);
+        const Vector3 nextShot = game::FpsWeaponPelletDirection(
+                aim, pellets, pelletIndex, 18);
+        assert(Near(Vector3Length(first), 1.0f));
+        assert(Vector3DotProduct(first, aim) >= minimumDot - 0.0001f);
+        assert(Near(first, duplicate));
+        sequenceChangedPattern = sequenceChangedPattern
+                || !Near(first, nextShot);
+    }
+    assert(sequenceChangedPattern);
+
+    pellets.enabled = false;
+    assert(Near(
+            game::FpsWeaponPelletDirection(aim, pellets, 7, 17),
+            aim));
 }
 
 void ExpectRegistryFailure(std::string text, const char* expected)
@@ -2353,6 +2404,7 @@ void CameraRecoilRuntime()
 int main()
 {
     RegistrySuccess(); RegistryRoundTripAndSharedArmsConfiguration();
+    PelletDirectionGeneration();
     RegistryValidation(); WeaponSlotSchemaAndKeys();
     SettingsResolutionAndPersistence();
     PreviewSettingsOverrideDeltaCoverage();

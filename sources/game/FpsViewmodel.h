@@ -2,6 +2,7 @@
 
 #include "engine/components/AnimatedModel.h"
 #include "engine/ecs/Entity.h"
+#include "game/FpsWeaponPellets.h"
 #include "game/FpsWeaponRegistry.h"
 
 #include <raylib.h>

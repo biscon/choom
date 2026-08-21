@@ -253,6 +253,7 @@ if(BUILD_TESTING)
     add_executable(fps_viewmodel_tests
             tests/FpsViewmodelTests.cpp
             sources/game/FpsViewmodel.cpp
+            sources/game/FpsWeaponPellets.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/game/FpsHudRenderer.cpp
             sources/game/PlayerStamina.cpp
@@ -547,6 +548,7 @@ if(BUILD_TESTING)
             sources/game/npc/NpcDefinitions.cpp
             sources/game/npc/NpcCollision.cpp
             sources/game/npc/NpcCombatSystem.cpp
+            sources/game/FpsWeaponPellets.cpp
             sources/game/npc/NpcNavigationSystem.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/engine/scripting/ScriptSystem.cpp

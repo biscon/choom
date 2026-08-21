@@ -352,6 +352,7 @@ void ValidateFiring(
 {
     const float values[] = {
             value.shotIntervalSeconds, value.maximumRangeWorld,
+            value.pellets.spreadHalfAngleDegrees,
             value.recoil.translationImpulse.x, value.recoil.translationImpulse.y,
             value.recoil.translationImpulse.z,
             value.recoil.rotationImpulseDegrees.x,
@@ -398,6 +399,12 @@ void ValidateFiring(
     }
     if (value.shotIntervalSeconds <= 0.0f || value.maximumRangeWorld <= 0.0f) {
         Fail(context + " shot interval and maximum range must be greater than zero");
+    }
+    if (value.pellets.count < 1
+            || value.pellets.count > MaxFpsWeaponPellets
+            || value.pellets.spreadHalfAngleDegrees < 0.0f
+            || value.pellets.spreadHalfAngleDegrees > 45.0f) {
+        Fail(context + ".pellets contains an invalid count or spread half-angle");
     }
     if (value.recoil.rollVariationDegrees < 0.0f
             || value.recoil.springFrequencyHz <= 0.0f
@@ -476,6 +483,15 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
     FpsWeaponFiringDefinition result;
     result.shotIntervalSeconds = Number(object, "shotIntervalSeconds", context);
     result.maximumRangeWorld = Number(object, "maximumRangeWorld", context);
+    const auto pellets = object.find("pellets");
+    if (pellets != object.end()) {
+        const std::string pelletsContext = context + ".pellets";
+        if (!pellets->is_object()) Fail(pelletsContext + " must be an object");
+        result.pellets.enabled = Boolean(*pellets, "enabled", pelletsContext);
+        result.pellets.count = Integer(*pellets, "count", pelletsContext);
+        result.pellets.spreadHalfAngleDegrees = Number(
+                *pellets, "spreadHalfAngleDegrees", pelletsContext);
+    }
     const auto shootSound = object.find("shootSound");
     if (shootSound != object.end()) {
         if (!shootSound->is_string()) {
@@ -768,6 +784,17 @@ Json FiringValue(const FpsWeaponFiringDefinition& value)
                     {"knockbackImpulseWorldPerSecond", value.impact.knockbackImpulseWorldPerSecond},
                     {"blood", ImpactParticlesValue(value.impact.blood)},
                     {"surfaceDebris", ImpactParticlesValue(value.impact.surfaceDebris)}}}};
+    const FpsWeaponPelletDefinition defaultPellets;
+    if (value.pellets.enabled != defaultPellets.enabled
+            || value.pellets.count != defaultPellets.count
+            || value.pellets.spreadHalfAngleDegrees
+                    != defaultPellets.spreadHalfAngleDegrees) {
+        firing["pellets"] = {
+                {"enabled", value.pellets.enabled},
+                {"count", value.pellets.count},
+                {"spreadHalfAngleDegrees",
+                        value.pellets.spreadHalfAngleDegrees}};
+    }
     if (!value.shootSoundPath.empty()) {
         firing["shootSound"] = value.shootSoundPath;
     }
@@ -2428,6 +2455,12 @@ FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
 {
     value.shotIntervalSeconds = std::clamp(value.shotIntervalSeconds, 0.03f, 5.0f);
     value.maximumRangeWorld = std::clamp(value.maximumRangeWorld, 1.0f, 10000.0f);
+    value.pellets.count = std::clamp(
+            value.pellets.count, 1, MaxFpsWeaponPellets);
+    value.pellets.spreadHalfAngleDegrees = std::isfinite(
+            value.pellets.spreadHalfAngleDegrees)
+            ? std::clamp(value.pellets.spreadHalfAngleDegrees, 0.0f, 45.0f)
+            : FpsWeaponPelletDefinition{}.spreadHalfAngleDegrees;
     const auto clampVector = [](Vector3& vector, float minimum, float maximum) {
         vector.x = std::clamp(vector.x, minimum, maximum);
         vector.y = std::clamp(vector.y, minimum, maximum);

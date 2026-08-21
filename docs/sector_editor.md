@@ -552,6 +552,13 @@ The slot-1 weapon is selected but remains holstered when gameplay or 3D preview
 starts. Press `H` to equip it. In gameplay and 3D Gameplay control mode, the
 top-row keys `1` through `6` switch to assigned weapons by holstering the old
 weapon completely before automatically unholstering the new weapon.
+Firing definitions can optionally enable hitscan pellets and configure their
+count and spread half-angle. A pellet weapon performs one normal firing event
+for cooldown, sound, recoil, muzzle flash, and muzzle light, while each pellet
+independently resolves its first collision, damage, knockback, stagger, and
+impact effects. Weapons without pellets enabled retain one centered hitscan
+ray. Magazine ammunition and manual reload behavior are not currently part of
+the weapon system.
 
 `Preview Settings -> Fog` configures map-level analytic distance fog. The fog
 color is a scattering tint, not an emissive replacement color: distance fog

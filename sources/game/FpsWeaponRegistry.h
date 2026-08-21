@@ -16,6 +16,7 @@ namespace engine { class AssetManager; }
 namespace game {
 
 constexpr int MaxFpsMuzzleFlashLobes = 12;
+constexpr int MaxFpsWeaponPellets = 32;
 constexpr int MinFpsWeaponSlot = 1;
 constexpr int MaxFpsWeaponSlot = 6;
 
@@ -138,9 +139,16 @@ struct FpsWeaponImpactDefinition {
     FpsWeaponImpactParticlesDefinition surfaceDebris;
 };
 
+struct FpsWeaponPelletDefinition {
+    bool enabled = false;
+    int count = 8;
+    float spreadHalfAngleDegrees = 6.0f;
+};
+
 struct FpsWeaponFiringDefinition {
     float shotIntervalSeconds = 0.18f;
     float maximumRangeWorld = 100.0f;
+    FpsWeaponPelletDefinition pellets;
     std::string shootSoundPath;
     engine::SoundHandle shootSound = engine::NullSoundHandle();
     FpsWeaponRecoilDefinition recoil;

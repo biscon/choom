@@ -492,6 +492,17 @@ SectorEditorWeaponEditorPanelResult DrawSectorEditorWeaponEditorPanel(
                 weapon->firing.shotIntervalSeconds, 0.001f, 60.0f, 3);
         drawFloat("sector_editor_weapon_max_range", "Maximum range",
                 weapon->firing.maximumRangeWorld, 0.001f, 1000000.0f, 2);
+        drawCheckbox("sector_editor_weapon_pellets_enabled", "Pellets enabled",
+                weapon->firing.pellets.enabled);
+        drawInt("sector_editor_weapon_pellet_count", "Pellet count",
+                weapon->firing.pellets.count, 1, MaxFpsWeaponPellets, 1);
+        drawFloat(
+                "sector_editor_weapon_pellet_spread",
+                "Spread half-angle (degrees)",
+                weapon->firing.pellets.spreadHalfAngleDegrees,
+                0.0f,
+                45.0f,
+                2);
         label("Shoot sound");
         const engine::UITextInputResult soundResult = engine::TextInput(
                 ui, config, input, assets, "sector_editor_weapon_shoot_sound",
