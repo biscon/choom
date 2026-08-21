@@ -20,6 +20,7 @@
 #include "sector_demo/SectorUnits.h"
 #include "util/json.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -337,6 +338,65 @@ game::SectorTopologyMap MakeNavigationStairMap()
         }
     }
     map.previewSettings.stepHeight = 0.4f;
+    return map;
+}
+
+game::SectorTopologyMap MakeNavigationTurningStairMap()
+{
+    game::SectorTopologyMap map;
+    constexpr game::SectorCoord Unit = 128;
+    map.vertices = {
+            {1, 0, 0}, {2, Unit, 0}, {3, Unit, 2 * Unit}, {4, 0, 2 * Unit},
+            {5, 2 * Unit, 0}, {6, 2 * Unit, 2 * Unit},
+            {7, 4 * Unit, 0}, {8, 4 * Unit, 2 * Unit},
+            {9, 4 * Unit, 3 * Unit}, {10, 2 * Unit, 3 * Unit},
+            {11, 4 * Unit, 4 * Unit}, {12, 2 * Unit, 4 * Unit},
+            {13, 4 * Unit, 5 * Unit}, {14, 2 * Unit, 5 * Unit}};
+    const std::array<std::array<int, 4>, 6> loops{{
+            {{1, 2, 3, 4}},
+            {{2, 5, 6, 3}},
+            {{5, 7, 8, 6}},
+            {{6, 8, 9, 10}},
+            {{10, 9, 11, 12}},
+            {{12, 11, 13, 14}}}};
+    struct EdgeRecord {
+        int start = 0;
+        int end = 0;
+        size_t lineIndex = 0;
+    };
+    std::vector<EdgeRecord> edges;
+    int nextLineId = 1;
+    int nextSideId = 1;
+    for (size_t sectorIndex = 0; sectorIndex < loops.size(); ++sectorIndex) {
+        const int sectorId = static_cast<int>(sectorIndex) + 1;
+        game::SectorTopologySector sector = Sector(sectorId);
+        sector.floorZ = static_cast<float>(sectorIndex) * 3.0f;
+        sector.ceilingZ = sector.floorZ + 24.0f;
+        map.sectors.push_back(sector);
+        for (size_t edgeIndex = 0; edgeIndex < 4; ++edgeIndex) {
+            const int start = loops[sectorIndex][edgeIndex];
+            const int end = loops[sectorIndex][(edgeIndex + 1) % 4];
+            const auto existing = std::find_if(
+                    edges.begin(), edges.end(), [start, end](const EdgeRecord& edge) {
+                        return edge.start == end && edge.end == start;
+                    });
+            const int sideId = nextSideId++;
+            if (existing == edges.end()) {
+                const int lineId = nextLineId++;
+                map.lineDefs.push_back({lineId, start, end, sideId, -1});
+                edges.push_back({start, end, map.lineDefs.size() - 1});
+                AddSide(map, sideId, lineId,
+                        game::SectorTopologySideKind::Front, sectorId);
+            } else {
+                game::SectorTopologyLineDef& line = map.lineDefs[existing->lineIndex];
+                line.backSideDefId = sideId;
+                AddSide(map, sideId, line.id,
+                        game::SectorTopologySideKind::Back, sectorId);
+            }
+        }
+    }
+    map.previewSettings.stepHeight = 0.4f;
+    map.previewSettings.npcToNpcCollisionEnabled = false;
     return map;
 }
 
@@ -5471,6 +5531,39 @@ void TestNpcNavigationLowSpeedAdvancesAtHighRefreshRate()
     navigation.Shutdown();
 }
 
+void TestNpcWaypointProgressTrackingRejectsJitterAndAcceptsSlowProgress()
+{
+    game::NpcNavigationRecord jitter;
+    game::UpdateNpcWaypointProgressTracking(
+            jitter, 2, 1.0f, 0.25f, 1.0f, 0.1f);
+    for (int sample = 0; sample < 8; ++sample) {
+        const float distance = sample % 2 == 0 ? 0.9999f : 1.0001f;
+        game::UpdateNpcWaypointProgressTracking(
+                jitter, 2, distance, 0.25f, 1.0f, 0.1f);
+    }
+    Check(jitter.steeringRecoveryActive && jitter.stallSeconds >= 0.75f,
+          "microscopic waypoint jitter deterministically activates direct steering recovery");
+
+    game::NpcNavigationRecord progressing;
+    game::UpdateNpcWaypointProgressTracking(
+            progressing, 4, 1.0f, 0.25f, 1.0f, 0.1f);
+    for (int sample = 1; sample <= 30; ++sample) {
+        game::UpdateNpcWaypointProgressTracking(
+                progressing, 4, 1.0f - static_cast<float>(sample) * 0.01f,
+                0.25f, 1.0f, 0.1f);
+    }
+    Check(!progressing.steeringRecoveryActive
+                  && progressing.stallSeconds < 0.4f,
+          "slow cumulative waypoint progress resets the stall window without false recovery");
+
+    game::UpdateNpcWaypointProgressTracking(
+            jitter, 3, 0.8f, 0.25f, 1.0f, 0.1f);
+    Check(!jitter.steeringRecoveryActive
+                  && jitter.stallSeconds == 0.0f
+                  && jitter.trackedCornerIndex == 3,
+          "advancing to a new waypoint resets deterministic recovery tracking");
+}
+
 void TestNpcCollisionCylindersAreSolidWithoutVerticalFalsePositives()
 {
     const game::SectorCollisionMoveState start{{0.0f, 0.0f}, 0.0f, 10, true};
@@ -5884,6 +5977,70 @@ void TestNpcNavigationSmoothsSectorGeometryStairsVisually()
                           == game::NpcAction::Idle
                   && Near(world.Get<game::SectorObjectVisualOffset>(npcEntity).position.y, 0.0f),
           "map teardown cancels locomotion, restores Idle, and clears visual smoothing state");
+}
+
+void TestNpcNavigationTraversesTurningStairsRepeatedly()
+{
+    const game::SectorTopologyMap map = MakeNavigationTurningStairMap();
+    game::SectorCollisionWorld collisionWorld;
+    std::string collisionError;
+    Check(collisionWorld.BuildFromTopology(map, &collisionError),
+          "turning stair collision fixture builds");
+    game::SectorNavigationWorld navigation;
+    navigation.Initialize(game::BuildSectorNavigationSettingsForMap(map));
+    navigation.RequestRebuild();
+    FinishNavigationBuild(navigation, map);
+    Check(navigation.State() == game::SectorNavigationState::Ready,
+          "turning stair navigation fixture builds");
+
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+    const engine::Entity npcEntity = SpawnNavigationTestNpc(
+            world, "turning_stair_npc", 211, {0.5f, 0.0f, 1.0f}, 1,
+            1.5f, 3.0f);
+    game::NpcNavigationRuntime runtime;
+    game::InitializeNpcNavigationRuntime(world, navigation, runtime);
+    engine::AssetManager assets;
+    game::NpcDefinitionCatalog definitions;
+    game::SectorBakedObjectLightProbeRuntimeData probes;
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> colliders;
+
+    bool allArrivedWithoutReplans = true;
+    for (int traversal = 0; traversal < 6; ++traversal) {
+        const bool ascending = traversal % 2 == 0;
+        const Vector2 destination = ascending
+                ? Vector2{3.0f, 4.5f} : Vector2{0.5f, 1.0f};
+        const game::NpcMoveRequestResult request = game::RequestNpcMove(
+                world, navigation, collisionWorld, runtime,
+                "turning_stair_npc", destination, game::NpcMoveGait::Walk);
+        if (!request.accepted) {
+            allArrivedWithoutReplans = false;
+            break;
+        }
+        for (int frame = 0; frame < 800; ++frame) {
+            game::UpdateNpcNavigationAndLocomotionSystem(
+                    world, assets, navigation, runtime, definitions,
+                    collisionWorld, doors, colliders, probes, map, 0.025f);
+            if (game::GetNpcMoveStatus(runtime, "turning_stair_npc").phase
+                    != game::NpcMovePhase::FollowingPath) {
+                break;
+            }
+        }
+        const game::NpcMoveStatus status =
+                game::GetNpcMoveStatus(runtime, "turning_stair_npc");
+        const int expectedSector = ascending ? 6 : 1;
+        allArrivedWithoutReplans = allArrivedWithoutReplans
+                && status.phase == game::NpcMovePhase::Arrived
+                && status.replanCount == 0
+                && world.Get<game::SectorObject>(npcEntity).currentSectorId
+                        == expectedSector;
+        if (!allArrivedWithoutReplans) break;
+    }
+    Check(allArrivedWithoutReplans,
+          "NPC repeatedly traverses an L-shaped staircase both ways without stalls or replans");
+    game::ShutdownNpcNavigationRuntime(world, navigation, runtime);
+    navigation.Shutdown();
 }
 
 void TestNpcNavigationMovementStaysOnWalkableSideOfDrop()
@@ -8328,6 +8485,7 @@ int main()
     TestNpcNavigationRoutesIndependentAgentsAroundStaticCollision();
     TestNpcNavigationReplansAroundDynamicTileCacheObstacle();
     TestNpcNavigationLowSpeedAdvancesAtHighRefreshRate();
+    TestNpcWaypointProgressTrackingRejectsJitterAndAcceptsSlowProgress();
     TestNpcCollisionCylindersAreSolidWithoutVerticalFalsePositives();
     TestCrowdFactionAwarePlayerAvoidanceAndHostileContact();
     TestCrowdHeadOnNpcAgentsAvoidEachOther();
@@ -8335,6 +8493,7 @@ int main()
     TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions();
     TestNpcWeaponDamageOcclusionAndCorpseFade();
     TestNpcNavigationSmoothsSectorGeometryStairsVisually();
+    TestNpcNavigationTraversesTurningStairsRepeatedly();
     TestNpcNavigationMovementStaysOnWalkableSideOfDrop();
     TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip();
     TestAnimatedModelSelectionAndBlendApi();

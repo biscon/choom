@@ -60,6 +60,16 @@ enum class SectorNavigationArea : uint8_t {
     Door = 2
 };
 
+constexpr uint8_t SectorNavigationFirstGroundVariantArea = 3;
+constexpr uint8_t SectorNavigationLastGroundVariantArea = 62;
+
+constexpr bool IsSectorNavigationGroundArea(uint8_t area)
+{
+    return area == static_cast<uint8_t>(SectorNavigationArea::Ground)
+            || (area >= SectorNavigationFirstGroundVariantArea
+                && area <= SectorNavigationLastGroundVariantArea);
+}
+
 enum SectorNavigationPolyFlag : uint16_t {
     SectorNavigationPolyFlag_None = 0,
     SectorNavigationPolyFlag_Walk = 1u << 0u,
@@ -108,7 +118,8 @@ bool IsNull(SectorNavigationAgentHandle handle);
 bool IsNull(SectorNavigationPathHandle handle);
 
 constexpr size_t SectorNavigationMaximumPathPolygons = 256;
-constexpr size_t SectorNavigationMaximumStraightPathCorners = 64;
+constexpr size_t SectorNavigationMaximumStraightPathCorners =
+        SectorNavigationMaximumPathPolygons + 1;
 constexpr size_t SectorNavigationMaximumCorridorTiles = 256;
 constexpr size_t SectorNavigationMaximumDiagnosticMessageBytes = 512;
 

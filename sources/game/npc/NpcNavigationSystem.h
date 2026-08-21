@@ -100,6 +100,16 @@ bool UpdateNpcFootstepCadence(
         bool active,
         float resolvedHorizontalDistance);
 
+void ResetNpcWaypointProgressTracking(NpcNavigationRecord& record);
+
+void UpdateNpcWaypointProgressTracking(
+        NpcNavigationRecord& record,
+        size_t cornerIndex,
+        float cornerDistance,
+        float agentRadius,
+        float maximumSpeed,
+        float dt);
+
 void UpdateNpcNavigationAndLocomotionSystem(
         engine::World& world,
         engine::AssetManager& assets,

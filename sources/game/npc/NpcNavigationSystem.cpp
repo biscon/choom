@@ -22,7 +22,8 @@ namespace {
 
 constexpr float ArrivalTolerance = 0.10f;
 constexpr float MovementDistanceEpsilon = 0.0001f;
-constexpr float StallTriggerSeconds = 0.75f;
+constexpr float SteeringRecoveryTriggerSeconds = 0.75f;
+constexpr float ReplanTriggerSeconds = 1.50f;
 constexpr float ReplanCooldownSeconds = 0.50f;
 constexpr float DriftCheckIntervalSeconds = 0.25f;
 constexpr uint32_t MaximumReplans = 3;
@@ -83,6 +84,11 @@ bool IsActive(NpcMovePhase phase)
     return phase == NpcMovePhase::FollowingPath;
 }
 
+void ResetProgressTracking(NpcNavigationRecord& record)
+{
+    ResetNpcWaypointProgressTracking(record);
+}
+
 void ReleasePath(
         SectorNavigationWorld& navigation,
         NpcNavigationRecord& record,
@@ -113,6 +119,7 @@ void ReleasePath(
     record.doorLanding = {};
     record.doorWaitSeconds = 0.0f;
     record.holdsDoor = false;
+    ResetProgressTracking(record);
 }
 
 void SetTerminal(
@@ -133,7 +140,7 @@ void SetTerminal(
     record.crowdNeighborCount = 0;
     record.crowdNearestNeighborDistance = 0.0f;
     record.playerAvoidanceActive = false;
-    record.stallSeconds = 0.0f;
+    ResetProgressTracking(record);
     record.replanCooldownSeconds = 0.0f;
     SetDiagnostic(record, diagnostic);
     if (phase == NpcMovePhase::Arrived) ++runtime.counters.arrivals;
@@ -348,7 +355,7 @@ bool Replan(
     }
     ++record.replanCount;
     ++runtime.counters.replans;
-    record.stallSeconds = 0.0f;
+    ResetProgressTracking(record);
     record.replanCooldownSeconds = ReplanCooldownSeconds;
     SetDiagnostic(record, "path replanned from actual position");
     return true;
@@ -434,6 +441,43 @@ Vector2 ApplyFriendlyPlayerAvoidance(
 }
 
 } // namespace
+
+void ResetNpcWaypointProgressTracking(NpcNavigationRecord& record)
+{
+    record.stallSeconds = 0.0f;
+    record.bestCornerDistance = 0.0f;
+    record.trackedCornerIndex = SIZE_MAX;
+    record.steeringRecoveryActive = false;
+}
+
+void UpdateNpcWaypointProgressTracking(
+        NpcNavigationRecord& record,
+        size_t cornerIndex,
+        float cornerDistance,
+        float agentRadius,
+        float maximumSpeed,
+        float dt)
+{
+    if (record.trackedCornerIndex != cornerIndex) {
+        record.trackedCornerIndex = cornerIndex;
+        record.bestCornerDistance = cornerDistance;
+        record.stallSeconds = 0.0f;
+        record.steeringRecoveryActive = false;
+        return;
+    }
+    const float meaningfulProgress = std::max(
+            0.0025f,
+            std::min(agentRadius * 0.1f, maximumSpeed * 0.25f));
+    if (record.bestCornerDistance - cornerDistance >= meaningfulProgress) {
+        record.bestCornerDistance = cornerDistance;
+        record.stallSeconds = 0.0f;
+    } else {
+        record.stallSeconds += std::max(0.0f, dt);
+    }
+    if (record.stallSeconds >= SteeringRecoveryTriggerSeconds) {
+        record.steeringRecoveryActive = true;
+    }
+}
 
 NpcAnimationApplyResult ApplyNpcSemanticAnimation(
         NpcAnimationState& state,
@@ -676,7 +720,7 @@ NpcMoveRequestResult RequestNpcMove(
     record->actualVelocity = {};
     record->footstepDistanceWorld = 0.0f;
     record->footstepEvent = false;
-    record->stallSeconds = 0.0f;
+    ResetProgressTracking(*record);
     record->replanCooldownSeconds = 0.0f;
     record->driftCheckSeconds = 0.0f;
     record->replanCount = 0;
@@ -870,6 +914,7 @@ void PrepareNpcDoorTraversalAndHoldsSystem(
                 }
                 if (crossing == nullptr && bestWaiting == &record) {
                     record.doorPhase = NpcDoorTraversalPhase::Crossing;
+                    ResetProgressTracking(record);
                     SetDiagnostic(record, "crossing physically clear door");
                 } else {
                     SetDiagnostic(record, "queued for exclusive door crossing");
@@ -1185,28 +1230,15 @@ void UpdateNpcNavigationAndLocomotionSystem(
                     crowdState.nearestNeighborDistance;
             Vector2 steeringVelocity = crowdState.attached
                     ? crowdState.steeredVelocity : record.preferredVelocity;
-            if (record.doorPhase == NpcDoorTraversalPhase::Crossing) {
+            if (record.steeringRecoveryActive
+                    || record.doorPhase == NpcDoorTraversalPhase::Crossing) {
                 steeringVelocity = record.preferredVelocity;
             }
             record.desiredVelocity = steeringVelocity;
             const float steeringSpeed = Vector2Length(steeringVelocity);
             float movementBudget = steeringSpeed * dt;
             Vector2 totalActual{};
-            Vector2 progressDirection{};
-            if (record.nextCorner < record.cornerCount) {
-                const Vector3 progressTarget =
-                        record.doorPhase == NpcDoorTraversalPhase::Crossing
-                        ? record.doorLanding
-                        : record.corners[record.nextCorner];
-                progressDirection = {
-                        progressTarget.x - transform.position.x,
-                        progressTarget.z - transform.position.z};
-                const float progressLength = Vector2Length(progressDirection);
-                if (progressLength > MovementDistanceEpsilon) {
-                    progressDirection = Vector2Scale(
-                            progressDirection, 1.0f / progressLength);
-                }
-            }
+            const size_t cornerBeforeMovement = record.nextCorner;
             int stepCount = 0;
             while (movementBudget > MovementDistanceEpsilon
                     && record.nextCorner < record.cornerCount
@@ -1363,14 +1395,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
             resolvedHorizontalDistance = actualDistance;
             record.actualVelocity = dt > 0.0f
                     ? Vector2Scale(totalActual, 1.0f / dt) : Vector2{};
-            const float forwardProgress = Vector2DotProduct(
-                    totalActual, progressDirection);
             if (actualDistance > MovementDistanceEpsilon) {
-                if (forwardProgress > MovementDistanceEpsilon) {
-                    record.stallSeconds = 0.0f;
-                } else {
-                    record.stallSeconds += dt;
-                }
                 const float targetYaw = std::atan2(totalActual.x, totalActual.y);
                 const float delta = ShortestAngleDelta(transform.yawRadians, targetYaw);
                 const float maximumTurn = TurnRateRadiansPerSecond * dt;
@@ -1379,11 +1404,36 @@ void UpdateNpcNavigationAndLocomotionSystem(
                         ? NpcAction::Run : NpcAction::Walk;
             } else if (record.doorPhase
                     == NpcDoorTraversalPhase::WaitingForClearance) {
-                record.stallSeconds = 0.0f;
                 npc.action = NpcAction::Idle;
             } else {
-                record.stallSeconds += dt;
                 npc.action = NpcAction::Idle;
+            }
+
+            if (record.doorPhase == NpcDoorTraversalPhase::WaitingForClearance) {
+                ResetProgressTracking(record);
+            } else if (record.nextCorner != cornerBeforeMovement) {
+                ResetProgressTracking(record);
+            } else if (record.nextCorner < record.cornerCount) {
+                const Vector3 progressTarget =
+                        record.doorPhase == NpcDoorTraversalPhase::Crossing
+                        ? record.doorLanding
+                        : record.corners[record.nextCorner];
+                const Vector2 progressDelta{
+                        progressTarget.x - transform.position.x,
+                        progressTarget.z - transform.position.z};
+                const float cornerDistance = Vector2Length(progressDelta);
+                const bool recoveringBefore = record.steeringRecoveryActive;
+                UpdateNpcWaypointProgressTracking(
+                        record,
+                        record.nextCorner,
+                        cornerDistance,
+                        navSettings.agentRadius,
+                        movementSpeed,
+                        dt);
+                if (!recoveringBefore && record.steeringRecoveryActive) {
+                    SetDiagnostic(record,
+                            "direct steering recovery after no waypoint progress");
+                }
             }
 
             const float destinationDx =
@@ -1403,7 +1453,7 @@ void UpdateNpcNavigationAndLocomotionSystem(
                         NpcMovePhase::Arrived,
                         SectorNavigationQueryStatus::Success,
                         "arrived within 0.10m tolerance");
-            } else if (record.stallSeconds >= StallTriggerSeconds
+            } else if (record.stallSeconds >= ReplanTriggerSeconds
                     && record.replanCooldownSeconds <= 0.0f) {
                 if (record.replanCount >= MaximumReplans
                         || !Replan(world, navigation, runtime, record)) {

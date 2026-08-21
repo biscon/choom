@@ -118,6 +118,8 @@ struct NpcNavigationRecord {
     Vector3 visualPosition = {};
     float footstepDistanceWorld = 0.0f;
     float stallSeconds = 0.0f;
+    float bestCornerDistance = 0.0f;
+    size_t trackedCornerIndex = SIZE_MAX;
     float replanCooldownSeconds = 0.0f;
     float driftCheckSeconds = 0.0f;
     uint32_t replanCount = 0;
@@ -128,6 +130,7 @@ struct NpcNavigationRecord {
     Vector3 doorLanding = {};
     float doorWaitSeconds = 0.0f;
     bool holdsDoor = false;
+    bool steeringRecoveryActive = false;
     bool tileReplanPending = false;
     bool footstepEvent = false;
     std::array<char, 192> diagnostic{};

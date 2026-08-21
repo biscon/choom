@@ -699,6 +699,51 @@ void TestTopologyWalkabilityFixtures()
     Check(ascending.status == game::SectorNavigationQueryStatus::Success
                   && descending.status == game::SectorNavigationQueryStatus::Success,
           "successive sector-geometry stair treads connect in both directions");
+    const auto preservesEveryStairCrossing = [](const auto& path, bool forward) {
+        if (path.cornerCount < StairStepCount + 1
+                || path.corridorPolygonCount < StairStepCount) {
+            return false;
+        }
+        for (int boundary = 1; boundary < StairStepCount; ++boundary) {
+            const float expectedX = static_cast<float>(boundary);
+            bool found = false;
+            for (size_t corner = 1; corner + 1 < path.cornerCount; ++corner) {
+                if (std::fabs(path.corners[corner].x - expectedX) <= 0.1f) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+        for (size_t corner = 1; corner < path.cornerCount; ++corner) {
+            if (forward
+                    ? path.corners[corner].x + 0.0001f
+                            < path.corners[corner - 1].x
+                    : path.corners[corner].x - 0.0001f
+                            > path.corners[corner - 1].x) {
+                return false;
+            }
+        }
+        return true;
+    };
+    const bool preservesStairCrossings =
+            preservesEveryStairCrossing(ascending, true)
+            && preservesEveryStairCrossing(descending, false);
+    if (!preservesStairCrossings) {
+        std::cerr << "stair corners ascending=" << ascending.cornerCount
+                  << " polys=" << ascending.corridorPolygonCount << ':';
+        for (size_t index = 0; index < ascending.cornerCount; ++index) {
+            std::cerr << ' ' << ascending.corners[index].x;
+        }
+        std::cerr << " descending=" << descending.cornerCount
+                  << " polys=" << descending.corridorPolygonCount << ':';
+        for (size_t index = 0; index < descending.cornerCount; ++index) {
+            std::cerr << ' ' << descending.corners[index].x;
+        }
+        std::cerr << '\n';
+    }
+    Check(preservesStairCrossings,
+          "straight paths preserve every physical stair transition in order");
     Check(!stairWorld.DebugCache().stepConnections.empty(),
           "navigation debug cache exposes Detour adjacency between stair levels");
 
@@ -731,6 +776,8 @@ void TestTopologyWalkabilityFixtures()
     }
     Check(tallAscending.status == game::SectorNavigationQueryStatus::Success
                   && tallDescending.status == game::SectorNavigationQueryStatus::Success
+                  && preservesEveryStairCrossing(tallAscending, true)
+                  && preservesEveryStairCrossing(tallDescending, false)
                   && !mapConfiguredStairWorld.DebugCache().stepConnections.empty(),
           "map-configured 0.40m climb connects 0.375m stair treads in both directions");
 

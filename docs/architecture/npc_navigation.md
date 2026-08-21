@@ -42,6 +42,21 @@ blocking ledges. This prevents avoidance steering from moving a non-falling NPC
 off the navigation surface; NPC gravity and airborne traversal remain out of
 scope.
 
+Passable portals between different floor heights receive deterministic
+walkable-area variants during the derived navigation build. Straight-path
+queries request area crossings, so authored stair treads retain an ordered
+waypoint at every physical height transition even if Recast would otherwise
+simplify the run into a single sloped polygon. All ground variants have
+identical query flags and cost; the areas only preserve locomotion boundaries.
+
+Locomotion progress is cumulative improvement toward the active waypoint,
+rather than any tiny forward displacement. After 0.75 seconds without
+meaningful improvement, the NPC temporarily follows its raw waypoint velocity
+instead of Crowd steering while remaining a Crowd neighbor and retaining
+authoritative physical collision. If recovery produces no progress by 1.5
+seconds, the bounded replan policy applies. Advancing to a waypoint or
+successfully replanning resets recovery state.
+
 Normal-frame query and steering data use fixed arrays or pre-reserved vectors.
 Agent, path, obstacle, diagnostic, and script-operation capacity overruns remain
 safe development fallbacks and emit one-shot warnings where growth is allowed.
@@ -78,7 +93,8 @@ tile progress, build/update timing, memory/capacity data, Crowd and obstacle
 counters, bounded diagnostics, door links, and the selected NPC. Rebuild is
 disabled while a build is already queued or running. Debug toggles draw cached
 surfaces, edges, tile bounds, obstacles, door links, step connections, paths,
-corners, and agents.
+corners, and agents. Surface and polygon-edge overlays use a small visual-only
+vertical offset to avoid depth fighting with preview geometry.
 
 Troubleshooting guidance:
 

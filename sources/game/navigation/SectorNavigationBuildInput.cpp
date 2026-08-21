@@ -416,40 +416,6 @@ bool BuildSectorNavigationBuildInput(
     float minimumFloor = std::numeric_limits<float>::max();
     float maximumTop = std::numeric_limits<float>::lowest();
 
-    for (const SectorTopologySector* sector : SortedById(map.sectors)) {
-        if (!std::isfinite(sector->floorZ) || !std::isfinite(sector->ceilingZ)
-            || sector->ceilingZ <= sector->floorZ) {
-            outError = "Navigation sector " + std::to_string(sector->id)
-                    + " has invalid floor/ceiling heights";
-            return false;
-        }
-        minimumFloor = std::min(minimumFloor, SectorAuthoringToWorldDistance(sector->floorZ));
-        maximumTop = std::max(maximumTop, SectorAuthoringToWorldDistance(
-                sector->ceilingSky
-                        ? sector->floorZ + SectorWorldToAuthoringDistance(settings.agentHeight + 1.0f)
-                        : sector->ceilingZ));
-        SectorTopologyLoopSet loops;
-        std::vector<SectorTopologyValidationIssue> loopIssues;
-        if (!ExtractSectorTopologyLoops(map, indexes, sector->id, loops, &loopIssues)) {
-            outError = "Navigation loop extraction failed for sector "
-                    + std::to_string(sector->id);
-            if (!loopIssues.empty()) {
-                outError += ": " + FormatSectorTopologyValidationIssue(loopIssues.front());
-            }
-            return false;
-        }
-        if (!AppendSectorSurface(map, *sector, loops, sector->floorZ, true,
-                    NavigationRasterWalkableArea, outInput, minimum, maximum, outError)) {
-            return false;
-        }
-        if (!sector->ceilingSky
-            && !AppendSectorSurface(map, *sector, loops, sector->ceilingZ, false,
-                    NavigationRasterNullArea, outInput, minimum, maximum, outError)) {
-            return false;
-        }
-        loopsBySectorId.emplace(sector->id, std::move(loops));
-    }
-
     std::unordered_set<int> doorLineIds;
     std::vector<const SectorPlacedRuntimeObject*> objects;
     objects.reserve(map.runtimeObjects.size());
@@ -489,6 +455,73 @@ bool BuildSectorNavigationBuildInput(
         if (front == nullptr || back == nullptr) continue;
         walkableSectorAdjacency[front->sectorId].push_back(back->sectorId);
         walkableSectorAdjacency[back->sectorId].push_back(front->sectorId);
+    }
+
+    // Recast may merge a run of discrete treads into one sloped polygon. Give
+    // neighboring sectors at different floor heights distinct walkable areas
+    // so Detour retains each physical height transition as a path crossing.
+    std::unordered_map<int, uint8_t> groundAreaBySectorId;
+    groundAreaBySectorId.reserve(map.sectors.size());
+    for (const SectorTopologySector* sector : SortedById(map.sectors)) {
+        std::array<bool, SectorNavigationLastGroundVariantArea + 1> unavailable{};
+        const auto adjacent = walkableSectorAdjacency.find(sector->id);
+        if (adjacent != walkableSectorAdjacency.end()) {
+            for (int neighborId : adjacent->second) {
+                const SectorTopologySector* neighbor =
+                        FindSectorTopologySector(map, neighborId);
+                const auto colored = groundAreaBySectorId.find(neighborId);
+                if (neighbor != nullptr && colored != groundAreaBySectorId.end()
+                        && neighbor->floorZ != sector->floorZ) {
+                    unavailable[colored->second] = true;
+                }
+            }
+        }
+        uint8_t area = static_cast<uint8_t>(SectorNavigationArea::Ground);
+        if (unavailable[area]) {
+            for (area = SectorNavigationFirstGroundVariantArea;
+                    area <= SectorNavigationLastGroundVariantArea
+                            && unavailable[area]; ++area) {}
+            if (area > SectorNavigationLastGroundVariantArea) {
+                outError = "Navigation height-transition area capacity was exceeded";
+                return false;
+            }
+        }
+        groundAreaBySectorId.emplace(sector->id, area);
+    }
+
+    for (const SectorTopologySector* sector : SortedById(map.sectors)) {
+        if (!std::isfinite(sector->floorZ) || !std::isfinite(sector->ceilingZ)
+            || sector->ceilingZ <= sector->floorZ) {
+            outError = "Navigation sector " + std::to_string(sector->id)
+                    + " has invalid floor/ceiling heights";
+            return false;
+        }
+        minimumFloor = std::min(minimumFloor, SectorAuthoringToWorldDistance(sector->floorZ));
+        maximumTop = std::max(maximumTop, SectorAuthoringToWorldDistance(
+                sector->ceilingSky
+                        ? sector->floorZ + SectorWorldToAuthoringDistance(settings.agentHeight + 1.0f)
+                        : sector->ceilingZ));
+        SectorTopologyLoopSet loops;
+        std::vector<SectorTopologyValidationIssue> loopIssues;
+        if (!ExtractSectorTopologyLoops(map, indexes, sector->id, loops, &loopIssues)) {
+            outError = "Navigation loop extraction failed for sector "
+                    + std::to_string(sector->id);
+            if (!loopIssues.empty()) {
+                outError += ": " + FormatSectorTopologyValidationIssue(loopIssues.front());
+            }
+            return false;
+        }
+        if (!AppendSectorSurface(map, *sector, loops, sector->floorZ, true,
+                    groundAreaBySectorId.at(sector->id), outInput,
+                    minimum, maximum, outError)) {
+            return false;
+        }
+        if (!sector->ceilingSky
+            && !AppendSectorSurface(map, *sector, loops, sector->ceilingZ, false,
+                    NavigationRasterNullArea, outInput, minimum, maximum, outError)) {
+            return false;
+        }
+        loopsBySectorId.emplace(sector->id, std::move(loops));
     }
 
     for (const ResolvedNavigationDoor& resolvedDoor : resolvedDoors) {
@@ -620,7 +653,7 @@ uint64_t ComputeSectorNavigationSourceHash(
         const SectorNavigationSettings& rawSettings)
 {
     Fnv64 hash;
-    hash.String("SectorNavigationSourceV2");
+    hash.String("SectorNavigationSourceV3");
     const SectorNavigationSettings settings = NormalizeSectorNavigationSettings(rawSettings);
     HashSettings(hash, settings);
 

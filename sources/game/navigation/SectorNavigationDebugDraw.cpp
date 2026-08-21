@@ -16,6 +16,12 @@ Color LinearOverlaySwatch(Color color)
     return engine::SrgbColorBytesToLinearSceneUnorm(color);
 }
 
+Vector3 OffsetNavigationSurfaceDebugPoint(Vector3 point)
+{
+    point.y += 0.005f;
+    return point;
+}
+
 } // namespace
 
 void DrawSectorNavigationDebugWorld(
@@ -43,13 +49,17 @@ void DrawSectorNavigationDebugWorld(
     BeginMode3D(renderer.RenderCamera());
     if (settings.showSurface) {
         for (const SectorNavigationDebugTriangle& triangle : debug.walkableTriangles) {
-            DrawTriangle3D(triangle.a, triangle.b, triangle.c, surfaceColor);
-            DrawTriangle3D(triangle.c, triangle.b, triangle.a, surfaceColor);
+            const Vector3 a = OffsetNavigationSurfaceDebugPoint(triangle.a);
+            const Vector3 b = OffsetNavigationSurfaceDebugPoint(triangle.b);
+            const Vector3 c = OffsetNavigationSurfaceDebugPoint(triangle.c);
+            DrawTriangle3D(a, b, c, surfaceColor);
+            DrawTriangle3D(c, b, a, surfaceColor);
         }
     }
     if (settings.showEdges) {
         for (const SectorNavigationDebugSegment& edge : debug.polygonEdges) {
-            DrawLine3D(edge.a, edge.b, edgeColor);
+            DrawLine3D(OffsetNavigationSurfaceDebugPoint(edge.a),
+                    OffsetNavigationSurfaceDebugPoint(edge.b), edgeColor);
         }
     }
     if (settings.showTileBounds) {

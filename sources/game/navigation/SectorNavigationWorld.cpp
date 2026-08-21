@@ -153,7 +153,7 @@ struct NavigationTileCacheMeshProcess final : dtTileCacheMeshProcess {
             if (polyAreas[index] == DT_TILECACHE_WALKABLE_AREA) {
                 polyAreas[index] = static_cast<unsigned char>(SectorNavigationArea::Ground);
             }
-            if (polyAreas[index] == static_cast<unsigned char>(SectorNavigationArea::Ground)) {
+            if (IsSectorNavigationGroundArea(polyAreas[index])) {
                 polyFlags[index] = SectorNavigationPolyFlag_Walk;
             } else if (polyAreas[index] == static_cast<unsigned char>(SectorNavigationArea::Door)) {
                 polyFlags[index] = SectorNavigationPolyFlag_Walk
@@ -212,6 +212,10 @@ dtQueryFilter MakeQueryFilter(const SectorNavigationQueryFilterPolicy& policy)
     filter.setIncludeFlags(policy.includedFlags);
     filter.setExcludeFlags(policy.excludedFlags);
     filter.setAreaCost(static_cast<int>(SectorNavigationArea::Ground), policy.groundCost);
+    for (uint8_t area = SectorNavigationFirstGroundVariantArea;
+            area <= SectorNavigationLastGroundVariantArea; ++area) {
+        filter.setAreaCost(static_cast<int>(area), policy.groundCost);
+    }
     filter.setAreaCost(static_cast<int>(SectorNavigationArea::Door), policy.doorCost);
     return filter;
 }
@@ -2024,7 +2028,7 @@ SectorNavigationPathResult SectorNavigationWorld::FindPath(
     const dtStatus straightStatus = impl->query->findStraightPath(
             projectedStart, straightDestination, corridor.data(), corridorCount,
             straightPoints.data(), straightFlags.data(), straightRefs.data(), &straightCount,
-            straightCapacity);
+            straightCapacity, DT_STRAIGHTPATH_AREA_CROSSINGS);
     if (dtStatusFailed(straightStatus)) {
         result.status = SectorNavigationQueryStatus::InternalError;
         ++impl->counters.failedQueries;
