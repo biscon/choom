@@ -73,6 +73,26 @@ namespace {
 constexpr float SectorEditorPanelScrollPaddingPx = 8.0f;
 constexpr float SectorEditorFreeflyPrecisionMoveScale = 0.1f;
 
+void SetFpsViewmodelEquipPose(
+        FpsViewmodelRuntimeState& state,
+        FpsViewmodelEquipState equipState,
+        float equipProgress)
+{
+    state.equipState = equipState;
+    state.equipProgress = std::clamp(equipProgress, 0.0f, 1.0f);
+    state.holsterPose = EvaluateFpsViewmodelHolsterPose(
+            state.holsterTransition,
+            state.equipProgress);
+}
+
+void EquipFpsViewmodelForWeaponEditing(FpsViewmodelRuntimeState& state)
+{
+    SetFpsViewmodelEquipPose(
+            state,
+            FpsViewmodelEquipState::Equipped,
+            1.0f);
+}
+
 SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
         SectorEditorUiState& uiState,
         RuntimeObjectEditingUiState& runtimeObjectUiState,
@@ -407,13 +427,16 @@ void SectorEditor::UpdateFpsViewmodel(
         if (editor.ConsumePreviewReloadRequest()) {
             const std::string selectedId = editor.SelectedWeaponId();
             if (!selectedId.empty()) {
-                fpsPlayer.SelectWeapon(
+                const bool selected = fpsPlayer.SelectWeapon(
                         assets,
                         sceneRuntime.Renderer(),
                         editor.PreviewRegistry(),
                         editor.PreviewApplicationSettings(),
                         selectedId,
                         "fps_weapon_editor_viewmodel");
+                if (selected) {
+                    EquipFpsViewmodelForWeaponEditing(fpsPlayer.State());
+                }
             }
         }
         fpsPlayer.Update(
@@ -5632,6 +5655,10 @@ void SectorEditor::DrawWeaponEditor(
     const bool openedFromPreview3D = weaponEditorState.openedFromPreview3D;
     const std::string originalActiveWeaponId =
             weaponEditorState.originalActiveWeaponId;
+    const FpsViewmodelEquipState originalEquipState =
+            weaponEditorState.originalEquipState;
+    const float originalEquipProgress =
+            weaponEditorState.originalEquipProgress;
     SectorEditorWeaponEditorService editor = BuildWeaponEditorService();
     SectorEditorStaticModelPickerService modelPicker{
             runtimeObjectEditingState.staticModelPicker,
@@ -5672,13 +5699,19 @@ void SectorEditor::DrawWeaponEditor(
                 weaponRegistry, weaponId) != nullptr
                 ? weaponId
                 : weaponRegistry.initialWeaponId;
-        fpsPlayer.SelectWeapon(
+        const bool selected = fpsPlayer.SelectWeapon(
                 assets,
                 sceneRuntime.Renderer(),
                 weaponRegistry,
                 applicationSettings,
                 fallbackId,
                 "fps_viewmodel");
+        if (selected) {
+            SetFpsViewmodelEquipPose(
+                    fpsPlayer.State(),
+                    originalEquipState,
+                    originalEquipProgress);
+        }
     }
 }
 
@@ -6953,7 +6986,14 @@ void SectorEditor::OpenWeaponEditor(bool fromPreview3D)
     const std::string activeWeaponId = fromPreview3D
             ? fpsPlayer.State().activeWeaponId
             : weaponRegistry.initialWeaponId;
-    BuildWeaponEditorService().Open(activeWeaponId, fromPreview3D);
+    const FpsViewmodelEquipState equipState = fpsPlayer.State().equipState;
+    const float equipProgress = fpsPlayer.State().equipProgress;
+    if (BuildWeaponEditorService().Open(activeWeaponId, fromPreview3D)
+            && fromPreview3D) {
+        weaponEditorState.originalEquipState = equipState;
+        weaponEditorState.originalEquipProgress = equipProgress;
+        EquipFpsViewmodelForWeaponEditing(fpsPlayer.State());
+    }
 }
 
 void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)

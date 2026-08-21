@@ -40,7 +40,7 @@ void AddDuplicateDeleteAndCancel()
             "unused_application_settings.json");
 
     assert(service.Open("pistol", true));
-    assert(service.ConsumePreviewReloadRequest());
+    assert(!service.ConsumePreviewReloadRequest());
     assert(service.SelectedWeaponId() == "pistol");
     assert(service.SelectedWeapon()->viewmodel.presentation.position.x == 0.2f);
 

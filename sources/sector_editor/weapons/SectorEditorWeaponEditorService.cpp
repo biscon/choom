@@ -67,7 +67,8 @@ bool SectorEditorWeaponEditorService::Open(
             : static_cast<int>(std::distance(
                     state_.draftRegistry.weapons.begin(), found));
     SyncBuffersFromSelection();
-    RequestPreviewReload();
+    state_.previewReloadRequested = state_.openedFromPreview3D
+            && SelectedWeaponId() != activeWeaponId;
     statusText_ = "Weapon Editor opened";
     return true;
 }

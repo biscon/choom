@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/ui/UI.h"
+#include "game/FpsViewmodel.h"
 #include "game/FpsWeaponRegistry.h"
 #include "sector_editor/services/sounds/SectorEditorAudioAssetPicker.h"
 
@@ -22,6 +23,9 @@ struct SectorEditorWeaponEditorState {
     FpsWeaponRegistry draftRegistry;
     FpsApplicationSettings previewApplicationSettings;
     std::string originalActiveWeaponId;
+    FpsViewmodelEquipState originalEquipState =
+            FpsViewmodelEquipState::Holstered;
+    float originalEquipProgress = 0.0f;
     int selectedIndex = -1;
     std::vector<std::string> listLabelStorage;
     std::vector<const char*> listLabels;
