@@ -91,6 +91,37 @@ void AdvanceFpsViewmodelEquipTransition(
             state.equipProgress);
 }
 
+bool QueueFpsWeaponSlotSwitch(
+        FpsViewmodelRuntimeState& state,
+        int targetSlot,
+        int& pendingWeaponSlot)
+{
+    if (targetSlot < MinFpsWeaponSlot
+            || targetSlot > MaxFpsWeaponSlot
+            || pendingWeaponSlot != 0) {
+        return false;
+    }
+    pendingWeaponSlot = targetSlot;
+    if (state.activeWeaponId.empty()
+            || state.equipState == FpsViewmodelEquipState::Holstered
+            || state.equipProgress <= 0.0f) {
+        state.equipState = FpsViewmodelEquipState::Holstered;
+        state.equipProgress = 0.0f;
+    } else {
+        state.equipState = FpsViewmodelEquipState::Holstering;
+    }
+    return true;
+}
+
+void BeginFpsWeaponSlotTargetUnholster(FpsViewmodelRuntimeState& state)
+{
+    state.equipState = FpsViewmodelEquipState::Unholstering;
+    state.equipProgress = 0.0f;
+    state.holsterPose = EvaluateFpsViewmodelHolsterPose(
+            state.holsterTransition,
+            state.equipProgress);
+}
+
 bool IsFpsViewmodelReadyForUse(const FpsViewmodelRuntimeState& state)
 {
     return !state.activeWeaponId.empty()

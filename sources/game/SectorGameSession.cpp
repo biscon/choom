@@ -469,6 +469,7 @@ void SectorGameSession::Update(
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
         fpsPlayer.Update(
                 context.assets,
+                scene.Renderer(),
                 *weaponRegistry,
                 *applicationSettings,
                 dt);
@@ -477,6 +478,7 @@ void SectorGameSession::Update(
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
         acceptedShot = fpsPlayer.HandleInput(
                 context.input,
+                *weaponRegistry,
                 context.assets,
                 context.audio,
                 collision.sectorCollisionWorldValid
@@ -546,6 +548,7 @@ void SectorGameSession::UpdateLoading(
     if (weaponRegistry != nullptr && applicationSettings != nullptr) {
         fpsPlayer.Update(
                 context.assets,
+                scene.Renderer(),
                 *weaponRegistry,
                 *applicationSettings,
                 0.0f);

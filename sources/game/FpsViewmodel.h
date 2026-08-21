@@ -201,6 +201,11 @@ bool ToggleFpsViewmodelHolster(
 void AdvanceFpsViewmodelEquipTransition(
         FpsViewmodelRuntimeState& state,
         float deltaSeconds);
+bool QueueFpsWeaponSlotSwitch(
+        FpsViewmodelRuntimeState& state,
+        int targetSlot,
+        int& pendingWeaponSlot);
+void BeginFpsWeaponSlotTargetUnholster(FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelReadyForUse(const FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelPresentationVisible(const FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelRenderable(const FpsViewmodelRuntimeState& state);

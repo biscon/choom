@@ -299,15 +299,19 @@ SectorEditorWeaponEditorPanelResult DrawSectorEditorWeaponEditorPanel(
                 sizeof(state.idBuffer) - 1);
         if (idResult.submitted) editor.ApplyIdBuffer();
         y += RowHeight + RowGap;
-        if (engine::Button(
+        label("Weapon slot");
+        const char* const slotOptions[] = {
+                "Unassigned", "1", "2", "3", "4", "5", "6"};
+        int weaponSlot = weapon->weaponSlot;
+        if (engine::Option(
                     ui, config, input, assets,
-                    "sector_editor_weapon_make_initial",
-                    Rectangle{fieldX, y, std::min(190.0f, fieldWidth), RowHeight},
+                    "sector_editor_weapon_slot",
+                    Rectangle{fieldX, y, fieldWidth, RowHeight},
                     smallFont,
-                    weapon->id == state.draftRegistry.initialWeaponId
-                            ? "Initial Weapon"
-                            : "Make Initial")) {
-            editor.SetSelectedInitial();
+                    slotOptions,
+                    std::size(slotOptions),
+                    weaponSlot)) {
+            editor.SetSelectedWeaponSlot(weaponSlot);
         }
         y += RowHeight + RowGap;
 
@@ -626,38 +630,38 @@ SectorEditorWeaponEditorPanelResult DrawSectorEditorWeaponEditorPanel(
         drawFloat("sector_editor_weapon_debris_intensity", "Debris intensity",
                 weapon->firing.impact.surfaceDebris.intensity, 0.0f, 10.0f, 3);
 
-        if (state.openedFromPreview3D) {
-            section("Live preview");
-            if (engine::Button(
-                        ui, config, input, assets,
-                        "sector_editor_weapon_preview_fire",
-                        Rectangle{fieldX, y, std::min(150.0f, fieldWidth), RowHeight},
-                        smallFont, "Preview Fire")) {
-                result.previewFireRequested = true;
-            }
-            if (engine::Button(
-                        ui, config, input, assets,
-                        "sector_editor_weapon_preview_holster",
-                        Rectangle{fieldX + std::min(150.0f, fieldWidth) + 8.0f,
-                                y, std::min(180.0f, std::max(0.0f, fieldWidth - 158.0f)),
-                                RowHeight},
-                        smallFont, "Holster / Unholster")) {
-                result.holsterToggleRequested = true;
-            }
-            y += RowHeight + RowGap;
-        }
-
         engine::EndScrollArea(
                 ui, config, input, formScroll, editor.Session().formScroll);
+    }
+
+    if (state.openedFromPreview3D && weapon != nullptr) {
+        if (engine::Button(
+                    ui, config, input, assets,
+                    "sector_editor_weapon_preview_fire",
+                    layout.previewFireButton,
+                    smallFont, "Preview Fire")) {
+            result.previewFireRequested = true;
+        }
+        if (engine::Button(
+                    ui, config, input, assets,
+                    "sector_editor_weapon_preview_holster",
+                    layout.holsterToggleButton,
+                    smallFont, "Holster / Unholster")) {
+            result.holsterToggleRequested = true;
+        }
     }
 
     if (!state.validationMessage.empty()) {
         engine::Text(
                 config, assets,
-                Rectangle{layout.panel.x + 20.0f,
-                        layout.panel.y + layout.panel.height - 58.0f,
-                        std::max(0.0f, layout.panel.width - 350.0f), 42.0f},
+                layout.validationMessage,
                 smallFont, state.validationMessage.c_str(),
+                engine::UITextJustify::Left, config.invalidColor, true);
+    } else if (!state.warningMessage.empty()) {
+        engine::Text(
+                config, assets,
+                layout.validationMessage,
+                smallFont, state.warningMessage.c_str(),
                 engine::UITextJustify::Left, config.invalidColor, true);
     }
 

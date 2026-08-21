@@ -8,6 +8,8 @@
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorService.h"
 
+#include <algorithm>
+
 namespace game {
 
 struct SectorEditorWeaponEditorLayout {
@@ -18,6 +20,9 @@ struct SectorEditorWeaponEditorLayout {
     Rectangle addButton = {};
     Rectangle duplicateButton = {};
     Rectangle deleteButton = {};
+    Rectangle validationMessage = {};
+    Rectangle previewFireButton = {};
+    Rectangle holsterToggleButton = {};
     Rectangle saveButton = {};
     Rectangle cancelButton = {};
 };
@@ -42,7 +47,7 @@ inline SectorEditorWeaponEditorLayout BuildSectorEditorWeaponEditorLayoutForView
             layout.panel.x + 20.0f,
             layout.panel.y + 66.0f,
             listWidth,
-            layout.panel.height - 142.0f};
+            layout.panel.height - (preview3D ? 190.0f : 142.0f)};
     layout.listBounds = Rectangle{
             layout.listPane.x,
             layout.listPane.y,
@@ -71,6 +76,23 @@ inline SectorEditorWeaponEditorLayout BuildSectorEditorWeaponEditorLayoutForView
             layout.addButton.y + 48.0f,
             layout.listPane.width,
             42.0f};
+    layout.validationMessage = Rectangle{
+            layout.panel.x + 20.0f,
+            layout.panel.y + layout.panel.height - (preview3D ? 108.0f : 58.0f),
+            std::max(0.0f, layout.panel.width - (preview3D ? 40.0f : 350.0f)),
+            42.0f};
+    if (preview3D) {
+        layout.previewFireButton = Rectangle{
+                layout.panel.x + 20.0f,
+                layout.panel.y + layout.panel.height - 58.0f,
+                150.0f,
+                42.0f};
+        layout.holsterToggleButton = Rectangle{
+                layout.previewFireButton.x + layout.previewFireButton.width + 8.0f,
+                layout.previewFireButton.y,
+                190.0f,
+                42.0f};
+    }
     layout.saveButton = Rectangle{
             layout.panel.x + layout.panel.width - 314.0f,
             layout.panel.y + layout.panel.height - 58.0f,

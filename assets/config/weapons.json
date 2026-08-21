@@ -1,24 +1,133 @@
 {
-  "version": 1,
-  "initialWeaponId": "pistol",
+  "version": 2,
   "weapons": [
     {
       "id": "pistol",
+      "slot": 1,
       "crosshair": {
         "enabled": true,
-        "innerColor": {"r": 235, "g": 235, "b": 225, "a": 255},
-        "outlineColor": {"r": 0, "g": 0, "b": 0, "a": 220},
+        "innerColor": {
+          "r": 235,
+          "g": 235,
+          "b": 225,
+          "a": 255
+        },
+        "outlineColor": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 220
+        },
         "centerGapPixels": 4.0,
         "segmentLengthPixels": 6.0,
         "innerThicknessPixels": 2.0,
         "outlineThicknessPixels": 1.0
       },
       "firing": {
-        "shotIntervalSeconds": 0.18,
+        "shotIntervalSeconds": 0.18000000715255737,
         "maximumRangeWorld": 100.0,
+        "recoil": {
+          "translationImpulse": [
+            0.0,
+            0.0,
+            -0.029999999329447746
+          ],
+          "rotationImpulseDegrees": [
+            -3.0,
+            0.0,
+            0.0
+          ],
+          "rollVariationDegrees": 0.44999998807907104,
+          "springFrequencyHz": 4.0,
+          "dampingRatio": 0.6499999761581421,
+          "maximumTranslation": [
+            0.05000000074505806,
+            0.05000000074505806,
+            0.07999999821186066
+          ],
+          "maximumRotationDegrees": [
+            8.0,
+            2.0,
+            2.0
+          ]
+        },
+        "cameraRecoil": {
+          "enabled": true,
+          "pitchKickDegrees": 2.5,
+          "pitchVariationDegrees": 0.11999999731779099,
+          "yawVariationDegrees": 0.25,
+          "rollVariationDegrees": 0.07000000029802322,
+          "springFrequencyHz": 3.5,
+          "springDampingRatio": 0.9200000166893005,
+          "maxPitchDegrees": 8.0,
+          "maxYawDegrees": 0.6000000238418579,
+          "maxRollDegrees": 0.20000000298023224
+        },
+        "muzzleSocket": {
+          "position": [
+            0.004999999888241291,
+            0.05000000074505806,
+            0.12999999523162842
+          ],
+          "rotationDegrees": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "muzzleFlash": {
+          "enabled": true,
+          "lifetimeSeconds": 0.07599999755620956,
+          "sizeWorld": 0.10000000149011612,
+          "sizeVariation": 0.11999999731779099,
+          "irregularity": 0.6499999761581421,
+          "forwardStretch": 1.7999999523162842,
+          "minimumLobeCount": 5,
+          "maximumLobeCount": 8,
+          "rearSuppression": 0.8999999761581421,
+          "coreColor": {
+            "r": 255,
+            "g": 255,
+            "b": 245,
+            "a": 255
+          },
+          "hotColor": {
+            "r": 255,
+            "g": 235,
+            "b": 120,
+            "a": 255
+          },
+          "warmColor": {
+            "r": 255,
+            "g": 90,
+            "b": 15,
+            "a": 230
+          },
+          "edgeColor": {
+            "r": 120,
+            "g": 15,
+            "b": 5,
+            "a": 150
+          },
+          "edgeSoftness": 0.800000011920929,
+          "radianceStrength": 16.0
+        },
+        "muzzleLight": {
+          "enabled": true,
+          "color": {
+            "r": 255,
+            "g": 165,
+            "b": 70,
+            "a": 255
+          },
+          "intensity": 8.0,
+          "radiusWorld": 3.0,
+          "lifetimeSeconds": 0.08500000089406967,
+          "decayExponent": 2.5
+        },
         "impact": {
           "damage": 25,
-          "staggerSeconds": 0.18,
+          "staggerSeconds": 0.18000000715255737,
           "knockbackImpulseWorldPerSecond": 1.25,
           "blood": {
             "enabled": true,
@@ -29,61 +138,11 @@
           "surfaceDebris": {
             "enabled": true,
             "particleCount": 14,
-            "sizeScale": 0.85,
-            "intensity": 0.8
+            "sizeScale": 0.8500000238418579,
+            "intensity": 0.800000011920929
           }
         },
-        "shootSound": "weapons/pistol/shot_01.ogg",
-        "recoil": {
-          "translationImpulse": [0.0, 0.0, -0.03],
-          "rotationImpulseDegrees": [-3.0, 0.0, 0.0],
-          "rollVariationDegrees": 0.45,
-          "springFrequencyHz": 4.0,
-          "dampingRatio": 0.65,
-          "maximumTranslation": [0.05, 0.05, 0.08],
-          "maximumRotationDegrees": [8.0, 2.0, 2.0]
-        },
-        "cameraRecoil": {
-          "enabled": true,
-          "pitchKickDegrees": 2.5,
-          "pitchVariationDegrees": 0.12,
-          "yawVariationDegrees": 0.25,
-          "rollVariationDegrees": 0.07,
-          "springFrequencyHz": 3.5,
-          "springDampingRatio": 0.92,
-          "maxPitchDegrees": 8.0,
-          "maxYawDegrees": 0.60,
-          "maxRollDegrees": 0.20
-        },
-        "muzzleSocket": {
-          "position": [0.005, 0.05, 0.13],
-          "rotationDegrees": [0.0, 0.0, 0.0]
-        },
-        "muzzleFlash": {
-          "enabled": true,
-          "lifetimeSeconds": 0.076,
-          "sizeWorld": 0.1,
-          "sizeVariation": 0.12,
-          "irregularity": 0.65,
-          "forwardStretch": 1.8,
-          "minimumLobeCount": 5,
-          "maximumLobeCount": 8,
-          "rearSuppression": 0.9,
-          "coreColor": {"r": 255, "g": 255, "b": 245, "a": 255},
-          "hotColor": {"r": 255, "g": 235, "b": 120, "a": 255},
-          "warmColor": {"r": 255, "g": 90, "b": 15, "a": 230},
-          "edgeColor": {"r": 120, "g": 15, "b": 5, "a": 150},
-          "edgeSoftness": 0.8,
-          "radianceStrength": 16.0
-        },
-        "muzzleLight": {
-          "enabled": true,
-          "color": {"r": 255, "g": 165, "b": 70, "a": 255},
-          "intensity": 8.0,
-          "radiusWorld": 3.0,
-          "lifetimeSeconds": 0.085,
-          "decayExponent": 2.5
-        }
+        "shootSound": "weapons/pistol/shot_01.ogg"
       },
       "viewmodel": {
         "modelPath": "assets/models/weapons/pistol_arms.glb",
@@ -91,32 +150,261 @@
         "sourceFps": 30.0,
         "firstFrame": 1,
         "lastFrame": 41,
-        "playbackSpeed": 1.0,
-        "position": [0.14, -1.55, 0.035],
-        "rotationDegrees": [-4.0, 4.0, 0.0],
+        "playbackSpeed": 0.5,
+        "position": [
+          0.14000000059604645,
+          -1.5499999523162842,
+          0.03500000014901161
+        ],
+        "rotationDegrees": [
+          -4.0,
+          4.0,
+          0.0
+        ],
         "scale": 1.0,
         "verticalFovDegrees": 55.0,
         "holsterTransition": {
           "holsterDurationSeconds": 1.25,
-          "unholsterDurationSeconds": 0.8,
-          "hiddenTranslation": [0.45, -1.75, 0.0],
-          "hiddenRotationDegrees": [13.0, 0.0, -10.0]
+          "unholsterDurationSeconds": 0.800000011920929,
+          "hiddenTranslation": [
+            0.44999998807907104,
+            -1.75,
+            0.0
+          ],
+          "hiddenRotationDegrees": [
+            13.0,
+            0.0,
+            -10.0
+          ]
         },
-        "brightnessAdjustment": -0.55,
+        "brightnessAdjustment": -0.550000011920929,
         "materialOverride": {
           "metallicFactor": 0.0,
-          "roughnessFactor": 0.78,
+          "roughnessFactor": 0.7799999713897705,
           "useMetallicRoughnessTexture": false
         },
         "attachment": {
           "modelPath": "assets/models/weapons/pistol.glb",
           "boneName": "mixamorig12:RightHand",
-          "translation": [0.03, 0.13, 0.03],
-          "rotationDegrees": [93.0, 181.0, 88.19],
+          "translation": [
+            0.029999999329447746,
+            0.12999999523162842,
+            0.029999999329447746
+          ],
+          "rotationDegrees": [
+            93.0,
+            181.0,
+            88.19000244140625
+          ],
           "scale": 1.0,
           "brightnessAdjustment": 0.25,
           "materialOverride": {
-            "metallicFactor": 0.35,
+            "metallicFactor": 0.3499999940395355,
+            "roughnessFactor": 1.0,
+            "useMetallicRoughnessTexture": true
+          }
+        }
+      }
+    },
+    {
+      "id": "shotgun",
+      "slot": 2,
+      "crosshair": {
+        "enabled": true,
+        "innerColor": {
+          "r": 235,
+          "g": 235,
+          "b": 225,
+          "a": 255
+        },
+        "outlineColor": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 220
+        },
+        "centerGapPixels": 8.0,
+        "segmentLengthPixels": 10.0,
+        "innerThicknessPixels": 2.0,
+        "outlineThicknessPixels": 1.0
+      },
+      "firing": {
+        "shotIntervalSeconds": 0.5,
+        "maximumRangeWorld": 100.0,
+        "recoil": {
+          "translationImpulse": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "rotationImpulseDegrees": [
+            -6.0,
+            0.0,
+            0.0
+          ],
+          "rollVariationDegrees": 0.44999998807907104,
+          "springFrequencyHz": 3.0,
+          "dampingRatio": 0.5,
+          "maximumTranslation": [
+            0.05000000074505806,
+            0.05000000074505806,
+            0.10000000149011612
+          ],
+          "maximumRotationDegrees": [
+            8.0,
+            2.0,
+            2.0
+          ]
+        },
+        "cameraRecoil": {
+          "enabled": true,
+          "pitchKickDegrees": 4.5,
+          "pitchVariationDegrees": 0.11999999731779099,
+          "yawVariationDegrees": 0.25,
+          "rollVariationDegrees": 0.09000000357627869,
+          "springFrequencyHz": 3.0,
+          "springDampingRatio": 0.5,
+          "maxPitchDegrees": 10.0,
+          "maxYawDegrees": 0.6000000238418579,
+          "maxRollDegrees": 0.20000000298023224
+        },
+        "muzzleSocket": {
+          "position": [
+            0.0,
+            0.07000000029802322,
+            -0.800000011920929
+          ],
+          "rotationDegrees": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "muzzleFlash": {
+          "enabled": true,
+          "lifetimeSeconds": 0.10000000149011612,
+          "sizeWorld": 0.25,
+          "sizeVariation": 0.11999999731779099,
+          "irregularity": 0.6499999761581421,
+          "forwardStretch": 1.7999999523162842,
+          "minimumLobeCount": 7,
+          "maximumLobeCount": 10,
+          "rearSuppression": 0.8999999761581421,
+          "coreColor": {
+            "r": 255,
+            "g": 255,
+            "b": 245,
+            "a": 255
+          },
+          "hotColor": {
+            "r": 255,
+            "g": 235,
+            "b": 120,
+            "a": 255
+          },
+          "warmColor": {
+            "r": 255,
+            "g": 90,
+            "b": 15,
+            "a": 230
+          },
+          "edgeColor": {
+            "r": 120,
+            "g": 15,
+            "b": 5,
+            "a": 150
+          },
+          "edgeSoftness": 0.800000011920929,
+          "radianceStrength": 16.0
+        },
+        "muzzleLight": {
+          "enabled": true,
+          "color": {
+            "r": 255,
+            "g": 165,
+            "b": 70,
+            "a": 255
+          },
+          "intensity": 8.0,
+          "radiusWorld": 5.0,
+          "lifetimeSeconds": 0.0949999988079071,
+          "decayExponent": 2.5
+        },
+        "impact": {
+          "damage": 25,
+          "staggerSeconds": 0.30000001192092896,
+          "knockbackImpulseWorldPerSecond": 6.25,
+          "blood": {
+            "enabled": true,
+            "particleCount": 32,
+            "sizeScale": 1.25,
+            "intensity": 1.399999976158142
+          },
+          "surfaceDebris": {
+            "enabled": true,
+            "particleCount": 32,
+            "sizeScale": 0.8500000238418579,
+            "intensity": 0.800000011920929
+          }
+        },
+        "shootSound": "weapons/shotgun/shotgun_shot_02.ogg"
+      },
+      "viewmodel": {
+        "modelPath": "assets/models/weapons/rifle_arms.glb",
+        "idleAnimation": "Rifle Aiming Idle",
+        "sourceFps": 30.0,
+        "firstFrame": 1,
+        "lastFrame": 94,
+        "playbackSpeed": 1.0,
+        "position": [
+          -0.27000001072883606,
+          -1.590000033378601,
+          0.17499999701976776
+        ],
+        "rotationDegrees": [
+          -1.0,
+          -13.0,
+          -14.5
+        ],
+        "scale": 1.0,
+        "verticalFovDegrees": 55.0,
+        "holsterTransition": {
+          "holsterDurationSeconds": 1.25,
+          "unholsterDurationSeconds": 0.800000011920929,
+          "hiddenTranslation": [
+            0.44999998807907104,
+            -1.75,
+            0.0
+          ],
+          "hiddenRotationDegrees": [
+            13.0,
+            0.0,
+            -10.0
+          ]
+        },
+        "brightnessAdjustment": -0.550000011920929,
+        "materialOverride": {
+          "metallicFactor": 0.0,
+          "roughnessFactor": 0.7799999713897705,
+          "useMetallicRoughnessTexture": false
+        },
+        "attachment": {
+          "modelPath": "assets/models/weapons/double_barrel_shotgun.glb",
+          "boneName": "mixamorig12:RightHand",
+          "translation": [
+            -0.0,
+            0.15000000596046448,
+            0.06499999761581421
+          ],
+          "rotationDegrees": [
+            -80.0,
+            181.0,
+            88.0
+          ],
+          "scale": 1.0,
+          "brightnessAdjustment": 0.25,
+          "materialOverride": {
+            "metallicFactor": 0.3499999940395355,
             "roughnessFactor": 1.0,
             "useMetallicRoughnessTexture": true
           }

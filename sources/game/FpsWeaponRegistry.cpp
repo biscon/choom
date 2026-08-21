@@ -806,7 +806,7 @@ Json WeaponValue(const FpsWeaponDefinition& value)
             {"brightnessAdjustment", value.viewmodel.attachment.lighting.brightnessAdjustment},
             {"materialOverride", MaterialOverrideValue(
                     value.viewmodel.attachment.lighting.materialOverride)}};
-    return Json{
+    Json weapon{
             {"id", value.id},
             {"crosshair", {
                     {"enabled", value.crosshair.enabled},
@@ -818,6 +818,10 @@ Json WeaponValue(const FpsWeaponDefinition& value)
                     {"outlineThicknessPixels", value.crosshair.outlineThicknessPixels}}},
             {"firing", FiringValue(value.firing)},
             {"viewmodel", std::move(viewmodel)}};
+    if (value.weaponSlot != 0) {
+        weapon["slot"] = value.weaponSlot;
+    }
+    return weapon;
 }
 
 Json RegistryValue(const FpsWeaponRegistry& registry)
@@ -828,7 +832,6 @@ Json RegistryValue(const FpsWeaponRegistry& registry)
     }
     return Json{
             {"version", registry.version},
-            {"initialWeaponId", registry.initialWeaponId},
             {"weapons", std::move(weapons)}};
 }
 
@@ -898,12 +901,18 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
         const Json root = Json::parse(text.begin(), text.end());
         if (!root.is_object()) Fail("weapon registry root must be an object");
         FpsWeaponRegistry parsed;
-        parsed.version = Integer(root, "version", "weapon registry");
-        if (parsed.version != 1) Fail("weapon registry version must be 1");
-        parsed.initialWeaponId = String(root, "initialWeaponId", "weapon registry");
+        const int sourceVersion = Integer(root, "version", "weapon registry");
+        if (sourceVersion != 1 && sourceVersion != 2) {
+            Fail("weapon registry version must be 1 or 2");
+        }
+        parsed.version = 2;
+        const std::string legacyInitialWeaponId = sourceVersion == 1
+                ? String(root, "initialWeaponId", "weapon registry")
+                : std::string{};
         const Json& weapons = Require(root, "weapons", "weapon registry");
         if (!weapons.is_array() || weapons.empty()) Fail("weapon registry.weapons must be a non-empty array");
         std::unordered_set<std::string> ids;
+        std::unordered_set<int> weaponSlots;
         for (size_t i = 0; i < weapons.size(); ++i) {
             const Json& object = weapons[i];
             const std::string context = "weapon registry.weapons[" + std::to_string(i) + "]";
@@ -911,6 +920,21 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
             FpsWeaponDefinition definition;
             definition.id = String(object, "id", context);
             if (!ids.insert(definition.id).second) Fail("duplicate weapon id '" + definition.id + "'");
+            if (sourceVersion == 2) {
+                const std::optional<int> weaponSlot = OptionalInteger(
+                        object, "slot", context);
+                if (weaponSlot
+                        && (*weaponSlot < MinFpsWeaponSlot
+                            || *weaponSlot > MaxFpsWeaponSlot)) {
+                    Fail(context + ".slot must be between 1 and 6 when present");
+                }
+                definition.weaponSlot = weaponSlot.value_or(0);
+                if (definition.weaponSlot != 0
+                        && !weaponSlots.insert(definition.weaponSlot).second) {
+                    Fail("duplicate weapon slot "
+                            + std::to_string(definition.weaponSlot));
+                }
+            }
             const auto crosshair = object.find("crosshair");
             if (crosshair != object.end()) {
                 definition.crosshair = ReadCrosshair(
@@ -983,8 +1007,18 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
             }
             parsed.weapons.push_back(std::move(definition));
         }
-        if (!FindFpsWeaponDefinition(parsed, parsed.initialWeaponId)) {
-            Fail("initial weapon id '" + parsed.initialWeaponId + "' has no definition");
+        if (sourceVersion == 1) {
+            auto legacyInitial = std::find_if(
+                    parsed.weapons.begin(),
+                    parsed.weapons.end(),
+                    [&legacyInitialWeaponId](const FpsWeaponDefinition& weapon) {
+                        return weapon.id == legacyInitialWeaponId;
+                    });
+            if (legacyInitial == parsed.weapons.end()) {
+                Fail("initial weapon id '" + legacyInitialWeaponId
+                        + "' has no definition");
+            }
+            legacyInitial->weaponSlot = MinFpsWeaponSlot;
         }
         output = std::move(parsed);
         SetError(error, {});
@@ -1067,6 +1101,30 @@ const FpsWeaponDefinition* FindFpsWeaponDefinition(const FpsWeaponRegistry& regi
     const auto it = std::find_if(registry.weapons.begin(), registry.weapons.end(),
             [id](const FpsWeaponDefinition& value) { return value.id == id; });
     return it == registry.weapons.end() ? nullptr : &*it;
+}
+
+const FpsWeaponDefinition* FindFpsWeaponDefinitionForSlot(
+        const FpsWeaponRegistry& registry,
+        int weaponSlot)
+{
+    if (weaponSlot < MinFpsWeaponSlot || weaponSlot > MaxFpsWeaponSlot) {
+        return nullptr;
+    }
+    const auto it = std::find_if(
+            registry.weapons.begin(),
+            registry.weapons.end(),
+            [weaponSlot](const FpsWeaponDefinition& weapon) {
+                return weapon.weaponSlot == weaponSlot;
+            });
+    return it == registry.weapons.end() ? nullptr : &*it;
+}
+
+int FpsWeaponSlotFromKey(int key)
+{
+    if (key < KEY_ONE || key > KEY_SIX) {
+        return 0;
+    }
+    return key - KEY_ONE + MinFpsWeaponSlot;
 }
 
 void ApplyFpsApplicationWeaponOverrides(

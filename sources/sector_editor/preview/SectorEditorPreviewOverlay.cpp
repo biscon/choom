@@ -1571,7 +1571,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 } else {
                     addWrappedLine("movement: WASD move, mouse look, Space/Ctrl up/down, hold Shift for precision movement. F11 unlocks cursor for UI tabs.");
                 }
-                addWrappedLine("hotkeys: left mouse fire, H holster/equip viewmodel, F1 AO, F2 hide/show 3D UI, F3 control mode, F4 dynamic lights, F10 borderless window, Tab/Esc return to 2D.");
+                addWrappedLine("hotkeys: left mouse fire, 1-6 weapon slots, H holster/equip viewmodel, F1 AO, F2 hide/show 3D UI, F3 control mode, F4 dynamic lights, F10 borderless window, Tab/Esc return to 2D.");
                 break;
             case PreviewDebugOverlayTab::None:
                 break;

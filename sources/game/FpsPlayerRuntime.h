@@ -15,6 +15,10 @@
 
 #include <raylib.h>
 
+#include <limits>
+#include <string>
+#include <vector>
+
 namespace game {
 
 struct FpsPlayerRuntimeTuning {
@@ -44,18 +48,25 @@ public:
 
     void Update(
             engine::AssetManager& assets,
+            SectorMeshRenderer& renderer,
             const FpsWeaponRegistry& registry,
             const FpsApplicationSettings& settings,
             float dt,
             const FpsPlayerRuntimeTuning* tuning = nullptr);
     bool HandleInput(
             engine::Input& input,
+            const FpsWeaponRegistry& registry,
             engine::AssetManager& assets,
             engine::AudioSystem& audio,
             const SectorCollisionWorld* collisionWorld,
             const SectorMeshRenderer& renderer,
             bool gameplayActive,
             bool mouseLookActive,
+            bool uiCaptured);
+    bool HandleWeaponSlotInput(
+            engine::Input& input,
+            const FpsWeaponRegistry& registry,
+            bool gameplayActive,
             bool uiCaptured);
     bool HandleFireInput(
             engine::Input& input,
@@ -94,8 +105,36 @@ public:
 
     FpsViewmodelRuntimeState& State() { return state; }
     const FpsViewmodelRuntimeState& State() const { return state; }
+    bool IsWeaponSwitchInProgress() const { return pendingWeaponSlot != 0; }
 
 private:
+    struct WeaponAssetEntry {
+        std::string weaponId;
+        std::string modelPath;
+        std::string attachmentModelPath;
+        std::string resolvedModelPath;
+        std::string resolvedAttachmentModelPath;
+        engine::ModelHandle model;
+        engine::ModelHandle attachmentModel;
+        engine::AnimatedModelInstance modelInstance;
+    };
+
+    static constexpr size_t InvalidWeaponAssetIndex =
+            std::numeric_limits<size_t>::max();
+
+    size_t FindWeaponAssetEntry(const FpsWeaponDefinition& definition) const;
+    size_t EnsureWeaponAssetEntry(
+            engine::AssetManager& assets,
+            const FpsWeaponDefinition& definition);
+    void PrepareInactiveWeaponInstances(engine::AssetManager& assets);
+    bool ActivateWeapon(
+            SectorMeshRenderer& renderer,
+            const FpsWeaponRegistry& registry,
+            const FpsApplicationSettings& settings,
+            std::string_view weaponId,
+            bool allowAssetRequest,
+            engine::AssetManager* assets = nullptr);
+    void ResetActiveWeapon(SectorMeshRenderer& renderer);
     bool LoadWeapon(
             engine::AssetManager& assets,
             SectorMeshRenderer& renderer,
@@ -103,11 +142,12 @@ private:
             const FpsApplicationSettings& settings,
             std::string_view weaponId,
             const char* scopeName);
-    void UnloadActiveWeapon(
-            engine::AssetManager& assets,
-            SectorMeshRenderer& renderer);
 
     FpsViewmodelRuntimeState state;
+    engine::AssetScopeHandle weaponAssetScope = engine::NullAssetScopeHandle();
+    std::vector<WeaponAssetEntry> weaponAssets;
+    size_t activeWeaponAssetIndex = InvalidWeaponAssetIndex;
+    int pendingWeaponSlot = 0;
     FpsMuzzleFlashRenderResources muzzleFlashRenderResources;
     std::string cameraRecoilWeaponId;
 };

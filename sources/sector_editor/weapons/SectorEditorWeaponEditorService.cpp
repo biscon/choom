@@ -51,11 +51,17 @@ bool SectorEditorWeaponEditorService::Open(
     state_.originalActiveWeaponId = std::string(activeWeaponId);
     RebuildListLabels();
 
+    const FpsWeaponDefinition* slotOneWeapon =
+            FindFpsWeaponDefinitionForSlot(
+                    state_.draftRegistry,
+                    MinFpsWeaponSlot);
     const std::string desired = !session_.selectedWeaponId.empty()
             ? session_.selectedWeaponId
             : (!activeWeaponId.empty()
                     ? std::string(activeWeaponId)
-                    : state_.draftRegistry.initialWeaponId);
+                    : (slotOneWeapon != nullptr
+                            ? slotOneWeapon->id
+                            : std::string{}));
     const auto found = std::find_if(
             state_.draftRegistry.weapons.begin(),
             state_.draftRegistry.weapons.end(),
@@ -192,6 +198,7 @@ void SectorEditorWeaponEditorService::DuplicateSelected()
     if (selected == nullptr) return;
     FpsWeaponDefinition copy = *selected;
     copy.id = UniqueId(selected->id + "_copy");
+    copy.weaponSlot = 0;
     state_.draftRegistry.weapons.push_back(std::move(copy));
     state_.selectedIndex = static_cast<int>(state_.draftRegistry.weapons.size()) - 1;
     session_.selectedWeaponId = SelectedWeaponId();
@@ -227,15 +234,11 @@ void SectorEditorWeaponEditorService::ConfirmDeleteSelected()
         return;
     }
     const int removedIndex = state_.selectedIndex;
-    const bool removedInitial = selected->id == state_.draftRegistry.initialWeaponId;
     state_.draftRegistry.weapons.erase(
             state_.draftRegistry.weapons.begin() + removedIndex);
     state_.selectedIndex = std::min(
             removedIndex,
             static_cast<int>(state_.draftRegistry.weapons.size()) - 1);
-    if (removedInitial) {
-        state_.draftRegistry.initialWeaponId = SelectedWeapon()->id;
-    }
     session_.selectedWeaponId = SelectedWeaponId();
     session_.formScroll = {};
     CancelDelete();
@@ -244,24 +247,42 @@ void SectorEditorWeaponEditorService::ConfirmDeleteSelected()
     RequestPreviewReload();
 }
 
-void SectorEditorWeaponEditorService::SetSelectedInitial()
+bool SectorEditorWeaponEditorService::SetSelectedWeaponSlot(int weaponSlot)
 {
-    const FpsWeaponDefinition* selected = SelectedWeapon();
-    if (selected == nullptr) return;
-    state_.draftRegistry.initialWeaponId = selected->id;
+    FpsWeaponDefinition* selected = SelectedWeapon();
+    if (selected == nullptr
+            || weaponSlot < 0
+            || weaponSlot > MaxFpsWeaponSlot) {
+        return false;
+    }
+    if (selected->weaponSlot == weaponSlot) {
+        return true;
+    }
+    if (weaponSlot != 0) {
+        const FpsWeaponDefinition* assigned = FindFpsWeaponDefinitionForSlot(
+                state_.draftRegistry,
+                weaponSlot);
+        if (assigned != nullptr && assigned != selected) {
+            state_.warningMessage = "Weapon slot "
+                    + std::to_string(weaponSlot) + " is already assigned to '"
+                    + assigned->id
+                    + "'. Change or unassign that weapon first.";
+            statusText_ = state_.warningMessage;
+            return false;
+        }
+    }
+    selected->weaponSlot = weaponSlot;
     RebuildListLabels();
     state_.validationMessage.clear();
+    state_.warningMessage.clear();
+    return true;
 }
 
 void SectorEditorWeaponEditorService::ApplyIdBuffer()
 {
     FpsWeaponDefinition* selected = SelectedWeapon();
     if (selected == nullptr) return;
-    const std::string oldId = selected->id;
     selected->id = state_.idBuffer;
-    if (state_.draftRegistry.initialWeaponId == oldId) {
-        state_.draftRegistry.initialWeaponId = selected->id;
-    }
     session_.selectedWeaponId = selected->id;
     RebuildListLabels();
     RequestPreviewReload();
@@ -331,7 +352,6 @@ void SectorEditorWeaponEditorService::SetShootSoundPath(
     selected->firing.shootSound = engine::NullSoundHandle();
     if (!path.empty()) {
         FpsWeaponRegistry one;
-        one.initialWeaponId = selected->id;
         one.weapons.push_back(*selected);
         RequestFpsWeaponAudioAssets(assets, one);
         selected->firing.shootSound = one.weapons.front().firing.shootSound;
@@ -395,10 +415,10 @@ void SectorEditorWeaponEditorService::RebuildListLabels()
     state_.listLabelStorage.clear();
     state_.listLabelStorage.reserve(state_.draftRegistry.weapons.size());
     for (const FpsWeaponDefinition& weapon : state_.draftRegistry.weapons) {
-        state_.listLabelStorage.push_back(
-                weapon.id == state_.draftRegistry.initialWeaponId
-                        ? weapon.id + "  [initial]"
-                        : weapon.id);
+        state_.listLabelStorage.push_back(weapon.weaponSlot == 0
+                ? weapon.id
+                : weapon.id + "  [slot "
+                        + std::to_string(weapon.weaponSlot) + "]");
     }
     state_.listLabels.clear();
     state_.listLabels.reserve(state_.listLabelStorage.size());

@@ -34,7 +34,7 @@ public:
     void RequestDeleteSelected();
     void CancelDelete();
     void ConfirmDeleteSelected();
-    void SetSelectedInitial();
+    bool SetSelectedWeaponSlot(int weaponSlot);
 
     void ApplyIdBuffer();
     void ApplyArmsModelPathBuffer();

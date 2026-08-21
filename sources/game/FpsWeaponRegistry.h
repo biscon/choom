@@ -16,6 +16,8 @@ namespace engine { class AssetManager; }
 namespace game {
 
 constexpr int MaxFpsMuzzleFlashLobes = 12;
+constexpr int MinFpsWeaponSlot = 1;
+constexpr int MaxFpsWeaponSlot = 6;
 
 struct FpsViewmodelPresentation {
     Vector3 position{0.0f, 0.0f, 0.0f};
@@ -165,14 +167,14 @@ struct FpsWeaponViewmodelDefinition {
 
 struct FpsWeaponDefinition {
     std::string id;
+    int weaponSlot = 0;
     FpsWeaponCrosshairDefinition crosshair;
     FpsWeaponFiringDefinition firing;
     FpsWeaponViewmodelDefinition viewmodel;
 };
 
 struct FpsWeaponRegistry {
-    int version = 1;
-    std::string initialWeaponId;
+    int version = 2;
     std::vector<FpsWeaponDefinition> weapons;
 };
 
@@ -341,6 +343,10 @@ void RequestFpsWeaponAudioAssets(
 const FpsWeaponDefinition* FindFpsWeaponDefinition(
         const FpsWeaponRegistry& registry,
         std::string_view id);
+const FpsWeaponDefinition* FindFpsWeaponDefinitionForSlot(
+        const FpsWeaponRegistry& registry,
+        int weaponSlot);
+int FpsWeaponSlotFromKey(int key);
 
 bool ParseFpsApplicationSettings(
         std::string_view jsonText,

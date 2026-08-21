@@ -441,6 +441,7 @@ void SectorEditor::UpdateFpsViewmodel(
         }
         fpsPlayer.Update(
                 assets,
+                sceneRuntime.Renderer(),
                 editor.PreviewRegistry(),
                 editor.PreviewApplicationSettings(),
                 dt);
@@ -448,6 +449,7 @@ void SectorEditor::UpdateFpsViewmodel(
     }
     fpsPlayer.Update(
             assets,
+            sceneRuntime.Renderer(),
             weaponRegistry,
             applicationSettings,
             dt);
@@ -2153,6 +2155,20 @@ void SectorEditor::CancelRuntimeObjectDrag(const char* message)
 void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt)
 {
     bool controlModeToggled = false;
+    const bool gameplayWeaponInput = state.mode == SectorEditorMode::Preview3D
+            && previewState.controller.previewControlMode
+                    == SectorPreviewControlMode::Gameplay;
+    const bool weaponInputCaptured = uiState.keyboardCaptured
+            || state.texturePicker.open
+            || state.soundPicker.open
+            || state.decalTintModal.open
+            || state.previewSettingsModal.open
+            || weaponEditorState.open;
+    fpsPlayer.HandleWeaponSlotInput(
+            input,
+            weaponRegistry,
+            gameplayWeaponInput,
+            weaponInputCaptured);
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
@@ -2206,6 +2222,12 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_H) {
+                    if (fpsPlayer.IsWeaponSwitchInProgress()) {
+                        if (!uiState.keyboardCaptured) {
+                            engine::ConsumeEvent(event);
+                        }
+                        return;
+                    }
                     if (ToggleFpsViewmodelHolster(fpsPlayer.State(), true, uiState.keyboardCaptured)) {
                         statusText = fpsPlayer.State().equipState
                                         == FpsViewmodelEquipState::Holstering
@@ -5695,11 +5717,28 @@ void SectorEditor::DrawWeaponEditor(
         const std::string weaponId = result.saved
                 ? weaponEditorSessionState.selectedWeaponId
                 : originalActiveWeaponId;
+        if (result.cancelled && weaponId.empty()) {
+            fpsPlayer.Begin(
+                    assets,
+                    sceneRuntime.Renderer(),
+                    weaponRegistry,
+                    applicationSettings,
+                    "fps_viewmodel");
+            return;
+        }
+        const FpsWeaponDefinition* slotOneWeapon =
+                FindFpsWeaponDefinitionForSlot(
+                        weaponRegistry,
+                        MinFpsWeaponSlot);
         const std::string fallbackId = FindFpsWeaponDefinition(
                 weaponRegistry, weaponId) != nullptr
                 ? weaponId
-                : weaponRegistry.initialWeaponId;
-        const bool selected = fpsPlayer.SelectWeapon(
+                : (slotOneWeapon != nullptr
+                        ? slotOneWeapon->id
+                        : (weaponRegistry.weapons.empty()
+                                ? std::string{}
+                                : weaponRegistry.weapons.front().id));
+        const bool selected = !fallbackId.empty() && fpsPlayer.SelectWeapon(
                 assets,
                 sceneRuntime.Renderer(),
                 weaponRegistry,
@@ -6983,9 +7022,15 @@ SectorEditorWeaponEditorService SectorEditor::BuildWeaponEditorService()
 
 void SectorEditor::OpenWeaponEditor(bool fromPreview3D)
 {
+    const FpsWeaponDefinition* slotOneWeapon =
+            FindFpsWeaponDefinitionForSlot(
+                    weaponRegistry,
+                    MinFpsWeaponSlot);
     const std::string activeWeaponId = fromPreview3D
             ? fpsPlayer.State().activeWeaponId
-            : weaponRegistry.initialWeaponId;
+            : (slotOneWeapon != nullptr
+                    ? slotOneWeapon->id
+                    : std::string{});
     const FpsViewmodelEquipState equipState = fpsPlayer.State().equipState;
     const float equipProgress = fpsPlayer.State().equipProgress;
     if (BuildWeaponEditorService().Open(activeWeaponId, fromPreview3D)

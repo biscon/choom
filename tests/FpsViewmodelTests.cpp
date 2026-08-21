@@ -104,7 +104,7 @@ void RegistrySuccess()
     game::FpsWeaponRegistry registry; std::string error;
     assert(game::ParseFpsWeaponRegistry(ValidRegistry, registry, &error));
     const auto* pistol = game::FindFpsWeaponDefinition(registry, "pistol");
-    assert(pistol && registry.initialWeaponId == "pistol");
+    assert(pistol && registry.version == 2 && pistol->weaponSlot == 1);
     assert(pistol->crosshair.enabled);
     assert(pistol->crosshair.innerColor.r == 235
             && pistol->crosshair.innerColor.g == 235
@@ -316,6 +316,7 @@ void RegistryRoundTripAndSharedArmsConfiguration()
 
     game::FpsWeaponDefinition rifle = registry.weapons.front();
     rifle.id = "rifle";
+    rifle.weaponSlot = 2;
     rifle.firing.shotIntervalSeconds = 0.09f;
     rifle.viewmodel.attachment.gripCorrection.translation.x = 0.11f;
     registry.weapons.push_back(rifle);
@@ -336,6 +337,8 @@ void RegistryRoundTripAndSharedArmsConfiguration()
     assert(!Near(
             pistol->firing.shotIntervalSeconds,
             loadedRifle->firing.shotIntervalSeconds));
+    assert(pistol->weaponSlot == 1 && loadedRifle->weaponSlot == 2);
+    assert(serialized.find("initialWeaponId") == std::string::npos);
 
     game::FpsApplicationSettings settings;
     game::FpsViewmodelPresentationOverride override;
@@ -346,6 +349,10 @@ void RegistryRoundTripAndSharedArmsConfiguration()
     assert(loadedRifle != nullptr
             && Near(loadedRifle->viewmodel.presentation.position.x, 0.25f));
 
+    roundTrip.weapons.back().weaponSlot = 1;
+    assert(!game::ValidateFpsWeaponRegistry(roundTrip, &error));
+    assert(error.find("duplicate weapon slot 1") != std::string::npos);
+    roundTrip.weapons.back().weaponSlot = 2;
     roundTrip.weapons.back().id = "pistol";
     assert(!game::ValidateFpsWeaponRegistry(roundTrip, &error));
     assert(error.find("duplicate weapon id") != std::string::npos);
@@ -621,6 +628,39 @@ void RegistryValidation()
             nonFiniteRegistry,
             &nonFiniteError));
     assert(!nonFiniteError.empty());
+}
+
+void WeaponSlotSchemaAndKeys()
+{
+    game::FpsWeaponRegistry registry;
+    std::string error;
+    assert(game::ParseFpsWeaponRegistry(ValidRegistry, registry, &error));
+    assert(registry.version == 2);
+    assert(game::FindFpsWeaponDefinitionForSlot(registry, 1)
+            == &registry.weapons.front());
+    assert(game::FindFpsWeaponDefinitionForSlot(registry, 0) == nullptr);
+
+    registry.weapons.front().weaponSlot = 0;
+    std::string serialized;
+    assert(game::SerializeFpsWeaponRegistryJson(
+            registry, serialized, &error));
+    assert(serialized.find("\"initialWeaponId\"") == std::string::npos);
+    assert(serialized.find("\"slot\"") == std::string::npos);
+
+    game::FpsWeaponRegistry unassigned;
+    assert(game::ParseFpsWeaponRegistry(serialized, unassigned, &error));
+    assert(unassigned.version == 2);
+    assert(unassigned.weapons.front().weaponSlot == 0);
+    assert(game::FindFpsWeaponDefinitionForSlot(unassigned, 1) == nullptr);
+
+    registry.weapons.front().weaponSlot = 7;
+    assert(!game::ValidateFpsWeaponRegistry(registry, &error));
+    assert(error.find("slot must be between 1 and 6") != std::string::npos);
+
+    assert(game::FpsWeaponSlotFromKey(KEY_ONE) == 1);
+    assert(game::FpsWeaponSlotFromKey(KEY_SIX) == 6);
+    assert(game::FpsWeaponSlotFromKey(KEY_ZERO) == 0);
+    assert(game::FpsWeaponSlotFromKey(KEY_KP_1) == 0);
 }
 
 void SettingsResolutionAndPersistence()
@@ -1399,6 +1439,35 @@ void HolsterTransitionStateAndMath()
             game::BuildFpsViewmodelCameraBasis(pitchedCamera);
     assert(Near(Vector3DotProduct(pitchedDelta, pitchedBasis.right), 0.45f, 0.001f));
     assert(Near(Vector3DotProduct(pitchedDelta, pitchedBasis.up), -1.75f, 0.001f));
+
+    game::FpsViewmodelRuntimeState switchState;
+    switchState.activeWeaponId = "pistol";
+    switchState.equipState = game::FpsViewmodelEquipState::Equipped;
+    switchState.equipProgress = 1.0f;
+    switchState.holsterTransition = state.holsterTransition;
+    int pendingSlot = 0;
+    assert(game::QueueFpsWeaponSlotSwitch(switchState, 2, pendingSlot));
+    assert(pendingSlot == 2);
+    assert(switchState.equipState
+            == game::FpsViewmodelEquipState::Holstering);
+    assert(!game::QueueFpsWeaponSlotSwitch(switchState, 3, pendingSlot));
+    game::AdvanceFpsViewmodelEquipTransition(switchState, 100.0f);
+    assert(switchState.equipState
+            == game::FpsViewmodelEquipState::Holstered);
+    pendingSlot = 0;
+    game::BeginFpsWeaponSlotTargetUnholster(switchState);
+    assert(switchState.equipState
+            == game::FpsViewmodelEquipState::Unholstering);
+    assert(Near(switchState.equipProgress, 0.0f));
+
+    switchState.activeWeaponId.clear();
+    switchState.equipState = game::FpsViewmodelEquipState::Holstered;
+    pendingSlot = 0;
+    assert(game::QueueFpsWeaponSlotSwitch(switchState, 1, pendingSlot));
+    assert(switchState.equipState
+            == game::FpsViewmodelEquipState::Holstered);
+    pendingSlot = 0;
+    assert(!game::QueueFpsWeaponSlotSwitch(switchState, 0, pendingSlot));
 }
 
 void AnimationTiming()
@@ -2284,7 +2353,8 @@ void CameraRecoilRuntime()
 int main()
 {
     RegistrySuccess(); RegistryRoundTripAndSharedArmsConfiguration();
-    RegistryValidation(); SettingsResolutionAndPersistence();
+    RegistryValidation(); WeaponSlotSchemaAndKeys();
+    SettingsResolutionAndPersistence();
     PreviewSettingsOverrideDeltaCoverage();
     CameraMath(); HolsterTransitionStateAndMath(); AnimationTiming();
     AttachmentMathAndBoneResolution();

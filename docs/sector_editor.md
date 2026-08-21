@@ -539,13 +539,19 @@ map or preview settings. Open the Weapon Editor from the 2D tools pane or from
 the 3D preview debug overlay's `Arms` tab. The editor uses a scrolling weapon
 list on the left and the selected weapon's complete definition on the right.
 It can add a default definition, duplicate a selected weapon, delete definitions,
-and choose the initial weapon. Multiple weapons may reference the same arms
+and assign each weapon to one of the exclusive keyboard slots `1` through `6`.
+Assigning an occupied slot is refused until the other weapon is changed or
+unassigned. Multiple weapons may reference the same arms
 model while retaining independent animation, grip, attachment, firing, recoil,
 muzzle, crosshair, and presentation values. In 3D preview the editor stays
 docked beside the live scene; `Preview Fire` and holster controls make tuning
 visible immediately. Save writes the global registry, while Cancel discards the
 draft. Legacy per-weapon application-setting overrides are folded into the
 registry when the editor opens and removed on its next successful save.
+The slot-1 weapon is selected but remains holstered when gameplay or 3D preview
+starts. Press `H` to equip it. In gameplay and 3D Gameplay control mode, the
+top-row keys `1` through `6` switch to assigned weapons by holstering the old
+weapon completely before automatically unholstering the new weapon.
 
 `Preview Settings -> Fog` configures map-level analytic distance fog. The fog
 color is a scattering tint, not an emissive replacement color: distance fog
