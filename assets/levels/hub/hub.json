@@ -1736,6 +1736,22 @@
         32.0
       ],
       "yawDegrees": 0.0
+    },
+    {
+      "id": 104,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/furniture/horse_painting.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 1.75,
+        "scale": 2.5
+      },
+      "position": [
+        -112.0,
+        0.0,
+        51.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -4453,7 +4469,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "c836c9c3a3c23a02",
+    "sourceHash": "2c9707b7561feeb4",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -4473,7 +4489,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "c836c9c3a3c23a02",
+      "sourceHash": "2c9707b7561feeb4",
       "count": 2221,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -4499,9 +4515,9 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "c836c9c3a3c23a02",
-      "modelCount": 36,
-      "objectCount": 87,
+      "sourceHash": "2c9707b7561feeb4",
+      "modelCount": 37,
+      "objectCount": 88,
       "format": "staticModelUvRemapF32LE"
     },
     "additionalAtlases": [
