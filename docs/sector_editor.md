@@ -534,6 +534,19 @@ height. Step height defaults to `0.25` world units. Jump height defaults to
 bob frequency defaults to `2.0`. Gravity uses a positive magnitude; `0`
 disables falling and also prevents jumps from adding lift.
 
+Weapons are global game definitions stored in `assets/config/weapons.json`, not
+map or preview settings. Open the Weapon Editor from the 2D tools pane or from
+the 3D preview debug overlay's `Arms` tab. The editor uses a scrolling weapon
+list on the left and the selected weapon's complete definition on the right.
+It can add a default definition, duplicate a selected weapon, delete definitions,
+and choose the initial weapon. Multiple weapons may reference the same arms
+model while retaining independent animation, grip, attachment, firing, recoil,
+muzzle, crosshair, and presentation values. In 3D preview the editor stays
+docked beside the live scene; `Preview Fire` and holster controls make tuning
+visible immediately. Save writes the global registry, while Cancel discards the
+draft. Legacy per-weapon application-setting overrides are folded into the
+registry when the editor opens and removed on its next successful save.
+
 `Preview Settings -> Fog` configures map-level analytic distance fog. The fog
 color is a scattering tint, not an emissive replacement color: distance fog
 attenuates surfaces and uses the static illumination available to each receiver

@@ -33,6 +33,13 @@ public:
             const FpsWeaponRegistry& registry,
             const FpsApplicationSettings& settings,
             const char* scopeName);
+    bool SelectWeapon(
+            engine::AssetManager& assets,
+            SectorMeshRenderer& renderer,
+            const FpsWeaponRegistry& registry,
+            const FpsApplicationSettings& settings,
+            std::string_view weaponId,
+            const char* scopeName = "fps_viewmodel");
     void End(engine::AssetManager& assets, SectorMeshRenderer& renderer);
 
     void Update(
@@ -59,6 +66,10 @@ public:
             bool gameplayActive,
             bool mouseLookActive,
             bool uiCaptured);
+    bool TriggerPreviewShot(
+            engine::AssetManager& assets,
+            engine::AudioSystem& audio,
+            const SectorMeshRenderer& renderer);
     void UpdateTransformsAndLight(
             SectorMeshRenderer& renderer,
             const SectorCollisionWorld* collisionWorld);
@@ -85,6 +96,17 @@ public:
     const FpsViewmodelRuntimeState& State() const { return state; }
 
 private:
+    bool LoadWeapon(
+            engine::AssetManager& assets,
+            SectorMeshRenderer& renderer,
+            const FpsWeaponRegistry& registry,
+            const FpsApplicationSettings& settings,
+            std::string_view weaponId,
+            const char* scopeName);
+    void UnloadActiveWeapon(
+            engine::AssetManager& assets,
+            SectorMeshRenderer& renderer);
+
     FpsViewmodelRuntimeState state;
     FpsMuzzleFlashRenderResources muzzleFlashRenderResources;
     std::string cameraRecoilWeaponId;

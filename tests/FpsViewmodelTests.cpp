@@ -308,6 +308,49 @@ void RegistrySuccess()
     assert(error.find("coreColor") != std::string::npos);
 }
 
+void RegistryRoundTripAndSharedArmsConfiguration()
+{
+    game::FpsWeaponRegistry registry;
+    std::string error;
+    assert(game::ParseFpsWeaponRegistry(ValidRegistry, registry, &error));
+
+    game::FpsWeaponDefinition rifle = registry.weapons.front();
+    rifle.id = "rifle";
+    rifle.firing.shotIntervalSeconds = 0.09f;
+    rifle.viewmodel.attachment.gripCorrection.translation.x = 0.11f;
+    registry.weapons.push_back(rifle);
+
+    std::string serialized;
+    assert(game::SerializeFpsWeaponRegistryJson(
+            registry, serialized, &error));
+    game::FpsWeaponRegistry roundTrip;
+    assert(game::ParseFpsWeaponRegistry(serialized, roundTrip, &error));
+    assert(roundTrip.weapons.size() == 2);
+    const auto* pistol = game::FindFpsWeaponDefinition(roundTrip, "pistol");
+    const auto* loadedRifle = game::FindFpsWeaponDefinition(roundTrip, "rifle");
+    assert(pistol != nullptr && loadedRifle != nullptr);
+    assert(pistol->viewmodel.modelPath == loadedRifle->viewmodel.modelPath);
+    assert(!Near(
+            pistol->viewmodel.attachment.gripCorrection.translation.x,
+            loadedRifle->viewmodel.attachment.gripCorrection.translation.x));
+    assert(!Near(
+            pistol->firing.shotIntervalSeconds,
+            loadedRifle->firing.shotIntervalSeconds));
+
+    game::FpsApplicationSettings settings;
+    game::FpsViewmodelPresentationOverride override;
+    override.position = Vector3{0.25f, -1.0f, 0.1f};
+    game::SetFpsViewmodelOverride(settings, "rifle", override);
+    game::ApplyFpsApplicationWeaponOverrides(roundTrip, settings);
+    loadedRifle = game::FindFpsWeaponDefinition(roundTrip, "rifle");
+    assert(loadedRifle != nullptr
+            && Near(loadedRifle->viewmodel.presentation.position.x, 0.25f));
+
+    roundTrip.weapons.back().id = "pistol";
+    assert(!game::ValidateFpsWeaponRegistry(roundTrip, &error));
+    assert(error.find("duplicate weapon id") != std::string::npos);
+}
+
 void ExpectRegistryFailure(std::string text, const char* expected)
 {
     game::FpsWeaponRegistry registry; std::string error;
@@ -1650,7 +1693,7 @@ void CrosshairVisibilityAndLayout()
     assert(SameRectangle(healthOnly.health.border, vitals.stamina.border));
 
     runtime.attachment.handModelTransform = MatrixTranslate(10.0f, 20.0f, 30.0f);
-    runtime.attachment.pistolWorldTransform = MatrixRotateY(1.25f);
+    runtime.attachment.attachmentWorldTransform = MatrixRotateY(1.25f);
     const auto afterWeaponTransforms =
             game::BuildFpsCrosshairLayout(
                     crosshair,
@@ -2240,7 +2283,8 @@ void CameraRecoilRuntime()
 
 int main()
 {
-    RegistrySuccess(); RegistryValidation(); SettingsResolutionAndPersistence();
+    RegistrySuccess(); RegistryRoundTripAndSharedArmsConfiguration();
+    RegistryValidation(); SettingsResolutionAndPersistence();
     PreviewSettingsOverrideDeltaCoverage();
     CameraMath(); HolsterTransitionStateAndMath(); AnimationTiming();
     AttachmentMathAndBoneResolution();

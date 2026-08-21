@@ -5,6 +5,7 @@
 #include "sector_editor/preview/SectorEditorPreviewOverlayLayout.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
+#include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
 #include "sector_demo/SectorLightmap.h"
 
 #include <cmath>
@@ -468,13 +469,11 @@ void TestPreviewSettingsModalResetPreservesSessionView()
 {
     game::SectorPreviewSettingsModalState modal;
     modal.open = true;
-    modal.activeTab = game::PreviewSettingsTab::Weapon;
+    modal.activeTab = game::PreviewSettingsTab::Lighting;
     modal.generalScroll.offset.y = 11.0f;
     modal.skyScroll.offset.y = 22.0f;
     modal.lightingScroll.offset.y = 33.0f;
     modal.fogScroll.offset.y = 44.0f;
-    modal.viewmodelScroll.offset.y = 55.0f;
-    modal.weaponScroll.offset.y = 66.0f;
     modal.draftConfig.walkSpeed = 123.0f;
     modal.draftNpcToNpcCollisionEnabled = false;
     modal.errorMessage = "discard me";
@@ -482,15 +481,13 @@ void TestPreviewSettingsModalResetPreservesSessionView()
     game::ResetSectorPreviewSettingsModalPreservingView(modal);
 
     Check(!modal.open, "preview settings reset closes modal");
-    Check(modal.activeTab == game::PreviewSettingsTab::Weapon,
+    Check(modal.activeTab == game::PreviewSettingsTab::Lighting,
           "preview settings reset preserves active tab for the session");
     Check(Near(modal.generalScroll.offset.y, 11.0f)
                   && Near(modal.skyScroll.offset.y, 22.0f)
                   && Near(modal.lightingScroll.offset.y, 33.0f)
-                  && Near(modal.fogScroll.offset.y, 44.0f)
-                  && Near(modal.viewmodelScroll.offset.y, 55.0f)
-                  && Near(modal.weaponScroll.offset.y, 66.0f),
-          "preview settings reset preserves every tab scroll offset");
+                  && Near(modal.fogScroll.offset.y, 44.0f),
+          "preview settings reset preserves every remaining tab scroll offset");
     Check(modal.errorMessage.empty()
                   && !Near(modal.draftConfig.walkSpeed, 123.0f)
                   && modal.draftNpcToNpcCollisionEnabled,
@@ -554,7 +551,7 @@ void TestPreviewSettingsModalNormalizesLayeredProbeSettings()
 void TestPreviewSettingsFogTabLayout()
 {
     const Rectangle modal{510.0f, 190.0f, 900.0f, 700.0f};
-    const std::array<Rectangle, 6> tabs =
+    const std::array<Rectangle, 4> tabs =
             game::BuildSectorPreviewSettingsTabLayout(modal, modal.y + 76.0f, 38.0f);
     for (size_t i = 0; i < tabs.size(); ++i) {
         Check(Contains(modal, tabs[i]), "preview settings tab fits inside expanded modal");
@@ -562,8 +559,28 @@ void TestPreviewSettingsFogTabLayout()
             Check(!Overlaps(tabs[i], tabs[j]), "preview settings tabs do not overlap");
         }
     }
-    Check(tabs[5].x + tabs[5].width <= modal.x + modal.width - 30.0f,
-          "weapon tab preserves the modal right margin");
+    Check(tabs[3].x + tabs[3].width <= modal.x + modal.width - 30.0f,
+          "fog tab preserves the modal right margin");
+}
+
+void TestWeaponEditorLayouts()
+{
+    const Rectangle viewport{0.0f, 0.0f, 1920.0f, 1080.0f};
+    for (bool preview3D : {false, true}) {
+        const game::SectorEditorWeaponEditorLayout layout =
+                game::BuildSectorEditorWeaponEditorLayoutForViewport(
+                        viewport.width, viewport.height, preview3D);
+        Check(Contains(viewport, layout.panel),
+              "weapon editor panel fits inside the viewport");
+        Check(Contains(layout.panel, layout.listPane)
+                      && Contains(layout.panel, layout.formBounds),
+              "weapon editor list and form fit inside the panel");
+        Check(!Overlaps(layout.listPane, layout.formBounds),
+              "weapon editor list and form do not overlap");
+        Check(!Overlaps(layout.addButton, layout.duplicateButton)
+                      && !Overlaps(layout.saveButton, layout.cancelButton),
+              "weapon editor action buttons do not overlap");
+    }
 }
 
 void TestNpcEditorModalSplitPaneLayout()
@@ -739,6 +756,7 @@ int main()
     TestPreviewSettingsModalNormalizesLayeredProbeSettings();
     TestPreviewSettingsFogTabLayout();
     TestNpcEditorModalSplitPaneLayout();
+    TestWeaponEditorLayouts();
     TestPreviewSettingsModalFogDraftApplyAndReset();
     TestPreviewNavigationTabLayout();
     TestLightProxyPlacementMath();

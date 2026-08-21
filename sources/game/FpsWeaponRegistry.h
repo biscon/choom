@@ -316,10 +316,25 @@ bool ParseFpsWeaponRegistry(
         std::string_view jsonText,
         FpsWeaponRegistry& outRegistry,
         std::string* outError = nullptr);
+FpsWeaponDefinition MakeDefaultFpsWeaponDefinition();
+bool ValidateFpsWeaponRegistry(
+        const FpsWeaponRegistry& registry,
+        std::string* outError = nullptr);
+bool SerializeFpsWeaponRegistryJson(
+        const FpsWeaponRegistry& registry,
+        std::string& outJson,
+        std::string* outError = nullptr);
 bool LoadFpsWeaponRegistry(
         const std::string& path,
         FpsWeaponRegistry& outRegistry,
         std::string* outError = nullptr);
+bool SaveFpsWeaponRegistry(
+        const std::string& path,
+        const FpsWeaponRegistry& registry,
+        std::string* outError = nullptr);
+void ApplyFpsApplicationWeaponOverrides(
+        FpsWeaponRegistry& registry,
+        const FpsApplicationSettings& settings);
 void RequestFpsWeaponAudioAssets(
         engine::AssetManager& assets,
         FpsWeaponRegistry& registry);

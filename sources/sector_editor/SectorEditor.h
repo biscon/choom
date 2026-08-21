@@ -13,6 +13,8 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorState.h"
+#include "sector_editor/weapons/SectorEditorWeaponEditorService.h"
+#include "sector_editor/weapons/SectorEditorWeaponEditorState.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/sounds/SectorEditorSoundCatalogState.h"
 #include "sector_editor/services/sounds/SectorEditorSoundService.h"
@@ -278,6 +280,13 @@ private:
             engine::AssetManager& assets,
             engine::FontHandle font,
             engine::FontHandle smallFont);
+    void DrawWeaponEditor(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawSaveLevelModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -450,6 +459,8 @@ private:
             SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr);
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorNpcEditorService BuildNpcEditorService();
+    SectorEditorWeaponEditorService BuildWeaponEditorService();
+    void OpenWeaponEditor(bool fromPreview3D);
     SectorEditorDocumentLifecycleAccess Lifecycle();
     SectorEditorConstDocumentLifecycleAccess Lifecycle() const;
     SectorTopologyMap& TopologyMap();
@@ -497,6 +508,8 @@ private:
     RuntimeObjectEditingUiState runtimeObjectEditingUiState;
     SectorEditorNpcEditorState npcEditorState;
     SectorEditorNpcEditorSessionState npcEditorSessionState;
+    SectorEditorWeaponEditorState weaponEditorState;
+    SectorEditorWeaponEditorSessionState weaponEditorSessionState;
     SectorEditorAudioAssetPickerSessionState audioAssetPickerSessionState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
@@ -522,6 +535,7 @@ private:
     FpsApplicationSettings& applicationSettings;
     PlayerAudioRuntime playerAudio;
     std::string applicationSettingsPath;
+    std::string weaponRegistryPath;
     std::string weaponRegistryError;
     engine::EngineContext* engineContext = nullptr;
     bool initialized = false;

@@ -61,6 +61,7 @@ struct SectorEditorPreviewOverlayResult {
     bool previewProxyOffsetChanged = false;
     Vector3 previewProxyOffsetWorld = {};
     bool openPreviewSettings = false;
+    bool openWeaponEditor = false;
     bool markTopologyDocumentEdited = false;
     bool requestNavigationRebuild = false;
     const char* topologyDocumentEditStatus = nullptr;

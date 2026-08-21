@@ -14,15 +14,15 @@
 
 namespace game {
 
-inline std::array<Rectangle, 6> BuildSectorPreviewSettingsTabLayout(
+inline std::array<Rectangle, 4> BuildSectorPreviewSettingsTabLayout(
         Rectangle modal,
         float y,
         float tabHeight)
 {
     constexpr float margin = 30.0f;
     constexpr float gap = 8.0f;
-    const float tabWidth = (modal.width - margin * 2.0f - gap * 5.0f) / 6.0f;
-    std::array<Rectangle, 6> tabs{};
+    const float tabWidth = (modal.width - margin * 2.0f - gap * 3.0f) / 4.0f;
+    std::array<Rectangle, 4> tabs{};
     for (size_t i = 0; i < tabs.size(); ++i) {
         tabs[i] = Rectangle{
                 modal.x + margin + (tabWidth + gap) * static_cast<float>(i),
@@ -71,8 +71,6 @@ inline void ResetSectorPreviewSettingsModalPreservingView(
     const engine::UIScrollState skyScroll = modalState.skyScroll;
     const engine::UIScrollState lightingScroll = modalState.lightingScroll;
     const engine::UIScrollState fogScroll = modalState.fogScroll;
-    const engine::UIScrollState viewmodelScroll = modalState.viewmodelScroll;
-    const engine::UIScrollState weaponScroll = modalState.weaponScroll;
 
     modalState = SectorPreviewSettingsModalState{};
     modalState.activeTab = activeTab;
@@ -80,8 +78,6 @@ inline void ResetSectorPreviewSettingsModalPreservingView(
     modalState.skyScroll = skyScroll;
     modalState.lightingScroll = lightingScroll;
     modalState.fogScroll = fogScroll;
-    modalState.viewmodelScroll = viewmodelScroll;
-    modalState.weaponScroll = weaponScroll;
 }
 
 inline SectorLightmapBakeSettings NormalizeSectorPreviewObjectProbeSettings(

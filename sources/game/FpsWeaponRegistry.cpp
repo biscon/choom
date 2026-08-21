@@ -690,6 +690,148 @@ bool Same(Vector3 a, Vector3 b) { return NearlyEqual(a.x,b.x) && NearlyEqual(a.y
 
 Json Vec(Vector3 value) { return Json::array({value.x, value.y, value.z}); }
 
+Json ColorValue(Color value)
+{
+    return Json{{"r", value.r}, {"g", value.g}, {"b", value.b}, {"a", value.a}};
+}
+
+Json MaterialOverrideValue(const FpsViewmodelMaterialOverride& value)
+{
+    return Json{
+            {"metallicFactor", value.metallicFactor},
+            {"roughnessFactor", value.roughnessFactor},
+            {"useMetallicRoughnessTexture", value.useMetallicRoughnessTexture}};
+}
+
+Json ImpactParticlesValue(const FpsWeaponImpactParticlesDefinition& value)
+{
+    return Json{
+            {"enabled", value.enabled},
+            {"particleCount", value.particleCount},
+            {"sizeScale", value.sizeScale},
+            {"intensity", value.intensity}};
+}
+
+Json FiringValue(const FpsWeaponFiringDefinition& value)
+{
+    Json firing{
+            {"shotIntervalSeconds", value.shotIntervalSeconds},
+            {"maximumRangeWorld", value.maximumRangeWorld},
+            {"recoil", {
+                    {"translationImpulse", Vec(value.recoil.translationImpulse)},
+                    {"rotationImpulseDegrees", Vec(value.recoil.rotationImpulseDegrees)},
+                    {"rollVariationDegrees", value.recoil.rollVariationDegrees},
+                    {"springFrequencyHz", value.recoil.springFrequencyHz},
+                    {"dampingRatio", value.recoil.dampingRatio},
+                    {"maximumTranslation", Vec(value.recoil.maximumTranslation)},
+                    {"maximumRotationDegrees", Vec(value.recoil.maximumRotationDegrees)}}},
+            {"cameraRecoil", {
+                    {"enabled", value.cameraRecoil.enabled},
+                    {"pitchKickDegrees", value.cameraRecoil.pitchKickDegrees},
+                    {"pitchVariationDegrees", value.cameraRecoil.pitchVariationDegrees},
+                    {"yawVariationDegrees", value.cameraRecoil.yawVariationDegrees},
+                    {"rollVariationDegrees", value.cameraRecoil.rollVariationDegrees},
+                    {"springFrequencyHz", value.cameraRecoil.springFrequencyHz},
+                    {"springDampingRatio", value.cameraRecoil.springDampingRatio},
+                    {"maxPitchDegrees", value.cameraRecoil.maxPitchDegrees},
+                    {"maxYawDegrees", value.cameraRecoil.maxYawDegrees},
+                    {"maxRollDegrees", value.cameraRecoil.maxRollDegrees}}},
+            {"muzzleSocket", {
+                    {"position", Vec(value.muzzleSocket.position)},
+                    {"rotationDegrees", Vec(value.muzzleSocket.rotationDegrees)}}},
+            {"muzzleFlash", {
+                    {"enabled", value.muzzleFlash.enabled},
+                    {"lifetimeSeconds", value.muzzleFlash.lifetimeSeconds},
+                    {"sizeWorld", value.muzzleFlash.sizeWorld},
+                    {"sizeVariation", value.muzzleFlash.sizeVariation},
+                    {"irregularity", value.muzzleFlash.irregularity},
+                    {"forwardStretch", value.muzzleFlash.forwardStretch},
+                    {"minimumLobeCount", value.muzzleFlash.minimumLobeCount},
+                    {"maximumLobeCount", value.muzzleFlash.maximumLobeCount},
+                    {"rearSuppression", value.muzzleFlash.rearSuppression},
+                    {"coreColor", ColorValue(value.muzzleFlash.coreColor)},
+                    {"hotColor", ColorValue(value.muzzleFlash.hotColor)},
+                    {"warmColor", ColorValue(value.muzzleFlash.warmColor)},
+                    {"edgeColor", ColorValue(value.muzzleFlash.edgeColor)},
+                    {"edgeSoftness", value.muzzleFlash.edgeSoftness},
+                    {"radianceStrength", value.muzzleFlash.radianceStrength}}},
+            {"muzzleLight", {
+                    {"enabled", value.muzzleLight.enabled},
+                    {"color", ColorValue(value.muzzleLight.color)},
+                    {"intensity", value.muzzleLight.intensity},
+                    {"radiusWorld", value.muzzleLight.radiusWorld},
+                    {"lifetimeSeconds", value.muzzleLight.lifetimeSeconds},
+                    {"decayExponent", value.muzzleLight.decayExponent}}},
+            {"impact", {
+                    {"damage", value.impact.damage},
+                    {"staggerSeconds", value.impact.staggerSeconds},
+                    {"knockbackImpulseWorldPerSecond", value.impact.knockbackImpulseWorldPerSecond},
+                    {"blood", ImpactParticlesValue(value.impact.blood)},
+                    {"surfaceDebris", ImpactParticlesValue(value.impact.surfaceDebris)}}}};
+    if (!value.shootSoundPath.empty()) {
+        firing["shootSound"] = value.shootSoundPath;
+    }
+    return firing;
+}
+
+Json WeaponValue(const FpsWeaponDefinition& value)
+{
+    Json viewmodel{
+            {"modelPath", value.viewmodel.modelPath},
+            {"idleAnimation", value.viewmodel.idleAnimation},
+            {"sourceFps", value.viewmodel.sourceFps},
+            {"firstFrame", value.viewmodel.firstFrame},
+            {"lastFrame", value.viewmodel.lastFrame},
+            {"playbackSpeed", value.viewmodel.playbackSpeed},
+            {"position", Vec(value.viewmodel.presentation.position)},
+            {"rotationDegrees", Vec(value.viewmodel.presentation.rotationDegrees)},
+            {"scale", value.viewmodel.presentation.scale},
+            {"verticalFovDegrees", value.viewmodel.presentation.verticalFovDegrees},
+            {"holsterTransition", {
+                    {"holsterDurationSeconds", value.viewmodel.holsterTransition.holsterDurationSeconds},
+                    {"unholsterDurationSeconds", value.viewmodel.holsterTransition.unholsterDurationSeconds},
+                    {"hiddenTranslation", Vec(value.viewmodel.holsterTransition.hiddenTranslation)},
+                    {"hiddenRotationDegrees", Vec(value.viewmodel.holsterTransition.hiddenRotationDegrees)}}},
+            {"brightnessAdjustment", value.viewmodel.brightnessAdjustment}};
+    if (value.viewmodel.materialOverride.enabled) {
+        viewmodel["materialOverride"] = MaterialOverrideValue(
+                value.viewmodel.materialOverride);
+    }
+    viewmodel["attachment"] = {
+            {"modelPath", value.viewmodel.attachment.modelPath},
+            {"boneName", value.viewmodel.attachment.boneName},
+            {"translation", Vec(value.viewmodel.attachment.gripCorrection.translation)},
+            {"rotationDegrees", Vec(value.viewmodel.attachment.gripCorrection.rotationDegrees)},
+            {"scale", value.viewmodel.attachment.gripCorrection.scale},
+            {"brightnessAdjustment", value.viewmodel.attachment.lighting.brightnessAdjustment},
+            {"materialOverride", MaterialOverrideValue(
+                    value.viewmodel.attachment.lighting.materialOverride)}};
+    return Json{
+            {"id", value.id},
+            {"crosshair", {
+                    {"enabled", value.crosshair.enabled},
+                    {"innerColor", ColorValue(value.crosshair.innerColor)},
+                    {"outlineColor", ColorValue(value.crosshair.outlineColor)},
+                    {"centerGapPixels", value.crosshair.centerGapPixels},
+                    {"segmentLengthPixels", value.crosshair.segmentLengthPixels},
+                    {"innerThicknessPixels", value.crosshair.innerThicknessPixels},
+                    {"outlineThicknessPixels", value.crosshair.outlineThicknessPixels}}},
+            {"firing", FiringValue(value.firing)},
+            {"viewmodel", std::move(viewmodel)}};
+}
+
+Json RegistryValue(const FpsWeaponRegistry& registry)
+{
+    Json weapons = Json::array();
+    for (const FpsWeaponDefinition& weapon : registry.weapons) {
+        weapons.push_back(WeaponValue(weapon));
+    }
+    return Json{
+            {"version", registry.version},
+            {"initialWeaponId", registry.initialWeaponId},
+            {"weapons", std::move(weapons)}};
+}
+
 } // namespace
 
 const char* FpsShadowQualityName(FpsShadowQuality quality)
@@ -853,6 +995,44 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
     }
 }
 
+FpsWeaponDefinition MakeDefaultFpsWeaponDefinition()
+{
+    FpsWeaponDefinition definition;
+    definition.id = "new_weapon";
+    definition.viewmodel.attachment.lighting.materialOverride.enabled = true;
+    return definition;
+}
+
+bool SerializeFpsWeaponRegistryJson(
+        const FpsWeaponRegistry& registry,
+        std::string& outJson,
+        std::string* error)
+{
+    try {
+        const std::string text = RegistryValue(registry).dump(2) + '\n';
+        FpsWeaponRegistry validated;
+        std::string validationError;
+        if (!ParseFpsWeaponRegistry(text, validated, &validationError)) {
+            SetError(error, validationError);
+            return false;
+        }
+        outJson = text;
+        SetError(error, {});
+        return true;
+    } catch (const std::exception& exception) {
+        SetError(error, exception.what());
+        return false;
+    }
+}
+
+bool ValidateFpsWeaponRegistry(
+        const FpsWeaponRegistry& registry,
+        std::string* error)
+{
+    std::string ignored;
+    return SerializeFpsWeaponRegistryJson(registry, ignored, error);
+}
+
 bool LoadFpsWeaponRegistry(const std::string& path, FpsWeaponRegistry& output, std::string* error)
 {
     std::ifstream input(path);
@@ -861,11 +1041,55 @@ bool LoadFpsWeaponRegistry(const std::string& path, FpsWeaponRegistry& output, s
     return ParseFpsWeaponRegistry(text.str(), output, error);
 }
 
+bool SaveFpsWeaponRegistry(
+        const std::string& path,
+        const FpsWeaponRegistry& registry,
+        std::string* error)
+{
+    std::string text;
+    if (!SerializeFpsWeaponRegistryJson(registry, text, error)) return false;
+    std::ofstream output(path, std::ios::trunc);
+    if (!output) {
+        SetError(error, "could not write weapon registry: " + path);
+        return false;
+    }
+    output << text;
+    if (!output) {
+        SetError(error, "failed writing weapon registry: " + path);
+        return false;
+    }
+    SetError(error, {});
+    return true;
+}
+
 const FpsWeaponDefinition* FindFpsWeaponDefinition(const FpsWeaponRegistry& registry, std::string_view id)
 {
     const auto it = std::find_if(registry.weapons.begin(), registry.weapons.end(),
             [id](const FpsWeaponDefinition& value) { return value.id == id; });
     return it == registry.weapons.end() ? nullptr : &*it;
+}
+
+void ApplyFpsApplicationWeaponOverrides(
+        FpsWeaponRegistry& registry,
+        const FpsApplicationSettings& settings)
+{
+    for (FpsWeaponDefinition& weapon : registry.weapons) {
+        weapon.viewmodel.presentation = ResolveFpsViewmodelPresentation(
+                weapon.viewmodel.presentation,
+                FindFpsViewmodelOverride(settings, weapon.id));
+        weapon.viewmodel.holsterTransition = ResolveFpsViewmodelHolsterTransition(
+                weapon.viewmodel.holsterTransition,
+                FindFpsViewmodelHolsterTransitionOverride(settings, weapon.id));
+        weapon.viewmodel.attachment.gripCorrection = ResolveFpsViewmodelGripCorrection(
+                weapon.viewmodel.attachment.gripCorrection,
+                FindFpsViewmodelGripCorrectionOverride(settings, weapon.id));
+        weapon.viewmodel.attachment.lighting = ResolveFpsViewmodelAttachmentLighting(
+                weapon.viewmodel.attachment.lighting,
+                FindFpsViewmodelAttachmentLightingOverride(settings, weapon.id));
+        weapon.firing = ResolveFpsWeaponFiringDefinition(
+                weapon.firing,
+                FindFpsWeaponFiringOverride(settings, weapon.id));
+    }
 }
 
 bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& output, std::string* error)
@@ -1576,7 +1800,9 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         if (!firing.empty()) value["firing"] = std::move(firing);
         if (!value.empty()) overrides[entry.weaponId] = std::move(value);
     }
-    root["viewmodelOverrides"] = std::move(overrides);
+    if (!overrides.empty()) {
+        root["viewmodelOverrides"] = std::move(overrides);
+    }
     std::ofstream output(path, std::ios::trunc);
     if (!output) { SetError(error, "could not write application settings: " + path); return false; }
     output << root.dump(2) << '\n';

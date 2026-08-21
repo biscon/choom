@@ -157,9 +157,9 @@ struct FpsViewmodelAttachmentRuntimeState {
     FpsViewmodelAttachmentLighting lighting;
     float brightnessMultiplier = 1.0f;
     Matrix handModelTransform = {};
-    Matrix pistolWorldTransform = {};
+    Matrix attachmentWorldTransform = {};
     bool handPoseValid = false;
-    bool pistolWorldTransformValid = false;
+    bool attachmentWorldTransformValid = false;
     int meshCount = 0;
     int triangleCount = 0;
     int materialCount = 0;
@@ -257,7 +257,7 @@ Matrix BuildFpsViewmodelAttachmentTransform(
         Matrix handModelTransform,
         const FpsViewmodelGripCorrection& gripCorrection);
 Matrix BuildFpsViewmodelMuzzleTransform(
-        Matrix pistolWorldTransform,
+        Matrix attachmentWorldTransform,
         const FpsWeaponMuzzleSocketDefinition& socket);
 FpsMuzzleEmissionCapture CaptureFpsMuzzleEmission(
         Matrix muzzleWorldTransform,

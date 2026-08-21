@@ -38,30 +38,30 @@
           "translationImpulse": [0.0, 0.0, -0.03],
           "rotationImpulseDegrees": [-3.0, 0.0, 0.0],
           "rollVariationDegrees": 0.45,
-          "springFrequencyHz": 8.0,
-          "dampingRatio": 0.82,
+          "springFrequencyHz": 4.0,
+          "dampingRatio": 0.65,
           "maximumTranslation": [0.05, 0.05, 0.08],
           "maximumRotationDegrees": [8.0, 2.0, 2.0]
         },
         "cameraRecoil": {
           "enabled": true,
-          "pitchKickDegrees": 0.40,
-          "pitchVariationDegrees": 0.08,
-          "yawVariationDegrees": 0.15,
+          "pitchKickDegrees": 2.5,
+          "pitchVariationDegrees": 0.12,
+          "yawVariationDegrees": 0.25,
           "rollVariationDegrees": 0.07,
-          "springFrequencyHz": 5.5,
-          "springDampingRatio": 0.97,
-          "maxPitchDegrees": 1.25,
+          "springFrequencyHz": 3.5,
+          "springDampingRatio": 0.92,
+          "maxPitchDegrees": 8.0,
           "maxYawDegrees": 0.60,
           "maxRollDegrees": 0.20
         },
         "muzzleSocket": {
-          "position": [0.0, 0.035, 0.105],
+          "position": [0.005, 0.05, 0.13],
           "rotationDegrees": [0.0, 0.0, 0.0]
         },
         "muzzleFlash": {
           "enabled": true,
-          "lifetimeSeconds": 0.033,
+          "lifetimeSeconds": 0.076,
           "sizeWorld": 0.1,
           "sizeVariation": 0.12,
           "irregularity": 0.65,
@@ -73,15 +73,15 @@
           "hotColor": {"r": 255, "g": 235, "b": 120, "a": 255},
           "warmColor": {"r": 255, "g": 90, "b": 15, "a": 230},
           "edgeColor": {"r": 120, "g": 15, "b": 5, "a": 150},
-          "edgeSoftness": 0.35,
-          "radianceStrength": 8.0
+          "edgeSoftness": 0.8,
+          "radianceStrength": 16.0
         },
         "muzzleLight": {
           "enabled": true,
           "color": {"r": 255, "g": 165, "b": 70, "a": 255},
-          "intensity": 6.0,
-          "radiusWorld": 2.5,
-          "lifetimeSeconds": 0.07,
+          "intensity": 8.0,
+          "radiusWorld": 3.0,
+          "lifetimeSeconds": 0.085,
           "decayExponent": 2.5
         }
       },
@@ -92,13 +92,13 @@
         "firstFrame": 1,
         "lastFrame": 41,
         "playbackSpeed": 1.0,
-        "position": [0.0, -1.4, 0.25],
-        "rotationDegrees": [0.0, 0.0, 0.0],
+        "position": [0.14, -1.55, 0.035],
+        "rotationDegrees": [-4.0, 4.0, 0.0],
         "scale": 1.0,
-        "verticalFovDegrees": 65.0,
+        "verticalFovDegrees": 55.0,
         "holsterTransition": {
-          "holsterDurationSeconds": 0.25,
-          "unholsterDurationSeconds": 0.34,
+          "holsterDurationSeconds": 1.25,
+          "unholsterDurationSeconds": 0.8,
           "hiddenTranslation": [0.45, -1.75, 0.0],
           "hiddenRotationDegrees": [13.0, 0.0, -10.0]
         },
@@ -111,10 +111,10 @@
         "attachment": {
           "modelPath": "assets/models/weapons/pistol.glb",
           "boneName": "mixamorig12:RightHand",
-          "translation": [0.020654, 0.037913, -0.149138],
-          "rotationDegrees": [3.058116, 175.482727, 88.187634],
+          "translation": [0.03, 0.13, 0.03],
+          "rotationDegrees": [93.0, 181.0, 88.19],
           "scale": 1.0,
-          "brightnessAdjustment": 0.0,
+          "brightnessAdjustment": 0.25,
           "materialOverride": {
             "metallicFactor": 0.35,
             "roughnessFactor": 1.0,

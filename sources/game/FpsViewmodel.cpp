@@ -398,7 +398,7 @@ Matrix BuildFpsViewmodelAttachmentTransform(
 }
 
 Matrix BuildFpsViewmodelMuzzleTransform(
-        Matrix pistolWorldTransform,
+        Matrix attachmentWorldTransform,
         const FpsWeaponMuzzleSocketDefinition& socket)
 {
     const Matrix rotation = MatrixRotateXYZ({
@@ -411,7 +411,7 @@ Matrix BuildFpsViewmodelMuzzleTransform(
             socket.position.z);
     return MatrixMultiply(
             MatrixMultiply(rotation, translation),
-            pistolWorldTransform);
+            attachmentWorldTransform);
 }
 
 FpsMuzzleEmissionCapture CaptureFpsMuzzleEmission(

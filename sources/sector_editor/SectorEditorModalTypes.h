@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/assets/AssetHandles.h"
+#include "engine/render/HdrEffectPolicy.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorSurfaceTypes.h"
 #include "sector_editor/services/sounds/SectorEditorAudioAssetPicker.h"
@@ -9,7 +10,6 @@
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyTypes.h"
-#include "game/FpsWeaponRegistry.h"
 #include "game/FootstepAudio.h"
 
 #include <raylib.h>
@@ -34,9 +34,7 @@ enum class PreviewSettingsTab {
     General,
     Sky,
     Lighting,
-    Fog,
-    Viewmodel,
-    Weapon
+    Fog
 };
 
 struct TexturePickerState {
@@ -219,23 +217,12 @@ struct SectorLightmapBakeSetupModalState {
 struct SectorPreviewSettingsModalState {
     bool open = false;
     PreviewSettingsTab activeTab = PreviewSettingsTab::General;
-    std::string weaponId;
     SectorFpsControllerConfig draftConfig;
     bool draftNpcToNpcCollisionEnabled = true;
     SectorTopologySkySettings draftSkySettings;
     SectorTopologyDirectionalLightSettings draftDirectionalLight;
     SectorTopologyFogSettings draftFogSettings;
     SectorLightmapBakeSettings draftLightmapSettings;
-    FpsViewmodelPresentation viewmodelDefaults;
-    FpsViewmodelPresentation draftViewmodel;
-    FpsViewmodelHolsterTransition viewmodelHolsterTransitionDefaults;
-    FpsViewmodelHolsterTransition draftViewmodelHolsterTransition;
-    FpsViewmodelGripCorrection viewmodelGripDefaults;
-    FpsViewmodelGripCorrection draftViewmodelGrip;
-    FpsViewmodelAttachmentLighting viewmodelAttachmentLightingDefaults;
-    FpsViewmodelAttachmentLighting draftViewmodelAttachmentLighting;
-    FpsWeaponFiringDefinition weaponFiringDefaults;
-    FpsWeaponFiringDefinition draftWeaponFiring;
     engine::HdrBloomSettings draftHdrBloom;
     engine::UIFloatInputState walkSpeedInput;
     engine::UIFloatInputState runSpeedInput;
@@ -279,76 +266,10 @@ struct SectorPreviewSettingsModalState {
     engine::UIIntInputState fogColorRedInput;
     engine::UIIntInputState fogColorGreenInput;
     engine::UIIntInputState fogColorBlueInput;
-    engine::UIFloatInputState viewmodelPositionXInput;
-    engine::UIFloatInputState viewmodelPositionYInput;
-    engine::UIFloatInputState viewmodelPositionZInput;
-    engine::UIFloatInputState viewmodelPitchInput;
-    engine::UIFloatInputState viewmodelYawInput;
-    engine::UIFloatInputState viewmodelRollInput;
-    engine::UIFloatInputState viewmodelScaleInput;
-    engine::UIFloatInputState viewmodelFovInput;
-    engine::UIFloatInputState cameraRecoilPitchKickInput;
-    engine::UIFloatInputState cameraRecoilPitchVariationInput;
-    engine::UIFloatInputState cameraRecoilYawVariationInput;
-    engine::UIFloatInputState cameraRecoilRollVariationInput;
-    engine::UIFloatInputState cameraRecoilFrequencyInput;
-    engine::UIFloatInputState cameraRecoilDampingInput;
-    engine::UIFloatInputState cameraRecoilMaxPitchInput;
-    engine::UIFloatInputState cameraRecoilMaxYawInput;
-    engine::UIFloatInputState cameraRecoilMaxRollInput;
-    engine::UIFloatInputState viewmodelHolsterDurationInput;
-    engine::UIFloatInputState viewmodelUnholsterDurationInput;
-    engine::UIFloatInputState viewmodelHiddenTranslationXInput;
-    engine::UIFloatInputState viewmodelHiddenTranslationYInput;
-    engine::UIFloatInputState viewmodelHiddenTranslationZInput;
-    engine::UIFloatInputState viewmodelHiddenPitchInput;
-    engine::UIFloatInputState viewmodelHiddenYawInput;
-    engine::UIFloatInputState viewmodelHiddenRollInput;
-    engine::UIFloatInputState viewmodelGripTranslationXInput;
-    engine::UIFloatInputState viewmodelGripTranslationYInput;
-    engine::UIFloatInputState viewmodelGripTranslationZInput;
-    engine::UIFloatInputState viewmodelGripPitchInput;
-    engine::UIFloatInputState viewmodelGripYawInput;
-    engine::UIFloatInputState viewmodelGripRollInput;
-    engine::UIFloatInputState viewmodelGripScaleInput;
-    engine::UIFloatInputState viewmodelAttachmentBrightnessInput;
-    engine::UIFloatInputState viewmodelAttachmentMetallicInput;
-    engine::UIFloatInputState viewmodelAttachmentRoughnessInput;
-    engine::UIFloatInputState weaponShotIntervalInput;
-    engine::UIFloatInputState weaponRecoilTranslationXInput;
-    engine::UIFloatInputState weaponRecoilTranslationYInput;
-    engine::UIFloatInputState weaponRecoilTranslationZInput;
-    engine::UIFloatInputState weaponRecoilPitchInput;
-    engine::UIFloatInputState weaponRecoilYawInput;
-    engine::UIFloatInputState weaponRecoilRollInput;
-    engine::UIFloatInputState weaponRecoilRollVariationInput;
-    engine::UIFloatInputState weaponRecoilFrequencyInput;
-    engine::UIFloatInputState weaponRecoilDampingInput;
-    engine::UIFloatInputState weaponMuzzlePositionXInput;
-    engine::UIFloatInputState weaponMuzzlePositionYInput;
-    engine::UIFloatInputState weaponMuzzlePositionZInput;
-    engine::UIFloatInputState weaponMuzzlePitchInput;
-    engine::UIFloatInputState weaponMuzzleYawInput;
-    engine::UIFloatInputState weaponMuzzleRollInput;
-    engine::UIFloatInputState weaponFlashLifetimeInput;
-    engine::UIFloatInputState weaponFlashSizeInput;
-    engine::UIFloatInputState weaponFlashRadianceStrengthInput;
-    engine::UIFloatInputState weaponFlashSizeVariationInput;
-    engine::UIFloatInputState weaponFlashIrregularityInput;
-    engine::UIFloatInputState weaponFlashForwardStretchInput;
-    engine::UIIntInputState weaponFlashMinimumLobesInput;
-    engine::UIIntInputState weaponFlashMaximumLobesInput;
-    engine::UIFloatInputState weaponFlashRearSuppressionInput;
-    engine::UIFloatInputState weaponFlashEdgeSoftnessInput;
-    engine::UIFloatInputState weaponLightIntensityInput;
-    engine::UIFloatInputState weaponLightRadiusInput;
-    engine::UIFloatInputState weaponLightLifetimeInput;
     engine::UIScrollState generalScroll;
     engine::UIScrollState skyScroll;
     engine::UIScrollState lightingScroll;
     engine::UIScrollState fogScroll;
-    engine::UIScrollState viewmodelScroll;
-    engine::UIScrollState weaponScroll;
     std::string errorMessage;
 };
 

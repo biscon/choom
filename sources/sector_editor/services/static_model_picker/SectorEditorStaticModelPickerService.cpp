@@ -64,7 +64,11 @@ void SectorEditorStaticModelPickerService::Open(
             ? "Choose a dynamic prop model"
             : (target == ModelPickerTarget::NpcDefinition
                     ? "Choose an NPC character model"
-                    : "Choose a static prop model");
+                    : (target == ModelPickerTarget::WeaponArms
+                            ? "Choose an animated arms model"
+                            : (target == ModelPickerTarget::WeaponAttachment
+                                    ? "Choose an attached weapon model"
+                                    : "Choose a static prop model")));
 }
 
 void SectorEditorStaticModelPickerService::Close()
@@ -74,7 +78,11 @@ void SectorEditorStaticModelPickerService::Close()
             ? "Dynamic model selection cancelled"
             : (state_.target == ModelPickerTarget::NpcDefinition
                     ? "NPC model selection cancelled"
-                    : "Static model selection cancelled");
+                    : (state_.target == ModelPickerTarget::WeaponArms
+                                    || state_.target
+                                            == ModelPickerTarget::WeaponAttachment
+                            ? "Weapon model selection cancelled"
+                            : "Static model selection cancelled"));
 }
 
 bool SectorEditorStaticModelPickerService::Refresh()

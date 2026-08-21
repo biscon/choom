@@ -23,13 +23,43 @@ void FpsPlayerRuntime::Begin(
     if (!LoadFpsMuzzleFlashRenderResources(muzzleFlashRenderResources)) {
         TraceLog(LOG_WARNING, "MUZZLE FLASH: HDR shader unavailable; visible flash disabled");
     }
+    LoadWeapon(
+            assets,
+            renderer,
+            registry,
+            settings,
+            registry.initialWeaponId,
+            scopeName);
+}
+
+void FpsPlayerRuntime::UnloadActiveWeapon(
+        engine::AssetManager& assets,
+        SectorMeshRenderer& renderer)
+{
+    if (!engine::IsNull(state.assetScope)) {
+        assets.UnloadScope(state.assetScope);
+    }
+    renderer.SetRuntimePointLight(nullptr);
+    ResetFpsViewmodelRuntime(state);
+    cameraRecoilWeaponId.clear();
+}
+
+bool FpsPlayerRuntime::LoadWeapon(
+        engine::AssetManager& assets,
+        SectorMeshRenderer& renderer,
+        const FpsWeaponRegistry& registry,
+        const FpsApplicationSettings& settings,
+        std::string_view weaponId,
+        const char* scopeName)
+{
     const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(
             registry,
-            registry.initialWeaponId);
+            weaponId);
     if (definition == nullptr) {
         state.loadState = FpsViewmodelLoadState::Failed;
-        state.error = "Initial weapon definition is unavailable";
-        return;
+        state.error = "Weapon definition '" + std::string(weaponId)
+                + "' is unavailable";
+        return false;
     }
     const auto failAttachment = [this]() {
         if (state.attachment.loadState
@@ -85,7 +115,7 @@ void FpsPlayerRuntime::Begin(
         state.loadState = FpsViewmodelLoadState::Failed;
         state.error = "Could not create the FPS viewmodel asset scope";
         failAttachment();
-        return;
+        return false;
     }
     state.modelInstance.model = assets.RequestModel(
             state.assetScope,
@@ -97,7 +127,7 @@ void FpsPlayerRuntime::Begin(
         state.error = "Could not request FPS viewmodel asset: "
                 + state.resolvedModelPath;
         failAttachment();
-        return;
+        return false;
     }
     state.attachment.model = assets.RequestModel(
             state.assetScope,
@@ -114,19 +144,33 @@ void FpsPlayerRuntime::Begin(
                 FpsViewmodelAttachmentLoadState::Pending;
     }
     state.loadState = FpsViewmodelLoadState::Pending;
+    return true;
+}
+
+bool FpsPlayerRuntime::SelectWeapon(
+        engine::AssetManager& assets,
+        SectorMeshRenderer& renderer,
+        const FpsWeaponRegistry& registry,
+        const FpsApplicationSettings& settings,
+        std::string_view weaponId,
+        const char* scopeName)
+{
+    UnloadActiveWeapon(assets, renderer);
+    return LoadWeapon(
+            assets,
+            renderer,
+            registry,
+            settings,
+            weaponId,
+            scopeName);
 }
 
 void FpsPlayerRuntime::End(
         engine::AssetManager& assets,
         SectorMeshRenderer& renderer)
 {
-    if (!engine::IsNull(state.assetScope)) {
-        assets.UnloadScope(state.assetScope);
-    }
-    renderer.SetRuntimePointLight(nullptr);
+    UnloadActiveWeapon(assets, renderer);
     UnloadFpsMuzzleFlashRenderResources(muzzleFlashRenderResources);
-    ResetFpsViewmodelRuntime(state);
-    cameraRecoilWeaponId.clear();
 }
 
 void FpsPlayerRuntime::Update(
@@ -176,6 +220,10 @@ void FpsPlayerRuntime::Update(
     if (tuning != nullptr && tuning->presentation != nullptr) {
         state.presentation = *tuning->presentation;
     }
+    state.brightnessAdjustment = definition->viewmodel.brightnessAdjustment;
+    state.brightnessMultiplier = FpsViewmodelBrightnessMultiplier(
+            state.brightnessAdjustment);
+    state.materialOverride = definition->viewmodel.materialOverride;
     state.attachment.gripCorrection = ResolveFpsViewmodelGripCorrection(
             definition->viewmodel.attachment.gripCorrection,
             FindFpsViewmodelGripCorrectionOverride(settings, definition->id));
@@ -427,13 +475,13 @@ bool FpsPlayerRuntime::HandleFireInput(
                             state.presentation,
                             state.holsterPose,
                             state.firing.recoil);
-                    const Matrix pistol = BuildFpsViewmodelAttachmentTransform(
+                    const Matrix attachment = BuildFpsViewmodelAttachmentTransform(
                             root,
                             state.attachment.handModelTransform,
                             state.attachment.gripCorrection);
                     emission = CaptureFpsMuzzleEmission(
                             BuildFpsViewmodelMuzzleTransform(
-                                    pistol,
+                                    attachment,
                                     state.firing.definition.muzzleSocket),
                             camera);
                 }
@@ -453,6 +501,55 @@ bool FpsPlayerRuntime::HandleFireInput(
     return acceptedShot;
 }
 
+bool FpsPlayerRuntime::TriggerPreviewShot(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        const SectorMeshRenderer& renderer)
+{
+    FpsFireRejectReason reason = FpsFireRejectReason::None;
+    if (!CanFireFpsWeapon(state, true, true, false, &reason)) {
+        state.firing.lastRejectReason = reason;
+        return false;
+    }
+    const Camera3D& camera = renderer.RenderCamera();
+    const Vector3 direction = Vector3Normalize(
+            Vector3Subtract(camera.target, camera.position));
+    FpsShotResult shot;
+    shot.accepted = true;
+    shot.rayOrigin = camera.position;
+    shot.rayDirection = direction;
+    FpsMuzzleEmissionCapture emission;
+    if (state.attachment.handPoseValid
+            && state.attachment.loadState
+                    == FpsViewmodelAttachmentLoadState::Ready) {
+        const Matrix root = BuildFpsViewmodelAnimatedTransform(
+                camera,
+                state.presentation,
+                state.holsterPose,
+                state.firing.recoil);
+        const Matrix attachment = BuildFpsViewmodelAttachmentTransform(
+                root,
+                state.attachment.handModelTransform,
+                state.attachment.gripCorrection);
+        emission = CaptureFpsMuzzleEmission(
+                BuildFpsViewmodelMuzzleTransform(
+                        attachment,
+                        state.firing.definition.muzzleSocket),
+                camera);
+    }
+    ApplyFpsWeaponShotEffects(state.firing, shot, emission);
+    audio.PlaySound(
+            assets,
+            state.firing.definition.shootSound,
+            engine::SoundPlaybackSettings{
+                    1.0f,
+                    FpsWeaponShotPitch(
+                            state.firing.shotSequence,
+                            state.firing.randomState),
+                    0.0f});
+    return true;
+}
+
 void FpsPlayerRuntime::UpdateTransformsAndLight(
         SectorMeshRenderer& renderer,
         const SectorCollisionWorld* collisionWorld)
@@ -463,19 +560,19 @@ void FpsPlayerRuntime::UpdateTransformsAndLight(
             state.holsterPose,
             state.firing.recoil);
     state.firing.viewmodelRootTransformValid = !state.activeWeaponId.empty();
-    state.attachment.pistolWorldTransformValid =
+    state.attachment.attachmentWorldTransformValid =
             state.firing.viewmodelRootTransformValid
             && state.attachment.handPoseValid
             && state.attachment.loadState
                     == FpsViewmodelAttachmentLoadState::Ready;
-    if (state.attachment.pistolWorldTransformValid) {
-        state.attachment.pistolWorldTransform =
+    if (state.attachment.attachmentWorldTransformValid) {
+        state.attachment.attachmentWorldTransform =
                 BuildFpsViewmodelAttachmentTransform(
                         state.firing.viewmodelRootTransform,
                         state.attachment.handModelTransform,
                         state.attachment.gripCorrection);
         state.firing.muzzleWorldTransform = BuildFpsViewmodelMuzzleTransform(
-                state.attachment.pistolWorldTransform,
+                state.attachment.attachmentWorldTransform,
                 state.firing.definition.muzzleSocket);
         state.firing.muzzleWorldTransformValid = true;
     } else {
@@ -516,7 +613,7 @@ void FpsPlayerRuntime::Render(
 {
     if (!IsFpsViewmodelRenderable(state)
             || !state.firing.viewmodelRootTransformValid) {
-        state.attachment.pistolWorldTransformValid = false;
+        state.attachment.attachmentWorldTransformValid = false;
         return;
     }
     const engine::ModelAsset* asset = assets.GetModelAsset(
@@ -568,7 +665,7 @@ void FpsPlayerRuntime::Render(
             camera,
             state.firing.viewmodelRootTransform,
             attachmentAsset,
-            state.attachment.pistolWorldTransform,
+            state.attachment.attachmentWorldTransform,
             preferredSectorId,
             !runtimeObjects.objectLightProbes.probes.empty(),
             ambientLighting,

@@ -1098,26 +1098,26 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                                         ? "failed"
                                         : "inactive";
                 addKeyValueStyled(
-                        "pistol model",
+                        "attachment model",
                         attachment.resolvedModelPath.empty()
                                 ? "none"
                                 : attachment.resolvedModelPath,
                         smallConfig.mutedTextColor,
                         true);
-                addKeyValue("pistol load", attachmentLoadState);
-                addKeyValue("pistol geometry", TextFormat(
+                addKeyValue("attachment load", attachmentLoadState);
+                addKeyValue("attachment geometry", TextFormat(
                         "meshes %d | triangles %d | materials %d",
                         attachment.meshCount,
                         attachment.triangleCount,
                         attachment.materialCount));
-                addKeyValue("pistol lighting default", TextFormat(
+                addKeyValue("attachment lighting default", TextFormat(
                         "brightness %+.3f | metallic %.3f | roughness %.3f",
                         attachment.lightingDefaults.brightnessAdjustment,
                         attachment.lightingDefaults.materialOverride
                                 .metallicFactor,
                         attachment.lightingDefaults.materialOverride
                                 .roughnessFactor));
-                addKeyValue("pistol lighting effective", TextFormat(
+                addKeyValue("attachment lighting effective", TextFormat(
                         "brightness %+.3f (x%.3f) | metallic %.3f | roughness %.3f | packed texture %s",
                         attachment.lighting.brightnessAdjustment,
                         attachment.brightnessMultiplier,
@@ -1163,11 +1163,11 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             smallConfig.mutedTextColor,
                             true);
                 }
-                if (attachment.pistolWorldTransformValid) {
+                if (attachment.attachmentWorldTransformValid) {
                     addKeyValueStyled(
-                            "pistol transform",
+                            "attachment transform",
                             FormatViewmodelTransform(
-                                    attachment.pistolWorldTransform),
+                                    attachment.attachmentWorldTransform),
                             smallConfig.mutedTextColor,
                             true);
                 }
@@ -1177,21 +1177,21 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             ? "viewmodel is holstered"
                             : attachment.loadState
                                             == FpsViewmodelAttachmentLoadState::Pending
-                                    ? "pistol resource or attachment bone is pending"
+                                    ? "attachment resource or bone is pending"
                                     : !attachment.error.empty()
                                             ? attachment.error.c_str()
                                             : !attachment.handPoseValid
                                                     ? "current hand pose is unavailable"
                                                     : "attachment is not ready";
                     addKeyValueStyled(
-                            "pistol hidden",
+                            "attachment hidden",
                             reason,
                             Color{236, 92, 92, 245},
                             true);
                 }
                 if (!attachment.error.empty()) {
                     addKeyValueStyled(
-                            "pistol error",
+                            "attachment error",
                             attachment.error,
                             Color{236, 92, 92, 245},
                             true);
@@ -1952,6 +1952,23 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     }
 
     float y = tabY + tabH + gap;
+    if (drawExpanded
+            && overlayState.activePreviewDebugOverlayTab
+                    == PreviewDebugOverlayTab::Viewmodel
+            && mouseInteractive) {
+        if (engine::Button(
+                    ui,
+                    smallConfig,
+                    input,
+                    assets,
+                    "sector_editor_preview_open_weapon_editor",
+                    Rectangle{panel.x + padding, y, 190.0f, rowH},
+                    smallFont,
+                    "Open Weapon Editor")) {
+            result.openWeaponEditor = true;
+        }
+        y += rowH + gap;
+    }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
         const char* doorModeOptions[] = {
                 "Normal",
