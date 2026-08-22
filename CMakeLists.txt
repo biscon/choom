@@ -253,6 +253,7 @@ if(BUILD_TESTING)
     add_executable(fps_viewmodel_tests
             tests/FpsViewmodelTests.cpp
             sources/game/FpsViewmodel.cpp
+            sources/game/FpsWeaponPellets.cpp
             sources/game/FpsWeaponRegistry.cpp
             sources/game/FpsHudRenderer.cpp
             sources/game/PlayerStamina.cpp
@@ -325,6 +326,14 @@ if(BUILD_TESTING)
     target_compile_definitions(sector_editor_light_editing_service_tests PRIVATE ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(sector_editor_light_editing_service_tests PRIVATE raylib)
     add_test(NAME sector_editor_light_editing_service COMMAND sector_editor_light_editing_service_tests)
+
+    add_executable(sector_editor_asset_pruning_tests
+            tests/SectorEditorAssetPruningTests.cpp
+            sources/sector_editor/services/asset_pruning/SectorEditorAssetPruning.cpp
+    )
+    target_include_directories(sector_editor_asset_pruning_tests PRIVATE sources)
+    target_link_libraries(sector_editor_asset_pruning_tests PRIVATE raylib)
+    add_test(NAME sector_editor_asset_pruning COMMAND sector_editor_asset_pruning_tests)
 
     add_executable(sector_authoring_graph_tests
             tests/SectorAuthoringGraphTests.cpp
@@ -547,6 +556,7 @@ if(BUILD_TESTING)
             sources/game/npc/NpcDefinitions.cpp
             sources/game/npc/NpcCollision.cpp
             sources/game/npc/NpcCombatSystem.cpp
+            sources/game/FpsWeaponPellets.cpp
             sources/game/npc/NpcNavigationSystem.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/engine/scripting/ScriptSystem.cpp
@@ -624,6 +634,27 @@ if(BUILD_TESTING)
             ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
     target_link_libraries(npc_definition_tests PRIVATE raylib)
     add_test(NAME npc_definition COMMAND npc_definition_tests)
+
+    add_executable(weapon_editor_service_tests
+            tests/WeaponEditorServiceTests.cpp
+            sources/game/FpsWeaponRegistry.cpp
+            sources/game/FpsWeaponAudio.cpp
+            sources/game/PlayerStamina.cpp
+            sources/sector_editor/weapons/SectorEditorWeaponEditorService.cpp
+            sources/sector_demo/SectorAssetPaths.cpp
+            sources/engine/assets/AssetManager.cpp
+            sources/engine/assets/AudioAssets.cpp
+            sources/engine/assets/FontAssets.cpp
+            sources/engine/assets/ModelAssets.cpp
+            sources/engine/assets/SpriteAnimationAssets.cpp
+            sources/engine/assets/TextureAssets.cpp
+            sources/engine/render/HdrEffectPolicy.cpp
+    )
+    target_include_directories(weapon_editor_service_tests PRIVATE sources)
+    target_compile_definitions(weapon_editor_service_tests PRIVATE
+            ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/")
+    target_link_libraries(weapon_editor_service_tests PRIVATE raylib)
+    add_test(NAME weapon_editor_service COMMAND weapon_editor_service_tests)
 
     add_executable(sector_editor_ui_layout_tests
             tests/SectorEditorUiLayoutTests.cpp

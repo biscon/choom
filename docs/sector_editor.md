@@ -458,6 +458,21 @@ names such as `stone_normal.png` and `stone_normal_512.png`, are omitted because
 the renderer and lightmap baker discover them automatically from their base
 texture. The modal does not copy external files into the project.
 
+## Prune Map Assets
+
+The left tools pane `Prune Assets` button removes unused entries from the map's
+texture and sound registries. The modal can prune textures, sounds, or both;
+both categories are selected by default. Pruned assets are unloaded from the
+editor and disappear from the corresponding pickers. They must be added again
+before the map can use them later.
+
+Texture references on authored floor, ceiling, wall, lower, upper, and middle
+base/decal materials are retained, as are map sky and procedural-door texture
+references. The built-in `wall`, `floor`, and `ceiling` texture IDs are always
+retained. Door open/close sound references are retained. Background music,
+footsteps, NPC-definition audio, sprites, and models are separate from these
+registries and are not changed by this command.
+
 ## Move, Split, And Delete Tools
 
 Moving a topology vertex edits exactly one stable vertex ID. Connected linedefs
@@ -533,6 +548,32 @@ height. Step height defaults to `0.25` world units. Jump height defaults to
 `0.6` world units. Head bob strength defaults to `0.020` world units and head
 bob frequency defaults to `2.0`. Gravity uses a positive magnitude; `0`
 disables falling and also prevents jumps from adding lift.
+
+Weapons are global game definitions stored in `assets/config/weapons.json`, not
+map or preview settings. Open the Weapon Editor from the 2D tools pane or from
+the 3D preview debug overlay's `Arms` tab. The editor uses a scrolling weapon
+list on the left and the selected weapon's complete definition on the right.
+It can add a default definition, duplicate a selected weapon, delete definitions,
+and assign each weapon to one of the exclusive keyboard slots `1` through `6`.
+Assigning an occupied slot is refused until the other weapon is changed or
+unassigned. Multiple weapons may reference the same arms
+model while retaining independent animation, grip, attachment, firing, recoil,
+muzzle, crosshair, and presentation values. In 3D preview the editor stays
+docked beside the live scene; `Preview Fire` and holster controls make tuning
+visible immediately. Save writes the global registry, while Cancel discards the
+draft. Legacy per-weapon application-setting overrides are folded into the
+registry when the editor opens and removed on its next successful save.
+The slot-1 weapon is selected but remains holstered when gameplay or 3D preview
+starts. Press `H` to equip it. In gameplay and 3D Gameplay control mode, the
+top-row keys `1` through `6` switch to assigned weapons by holstering the old
+weapon completely before automatically unholstering the new weapon.
+Firing definitions can optionally enable hitscan pellets and configure their
+count and spread half-angle. A pellet weapon performs one normal firing event
+for cooldown, sound, recoil, muzzle flash, and muzzle light, while each pellet
+independently resolves its first collision, damage, knockback, stagger, and
+impact effects. Weapons without pellets enabled retain one centered hitscan
+ray. Magazine ammunition and manual reload behavior are not currently part of
+the weapon system.
 
 `Preview Settings -> Fog` configures map-level analytic distance fog. The fog
 color is a scattering tint, not an emissive replacement color: distance fog

@@ -10,7 +10,49 @@
 #include <raymath.h>
 #include <rlgl.h>
 
+#include <algorithm>
+
 namespace game {
+namespace {
+
+void ResetFpsViewmodelRuntimePreservingStringStorage(
+        FpsViewmodelRuntimeState& state)
+{
+    std::string activeWeaponId = std::move(state.activeWeaponId);
+    std::string resolvedModelPath = std::move(state.resolvedModelPath);
+    std::string animationName = std::move(state.animationName);
+    std::string error = std::move(state.error);
+    std::string attachmentResolvedModelPath =
+            std::move(state.attachment.resolvedModelPath);
+    std::string attachmentConfiguredBoneName =
+            std::move(state.attachment.configuredBoneName);
+    std::string attachmentResolvedBoneName =
+            std::move(state.attachment.resolvedBoneName);
+    std::string attachmentError = std::move(state.attachment.error);
+
+    ResetFpsViewmodelRuntime(state);
+    state.activeWeaponId = std::move(activeWeaponId);
+    state.activeWeaponId.clear();
+    state.resolvedModelPath = std::move(resolvedModelPath);
+    state.resolvedModelPath.clear();
+    state.animationName = std::move(animationName);
+    state.animationName.clear();
+    state.error = std::move(error);
+    state.error.clear();
+    state.attachment.resolvedModelPath =
+            std::move(attachmentResolvedModelPath);
+    state.attachment.resolvedModelPath.clear();
+    state.attachment.configuredBoneName =
+            std::move(attachmentConfiguredBoneName);
+    state.attachment.configuredBoneName.clear();
+    state.attachment.resolvedBoneName =
+            std::move(attachmentResolvedBoneName);
+    state.attachment.resolvedBoneName.clear();
+    state.attachment.error = std::move(attachmentError);
+    state.attachment.error.clear();
+}
+
+} // namespace
 
 void FpsPlayerRuntime::Begin(
         engine::AssetManager& assets,
@@ -23,34 +65,186 @@ void FpsPlayerRuntime::Begin(
     if (!LoadFpsMuzzleFlashRenderResources(muzzleFlashRenderResources)) {
         TraceLog(LOG_WARNING, "MUZZLE FLASH: HDR shader unavailable; visible flash disabled");
     }
-    const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(
-            registry,
-            registry.initialWeaponId);
-    if (definition == nullptr) {
+    weaponAssetScope = assets.CreateScope(
+            scopeName != nullptr ? scopeName : "fps_player_viewmodel");
+    if (engine::IsNull(weaponAssetScope)) {
         state.loadState = FpsViewmodelLoadState::Failed;
-        state.error = "Initial weapon definition is unavailable";
+        state.error = "Could not create the FPS viewmodel asset scope";
         return;
     }
-    const auto failAttachment = [this]() {
-        if (state.attachment.loadState
-                != FpsViewmodelAttachmentLoadState::Failed) {
-            state.attachment.loadState =
-                    FpsViewmodelAttachmentLoadState::Failed;
-            state.attachment.error =
-                    "Arms viewmodel failed before the attachment could be evaluated";
+    state.assetScope = weaponAssetScope;
+    weaponAssets.reserve(registry.weapons.size());
+    for (const FpsWeaponDefinition& weapon : registry.weapons) {
+        if (EnsureWeaponAssetEntry(assets, weapon) == InvalidWeaponAssetIndex) {
+            TraceLog(
+                    LOG_WARNING,
+                    "Could not preload FPS weapon models for '%s'",
+                    weapon.id.c_str());
         }
-    };
+        state.activeWeaponId.reserve(std::max(
+                state.activeWeaponId.capacity(), weapon.id.size()));
+        state.animationName.reserve(std::max(
+                state.animationName.capacity(),
+                weapon.viewmodel.idleAnimation.size()));
+        state.attachment.configuredBoneName.reserve(std::max(
+                state.attachment.configuredBoneName.capacity(),
+                weapon.viewmodel.attachment.boneName.size()));
+        cameraRecoilWeaponId.reserve(std::max(
+                cameraRecoilWeaponId.capacity(), weapon.id.size()));
+    }
+    for (const WeaponAssetEntry& entry : weaponAssets) {
+        state.resolvedModelPath.reserve(std::max(
+                state.resolvedModelPath.capacity(),
+                entry.resolvedModelPath.size()));
+        state.attachment.resolvedModelPath.reserve(std::max(
+                state.attachment.resolvedModelPath.capacity(),
+                entry.resolvedAttachmentModelPath.size()));
+    }
+    state.attachment.resolvedBoneName.reserve(sizeof(BoneInfo::name));
+    state.error.reserve(256);
+    state.attachment.error.reserve(256);
+    const FpsWeaponDefinition* initial = FindFpsWeaponDefinitionForSlot(
+            registry,
+            MinFpsWeaponSlot);
+    if (initial != nullptr) {
+        ActivateWeapon(
+                renderer,
+                registry,
+                settings,
+                initial->id,
+                false);
+    }
+}
+
+size_t FpsPlayerRuntime::FindWeaponAssetEntry(
+        const FpsWeaponDefinition& definition) const
+{
+    for (size_t index = 0; index < weaponAssets.size(); ++index) {
+        const WeaponAssetEntry& entry = weaponAssets[index];
+        if (entry.weaponId == definition.id
+                && entry.modelPath == definition.viewmodel.modelPath
+                && entry.attachmentModelPath
+                        == definition.viewmodel.attachment.modelPath) {
+            return index;
+        }
+    }
+    return InvalidWeaponAssetIndex;
+}
+
+size_t FpsPlayerRuntime::EnsureWeaponAssetEntry(
+        engine::AssetManager& assets,
+        const FpsWeaponDefinition& definition)
+{
+    const size_t existing = FindWeaponAssetEntry(definition);
+    if (existing != InvalidWeaponAssetIndex) {
+        return existing;
+    }
+    if (engine::IsNull(weaponAssetScope)) {
+        return InvalidWeaponAssetIndex;
+    }
+
+    WeaponAssetEntry entry;
+    entry.weaponId = definition.id;
+    entry.modelPath = definition.viewmodel.modelPath;
+    entry.attachmentModelPath = definition.viewmodel.attachment.modelPath;
+    entry.resolvedModelPath = ResolveSectorAssetPath(
+            definition.viewmodel.modelPath);
+    entry.resolvedAttachmentModelPath = ResolveSectorAssetPath(
+            definition.viewmodel.attachment.modelPath);
+    entry.model = assets.RequestModel(
+            weaponAssetScope,
+            ("fps_viewmodel_" + definition.id).c_str(),
+            entry.resolvedModelPath.c_str(),
+            engine::ModelLoad_Animations);
+    entry.attachmentModel = assets.RequestModel(
+            weaponAssetScope,
+            ("fps_viewmodel_attachment_" + definition.id).c_str(),
+            entry.resolvedAttachmentModelPath.c_str(),
+            engine::ModelLoad_None);
+    if (engine::IsNull(entry.model)
+            || engine::IsNull(entry.attachmentModel)) {
+        return InvalidWeaponAssetIndex;
+    }
+    entry.modelInstance.model = entry.model;
+    weaponAssets.push_back(std::move(entry));
+    return weaponAssets.size() - 1;
+}
+
+void FpsPlayerRuntime::PrepareInactiveWeaponInstances(
+        engine::AssetManager& assets)
+{
+    for (size_t index = 0; index < weaponAssets.size(); ++index) {
+        if (index == activeWeaponAssetIndex) continue;
+        WeaponAssetEntry& entry = weaponAssets[index];
+        if (entry.modelInstance.poseReady || entry.modelInstance.poseFailed) {
+            continue;
+        }
+        const engine::ModelAsset* asset = assets.GetModelAsset(entry.model);
+        if (asset != nullptr) {
+            engine::PrepareAnimatedModelInstance(entry.modelInstance, *asset);
+        } else if (assets.HasFailed(entry.model)) {
+            entry.modelInstance.poseFailed = true;
+        }
+    }
+}
+
+void FpsPlayerRuntime::ResetActiveWeapon(SectorMeshRenderer& renderer)
+{
+    if (activeWeaponAssetIndex < weaponAssets.size()) {
+        WeaponAssetEntry& entry = weaponAssets[activeWeaponAssetIndex];
+        entry.modelInstance = std::move(state.modelInstance);
+        entry.modelInstance.model = entry.model;
+    }
+    renderer.SetRuntimePointLight(nullptr);
+    ResetFpsViewmodelRuntimePreservingStringStorage(state);
+    state.assetScope = weaponAssetScope;
+    activeWeaponAssetIndex = InvalidWeaponAssetIndex;
+    cameraRecoilWeaponId.clear();
+}
+
+bool FpsPlayerRuntime::ActivateWeapon(
+        SectorMeshRenderer& renderer,
+        const FpsWeaponRegistry& registry,
+        const FpsApplicationSettings& settings,
+        std::string_view weaponId,
+        bool allowAssetRequest,
+        engine::AssetManager* assets)
+{
+    const FpsWeaponDefinition* definition = FindFpsWeaponDefinition(
+            registry,
+            weaponId);
+    if (definition == nullptr) {
+        state.loadState = FpsViewmodelLoadState::Failed;
+        state.error = "Weapon definition '" + std::string(weaponId)
+                + "' is unavailable";
+        return false;
+    }
+    size_t assetIndex = FindWeaponAssetEntry(*definition);
+    if (assetIndex == InvalidWeaponAssetIndex
+            && allowAssetRequest
+            && assets != nullptr) {
+        assetIndex = EnsureWeaponAssetEntry(*assets, *definition);
+    }
+    if (assetIndex == InvalidWeaponAssetIndex) {
+        state.loadState = FpsViewmodelLoadState::Failed;
+        state.error = "Weapon assets for '" + definition->id
+                + "' were not preloaded";
+        return false;
+    }
+
+    ResetActiveWeapon(renderer);
+    WeaponAssetEntry& assetEntry = weaponAssets[assetIndex];
+    activeWeaponAssetIndex = assetIndex;
     state.activeWeaponId = definition->id;
     cameraRecoilWeaponId = definition->id;
-    state.resolvedModelPath = ResolveSectorAssetPath(
-            definition->viewmodel.modelPath);
+    state.resolvedModelPath = assetEntry.resolvedModelPath;
     state.animationName = definition->viewmodel.idleAnimation;
     state.brightnessAdjustment = definition->viewmodel.brightnessAdjustment;
     state.brightnessMultiplier = FpsViewmodelBrightnessMultiplier(
             state.brightnessAdjustment);
     state.materialOverride = definition->viewmodel.materialOverride;
-    state.attachment.resolvedModelPath = ResolveSectorAssetPath(
-            definition->viewmodel.attachment.modelPath);
+    state.attachment.resolvedModelPath =
+            assetEntry.resolvedAttachmentModelPath;
     state.attachment.configuredBoneName =
             definition->viewmodel.attachment.boneName;
     state.attachment.gripCorrection = ResolveFpsViewmodelGripCorrection(
@@ -79,63 +273,101 @@ void FpsPlayerRuntime::Begin(
     state.firing.definition = ResolveFpsWeaponFiringDefinition(
             definition->firing,
             FindFpsWeaponFiringOverride(settings, definition->id));
-    state.assetScope = assets.CreateScope(
-            scopeName != nullptr ? scopeName : "fps_player_viewmodel");
-    if (engine::IsNull(state.assetScope)) {
-        state.loadState = FpsViewmodelLoadState::Failed;
-        state.error = "Could not create the FPS viewmodel asset scope";
-        failAttachment();
-        return;
-    }
-    state.modelInstance.model = assets.RequestModel(
-            state.assetScope,
-            ("fps_viewmodel_" + definition->id).c_str(),
-            state.resolvedModelPath.c_str(),
-            engine::ModelLoad_Animations);
-    if (engine::IsNull(state.modelInstance.model)) {
-        state.loadState = FpsViewmodelLoadState::Failed;
-        state.error = "Could not request FPS viewmodel asset: "
-                + state.resolvedModelPath;
-        failAttachment();
-        return;
-    }
-    state.attachment.model = assets.RequestModel(
-            state.assetScope,
-            ("fps_viewmodel_attachment_" + definition->id).c_str(),
-            state.attachment.resolvedModelPath.c_str(),
-            engine::ModelLoad_None);
-    if (engine::IsNull(state.attachment.model)) {
-        state.attachment.loadState =
-                FpsViewmodelAttachmentLoadState::Failed;
-        state.attachment.error = "Could not request FPS viewmodel attachment: "
-                + state.attachment.resolvedModelPath;
-    } else {
-        state.attachment.loadState =
-                FpsViewmodelAttachmentLoadState::Pending;
-    }
+    state.modelInstance = std::move(assetEntry.modelInstance);
+    state.modelInstance.model = assetEntry.model;
+    state.attachment.model = assetEntry.attachmentModel;
+    state.attachment.loadState = FpsViewmodelAttachmentLoadState::Pending;
     state.loadState = FpsViewmodelLoadState::Pending;
+    return true;
+}
+
+bool FpsPlayerRuntime::LoadWeapon(
+        engine::AssetManager& assets,
+        SectorMeshRenderer& renderer,
+        const FpsWeaponRegistry& registry,
+        const FpsApplicationSettings& settings,
+        std::string_view weaponId,
+        const char* scopeName)
+{
+    (void)scopeName;
+    return ActivateWeapon(
+            renderer,
+            registry,
+            settings,
+            weaponId,
+            true,
+            &assets);
+}
+
+bool FpsPlayerRuntime::SelectWeapon(
+        engine::AssetManager& assets,
+        SectorMeshRenderer& renderer,
+        const FpsWeaponRegistry& registry,
+        const FpsApplicationSettings& settings,
+        std::string_view weaponId,
+        const char* scopeName)
+{
+    pendingWeaponSlot = 0;
+    return LoadWeapon(
+            assets,
+            renderer,
+            registry,
+            settings,
+            weaponId,
+            scopeName);
 }
 
 void FpsPlayerRuntime::End(
         engine::AssetManager& assets,
         SectorMeshRenderer& renderer)
 {
-    if (!engine::IsNull(state.assetScope)) {
-        assets.UnloadScope(state.assetScope);
+    ResetActiveWeapon(renderer);
+    if (!engine::IsNull(weaponAssetScope)) {
+        assets.UnloadScope(weaponAssetScope);
     }
-    renderer.SetRuntimePointLight(nullptr);
-    UnloadFpsMuzzleFlashRenderResources(muzzleFlashRenderResources);
+    weaponAssetScope = engine::NullAssetScopeHandle();
+    weaponAssets.clear();
+    activeWeaponAssetIndex = InvalidWeaponAssetIndex;
+    pendingWeaponSlot = 0;
     ResetFpsViewmodelRuntime(state);
-    cameraRecoilWeaponId.clear();
+    UnloadFpsMuzzleFlashRenderResources(muzzleFlashRenderResources);
 }
 
 void FpsPlayerRuntime::Update(
         engine::AssetManager& assets,
+        SectorMeshRenderer& renderer,
         const FpsWeaponRegistry& registry,
         const FpsApplicationSettings& settings,
         float dt,
         const FpsPlayerRuntimeTuning* tuning)
 {
+    PrepareInactiveWeaponInstances(assets);
+    const auto commitPendingSwitch = [this, &renderer, &registry, &settings]() {
+        if (pendingWeaponSlot == 0) return false;
+        const int targetSlot = pendingWeaponSlot;
+        pendingWeaponSlot = 0;
+        const FpsWeaponDefinition* target = FindFpsWeaponDefinitionForSlot(
+                registry,
+                targetSlot);
+        if (target == nullptr
+                || !ActivateWeapon(
+                        renderer,
+                        registry,
+                        settings,
+                        target->id,
+                        false)) {
+            return false;
+        }
+        BeginFpsWeaponSlotTargetUnholster(state);
+        return true;
+    };
+    if (pendingWeaponSlot != 0
+            && (state.activeWeaponId.empty()
+                || state.equipState == FpsViewmodelEquipState::Holstered
+                || state.equipProgress <= 0.0f)) {
+        commitPendingSwitch();
+        return;
+    }
     if (state.loadState == FpsViewmodelLoadState::Inactive) {
         return;
     }
@@ -160,6 +392,11 @@ void FpsPlayerRuntime::Update(
         state.holsterTransition = *tuning->holsterTransition;
     }
     AdvanceFpsViewmodelEquipTransition(state, dt);
+    if (pendingWeaponSlot != 0
+            && state.equipState == FpsViewmodelEquipState::Holstered) {
+        commitPendingSwitch();
+        return;
+    }
     state.firing.definition = ResolveFpsWeaponFiringDefinition(
             definition->firing,
             FindFpsWeaponFiringOverride(settings, definition->id));
@@ -176,6 +413,10 @@ void FpsPlayerRuntime::Update(
     if (tuning != nullptr && tuning->presentation != nullptr) {
         state.presentation = *tuning->presentation;
     }
+    state.brightnessAdjustment = definition->viewmodel.brightnessAdjustment;
+    state.brightnessMultiplier = FpsViewmodelBrightnessMultiplier(
+            state.brightnessAdjustment);
+    state.materialOverride = definition->viewmodel.materialOverride;
     state.attachment.gripCorrection = ResolveFpsViewmodelGripCorrection(
             definition->viewmodel.attachment.gripCorrection,
             FindFpsViewmodelGripCorrectionOverride(settings, definition->id));
@@ -222,9 +463,11 @@ void FpsPlayerRuntime::Update(
         }
         const ModelAnimation& animation = asset->animations[state.animationIndex];
         if (!IsModelAnimationValid(asset->model, animation)
-                || !engine::PrepareAnimatedModelInstance(
-                        state.modelInstance,
-                        *asset)) {
+                || state.modelInstance.poseFailed
+                || (!state.modelInstance.poseReady
+                    && !engine::PrepareAnimatedModelInstance(
+                            state.modelInstance,
+                            *asset))) {
             state.loadState = FpsViewmodelLoadState::Failed;
             state.error = "Viewmodel animation cannot use the model skeleton";
             return;
@@ -316,6 +559,7 @@ void FpsPlayerRuntime::Update(
 
 bool FpsPlayerRuntime::HandleInput(
         engine::Input& input,
+        const FpsWeaponRegistry& registry,
         engine::AssetManager& assets,
         engine::AudioSystem& audio,
         const SectorCollisionWorld* collisionWorld,
@@ -324,11 +568,22 @@ bool FpsPlayerRuntime::HandleInput(
         bool mouseLookActive,
         bool uiCaptured)
 {
+    HandleWeaponSlotInput(
+            input,
+            registry,
+            gameplayActive,
+            uiCaptured);
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
             [this, gameplayActive, uiCaptured](engine::InputEvent& event) {
                 if (event.key.key != KEY_H) {
+                    return;
+                }
+                if (IsWeaponSwitchInProgress()) {
+                    if (gameplayActive && !uiCaptured) {
+                        engine::ConsumeEvent(event);
+                    }
                     return;
                 }
                 if (ToggleFpsViewmodelHolster(
@@ -347,6 +602,39 @@ bool FpsPlayerRuntime::HandleInput(
             gameplayActive,
             mouseLookActive,
             uiCaptured);
+}
+
+bool FpsPlayerRuntime::HandleWeaponSlotInput(
+        engine::Input& input,
+        const FpsWeaponRegistry& registry,
+        bool gameplayActive,
+        bool uiCaptured)
+{
+    bool switchRequested = false;
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [this, &registry, gameplayActive, uiCaptured,
+                    &switchRequested](engine::InputEvent& event) {
+                const int weaponSlot = FpsWeaponSlotFromKey(event.key.key);
+                if (weaponSlot == 0 || !gameplayActive || uiCaptured) {
+                    return;
+                }
+                engine::ConsumeEvent(event);
+                if (pendingWeaponSlot != 0) {
+                    return;
+                }
+                const FpsWeaponDefinition* target =
+                        FindFpsWeaponDefinitionForSlot(registry, weaponSlot);
+                if (target == nullptr || target->id == state.activeWeaponId) {
+                    return;
+                }
+                switchRequested = QueueFpsWeaponSlotSwitch(
+                        state,
+                        weaponSlot,
+                        pendingWeaponSlot);
+            });
+    return switchRequested;
 }
 
 bool FpsPlayerRuntime::HandleFireInput(
@@ -427,13 +715,13 @@ bool FpsPlayerRuntime::HandleFireInput(
                             state.presentation,
                             state.holsterPose,
                             state.firing.recoil);
-                    const Matrix pistol = BuildFpsViewmodelAttachmentTransform(
+                    const Matrix attachment = BuildFpsViewmodelAttachmentTransform(
                             root,
                             state.attachment.handModelTransform,
                             state.attachment.gripCorrection);
                     emission = CaptureFpsMuzzleEmission(
                             BuildFpsViewmodelMuzzleTransform(
-                                    pistol,
+                                    attachment,
                                     state.firing.definition.muzzleSocket),
                             camera);
                 }
@@ -453,6 +741,55 @@ bool FpsPlayerRuntime::HandleFireInput(
     return acceptedShot;
 }
 
+bool FpsPlayerRuntime::TriggerPreviewShot(
+        engine::AssetManager& assets,
+        engine::AudioSystem& audio,
+        const SectorMeshRenderer& renderer)
+{
+    FpsFireRejectReason reason = FpsFireRejectReason::None;
+    if (!CanFireFpsWeapon(state, true, true, false, &reason)) {
+        state.firing.lastRejectReason = reason;
+        return false;
+    }
+    const Camera3D& camera = renderer.RenderCamera();
+    const Vector3 direction = Vector3Normalize(
+            Vector3Subtract(camera.target, camera.position));
+    FpsShotResult shot;
+    shot.accepted = true;
+    shot.rayOrigin = camera.position;
+    shot.rayDirection = direction;
+    FpsMuzzleEmissionCapture emission;
+    if (state.attachment.handPoseValid
+            && state.attachment.loadState
+                    == FpsViewmodelAttachmentLoadState::Ready) {
+        const Matrix root = BuildFpsViewmodelAnimatedTransform(
+                camera,
+                state.presentation,
+                state.holsterPose,
+                state.firing.recoil);
+        const Matrix attachment = BuildFpsViewmodelAttachmentTransform(
+                root,
+                state.attachment.handModelTransform,
+                state.attachment.gripCorrection);
+        emission = CaptureFpsMuzzleEmission(
+                BuildFpsViewmodelMuzzleTransform(
+                        attachment,
+                        state.firing.definition.muzzleSocket),
+                camera);
+    }
+    ApplyFpsWeaponShotEffects(state.firing, shot, emission);
+    audio.PlaySound(
+            assets,
+            state.firing.definition.shootSound,
+            engine::SoundPlaybackSettings{
+                    1.0f,
+                    FpsWeaponShotPitch(
+                            state.firing.shotSequence,
+                            state.firing.randomState),
+                    0.0f});
+    return true;
+}
+
 void FpsPlayerRuntime::UpdateTransformsAndLight(
         SectorMeshRenderer& renderer,
         const SectorCollisionWorld* collisionWorld)
@@ -463,19 +800,19 @@ void FpsPlayerRuntime::UpdateTransformsAndLight(
             state.holsterPose,
             state.firing.recoil);
     state.firing.viewmodelRootTransformValid = !state.activeWeaponId.empty();
-    state.attachment.pistolWorldTransformValid =
+    state.attachment.attachmentWorldTransformValid =
             state.firing.viewmodelRootTransformValid
             && state.attachment.handPoseValid
             && state.attachment.loadState
                     == FpsViewmodelAttachmentLoadState::Ready;
-    if (state.attachment.pistolWorldTransformValid) {
-        state.attachment.pistolWorldTransform =
+    if (state.attachment.attachmentWorldTransformValid) {
+        state.attachment.attachmentWorldTransform =
                 BuildFpsViewmodelAttachmentTransform(
                         state.firing.viewmodelRootTransform,
                         state.attachment.handModelTransform,
                         state.attachment.gripCorrection);
         state.firing.muzzleWorldTransform = BuildFpsViewmodelMuzzleTransform(
-                state.attachment.pistolWorldTransform,
+                state.attachment.attachmentWorldTransform,
                 state.firing.definition.muzzleSocket);
         state.firing.muzzleWorldTransformValid = true;
     } else {
@@ -516,7 +853,7 @@ void FpsPlayerRuntime::Render(
 {
     if (!IsFpsViewmodelRenderable(state)
             || !state.firing.viewmodelRootTransformValid) {
-        state.attachment.pistolWorldTransformValid = false;
+        state.attachment.attachmentWorldTransformValid = false;
         return;
     }
     const engine::ModelAsset* asset = assets.GetModelAsset(
@@ -568,7 +905,7 @@ void FpsPlayerRuntime::Render(
             camera,
             state.firing.viewmodelRootTransform,
             attachmentAsset,
-            state.attachment.pistolWorldTransform,
+            state.attachment.attachmentWorldTransform,
             preferredSectorId,
             !runtimeObjects.objectLightProbes.probes.empty(),
             ambientLighting,

@@ -264,27 +264,22 @@ void ClearNpcCombatRuntime(NpcCombatRuntime& runtime)
     runtime.deferredDestroy.clear();
 }
 
-bool ResolvePlayerWeaponShot(
+static bool TracePlayerWeaponShot(
         engine::World& world,
         const engine::AssetManager* assets,
-        SectorNavigationWorld& navigation,
-        NpcNavigationRuntime& npcNavigation,
         const SectorCollisionWorld* collisionWorld,
         const std::vector<SectorDynamicDoorCollider>& doorColliders,
         const std::vector<SectorStaticModelCollider>& staticColliders,
         Vector3 rayOrigin,
         Vector3 rayDirection,
         float maximumDistance,
-        const FpsWeaponImpactDefinition& impact,
         FpsShotResult& outShot,
-        WeaponImpactEvent& outImpact,
-        NpcAudioRuntime* npcAudio)
+        RayCandidate& outCandidate)
 {
     outShot = {};
     outShot.accepted = true;
     outShot.rayOrigin = rayOrigin;
     outShot.rayDirection = Vector3Normalize(rayDirection);
-    outImpact = {};
     RayCandidate best;
 
     if (collisionWorld != nullptr) {
@@ -427,6 +422,21 @@ bool ResolvePlayerWeaponShot(
     outShot.placedObjectId = best.placedObjectId;
     outShot.targetEntity = best.entity;
 
+    outCandidate = best;
+    return true;
+}
+
+static void ApplyPlayerWeaponImpact(
+        engine::World& world,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& npcNavigation,
+        const FpsWeaponImpactDefinition& impact,
+        const RayCandidate& best,
+        const FpsShotResult& outShot,
+        WeaponImpactEvent& outImpact,
+        NpcAudioRuntime* npcAudio)
+{
+    outImpact = {};
     if (best.kind == FpsShotHitKind::Npc
             && world.IsAlive(best.entity)
             && world.Has<Health>(best.entity)
@@ -496,7 +506,116 @@ bool ResolvePlayerWeaponShot(
         outImpact.sectorId = best.sectorId;
         outImpact.particles = impact.surfaceDebris;
     }
-    return true;
+}
+
+bool ResolvePlayerWeaponShot(
+        engine::World& world,
+        const engine::AssetManager* assets,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& npcNavigation,
+        const SectorCollisionWorld* collisionWorld,
+        const std::vector<SectorDynamicDoorCollider>& doorColliders,
+        const std::vector<SectorStaticModelCollider>& staticColliders,
+        Vector3 rayOrigin,
+        Vector3 rayDirection,
+        float maximumDistance,
+        const FpsWeaponImpactDefinition& impact,
+        FpsShotResult& outShot,
+        WeaponImpactEvent& outImpact,
+        NpcAudioRuntime* npcAudio)
+{
+    RayCandidate candidate;
+    const bool hit = TracePlayerWeaponShot(
+            world,
+            assets,
+            collisionWorld,
+            doorColliders,
+            staticColliders,
+            rayOrigin,
+            rayDirection,
+            maximumDistance,
+            outShot,
+            candidate);
+    outImpact = {};
+    if (hit) {
+        ApplyPlayerWeaponImpact(
+                world,
+                navigation,
+                npcNavigation,
+                impact,
+                candidate,
+                outShot,
+                outImpact,
+                npcAudio);
+    }
+    return hit;
+}
+
+bool ResolvePlayerWeaponPelletVolley(
+        engine::World& world,
+        const engine::AssetManager* assets,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& npcNavigation,
+        const SectorCollisionWorld* collisionWorld,
+        const std::vector<SectorDynamicDoorCollider>& doorColliders,
+        const std::vector<SectorStaticModelCollider>& staticColliders,
+        Vector3 rayOrigin,
+        Vector3 aimDirection,
+        uint64_t shotSequence,
+        const FpsWeaponFiringDefinition& rawFiring,
+        WeaponPelletVolleyResult& outVolley,
+        NpcAudioRuntime* npcAudio)
+{
+    outVolley = {};
+    const int configuredPelletCount = std::clamp(
+            rawFiring.pellets.count, 1, MaxFpsWeaponPellets);
+    outVolley.pelletCount = rawFiring.pellets.enabled
+            ? configuredPelletCount
+            : 1;
+    const float maximumRange = std::isfinite(rawFiring.maximumRangeWorld)
+            ? std::clamp(rawFiring.maximumRangeWorld, 1.0f, 10000.0f)
+            : FpsWeaponFiringDefinition{}.maximumRangeWorld;
+    std::array<RayCandidate, MaxFpsWeaponPellets> candidates{};
+
+    for (int pelletIndex = 0;
+            pelletIndex < outVolley.pelletCount;
+            ++pelletIndex) {
+        const Vector3 pelletDirection = FpsWeaponPelletDirection(
+                aimDirection,
+                rawFiring.pellets,
+                pelletIndex,
+                shotSequence);
+        if (TracePlayerWeaponShot(
+                    world,
+                    assets,
+                    collisionWorld,
+                    doorColliders,
+                    staticColliders,
+                    rayOrigin,
+                    pelletDirection,
+                    maximumRange,
+                    outVolley.shots[static_cast<size_t>(pelletIndex)],
+                    candidates[static_cast<size_t>(pelletIndex)])) {
+            ++outVolley.hitCount;
+        }
+    }
+
+    for (int pelletIndex = 0;
+            pelletIndex < outVolley.pelletCount;
+            ++pelletIndex) {
+        const size_t index = static_cast<size_t>(pelletIndex);
+        if (!outVolley.shots[index].hit) continue;
+        ApplyPlayerWeaponImpact(
+                world,
+                navigation,
+                npcNavigation,
+                rawFiring.impact,
+                candidates[index],
+                outVolley.shots[index],
+                outVolley.impacts[index],
+                npcAudio);
+    }
+    return outVolley.hitCount > 0;
 }
 
 bool UpdateNpcCombatSystem(

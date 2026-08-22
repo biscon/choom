@@ -257,12 +257,12 @@ bool SectorSceneRuntime::ResolvePlayerWeaponShot(
         const SectorCollisionWorld* collisionWorld,
         Vector3 rayOrigin,
         Vector3 rayDirection,
-        float maximumDistance,
-        const FpsWeaponImpactDefinition& impact,
+        uint64_t shotSequence,
+        const FpsWeaponFiringDefinition& firing,
         FpsShotResult& outShot)
 {
-    WeaponImpactEvent impactEvent;
-    const bool hit = game::ResolvePlayerWeaponShot(
+    WeaponPelletVolleyResult volley;
+    const bool hit = game::ResolvePlayerWeaponPelletVolley(
             context.world,
             &context.assets,
             navigation,
@@ -272,12 +272,17 @@ bool SectorSceneRuntime::ResolvePlayerWeaponShot(
             runtimeObjects.staticModelColliders,
             rayOrigin,
             rayDirection,
-            maximumDistance,
-            impact,
-            outShot,
-            impactEvent,
+            shotSequence,
+            firing,
+            volley,
             &npcAudio);
-    impactParticles.Spawn(impactEvent);
+    outShot = volley.shots[0];
+    for (int pelletIndex = 0;
+            pelletIndex < volley.pelletCount;
+            ++pelletIndex) {
+        impactParticles.Spawn(
+                volley.impacts[static_cast<size_t>(pelletIndex)]);
+    }
     return hit;
 }
 

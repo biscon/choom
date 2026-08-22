@@ -2,6 +2,7 @@
 
 #include "engine/components/AnimatedModel.h"
 #include "engine/ecs/Entity.h"
+#include "game/FpsWeaponPellets.h"
 #include "game/FpsWeaponRegistry.h"
 
 #include <raylib.h>
@@ -157,9 +158,9 @@ struct FpsViewmodelAttachmentRuntimeState {
     FpsViewmodelAttachmentLighting lighting;
     float brightnessMultiplier = 1.0f;
     Matrix handModelTransform = {};
-    Matrix pistolWorldTransform = {};
+    Matrix attachmentWorldTransform = {};
     bool handPoseValid = false;
-    bool pistolWorldTransformValid = false;
+    bool attachmentWorldTransformValid = false;
     int meshCount = 0;
     int triangleCount = 0;
     int materialCount = 0;
@@ -201,6 +202,11 @@ bool ToggleFpsViewmodelHolster(
 void AdvanceFpsViewmodelEquipTransition(
         FpsViewmodelRuntimeState& state,
         float deltaSeconds);
+bool QueueFpsWeaponSlotSwitch(
+        FpsViewmodelRuntimeState& state,
+        int targetSlot,
+        int& pendingWeaponSlot);
+void BeginFpsWeaponSlotTargetUnholster(FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelReadyForUse(const FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelPresentationVisible(const FpsViewmodelRuntimeState& state);
 bool IsFpsViewmodelRenderable(const FpsViewmodelRuntimeState& state);
@@ -257,7 +263,7 @@ Matrix BuildFpsViewmodelAttachmentTransform(
         Matrix handModelTransform,
         const FpsViewmodelGripCorrection& gripCorrection);
 Matrix BuildFpsViewmodelMuzzleTransform(
-        Matrix pistolWorldTransform,
+        Matrix attachmentWorldTransform,
         const FpsWeaponMuzzleSocketDefinition& socket);
 FpsMuzzleEmissionCapture CaptureFpsMuzzleEmission(
         Matrix muzzleWorldTransform,

@@ -8384,6 +8384,118 @@ void TestNpcWeaponDamageOcclusionAndCorpseFade()
           "corpse is destroyed after its configured fade finishes");
 }
 
+void TestWeaponPelletVolleyDamageAndPretrace()
+{
+    const auto addNpc = [](engine::World& world,
+                                const char* instanceId,
+                                Vector3 position,
+                                int healthValue) {
+        const engine::Entity entity = world.CreateEntity();
+        world.Add(entity, game::NpcRuntimeInstance{
+                "test", instanceId, game::NpcAction::Idle,
+                false, true, 1.5f, 3.0f});
+        world.Add(entity, game::MakeHealth(healthValue));
+        world.Add(entity, game::NpcCombatState{});
+        world.Add(entity, game::SectorObjectTransform{position});
+        world.Add(entity, game::SectorObject{1, true});
+        return entity;
+    };
+
+    const std::vector<game::SectorDynamicDoorCollider> doors;
+    const std::vector<game::SectorStaticModelCollider> props;
+    game::SectorNavigationWorld navigation;
+    game::NpcNavigationRuntime npcNavigation;
+
+    engine::World clusteredWorld;
+    game::ReserveSectorRuntimeObjectWorld(clusteredWorld, 4);
+    const engine::Entity centerNpc = addNpc(
+            clusteredWorld, "center", Vector3{0.0f, 0.0f, 6.0f}, 100);
+    game::FpsWeaponFiringDefinition firing;
+    firing.maximumRangeWorld = 20.0f;
+    firing.pellets = {true, 2, 45.0f};
+    firing.impact.damage = 10;
+    uint64_t sequence = 1;
+    Vector3 spreadDirection{};
+    for (; sequence < 10000; ++sequence) {
+        spreadDirection = game::FpsWeaponPelletDirection(
+                Vector3{0.0f, 0.0f, 1.0f},
+                firing.pellets,
+                1,
+                sequence);
+        if (std::fabs(spreadDirection.y) < 0.05f
+                && std::fabs(spreadDirection.x) > 0.2f) {
+            break;
+        }
+    }
+    Check(sequence < 10000,
+          "pellet pattern provides a horizontally separated test ray");
+    const engine::Entity sideNpc = addNpc(
+            clusteredWorld,
+            "side",
+            Vector3{
+                    spreadDirection.x * 6.0f,
+                    0.0f,
+                    spreadDirection.z * 6.0f},
+            100);
+    game::WeaponPelletVolleyResult clusteredVolley;
+    Check(game::ResolvePlayerWeaponPelletVolley(
+                  clusteredWorld,
+                  nullptr,
+                  navigation,
+                  npcNavigation,
+                  nullptr,
+                  doors,
+                  props,
+                  Vector3{0.0f, 0.8f, 0.0f},
+                  Vector3{0.0f, 0.0f, 1.0f},
+                  sequence,
+                  firing,
+                  clusteredVolley)
+                  && clusteredVolley.pelletCount == 2
+                  && clusteredVolley.hitCount == 2
+                  && clusteredVolley.shots[0].targetEntity == centerNpc
+                  && clusteredVolley.shots[1].targetEntity == sideNpc
+                  && clusteredWorld.Get<game::Health>(centerNpc).current == 90
+                  && clusteredWorld.Get<game::Health>(sideNpc).current == 90,
+          "separate pellets independently damage nearby NPCs");
+
+    engine::World alignedWorld;
+    game::ReserveSectorRuntimeObjectWorld(alignedWorld, 4);
+    const engine::Entity frontNpc = addNpc(
+            alignedWorld, "front", Vector3{0.0f, 0.0f, 3.0f}, 20);
+    const engine::Entity rearNpc = addNpc(
+            alignedWorld, "rear", Vector3{0.0f, 0.0f, 6.0f}, 100);
+    firing.pellets = {true, 4, 0.0f};
+    game::WeaponPelletVolleyResult alignedVolley;
+    game::ResolvePlayerWeaponPelletVolley(
+            alignedWorld,
+            nullptr,
+            navigation,
+            npcNavigation,
+            nullptr,
+            doors,
+            props,
+            Vector3{0.0f, 0.8f, 0.0f},
+            Vector3{0.0f, 0.0f, 1.0f},
+            1,
+            firing,
+            alignedVolley);
+    bool everyPelletHitFront = alignedVolley.pelletCount == 4;
+    for (int pelletIndex = 0;
+            pelletIndex < alignedVolley.pelletCount;
+            ++pelletIndex) {
+        everyPelletHitFront = everyPelletHitFront
+                && alignedVolley.shots[static_cast<size_t>(pelletIndex)]
+                           .targetEntity == frontNpc;
+    }
+    Check(everyPelletHitFront
+                  && game::IsDepleted(
+                          alignedWorld.Get<game::Health>(frontNpc))
+                  && alignedWorld.Get<game::NpcCombatState>(frontNpc).dead
+                  && alignedWorld.Get<game::Health>(rearNpc).current == 100,
+          "pellet collisions are traced before lethal damage and do not pass through the killed target");
+}
+
 int main()
 {
     extern void RunSectorScriptBindingTests();
@@ -8492,6 +8604,7 @@ int main()
     TestCrowdMovingNpcAvoidsStationaryNpc();
     TestNpcSemanticAnimationUsesBlendingAndQueuesTransitions();
     TestNpcWeaponDamageOcclusionAndCorpseFade();
+    TestWeaponPelletVolleyDamageAndPretrace();
     TestNpcNavigationSmoothsSectorGeometryStairsVisually();
     TestNpcNavigationTraversesTurningStairsRepeatedly();
     TestNpcNavigationMovementStaysOnWalkableSideOfDrop();

@@ -14,7 +14,9 @@ namespace game {
 enum class ModelPickerTarget {
     StaticModel,
     DynamicModel,
-    NpcDefinition
+    NpcDefinition,
+    WeaponArms,
+    WeaponAttachment
 };
 
 struct StaticModelPickerState {

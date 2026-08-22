@@ -7,6 +7,7 @@
 
 #include <raylib.h>
 
+#include <array>
 #include <vector>
 
 namespace engine {
@@ -41,6 +42,13 @@ struct WeaponImpactEvent {
     FpsWeaponImpactParticlesDefinition particles;
 };
 
+struct WeaponPelletVolleyResult {
+    int pelletCount = 0;
+    int hitCount = 0;
+    std::array<FpsShotResult, MaxFpsWeaponPellets> shots{};
+    std::array<WeaponImpactEvent, MaxFpsWeaponPellets> impacts{};
+};
+
 struct NpcCombatRuntime {
     std::vector<engine::Entity> deferredDestroy;
 };
@@ -62,6 +70,21 @@ bool ResolvePlayerWeaponShot(
         const FpsWeaponImpactDefinition& impact,
         FpsShotResult& outShot,
         WeaponImpactEvent& outImpact,
+        NpcAudioRuntime* npcAudio = nullptr);
+
+bool ResolvePlayerWeaponPelletVolley(
+        engine::World& world,
+        const engine::AssetManager* assets,
+        SectorNavigationWorld& navigation,
+        NpcNavigationRuntime& npcNavigation,
+        const SectorCollisionWorld* collisionWorld,
+        const std::vector<SectorDynamicDoorCollider>& doorColliders,
+        const std::vector<SectorStaticModelCollider>& staticColliders,
+        Vector3 rayOrigin,
+        Vector3 aimDirection,
+        uint64_t shotSequence,
+        const FpsWeaponFiringDefinition& firing,
+        WeaponPelletVolleyResult& outVolley,
         NpcAudioRuntime* npcAudio = nullptr);
 
 bool UpdateNpcCombatSystem(

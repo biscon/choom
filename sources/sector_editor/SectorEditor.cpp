@@ -2,11 +2,13 @@
 
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
+#include "sector_editor/SectorEditorAssetPruneModal.h"
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentModals.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
+#include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
 #include "sector_editor/SectorEditorHelpers.h"
@@ -21,6 +23,7 @@
 #include "sector_editor/preview/SectorEditorPreviewUvPanel.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
+#include "sector_editor/services/asset_pruning/SectorEditorAssetPruning.h"
 #include "sector_editor/services/sounds/SectorEditorSoundService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
@@ -71,6 +74,26 @@ namespace {
 
 constexpr float SectorEditorPanelScrollPaddingPx = 8.0f;
 constexpr float SectorEditorFreeflyPrecisionMoveScale = 0.1f;
+
+void SetFpsViewmodelEquipPose(
+        FpsViewmodelRuntimeState& state,
+        FpsViewmodelEquipState equipState,
+        float equipProgress)
+{
+    state.equipState = equipState;
+    state.equipProgress = std::clamp(equipProgress, 0.0f, 1.0f);
+    state.holsterPose = EvaluateFpsViewmodelHolsterPose(
+            state.holsterTransition,
+            state.equipProgress);
+}
+
+void EquipFpsViewmodelForWeaponEditing(FpsViewmodelRuntimeState& state)
+{
+    SetFpsViewmodelEquipPose(
+            state,
+            FpsViewmodelEquipState::Equipped,
+            1.0f);
+}
 
 SectorEditorSelectionUiDependencies BuildSelectionUiDependencies(
         SectorEditorUiState& uiState,
@@ -270,7 +293,8 @@ bool SectorEditor::Init(engine::EngineContext& context)
     Shutdown(context);
     engineContext = &context;
     weaponRegistryError.clear();
-    if (!LoadFpsWeaponRegistry(ASSETS_PATH "config/weapons.json", weaponRegistry, &weaponRegistryError)) {
+    weaponRegistryPath = ASSETS_PATH "config/weapons.json";
+    if (!LoadFpsWeaponRegistry(weaponRegistryPath, weaponRegistry, &weaponRegistryError)) {
         TraceLog(LOG_ERROR, "Weapon registry load failed: %s", weaponRegistryError.c_str());
         statusText = "Startup failed: " + weaponRegistryError;
         return false;
@@ -330,6 +354,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
             context, audioAssetPickerSessionState};
     audioPicker.Close(npcEditorState.audioPicker.assetPicker);
     BuildNpcEditorService().Shutdown(assets);
+    audioPicker.Close(weaponEditorState.audioPicker);
+    BuildWeaponEditorService().Shutdown();
     if (state.footstepPicker.open
             || !engine::IsNull(state.footstepPicker.previewScope)) {
         BuildFootstepService().Close();
@@ -355,6 +381,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     runtimeObjectEditingUiState = RuntimeObjectEditingUiState{};
     npcEditorState = SectorEditorNpcEditorState{};
     npcEditorSessionState = SectorEditorNpcEditorSessionState{};
+    weaponEditorState = SectorEditorWeaponEditorState{};
+    weaponEditorSessionState = SectorEditorWeaponEditorSessionState{};
     audioAssetPickerSessionState = SectorEditorAudioAssetPickerSessionState{};
     textureCatalogState = TextureCatalogState{};
     soundCatalogState = SectorEditorSoundCatalogState{};
@@ -396,44 +424,37 @@ void SectorEditor::UpdateFpsViewmodel(
         engine::AssetManager& assets,
         float dt)
 {
-    if (!state.previewSettingsModal.open) {
+    if (weaponEditorState.open) {
+        SectorEditorWeaponEditorService editor = BuildWeaponEditorService();
+        if (editor.ConsumePreviewReloadRequest()) {
+            const std::string selectedId = editor.SelectedWeaponId();
+            if (!selectedId.empty()) {
+                const bool selected = fpsPlayer.SelectWeapon(
+                        assets,
+                        sceneRuntime.Renderer(),
+                        editor.PreviewRegistry(),
+                        editor.PreviewApplicationSettings(),
+                        selectedId,
+                        "fps_weapon_editor_viewmodel");
+                if (selected) {
+                    EquipFpsViewmodelForWeaponEditing(fpsPlayer.State());
+                }
+            }
+        }
         fpsPlayer.Update(
                 assets,
-                weaponRegistry,
-                applicationSettings,
+                sceneRuntime.Renderer(),
+                editor.PreviewRegistry(),
+                editor.PreviewApplicationSettings(),
                 dt);
         return;
     }
-
-    const FpsViewmodelPresentation presentation =
-            ClampFpsViewmodelPresentation(
-                    state.previewSettingsModal.draftViewmodel);
-    const FpsViewmodelHolsterTransition holsterTransition =
-            ClampFpsViewmodelHolsterTransition(
-                    state.previewSettingsModal
-                            .draftViewmodelHolsterTransition);
-    const FpsWeaponFiringDefinition firing =
-            ClampFpsWeaponFiringDefinition(
-                    state.previewSettingsModal.draftWeaponFiring);
-    const FpsViewmodelGripCorrection gripCorrection =
-            ClampFpsViewmodelGripCorrection(
-                    state.previewSettingsModal.draftViewmodelGrip);
-    const FpsViewmodelAttachmentLighting attachmentLighting =
-            ClampFpsViewmodelAttachmentLighting(
-                    state.previewSettingsModal
-                            .draftViewmodelAttachmentLighting);
-    const FpsPlayerRuntimeTuning tuning{
-            &presentation,
-            &holsterTransition,
-            &firing,
-            &gripCorrection,
-            &attachmentLighting};
     fpsPlayer.Update(
             assets,
+            sceneRuntime.Renderer(),
             weaponRegistry,
             applicationSettings,
-            dt,
-            &tuning);
+            dt);
 }
 bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
 {
@@ -450,6 +471,7 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             || state.decalTintModal.open
             || state.previewSettingsModal.open
             || npcEditorState.open
+            || weaponEditorState.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen();
@@ -474,8 +496,8 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
                     : nullptr,
             request.rayOrigin,
             request.rayDirection,
-            fpsPlayer.State().firing.definition.maximumRangeWorld,
-            fpsPlayer.State().firing.definition.impact,
+            fpsPlayer.State().firing.shotSequence,
+            fpsPlayer.State().firing.definition,
             resolvedShot);
     fpsPlayer.RecordShotResolution(resolvedShot);
     return true;
@@ -558,6 +580,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 || state.footstepPicker.open
                 || runtimeObjectEditingState.spritePicker.open
                 || runtimeObjectEditingState.staticModelPicker.open
+                || weaponEditorState.open
                 || HasDocumentModalOpen();
         if (hasBlockingModal) {
             if (previewState.controller.previewControlMode
@@ -614,6 +637,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
             || state.addMapTexture.open
             || state.addMapSound.open
             || npcEditorState.open
+            || weaponEditorState.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen()) {
@@ -672,6 +696,12 @@ void SectorEditor::RenderUI(
         }
         if (state.lightmapBakeSetupModal.open) {
             DrawLightmapBakeSetupModal(ui, config, input, assets, font);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
+        if (weaponEditorState.open) {
+            DrawWeaponEditor(ui, config, input, assets, font, smallFont);
             uiState.keyboardCaptured = true;
             engine::EndUI(ui, config, input, assets);
             return;
@@ -737,6 +767,12 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (weaponEditorState.open) {
+        DrawWeaponEditor(ui, config, input, assets, font, smallFont);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (npcEditorState.open) {
         DrawNpcEditorModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
@@ -798,6 +834,12 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (state.assetPruneModal.open) {
+        DrawAssetPruneModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (state.texturePicker.open) {
         DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
@@ -835,6 +877,7 @@ void SectorEditor::RenderUI(
     DrawSetAllModal(ui, config, input, assets, font);
     DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawAddMapSoundModal(ui, config, input, font);
+    DrawAssetPruneModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
     DrawSoundPickerModal(ui, config, input, font);
     DrawFootstepPickerModal(ui, config, input, assets, font);
@@ -846,7 +889,9 @@ void SectorEditor::RenderUI(
             || state.footstepPicker.open
             || state.addMapTexture.open
             || state.addMapSound.open
+            || state.assetPruneModal.open
             || npcEditorState.open
+            || weaponEditorState.open
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen()) {
@@ -2120,6 +2165,20 @@ void SectorEditor::CancelRuntimeObjectDrag(const char* message)
 void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& assets, float dt)
 {
     bool controlModeToggled = false;
+    const bool gameplayWeaponInput = state.mode == SectorEditorMode::Preview3D
+            && previewState.controller.previewControlMode
+                    == SectorPreviewControlMode::Gameplay;
+    const bool weaponInputCaptured = uiState.keyboardCaptured
+            || state.texturePicker.open
+            || state.soundPicker.open
+            || state.decalTintModal.open
+            || state.previewSettingsModal.open
+            || weaponEditorState.open;
+    fpsPlayer.HandleWeaponSlotInput(
+            input,
+            weaponRegistry,
+            gameplayWeaponInput,
+            weaponInputCaptured);
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
@@ -2173,6 +2232,12 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                 }
 
                 if (event.key.key == KEY_H) {
+                    if (fpsPlayer.IsWeaponSwitchInProgress()) {
+                        if (!uiState.keyboardCaptured) {
+                            engine::ConsumeEvent(event);
+                        }
+                        return;
+                    }
                     if (ToggleFpsViewmodelHolster(fpsPlayer.State(), true, uiState.keyboardCaptured)) {
                         statusText = fpsPlayer.State().equipState
                                         == FpsViewmodelEquipState::Holstering
@@ -3717,7 +3782,11 @@ void SectorEditor::RenderPreview3DOverlays()
 void SectorEditor::RenderPreview3DHud(Rectangle playableViewport) const
 {
     if (state.mode == SectorEditorMode::Preview3D) {
-        fpsPlayer.RenderHud(playableViewport, weaponRegistry);
+        fpsPlayer.RenderHud(
+                playableViewport,
+                weaponEditorState.open
+                        ? weaponEditorState.draftRegistry
+                        : weaponRegistry);
     }
 }
 
@@ -3877,6 +3946,9 @@ void SectorEditor::DrawPreviewOverlay(
     }
     if (result.openPreviewSettings) {
         OpenPreviewSettingsModal();
+    }
+    if (result.openWeaponEditor) {
+        OpenWeaponEditor(true);
     }
     if (result.requestNavigationRebuild) {
         statusText = engineContext != nullptr
@@ -4713,7 +4785,7 @@ void SectorEditor::DrawToolsPanel(
     const float toolsContentH =
             sectionLabelH + rowsHeight(5)
             + separatorH + sectionLabelH + rowsHeight(13)
-            + separatorH + rowsHeight(6)
+            + separatorH + rowsHeight(7)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
             + separatorH + rowsHeight(1)
@@ -4974,6 +5046,11 @@ void SectorEditor::DrawToolsPanel(
         BuildSoundService().OpenAddModal();
     }
     y += rowH + gap;
+    if (engine::Button(ui, config, input, assets, "sector_editor_prune_assets", Rectangle{0.0f, y, contentW, rowH}, font, "Prune Assets")) {
+        OpenSectorEditorAssetPruneModal(state.assetPruneModal);
+        statusText = "Choose map asset categories to prune";
+    }
+    y += rowH + gap;
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_2d", Rectangle{0.0f, y, contentW, rowH}, font, "Settings")) {
         OpenPreviewSettingsModal();
     }
@@ -4984,6 +5061,14 @@ void SectorEditor::DrawToolsPanel(
                 Rectangle{0.0f, y, contentW, rowH},
                 font, "NPC Editor")) {
         BuildNpcEditorService().Open();
+    }
+    y += rowH + gap;
+    if (engine::Button(
+                ui, config, input, assets,
+                "sector_editor_weapon_editor",
+                Rectangle{0.0f, y, contentW, rowH},
+                font, "Weapon Editor")) {
+        OpenWeaponEditor(false);
     }
     y += rowH + gap;
 
@@ -5258,6 +5343,26 @@ void SectorEditor::DrawAddMapSoundModal(
         engine::FontHandle font)
 {
     BuildSoundService().DrawAddModal(ui, config, input, font);
+}
+
+void SectorEditor::DrawAssetPruneModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    const SectorEditorAssetPruneModalResult result =
+            DrawSectorEditorAssetPruneModal(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    state.assetPruneModal);
+    if (result == SectorEditorAssetPruneModalResult::Confirmed) {
+        ApplyAssetPrune(assets);
+    }
 }
 
 void SectorEditor::DrawSoundPickerModal(
@@ -5589,6 +5694,98 @@ void SectorEditor::DrawNpcEditorModal(
     if (result == SectorEditorNpcEditorModalResult::Saved
             && engineContext != nullptr) {
         sceneRuntime.RefreshMapRuntimeObjects(*engineContext, TopologyMap());
+    }
+}
+
+void SectorEditor::DrawWeaponEditor(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    if (engineContext == nullptr) {
+        statusText = "Weapon Editor requires an engine context";
+        return;
+    }
+    const bool openedFromPreview3D = weaponEditorState.openedFromPreview3D;
+    const std::string originalActiveWeaponId =
+            weaponEditorState.originalActiveWeaponId;
+    const FpsViewmodelEquipState originalEquipState =
+            weaponEditorState.originalEquipState;
+    const float originalEquipProgress =
+            weaponEditorState.originalEquipProgress;
+    SectorEditorWeaponEditorService editor = BuildWeaponEditorService();
+    SectorEditorStaticModelPickerService modelPicker{
+            runtimeObjectEditingState.staticModelPicker,
+            statusText};
+    SectorEditorAudioAssetPickerService audioPicker{
+            *engineContext, audioAssetPickerSessionState};
+    const SectorEditorWeaponEditorPanelResult result =
+            DrawSectorEditorWeaponEditorPanel(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    smallFont,
+                    openedFromPreview3D ? &fpsPlayer.State() : nullptr,
+                    editor,
+                    modelPicker,
+                    audioPicker);
+    if (result.previewFireRequested) {
+        statusText = fpsPlayer.TriggerPreviewShot(
+                assets, engineContext->audio, sceneRuntime.Renderer())
+                ? "Preview weapon fired"
+                : "Preview weapon is not ready to fire";
+    }
+    if (result.holsterToggleRequested) {
+        if (ToggleFpsViewmodelHolster(fpsPlayer.State(), true, false)) {
+            statusText = fpsPlayer.State().equipState
+                            == FpsViewmodelEquipState::Holstering
+                    ? "Preview weapon holstering"
+                    : "Preview weapon unholstering";
+        }
+    }
+    if (openedFromPreview3D && (result.saved || result.cancelled)) {
+        const std::string weaponId = result.saved
+                ? weaponEditorSessionState.selectedWeaponId
+                : originalActiveWeaponId;
+        if (result.cancelled && weaponId.empty()) {
+            fpsPlayer.Begin(
+                    assets,
+                    sceneRuntime.Renderer(),
+                    weaponRegistry,
+                    applicationSettings,
+                    "fps_viewmodel");
+            return;
+        }
+        const FpsWeaponDefinition* slotOneWeapon =
+                FindFpsWeaponDefinitionForSlot(
+                        weaponRegistry,
+                        MinFpsWeaponSlot);
+        const std::string fallbackId = FindFpsWeaponDefinition(
+                weaponRegistry, weaponId) != nullptr
+                ? weaponId
+                : (slotOneWeapon != nullptr
+                        ? slotOneWeapon->id
+                        : (weaponRegistry.weapons.empty()
+                                ? std::string{}
+                                : weaponRegistry.weapons.front().id));
+        const bool selected = !fallbackId.empty() && fpsPlayer.SelectWeapon(
+                assets,
+                sceneRuntime.Renderer(),
+                weaponRegistry,
+                applicationSettings,
+                fallbackId,
+                "fps_viewmodel");
+        if (selected) {
+            SetFpsViewmodelEquipPose(
+                    fpsPlayer.State(),
+                    originalEquipState,
+                    originalEquipProgress);
+        }
     }
 }
 
@@ -6043,6 +6240,7 @@ bool SectorEditor::LoadLevel(
     state.texturePicker = TexturePickerState{};
     state.soundPicker = SoundPickerState{};
     state.addMapSound = AddMapSoundState{};
+    state.assetPruneModal = SectorEditorAssetPruneModalState{};
     state.loadLevelModal = LoadLevelModalState{};
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
@@ -6202,6 +6400,7 @@ bool SectorEditor::HasDocumentModalOpen() const
             || state.loadLevelModal.open
             || state.confirmationModal.open
             || state.setAllModal.open
+            || state.assetPruneModal.open
             || state.decalTintModal.open
             || state.doorTextureSettingsModal.open
             || state.lightmapBakeSetupModal.open
@@ -6701,45 +6900,6 @@ void SectorEditor::OpenPreviewSettingsModal()
             NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
     state.previewSettingsModal.draftHdrBloom =
             engine::NormalizeHdrBloomSettings(applicationSettings.hdrBloom);
-    state.previewSettingsModal.weaponId = fpsPlayer.State().activeWeaponId.empty()
-            ? weaponRegistry.initialWeaponId
-            : fpsPlayer.State().activeWeaponId;
-    const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
-            weaponRegistry, state.previewSettingsModal.weaponId);
-    if (weapon != nullptr) {
-        state.previewSettingsModal.viewmodelDefaults = weapon->viewmodel.presentation;
-        state.previewSettingsModal.draftViewmodel = ResolveFpsViewmodelPresentation(
-                weapon->viewmodel.presentation,
-                FindFpsViewmodelOverride(applicationSettings, weapon->id));
-        state.previewSettingsModal.viewmodelHolsterTransitionDefaults =
-                weapon->viewmodel.holsterTransition;
-        state.previewSettingsModal.draftViewmodelHolsterTransition =
-                ResolveFpsViewmodelHolsterTransition(
-                        weapon->viewmodel.holsterTransition,
-                        FindFpsViewmodelHolsterTransitionOverride(
-                                applicationSettings,
-                                weapon->id));
-        state.previewSettingsModal.viewmodelGripDefaults =
-                weapon->viewmodel.attachment.gripCorrection;
-        state.previewSettingsModal.draftViewmodelGrip =
-                ResolveFpsViewmodelGripCorrection(
-                        weapon->viewmodel.attachment.gripCorrection,
-                        FindFpsViewmodelGripCorrectionOverride(
-                                applicationSettings, weapon->id));
-        state.previewSettingsModal.viewmodelAttachmentLightingDefaults =
-                weapon->viewmodel.attachment.lighting;
-        state.previewSettingsModal.draftViewmodelAttachmentLighting =
-                ResolveFpsViewmodelAttachmentLighting(
-                        weapon->viewmodel.attachment.lighting,
-                        FindFpsViewmodelAttachmentLightingOverride(
-                                applicationSettings, weapon->id));
-        state.previewSettingsModal.weaponFiringDefaults = weapon->firing;
-        state.previewSettingsModal.draftWeaponFiring =
-                ResolveFpsWeaponFiringDefinition(
-                        weapon->firing,
-                        FindFpsWeaponFiringOverride(
-                                applicationSettings, weapon->id));
-    }
 }
 
 void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
@@ -6793,104 +6953,8 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
             || draftHdrBloom.softKnee != currentHdrBloom.softKnee
             || draftHdrBloom.intensity != currentHdrBloom.intensity
             || draftHdrBloom.radius != currentHdrBloom.radius;
-    const FpsWeaponDefinition* weapon = FindFpsWeaponDefinition(
-            weaponRegistry,
-            state.previewSettingsModal.weaponId.empty()
-                    ? weaponRegistry.initialWeaponId
-                    : state.previewSettingsModal.weaponId);
-    const FpsViewmodelPresentation draftViewmodel = ClampFpsViewmodelPresentation(
-            state.previewSettingsModal.draftViewmodel);
-    const FpsViewmodelPresentation currentViewmodel = weapon != nullptr
-            ? ResolveFpsViewmodelPresentation(weapon->viewmodel.presentation,
-                    FindFpsViewmodelOverride(applicationSettings, weapon->id))
-            : FpsViewmodelPresentation{};
-    const FpsViewmodelPresentationOverride viewmodelOverride = weapon != nullptr
-            ? BuildFpsViewmodelOverride(weapon->viewmodel.presentation, draftViewmodel)
-            : FpsViewmodelPresentationOverride{};
-    const bool viewmodelChanged = weapon != nullptr
-            && !FpsViewmodelOverrideEmpty(
-                    BuildFpsViewmodelOverride(currentViewmodel, draftViewmodel));
-    const FpsViewmodelHolsterTransition draftHolsterTransition =
-            ClampFpsViewmodelHolsterTransition(
-                    state.previewSettingsModal
-                            .draftViewmodelHolsterTransition);
-    const FpsViewmodelHolsterTransition currentHolsterTransition =
-            weapon != nullptr
-            ? ResolveFpsViewmodelHolsterTransition(
-                    weapon->viewmodel.holsterTransition,
-                    FindFpsViewmodelHolsterTransitionOverride(
-                            applicationSettings,
-                            weapon->id))
-            : FpsViewmodelHolsterTransition{};
-    const FpsViewmodelHolsterTransitionOverride holsterTransitionOverride =
-            weapon != nullptr
-            ? BuildFpsViewmodelHolsterTransitionOverride(
-                    weapon->viewmodel.holsterTransition,
-                    draftHolsterTransition)
-            : FpsViewmodelHolsterTransitionOverride{};
-    const bool holsterTransitionChanged = weapon != nullptr
-            && !FpsViewmodelHolsterTransitionOverrideEmpty(
-                    BuildFpsViewmodelHolsterTransitionOverride(
-                            currentHolsterTransition,
-                            draftHolsterTransition));
-    const FpsViewmodelGripCorrection draftGrip =
-            ClampFpsViewmodelGripCorrection(
-                    state.previewSettingsModal.draftViewmodelGrip);
-    const FpsViewmodelGripCorrection currentGrip = weapon != nullptr
-            ? ResolveFpsViewmodelGripCorrection(
-                    weapon->viewmodel.attachment.gripCorrection,
-                    FindFpsViewmodelGripCorrectionOverride(
-                            applicationSettings, weapon->id))
-            : FpsViewmodelGripCorrection{};
-    const FpsViewmodelGripCorrectionOverride gripOverride = weapon != nullptr
-            ? BuildFpsViewmodelGripCorrectionOverride(
-                    weapon->viewmodel.attachment.gripCorrection,
-                    draftGrip)
-            : FpsViewmodelGripCorrectionOverride{};
-    const bool gripChanged = weapon != nullptr
-            && !FpsViewmodelGripCorrectionOverrideEmpty(
-                    BuildFpsViewmodelGripCorrectionOverride(
-                            currentGrip, draftGrip));
-    const FpsViewmodelAttachmentLighting draftAttachmentLighting =
-            ClampFpsViewmodelAttachmentLighting(
-                    state.previewSettingsModal
-                            .draftViewmodelAttachmentLighting);
-    const FpsViewmodelAttachmentLighting currentAttachmentLighting =
-            weapon != nullptr
-            ? ResolveFpsViewmodelAttachmentLighting(
-                    weapon->viewmodel.attachment.lighting,
-                    FindFpsViewmodelAttachmentLightingOverride(
-                            applicationSettings, weapon->id))
-            : FpsViewmodelAttachmentLighting{};
-    const FpsViewmodelAttachmentLightingOverride attachmentLightingOverride =
-            weapon != nullptr
-            ? BuildFpsViewmodelAttachmentLightingOverride(
-                    weapon->viewmodel.attachment.lighting,
-                    draftAttachmentLighting)
-            : FpsViewmodelAttachmentLightingOverride{};
-    const bool attachmentLightingChanged = weapon != nullptr
-            && !FpsViewmodelAttachmentLightingOverrideEmpty(
-                    BuildFpsViewmodelAttachmentLightingOverride(
-                            currentAttachmentLighting,
-                            draftAttachmentLighting));
-    const FpsWeaponFiringDefinition draftFiring =
-            ClampFpsWeaponFiringDefinition(
-                    state.previewSettingsModal.draftWeaponFiring);
-    const FpsWeaponFiringDefinition currentFiring = weapon != nullptr
-            ? ResolveFpsWeaponFiringDefinition(
-                    weapon->firing,
-                    FindFpsWeaponFiringOverride(applicationSettings, weapon->id))
-            : FpsWeaponFiringDefinition{};
-    const FpsWeaponFiringOverride firingOverride = weapon != nullptr
-            ? BuildFpsWeaponFiringOverride(weapon->firing, draftFiring)
-            : FpsWeaponFiringOverride{};
-    const bool firingChanged = weapon != nullptr
-            && !FpsWeaponFiringOverrideEmpty(
-                    BuildFpsWeaponFiringOverride(currentFiring, draftFiring));
     if (!previewChanged && !skyChanged && !directionalChanged && !fogChanged
-            && !objectProbeSettingsChanged && !viewmodelChanged && !gripChanged
-            && !holsterTransitionChanged && !attachmentLightingChanged
-            && !firingChanged && !bloomChanged) {
+            && !objectProbeSettingsChanged && !bloomChanged) {
         ResetSectorPreviewSettingsModalPreservingView(
                 state.previewSettingsModal);
         statusText = "Preview settings unchanged";
@@ -6908,62 +6972,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     ApplySectorPreviewFogSettings(TopologyMap(), draftFogSettings);
     ApplySectorPreviewObjectProbeSettings(TopologyMap(), draftLightmapSettings);
     applicationSettings.hdrBloom = draftHdrBloom;
-    const bool weaponApplicationSettingsChanged = viewmodelChanged
-            || holsterTransitionChanged || gripChanged
-            || attachmentLightingChanged || firingChanged;
-    if (weaponApplicationSettingsChanged && weapon != nullptr) {
-        if (viewmodelChanged) {
-            if (FpsViewmodelOverrideEmpty(viewmodelOverride)) {
-                ClearFpsViewmodelOverride(applicationSettings, weapon->id);
-            } else {
-                SetFpsViewmodelOverride(
-                        applicationSettings, weapon->id, viewmodelOverride);
-            }
-        }
-        if (holsterTransitionChanged) {
-            if (FpsViewmodelHolsterTransitionOverrideEmpty(
-                        holsterTransitionOverride)) {
-                ClearFpsViewmodelHolsterTransitionOverride(
-                        applicationSettings,
-                        weapon->id);
-            } else {
-                SetFpsViewmodelHolsterTransitionOverride(
-                        applicationSettings,
-                        weapon->id,
-                        holsterTransitionOverride);
-            }
-        }
-        if (gripChanged) {
-            if (FpsViewmodelGripCorrectionOverrideEmpty(gripOverride)) {
-                ClearFpsViewmodelGripCorrectionOverride(
-                        applicationSettings, weapon->id);
-            } else {
-                SetFpsViewmodelGripCorrectionOverride(
-                        applicationSettings, weapon->id, gripOverride);
-            }
-        }
-        if (attachmentLightingChanged) {
-            if (FpsViewmodelAttachmentLightingOverrideEmpty(
-                        attachmentLightingOverride)) {
-                ClearFpsViewmodelAttachmentLightingOverride(
-                        applicationSettings, weapon->id);
-            } else {
-                SetFpsViewmodelAttachmentLightingOverride(
-                        applicationSettings,
-                        weapon->id,
-                        attachmentLightingOverride);
-            }
-        }
-        if (firingChanged) {
-            if (FpsWeaponFiringOverrideEmpty(firingOverride)) {
-                ClearFpsWeaponFiringOverride(applicationSettings, weapon->id);
-            } else {
-                SetFpsWeaponFiringOverride(
-                        applicationSettings, weapon->id, firingOverride);
-            }
-        }
-    }
-    if (weaponApplicationSettingsChanged || bloomChanged) {
+    if (bloomChanged) {
         std::string saveError;
         if (!SaveFpsApplicationSettings(applicationSettingsPath, applicationSettings, &saveError)) {
             TraceLog(LOG_WARNING, "Could not persist application settings: %s", saveError.c_str());
@@ -7036,6 +7045,39 @@ SectorEditorNpcEditorService SectorEditor::BuildNpcEditorService()
             std::filesystem::path(ASSETS_PATH) / "npcs"};
 }
 
+SectorEditorWeaponEditorService SectorEditor::BuildWeaponEditorService()
+{
+    return SectorEditorWeaponEditorService{
+            weaponEditorState,
+            weaponEditorSessionState,
+            weaponRegistry,
+            applicationSettings,
+            statusText,
+            weaponRegistryPath,
+            applicationSettingsPath};
+}
+
+void SectorEditor::OpenWeaponEditor(bool fromPreview3D)
+{
+    const FpsWeaponDefinition* slotOneWeapon =
+            FindFpsWeaponDefinitionForSlot(
+                    weaponRegistry,
+                    MinFpsWeaponSlot);
+    const std::string activeWeaponId = fromPreview3D
+            ? fpsPlayer.State().activeWeaponId
+            : (slotOneWeapon != nullptr
+                    ? slotOneWeapon->id
+                    : std::string{});
+    const FpsViewmodelEquipState equipState = fpsPlayer.State().equipState;
+    const float equipProgress = fpsPlayer.State().equipProgress;
+    if (BuildWeaponEditorService().Open(activeWeaponId, fromPreview3D)
+            && fromPreview3D) {
+        weaponEditorState.originalEquipState = equipState;
+        weaponEditorState.originalEquipProgress = equipProgress;
+        EquipFpsViewmodelForWeaponEditing(fpsPlayer.State());
+    }
+}
+
 void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)
 {
     CloseAddMapTextureModal(assets);
@@ -7071,6 +7113,59 @@ bool SectorEditor::AddSelectedMapTexture(engine::AssetManager& assets)
     statusText = TextFormat("%s texture %s", result.replacing ? "Updated" : "Added", result.textureId.c_str());
     CloseAddMapTextureModal(assets);
     return true;
+}
+
+void SectorEditor::ApplyAssetPrune(engine::AssetManager& assets)
+{
+    const SectorEditorAssetPruneOptions options{
+            state.assetPruneModal.pruneTextures,
+            state.assetPruneModal.pruneSounds};
+    const SectorEditorAssetPruneResult result = PruneUnusedSectorEditorAssets(
+            AuthoringGraph(),
+            TopologyMap(),
+            options);
+
+    if (result.removedTextureCount > 0) {
+        SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
+        textureCatalog.RefreshDefaultTextureIds();
+        textureCatalog.RefreshTextureHandles(assets);
+    }
+    if (result.removedSoundCount > 0) {
+        BuildSoundService().RefreshCatalogHandles();
+    }
+
+    const std::size_t removedCount =
+            result.removedTextureCount + result.removedSoundCount;
+    if (removedCount > 0) {
+        Lifecycle().topologyDocumentDirty = true;
+        Lifecycle().hasUnsavedChanges = true;
+    }
+
+    if (options.pruneTextures && options.pruneSounds) {
+        statusText = removedCount == 0
+                ? "No unused map textures or sounds found"
+                : TextFormat(
+                        "Pruned %zu texture%s and %zu sound%s",
+                        result.removedTextureCount,
+                        result.removedTextureCount == 1 ? "" : "s",
+                        result.removedSoundCount,
+                        result.removedSoundCount == 1 ? "" : "s");
+    } else if (options.pruneTextures) {
+        statusText = result.removedTextureCount == 0
+                ? "No unused map textures found"
+                : TextFormat(
+                        "Pruned %zu texture%s",
+                        result.removedTextureCount,
+                        result.removedTextureCount == 1 ? "" : "s");
+    } else {
+        statusText = result.removedSoundCount == 0
+                ? "No unused map sounds found"
+                : TextFormat(
+                        "Pruned %zu sound%s",
+                        result.removedSoundCount,
+                        result.removedSoundCount == 1 ? "" : "s");
+    }
+    CloseSectorEditorAssetPruneModal(state.assetPruneModal);
 }
 
 bool SectorEditor::PointInTopologyLoop(Vector2 mapPoint, const SectorTopologyLoop& loop) const

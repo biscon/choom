@@ -352,6 +352,7 @@ void ValidateFiring(
 {
     const float values[] = {
             value.shotIntervalSeconds, value.maximumRangeWorld,
+            value.pellets.spreadHalfAngleDegrees,
             value.recoil.translationImpulse.x, value.recoil.translationImpulse.y,
             value.recoil.translationImpulse.z,
             value.recoil.rotationImpulseDegrees.x,
@@ -398,6 +399,12 @@ void ValidateFiring(
     }
     if (value.shotIntervalSeconds <= 0.0f || value.maximumRangeWorld <= 0.0f) {
         Fail(context + " shot interval and maximum range must be greater than zero");
+    }
+    if (value.pellets.count < 1
+            || value.pellets.count > MaxFpsWeaponPellets
+            || value.pellets.spreadHalfAngleDegrees < 0.0f
+            || value.pellets.spreadHalfAngleDegrees > 45.0f) {
+        Fail(context + ".pellets contains an invalid count or spread half-angle");
     }
     if (value.recoil.rollVariationDegrees < 0.0f
             || value.recoil.springFrequencyHz <= 0.0f
@@ -476,6 +483,15 @@ FpsWeaponFiringDefinition ReadFiring(const Json& object, const std::string& cont
     FpsWeaponFiringDefinition result;
     result.shotIntervalSeconds = Number(object, "shotIntervalSeconds", context);
     result.maximumRangeWorld = Number(object, "maximumRangeWorld", context);
+    const auto pellets = object.find("pellets");
+    if (pellets != object.end()) {
+        const std::string pelletsContext = context + ".pellets";
+        if (!pellets->is_object()) Fail(pelletsContext + " must be an object");
+        result.pellets.enabled = Boolean(*pellets, "enabled", pelletsContext);
+        result.pellets.count = Integer(*pellets, "count", pelletsContext);
+        result.pellets.spreadHalfAngleDegrees = Number(
+                *pellets, "spreadHalfAngleDegrees", pelletsContext);
+    }
     const auto shootSound = object.find("shootSound");
     if (shootSound != object.end()) {
         if (!shootSound->is_string()) {
@@ -690,6 +706,162 @@ bool Same(Vector3 a, Vector3 b) { return NearlyEqual(a.x,b.x) && NearlyEqual(a.y
 
 Json Vec(Vector3 value) { return Json::array({value.x, value.y, value.z}); }
 
+Json ColorValue(Color value)
+{
+    return Json{{"r", value.r}, {"g", value.g}, {"b", value.b}, {"a", value.a}};
+}
+
+Json MaterialOverrideValue(const FpsViewmodelMaterialOverride& value)
+{
+    return Json{
+            {"metallicFactor", value.metallicFactor},
+            {"roughnessFactor", value.roughnessFactor},
+            {"useMetallicRoughnessTexture", value.useMetallicRoughnessTexture}};
+}
+
+Json ImpactParticlesValue(const FpsWeaponImpactParticlesDefinition& value)
+{
+    return Json{
+            {"enabled", value.enabled},
+            {"particleCount", value.particleCount},
+            {"sizeScale", value.sizeScale},
+            {"intensity", value.intensity}};
+}
+
+Json FiringValue(const FpsWeaponFiringDefinition& value)
+{
+    Json firing{
+            {"shotIntervalSeconds", value.shotIntervalSeconds},
+            {"maximumRangeWorld", value.maximumRangeWorld},
+            {"recoil", {
+                    {"translationImpulse", Vec(value.recoil.translationImpulse)},
+                    {"rotationImpulseDegrees", Vec(value.recoil.rotationImpulseDegrees)},
+                    {"rollVariationDegrees", value.recoil.rollVariationDegrees},
+                    {"springFrequencyHz", value.recoil.springFrequencyHz},
+                    {"dampingRatio", value.recoil.dampingRatio},
+                    {"maximumTranslation", Vec(value.recoil.maximumTranslation)},
+                    {"maximumRotationDegrees", Vec(value.recoil.maximumRotationDegrees)}}},
+            {"cameraRecoil", {
+                    {"enabled", value.cameraRecoil.enabled},
+                    {"pitchKickDegrees", value.cameraRecoil.pitchKickDegrees},
+                    {"pitchVariationDegrees", value.cameraRecoil.pitchVariationDegrees},
+                    {"yawVariationDegrees", value.cameraRecoil.yawVariationDegrees},
+                    {"rollVariationDegrees", value.cameraRecoil.rollVariationDegrees},
+                    {"springFrequencyHz", value.cameraRecoil.springFrequencyHz},
+                    {"springDampingRatio", value.cameraRecoil.springDampingRatio},
+                    {"maxPitchDegrees", value.cameraRecoil.maxPitchDegrees},
+                    {"maxYawDegrees", value.cameraRecoil.maxYawDegrees},
+                    {"maxRollDegrees", value.cameraRecoil.maxRollDegrees}}},
+            {"muzzleSocket", {
+                    {"position", Vec(value.muzzleSocket.position)},
+                    {"rotationDegrees", Vec(value.muzzleSocket.rotationDegrees)}}},
+            {"muzzleFlash", {
+                    {"enabled", value.muzzleFlash.enabled},
+                    {"lifetimeSeconds", value.muzzleFlash.lifetimeSeconds},
+                    {"sizeWorld", value.muzzleFlash.sizeWorld},
+                    {"sizeVariation", value.muzzleFlash.sizeVariation},
+                    {"irregularity", value.muzzleFlash.irregularity},
+                    {"forwardStretch", value.muzzleFlash.forwardStretch},
+                    {"minimumLobeCount", value.muzzleFlash.minimumLobeCount},
+                    {"maximumLobeCount", value.muzzleFlash.maximumLobeCount},
+                    {"rearSuppression", value.muzzleFlash.rearSuppression},
+                    {"coreColor", ColorValue(value.muzzleFlash.coreColor)},
+                    {"hotColor", ColorValue(value.muzzleFlash.hotColor)},
+                    {"warmColor", ColorValue(value.muzzleFlash.warmColor)},
+                    {"edgeColor", ColorValue(value.muzzleFlash.edgeColor)},
+                    {"edgeSoftness", value.muzzleFlash.edgeSoftness},
+                    {"radianceStrength", value.muzzleFlash.radianceStrength}}},
+            {"muzzleLight", {
+                    {"enabled", value.muzzleLight.enabled},
+                    {"color", ColorValue(value.muzzleLight.color)},
+                    {"intensity", value.muzzleLight.intensity},
+                    {"radiusWorld", value.muzzleLight.radiusWorld},
+                    {"lifetimeSeconds", value.muzzleLight.lifetimeSeconds},
+                    {"decayExponent", value.muzzleLight.decayExponent}}},
+            {"impact", {
+                    {"damage", value.impact.damage},
+                    {"staggerSeconds", value.impact.staggerSeconds},
+                    {"knockbackImpulseWorldPerSecond", value.impact.knockbackImpulseWorldPerSecond},
+                    {"blood", ImpactParticlesValue(value.impact.blood)},
+                    {"surfaceDebris", ImpactParticlesValue(value.impact.surfaceDebris)}}}};
+    const FpsWeaponPelletDefinition defaultPellets;
+    if (value.pellets.enabled != defaultPellets.enabled
+            || value.pellets.count != defaultPellets.count
+            || value.pellets.spreadHalfAngleDegrees
+                    != defaultPellets.spreadHalfAngleDegrees) {
+        firing["pellets"] = {
+                {"enabled", value.pellets.enabled},
+                {"count", value.pellets.count},
+                {"spreadHalfAngleDegrees",
+                        value.pellets.spreadHalfAngleDegrees}};
+    }
+    if (!value.shootSoundPath.empty()) {
+        firing["shootSound"] = value.shootSoundPath;
+    }
+    return firing;
+}
+
+Json WeaponValue(const FpsWeaponDefinition& value)
+{
+    Json viewmodel{
+            {"modelPath", value.viewmodel.modelPath},
+            {"idleAnimation", value.viewmodel.idleAnimation},
+            {"sourceFps", value.viewmodel.sourceFps},
+            {"firstFrame", value.viewmodel.firstFrame},
+            {"lastFrame", value.viewmodel.lastFrame},
+            {"playbackSpeed", value.viewmodel.playbackSpeed},
+            {"position", Vec(value.viewmodel.presentation.position)},
+            {"rotationDegrees", Vec(value.viewmodel.presentation.rotationDegrees)},
+            {"scale", value.viewmodel.presentation.scale},
+            {"verticalFovDegrees", value.viewmodel.presentation.verticalFovDegrees},
+            {"holsterTransition", {
+                    {"holsterDurationSeconds", value.viewmodel.holsterTransition.holsterDurationSeconds},
+                    {"unholsterDurationSeconds", value.viewmodel.holsterTransition.unholsterDurationSeconds},
+                    {"hiddenTranslation", Vec(value.viewmodel.holsterTransition.hiddenTranslation)},
+                    {"hiddenRotationDegrees", Vec(value.viewmodel.holsterTransition.hiddenRotationDegrees)}}},
+            {"brightnessAdjustment", value.viewmodel.brightnessAdjustment}};
+    if (value.viewmodel.materialOverride.enabled) {
+        viewmodel["materialOverride"] = MaterialOverrideValue(
+                value.viewmodel.materialOverride);
+    }
+    viewmodel["attachment"] = {
+            {"modelPath", value.viewmodel.attachment.modelPath},
+            {"boneName", value.viewmodel.attachment.boneName},
+            {"translation", Vec(value.viewmodel.attachment.gripCorrection.translation)},
+            {"rotationDegrees", Vec(value.viewmodel.attachment.gripCorrection.rotationDegrees)},
+            {"scale", value.viewmodel.attachment.gripCorrection.scale},
+            {"brightnessAdjustment", value.viewmodel.attachment.lighting.brightnessAdjustment},
+            {"materialOverride", MaterialOverrideValue(
+                    value.viewmodel.attachment.lighting.materialOverride)}};
+    Json weapon{
+            {"id", value.id},
+            {"crosshair", {
+                    {"enabled", value.crosshair.enabled},
+                    {"innerColor", ColorValue(value.crosshair.innerColor)},
+                    {"outlineColor", ColorValue(value.crosshair.outlineColor)},
+                    {"centerGapPixels", value.crosshair.centerGapPixels},
+                    {"segmentLengthPixels", value.crosshair.segmentLengthPixels},
+                    {"innerThicknessPixels", value.crosshair.innerThicknessPixels},
+                    {"outlineThicknessPixels", value.crosshair.outlineThicknessPixels}}},
+            {"firing", FiringValue(value.firing)},
+            {"viewmodel", std::move(viewmodel)}};
+    if (value.weaponSlot != 0) {
+        weapon["slot"] = value.weaponSlot;
+    }
+    return weapon;
+}
+
+Json RegistryValue(const FpsWeaponRegistry& registry)
+{
+    Json weapons = Json::array();
+    for (const FpsWeaponDefinition& weapon : registry.weapons) {
+        weapons.push_back(WeaponValue(weapon));
+    }
+    return Json{
+            {"version", registry.version},
+            {"weapons", std::move(weapons)}};
+}
+
 } // namespace
 
 const char* FpsShadowQualityName(FpsShadowQuality quality)
@@ -756,12 +928,18 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
         const Json root = Json::parse(text.begin(), text.end());
         if (!root.is_object()) Fail("weapon registry root must be an object");
         FpsWeaponRegistry parsed;
-        parsed.version = Integer(root, "version", "weapon registry");
-        if (parsed.version != 1) Fail("weapon registry version must be 1");
-        parsed.initialWeaponId = String(root, "initialWeaponId", "weapon registry");
+        const int sourceVersion = Integer(root, "version", "weapon registry");
+        if (sourceVersion != 1 && sourceVersion != 2) {
+            Fail("weapon registry version must be 1 or 2");
+        }
+        parsed.version = 2;
+        const std::string legacyInitialWeaponId = sourceVersion == 1
+                ? String(root, "initialWeaponId", "weapon registry")
+                : std::string{};
         const Json& weapons = Require(root, "weapons", "weapon registry");
         if (!weapons.is_array() || weapons.empty()) Fail("weapon registry.weapons must be a non-empty array");
         std::unordered_set<std::string> ids;
+        std::unordered_set<int> weaponSlots;
         for (size_t i = 0; i < weapons.size(); ++i) {
             const Json& object = weapons[i];
             const std::string context = "weapon registry.weapons[" + std::to_string(i) + "]";
@@ -769,6 +947,21 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
             FpsWeaponDefinition definition;
             definition.id = String(object, "id", context);
             if (!ids.insert(definition.id).second) Fail("duplicate weapon id '" + definition.id + "'");
+            if (sourceVersion == 2) {
+                const std::optional<int> weaponSlot = OptionalInteger(
+                        object, "slot", context);
+                if (weaponSlot
+                        && (*weaponSlot < MinFpsWeaponSlot
+                            || *weaponSlot > MaxFpsWeaponSlot)) {
+                    Fail(context + ".slot must be between 1 and 6 when present");
+                }
+                definition.weaponSlot = weaponSlot.value_or(0);
+                if (definition.weaponSlot != 0
+                        && !weaponSlots.insert(definition.weaponSlot).second) {
+                    Fail("duplicate weapon slot "
+                            + std::to_string(definition.weaponSlot));
+                }
+            }
             const auto crosshair = object.find("crosshair");
             if (crosshair != object.end()) {
                 definition.crosshair = ReadCrosshair(
@@ -841,8 +1034,18 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
             }
             parsed.weapons.push_back(std::move(definition));
         }
-        if (!FindFpsWeaponDefinition(parsed, parsed.initialWeaponId)) {
-            Fail("initial weapon id '" + parsed.initialWeaponId + "' has no definition");
+        if (sourceVersion == 1) {
+            auto legacyInitial = std::find_if(
+                    parsed.weapons.begin(),
+                    parsed.weapons.end(),
+                    [&legacyInitialWeaponId](const FpsWeaponDefinition& weapon) {
+                        return weapon.id == legacyInitialWeaponId;
+                    });
+            if (legacyInitial == parsed.weapons.end()) {
+                Fail("initial weapon id '" + legacyInitialWeaponId
+                        + "' has no definition");
+            }
+            legacyInitial->weaponSlot = MinFpsWeaponSlot;
         }
         output = std::move(parsed);
         SetError(error, {});
@@ -853,6 +1056,44 @@ bool ParseFpsWeaponRegistry(std::string_view text, FpsWeaponRegistry& output, st
     }
 }
 
+FpsWeaponDefinition MakeDefaultFpsWeaponDefinition()
+{
+    FpsWeaponDefinition definition;
+    definition.id = "new_weapon";
+    definition.viewmodel.attachment.lighting.materialOverride.enabled = true;
+    return definition;
+}
+
+bool SerializeFpsWeaponRegistryJson(
+        const FpsWeaponRegistry& registry,
+        std::string& outJson,
+        std::string* error)
+{
+    try {
+        const std::string text = RegistryValue(registry).dump(2) + '\n';
+        FpsWeaponRegistry validated;
+        std::string validationError;
+        if (!ParseFpsWeaponRegistry(text, validated, &validationError)) {
+            SetError(error, validationError);
+            return false;
+        }
+        outJson = text;
+        SetError(error, {});
+        return true;
+    } catch (const std::exception& exception) {
+        SetError(error, exception.what());
+        return false;
+    }
+}
+
+bool ValidateFpsWeaponRegistry(
+        const FpsWeaponRegistry& registry,
+        std::string* error)
+{
+    std::string ignored;
+    return SerializeFpsWeaponRegistryJson(registry, ignored, error);
+}
+
 bool LoadFpsWeaponRegistry(const std::string& path, FpsWeaponRegistry& output, std::string* error)
 {
     std::ifstream input(path);
@@ -861,11 +1102,79 @@ bool LoadFpsWeaponRegistry(const std::string& path, FpsWeaponRegistry& output, s
     return ParseFpsWeaponRegistry(text.str(), output, error);
 }
 
+bool SaveFpsWeaponRegistry(
+        const std::string& path,
+        const FpsWeaponRegistry& registry,
+        std::string* error)
+{
+    std::string text;
+    if (!SerializeFpsWeaponRegistryJson(registry, text, error)) return false;
+    std::ofstream output(path, std::ios::trunc);
+    if (!output) {
+        SetError(error, "could not write weapon registry: " + path);
+        return false;
+    }
+    output << text;
+    if (!output) {
+        SetError(error, "failed writing weapon registry: " + path);
+        return false;
+    }
+    SetError(error, {});
+    return true;
+}
+
 const FpsWeaponDefinition* FindFpsWeaponDefinition(const FpsWeaponRegistry& registry, std::string_view id)
 {
     const auto it = std::find_if(registry.weapons.begin(), registry.weapons.end(),
             [id](const FpsWeaponDefinition& value) { return value.id == id; });
     return it == registry.weapons.end() ? nullptr : &*it;
+}
+
+const FpsWeaponDefinition* FindFpsWeaponDefinitionForSlot(
+        const FpsWeaponRegistry& registry,
+        int weaponSlot)
+{
+    if (weaponSlot < MinFpsWeaponSlot || weaponSlot > MaxFpsWeaponSlot) {
+        return nullptr;
+    }
+    const auto it = std::find_if(
+            registry.weapons.begin(),
+            registry.weapons.end(),
+            [weaponSlot](const FpsWeaponDefinition& weapon) {
+                return weapon.weaponSlot == weaponSlot;
+            });
+    return it == registry.weapons.end() ? nullptr : &*it;
+}
+
+int FpsWeaponSlotFromKey(int key)
+{
+    if (key < KEY_ONE || key > KEY_SIX) {
+        return 0;
+    }
+    return key - KEY_ONE + MinFpsWeaponSlot;
+}
+
+void ApplyFpsApplicationWeaponOverrides(
+        FpsWeaponRegistry& registry,
+        const FpsApplicationSettings& settings)
+{
+    for (FpsWeaponDefinition& weapon : registry.weapons) {
+        weapon.viewmodel.presentation = ResolveFpsViewmodelPresentation(
+                weapon.viewmodel.presentation,
+                FindFpsViewmodelOverride(settings, weapon.id));
+        weapon.viewmodel.holsterTransition = ResolveFpsViewmodelHolsterTransition(
+                weapon.viewmodel.holsterTransition,
+                FindFpsViewmodelHolsterTransitionOverride(settings, weapon.id));
+        weapon.viewmodel.attachment.gripCorrection = ResolveFpsViewmodelGripCorrection(
+                weapon.viewmodel.attachment.gripCorrection,
+                FindFpsViewmodelGripCorrectionOverride(settings, weapon.id));
+        weapon.viewmodel.attachment.lighting = ResolveFpsViewmodelAttachmentLighting(
+                weapon.viewmodel.attachment.lighting,
+                FindFpsViewmodelAttachmentLightingOverride(settings, weapon.id));
+        weapon.firing = ResolveFpsWeaponFiringDefinition(
+                weapon.firing,
+                FindFpsWeaponFiringOverride(settings, weapon.id));
+    }
 }
 
 bool ParseFpsApplicationSettings(std::string_view text, FpsApplicationSettings& output, std::string* error)
@@ -1576,7 +1885,9 @@ bool SaveFpsApplicationSettings(const std::string& path, const FpsApplicationSet
         if (!firing.empty()) value["firing"] = std::move(firing);
         if (!value.empty()) overrides[entry.weaponId] = std::move(value);
     }
-    root["viewmodelOverrides"] = std::move(overrides);
+    if (!overrides.empty()) {
+        root["viewmodelOverrides"] = std::move(overrides);
+    }
     std::ofstream output(path, std::ios::trunc);
     if (!output) { SetError(error, "could not write application settings: " + path); return false; }
     output << root.dump(2) << '\n';
@@ -2144,6 +2455,12 @@ FpsWeaponFiringDefinition ClampFpsWeaponFiringDefinition(
 {
     value.shotIntervalSeconds = std::clamp(value.shotIntervalSeconds, 0.03f, 5.0f);
     value.maximumRangeWorld = std::clamp(value.maximumRangeWorld, 1.0f, 10000.0f);
+    value.pellets.count = std::clamp(
+            value.pellets.count, 1, MaxFpsWeaponPellets);
+    value.pellets.spreadHalfAngleDegrees = std::isfinite(
+            value.pellets.spreadHalfAngleDegrees)
+            ? std::clamp(value.pellets.spreadHalfAngleDegrees, 0.0f, 45.0f)
+            : FpsWeaponPelletDefinition{}.spreadHalfAngleDegrees;
     const auto clampVector = [](Vector3& vector, float minimum, float maximum) {
         vector.x = std::clamp(vector.x, minimum, maximum);
         vector.y = std::clamp(vector.y, minimum, maximum);

@@ -57,8 +57,8 @@ public:
             const SectorCollisionWorld* collisionWorld,
             Vector3 rayOrigin,
             Vector3 rayDirection,
-            float maximumDistance,
-            const FpsWeaponImpactDefinition& impact,
+            uint64_t shotSequence,
+            const FpsWeaponFiringDefinition& firing,
             FpsShotResult& outShot);
 
     void RenderShadowMaps(engine::EngineContext& context);

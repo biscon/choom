@@ -3,6 +3,10 @@
   "topology": "authoringGraph",
   "coordSubdivisions": 16,
   "textures": {
+    "beige_wall_001": {
+      "path": "assets/images/hires/beige_wall_001.png",
+      "filter": "anisotropic8x"
+    },
     "biker_chick": {
       "path": "assets/images/biker_chick.png",
       "filter": "anisotropic8x"
@@ -19,12 +23,20 @@
       "path": "assets/images/floors/concrete_floor1.png",
       "filter": "anisotropic8x"
     },
+    "dark_wooden_planks": {
+      "path": "assets/images/hires/dark_wooden_planks.png",
+      "filter": "anisotropic8x"
+    },
     "dirty_gray_concrete_wall_512": {
       "path": "assets/images/walls/dirty_gray_concrete_wall_512.png",
       "filter": "anisotropic8x"
     },
     "dirty_office_wall_baseboard_512": {
       "path": "assets/images/walls/dirty_office_wall_baseboard_512.png",
+      "filter": "anisotropic8x"
+    },
+    "distressed_painted_planks": {
+      "path": "assets/images/hires/distressed_painted_planks.png",
       "filter": "anisotropic8x"
     },
     "floor": {
@@ -75,6 +87,18 @@
       "path": "assets/images/hub/metal_grate_decal_256.png",
       "filter": "anisotropic8x"
     },
+    "painted_plaster_wall": {
+      "path": "assets/images/hires/painted_plaster_wall.png",
+      "filter": "anisotropic8x"
+    },
+    "peeling_painted_wall": {
+      "path": "assets/images/hires/peeling_painted_wall.png",
+      "filter": "anisotropic8x"
+    },
+    "plastered_wall_02": {
+      "path": "assets/images/hires/plastered_wall_02.png",
+      "filter": "anisotropic8x"
+    },
     "riser_01_512": {
       "path": "assets/images/riser_01_512.png",
       "filter": "anisotropic8x"
@@ -101,6 +125,10 @@
     },
     "wall": {
       "path": "assets/images/wall.png",
+      "filter": "anisotropic8x"
+    },
+    "white_stucco": {
+      "path": "assets/images/hires/white_stucco.png",
       "filter": "anisotropic8x"
     },
     "wood_beam_512x128": {
@@ -473,8 +501,8 @@
           "lineDefId": 96,
           "frontSectorId": 24,
           "backSectorId": 25,
-          "frontSideDefId": 326,
-          "backSideDefId": 327,
+          "frontSideDefId": 344,
+          "backSideDefId": 345,
           "endpointA": [
             -704,
             1296
@@ -512,8 +540,8 @@
           "lineDefId": 119,
           "frontSectorId": 29,
           "backSectorId": 31,
-          "frontSideDefId": 296,
-          "backSideDefId": 316,
+          "frontSideDefId": 314,
+          "backSideDefId": 334,
           "endpointA": [
             -992,
             1456
@@ -581,7 +609,7 @@
           "frontSectorId": 33,
           "backSectorId": 26,
           "frontSideDefId": 210,
-          "backSideDefId": 225,
+          "backSideDefId": 231,
           "endpointA": [
             -2560,
             1376
@@ -1734,6 +1762,22 @@
         -152.0,
         -14.800000190734863,
         32.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 104,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/furniture/horse_painting.glb",
+        "rotationXDegrees": 180.0,
+        "heightOffsetWorld": 1.75,
+        "scale": 2.5
+      },
+      "position": [
+        -112.0,
+        0.0,
+        51.0
       ],
       "yawDegrees": 0.0
     }
@@ -3420,6 +3464,23 @@
           }
         }
       }
+    },
+    {
+      "id": 55,
+      "position": [
+        -296.0,
+        -2.6000003814697266,
+        -24.0
+      ],
+      "radius": 64.0,
+      "sourceRadius": 2.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 242,
+        "a": 255
+      }
     }
   ],
   "staticSpotLights": [
@@ -4084,6 +4145,22 @@
           }
         }
       }
+    },
+    {
+      "id": 6,
+      "position": [
+        -200.0,
+        -2.6000003814697266,
+        -48.0
+      ],
+      "radius": 64.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 242,
+        "a": 255
+      }
     }
   ],
   "dynamicSpotLights": [
@@ -4375,7 +4452,7 @@
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "qualityPreset": "draft"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -4453,7 +4530,7 @@
     "height": 2048,
     "version": 1,
     "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "c836c9c3a3c23a02",
+    "sourceHash": "16d362553b92f615",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -4461,20 +4538,20 @@
         0.0
       ],
       "rgbMax": [
-        2.2421875,
-        1.462890625,
-        1.396484375
+        2.19921875,
+        1.4501953125,
+        1.3837890625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 8388608,
-      "rgbChannelsAboveOne": 1137
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 176
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "c836c9c3a3c23a02",
-      "count": 2221,
+      "sourceHash": "16d362553b92f615",
+      "count": 2519,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
       "probeUpperHeightWorld": 1.5,
@@ -4486,31 +4563,24 @@
           0.0
         ],
         "rgbMax": [
-          2.19494366645813,
-          1.9382474422454834,
-          1.8512030839920044
+          2.204270601272583,
+          1.935850739479065,
+          1.8489267826080322
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
-        "sampleCount": 13326,
-        "rgbChannelsAboveOne": 32
+        "sampleCount": 15114,
+        "rgbChannelsAboveOne": 35
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "c836c9c3a3c23a02",
-      "modelCount": 36,
-      "objectCount": 87,
+      "sourceHash": "16d362553b92f615",
+      "modelCount": 37,
+      "objectCount": 88,
       "format": "staticModelUvRemapF32LE"
-    },
-    "additionalAtlases": [
-      {
-        "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      }
-    ]
+    }
   },
   "editorSettings": {
     "gridSize": 1
@@ -5576,6 +5646,66 @@
         "id": 225,
         "x": -2112,
         "y": 592
+      },
+      {
+        "id": 226,
+        "x": -2432,
+        "y": -720
+      },
+      {
+        "id": 227,
+        "x": -2464,
+        "y": -720
+      },
+      {
+        "id": 228,
+        "x": -2464,
+        "y": -560
+      },
+      {
+        "id": 229,
+        "x": -2432,
+        "y": -560
+      },
+      {
+        "id": 230,
+        "x": -2464,
+        "y": -784
+      },
+      {
+        "id": 231,
+        "x": -2688,
+        "y": -784
+      },
+      {
+        "id": 232,
+        "x": -2688,
+        "y": -496
+      },
+      {
+        "id": 233,
+        "x": -2464,
+        "y": -496
+      },
+      {
+        "id": 234,
+        "x": -2688,
+        "y": -1152
+      },
+      {
+        "id": 235,
+        "x": -4992,
+        "y": -1152
+      },
+      {
+        "id": 236,
+        "x": -4992,
+        "y": -128
+      },
+      {
+        "id": 237,
+        "x": -2688,
+        "y": -128
       }
     ],
     "lines": [
@@ -6776,11 +6906,6 @@
         "endVertexId": 213
       },
       {
-        "id": 355,
-        "startVertexId": 213,
-        "endVertexId": 214
-      },
-      {
         "id": 357,
         "startVertexId": 214,
         "endVertexId": 215
@@ -6849,6 +6974,86 @@
         "id": 374,
         "startVertexId": 225,
         "endVertexId": 220
+      },
+      {
+        "id": 376,
+        "startVertexId": 226,
+        "endVertexId": 214
+      },
+      {
+        "id": 377,
+        "startVertexId": 226,
+        "endVertexId": 227
+      },
+      {
+        "id": 378,
+        "startVertexId": 227,
+        "endVertexId": 228
+      },
+      {
+        "id": 379,
+        "startVertexId": 213,
+        "endVertexId": 229
+      },
+      {
+        "id": 380,
+        "startVertexId": 229,
+        "endVertexId": 226
+      },
+      {
+        "id": 381,
+        "startVertexId": 228,
+        "endVertexId": 229
+      },
+      {
+        "id": 382,
+        "startVertexId": 227,
+        "endVertexId": 230
+      },
+      {
+        "id": 383,
+        "startVertexId": 230,
+        "endVertexId": 231
+      },
+      {
+        "id": 384,
+        "startVertexId": 231,
+        "endVertexId": 232
+      },
+      {
+        "id": 385,
+        "startVertexId": 232,
+        "endVertexId": 233
+      },
+      {
+        "id": 386,
+        "startVertexId": 233,
+        "endVertexId": 228
+      },
+      {
+        "id": 387,
+        "startVertexId": 231,
+        "endVertexId": 234
+      },
+      {
+        "id": 388,
+        "startVertexId": 234,
+        "endVertexId": 235
+      },
+      {
+        "id": 389,
+        "startVertexId": 235,
+        "endVertexId": 236
+      },
+      {
+        "id": 390,
+        "startVertexId": 236,
+        "endVertexId": 237
+      },
+      {
+        "id": 391,
+        "startVertexId": 237,
+        "endVertexId": 232
       }
     ],
     "lineSides": [
@@ -14021,49 +14226,6 @@
         }
       },
       {
-        "lineId": 355,
-        "side": "front",
-        "wall": {
-          "textureId": "dirty_office_wall_baseboard_512",
-          "uv": {
-            "scale": [
-              1.0,
-              0.5333333611488342
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "lower": {
-          "textureId": "dirty_office_wall_baseboard_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        },
-        "upper": {
-          "textureId": "dirty_office_wall_baseboard_512",
-          "uv": {
-            "scale": [
-              1.0,
-              1.0
-            ],
-            "offset": [
-              0.0,
-              0.0
-            ]
-          }
-        }
-      },
-      {
         "lineId": 357,
         "side": "front",
         "wall": {
@@ -14653,6 +14815,522 @@
         },
         "upper": {
           "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 376,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 378,
+        "side": "front",
+        "wall": {
+          "textureId": "worn_white_ceiling_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 379,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 380,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5333333611488342
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 382,
+        "side": "back",
+        "wall": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 383,
+        "side": "back",
+        "wall": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5925925970077515
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 384,
+        "side": "front",
+        "wall": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5
+            ],
+            "offset": [
+              0.0,
+              0.9377999901771545
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 385,
+        "side": "back",
+        "wall": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 386,
+        "side": "back",
+        "wall": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 387,
+        "side": "back",
+        "wall": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 388,
+        "side": "back",
+        "wall": {
+          "textureId": "peeling_painted_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              -0.9375
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "lineId": 391,
+        "side": "back",
+        "wall": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              0.5
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "lower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "upper": {
+          "textureId": "dirty_office_wall_baseboard_512",
           "uv": {
             "scale": [
               1.0,
@@ -18707,6 +19385,234 @@
           }
         },
         "footstepSet": "Parquet_Floor_Mono"
+      },
+      {
+        "id": 53,
+        "name": "Sector 53",
+        "x": -2449,
+        "y": -702,
+        "floorZ": -14.5,
+        "ceilingZ": 6.650000095367432,
+        "floorTextureId": "floor",
+        "ceilingTextureId": "ceiling",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.019999999552965164,
+        "defaultWall": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 54,
+        "name": "Sector 54",
+        "x": -2577,
+        "y": -669,
+        "floorZ": -15.0,
+        "ceilingZ": 12.0,
+        "floorTextureId": "worn_dark_red_carpet_512",
+        "ceilingTextureId": "white_stucco",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.03999999910593033,
+        "defaultWall": {
+          "textureId": "worn_white_ceiling_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "dirty_office_wall_baseboard_512",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "id": 55,
+        "name": "Sector 55",
+        "x": -4417,
+        "y": -706,
+        "floorZ": -17.0,
+        "ceilingZ": 15.0,
+        "floorTextureId": "dark_wooden_planks",
+        "ceilingTextureId": "worn_white_ceiling_512",
+        "floorUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ceilingUv": {
+          "scale": [
+            1.0,
+            1.0
+          ],
+          "offset": [
+            0.0,
+            0.0
+          ]
+        },
+        "ambientColor": {
+          "r": 255,
+          "g": 255,
+          "b": 255,
+          "a": 255
+        },
+        "ambientIntensity": 0.10000000149011612,
+        "defaultWall": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultLower": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "defaultUpper": {
+          "textureId": "painted_plaster_wall",
+          "uv": {
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "offset": [
+              0.0,
+              0.0
+            ]
+          }
+        }
       }
     ],
     "fogVolumes": [

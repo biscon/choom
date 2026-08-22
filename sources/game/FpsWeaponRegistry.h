@@ -16,6 +16,9 @@ namespace engine { class AssetManager; }
 namespace game {
 
 constexpr int MaxFpsMuzzleFlashLobes = 12;
+constexpr int MaxFpsWeaponPellets = 32;
+constexpr int MinFpsWeaponSlot = 1;
+constexpr int MaxFpsWeaponSlot = 6;
 
 struct FpsViewmodelPresentation {
     Vector3 position{0.0f, 0.0f, 0.0f};
@@ -136,9 +139,16 @@ struct FpsWeaponImpactDefinition {
     FpsWeaponImpactParticlesDefinition surfaceDebris;
 };
 
+struct FpsWeaponPelletDefinition {
+    bool enabled = false;
+    int count = 8;
+    float spreadHalfAngleDegrees = 6.0f;
+};
+
 struct FpsWeaponFiringDefinition {
     float shotIntervalSeconds = 0.18f;
     float maximumRangeWorld = 100.0f;
+    FpsWeaponPelletDefinition pellets;
     std::string shootSoundPath;
     engine::SoundHandle shootSound = engine::NullSoundHandle();
     FpsWeaponRecoilDefinition recoil;
@@ -165,14 +175,14 @@ struct FpsWeaponViewmodelDefinition {
 
 struct FpsWeaponDefinition {
     std::string id;
+    int weaponSlot = 0;
     FpsWeaponCrosshairDefinition crosshair;
     FpsWeaponFiringDefinition firing;
     FpsWeaponViewmodelDefinition viewmodel;
 };
 
 struct FpsWeaponRegistry {
-    int version = 1;
-    std::string initialWeaponId;
+    int version = 2;
     std::vector<FpsWeaponDefinition> weapons;
 };
 
@@ -316,16 +326,35 @@ bool ParseFpsWeaponRegistry(
         std::string_view jsonText,
         FpsWeaponRegistry& outRegistry,
         std::string* outError = nullptr);
+FpsWeaponDefinition MakeDefaultFpsWeaponDefinition();
+bool ValidateFpsWeaponRegistry(
+        const FpsWeaponRegistry& registry,
+        std::string* outError = nullptr);
+bool SerializeFpsWeaponRegistryJson(
+        const FpsWeaponRegistry& registry,
+        std::string& outJson,
+        std::string* outError = nullptr);
 bool LoadFpsWeaponRegistry(
         const std::string& path,
         FpsWeaponRegistry& outRegistry,
         std::string* outError = nullptr);
+bool SaveFpsWeaponRegistry(
+        const std::string& path,
+        const FpsWeaponRegistry& registry,
+        std::string* outError = nullptr);
+void ApplyFpsApplicationWeaponOverrides(
+        FpsWeaponRegistry& registry,
+        const FpsApplicationSettings& settings);
 void RequestFpsWeaponAudioAssets(
         engine::AssetManager& assets,
         FpsWeaponRegistry& registry);
 const FpsWeaponDefinition* FindFpsWeaponDefinition(
         const FpsWeaponRegistry& registry,
         std::string_view id);
+const FpsWeaponDefinition* FindFpsWeaponDefinitionForSlot(
+        const FpsWeaponRegistry& registry,
+        int weaponSlot);
+int FpsWeaponSlotFromKey(int key);
 
 bool ParseFpsApplicationSettings(
         std::string_view jsonText,
