@@ -2,6 +2,7 @@
 
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
+#include "sector_editor/SectorEditorAssetPruneModal.h"
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentModals.h"
@@ -22,6 +23,7 @@
 #include "sector_editor/preview/SectorEditorPreviewUvPanel.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
+#include "sector_editor/services/asset_pruning/SectorEditorAssetPruning.h"
 #include "sector_editor/services/sounds/SectorEditorSoundService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
@@ -832,6 +834,12 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (state.assetPruneModal.open) {
+        DrawAssetPruneModal(ui, config, input, assets, font);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (state.texturePicker.open) {
         DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
@@ -869,6 +877,7 @@ void SectorEditor::RenderUI(
     DrawSetAllModal(ui, config, input, assets, font);
     DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawAddMapSoundModal(ui, config, input, font);
+    DrawAssetPruneModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
     DrawSoundPickerModal(ui, config, input, font);
     DrawFootstepPickerModal(ui, config, input, assets, font);
@@ -880,6 +889,7 @@ void SectorEditor::RenderUI(
             || state.footstepPicker.open
             || state.addMapTexture.open
             || state.addMapSound.open
+            || state.assetPruneModal.open
             || npcEditorState.open
             || weaponEditorState.open
             || runtimeObjectEditingState.spritePicker.open
@@ -5036,6 +5046,11 @@ void SectorEditor::DrawToolsPanel(
         BuildSoundService().OpenAddModal();
     }
     y += rowH + gap;
+    if (engine::Button(ui, config, input, assets, "sector_editor_prune_assets", Rectangle{0.0f, y, contentW, rowH}, font, "Prune Assets")) {
+        OpenSectorEditorAssetPruneModal(state.assetPruneModal);
+        statusText = "Choose map asset categories to prune";
+    }
+    y += rowH + gap;
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_2d", Rectangle{0.0f, y, contentW, rowH}, font, "Settings")) {
         OpenPreviewSettingsModal();
     }
@@ -5328,6 +5343,26 @@ void SectorEditor::DrawAddMapSoundModal(
         engine::FontHandle font)
 {
     BuildSoundService().DrawAddModal(ui, config, input, font);
+}
+
+void SectorEditor::DrawAssetPruneModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font)
+{
+    const SectorEditorAssetPruneModalResult result =
+            DrawSectorEditorAssetPruneModal(
+                    ui,
+                    config,
+                    input,
+                    assets,
+                    font,
+                    state.assetPruneModal);
+    if (result == SectorEditorAssetPruneModalResult::Confirmed) {
+        ApplyAssetPrune(assets);
+    }
 }
 
 void SectorEditor::DrawSoundPickerModal(
@@ -6205,6 +6240,7 @@ bool SectorEditor::LoadLevel(
     state.texturePicker = TexturePickerState{};
     state.soundPicker = SoundPickerState{};
     state.addMapSound = AddMapSoundState{};
+    state.assetPruneModal = SectorEditorAssetPruneModalState{};
     state.loadLevelModal = LoadLevelModalState{};
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
@@ -6364,6 +6400,7 @@ bool SectorEditor::HasDocumentModalOpen() const
             || state.loadLevelModal.open
             || state.confirmationModal.open
             || state.setAllModal.open
+            || state.assetPruneModal.open
             || state.decalTintModal.open
             || state.doorTextureSettingsModal.open
             || state.lightmapBakeSetupModal.open
@@ -7076,6 +7113,59 @@ bool SectorEditor::AddSelectedMapTexture(engine::AssetManager& assets)
     statusText = TextFormat("%s texture %s", result.replacing ? "Updated" : "Added", result.textureId.c_str());
     CloseAddMapTextureModal(assets);
     return true;
+}
+
+void SectorEditor::ApplyAssetPrune(engine::AssetManager& assets)
+{
+    const SectorEditorAssetPruneOptions options{
+            state.assetPruneModal.pruneTextures,
+            state.assetPruneModal.pruneSounds};
+    const SectorEditorAssetPruneResult result = PruneUnusedSectorEditorAssets(
+            AuthoringGraph(),
+            TopologyMap(),
+            options);
+
+    if (result.removedTextureCount > 0) {
+        SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
+        textureCatalog.RefreshDefaultTextureIds();
+        textureCatalog.RefreshTextureHandles(assets);
+    }
+    if (result.removedSoundCount > 0) {
+        BuildSoundService().RefreshCatalogHandles();
+    }
+
+    const std::size_t removedCount =
+            result.removedTextureCount + result.removedSoundCount;
+    if (removedCount > 0) {
+        Lifecycle().topologyDocumentDirty = true;
+        Lifecycle().hasUnsavedChanges = true;
+    }
+
+    if (options.pruneTextures && options.pruneSounds) {
+        statusText = removedCount == 0
+                ? "No unused map textures or sounds found"
+                : TextFormat(
+                        "Pruned %zu texture%s and %zu sound%s",
+                        result.removedTextureCount,
+                        result.removedTextureCount == 1 ? "" : "s",
+                        result.removedSoundCount,
+                        result.removedSoundCount == 1 ? "" : "s");
+    } else if (options.pruneTextures) {
+        statusText = result.removedTextureCount == 0
+                ? "No unused map textures found"
+                : TextFormat(
+                        "Pruned %zu texture%s",
+                        result.removedTextureCount,
+                        result.removedTextureCount == 1 ? "" : "s");
+    } else {
+        statusText = result.removedSoundCount == 0
+                ? "No unused map sounds found"
+                : TextFormat(
+                        "Pruned %zu sound%s",
+                        result.removedSoundCount,
+                        result.removedSoundCount == 1 ? "" : "s");
+    }
+    CloseSectorEditorAssetPruneModal(state.assetPruneModal);
 }
 
 bool SectorEditor::PointInTopologyLoop(Vector2 mapPoint, const SectorTopologyLoop& loop) const

@@ -256,6 +256,12 @@ private:
             const engine::UIConfig& config,
             engine::Input& input,
             engine::FontHandle font);
+    void DrawAssetPruneModal(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font);
     void DrawSoundPickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -403,6 +409,7 @@ private:
     void OpenAddMapTextureModal(engine::AssetManager& assets);
     void CloseAddMapTextureModal(engine::AssetManager& assets);
     bool AddSelectedMapTexture(engine::AssetManager& assets);
+    void ApplyAssetPrune(engine::AssetManager& assets);
     SectorEditorManipulationServiceContext BuildManipulationServiceContext();
     SectorEditorSelectionServiceContext BuildSelectionServiceContext();
     SectorAuthoringGraph& AuthoringGraph();

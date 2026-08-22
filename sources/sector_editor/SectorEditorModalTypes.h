@@ -104,6 +104,12 @@ struct AddMapSoundState {
     std::string validationMessage;
 };
 
+struct SectorEditorAssetPruneModalState {
+    bool open = false;
+    bool pruneTextures = true;
+    bool pruneSounds = true;
+};
+
 struct SoundPickerState {
     bool open = false;
     SectorEditorDoorSoundTarget target = SectorEditorDoorSoundTarget::Open;

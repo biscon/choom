@@ -327,6 +327,14 @@ if(BUILD_TESTING)
     target_link_libraries(sector_editor_light_editing_service_tests PRIVATE raylib)
     add_test(NAME sector_editor_light_editing_service COMMAND sector_editor_light_editing_service_tests)
 
+    add_executable(sector_editor_asset_pruning_tests
+            tests/SectorEditorAssetPruningTests.cpp
+            sources/sector_editor/services/asset_pruning/SectorEditorAssetPruning.cpp
+    )
+    target_include_directories(sector_editor_asset_pruning_tests PRIVATE sources)
+    target_link_libraries(sector_editor_asset_pruning_tests PRIVATE raylib)
+    add_test(NAME sector_editor_asset_pruning COMMAND sector_editor_asset_pruning_tests)
+
     add_executable(sector_authoring_graph_tests
             tests/SectorAuthoringGraphTests.cpp
             sources/game/npc/NpcDefinitions.cpp

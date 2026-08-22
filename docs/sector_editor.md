@@ -458,6 +458,21 @@ names such as `stone_normal.png` and `stone_normal_512.png`, are omitted because
 the renderer and lightmap baker discover them automatically from their base
 texture. The modal does not copy external files into the project.
 
+## Prune Map Assets
+
+The left tools pane `Prune Assets` button removes unused entries from the map's
+texture and sound registries. The modal can prune textures, sounds, or both;
+both categories are selected by default. Pruned assets are unloaded from the
+editor and disappear from the corresponding pickers. They must be added again
+before the map can use them later.
+
+Texture references on authored floor, ceiling, wall, lower, upper, and middle
+base/decal materials are retained, as are map sky and procedural-door texture
+references. The built-in `wall`, `floor`, and `ceiling` texture IDs are always
+retained. Door open/close sound references are retained. Background music,
+footsteps, NPC-definition audio, sprites, and models are separate from these
+registries and are not changed by this command.
+
 ## Move, Split, And Delete Tools
 
 Moving a topology vertex edits exactly one stable vertex ID. Connected linedefs
