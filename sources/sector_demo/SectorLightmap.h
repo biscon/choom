@@ -188,11 +188,11 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 16: generated sector surfaces bake with geometric normals only.
-constexpr int kSectorLightmapBakeVersion = 16;
-constexpr int kSectorLightmapArtifactVersion = 1;
+// Version 17: artifacts include a dominant-direction companion plane.
+constexpr int kSectorLightmapBakeVersion = 17;
+constexpr int kSectorLightmapArtifactVersion = 2;
 constexpr const char* kSectorLightmapArtifactFormat =
-        "rgba16fLinearHdrRgbAoLE";
+        "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE";
 constexpr int kSectorBakedObjectLightProbeSidecarVersion = 3;
 constexpr const char* kSectorBakedObjectLightProbeSidecarFormat =
         "layeredAmbientCubeLinearHdrF32LE";
@@ -286,6 +286,7 @@ bool WriteSectorLightmapArtifact(
         int width,
         int height,
         const Vector4* linearRgba,
+        const Vector4* directionalRgba,
         size_t texelCount,
         const std::string& sourceHash,
         SectorIlluminationStatistics& outPreEncodeStatistics,

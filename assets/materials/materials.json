@@ -20,7 +20,7 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
-      "normalStrength": 1.0
+      "normalStrength": 0.75
     },
     "ceiling": {
       "albedoTexturePath": "assets/images/ceiling.png",
@@ -48,14 +48,14 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
-      "normalStrength": 1.0
+      "normalStrength": 0.5
     },
     "dirty_office_wall_baseboard_512": {
       "albedoTexturePath": "assets/images/walls/dirty_office_wall_baseboard_512.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.8500000238418579,
-      "normalStrength": 1.0
+      "normalStrength": 0.5
     },
     "distressed_painted_planks": {
       "albedoTexturePath": "assets/images/hires/distressed_painted_planks.png",
@@ -82,7 +82,7 @@
       "albedoTexturePath": "assets/images/hub/fortress_stone_mossy_512.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.8500000238418579,
+      "roughnessFactor": 0.75,
       "normalStrength": 1.0
     },
     "hub_cobble_512": {
@@ -96,7 +96,7 @@
       "albedoTexturePath": "assets/images/hub/hub_cobble_dirty_512.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.8500000238418579,
+      "roughnessFactor": 0.6499999761581421,
       "normalStrength": 1.0
     },
     "hub_drain_grate_256": {
@@ -109,8 +109,8 @@
     "hydraulic_blast_door_512": {
       "albedoTexturePath": "assets/images/doors/hydraulic_blast_door_512.png",
       "filter": "anisotropic8x",
-      "metallicFactor": 0.15000000596046448,
-      "roughnessFactor": 0.6499999761581421,
+      "metallicFactor": 1.0,
+      "roughnessFactor": 0.20000000298023224,
       "normalStrength": 1.0
     },
     "industrial_wall_01": {
@@ -131,8 +131,8 @@
       "albedoTexturePath": "assets/images/floors/large_industrial_tiles_512.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.8500000238418579,
-      "normalStrength": 1.0
+      "roughnessFactor": 0.75,
+      "normalStrength": 0.75
     },
     "metal_bars_01": {
       "albedoTexturePath": "assets/images/middle/metal_bars_01.png",
@@ -179,7 +179,7 @@
     "step_01_512": {
       "albedoTexturePath": "assets/images/step_01_512.png",
       "filter": "anisotropic8x",
-      "metallicFactor": 0.8500000238418579,
+      "metallicFactor": 1.0,
       "roughnessFactor": 0.550000011920929,
       "normalStrength": 1.0
     },
@@ -250,7 +250,7 @@
       "albedoTexturePath": "assets/images/floors/worn_office_oak_floor_512.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.75,
+      "roughnessFactor": 0.30000001192092896,
       "normalStrength": 1.0
     },
     "worn_white_ceiling_512": {

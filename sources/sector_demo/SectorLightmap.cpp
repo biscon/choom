@@ -208,9 +208,9 @@ constexpr float Pi = 3.14159265358979323846f;
 constexpr char kObjectProbeSidecarMagic[4] = {'S', 'O', 'P', 'B'};
 constexpr char kLightmapArtifactMagic[4] = {'S', 'L', 'M', 'H'};
 constexpr uint32_t kLightmapArtifactFixedHeaderBytes = 52;
-constexpr uint32_t kLightmapArtifactChannels = 4;
-constexpr uint32_t kLightmapArtifactEncodingRgbaBinary16 = 1;
-constexpr uint32_t kLightmapArtifactSemanticsLinearHdrRgbAo = 1;
+constexpr uint32_t kLightmapArtifactChannels = 8;
+constexpr uint32_t kLightmapArtifactEncodingMixedRgba16Rgba8 = 2;
+constexpr uint32_t kLightmapArtifactSemanticsHdrRgbAoDominantDirection = 2;
 constexpr uint32_t kObjectProbeFixedHeaderBytes = 48;
 
 bool RayIntersectsTriangle(
@@ -1573,7 +1573,26 @@ Vector3 GeometricNormalForHit(const RasterHit& hit)
             : hit.normal;
 }
 
-Vector3 EvaluateDirectLightSample(
+struct DirectLightEvaluation {
+    Vector3 radiance = {};
+    Vector3 directionMoment = {};
+};
+
+float LinearLuminance(Vector3 value)
+{
+    return value.x * 0.2126f + value.y * 0.7152f + value.z * 0.0722f;
+}
+
+DirectLightEvaluation MakeDirectLightEvaluation(
+        Vector3 radiance,
+        Vector3 directionToLight)
+{
+    return DirectLightEvaluation{
+            radiance,
+            Vector3Scale(directionToLight, std::max(LinearLuminance(radiance), 0.0f))};
+}
+
+DirectLightEvaluation EvaluateDirectLightSample(
         const SectorTopologyMap& map,
         const LightmapWorldPointLight& light,
         Vector3 lightPosition,
@@ -1590,13 +1609,13 @@ Vector3 EvaluateDirectLightSample(
     const Vector3 toLight = Vector3Subtract(lightPosition, hit.position);
     const float distance = Vector3Length(toLight);
     if (distance <= RayHitEpsilon || distance > light.radius) {
-        return Vector3{};
+        return {};
     }
 
     const Vector3 lightDir = Vector3Scale(toLight, 1.0f / distance);
     const float lambert = std::max(Vector3DotProduct(hit.normal, lightDir), 0.0f);
     if (lambert <= 0.0f) {
-        return Vector3{};
+        return {};
     }
 
     if (light.castsShadow && IsOccluded(
@@ -1613,13 +1632,14 @@ Vector3 EvaluateDirectLightSample(
                 alphaMaskCache,
                 softShadowSample,
                 stats)) {
-        return Vector3{};
+        return {};
     }
 
     const float t = std::clamp(1.0f - distance / light.radius, 0.0f, 1.0f);
     const float attenuation = t * t;
     const float scale = light.intensity * attenuation * lambert;
-    return Vector3Scale(light.linearColor, scale);
+    return MakeDirectLightEvaluation(
+            Vector3Scale(light.linearColor, scale), lightDir);
 }
 
 float SmoothStep(float edge0, float edge1, float value)
@@ -1641,7 +1661,7 @@ Vector3 NormalizeOrFallback(Vector3 value, Vector3 fallback)
     return NormalizeVector3OrFallback(value, fallback, 0.00000001f);
 }
 
-Vector3 EvaluateDirectLightSample(
+DirectLightEvaluation EvaluateDirectLightSample(
         const SectorTopologyMap& map,
         const LightmapWorldSpotLight& light,
         Vector3 lightPosition,
@@ -1658,13 +1678,13 @@ Vector3 EvaluateDirectLightSample(
     const Vector3 toLight = Vector3Subtract(lightPosition, hit.position);
     const float distance = Vector3Length(toLight);
     if (distance <= RayHitEpsilon || distance > light.range) {
-        return Vector3{};
+        return {};
     }
 
     const Vector3 lightDir = Vector3Scale(toLight, 1.0f / distance);
     const float lambert = std::max(Vector3DotProduct(hit.normal, lightDir), 0.0f);
     if (lambert <= 0.0f) {
-        return Vector3{};
+        return {};
     }
 
     const Vector3 spotDirection = NormalizeOrFallback(
@@ -1678,7 +1698,7 @@ Vector3 EvaluateDirectLightSample(
     const float outerConeCos = ConeCosine(outerDegrees);
     const float coneAttenuation = SmoothStep(outerConeCos, innerConeCos, coneDot);
     if (coneAttenuation <= 0.0f) {
-        return Vector3{};
+        return {};
     }
 
     if (light.castsShadow && IsOccluded(
@@ -1695,16 +1715,17 @@ Vector3 EvaluateDirectLightSample(
                 alphaMaskCache,
                 softShadowSample,
                 stats)) {
-        return Vector3{};
+        return {};
     }
 
     const float t = std::clamp(1.0f - distance / light.range, 0.0f, 1.0f);
     const float attenuation = t * t;
     const float scale = light.intensity * attenuation * lambert * coneAttenuation;
-    return Vector3Scale(light.linearColor, scale);
+    return MakeDirectLightEvaluation(
+            Vector3Scale(light.linearColor, scale), lightDir);
 }
 
-Vector3 EvaluateDirectLightSample(
+DirectLightEvaluation EvaluateDirectLightSample(
         const SectorTopologyMap& map,
         const LightmapWorldRectLight& light,
         Vector3 samplePosition,
@@ -1719,25 +1740,26 @@ Vector3 EvaluateDirectLightSample(
 {
     const Vector3 fromEmitter = Vector3Subtract(hit.position, samplePosition);
     const float distance = Vector3Length(fromEmitter);
-    if (distance <= RayHitEpsilon || distance > light.range) return Vector3{};
+    if (distance <= RayHitEpsilon || distance > light.range) return {};
     const Vector3 emitterToHit = Vector3Scale(fromEmitter, 1.0f / distance);
     const float emitterCosine = Vector3DotProduct(light.basis.forward, emitterToHit);
-    if (emitterCosine <= 0.0f) return Vector3{};
+    if (emitterCosine <= 0.0f) return {};
     const Vector3 directionToLight = Vector3Scale(emitterToHit, -1.0f);
     const float lambert = std::max(Vector3DotProduct(hit.normal, directionToLight), 0.0f);
-    if (lambert <= 0.0f) return Vector3{};
+    if (lambert <= 0.0f) return {};
     if (light.castsShadow && IsOccluded(
                 map, hit.position, GeometricNormalForHit(hit), samplePosition,
                 surfaceRef, surfaceIndex, hit.triangleIndex, bvh, triangles,
                 alphaOccluders, alphaMaskCache, true, stats)) {
-        return Vector3{};
+        return {};
     }
     const float t = std::clamp(1.0f - distance / light.range, 0.0f, 1.0f);
     const float scale = light.intensity * t * t * lambert * emitterCosine;
-    return Vector3Scale(light.linearColor, scale);
+    return MakeDirectLightEvaluation(
+            Vector3Scale(light.linearColor, scale), directionToLight);
 }
 
-Vector3 EvaluateDirectLight(
+DirectLightEvaluation EvaluateDirectLight(
         const SectorTopologyMap& map,
         const LightmapWorldPointLight& light,
         const RasterHit& hit,
@@ -1751,7 +1773,7 @@ Vector3 EvaluateDirectLight(
         BakeRayStats& stats)
 {
     if (light.radius <= 0.0f || light.intensity <= 0.0f) {
-        return Vector3{};
+        return {};
     }
 
     const float sourceRadius = std::min(std::clamp(light.sourceRadius, 0.0f, 8.0f), light.radius * 0.5f);
@@ -1771,13 +1793,11 @@ Vector3 EvaluateDirectLight(
                 stats);
     }
 
-    Vector3 direct{};
+    DirectLightEvaluation direct;
     for (int i = 0; i < softShadowSampleCount; ++i) {
         const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, softShadowSampleCount), sourceRadius);
         const Vector3 samplePosition = Vector3Add(light.position, sampleOffset);
-        direct = Vector3Add(
-                direct,
-                EvaluateDirectLightSample(
+        const DirectLightEvaluation sample = EvaluateDirectLightSample(
                         map,
                         light,
                         samplePosition,
@@ -1789,12 +1809,18 @@ Vector3 EvaluateDirectLight(
                         alphaOccluders,
                         alphaMaskCache,
                         true,
-                        stats));
+                        stats);
+        direct.radiance = Vector3Add(direct.radiance, sample.radiance);
+        direct.directionMoment = Vector3Add(
+                direct.directionMoment, sample.directionMoment);
     }
-    return Vector3Scale(direct, 1.0f / static_cast<float>(softShadowSampleCount));
+    const float inverseSamples = 1.0f / static_cast<float>(softShadowSampleCount);
+    direct.radiance = Vector3Scale(direct.radiance, inverseSamples);
+    direct.directionMoment = Vector3Scale(direct.directionMoment, inverseSamples);
+    return direct;
 }
 
-Vector3 EvaluateDirectLight(
+DirectLightEvaluation EvaluateDirectLight(
         const SectorTopologyMap& map,
         const LightmapWorldRectLight& light,
         const RasterHit& hit,
@@ -1808,7 +1834,7 @@ Vector3 EvaluateDirectLight(
         BakeRayStats& stats)
 {
     if (light.range <= 0.0f || light.width <= 0.0f || light.height <= 0.0f
-            || light.intensity <= 0.0f) return Vector3{};
+            || light.intensity <= 0.0f) return {};
     const int samples = std::max(1, sampleCount);
     auto radicalInverse = [](int index, int base) {
         float value = 0.0f;
@@ -1820,7 +1846,7 @@ Vector3 EvaluateDirectLight(
         }
         return value;
     };
-    Vector3 direct{};
+    DirectLightEvaluation direct;
     for (int i = 0; i < samples; ++i) {
         const float u = radicalInverse(i + 1, 2) - 0.5f;
         const float v = radicalInverse(i + 1, 3) - 0.5f;
@@ -1829,14 +1855,20 @@ Vector3 EvaluateDirectLight(
                 Vector3Add(
                         Vector3Scale(light.basis.right, u * light.width),
                         Vector3Scale(light.basis.up, v * light.height)));
-        direct = Vector3Add(direct, EvaluateDirectLightSample(
+        const DirectLightEvaluation sample = EvaluateDirectLightSample(
                 map, light, samplePosition, hit, surfaceRef, surfaceIndex, bvh,
-                triangles, alphaOccluders, alphaMaskCache, stats));
+                triangles, alphaOccluders, alphaMaskCache, stats);
+        direct.radiance = Vector3Add(direct.radiance, sample.radiance);
+        direct.directionMoment = Vector3Add(
+                direct.directionMoment, sample.directionMoment);
     }
-    return Vector3Scale(direct, 1.0f / static_cast<float>(samples));
+    const float inverseSamples = 1.0f / static_cast<float>(samples);
+    direct.radiance = Vector3Scale(direct.radiance, inverseSamples);
+    direct.directionMoment = Vector3Scale(direct.directionMoment, inverseSamples);
+    return direct;
 }
 
-Vector3 EvaluateDirectLight(
+DirectLightEvaluation EvaluateDirectLight(
         const SectorTopologyMap& map,
         const LightmapWorldSpotLight& light,
         const RasterHit& hit,
@@ -1850,7 +1882,7 @@ Vector3 EvaluateDirectLight(
         BakeRayStats& stats)
 {
     if (light.range <= 0.0f || light.intensity <= 0.0f) {
-        return Vector3{};
+        return {};
     }
 
     const float sourceRadius = std::min(std::clamp(light.sourceRadius, 0.0f, 8.0f), light.range * 0.5f);
@@ -1870,13 +1902,11 @@ Vector3 EvaluateDirectLight(
                 stats);
     }
 
-    Vector3 direct{};
+    DirectLightEvaluation direct;
     for (int i = 0; i < softShadowSampleCount; ++i) {
         const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, softShadowSampleCount), sourceRadius);
         const Vector3 samplePosition = Vector3Add(light.position, sampleOffset);
-        direct = Vector3Add(
-                direct,
-                EvaluateDirectLightSample(
+        const DirectLightEvaluation sample = EvaluateDirectLightSample(
                         map,
                         light,
                         samplePosition,
@@ -1888,9 +1918,15 @@ Vector3 EvaluateDirectLight(
                         alphaOccluders,
                         alphaMaskCache,
                         true,
-                        stats));
+                        stats);
+        direct.radiance = Vector3Add(direct.radiance, sample.radiance);
+        direct.directionMoment = Vector3Add(
+                direct.directionMoment, sample.directionMoment);
     }
-    return Vector3Scale(direct, 1.0f / static_cast<float>(softShadowSampleCount));
+    const float inverseSamples = 1.0f / static_cast<float>(softShadowSampleCount);
+    direct.radiance = Vector3Scale(direct.radiance, inverseSamples);
+    direct.directionMoment = Vector3Scale(direct.directionMoment, inverseSamples);
+    return direct;
 }
 
 bool IsSkyOwnedLightmapSurface(
@@ -1935,7 +1971,7 @@ bool IsDirectionOccluded(
     );
 }
 
-Vector3 EvaluateDirectionalLight(
+DirectLightEvaluation EvaluateDirectionalLight(
         const SectorTopologyMap& map,
         const LightmapWorldDirectionalLight& light,
         const RasterHit& hit,
@@ -1949,11 +1985,11 @@ Vector3 EvaluateDirectionalLight(
         BakeRayStats& stats)
 {
     if (!light.enabled || light.intensity <= 0.0f) {
-        return Vector3{};
+        return {};
     }
     const float lambert = std::max(Vector3DotProduct(hit.normal, light.directionToLight), 0.0f);
     if (lambert <= 0.0f) {
-        return Vector3{};
+        return {};
     }
     if (IsDirectionOccluded(
                 map,
@@ -1969,11 +2005,12 @@ Vector3 EvaluateDirectionalLight(
                 alphaOccluders,
                 alphaMaskCache,
                 stats)) {
-        return Vector3{};
+        return {};
     }
 
     const float scale = light.intensity * lambert;
-    return Vector3Scale(light.linearColor, scale);
+    return MakeDirectLightEvaluation(
+            Vector3Scale(light.linearColor, scale), light.directionToLight);
 }
 
 Vector3 SanitizeNonNegativeRadiance(Vector3 value)
@@ -2300,7 +2337,7 @@ Vector3 EvaluateProbePointLight(
             alphaOccluders,
             alphaMaskCache,
             softShadowSampleCount,
-            stats);
+            stats).radiance;
 }
 
 Vector3 EvaluateProbeSpotLight(
@@ -2331,7 +2368,7 @@ Vector3 EvaluateProbeSpotLight(
             alphaOccluders,
             alphaMaskCache,
             softShadowSampleCount,
-            stats);
+            stats).radiance;
 }
 
 Vector3 EvaluateProbeRectLight(
@@ -2352,7 +2389,7 @@ Vector3 EvaluateProbeRectLight(
     hit.normal = faceDirection;
     hit.triangleIndex = -1;
     return EvaluateDirectLight(map, light, hit, SectorGeneratedSurfaceRef{}, -1,
-            bvh, triangles, alphaOccluders, alphaMaskCache, sampleCount, stats);
+            bvh, triangles, alphaOccluders, alphaMaskCache, sampleCount, stats).radiance;
 }
 
 Vector3 EvaluateProbeDirectionalLight(
@@ -2383,7 +2420,7 @@ Vector3 EvaluateProbeDirectionalLight(
             triangles,
             alphaOccluders,
             alphaMaskCache,
-            stats);
+            stats).radiance;
 }
 
 void BakeProbeAmbientCube(
@@ -3332,6 +3369,7 @@ bool WriteSectorLightmapArtifact(
         int width,
         int height,
         const Vector4* linearRgba,
+        const Vector4* directionalRgba,
         size_t texelCount,
         const std::string& sourceHash,
         SectorIlluminationStatistics& outPreEncodeStatistics,
@@ -3342,21 +3380,21 @@ bool WriteSectorLightmapArtifact(
     outPreEncodeStatistics = {};
     outStoredStatistics = {};
     if (path.empty() || width <= 0 || height <= 0 || linearRgba == nullptr
-            || sourceHash.empty()) {
+            || directionalRgba == nullptr || sourceHash.empty()) {
         outError = "HDR lightmap write failed: invalid arguments";
         return false;
     }
     const uint64_t expectedTexels = static_cast<uint64_t>(width)
             * static_cast<uint64_t>(height);
     if (expectedTexels != texelCount
-            || expectedTexels > std::numeric_limits<uint64_t>::max() / 8u
+            || expectedTexels > std::numeric_limits<uint64_t>::max() / 12u
             || sourceHash.size() > std::numeric_limits<uint32_t>::max()) {
         outError = "HDR lightmap write failed: invalid dimensions or source hash";
         return false;
     }
 
     std::vector<uint8_t> payload;
-    payload.reserve(texelCount * 8u);
+    payload.reserve(texelCount * 12u);
     for (size_t index = 0; index < texelCount; ++index) {
         const Vector4 value = linearRgba[index];
         const Vector3 rgb{value.x, value.y, value.z};
@@ -3378,6 +3416,22 @@ bool WriteSectorLightmapArtifact(
             payload.push_back(static_cast<uint8_t>((channel >> 8u) & 0xffu));
         }
     }
+    for (size_t index = 0; index < texelCount; ++index) {
+        const Vector4 value = directionalRgba[index];
+        if (!std::isfinite(value.x) || !std::isfinite(value.y)
+                || !std::isfinite(value.z) || !std::isfinite(value.w)
+                || value.x < 0.0f || value.x > 1.0f
+                || value.y < 0.0f || value.y > 1.0f
+                || value.z < 0.0f || value.z > 1.0f
+                || value.w < 0.0f || value.w > 1.0f) {
+            outError = "HDR lightmap write failed: invalid directional sample";
+            return false;
+        }
+        payload.push_back(static_cast<uint8_t>(std::lround(value.x * 255.0f)));
+        payload.push_back(static_cast<uint8_t>(std::lround(value.y * 255.0f)));
+        payload.push_back(static_cast<uint8_t>(std::lround(value.z * 255.0f)));
+        payload.push_back(static_cast<uint8_t>(std::lround(value.w * 255.0f)));
+    }
 
     const std::filesystem::path outputPath(path);
     std::error_code ec;
@@ -3398,8 +3452,8 @@ bool WriteSectorLightmapArtifact(
             || !WriteU32LE(output, static_cast<uint32_t>(width))
             || !WriteU32LE(output, static_cast<uint32_t>(height))
             || !WriteU32LE(output, kLightmapArtifactChannels)
-            || !WriteU32LE(output, kLightmapArtifactEncodingRgbaBinary16)
-            || !WriteU32LE(output, kLightmapArtifactSemanticsLinearHdrRgbAo)
+            || !WriteU32LE(output, kLightmapArtifactEncodingMixedRgba16Rgba8)
+            || !WriteU32LE(output, kLightmapArtifactSemanticsHdrRgbAoDominantDirection)
             || !WriteU32LE(output, static_cast<uint32_t>(sourceHash.size()))
             || !WriteU64LE(output, static_cast<uint64_t>(payload.size()))
             || !WriteU64LE(output, Fnv1aBytes(payload))) {
@@ -3474,15 +3528,15 @@ bool ReadSectorLightmapArtifact(
     if (version != static_cast<uint32_t>(kSectorLightmapArtifactVersion)
             || headerBytes != kLightmapArtifactFixedHeaderBytes + sourceHashBytes
             || width == 0 || height == 0 || channels != kLightmapArtifactChannels
-            || encoding != kLightmapArtifactEncodingRgbaBinary16
-            || semantics != kLightmapArtifactSemanticsLinearHdrRgbAo
+            || encoding != kLightmapArtifactEncodingMixedRgba16Rgba8
+            || semantics != kLightmapArtifactSemanticsHdrRgbAoDominantDirection
             || sourceHashBytes == 0 || sourceHashBytes > 1024u) {
         outError = "HDR lightmap read failed: unsupported or invalid header";
         return false;
     }
     const uint64_t texelCount = static_cast<uint64_t>(width) * height;
-    if (texelCount > std::numeric_limits<uint64_t>::max() / 8u
-            || payloadBytes != texelCount * 8u
+    if (texelCount > std::numeric_limits<uint64_t>::max() / 12u
+            || payloadBytes != texelCount * 12u
             || payloadBytes > std::numeric_limits<size_t>::max()) {
         outError = "HDR lightmap read failed: invalid payload size";
         return false;
@@ -3524,6 +3578,10 @@ bool ReadSectorLightmapArtifact(
                         static_cast<uint16_t>(payload[byteIndex + 1u]) << 8u);
         outData.rgba16[channelIndex] = bits;
     }
+    const size_t directionalByteOffset = static_cast<size_t>(texelCount) * 8u;
+    outData.directionalRgba8.assign(
+            payload.begin() + static_cast<std::ptrdiff_t>(directionalByteOffset),
+            payload.end());
     for (size_t texelIndex = 0; texelIndex < static_cast<size_t>(texelCount); ++texelIndex) {
         const size_t base = texelIndex * 4u;
         const Vector3 rgb{
@@ -4723,7 +4781,10 @@ bool BakeSectorLightmapForMap(
     ReportProgress(callbacks, SectorLightmapBakePhase::Preparing, 0, 1);
     const std::string artifactSourceHash = ComputeSectorLightmapSourceHash(map);
     std::vector<Vector4> pixels(totalPixelCount, Vector4{0.0f, 0.0f, 0.0f, 1.0f});
+    std::vector<Vector4> directionalPixels(
+            totalPixelCount, Vector4{0.5f, 0.5f, 1.0f, 0.0f});
     std::vector<Vector3> directLightingFloat(totalPixelCount, Vector3{});
+    std::vector<Vector3> directDirectionMoments(totalPixelCount, Vector3{});
     std::vector<Vector3> indirectLightingFloat(totalPixelCount, Vector3{});
     std::vector<float> ambientOcclusionFloat(totalPixelCount, 1.0f);
     std::vector<unsigned char> validChartTexel(totalPixelCount, 0);
@@ -4909,10 +4970,9 @@ bool BakeSectorLightmapForMap(
             hit.triangleIndex = texel.triangleIndex;
 
             Vector3 direct{};
+            Vector3 directionMoment{};
             for (const LightmapWorldPointLight& light : worldLights) {
-                direct = Vector3Add(
-                        direct,
-                        EvaluateDirectLight(
+                const DirectLightEvaluation evaluation = EvaluateDirectLight(
                                 map,
                                 light,
                                 hit,
@@ -4923,12 +4983,13 @@ bool BakeSectorLightmapForMap(
                                 alphaOccluders,
                                 alphaMaskCache,
                                 quality.directSoftShadowSampleCount,
-                                stats));
+                                stats);
+                direct = Vector3Add(direct, evaluation.radiance);
+                directionMoment = Vector3Add(
+                        directionMoment, evaluation.directionMoment);
             }
             for (const LightmapWorldSpotLight& light : worldSpotLights) {
-                direct = Vector3Add(
-                        direct,
-                        EvaluateDirectLight(
+                const DirectLightEvaluation evaluation = EvaluateDirectLight(
                                 map,
                                 light,
                                 hit,
@@ -4939,18 +5000,22 @@ bool BakeSectorLightmapForMap(
                                 alphaOccluders,
                                 alphaMaskCache,
                                 quality.directSoftShadowSampleCount,
-                                stats));
+                                stats);
+                direct = Vector3Add(direct, evaluation.radiance);
+                directionMoment = Vector3Add(
+                        directionMoment, evaluation.directionMoment);
             }
             for (const LightmapWorldRectLight& light : worldRectLights) {
-                direct = Vector3Add(direct, EvaluateDirectLight(
+                const DirectLightEvaluation evaluation = EvaluateDirectLight(
                         map, light, hit, texel.surfaceRef, texel.sourceSurfaceIndex,
                         bvh, triangles, alphaOccluders, alphaMaskCache,
-                        quality.directSoftShadowSampleCount, stats));
+                        quality.directSoftShadowSampleCount, stats);
+                direct = Vector3Add(direct, evaluation.radiance);
+                directionMoment = Vector3Add(
+                        directionMoment, evaluation.directionMoment);
             }
             if (IsSkyOwnedLightmapSurface(map, texel.surfaceRef)) {
-                direct = Vector3Add(
-                        direct,
-                        EvaluateDirectionalLight(
+                const DirectLightEvaluation evaluation = EvaluateDirectionalLight(
                                 map,
                                 directionalLight,
                                 hit,
@@ -4961,9 +5026,13 @@ bool BakeSectorLightmapForMap(
                                 triangles,
                                 alphaOccluders,
                                 alphaMaskCache,
-                                stats));
+                                stats);
+                direct = Vector3Add(direct, evaluation.radiance);
+                directionMoment = Vector3Add(
+                        directionMoment, evaluation.directionMoment);
             }
             directLightingFloat[texel.pixelIndex] = direct;
+            directDirectionMoments[texel.pixelIndex] = directionMoment;
             ++completedTexels;
             if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
                 ReportProgress(callbacks, SectorLightmapBakePhase::DirectLighting, completedTexels, static_cast<uint32_t>(bakeTexels.size()));
@@ -5104,6 +5173,7 @@ bool BakeSectorLightmapForMap(
             0,
             exportWorkTotal);
     std::vector<unsigned char> exportValid = validChartTexel;
+    std::vector<unsigned char> directionalExportValid = validChartTexel;
     completedTexels = 0;
     for (const BakeTexel& texel : bakeTexels) {
         const Vector3 finalRgb = Vector3Add(
@@ -5119,6 +5189,22 @@ bool BakeSectorLightmapForMap(
                 finalRgb.y,
                 finalRgb.z,
                 std::clamp(ambientOcclusionFloat[texel.pixelIndex], 0.0f, 1.0f)};
+        const Vector3 directionMoment = directDirectionMoments[texel.pixelIndex];
+        const float directionLength = Vector3Length(directionMoment);
+        const float directLuminance = std::max(
+                LinearLuminance(directLightingFloat[texel.pixelIndex]), 0.0f);
+        const float totalLuminance = directLuminance + std::max(
+                LinearLuminance(indirectLightingFloat[texel.pixelIndex]), 0.0f);
+        if (directionLength > BakeEpsilon && directLuminance > BakeEpsilon
+                && totalLuminance > BakeEpsilon) {
+            const Vector3 direction = Vector3Scale(
+                    directionMoment, 1.0f / directionLength);
+            directionalPixels[texel.pixelIndex] = Vector4{
+                    direction.x * 0.5f + 0.5f,
+                    direction.y * 0.5f + 0.5f,
+                    direction.z * 0.5f + 0.5f,
+                    std::clamp(directLuminance / totalLuminance, 0.0f, 1.0f)};
+        }
         ++completedTexels;
         if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
             ReportProgress(
@@ -5134,6 +5220,12 @@ bool BakeSectorLightmapForMap(
     uint32_t completedExportWork = static_cast<uint32_t>(bakeTexels.size());
     for (const SectorLightmapChart& chart : layout.charts) {
         DilateChart(chart, pixels, exportValid, width, height);
+        DilateChart(
+                chart,
+                directionalPixels,
+                directionalExportValid,
+                width,
+                height);
         ++completedExportWork;
         ReportProgress(
                 callbacks,
@@ -5152,6 +5244,12 @@ bool BakeSectorLightmapForMap(
                         PlacementAsChart(placement),
                         pixels,
                         exportValid,
+                        width,
+                        height);
+                DilateChart(
+                        PlacementAsChart(placement),
+                        directionalPixels,
+                        directionalExportValid,
                         width,
                         height);
                 ++completedExportWork;
@@ -5187,6 +5285,8 @@ bool BakeSectorLightmapForMap(
                     width,
                     height,
                     pixels.data() + static_cast<size_t>(atlasIndex) * atlasPixelCount,
+                    directionalPixels.data()
+                            + static_cast<size_t>(atlasIndex) * atlasPixelCount,
                     atlasPixelCount,
                     artifactSourceHash,
                     preEncodeStatistics,

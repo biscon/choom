@@ -50,6 +50,7 @@ enum class SectorPbrDiagnosticMode : int {
     MaterialOcclusion,
     MetallicRoughness,
     ShadingNormal,
+    TangentNormal,
     Count
 };
 

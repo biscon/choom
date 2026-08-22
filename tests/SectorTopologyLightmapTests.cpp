@@ -88,6 +88,12 @@ bool SameVector(Vector3 a, Vector3 b)
     return Near(a.x, b.x) && Near(a.y, b.y) && Near(a.z, b.z);
 }
 
+std::vector<Vector4> NeutralDirectionalTexels(size_t count)
+{
+    return std::vector<Vector4>(
+            count, Vector4{0.5f, 0.5f, 1.0f, 0.0f});
+}
+
 void TestLightmapBakeReportFormatting()
 {
     game::SectorLightmapBakeResult result;
@@ -281,6 +287,8 @@ void WriteInstallTestTemps(const game::SectorLightmapBakeAsyncResult& result)
             static_cast<size_t>(result.bakeResult.width)
                     * static_cast<size_t>(result.bakeResult.height),
             Vector4{2.0f, 0.5f, 0.25f, 0.75f});
+    const std::vector<Vector4> directionalTexels =
+            NeutralDirectionalTexels(texels.size());
     game::SectorIlluminationStatistics preEncodeStatistics;
     game::SectorIlluminationStatistics storedStatistics;
     std::string atlasError;
@@ -289,6 +297,7 @@ void WriteInstallTestTemps(const game::SectorLightmapBakeAsyncResult& result)
                   result.bakeResult.width,
                   result.bakeResult.height,
                   texels.data(),
+                  directionalTexels.data(),
                   texels.size(),
                   result.bakeResult.sourceHash,
                   preEncodeStatistics,
@@ -534,6 +543,8 @@ void TestLightmapBakeInstallBoundaryHandlesMultipleAtlases()
             static_cast<size_t>(result.bakeResult.width)
                     * static_cast<size_t>(result.bakeResult.height),
             Vector4{3.0f, 0.25f, 0.5f, 1.0f});
+    const std::vector<Vector4> secondDirectionalTexels =
+            NeutralDirectionalTexels(secondAtlasTexels.size());
     game::SectorIlluminationStatistics secondPreEncode;
     game::SectorIlluminationStatistics secondStored;
     std::string secondAtlasError;
@@ -542,6 +553,7 @@ void TestLightmapBakeInstallBoundaryHandlesMultipleAtlases()
                   result.bakeResult.width,
                   result.bakeResult.height,
                   secondAtlasTexels.data(),
+                  secondDirectionalTexels.data(),
                   secondAtlasTexels.size(),
                   result.bakeResult.sourceHash,
                   secondPreEncode,
@@ -1096,6 +1108,7 @@ struct LightmapImageMetrics {
     long long softShadowSourceRays = 0;
     int ceilingCenterRgb = 0;
     int floorCenterRgb = 0;
+    Vector4 floorCenterDirectional = {};
 };
 
 bool ReadHdrLightmap(
@@ -1195,6 +1208,11 @@ LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fil
                 game::SectorLightmapBinary16ToFloat(image.rgba16[base])
                 + game::SectorLightmapBinary16ToFloat(image.rgba16[base + 1u])
                 + game::SectorLightmapBinary16ToFloat(image.rgba16[base + 2u]))));
+        metrics.floorCenterDirectional = Vector4{
+                static_cast<float>(image.directionalRgba8[base]) / 255.0f,
+                static_cast<float>(image.directionalRgba8[base + 1u]) / 255.0f,
+                static_cast<float>(image.directionalRgba8[base + 2u]) / 255.0f,
+                static_cast<float>(image.directionalRgba8[base + 3u]) / 255.0f};
     }
     metrics.averageRgb = rgbSum / static_cast<double>(pixelCount);
     std::error_code removeError;
@@ -1848,8 +1866,8 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 16,
-          "lightmap bake version is bumped for geometric-normal sector bakes");
+    Check(game::kSectorLightmapBakeVersion == 17,
+          "lightmap bake version is bumped for directional companion bakes");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);
@@ -2624,6 +2642,11 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
             "generated_surface_with_normal.lightmap.png");
     Check(withoutNormal.floorCenterRgb > 600,
           "missing companion normal map preserves geometric direct lighting");
+    Check(Near(withoutNormal.floorCenterDirectional.x, 0.5f, 0.01f)
+                  && Near(withoutNormal.floorCenterDirectional.y, 1.0f, 0.01f)
+                  && Near(withoutNormal.floorCenterDirectional.z, 0.5f, 0.01f)
+                  && Near(withoutNormal.floorCenterDirectional.w, 1.0f, 0.01f),
+          "directional companion stores the dominant incoming direction and direct fraction");
     Check(withNormal.floorCenterRgb == withoutNormal.floorCenterRgb,
           "companion normal map does not change baked direct-light response");
 
@@ -4657,16 +4680,21 @@ void TestHdrArtifactAndBakeColorContract()
     const std::vector<Vector4> texels{
             Vector4{4.5f, 2.0f, 0.125f, 0.25f},
             Vector4{1.25f, 0.0f, 32.0f, 1.0f}};
+    const std::vector<Vector4> directionalTexels{
+            Vector4{0.5f, 1.0f, 0.0f, 0.25f},
+            Vector4{1.0f, 0.5f, 0.5f, 0.75f}};
     game::SectorIlluminationStatistics firstPre;
     game::SectorIlluminationStatistics firstStored;
     game::SectorIlluminationStatistics secondPre;
     game::SectorIlluminationStatistics secondStored;
     std::string error;
     Check(game::WriteSectorLightmapArtifact(
-                  firstPath.string(), 2, 1, texels.data(), texels.size(),
+                  firstPath.string(), 2, 1, texels.data(),
+                  directionalTexels.data(), texels.size(),
                   "hdr-contract-hash", firstPre, firstStored, error)
                   && game::WriteSectorLightmapArtifact(
-                             secondPath.string(), 2, 1, texels.data(), texels.size(),
+                             secondPath.string(), 2, 1, texels.data(),
+                             directionalTexels.data(), texels.size(),
                              "hdr-contract-hash", secondPre, secondStored, error),
           "HDR artifact writer stores and reopens representative radiance");
     game::SectorLightmapMetadata expected;
@@ -4682,6 +4710,12 @@ void TestHdrArtifactAndBakeColorContract()
                   && Near(HdrLightmapTexel(loaded, 0, 0).x, 4.5f)
                   && Near(HdrLightmapTexel(loaded, 1, 0).z, 32.0f)
                   && Near(HdrLightmapTexel(loaded, 0, 0).w, 0.25f)
+                  && loaded.directionalRgba8.size() == 8
+                  && loaded.directionalRgba8[0] == 128
+                  && loaded.directionalRgba8[1] == 255
+                  && loaded.directionalRgba8[2] == 0
+                  && loaded.directionalRgba8[3] == 64
+                  && loaded.directionalRgba8[7] == 191
                   && loaded.storedStatistics.rgbMax.z > 1.0f
                   && loaded.storedStatistics.rgbChannelsAboveOne == 4,
           "HDR artifact round trip preserves above-one RGB and bounded AO");
@@ -4701,7 +4735,7 @@ void TestHdrArtifactAndBakeColorContract()
     Check(firstBytes == secondBytes
                   && firstBytes.size() > 8
                   && firstBytes[0] == 'S' && firstBytes[1] == 'L'
-                  && firstBytes[4] == 1 && firstBytes[5] == 0
+                  && firstBytes[4] == 2 && firstBytes[5] == 0
                   && firstBytes[6] == 0 && firstBytes[7] == 0,
           "HDR artifact output is deterministic with fixed-width little-endian fields");
 

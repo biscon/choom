@@ -154,11 +154,22 @@ uniform sampler2D texture0;
 uniform sampler2D texture1;
 uniform sampler2D decalTexture;
 uniform sampler2D normalTexture;
+uniform sampler2D directionalLightmapTexture;
+uniform samplerCube environmentTexture;
 uniform float useLightmap;
 uniform float useBakedAmbientOcclusion;
 uniform int hasLightmap;
+uniform int hasDirectionalLightmap;
 uniform int hasNormalMap;
 uniform float normalStrength;
+uniform float metallicFactor;
+uniform float roughnessFactor;
+uniform vec3 cameraPosition;
+uniform int hasEnvironment;
+uniform float environmentExposure;
+uniform float indirectDiffuseScale;
+uniform float environmentSpecularScale;
+uniform int pbrDiagnosticMode;
 uniform int alphaTest;
 uniform float alphaCutoff;
 uniform int hasDecal;
@@ -198,6 +209,18 @@ uniform int shadowAtlasTilesPerRow;
 uniform sampler2D shadowMap0;
 uniform sampler2D shadowMap1;
 
+#define MAX_STATIC_SPECULAR_LIGHTS 4
+uniform int useStaticSpecularLighting;
+uniform int staticSpecularLightCount;
+uniform vec3 staticSpecularLightPositions[MAX_STATIC_SPECULAR_LIGHTS];
+uniform vec3 staticSpecularLightColors[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightRadii[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightIntensities[MAX_STATIC_SPECULAR_LIGHTS];
+uniform int staticSpecularLightTypes[MAX_STATIC_SPECULAR_LIGHTS];
+uniform vec3 staticSpecularLightDirections[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightInnerConeCos[MAX_STATIC_SPECULAR_LIGHTS];
+uniform float staticSpecularLightOuterConeCos[MAX_STATIC_SPECULAR_LIGHTS];
+
 out vec4 finalColor;
 
 const vec2 kPoissonDisk[12] = vec2[12](
@@ -230,10 +253,53 @@ vec3 StoreFiniteHalfRadiance(vec3 value)
     return result;
 }
 
+float DistributionGgx(vec3 normal, vec3 halfway, float roughness)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float ndoth = max(dot(normal, halfway), 0.0);
+    float denominator = ndoth * ndoth * (a2 - 1.0) + 1.0;
+    return a2 / max(3.14159265 * denominator * denominator, 0.000001);
+}
+
+float GeometrySchlickGgx(float ndotv, float roughness)
+{
+    float r = roughness + 1.0;
+    float k = r * r / 8.0;
+    return ndotv / max(ndotv * (1.0 - k) + k, 0.000001);
+}
+
+float GeometrySmith(
+        vec3 normal,
+        vec3 viewDirection,
+        vec3 lightDirection,
+        float roughness)
+{
+    return GeometrySchlickGgx(
+            max(dot(normal, viewDirection), 0.0), roughness)
+            * GeometrySchlickGgx(
+                    max(dot(normal, lightDirection), 0.0), roughness);
+}
+
+vec3 FresnelSchlick(float cosTheta, vec3 f0)
+{
+    return f0 + (1.0 - f0)
+            * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec2 EnvironmentBrdfApprox(float roughness, float ndotv)
+{
+    const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+    const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+    vec4 r = roughness * c0 + c1;
+    float a004 = min(r.x * r.x, exp2(-9.28 * ndotv)) * r.x + r.y;
+    return vec2(-1.04, 1.04) * a004 + r.zw;
+}
+
 )"
 SECTOR_DYNAMIC_SURFACE_SHADOW_GLSL
 R"(
-vec3 SurfaceNormal(vec3 geometricNormal)
+vec3 SurfaceNormal(vec3 geometricNormal, vec3 tangentNormalSample)
 {
     if (hasNormalMap == 0) {
         return geometricNormal;
@@ -243,15 +309,23 @@ vec3 SurfaceNormal(vec3 geometricNormal)
     vec3 positionDy = dFdy(fragWorldPosition);
     vec2 uvDx = dFdx(fragTexCoord);
     vec2 uvDy = dFdy(fragTexCoord);
-    vec3 positionDyPerpendicular = cross(positionDy, geometricNormal);
-    vec3 positionDxPerpendicular = cross(geometricNormal, positionDx);
-    vec3 tangent = positionDyPerpendicular * uvDx.x
-            + positionDxPerpendicular * uvDy.x;
-    vec3 sourceBitangent = positionDyPerpendicular * uvDx.y
-            + positionDxPerpendicular * uvDy.y;
+    float uvDeterminant = uvDx.x * uvDy.y - uvDx.y * uvDy.x;
+    float uvDerivativeScaleSq = dot(uvDx, uvDx) * dot(uvDy, uvDy);
+    if (uvDeterminant * uvDeterminant
+                    <= uvDerivativeScaleSq * 0.00000001) {
+        return geometricNormal;
+    }
+
+    float inverseUvDeterminant = 1.0 / uvDeterminant;
+    vec3 tangent = (positionDx * uvDy.y - positionDy * uvDx.y)
+            * inverseUvDeterminant;
+    vec3 sourceBitangent = (positionDy * uvDx.x - positionDx * uvDy.x)
+            * inverseUvDeterminant;
     tangent -= geometricNormal * dot(tangent, geometricNormal);
-    if (dot(tangent, tangent) <= 0.00000001
-            || dot(sourceBitangent, sourceBitangent) <= 0.00000001) {
+    if (any(isnan(tangent)) || any(isinf(tangent))
+            || any(isnan(sourceBitangent)) || any(isinf(sourceBitangent))
+            || dot(tangent, tangent) <= 0.000000000001
+            || dot(sourceBitangent, sourceBitangent) <= 0.000000000001) {
         return geometricNormal;
     }
 
@@ -262,11 +336,40 @@ vec3 SurfaceNormal(vec3 geometricNormal)
     vec3 bitangent = SafeNormalize(
             cross(geometricNormal, tangent),
             vec3(0.0, 0.0, 1.0)) * handedness;
-    vec3 mappedNormal = texture(normalTexture, fragTexCoord).xyz * 2.0 - 1.0;
+    vec3 mappedNormal = tangentNormalSample * 2.0 - 1.0;
     mappedNormal.xy *= normalStrength;
     return SafeNormalize(
             mat3(tangent, bitangent, geometricNormal) * mappedNormal,
             geometricNormal);
+}
+
+vec3 ApplyDirectionalLightmap(
+        vec3 bakedLighting,
+        vec3 geometricNormal,
+        vec3 worldNormal)
+{
+    if (hasDirectionalLightmap == 0 || hasNormalMap == 0) {
+        return bakedLighting;
+    }
+    vec4 directionalSample = texture(
+            directionalLightmapTexture, fragTexCoord2);
+    float directionalFraction = clamp(directionalSample.a, 0.0, 1.0);
+    if (directionalFraction <= 0.0001) {
+        return bakedLighting;
+    }
+    vec3 dominantDirection = SafeNormalize(
+            directionalSample.rgb * 2.0 - 1.0,
+            geometricNormal);
+    float geometricResponse = max(
+            dot(geometricNormal, dominantDirection), 0.0);
+    if (geometricResponse <= 0.0001) {
+        return bakedLighting;
+    }
+    float mappedResponse = max(dot(worldNormal, dominantDirection), 0.0);
+    float responseRatio = clamp(
+            mappedResponse / geometricResponse, 0.0, 4.0);
+    return bakedLighting * mix(
+            1.0, responseRatio, directionalFraction);
 }
 
 vec3 ApplySectorFog(
@@ -330,12 +433,33 @@ void main()
             surfaceRgb = mix(baseColor.rgb, decalRgb, decalAlpha);
         }
     }
-    vec4 bakedSample = (useLightmap > 0.5 && hasLightmap != 0) ? texture(texture1, fragTexCoord2) : vec4(0.0, 0.0, 0.0, 1.0);
-    float aoFactor = (useBakedAmbientOcclusion > 0.5 && hasLightmap != 0) ? bakedSample.a : 1.0;
-    vec3 worldNormal = SurfaceNormal(geometricNormal);
-    vec3 ambient = fragColor.rgb * aoFactor;
-    vec3 bakedDirect = bakedSample.rgb;
-    vec3 dynamicDirect = vec3(0.0);
+    vec4 bakedSample = (useLightmap > 0.5 && hasLightmap != 0)
+            ? texture(texture1, fragTexCoord2)
+            : vec4(0.0, 0.0, 0.0, 1.0);
+    float aoFactor = (useBakedAmbientOcclusion > 0.5 && hasLightmap != 0)
+            ? bakedSample.a
+            : 1.0;
+    vec3 tangentNormalSample = hasNormalMap != 0
+            ? texture(normalTexture, fragTexCoord).xyz
+            : vec3(0.5, 0.5, 1.0);
+    vec3 worldNormal = SurfaceNormal(
+            geometricNormal, tangentNormalSample);
+    vec3 viewDirection = SafeNormalize(
+            cameraPosition - fragWorldPosition, geometricNormal);
+    float metallic = clamp(metallicFactor, 0.0, 1.0);
+    float roughness = clamp(roughnessFactor, 0.045, 1.0);
+    vec3 f0 = mix(vec3(0.04), surfaceRgb, metallic);
+    vec3 correctedBakedLighting = ApplyDirectionalLightmap(
+            bakedSample.rgb, geometricNormal, worldNormal);
+    vec3 staticLighting = max(
+            fragColor.rgb * aoFactor + correctedBakedLighting,
+            vec3(0.0));
+    vec3 staticDiffuse = surfaceRgb
+            * (1.0 - metallic)
+            * staticLighting
+            * indirectDiffuseScale;
+    vec3 dynamicDirectDiffuse = vec3(0.0);
+    vec3 dynamicDirectSpecular = vec3(0.0);
     for (int i = 0; i < dynamicLightCount && i < MAX_DYNAMIC_LIGHTS; ++i) {
         float radius = dynamicLightRadii[i];
         vec3 toLight = dynamicLightPositions[i] - fragWorldPosition;
@@ -381,20 +505,142 @@ void main()
                 coneAtten *= mix(1.0, visibility,
                         clamp(shadowStrength[shadowSlot], 0.0, 1.0));
             }
-            dynamicDirect += dynamicLightColors[i] * dynamicLightIntensities[i] * atten * ndotl * coneAtten;
+            vec3 halfway = SafeNormalize(
+                    viewDirection + lightDirection, worldNormal);
+            float distribution = DistributionGgx(
+                    worldNormal, halfway, roughness);
+            float geometry = GeometrySmith(
+                    worldNormal, viewDirection, lightDirection, roughness);
+            vec3 fresnel = FresnelSchlick(
+                    max(dot(halfway, viewDirection), 0.0), f0);
+            vec3 specular = distribution * geometry * fresnel
+                    / max(4.0
+                            * max(dot(worldNormal, viewDirection), 0.0)
+                            * ndotl,
+                            0.001);
+            vec3 diffuseWeight = (vec3(1.0) - fresnel)
+                    * (1.0 - metallic);
+            vec3 radiance = dynamicLightColors[i]
+                    * dynamicLightIntensities[i]
+                    * atten
+                    * coneAtten;
+            dynamicDirectDiffuse += diffuseWeight
+                    * surfaceRgb
+                    * radiance
+                    * ndotl;
+            dynamicDirectSpecular += specular * radiance * ndotl;
         }
     }
-    vec3 bakedLighting = max(ambient + bakedDirect, vec3(0.0));
-    vec3 lighting = max(bakedLighting + dynamicDirect, vec3(0.0));
-    vec3 staticAtmosphericLighting = max(fragColor.rgb + bakedDirect, vec3(0.0));
-    vec3 litRgb = surfaceRgb * lighting;
+
+    vec3 staticDirectSpecular = vec3(0.0);
+    if (useStaticSpecularLighting != 0) {
+        for (int i = 0;
+                i < staticSpecularLightCount
+                        && i < MAX_STATIC_SPECULAR_LIGHTS;
+                ++i) {
+            float radius = staticSpecularLightRadii[i];
+            vec3 toLight = staticSpecularLightPositions[i]
+                    - fragWorldPosition;
+            float distanceSq = dot(toLight, toLight);
+            if (radius <= 0.0 || distanceSq >= radius * radius) continue;
+            float distanceToLight = sqrt(max(distanceSq, 0.0));
+            vec3 lightDirection = distanceToLight > 0.0001
+                    ? toLight / distanceToLight
+                    : worldNormal;
+            float ndotl = max(dot(worldNormal, lightDirection), 0.0);
+            if (ndotl <= 0.0) continue;
+            float atten = clamp(
+                    1.0 - distanceToLight / radius, 0.0, 1.0);
+            atten *= atten;
+            float coneAtten = 1.0;
+            if (staticSpecularLightTypes[i] == 1) {
+                vec3 spotDirection = SafeNormalize(
+                        staticSpecularLightDirections[i],
+                        vec3(0.0, -1.0, 0.0));
+                vec3 fragmentDirectionFromLight = distanceToLight > 0.0001
+                        ? -lightDirection
+                        : spotDirection;
+                float coneDot = dot(
+                        spotDirection, fragmentDirectionFromLight);
+                float innerConeCos = staticSpecularLightInnerConeCos[i];
+                float outerConeCos = staticSpecularLightOuterConeCos[i];
+                coneAtten = abs(innerConeCos - outerConeCos) > 0.0001
+                        ? smoothstep(outerConeCos, innerConeCos, coneDot)
+                        : step(innerConeCos, coneDot);
+            }
+            if (coneAtten <= 0.0) continue;
+            vec3 halfway = SafeNormalize(
+                    viewDirection + lightDirection, worldNormal);
+            float distribution = DistributionGgx(
+                    worldNormal, halfway, roughness);
+            float geometry = GeometrySmith(
+                    worldNormal, viewDirection, lightDirection, roughness);
+            vec3 fresnel = FresnelSchlick(
+                    max(dot(halfway, viewDirection), 0.0), f0);
+            vec3 specular = distribution * geometry * fresnel
+                    / max(4.0
+                            * max(dot(worldNormal, viewDirection), 0.0)
+                            * ndotl,
+                            0.001);
+            vec3 radiance = staticSpecularLightColors[i]
+                    * staticSpecularLightIntensities[i]
+                    * atten
+                    * coneAtten;
+            staticDirectSpecular += specular * radiance * ndotl;
+        }
+    }
+
+    vec3 environmentSpecular = vec3(0.0);
+    if (hasEnvironment != 0 && environmentSpecularScale > 0.0) {
+        vec3 reflected = reflect(-viewDirection, worldNormal);
+        vec3 environment = textureLod(
+                environmentTexture, reflected, roughness * 8.0).rgb;
+        vec2 environmentBrdf = EnvironmentBrdfApprox(
+                roughness,
+                max(dot(worldNormal, viewDirection), 0.0));
+        environmentSpecular = environment
+                * (f0 * environmentBrdf.x + environmentBrdf.y)
+                * environmentExposure
+                * environmentSpecularScale;
+    }
+
+    vec3 staticAtmosphericLighting = max(
+            fragColor.rgb + bakedSample.rgb, vec3(0.0));
     vec3 emissiveRadiance = emissiveDecalRgb * max(decalEmissiveStrength, 0.0);
+    vec3 litRgb = staticDiffuse
+            + dynamicDirectDiffuse
+            + dynamicDirectSpecular
+            + staticDirectSpecular
+            + environmentSpecular;
     vec3 surfaceOutput = litRgb * (1.0 - emissiveDecalAlpha)
             + emissiveRadiance * emissiveDecalAlpha;
-    finalColor = vec4(StoreFiniteHalfRadiance(ApplySectorFog(
-            surfaceOutput,
-            staticAtmosphericLighting,
-            fragWorldPosition)),
+    if (pbrDiagnosticMode == 1) surfaceOutput = surfaceRgb;
+    else if (pbrDiagnosticMode == 2) surfaceOutput = dynamicDirectDiffuse;
+    else if (pbrDiagnosticMode == 3) {
+        surfaceOutput = dynamicDirectSpecular + staticDirectSpecular;
+    }
+    else if (pbrDiagnosticMode == 4) surfaceOutput = staticDiffuse;
+    else if (pbrDiagnosticMode == 5) surfaceOutput = environmentSpecular;
+    else if (pbrDiagnosticMode == 6) surfaceOutput = emissiveRadiance;
+    else if (pbrDiagnosticMode == 7) surfaceOutput = vec3(1.0);
+    else if (pbrDiagnosticMode == 8) {
+        surfaceOutput = vec3(metallic, roughness, 0.0);
+    }
+    else if (pbrDiagnosticMode == 9) {
+        surfaceOutput = worldNormal * 0.5 + 0.5;
+    }
+    else if (pbrDiagnosticMode == 10) {
+        surfaceOutput = hasNormalMap != 0
+                ? tangentNormalSample
+                : vec3(1.0, 0.0, 1.0);
+    }
+    if (pbrDiagnosticMode == 0) {
+        surfaceOutput = ApplySectorFog(
+                surfaceOutput,
+                staticAtmosphericLighting,
+                fragWorldPosition);
+    }
+    finalColor = vec4(StoreFiniteHalfRadiance(surfaceOutput),
             clamp(baseColor.a * fragColor.a, 0.0, 1.0));
 }
 )";
@@ -426,6 +672,24 @@ int GetShaderLocationArrayElement(Shader shader, const char* name, std::size_t i
 {
     const std::string indexedName = std::string(name) + "[" + std::to_string(index) + "]";
     return GetShaderLocation(shader, indexedName.c_str());
+}
+
+void InitializeSectorSurfaceSamplerUnits(Shader shader)
+{
+    for (int textureUnit = MATERIAL_MAP_ALBEDO;
+            textureUnit <= MATERIAL_MAP_CUBEMAP;
+            ++textureUnit) {
+        const int location = shader.locs[
+                SHADER_LOC_MAP_DIFFUSE + textureUnit];
+        if (location >= 0) {
+            SetShaderValue(
+                    shader,
+                    location,
+                    &textureUnit,
+                    SHADER_UNIFORM_INT);
+        }
+    }
+    rlDisableShader();
 }
 
 const char* DynamicLightDebugPrefix(SectorPreviewDynamicLightKind kind)
@@ -553,8 +817,19 @@ bool LoadPreviewMaterial(
         int& useLightmapLoc,
         int& useBakedAmbientOcclusionLoc,
         int& hasLightmapLoc,
+        int& hasDirectionalLightmapLoc,
         int& hasNormalMapLoc,
         int& normalStrengthLoc,
+        int& metallicFactorLoc,
+        int& roughnessFactorLoc,
+        int& cameraPositionLoc,
+        int& hasEnvironmentLoc,
+        int& environmentExposureLoc,
+        int& indirectDiffuseScaleLoc,
+        int& environmentSpecularScaleLoc,
+        int& pbrDiagnosticModeLoc,
+        int& useStaticSpecularLightingLoc,
+        SectorStaticSpecularShaderLocations& staticSpecularLocations,
         int& alphaTestLoc,
         int& alphaCutoffLoc,
         int& hasDecalLoc,
@@ -598,13 +873,35 @@ bool LoadPreviewMaterial(
     material.shader.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(material.shader, "texture1");
     material.shader.locs[SHADER_LOC_MAP_NORMAL] = GetShaderLocation(material.shader, "decalTexture");
     material.shader.locs[SHADER_LOC_MAP_HEIGHT] = GetShaderLocation(material.shader, "normalTexture");
+    material.shader.locs[SHADER_LOC_MAP_EMISSION] =
+            GetShaderLocation(material.shader, "directionalLightmapTexture");
+    material.shader.locs[SHADER_LOC_MAP_CUBEMAP] =
+            GetShaderLocation(material.shader, "environmentTexture");
     material.shader.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(material.shader, "shadowMap0");
     material.shader.locs[SHADER_LOC_MAP_OCCLUSION] = GetShaderLocation(material.shader, "shadowMap1");
     useLightmapLoc = GetShaderLocation(material.shader, "useLightmap");
     useBakedAmbientOcclusionLoc = GetShaderLocation(material.shader, "useBakedAmbientOcclusion");
     hasLightmapLoc = GetShaderLocation(material.shader, "hasLightmap");
+    hasDirectionalLightmapLoc = GetShaderLocation(
+            material.shader, "hasDirectionalLightmap");
     hasNormalMapLoc = GetShaderLocation(material.shader, "hasNormalMap");
     normalStrengthLoc = GetShaderLocation(material.shader, "normalStrength");
+    metallicFactorLoc = GetShaderLocation(material.shader, "metallicFactor");
+    roughnessFactorLoc = GetShaderLocation(material.shader, "roughnessFactor");
+    cameraPositionLoc = GetShaderLocation(material.shader, "cameraPosition");
+    hasEnvironmentLoc = GetShaderLocation(material.shader, "hasEnvironment");
+    environmentExposureLoc = GetShaderLocation(
+            material.shader, "environmentExposure");
+    indirectDiffuseScaleLoc = GetShaderLocation(
+            material.shader, "indirectDiffuseScale");
+    environmentSpecularScaleLoc = GetShaderLocation(
+            material.shader, "environmentSpecularScale");
+    pbrDiagnosticModeLoc = GetShaderLocation(
+            material.shader, "pbrDiagnosticMode");
+    useStaticSpecularLightingLoc = GetShaderLocation(
+            material.shader, "useStaticSpecularLighting");
+    staticSpecularLocations = GetSectorStaticSpecularShaderLocations(
+            material.shader);
     alphaTestLoc = GetShaderLocation(material.shader, "alphaTest");
     alphaCutoffLoc = GetShaderLocation(material.shader, "alphaCutoff");
     hasDecalLoc = GetShaderLocation(material.shader, "hasDecal");
@@ -635,6 +932,7 @@ bool LoadPreviewMaterial(
     shadowSoftnessLoc = GetShaderLocationArrayBase(material.shader, "shadowSoftness");
     shadowAtlasTilesPerRowLoc = GetShaderLocation(material.shader, "shadowAtlasTilesPerRow");
     fogShaderLocations = GetSectorFogShaderLocations(material.shader);
+    InitializeSectorSurfaceSamplerUnits(material.shader);
     defaultMaterialTexture = material.maps[MATERIAL_MAP_DIFFUSE].texture;
     materialLoaded = true;
     return true;
@@ -653,6 +951,19 @@ bool ComputeGeometryBounds(const SectorGeneratedGeometry& geometry, Vector3& out
     outMin = bounds.min;
     outMax = bounds.max;
     return found;
+}
+
+const SectorReceiverBounds* FindSectorReceiverBounds(
+        const std::vector<SectorReceiverBounds>& bounds,
+        int sectorId)
+{
+    const auto found = std::find_if(
+            bounds.begin(),
+            bounds.end(),
+            [sectorId](const SectorReceiverBounds& candidate) {
+                return candidate.sectorId == sectorId;
+            });
+    return found == bounds.end() ? nullptr : &*found;
 }
 
 } // namespace
@@ -738,6 +1049,8 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 : sharedAlbedo->second;
         sharedAlbedoHandles.emplace(albedoRequestKey, handle);
         textureHandlesById.emplace(texture.id, handle);
+        metallicFactorById.emplace(texture.id, texture.metallicFactor);
+        roughnessFactorById.emplace(texture.id, texture.roughnessFactor);
         if (normalMappedMaterialIds.find(materialId)
                 == normalMappedMaterialIds.end()) {
             continue;
@@ -831,6 +1144,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
 
     if (useLightmapLayout) {
         lightmapTextures.reserve(lightmapAtlases.size());
+        directionalLightmapTextures.reserve(lightmapAtlases.size());
         for (size_t atlasIndex = 0; atlasIndex < lightmapAtlases.size(); ++atlasIndex) {
             const std::string resolvedPath = ResolveSectorAssetPath(
                     lightmapAtlases[atlasIndex].path);
@@ -847,6 +1161,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                         "[SectorDemo WARNING] HDR lightmap disabled: %s\n",
                         artifactError.c_str());
                 lightmapTextures.clear();
+                directionalLightmapTextures.clear();
                 useLightmapLayout = false;
                 lightmapStatus = static_cast<int>(SectorLightmapStatus::Invalid);
                 break;
@@ -868,11 +1183,39 @@ bool SectorMeshRenderer::RebuildRendererResources(
                         "[SectorDemo WARNING] HDR lightmap GPU upload failed for '%s'\n",
                         resolvedPath.c_str());
                 lightmapTextures.clear();
+                directionalLightmapTextures.clear();
+                useLightmapLayout = false;
+                lightmapStatus = static_cast<int>(SectorLightmapStatus::Invalid);
+                break;
+            }
+            Image directionalImage{};
+            directionalImage.data = artifact.directionalRgba8.data();
+            directionalImage.width = artifact.width;
+            directionalImage.height = artifact.height;
+            directionalImage.mipmaps = 1;
+            directionalImage.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+            const std::string directionalKey =
+                    "sector_directional_lightmap_atlas_"
+                    + std::to_string(atlasIndex);
+            const engine::TextureHandle directionalTexture =
+                    assets.CreateTextureFromImage(
+                            assetScope,
+                            directionalKey.c_str(),
+                            directionalImage,
+                            engine::TextureColorUsage::LinearData,
+                            engine::TextureLoad_BilinearFilter);
+            if (engine::IsNull(directionalTexture)) {
+                std::fprintf(stderr,
+                        "[SectorDemo WARNING] Directional lightmap GPU upload failed for '%s'\n",
+                        resolvedPath.c_str());
+                lightmapTextures.clear();
+                directionalLightmapTextures.clear();
                 useLightmapLayout = false;
                 lightmapStatus = static_cast<int>(SectorLightmapStatus::Invalid);
                 break;
             }
             lightmapTextures.push_back(texture);
+            directionalLightmapTextures.push_back(directionalTexture);
         }
     }
 
@@ -965,8 +1308,19 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 useLightmapLoc,
                 useBakedAmbientOcclusionLoc,
                 hasLightmapLoc,
+                hasDirectionalLightmapLoc,
                 hasNormalMapLoc,
                 normalStrengthLoc,
+                metallicFactorLoc,
+                roughnessFactorLoc,
+                cameraPositionLoc,
+                hasEnvironmentLoc,
+                environmentExposureLoc,
+                indirectDiffuseScaleLoc,
+                environmentSpecularScaleLoc,
+                pbrDiagnosticModeLoc,
+                useStaticSpecularLightingLoc,
+                staticSpecularLocations,
                 alphaTestLoc,
                 alphaCutoffLoc,
                 hasDecalLoc,
@@ -1109,7 +1463,10 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     textureHandlesById.clear();
     normalTextureHandlesById.clear();
     normalStrengthById.clear();
+    metallicFactorById.clear();
+    roughnessFactorById.clear();
     lightmapTextures.clear();
+    directionalLightmapTextures.clear();
     sectorCount = 0;
 
     if (materialLoaded) {
@@ -1117,6 +1474,8 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
         material.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
         material.maps[MATERIAL_MAP_NORMAL].texture = Texture2D{};
         material.maps[MATERIAL_MAP_HEIGHT].texture = Texture2D{};
+        material.maps[MATERIAL_MAP_EMISSION].texture = Texture2D{};
+        material.maps[MATERIAL_MAP_CUBEMAP].texture = Texture2D{};
         UnloadMaterial(material);
         material = Material{};
         defaultMaterialTexture = Texture2D{};
@@ -1126,6 +1485,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
         shadowBiasLoc = -1;
         shadowStrengthLoc = -1;
         shadowSoftnessLoc = -1;
+        staticSpecularLocations = {};
     }
     if (depthPrepassMaterialLoaded) {
         UnloadMaterial(depthPrepassMaterial);
@@ -1213,6 +1573,38 @@ void SectorMeshRenderer::DrawScene(
             ? dynamicLightState.ShadowMapDepthTexture(1) : nullptr;
     material.maps[MATERIAL_MAP_ROUGHNESS].texture = shadowMap0 != nullptr ? *shadowMap0 : Texture2D{};
     material.maps[MATERIAL_MAP_OCCLUSION].texture = shadowMap1 != nullptr ? *shadowMap1 : Texture2D{};
+    const TextureCubemap* environmentTexture = assets.GetCubemap(
+            pbrEnvironment.cubemap);
+    const bool environmentReady = IsSectorPbrEnvironmentActive(
+            pbrEnvironment, environmentTexture);
+    const int hasEnvironment = environmentReady
+                    && pbrContributionSettings.worldEnvironmentSpecularScale > 0.0f
+            ? 1
+            : 0;
+    material.maps[MATERIAL_MAP_CUBEMAP].texture = environmentReady
+            ? *environmentTexture
+            : Texture2D{};
+    constexpr float SectorSurfaceEnvironmentExposure = 0.15f;
+    const int pbrDiagnosticMode = static_cast<int>(
+            pbrContributionSettings.diagnosticMode);
+    if (cameraPositionLoc >= 0) SetShaderValue(
+            material.shader, cameraPositionLoc, &camera.position, SHADER_UNIFORM_VEC3);
+    if (hasEnvironmentLoc >= 0) SetShaderValue(
+            material.shader, hasEnvironmentLoc, &hasEnvironment, SHADER_UNIFORM_INT);
+    if (environmentExposureLoc >= 0) SetShaderValue(
+            material.shader, environmentExposureLoc,
+            &SectorSurfaceEnvironmentExposure, SHADER_UNIFORM_FLOAT);
+    if (indirectDiffuseScaleLoc >= 0) SetShaderValue(
+            material.shader, indirectDiffuseScaleLoc,
+            &pbrContributionSettings.worldIndirectDiffuseScale,
+            SHADER_UNIFORM_FLOAT);
+    if (environmentSpecularScaleLoc >= 0) SetShaderValue(
+            material.shader, environmentSpecularScaleLoc,
+            &pbrContributionSettings.worldEnvironmentSpecularScale,
+            SHADER_UNIFORM_FLOAT);
+    if (pbrDiagnosticModeLoc >= 0) SetShaderValue(
+            material.shader, pbrDiagnosticModeLoc,
+            &pbrDiagnosticMode, SHADER_UNIFORM_INT);
     if (useBakedAmbientOcclusionLoc >= 0) {
         SetShaderValue(material.shader, useBakedAmbientOcclusionLoc, &useAo, SHADER_UNIFORM_FLOAT);
     }
@@ -1268,6 +1660,24 @@ void SectorMeshRenderer::DrawScene(
                     material.shader,
                     shadowLocations.dynamicLightShadowSlots,
                     lightContext->shadowUniforms);
+            const SectorReceiverBounds* receiverBounds =
+                    FindSectorReceiverBounds(
+                            meshes.sectorReceiverBounds, batch.sectorId);
+            const SectorReceiverBounds fallbackBounds{
+                    batch.sectorId, camera.position, camera.position};
+            const SectorStaticSpecularLightContext staticSpecularContext =
+                    SelectSectorStaticSpecularLights(
+                            staticSpecularLightState,
+                            receiverBounds != nullptr
+                                    ? *receiverBounds
+                                    : fallbackBounds,
+                            batch.sectorId,
+                            visibilityResult,
+                            surfaceLightmapBakeCurrent);
+            UploadSectorStaticSpecularLights(
+                    material.shader,
+                    staticSpecularLocations,
+                    staticSpecularContext);
             uploadedLightSectorId = batch.sectorId;
         }
 
@@ -1291,6 +1701,12 @@ void SectorMeshRenderer::DrawScene(
                 ? assets.GetTexture(lightmapTextures[
                         static_cast<size_t>(batch.lightmapAtlasIndex)])
                 : nullptr;
+        const Texture2D* directionalLightmap = batch.lightmapAtlasIndex >= 0
+                && batch.lightmapAtlasIndex
+                        < static_cast<int>(directionalLightmapTextures.size())
+                ? assets.GetTexture(directionalLightmapTextures[
+                        static_cast<size_t>(batch.lightmapAtlasIndex)])
+                : nullptr;
         const float useLightmap = lightmap != nullptr ? 1.0f : 0.0f;
         material.maps[MATERIAL_MAP_SPECULAR].texture = lightmap != nullptr
                 ? *lightmap
@@ -1298,11 +1714,23 @@ void SectorMeshRenderer::DrawScene(
         const int hasDecal = decalTexture != nullptr ? 1 : 0;
         const int hasLightmap = batch.receivesLightmap
                 && lightmap != nullptr ? 1 : 0;
+        const int hasDirectionalLightmap = hasLightmap != 0
+                && directionalLightmap != nullptr ? 1 : 0;
         const int hasNormalMap = normalTexture != nullptr ? 1 : 0;
         const auto normalStrengthIt = normalStrengthById.find(batch.materialId);
         const float materialNormalStrength = normalStrengthIt == normalStrengthById.end()
                 ? 1.0f
                 : normalStrengthIt->second;
+        const auto metallicIt = metallicFactorById.find(batch.materialId);
+        const float materialMetallic = metallicIt == metallicFactorById.end()
+                ? 0.0f
+                : metallicIt->second;
+        const auto roughnessIt = roughnessFactorById.find(batch.materialId);
+        const float materialRoughness = roughnessIt == roughnessFactorById.end()
+                ? 0.8f
+                : roughnessIt->second;
+        const int useStaticSpecularLighting = surfaceLightmapBakeCurrent
+                && hasLightmap != 0 ? 1 : 0;
         const int alphaTest = batch.alphaTest ? 1 : 0;
         const float alphaCutoff = batch.alphaCutoff;
         const float decalOpacity = batch.decalOpacity;
@@ -1316,6 +1744,10 @@ void SectorMeshRenderer::DrawScene(
         material.maps[MATERIAL_MAP_HEIGHT].texture = (normalTexture != nullptr)
                 ? *normalTexture
                 : Texture2D{};
+        material.maps[MATERIAL_MAP_EMISSION].texture =
+                directionalLightmap != nullptr
+                ? *directionalLightmap
+                : Texture2D{};
         if (useLightmapLoc >= 0) {
             SetShaderValue(
                     material.shader,
@@ -1325,6 +1757,13 @@ void SectorMeshRenderer::DrawScene(
         }
         if (hasLightmapLoc >= 0) {
             SetShaderValue(material.shader, hasLightmapLoc, &hasLightmap, SHADER_UNIFORM_INT);
+        }
+        if (hasDirectionalLightmapLoc >= 0) {
+            SetShaderValue(
+                    material.shader,
+                    hasDirectionalLightmapLoc,
+                    &hasDirectionalLightmap,
+                    SHADER_UNIFORM_INT);
         }
         if (hasNormalMapLoc >= 0) {
             SetShaderValue(material.shader, hasNormalMapLoc, &hasNormalMap, SHADER_UNIFORM_INT);
@@ -1336,6 +1775,15 @@ void SectorMeshRenderer::DrawScene(
                     &materialNormalStrength,
                     SHADER_UNIFORM_FLOAT);
         }
+        if (metallicFactorLoc >= 0) SetShaderValue(
+                material.shader, metallicFactorLoc,
+                &materialMetallic, SHADER_UNIFORM_FLOAT);
+        if (roughnessFactorLoc >= 0) SetShaderValue(
+                material.shader, roughnessFactorLoc,
+                &materialRoughness, SHADER_UNIFORM_FLOAT);
+        if (useStaticSpecularLightingLoc >= 0) SetShaderValue(
+                material.shader, useStaticSpecularLightingLoc,
+                &useStaticSpecularLighting, SHADER_UNIFORM_INT);
         if (alphaTestLoc >= 0) {
             SetShaderValue(material.shader, alphaTestLoc, &alphaTest, SHADER_UNIFORM_INT);
         }

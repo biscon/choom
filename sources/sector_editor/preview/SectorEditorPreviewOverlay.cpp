@@ -963,7 +963,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             "viewmodel static specular",
                             viewmodelStaticSpecular.str());
                 }
-                addWrappedLine("AO/metallic/roughness/normals are bounded scene-linear diagnostic values and still pass through the shared HDR presentation transform.");
+                addWrappedLine("Metallic / Roughness uses R=metallic and G=effective roughness. Tangent-Space Normal shows raw normal RGB; magenta means missing or not ready. Shading Normal shows the final world-space normal. Diagnostics bypass fog and still pass through the shared HDR presentation transform.");
                 break;
             }
             case PreviewDebugOverlayTab::Objects: {
@@ -2029,7 +2029,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 "Emissive",
                 "Material AO",
                 "Metallic / Roughness",
-                "Shading Normal"};
+                "Shading Normal",
+                "Tangent-Space Normal"};
         int selectedMode = static_cast<int>(settings.diagnosticMode);
         engine::Text(smallConfig, assets,
                 Rectangle{panel.x + padding, y, 94.0f, rowH},

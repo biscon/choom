@@ -4010,7 +4010,8 @@
         "g": 250,
         "b": 242,
         "a": 255
-      }
+      },
+      "enabled": false
     }
   ],
   "dynamicSpotLights": [
@@ -4291,6 +4292,28 @@
           }
         }
       }
+    },
+    {
+      "id": 5,
+      "position": [
+        -220.93368530273438,
+        7.058868408203125,
+        -49.909446716308594
+      ],
+      "target": [
+        -195.27061462402344,
+        -2.846468925476074,
+        -67.46652221679688
+      ],
+      "range": 64.0,
+      "intensity": 3.0,
+      "color": {
+        "r": 255,
+        "g": 255,
+        "b": 255,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0
     }
   ],
   "dynamicRectLights": [],
@@ -4301,7 +4324,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -4377,9 +4401,9 @@
     "path": "assets/levels/hub/hub.lightmap.bin",
     "width": 2048,
     "height": 2048,
-    "version": 1,
-    "format": "rgba16fLinearHdrRgbAoLE",
-    "sourceHash": "8ac6e429b0508474",
+    "version": 2,
+    "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
+    "sourceHash": "c8a560cee66801d3",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -4387,19 +4411,19 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.45703125,
-        1.390625
+        2.2421875,
+        1.462890625,
+        1.396484375
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 725
+      "sampleCount": 8388608,
+      "rgbChannelsAboveOne": 1130
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "8ac6e429b0508474",
+      "sourceHash": "c8a560cee66801d3",
       "count": 2519,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -4412,24 +4436,31 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9389466047286987,
-          1.8518656492233276
+          2.19494366645813,
+          1.9382474422454834,
+          1.8512030839920044
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 15114,
-        "rgbChannelsAboveOne": 33
+        "rgbChannelsAboveOne": 32
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "8ac6e429b0508474",
+      "sourceHash": "c8a560cee66801d3",
       "modelCount": 37,
       "objectCount": 88,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "editorSettings": {
     "gridSize": 1
@@ -19422,7 +19453,7 @@
           "b": 255,
           "a": 255
         },
-        "ambientIntensity": 0.10000000149011612,
+        "ambientIntensity": 0.019999999552965164,
         "defaultWall": {
           "materialId": "painted_plaster_wall",
           "uv": {

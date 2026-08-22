@@ -341,9 +341,11 @@ void main()
                     : vec3(1.0, 0.0, 0.0), geometricNormal), vec3(1.0, 0.0, 0.0)));
     vec3 bitangent = SafeNormalize(cross(geometricNormal, tangent), vec3(0.0, 0.0, 1.0))
             * (fragTangentSign < 0.0 ? -1.0 : 1.0);
+    vec3 tangentNormalSample = vec3(0.5, 0.5, 1.0);
     vec3 worldNormal = geometricNormal;
     if (hasNormalTexture != 0) {
-        vec3 mappedNormal = texture(normalTexture, fragTexCoord).xyz * 2.0 - 1.0;
+        tangentNormalSample = texture(normalTexture, fragTexCoord).xyz;
+        vec3 mappedNormal = tangentNormalSample * 2.0 - 1.0;
         mappedNormal.xy *= normalScale;
         worldNormal = SafeNormalize(
                 mat3(tangent, bitangent, geometricNormal) * mappedNormal,
@@ -567,6 +569,11 @@ void main()
     else if (pbrDiagnosticMode == 7) linearColor = vec3(materialAo);
     else if (pbrDiagnosticMode == 8) linearColor = vec3(metallic, roughness, 0.0);
     else if (pbrDiagnosticMode == 9) linearColor = worldNormal * 0.5 + 0.5;
+    else if (pbrDiagnosticMode == 10) {
+        linearColor = hasNormalTexture != 0
+                ? tangentNormalSample
+                : vec3(1.0, 0.0, 1.0);
+    }
 
     // Artistic/display ceilings are forbidden. The final write below applies
     // only the unavoidable finite RGBA16F storage boundary.
@@ -874,6 +881,7 @@ const char* SectorPbrDiagnosticModeName(SectorPbrDiagnosticMode mode)
         case SectorPbrDiagnosticMode::MaterialOcclusion: return "Material AO";
         case SectorPbrDiagnosticMode::MetallicRoughness: return "Metallic / Roughness";
         case SectorPbrDiagnosticMode::ShadingNormal: return "Shading Normal";
+        case SectorPbrDiagnosticMode::TangentNormal: return "Tangent-Space Normal";
         case SectorPbrDiagnosticMode::Count: break;
     }
     return "Full PBR";

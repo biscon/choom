@@ -122,6 +122,8 @@ struct SectorLightmapArtifactData {
     std::string sourceHash;
     // Host-order IEEE 754 binary16 bit patterns, interleaved RGBA.
     std::vector<uint16_t> rgba16;
+    // Linear UNORM dominant-light direction RGB and direct-light fraction A.
+    std::vector<unsigned char> directionalRgba8;
     SectorIlluminationStatistics storedStatistics;
 };
 
