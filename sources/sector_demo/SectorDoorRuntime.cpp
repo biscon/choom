@@ -563,15 +563,16 @@ bool BuildSectorDoorStaticLightingColors(
     return outLighting.size() == meshData.vertices.size();
 }
 
-bool AppendSectorDoorReceiverBounds(
+bool BuildSectorDoorReceiverBounds(
         const SectorObjectTransform& transform,
         const SectorObject& object,
         const SectorDoor& door,
         const SectorDoorResolvedAnchor& anchor,
         const SectorDoorRender& render,
-        std::vector<SectorReceiverBounds>& outBounds)
+        int sectorId,
+        SectorReceiverBounds& outBounds)
 {
-    if (!object.visible || !door.enabled || !render.visible) {
+    if (!object.visible || !door.enabled || !render.visible || sectorId <= 0) {
         return false;
     }
     if (render.width <= 0.0f
@@ -603,6 +604,20 @@ bool AppendSectorDoorReceiverBounds(
         ExpandSectorAabb3(bounds, corner);
     }
 
+    outBounds = SectorReceiverBounds{sectorId, bounds.min, bounds.max};
+    return true;
+}
+
+bool AppendSectorDoorReceiverBounds(
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render,
+        std::vector<SectorReceiverBounds>& outBounds)
+{
+    SectorReceiverBounds receiverBounds;
+
     const std::size_t beginIndex = outBounds.size();
     const auto alreadyAppended = [&outBounds, beginIndex](int sectorId) {
         for (std::size_t i = beginIndex; i < outBounds.size(); ++i) {
@@ -616,7 +631,16 @@ bool AppendSectorDoorReceiverBounds(
         if (sectorId <= 0 || alreadyAppended(sectorId)) {
             return;
         }
-        outBounds.push_back(SectorReceiverBounds{sectorId, bounds.min, bounds.max});
+        if (BuildSectorDoorReceiverBounds(
+                    transform,
+                    object,
+                    door,
+                    anchor,
+                    render,
+                    sectorId,
+                    receiverBounds)) {
+            outBounds.push_back(receiverBounds);
+        }
     };
 
     appendForSector(anchor.frontSectorId);

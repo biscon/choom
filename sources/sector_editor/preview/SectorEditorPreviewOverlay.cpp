@@ -720,7 +720,6 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 addKeyValue("dynamic", preview.DynamicLightingEnabled() ? "on" : "off");
                 addKeyValue("AO", overlayState.useBakedAmbientOcclusion ? "on" : "off");
                 addKeyValue("lightmap", preview.RendererLightmapStatusText());
-                addKeyValue("door mode", SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()));
                 addKeyValue("dynamic lights", TextFormat(
                         "selected %zu | portal eligible %zu | sources %zu",
                         preview.SelectedDynamicLights().size(),
@@ -1968,54 +1967,6 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
             result.openWeaponEditor = true;
         }
         y += rowH + gap;
-    }
-    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
-        const char* doorModeOptions[] = {
-                "Normal",
-                "AlbedoOnly",
-                "BakedOnly",
-                "DynamicOnly",
-                "NormalVisualize",
-                "FlatColorNoTexture"};
-        const float labelW = 86.0f;
-        const Rectangle labelRect{panel.x + padding, y, labelW, rowH};
-        const Rectangle modeRect{panel.x + padding + labelW + gap, y, 220.0f, rowH};
-        int selectedMode = static_cast<int>(preview.DoorLightingDebugMode());
-        engine::Text(
-                smallConfig,
-                assets,
-                labelRect,
-                smallFont,
-                "Door Debug",
-                engine::UITextJustify::Left,
-                smallConfig.textColor);
-        if (mouseInteractive) {
-            if (engine::Option(
-                        ui,
-                        smallConfig,
-                        input,
-                        assets,
-                        "sector_editor_preview_door_lighting_debug_mode",
-                        modeRect,
-                        smallFont,
-                        doorModeOptions,
-                        sizeof(doorModeOptions) / sizeof(doorModeOptions[0]),
-                        selectedMode)) {
-                preview.SetDoorLightingDebugMode(static_cast<SectorDoorLightingDebugMode>(selectedMode));
-            }
-        } else {
-            DrawRectangleRec(modeRect, Color{24, 30, 38, 155});
-            DrawRectangleLinesEx(modeRect, config.borderThickness, config.borderColor);
-            engine::Text(
-                    smallConfig,
-                    assets,
-                    modeRect,
-                    smallFont,
-                    SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()),
-                    engine::UITextJustify::Center,
-                    smallConfig.mutedTextColor);
-        }
-        y += rowH + 6.0f;
     }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Pbr) {
         SectorPbrContributionSettings settings = preview.PbrContributionSettings();

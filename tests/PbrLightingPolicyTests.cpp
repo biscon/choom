@@ -359,6 +359,7 @@ std::string ReadSource(const char* path)
 void TestSectorRuntimeNormalMappingPolicy()
 {
     const std::string source = ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    const std::string door = ReadSource(DOOR_SHADER_SOURCE_PATH);
     Check(!source.empty(),
           "sector runtime normal-mapping policy can read the active renderer");
     Check(source.find("engine::TextureColorUsage::LinearData")
@@ -448,6 +449,37 @@ void TestSectorRuntimeNormalMappingPolicy()
                       "        surfaceOutput = ApplySectorFog(")
                     != std::string::npos,
           "sector PBR diagnostics bypass fog while full rendering retains it");
+    Check(door.find("uniform sampler2D normalTexture") != std::string::npos
+                    && door.find("float uvDeterminant = uvDx.x * uvDy.y - uvDx.y * uvDy.x")
+                            != std::string::npos
+                    && door.find("mat3(tangent, bitangent, geometricNormal) * mappedNormal")
+                            != std::string::npos,
+          "procedural doors apply OpenGL tangent-space normal maps at runtime");
+    Check(door.find("float DistributionGgx(") != std::string::npos
+                    && door.find("dynamicDirectSpecular +=") != std::string::npos
+                    && door.find("staticDirectSpecular +=") != std::string::npos
+                    && door.find("mix(vec3(0.04), surfaceRgb, metallic)")
+                            != std::string::npos
+                    && door.find("textureLod(\n"
+                               "                environmentTexture")
+                            != std::string::npos,
+          "procedural door material scalars drive dynamic static and environment GGX lighting");
+    Check(door.find("pbrDiagnosticMode == 8") != std::string::npos
+                    && door.find("pbrDiagnosticMode == 9") != std::string::npos
+                    && door.find("pbrDiagnosticMode == 10") != std::string::npos
+                    && door.find("doorDebugMode") == std::string::npos
+                    && door.find("DOOR_DEBUG_") == std::string::npos,
+          "procedural doors use shared PBR diagnostics without the legacy door-only modes");
+    Check(door.find("if (pbrDiagnosticMode == 0) {\n"
+                      "        outputRgb = ApplySectorFog(")
+                    != std::string::npos,
+          "door PBR diagnostics bypass fog while full rendering retains it");
+    Check(source.find("NormalMappedRendererMaterialIds(map, generatedGeometry)")
+                            != std::string::npos
+                    && source.find("ResolveDoorMaterial(") != std::string::npos
+                    && source.find("normalTextureHandlesById.find(materialId)")
+                            != std::string::npos,
+          "procedural door materials resolve their global normal and scalar metadata");
 }
 
 void TestBakedHdrConsumersStayUnclamped()
@@ -549,9 +581,9 @@ void TestDistanceFogUsesDarknessGatedScattering()
                             != std::string::npos,
           "sector fog uses ambient and uncorrected baked light without baked AO or dynamic light");
     Check(door.find(
-                      "ApplySectorFog(\n"
-                      "            surfaceRgb * tint * lighting,\n"
-                      "            staticProbeLighting,")
+                      "outputRgb = ApplySectorFog(\n"
+                      "                outputRgb,\n"
+                      "                staticProbeLighting,")
                             != std::string::npos
                     && billboard.find(
                                "ApplySectorFog(\n"

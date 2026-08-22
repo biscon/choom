@@ -474,7 +474,7 @@
         "normalOffset": -0.20000000298023224,
         "openDistance": 2.75,
         "speed": 1.75,
-        "autoOpen": true,
+        "interactionDistance": 3.5,
         "autoOpenDistance": 2.5,
         "materialId": "hydraulic_blast_door_512",
         "openSoundId": "slidingdoor_03",

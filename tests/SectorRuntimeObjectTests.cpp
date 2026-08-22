@@ -2436,6 +2436,20 @@ void TestSectorDoorReceiverBoundsUseAnimatedSlabGeometry()
                   && Near(bounds[1].max, bounds[0].max),
             "door receiver bounds cover the current slab AABB including vertical extent");
 
+    game::SectorReceiverBounds singleBounds;
+    Check(game::BuildSectorDoorReceiverBounds(
+                  world.Get<game::SectorObjectTransform>(door),
+                  world.Get<game::SectorObject>(door),
+                  world.Get<game::SectorDoor>(door),
+                  world.Get<game::SectorDoorResolvedAnchor>(door),
+                  world.Get<game::SectorDoorRender>(door),
+                  10,
+                  singleBounds)
+                  && singleBounds.sectorId == 10
+                  && Near(singleBounds.min, bounds[0].min)
+                  && Near(singleBounds.max, bounds[0].max),
+            "allocation-free door receiver bounds match collected slab bounds");
+
     game::SectorDoorMotion& motion = world.Get<game::SectorDoorMotion>(door);
     motion.openFraction = 0.5f;
     motion.targetOpenFraction = 0.5f;

@@ -109,8 +109,8 @@
     "hydraulic_blast_door_512": {
       "albedoTexturePath": "assets/images/doors/hydraulic_blast_door_512.png",
       "filter": "anisotropic8x",
-      "metallicFactor": 1.0,
-      "roughnessFactor": 0.20000000298023224,
+      "metallicFactor": 0.20000000298023224,
+      "roughnessFactor": 0.3499999940395355,
       "normalStrength": 1.0
     },
     "industrial_wall_01": {

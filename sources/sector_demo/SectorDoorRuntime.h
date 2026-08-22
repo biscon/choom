@@ -326,6 +326,15 @@ bool BuildSectorDoorStaticLightingColors(
         const SectorTopologyMap* mapForFallback,
         std::vector<Vector3>& outLighting);
 
+bool BuildSectorDoorReceiverBounds(
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render,
+        int sectorId,
+        SectorReceiverBounds& outBounds);
+
 bool AppendSectorDoorReceiverBounds(
         const SectorObjectTransform& transform,
         const SectorObject& object,

@@ -194,8 +194,6 @@ public:
                 dynamicLightFadeInSeconds);
         depthPrepassEnabled = depthPrepass;
     }
-    SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorRenderer.DoorLightingDebugMode(); }
-    void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorRenderer.SetDoorLightingDebugMode(mode); }
     const std::vector<SectorPreviewDynamicPointLightUniform>& SelectedDynamicLights() const
     {
         return dynamicLightState.SelectedLights();
@@ -285,6 +283,10 @@ private:
     SectorBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     void DrawDepthPrepass(engine::AssetManager& assets, engine::World* runtimeObjectWorld);
     static const Texture2D* ResolveShadowCasterTexture(
+            void* userData,
+            engine::AssetManager& assets,
+            const std::string& materialId);
+    static SectorDoorResolvedMaterial ResolveDoorMaterial(
             void* userData,
             engine::AssetManager& assets,
             const std::string& materialId);

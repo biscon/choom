@@ -790,7 +790,6 @@ std::vector<std::string> SortedRendererMaterialIds(
     }
     for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
         if (object.kind == "door"
-                && object.door.visual == SectorDoorVisualType::Procedural
                 && !object.door.materialId.empty()) {
             unique.insert(object.door.materialId);
         }
@@ -801,11 +800,17 @@ std::vector<std::string> SortedRendererMaterialIds(
 }
 
 std::unordered_set<std::string> NormalMappedRendererMaterialIds(
+        const SectorTopologyMap& map,
         const SectorGeneratedGeometry& geometry)
 {
     std::unordered_set<std::string> ids;
     for (const SectorGeneratedSurface& surface : geometry.surfaces) {
         if (!surface.materialId.empty()) ids.insert(surface.materialId);
+    }
+    for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
+        if (object.kind == "door" && !object.door.materialId.empty()) {
+            ids.insert(object.door.materialId);
+        }
     }
     return ids;
 }
@@ -1022,7 +1027,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
     std::unordered_map<std::string, engine::TextureHandle> sharedAlbedoHandles;
     std::unordered_map<std::string, engine::TextureHandle> sharedNormalHandles;
     const std::unordered_set<std::string> normalMappedMaterialIds =
-            NormalMappedRendererMaterialIds(generatedGeometry);
+            NormalMappedRendererMaterialIds(map, generatedGeometry);
     for (const std::string& materialId :
             SortedRendererMaterialIds(map, generatedGeometry)) {
         const auto it = map.resolvedMaterialsById.find(materialId);
@@ -1820,8 +1825,18 @@ void SectorMeshRenderer::DrawScene(
                 dynamicLightState.PackShadowUniforms(shadowMapsEnabled);
         doorDrawContext.dynamicLighting.shadowMaps = dynamicLightState.BuildShadowMapTextures();
         doorDrawContext.fog = fogContext;
-        doorDrawContext.textureResolver.userData = this;
-        doorDrawContext.textureResolver.resolve = &SectorMeshRenderer::ResolveShadowCasterTexture;
+        doorDrawContext.materialResolver.userData = this;
+        doorDrawContext.materialResolver.resolve = &SectorMeshRenderer::ResolveDoorMaterial;
+        doorDrawContext.camera = camera;
+        doorDrawContext.pbr = pbrContributionSettings;
+        doorDrawContext.staticSpecularLights = &staticSpecularLightState;
+        doorDrawContext.visibility = &visibilityResult;
+        doorDrawContext.environment = environmentReady
+                ? environmentTexture
+                : nullptr;
+        doorDrawContext.staticSpecularEligible = objectProbeBakeCurrent
+                && doorLighting.objectLightProbes != nullptr
+                && !doorLighting.objectLightProbes->probes.empty();
         doorDrawContext.defaultMaterialTexture = &defaultMaterialTexture;
         doorDrawContext.renderDebugText = &renderDebugText;
         doorRenderer.Draw(doorDrawContext);
@@ -2592,6 +2607,35 @@ const Texture2D* SectorMeshRenderer::ResolveShadowCasterTexture(
         return nullptr;
     }
     return assets.GetTexture(preview->TextureForId(materialId));
+}
+
+SectorDoorResolvedMaterial SectorMeshRenderer::ResolveDoorMaterial(
+        void* userData,
+        engine::AssetManager& assets,
+        const std::string& materialId)
+{
+    const SectorMeshRenderer* preview = static_cast<const SectorMeshRenderer*>(
+            userData);
+    if (preview == nullptr) {
+        return {};
+    }
+
+    SectorDoorResolvedMaterial result;
+    result.albedo = assets.GetTexture(preview->TextureForId(materialId));
+    result.normal = assets.GetTexture(preview->NormalTextureForId(materialId));
+    const auto normalStrength = preview->normalStrengthById.find(materialId);
+    if (normalStrength != preview->normalStrengthById.end()) {
+        result.normalStrength = normalStrength->second;
+    }
+    const auto metallic = preview->metallicFactorById.find(materialId);
+    if (metallic != preview->metallicFactorById.end()) {
+        result.metallicFactor = metallic->second;
+    }
+    const auto roughness = preview->roughnessFactorById.find(materialId);
+    if (roughness != preview->roughnessFactorById.end()) {
+        result.roughnessFactor = roughness->second;
+    }
+    return result;
 }
 
 void SectorMeshRenderer::UpdateCamera()
