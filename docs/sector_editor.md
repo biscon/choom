@@ -872,6 +872,12 @@ lightmap resolution does not increase the number of screen fragments, but it
 does increase memory, upload, and texture-cache costs and can add atlas-bound
 draw batches.
 
+Generated sector surfaces use their geometric normals during baking. Automatic
+`_normal` companion textures are runtime material detail for dynamic lighting;
+they are deliberately not sampled into the low-resolution baked lightmap.
+Directional baked normal response would require a directional-lightmap path and
+is deferred.
+
 `Preview Settings -> Lighting` edits the map-level outdoor directional light.
 Its `directionToLight` vector points from the shaded surface toward the light
 source. The light contributes only to baked lightmap samples whose generated
@@ -887,7 +893,7 @@ for the bake. If the document changed during the bake, the temporary result is
 discarded.
 
 The source hash is deterministic over the topology lightmap bake version
-(`15`), atlas constants, resolved quality density/sample counts, coordinate
+(`16`), atlas constants, resolved quality density/sample counts, coordinate
 subdivision value, map texture definitions referenced by baked surface fields,
 vertex/linedef/sidedef/sector
 IDs and geometry, sector and sidedef texture and UV fields, static lights, and
@@ -895,7 +901,9 @@ bake settings. Directional light enabled state, normalized direction, RGB color,
 and intensity are included, so directional changes invalidate baked lightmaps.
 Middle texture receiver data is included because it affects lightmap chart
 layout. Sky visual settings do not invalidate baked lightmaps. The hash does not
-include the installed baked-lightmap metadata itself.
+include automatic companion normal-map presence or content because normal maps
+are runtime-only for generated sector surfaces. It also does not include the
+installed baked-lightmap metadata itself.
 
 Each baked artifact stores direct static-light contribution and one-bounce indirect
 light in RGB, and ambient occlusion in alpha. 3D Mode binds the atlas assigned

@@ -22,7 +22,6 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
-#include <mutex>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -120,29 +119,6 @@ struct BakeTexel {
     Vector3 position = {};
     Vector3 normal = {};
     Vector3 geometricNormal = {};
-};
-
-struct SectorLightmapNormalMap {
-    bool valid = false;
-    int width = 0;
-    int height = 0;
-    std::vector<Color> pixels;
-};
-
-class SectorLightmapNormalMapCache {
-public:
-    bool Sample(
-            const SectorTopologyMap& map,
-            const std::string& textureId,
-            Vector2 uv,
-            Vector3& outTangentNormal);
-
-private:
-    const SectorLightmapNormalMap& LoadOrGet(
-            const SectorTopologyMap& map,
-            const std::string& textureId);
-
-    std::unordered_map<std::string, SectorLightmapNormalMap> mapsByPath;
 };
 
 struct LightmapWorldPointLight {
@@ -281,93 +257,6 @@ std::string HashToString(uint64_t hash)
     return buffer;
 }
 
-struct NormalMapFingerprintCacheEntry {
-    uintmax_t fileSize = 0;
-    std::filesystem::file_time_type modifiedTime = {};
-    std::string fingerprint;
-};
-
-std::unordered_map<std::string, NormalMapFingerprintCacheEntry>& NormalMapFingerprintCache()
-{
-    static std::unordered_map<std::string, NormalMapFingerprintCacheEntry> cache;
-    return cache;
-}
-
-std::mutex& NormalMapFingerprintCacheMutex()
-{
-    static std::mutex mutex;
-    return mutex;
-}
-
-std::string ComputeNormalMapFingerprint(const SectorTextureDefinition& texture)
-{
-    const std::string normalMapPath = SectorTextureNormalMapPath(texture.path);
-    if (normalMapPath.empty()) {
-        return "missing";
-    }
-
-    std::error_code pathError;
-    std::filesystem::path resolvedPath = std::filesystem::absolute(
-            ResolveSectorAssetPath(normalMapPath),
-            pathError);
-    if (pathError) {
-        resolvedPath = std::filesystem::path(
-                ResolveSectorAssetPath(normalMapPath));
-        pathError.clear();
-    }
-    resolvedPath = resolvedPath.lexically_normal();
-    if (!std::filesystem::is_regular_file(resolvedPath, pathError)
-            || pathError) {
-        return pathError ? "unreadable" : "missing";
-    }
-    const uintmax_t fileSize = std::filesystem::file_size(
-            resolvedPath,
-            pathError);
-    if (pathError) {
-        return "unreadable";
-    }
-    const std::filesystem::file_time_type modifiedTime =
-            std::filesystem::last_write_time(resolvedPath, pathError);
-    if (pathError) {
-        return "unreadable";
-    }
-
-    const std::string cacheKey = resolvedPath.generic_string();
-    std::lock_guard<std::mutex> lock(NormalMapFingerprintCacheMutex());
-    auto& cache = NormalMapFingerprintCache();
-    const auto cached = cache.find(cacheKey);
-    if (cached != cache.end()
-            && cached->second.fileSize == fileSize
-            && cached->second.modifiedTime == modifiedTime) {
-        return cached->second.fingerprint;
-    }
-
-    std::ifstream input(resolvedPath, std::ios::binary);
-    if (!input) {
-        return "unreadable";
-    }
-    uint64_t hash = 14695981039346656037ull;
-    FnvAppendString(hash, "sector-generated-normal-map-v1");
-    std::array<char, 64 * 1024> buffer{};
-    while (input) {
-        input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-        const std::streamsize count = input.gcount();
-        for (std::streamsize i = 0; i < count; ++i) {
-            hash = FnvAppendByte(hash, static_cast<uint8_t>(buffer[static_cast<size_t>(i)]));
-        }
-    }
-    if (!input.eof()) {
-        return "unreadable";
-    }
-
-    const std::string fingerprint = "present:" + HashToString(hash);
-    cache[cacheKey] = NormalMapFingerprintCacheEntry{
-            fileSize,
-            modifiedTime,
-            fingerprint};
-    return fingerprint;
-}
-
 unsigned char FloatToByte(float value)
 {
     return ClampColorByte(value * 255.0f);
@@ -407,194 +296,6 @@ Vector2 Interpolate(Vector2 a, Vector2 b, Vector2 c, float wa, float wb, float w
             a.x * wa + b.x * wb + c.x * wc,
             a.y * wa + b.y * wb + c.y * wc
     };
-}
-
-int WrapPixelIndex(int value, int size)
-{
-    if (size <= 0) {
-        return 0;
-    }
-    const int wrapped = value % size;
-    return wrapped < 0 ? wrapped + size : wrapped;
-}
-
-Vector3 DecodeTangentNormal(Color color)
-{
-    return Vector3{
-            static_cast<float>(color.r) * (2.0f / 255.0f) - 1.0f,
-            static_cast<float>(color.g) * (2.0f / 255.0f) - 1.0f,
-            static_cast<float>(color.b) * (2.0f / 255.0f) - 1.0f};
-}
-
-const SectorLightmapNormalMap& SectorLightmapNormalMapCache::LoadOrGet(
-        const SectorTopologyMap& map,
-        const std::string& textureId)
-{
-    static const SectorLightmapNormalMap missing;
-    const auto textureIt = map.texturesById.find(textureId);
-    if (textureIt == map.texturesById.end()) {
-        return missing;
-    }
-
-    const std::string normalMapPath = SectorTextureNormalMapPath(
-            textureIt->second.path);
-    const std::string resolvedPath = ResolveSectorAssetPath(normalMapPath);
-    auto existing = mapsByPath.find(resolvedPath);
-    if (existing != mapsByPath.end()) {
-        return existing->second;
-    }
-
-    SectorLightmapNormalMap normalMap;
-    std::error_code fileError;
-    if (normalMapPath.empty()
-            || !std::filesystem::is_regular_file(resolvedPath, fileError)
-            || fileError) {
-        return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
-    }
-
-    Image image = LoadImage(resolvedPath.c_str());
-    if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
-        TraceLog(
-                LOG_WARNING,
-                "Sector lightmap normal map could not load '%s'",
-                resolvedPath.c_str());
-        if (image.data != nullptr) {
-            UnloadImage(image);
-        }
-        return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
-    }
-
-    Color* colors = LoadImageColors(image);
-    if (colors == nullptr) {
-        TraceLog(
-                LOG_WARNING,
-                "Sector lightmap normal map could not read pixels from '%s'",
-                resolvedPath.c_str());
-        UnloadImage(image);
-        return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
-    }
-
-    normalMap.valid = true;
-    normalMap.width = image.width;
-    normalMap.height = image.height;
-    normalMap.pixels.assign(
-            colors,
-            colors + static_cast<size_t>(image.width * image.height));
-    UnloadImageColors(colors);
-    UnloadImage(image);
-    return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
-}
-
-bool SectorLightmapNormalMapCache::Sample(
-        const SectorTopologyMap& map,
-        const std::string& textureId,
-        Vector2 uv,
-        Vector3& outTangentNormal)
-{
-    outTangentNormal = Vector3{0.0f, 0.0f, 1.0f};
-    const SectorLightmapNormalMap& normalMap = LoadOrGet(map, textureId);
-    if (!normalMap.valid
-            || normalMap.width <= 0
-            || normalMap.height <= 0
-            || normalMap.pixels.empty()
-            || !std::isfinite(uv.x)
-            || !std::isfinite(uv.y)) {
-        return false;
-    }
-
-    const float wrappedU = uv.x - std::floor(uv.x);
-    const float wrappedV = uv.y - std::floor(uv.y);
-    const float pixelX = wrappedU * static_cast<float>(normalMap.width) - 0.5f;
-    const float pixelY = wrappedV * static_cast<float>(normalMap.height) - 0.5f;
-    const int x0 = static_cast<int>(std::floor(pixelX));
-    const int y0 = static_cast<int>(std::floor(pixelY));
-    const int x1 = x0 + 1;
-    const int y1 = y0 + 1;
-    const float tx = pixelX - std::floor(pixelX);
-    const float ty = pixelY - std::floor(pixelY);
-    const auto sample = [&normalMap](int x, int y) {
-        const int wrappedX = WrapPixelIndex(x, normalMap.width);
-        const int wrappedY = WrapPixelIndex(y, normalMap.height);
-        return DecodeTangentNormal(normalMap.pixels[static_cast<size_t>(
-                wrappedY * normalMap.width + wrappedX)]);
-    };
-    const Vector3 top = Vector3Lerp(sample(x0, y0), sample(x1, y0), tx);
-    const Vector3 bottom = Vector3Lerp(sample(x0, y1), sample(x1, y1), tx);
-    outTangentNormal = Vector3Lerp(top, bottom, ty);
-    return Vector3LengthSqr(outTangentNormal) > BakeEpsilon;
-}
-
-Vector3 TransformTangentNormalToWorld(
-        const SectorGeneratedVertex& vertex0,
-        const SectorGeneratedVertex& vertex1,
-        const SectorGeneratedVertex& vertex2,
-        Vector3 geometricNormal,
-        Vector3 tangentNormal)
-{
-    const Vector3 edge1 = Vector3Subtract(vertex1.position, vertex0.position);
-    const Vector3 edge2 = Vector3Subtract(vertex2.position, vertex0.position);
-    const Vector2 uvEdge1 = Vector2Subtract(vertex1.uv, vertex0.uv);
-    const Vector2 uvEdge2 = Vector2Subtract(vertex2.uv, vertex0.uv);
-    const float determinant = uvEdge1.x * uvEdge2.y - uvEdge1.y * uvEdge2.x;
-    if (std::fabs(determinant) <= BakeEpsilon) {
-        return geometricNormal;
-    }
-
-    const float inverseDeterminant = 1.0f / determinant;
-    Vector3 tangent = Vector3Scale(
-            Vector3Subtract(
-                    Vector3Scale(edge1, uvEdge2.y),
-                    Vector3Scale(edge2, uvEdge1.y)),
-            inverseDeterminant);
-    const Vector3 sourceBitangent = Vector3Scale(
-            Vector3Subtract(
-                    Vector3Scale(edge2, uvEdge1.x),
-                    Vector3Scale(edge1, uvEdge2.x)),
-            inverseDeterminant);
-    tangent = Vector3Subtract(
-            tangent,
-            Vector3Scale(geometricNormal, Vector3DotProduct(tangent, geometricNormal)));
-    if (Vector3LengthSqr(tangent) <= BakeEpsilon
-            || Vector3LengthSqr(sourceBitangent) <= BakeEpsilon) {
-        return geometricNormal;
-    }
-    tangent = Vector3Normalize(tangent);
-    const float handedness = Vector3DotProduct(
-            Vector3CrossProduct(geometricNormal, tangent),
-            sourceBitangent) < 0.0f ? -1.0f : 1.0f;
-    const Vector3 bitangent = Vector3Scale(
-            Vector3Normalize(Vector3CrossProduct(geometricNormal, tangent)),
-            handedness);
-    const Vector3 worldNormal = Vector3Add(
-            Vector3Add(
-                    Vector3Scale(tangent, tangentNormal.x),
-                    Vector3Scale(bitangent, tangentNormal.y)),
-            Vector3Scale(geometricNormal, tangentNormal.z));
-    return Vector3LengthSqr(worldNormal) > BakeEpsilon
-            ? Vector3Normalize(worldNormal)
-            : geometricNormal;
-}
-
-Vector3 ResolveSurfaceShadingNormal(
-        const SectorTopologyMap& map,
-        const SectorGeneratedSurface& surface,
-        const RasterHit& hit,
-        SectorLightmapNormalMapCache& normalMapCache)
-{
-    Vector3 tangentNormal{};
-    if (!normalMapCache.Sample(map, surface.textureId, hit.uv, tangentNormal)) {
-        return hit.geometricNormal;
-    }
-    const size_t vertexIndex = static_cast<size_t>(hit.triangleIndex) * 3u;
-    if (hit.triangleIndex < 0 || vertexIndex + 2u >= surface.vertices.size()) {
-        return hit.geometricNormal;
-    }
-    return TransformTangentNormalToWorld(
-            surface.vertices[vertexIndex + 0u],
-            surface.vertices[vertexIndex + 1u],
-            surface.vertices[vertexIndex + 2u],
-            hit.geometricNormal,
-            tangentNormal);
 }
 
 bool RasterizeSurfacePoint(
@@ -5030,7 +4731,6 @@ bool BakeSectorLightmapForMap(
     const std::vector<SectorLightmapAlphaOccluderTriangle> alphaOccluders =
             CollectSectorLightmapAlphaOccluders(geometry);
     SectorLightmapAlphaMaskCache alphaMaskCache;
-    SectorLightmapNormalMapCache normalMapCache;
     const std::vector<BakeTriangle> triangles =
             BuildBakeTriangles(geometry, layout, staticModels);
     ReportProgress(callbacks, SectorLightmapBakePhase::BuildingBvh, 0, 1);
@@ -5099,12 +4799,6 @@ bool BakeSectorLightmapForMap(
                     continue;
                 }
 
-                const Vector3 shadingNormal = ResolveSurfaceShadingNormal(
-                        map,
-                        surface,
-                        hit,
-                        normalMapCache);
-
                 const size_t pixelIndex = static_cast<size_t>(chart.atlasIndex)
                         * atlasPixelCount
                         + static_cast<size_t>(y * width + x);
@@ -5117,7 +4811,7 @@ bool BakeSectorLightmapForMap(
                         chart.surfaceIndex,
                         hit.triangleIndex,
                         hit.position,
-                        shadingNormal,
+                        hit.geometricNormal,
                         hit.geometricNormal
                 });
                 validChartTexel[pixelIndex] = 1;
@@ -5795,8 +5489,6 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendString(hash, texture.id);
         FnvAppendString(hash, texture.path);
         FnvAppendInt(hash, static_cast<int>(texture.filter));
-        FnvAppendString(hash, SectorTextureNormalMapPath(texture.path));
-        FnvAppendString(hash, ComputeNormalMapFingerprint(texture));
     }
 
     const std::vector<const SectorTopologyVertex*> vertices = SortedLightmapHashRecords(map.vertices);

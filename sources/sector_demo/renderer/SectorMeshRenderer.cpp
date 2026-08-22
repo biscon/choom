@@ -244,20 +244,24 @@ vec3 SurfaceNormal(vec3 geometricNormal)
     vec3 positionDxPerpendicular = cross(geometricNormal, positionDx);
     vec3 tangent = positionDyPerpendicular * uvDx.x
             + positionDxPerpendicular * uvDy.x;
-    vec3 bitangent = positionDyPerpendicular * uvDx.y
+    vec3 sourceBitangent = positionDyPerpendicular * uvDx.y
             + positionDxPerpendicular * uvDy.y;
-    float basisLengthSq = max(dot(tangent, tangent), dot(bitangent, bitangent));
-    if (basisLengthSq <= 0.00000001) {
+    tangent -= geometricNormal * dot(tangent, geometricNormal);
+    if (dot(tangent, tangent) <= 0.00000001
+            || dot(sourceBitangent, sourceBitangent) <= 0.00000001) {
         return geometricNormal;
     }
 
-    float inverseBasisLength = inversesqrt(basisLengthSq);
+    tangent = normalize(tangent);
+    float handedness = dot(cross(geometricNormal, tangent), sourceBitangent) < 0.0
+            ? -1.0
+            : 1.0;
+    vec3 bitangent = SafeNormalize(
+            cross(geometricNormal, tangent),
+            vec3(0.0, 0.0, 1.0)) * handedness;
     vec3 mappedNormal = texture(normalTexture, fragTexCoord).xyz * 2.0 - 1.0;
     return SafeNormalize(
-            mat3(
-                    tangent * inverseBasisLength,
-                    bitangent * inverseBasisLength,
-                    geometricNormal) * mappedNormal,
+            mat3(tangent, bitangent, geometricNormal) * mappedNormal,
             geometricNormal);
 }
 

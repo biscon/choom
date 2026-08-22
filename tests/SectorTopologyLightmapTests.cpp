@@ -1848,8 +1848,8 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 15,
-          "lightmap bake version is bumped for linear HDR artifacts");
+    Check(game::kSectorLightmapBakeVersion == 16,
+          "lightmap bake version is bumped for geometric-normal sector bakes");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);
@@ -2570,7 +2570,7 @@ void TestDirectionalLightBakeBehavior()
     Check(pointMetrics.minAlpha < 255, "ambient occlusion alpha behavior remains present");
 }
 
-void TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting()
+void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
 {
     const std::filesystem::path root =
             Phase01bSandboxDir() / "generated_surface_normal_maps";
@@ -2593,12 +2593,10 @@ void TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting()
                   && !game::IsSectorTextureNormalMapPath("assets/images/stone.png"),
           "normal-map convention identifies the automatic filename marker");
 
-    const std::filesystem::path flatBasePath = root / "flat_floor.png";
-    const std::filesystem::path mappedBasePath = root / "mapped_floor.png";
-    const std::filesystem::path mappedNormalPath = root / "mapped_floor_normal.png";
-    WriteSolidRgbTexture(flatBasePath, WHITE);
-    WriteSolidRgbTexture(mappedBasePath, WHITE);
-    WriteSolidRgbTexture(mappedNormalPath, Color{255, 128, 128, 255});
+    const std::filesystem::path floorBasePath = root / "floor.png";
+    const std::filesystem::path floorNormalPath = root / "floor_normal.png";
+    WriteSolidRgbTexture(floorBasePath, WHITE);
+    std::filesystem::remove(floorNormalPath);
 
     auto makeDirectionalMap = [](const std::filesystem::path& floorTexturePath) {
         game::SectorTopologyMap map = MakeSquare();
@@ -2615,16 +2613,19 @@ void TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting()
         return map;
     };
 
-    const LightmapImageMetrics flat = BakeAndMeasure(
-            makeDirectionalMap(flatBasePath),
-            "generated_surface_flat_normal.lightmap.png");
-    const LightmapImageMetrics mapped = BakeAndMeasure(
-            makeDirectionalMap(mappedBasePath),
-            "generated_surface_mapped_normal.lightmap.png");
-    Check(flat.floorCenterRgb > 600,
+    const game::SectorTopologyMap directionalMap =
+            makeDirectionalMap(floorBasePath);
+    const LightmapImageMetrics withoutNormal = BakeAndMeasure(
+            directionalMap,
+            "generated_surface_without_normal.lightmap.png");
+    WriteSolidRgbTexture(floorNormalPath, Color{255, 128, 128, 255});
+    const LightmapImageMetrics withNormal = BakeAndMeasure(
+            directionalMap,
+            "generated_surface_with_normal.lightmap.png");
+    Check(withoutNormal.floorCenterRgb > 600,
           "missing companion normal map preserves geometric direct lighting");
-    Check(mapped.floorCenterRgb + 300 < flat.floorCenterRgb,
-          "companion normal map changes baked direct-light response");
+    Check(withNormal.floorCenterRgb == withoutNormal.floorCenterRgb,
+          "companion normal map does not change baked direct-light response");
 
     const std::filesystem::path hashBasePath = root / "hash_surface.png";
     const std::filesystem::path hashNormalPath = root / "hash_surface_normal.png";
@@ -2637,13 +2638,13 @@ void TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting()
     WriteSolidRgbTexture(hashNormalPath, Color{128, 128, 255, 255});
     const std::string presentNormalHash =
             game::ComputeSectorLightmapSourceHash(hashMap);
-    Check(presentNormalHash != missingNormalHash,
-          "adding a referenced companion normal map changes the source hash");
+    Check(presentNormalHash == missingNormalHash,
+          "adding a referenced companion normal map does not change the source hash");
     WriteSolidRgbTexture(hashNormalPath, Color{255, 128, 128, 255}, 3, 2);
     const std::string changedNormalHash =
             game::ComputeSectorLightmapSourceHash(hashMap);
-    Check(changedNormalHash != presentNormalHash,
-          "changing referenced normal-map content changes the source hash");
+    Check(changedNormalHash == presentNormalHash,
+          "changing referenced normal-map content does not change the source hash");
     std::filesystem::remove(hashNormalPath);
     Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
           "removing a companion normal map restores the missing-map source hash");
@@ -4773,7 +4774,7 @@ int main()
     TestAlphaAwareStaticRayOcclusion();
     TestAlphaAwareStaticLightBakePaths();
     TestDirectionalLightBakeBehavior();
-    TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting();
+    TestGeneratedSurfaceNormalMapConventionAndBakeIndependence();
     TestStaticSpotlightBakeBehavior();
     TestStaticModelUvPreparationAndImportedTransforms();
     TestVerySmallStaticModelUvNormalization();

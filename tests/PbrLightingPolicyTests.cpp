@@ -352,6 +352,37 @@ std::string ReadSource(const char* path)
             std::istreambuf_iterator<char>());
 }
 
+void TestSectorRuntimeNormalMappingPolicy()
+{
+    const std::string source = ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    Check(!source.empty(),
+          "sector runtime normal-mapping policy can read the active renderer");
+    Check(source.find("engine::TextureColorUsage::LinearData")
+                    != std::string::npos
+                    && source.find("normalTextureHandlesById.emplace(")
+                            != std::string::npos,
+          "automatic sector normal maps load as linear texture data");
+    Check(source.find(
+                      "tangent -= geometricNormal * dot(tangent, geometricNormal)")
+                    != std::string::npos
+                    && source.find(
+                               "dot(cross(geometricNormal, tangent), sourceBitangent) < 0.0")
+                            != std::string::npos
+                    && source.find("cross(geometricNormal, tangent)")
+                            != std::string::npos
+                    && source.find(
+                               "mat3(tangent, bitangent, geometricNormal) * mappedNormal")
+                            != std::string::npos,
+          "sector runtime normal mapping builds an orthonormal handed tangent basis");
+    Check(source.find("inverseBasisLength") == std::string::npos,
+          "sector runtime normal mapping does not reuse one scale for both basis axes");
+    Check(source.find("vec3 worldNormal = SurfaceNormal(geometricNormal)")
+                    != std::string::npos
+                    && source.find("dot(worldNormal, lightDirection)")
+                            != std::string::npos,
+          "dynamic sector lights evaluate the mapped world normal");
+}
+
 void TestBakedHdrConsumersStayUnclamped()
 {
     const std::string sector = ReadSource(SECTOR_SHADER_SOURCE_PATH);
@@ -878,6 +909,7 @@ int main()
     TestMaterialTextureSemantics();
     TestEnvironmentEligibility();
     TestRemovedShaderPathsStayRemoved();
+    TestSectorRuntimeNormalMappingPolicy();
     TestBakedHdrConsumersStayUnclamped();
     TestDistanceFogUsesDarknessGatedScattering();
     TestHdrEffectShaderAndPassPolicies();

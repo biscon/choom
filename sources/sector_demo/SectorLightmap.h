@@ -188,8 +188,8 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 15: baked illumination is linear HDR end to end.
-constexpr int kSectorLightmapBakeVersion = 15;
+// Version 16: generated sector surfaces bake with geometric normals only.
+constexpr int kSectorLightmapBakeVersion = 16;
 constexpr int kSectorLightmapArtifactVersion = 1;
 constexpr const char* kSectorLightmapArtifactFormat =
         "rgba16fLinearHdrRgbAoLE";
