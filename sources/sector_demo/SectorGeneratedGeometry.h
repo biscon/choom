@@ -41,8 +41,8 @@ struct SectorGeneratedVertex {
 
 struct SectorGeneratedSurface {
     SectorGeneratedSurfaceRef ref;
-    std::string textureId;
-    std::string decalTextureId;
+    std::string materialId;
+    std::string decalMaterialId;
     float decalOpacity = 1.0f;
     bool decalEmissive = false;
     Vector3 decalTint = {1.0f, 1.0f, 1.0f};

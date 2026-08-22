@@ -49,7 +49,7 @@ struct SectorPreviewSettings {
 };
 
 struct SectorTopologySkySettings {
-    std::string textureId = "sky_cylinder";
+    std::string materialId = "sky_cylinder";
     float yawOffsetDegrees = 0.0f;
     float verticalOffset = 0.0f;
     float verticalScale = 1.0f;
@@ -255,7 +255,7 @@ struct SectorPlacedDoor {
     bool autoOpen = false;
     float interactionDistance = 1.5f;
     float autoOpenDistance = 2.0f;
-    std::string textureId;
+    std::string materialId;
     std::string openSoundId;
     std::string closeSoundId;
     SectorDoorFaceUvSet faceUvs;
@@ -300,7 +300,7 @@ struct SectorPlacedRuntimeObject {
 };
 
 struct SectorTopologyMap {
-    std::unordered_map<std::string, SectorTextureDefinition> texturesById;
+    std::unordered_map<std::string, SectorMaterialDefinition> resolvedMaterialsById;
     std::vector<SectorTopologyVertex> vertices;
     std::vector<SectorTopologyLineDef> lineDefs;
     std::vector<SectorTopologySideDef> sideDefs;

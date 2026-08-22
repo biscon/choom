@@ -895,7 +895,7 @@ bool SameWallPartSettings(
         const SectorTopologyWallPartSettings& a,
         const SectorTopologyWallPartSettings& b)
 {
-    return a.textureId == b.textureId && SameUvSettings(a.uv, b.uv);
+    return a.materialId == b.materialId && SameUvSettings(a.uv, b.uv);
 }
 
 bool SameSideDefMergeSettings(

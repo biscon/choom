@@ -17,14 +17,6 @@ namespace game {
 
 class SectorEditorTextureCatalogService;
 
-struct SectorEditorAddTextureModalCallbacks {
-    std::function<void()> close;
-    std::function<bool()> addSelected;
-    std::function<void(int)> selectPath;
-    std::function<void()> refreshPreview;
-    std::function<bool(std::string&)> validateId;
-};
-
 struct SectorEditorTexturePickerCallbacks {
     std::function<void()> close;
     std::function<void()> applySelection;
@@ -53,22 +45,6 @@ struct SectorEditorSpritePickerResult {
     std::vector<std::string> clipNames;
 };
 
-struct SectorEditorAddTextureResult {
-    bool success = false;
-    bool replacing = false;
-    std::string textureId;
-    std::string error;
-};
-
-void DrawAddMapTextureModal(
-        engine::UIContext& ui,
-        const engine::UIConfig& config,
-        engine::Input& input,
-        engine::AssetManager& assets,
-        engine::FontHandle font,
-        AddMapTextureState& modalState,
-        const SectorEditorAddTextureModalCallbacks& callbacks);
-
 void DrawTexturePickerModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -88,9 +64,6 @@ void DrawSpritePickerModal(
         engine::FontHandle font,
         SpritePickerState& picker,
         const SectorEditorSpritePickerCallbacks& callbacks);
-
-void RefreshAddMapTextureScan(AddMapTextureState& modalState);
-void RefreshAddMapTexturePreview(AddMapTextureState& modalState, engine::AssetManager& assets);
 
 void RefreshSpritePickerScan(SpritePickerState& picker);
 void RefreshSpriteMetadataCatalog(SectorSpriteMetadataCatalog& catalog);

@@ -67,10 +67,10 @@ game::SectorTopologyMap MakeMap(bool skyCeiling)
 
 void AddTexture(game::SectorTopologyMap& map, const char* id)
 {
-    map.texturesById.emplace(id, game::SectorTextureDefinition{
+    map.resolvedMaterialsById.emplace(id, game::SectorMaterialDefinition{
             id,
             "assets/images/test.png",
-            game::SectorTextureFilter::Anisotropic8x});
+            game::SectorMaterialFilter::Anisotropic8x});
 }
 
 void TestDefaultSkyTextureLookup()
@@ -90,7 +90,7 @@ void TestDefaultSkyTextureLookup()
 
     game::SectorTopologyMap sky = MakeMap(true);
     AddTexture(sky, std::string(game::kDefaultSkyTextureId).c_str());
-    const game::SectorTextureDefinition* texture = game::FindSkyTexture(sky);
+    const game::SectorMaterialDefinition* texture = game::FindSkyTexture(sky);
     Check(texture != nullptr, "sky_cylinder texture entry is selected");
     Check(texture != nullptr && texture->id == game::kDefaultSkyTextureId,
           "selected sky texture preserves sky_cylinder id");
@@ -98,7 +98,7 @@ void TestDefaultSkyTextureLookup()
           "sky sector plus sky_cylinder texture enables default sky cylinder");
 
     game::SectorTopologyMap configured = MakeMap(true);
-    configured.skySettings.textureId = "storm";
+    configured.skySettings.materialId = "storm";
     AddTexture(configured, "sky_cylinder");
     AddTexture(configured, "storm");
     texture = game::FindSkyTexture(configured);
@@ -106,7 +106,7 @@ void TestDefaultSkyTextureLookup()
           "configured sky texture ID selects matching texture");
 
     game::SectorTopologyMap emptyConfigured = MakeMap(true);
-    emptyConfigured.skySettings.textureId.clear();
+    emptyConfigured.skySettings.materialId.clear();
     AddTexture(emptyConfigured, std::string(game::kDefaultSkyTextureId).c_str());
     Check(game::FindSkyTexture(emptyConfigured) == nullptr,
           "empty configured sky texture ID selects no texture");
@@ -114,7 +114,7 @@ void TestDefaultSkyTextureLookup()
           "empty configured sky texture ID disables sky cylinder");
 
     game::SectorTopologyMap missingConfigured = MakeMap(true);
-    missingConfigured.skySettings.textureId = "missing";
+    missingConfigured.skySettings.materialId = "missing";
     AddTexture(missingConfigured, std::string(game::kDefaultSkyTextureId).c_str());
     Check(game::FindSkyTexture(missingConfigured) == nullptr,
           "missing configured sky texture ID ignores unrelated default texture");

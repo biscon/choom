@@ -1291,7 +1291,7 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
     door.autoOpen = true;
     door.interactionDistance = 2.25f;
     door.autoOpenDistance = 3.5f;
-    door.textureId = "test_door";
+    door.materialId = "test_door";
     door.openSoundId = "door_open";
     door.closeSoundId = "door_close";
     map.runtimeObjects.push_back(MakePlacedDoor(35, door));
@@ -1386,7 +1386,7 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
                   && Near(render.height, 1.5f)
                   && Near(render.thickness, 0.375f)
                   && Near(render.normalOffset, 0.125f)
-                  && render.textureId == "test_door"
+                  && render.materialId == "test_door"
                   && render.visible,
             "valid placed door render component stores dimensions and material ID");
 

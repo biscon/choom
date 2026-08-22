@@ -8,10 +8,10 @@ namespace {
 
 void AddTextureReference(
         std::unordered_set<std::string>& usedTextureIds,
-        const std::string& textureId)
+        const std::string& materialId)
 {
-    if (!textureId.empty()) {
-        usedTextureIds.insert(textureId);
+    if (!materialId.empty()) {
+        usedTextureIds.insert(materialId);
     }
 }
 
@@ -19,8 +19,8 @@ void AddTextureReferences(
         std::unordered_set<std::string>& usedTextureIds,
         const SectorTopologyWallPartSettings& part)
 {
-    AddTextureReference(usedTextureIds, part.textureId);
-    AddTextureReference(usedTextureIds, part.decal.textureId);
+    AddTextureReference(usedTextureIds, part.materialId);
+    AddTextureReference(usedTextureIds, part.decal.materialId);
 }
 
 std::unordered_set<std::string> CollectUsedTextureIds(
@@ -40,10 +40,10 @@ std::unordered_set<std::string> CollectUsedTextureIds(
     usedTextureIds.insert("ceiling");
 
     for (const SectorAuthoringFaceAnchor& anchor : authoringGraph.faceAnchors) {
-        AddTextureReference(usedTextureIds, anchor.floorTextureId);
-        AddTextureReference(usedTextureIds, anchor.ceilingTextureId);
-        AddTextureReference(usedTextureIds, anchor.floorDecal.textureId);
-        AddTextureReference(usedTextureIds, anchor.ceilingDecal.textureId);
+        AddTextureReference(usedTextureIds, anchor.floorMaterialId);
+        AddTextureReference(usedTextureIds, anchor.ceilingMaterialId);
+        AddTextureReference(usedTextureIds, anchor.floorDecal.materialId);
+        AddTextureReference(usedTextureIds, anchor.ceilingDecal.materialId);
         AddTextureReferences(usedTextureIds, anchor.defaultWall);
         AddTextureReferences(usedTextureIds, anchor.defaultLower);
         AddTextureReferences(usedTextureIds, anchor.defaultUpper);
@@ -56,10 +56,10 @@ std::unordered_set<std::string> CollectUsedTextureIds(
         AddTextureReferences(usedTextureIds, side.middle);
     }
 
-    AddTextureReference(usedTextureIds, map.skySettings.textureId);
+    AddTextureReference(usedTextureIds, map.skySettings.materialId);
     for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
         if (object.kind == "door") {
-            AddTextureReference(usedTextureIds, object.door.textureId);
+            AddTextureReference(usedTextureIds, object.door.materialId);
         }
     }
     return usedTextureIds;
@@ -108,7 +108,7 @@ SectorEditorAssetPruneResult PruneUnusedSectorEditorAssets(
     SectorEditorAssetPruneResult result;
     if (options.pruneTextures) {
         result.removedTextureCount = EraseUnusedAssets(
-                map.texturesById,
+                map.resolvedMaterialsById,
                 CollectUsedTextureIds(authoringGraph, map));
     }
     if (options.pruneSounds) {

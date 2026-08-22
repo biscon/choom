@@ -203,10 +203,10 @@ const game::SectorReceiverBounds* FindBounds(
     return nullptr;
 }
 
-game::SectorTopologyWallPartSettings Part(const char* textureId)
+game::SectorTopologyWallPartSettings Part(const char* materialId)
 {
     game::SectorTopologyWallPartSettings part;
-    part.textureId = textureId;
+    part.materialId = materialId;
     return part;
 }
 
@@ -216,8 +216,8 @@ game::SectorTopologySector Sector(int id, float floorZ = 0.0f, float ceilingZ = 
     sector.id = id;
     sector.floorZ = floorZ;
     sector.ceilingZ = ceilingZ;
-    sector.floorTextureId = "floor-" + std::to_string(id);
-    sector.ceilingTextureId = "ceiling-" + std::to_string(id);
+    sector.floorMaterialId = "floor-" + std::to_string(id);
+    sector.ceilingMaterialId = "ceiling-" + std::to_string(id);
     sector.ambientColor = Color{200, 160, 120, 255};
     sector.ambientIntensity = 0.5f;
     return sector;
@@ -308,10 +308,10 @@ game::SectorTopologyMap MakeDiagonal()
     return map;
 }
 
-bool HasBatchTexture(const game::SectorMeshBatchDataResult& result, const std::string& textureId)
+bool HasBatchTexture(const game::SectorMeshBatchDataResult& result, const std::string& materialId)
 {
     for (const game::SectorMeshBatchData& batch : result.batches) {
-        if (batch.textureId == textureId) {
+        if (batch.materialId == materialId) {
             return true;
         }
     }
@@ -332,13 +332,13 @@ int CountSectorRecords(const game::SectorMeshBatchDataResult& result, int sector
 const game::SectorMeshBatchData* FindSectorRecord(
         const game::SectorMeshBatchDataResult& result,
         int sectorId,
-        const std::string& textureId,
-        const std::string& decalTextureId)
+        const std::string& materialId,
+        const std::string& decalMaterialId)
 {
     for (const game::SectorMeshBatchData& batch : result.batches) {
         if (batch.sectorId == sectorId
-                && batch.textureId == textureId
-                && batch.decalTextureId == decalTextureId) {
+                && batch.materialId == materialId
+                && batch.decalMaterialId == decalMaterialId) {
             return &batch;
         }
     }
@@ -347,11 +347,11 @@ const game::SectorMeshBatchData* FindSectorRecord(
 
 const game::SectorMeshBatchData* FindBatch(
         const game::SectorMeshBatchDataResult& result,
-        const std::string& textureId,
-        const std::string& decalTextureId)
+        const std::string& materialId,
+        const std::string& decalMaterialId)
 {
     for (const game::SectorMeshBatchData& batch : result.batches) {
-        if (batch.textureId == textureId && batch.decalTextureId == decalTextureId) {
+        if (batch.materialId == materialId && batch.decalMaterialId == decalMaterialId) {
             return &batch;
         }
     }
@@ -360,16 +360,16 @@ const game::SectorMeshBatchData* FindBatch(
 
 const game::SectorMeshBatchData* FindBatch(
         const game::SectorMeshBatchDataResult& result,
-        const std::string& textureId,
-        const std::string& decalTextureId,
+        const std::string& materialId,
+        const std::string& decalMaterialId,
         float decalOpacity,
         bool decalEmissive = false,
         Vector3 decalTint = {1.0f, 1.0f, 1.0f},
         float decalEmissiveStrength = 1.0f)
 {
     for (const game::SectorMeshBatchData& batch : result.batches) {
-        if (batch.textureId == textureId
-                && batch.decalTextureId == decalTextureId
+        if (batch.materialId == materialId
+                && batch.decalMaterialId == decalMaterialId
                 && Near(batch.decalOpacity, decalOpacity)
                 && batch.decalEmissive == decalEmissive
                 && Near(batch.decalTint, decalTint)
@@ -382,12 +382,12 @@ const game::SectorMeshBatchData* FindBatch(
 
 int CountBatches(
         const game::SectorMeshBatchDataResult& result,
-        const std::string& textureId,
-        const std::string& decalTextureId)
+        const std::string& materialId,
+        const std::string& decalMaterialId)
 {
     int count = 0;
     for (const game::SectorMeshBatchData& batch : result.batches) {
-        if (batch.textureId == textureId && batch.decalTextureId == decalTextureId) {
+        if (batch.materialId == materialId && batch.decalMaterialId == decalMaterialId) {
             ++count;
         }
     }
@@ -396,8 +396,8 @@ int CountBatches(
 
 int CountBatches(
         const game::SectorMeshBatchDataResult& result,
-        const std::string& textureId,
-        const std::string& decalTextureId,
+        const std::string& materialId,
+        const std::string& decalMaterialId,
         float decalOpacity,
         bool decalEmissive = false,
         Vector3 decalTint = {1.0f, 1.0f, 1.0f},
@@ -405,8 +405,8 @@ int CountBatches(
 {
     int count = 0;
     for (const game::SectorMeshBatchData& batch : result.batches) {
-        if (batch.textureId == textureId
-                && batch.decalTextureId == decalTextureId
+        if (batch.materialId == materialId
+                && batch.decalMaterialId == decalMaterialId
                 && Near(batch.decalOpacity, decalOpacity)
                 && batch.decalEmissive == decalEmissive
                 && Near(batch.decalTint, decalTint)
@@ -418,8 +418,8 @@ int CountBatches(
 }
 
 game::SectorGeneratedSurface MakeBatchTestSurface(
-        const char* textureId,
-        const char* decalTextureId,
+        const char* materialId,
+        const char* decalMaterialId,
         Vector2 decalUv,
         float decalOpacity,
         float xOffset,
@@ -428,12 +428,12 @@ game::SectorGeneratedSurface MakeBatchTestSurface(
         float decalEmissiveStrength = 1.0f)
 {
     game::SectorGeneratedSurface surface;
-    surface.textureId = textureId;
-    surface.decalTextureId = decalTextureId;
-    surface.decalOpacity = decalTextureId[0] == '\0' ? 1.0f : decalOpacity;
-    surface.decalEmissive = decalTextureId[0] != '\0' && decalEmissive;
-    surface.decalTint = decalTextureId[0] == '\0' ? Vector3{1.0f, 1.0f, 1.0f} : decalTint;
-    surface.decalEmissiveStrength = decalTextureId[0] == '\0' ? 1.0f : decalEmissiveStrength;
+    surface.materialId = materialId;
+    surface.decalMaterialId = decalMaterialId;
+    surface.decalOpacity = decalMaterialId[0] == '\0' ? 1.0f : decalOpacity;
+    surface.decalEmissive = decalMaterialId[0] != '\0' && decalEmissive;
+    surface.decalTint = decalMaterialId[0] == '\0' ? Vector3{1.0f, 1.0f, 1.0f} : decalTint;
+    surface.decalEmissiveStrength = decalMaterialId[0] == '\0' ? 1.0f : decalEmissiveStrength;
     surface.normal = Vector3{0.0f, 1.0f, 0.0f};
     surface.vertices = {
             game::SectorGeneratedVertex{
@@ -462,22 +462,22 @@ game::SectorGeneratedSurface MakeBatchTestSurface(
 
 game::SectorMeshBatch MakeDrawRecord(
         int sectorId,
-        const char* textureId,
-        const char* decalTextureId = "",
+        const char* materialId,
+        const char* decalMaterialId = "",
         bool decalEmissive = false)
 {
     game::SectorMeshBatch record;
     record.sectorId = sectorId;
-    record.textureId = textureId;
-    record.decalTextureId = decalTextureId;
+    record.materialId = materialId;
+    record.decalMaterialId = decalMaterialId;
     record.decalEmissive = decalEmissive;
     return record;
 }
 
-game::SectorGeneratedSurface MakeMiddleBatchTestSurface(const char* textureId, float xOffset)
+game::SectorGeneratedSurface MakeMiddleBatchTestSurface(const char* materialId, float xOffset)
 {
     game::SectorGeneratedSurface surface =
-            MakeBatchTestSurface(textureId, "", Vector2{0.0f, 0.0f}, 1.0f, xOffset);
+            MakeBatchTestSurface(materialId, "", Vector2{0.0f, 0.0f}, 1.0f, xOffset);
     surface.ref.kind = game::SectorGeneratedSurfaceKind::Middle;
     surface.alphaTest = true;
     surface.alphaCutoff = 0.5f;
@@ -684,7 +684,7 @@ void TestDecalMeshBatchData()
               "mesh batch preserves decal emissive strength");
     }
     if (noDecal != nullptr && !noDecal->vertices.empty()) {
-        Check(noDecal->decalTextureId.empty(), "no-decal batch stores empty decal texture ID");
+        Check(noDecal->decalMaterialId.empty(), "no-decal batch stores empty decal texture ID");
         Check(Near(noDecal->decalOpacity, 1.0f),
               "no-decal batch stores default uniform opacity");
         Check(!noDecal->decalEmissive, "no-decal batch stores default emissive flag");
@@ -795,7 +795,7 @@ void TestMiddleTextureBatchState()
     const game::SectorMeshBatchData* opaqueBatch = nullptr;
     const game::SectorMeshBatchData* middleBatch = nullptr;
     for (const game::SectorMeshBatchData& batch : result.batches) {
-        if (batch.textureId != "shared") {
+        if (batch.materialId != "shared") {
             continue;
         }
         if (batch.alphaTest) {

@@ -453,7 +453,7 @@ void TestAuthoringFaceInspectorHeightIncludesAllSections()
     Check(Near(height, 1434.0f),
           "authoring face height includes merge, ceiling sky, audio, materials, decals, and padding");
 
-    anchor.floorDecal.textureId = "floor_decal";
+    anchor.floorDecal.materialId = "floor_decal";
     anchor.floorDecal.emissive = true;
     const float assignedDecalHeight =
             game::MeasureSectorEditorAuthoringFaceInspectorContentHeight(

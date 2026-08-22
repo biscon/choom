@@ -673,12 +673,12 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
                 }
 
                 const Texture2D* texture = nullptr;
-                if (!render.textureId.empty()
+                if (!render.materialId.empty()
                         && context.textureResolver.resolve != nullptr) {
                     texture = context.textureResolver.resolve(
                             context.textureResolver.userData,
                             *context.assets,
-                            render.textureId);
+                            render.materialId);
                 }
                 if (texture == nullptr) {
                     texture = context.defaultMaterialTexture != nullptr

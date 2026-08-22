@@ -239,22 +239,22 @@ void DrawPreviewSettingsModal(
                 modalState.skyScroll);
         const float contentW = scroll.viewport.width;
 
-        engine::Text(ui, config, assets, Rectangle{0.0f, contentY, labelW, rowH}, font, "Sky texture", engine::UITextJustify::Left, config.mutedTextColor);
+        engine::Text(ui, config, assets, Rectangle{0.0f, contentY, labelW, rowH}, font, "Sky material", engine::UITextJustify::Left, config.mutedTextColor);
         engine::Text(
                 ui,
                 config,
                 assets,
                 Rectangle{inputX, contentY, std::max(0.0f, contentW - inputX), rowH},
                 font,
-                modalState.draftSkySettings.textureId.empty() ? "<none>" : modalState.draftSkySettings.textureId.c_str(),
+                modalState.draftSkySettings.materialId.empty() ? "<none>" : modalState.draftSkySettings.materialId.c_str(),
                 engine::UITextJustify::Left,
                 config.textColor);
         contentY += rowH + gap;
-        if (engine::Button(ui, config, input, assets, "sector_editor_preview_sky_pick_texture", Rectangle{inputX, contentY, 150.0f, rowH}, font, "Pick Texture")) {
+        if (engine::Button(ui, config, input, assets, "sector_editor_preview_sky_pick_texture", Rectangle{inputX, contentY, 150.0f, rowH}, font, "Pick Material")) {
             callbacks.openSkyTexturePicker();
         }
         if (engine::Button(ui, config, input, assets, "sector_editor_preview_sky_clear_texture", Rectangle{inputX + 162.0f, contentY, 112.0f, rowH}, font, "Clear")) {
-            modalState.draftSkySettings.textureId.clear();
+            modalState.draftSkySettings.materialId.clear();
             modalState.errorMessage.clear();
         }
         contentY += rowH + gap;

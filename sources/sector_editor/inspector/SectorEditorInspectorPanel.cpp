@@ -177,7 +177,7 @@ float AuthoringInspectorDecalBlockHeight(
         bool includeTintAndFit)
 {
     float height = AuthoringInspectorTextureRowTotalHeight(gap);
-    if (!decal.textureId.empty()) {
+    if (!decal.materialId.empty()) {
         height += AuthoringInspectorAssignedDecalControlsHeight(
                 decal.emissive,
                 rowH,
@@ -1192,7 +1192,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                         if (authoringSide == nullptr) {
                             return std::string{};
                         }
-                        return TopologyWallPartSettingsFor(*authoringSide, part).textureId;
+                        return TopologyWallPartSettingsFor(*authoringSide, part).materialId;
                     };
                     const auto decalForPart = [authoringSide](TopologyWallPart part) -> SectorTopologyDecalLayer {
                         if (authoringSide == nullptr) {
@@ -1239,11 +1239,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 const float buttonW = 38.0f;
                                 const bool canClear = part == TopologyWallPart::Middle;
                                 const float clearW = canClear ? 58.0f : 0.0f;
-                                const std::string textureId = textureForPart(part);
+                                const std::string materialId = textureForPart(part);
                                 const SectorEditorInspectorTextureRowLayout row =
                                         BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
-                                const bool missing = !textureId.empty()
-                                        && !textureCatalog.HasTexture(textureId);
+                                const bool missing = !materialId.empty()
+                                        && !textureCatalog.HasTexture(materialId);
                                 engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
@@ -1251,7 +1251,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                         assets,
                                         row.valueRect,
                                         smallFont,
-                                        textureId.empty() ? "<none>" : textureId.c_str(),
+                                        materialId.empty() ? "<none>" : materialId.c_str(),
                                         engine::UITextJustify::Left,
                                         missing ? config.invalidColor : config.mutedTextColor);
                                 if (canClear
@@ -1301,8 +1301,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 const float clearW = 92.0f;
                                 const SectorEditorInspectorTextureRowLayout row =
                                         BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
-                                const bool missing = !decal.textureId.empty()
-                                        && !textureCatalog.HasTexture(decal.textureId);
+                                const bool missing = !decal.materialId.empty()
+                                        && !textureCatalog.HasTexture(decal.materialId);
                                 engine::Text(ui, config, assets, row.labelRect, font, title, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
@@ -1310,7 +1310,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                         assets,
                                         row.valueRect,
                                         smallFont,
-                                        decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                                        decal.materialId.empty() ? "<none>" : decal.materialId.c_str(),
                                         engine::UITextJustify::Left,
                                         missing ? config.invalidColor : config.mutedTextColor);
                                 if (engine::Button(
@@ -1352,7 +1352,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 }
                                 y += row.height + gap;
 
-                                if (decal.textureId.empty()) {
+                                if (decal.materialId.empty()) {
                                     return;
                                 }
 
@@ -1380,7 +1380,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                             [part, value = opacityResult.value](SectorAuthoringLineSide& side) {
                                                 SectorTopologyDecalLayer& target =
                                                         TopologyWallPartSettingsFor(side, part).decal;
-                                                if (target.textureId.empty() || target.opacity == value) {
+                                                if (target.materialId.empty() || target.opacity == value) {
                                                     return false;
                                                 }
                                                 target.opacity = value;
@@ -1405,7 +1405,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                             [part, emissive](SectorAuthoringLineSide& side) {
                                                 SectorTopologyDecalLayer& target =
                                                         TopologyWallPartSettingsFor(side, part).decal;
-                                                if (target.textureId.empty() || target.emissive == emissive) {
+                                                if (target.materialId.empty() || target.emissive == emissive) {
                                                     return false;
                                                 }
                                                 target.emissive = emissive;
@@ -1439,7 +1439,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                                 [part, value = emissiveStrengthResult.value](SectorAuthoringLineSide& side) {
                                                     SectorTopologyDecalLayer& target =
                                                             TopologyWallPartSettingsFor(side, part).decal;
-                                                    if (target.textureId.empty() || target.bloomIntensity == value) {
+                                                    if (target.materialId.empty() || target.bloomIntensity == value) {
                                                         return false;
                                                     }
                                                     target.bloomIntensity = value;
@@ -1836,11 +1836,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         drawAmbientChannel("sector_editor_authoring_face_ambient_g", "G:", selectedAuthoringFaceAnchor->ambientColor.g, uiState.ambientGreenInput, 1);
         drawAmbientChannel("sector_editor_authoring_face_ambient_b", "B:", selectedAuthoringFaceAnchor->ambientColor.b, uiState.ambientBlueInput, 2);
 
-        const auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologySectorTextureField field) {
+        const auto drawTextureRow = [&](const char* id, const char* label, const std::string& materialId, TopologySectorTextureField field) {
             const float buttonW = 38.0f;
             const SectorEditorInspectorTextureRowLayout row =
                     BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, 0.0f);
-            const bool missing = !textureId.empty() && !textureCatalog.HasTexture(textureId);
+            const bool missing = !materialId.empty() && !textureCatalog.HasTexture(materialId);
             engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
             engine::Text(
                     ui,
@@ -1848,7 +1848,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     assets,
                     row.valueRect,
                     smallFont,
-                    textureId.empty() ? "<none>" : textureId.c_str(),
+                    materialId.empty() ? "<none>" : materialId.c_str(),
                     engine::UITextJustify::Left,
                     missing ? config.invalidColor : config.mutedTextColor);
             if (engine::Button(ui, config, input, assets, id, row.pickerButtonRect, font, ">")) {
@@ -1891,8 +1891,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     const float clearW = 92.0f;
                     const SectorEditorInspectorTextureRowLayout row =
                             BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
-                    const bool missing = !decal.textureId.empty()
-                            && !textureCatalog.HasTexture(decal.textureId);
+                    const bool missing = !decal.materialId.empty()
+                            && !textureCatalog.HasTexture(decal.materialId);
                     engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,
@@ -1900,7 +1900,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                             assets,
                             row.valueRect,
                             smallFont,
-                            decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                            decal.materialId.empty() ? "<none>" : decal.materialId.c_str(),
                             engine::UITextJustify::Left,
                             missing ? config.invalidColor : config.mutedTextColor);
                     if (engine::Button(
@@ -1946,7 +1946,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     }
                     y += row.height + gap;
 
-                    if (decal.textureId.empty()) {
+                    if (decal.materialId.empty()) {
                         return;
                     }
 
@@ -1975,7 +1975,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                     SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
                                             ? &anchor.floorDecal
                                             : &anchor.ceilingDecal;
-                                    if (target->textureId.empty() || target->opacity == value) {
+                                    if (target->materialId.empty() || target->opacity == value) {
                                         return false;
                                     }
                                     target->opacity = value;
@@ -2001,7 +2001,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                     SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
                                             ? &anchor.floorDecal
                                             : &anchor.ceilingDecal;
-                                    if (target->textureId.empty() || target->emissive == emissive) {
+                                    if (target->materialId.empty() || target->emissive == emissive) {
                                         return false;
                                     }
                                     target->emissive = emissive;
@@ -2036,7 +2036,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                         SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
                                                 ? &anchor.floorDecal
                                                 : &anchor.ceilingDecal;
-                                        if (target->textureId.empty() || target->bloomIntensity == value) {
+                                        if (target->materialId.empty() || target->bloomIntensity == value) {
                                             return false;
                                         }
                                         target->bloomIntensity = value;
@@ -2093,8 +2093,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     const float clearW = 92.0f;
                     const SectorEditorInspectorTextureRowLayout row =
                             BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
-                    const bool missing = !decal.textureId.empty()
-                            && !textureCatalog.HasTexture(decal.textureId);
+                    const bool missing = !decal.materialId.empty()
+                            && !textureCatalog.HasTexture(decal.materialId);
                     engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,
@@ -2102,7 +2102,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                             assets,
                             row.valueRect,
                             smallFont,
-                            decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                            decal.materialId.empty() ? "<none>" : decal.materialId.c_str(),
                             engine::UITextJustify::Left,
                             missing ? config.invalidColor : config.mutedTextColor);
                     auto defaultDecalForField = [field](SectorAuthoringFaceAnchor& anchor) -> SectorTopologyDecalLayer* {
@@ -2155,7 +2155,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     }
                     y += row.height + gap;
 
-                    if (decal.textureId.empty()) {
+                    if (decal.materialId.empty()) {
                         return;
                     }
 
@@ -2182,7 +2182,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 "Updated authoring default decal opacity",
                                 [defaultDecalForField, value = opacityResult.value](SectorAuthoringFaceAnchor& anchor) {
                                     SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
-                                    if (target == nullptr || target->textureId.empty() || target->opacity == value) {
+                                    if (target == nullptr || target->materialId.empty() || target->opacity == value) {
                                         return false;
                                     }
                                     target->opacity = value;
@@ -2206,7 +2206,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 "Updated authoring default decal emissive",
                                 [defaultDecalForField, emissive](SectorAuthoringFaceAnchor& anchor) {
                                     SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
-                                    if (target == nullptr || target->textureId.empty() || target->emissive == emissive) {
+                                    if (target == nullptr || target->materialId.empty() || target->emissive == emissive) {
                                         return false;
                                     }
                                     target->emissive = emissive;
@@ -2239,7 +2239,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                     "Updated authoring default decal emissive strength",
                                     [defaultDecalForField, value = emissiveStrengthResult.value](SectorAuthoringFaceAnchor& anchor) {
                                         SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
-                                        if (target == nullptr || target->textureId.empty() || target->bloomIntensity == value) {
+                                        if (target == nullptr || target->materialId.empty() || target->bloomIntensity == value) {
                                             return false;
                                         }
                                         target->bloomIntensity = value;
@@ -2254,11 +2254,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         y += 18.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Materials", engine::UITextJustify::Left, config.textColor);
         y += 30.0f;
-        drawTextureRow("sector_editor_authoring_face_pick_floor", "Floor:", selectedAuthoringFaceAnchor->floorTextureId, TopologySectorTextureField::Floor);
-        drawTextureRow("sector_editor_authoring_face_pick_ceiling", "Ceiling:", selectedAuthoringFaceAnchor->ceilingTextureId, TopologySectorTextureField::Ceiling);
-        drawTextureRow("sector_editor_authoring_face_pick_default_wall", "Wall:", selectedAuthoringFaceAnchor->defaultWall.textureId, TopologySectorTextureField::DefaultWall);
-        drawTextureRow("sector_editor_authoring_face_pick_default_lower", "Lower:", selectedAuthoringFaceAnchor->defaultLower.textureId, TopologySectorTextureField::DefaultLower);
-        drawTextureRow("sector_editor_authoring_face_pick_default_upper", "Upper:", selectedAuthoringFaceAnchor->defaultUpper.textureId, TopologySectorTextureField::DefaultUpper);
+        drawTextureRow("sector_editor_authoring_face_pick_floor", "Floor:", selectedAuthoringFaceAnchor->floorMaterialId, TopologySectorTextureField::Floor);
+        drawTextureRow("sector_editor_authoring_face_pick_ceiling", "Ceiling:", selectedAuthoringFaceAnchor->ceilingMaterialId, TopologySectorTextureField::Ceiling);
+        drawTextureRow("sector_editor_authoring_face_pick_default_wall", "Wall:", selectedAuthoringFaceAnchor->defaultWall.materialId, TopologySectorTextureField::DefaultWall);
+        drawTextureRow("sector_editor_authoring_face_pick_default_lower", "Lower:", selectedAuthoringFaceAnchor->defaultLower.materialId, TopologySectorTextureField::DefaultLower);
+        drawTextureRow("sector_editor_authoring_face_pick_default_upper", "Upper:", selectedAuthoringFaceAnchor->defaultUpper.materialId, TopologySectorTextureField::DefaultUpper);
         drawFlatDecalControls("sector_editor_authoring_face_floor_decal", "Floor Decal:", selectedAuthoringFaceAnchor->floorDecal, TopologySectorTextureField::Floor, 0);
         drawFlatDecalControls("sector_editor_authoring_face_ceiling_decal", "Ceiling Decal:", selectedAuthoringFaceAnchor->ceilingDecal, TopologySectorTextureField::Ceiling, 1);
         drawDefaultDecalControls("sector_editor_authoring_face_default_wall_decal", "Wall Decal:", selectedAuthoringFaceAnchor->defaultWall.decal, TopologySectorTextureField::DefaultWall, 0);

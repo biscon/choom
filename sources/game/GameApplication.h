@@ -10,6 +10,7 @@
 #include "game/PlayerAudio.h"
 #include "game/SectorGameSession.h"
 #include "sector_editor/SectorEditor.h"
+#include "sector_demo/SectorMaterialRegistry.h"
 
 #include <optional>
 #include <string>
@@ -24,7 +25,7 @@ enum class ApplicationContentKind {
 
 class GameApplication {
 public:
-    GameApplication() : editor(applicationSettings) {}
+    GameApplication() : editor(applicationSettings, materialRegistry) {}
 
     bool Init(
             engine::EngineContext& context,
@@ -96,6 +97,7 @@ private:
 
     ApplicationFlowState flow;
     FpsApplicationSettings applicationSettings;
+    SectorMaterialRegistry materialRegistry;
     SectorEditor editor;
     SectorGameSession gameSession;
     SectorSceneRuntime gameScene;

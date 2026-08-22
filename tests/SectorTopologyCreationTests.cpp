@@ -49,11 +49,11 @@ void PrintErrorIfAny(const std::string& error)
 SectorTopologyCreatePolygonOptions Options()
 {
     SectorTopologyCreatePolygonOptions options;
-    options.floorTextureId = "floor";
-    options.ceilingTextureId = "ceiling";
-    options.defaultWall.textureId = "wall";
-    options.defaultLower.textureId = "step_wall";
-    options.defaultUpper.textureId = "upper_wall";
+    options.floorMaterialId = "floor";
+    options.ceilingMaterialId = "ceiling";
+    options.defaultWall.materialId = "wall";
+    options.defaultLower.materialId = "step_wall";
+    options.defaultUpper.materialId = "upper_wall";
     return options;
 }
 
@@ -130,10 +130,10 @@ void CheckUnchanged(
                           && before.sideDefs[i].lineDefId == after.sideDefs[i].lineDefId
                           && before.sideDefs[i].side == after.sideDefs[i].side
                           && before.sideDefs[i].sectorId == after.sideDefs[i].sectorId
-                          && before.sideDefs[i].wall.textureId == after.sideDefs[i].wall.textureId
-                          && before.sideDefs[i].lower.textureId == after.sideDefs[i].lower.textureId
-                          && before.sideDefs[i].upper.textureId == after.sideDefs[i].upper.textureId
-                          && before.sideDefs[i].middle.textureId == after.sideDefs[i].middle.textureId
+                          && before.sideDefs[i].wall.materialId == after.sideDefs[i].wall.materialId
+                          && before.sideDefs[i].lower.materialId == after.sideDefs[i].lower.materialId
+                          && before.sideDefs[i].upper.materialId == after.sideDefs[i].upper.materialId
+                          && before.sideDefs[i].middle.materialId == after.sideDefs[i].middle.materialId
                           && before.sideDefs[i].wall.uv.scale.x == after.sideDefs[i].wall.uv.scale.x
                           && before.sideDefs[i].wall.uv.scale.y == after.sideDefs[i].wall.uv.scale.y
                           && before.sideDefs[i].wall.uv.offset.x == after.sideDefs[i].wall.uv.offset.x
@@ -255,7 +255,7 @@ bool SameWallPart(
         const game::SectorTopologyWallPartSettings& a,
         const game::SectorTopologyWallPartSettings& b)
 {
-    return a.textureId == b.textureId && SameUv(a.uv, b.uv);
+    return a.materialId == b.materialId && SameUv(a.uv, b.uv);
 }
 
 bool SameSideDefSettings(const SectorTopologySideDef& a, const SectorTopologySideDef& b)
@@ -293,16 +293,16 @@ bool SameAllSideDefSettings(const SectorTopologyMap& before, const SectorTopolog
 
 void SetDistinctSideSettings(SectorTopologySideDef& sideDef, const char* prefix)
 {
-    sideDef.wall.textureId = std::string{prefix} + "_wall";
+    sideDef.wall.materialId = std::string{prefix} + "_wall";
     sideDef.wall.uv.scale = {2.0f, 3.0f};
     sideDef.wall.uv.offset = {4.0f, 5.0f};
-    sideDef.lower.textureId = std::string{prefix} + "_lower";
+    sideDef.lower.materialId = std::string{prefix} + "_lower";
     sideDef.lower.uv.scale = {6.0f, 7.0f};
     sideDef.lower.uv.offset = {8.0f, 9.0f};
-    sideDef.upper.textureId = std::string{prefix} + "_upper";
+    sideDef.upper.materialId = std::string{prefix} + "_upper";
     sideDef.upper.uv.scale = {10.0f, 11.0f};
     sideDef.upper.uv.offset = {12.0f, 13.0f};
-    sideDef.middle.textureId = std::string{prefix} + "_middle";
+    sideDef.middle.materialId = std::string{prefix} + "_middle";
     sideDef.middle.uv.scale = {14.0f, 15.0f};
     sideDef.middle.uv.offset = {16.0f, 17.0f};
 }
@@ -375,7 +375,7 @@ void TestCreateSquare()
     Check(map.sideDefs.size() == 4, "square has 4 sidedefs");
     Check(map.sectors.size() == 1, "square has 1 sector");
     for (const SectorTopologySideDef& sideDef : map.sideDefs) {
-        Check(sideDef.middle.textureId.empty()
+        Check(sideDef.middle.materialId.empty()
                       && sideDef.middle.uv.scale.x == 1.0f
                       && sideDef.middle.uv.scale.y == 1.0f
                       && sideDef.middle.uv.offset.x == 0.0f
@@ -437,19 +437,19 @@ void TestInsertChildCopiesParentFields()
     if (parent != nullptr) {
         parent->floorZ = -8.0f;
         parent->ceilingZ = 48.0f;
-        parent->floorTextureId = "parent_floor";
-        parent->ceilingTextureId = "parent_ceiling";
+        parent->floorMaterialId = "parent_floor";
+        parent->ceilingMaterialId = "parent_ceiling";
         parent->floorUv.scale = {2.0f, 3.0f};
         parent->floorUv.offset = {4.0f, 5.0f};
         parent->ceilingUv.scale = {6.0f, 7.0f};
         parent->ceilingUv.offset = {8.0f, 9.0f};
         parent->ambientColor = Color{10, 20, 30, 255};
         parent->ambientIntensity = 0.42f;
-        parent->defaultWall.textureId = "parent_wall";
+        parent->defaultWall.materialId = "parent_wall";
         parent->defaultWall.uv.scale = {1.5f, 2.5f};
-        parent->defaultLower.textureId = "parent_lower";
+        parent->defaultLower.materialId = "parent_lower";
         parent->defaultLower.uv.offset = {3.5f, 4.5f};
-        parent->defaultUpper.textureId = "parent_upper";
+        parent->defaultUpper.materialId = "parent_upper";
         parent->defaultUpper.uv.scale = {5.5f, 6.5f};
     }
 
@@ -461,8 +461,8 @@ void TestInsertChildCopiesParentFields()
     if (copiedParent != nullptr && child != nullptr) {
         Check(child->floorZ == copiedParent->floorZ, "child copies floor");
         Check(child->ceilingZ == copiedParent->ceilingZ, "child copies ceiling");
-        Check(child->floorTextureId == copiedParent->floorTextureId, "child copies floor texture");
-        Check(child->ceilingTextureId == copiedParent->ceilingTextureId, "child copies ceiling texture");
+        Check(child->floorMaterialId == copiedParent->floorMaterialId, "child copies floor texture");
+        Check(child->ceilingMaterialId == copiedParent->ceilingMaterialId, "child copies ceiling texture");
         Check(child->floorUv.scale.x == copiedParent->floorUv.scale.x
                       && child->floorUv.offset.y == copiedParent->floorUv.offset.y,
               "child copies floor UV");
@@ -472,11 +472,11 @@ void TestInsertChildCopiesParentFields()
         Check(child->ambientColor.r == copiedParent->ambientColor.r
                       && child->ambientIntensity == copiedParent->ambientIntensity,
               "child copies ambient fields");
-        Check(child->defaultWall.textureId == copiedParent->defaultWall.textureId,
+        Check(child->defaultWall.materialId == copiedParent->defaultWall.materialId,
               "child copies default wall");
-        Check(child->defaultLower.textureId == copiedParent->defaultLower.textureId,
+        Check(child->defaultLower.materialId == copiedParent->defaultLower.materialId,
               "child copies default lower");
-        Check(child->defaultUpper.textureId == copiedParent->defaultUpper.textureId,
+        Check(child->defaultUpper.materialId == copiedParent->defaultUpper.materialId,
               "child copies default upper");
     }
 
@@ -484,16 +484,16 @@ void TestInsertChildCopiesParentFields()
         const game::SectorTopologySideDef* front = FindSideDef(map, lineDef->frontSideDefId);
         const game::SectorTopologySideDef* back = FindSideDef(map, lineDef->backSideDefId);
         Check(front != nullptr && child != nullptr
-                      && front->wall.textureId == child->defaultWall.textureId
-                      && front->lower.textureId == child->defaultLower.textureId
-                      && front->upper.textureId == child->defaultUpper.textureId
-                      && front->middle.textureId.empty(),
+                      && front->wall.materialId == child->defaultWall.materialId
+                      && front->lower.materialId == child->defaultLower.materialId
+                      && front->upper.materialId == child->defaultUpper.materialId
+                      && front->middle.materialId.empty(),
               "child front sidedef copies child defaults and starts with empty middle");
         Check(back != nullptr && copiedParent != nullptr
-                      && back->wall.textureId == copiedParent->defaultWall.textureId
-                      && back->lower.textureId == copiedParent->defaultLower.textureId
-                      && back->upper.textureId == copiedParent->defaultUpper.textureId
-                      && back->middle.textureId.empty(),
+                      && back->wall.materialId == copiedParent->defaultWall.materialId
+                      && back->lower.materialId == copiedParent->defaultLower.materialId
+                      && back->upper.materialId == copiedParent->defaultUpper.materialId
+                      && back->middle.materialId.empty(),
               "parent back sidedef copies parent defaults and starts with empty middle");
     }
 }
@@ -523,15 +523,15 @@ void TestInsertSidesAreIndependent()
         return;
     }
 
-    front->wall.textureId = "child_changed_wall";
+    front->wall.materialId = "child_changed_wall";
     front->wall.uv.scale = {3.0f, 4.0f};
-    Check(back->wall.textureId != "child_changed_wall"
+    Check(back->wall.materialId != "child_changed_wall"
                   && back->wall.uv.scale.x != 3.0f,
           "parent back sidedef remains independent after child edit");
 
-    back->wall.textureId = "parent_changed_wall";
+    back->wall.materialId = "parent_changed_wall";
     back->wall.uv.offset = {5.0f, 6.0f};
-    Check(front->wall.textureId != "parent_changed_wall"
+    Check(front->wall.materialId != "parent_changed_wall"
                   && front->wall.uv.offset.x != 5.0f,
           "child front sidedef remains independent after parent edit");
 }
@@ -730,25 +730,25 @@ void TestChangingSectorDefaultsDoesNotRewriteExistingSideDefs()
     lowerTextures.reserve(map.sideDefs.size());
     upperTextures.reserve(map.sideDefs.size());
     for (const game::SectorTopologySideDef& sideDef : map.sideDefs) {
-        wallTextures.push_back(sideDef.wall.textureId);
-        lowerTextures.push_back(sideDef.lower.textureId);
-        upperTextures.push_back(sideDef.upper.textureId);
+        wallTextures.push_back(sideDef.wall.materialId);
+        lowerTextures.push_back(sideDef.lower.materialId);
+        upperTextures.push_back(sideDef.upper.materialId);
     }
 
     game::SectorTopologySector* sector = game::FindSectorTopologySector(map, sectorId);
     Check(sector != nullptr, "default rewrite test finds sector");
     if (sector != nullptr) {
-        sector->defaultWall.textureId = "future_wall";
-        sector->defaultLower.textureId = "future_lower";
-        sector->defaultUpper.textureId = "future_upper";
+        sector->defaultWall.materialId = "future_wall";
+        sector->defaultLower.materialId = "future_lower";
+        sector->defaultUpper.materialId = "future_upper";
     }
 
     for (size_t i = 0; i < map.sideDefs.size(); ++i) {
-        Check(map.sideDefs[i].wall.textureId == wallTextures[i],
+        Check(map.sideDefs[i].wall.materialId == wallTextures[i],
               "changing default wall leaves existing sidedef wall unchanged");
-        Check(map.sideDefs[i].lower.textureId == lowerTextures[i],
+        Check(map.sideDefs[i].lower.materialId == lowerTextures[i],
               "changing default lower leaves existing sidedef lower unchanged");
-        Check(map.sideDefs[i].upper.textureId == upperTextures[i],
+        Check(map.sideDefs[i].upper.materialId == upperTextures[i],
               "changing default upper leaves existing sidedef upper unchanged");
     }
 }
@@ -1229,7 +1229,7 @@ void TestRejectDissolveMaterialMismatch()
     if (secondSide == nullptr) {
         return;
     }
-    secondSide->middle.textureId = "changed_middle";
+    secondSide->middle.materialId = "changed_middle";
     ExpectDissolveRejected(map, split.newVertexId, "different sector, material, or UV",
                            "dissolve middle material mismatch fails");
 }
@@ -1325,7 +1325,7 @@ void TestSplitOneSidedWall()
 void TestDeleteStandaloneSector()
 {
     SectorTopologyMap map;
-    map.texturesById["floor"] = game::SectorTextureDefinition{"floor", "floor.png"};
+    map.resolvedMaterialsById["floor"] = game::SectorMaterialDefinition{"floor", "floor.png"};
     int sectorId = -1;
     Check(Create(map, {{0, 0}, {64, 0}, {64, 64}, {0, 64}}, &sectorId),
           "delete standalone square creation succeeds");
@@ -1343,7 +1343,7 @@ void TestDeleteStandaloneSector()
     Check(map.sideDefs.empty(), "standalone delete leaves no sidedefs");
     Check(map.lineDefs.empty(), "standalone delete leaves no linedefs");
     Check(map.vertices.empty(), "standalone delete leaves no vertices");
-    Check(map.texturesById.find("floor") != map.texturesById.end(),
+    Check(map.resolvedMaterialsById.find("floor") != map.resolvedMaterialsById.end(),
           "standalone delete preserves textures");
     Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(map)),
           "empty map validates after standalone delete");
@@ -1766,13 +1766,13 @@ void TestCutCopiesSectorFieldsAndPreservesBoundarySideDefs()
     sector->name = "kept";
     sector->floorZ = -4.0f;
     sector->ceilingZ = 40.0f;
-    sector->floorTextureId = "cut_floor";
-    sector->ceilingTextureId = "cut_ceiling";
+    sector->floorMaterialId = "cut_floor";
+    sector->ceilingMaterialId = "cut_ceiling";
     sector->ambientColor = Color{5, 6, 7, 255};
     sector->ambientIntensity = 0.25f;
-    sector->defaultWall.textureId = "cut_default_wall";
-    sector->defaultLower.textureId = "cut_default_lower";
-    sector->defaultUpper.textureId = "cut_default_upper";
+    sector->defaultWall.materialId = "cut_default_wall";
+    sector->defaultLower.materialId = "cut_default_lower";
+    sector->defaultUpper.materialId = "cut_default_upper";
     for (SectorTopologySideDef& sideDef : map.sideDefs) {
         SetDistinctSideSettings(sideDef, TextFormat("cut_side_%d", sideDef.id));
     }
@@ -1798,8 +1798,8 @@ void TestCutCopiesSectorFieldsAndPreservesBoundarySideDefs()
               "cut preserves original sector name and generates unique new name");
         Check(created->floorZ == preserved->floorZ
                       && created->ceilingZ == preserved->ceilingZ
-                      && created->floorTextureId == preserved->floorTextureId
-                      && created->ceilingTextureId == preserved->ceilingTextureId
+                      && created->floorMaterialId == preserved->floorMaterialId
+                      && created->ceilingMaterialId == preserved->ceilingMaterialId
                       && created->ambientColor.r == preserved->ambientColor.r
                       && created->ambientIntensity == preserved->ambientIntensity,
               "cut copies sector fields to new sector");
@@ -1817,10 +1817,10 @@ void TestCutCopiesSectorFieldsAndPreservesBoundarySideDefs()
           "cut default sidedefs exist");
     if (originalCutSide != nullptr && newCutSide != nullptr && preserved != nullptr && created != nullptr) {
         Check(originalCutSide->id != newCutSide->id
-                      && originalCutSide->wall.textureId == preserved->defaultWall.textureId
-                      && newCutSide->wall.textureId == created->defaultWall.textureId
-                      && originalCutSide->middle.textureId.empty()
-                      && newCutSide->middle.textureId.empty(),
+                      && originalCutSide->wall.materialId == preserved->defaultWall.materialId
+                      && newCutSide->wall.materialId == created->defaultWall.materialId
+                      && originalCutSide->middle.materialId.empty()
+                      && newCutSide->middle.materialId.empty(),
               "cut linedef sides are independent, initialized from sector defaults, and have empty middle");
     }
 }
@@ -2156,15 +2156,15 @@ void TestJoinAdjacentRectanglesPreservesWinnerAndSides()
     left->name = "winner";
     left->floorZ = -8.0f;
     left->ceilingZ = 56.0f;
-    left->floorTextureId = "winner_floor";
-    left->ceilingTextureId = "winner_ceiling";
+    left->floorMaterialId = "winner_floor";
+    left->ceilingMaterialId = "winner_ceiling";
     left->ambientColor = Color{10, 20, 30, 255};
     left->ambientIntensity = 0.35f;
-    left->defaultWall.textureId = "winner_default_wall";
+    left->defaultWall.materialId = "winner_default_wall";
     right->name = "removed";
     right->floorZ = 7.0f;
     right->ceilingZ = 80.0f;
-    right->floorTextureId = "removed_floor";
+    right->floorMaterialId = "removed_floor";
 
     const SectorTopologyLineDef* shared = FindSharedLineBetweenSectors(map, leftId, rightId);
     Check(shared != nullptr, "join adjacent finds shared portal");
@@ -2201,11 +2201,11 @@ void TestJoinAdjacentRectanglesPreservesWinnerAndSides()
         Check(winner->name == "winner"
                       && winner->floorZ == -8.0f
                       && winner->ceilingZ == 56.0f
-                      && winner->floorTextureId == "winner_floor"
-                      && winner->ceilingTextureId == "winner_ceiling"
+                      && winner->floorMaterialId == "winner_floor"
+                      && winner->ceilingMaterialId == "winner_ceiling"
                       && winner->ambientColor.g == 20
                       && winner->ambientIntensity == 0.35f
-                      && winner->defaultWall.textureId == "winner_default_wall",
+                      && winner->defaultWall.materialId == "winner_default_wall",
               "join preserves winner sector properties");
     }
     Check(FindLineById(map, sharedLineId) == nullptr,

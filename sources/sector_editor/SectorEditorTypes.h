@@ -66,7 +66,7 @@ enum class TopologyUAlignDirection {
 struct TopologyMaterialPayload {
     bool valid = false;
     TopologySurfaceEditTargetKind kind = TopologySurfaceEditTargetKind::None;
-    std::string textureId;
+    std::string materialId;
     SectorTopologyUvSettings uv;
 };
 
@@ -103,7 +103,6 @@ struct SectorEditorState {
     bool showSectorIds = true;
     TexturePickerState texturePicker;
     FootstepPickerState footstepPicker;
-    AddMapTextureState addMapTexture;
     AddMapSoundState addMapSound;
     SectorEditorAssetPruneModalState assetPruneModal;
     SoundPickerState soundPicker;

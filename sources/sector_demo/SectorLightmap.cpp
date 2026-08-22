@@ -104,7 +104,7 @@ struct AlphaRayHit {
     bool hit = false;
     float distance = 0.0f;
     Vector2 uv = {};
-    std::string textureId;
+    std::string materialId;
     float alphaCutoff = 0.5f;
 };
 
@@ -1066,7 +1066,7 @@ bool CastsAlphaTestLightmapOcclusion(const SectorGeneratedSurface& surface)
 {
     return surface.ref.kind == SectorGeneratedSurfaceKind::Middle
             && surface.alphaTest
-            && !surface.textureId.empty();
+            && !surface.materialId.empty();
 }
 
 bool IntersectRayAabb(const Ray& ray, const BakeAabb& bounds, float maxDistance, float& outEntryDistance)
@@ -1378,7 +1378,7 @@ AlphaRayHit RaycastAlphaOccludersClosest(
         closest.hit = true;
         closest.distance = distance;
         closest.uv = Interpolate(tri.uv0, tri.uv1, tri.uv2, barycentric0, barycentric1, barycentric2);
-        closest.textureId = tri.textureId;
+        closest.materialId = tri.materialId;
         closest.alphaCutoff = tri.alphaCutoff;
     }
     return closest;
@@ -1439,7 +1439,7 @@ bool RaycastBakeOcclusionAlphaAware(
         }
 
         const SectorLightmapAlphaSample alphaSample =
-                alphaMaskCache.Sample(map, alphaHit.textureId, alphaHit.uv, alphaHit.alphaCutoff);
+                alphaMaskCache.Sample(map, alphaHit.materialId, alphaHit.uv, alphaHit.alphaCutoff);
         if (alphaSample.opaque) {
             return true;
         }
@@ -2699,7 +2699,7 @@ std::vector<SectorLightmapAlphaOccluderTriangle> BuildAlphaTestOccluderTriangles
                     surface.vertices[i + 0].uv,
                     surface.vertices[i + 1].uv,
                     surface.vertices[i + 2].uv,
-                    surface.textureId,
+                    surface.materialId,
                     surface.alphaCutoff,
                     surface.ref,
                     static_cast<int>(surfaceIndex),
@@ -3087,7 +3087,7 @@ void FnvAppendTopologyUv(uint64_t& hash, const SectorTopologyUvSettings& uv)
 
 void FnvAppendTopologyWallPart(uint64_t& hash, const SectorTopologyWallPartSettings& part)
 {
-    FnvAppendString(hash, part.textureId);
+    FnvAppendString(hash, part.materialId);
     FnvAppendTopologyUv(hash, part.uv);
 }
 
@@ -3153,10 +3153,10 @@ std::vector<const T*> SortedLightmapHashRecords(const std::vector<T>& values)
     return sorted;
 }
 
-void AddReferencedLightmapTexture(std::unordered_set<std::string>& textureIds, const std::string& textureId)
+void AddReferencedLightmapTexture(std::unordered_set<std::string>& materialIds, const std::string& materialId)
 {
-    if (!textureId.empty()) {
-        textureIds.insert(textureId);
+    if (!materialId.empty()) {
+        materialIds.insert(materialId);
     }
 }
 
@@ -3164,24 +3164,24 @@ std::vector<std::string> SortedReferencedLightmapTextureIds(const SectorTopology
 {
     std::unordered_set<std::string> referenced;
     for (const SectorTopologySideDef& sideDef : map.sideDefs) {
-        AddReferencedLightmapTexture(referenced, sideDef.wall.textureId);
-        AddReferencedLightmapTexture(referenced, sideDef.lower.textureId);
-        AddReferencedLightmapTexture(referenced, sideDef.upper.textureId);
-        AddReferencedLightmapTexture(referenced, sideDef.middle.textureId);
+        AddReferencedLightmapTexture(referenced, sideDef.wall.materialId);
+        AddReferencedLightmapTexture(referenced, sideDef.lower.materialId);
+        AddReferencedLightmapTexture(referenced, sideDef.upper.materialId);
+        AddReferencedLightmapTexture(referenced, sideDef.middle.materialId);
     }
     for (const SectorTopologySector& sector : map.sectors) {
-        AddReferencedLightmapTexture(referenced, sector.floorTextureId);
-        AddReferencedLightmapTexture(referenced, sector.ceilingTextureId);
-        AddReferencedLightmapTexture(referenced, sector.defaultWall.textureId);
-        AddReferencedLightmapTexture(referenced, sector.defaultLower.textureId);
-        AddReferencedLightmapTexture(referenced, sector.defaultUpper.textureId);
+        AddReferencedLightmapTexture(referenced, sector.floorMaterialId);
+        AddReferencedLightmapTexture(referenced, sector.ceilingMaterialId);
+        AddReferencedLightmapTexture(referenced, sector.defaultWall.materialId);
+        AddReferencedLightmapTexture(referenced, sector.defaultLower.materialId);
+        AddReferencedLightmapTexture(referenced, sector.defaultUpper.materialId);
     }
 
     std::vector<std::string> ids;
     ids.reserve(referenced.size());
-    for (const std::string& textureId : referenced) {
-        if (map.texturesById.find(textureId) != map.texturesById.end()) {
-            ids.push_back(textureId);
+    for (const std::string& materialId : referenced) {
+        if (map.resolvedMaterialsById.find(materialId) != map.resolvedMaterialsById.end()) {
+            ids.push_back(materialId);
         }
     }
     std::sort(ids.begin(), ids.end());
@@ -3543,21 +3543,21 @@ bool ReadSectorLightmapArtifact(
     return true;
 }
 
-std::string SectorLightmapAlphaMaskCache::CacheKey(const SectorTopologyMap& map, const std::string& textureId)
+std::string SectorLightmapAlphaMaskCache::CacheKey(const SectorTopologyMap& map, const std::string& materialId)
 {
-    const auto it = map.texturesById.find(textureId);
-    if (it == map.texturesById.end()) {
-        return textureId + "\n\n";
+    const auto it = map.resolvedMaterialsById.find(materialId);
+    if (it == map.resolvedMaterialsById.end()) {
+        return materialId + "\n\n";
     }
 
-    return textureId + "\n" + it->second.id + "\n" + it->second.path;
+    return materialId + "\n" + it->second.id + "\n" + it->second.path;
 }
 
 const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::LoadOrGet(
         const SectorTopologyMap& map,
-        const std::string& textureId)
+        const std::string& materialId)
 {
-    const std::string key = CacheKey(map, textureId);
+    const std::string key = CacheKey(map, materialId);
     const auto found = masksByKey.find(key);
     if (found != masksByKey.end()) {
         return found->second;
@@ -3566,9 +3566,9 @@ const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::Loa
     ++loadAttemptsByKey[key];
 
     AlphaMask mask;
-    const auto textureIt = map.texturesById.find(textureId);
-    if (textureIt == map.texturesById.end()) {
-        TraceLog(LOG_WARNING, "Sector lightmap alpha cache missing texture id '%s'", textureId.c_str());
+    const auto textureIt = map.resolvedMaterialsById.find(materialId);
+    if (textureIt == map.resolvedMaterialsById.end()) {
+        TraceLog(LOG_WARNING, "Sector lightmap alpha cache missing texture id '%s'", materialId.c_str());
         return masksByKey.emplace(key, std::move(mask)).first->second;
     }
 
@@ -3577,7 +3577,7 @@ const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::Loa
     if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
         TraceLog(LOG_WARNING,
                  "Sector lightmap alpha cache could not load texture '%s' from '%s'",
-                 textureId.c_str(),
+                 materialId.c_str(),
                  resolvedPath.c_str());
         if (image.data != nullptr) {
             UnloadImage(image);
@@ -3589,7 +3589,7 @@ const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::Loa
     if (colors == nullptr) {
         TraceLog(LOG_WARNING,
                  "Sector lightmap alpha cache could not read pixels for texture '%s' from '%s'",
-                 textureId.c_str(),
+                 materialId.c_str(),
                  resolvedPath.c_str());
         UnloadImage(image);
         return masksByKey.emplace(key, std::move(mask)).first->second;
@@ -3610,11 +3610,11 @@ const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::Loa
 
 SectorLightmapAlphaSample SectorLightmapAlphaMaskCache::Sample(
         const SectorTopologyMap& map,
-        const std::string& textureId,
+        const std::string& materialId,
         Vector2 uv,
         float alphaCutoff)
 {
-    const AlphaMask& mask = LoadOrGet(map, textureId);
+    const AlphaMask& mask = LoadOrGet(map, materialId);
     SectorLightmapAlphaSample sample;
     sample.valid = mask.valid;
     sample.width = mask.width;
@@ -3647,9 +3647,9 @@ size_t SectorLightmapAlphaMaskCache::CachedTextureCount() const
     return masksByKey.size();
 }
 
-int SectorLightmapAlphaMaskCache::LoadAttemptCount(const SectorTopologyMap& map, const std::string& textureId) const
+int SectorLightmapAlphaMaskCache::LoadAttemptCount(const SectorTopologyMap& map, const std::string& materialId) const
 {
-    const std::string key = CacheKey(map, textureId);
+    const std::string key = CacheKey(map, materialId);
     const auto found = loadAttemptsByKey.find(key);
     return found == loadAttemptsByKey.end() ? 0 : found->second;
 }
@@ -5481,11 +5481,11 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
     FnvAppendDirectionalLightSettings(hash, map.directionalLight);
     FnvAppendInt(hash, SectorCoordSubdivisions);
 
-    const std::vector<std::string> textureIds = SortedReferencedLightmapTextureIds(map);
-    FnvAppendInt(hash, static_cast<int>(textureIds.size()));
-    for (const std::string& textureId : textureIds) {
-        const SectorTextureDefinition& texture = map.texturesById.at(textureId);
-        FnvAppendString(hash, textureId);
+    const std::vector<std::string> materialIds = SortedReferencedLightmapTextureIds(map);
+    FnvAppendInt(hash, static_cast<int>(materialIds.size()));
+    for (const std::string& materialId : materialIds) {
+        const SectorMaterialDefinition& texture = map.resolvedMaterialsById.at(materialId);
+        FnvAppendString(hash, materialId);
         FnvAppendString(hash, texture.id);
         FnvAppendString(hash, texture.path);
         FnvAppendInt(hash, static_cast<int>(texture.filter));
@@ -5529,8 +5529,8 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector->floorZ));
         FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector->ceilingZ));
         FnvAppendInt(hash, sector->ceilingSky ? 1 : 0);
-        FnvAppendString(hash, sector->floorTextureId);
-        FnvAppendString(hash, sector->ceilingTextureId);
+        FnvAppendString(hash, sector->floorMaterialId);
+        FnvAppendString(hash, sector->ceilingMaterialId);
         FnvAppendTopologyUv(hash, sector->floorUv);
         FnvAppendTopologyUv(hash, sector->ceilingUv);
         FnvAppendColor(hash, sector->ambientColor);

@@ -105,8 +105,8 @@ SectorTopologyWallPartSettings& AuthoringWallPartSettingsFor(
 std::string& FlatTextureIdFor(SectorAuthoringFaceAnchor& anchor, TopologySurfaceEditTargetKind kind)
 {
     return kind == TopologySurfaceEditTargetKind::SectorFloor
-            ? anchor.floorTextureId
-            : anchor.ceilingTextureId;
+            ? anchor.floorMaterialId
+            : anchor.ceilingMaterialId;
 }
 
 SectorTopologyUvSettings& FlatUvFor(SectorAuthoringFaceAnchor& anchor, TopologySurfaceEditTargetKind kind)
@@ -245,9 +245,9 @@ bool SectorEditorMaterialEditingService::ApplyAuthoringSideMaterialEdit(
                 authoringTarget.target = target;
                 authoringTarget.layer = effectiveLayer;
                 authoringTarget.wallPart = &part;
-                authoringTarget.textureId = effectiveLayer == TopologyMaterialLayer::Decal
-                        ? &part.decal.textureId
-                        : &part.textureId;
+                authoringTarget.materialId = effectiveLayer == TopologyMaterialLayer::Decal
+                        ? &part.decal.materialId
+                        : &part.materialId;
                 authoringTarget.uv = effectiveLayer == TopologyMaterialLayer::Decal
                         ? &part.decal.uv
                         : &part.uv;
@@ -315,8 +315,8 @@ bool SectorEditorMaterialEditingService::ApplyAuthoringFaceAnchorMaterialEdit(
                 SectorEditorAuthoringMaterialTarget materialTarget;
                 materialTarget.target = target;
                 materialTarget.layer = layer;
-                materialTarget.textureId = layer == TopologyMaterialLayer::Decal
-                        ? &FlatDecalFor(anchor, target.kind).textureId
+                materialTarget.materialId = layer == TopologyMaterialLayer::Decal
+                        ? &FlatDecalFor(anchor, target.kind).materialId
                         : &FlatTextureIdFor(anchor, target.kind);
                 materialTarget.uv = layer == TopologyMaterialLayer::Decal
                         ? &FlatDecalFor(anchor, target.kind).uv
@@ -374,13 +374,13 @@ bool SectorEditorMaterialEditingService::PasteMaterial(
             &assets,
             TopologyMaterialLayer::Base,
             [this](SectorEditorAuthoringMaterialTarget& authoringTarget) {
-                if (authoringTarget.textureId == nullptr || authoringTarget.uv == nullptr) {
+                if (authoringTarget.materialId == nullptr || authoringTarget.uv == nullptr) {
                     return SectorEditorMaterialActionResult{};
                 }
                 return PasteMaterialToFields(
                         authoringTarget.target,
                         context_.materialState.copiedMaterial,
-                        *authoringTarget.textureId,
+                        *authoringTarget.materialId,
                         *authoringTarget.uv);
             });
 }

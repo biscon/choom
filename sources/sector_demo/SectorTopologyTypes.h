@@ -105,7 +105,7 @@ struct SectorDoorFaceUvSet {
 };
 
 struct SectorTopologyDecalLayer {
-    std::string textureId;
+    std::string materialId;
     SectorTopologyUvSettings uv;
     float opacity = 1.0f;
     bool emissive = false;
@@ -114,7 +114,7 @@ struct SectorTopologyDecalLayer {
 };
 
 struct SectorTopologyWallPartSettings {
-    std::string textureId;
+    std::string materialId;
     SectorTopologyUvSettings uv;
     SectorTopologyDecalLayer decal;
 };
@@ -154,8 +154,8 @@ struct SectorTopologySector {
     float floorZ = 0.0f;
     float ceilingZ = 24.0f;
 
-    std::string floorTextureId;
-    std::string ceilingTextureId;
+    std::string floorMaterialId;
+    std::string ceilingMaterialId;
     // Empty uses the application-wide default footstep set.
     std::string footstepSet;
     bool ceilingSky = false;

@@ -52,7 +52,7 @@ struct SectorDoorTextureResolver {
     using ResolveFn = const Texture2D* (*)(
             void* userData,
             engine::AssetManager& assets,
-            const std::string& textureId);
+            const std::string& materialId);
 
     void* userData = nullptr;
     ResolveFn resolve = nullptr;

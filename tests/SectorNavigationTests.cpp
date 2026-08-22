@@ -624,7 +624,7 @@ void TestBuildInputAndSourceHash()
     const uint64_t doorBase = game::ComputeSectorNavigationSourceHash(
             doorMap, colliders, {});
     doorMap.runtimeObjects.front().door.modelAssetId = "visual-only.glb";
-    doorMap.runtimeObjects.front().door.textureId = "visual-only";
+    doorMap.runtimeObjects.front().door.materialId = "visual-only";
     doorMap.runtimeObjects.front().door.openSoundId = "open";
     doorMap.runtimeObjects.front().door.speed += 2.0f;
     doorMap.runtimeObjects.front().door.openAngleDegrees += 15.0f;

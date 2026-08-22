@@ -261,14 +261,14 @@ std::string BuildDoorAssetStatus(
 {
     std::string status;
     if (door.visual == SectorDoorVisualType::Procedural) {
-        const bool textureMissing = !door.textureId.empty()
-                && !textureCatalog.HasTexture(door.textureId);
+        const bool textureMissing = !door.materialId.empty()
+                && !textureCatalog.HasTexture(door.materialId);
         invalid = invalid || textureMissing;
-        status = door.textureId.empty()
-                ? "Texture: default material"
+        status = door.materialId.empty()
+                ? "Material: default"
                 : textureMissing
-                        ? TextFormat("Texture missing: %s", door.textureId.c_str())
-                        : TextFormat("Texture: %s", door.textureId.c_str());
+                        ? TextFormat("Material missing: %s", door.materialId.c_str())
+                        : TextFormat("Material: %s", door.materialId.c_str());
         status += "\n";
     }
     status += DoorSoundStatus(sounds, "Open", door.openSoundId, invalid);
@@ -926,7 +926,7 @@ void DrawSectorEditorDoorInspector(
                     "sector_editor_door_pick_texture",
                     Rectangle{0.0f, y, contentW, rowH},
                     font,
-                    "Pick Texture")) {
+                    "Pick Material")) {
             if (!OpenRuntimeDoorTexturePicker(
                         context.state,
                         context.topologyMap,

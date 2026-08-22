@@ -11,20 +11,20 @@ void CloseSectorEditorTexturePicker(TexturePickerState& picker)
 
 void PopulateSectorEditorTexturePickerOptions(
         TexturePickerState& picker,
-        const std::vector<std::string>& textureIds,
+        const std::vector<std::string>& materialIds,
         const std::string& currentTexture)
 {
     picker.selectedTextureIndex = 0;
     picker.scroll = engine::UIScrollState{};
-    picker.textureIds.clear();
+    picker.materialIds.clear();
     picker.optionLabels.clear();
 
-    picker.textureIds.insert(picker.textureIds.end(), textureIds.begin(), textureIds.end());
-    picker.optionLabels.reserve(picker.textureIds.size());
+    picker.materialIds.insert(picker.materialIds.end(), materialIds.begin(), materialIds.end());
+    picker.optionLabels.reserve(picker.materialIds.size());
 
-    for (size_t i = 0; i < picker.textureIds.size(); ++i) {
-        picker.optionLabels.push_back(picker.textureIds[i].c_str());
-        if (picker.textureIds[i] == currentTexture) {
+    for (size_t i = 0; i < picker.materialIds.size(); ++i) {
+        picker.optionLabels.push_back(picker.materialIds[i].c_str());
+        if (picker.materialIds[i] == currentTexture) {
             picker.selectedTextureIndex = static_cast<int>(i);
         }
     }
@@ -32,11 +32,11 @@ void PopulateSectorEditorTexturePickerOptions(
 
 void OpenSectorEditorTexturePicker(
         TexturePickerState& picker,
-        const std::vector<std::string>& textureIds,
+        const std::vector<std::string>& materialIds,
         const std::string& currentTexture)
 {
     picker.open = true;
-    PopulateSectorEditorTexturePickerOptions(picker, textureIds, currentTexture);
+    PopulateSectorEditorTexturePickerOptions(picker, materialIds, currentTexture);
 }
 
 SectorEditorSelectedTexture CurrentSectorEditorTexturePickerSelection(const TexturePickerState& picker)
@@ -45,12 +45,12 @@ SectorEditorSelectedTexture CurrentSectorEditorTexturePickerSelection(const Text
     if (!picker.open
             || picker.topologyTargetKind == TopologyTexturePickerTargetKind::None
             || picker.selectedTextureIndex < 0
-            || picker.selectedTextureIndex >= static_cast<int>(picker.textureIds.size())) {
+            || picker.selectedTextureIndex >= static_cast<int>(picker.materialIds.size())) {
         return selected;
     }
 
     selected.valid = true;
-    selected.textureId = picker.textureIds[static_cast<size_t>(picker.selectedTextureIndex)];
+    selected.materialId = picker.materialIds[static_cast<size_t>(picker.selectedTextureIndex)];
     return selected;
 }
 

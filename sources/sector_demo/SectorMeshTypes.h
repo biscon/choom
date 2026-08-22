@@ -10,8 +10,8 @@ namespace game {
 struct SectorMeshBatch {
     int sectorId = -1;
     int lightmapAtlasIndex = -1;
-    std::string textureId;
-    std::string decalTextureId;
+    std::string materialId;
+    std::string decalMaterialId;
     float decalOpacity = 1.0f;
     bool decalEmissive = false;
     Vector3 decalTint = {1.0f, 1.0f, 1.0f};

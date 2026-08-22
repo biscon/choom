@@ -1,5 +1,7 @@
 #include "sector_demo/SectorTopologySerialization.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorMaterialRefactor.h"
+#include "sector_demo/SectorMaterialRegistry.h"
 #include "game/SectorLevelLoader.h"
 #include "util/json.hpp"
 
@@ -12,12 +14,14 @@
 #include <cmath>
 #include <limits>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
 
-using game::SectorTextureDefinition;
-using game::SectorTextureFilter;
+using game::SectorMaterialDefinition;
+using game::SectorMaterialFilter;
 using game::SectorSoundDefinition;
 using game::SectorSoundType;
 using game::SectorTopologyLineDef;
@@ -47,21 +51,21 @@ void Check(bool condition, const char* description)
 }
 
 game::SectorTopologyWallPartSettings MakePart(
-        const char* textureId,
+        const char* materialId,
         float scaleX,
         float scaleY,
         float offsetX,
         float offsetY)
 {
     game::SectorTopologyWallPartSettings part;
-    part.textureId = textureId;
+    part.materialId = materialId;
     part.uv.scale = {scaleX, scaleY};
     part.uv.offset = {offsetX, offsetY};
     return part;
 }
 
 game::SectorTopologyDecalLayer MakeDecal(
-        const char* textureId,
+        const char* materialId,
         float scaleX,
         float scaleY,
         float offsetX,
@@ -72,7 +76,7 @@ game::SectorTopologyDecalLayer MakeDecal(
         float bloomIntensity = 1.0f)
 {
     game::SectorTopologyDecalLayer decal;
-    decal.textureId = textureId;
+    decal.materialId = materialId;
     decal.uv.scale = {scaleX, scaleY};
     decal.uv.offset = {offsetX, offsetY};
     decal.opacity = opacity;
@@ -103,12 +107,12 @@ bool Near(Vector3 actual, Vector3 expected, float epsilon = 0.00001f)
 SectorTopologyMap MakeSquare()
 {
     SectorTopologyMap map;
-    map.texturesById.emplace("wall", SectorTextureDefinition{
-            "wall", "textures/wall.png", SectorTextureFilter::Point});
-    map.texturesById.emplace("floor", SectorTextureDefinition{
-            "floor", "textures/floor.png", SectorTextureFilter::Bilinear});
-    map.texturesById.emplace("ceiling", SectorTextureDefinition{
-            "ceiling", "textures/ceiling.png", SectorTextureFilter::Bilinear});
+    map.resolvedMaterialsById.emplace("wall", SectorMaterialDefinition{
+            "wall", "textures/wall.png", SectorMaterialFilter::Point});
+    map.resolvedMaterialsById.emplace("floor", SectorMaterialDefinition{
+            "floor", "textures/floor.png", SectorMaterialFilter::Bilinear});
+    map.resolvedMaterialsById.emplace("ceiling", SectorMaterialDefinition{
+            "ceiling", "textures/ceiling.png", SectorMaterialFilter::Bilinear});
 
     map.vertices = {
             {1, 0, 0},
@@ -139,8 +143,8 @@ SectorTopologyMap MakeSquare()
     sector.name = "sector_001";
     sector.floorZ = -2.5f;
     sector.ceilingZ = 24.25f;
-    sector.floorTextureId = "floor";
-    sector.ceilingTextureId = "ceiling";
+    sector.floorMaterialId = "floor";
+    sector.ceilingMaterialId = "ceiling";
     sector.floorUv.scale = {2.0f, 3.0f};
     sector.floorUv.offset = {4.0f, 5.0f};
     sector.ceilingUv.scale = {6.0f, 7.0f};
@@ -195,7 +199,7 @@ SectorPlacedRuntimeObject MakeDoorRuntimeObject(int id)
     object.door.autoOpen = true;
     object.door.interactionDistance = 1.75f;
     object.door.autoOpenDistance = 2.5f;
-    object.door.textureId = "industrial_door";
+    object.door.materialId = "industrial_door";
     object.door.openSoundId = "door_open";
     object.door.closeSoundId = "door_close";
     return object;
@@ -204,16 +208,16 @@ SectorPlacedRuntimeObject MakeDoorRuntimeObject(int id)
 SectorTopologyMap MakeAdjacentSquares()
 {
     SectorTopologyMap map;
-    map.texturesById.emplace("wall", SectorTextureDefinition{
-            "wall", "textures/wall.png", SectorTextureFilter::Point});
-    map.texturesById.emplace("front_wall", SectorTextureDefinition{
-            "front_wall", "textures/front.png", SectorTextureFilter::Point});
-    map.texturesById.emplace("back_wall", SectorTextureDefinition{
-            "back_wall", "textures/back.png", SectorTextureFilter::Point});
-    map.texturesById.emplace("floor", SectorTextureDefinition{
-            "floor", "textures/floor.png", SectorTextureFilter::Bilinear});
-    map.texturesById.emplace("ceiling", SectorTextureDefinition{
-            "ceiling", "textures/ceiling.png", SectorTextureFilter::Bilinear});
+    map.resolvedMaterialsById.emplace("wall", SectorMaterialDefinition{
+            "wall", "textures/wall.png", SectorMaterialFilter::Point});
+    map.resolvedMaterialsById.emplace("front_wall", SectorMaterialDefinition{
+            "front_wall", "textures/front.png", SectorMaterialFilter::Point});
+    map.resolvedMaterialsById.emplace("back_wall", SectorMaterialDefinition{
+            "back_wall", "textures/back.png", SectorMaterialFilter::Point});
+    map.resolvedMaterialsById.emplace("floor", SectorMaterialDefinition{
+            "floor", "textures/floor.png", SectorMaterialFilter::Bilinear});
+    map.resolvedMaterialsById.emplace("ceiling", SectorMaterialDefinition{
+            "ceiling", "textures/ceiling.png", SectorMaterialFilter::Bilinear});
 
     map.vertices = {
             {1, 0, 0},
@@ -256,8 +260,8 @@ SectorTopologyMap MakeAdjacentSquares()
     SectorTopologySector left;
     left.id = 1;
     left.name = "left";
-    left.floorTextureId = "floor";
-    left.ceilingTextureId = "ceiling";
+    left.floorMaterialId = "floor";
+    left.ceilingMaterialId = "ceiling";
     left.defaultWall = MakePart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
     left.defaultLower = MakePart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
     left.defaultUpper = MakePart("wall", 1.0f, 1.0f, 0.0f, 0.0f);
@@ -309,7 +313,7 @@ game::SectorAuthoringDocument MakeAuthoringDocumentFromMap(const SectorTopologyM
     game::SectorAuthoringDocument document;
     document.graph = game::ImportSectorTopologyMapToAuthoringGraph(map);
     document.mapData.audioSettings = map.audioSettings;
-    document.mapData.texturesById = map.texturesById;
+    document.mapData.resolvedMaterialsById = map.resolvedMaterialsById;
     document.mapData.staticLights = map.staticLights;
     document.mapData.staticSpotLights = map.staticSpotLights;
     document.mapData.dynamicPointLights = map.dynamicPointLights;
@@ -369,9 +373,9 @@ void TestRoundTrip()
           "ambient color alpha round-trips");
     Check(loaded.sectors[0].defaultUpper.uv.offset.y == 12.0f,
           "sector defaults round-trip");
-    Check(loaded.texturesById.at("wall").filter == SectorTextureFilter::Point,
+    Check(loaded.resolvedMaterialsById.at("wall").filter == SectorMaterialFilter::Point,
           "texture definition round-trips");
-    Check(loaded.texturesById.at("floor").filter == SectorTextureFilter::Bilinear,
+    Check(loaded.resolvedMaterialsById.at("floor").filter == SectorMaterialFilter::Bilinear,
           "linear texture definition round-trips");
     Check(!game::HasSectorTopologyValidationErrors(game::ValidateSectorTopologyMap(loaded)),
           "round-tripped map validates");
@@ -384,10 +388,10 @@ void TestRoundTrip()
 void TestTextureFilterSerialization()
 {
     SectorTopologyMap map = MakeSquare();
-    map.texturesById.emplace("tri", SectorTextureDefinition{
-            "tri", "textures/tri.png", SectorTextureFilter::Trilinear});
-    map.texturesById.emplace("aniso", SectorTextureDefinition{
-            "aniso", "textures/aniso.png", SectorTextureFilter::Anisotropic8x});
+    map.resolvedMaterialsById.emplace("tri", SectorMaterialDefinition{
+            "tri", "textures/tri.png", SectorMaterialFilter::Trilinear});
+    map.resolvedMaterialsById.emplace("aniso", SectorMaterialDefinition{
+            "aniso", "textures/aniso.png", SectorMaterialFilter::Anisotropic8x});
 
     const Json saved = Json::parse(SaveText(map));
     Check(saved["textures"]["wall"]["filter"] == "point",
@@ -402,19 +406,19 @@ void TestTextureFilterSerialization()
     SectorTopologyMap loaded;
     std::string error;
     Check(LoadText(saved.dump(), loaded, error), "all texture filter presets load");
-    Check(loaded.texturesById.at("wall").filter == SectorTextureFilter::Point,
+    Check(loaded.resolvedMaterialsById.at("wall").filter == SectorMaterialFilter::Point,
           "point texture filter loads");
-    Check(loaded.texturesById.at("floor").filter == SectorTextureFilter::Bilinear,
+    Check(loaded.resolvedMaterialsById.at("floor").filter == SectorMaterialFilter::Bilinear,
           "linear texture filter loads");
-    Check(loaded.texturesById.at("tri").filter == SectorTextureFilter::Trilinear,
+    Check(loaded.resolvedMaterialsById.at("tri").filter == SectorMaterialFilter::Trilinear,
           "trilinear texture filter loads");
-    Check(loaded.texturesById.at("aniso").filter == SectorTextureFilter::Anisotropic8x,
+    Check(loaded.resolvedMaterialsById.at("aniso").filter == SectorMaterialFilter::Anisotropic8x,
           "anisotropic texture filter loads");
 
     Json legacy = saved;
     legacy["textures"]["floor"]["filter"] = "bilinear";
     Check(LoadText(legacy.dump(), loaded, error), "legacy bilinear texture filter loads");
-    Check(loaded.texturesById.at("floor").filter == SectorTextureFilter::Anisotropic8x,
+    Check(loaded.resolvedMaterialsById.at("floor").filter == SectorMaterialFilter::Anisotropic8x,
           "legacy bilinear upgrades to anisotropic filtering");
 }
 
@@ -1541,7 +1545,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && savedDoor["autoOpen"].get<bool>()
                   && Near(savedDoor["interactionDistance"].get<float>(), 1.75f)
                   && Near(savedDoor["autoOpenDistance"].get<float>(), 2.5f)
-                  && savedDoor["textureId"].get<std::string>() == "industrial_door"
+                  && savedDoor["materialId"].get<std::string>() == "industrial_door"
                   && savedDoor["openSoundId"].get<std::string>() == "door_open"
                   && savedDoor["closeSoundId"].get<std::string>() == "door_close",
           "door payload writes dimensions motion interaction and asset IDs");
@@ -1583,7 +1587,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && loadedDoor->door.autoOpen
                   && Near(loadedDoor->door.interactionDistance, 1.75f)
                   && Near(loadedDoor->door.autoOpenDistance, 2.5f)
-                  && loadedDoor->door.textureId == "industrial_door"
+                  && loadedDoor->door.materialId == "industrial_door"
                   && loadedDoor->door.openSoundId == "door_open"
                   && loadedDoor->door.closeSoundId == "door_close"
                   && Near(loadedDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].scale, Vector2{2.0f, 3.0f})
@@ -1749,7 +1753,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
     defaultDoor.door.autoOpen = false;
     defaultDoor.door.interactionDistance = 1.5f;
     defaultDoor.door.autoOpenDistance = 2.0f;
-    defaultDoor.door.textureId.clear();
+    defaultDoor.door.materialId.clear();
     defaultDoor.door.openSoundId.clear();
     defaultDoor.door.closeSoundId.clear();
     defaultDoorMap.runtimeObjects.push_back(defaultDoor);
@@ -1775,7 +1779,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && !savedDefaultDoor.contains("autoOpen")
                   && !savedDefaultDoor.contains("interactionDistance")
                   && !savedDefaultDoor.contains("autoOpenDistance")
-                  && !savedDefaultDoor.contains("textureId")
+                  && !savedDefaultDoor.contains("materialId")
                   && !savedDefaultDoor.contains("openSoundId")
                   && !savedDefaultDoor.contains("closeSoundId")
                   && !savedDefaultDoor.contains("faceUvs"),
@@ -1808,7 +1812,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && !loadedDefaultDoor->door.autoOpen
                   && Near(loadedDefaultDoor->door.interactionDistance, 1.5f)
                   && Near(loadedDefaultDoor->door.autoOpenDistance, 2.0f)
-                  && loadedDefaultDoor->door.textureId.empty()
+                  && loadedDefaultDoor->door.materialId.empty()
                   && loadedDefaultDoor->door.openSoundId.empty()
                   && loadedDefaultDoor->door.closeSoundId.empty(),
           "default door payload restores default fields");
@@ -1948,7 +1952,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
     ExpectRejected(invalidDoor, "non-positive door auto-open distance is rejected");
 
     invalidDoor = doorSaved;
-    invalidDoor["runtimeObjects"][0]["door"]["textureId"] = 7;
+    invalidDoor["runtimeObjects"][0]["door"]["materialId"] = 7;
     ExpectRejected(invalidDoor, "wrong-type door texture ID is rejected");
 
     invalidDoor = doorSaved;
@@ -2658,7 +2662,7 @@ void TestAudioSettingsRoundTripAndValidation()
 void TestSkySettingsRoundTripAndValidation()
 {
     SectorTopologyMap original = MakeSquare();
-    original.skySettings.textureId = "storm_panorama";
+    original.skySettings.materialId = "storm_panorama";
     original.skySettings.yawOffsetDegrees = 45.5f;
     original.skySettings.verticalOffset = -0.125f;
     original.skySettings.verticalScale = 1.75f;
@@ -2667,7 +2671,7 @@ void TestSkySettingsRoundTripAndValidation()
     const std::string text = SaveText(original);
     const Json saved = Json::parse(text);
     Check(saved["skySettings"].is_object(), "non-default sky settings are written");
-    Check(saved["skySettings"]["textureId"].get<std::string>() == "storm_panorama"
+    Check(saved["skySettings"]["materialId"].get<std::string>() == "storm_panorama"
                   && Near(saved["skySettings"]["yawOffsetDegrees"].get<float>(), 45.5f)
                   && Near(saved["skySettings"]["verticalOffset"].get<float>(), -0.125f)
                   && Near(saved["skySettings"]["verticalScale"].get<float>(), 1.75f)
@@ -2680,7 +2684,7 @@ void TestSkySettingsRoundTripAndValidation()
     SectorTopologyMap loaded;
     std::string error;
     Check(LoadText(text, loaded, error), "sky settings JSON loads");
-    Check(loaded.skySettings.textureId == "storm_panorama"
+    Check(loaded.skySettings.materialId == "storm_panorama"
                   && Near(loaded.skySettings.yawOffsetDegrees, 45.5f)
                   && Near(loaded.skySettings.verticalOffset, -0.125f)
                   && Near(loaded.skySettings.verticalScale, 1.75f)
@@ -2691,13 +2695,13 @@ void TestSkySettingsRoundTripAndValidation()
           "sky settings round-trip");
 
     Json missingFields = saved;
-    missingFields["skySettings"].erase("textureId");
+    missingFields["skySettings"].erase("materialId");
     missingFields["skySettings"].erase("yawOffsetDegrees");
     missingFields["skySettings"].erase("verticalOffset");
     missingFields["skySettings"].erase("verticalScale");
     Check(LoadText(missingFields.dump(), loaded, error), "omitted sky setting fields are accepted");
     const game::SectorTopologySkySettings defaults = game::DefaultSectorTopologySkySettings();
-    Check(loaded.skySettings.textureId == defaults.textureId
+    Check(loaded.skySettings.materialId == defaults.materialId
                   && Near(loaded.skySettings.yawOffsetDegrees, defaults.yawOffsetDegrees)
                   && Near(loaded.skySettings.verticalOffset, defaults.verticalOffset)
                   && Near(loaded.skySettings.verticalScale, defaults.verticalScale)
@@ -2708,7 +2712,7 @@ void TestSkySettingsRoundTripAndValidation()
     withoutSkySettings.erase("skySettings");
     Check(LoadText(withoutSkySettings.dump(), loaded, error),
           "omitted sky settings field is accepted");
-    Check(loaded.skySettings.textureId == defaults.textureId
+    Check(loaded.skySettings.materialId == defaults.materialId
                   && Near(loaded.skySettings.yawOffsetDegrees, defaults.yawOffsetDegrees)
                   && Near(loaded.skySettings.verticalOffset, defaults.verticalOffset)
                   && Near(loaded.skySettings.verticalScale, defaults.verticalScale)
@@ -2735,14 +2739,14 @@ void TestSkySettingsRoundTripAndValidation()
     ExpectRejected(invalid, "non-object sky settings are rejected");
 
     const std::array<const char*, 4> fields{
-            "textureId",
+            "materialId",
             "yawOffsetDegrees",
             "verticalOffset",
             "verticalScale"
     };
     for (const char* field : fields) {
         invalid = saved;
-        invalid["skySettings"][field] = field == std::string("textureId") ? Json(42) : Json("invalid");
+        invalid["skySettings"][field] = field == std::string("materialId") ? Json(42) : Json("invalid");
         ExpectRejected(invalid, "wrong-type sky settings field is rejected");
     }
     invalid = saved;
@@ -2996,7 +3000,7 @@ void TestDecalDefaultsAndOmission()
     SectorTopologyMap loaded;
     std::string error;
     Check(LoadText(text, loaded, error), "topology without decal fields loads");
-    Check(loaded.sectors[0].floorDecal.textureId.empty()
+    Check(loaded.sectors[0].floorDecal.materialId.empty()
                   && loaded.sectors[0].floorDecal.uv.scale.x == 1.0f
                   && loaded.sectors[0].floorDecal.uv.offset.y == 0.0f
                   && loaded.sectors[0].floorDecal.opacity == 1.0f
@@ -3004,7 +3008,7 @@ void TestDecalDefaultsAndOmission()
                   && Near(loaded.sectors[0].floorDecal.tint, Vector3{1.0f, 1.0f, 1.0f})
                   && Near(loaded.sectors[0].floorDecal.bloomIntensity, 1.0f),
           "omitted floor decal loads default no-decal state");
-    Check(loaded.sideDefs[0].wall.decal.textureId.empty()
+    Check(loaded.sideDefs[0].wall.decal.materialId.empty()
                   && loaded.sideDefs[0].wall.decal.uv.scale.y == 1.0f
                   && loaded.sideDefs[0].wall.decal.opacity == 1.0f
                   && !loaded.sideDefs[0].wall.decal.emissive
@@ -3040,19 +3044,19 @@ void TestMiddleDefaultsAndOmission()
     SectorTopologyMap loaded;
     std::string error;
     Check(LoadText(savedDefault.dump(), loaded, error), "topology without middle fields loads");
-    Check(loaded.sideDefs[0].middle.textureId.empty()
+    Check(loaded.sideDefs[0].middle.materialId.empty()
                   && loaded.sideDefs[0].middle.uv.scale.x == 1.0f
                   && loaded.sideDefs[0].middle.uv.scale.y == 1.0f
                   && loaded.sideDefs[0].middle.uv.offset.x == 0.0f
                   && loaded.sideDefs[0].middle.uv.offset.y == 0.0f
-                  && loaded.sideDefs[0].middle.decal.textureId.empty()
+                  && loaded.sideDefs[0].middle.decal.materialId.empty()
                   && loaded.sideDefs[0].middle.decal.opacity == 1.0f,
           "omitted middle loads default empty settings");
 
     map.sideDefs[0].middle.uv.scale = {2.0f, 3.0f};
     const Json savedUvOnly = Json::parse(SaveText(map));
     Check(savedUvOnly["sidedefs"][0].contains("middle")
-                  && savedUvOnly["sidedefs"][0]["middle"]["textureId"].get<std::string>().empty()
+                  && savedUvOnly["sidedefs"][0]["middle"]["materialId"].get<std::string>().empty()
                   && savedUvOnly["sidedefs"][0]["middle"]["uv"]["scale"][0].get<float>() == 2.0f,
           "non-default middle UV is saved even without a texture");
 
@@ -3066,13 +3070,13 @@ void TestMiddleDefaultsAndOmission()
 void TestMiddleRoundTrip()
 {
     SectorTopologyMap original = MakeSquare();
-    original.texturesById.emplace("bars", SectorTextureDefinition{
-            "bars", "textures/bars.png", SectorTextureFilter::Point});
+    original.resolvedMaterialsById.emplace("bars", SectorMaterialDefinition{
+            "bars", "textures/bars.png", SectorMaterialFilter::Point});
     original.sideDefs[0].middle = MakePart("bars", 2.0f, 3.0f, 4.0f, 5.0f);
 
     const std::string text = SaveText(original);
     const Json saved = Json::parse(text);
-    Check(saved["sidedefs"][0]["middle"]["textureId"].get<std::string>() == "bars",
+    Check(saved["sidedefs"][0]["middle"]["materialId"].get<std::string>() == "bars",
           "middle texture ID is saved");
     Check(saved["sidedefs"][0]["middle"]["uv"]["scale"][0].get<float>() == 2.0f
                   && saved["sidedefs"][0]["middle"]["uv"]["offset"][1].get<float>() == 5.0f,
@@ -3083,7 +3087,7 @@ void TestMiddleRoundTrip()
     SectorTopologyMap loaded;
     std::string error;
     Check(LoadText(text, loaded, error), "topology with middle field loads");
-    Check(loaded.sideDefs[0].middle.textureId == "bars"
+    Check(loaded.sideDefs[0].middle.materialId == "bars"
                   && loaded.sideDefs[0].middle.uv.scale.x == 2.0f
                   && loaded.sideDefs[0].middle.uv.scale.y == 3.0f
                   && loaded.sideDefs[0].middle.uv.offset.x == 4.0f
@@ -3149,7 +3153,7 @@ void TestDecalRoundTrip()
 
     const std::string text = SaveText(original);
     const Json saved = Json::parse(text);
-    Check(saved["sectors"][0]["floorDecal"]["textureId"].get<std::string>() == "floor_arrow",
+    Check(saved["sectors"][0]["floorDecal"]["materialId"].get<std::string>() == "floor_arrow",
           "floor decal texture ID is saved");
     Check(saved["sectors"][0]["floorDecal"]["uv"]["scale"][0].get<float>() == 0.5f,
           "floor decal UV scale is saved");
@@ -3161,7 +3165,7 @@ void TestDecalRoundTrip()
           "floor decal tint is saved");
     Check(saved["sectors"][0]["floorDecal"]["bloomIntensity"].get<float>() == 2.5f,
           "floor decal bloom intensity is saved");
-    Check(saved["sidedefs"][0]["wall"]["decal"]["textureId"].get<std::string>() == "painting_01",
+    Check(saved["sidedefs"][0]["wall"]["decal"]["materialId"].get<std::string>() == "painting_01",
           "wall decal texture ID is saved");
     Check(saved["sidedefs"][0]["lower"]["decal"]["uv"]["offset"][1].get<float>() == 2.0f,
           "lower decal UV offset is saved");
@@ -3171,7 +3175,7 @@ void TestDecalRoundTrip()
     SectorTopologyMap loaded;
     std::string error;
     Check(LoadText(text, loaded, error), "topology with decal fields loads");
-    Check(loaded.sectors[0].floorDecal.textureId == "floor_arrow"
+    Check(loaded.sectors[0].floorDecal.materialId == "floor_arrow"
                   && loaded.sectors[0].floorDecal.uv.scale.x == 0.5f
                   && loaded.sectors[0].floorDecal.uv.offset.y == 0.25f
                   && loaded.sectors[0].floorDecal.opacity == 0.8f
@@ -3179,25 +3183,25 @@ void TestDecalRoundTrip()
                   && Near(loaded.sectors[0].floorDecal.tint, Vector3{1.0f, 0.25f, 0.5f})
                   && Near(loaded.sectors[0].floorDecal.bloomIntensity, 2.5f),
           "floor decal round-trips");
-    Check(loaded.sectors[0].ceilingDecal.textureId == "ceiling_grime"
+    Check(loaded.sectors[0].ceilingDecal.materialId == "ceiling_grime"
                   && loaded.sectors[0].ceilingDecal.uv.scale.y == 3.0f
                   && loaded.sectors[0].ceilingDecal.uv.offset.x == 4.0f
                   && loaded.sectors[0].ceilingDecal.opacity == 0.35f
                   && !loaded.sectors[0].ceilingDecal.emissive
                   && Near(loaded.sectors[0].ceilingDecal.tint, Vector3{0.2f, 0.3f, 0.4f}),
           "ceiling decal round-trips");
-    Check(loaded.sideDefs[0].wall.decal.textureId == "painting_01"
+    Check(loaded.sideDefs[0].wall.decal.materialId == "painting_01"
                   && loaded.sideDefs[0].wall.decal.uv.offset.x == 0.75f
                   && loaded.sideDefs[0].wall.decal.opacity == 1.0f
                   && loaded.sideDefs[0].wall.decal.emissive
                   && Near(loaded.sideDefs[0].wall.decal.tint, Vector3{0.5f, 0.6f, 0.7f})
                   && Near(loaded.sideDefs[0].wall.decal.bloomIntensity, 7.0f),
           "wall decal round-trips");
-    Check(loaded.sideDefs[0].lower.decal.textureId == "lower_sign"
+    Check(loaded.sideDefs[0].lower.decal.materialId == "lower_sign"
                   && loaded.sideDefs[0].lower.decal.uv.scale.x == 1.25f
                   && loaded.sideDefs[0].lower.decal.opacity == 0.65f,
           "lower decal round-trips");
-    Check(loaded.sideDefs[0].upper.decal.textureId == "upper_text"
+    Check(loaded.sideDefs[0].upper.decal.materialId == "upper_text"
                   && loaded.sideDefs[0].upper.decal.uv.offset.y == 3.0f
                   && loaded.sideDefs[0].upper.decal.opacity == 0.9f,
           "upper decal round-trips");
@@ -3233,22 +3237,22 @@ void TestStrictDecalValidation()
     ExpectRejected(changed, "decal field wrong type is rejected");
     changed = valid;
     changed["sectors"][0]["floorDecal"] = Json{
-            {"textureId", ""},
+            {"materialId", ""},
             {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}},
             {"opacity", 1.0f}
     };
     ExpectRejected(changed, "empty present decal texture ID is rejected");
-    changed["sectors"][0]["floorDecal"]["textureId"] = 17;
+    changed["sectors"][0]["floorDecal"]["materialId"] = 17;
     ExpectRejected(changed, "decal texture ID wrong type is rejected");
     changed = valid;
     changed["sectors"][0]["floorDecal"] = Json{
-            {"textureId", "arrow"},
+            {"materialId", "arrow"},
             {"opacity", 1.0f}
     };
     ExpectRejected(changed, "decal missing UV is rejected");
     changed = valid;
     changed["sectors"][0]["floorDecal"] = Json{
-            {"textureId", "arrow"},
+            {"materialId", "arrow"},
             {"uv", {{"scale", Json::array({1})}, {"offset", Json::array({0, 0})}}},
             {"opacity", 1.0f}
     };
@@ -3261,7 +3265,7 @@ void TestStrictDecalValidation()
     ExpectRejected(changed, "decal UV outside float range is rejected");
     changed = valid;
     changed["sidedefs"][0]["wall"]["decal"] = Json{
-            {"textureId", "painting"},
+            {"materialId", "painting"},
             {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}},
             {"opacity", "solid"}
     };
@@ -3336,13 +3340,13 @@ void TestStrictDecalValidation()
     output.sectors[0].floorDecal = MakeDecal("existing", 2.0f, 2.0f, 3.0f, 3.0f, 0.5f);
     changed = valid;
     changed["sectors"][0]["floorDecal"] = Json{
-            {"textureId", ""},
+            {"materialId", ""},
             {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}},
             {"opacity", 1.0f}
     };
     error.clear();
     Check(!LoadText(changed.dump(), output, error), "invalid decal load fails");
-    Check(output.sectors[0].floorDecal.textureId == "existing"
+    Check(output.sectors[0].floorDecal.materialId == "existing"
                   && output.sectors[0].floorDecal.opacity == 0.5f,
           "failed decal load leaves output map unchanged");
 }
@@ -3355,11 +3359,11 @@ void TestStrictMiddleValidation()
     ExpectRejected(changed, "middle wrong type is rejected");
     changed = valid;
     changed["sidedefs"][0]["middle"] = Json{
-            {"textureId", 17},
+            {"materialId", 17},
             {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}}
     };
     ExpectRejected(changed, "middle texture ID wrong type is rejected");
-    changed["sidedefs"][0]["middle"]["textureId"] = "bars";
+    changed["sidedefs"][0]["middle"]["materialId"] = "bars";
     changed["sidedefs"][0]["middle"]["uv"]["scale"] = Json::array({1});
     ExpectRejected(changed, "middle UV scale wrong shape is rejected");
     changed["sidedefs"][0]["middle"]["uv"]["scale"] = Json::array({1, 1});
@@ -3370,7 +3374,7 @@ void TestStrictMiddleValidation()
     ExpectRejected(changed, "middle UV outside float range is rejected");
     changed = valid;
     changed["sidedefs"][0]["middle"] = Json{
-            {"textureId", "bars"},
+            {"materialId", "bars"},
             {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}},
             {"decal", "not an object"}
     };
@@ -3380,12 +3384,12 @@ void TestStrictMiddleValidation()
     output.sideDefs[0].middle = MakePart("existing_middle", 2.0f, 3.0f, 4.0f, 5.0f);
     changed = valid;
     changed["sidedefs"][0]["middle"] = Json{
-            {"textureId", 17},
+            {"materialId", 17},
             {"uv", {{"scale", Json::array({1, 1})}, {"offset", Json::array({0, 0})}}}
     };
     std::string error;
     Check(!LoadText(changed.dump(), output, error), "invalid middle load fails");
-    Check(output.sideDefs[0].middle.textureId == "existing_middle"
+    Check(output.sideDefs[0].middle.materialId == "existing_middle"
                   && output.sideDefs[0].middle.uv.offset.y == 5.0f,
           "failed middle load leaves output map unchanged");
 
@@ -3417,20 +3421,20 @@ void TestHandAuthoredJson()
     {"id":4,"startVertexId":4,"endVertexId":1,"frontSideDefId":4,"backSideDefId":-1}
   ],
   "sidedefs": [
-    {"id":1,"lineDefId":1,"side":"front","sectorId":1,"wall":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}}},
-    {"id":2,"lineDefId":2,"side":"front","sectorId":1,"wall":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}}},
-    {"id":3,"lineDefId":3,"side":"front","sectorId":1,"wall":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}}},
-    {"id":4,"lineDefId":4,"side":"front","sectorId":1,"wall":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}}}
+    {"id":1,"lineDefId":1,"side":"front","sectorId":1,"wall":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}}},
+    {"id":2,"lineDefId":2,"side":"front","sectorId":1,"wall":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}}},
+    {"id":3,"lineDefId":3,"side":"front","sectorId":1,"wall":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}}},
+    {"id":4,"lineDefId":4,"side":"front","sectorId":1,"wall":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}},"lower":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}},"upper":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}}}
   ],
   "sectors": [{
     "id":1,"name":"sector_001","floorZ":0,"ceilingZ":24,
-    "floorTextureId":"","ceilingTextureId":"",
+    "floorMaterialId":"","ceilingMaterialId":"",
     "floorUv":{"scale":[1,1],"offset":[0,0]},
     "ceilingUv":{"scale":[1,1],"offset":[0,0]},
     "ambientColor":{"r":255,"g":255,"b":255,"a":255},"ambientIntensity":1,
-    "defaultWall":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},
-    "defaultLower":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}},
-    "defaultUpper":{"textureId":"","uv":{"scale":[1,1],"offset":[0,0]}}
+    "defaultWall":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}},
+    "defaultLower":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}},
+    "defaultUpper":{"materialId":"","uv":{"scale":[1,1],"offset":[0,0]}}
   }],
   "futureMetadata": {"allowed": true}
 })json";
@@ -3845,10 +3849,10 @@ void TestDeterministicOutput()
     });
     second.dynamicSpotLights = first.dynamicSpotLights;
     std::reverse(second.dynamicSpotLights.begin(), second.dynamicSpotLights.end());
-    second.texturesById.clear();
-    second.texturesById.emplace("ceiling", first.texturesById.at("ceiling"));
-    second.texturesById.emplace("wall", first.texturesById.at("wall"));
-    second.texturesById.emplace("floor", first.texturesById.at("floor"));
+    second.resolvedMaterialsById.clear();
+    second.resolvedMaterialsById.emplace("ceiling", first.resolvedMaterialsById.at("ceiling"));
+    second.resolvedMaterialsById.emplace("wall", first.resolvedMaterialsById.at("wall"));
+    second.resolvedMaterialsById.emplace("floor", first.resolvedMaterialsById.at("floor"));
     Check(SaveText(first) == SaveText(second),
           "serialization is independent of vector and hash-map insertion order");
     Check(SaveText(first) == SaveText(first), "repeated serialization is identical");
@@ -3988,14 +3992,14 @@ void TestIndependentFrontBackSidedefEdits()
         return;
     }
 
-    front->wall.textureId = "front_wall";
+    front->wall.materialId = "front_wall";
     front->wall.uv.scale = {2.0f, 3.0f};
     front->wall.uv.offset = {4.0f, 5.0f};
-    back->wall.textureId = "back_wall";
+    back->wall.materialId = "back_wall";
     back->wall.uv.scale = {6.0f, 7.0f};
     back->wall.uv.offset = {8.0f, 9.0f};
 
-    Check(front->wall.textureId != back->wall.textureId,
+    Check(front->wall.materialId != back->wall.materialId,
           "front and back sidedef textures can differ");
     Check(front->wall.uv.scale.x != back->wall.uv.scale.x
                   && front->wall.uv.offset.x != back->wall.uv.offset.x,
@@ -4012,11 +4016,11 @@ void TestIndependentFrontBackSidedefEdits()
     Check(loadedFront != nullptr && loadedBack != nullptr,
           "round-tripped adjacent map retains shared sidedefs");
     if (loadedFront != nullptr && loadedBack != nullptr) {
-        Check(loadedFront->wall.textureId == "front_wall"
+        Check(loadedFront->wall.materialId == "front_wall"
                       && loadedFront->wall.uv.scale.x == 2.0f
                       && loadedFront->wall.uv.offset.y == 5.0f,
               "front sidedef edit round-trips");
-        Check(loadedBack->wall.textureId == "back_wall"
+        Check(loadedBack->wall.materialId == "back_wall"
                       && loadedBack->wall.uv.scale.y == 7.0f
                       && loadedBack->wall.uv.offset.x == 8.0f,
               "back sidedef edit round-trips");
@@ -4041,7 +4045,7 @@ void TestGraphNativeEmptyAndLooseGraphRoundTrip()
 {
     game::SectorAuthoringDocument empty;
     const Json emptySaved = Json::parse(SaveAuthoringText(empty));
-    Check(emptySaved["formatVersion"] == 3, "graph-native format version is written");
+    Check(emptySaved["formatVersion"] == 4, "graph-native format version is written");
     Check(emptySaved["topology"] == "authoringGraph", "graph-native topology marker is written");
     Check(emptySaved.contains("authoringGraph"), "graph-native source graph is written");
     Check(!emptySaved.contains("vertices")
@@ -4135,7 +4139,7 @@ void TestGraphNativeValidGraphDerivesTopologyAndProperties()
     const game::SectorTopologySideDef* side = game::FindSectorTopologySideDef(
             loaded.derivation.topology,
             loaded.derivation.topology.lineDefs[0].frontSideDefId);
-    Check(side != nullptr && side->wall.uv.scale.x == 4.0f && side->middle.textureId == "wall",
+    Check(side != nullptr && side->wall.uv.scale.x == 4.0f && side->middle.materialId == "wall",
           "authoring side materials project after graph-native load");
     const game::SectorTopologySector* sector =
             game::FindSectorTopologySector(loaded.derivation.topology, 1);
@@ -4148,8 +4152,8 @@ void TestGraphNativeValidGraphDerivesTopologyAndProperties()
 void TestGraphNativeMapLevelRoundTrip()
 {
     SectorTopologyMap source = MakeSquare();
-    source.texturesById.emplace("sky", SectorTextureDefinition{
-            "sky", "textures/sky.png", SectorTextureFilter::Trilinear});
+    source.resolvedMaterialsById.emplace("sky", SectorMaterialDefinition{
+            "sky", "textures/sky.png", SectorMaterialFilter::Trilinear});
     source.staticLights.push_back(SectorTopologyStaticPointLight{
             9,
             Vector3{1.0f, 2.0f, 3.0f},
@@ -4207,7 +4211,7 @@ void TestGraphNativeMapLevelRoundTrip()
     source.audioSettings.soundsById.emplace(
             "ambient_hum", SectorSoundDefinition{
                     "ambient_hum", "ambience/hum.wav", SectorSoundType::Sound});
-    source.skySettings.textureId = "sky";
+    source.skySettings.materialId = "sky";
     source.skySettings.yawOffsetDegrees = 17.0f;
     source.directionalLight.enabled = true;
     source.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
@@ -4244,7 +4248,7 @@ void TestGraphNativeMapLevelRoundTrip()
 
     const game::SectorAuthoringDocument original = MakeAuthoringDocumentFromMap(source);
     const Json saved = Json::parse(SaveAuthoringText(original));
-    Check(saved["textures"].contains("sky"), "graph-native texture registry is persisted");
+    Check(!saved.contains("textures"), "graph-native save omits the global material registry");
     Check(saved["staticLights"][0]["id"] == 9
                   && saved["staticLights"][0]["castsShadow"] == false,
           "graph-native static lights are persisted");
@@ -4277,7 +4281,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && saved["audio"]["sounds"]["ambient_hum"]["path"]
                   == "ambience/hum.wav",
           "graph-native audio settings are persisted");
-    Check(saved["skySettings"]["textureId"] == "sky", "graph-native sky settings are persisted");
+    Check(saved["skySettings"]["materialId"] == "sky", "graph-native sky settings are persisted");
     Check(saved["directionalLight"]["enabled"] == true,
           "graph-native directional light settings are persisted");
     Check(saved["fogSettings"]["enabled"] == true
@@ -4323,7 +4327,7 @@ void TestGraphNativeMapLevelRoundTrip()
     game::SectorAuthoringDocument loaded;
     std::string error;
     Check(LoadAuthoringText(saved.dump(), loaded, error), "graph-native map-level data loads");
-    Check(loaded.mapData.texturesById.count("sky") == 1
+    Check(loaded.mapData.resolvedMaterialsById.empty()
                   && loaded.mapData.staticLights.size() == 1
                   && !loaded.mapData.staticLights[0].castsShadow
                   && loaded.mapData.staticSpotLights.size() == 1
@@ -4353,7 +4357,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.mapData.audioSettings.musicVolume, 0.4f)
                   && loaded.mapData.audioSettings.soundsById.at("ambient_hum").path
                           == "ambience/hum.wav"
-                  && loaded.mapData.skySettings.textureId == "sky"
+                  && loaded.mapData.skySettings.materialId == "sky"
                   && loaded.mapData.directionalLight.enabled
                   && loaded.mapData.fogSettings.enabled
                   && Near(loaded.mapData.fogSettings.density, 0.125f)
@@ -4383,7 +4387,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.derivation.topology.audioSettings.musicVolume, 0.4f)
                   && loaded.derivation.topology.audioSettings.soundsById.at(
                           "ambient_hum").path == "ambience/hum.wav"
-                  && loaded.derivation.topology.texturesById.count("sky") == 1
+                  && loaded.derivation.topology.resolvedMaterialsById.empty()
                   && loaded.derivation.topology.staticLights.size() == 1
                   && !loaded.derivation.topology.staticLights[0].castsShadow
                   && loaded.derivation.topology.staticSpotLights.size() == 1
@@ -4401,7 +4405,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.derivation.topology.dynamicSpotLights[0].shadowBias, 0.02f)
                   && Near(loaded.derivation.topology.dynamicSpotLights[0].shadowStrength, 0.8f)
                   && Near(loaded.derivation.topology.dynamicSpotLights[0].shadowSoftness, 3.0f)
-                  && loaded.derivation.topology.skySettings.textureId == "sky"
+                  && loaded.derivation.topology.skySettings.materialId == "sky"
                   && loaded.derivation.topology.fogSettings.enabled
                   && Near(loaded.derivation.topology.fogSettings.density, 0.125f)
                   && loaded.derivation.topology.bakedLightmap.path == "assets/levels/test/test.lightmap.png"
@@ -4597,6 +4601,98 @@ void TestFileApi()
     std::filesystem::remove(path, removeError);
 }
 
+void TestGlobalMaterialRegistryAndReferenceRefactor()
+{
+    const std::string registryText = R"json({
+  "formatVersion": 1,
+  "materials": {
+    "old_wall": {
+      "albedoTexturePath": "assets/images/wall.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.25,
+      "roughnessFactor": 0.65,
+      "normalStrength": 0.75
+    }
+  }
+})json";
+    game::SectorMaterialRegistry parsed;
+    std::string error;
+    Check(game::ParseSectorMaterialRegistryJson(registryText, parsed, error)
+                  && parsed.materialsById.size() == 1
+                  && Near(parsed.materialsById.at("old_wall").metallicFactor, 0.25f)
+                  && Near(parsed.materialsById.at("old_wall").roughnessFactor, 0.65f)
+                  && Near(parsed.materialsById.at("old_wall").normalStrength, 0.75f),
+          "global material registry parses scalar PBR metadata");
+    std::string serialized;
+    Check(game::SerializeSectorMaterialRegistryJson(parsed, serialized, error)
+                  && Json::parse(serialized)["materials"].contains("old_wall"),
+          "global material registry serializes keyed materials");
+
+    SectorTopologyMap map = MakeSquare();
+    map.sectors[0].floorMaterialId = "old_wall";
+    map.sectors[0].ceilingMaterialId = "missing";
+    const std::vector<std::string> missing =
+            game::ResolveSectorMaterialsForMap(map, parsed);
+    Check(map.resolvedMaterialsById.size() == 1
+                  && map.resolvedMaterialsById.count("old_wall") == 1
+                  && std::find(missing.begin(), missing.end(), "missing") != missing.end(),
+          "runtime resolution stores only referenced registered materials");
+
+    const std::filesystem::path root =
+            std::filesystem::temp_directory_path() / "sector_material_refactor_test";
+    std::error_code fileError;
+    std::filesystem::remove_all(root, fileError);
+    std::filesystem::create_directories(root / "levels" / "demo", fileError);
+    std::filesystem::create_directories(root / "materials", fileError);
+    const std::filesystem::path levelPath = root / "levels" / "demo" / "demo.json";
+    const std::filesystem::path registryPath = root / "materials" / "materials.json";
+    {
+        std::ofstream level(levelPath);
+        level << R"json({
+  "formatVersion": 4,
+  "topology": "authoringGraph",
+  "skySettings": { "materialId": "old_wall" },
+  "authoringGraph": {
+    "vertices": [], "lines": [], "lineSides": [], "faceAnchors": []
+  }
+})json";
+    }
+    game::SectorMaterialRegistry renamedRegistry;
+    game::SectorMaterialDefinition renamed = parsed.materialsById.at("old_wall");
+    renamed.id = "new_wall";
+    renamedRegistry.materialsById.emplace(renamed.id, renamed);
+    Check(game::SaveSectorMaterialRegistryWithLevelRefactors(
+                  registryPath,
+                  root / "levels",
+                  renamedRegistry,
+                  {{"old_wall", "new_wall"}},
+                  {},
+                  error),
+          "material ID rename transaction updates registry and levels");
+    Json renamedLevel;
+    {
+        std::ifstream level(levelPath);
+        level >> renamedLevel;
+    }
+    Check(renamedLevel["skySettings"]["materialId"] == "new_wall",
+          "material ID rename updates special material consumers");
+
+    game::SectorMaterialRegistry replacementRegistry;
+    game::SectorMaterialDefinition fallback = renamed;
+    fallback.id = "fallback";
+    replacementRegistry.materialsById.emplace(fallback.id, fallback);
+    Check(!game::SaveSectorMaterialRegistryWithLevelRefactors(
+                  registryPath,
+                  root / "levels",
+                  replacementRegistry,
+                  {},
+                  {"new_wall"},
+                  error)
+                  && error.find("referenced") != std::string::npos,
+          "referenced material deletion is rejected transactionally");
+    std::filesystem::remove_all(root, fileError);
+}
+
 void TestFootstepSetRoundTripAndDefaults()
 {
     SectorTopologyMap map = MakeSquare();
@@ -4777,6 +4873,7 @@ int main()
     TestFootstepSetRoundTripAndDefaults();
     TestAuthoringEditorSettingsRoundTripAndValidation();
     TestFileApi();
+    TestGlobalMaterialRegistryAndReferenceRefactor();
 
     if (failures != 0) {
         std::cerr << failures << " topology serialization test(s) failed\n";

@@ -55,23 +55,6 @@ namespace {
 
 using Json = nlohmann::ordered_json;
 
-template<typename TextureMap>
-void PopulateDefaultSectorTextures(TextureMap& texturesById)
-{
-    const auto addTexture = [&texturesById](const char* id, const char* path) {
-        SectorTextureDefinition definition;
-        definition.id = id;
-        definition.path = path;
-        definition.filter = SectorTextureFilter::Anisotropic8x;
-        texturesById.emplace(id, std::move(definition));
-    };
-    addTexture("wall", "assets/images/wall.png");
-    addTexture("floor", "assets/images/floor.png");
-    addTexture("ceiling", "assets/images/ceiling.png");
-    addTexture("step_wall", "assets/images/wall.png");
-    addTexture("upper_wall", "assets/images/wall.png");
-}
-
 bool ReadTextFile(const std::string& filePath, std::string& outText, std::string& errorMessage)
 {
     std::ifstream file(filePath, std::ios::binary);
@@ -116,7 +99,7 @@ SectorEditorDocumentFormat DetectSectorEditorDocumentFormat(
 
         const int version = versionIt->get<int>();
         const std::string topology = topologyIt->get<std::string>();
-        if (version == 3 && topology == "authoringGraph") {
+        if (version == 4 && topology == "authoringGraph") {
             errorMessage.clear();
             return SectorEditorDocumentFormat::AuthoringGraph;
         }
@@ -158,9 +141,7 @@ SectorAuthoringDocument BuildSectorAuthoringDocument(
 
 SectorTopologyMap CreateEmptySectorTopologyDocument()
 {
-    SectorTopologyMap map;
-    PopulateDefaultSectorTextures(map.texturesById);
-    return map;
+    return SectorTopologyMap{};
 }
 
 void ResetEditorTopologyDocumentState(

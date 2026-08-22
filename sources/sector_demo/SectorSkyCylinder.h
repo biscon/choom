@@ -23,9 +23,9 @@ struct SectorSkyCylinderMeshData {
 };
 
 bool HasSkyCeilingSector(const SectorTopologyMap& map);
-const SectorTextureDefinition* FindSkyTexture(const SectorTopologyMap& map);
+const SectorMaterialDefinition* FindSkyTexture(const SectorTopologyMap& map);
 bool ShouldRenderSkyCylinder(const SectorTopologyMap& map);
-const SectorTextureDefinition* FindDefaultSkyTexture(const SectorTopologyMap& map);
+const SectorMaterialDefinition* FindDefaultSkyTexture(const SectorTopologyMap& map);
 bool ShouldRenderDefaultSkyCylinder(const SectorTopologyMap& map);
 SectorSkyCylinderMeshData BuildSkyCylinderMeshData(
         int segments = kDefaultSkyCylinderSegments,

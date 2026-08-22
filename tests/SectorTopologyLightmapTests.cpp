@@ -33,9 +33,9 @@ void Check(bool condition, const char* description)
     }
 }
 
-game::SectorTextureDefinition Texture(const char* id)
+game::SectorMaterialDefinition Texture(const char* id)
 {
-    game::SectorTextureDefinition texture;
+    game::SectorMaterialDefinition texture;
     texture.id = id;
     texture.path = std::string("assets/textures/") + id + ".png";
     return texture;
@@ -716,10 +716,10 @@ void WriteSolidRgbTexture(
     UnloadImage(image);
 }
 
-game::SectorTopologyWallPartSettings Part(const char* textureId)
+game::SectorTopologyWallPartSettings Part(const char* materialId)
 {
     game::SectorTopologyWallPartSettings part;
-    part.textureId = textureId;
+    part.materialId = materialId;
     return part;
 }
 
@@ -730,8 +730,8 @@ game::SectorTopologySector Sector(int id, float floorZ = 0.0f, float ceilingZ = 
     sector.name = "sector-" + std::to_string(id);
     sector.floorZ = floorZ;
     sector.ceilingZ = ceilingZ;
-    sector.floorTextureId = "floor";
-    sector.ceilingTextureId = "ceiling";
+    sector.floorMaterialId = "floor";
+    sector.ceilingMaterialId = "ceiling";
     sector.ambientColor = Color{200, 180, 160, 255};
     sector.ambientIntensity = 0.5f;
     sector.defaultWall = Part("wall");
@@ -743,7 +743,7 @@ game::SectorTopologySector Sector(int id, float floorZ = 0.0f, float ceilingZ = 
 void AddTextureDefaults(game::SectorTopologyMap& map)
 {
     for (const char* id : {"floor", "ceiling", "wall", "lower", "upper", "alt"}) {
-        map.texturesById.emplace(id, Texture(id));
+        map.resolvedMaterialsById.emplace(id, Texture(id));
     }
 }
 
@@ -1224,10 +1224,10 @@ void TestHdrBakeAccumulationPreservesAboveOneRadiance()
 game::SectorTopologyMap MakeAlphaMiddleOcclusionBakeMap(const std::filesystem::path& texturePath)
 {
     game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
-    game::SectorTextureDefinition texture;
+    game::SectorMaterialDefinition texture;
     texture.id = "bars";
     texture.path = texturePath.string();
-    map.texturesById["bars"] = texture;
+    map.resolvedMaterialsById["bars"] = texture;
 
     game::SectorTopologySideDef* frontMiddle = game::FindSectorTopologySideDef(map, 2);
     game::SectorTopologySideDef* backMiddle = game::FindSectorTopologySideDef(map, 8);
@@ -1368,7 +1368,7 @@ void TestSourceHashChanges()
     changedSector.sectors[0].floorZ += 1.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedSector) != hash, "hash changes when sector floor changes");
     changedSector = base;
-    changedSector.sectors[0].ceilingTextureId = "alt";
+    changedSector.sectors[0].ceilingMaterialId = "alt";
     Check(game::ComputeSectorLightmapSourceHash(changedSector) != hash, "hash changes when sector texture changes");
     changedSector = base;
     changedSector.sectors[0].ceilingSky = true;
@@ -1379,7 +1379,7 @@ void TestSourceHashChanges()
           "hash excludes runtime-only sector footstep assignments");
 
     game::SectorTopologyMap changedSideDef = base;
-    changedSideDef.sideDefs[0].wall.textureId = "alt";
+    changedSideDef.sideDefs[0].wall.materialId = "alt";
     Check(game::ComputeSectorLightmapSourceHash(changedSideDef) != hash, "hash changes when sidedef wall texture changes");
 
     game::SectorTopologyMap changedLight = base;
@@ -1700,7 +1700,7 @@ void TestSourceHashChanges()
           "hash ignores runtime-only audio settings");
 
     game::SectorTopologyMap changedSky = base;
-    changedSky.skySettings.textureId = "storm_panorama";
+    changedSky.skySettings.materialId = "storm_panorama";
     Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
           "hash ignores sky texture ID");
     changedSky = base;
@@ -1766,7 +1766,7 @@ void TestSourceHashIncludesMiddleTextureData()
     const std::string hash = game::ComputeSectorLightmapSourceHash(base);
 
     game::SectorTopologyMap withMiddle = base;
-    withMiddle.texturesById.emplace("bars", Texture("bars"));
+    withMiddle.resolvedMaterialsById.emplace("bars", Texture("bars"));
     game::FindSectorTopologySideDef(withMiddle, 2)->middle = Part("bars");
     const std::string middleHash = game::ComputeSectorLightmapSourceHash(withMiddle);
     Check(middleHash != hash, "hash changes when middle receiver texture is added");
@@ -1777,12 +1777,12 @@ void TestSourceHashIncludesMiddleTextureData()
           "hash changes when middle receiver UV changes");
 
     game::SectorTopologyMap changedTextureDefinition = withMiddle;
-    changedTextureDefinition.texturesById["bars"].path = "assets/images/alternate_bars.png";
+    changedTextureDefinition.resolvedMaterialsById["bars"].path = "assets/images/alternate_bars.png";
     Check(game::ComputeSectorLightmapSourceHash(changedTextureDefinition) != middleHash,
           "hash changes when a middle-only referenced texture definition changes");
 
     game::SectorTopologyMap unreferencedTexture = base;
-    unreferencedTexture.texturesById.emplace("bars", Texture("bars"));
+    unreferencedTexture.resolvedMaterialsById.emplace("bars", Texture("bars"));
     Check(game::ComputeSectorLightmapSourceHash(unreferencedTexture) == hash,
           "hash ignores unreferenced middle texture table entries");
 }
@@ -2189,7 +2189,7 @@ void TestSmallSyntheticMultiAtlasBake()
 void TestMiddleSurfacesReceiveLightmapsWithoutOccluding()
 {
     game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
-    map.texturesById.emplace("bars", Texture("bars"));
+    map.resolvedMaterialsById.emplace("bars", Texture("bars"));
     game::FindSectorTopologySideDef(map, 2)->middle = Part("bars");
 
     game::SectorGeneratedGeometry geometry;
@@ -2255,7 +2255,7 @@ void TestAlphaTestMiddleOccluderCollection()
     Check(skyOccluders.empty(), "sky surfaces do not become alpha-test occluders");
 
     game::SectorTopologyMap middleMap = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
-    middleMap.texturesById.emplace("bars", Texture("bars"));
+    middleMap.resolvedMaterialsById.emplace("bars", Texture("bars"));
     game::SectorTopologySideDef* middleSide = game::FindSectorTopologySideDef(middleMap, 2);
     Check(middleSide != nullptr, "alpha occluder middle sidedef exists");
     if (middleSide != nullptr) {
@@ -2279,7 +2279,7 @@ void TestAlphaTestMiddleOccluderCollection()
 
     if (!middleOccluders.empty()) {
         const game::SectorLightmapAlphaOccluderTriangle& occluder = middleOccluders.front();
-        Check(occluder.textureId == "bars", "alpha occluder preserves texture id");
+        Check(occluder.materialId == "bars", "alpha occluder preserves texture id");
         Check(std::fabs(occluder.alphaCutoff - 0.5f) < 0.0001f, "alpha occluder preserves alpha cutoff");
         Check(occluder.sourceSurfaceIndex >= 0, "alpha occluder preserves source surface index");
         Check(occluder.triangleIndex >= 0, "alpha occluder preserves triangle index");
@@ -2290,9 +2290,9 @@ void TestAlphaTestMiddleOccluderCollection()
 
     game::SectorGeneratedGeometry decalGeometry = opaqueGeometry;
     if (!decalGeometry.surfaces.empty()) {
-        decalGeometry.surfaces.front().decalTextureId = "bars";
+        decalGeometry.surfaces.front().decalMaterialId = "bars";
         decalGeometry.surfaces.front().alphaTest = true;
-        decalGeometry.surfaces.front().textureId = "wall";
+        decalGeometry.surfaces.front().materialId = "wall";
     }
     const std::vector<game::SectorLightmapAlphaOccluderTriangle> decalOccluders =
             game::CollectSectorLightmapAlphaOccluders(decalGeometry);
@@ -2305,10 +2305,10 @@ void TestAlphaMaskCacheSampling()
     WriteAlphaMaskTestTexture(texturePath);
 
     game::SectorTopologyMap map;
-    game::SectorTextureDefinition texture;
+    game::SectorMaterialDefinition texture;
     texture.id = "mask";
     texture.path = texturePath.string();
-    map.texturesById.emplace("mask", texture);
+    map.resolvedMaterialsById.emplace("mask", texture);
 
     game::SectorLightmapAlphaMaskCache cache;
     const game::SectorLightmapAlphaSample transparent =
@@ -2336,10 +2336,10 @@ void TestAlphaMaskCacheSampling()
     Check(cache.CachedTextureCount() == 1, "alpha mask cache stores one loaded texture entry");
 
     game::SectorTopologyMap missingMap;
-    game::SectorTextureDefinition missingTexture;
+    game::SectorMaterialDefinition missingTexture;
     missingTexture.id = "missing";
     missingTexture.path = (Phase01bSandboxDir() / "missing.png").string();
-    missingMap.texturesById.emplace("missing", missingTexture);
+    missingMap.resolvedMaterialsById.emplace("missing", missingTexture);
 
     game::SectorLightmapAlphaMaskCache missingCache;
     const game::SectorLightmapAlphaSample missing =
@@ -2363,18 +2363,18 @@ void TestAlphaAwareStaticRayOcclusion()
 
     auto makeMap = [](const std::filesystem::path& texturePath) {
         game::SectorTopologyMap map;
-        game::SectorTextureDefinition texture;
+        game::SectorMaterialDefinition texture;
         texture.id = "bars";
         texture.path = texturePath.string();
-        map.texturesById["bars"] = texture;
-        map.texturesById.emplace("wall", Texture("wall"));
+        map.resolvedMaterialsById["bars"] = texture;
+        map.resolvedMaterialsById.emplace("wall", Texture("wall"));
         return map;
     };
 
-    auto makeTriangleSurface = [](game::SectorGeneratedSurfaceKind kind, const char* textureId, float x) {
+    auto makeTriangleSurface = [](game::SectorGeneratedSurfaceKind kind, const char* materialId, float x) {
         game::SectorGeneratedSurface surface;
         surface.ref.kind = kind;
-        surface.textureId = textureId;
+        surface.materialId = materialId;
         surface.alphaTest = kind == game::SectorGeneratedSurfaceKind::Middle;
         surface.alphaCutoff = 0.5f;
         surface.normal = Vector3{-1.0f, 0.0f, 0.0f};
@@ -2577,20 +2577,20 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
 
-    Check(game::SectorTextureNormalMapPath("assets/images/stone.png")
+    Check(game::SectorMaterialNormalMapPath("assets/images/stone.png")
                   == "assets/images/stone_normal.png",
           "normal-map convention inserts suffix before extension");
-    Check(game::SectorTextureNormalMapPath("/tmp/stone.wall.png")
+    Check(game::SectorMaterialNormalMapPath("/tmp/stone.wall.png")
                   == "/tmp/stone.wall_normal.png",
           "normal-map convention preserves dotted stems and directories");
-    Check(game::SectorTextureNormalMapPath("stone") == "stone_normal",
+    Check(game::SectorMaterialNormalMapPath("stone") == "stone_normal",
           "normal-map convention supports extensionless texture paths");
-    Check(game::IsSectorTextureNormalMapPath("assets/images/stone_normal.png")
-                  && game::IsSectorTextureNormalMapPath("stone.wall_normal.PNG")
-                  && game::IsSectorTextureNormalMapPath("stone_normal_512.png")
-                  && !game::IsSectorTextureNormalMapPath("assets/images/normal_stone.png")
-                  && !game::IsSectorTextureNormalMapPath("assets/images/abnormal_stone.png")
-                  && !game::IsSectorTextureNormalMapPath("assets/images/stone.png"),
+    Check(game::IsSectorMaterialNormalMapPath("assets/images/stone_normal.png")
+                  && game::IsSectorMaterialNormalMapPath("stone.wall_normal.PNG")
+                  && game::IsSectorMaterialNormalMapPath("stone_normal_512.png")
+                  && !game::IsSectorMaterialNormalMapPath("assets/images/normal_stone.png")
+                  && !game::IsSectorMaterialNormalMapPath("assets/images/abnormal_stone.png")
+                  && !game::IsSectorMaterialNormalMapPath("assets/images/stone.png"),
           "normal-map convention identifies the automatic filename marker");
 
     const std::filesystem::path floorBasePath = root / "floor.png";
@@ -2600,7 +2600,7 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
 
     auto makeDirectionalMap = [](const std::filesystem::path& floorTexturePath) {
         game::SectorTopologyMap map = MakeSquare();
-        map.texturesById["floor"].path = floorTexturePath.string();
+        map.resolvedMaterialsById["floor"].path = floorTexturePath.string();
         map.staticLights.clear();
         map.staticSpotLights.clear();
         map.sectors[0].ceilingSky = true;
@@ -2632,9 +2632,14 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
     WriteSolidRgbTexture(hashBasePath, WHITE);
     std::filesystem::remove(hashNormalPath);
     game::SectorTopologyMap hashMap = MakeSquare();
-    hashMap.texturesById["floor"].path = hashBasePath.string();
+    hashMap.resolvedMaterialsById["floor"].path = hashBasePath.string();
     const std::string missingNormalHash =
             game::ComputeSectorLightmapSourceHash(hashMap);
+    hashMap.resolvedMaterialsById["floor"].metallicFactor = 0.85f;
+    hashMap.resolvedMaterialsById["floor"].roughnessFactor = 0.15f;
+    hashMap.resolvedMaterialsById["floor"].normalStrength = 0.25f;
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "runtime-only material PBR scalars do not change the source hash");
     WriteSolidRgbTexture(hashNormalPath, Color{128, 128, 255, 255});
     const std::string presentNormalHash =
             game::ComputeSectorLightmapSourceHash(hashMap);
@@ -2652,10 +2657,10 @@ void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
     const std::filesystem::path unusedBasePath = root / "unused.png";
     const std::filesystem::path unusedNormalPath = root / "unused_normal.png";
     WriteSolidRgbTexture(unusedBasePath, WHITE);
-    game::SectorTextureDefinition unusedTexture;
+    game::SectorMaterialDefinition unusedTexture;
     unusedTexture.id = "unused";
     unusedTexture.path = unusedBasePath.string();
-    hashMap.texturesById[unusedTexture.id] = unusedTexture;
+    hashMap.resolvedMaterialsById[unusedTexture.id] = unusedTexture;
     const std::string withoutUnusedNormal =
             game::ComputeSectorLightmapSourceHash(hashMap);
     WriteSolidRgbTexture(unusedNormalPath, Color{255, 128, 128, 255});

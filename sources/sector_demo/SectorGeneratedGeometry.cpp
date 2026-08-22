@@ -143,7 +143,7 @@ bool BuildTopologyFlatSurface(
         float height,
         Vector3 normal,
         bool facePositiveY,
-        const std::string& textureId,
+        const std::string& materialId,
         const SectorTopologyUvSettings& uvSettings,
         const SectorTopologyDecalLayer& decal,
         SectorGeneratedSurface& outSurface,
@@ -206,12 +206,12 @@ bool BuildTopologyFlatSurface(
     SectorGeneratedSurface surface;
     surface.ref.kind = kind;
     surface.ref.topologySectorId = sector.id;
-    surface.textureId = textureId;
-    surface.decalTextureId = decal.textureId;
-    surface.decalOpacity = decal.textureId.empty() ? 1.0f : decal.opacity;
-    surface.decalEmissive = !decal.textureId.empty() && decal.emissive;
-    surface.decalTint = decal.textureId.empty() ? Vector3{1.0f, 1.0f, 1.0f} : decal.tint;
-    surface.decalEmissiveStrength = decal.textureId.empty()
+    surface.materialId = materialId;
+    surface.decalMaterialId = decal.materialId;
+    surface.decalOpacity = decal.materialId.empty() ? 1.0f : decal.opacity;
+    surface.decalEmissive = !decal.materialId.empty() && decal.emissive;
+    surface.decalTint = decal.materialId.empty() ? Vector3{1.0f, 1.0f, 1.0f} : decal.tint;
+    surface.decalEmissiveStrength = decal.materialId.empty()
             ? 1.0f
             : DecalEmissiveStrengthOrDefault(decal.bloomIntensity);
     surface.normal = normal;
@@ -324,14 +324,14 @@ bool BuildTopologyWallSurface(
     surface.ref.topologyLineDefId = lineDef.id;
     surface.ref.topologySideDefId = sideDef.id;
     surface.ref.topologySide = sideDef.side;
-    surface.textureId = settings.textureId;
-    surface.decalTextureId = settings.decal.textureId;
-    surface.decalOpacity = settings.decal.textureId.empty() ? 1.0f : settings.decal.opacity;
-    surface.decalEmissive = !settings.decal.textureId.empty() && settings.decal.emissive;
-    surface.decalTint = settings.decal.textureId.empty()
+    surface.materialId = settings.materialId;
+    surface.decalMaterialId = settings.decal.materialId;
+    surface.decalOpacity = settings.decal.materialId.empty() ? 1.0f : settings.decal.opacity;
+    surface.decalEmissive = !settings.decal.materialId.empty() && settings.decal.emissive;
+    surface.decalTint = settings.decal.materialId.empty()
             ? Vector3{1.0f, 1.0f, 1.0f}
             : settings.decal.tint;
-    surface.decalEmissiveStrength = settings.decal.textureId.empty()
+    surface.decalEmissiveStrength = settings.decal.materialId.empty()
             ? 1.0f
             : DecalEmissiveStrengthOrDefault(settings.decal.bloomIntensity);
     surface.normal = normal;
@@ -395,7 +395,7 @@ bool BuildTopologyMiddleSurface(
         return false;
     }
 
-    outSurface.decalTextureId.clear();
+    outSurface.decalMaterialId.clear();
     outSurface.decalOpacity = 1.0f;
     outSurface.decalEmissive = false;
     outSurface.decalTint = Vector3{1.0f, 1.0f, 1.0f};
@@ -553,7 +553,7 @@ bool BuildSectorGeneratedGeometry(
         if (!BuildTopologyFlatSurface(
                     map, sector, loops, SectorGeneratedSurfaceKind::Floor,
                     sector.floorZ, Vector3{0.0f, 1.0f, 0.0f}, true,
-                    sector.floorTextureId, sector.floorUv, sector.floorDecal, floor, error)) {
+                    sector.floorMaterialId, sector.floorUv, sector.floorDecal, floor, error)) {
             return SetTopologyError(outGeometry, outError, error);
         }
         generated.surfaces.push_back(std::move(floor));
@@ -563,7 +563,7 @@ bool BuildSectorGeneratedGeometry(
             if (!BuildTopologyFlatSurface(
                         map, sector, loops, SectorGeneratedSurfaceKind::Ceiling,
                         sector.ceilingZ, Vector3{0.0f, -1.0f, 0.0f}, false,
-                        sector.ceilingTextureId, sector.ceilingUv, sector.ceilingDecal, ceiling, error)) {
+                        sector.ceilingMaterialId, sector.ceilingUv, sector.ceilingDecal, ceiling, error)) {
                 return SetTopologyError(outGeometry, outError, error);
             }
             generated.surfaces.push_back(std::move(ceiling));
@@ -665,7 +665,7 @@ bool BuildSectorGeneratedGeometry(
                     "Could not resolve middle texture sidedefs for topology linedef "
                             + std::to_string(lineDef.id));
         }
-        if (frontSideDef->middle.textureId.empty() && backSideDef->middle.textureId.empty()) {
+        if (frontSideDef->middle.materialId.empty() && backSideDef->middle.materialId.empty()) {
             continue;
         }
 
@@ -708,8 +708,8 @@ bool BuildSectorGeneratedGeometry(
         const SectorTopologySideDef* backRefSideDef = backSideDef;
         const SectorTopologySector* frontRefSector = frontSector;
         const SectorTopologySector* backRefSector = backSector;
-        const bool hasFrontMiddle = !frontSettings->textureId.empty();
-        const bool hasBackMiddle = !backSettings->textureId.empty();
+        const bool hasFrontMiddle = !frontSettings->materialId.empty();
+        const bool hasBackMiddle = !backSettings->materialId.empty();
         if (!hasFrontMiddle && hasBackMiddle) {
             frontSettings = &backSideDef->middle;
             frontRefSideDef = backSideDef;

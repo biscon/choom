@@ -135,7 +135,7 @@ struct SectorDoorRender {
     float normalOffset = 0.0f;
     // Final world-space vertical nudge for the slab and any model frame.
     float heightOffsetWorld = 0.0f;
-    std::string textureId;
+    std::string materialId;
     SectorDoorFaceUvSet faceUvs;
     Color tint = WHITE;
     bool visible = true;

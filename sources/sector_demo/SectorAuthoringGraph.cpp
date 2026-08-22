@@ -516,8 +516,8 @@ void CopySectorPropertiesToFaceAnchor(
     anchor.name = sector.name;
     anchor.floorZ = sector.floorZ;
     anchor.ceilingZ = sector.ceilingZ;
-    anchor.floorTextureId = sector.floorTextureId;
-    anchor.ceilingTextureId = sector.ceilingTextureId;
+    anchor.floorMaterialId = sector.floorMaterialId;
+    anchor.ceilingMaterialId = sector.ceilingMaterialId;
     anchor.footstepSet = sector.footstepSet;
     anchor.ceilingSky = sector.ceilingSky;
     anchor.floorUv = sector.floorUv;
@@ -538,8 +538,8 @@ void CopyFaceAnchorPropertiesToTopologySector(
     sector.name = anchor.name;
     sector.floorZ = anchor.floorZ;
     sector.ceilingZ = anchor.ceilingZ;
-    sector.floorTextureId = anchor.floorTextureId;
-    sector.ceilingTextureId = anchor.ceilingTextureId;
+    sector.floorMaterialId = anchor.floorMaterialId;
+    sector.ceilingMaterialId = anchor.ceilingMaterialId;
     sector.footstepSet = anchor.footstepSet;
     sector.ceilingSky = anchor.ceilingSky;
     sector.floorUv = anchor.floorUv;
@@ -1399,11 +1399,11 @@ void CopyFaceDefaultsToTopologySector(
 {
     sector.id = topologySectorId;
     sector.name = "Sector " + std::to_string(face.id);
-    sector.floorTextureId = "floor";
-    sector.ceilingTextureId = "ceiling";
-    sector.defaultWall.textureId = "wall";
-    sector.defaultLower.textureId = "wall";
-    sector.defaultUpper.textureId = "wall";
+    sector.floorMaterialId = "floor";
+    sector.ceilingMaterialId = "ceiling";
+    sector.defaultWall.materialId = "wall";
+    sector.defaultLower.materialId = "wall";
+    sector.defaultUpper.materialId = "wall";
 }
 
 int AllocateDerivedSectorId(

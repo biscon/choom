@@ -51,8 +51,8 @@ struct SectorAuthoringFaceAnchor {
     float floorZ = 0.0f;
     float ceilingZ = 24.0f;
 
-    std::string floorTextureId;
-    std::string ceilingTextureId;
+    std::string floorMaterialId;
+    std::string ceilingMaterialId;
     // Empty uses the application-wide default footstep set.
     std::string footstepSet;
     bool ceilingSky = false;

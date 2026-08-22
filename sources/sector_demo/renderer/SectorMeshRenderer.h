@@ -278,15 +278,15 @@ private:
             bool end) const;
     void RefreshAtmosphereDiagnostics(
             const SectorBillboardDynamicLightContext& dynamicLights);
-    engine::TextureHandle TextureForId(const std::string& textureId) const;
-    engine::TextureHandle NormalTextureForId(const std::string& textureId) const;
+    engine::TextureHandle TextureForId(const std::string& materialId) const;
+    engine::TextureHandle NormalTextureForId(const std::string& materialId) const;
     void UpdateCamera();
     SectorBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     void DrawDepthPrepass(engine::AssetManager& assets, engine::World* runtimeObjectWorld);
     static const Texture2D* ResolveShadowCasterTexture(
             void* userData,
             engine::AssetManager& assets,
-            const std::string& textureId);
+            const std::string& materialId);
 
     SectorMeshBuildResult meshes;
     SectorGeneratedGeometry generatedGeometry;
@@ -300,6 +300,7 @@ private:
     bool visibilityLookupWorldValid = false;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
     std::unordered_map<std::string, engine::TextureHandle> normalTextureHandlesById;
+    std::unordered_map<std::string, float> normalStrengthById;
     std::vector<engine::TextureHandle> lightmapTextures;
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
     Material material = {};
@@ -311,6 +312,7 @@ private:
     int useBakedAmbientOcclusionLoc = -1;
     int hasLightmapLoc = -1;
     int hasNormalMapLoc = -1;
+    int normalStrengthLoc = -1;
     int alphaTestLoc = -1;
     int alphaCutoffLoc = -1;
     int hasDecalLoc = -1;

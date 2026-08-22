@@ -247,7 +247,7 @@ Vector2 VisibleAuthoringPoint(game::SectorCoord x, game::SectorCoord y)
             game::SectorCoordToVisibleAuthoring(y)};
 }
 
-void SelectTextureInPicker(game::TexturePickerState& picker, const std::string& textureId);
+void SelectTextureInPicker(game::TexturePickerState& picker, const std::string& materialId);
 
 game::SectorAuthoringGraph MakeGraphFromLines(
         const std::vector<std::pair<game::SectorCoord, game::SectorCoord>>& endpoints)
@@ -423,7 +423,7 @@ int AddConfiguredDoorToAuthoringPortal(
     if (object != nullptr) {
         object->door.motion = game::SectorDoorMotionType::Swing;
         object->door.modelAssetId = "preserved_model";
-        object->door.textureId = "preserved_texture";
+        object->door.materialId = "preserved_texture";
         object->door.openSoundId = "preserved_open";
         object->door.closeSoundId = "preserved_close";
         object->door.normalOffset = 0.125f;
@@ -772,14 +772,14 @@ game::SectorAuthoringFaceExtractionResult ExtractFacesFromGraph(const game::Sect
 }
 
 game::SectorTopologyWallPartSettings WallPart(
-        const std::string& textureId,
+        const std::string& materialId,
         float scaleX,
         float scaleY,
         float offsetX,
         float offsetY)
 {
     game::SectorTopologyWallPartSettings part;
-    part.textureId = textureId;
+    part.materialId = materialId;
     part.uv.scale = Vector2{scaleX, scaleY};
     part.uv.offset = Vector2{offsetX, offsetY};
     return part;
@@ -958,7 +958,7 @@ game::SectorTopologySideDef SideDef(
     sideDef.lower = WallPart(prefix + "_lower", 2.0f, 3.0f, 4.0f, 5.0f);
     sideDef.upper = WallPart(prefix + "_upper", 3.0f, 4.0f, 5.0f, 6.0f);
     sideDef.middle = WallPart(prefix + "_middle", 4.0f, 5.0f, 6.0f, 7.0f);
-    sideDef.middle.decal.textureId = prefix + "_middle_decal";
+    sideDef.middle.decal.materialId = prefix + "_middle_decal";
     sideDef.middle.decal.opacity = 0.5f;
     return sideDef;
 }
@@ -970,15 +970,15 @@ game::SectorTopologySector Sector(int id, const std::string& name)
     sector.name = name;
     sector.floorZ = -2.0f;
     sector.ceilingZ = 40.0f;
-    sector.floorTextureId = name + "_floor";
-    sector.ceilingTextureId = name + "_ceiling";
+    sector.floorMaterialId = name + "_floor";
+    sector.ceilingMaterialId = name + "_ceiling";
     sector.ceilingSky = true;
     sector.floorUv.scale = Vector2{2.0f, 3.0f};
     sector.floorUv.offset = Vector2{4.0f, 5.0f};
     sector.ceilingUv.scale = Vector2{6.0f, 7.0f};
     sector.ceilingUv.offset = Vector2{8.0f, 9.0f};
-    sector.floorDecal.textureId = name + "_floor_decal";
-    sector.ceilingDecal.textureId = name + "_ceiling_decal";
+    sector.floorDecal.materialId = name + "_floor_decal";
+    sector.ceilingDecal.materialId = name + "_ceiling_decal";
     sector.ambientColor = Color{8, 16, 32, 255};
     sector.ambientIntensity = 0.35f;
     sector.defaultWall = WallPart(name + "_default_wall", 1.0f, 1.5f, 2.0f, 2.5f);
@@ -1070,9 +1070,9 @@ void CheckWallPartCopied(
         const game::SectorTopologyWallPartSettings& original,
         const char* description)
 {
-    Check(imported.textureId == original.textureId, description);
+    Check(imported.materialId == original.materialId, description);
     Check(SameUv(imported.uv, original.uv), description);
-    Check(imported.decal.textureId == original.decal.textureId, description);
+    Check(imported.decal.materialId == original.decal.materialId, description);
     Check(imported.decal.opacity == original.decal.opacity, description);
 }
 
@@ -1085,13 +1085,13 @@ void CheckSectorPropertiesCopied(
     Check(anchor.name == sector.name, description);
     Check(anchor.floorZ == sector.floorZ, description);
     Check(anchor.ceilingZ == sector.ceilingZ, description);
-    Check(anchor.floorTextureId == sector.floorTextureId, description);
-    Check(anchor.ceilingTextureId == sector.ceilingTextureId, description);
+    Check(anchor.floorMaterialId == sector.floorMaterialId, description);
+    Check(anchor.ceilingMaterialId == sector.ceilingMaterialId, description);
     Check(anchor.ceilingSky == sector.ceilingSky, description);
     Check(SameUv(anchor.floorUv, sector.floorUv), description);
     Check(SameUv(anchor.ceilingUv, sector.ceilingUv), description);
-    Check(anchor.floorDecal.textureId == sector.floorDecal.textureId, description);
-    Check(anchor.ceilingDecal.textureId == sector.ceilingDecal.textureId, description);
+    Check(anchor.floorDecal.materialId == sector.floorDecal.materialId, description);
+    Check(anchor.ceilingDecal.materialId == sector.ceilingDecal.materialId, description);
     Check(anchor.ambientColor.r == sector.ambientColor.r
                   && anchor.ambientColor.g == sector.ambientColor.g
                   && anchor.ambientColor.b == sector.ambientColor.b
@@ -1279,16 +1279,16 @@ void TestSideIdentityHelpers()
     graph.lines.push_back(game::SectorAuthoringLine{17, 1, 2});
     game::SectorAuthoringLineSide side;
     side.id = front;
-    side.wall.textureId = "wall";
+    side.wall.materialId = "wall";
     graph.lineSides.push_back(side);
 
     const game::SectorAuthoringLineSide* found = game::FindSectorAuthoringLineSide(graph, front);
     Check(found != nullptr, "find authoring side by line plus side");
     if (found != nullptr) {
-        Check(found->wall.textureId == "wall", "authoring side carries wall material metadata");
-        Check(found->lower.textureId.empty(), "authoring side lower material defaults match topology defaults");
-        Check(found->upper.textureId.empty(), "authoring side upper material defaults match topology defaults");
-        Check(found->middle.textureId.empty(), "authoring side middle material defaults match topology defaults");
+        Check(found->wall.materialId == "wall", "authoring side carries wall material metadata");
+        Check(found->lower.materialId.empty(), "authoring side lower material defaults match topology defaults");
+        Check(found->upper.materialId.empty(), "authoring side upper material defaults match topology defaults");
+        Check(found->middle.materialId.empty(), "authoring side middle material defaults match topology defaults");
     }
 }
 
@@ -1299,8 +1299,8 @@ void TestFaceAnchorDefaultsMatchTopologyDefaults()
 
     Check(anchor.floorZ == sector.floorZ, "face anchor floor height default matches topology sector");
     Check(anchor.ceilingZ == sector.ceilingZ, "face anchor ceiling height default matches topology sector");
-    Check(anchor.floorTextureId == sector.floorTextureId, "face anchor floor texture default matches topology sector");
-    Check(anchor.ceilingTextureId == sector.ceilingTextureId, "face anchor ceiling texture default matches topology sector");
+    Check(anchor.floorMaterialId == sector.floorMaterialId, "face anchor floor texture default matches topology sector");
+    Check(anchor.ceilingMaterialId == sector.ceilingMaterialId, "face anchor ceiling texture default matches topology sector");
     Check(anchor.ceilingSky == sector.ceilingSky, "face anchor sky default matches topology sector");
     Check(anchor.ambientColor.r == sector.ambientColor.r
                   && anchor.ambientColor.g == sector.ambientColor.g
@@ -1308,9 +1308,9 @@ void TestFaceAnchorDefaultsMatchTopologyDefaults()
                   && anchor.ambientColor.a == sector.ambientColor.a,
           "face anchor ambient color default matches topology sector");
     Check(anchor.ambientIntensity == sector.ambientIntensity, "face anchor ambient intensity default matches topology sector");
-    Check(anchor.defaultWall.textureId == sector.defaultWall.textureId, "face anchor default wall material matches topology sector");
-    Check(anchor.defaultLower.textureId == sector.defaultLower.textureId, "face anchor default lower material matches topology sector");
-    Check(anchor.defaultUpper.textureId == sector.defaultUpper.textureId, "face anchor default upper material matches topology sector");
+    Check(anchor.defaultWall.materialId == sector.defaultWall.materialId, "face anchor default wall material matches topology sector");
+    Check(anchor.defaultLower.materialId == sector.defaultLower.materialId, "face anchor default lower material matches topology sector");
+    Check(anchor.defaultUpper.materialId == sector.defaultUpper.materialId, "face anchor default upper material matches topology sector");
 }
 
 void TestImportEmptyTopologyMap()
@@ -1389,10 +1389,10 @@ void TestImportAdjacentSectors()
     Check(front != nullptr, "adjacent import keeps front side metadata for shared linedef");
     Check(back != nullptr, "adjacent import keeps back side metadata for shared linedef");
     if (front != nullptr) {
-        Check(front->wall.textureId == "portal_left_wall", "adjacent import copies front wall metadata");
+        Check(front->wall.materialId == "portal_left_wall", "adjacent import copies front wall metadata");
     }
     if (back != nullptr) {
-        Check(back->wall.textureId == "portal_right_wall", "adjacent import copies back wall metadata");
+        Check(back->wall.materialId == "portal_right_wall", "adjacent import copies back wall metadata");
     }
 
     Check(game::FindSectorAuthoringFaceAnchor(graph, 200) != nullptr, "adjacent import keeps first sector anchor");
@@ -1931,15 +1931,15 @@ void TestAdjacentVoidFaceCreatesOneSidedWallAndProjectsNonVoidMaterial()
 
     game::SectorAuthoringLineSide sharedSide;
     sharedSide.id = game::SectorAuthoringSideId{11, game::SectorTopologySideKind::Front};
-    sharedSide.wall.textureId = "non_void_wall";
-    sharedSide.lower.textureId = "non_void_lower";
-    sharedSide.upper.textureId = "non_void_upper";
-    sharedSide.middle.textureId = "non_void_middle";
+    sharedSide.wall.materialId = "non_void_wall";
+    sharedSide.lower.materialId = "non_void_lower";
+    sharedSide.upper.materialId = "non_void_upper";
+    sharedSide.middle.materialId = "non_void_middle";
     graph.lineSides.push_back(sharedSide);
 
     game::SectorAuthoringLineSide voidSide;
     voidSide.id = game::SectorAuthoringSideId{11, game::SectorTopologySideKind::Back};
-    voidSide.wall.textureId = "void_wall";
+    voidSide.wall.materialId = "void_wall";
     graph.lineSides.push_back(voidSide);
 
     game::SectorAuthoringDerivationResult result =
@@ -1960,10 +1960,10 @@ void TestAdjacentVoidFaceCreatesOneSidedWallAndProjectsNonVoidMaterial()
         Check(sideDef != nullptr && sideDef->sectorId == 200,
               "adjacent void shared boundary sidedef belongs to non-void sector");
         Check(sideDef != nullptr
-                      && sideDef->wall.textureId == "non_void_wall"
-                      && sideDef->lower.textureId == "non_void_lower"
-                      && sideDef->upper.textureId == "non_void_upper"
-                      && sideDef->middle.textureId == "non_void_middle",
+                      && sideDef->wall.materialId == "non_void_wall"
+                      && sideDef->lower.materialId == "non_void_lower"
+                      && sideDef->upper.materialId == "non_void_upper"
+                      && sideDef->middle.materialId == "non_void_middle",
               "adjacent void shared boundary projects non-void side material");
 
         game::SectorGeneratedGeometry geometry;
@@ -1992,7 +1992,7 @@ void TestAdjacentVoidFaceCreatesOneSidedWallAndProjectsNonVoidMaterial()
     if (sharedLine != nullptr) {
         const game::SectorTopologySideDef* backSide =
                 game::FindSectorTopologySideDef(result.topology, sharedLine->backSideDefId);
-        Check(backSide != nullptr && backSide->wall.textureId == "void_wall",
+        Check(backSide != nullptr && backSide->wall.materialId == "void_wall",
               "unvoided adjacent face restores preserved void-side material");
     }
 }
@@ -2214,9 +2214,9 @@ void TestDeriveNestedLoopProjectsInnerBoundaryProperties()
             result,
             14,
             game::SectorTopologySideKind::Back);
-    Check(frontSide != nullptr && frontSide->wall.textureId == "inner_front_wall",
+    Check(frontSide != nullptr && frontSide->wall.materialId == "inner_front_wall",
           "nested loop front side material projects to contained boundary side");
-    Check(backSide != nullptr && backSide->wall.textureId == "inner_back_wall",
+    Check(backSide != nullptr && backSide->wall.materialId == "inner_back_wall",
           "nested loop back side material projects to outer hole boundary side");
 }
 
@@ -2728,15 +2728,15 @@ void TestDeriveProjectsFaceAnchorProperties()
     anchor.y = 32;
     anchor.floorZ = -4.0f;
     anchor.ceilingZ = 48.0f;
-    anchor.floorTextureId = "floor_projected";
-    anchor.ceilingTextureId = "ceiling_projected";
+    anchor.floorMaterialId = "floor_projected";
+    anchor.ceilingMaterialId = "ceiling_projected";
     anchor.ceilingSky = true;
     anchor.floorUv.scale = Vector2{2.0f, 3.0f};
     anchor.floorUv.offset = Vector2{4.0f, 5.0f};
     anchor.ceilingUv.scale = Vector2{6.0f, 7.0f};
     anchor.ceilingUv.offset = Vector2{8.0f, 9.0f};
-    anchor.floorDecal.textureId = "floor_decal_projected";
-    anchor.ceilingDecal.textureId = "ceiling_decal_projected";
+    anchor.floorDecal.materialId = "floor_decal_projected";
+    anchor.ceilingDecal.materialId = "ceiling_decal_projected";
     anchor.ambientColor = Color{12, 24, 36, 255};
     anchor.ambientIntensity = 0.45f;
     anchor.defaultWall = WallPart("anchor_wall", 1.0f, 2.0f, 3.0f, 4.0f);
@@ -2755,13 +2755,13 @@ void TestDeriveProjectsFaceAnchorProperties()
         Check(anchor.name == sector->name, "projected sector keeps anchor name");
         Check(anchor.floorZ == sector->floorZ, "projected sector keeps floor height");
         Check(anchor.ceilingZ == sector->ceilingZ, "projected sector keeps ceiling height");
-        Check(anchor.floorTextureId == sector->floorTextureId, "projected sector keeps floor texture");
-        Check(anchor.ceilingTextureId == sector->ceilingTextureId, "projected sector keeps ceiling texture");
+        Check(anchor.floorMaterialId == sector->floorMaterialId, "projected sector keeps floor texture");
+        Check(anchor.ceilingMaterialId == sector->ceilingMaterialId, "projected sector keeps ceiling texture");
         Check(sector->ceilingSky, "projected sector keeps ceiling sky");
         Check(SameUv(anchor.floorUv, sector->floorUv), "projected sector keeps floor UV");
         Check(SameUv(anchor.ceilingUv, sector->ceilingUv), "projected sector keeps ceiling UV");
-        Check(anchor.floorDecal.textureId == sector->floorDecal.textureId, "projected sector keeps floor decal");
-        Check(anchor.ceilingDecal.textureId == sector->ceilingDecal.textureId, "projected sector keeps ceiling decal");
+        Check(anchor.floorDecal.materialId == sector->floorDecal.materialId, "projected sector keeps floor decal");
+        Check(anchor.ceilingDecal.materialId == sector->ceilingDecal.materialId, "projected sector keeps ceiling decal");
         Check(anchor.ambientColor.r == sector->ambientColor.r
                       && anchor.ambientColor.g == sector->ambientColor.g
                       && anchor.ambientColor.b == sector->ambientColor.b
@@ -2788,7 +2788,7 @@ void TestDeriveProjectsSideMaterialsAndLineFlags()
     side.lower = WallPart("side_lower", 2.0f, 3.0f, 4.0f, 5.0f);
     side.upper = WallPart("side_upper", 3.0f, 4.0f, 5.0f, 6.0f);
     side.middle = WallPart("side_middle", 4.0f, 5.0f, 6.0f, 7.0f);
-    side.middle.decal.textureId = "side_middle_decal";
+    side.middle.decal.materialId = "side_middle_decal";
     side.middle.decal.opacity = 0.25f;
     graph.lineSides.push_back(side);
 
@@ -2846,7 +2846,7 @@ void TestDeriveSplitLineDuplicatesProjectedProperties()
         }
         const game::SectorTopologySideDef* sideDef =
                 game::FindSectorTopologySideDef(result.topology, sideMapping.topologySideDefId);
-        Check(sideDef != nullptr && sideDef->wall.textureId == "split_front_wall",
+        Check(sideDef != nullptr && sideDef->wall.materialId == "split_front_wall",
               "split derived sidedef keeps source side wall material");
         ++projectedFrontSideCount;
     }
@@ -2863,7 +2863,7 @@ void TestDeriveUnresolvedAnchorPreservesAuthoringProperties()
     unresolvedAnchor.id = 300;
     unresolvedAnchor.x = 128;
     unresolvedAnchor.y = 128;
-    unresolvedAnchor.floorTextureId = "unresolved_floor";
+    unresolvedAnchor.floorMaterialId = "unresolved_floor";
     graph.faceAnchors.push_back(unresolvedAnchor);
 
     const game::SectorAuthoringDerivationResult result =
@@ -2877,7 +2877,7 @@ void TestDeriveUnresolvedAnchorPreservesAuthoringProperties()
           "unresolved property anchor reports diagnostic");
     const game::SectorAuthoringFaceAnchor* preserved =
             game::FindSectorAuthoringFaceAnchor(graph, 300);
-    Check(preserved != nullptr && preserved->floorTextureId == "unresolved_floor",
+    Check(preserved != nullptr && preserved->floorMaterialId == "unresolved_floor",
           "unresolved anchor properties remain in authoring graph");
 }
 
@@ -2909,17 +2909,17 @@ void TestFreshDerivedTopologyUsesDefaultMaterials()
     Check(result.topology.sectors.size() == 1, "fresh material default graph derives one sector");
     if (!result.topology.sectors.empty()) {
         const game::SectorTopologySector& sector = result.topology.sectors.front();
-        Check(sector.floorTextureId == "floor", "fresh derived sector gets default floor texture");
-        Check(sector.ceilingTextureId == "ceiling", "fresh derived sector gets default ceiling texture");
-        Check(sector.defaultWall.textureId == "wall", "fresh derived sector gets default wall texture");
-        Check(sector.defaultLower.textureId == "wall", "fresh derived sector gets default lower wall texture");
-        Check(sector.defaultUpper.textureId == "wall", "fresh derived sector gets default upper wall texture");
+        Check(sector.floorMaterialId == "floor", "fresh derived sector gets default floor texture");
+        Check(sector.ceilingMaterialId == "ceiling", "fresh derived sector gets default ceiling texture");
+        Check(sector.defaultWall.materialId == "wall", "fresh derived sector gets default wall texture");
+        Check(sector.defaultLower.materialId == "wall", "fresh derived sector gets default lower wall texture");
+        Check(sector.defaultUpper.materialId == "wall", "fresh derived sector gets default upper wall texture");
     }
 
     for (const game::SectorTopologySideDef& sideDef : result.topology.sideDefs) {
-        Check(sideDef.wall.textureId == "wall", "fresh derived sidedef gets default wall texture");
-        Check(sideDef.lower.textureId == "wall", "fresh derived sidedef gets default lower wall texture");
-        Check(sideDef.upper.textureId == "wall", "fresh derived sidedef gets default upper wall texture");
+        Check(sideDef.wall.materialId == "wall", "fresh derived sidedef gets default wall texture");
+        Check(sideDef.lower.materialId == "wall", "fresh derived sidedef gets default lower wall texture");
+        Check(sideDef.upper.materialId == "wall", "fresh derived sidedef gets default upper wall texture");
     }
 
     game::SectorGeneratedGeometry geometry;
@@ -2931,13 +2931,13 @@ void TestFreshDerivedTopologyUsesDefaultMaterials()
     bool sawWall = false;
     bool sawEmptyTexture = false;
     for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
-        sawEmptyTexture = sawEmptyTexture || surface.textureId.empty();
+        sawEmptyTexture = sawEmptyTexture || surface.materialId.empty();
         sawFloor = sawFloor || (surface.ref.kind == game::SectorGeneratedSurfaceKind::Floor
-                && surface.textureId == "floor");
+                && surface.materialId == "floor");
         sawCeiling = sawCeiling || (surface.ref.kind == game::SectorGeneratedSurfaceKind::Ceiling
-                && surface.textureId == "ceiling");
+                && surface.materialId == "ceiling");
         sawWall = sawWall || (surface.ref.kind == game::SectorGeneratedSurfaceKind::Wall
-                && surface.textureId == "wall");
+                && surface.materialId == "wall");
     }
     Check(!sawEmptyTexture, "fresh derived generated geometry surfaces have non-empty textures");
     Check(sawFloor, "fresh derived generated geometry has default floor texture");
@@ -2965,18 +2965,18 @@ void TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials()
     Check(anchor != nullptr && anchor->name == "Sector 1",
           "fresh outer synthesized anchor gets first generated label");
     Check(anchor != nullptr
-                  && !anchor->floorTextureId.empty()
-                  && !anchor->ceilingTextureId.empty()
-                  && !anchor->defaultWall.textureId.empty()
-                  && !anchor->defaultLower.textureId.empty()
-                  && !anchor->defaultUpper.textureId.empty(),
+                  && !anchor->floorMaterialId.empty()
+                  && !anchor->ceilingMaterialId.empty()
+                  && !anchor->defaultWall.materialId.empty()
+                  && !anchor->defaultLower.materialId.empty()
+                  && !anchor->defaultUpper.materialId.empty(),
           "fresh outer synthesized anchor gets non-empty default materials");
     Check(anchor != nullptr
-                  && anchor->floorTextureId == "floor"
-                  && anchor->ceilingTextureId == "ceiling"
-                  && anchor->defaultWall.textureId == "wall"
-                  && anchor->defaultLower.textureId == "wall"
-                  && anchor->defaultUpper.textureId == "wall",
+                  && anchor->floorMaterialId == "floor"
+                  && anchor->ceilingMaterialId == "ceiling"
+                  && anchor->defaultWall.materialId == "wall"
+                  && anchor->defaultLower.materialId == "wall"
+                  && anchor->defaultUpper.materialId == "wall",
           "fresh outer synthesized anchor uses normal graph-authored defaults");
     Check(AllDerivedSectorsHaveExactlyOneValidFaceAnchorMapping(
                   authoringGraph,
@@ -2989,7 +2989,7 @@ void TestEditorAuthoringRefreshSynthesizedOuterSectorGetsDefaultMaterials()
           "fresh outer reconciled topology builds generated geometry");
     bool sawEmptyTexture = false;
     for (const game::SectorGeneratedSurface& surface : geometry.surfaces) {
-        sawEmptyTexture = sawEmptyTexture || surface.textureId.empty();
+        sawEmptyTexture = sawEmptyTexture || surface.materialId.empty();
     }
     Check(!sawEmptyTexture,
           "fresh outer reconciled generated geometry does not rely on empty texture IDs");
@@ -3022,8 +3022,8 @@ void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
     outerAnchor->name = "Sector 1";
     outerAnchor->floorZ = -6.0f;
     outerAnchor->ceilingZ = 42.0f;
-    outerAnchor->floorTextureId = "outer_floor";
-    outerAnchor->ceilingTextureId = "outer_ceiling";
+    outerAnchor->floorMaterialId = "outer_floor";
+    outerAnchor->ceilingMaterialId = "outer_ceiling";
     outerAnchor->defaultWall = WallPart("outer_wall", 1.0f, 2.0f, 3.0f, 4.0f);
     outerAnchor->defaultLower = WallPart("outer_lower", 2.0f, 3.0f, 4.0f, 5.0f);
     outerAnchor->defaultUpper = WallPart("outer_upper", 3.0f, 4.0f, 5.0f, 6.0f);
@@ -3049,11 +3049,11 @@ void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
     Check(preservedOuter != nullptr
                   && preservedOuter->floorZ == -6.0f
                   && preservedOuter->ceilingZ == 42.0f
-                  && preservedOuter->floorTextureId == "outer_floor"
-                  && preservedOuter->ceilingTextureId == "outer_ceiling"
-                  && preservedOuter->defaultWall.textureId == "outer_wall"
-                  && preservedOuter->defaultLower.textureId == "outer_lower"
-                  && preservedOuter->defaultUpper.textureId == "outer_upper",
+                  && preservedOuter->floorMaterialId == "outer_floor"
+                  && preservedOuter->ceilingMaterialId == "outer_ceiling"
+                  && preservedOuter->defaultWall.materialId == "outer_wall"
+                  && preservedOuter->defaultLower.materialId == "outer_lower"
+                  && preservedOuter->defaultUpper.materialId == "outer_upper",
           "outer anchor keeps material and height properties");
 
     game::SectorAuthoringSelectionTarget outerTarget;
@@ -3088,11 +3088,11 @@ void TestEditorAuthoringRefreshAddingInnerSectorPreservesOuterAnchor()
     Check(innerAnchor != nullptr && innerAnchor->name == "Sector 2",
           "inner synthesized anchor gets next generated label");
     Check(innerAnchor != nullptr
-                  && !innerAnchor->floorTextureId.empty()
-                  && !innerAnchor->ceilingTextureId.empty()
-                  && !innerAnchor->defaultWall.textureId.empty()
-                  && !innerAnchor->defaultLower.textureId.empty()
-                  && !innerAnchor->defaultUpper.textureId.empty(),
+                  && !innerAnchor->floorMaterialId.empty()
+                  && !innerAnchor->ceilingMaterialId.empty()
+                  && !innerAnchor->defaultWall.materialId.empty()
+                  && !innerAnchor->defaultLower.materialId.empty()
+                  && !innerAnchor->defaultUpper.materialId.empty(),
           "inner synthesized anchor gets valid material defaults");
 }
 
@@ -3343,7 +3343,7 @@ void TestEditorAuthoringSuccessfulDerivationUpdatesState()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace("wall", game::SectorTextureDefinition{"wall", "assets/images/wall.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("wall", game::SectorMaterialDefinition{"wall", "assets/images/wall.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
@@ -3361,7 +3361,7 @@ void TestEditorAuthoringSuccessfulDerivationUpdatesState()
           "successful editor derivation updates current derived topology");
     Check(documentState.derivation.authoringDerivation.mapping.sectors.size() == 1,
           "successful editor derivation preserves mapping for editor state");
-    Check(documentState.map.topologyMap.texturesById.find("wall") != documentState.map.topologyMap.texturesById.end(),
+    Check(documentState.map.topologyMap.resolvedMaterialsById.find("wall") != documentState.map.topologyMap.resolvedMaterialsById.end(),
           "successful editor derivation preserves map-level texture data");
 }
 
@@ -3925,13 +3925,13 @@ void TestEditorAuthoringSideMaterialInspectorWritesProjectAfterDerivation()
             documentState.derivation.authoringDerivation,
             10,
             game::SectorTopologySideKind::Front);
-    Check(authoringSide != nullptr && authoringSide->wall.textureId == "edited_wall",
+    Check(authoringSide != nullptr && authoringSide->wall.materialId == "edited_wall",
           "side material inspector write creates or updates authoring side source");
     Check(projectedSideDef != nullptr
-                  && projectedSideDef->wall.textureId == "edited_wall"
-                  && projectedSideDef->lower.textureId == "edited_lower"
-                  && projectedSideDef->upper.textureId == "edited_upper"
-                  && projectedSideDef->middle.textureId == "edited_middle",
+                  && projectedSideDef->wall.materialId == "edited_wall"
+                  && projectedSideDef->lower.materialId == "edited_lower"
+                  && projectedSideDef->upper.materialId == "edited_upper"
+                  && projectedSideDef->middle.materialId == "edited_middle",
           "side material inspector write projects to derived sidedef after derivation");
     Check(documentState.lifecycle.topologyDocumentDirty, "side material inspector write marks document dirty");
     Check(documentState.lifecycle.hasUnsavedChanges, "side material inspector write marks unsaved changes");
@@ -3989,7 +3989,7 @@ void TestEditorAuthoringSideMaterialInspectorWritesProjectToSplitDerivedSideDefs
         }
         const game::SectorTopologySideDef* sideDef =
                 game::FindSectorTopologySideDef(documentState.map.topologyMap, mapping.topologySideDefId);
-        Check(sideDef != nullptr && sideDef->wall.textureId == "split_edited_wall",
+        Check(sideDef != nullptr && sideDef->wall.materialId == "split_edited_wall",
               "split side material inspector write projects to each child derived sidedef");
         ++projectedAfterCount;
     }
@@ -4029,7 +4029,7 @@ void TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTo
                   sideDefId,
                   "Updated authoring side while graph is invalid",
                   [](game::SectorAuthoringLineSide& side) {
-                      side.wall.textureId = "invalid_graph_wall";
+                      side.wall.materialId = "invalid_graph_wall";
                       return true;
                   }),
           "side material inspector write reports failed derivation when graph is invalid");
@@ -4041,10 +4041,10 @@ void TestEditorAuthoringSideMaterialInspectorWriteDoesNotDirectlyMutateDerivedTo
             game::FindSectorTopologySideDef(documentState.map.topologyMap, sideDefId);
     const game::SectorTopologySideDef* lastValidSideDef =
             game::FindSectorTopologySideDef(lastValid, sideDefId);
-    Check(authoringSide != nullptr && authoringSide->wall.textureId == "invalid_graph_wall",
+    Check(authoringSide != nullptr && authoringSide->wall.materialId == "invalid_graph_wall",
           "failed side material inspector write keeps authoring side edit");
     Check(sideDef != nullptr && lastValidSideDef != nullptr
-                  && sideDef->wall.textureId == lastValidSideDef->wall.textureId,
+                  && sideDef->wall.materialId == lastValidSideDef->wall.materialId,
           "failed side material inspector write does not directly mutate derived sidedef");
     Check(documentState.derivation.authoringDerivationState == game::SectorEditorAuthoringDerivationState::InvalidLastValid,
           "failed side material inspector write records invalid last-valid state");
@@ -4216,7 +4216,7 @@ void TestEditorMaterialEditingServiceNoAuthoringMaterialEditFailsWithoutMutating
     if (sector == nullptr) {
         return;
     }
-    sector->floorDecal.textureId = "mark";
+    sector->floorDecal.materialId = "mark";
     sector->floorDecal.opacity = 0.25f;
 
     game::SectorEditorUiState uiState;
@@ -4252,8 +4252,8 @@ void TestEditorMaterialEditingServiceSideDefDecalUvWritesThroughAuthoringSide()
     AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
-    side.wall.textureId = "wall";
-    side.wall.decal.textureId = "poster";
+    side.wall.materialId = "wall";
+    side.wall.decal.materialId = "poster";
     authoringGraph.lineSides.push_back(side);
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "service sidedef decal UV setup derives valid topology");
@@ -4369,8 +4369,8 @@ void TestEditorMaterialEditingServiceSideDefDecalUvResetWritesThroughAuthoringSi
     AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
-    side.wall.textureId = "wall";
-    side.wall.decal.textureId = "poster";
+    side.wall.materialId = "wall";
+    side.wall.decal.materialId = "poster";
     side.wall.decal.uv.scale = Vector2{2.0f, 3.0f};
     side.wall.decal.uv.offset = Vector2{4.0f, 5.0f};
     authoringGraph.lineSides.push_back(side);
@@ -4483,8 +4483,8 @@ void TestEditorMaterialEditingServiceSideDecalOpacityWritesThroughAuthoringSide(
     AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
-    side.wall.textureId = "wall";
-    side.wall.decal.textureId = "poster";
+    side.wall.materialId = "wall";
+    side.wall.decal.materialId = "poster";
     side.wall.decal.opacity = 0.25f;
     authoringGraph.lineSides.push_back(side);
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
@@ -4535,7 +4535,7 @@ void TestEditorMaterialEditingServiceFlatDecalFitWritesThroughFaceAnchor()
     if (anchor == nullptr) {
         return;
     }
-    anchor->floorDecal.textureId = "floor_mark";
+    anchor->floorDecal.materialId = "floor_mark";
     anchor->floorDecal.uv.scale = Vector2{2.0f, 2.0f};
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "service flat decal fit setup derives valid topology");
@@ -4574,15 +4574,15 @@ void TestEditorMaterialEditingServiceDerivedSidePickerWritesAuthoringSideDirectl
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
-    documentState.map.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("old_wall", game::SectorMaterialDefinition{"old_wall", "old_wall.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("new_wall", game::SectorMaterialDefinition{"new_wall", "new_wall.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
     AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
-    side.wall.textureId = "old_wall";
+    side.wall.materialId = "old_wall";
     authoringGraph.lineSides.push_back(side);
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "service derived side picker setup derives valid topology");
@@ -4616,9 +4616,9 @@ void TestEditorMaterialEditingServiceDerivedSidePickerWritesAuthoringSideDirectl
             10,
             game::SectorTopologySideKind::Front);
     Check(result.changed, "service derived side picker reports texture change");
-    Check(editedSide != nullptr && editedSide->wall.textureId == "new_wall",
+    Check(editedSide != nullptr && editedSide->wall.materialId == "new_wall",
           "service derived side picker writes authoring side");
-    Check(projectedSideDef != nullptr && projectedSideDef->wall.textureId == "new_wall",
+    Check(projectedSideDef != nullptr && projectedSideDef->wall.materialId == "new_wall",
           "service derived side picker refreshes derived topology");
     Check(!state.texturePicker.open, "service derived side picker closes after apply");
 }
@@ -5016,8 +5016,8 @@ void TestEditorAuthoringSideClearMiddleAndDecalProjectsAfterDerivation()
     AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
-    side.middle.textureId = "bars";
-    side.wall.decal.textureId = "poster";
+    side.middle.materialId = "bars";
+    side.wall.decal.materialId = "poster";
     side.wall.decal.opacity = 0.5f;
     authoringGraph.lineSides.push_back(side);
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
@@ -5043,12 +5043,12 @@ void TestEditorAuthoringSideClearMiddleAndDecalProjectsAfterDerivation()
             10,
             game::SectorTopologySideKind::Front);
     Check(authoringSide != nullptr
-                  && authoringSide->middle.textureId.empty()
-                  && authoringSide->wall.decal.textureId.empty(),
+                  && authoringSide->middle.materialId.empty()
+                  && authoringSide->wall.decal.materialId.empty(),
           "authoring side clear updates authoring metadata");
     Check(projectedSideDef != nullptr
-                  && projectedSideDef->middle.textureId.empty()
-                  && projectedSideDef->wall.decal.textureId.empty(),
+                  && projectedSideDef->middle.materialId.empty()
+                  && projectedSideDef->wall.decal.materialId.empty(),
           "authoring side clear projects to derived sidedef");
 }
 
@@ -5068,7 +5068,7 @@ void TestEditorAuthoringFaceClearDecalProjectsAfterDerivation()
     if (anchor == nullptr) {
         return;
     }
-    anchor->floorDecal.textureId = "floor_mark";
+    anchor->floorDecal.materialId = "floor_mark";
     anchor->floorDecal.opacity = 0.25f;
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring face clear setup derives valid topology");
@@ -5089,9 +5089,9 @@ void TestEditorAuthoringFaceClearDecalProjectsAfterDerivation()
             game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     const game::SectorTopologySector* projectedSector =
             game::FindSectorTopologySector(documentState.map.topologyMap, 200);
-    Check(updatedAnchor != nullptr && updatedAnchor->floorDecal.textureId.empty(),
+    Check(updatedAnchor != nullptr && updatedAnchor->floorDecal.materialId.empty(),
           "authoring face clear decal updates face anchor");
-    Check(projectedSector != nullptr && projectedSector->floorDecal.textureId.empty(),
+    Check(projectedSector != nullptr && projectedSector->floorDecal.materialId.empty(),
           "authoring face clear decal projects to derived sector");
 }
 
@@ -5107,7 +5107,7 @@ void TestEditorAuthoringSideDecalPropertyEditProjectsAfterDerivation()
     AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
-    side.wall.decal.textureId = "poster";
+    side.wall.decal.materialId = "poster";
     authoringGraph.lineSides.push_back(side);
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring side decal property setup derives valid topology");
@@ -5157,7 +5157,7 @@ void TestEditorAuthoringFaceDecalPropertyEditProjectsAfterDerivation()
     if (anchor == nullptr) {
         return;
     }
-    anchor->floorDecal.textureId = "floor_mark";
+    anchor->floorDecal.materialId = "floor_mark";
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring face decal property setup derives valid topology");
 
@@ -5194,7 +5194,7 @@ void TestEditorAuthoringFaceDefaultDecalTexturePickerWritesThroughAnchor()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace("default_poster", game::SectorTextureDefinition{"default_poster", "default_poster.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("default_poster", game::SectorMaterialDefinition{"default_poster", "default_poster.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
@@ -5220,9 +5220,9 @@ void TestEditorAuthoringFaceDefaultDecalTexturePickerWritesThroughAnchor()
     const game::SectorTopologySector* sector =
             game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(result.changed, "authoring face default wall decal picker reports change");
-    Check(anchor != nullptr && anchor->defaultWall.decal.textureId == "default_poster",
+    Check(anchor != nullptr && anchor->defaultWall.decal.materialId == "default_poster",
           "authoring face default wall decal picker writes face anchor");
-    Check(sector != nullptr && sector->defaultWall.decal.textureId == "default_poster",
+    Check(sector != nullptr && sector->defaultWall.decal.materialId == "default_poster",
           "authoring face default wall decal picker projects to derived sector defaults");
 }
 
@@ -5366,7 +5366,7 @@ void TestEditorSelectedAuthoringLineSideMaterialWritesWithoutTopologySelection()
             game::FindSectorAuthoringLineSide(
                     authoringGraph,
                     game::SectorAuthoringSideId{14, game::SectorTopologySideKind::Front});
-    Check(authoringSide != nullptr && authoringSide->wall.textureId == "direct_selected_wall",
+    Check(authoringSide != nullptr && authoringSide->wall.materialId == "direct_selected_wall",
           "selected side direct material write updates authoring side metadata");
 
     int projectedCount = 0;
@@ -5377,7 +5377,7 @@ void TestEditorSelectedAuthoringLineSideMaterialWritesWithoutTopologySelection()
         }
         const game::SectorTopologySideDef* sideDef =
                 game::FindSectorTopologySideDef(documentState.map.topologyMap, mapping.topologySideDefId);
-        Check(sideDef != nullptr && sideDef->wall.textureId == "direct_selected_wall",
+        Check(sideDef != nullptr && sideDef->wall.materialId == "direct_selected_wall",
               "selected side direct material write projects to split derived sidedef");
         ++projectedCount;
     }
@@ -5952,10 +5952,10 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
-    documentState.map.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
-    documentState.map.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
-    documentState.map.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("old_wall", game::SectorMaterialDefinition{"old_wall", "old_wall.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("new_wall", game::SectorMaterialDefinition{"new_wall", "new_wall.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("old_floor", game::SectorMaterialDefinition{"old_floor", "old_floor.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("new_floor", game::SectorMaterialDefinition{"new_floor", "new_floor.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
@@ -5963,11 +5963,11 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
     game::SectorAuthoringFaceAnchor* anchor =
             game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     if (anchor != nullptr) {
-        anchor->floorTextureId = "old_floor";
+        anchor->floorMaterialId = "old_floor";
     }
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
-    side.wall.textureId = "old_wall";
+    side.wall.materialId = "old_wall";
     authoringGraph.lineSides.push_back(side);
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "direct authoring picker fail-closed setup derives valid topology");
@@ -5993,7 +5993,7 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
           "direct authoring side picker apply fails closed when derivation becomes stale");
     Check(staleSideResult.status.find("derived topology is not current") != std::string::npos,
           "direct stale side picker reports current mapping requirement");
-    Check(afterStaleSide != nullptr && afterStaleSide->wall.textureId == "old_wall",
+    Check(afterStaleSide != nullptr && afterStaleSide->wall.materialId == "old_wall",
           "direct stale side picker does not mutate authoring side");
 
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
@@ -6327,7 +6327,7 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace("floor_tiles", game::SectorTextureDefinition{"floor_tiles", "floor_tiles.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("floor_tiles", game::SectorMaterialDefinition{"floor_tiles", "floor_tiles.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
@@ -6354,8 +6354,8 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
                   game::TopologySectorTextureField::Floor,
                   game::TopologyMaterialLayer::Base),
           "service flat texture picker opens for graph-authored flat target");
-    for (size_t i = 0; i < state.texturePicker.textureIds.size(); ++i) {
-        if (state.texturePicker.textureIds[i] == "floor_tiles") {
+    for (size_t i = 0; i < state.texturePicker.materialIds.size(); ++i) {
+        if (state.texturePicker.materialIds[i] == "floor_tiles") {
             state.texturePicker.selectedTextureIndex = static_cast<int>(i);
             break;
         }
@@ -6368,9 +6368,9 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
     const game::SectorTopologySector* sector =
             game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(result.changed, "service flat texture picker reports changed edit");
-    Check(anchor != nullptr && anchor->floorTextureId == "floor_tiles",
+    Check(anchor != nullptr && anchor->floorMaterialId == "floor_tiles",
           "service flat texture picker writes to face anchor floor texture");
-    Check(sector != nullptr && sector->floorTextureId == "floor_tiles",
+    Check(sector != nullptr && sector->floorMaterialId == "floor_tiles",
           "service flat texture picker refreshes derived sector projection");
 }
 
@@ -6435,10 +6435,10 @@ void TestEditorAuthoringFlatSurfaceStaleMappingBlocksMaterialEdits()
           "stale 3D flat material edit does not mutate derived topology");
 }
 
-void SelectTextureInPicker(game::TexturePickerState& picker, const std::string& textureId)
+void SelectTextureInPicker(game::TexturePickerState& picker, const std::string& materialId)
 {
-    for (size_t i = 0; i < picker.textureIds.size(); ++i) {
-        if (picker.textureIds[i] == textureId) {
+    for (size_t i = 0; i < picker.materialIds.size(); ++i) {
+        if (picker.materialIds[i] == materialId) {
             picker.selectedTextureIndex = static_cast<int>(i);
             return;
         }
@@ -6452,8 +6452,8 @@ void TestEditorAuthoringFaceTexturePickerWritesThroughFaceAnchor()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
-    documentState.map.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("old_floor", game::SectorMaterialDefinition{"old_floor", "old_floor.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("new_floor", game::SectorMaterialDefinition{"new_floor", "new_floor.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
@@ -6462,7 +6462,7 @@ void TestEditorAuthoringFaceTexturePickerWritesThroughFaceAnchor()
             game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     Check(anchor != nullptr, "authoring face picker setup has face anchor");
     if (anchor != nullptr) {
-        anchor->floorTextureId = "old_floor";
+        anchor->floorMaterialId = "old_floor";
     }
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring face picker setup derives valid topology");
@@ -6491,9 +6491,9 @@ void TestEditorAuthoringFaceTexturePickerWritesThroughFaceAnchor()
     const game::SectorTopologySector* projectedSector =
             game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     Check(result.changed, "authoring face picker reports texture change");
-    Check(editedAnchor != nullptr && editedAnchor->floorTextureId == "new_floor",
+    Check(editedAnchor != nullptr && editedAnchor->floorMaterialId == "new_floor",
           "authoring face picker writes selected texture to face anchor");
-    Check(projectedSector != nullptr && projectedSector->floorTextureId == "new_floor",
+    Check(projectedSector != nullptr && projectedSector->floorMaterialId == "new_floor",
           "authoring face picker refreshes projected derived sector texture");
     Check(documentState.lifecycle.topologyDocumentDirty && documentState.lifecycle.hasUnsavedChanges,
           "authoring face picker marks document dirty");
@@ -6507,15 +6507,15 @@ void TestEditorAuthoringSideTexturePickerWritesThroughAuthoringSide()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
-    documentState.map.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("old_wall", game::SectorMaterialDefinition{"old_wall", "old_wall.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("new_wall", game::SectorMaterialDefinition{"new_wall", "new_wall.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
     AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
-    side.wall.textureId = "old_wall";
+    side.wall.materialId = "old_wall";
     authoringGraph.lineSides.push_back(side);
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "authoring side picker setup derives valid topology");
@@ -6560,9 +6560,9 @@ void TestEditorAuthoringSideTexturePickerWritesThroughAuthoringSide()
                     10,
                     game::SectorTopologySideKind::Front);
     Check(result.changed, "authoring side picker reports texture change");
-    Check(editedSide != nullptr && editedSide->wall.textureId == "new_wall",
+    Check(editedSide != nullptr && editedSide->wall.materialId == "new_wall",
           "authoring side picker writes selected texture to authoring side");
-    Check(projectedSideDef != nullptr && projectedSideDef->wall.textureId == "new_wall",
+    Check(projectedSideDef != nullptr && projectedSideDef->wall.materialId == "new_wall",
           "authoring side picker refreshes projected derived sidedef texture");
 }
 
@@ -6572,8 +6572,8 @@ void TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace("old_floor", game::SectorTextureDefinition{"old_floor", "old_floor.png"});
-    documentState.map.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("old_floor", game::SectorMaterialDefinition{"old_floor", "old_floor.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("new_floor", game::SectorMaterialDefinition{"new_floor", "new_floor.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
@@ -6582,7 +6582,7 @@ void TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen()
             game::FindSectorAuthoringFaceAnchor(authoringGraph, 200);
     Check(anchor != nullptr, "stale face picker setup has face anchor");
     if (anchor != nullptr) {
-        anchor->floorTextureId = "old_floor";
+        anchor->floorMaterialId = "old_floor";
     }
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "stale face picker setup derives valid topology");
@@ -6601,7 +6601,7 @@ void TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen()
     const game::SectorTopologySector* beforeSector =
             game::FindSectorTopologySector(documentState.map.topologyMap, 200);
     const std::string beforeSectorTexture = beforeSector != nullptr
-            ? beforeSector->floorTextureId
+            ? beforeSector->floorMaterialId
             : std::string{};
     game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring graph changed after picker open");
 
@@ -6616,9 +6616,9 @@ void TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen()
     Check(result.status.find("derived topology is not current") != std::string::npos,
           "stale face picker apply reports stale mapping");
     Check(!state.texturePicker.open, "stale face picker apply closes picker");
-    Check(afterAnchor != nullptr && afterAnchor->floorTextureId == "old_floor",
+    Check(afterAnchor != nullptr && afterAnchor->floorMaterialId == "old_floor",
           "stale face picker apply does not mutate face anchor");
-    Check(afterSector != nullptr && afterSector->floorTextureId == beforeSectorTexture,
+    Check(afterSector != nullptr && afterSector->floorMaterialId == beforeSectorTexture,
           "stale face picker apply does not directly mutate live derived sector");
 }
 
@@ -6628,15 +6628,15 @@ void TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace("old_wall", game::SectorTextureDefinition{"old_wall", "old_wall.png"});
-    documentState.map.topologyMap.texturesById.emplace("new_wall", game::SectorTextureDefinition{"new_wall", "new_wall.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("old_wall", game::SectorMaterialDefinition{"old_wall", "old_wall.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("new_wall", game::SectorMaterialDefinition{"new_wall", "new_wall.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
     AddFaceAnchor(authoringGraph, 200, 32, 32, "room");
     game::SectorAuthoringLineSide side;
     side.id = game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front};
-    side.wall.textureId = "old_wall";
+    side.wall.materialId = "old_wall";
     authoringGraph.lineSides.push_back(side);
     Check(game::RefreshSectorEditorAuthoringDerivation(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), documentState.map.topologyMap, authoringGraph, game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
           "stale side picker setup derives valid topology");
@@ -6666,7 +6666,7 @@ void TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen()
     const game::SectorTopologySideDef* beforeSideDef =
             game::FindSectorTopologySideDef(documentState.map.topologyMap, sideDefId);
     const std::string beforeSideTexture = beforeSideDef != nullptr
-            ? beforeSideDef->wall.textureId
+            ? beforeSideDef->wall.materialId
             : std::string{};
     game::MarkSectorEditorAuthoringGraphEdited(state, game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle), game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation), "authoring graph changed after picker open");
 
@@ -6683,9 +6683,9 @@ void TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen()
     Check(result.status.find("derived topology is not current") != std::string::npos,
           "stale side picker apply reports stale mapping");
     Check(!state.texturePicker.open, "stale side picker apply closes picker");
-    Check(afterSide != nullptr && afterSide->wall.textureId == "old_wall",
+    Check(afterSide != nullptr && afterSide->wall.materialId == "old_wall",
           "stale side picker apply does not mutate authoring side");
-    Check(afterSideDef != nullptr && afterSideDef->wall.textureId == beforeSideTexture,
+    Check(afterSideDef != nullptr && afterSideDef->wall.materialId == beforeSideTexture,
           "stale side picker apply does not directly mutate live derived sidedef");
 }
 
@@ -6695,7 +6695,7 @@ void TestEditorAuthoringTexturePickerRejectsStaleMapping()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace("wall", game::SectorTextureDefinition{"wall", "wall.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("wall", game::SectorMaterialDefinition{"wall", "wall.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
@@ -6724,16 +6724,16 @@ void TestEditorNoAuthoringTexturePickerApplyFailsWithoutMutatingTopology()
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
     documentState.map.topologyMap = MakeSingleSectorSquareMap();
-    documentState.map.topologyMap.texturesById.emplace("room_floor", game::SectorTextureDefinition{"room_floor", "room_floor.png"});
-    documentState.map.topologyMap.texturesById.emplace("new_floor", game::SectorTextureDefinition{"new_floor", "new_floor.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("room_floor", game::SectorMaterialDefinition{"room_floor", "room_floor.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("new_floor", game::SectorMaterialDefinition{"new_floor", "new_floor.png"});
 
     state.texturePicker.open = true;
     state.texturePicker.topologyTargetKind = game::TopologyTexturePickerTargetKind::Sector;
     state.texturePicker.topologyLayer = game::TopologyMaterialLayer::Base;
     state.texturePicker.topologySectorId = 200;
     state.texturePicker.topologyField = game::TopologySectorTextureField::Floor;
-    state.texturePicker.textureIds.push_back("room_floor");
-    state.texturePicker.textureIds.push_back("new_floor");
+    state.texturePicker.materialIds.push_back("room_floor");
+    state.texturePicker.materialIds.push_back("new_floor");
     SelectTextureInPicker(state.texturePicker, "new_floor");
 
     const game::SectorEditorTexturePickerApplyResult result =
@@ -6743,7 +6743,7 @@ void TestEditorNoAuthoringTexturePickerApplyFailsWithoutMutatingTopology()
     Check(!result.changed, "invalid no-authoring texture picker reports no material change");
     Check(result.status.find("authoring data is required") != std::string::npos,
           "invalid no-authoring texture picker reports authoring requirement");
-    Check(sector != nullptr && sector->floorTextureId == "room_floor",
+    Check(sector != nullptr && sector->floorMaterialId == "room_floor",
           "invalid no-authoring texture picker does not mutate derived topology");
     Check(!state.texturePicker.open, "invalid no-authoring texture picker closes after apply");
 }
@@ -6754,19 +6754,21 @@ void TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace("old_door", game::SectorTextureDefinition{"old_door", "old_door.png"});
-    documentState.map.topologyMap.texturesById.emplace("new_door", game::SectorTextureDefinition{"new_door", "new_door.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("old_door", game::SectorMaterialDefinition{"old_door", "old_door.png"});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("new_door", game::SectorMaterialDefinition{"new_door", "new_door.png"});
 
     game::SectorPlacedRuntimeObject object;
     object.id = 77;
     object.kind = "door";
-    object.door.textureId = "old_door";
+    object.door.materialId = "old_door";
     documentState.map.topologyMap.runtimeObjects.push_back(object);
 
     game::TextureCatalogState textureCatalogState;
+    game::SectorMaterialRegistry materialRegistry;
+    materialRegistry.materialsById = documentState.map.topologyMap.resolvedMaterialsById;
     game::SectorEditorTextureCatalogService catalog{
             game::SectorEditorTextureCatalogServiceContext{
-                    documentState.map.topologyMap,
+                    materialRegistry,
                     textureCatalogState,
                     state.defaultFloorTextureId,
                     state.defaultCeilingTextureId,
@@ -6789,83 +6791,63 @@ void TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture()
     const game::SectorPlacedRuntimeObject* editedObject =
             game::FindSectorPlacedRuntimeObject(documentState.map.topologyMap, 77);
     Check(result.changed, "runtime door texture picker reports texture change");
-    Check(editedObject != nullptr && editedObject->door.textureId == "new_door",
+    Check(editedObject != nullptr && editedObject->door.materialId == "new_door",
           "runtime door texture picker writes selected texture to authored door");
     Check(!state.texturePicker.open, "runtime door texture picker closes after apply");
 }
 
-void TestEditorMapTextureImportPreservesMapLevelRegistryOnly()
+void TestEditorMaterialCatalogUsesGlobalRegistry()
 {
     game::SectorEditorState state;
-    game::SectorEditorDocumentState documentState;
-    game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
-    game::SelectionState selectionState;
-    documentState.map.topologyMap.texturesById.emplace(
-            "z_existing",
-            game::SectorTextureDefinition{"z_existing", "assets/images/z_existing.png"});
-    documentState.map.topologyMap.texturesById.emplace(
-            "a_existing",
-            game::SectorTextureDefinition{"a_existing", "assets/images/a_existing.png"});
     state.topologyRenderCache.valid = true;
     const uint64_t originalRevision = state.topologyRenderRevision;
-    state.addMapTexture.paths.push_back("assets/images/imported_wall.png");
-    state.addMapTexture.selectedPathIndex = 0;
-    std::snprintf(
-            state.addMapTexture.textureIdBuffer,
-            sizeof(state.addMapTexture.textureIdBuffer),
-            "%s",
-            "imported_wall");
-    state.addMapTexture.filter = game::SectorTextureFilter::Point;
 
     game::TextureCatalogState textureCatalogState;
+    game::SectorMaterialRegistry materialRegistry;
+    materialRegistry.materialsById.emplace(
+            "z_existing",
+            game::SectorMaterialDefinition{"z_existing", "assets/images/z_existing.png"});
+    materialRegistry.materialsById.emplace(
+            "a_existing",
+            game::SectorMaterialDefinition{"a_existing", "assets/images/a_existing.png"});
+    materialRegistry.materialsById.emplace(
+            "imported_wall",
+            game::SectorMaterialDefinition{
+                    "imported_wall", "assets/images/imported_wall.png",
+                    game::SectorMaterialFilter::Point});
     game::SectorEditorTextureCatalogService catalog{
             game::SectorEditorTextureCatalogServiceContext{
-                    documentState.map.topologyMap,
+                    materialRegistry,
                     textureCatalogState,
                     state.defaultFloorTextureId,
                     state.defaultCeilingTextureId,
                     state.defaultWallTextureId,
                     state.defaultLowerWallTextureId,
                     state.defaultUpperWallTextureId}};
-    const game::SectorEditorAddTextureResult result =
-            catalog.RegisterSelectedMapTexture(state.addMapTexture);
-
-    const auto textureIt = documentState.map.topologyMap.texturesById.find("imported_wall");
-    Check(result.success, "texture catalog registers valid map texture id");
-    Check(textureIt != documentState.map.topologyMap.texturesById.end()
-                  && textureIt->second.path == "assets/images/imported_wall.png"
-                  && textureIt->second.filter == game::SectorTextureFilter::Point,
-          "texture catalog writes only the map-level texture registry");
-    Check(catalog.HasTexture("imported_wall"), "texture catalog finds registered texture id");
-    Check(catalog.FindTexture("missing_texture") == nullptr, "texture catalog reports missing texture id");
-    Check(catalog.TextureHandleForId("missing_texture") == engine::NullTextureHandle(),
-          "texture catalog missing handle lookup returns null texture handle");
+    const game::SectorMaterialDefinition* material = catalog.FindTexture("imported_wall");
+    Check(catalog.HasTexture("imported_wall")
+                  && material != nullptr
+                  && material->path == "assets/images/imported_wall.png"
+                  && material->filter == game::SectorMaterialFilter::Point,
+          "material catalog reads definitions from the global registry");
+    Check(catalog.FindTexture("missing_material") == nullptr,
+          "material catalog reports a missing material id");
+    Check(catalog.TextureHandleForId("missing_material") == engine::NullTextureHandle(),
+          "material catalog missing handle lookup returns null texture handle");
     Check(state.topologyRenderCache.valid,
-          "texture catalog registration does not invalidate cached topology rendering by itself");
+          "material catalog reads do not invalidate cached topology rendering");
     Check(state.topologyRenderRevision == originalRevision,
-          "texture catalog registration does not bump topology render revision by itself");
-
-    state.addMapTexture.paths[0] = "assets/images/imported_wall_replacement.png";
-    state.addMapTexture.filter = game::SectorTextureFilter::Bilinear;
-    const game::SectorEditorAddTextureResult replacement =
-            catalog.RegisterSelectedMapTexture(state.addMapTexture);
-    const game::SectorTextureDefinition* replaced = catalog.FindTexture("imported_wall");
-    Check(replacement.success && replacement.replacing,
-          "texture catalog preserves duplicate id replacement reporting");
-    Check(replaced != nullptr
-                  && replaced->path == "assets/images/imported_wall_replacement.png"
-                  && replaced->filter == game::SectorTextureFilter::Bilinear,
-          "texture catalog preserves duplicate id replacement behavior");
+          "material catalog reads do not bump topology render revision");
 
     game::TexturePickerState picker;
     catalog.PopulatePickerOptions(picker, "imported_wall");
-    Check(picker.textureIds.size() == 3
-                  && picker.textureIds[0] == "a_existing"
-                  && picker.textureIds[1] == "imported_wall"
-                  && picker.textureIds[2] == "z_existing",
-          "texture catalog picker options remain sorted by texture id");
+    Check(picker.materialIds.size() == 3
+                  && picker.materialIds[0] == "a_existing"
+                  && picker.materialIds[1] == "imported_wall"
+                  && picker.materialIds[2] == "z_existing",
+          "material picker options are sorted by global material id");
     Check(picker.selectedTextureIndex == 1,
-          "texture catalog picker options preserve current texture selection");
+          "material picker options preserve the current material selection");
 }
 
 void TestAudioScannerFindsSupportedFilesRecursively()
@@ -7611,7 +7593,7 @@ void TestEditorAuthoringLineDrawHelperAutoSplitsEndpointOnLine()
                         authoringGraph,
                         game::SectorAuthoringSideId{line.id, game::SectorTopologySideKind::Front});
         Check(childSide != nullptr
-                      && childSide->middle.textureId == "split_middle",
+                      && childSide->middle.materialId == "split_middle",
               "auto-split source child line preserves side material metadata");
     }
     Check(documentState.lifecycle.topologyDocumentDirty && documentState.lifecycle.hasUnsavedChanges,
@@ -8325,9 +8307,9 @@ void TestAuthoringRectangleHelperDerivesValidTopology()
             ? nullptr
             : &authoringGraph.faceAnchors.front();
     Check(anchor != nullptr
-                  && anchor->floorTextureId == "floor"
-                  && anchor->ceilingTextureId == "ceiling"
-                  && anchor->defaultWall.textureId == "wall",
+                  && anchor->floorMaterialId == "floor"
+                  && anchor->ceilingMaterialId == "ceiling"
+                  && anchor->defaultWall.materialId == "wall",
           "authoring rectangle synthesized face anchor gets normal default materials");
 
     game::SectorGeneratedGeometry geometry;
@@ -8468,7 +8450,7 @@ void TestAuthoringRectangleSplitsCrossedAuthoringLineAndOwnEdges()
                         graph,
                         game::SectorAuthoringSideId{line.id, game::SectorTopologySideKind::Front});
         Check(childSide != nullptr
-                      && childSide->middle.textureId == "source_middle",
+                      && childSide->middle.materialId == "source_middle",
               "rectangle split source child preserves side material metadata");
     }
 
@@ -8636,7 +8618,7 @@ void TestEditorAuthoringRectangleRebindsUnrelatedDoorAfterTopologyIdsChange()
     Check(reboundDoor != nullptr
                   && reboundDoor->door.motion == game::SectorDoorMotionType::Swing
                   && reboundDoor->door.modelAssetId == "preserved_model"
-                  && reboundDoor->door.textureId == "preserved_texture"
+                  && reboundDoor->door.materialId == "preserved_texture"
                   && reboundDoor->door.openSoundId == "preserved_open"
                   && reboundDoor->door.closeSoundId == "preserved_close"
                   && Near(reboundDoor->door.normalOffset, 0.125f)
@@ -9520,8 +9502,8 @@ void TestEditorAuthoringMoveVertexAutoFollowsDisplacedFaceAnchor()
     anchor->y = 280;
     anchor->floorZ = -7.0f;
     anchor->ceilingZ = 37.0f;
-    anchor->floorTextureId = "kept_floor";
-    anchor->ceilingTextureId = "kept_ceiling";
+    anchor->floorMaterialId = "kept_floor";
+    anchor->ceilingMaterialId = "kept_ceiling";
     Check(game::RefreshSectorEditorAuthoringDerivation(
                   state,
                   game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
@@ -9580,8 +9562,8 @@ void TestEditorAuthoringMoveVertexAutoFollowsDisplacedFaceAnchor()
     Check(anchor != nullptr
                   && anchor->floorZ == -7.0f
                   && anchor->ceilingZ == 37.0f
-                  && anchor->floorTextureId == "kept_floor"
-                  && anchor->ceilingTextureId == "kept_ceiling",
+                  && anchor->floorMaterialId == "kept_floor"
+                  && anchor->ceilingMaterialId == "kept_ceiling",
           "auto-follow repair preserves anchor identity and authored properties");
     Check(FindSectorMappingForAnchor(
                   documentState.derivation.authoringDerivation.mapping,
@@ -9638,7 +9620,7 @@ void TestEditorAuthoringSingleCornerMoveRecoversMissingFaceBinding()
     anchor->y = 10 * subdivisions;
     anchor->floorZ = -5.0f;
     anchor->ceilingZ = 29.0f;
-    anchor->floorTextureId = "single_move_floor";
+    anchor->floorMaterialId = "single_move_floor";
     Check(game::RefreshSectorEditorAuthoringDerivation(
                   state,
                   game::MakeSectorEditorDocumentLifecycleAccess(
@@ -9691,7 +9673,7 @@ void TestEditorAuthoringSingleCornerMoveRecoversMissingFaceBinding()
     Check(anchor != nullptr
                   && anchor->floorZ == -5.0f
                   && anchor->ceilingZ == 29.0f
-                  && anchor->floorTextureId == "single_move_floor",
+                  && anchor->floorMaterialId == "single_move_floor",
           "single inward corner move preserves face-anchor identity and properties");
 
     const game::SectorTopologyVertex* movedTopologyVertex =
@@ -9819,16 +9801,16 @@ void TestEditorAuthoringDissolveDegreeTwoVertexCreatesTriangleAtomically()
     keptSide.id = game::SectorAuthoringSideId{
             11,
             game::SectorTopologySideKind::Front};
-    keptSide.wall.textureId = "kept-wall";
+    keptSide.wall.materialId = "kept-wall";
     keptSide.wall.uv.scale = Vector2{2.0f, 3.0f};
     keptSide.wall.uv.offset = Vector2{4.0f, 5.0f};
-    keptSide.wall.decal.textureId = "kept-decal";
+    keptSide.wall.decal.materialId = "kept-decal";
     fixture.lineSides.push_back(keptSide);
     game::SectorAuthoringLineSide discardedSide;
     discardedSide.id = game::SectorAuthoringSideId{
             12,
             game::SectorTopologySideKind::Front};
-    discardedSide.wall.textureId = "discarded-wall";
+    discardedSide.wall.materialId = "discarded-wall";
     fixture.lineSides.push_back(discardedSide);
 
     InitializeEditorStateWithAuthoringGraph(
@@ -9907,12 +9889,12 @@ void TestEditorAuthoringDissolveDegreeTwoVertexCreatesTriangleAtomically()
                   && survivingLine->special.tag == "kept-special",
           "degree-2 dissolve preserves lower-ID line flags and special data");
     Check(survivingSide != nullptr
-                  && survivingSide->wall.textureId == "kept-wall"
+                  && survivingSide->wall.materialId == "kept-wall"
                   && survivingSide->wall.uv.scale.x == 2.0f
                   && survivingSide->wall.uv.scale.y == 3.0f
                   && survivingSide->wall.uv.offset.x == 4.0f
                   && survivingSide->wall.uv.offset.y == 5.0f
-                  && survivingSide->wall.decal.textureId == "kept-decal",
+                  && survivingSide->wall.decal.materialId == "kept-decal",
           "degree-2 dissolve preserves lower-ID line material, UV, and decal data");
     Check(game::FindSectorAuthoringLine(authoringGraph, 12) == nullptr
                   && game::FindSectorAuthoringLineSide(
@@ -11036,7 +11018,7 @@ void TestEditorAuthoringDocumentSaveWritesGraphNativeAndReloadsValidCurrent()
             authoringGraph,
             "sector_editor_graph_native_valid_save_test.json",
             &savedText);
-    Check(saved["formatVersion"] == 3, "editor save writes graph-native format version");
+    Check(saved["formatVersion"] == 4, "editor save writes graph-native format version");
     Check(saved["topology"] == "authoringGraph", "editor save writes graph-native topology marker");
     Check(saved["editorSettings"]["gridSize"] == 24,
           "editor save writes the current per-map grid size");
@@ -11130,7 +11112,7 @@ void TestEditorGraphNativeLoadRecoversDoorsWithoutPriorDerivedTopology()
     unresolvedDoor.door.anchor.endpointAY = 888;
     unresolvedDoor.door.anchor.endpointBX = 999;
     unresolvedDoor.door.anchor.endpointBY = 1111;
-    unresolvedDoor.door.textureId = "unresolved_preserved_texture";
+    unresolvedDoor.door.materialId = "unresolved_preserved_texture";
     loaded.mapData.runtimeObjects.push_back(unresolvedDoor);
 
     game::SectorEditorDocumentState documentState;
@@ -11167,7 +11149,7 @@ void TestEditorGraphNativeLoadRecoversDoorsWithoutPriorDerivedTopology()
           "graph-native load preserves recovered door settings");
     Check(preservedUnresolvedDoor != nullptr
                   && preservedUnresolvedDoor->door.anchor.lineDefId == 9101
-                  && preservedUnresolvedDoor->door.textureId
+                  && preservedUnresolvedDoor->door.materialId
                           == "unresolved_preserved_texture"
                   && !game::ResolveSectorDoorAnchor(
                               documentState.map.topologyMap,
@@ -11214,7 +11196,7 @@ void TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics()
             authoringGraph,
             "sector_editor_graph_native_invalid_save_test.json",
             &savedText);
-    Check(saved["formatVersion"] == 3, "invalid editor graph save writes graph-native version");
+    Check(saved["formatVersion"] == 4, "invalid editor graph save writes graph-native version");
     Check(saved["topology"] == "authoringGraph", "invalid editor graph save writes graph-native marker");
     Check(saved["authoringGraph"]["lines"].size() == 1,
           "invalid editor graph save preserves dangling line");
@@ -11291,7 +11273,7 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
             documentState,
             authoringGraph,
             "sector_editor_legacy_import_save_graph_native_test.json");
-    Check(saved["formatVersion"] == 3, "save after topology-v2 import writes graph-native version");
+    Check(saved["formatVersion"] == 4, "save after topology-v2 import writes graph-native version");
     Check(saved["topology"] == "authoringGraph",
           "save after topology-v2 import writes graph-native marker");
     Check(saved.contains("authoringGraph"), "save after topology-v2 import writes authoring graph");
@@ -11359,13 +11341,13 @@ void TestEditorGraphNativeNestedRoundTripPreservesAnchorsMaterialsAndSelection()
     }
     const game::SectorAuthoringFaceAnchor* outer =
             game::FindSectorAuthoringFaceAnchor(loadedAuthoringGraph, 200);
-    Check(outer != nullptr && outer->defaultWall.textureId == "outer_wall",
+    Check(outer != nullptr && outer->defaultWall.materialId == "outer_wall",
           "nested graph-native reload preserves face material");
     const game::SectorAuthoringLineSide* loadedSide =
             game::FindSectorAuthoringLineSide(
                     loadedAuthoringGraph,
                     game::SectorAuthoringSideId{10, game::SectorTopologySideKind::Front});
-    Check(loadedSide != nullptr && loadedSide->wall.textureId == "line_wall",
+    Check(loadedSide != nullptr && loadedSide->wall.materialId == "line_wall",
           "nested graph-native reload preserves side material");
 
     const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, int expectedAnchorId, const char* description) {
@@ -11443,7 +11425,7 @@ void TestEditorGraphNativeSiblingHolesRoundTripPreservesSelection()
     }
     const game::SectorAuthoringFaceAnchor* left =
             game::FindSectorAuthoringFaceAnchor(loadedAuthoringGraph, 201);
-    Check(left != nullptr && left->defaultWall.textureId == "left_wall",
+    Check(left != nullptr && left->defaultWall.materialId == "left_wall",
           "sibling holes graph-native reload preserves material");
 
     const auto expectFace = [&](game::SectorCoord x, game::SectorCoord y, int expectedAnchorId, const char* description) {
@@ -11478,8 +11460,8 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     InitializeEditorStateWithAuthoringGraph(state, documentState, authoringGraph, graph);
-    documentState.map.topologyMap.texturesById.emplace("sky", game::SectorTextureDefinition{
-            "sky", "textures/sky.png", game::SectorTextureFilter::Trilinear});
+    documentState.map.topologyMap.resolvedMaterialsById.emplace("sky", game::SectorMaterialDefinition{
+            "sky", "textures/sky.png", game::SectorMaterialFilter::Trilinear});
     documentState.map.topologyMap.staticLights.push_back(game::SectorTopologyStaticPointLight{
             9,
             Vector3{1.0f, 2.0f, 3.0f},
@@ -11489,7 +11471,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
             1.0f
     });
     documentState.map.topologyMap.previewSettings.walkSpeed = 9.0f;
-    documentState.map.topologyMap.skySettings.textureId = "sky";
+    documentState.map.topologyMap.skySettings.materialId = "sky";
     documentState.map.topologyMap.skySettings.yawOffsetDegrees = 17.0f;
     documentState.map.topologyMap.directionalLight.enabled = true;
     documentState.map.topologyMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
@@ -11526,11 +11508,11 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
             authoringGraph,
             "sector_editor_map_level_graph_native_save_test.json",
             &savedText);
-    Check(saved["textures"].contains("sky"), "editor graph-native save persists texture registry");
+    Check(!saved.contains("textures"), "editor graph-native save omits the global material registry");
     Check(saved["staticLights"][0]["id"] == 9, "editor graph-native save persists static light");
     Check(saved["previewSettings"]["walkSpeed"] == 9.0f,
           "editor graph-native save persists preview settings");
-    Check(saved["skySettings"]["textureId"] == "sky", "editor graph-native save persists sky settings");
+    Check(saved["skySettings"]["materialId"] == "sky", "editor graph-native save persists sky settings");
     Check(saved["directionalLight"]["enabled"] == true,
           "editor graph-native save persists directional light");
     Check(saved["audio"]["music"] == "ambience/graph_theme.wav"
@@ -11562,10 +11544,10 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     std::string error;
     Check(game::LoadSectorEditorDocumentFromAsset(path.string(), loaded, error),
           "editor graph-native map-level document reloads");
-    Check(loaded.mapData.texturesById.count("sky") == 1
+    Check(loaded.mapData.resolvedMaterialsById.empty()
                   && loaded.mapData.staticLights.size() == 1
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
-                  && loaded.mapData.skySettings.textureId == "sky"
+                  && loaded.mapData.skySettings.materialId == "sky"
                   && loaded.mapData.directionalLight.enabled
                   && loaded.mapData.audioSettings.musicPath
                              == "ambience/graph_theme.wav"
@@ -11587,9 +11569,9 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     const game::SectorEditorState loadedState =
             MakeEditorStateFromLoadedDocument(loaded, loadedDocumentState, loadedAuthoringGraph, &current);
     Check(current
-                  && loadedDocumentState.map.topologyMap.texturesById.count("sky") == 1
+                  && loadedDocumentState.map.topologyMap.resolvedMaterialsById.empty()
                   && loadedDocumentState.map.topologyMap.staticLights.size() == 1
-                  && loadedDocumentState.map.topologyMap.skySettings.textureId == "sky"
+                  && loadedDocumentState.map.topologyMap.skySettings.materialId == "sky"
                   && loadedDocumentState.map.topologyMap.audioSettings.musicPath
                              == "ambience/graph_theme.wav"
                   && Near(
@@ -11618,7 +11600,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
             loadedDocumentState,
             loadedAuthoringGraph,
             "sector_editor_map_level_graph_native_resave_test.json");
-    Check(resaved["formatVersion"] == 3 && resaved["topology"] == "authoringGraph",
+    Check(resaved["formatVersion"] == 4 && resaved["topology"] == "authoringGraph",
           "editor graph-native resave remains graph-native");
     Check(resaved["bakedLightmap"]["path"] == saved["bakedLightmap"]["path"]
                   && resaved["bakedLightmap"]["width"] == saved["bakedLightmap"]["width"]
@@ -13490,7 +13472,7 @@ int main()
     TestEditorAuthoringTexturePickerRejectsStaleMapping();
     TestEditorNoAuthoringTexturePickerApplyFailsWithoutMutatingTopology();
     TestEditorRuntimeDoorTexturePickerWritesAuthoredDoorTexture();
-    TestEditorMapTextureImportPreservesMapLevelRegistryOnly();
+    TestEditorMaterialCatalogUsesGlobalRegistry();
     TestSpriteMetadataScannerFindsNestedJsonAndFrameTagClips();
     TestAudioScannerFindsSupportedFilesRecursively();
     TestSpriteMetadataScannerFallsBackToFrameNamesAndDefaultClip();

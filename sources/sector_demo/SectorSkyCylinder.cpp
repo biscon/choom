@@ -35,20 +35,20 @@ bool HasSkyCeilingSector(const SectorTopologyMap& map)
     return false;
 }
 
-const SectorTextureDefinition* FindDefaultSkyTexture(const SectorTopologyMap& map)
+const SectorMaterialDefinition* FindDefaultSkyTexture(const SectorTopologyMap& map)
 {
-    const auto it = map.texturesById.find(DefaultSectorTopologySkySettings().textureId);
-    return it == map.texturesById.end() ? nullptr : &it->second;
+    const auto it = map.resolvedMaterialsById.find(DefaultSectorTopologySkySettings().materialId);
+    return it == map.resolvedMaterialsById.end() ? nullptr : &it->second;
 }
 
-const SectorTextureDefinition* FindSkyTexture(const SectorTopologyMap& map)
+const SectorMaterialDefinition* FindSkyTexture(const SectorTopologyMap& map)
 {
     const SectorTopologySkySettings settings = NormalizeSectorTopologySkySettings(map.skySettings);
-    if (settings.textureId.empty()) {
+    if (settings.materialId.empty()) {
         return nullptr;
     }
-    const auto it = map.texturesById.find(settings.textureId);
-    return it == map.texturesById.end() ? nullptr : &it->second;
+    const auto it = map.resolvedMaterialsById.find(settings.materialId);
+    return it == map.resolvedMaterialsById.end() ? nullptr : &it->second;
 }
 
 bool ShouldRenderSkyCylinder(const SectorTopologyMap& map)

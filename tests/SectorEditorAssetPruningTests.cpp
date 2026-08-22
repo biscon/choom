@@ -18,10 +18,10 @@ void Check(bool condition, const char* description)
 
 void AddTexture(game::SectorTopologyMap& map, const std::string& id)
 {
-    game::SectorTextureDefinition texture;
+    game::SectorMaterialDefinition texture;
     texture.id = id;
     texture.path = "assets/images/" + id + ".png";
-    map.texturesById.emplace(id, std::move(texture));
+    map.resolvedMaterialsById.emplace(id, std::move(texture));
 }
 
 void AddSound(game::SectorTopologyMap& map, const std::string& id)
@@ -36,34 +36,34 @@ void TestPruneKeepsAllReferenceKindsAndDefaults()
 {
     game::SectorAuthoringGraph graph;
     game::SectorAuthoringFaceAnchor anchor;
-    anchor.floorTextureId = "face_floor";
-    anchor.ceilingTextureId = "face_ceiling";
-    anchor.floorDecal.textureId = "floor_decal";
-    anchor.ceilingDecal.textureId = "ceiling_decal";
-    anchor.defaultWall.textureId = "default_wall";
-    anchor.defaultWall.decal.textureId = "default_wall_decal";
-    anchor.defaultLower.textureId = "default_lower";
-    anchor.defaultLower.decal.textureId = "default_lower_decal";
-    anchor.defaultUpper.textureId = "default_upper";
-    anchor.defaultUpper.decal.textureId = "default_upper_decal";
+    anchor.floorMaterialId = "face_floor";
+    anchor.ceilingMaterialId = "face_ceiling";
+    anchor.floorDecal.materialId = "floor_decal";
+    anchor.ceilingDecal.materialId = "ceiling_decal";
+    anchor.defaultWall.materialId = "default_wall";
+    anchor.defaultWall.decal.materialId = "default_wall_decal";
+    anchor.defaultLower.materialId = "default_lower";
+    anchor.defaultLower.decal.materialId = "default_lower_decal";
+    anchor.defaultUpper.materialId = "default_upper";
+    anchor.defaultUpper.decal.materialId = "default_upper_decal";
     graph.faceAnchors.push_back(anchor);
 
     game::SectorAuthoringLineSide side;
-    side.wall.textureId = "side_wall";
-    side.wall.decal.textureId = "side_wall_decal";
-    side.lower.textureId = "side_lower";
-    side.lower.decal.textureId = "side_lower_decal";
-    side.upper.textureId = "side_upper";
-    side.upper.decal.textureId = "side_upper_decal";
-    side.middle.textureId = "side_middle";
-    side.middle.decal.textureId = "side_middle_decal";
+    side.wall.materialId = "side_wall";
+    side.wall.decal.materialId = "side_wall_decal";
+    side.lower.materialId = "side_lower";
+    side.lower.decal.materialId = "side_lower_decal";
+    side.upper.materialId = "side_upper";
+    side.upper.decal.materialId = "side_upper_decal";
+    side.middle.materialId = "side_middle";
+    side.middle.decal.materialId = "side_middle_decal";
     graph.lineSides.push_back(side);
 
     game::SectorTopologyMap map;
-    map.skySettings.textureId = "map_sky";
+    map.skySettings.materialId = "map_sky";
     game::SectorPlacedRuntimeObject door;
     door.kind = "door";
-    door.door.textureId = "door_texture";
+    door.door.materialId = "door_texture";
     door.door.openSoundId = "door_open";
     door.door.closeSoundId = "door_close";
     map.runtimeObjects.push_back(door);
@@ -89,7 +89,7 @@ void TestPruneKeepsAllReferenceKindsAndDefaults()
     Check(result.removedTextureCount == 1, "combined prune removes one unused texture");
     Check(result.removedSoundCount == 1, "combined prune removes one unused sound");
     for (const char* id : keptTextures) {
-        Check(map.texturesById.find(id) != map.texturesById.end(),
+        Check(map.resolvedMaterialsById.find(id) != map.resolvedMaterialsById.end(),
               "combined prune retains every referenced and protected texture");
     }
     Check(map.audioSettings.soundsById.find("door_open")
@@ -104,7 +104,7 @@ void TestPruneCategoriesAreIndependent()
 {
     game::SectorAuthoringGraph graph;
     game::SectorTopologyMap map;
-    map.skySettings.textureId.clear();
+    map.skySettings.materialId.clear();
     AddTexture(map, "wall");
     AddTexture(map, "floor");
     AddTexture(map, "ceiling");
@@ -130,8 +130,8 @@ void TestPruneCategoriesAreIndependent()
     Check(soundResult.removedTextureCount == 0
                   && soundResult.removedSoundCount == 1,
           "sound-only prune reports only sound removals");
-    Check(map.texturesById.find("another_unused_texture")
-                  != map.texturesById.end(),
+    Check(map.resolvedMaterialsById.find("another_unused_texture")
+                  != map.resolvedMaterialsById.end(),
           "sound-only prune leaves textures untouched");
 }
 
@@ -139,11 +139,11 @@ void TestMissingReferencesAndCleanMapsAreSafe()
 {
     game::SectorAuthoringGraph graph;
     game::SectorAuthoringFaceAnchor anchor;
-    anchor.floorTextureId = "missing_texture";
+    anchor.floorMaterialId = "missing_texture";
     graph.faceAnchors.push_back(anchor);
 
     game::SectorTopologyMap map;
-    map.skySettings.textureId.clear();
+    map.skySettings.materialId.clear();
     game::SectorPlacedRuntimeObject door;
     door.kind = "door";
     door.door.openSoundId = "missing_sound";
@@ -161,10 +161,10 @@ void TestPruneModalDefaultsAndReset()
     state.pruneTextures = false;
     state.pruneSounds = false;
     game::OpenSectorEditorAssetPruneModal(state);
-    Check(state.open && state.pruneTextures && state.pruneSounds,
-          "prune modal opens with both categories selected");
+    Check(state.open && !state.pruneTextures && state.pruneSounds,
+          "prune modal opens for map-local sounds only");
     game::CloseSectorEditorAssetPruneModal(state);
-    Check(!state.open && state.pruneTextures && state.pruneSounds,
+    Check(!state.open && !state.pruneTextures && state.pruneSounds,
           "prune modal close resets its draft choices");
 }
 

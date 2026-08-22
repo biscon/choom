@@ -120,6 +120,7 @@ bool SectorGameSession::StartNew(
         engine::EngineContext& context,
         SectorSceneRuntime& scene,
         const SectorLevelEntryRequest& entry,
+        const SectorMaterialRegistry& materials,
         const FpsWeaponRegistry& registry,
         const FpsApplicationSettings& settings,
         PlayerAudioRuntime& playerAudioRuntime,
@@ -140,7 +141,7 @@ bool SectorGameSession::StartNew(
     }
 
     SectorTopologyMap loaded;
-    if (!LoadSectorRuntimeLevel(path, loaded, error)) {
+    if (!LoadSectorRuntimeLevel(path, materials, loaded, error)) {
         return false;
     }
     const SectorCompiledLevelMarker* entryMarker = nullptr;
@@ -195,6 +196,7 @@ bool SectorGameSession::StartNew(
     }
     EnterSectorFreeflyController(controller.freeflyController);
     weaponRegistry = &registry;
+    materialRegistry = &materials;
     applicationSettings = &settings;
     playerAudio = &playerAudioRuntime;
     persistentScripts = &persistentStore;
@@ -254,6 +256,7 @@ void SectorGameSession::Shutdown(
     consoleInputCaptured = false;
     pendingLoadingSave = false;
     weaponRegistry = nullptr;
+    materialRegistry = nullptr;
     applicationSettings = nullptr;
     playerAudio = nullptr;
     persistentScripts = nullptr;
@@ -763,11 +766,13 @@ bool SectorGameSession::ReloadCurrentMap(
     }
     const std::string mapId = levelName;
     const FpsWeaponRegistry* savedWeaponRegistry = weaponRegistry;
+    const SectorMaterialRegistry* savedMaterialRegistry = materialRegistry;
     const FpsApplicationSettings* savedSettings = applicationSettings;
     PlayerAudioRuntime* savedPlayerAudio = playerAudio;
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
     Shutdown(context, scene);
-    if (savedWeaponRegistry == nullptr || savedSettings == nullptr
+    if (savedWeaponRegistry == nullptr || savedMaterialRegistry == nullptr
+            || savedSettings == nullptr
             || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
         error = "Game services became unavailable during reload";
         return false;
@@ -776,6 +781,7 @@ bool SectorGameSession::ReloadCurrentMap(
                 context,
                 scene,
                 SectorLevelEntryRequest{mapId, std::nullopt},
+                *savedMaterialRegistry,
                 *savedWeaponRegistry,
                 *savedSettings,
                 *savedPlayerAudio,
@@ -816,13 +822,15 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
     scripts.requestedSpawnId.clear();
 
     const FpsWeaponRegistry* savedWeaponRegistry = weaponRegistry;
+    const SectorMaterialRegistry* savedMaterialRegistry = materialRegistry;
     const FpsApplicationSettings* savedSettings = applicationSettings;
     PlayerAudioRuntime* savedPlayerAudio = playerAudio;
     engine::PersistentScriptStore* savedPersistent = persistentScripts;
     const Health savedHealth = playerHealth;
     const PlayerStamina savedStamina = playerStamina;
     Shutdown(context, scene);
-    if (savedWeaponRegistry == nullptr || savedSettings == nullptr
+    if (savedWeaponRegistry == nullptr || savedMaterialRegistry == nullptr
+            || savedSettings == nullptr
             || savedPlayerAudio == nullptr || savedPersistent == nullptr) {
         failureError = "Map change failed because session services are unavailable";
         return;
@@ -838,6 +846,7 @@ void SectorGameSession::ConsumeScriptTransitionRequest(
                 context,
                 scene,
                 entry,
+                *savedMaterialRegistry,
                 *savedWeaponRegistry,
                 *savedSettings,
                 *savedPlayerAudio,

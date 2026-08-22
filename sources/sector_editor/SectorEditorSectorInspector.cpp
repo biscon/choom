@@ -254,11 +254,11 @@ bool DrawTopologySectorInspector(
     DrawColorSwatch(config, swatch, TopologySectorAmbientPreviewColor(sector, 255), 1.0f);
     y += 36.0f + gap;
 
-    auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologySectorTextureField field, TopologyMaterialLayer layer) {
+    auto drawTextureRow = [&](const char* id, const char* label, const std::string& materialId, TopologySectorTextureField field, TopologyMaterialLayer layer) {
         const float buttonW = 38.0f;
         const float labelColumnW = 82.0f;
         const Rectangle row{0.0f, y, contentW, 36.0f};
-        const bool missing = !textureId.empty() && !textureCatalog.HasTexture(textureId);
+        const bool missing = !materialId.empty() && !textureCatalog.HasTexture(materialId);
         engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
         engine::Text(
                 ui,
@@ -266,7 +266,7 @@ bool DrawTopologySectorInspector(
                 assets,
                 Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
                 smallFont,
-                textureId.empty() ? "<none>" : textureId.c_str(),
+                materialId.empty() ? "<none>" : materialId.c_str(),
                 engine::UITextJustify::Left,
                 missing ? config.invalidColor : config.mutedTextColor);
         if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
@@ -362,7 +362,7 @@ bool DrawTopologySectorInspector(
         y += 36.0f + gap;
     };
 
-    auto drawSurfaceSection = [&](const char* title, const char* textureButtonId, const std::string& textureId, TopologySectorTextureField field, const char* uvPrefix, SectorTopologyUvSettings& uv, SectorTopologyDecalLayer& decal, int stateOffset, int opacityStateIndex, TopologySurfaceEditTargetKind materialKind) {
+    auto drawSurfaceSection = [&](const char* title, const char* textureButtonId, const std::string& materialId, TopologySectorTextureField field, const char* uvPrefix, SectorTopologyUvSettings& uv, SectorTopologyDecalLayer& decal, int stateOffset, int opacityStateIndex, TopologySurfaceEditTargetKind materialKind) {
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, title, engine::UITextJustify::Left, config.textColor);
@@ -395,13 +395,13 @@ bool DrawTopologySectorInspector(
                 materialEditing.PasteMaterial(target, assets);
             }
             y += 36.0f + gap;
-            drawTextureRow(textureButtonId, "Texture:", textureId, field, TopologyMaterialLayer::Base);
+            drawTextureRow(textureButtonId, "Material:", materialId, field, TopologyMaterialLayer::Base);
             drawUvSettings(uvPrefix, uv, stateOffset);
             return;
         }
 
-        drawTextureRow(textureButtonId, "Texture:", decal.textureId, field, TopologyMaterialLayer::Decal);
-        if (decal.textureId.empty()) {
+        drawTextureRow(textureButtonId, "Material:", decal.materialId, field, TopologyMaterialLayer::Decal);
+        if (decal.materialId.empty()) {
             engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 32.0f}, font, "No decal assigned", engine::UITextJustify::Left, config.mutedTextColor);
             y += 32.0f + gap;
             return;
@@ -513,15 +513,15 @@ bool DrawTopologySectorInspector(
         y += 36.0f + gap;
     };
 
-    drawSurfaceSection("Floor", "sector_editor_topology_pick_floor", sector.floorTextureId, TopologySectorTextureField::Floor, "sector_editor_topology_floor_uv", sector.floorUv, sector.floorDecal, 0, 0, TopologySurfaceEditTargetKind::SectorFloor);
-    drawSurfaceSection("Ceiling", "sector_editor_topology_pick_ceiling", sector.ceilingTextureId, TopologySectorTextureField::Ceiling, "sector_editor_topology_ceiling_uv", sector.ceilingUv, sector.ceilingDecal, 4, 1, TopologySurfaceEditTargetKind::SectorCeiling);
+    drawSurfaceSection("Floor", "sector_editor_topology_pick_floor", sector.floorMaterialId, TopologySectorTextureField::Floor, "sector_editor_topology_floor_uv", sector.floorUv, sector.floorDecal, 0, 0, TopologySurfaceEditTargetKind::SectorFloor);
+    drawSurfaceSection("Ceiling", "sector_editor_topology_pick_ceiling", sector.ceilingMaterialId, TopologySectorTextureField::Ceiling, "sector_editor_topology_ceiling_uv", sector.ceilingUv, sector.ceilingDecal, 4, 1, TopologySurfaceEditTargetKind::SectorCeiling);
 
     auto drawWallDefaultSection = [&](const char* title, const char* textureButtonId, SectorTopologyWallPartSettings& part, TopologySectorTextureField field, const char* uvPrefix, int stateOffset) {
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, title, engine::UITextJustify::Left, config.textColor);
         y += 30.0f;
-        drawTextureRow(textureButtonId, "Texture:", part.textureId, field, TopologyMaterialLayer::Base);
+        drawTextureRow(textureButtonId, "Material:", part.materialId, field, TopologyMaterialLayer::Base);
         drawUvSettings(uvPrefix, part.uv, stateOffset);
     };
 

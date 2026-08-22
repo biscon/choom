@@ -376,6 +376,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorMaterialRegistry.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorBillboardRuntime.cpp
@@ -402,6 +403,8 @@ if(BUILD_TESTING)
             sources/game/npc/NpcDefinitions.cpp
             sources/game/npc/NpcRuntime.cpp
             sources/game/SectorLevelLoader.cpp
+            sources/sector_demo/SectorMaterialRefactor.cpp
+            sources/sector_demo/SectorMaterialRegistry.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp
             sources/sector_demo/SectorTopologyMap.cpp
             sources/sector_demo/SectorTriggers.cpp

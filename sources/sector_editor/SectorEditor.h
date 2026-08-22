@@ -13,6 +13,8 @@
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorState.h"
+#include "sector_editor/materials/SectorEditorMaterialRegistryEditorService.h"
+#include "sector_editor/materials/SectorEditorMaterialRegistryEditorState.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorService.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorState.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
@@ -41,6 +43,7 @@
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
 #include "sector_demo/SectorSceneRuntime.h"
+#include "sector_demo/SectorMaterialRegistry.h"
 #include "game/FpsWeaponRegistry.h"
 
 #include <raylib.h>
@@ -56,8 +59,11 @@ struct SectorEditorToolContext;
 
 class SectorEditor {
 public:
-    explicit SectorEditor(FpsApplicationSettings& sharedApplicationSettings)
-        : applicationSettings(sharedApplicationSettings) {}
+    SectorEditor(
+            FpsApplicationSettings& sharedApplicationSettings,
+            SectorMaterialRegistry& sharedMaterialRegistry)
+        : materialRegistry(sharedMaterialRegistry),
+          applicationSettings(sharedApplicationSettings) {}
 
     bool Init(engine::EngineContext& context);
     void Shutdown(engine::EngineContext& context);
@@ -245,12 +251,6 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
-    void DrawAddMapTextureModal(
-            engine::UIContext& ui,
-            const engine::UIConfig& config,
-            engine::Input& input,
-            engine::AssetManager& assets,
-            engine::FontHandle font);
     void DrawAddMapSoundModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -287,6 +287,13 @@ private:
             engine::FontHandle font,
             engine::FontHandle smallFont);
     void DrawWeaponEditor(
+            engine::UIContext& ui,
+            const engine::UIConfig& config,
+            engine::Input& input,
+            engine::AssetManager& assets,
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
+    void DrawMaterialRegistryEditor(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
@@ -406,9 +413,6 @@ private:
     void OpenPreviewSettingsModal();
     void ApplyPreviewSettingsModal(engine::AssetManager& assets);
     void OpenDoorTextureSettingsModal();
-    void OpenAddMapTextureModal(engine::AssetManager& assets);
-    void CloseAddMapTextureModal(engine::AssetManager& assets);
-    bool AddSelectedMapTexture(engine::AssetManager& assets);
     void ApplyAssetPrune(engine::AssetManager& assets);
     SectorEditorManipulationServiceContext BuildManipulationServiceContext();
     SectorEditorSelectionServiceContext BuildSelectionServiceContext();
@@ -467,6 +471,7 @@ private:
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorNpcEditorService BuildNpcEditorService();
     SectorEditorWeaponEditorService BuildWeaponEditorService();
+    SectorEditorMaterialRegistryEditorService BuildMaterialRegistryEditorService();
     void OpenWeaponEditor(bool fromPreview3D);
     SectorEditorDocumentLifecycleAccess Lifecycle();
     SectorEditorConstDocumentLifecycleAccess Lifecycle() const;
@@ -487,6 +492,7 @@ private:
     std::string CurrentTextureForPickerTarget() const;
     bool TryRenameSelectedDerivedSectorAuthoringName();
     void MarkTopologyDocumentEdited(const char* status);
+    void RefreshResolvedMaterials();
     bool OpenDeleteSelectedLightConfirmation();
     SectorEditorToolContext BuildToolContext(engine::Input* input);
     void AddRuntimeObjectAt(Vector2 mapPoint);
@@ -517,6 +523,7 @@ private:
     SectorEditorNpcEditorSessionState npcEditorSessionState;
     SectorEditorWeaponEditorState weaponEditorState;
     SectorEditorWeaponEditorSessionState weaponEditorSessionState;
+    SectorEditorMaterialRegistryEditorState materialRegistryEditorState;
     SectorEditorAudioAssetPickerSessionState audioAssetPickerSessionState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
@@ -539,6 +546,7 @@ private:
     SectorSceneRuntime sceneRuntime;
     FpsPlayerRuntime fpsPlayer;
     FpsWeaponRegistry weaponRegistry;
+    SectorMaterialRegistry& materialRegistry;
     FpsApplicationSettings& applicationSettings;
     PlayerAudioRuntime playerAudio;
     std::string applicationSettingsPath;

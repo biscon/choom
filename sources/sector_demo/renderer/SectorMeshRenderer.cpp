@@ -28,6 +28,8 @@
 #include <limits>
 #include <sstream>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -156,6 +158,7 @@ uniform float useLightmap;
 uniform float useBakedAmbientOcclusion;
 uniform int hasLightmap;
 uniform int hasNormalMap;
+uniform float normalStrength;
 uniform int alphaTest;
 uniform float alphaCutoff;
 uniform int hasDecal;
@@ -260,6 +263,7 @@ vec3 SurfaceNormal(vec3 geometricNormal)
             cross(geometricNormal, tangent),
             vec3(0.0, 0.0, 1.0)) * handedness;
     vec3 mappedNormal = texture(normalTexture, fragTexCoord).xyz * 2.0 - 1.0;
+    mappedNormal.xy *= normalStrength;
     return SafeNormalize(
             mat3(tangent, bitangent, geometricNormal) * mappedNormal,
             geometricNormal);
@@ -508,14 +512,37 @@ std::string FormatDynamicSpotLightShadowDebugText(
     return out.str();
 }
 
-std::vector<std::string> SortedTopologyTextureIds(const SectorTopologyMap& map)
+std::vector<std::string> SortedRendererMaterialIds(
+        const SectorTopologyMap& map,
+        const SectorGeneratedGeometry& geometry)
 {
-    std::vector<std::string> ids;
-    ids.reserve(map.texturesById.size());
-    for (const auto& texture : map.texturesById) {
-        ids.push_back(texture.first);
+    std::unordered_set<std::string> unique;
+    for (const SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (!surface.materialId.empty()) unique.insert(surface.materialId);
+        if (!surface.decalMaterialId.empty()) unique.insert(surface.decalMaterialId);
     }
+    if (ShouldRenderSkyCylinder(map) && !map.skySettings.materialId.empty()) {
+        unique.insert(map.skySettings.materialId);
+    }
+    for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
+        if (object.kind == "door"
+                && object.door.visual == SectorDoorVisualType::Procedural
+                && !object.door.materialId.empty()) {
+            unique.insert(object.door.materialId);
+        }
+    }
+    std::vector<std::string> ids(unique.begin(), unique.end());
     std::sort(ids.begin(), ids.end());
+    return ids;
+}
+
+std::unordered_set<std::string> NormalMappedRendererMaterialIds(
+        const SectorGeneratedGeometry& geometry)
+{
+    std::unordered_set<std::string> ids;
+    for (const SectorGeneratedSurface& surface : geometry.surfaces) {
+        if (!surface.materialId.empty()) ids.insert(surface.materialId);
+    }
     return ids;
 }
 
@@ -527,6 +554,7 @@ bool LoadPreviewMaterial(
         int& useBakedAmbientOcclusionLoc,
         int& hasLightmapLoc,
         int& hasNormalMapLoc,
+        int& normalStrengthLoc,
         int& alphaTestLoc,
         int& alphaCutoffLoc,
         int& hasDecalLoc,
@@ -576,6 +604,7 @@ bool LoadPreviewMaterial(
     useBakedAmbientOcclusionLoc = GetShaderLocation(material.shader, "useBakedAmbientOcclusion");
     hasLightmapLoc = GetShaderLocation(material.shader, "hasLightmap");
     hasNormalMapLoc = GetShaderLocation(material.shader, "hasNormalMap");
+    normalStrengthLoc = GetShaderLocation(material.shader, "normalStrength");
     alphaTestLoc = GetShaderLocation(material.shader, "alphaTest");
     alphaCutoffLoc = GetShaderLocation(material.shader, "alphaCutoff");
     hasDecalLoc = GetShaderLocation(material.shader, "hasDecal");
@@ -651,11 +680,6 @@ bool SectorMeshRenderer::RebuildRendererResources(
         return false;
     }
 
-    if (map.texturesById.empty()) {
-        error = "Preview failed: missing topology texture table";
-        return false;
-    }
-
     if (!BuildSectorGeneratedGeometry(map, generatedGeometry, &error)) {
         error = error.empty()
                 ? "Preview failed: topology generated no geometry"
@@ -684,42 +708,68 @@ bool SectorMeshRenderer::RebuildRendererResources(
         return false;
     }
 
-    for (const std::string& textureId : SortedTopologyTextureIds(map)) {
-        const auto it = map.texturesById.find(textureId);
-        if (it == map.texturesById.end()) {
+    std::unordered_map<std::string, engine::TextureHandle> sharedAlbedoHandles;
+    std::unordered_map<std::string, engine::TextureHandle> sharedNormalHandles;
+    const std::unordered_set<std::string> normalMappedMaterialIds =
+            NormalMappedRendererMaterialIds(generatedGeometry);
+    for (const std::string& materialId :
+            SortedRendererMaterialIds(map, generatedGeometry)) {
+        const auto it = map.resolvedMaterialsById.find(materialId);
+        if (it == map.resolvedMaterialsById.end()) {
+            std::fprintf(
+                    stderr,
+                    "[SectorMeshRenderer WARNING] Missing global material '%s'; using fallback texture\n",
+                    materialId.c_str());
             continue;
         }
 
-        const SectorTextureDefinition& texture = it->second;
+        const SectorMaterialDefinition& texture = it->second;
         const std::string resolvedPath = ResolveSectorAssetPath(texture.path);
-        engine::TextureHandle handle = assets.RequestTexture(
-                assetScope,
-                texture.id.c_str(),
-                resolvedPath.c_str(),
-                engine::TextureColorUsage::SceneSrgb,
-                SectorTextureLoadFlags(texture.filter));
+        const std::string albedoRequestKey = resolvedPath + "|srgb|"
+                + std::to_string(static_cast<int>(texture.filter));
+        const auto sharedAlbedo = sharedAlbedoHandles.find(albedoRequestKey);
+        const engine::TextureHandle handle = sharedAlbedo == sharedAlbedoHandles.end()
+                ? assets.RequestTexture(
+                        assetScope,
+                        albedoRequestKey.c_str(),
+                        resolvedPath.c_str(),
+                        engine::TextureColorUsage::SceneSrgb,
+                        SectorMaterialTextureLoadFlags(texture.filter))
+                : sharedAlbedo->second;
+        sharedAlbedoHandles.emplace(albedoRequestKey, handle);
         textureHandlesById.emplace(texture.id, handle);
+        if (normalMappedMaterialIds.find(materialId)
+                == normalMappedMaterialIds.end()) {
+            continue;
+        }
+        normalStrengthById.emplace(texture.id, texture.normalStrength);
 
-        const std::string normalMapPath = SectorTextureNormalMapPath(texture.path);
+        const std::string normalMapPath = SectorMaterialNormalMapPath(texture.path);
         const std::string resolvedNormalMapPath = ResolveSectorAssetPath(normalMapPath);
         std::error_code normalMapError;
         if (!normalMapPath.empty()
                 && std::filesystem::is_regular_file(resolvedNormalMapPath, normalMapError)
                 && !normalMapError) {
-            const std::string normalMapKey = texture.id + "_sector_normal";
-            normalTextureHandlesById.emplace(
-                    texture.id,
-                    assets.RequestTexture(
+            const std::string normalMapKey = resolvedNormalMapPath + "|linear|"
+                    + std::to_string(static_cast<int>(texture.filter));
+            const auto sharedNormal = sharedNormalHandles.find(normalMapKey);
+            const engine::TextureHandle normalHandle = sharedNormal == sharedNormalHandles.end()
+                    ? assets.RequestTexture(
                             assetScope,
                             normalMapKey.c_str(),
                             resolvedNormalMapPath.c_str(),
                             engine::TextureColorUsage::LinearData,
-                            SectorTextureLoadFlags(texture.filter)));
+                            SectorMaterialTextureLoadFlags(texture.filter))
+                    : sharedNormal->second;
+            sharedNormalHandles.emplace(normalMapKey, normalHandle);
+            normalTextureHandlesById.emplace(
+                    texture.id,
+                    normalHandle);
         }
     }
 
     if (ShouldRenderSkyCylinder(map)) {
-        const SectorTextureDefinition* skyTexture = FindSkyTexture(map);
+        const SectorMaterialDefinition* skyTexture = FindSkyTexture(map);
         const engine::TextureHandle skyTextureHandle = skyTexture == nullptr
                 ? engine::NullTextureHandle()
                 : TextureForId(skyTexture->id);
@@ -916,6 +966,7 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 useBakedAmbientOcclusionLoc,
                 hasLightmapLoc,
                 hasNormalMapLoc,
+                normalStrengthLoc,
                 alphaTestLoc,
                 alphaCutoffLoc,
                 hasDecalLoc,
@@ -1057,6 +1108,7 @@ void SectorMeshRenderer::ShutdownRendererResources(engine::AssetManager& assets)
     UnloadSectorMeshes(meshes);
     textureHandlesById.clear();
     normalTextureHandlesById.clear();
+    normalStrengthById.clear();
     lightmapTextures.clear();
     sectorCount = 0;
 
@@ -1219,18 +1271,18 @@ void SectorMeshRenderer::DrawScene(
             uploadedLightSectorId = batch.sectorId;
         }
 
-        const engine::TextureHandle textureHandle = TextureForId(batch.textureId);
+        const engine::TextureHandle textureHandle = TextureForId(batch.materialId);
         const Texture2D* texture = assets.GetTexture(textureHandle);
         material.maps[MATERIAL_MAP_DIFFUSE].texture = (texture != nullptr)
                 ? *texture
                 : defaultMaterialTexture;
 
         const Texture2D* normalTexture = assets.GetTexture(
-                NormalTextureForId(batch.textureId));
+                NormalTextureForId(batch.materialId));
 
         const Texture2D* decalTexture = nullptr;
-        if (!batch.decalTextureId.empty()) {
-            decalTexture = assets.GetTexture(TextureForId(batch.decalTextureId));
+        if (!batch.decalMaterialId.empty()) {
+            decalTexture = assets.GetTexture(TextureForId(batch.decalMaterialId));
         }
 
         const Texture2D* lightmap = batch.lightmapAtlasIndex >= 0
@@ -1247,6 +1299,10 @@ void SectorMeshRenderer::DrawScene(
         const int hasLightmap = batch.receivesLightmap
                 && lightmap != nullptr ? 1 : 0;
         const int hasNormalMap = normalTexture != nullptr ? 1 : 0;
+        const auto normalStrengthIt = normalStrengthById.find(batch.materialId);
+        const float materialNormalStrength = normalStrengthIt == normalStrengthById.end()
+                ? 1.0f
+                : normalStrengthIt->second;
         const int alphaTest = batch.alphaTest ? 1 : 0;
         const float alphaCutoff = batch.alphaCutoff;
         const float decalOpacity = batch.decalOpacity;
@@ -1272,6 +1328,13 @@ void SectorMeshRenderer::DrawScene(
         }
         if (hasNormalMapLoc >= 0) {
             SetShaderValue(material.shader, hasNormalMapLoc, &hasNormalMap, SHADER_UNIFORM_INT);
+        }
+        if (normalStrengthLoc >= 0) {
+            SetShaderValue(
+                    material.shader,
+                    normalStrengthLoc,
+                    &materialNormalStrength,
+                    SHADER_UNIFORM_FLOAT);
         }
         if (alphaTestLoc >= 0) {
             SetShaderValue(material.shader, alphaTestLoc, &alphaTest, SHADER_UNIFORM_INT);
@@ -2052,9 +2115,9 @@ const char* SectorMeshRenderer::RendererLightmapStatusText() const
     return SectorLightmapStatusText(static_cast<SectorLightmapStatus>(lightmapStatus));
 }
 
-engine::TextureHandle SectorMeshRenderer::TextureForId(const std::string& textureId) const
+engine::TextureHandle SectorMeshRenderer::TextureForId(const std::string& materialId) const
 {
-    const auto it = textureHandlesById.find(textureId);
+    const auto it = textureHandlesById.find(materialId);
     if (it == textureHandlesById.end()) {
         return engine::NullTextureHandle();
     }
@@ -2062,9 +2125,9 @@ engine::TextureHandle SectorMeshRenderer::TextureForId(const std::string& textur
     return it->second;
 }
 
-engine::TextureHandle SectorMeshRenderer::NormalTextureForId(const std::string& textureId) const
+engine::TextureHandle SectorMeshRenderer::NormalTextureForId(const std::string& materialId) const
 {
-    const auto it = normalTextureHandlesById.find(textureId);
+    const auto it = normalTextureHandlesById.find(materialId);
     if (it == normalTextureHandlesById.end()) {
         return engine::NullTextureHandle();
     }
@@ -2074,13 +2137,13 @@ engine::TextureHandle SectorMeshRenderer::NormalTextureForId(const std::string& 
 const Texture2D* SectorMeshRenderer::ResolveShadowCasterTexture(
         void* userData,
         engine::AssetManager& assets,
-        const std::string& textureId)
+        const std::string& materialId)
 {
     const SectorMeshRenderer* preview = static_cast<const SectorMeshRenderer*>(userData);
     if (preview == nullptr) {
         return nullptr;
     }
-    return assets.GetTexture(preview->TextureForId(textureId));
+    return assets.GetTexture(preview->TextureForId(materialId));
 }
 
 void SectorMeshRenderer::UpdateCamera()

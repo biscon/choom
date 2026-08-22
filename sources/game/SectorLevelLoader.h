@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_demo/SectorTopologyMap.h"
+#include "sector_demo/SectorMaterialRegistry.h"
 
 #include <string>
 #include <optional>
@@ -16,6 +17,7 @@ bool IsValidApplicationLevelName(const std::string& name);
 std::string ApplicationLevelAssetPath(const std::string& name);
 bool LoadSectorRuntimeLevel(
         const std::string& path,
+        const SectorMaterialRegistry& materials,
         SectorTopologyMap& outMap,
         std::string& error);
 bool ResolveSectorLevelEntryMarker(

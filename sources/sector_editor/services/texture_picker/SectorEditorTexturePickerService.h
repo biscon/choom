@@ -16,7 +16,7 @@ class SectorEditorTextureCatalogService;
 
 struct SectorEditorSelectedTexture {
     bool valid = false;
-    std::string textureId;
+    std::string materialId;
 };
 
 struct SectorEditorTexturePickerServiceCallbacks {
@@ -27,11 +27,11 @@ struct SectorEditorTexturePickerServiceCallbacks {
 void CloseSectorEditorTexturePicker(TexturePickerState& picker);
 void PopulateSectorEditorTexturePickerOptions(
         TexturePickerState& picker,
-        const std::vector<std::string>& textureIds,
+        const std::vector<std::string>& materialIds,
         const std::string& currentTexture);
 void OpenSectorEditorTexturePicker(
         TexturePickerState& picker,
-        const std::vector<std::string>& textureIds,
+        const std::vector<std::string>& materialIds,
         const std::string& currentTexture);
 SectorEditorSelectedTexture CurrentSectorEditorTexturePickerSelection(const TexturePickerState& picker);
 

@@ -40,15 +40,15 @@ Vector2 ApplyTestUv(Vector2 baseUv, Vector2 scale, Vector2 offset)
     return Vector2{baseUv.x * scale.x + offset.x, baseUv.y * scale.y + offset.y};
 }
 
-game::SectorTopologyWallPartSettings Part(const char* textureId)
+game::SectorTopologyWallPartSettings Part(const char* materialId)
 {
     game::SectorTopologyWallPartSettings part;
-    part.textureId = textureId;
+    part.materialId = materialId;
     return part;
 }
 
 game::SectorTopologyDecalLayer Decal(
-        const char* textureId,
+        const char* materialId,
         Vector2 scale,
         Vector2 offset,
         float opacity,
@@ -56,7 +56,7 @@ game::SectorTopologyDecalLayer Decal(
         Vector3 tint = {1.0f, 1.0f, 1.0f})
 {
     game::SectorTopologyDecalLayer decal;
-    decal.textureId = textureId;
+    decal.materialId = materialId;
     decal.uv.scale = scale;
     decal.uv.offset = offset;
     decal.opacity = opacity;
@@ -71,8 +71,8 @@ game::SectorTopologySector Sector(int id, float floorZ = 0.0f, float ceilingZ = 
     sector.id = id;
     sector.floorZ = floorZ;
     sector.ceilingZ = ceilingZ;
-    sector.floorTextureId = "floor-" + std::to_string(id);
-    sector.ceilingTextureId = "ceiling-" + std::to_string(id);
+    sector.floorMaterialId = "floor-" + std::to_string(id);
+    sector.ceilingMaterialId = "ceiling-" + std::to_string(id);
     sector.ambientColor = Color{200, 160, 120, 255};
     sector.ambientIntensity = 0.5f;
     return sector;
@@ -326,11 +326,11 @@ void TestSingleAssignedMiddleTextureGeneratesBothFacings()
     const auto* front = FindMiddleSurfaceFacing(geometry, 2, Vector3{-1.0f, 0.0f, 0.0f});
     const auto* back = FindMiddleSurfaceFacing(geometry, 2, Vector3{1.0f, 0.0f, 0.0f});
     Check(front != nullptr && back != nullptr, "single middle texture has front and back facings");
-    Check(front != nullptr && front->textureId == "bars" && front->ref.topologySideDefId == 2,
+    Check(front != nullptr && front->materialId == "bars" && front->ref.topologySideDefId == 2,
           "front middle surface uses assigned texture and owner sidedef ref");
     Check(front != nullptr && front->ref.topologySide == game::SectorTopologySideKind::Front,
           "front middle surface owner side is front");
-    Check(back != nullptr && back->textureId == "bars" && back->ref.topologySideDefId == 2,
+    Check(back != nullptr && back->materialId == "bars" && back->ref.topologySideDefId == 2,
           "back middle surface uses assigned texture and owner sidedef ref");
     Check(back != nullptr && back->ref.topologySide == game::SectorTopologySideKind::Front,
           "back middle surface owner side is front");
@@ -354,11 +354,11 @@ void TestBackAssignedMiddleTextureGeneratesOwnerRefs()
           "back assigned middle texture emits two middle surfaces");
     const auto* front = FindMiddleSurfaceFacing(geometry, 2, Vector3{-1.0f, 0.0f, 0.0f});
     const auto* back = FindMiddleSurfaceFacing(geometry, 2, Vector3{1.0f, 0.0f, 0.0f});
-    Check(front != nullptr && front->textureId == "bars" && front->ref.topologySideDefId == 8,
+    Check(front != nullptr && front->materialId == "bars" && front->ref.topologySideDefId == 8,
           "front-facing surface uses back owner sidedef ref");
     Check(front != nullptr && front->ref.topologySide == game::SectorTopologySideKind::Back,
           "front-facing surface owner side is back");
-    Check(back != nullptr && back->textureId == "bars" && back->ref.topologySideDefId == 8,
+    Check(back != nullptr && back->materialId == "bars" && back->ref.topologySideDefId == 8,
           "back-facing surface uses back owner sidedef ref");
     Check(back != nullptr && back->ref.topologySide == game::SectorTopologySideKind::Back,
           "back-facing surface owner side is back");
@@ -377,9 +377,9 @@ void TestBothAssignedMiddleTexturesGenerateOneFacingEach()
           "two assigned middle textures emit two middle surfaces total");
     const auto* front = FindMiddleSurface(geometry, 2, game::SectorTopologySideKind::Front);
     const auto* back = FindMiddleSurface(geometry, 2, game::SectorTopologySideKind::Back);
-    Check(front != nullptr && front->textureId == "front-bars",
+    Check(front != nullptr && front->materialId == "front-bars",
           "front middle facing preserves front middle texture");
-    Check(back != nullptr && back->textureId == "back-bars",
+    Check(back != nullptr && back->materialId == "back-bars",
           "back middle facing preserves back middle texture");
     Check(front != nullptr && front->ref.topologySideDefId == 2,
           "front middle facing refs front sidedef");
@@ -450,7 +450,7 @@ void TestDifferentFloorPortal()
     Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "different-floor sectors build");
     const auto* lower = FindSurface(geometry, game::SectorGeneratedSurfaceKind::LowerWall, 10, 2);
     Check(lower != nullptr, "lower wall is emitted on lower sector side");
-    Check(lower != nullptr && lower->textureId == "left-shared-lower",
+    Check(lower != nullptr && lower->materialId == "left-shared-lower",
           "lower wall uses current sidedef lower texture");
     Check(FindSurface(geometry, game::SectorGeneratedSurfaceKind::LowerWall, 20, 2) == nullptr,
           "higher sector side emits no duplicate lower wall");
@@ -464,7 +464,7 @@ void TestDifferentCeilingPortal()
     Check(game::BuildSectorGeneratedGeometry(map, geometry, &error), "different-ceiling sectors build");
     const auto* upper = FindSurface(geometry, game::SectorGeneratedSurfaceKind::UpperWall, 10, 2);
     Check(upper != nullptr, "upper wall is emitted on taller sector side");
-    Check(upper != nullptr && upper->textureId == "left-shared-upper",
+    Check(upper != nullptr && upper->materialId == "left-shared-upper",
           "upper wall uses current sidedef upper texture");
     Check(FindSurface(geometry, game::SectorGeneratedSurfaceKind::UpperWall, 20, 2) == nullptr,
           "shorter sector side emits no duplicate upper wall");
@@ -605,27 +605,27 @@ void TestDecalsPropagateWithoutChangingBaseUvs()
     const auto* upper = FindSurface(geometry, game::SectorGeneratedSurfaceKind::UpperWall, 10, 2);
     const auto* missing = FindSurface(geometry, game::SectorGeneratedSurfaceKind::Wall, 10, 3);
 
-    Check(floor != nullptr && floor->decalTextureId == "floor-mark" && Near(floor->decalOpacity, 0.6f),
+    Check(floor != nullptr && floor->decalMaterialId == "floor-mark" && Near(floor->decalOpacity, 0.6f),
           "floor decal texture and opacity propagate");
     Check(floor != nullptr && floor->decalEmissive && Near(floor->decalTint, Vector3{1.0f, 0.25f, 0.5f}),
           "floor decal emissive and tint propagate");
-    Check(ceiling != nullptr && ceiling->decalTextureId == "ceiling-grime" && Near(ceiling->decalOpacity, 0.7f),
+    Check(ceiling != nullptr && ceiling->decalMaterialId == "ceiling-grime" && Near(ceiling->decalOpacity, 0.7f),
           "ceiling decal texture and opacity propagate");
     Check(ceiling != nullptr && !ceiling->decalEmissive && Near(ceiling->decalTint, Vector3{0.4f, 0.5f, 0.6f}),
           "ceiling decal emissive and tint propagate");
-    Check(wall != nullptr && wall->decalTextureId == "wall-poster" && Near(wall->decalOpacity, 0.8f),
+    Check(wall != nullptr && wall->decalMaterialId == "wall-poster" && Near(wall->decalOpacity, 0.8f),
           "wall decal texture and opacity propagate");
     Check(wall != nullptr && wall->decalEmissive && Near(wall->decalTint, Vector3{0.2f, 1.0f, 0.3f}),
           "wall decal emissive and tint propagate");
-    Check(lower != nullptr && lower->decalTextureId == "lower-sign" && Near(lower->decalOpacity, 0.55f),
+    Check(lower != nullptr && lower->decalMaterialId == "lower-sign" && Near(lower->decalOpacity, 0.55f),
           "lower wall decal texture and opacity propagate");
     Check(lower != nullptr && !lower->decalEmissive && Near(lower->decalTint, Vector3{0.3f, 0.4f, 1.0f}),
           "lower wall decal emissive and tint propagate");
-    Check(upper != nullptr && upper->decalTextureId == "upper-text" && Near(upper->decalOpacity, 0.45f),
+    Check(upper != nullptr && upper->decalMaterialId == "upper-text" && Near(upper->decalOpacity, 0.45f),
           "upper wall decal texture and opacity propagate");
     Check(upper != nullptr && upper->decalEmissive && Near(upper->decalTint, Vector3{0.9f, 0.8f, 0.7f}),
           "upper wall decal emissive and tint propagate");
-    Check(missing != nullptr && missing->decalTextureId.empty() && Near(missing->decalOpacity, 1.0f),
+    Check(missing != nullptr && missing->decalMaterialId.empty() && Near(missing->decalOpacity, 1.0f),
           "missing decal keeps empty texture and default opacity");
     Check(missing != nullptr && !missing->decalEmissive && Near(missing->decalTint, Vector3{1.0f, 1.0f, 1.0f}),
           "missing decal keeps default emissive and tint");

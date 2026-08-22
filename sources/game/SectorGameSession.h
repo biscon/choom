@@ -22,6 +22,7 @@ public:
             engine::EngineContext& context,
             SectorSceneRuntime& scene,
             const SectorLevelEntryRequest& entry,
+            const SectorMaterialRegistry& materialRegistry,
             const FpsWeaponRegistry& weaponRegistry,
             const FpsApplicationSettings& applicationSettings,
             PlayerAudioRuntime& playerAudioRuntime,
@@ -126,6 +127,7 @@ private:
     GameLevelLoadingState loading;
     FpsPlayerRuntime fpsPlayer;
     const FpsWeaponRegistry* weaponRegistry = nullptr;
+    const SectorMaterialRegistry* materialRegistry = nullptr;
     const FpsApplicationSettings* applicationSettings = nullptr;
     PlayerAudioRuntime* playerAudio = nullptr;
     engine::PersistentScriptStore* persistentScripts = nullptr;

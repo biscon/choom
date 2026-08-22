@@ -169,7 +169,7 @@ bool BuildSectorPbrEnvironment(
 {
     outEnvironment = {};
     Image source{};
-    const SectorTextureDefinition* skyTexture = FindSkyTexture(map);
+    const SectorMaterialDefinition* skyTexture = FindSkyTexture(map);
     if (ShouldRenderSkyCylinder(map) && skyTexture != nullptr) {
         source = LoadImage(ResolveSectorAssetPath(skyTexture->path).c_str());
         outEnvironment.usedSky = source.data != nullptr;

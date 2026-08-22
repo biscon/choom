@@ -50,8 +50,8 @@ The authoring graph owns normal user-editable map state, including:
 - derived geometry used by renderer/preview/collision/lightmaps
 - derived IDs and mappings back to authoring graph
 - render/cache/bake/runtime outputs
-- texture registry / map-level asset dictionary, while it remains intentionally
-  global map metadata rather than authoring geometry
+- the transient subset of global materials resolved for rendering/baking;
+  material definitions themselves are not level-owned
 - lights/runtime objects only if they are intentionally topology-map-owned for
   now and tracked as future design decisions
 - imported topology data only as transient input before conversion to authoring
@@ -128,7 +128,11 @@ Examples:
   isolated and scheduled for removal.
 - `TexturePickerService` remains generic picker lifecycle/result machinery.
 - `MaterialEditingService` owns material-specific picker semantics.
-- Door, sky, sprite, add-map texture/import behavior must not be absorbed into
+- `SectorMaterialRegistry` is application-global and persisted separately from
+  levels; level documents store material IDs only.
+- `MaterialRegistryEditorService` owns global definition editing and safe ID
+  refactors across saved v4 levels.
+- Door, sky, sprite, and global material-registry behavior must not be absorbed into
   `MaterialEditingService`.
 
 ## Service Rules
@@ -198,7 +202,7 @@ Acceptable direct `SectorTopologyMap` write categories are:
 - cache invalidation/rebuild data
 - bake result metadata
 - runtime/preview outputs
-- texture registry/map asset dictionary if intentionally global
+- rebuilding the transient resolved-material subset from the global registry
 - lights/runtime objects if currently intentionally topology-owned
 - import/migration conversion code
 

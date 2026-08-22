@@ -8,6 +8,7 @@
 #include "sector_editor/document/SectorEditorDocumentModals.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
+#include "sector_editor/materials/SectorEditorMaterialRegistryEditorPanel.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
@@ -356,6 +357,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     BuildNpcEditorService().Shutdown(assets);
     audioPicker.Close(weaponEditorState.audioPicker);
     BuildWeaponEditorService().Shutdown();
+    BuildMaterialRegistryEditorService().Shutdown(assets);
     if (state.footstepPicker.open
             || !engine::IsNull(state.footstepPicker.previewScope)) {
         BuildFootstepService().Close();
@@ -369,9 +371,6 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     if (!engine::IsNull(textureCatalogState.editorTextureScope)) {
         assets.UnloadScope(textureCatalogState.editorTextureScope);
     }
-    if (!engine::IsNull(state.addMapTexture.previewScope)) {
-        assets.UnloadScope(state.addMapTexture.previewScope);
-    }
     if (!engine::IsNull(runtimeObjectEditingState.spritePicker.previewScope)) {
         assets.UnloadScope(runtimeObjectEditingState.spritePicker.previewScope);
     }
@@ -383,6 +382,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     npcEditorSessionState = SectorEditorNpcEditorSessionState{};
     weaponEditorState = SectorEditorWeaponEditorState{};
     weaponEditorSessionState = SectorEditorWeaponEditorSessionState{};
+    materialRegistryEditorState = SectorEditorMaterialRegistryEditorState{};
     audioAssetPickerSessionState = SectorEditorAudioAssetPickerSessionState{};
     textureCatalogState = TextureCatalogState{};
     soundCatalogState = SectorEditorSoundCatalogState{};
@@ -634,7 +634,6 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
     if (state.texturePicker.open
             || state.soundPicker.open
             || state.footstepPicker.open
-            || state.addMapTexture.open
             || state.addMapSound.open
             || npcEditorState.open
             || weaponEditorState.open
@@ -706,6 +705,12 @@ void SectorEditor::RenderUI(
             engine::EndUI(ui, config, input, assets);
             return;
         }
+        if (materialRegistryEditorState.open) {
+            DrawMaterialRegistryEditor(ui, config, input, assets, font, smallFont);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
         if (previewState.overlay.previewUiHidden) {
             ui.hotId = 0;
             ui.activeId = 0;
@@ -773,6 +778,12 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (materialRegistryEditorState.open) {
+        DrawMaterialRegistryEditor(ui, config, input, assets, font, smallFont);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (npcEditorState.open) {
         DrawNpcEditorModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
@@ -818,12 +829,6 @@ void SectorEditor::RenderUI(
     if (state.previewSettingsModal.open) {
         DrawPreviewSettingsModal(ui, config, input, assets, font);
         DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
-        uiState.keyboardCaptured = true;
-        engine::EndUI(ui, config, input, assets);
-        return;
-    }
-    if (state.addMapTexture.open) {
-        DrawAddMapTextureModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -875,7 +880,6 @@ void SectorEditor::RenderUI(
     DrawSectorsPanel(ui, config, input, assets, font, smallFont);
     DrawStatusPanel(ui, config, assets, smallFont);
     DrawSetAllModal(ui, config, input, assets, font);
-    DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawAddMapSoundModal(ui, config, input, font);
     DrawAssetPruneModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
@@ -887,7 +891,6 @@ void SectorEditor::RenderUI(
     if (state.texturePicker.open
             || state.soundPicker.open
             || state.footstepPicker.open
-            || state.addMapTexture.open
             || state.addMapSound.open
             || state.assetPruneModal.open
             || npcEditorState.open
@@ -3094,6 +3097,15 @@ void SectorEditor::MarkTopologyDocumentEdited(const char* status)
             status);
 }
 
+void SectorEditor::RefreshResolvedMaterials()
+{
+    const std::vector<std::string> missing =
+            ResolveSectorMaterialsForMap(TopologyMap(), materialRegistry);
+    for (const std::string& id : missing) {
+        TraceLog(LOG_WARNING, "Editor map references missing global material: %s", id.c_str());
+    }
+}
+
 bool SectorEditor::FinishTopologyActionResult(const SectorEditorTopologyActionResult& result)
 {
     if (!result.changed) {
@@ -3481,6 +3493,8 @@ bool SectorEditor::StartLightmapBake(
     }
     const std::string finalOutputPath = levelPaths.lightmapFilePath.string();
     const std::string temporaryOutputPath = MakeTemporaryLightmapPath(finalOutputPath);
+
+    RefreshResolvedMaterials();
 
     if (engineContext == nullptr) {
         statusText = "Bake failed: asset manager is unavailable";
@@ -5038,8 +5052,8 @@ void SectorEditor::DrawToolsPanel(
     }
     y += rowH + gap;
 
-    if (engine::Button(ui, config, input, assets, "sector_editor_add_map_texture", Rectangle{0.0f, y, contentW, rowH}, font, "Add Map Texture")) {
-        OpenAddMapTextureModal(assets);
+    if (engine::Button(ui, config, input, assets, "sector_editor_material_editor", Rectangle{0.0f, y, contentW, rowH}, font, "Material Editor")) {
+        BuildMaterialRegistryEditorService().Open();
     }
     y += rowH + gap;
     if (engine::Button(ui, config, input, assets, "sector_editor_add_map_sound", Rectangle{0.0f, y, contentW, rowH}, font, "Add Map Sound")) {
@@ -5312,28 +5326,6 @@ void SectorEditor::DrawSectorsPanel(
             break;
         }
     }
-}
-
-void SectorEditor::DrawAddMapTextureModal(
-        engine::UIContext& ui,
-        const engine::UIConfig& config,
-        engine::Input& input,
-        engine::AssetManager& assets,
-        engine::FontHandle font)
-{
-    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    const SectorEditorAddTextureModalCallbacks callbacks{
-            [this, &assets]() { CloseAddMapTextureModal(assets); },
-            [this, &assets]() { return AddSelectedMapTexture(assets); },
-            [&textureCatalog, this](int pathIndex) {
-                textureCatalog.SelectAddMapTexturePath(state.addMapTexture, pathIndex);
-            },
-            [this, &assets]() { game::RefreshAddMapTexturePreview(state.addMapTexture, assets); },
-            [&textureCatalog, this](std::string& error) {
-                return textureCatalog.ValidateAddMapTextureId(state.addMapTexture, error);
-            }
-    };
-    game::DrawAddMapTextureModal(ui, config, input, assets, font, state.addMapTexture, callbacks);
 }
 
 void SectorEditor::DrawAddMapSoundModal(
@@ -5789,6 +5781,28 @@ void SectorEditor::DrawWeaponEditor(
     }
 }
 
+void SectorEditor::DrawMaterialRegistryEditor(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    SectorEditorMaterialRegistryEditorService editor =
+            BuildMaterialRegistryEditorService();
+    const SectorEditorMaterialRegistryEditorResult result =
+            game::DrawSectorEditorMaterialRegistryEditor(
+                    ui, config, input, assets, font, smallFont, editor);
+    if (result == SectorEditorMaterialRegistryEditorResult::Saved) {
+        SectorEditorTextureCatalogService catalog = MakeTextureCatalogService();
+        catalog.RefreshTextureHandles(assets);
+        catalog.RefreshDefaultTextureIds();
+        RefreshResolvedMaterials();
+        state.lightmapSourceHashRevision = 0;
+    }
+}
+
 void SectorEditor::DrawSaveLevelModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -6097,9 +6111,6 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     if (!engine::IsNull(textureCatalogState.editorTextureScope)) {
         assets.UnloadScope(textureCatalogState.editorTextureScope);
     }
-    if (!engine::IsNull(state.addMapTexture.previewScope)) {
-        assets.UnloadScope(state.addMapTexture.previewScope);
-    }
     if (!engine::IsNull(runtimeObjectEditingState.spritePicker.previewScope)) {
         assets.UnloadScope(runtimeObjectEditingState.spritePicker.previewScope);
     }
@@ -6211,6 +6222,7 @@ bool SectorEditor::LoadLevel(
                 MakeLiveDerivationAccess(documentState.derivation),
                 topologyMap);
     }
+    RefreshResolvedMaterials();
     std::string fingerprintError;
     if (!RefreshSectorStaticModelGeometryFingerprints(
                 topologyMap,
@@ -6437,6 +6449,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
         return false;
     }
 
+    RefreshResolvedMaterials();
     std::string fingerprintError;
     if (!RefreshSectorStaticModelGeometryFingerprints(
                 TopologyMap(),
@@ -7027,7 +7040,7 @@ SectorEditorTextureCatalogService SectorEditor::MakeTextureCatalogService()
 {
     return SectorEditorTextureCatalogService{
             SectorEditorTextureCatalogServiceContext{
-                    TopologyMap(),
+                    materialRegistry,
                     textureCatalogState,
                     state.defaultFloorTextureId,
                     state.defaultCeilingTextureId,
@@ -7057,6 +7070,20 @@ SectorEditorWeaponEditorService SectorEditor::BuildWeaponEditorService()
             applicationSettingsPath};
 }
 
+SectorEditorMaterialRegistryEditorService SectorEditor::BuildMaterialRegistryEditorService()
+{
+    return SectorEditorMaterialRegistryEditorService{
+            materialRegistryEditorState,
+            materialRegistry,
+            AuthoringGraph(),
+            TopologyMap(),
+            MakeLiveDerivationAccess(documentState.derivation),
+            Lifecycle(),
+            statusText,
+            std::filesystem::path(ASSETS_PATH) / "materials" / "materials.json",
+            std::filesystem::path(ASSETS_PATH) / "levels"};
+}
+
 void SectorEditor::OpenWeaponEditor(bool fromPreview3D)
 {
     const FpsWeaponDefinition* slotOneWeapon =
@@ -7078,47 +7105,10 @@ void SectorEditor::OpenWeaponEditor(bool fromPreview3D)
     }
 }
 
-void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)
-{
-    CloseAddMapTextureModal(assets);
-    state.addMapTexture.open = true;
-    game::RefreshAddMapTextureScan(state.addMapTexture);
-    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    textureCatalog.SelectAddMapTexturePath(
-            state.addMapTexture,
-            state.addMapTexture.selectedPathIndex);
-    statusText = "Add topology texture";
-}
-
-void SectorEditor::CloseAddMapTextureModal(engine::AssetManager& assets)
-{
-    if (!engine::IsNull(state.addMapTexture.previewScope)) {
-        assets.UnloadScope(state.addMapTexture.previewScope);
-    }
-    state.addMapTexture = AddMapTextureState{};
-}
-
-bool SectorEditor::AddSelectedMapTexture(engine::AssetManager& assets)
-{
-    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    const SectorEditorAddTextureResult result =
-            textureCatalog.RegisterSelectedMapTexture(state.addMapTexture);
-    if (!result.success) {
-        return false;
-    }
-
-    textureCatalog.RefreshTextureHandles(assets);
-    Lifecycle().hasUnsavedChanges = true;
-    Lifecycle().topologyDocumentDirty = true;
-    statusText = TextFormat("%s texture %s", result.replacing ? "Updated" : "Added", result.textureId.c_str());
-    CloseAddMapTextureModal(assets);
-    return true;
-}
-
 void SectorEditor::ApplyAssetPrune(engine::AssetManager& assets)
 {
     const SectorEditorAssetPruneOptions options{
-            state.assetPruneModal.pruneTextures,
+            false,
             state.assetPruneModal.pruneSounds};
     const SectorEditorAssetPruneResult result = PruneUnusedSectorEditorAssets(
             AuthoringGraph(),
@@ -7947,6 +7937,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
     const SectorSurfaceRef selected = previewState.selection.selectedSurface3D;
     const TopologySurfaceEditTarget selectedTarget = previewState.selection.selectedTopologySurface3D;
 
+    RefreshResolvedMaterials();
     std::string fingerprintError;
     if (!RefreshSectorStaticModelGeometryFingerprints(
                 TopologyMap(),
@@ -8106,7 +8097,7 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
         }
 
         const int targetObjectId = picker.runtimeObjectId;
-        const std::string selectedTexture = selected.textureId;
+        const std::string selectedTexture = selected.materialId;
         CloseSectorEditorTexturePicker(picker);
 
         if (selectionState.selectedRuntimeObjectId != targetObjectId) {
@@ -8117,10 +8108,10 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
         const bool changed = MutateSelectedRuntimeObject(
                 "Updated door texture",
                 [&selectedTexture](SectorPlacedRuntimeObject& object) {
-                    if (object.kind != "door" || object.door.textureId == selectedTexture) {
+                    if (object.kind != "door" || object.door.materialId == selectedTexture) {
                         return false;
                     }
-                    object.door.textureId = selectedTexture;
+                    object.door.materialId = selectedTexture;
                     return true;
                 });
         statusText = changed

@@ -17,7 +17,7 @@ namespace game {
 struct SectorEditorAuthoringMaterialTarget {
     TopologySurfaceEditTarget target;
     TopologyMaterialLayer layer = TopologyMaterialLayer::Base;
-    std::string* textureId = nullptr;
+    std::string* materialId = nullptr;
     SectorTopologyUvSettings* uv = nullptr;
     SectorTopologyDecalLayer* decal = nullptr;
     SectorTopologyWallPartSettings* wallPart = nullptr;

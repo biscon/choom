@@ -7,28 +7,31 @@
 
 namespace game {
 
-enum class SectorTextureFilter {
+enum class SectorMaterialFilter {
     Point,
     Bilinear,
     Trilinear,
     Anisotropic8x
 };
 
-struct SectorTextureDefinition {
+struct SectorMaterialDefinition {
     std::string id;
     std::string path;
-    SectorTextureFilter filter = SectorTextureFilter::Anisotropic8x;
+    SectorMaterialFilter filter = SectorMaterialFilter::Anisotropic8x;
+    float metallicFactor = 0.0f;
+    float roughnessFactor = 0.8f;
+    float normalStrength = 1.0f;
 };
 
 struct SectorTextureBinding {
-    std::string textureId;
+    std::string materialId;
     engine::TextureHandle handle = engine::NullTextureHandle();
 };
 
-engine::TextureLoadFlags SectorTextureLoadFlags(SectorTextureFilter filter);
-const char* SectorTextureFilterName(SectorTextureFilter filter);
-std::string SectorTextureNormalMapPath(const std::string& baseTexturePath);
-inline bool IsSectorTextureNormalMapPath(const std::string& texturePath)
+engine::TextureLoadFlags SectorMaterialTextureLoadFlags(SectorMaterialFilter filter);
+const char* SectorMaterialFilterName(SectorMaterialFilter filter);
+std::string SectorMaterialNormalMapPath(const std::string& baseTexturePath);
+inline bool IsSectorMaterialNormalMapPath(const std::string& texturePath)
 {
     const std::size_t separator = texturePath.find_last_of("/\\");
     const std::size_t fileNameBegin = separator == std::string::npos

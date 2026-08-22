@@ -4,37 +4,37 @@
 
 namespace game {
 
-engine::TextureLoadFlags SectorTextureLoadFlags(SectorTextureFilter filter)
+engine::TextureLoadFlags SectorMaterialTextureLoadFlags(SectorMaterialFilter filter)
 {
     switch (filter) {
-        case SectorTextureFilter::Point:
+        case SectorMaterialFilter::Point:
             return engine::TextureLoad_PointFilter;
-        case SectorTextureFilter::Bilinear:
+        case SectorMaterialFilter::Bilinear:
             return engine::TextureLoad_BilinearFilter;
-        case SectorTextureFilter::Trilinear:
+        case SectorMaterialFilter::Trilinear:
             return engine::TextureLoad_TrilinearFilter;
-        case SectorTextureFilter::Anisotropic8x:
+        case SectorMaterialFilter::Anisotropic8x:
             return engine::TextureLoad_Anisotropic8x;
     }
     return engine::TextureLoad_Anisotropic8x;
 }
 
-const char* SectorTextureFilterName(SectorTextureFilter filter)
+const char* SectorMaterialFilterName(SectorMaterialFilter filter)
 {
     switch (filter) {
-        case SectorTextureFilter::Point:
+        case SectorMaterialFilter::Point:
             return "point";
-        case SectorTextureFilter::Bilinear:
+        case SectorMaterialFilter::Bilinear:
             return "bilinear";
-        case SectorTextureFilter::Trilinear:
+        case SectorMaterialFilter::Trilinear:
             return "trilinear";
-        case SectorTextureFilter::Anisotropic8x:
+        case SectorMaterialFilter::Anisotropic8x:
             return "aniso 8x";
     }
     return "aniso 8x";
 }
 
-std::string SectorTextureNormalMapPath(const std::string& baseTexturePath)
+std::string SectorMaterialNormalMapPath(const std::string& baseTexturePath)
 {
     if (baseTexturePath.empty()) {
         return {};

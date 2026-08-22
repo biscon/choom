@@ -106,7 +106,7 @@ inline float MeasureSectorEditorAuthoringFaceInspectorContentHeight(
             const SectorTopologyDecalLayer& decal,
             bool includeTintAndFit) {
         float height = SectorEditorInspectorTextureRowHeight() + gap;
-        if (decal.textureId.empty()) {
+        if (decal.materialId.empty()) {
             return height;
         }
         height += rowHeight + gap; // Opacity.

@@ -40,7 +40,7 @@ struct SectorEditorAuthoringSegmentInsertResult {
 
 void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap& source)
 {
-    target.texturesById = source.texturesById;
+    target.resolvedMaterialsById = source.resolvedMaterialsById;
     target.staticLights = source.staticLights;
     target.staticSpotLights = source.staticSpotLights;
     target.staticRectLights = source.staticRectLights;
@@ -1218,8 +1218,8 @@ void CopyTopologySectorDefaultsToFaceAnchor(
 {
     anchor.floorZ = sector.floorZ;
     anchor.ceilingZ = sector.ceilingZ;
-    anchor.floorTextureId = sector.floorTextureId;
-    anchor.ceilingTextureId = sector.ceilingTextureId;
+    anchor.floorMaterialId = sector.floorMaterialId;
+    anchor.ceilingMaterialId = sector.ceilingMaterialId;
     anchor.ceilingSky = sector.ceilingSky;
     anchor.floorUv = sector.floorUv;
     anchor.ceilingUv = sector.ceilingUv;
