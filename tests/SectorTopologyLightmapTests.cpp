@@ -992,6 +992,26 @@ game::SectorTopologyMap MakeProbeHoleSector()
     return map;
 }
 
+game::SectorTopologyMap MakeThinProbeRing()
+{
+    game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    map.vertices.insert(map.vertices.end(), {
+            {5, 16, 16},
+            {6, 1008, 16},
+            {7, 1008, 1008},
+            {8, 16, 1008}});
+    for (int i = 5; i <= 8; ++i) {
+        const int end = i == 8 ? 5 : i + 1;
+        const int frontSideId = i;
+        const int backSideId = i + 4;
+        map.lineDefs.push_back({i, i, end, frontSideId, backSideId});
+        AddSide(map, frontSideId, i, game::SectorTopologySideKind::Front, 20);
+        AddSide(map, backSideId, i, game::SectorTopologySideKind::Back, 10);
+    }
+    map.sectors.push_back(Sector(20, 8.0f, 24.0f));
+    return map;
+}
+
 int CountWallChartsForLine(const game::SectorTopologyMap& map, int lineDefId)
 {
     game::SectorGeneratedGeometry geometry;
@@ -1881,8 +1901,8 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 17,
-          "lightmap bake version is bumped for directional companion bakes");
+    Check(game::kSectorLightmapBakeVersion == 18,
+          "lightmap bake version is bumped for horizontal object probe clearance");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);
@@ -3683,6 +3703,42 @@ void TestObjectLightProbePlacementRejectsHoles()
           "object light probe placement still places probes in the sector inside the hole");
 }
 
+void TestObjectLightProbePlacementSkipsThinSectors()
+{
+    std::vector<game::SectorBakedObjectLightProbePlacementDiagnostic> diagnostics;
+    const std::vector<game::SectorBakedObjectLightProbe> narrowRectangle =
+            BuildObjectProbePlacementsForTest(
+                    MakeProbeRectangle(16, 1024), &diagnostics);
+    Check(CountProbesForSector(narrowRectangle, 10) == 0,
+          "sector narrower than twice the surface clearance receives no object probes");
+
+    bool sawNarrowRectangleSkip = false;
+    for (const game::SectorBakedObjectLightProbePlacementDiagnostic& diagnostic : diagnostics) {
+        sawNarrowRectangleSkip = sawNarrowRectangleSkip
+                || (diagnostic.sectorId == 10
+                    && diagnostic.message.find("skipped") != std::string::npos
+                    && diagnostic.message.find("surface clearance") != std::string::npos);
+    }
+    Check(sawNarrowRectangleSkip,
+          "thin rectangle object probe skip records a sector-specific clearance diagnostic");
+
+    const std::vector<game::SectorBakedObjectLightProbe> thinRing =
+            BuildObjectProbePlacementsForTest(MakeThinProbeRing(), &diagnostics);
+    Check(CountProbesForSector(thinRing, 10) == 0,
+          "thin ring sector around a hole receives no object probes");
+    Check(CountProbesForSector(thinRing, 20) == 8,
+          "normal sector inside a skipped thin ring still receives object probes");
+
+    bool sawThinRingSkip = false;
+    for (const game::SectorBakedObjectLightProbePlacementDiagnostic& diagnostic : diagnostics) {
+        sawThinRingSkip = sawThinRingSkip
+                || (diagnostic.sectorId == 10
+                    && diagnostic.message.find("skipped") != std::string::npos);
+    }
+    Check(sawThinRingSkip,
+          "thin ring object probe skip records the skipped sector ID");
+}
+
 void TestObjectLightProbePlacementFallbackAndLowCeiling()
 {
     game::SectorTopologyMap small = MakeSquare();
@@ -4862,6 +4918,7 @@ int main()
     TestObjectLightProbePlacementGridCounts();
     TestObjectLightProbePlacementRejectsConcaveVoid();
     TestObjectLightProbePlacementRejectsHoles();
+    TestObjectLightProbePlacementSkipsThinSectors();
     TestObjectLightProbePlacementFallbackAndLowCeiling();
     TestObjectLightProbePlacementConfiguredSingleLayerAndValidation();
     TestObjectLightProbePointAndDirectionalLighting();

@@ -730,6 +730,68 @@ bool IsStrictlyInsideProbePolygon(
     return true;
 }
 
+double ProbePointSegmentDistanceSquared(
+        SectorTopologyCoordPoint point,
+        SectorTopologyCoordPoint a,
+        SectorTopologyCoordPoint b)
+{
+    const double segmentX = static_cast<double>(b.x) - static_cast<double>(a.x);
+    const double segmentY = static_cast<double>(b.y) - static_cast<double>(a.y);
+    const double pointX = static_cast<double>(point.x) - static_cast<double>(a.x);
+    const double pointY = static_cast<double>(point.y) - static_cast<double>(a.y);
+    const double lengthSquared = segmentX * segmentX + segmentY * segmentY;
+    if (!(lengthSquared > 0.0) || !std::isfinite(lengthSquared)) {
+        return pointX * pointX + pointY * pointY;
+    }
+
+    const double t = std::clamp(
+            (pointX * segmentX + pointY * segmentY) / lengthSquared,
+            0.0,
+            1.0);
+    const double closestX = static_cast<double>(a.x) + t * segmentX;
+    const double closestY = static_cast<double>(a.y) + t * segmentY;
+    const double dx = static_cast<double>(point.x) - closestX;
+    const double dy = static_cast<double>(point.y) - closestY;
+    return dx * dx + dy * dy;
+}
+
+bool HasProbeLoopBoundaryClearance(
+        const std::vector<SectorTopologyCoordPoint>& loop,
+        SectorTopologyCoordPoint point,
+        double clearanceSquared)
+{
+    for (size_t index = 0; index < loop.size(); ++index) {
+        const SectorTopologyCoordPoint a = loop[index];
+        const SectorTopologyCoordPoint b = loop[(index + 1) % loop.size()];
+        if (ProbePointSegmentDistanceSquared(point, a, b) < clearanceSquared) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsValidProbePolygonPoint(
+        const std::vector<SectorTopologyCoordPoint>& outer,
+        const std::vector<std::vector<SectorTopologyCoordPoint>>& holes,
+        SectorTopologyCoordPoint point,
+        double boundaryClearanceCoord)
+{
+    if (!IsStrictlyInsideProbePolygon(outer, holes, point)) {
+        return false;
+    }
+
+    const double clearanceSquared = boundaryClearanceCoord * boundaryClearanceCoord;
+    if (!HasProbeLoopBoundaryClearance(outer, point, clearanceSquared)) {
+        return false;
+    }
+    for (const std::vector<SectorTopologyCoordPoint>& hole : holes) {
+        if (!HasProbeLoopBoundaryClearance(hole, point, clearanceSquared)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 SectorTopologyCoordPoint ProbePolygonAabbCenter(
         SectorCoord minX,
         SectorCoord minY,
@@ -750,10 +812,12 @@ bool FindRepresentativeProbePoint(
         SectorCoord minY,
         SectorCoord maxX,
         SectorCoord maxY,
+        double boundaryClearanceCoord,
         SectorTopologyCoordPoint& outPoint)
 {
     const SectorTopologyCoordPoint center = ProbePolygonAabbCenter(minX, minY, maxX, maxY);
-    if (IsStrictlyInsideProbePolygon(outer, holes, center)) {
+    if (IsValidProbePolygonPoint(
+                outer, holes, center, boundaryClearanceCoord)) {
         outPoint = center;
         return true;
     }
@@ -768,7 +832,8 @@ bool FindRepresentativeProbePoint(
         const SectorTopologyCoordPoint centroid{
                 static_cast<SectorCoord>(sumX / static_cast<int64_t>(outer.size())),
                 static_cast<SectorCoord>(sumY / static_cast<int64_t>(outer.size()))};
-        if (IsStrictlyInsideProbePolygon(outer, holes, centroid)) {
+        if (IsValidProbePolygonPoint(
+                    outer, holes, centroid, boundaryClearanceCoord)) {
             outPoint = centroid;
             return true;
         }
@@ -786,7 +851,8 @@ bool FindRepresentativeProbePoint(
             const SectorTopologyCoordPoint candidate{
                     static_cast<SectorCoord>(x),
                     static_cast<SectorCoord>(y)};
-            if (IsStrictlyInsideProbePolygon(outer, holes, candidate)) {
+            if (IsValidProbePolygonPoint(
+                        outer, holes, candidate, boundaryClearanceCoord)) {
                 outPoint = candidate;
                 return true;
             }
@@ -3749,6 +3815,10 @@ bool BuildSectorBakedObjectLightProbePlacements(
         outError = "Object probe placement failed: invalid probe spacing";
         return false;
     }
+    const double boundaryClearanceCoord =
+            static_cast<double>(SectorWorldToAuthoringDistance(
+                    kObjectProbeSurfaceClearanceWorld))
+            * static_cast<double>(SectorCoordSubdivisions);
 
     const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(map);
     for (const SectorTopologySector& sector : map.sectors) {
@@ -3805,7 +3875,8 @@ bool BuildSectorBakedObjectLightProbePlacements(
                 const SectorTopologyCoordPoint candidate{
                         static_cast<SectorCoord>(std::llround(x)),
                         static_cast<SectorCoord>(std::llround(y))};
-                if (!IsStrictlyInsideProbePolygon(outer, holes, candidate)) {
+                if (!IsValidProbePolygonPoint(
+                            outer, holes, candidate, boundaryClearanceCoord)) {
                     continue;
                 }
 
@@ -3819,10 +3890,21 @@ bool BuildSectorBakedObjectLightProbePlacements(
 
         if (outProbes.size() == beforeCount) {
             SectorTopologyCoordPoint representative;
-            if (!FindRepresentativeProbePoint(outer, holes, minX, minY, maxX, maxY, representative)) {
-                outError = "Object probe placement failed: could not place a probe in sector "
-                        + std::to_string(sector.id);
-                return false;
+            if (!FindRepresentativeProbePoint(
+                        outer,
+                        holes,
+                        minX,
+                        minY,
+                        maxX,
+                        maxY,
+                        boundaryClearanceCoord,
+                        representative)) {
+                if (outDiagnostics != nullptr) {
+                    outDiagnostics->push_back(SectorBakedObjectLightProbePlacementDiagnostic{
+                            sector.id,
+                            "Object probe placement skipped the sector because no candidate satisfied the required surface clearance"});
+                }
+                continue;
             }
 
             AppendObjectProbeLayers(

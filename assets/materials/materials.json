@@ -1,11 +1,18 @@
 {
   "formatVersion": 1,
   "materials": {
+    "asphalt_floor": {
+      "albedoTexturePath": "assets/images/hires/asphalt_floor.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0
+    },
     "beige_wall_001": {
       "albedoTexturePath": "assets/images/hires/beige_wall_001.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.8500000238418579,
+      "roughnessFactor": 0.75,
       "normalStrength": 1.0
     },
     "biker_chick": {
@@ -33,7 +40,21 @@
       "albedoTexturePath": "assets/images/floors/concrete_floor1.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.8500000238418579,
+      "roughnessFactor": 0.75,
+      "normalStrength": 1.0
+    },
+    "concrete_wall_007": {
+      "albedoTexturePath": "assets/images/hires/concrete_wall_007.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0
+    },
+    "concrete_wall_009": {
+      "albedoTexturePath": "assets/images/hires/concrete_wall_009.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
       "normalStrength": 1.0
     },
     "dark_wooden_planks": {
@@ -110,7 +131,7 @@
       "albedoTexturePath": "assets/images/doors/hydraulic_blast_door_512.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.8500000238418579,
-      "roughnessFactor": 0.3499999940395355,
+      "roughnessFactor": 0.25,
       "normalStrength": 1.0
     },
     "industrial_wall_01": {
@@ -131,7 +152,7 @@
       "albedoTexturePath": "assets/images/floors/large_industrial_tiles_512.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.75,
+      "roughnessFactor": 0.6499999761581421,
       "normalStrength": 0.75
     },
     "metal_bars_01": {
@@ -146,6 +167,13 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.8500000238418579,
       "roughnessFactor": 0.550000011920929,
+      "normalStrength": 1.0
+    },
+    "old_wooden_floor_02": {
+      "albedoTexturePath": "assets/images/hires/old_wooden_floor_02.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
       "normalStrength": 1.0
     },
     "old_wooden_floor_03": {
@@ -237,6 +265,20 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
       "roughnessFactor": 0.75,
+      "normalStrength": 1.0
+    },
+    "wood_table_worn": {
+      "albedoTexturePath": "assets/images/hires/wood_table_worn.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.800000011920929,
+      "normalStrength": 1.0
+    },
+    "wooden_panels": {
+      "albedoTexturePath": "assets/images/hires/wooden_panels.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.30000001192092896,
       "normalStrength": 1.0
     },
     "worn_dark_red_carpet_512": {
