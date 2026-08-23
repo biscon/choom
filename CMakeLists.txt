@@ -345,6 +345,7 @@ if(BUILD_TESTING)
             sources/sector_editor/SectorEditorHelpers.cpp
             sources/sector_editor/SectorEditorMaterialActions.cpp
             sources/sector_editor/SectorEditorTextureActions.cpp
+            sources/sector_editor/materials/SectorEditorMaterialRegistryEditorService.cpp
             sources/sector_editor/selection/SectorEditorManipulationService.cpp
             sources/sector_editor/selection/SectorEditorSelectionService.cpp
             sources/sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.cpp
@@ -377,6 +378,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorCollisionWorld.cpp
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
+            sources/sector_demo/SectorMaterialRefactor.cpp
             sources/sector_demo/SectorMaterialRegistry.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorAuthoringGraph.cpp

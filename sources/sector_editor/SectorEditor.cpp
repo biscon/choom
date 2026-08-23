@@ -8092,6 +8092,7 @@ SectorEditorMaterialEditingService SectorEditor::BuildMaterialEditingService()
     return SectorEditorMaterialEditingService{
             SectorEditorMaterialEditingServiceContext{
                     Lifecycle(),
+                    materialRegistry,
                     TopologyMap(),
                     AuthoringGraph(),
                     MakeLiveDerivationAccess(documentState.derivation),
@@ -8306,6 +8307,7 @@ std::string SectorEditor::CurrentTextureForPickerTarget() const
         SectorEditorMaterialEditingServiceContext serviceContext{
                 MakeSectorEditorDocumentLifecycleAccess(
                         const_cast<SectorEditorDocumentLifecycleState&>(documentState.lifecycle)),
+                materialRegistry,
                 const_cast<SectorTopologyMap&>(TopologyMap()),
                 const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
                 MakeLiveDerivationAccess(const_cast<SectorEditorDerivationState&>(documentState.derivation)),

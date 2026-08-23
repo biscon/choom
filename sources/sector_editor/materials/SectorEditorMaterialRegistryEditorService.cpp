@@ -5,9 +5,11 @@
 #include "sector_demo/SectorMaterialRefactor.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <functional>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -81,6 +83,21 @@ std::string UniqueMaterialId(
     return result;
 }
 
+bool ContainsCaseInsensitive(std::string_view text, std::string_view filter)
+{
+    if (filter.empty()) return true;
+    return std::search(
+                   text.begin(),
+                   text.end(),
+                   filter.begin(),
+                   filter.end(),
+                   [](char left, char right) {
+                       return std::tolower(static_cast<unsigned char>(left))
+                               == std::tolower(static_cast<unsigned char>(right));
+                   })
+            != text.end();
+}
+
 } // namespace
 
 SectorEditorMaterialRegistryEditorService::SectorEditorMaterialRegistryEditorService(
@@ -115,8 +132,13 @@ void SectorEditorMaterialRegistryEditorService::Open()
 
 void SectorEditorMaterialRegistryEditorService::Close(engine::AssetManager* assets)
 {
-    if (assets != nullptr && !engine::IsNull(state_.previewScope)) {
-        assets->UnloadScope(state_.previewScope);
+    if (assets != nullptr) {
+        if (!engine::IsNull(state_.previewScope)) {
+            assets->UnloadScope(state_.previewScope);
+        }
+        if (!engine::IsNull(state_.albedoPicker.previewScope)) {
+            assets->UnloadScope(state_.albedoPicker.previewScope);
+        }
     }
     state_ = SectorEditorMaterialRegistryEditorState{};
 }
@@ -183,18 +205,18 @@ void SectorEditorMaterialRegistryEditorService::ApplyIdBuffer()
     RebuildListLabels();
 }
 
-void SectorEditorMaterialRegistryEditorService::ApplyPathBuffer()
+bool SectorEditorMaterialRegistryEditorService::ApplyAlbedoPath(
+        const std::string& path)
 {
     SectorEditorMaterialRegistryDraft* draft = SelectedDraft();
-    if (draft == nullptr) return;
+    if (draft == nullptr) return false;
     const std::string previous = draft->definition.path;
-    draft->definition.path = state_.pathBuffer;
+    draft->definition.path = path;
     std::string error;
     if (!ValidateSectorMaterialDefinition(draft->definition, error)) {
         draft->definition.path = previous;
         state_.validationMessage = error;
-        SyncBuffers();
-        return;
+        return false;
     }
     if (draft->originalId.empty() && !draft->idWasEdited) {
         const std::string generatedId = GeneratedTextureIdBase(draft->definition.path);
@@ -207,6 +229,167 @@ void SectorEditorMaterialRegistryEditorService::ApplyPathBuffer()
                 draft->definition.id.c_str());
     }
     state_.validationMessage.clear();
+    state_.previewPath.clear();
+    state_.previewTexture = engine::NullTextureHandle();
+    return true;
+}
+
+void SectorEditorMaterialRegistryEditorService::OpenAlbedoPicker()
+{
+    SectorEditorMaterialAlbedoPickerState& picker = state_.albedoPicker;
+    picker = SectorEditorMaterialAlbedoPickerState{};
+    picker.paths = ScanAssetImagePngs(picker.scanMessage);
+    picker.open = true;
+    const SectorEditorMaterialRegistryDraft* draft = SelectedDraft();
+    RebuildAlbedoPickerList(
+            draft == nullptr ? std::string{} : draft->definition.path);
+}
+
+void SectorEditorMaterialRegistryEditorService::OpenAlbedoPickerFromRoot(
+        const std::filesystem::path& assetsRoot)
+{
+    SectorEditorMaterialAlbedoPickerState& picker = state_.albedoPicker;
+    picker = SectorEditorMaterialAlbedoPickerState{};
+    picker.paths = ScanAssetImagePngs(assetsRoot, picker.scanMessage);
+    picker.open = true;
+    const SectorEditorMaterialRegistryDraft* draft = SelectedDraft();
+    RebuildAlbedoPickerList(
+            draft == nullptr ? std::string{} : draft->definition.path);
+}
+
+void SectorEditorMaterialRegistryEditorService::ApplyAlbedoPickerFilter()
+{
+    const std::string preferredPath = SelectedAlbedoPickerPath();
+    state_.albedoPicker.scroll = engine::UIScrollState{};
+    RebuildAlbedoPickerList(preferredPath);
+}
+
+bool SectorEditorMaterialRegistryEditorService::SelectAlbedoPickerIndex(int index)
+{
+    SectorEditorMaterialAlbedoPickerState& picker = state_.albedoPicker;
+    if (index < 0
+            || index >= static_cast<int>(picker.filteredPathIndices.size())) {
+        picker.selectedFilteredIndex = -1;
+        return false;
+    }
+    picker.selectedFilteredIndex = index;
+    picker.selectionMessage.clear();
+    return true;
+}
+
+bool SectorEditorMaterialRegistryEditorService::HasAlbedoPickerSelection() const
+{
+    const SectorEditorMaterialAlbedoPickerState& picker = state_.albedoPicker;
+    if (picker.selectedFilteredIndex < 0
+            || picker.selectedFilteredIndex
+                    >= static_cast<int>(picker.filteredPathIndices.size())) {
+        return false;
+    }
+    const size_t pathIndex = picker.filteredPathIndices[
+            static_cast<size_t>(picker.selectedFilteredIndex)];
+    return pathIndex < picker.paths.size();
+}
+
+std::string SectorEditorMaterialRegistryEditorService::SelectedAlbedoPickerPath() const
+{
+    if (!HasAlbedoPickerSelection()) return {};
+    const SectorEditorMaterialAlbedoPickerState& picker = state_.albedoPicker;
+    const size_t pathIndex = picker.filteredPathIndices[
+            static_cast<size_t>(picker.selectedFilteredIndex)];
+    return picker.paths[pathIndex];
+}
+
+bool SectorEditorMaterialRegistryEditorService::ConfirmAlbedoPicker(
+        engine::AssetManager& assets)
+{
+    const std::string path = SelectedAlbedoPickerPath();
+    if (path.empty()) {
+        state_.albedoPicker.selectionMessage = "Select an albedo PNG";
+        return false;
+    }
+    if (!ApplyAlbedoPath(path)) return false;
+    CancelAlbedoPicker(&assets);
+    return true;
+}
+
+void SectorEditorMaterialRegistryEditorService::CancelAlbedoPicker(
+        engine::AssetManager* assets)
+{
+    if (assets != nullptr
+            && !engine::IsNull(state_.albedoPicker.previewScope)) {
+        assets->UnloadScope(state_.albedoPicker.previewScope);
+    }
+    state_.albedoPicker = SectorEditorMaterialAlbedoPickerState{};
+}
+
+void SectorEditorMaterialRegistryEditorService::EnsureAlbedoPickerPreview(
+        engine::AssetManager& assets)
+{
+    SectorEditorMaterialAlbedoPickerState& picker = state_.albedoPicker;
+    const std::string path = SelectedAlbedoPickerPath();
+    if (picker.previewPath == path
+            && (path.empty() || !engine::IsNull(picker.previewTexture))) {
+        return;
+    }
+    if (!engine::IsNull(picker.previewScope)) {
+        assets.UnloadScope(picker.previewScope);
+    }
+    picker.previewScope = engine::NullAssetScopeHandle();
+    picker.previewTexture = engine::NullTextureHandle();
+    picker.previewPath = path;
+    if (path.empty()) return;
+
+    const SectorEditorMaterialRegistryDraft* draft = SelectedDraft();
+    const SectorMaterialFilter filter = draft == nullptr
+            ? SectorMaterialFilter::Anisotropic8x
+            : draft->definition.filter;
+    picker.previewScope = assets.CreateScope(
+            "sector_editor_material_albedo_picker_preview");
+    picker.previewTexture = assets.RequestTexture(
+            picker.previewScope,
+            (path + "|material-albedo-picker").c_str(),
+            ResolveEditorAssetPath(path).c_str(),
+            engine::TextureColorUsage::DisplaySrgb,
+            SectorMaterialTextureLoadFlags(filter));
+}
+
+void SectorEditorMaterialRegistryEditorService::RebuildAlbedoPickerList(
+        const std::string& preferredPath)
+{
+    SectorEditorMaterialAlbedoPickerState& picker = state_.albedoPicker;
+    picker.filteredPathIndices.clear();
+    picker.listLabelStorage.clear();
+    picker.listLabels.clear();
+
+    const std::string_view filter = picker.filterBuffer;
+    picker.filteredPathIndices.reserve(picker.paths.size());
+    picker.listLabelStorage.reserve(picker.paths.size());
+    for (size_t index = 0; index < picker.paths.size(); ++index) {
+        const std::string label = EditorAssetPathDisplayLabel(
+                picker.paths[index], "assets/images/");
+        if (!ContainsCaseInsensitive(label, filter)) continue;
+        picker.filteredPathIndices.push_back(index);
+        picker.listLabelStorage.push_back(label);
+    }
+    picker.listLabels.reserve(picker.listLabelStorage.size());
+    for (const std::string& label : picker.listLabelStorage) {
+        picker.listLabels.push_back(label.c_str());
+    }
+
+    picker.selectedFilteredIndex = picker.filteredPathIndices.empty() ? -1 : 0;
+    if (!preferredPath.empty()) {
+        for (size_t index = 0; index < picker.filteredPathIndices.size(); ++index) {
+            if (picker.paths[picker.filteredPathIndices[index]] == preferredPath) {
+                picker.selectedFilteredIndex = static_cast<int>(index);
+                break;
+            }
+        }
+    }
+    picker.scrollSelectionIntoView = picker.selectedFilteredIndex > 0;
+    picker.selectionMessage = picker.filteredPathIndices.empty()
+            && !picker.paths.empty()
+            ? "No PNG files match the filter"
+            : std::string{};
 }
 
 bool SectorEditorMaterialRegistryEditorService::CurrentDocumentReferences(std::string_view id) const
@@ -282,7 +465,6 @@ bool SectorEditorMaterialRegistryEditorService::ValidateDrafts(std::string& erro
 
 bool SectorEditorMaterialRegistryEditorService::SaveAndClose(engine::AssetManager& assets)
 {
-    ApplyPathBuffer();
     ApplyIdBuffer();
     std::string error;
     if (!state_.validationMessage.empty() || !ValidateDrafts(error)) {
@@ -356,9 +538,7 @@ void SectorEditorMaterialRegistryEditorService::SyncBuffers()
 {
     const SectorEditorMaterialRegistryDraft* draft = SelectedDraft();
     const std::string id = draft == nullptr ? std::string{} : draft->definition.id;
-    const std::string path = draft == nullptr ? std::string{} : draft->definition.path;
     std::snprintf(state_.idBuffer, sizeof(state_.idBuffer), "%s", id.c_str());
-    std::snprintf(state_.pathBuffer, sizeof(state_.pathBuffer), "%s", path.c_str());
     state_.metallicInput = engine::UIFloatInputState{};
     state_.roughnessInput = engine::UIFloatInputState{};
     state_.normalStrengthInput = engine::UIFloatInputState{};

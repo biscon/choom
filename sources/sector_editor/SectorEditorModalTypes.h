@@ -53,8 +53,11 @@ struct TexturePickerState {
     int runtimeObjectId = -1;
     int selectedTextureIndex = -1;
     engine::UIScrollState scroll;
+    std::vector<std::string> allMaterialIds;
     std::vector<std::string> materialIds;
     std::vector<const char*> optionLabels;
+    char filterBuffer[256] = {};
+    std::string filterMessage;
 };
 
 struct FootstepPickerState {

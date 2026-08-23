@@ -39,8 +39,8 @@
     "dark_wooden_planks": {
       "albedoTexturePath": "assets/images/hires/dark_wooden_planks.png",
       "filter": "anisotropic8x",
-      "metallicFactor": 0.8500000238418579,
-      "roughnessFactor": 0.10000000149011612,
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.25,
       "normalStrength": 1.0
     },
     "dirty_gray_concrete_wall_512": {
@@ -96,7 +96,7 @@
       "albedoTexturePath": "assets/images/hub/hub_cobble_dirty_512.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.6499999761581421,
+      "roughnessFactor": 0.8500000238418579,
       "normalStrength": 1.0
     },
     "hub_drain_grate_256": {
@@ -148,6 +148,13 @@
       "roughnessFactor": 0.550000011920929,
       "normalStrength": 1.0
     },
+    "old_wooden_floor_03": {
+      "albedoTexturePath": "assets/images/hires/old_wooden_floor_03.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.25,
+      "normalStrength": 1.0
+    },
     "painted_plaster_wall": {
       "albedoTexturePath": "assets/images/hires/painted_plaster_wall.png",
       "filter": "anisotropic8x",
@@ -179,7 +186,7 @@
     "step_01_512": {
       "albedoTexturePath": "assets/images/step_01_512.png",
       "filter": "anisotropic8x",
-      "metallicFactor": 1.0,
+      "metallicFactor": 0.5,
       "roughnessFactor": 0.550000011920929,
       "normalStrength": 1.0
     },
@@ -242,15 +249,15 @@
     "worn_gray_metal_step_512": {
       "albedoTexturePath": "assets/images/worn_gray_metal_step_512.png",
       "filter": "anisotropic8x",
-      "metallicFactor": 0.8500000238418579,
+      "metallicFactor": 0.25,
       "roughnessFactor": 0.550000011920929,
       "normalStrength": 1.0
     },
     "worn_office_oak_floor_512": {
       "albedoTexturePath": "assets/images/floors/worn_office_oak_floor_512.png",
       "filter": "anisotropic8x",
-      "metallicFactor": 0.44999998807907104,
-      "roughnessFactor": 0.30000001192092896,
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.4000000059604645,
       "normalStrength": 1.0
     },
     "worn_white_ceiling_512": {

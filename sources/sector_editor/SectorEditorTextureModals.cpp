@@ -5,6 +5,7 @@
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
+#include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 #include "sector_demo/SectorTextureTypes.h"
 
 #include <algorithm>
@@ -47,12 +48,14 @@ void DrawTexturePickerModal(
     input.ForEachEvent(
             engine::InputEventType::KeyPressed,
             true,
-            [&callbacks](engine::InputEvent& event) {
+            [&callbacks, &picker](engine::InputEvent& event) {
                 if (event.key.key == KEY_ESCAPE) {
                     callbacks.close();
                     engine::ConsumeEvent(event);
                 } else if (event.key.key == KEY_ENTER || event.key.key == KEY_KP_ENTER) {
-                    callbacks.applySelection();
+                    if (CurrentSectorEditorTexturePickerSelection(picker).valid) {
+                        callbacks.applySelection();
+                    }
                     engine::ConsumeEvent(event);
                 }
             }
@@ -81,7 +84,40 @@ void DrawTexturePickerModal(
             TextFormat("Pick %s", TopologyPickerTargetLabel(picker)));
     y += 50.0f;
 
-    const Rectangle listBounds{modal.x + 22.0f, y, 555.0f, 530.0f};
+    const float leftX = modal.x + 22.0f;
+    const float leftWidth = 555.0f;
+    const Rectangle filterBounds{leftX, y, leftWidth, 42.0f};
+    const float filterLabelWidth = 82.0f;
+    engine::Text(
+            config,
+            assets,
+            Rectangle{filterBounds.x, filterBounds.y, filterLabelWidth, filterBounds.height},
+            smallFont,
+            "Filter",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
+    const engine::UITextInputResult filterResult = engine::TextInput(
+            ui,
+            config,
+            input,
+            assets,
+            "sector_editor_texture_picker_filter",
+            Rectangle{
+                    filterBounds.x + filterLabelWidth,
+                    filterBounds.y,
+                    filterBounds.width - filterLabelWidth,
+                    filterBounds.height},
+            smallFont,
+            picker.filterBuffer,
+            sizeof(picker.filterBuffer),
+            0,
+            sizeof(picker.filterBuffer) - 1);
+    if (filterResult.changed) {
+        ApplySectorEditorTexturePickerFilter(picker);
+    }
+    y += 54.0f;
+
+    const Rectangle listBounds{leftX, y, leftWidth, 476.0f};
     const float listContentW = ScrollAreaContentWidthForVerticalScrollbar(listBounds.width, config);
     const Vector2 contentSize{
             listContentW,
@@ -111,6 +147,17 @@ void DrawTexturePickerModal(
         );
     }
     engine::EndScrollArea(ui, config, input, scroll, picker.scroll);
+    if (picker.optionLabels.empty()) {
+        engine::Text(
+                config,
+                assets,
+                listBounds,
+                smallFont,
+                picker.filterMessage.c_str(),
+                engine::UITextJustify::Center,
+                config.mutedTextColor,
+                true);
+    }
 
     std::string previewTextureId;
     if (picker.selectedTextureIndex >= 0 && picker.selectedTextureIndex < static_cast<int>(picker.materialIds.size())) {
@@ -160,7 +207,9 @@ void DrawTexturePickerModal(
     const float buttonY = modal.y + modal.height - 64.0f;
     const float buttonW = 150.0f;
     if (engine::Button(ui, config, input, assets, "sector_editor_texture_picker_select", Rectangle{modal.x + modal.width - buttonW * 2.0f - 34.0f, buttonY, buttonW, 44.0f}, font, "Select")) {
-        callbacks.applySelection();
+        if (CurrentSectorEditorTexturePickerSelection(picker).valid) {
+            callbacks.applySelection();
+        }
     }
     if (engine::Button(ui, config, input, assets, "sector_editor_texture_picker_cancel", Rectangle{modal.x + modal.width - buttonW - 22.0f, buttonY, buttonW, 44.0f}, font, "Cancel")) {
         callbacks.close();

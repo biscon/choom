@@ -437,6 +437,9 @@ Material pickers are used for:
 - sidedef wall/lower/upper/middle materials
 - decals, sky, procedural doors, and 3D surface-panel targets
 
+The shared material picker filters the global catalog by material ID as text is
+entered in its case-insensitive Filter field.
+
 Surface materials can be copied and pasted between matching surface types from
 the 2D inspectors and the 3D surface panel. The copied material includes the
 material ID and UV scale/offset only. Floor materials paste only to floors,
@@ -447,10 +450,15 @@ lighting, or geometry. Keyboard shortcuts are not implemented for this workflow
 yet, so use the inspector or 3D panel buttons.
 
 The Material Editor has a scrolling material list and an albedo preview. Each
-definition exposes editable ID, PNG path, filtering, metalness, roughness, and
-normal strength. IDs may be edited. Renaming an ID updates all valid saved v4
-levels transactionally and the open document; deleting a referenced material
-is blocked. Albedo paths must be normalized PNG paths below `assets/images`.
+definition exposes editable ID, albedo PNG selection, filtering, metalness,
+roughness, and normal strength. The albedo button opens a modal that rescans
+`assets/images` recursively, filters relative paths as you type, and previews
+the selected image before it is applied. Automatic `_normal.png` companions are
+excluded from the albedo list, and displayed paths omit the common
+`assets/images/` prefix. IDs may be edited. Renaming an ID updates all valid
+saved v4 levels transactionally and the open document; deleting a referenced
+material is blocked. Saved albedo paths remain normalized PNG paths below
+`assets/images`.
 
 Normal maps retain the OpenGL Y+ filename convention: an albedo such as
 `stone.png` discovers `stone_normal.png`. The editor displays whether that

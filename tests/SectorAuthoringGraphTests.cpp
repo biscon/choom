@@ -8,6 +8,7 @@
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/materials/SectorEditorMaterialRegistryEditorService.h"
 #include "sector_editor/SectorEditorSetAllModal.h"
 #include "sector_editor/SectorEditorTextureModals.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
@@ -24,6 +25,7 @@
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
+#include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 #include "sector_editor/tools/doors/SectorEditorDoorInspector.h"
 #include "engine/assets/AssetManager.h"
 #include "engine/EngineContext.h"
@@ -806,9 +808,11 @@ game::SectorEditorMaterialEditingService MakeMaterialEditingService(
         game::SectorAuthoringGraph& authoringGraph,
         game::SectorEditorUiState& uiState,
         std::string& statusText,
-        bool* previewRebuildRequested = nullptr)
+        bool* previewRebuildRequested = nullptr,
+        const game::SectorMaterialRegistry* availableMaterials = nullptr)
 {
     static game::MaterialEditingState materialState;
+    static game::SectorMaterialRegistry inferredMaterialRegistry;
     game::SelectionState& selectionState = TestSelectionState();
     game::SectorEditorPreviewSelectionState& previewSelectionState = TestPreviewSelectionState();
     game::MaterialEditingUiState& materialUiState = TestMaterialEditingUiState();
@@ -816,9 +820,15 @@ game::SectorEditorMaterialEditingService MakeMaterialEditingService(
     selectionState = game::SelectionState{};
     materialState = game::MaterialEditingState{};
     materialUiState = game::MaterialEditingUiState{};
+    if (availableMaterials == nullptr) {
+        inferredMaterialRegistry.materialsById =
+                documentState.map.topologyMap.resolvedMaterialsById;
+        availableMaterials = &inferredMaterialRegistry;
+    }
     return game::SectorEditorMaterialEditingService{
             game::SectorEditorMaterialEditingServiceContext{
                     game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                    *availableMaterials,
                     documentState.map.topologyMap,
                     authoringGraph,
                     game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
@@ -4576,7 +4586,11 @@ void TestEditorMaterialEditingServiceDerivedSidePickerWritesAuthoringSideDirectl
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
     documentState.map.topologyMap.resolvedMaterialsById.emplace("old_wall", game::SectorMaterialDefinition{"old_wall", "old_wall.png"});
-    documentState.map.topologyMap.resolvedMaterialsById.emplace("new_wall", game::SectorMaterialDefinition{"new_wall", "new_wall.png"});
+    game::SectorMaterialRegistry materialRegistry;
+    materialRegistry.materialsById.emplace(
+            "old_wall", game::SectorMaterialDefinition{"old_wall", "old_wall.png"});
+    materialRegistry.materialsById.emplace(
+            "new_wall", game::SectorMaterialDefinition{"new_wall", "new_wall.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
@@ -4600,12 +4614,26 @@ void TestEditorMaterialEditingServiceDerivedSidePickerWritesAuthoringSideDirectl
     game::SectorEditorUiState uiState;
     std::string statusText;
     game::SectorEditorMaterialEditingService service =
-            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+            MakeMaterialEditingService(
+                    state,
+                    documentState,
+                    authoringGraph,
+                    uiState,
+                    statusText,
+                    nullptr,
+                    &materialRegistry);
     Check(service.OpenMaterialPickerForDerivedSideDef(
                   sideDef->id,
                   game::TopologyWallPart::Wall,
                   game::TopologyMaterialLayer::Base),
           "service derived side picker opens through material service");
+    Check(documentState.map.topologyMap.resolvedMaterialsById.find("new_wall")
+                    == documentState.map.topologyMap.resolvedMaterialsById.end()
+                  && std::find(
+                             state.texturePicker.materialIds.begin(),
+                             state.texturePicker.materialIds.end(),
+                             "new_wall") != state.texturePicker.materialIds.end(),
+          "service material picker includes globally registered material absent from map subset");
     SelectTextureInPicker(state.texturePicker, "new_wall");
     const game::SectorEditorTexturePickerApplyResult result =
             service.ApplyTexturePickerSelection(nullptr);
@@ -5205,6 +5233,7 @@ void TestEditorAuthoringFaceDefaultDecalTexturePickerWritesThroughAnchor()
 
     Check(game::OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
                   state.texturePicker,
+                  game::SortedSectorTopologyTextureIds(documentState.map.topologyMap),
                   documentState.map.topologyMap,
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
@@ -5975,6 +6004,7 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
 
     Check(game::OpenSectorEditorMaterialPickerForAuthoringSide(
                   state.texturePicker,
+                  game::SortedSectorTopologyTextureIds(documentState.map.topologyMap),
                   documentState.map.topologyMap,
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
@@ -6002,6 +6032,7 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
     documentState.derivation.authoringDerivation.mapping.sectors.clear();
     Check(!game::OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
                   state.texturePicker,
+                  game::SortedSectorTopologyTextureIds(documentState.map.topologyMap),
                   documentState.map.topologyMap,
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
@@ -6017,6 +6048,7 @@ void TestEditorAuthoringTexturePickerDirectTargetsFailClosedWhenMappingUnavailab
     documentState.derivation.authoringDerivation.mapping.sectors.push_back(documentState.derivation.authoringDerivation.mapping.sectors.front());
     Check(!game::OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
                   state.texturePicker,
+                  game::SortedSectorTopologyTextureIds(documentState.map.topologyMap),
                   documentState.map.topologyMap,
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
@@ -6328,7 +6360,9 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
     game::SectorEditorDocumentState documentState;
     game::SectorAuthoringGraph& authoringGraph = documentState.authoring.authoringGraph;
     game::SelectionState selectionState;
-    documentState.map.topologyMap.resolvedMaterialsById.emplace("floor_tiles", game::SectorMaterialDefinition{"floor_tiles", "floor_tiles.png"});
+    game::SectorMaterialRegistry materialRegistry;
+    materialRegistry.materialsById.emplace(
+            "floor_tiles", game::SectorMaterialDefinition{"floor_tiles", "floor_tiles.png"});
     authoringGraph = MakeGraphFromConnectedLines(
             {{0, 0}, {64, 0}, {64, 64}, {0, 64}},
             {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
@@ -6348,13 +6382,25 @@ void TestEditorAuthoringFlatSurfaceTextureWritesThroughFaceAnchor()
     game::SectorEditorUiState uiState;
     std::string statusText;
     game::SectorEditorMaterialEditingService service =
-            MakeMaterialEditingService(state, documentState, authoringGraph, uiState, statusText);
+            MakeMaterialEditingService(
+                    state,
+                    documentState,
+                    authoringGraph,
+                    uiState,
+                    statusText,
+                    nullptr,
+                    &materialRegistry);
 
     Check(service.OpenMaterialPickerForDerivedSector(
                   200,
                   game::TopologySectorTextureField::Floor,
                   game::TopologyMaterialLayer::Base),
           "service flat texture picker opens for graph-authored flat target");
+    Check(documentState.map.topologyMap.resolvedMaterialsById.find("floor_tiles")
+                    == documentState.map.topologyMap.resolvedMaterialsById.end()
+                  && state.texturePicker.materialIds
+                             == std::vector<std::string>{"floor_tiles"},
+          "flat surface picker uses global materials instead of the map subset");
     for (size_t i = 0; i < state.texturePicker.materialIds.size(); ++i) {
         if (state.texturePicker.materialIds[i] == "floor_tiles") {
             state.texturePicker.selectedTextureIndex = static_cast<int>(i);
@@ -6470,6 +6516,7 @@ void TestEditorAuthoringFaceTexturePickerWritesThroughFaceAnchor()
 
     Check(game::OpenSectorEditorMaterialPickerForDerivedSector(
                   state.texturePicker,
+                  game::SortedSectorTopologyTextureIds(documentState.map.topologyMap),
                   documentState.map.topologyMap,
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
@@ -6533,6 +6580,7 @@ void TestEditorAuthoringSideTexturePickerWritesThroughAuthoringSide()
 
     Check(game::OpenSectorEditorMaterialPickerForDerivedSideDef(
                   state.texturePicker,
+                  game::SortedSectorTopologyTextureIds(documentState.map.topologyMap),
                   documentState.map.topologyMap,
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
@@ -6590,6 +6638,7 @@ void TestEditorAuthoringFaceTexturePickerRejectsStaleMappingAfterOpen()
 
     Check(game::OpenSectorEditorMaterialPickerForDerivedSector(
                   state.texturePicker,
+                  game::SortedSectorTopologyTextureIds(documentState.map.topologyMap),
                   documentState.map.topologyMap,
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
@@ -6655,6 +6704,7 @@ void TestEditorAuthoringSideTexturePickerRejectsStaleMappingAfterOpen()
 
     Check(game::OpenSectorEditorMaterialPickerForDerivedSideDef(
                   state.texturePicker,
+                  game::SortedSectorTopologyTextureIds(documentState.map.topologyMap),
                   documentState.map.topologyMap,
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
@@ -6707,6 +6757,7 @@ void TestEditorAuthoringTexturePickerRejectsStaleMapping()
 
     Check(!game::OpenSectorEditorMaterialPickerForDerivedSector(
                   state.texturePicker,
+                  game::SortedSectorTopologyTextureIds(documentState.map.topologyMap),
                   documentState.map.topologyMap,
                   authoringGraph,
                   game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
@@ -6849,6 +6900,56 @@ void TestEditorMaterialCatalogUsesGlobalRegistry()
           "material picker options are sorted by global material id");
     Check(picker.selectedTextureIndex == 1,
           "material picker options preserve the current material selection");
+
+    game::TexturePickerState filteredPicker;
+    filteredPicker.topologyTargetKind = game::TopologyTexturePickerTargetKind::MapSky;
+    game::OpenSectorEditorTexturePicker(
+            filteredPicker,
+            catalog.TextureIds(),
+            "imported_wall");
+    std::snprintf(
+            filteredPicker.filterBuffer,
+            sizeof(filteredPicker.filterBuffer),
+            "%s",
+            "PoRtEd_W");
+    game::ApplySectorEditorTexturePickerFilter(filteredPicker);
+    const game::SectorEditorSelectedTexture filteredSelection =
+            game::CurrentSectorEditorTexturePickerSelection(filteredPicker);
+    Check(filteredPicker.materialIds
+                    == std::vector<std::string>{"imported_wall"}
+                  && filteredSelection.valid
+                  && filteredSelection.materialId == "imported_wall",
+          "material picker filters IDs case-insensitively while preserving selection");
+
+    std::snprintf(
+            filteredPicker.filterBuffer,
+            sizeof(filteredPicker.filterBuffer),
+            "%s",
+            "existing");
+    game::ApplySectorEditorTexturePickerFilter(filteredPicker);
+    Check(filteredPicker.materialIds
+                    == std::vector<std::string>{"a_existing", "z_existing"}
+                  && filteredPicker.selectedTextureIndex == 0,
+          "material picker selects the first result when the previous selection is filtered out");
+
+    std::snprintf(
+            filteredPicker.filterBuffer,
+            sizeof(filteredPicker.filterBuffer),
+            "%s",
+            "missing material");
+    game::ApplySectorEditorTexturePickerFilter(filteredPicker);
+    Check(filteredPicker.materialIds.empty()
+                  && filteredPicker.selectedTextureIndex == -1
+                  && !game::CurrentSectorEditorTexturePickerSelection(filteredPicker).valid
+                  && !filteredPicker.filterMessage.empty(),
+          "material picker reports an empty filter result without a selectable material");
+
+    filteredPicker.filterBuffer[0] = '\0';
+    game::ApplySectorEditorTexturePickerFilter(filteredPicker);
+    Check(filteredPicker.materialIds == catalog.TextureIds()
+                  && filteredPicker.selectedTextureIndex == 0
+                  && filteredPicker.filterMessage.empty(),
+          "clearing the material picker filter restores the global catalog");
 }
 
 void TestAudioScannerFindsSupportedFilesRecursively()
@@ -12209,6 +12310,125 @@ void TestAddMapTextureScanFiltersAutomaticNormalMaps()
     std::filesystem::remove_all(root, error);
 }
 
+void TestMaterialAlbedoPickerFilteringSelectionAndCommit()
+{
+    const std::filesystem::path root =
+            TempDirectoryPath("sector_editor_material_albedo_picker_test");
+    RecreateTempDirectory(root);
+    std::error_code error;
+    std::filesystem::create_directories(root / "images" / "floors", error);
+    Check(!error, "material albedo picker creates floor fixture directory");
+    std::filesystem::create_directories(root / "images" / "walls", error);
+    Check(!error, "material albedo picker creates wall fixture directory");
+    WriteTextFile(root / "images" / "stone.png", "");
+    WriteTextFile(root / "images" / "floors" / "Office_Tile.PNG", "");
+    WriteTextFile(root / "images" / "walls" / "brick.png", "");
+    WriteTextFile(root / "images" / "walls" / "brick_normal.png", "");
+    WriteTextFile(root / "images" / "walls" / "notes.txt", "");
+
+    game::SectorMaterialRegistry registry;
+    registry.materialsById.emplace(
+            "existing",
+            game::SectorMaterialDefinition{
+                    "existing",
+                    "assets/images/walls/brick.png",
+                    game::SectorMaterialFilter::Anisotropic8x});
+    game::SectorEditorDocumentState document;
+    game::SectorEditorMaterialRegistryEditorState state;
+    std::string status;
+    game::SectorEditorMaterialRegistryEditorService editor{
+            state,
+            registry,
+            document.authoring.authoringGraph,
+            document.map.topologyMap,
+            game::MakeSectorEditorDerivationDocumentAccess(document.derivation),
+            game::MakeSectorEditorDocumentLifecycleAccess(document.lifecycle),
+            status,
+            root / "materials" / "materials.json",
+            root / "levels"};
+    editor.Open();
+    editor.OpenAlbedoPickerFromRoot(root);
+
+    const std::vector<std::string> expectedPaths{
+            "assets/images/floors/Office_Tile.PNG",
+            "assets/images/stone.png",
+            "assets/images/walls/brick.png"};
+    const std::vector<std::string> expectedLabels{
+            "floors/Office_Tile.PNG",
+            "stone.png",
+            "walls/brick.png"};
+    Check(state.albedoPicker.paths == expectedPaths,
+          "material albedo picker recursively scans sorted base PNG paths");
+    Check(state.albedoPicker.listLabelStorage == expectedLabels,
+          "material albedo picker labels omit the assets/images prefix");
+    Check(editor.SelectedAlbedoPickerPath()
+                    == "assets/images/walls/brick.png",
+          "material albedo picker preselects the current material path");
+
+    std::snprintf(
+            state.albedoPicker.filterBuffer,
+            sizeof(state.albedoPicker.filterBuffer),
+            "%s",
+            "FlOoRs/oFfIcE");
+    editor.ApplyAlbedoPickerFilter();
+    Check(state.albedoPicker.listLabelStorage
+                    == std::vector<std::string>{"floors/Office_Tile.PNG"}
+                  && editor.SelectedAlbedoPickerPath()
+                             == "assets/images/floors/Office_Tile.PNG",
+          "material albedo picker filters case-insensitively across the relative path");
+
+    std::snprintf(
+            state.albedoPicker.filterBuffer,
+            sizeof(state.albedoPicker.filterBuffer),
+            "%s",
+            "missing-texture");
+    editor.ApplyAlbedoPickerFilter();
+    Check(state.albedoPicker.listLabels.empty()
+                  && !editor.HasAlbedoPickerSelection()
+                  && !state.albedoPicker.selectionMessage.empty(),
+          "material albedo picker reports an empty filtered result");
+    editor.CancelAlbedoPicker(nullptr);
+    Check(editor.SelectedDraft() != nullptr
+                  && editor.SelectedDraft()->definition.path
+                             == "assets/images/walls/brick.png",
+          "cancelling the material albedo picker preserves the draft path");
+
+    WriteTextFile(root / "images" / "late_addition.png", "");
+    editor.OpenAlbedoPickerFromRoot(root);
+    Check(std::find(
+                  state.albedoPicker.paths.begin(),
+                  state.albedoPicker.paths.end(),
+                  "assets/images/late_addition.png")
+                    != state.albedoPicker.paths.end(),
+          "reopening the material albedo picker rebuilds its filesystem list");
+    Check(editor.SelectAlbedoPickerIndex(0),
+          "material albedo picker accepts a visible selection");
+    engine::AssetManager assets;
+    Check(editor.ConfirmAlbedoPicker(assets)
+                  && editor.SelectedDraft()->definition.path
+                             == "assets/images/floors/Office_Tile.PNG"
+                  && editor.SelectedDraft()->definition.id == "existing"
+                  && !state.albedoPicker.open,
+          "confirming the material albedo picker commits the full path and closes it");
+
+    editor.AddMaterial();
+    editor.OpenAlbedoPickerFromRoot(root);
+    std::snprintf(
+            state.albedoPicker.filterBuffer,
+            sizeof(state.albedoPicker.filterBuffer),
+            "%s",
+            "stone");
+    editor.ApplyAlbedoPickerFilter();
+    Check(editor.ConfirmAlbedoPicker(assets)
+                  && editor.SelectedDraft()->definition.path
+                             == "assets/images/stone.png"
+                  && editor.SelectedDraft()->definition.id == "stone",
+          "a new material keeps automatic ID generation after picker selection");
+
+    editor.Cancel(nullptr);
+    std::filesystem::remove_all(root, error);
+}
+
 void TestStaticModelAssetRequestsDeduplicateAndUnloadByScope()
 {
     engine::AssetManager assets;
@@ -13688,6 +13908,7 @@ int main()
     TestEditorGraphNativeRuntimeObjectsSurviveLoadDerivation();
     TestStaticModelPickerRecursionFilteringRefreshAndSelection();
     TestAddMapTextureScanFiltersAutomaticNormalMaps();
+    TestMaterialAlbedoPickerFilteringSelectionAndCommit();
     TestStaticModelAssetRequestsDeduplicateAndUnloadByScope();
     TestStaticPropEditingPlacementMutationAndFloorRelativeDrag();
     TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag();

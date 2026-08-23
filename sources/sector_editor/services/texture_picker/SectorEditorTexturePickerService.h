@@ -29,6 +29,7 @@ void PopulateSectorEditorTexturePickerOptions(
         TexturePickerState& picker,
         const std::vector<std::string>& materialIds,
         const std::string& currentTexture);
+void ApplySectorEditorTexturePickerFilter(TexturePickerState& picker);
 void OpenSectorEditorTexturePicker(
         TexturePickerState& picker,
         const std::vector<std::string>& materialIds,

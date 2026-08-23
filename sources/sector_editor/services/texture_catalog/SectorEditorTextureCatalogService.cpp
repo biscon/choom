@@ -1,6 +1,7 @@
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 
 #include "sector_editor/SectorEditorHelpers.h"
+#include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
 #include "sector_demo/SectorMaterialRegistry.h"
 #include "sector_demo/SectorTextureTypes.h"
 
@@ -34,19 +35,7 @@ void SectorEditorTextureCatalogService::PopulatePickerOptions(
         TexturePickerState& picker,
         const std::string& currentTexture) const
 {
-    picker.selectedTextureIndex = 0;
-    picker.scroll = engine::UIScrollState{};
-    picker.materialIds.clear();
-    picker.optionLabels.clear();
-
-    picker.materialIds = TextureIds();
-    picker.optionLabels.reserve(picker.materialIds.size());
-    for (size_t i = 0; i < picker.materialIds.size(); ++i) {
-        picker.optionLabels.push_back(picker.materialIds[i].c_str());
-        if (picker.materialIds[i] == currentTexture) {
-            picker.selectedTextureIndex = static_cast<int>(i);
-        }
-    }
+    PopulateSectorEditorTexturePickerOptions(picker, TextureIds(), currentTexture);
 }
 
 engine::TextureHandle SectorEditorTextureCatalogService::TextureHandleForId(

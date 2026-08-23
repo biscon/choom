@@ -875,6 +875,7 @@ bool SectorEditorMaterialEditingService::OpenMaterialPickerForDerivedSector(
 {
     return OpenSectorEditorMaterialPickerForDerivedSector(
             context_.texturePicker,
+            SortedSectorMaterialIds(context_.materialRegistry),
             context_.topologyMap,
             context_.authoringGraph,
             game::MakeSectorEditorConstDerivationDocumentAccess(context_.derivation),
@@ -890,6 +891,7 @@ bool SectorEditorMaterialEditingService::OpenMaterialPickerForAuthoringFaceAncho
 {
     return OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
             context_.texturePicker,
+            SortedSectorMaterialIds(context_.materialRegistry),
             context_.topologyMap,
             context_.authoringGraph,
             game::MakeSectorEditorConstDerivationDocumentAccess(context_.derivation),
@@ -905,6 +907,7 @@ bool SectorEditorMaterialEditingService::OpenMaterialPickerForDerivedSideDef(
 {
     return OpenSectorEditorMaterialPickerForDerivedSideDef(
             context_.texturePicker,
+            SortedSectorMaterialIds(context_.materialRegistry),
             context_.topologyMap,
             context_.authoringGraph,
             game::MakeSectorEditorConstDerivationDocumentAccess(context_.derivation),
@@ -920,6 +923,7 @@ bool SectorEditorMaterialEditingService::OpenMaterialPickerForAuthoringSide(
 {
     return OpenSectorEditorMaterialPickerForAuthoringSide(
             context_.texturePicker,
+            SortedSectorMaterialIds(context_.materialRegistry),
             context_.topologyMap,
             context_.authoringGraph,
             game::MakeSectorEditorConstDerivationDocumentAccess(context_.derivation),

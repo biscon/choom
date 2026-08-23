@@ -456,6 +456,7 @@ std::string CurrentSectorEditorMaterialPickerTexture(
 
 bool OpenSectorEditorMaterialPickerForDerivedSector(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -490,13 +491,14 @@ bool OpenSectorEditorMaterialPickerForDerivedSector(
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(topologyMap),
+            materialIds,
             CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
 bool OpenSectorEditorMaterialPickerForDerivedSector(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -506,6 +508,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSector(
 {
     return OpenSectorEditorMaterialPickerForDerivedSector(
             picker,
+            materialIds,
             topologyMap,
             authoring.graph,
             derivation,
@@ -516,6 +519,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSector(
 
 bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -552,13 +556,14 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(topologyMap),
+            materialIds,
             CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
 bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -568,6 +573,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
 {
     return OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
             picker,
+            materialIds,
             topologyMap,
             authoring.graph,
             derivation,
@@ -578,6 +584,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
 
 bool OpenSectorEditorMaterialPickerForDerivedSideDef(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -617,13 +624,14 @@ bool OpenSectorEditorMaterialPickerForDerivedSideDef(
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(topologyMap),
+            materialIds,
             CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
 bool OpenSectorEditorMaterialPickerForDerivedSideDef(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -633,6 +641,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSideDef(
 {
     return OpenSectorEditorMaterialPickerForDerivedSideDef(
             picker,
+            materialIds,
             topologyMap,
             authoring.graph,
             derivation,
@@ -643,6 +652,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSideDef(
 
 bool OpenSectorEditorMaterialPickerForAuthoringSide(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -678,13 +688,14 @@ bool OpenSectorEditorMaterialPickerForAuthoringSide(
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(topologyMap),
+            materialIds,
             CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
 bool OpenSectorEditorMaterialPickerForAuthoringSide(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -694,6 +705,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringSide(
 {
     return OpenSectorEditorMaterialPickerForAuthoringSide(
             picker,
+            materialIds,
             topologyMap,
             authoring.graph,
             derivation,

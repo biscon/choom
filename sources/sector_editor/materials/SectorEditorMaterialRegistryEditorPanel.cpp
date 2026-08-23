@@ -19,6 +19,145 @@ float ScrollContentWidth(float width, const engine::UIConfig& config)
             - config.scrollbarSize - engine::DefaultScrollAreaPaddingPx * 2.0f);
 }
 
+void DrawAlbedoPickerModal(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont,
+        SectorEditorMaterialRegistryEditorService& editor)
+{
+    SectorEditorMaterialAlbedoPickerState& picker = editor.State().albedoPicker;
+    bool cancelRequested = false;
+    input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [&](engine::InputEvent& event) {
+                if (event.key.key != KEY_ESCAPE) return;
+                cancelRequested = true;
+                engine::ConsumeEvent(event);
+            });
+    if (cancelRequested) {
+        editor.CancelAlbedoPicker(&assets);
+        return;
+    }
+
+    DrawRectangle(0, 0, static_cast<int>(EditorWidth),
+            static_cast<int>(EditorHeight), Color{0, 0, 0, 150});
+    const Rectangle modal{
+            (EditorWidth - 1120.0f) * 0.5f,
+            (EditorHeight - 700.0f) * 0.5f,
+            1120.0f,
+            700.0f};
+    DrawRectangleRec(modal, Color{20, 24, 32, 250});
+    DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
+    engine::Text(config, assets,
+            Rectangle{modal.x + 22.0f, modal.y + 16.0f, modal.width - 44.0f, 38.0f},
+            font, "Choose Albedo PNG");
+
+    const float leftX = modal.x + 22.0f;
+    const float leftWidth = 555.0f;
+    const Rectangle filterBounds{leftX, modal.y + 68.0f, leftWidth, 42.0f};
+    const float filterLabelWidth = 82.0f;
+    engine::Text(config, assets,
+            Rectangle{filterBounds.x, filterBounds.y,
+                    filterLabelWidth, filterBounds.height},
+            smallFont, "Filter", engine::UITextJustify::Left,
+            config.mutedTextColor);
+    const engine::UITextInputResult filterResult = engine::TextInput(
+            ui, config, input, assets,
+            "sector_editor_material_albedo_picker_filter",
+            Rectangle{filterBounds.x + filterLabelWidth, filterBounds.y,
+                    filterBounds.width - filterLabelWidth, filterBounds.height},
+            smallFont,
+            picker.filterBuffer, sizeof(picker.filterBuffer),
+            0, sizeof(picker.filterBuffer) - 1);
+    if (filterResult.changed) editor.ApplyAlbedoPickerFilter();
+
+    const Rectangle listBounds{leftX, modal.y + 122.0f, leftWidth, 484.0f};
+    if (picker.scrollSelectionIntoView && picker.selectedFilteredIndex >= 0) {
+        picker.scroll.offset.y = config.listItemHeight
+                * static_cast<float>(picker.selectedFilteredIndex);
+        picker.scrollSelectionIntoView = false;
+    }
+    const Vector2 listContentSize{
+            ScrollContentWidth(listBounds.width, config),
+            std::max(listBounds.height,
+                    config.listItemHeight
+                            * static_cast<float>(picker.listLabels.size()))};
+    engine::UIScrollAreaResult listScroll = engine::BeginScrollArea(
+            ui, config, input,
+            "sector_editor_material_albedo_picker_scroll",
+            listBounds, listContentSize, picker.scroll);
+    if (!picker.listLabels.empty()) {
+        int selected = picker.selectedFilteredIndex;
+        engine::List(
+                ui, config, input, assets,
+                "sector_editor_material_albedo_picker_list",
+                Rectangle{0.0f, 0.0f, listScroll.viewport.width, listContentSize.y},
+                smallFont,
+                picker.listLabels.data(), picker.listLabels.size(), selected);
+        if (selected != picker.selectedFilteredIndex) {
+            editor.SelectAlbedoPickerIndex(selected);
+        }
+    }
+    engine::EndScrollArea(ui, config, input, listScroll, picker.scroll);
+
+    const std::string listMessage = !picker.selectionMessage.empty()
+            ? picker.selectionMessage
+            : (!picker.scanMessage.empty()
+                    ? picker.scanMessage
+                    : "Found " + std::to_string(picker.paths.size())
+                            + " albedo PNG files");
+    engine::Text(config, assets,
+            Rectangle{leftX, listBounds.y + listBounds.height + 8.0f,
+                    leftWidth, 34.0f},
+            smallFont, listMessage.c_str(), engine::UITextJustify::Left,
+            picker.listLabels.empty()
+                    ? config.invalidColor : config.mutedTextColor, true);
+
+    editor.EnsureAlbedoPickerPreview(assets);
+    const float rightX = modal.x + 607.0f;
+    const float rightWidth = modal.x + modal.width - 22.0f - rightX;
+    engine::Text(config, assets,
+            Rectangle{rightX, modal.y + 68.0f, rightWidth, 38.0f},
+            font, "Preview", engine::UITextJustify::Left, config.textColor);
+    engine::Image(config, assets,
+            Rectangle{rightX, modal.y + 114.0f, rightWidth, 360.0f},
+            picker.previewTexture);
+    const std::string selectedLabel = EditorAssetPathDisplayLabel(
+            editor.SelectedAlbedoPickerPath(), "assets/images/");
+    engine::Text(config, assets,
+            Rectangle{rightX, modal.y + 488.0f, rightWidth, 92.0f},
+            smallFont,
+            selectedLabel.empty() ? "<no selection>" : selectedLabel.c_str(),
+            engine::UITextJustify::Left,
+            selectedLabel.empty() ? config.mutedTextColor : config.textColor,
+            true);
+
+    const float buttonY = modal.y + modal.height - 64.0f;
+    if (engine::Button(
+                ui, config, input, assets,
+                "sector_editor_material_albedo_picker_okay",
+                Rectangle{modal.x + modal.width - 334.0f, buttonY, 150.0f, 44.0f},
+                smallFont, "Okay")) {
+        editor.ConfirmAlbedoPicker(assets);
+    }
+    if (engine::Button(
+                ui, config, input, assets,
+                "sector_editor_material_albedo_picker_cancel",
+                Rectangle{modal.x + modal.width - 172.0f, buttonY, 150.0f, 44.0f},
+                smallFont, "Cancel")) {
+        editor.CancelAlbedoPicker(&assets);
+    }
+
+    input.ForEachEvent(
+            engine::InputEventType::Any,
+            true,
+            [](engine::InputEvent& event) { engine::ConsumeEvent(event); });
+}
+
 } // namespace
 
 SectorEditorMaterialRegistryEditorResult DrawSectorEditorMaterialRegistryEditor(
@@ -32,6 +171,11 @@ SectorEditorMaterialRegistryEditorResult DrawSectorEditorMaterialRegistryEditor(
 {
     SectorEditorMaterialRegistryEditorState& state = editor.State();
     if (!state.open) return SectorEditorMaterialRegistryEditorResult::None;
+    if (state.albedoPicker.open) {
+        DrawAlbedoPickerModal(
+                ui, config, input, assets, font, smallFont, editor);
+        return SectorEditorMaterialRegistryEditorResult::None;
+    }
 
     bool cancelRequested = false;
     input.ForEachEvent(
@@ -123,11 +267,15 @@ SectorEditorMaterialRegistryEditorResult DrawSectorEditorMaterialRegistryEditor(
         y += RowHeight + Gap;
 
         label("Albedo PNG");
-        const auto pathResult = engine::TextInput(ui, config, input, assets,
-                "sector_editor_material_registry_path",
-                Rectangle{fieldX, y, fieldWidth, RowHeight}, smallFont,
-                state.pathBuffer, sizeof(state.pathBuffer), 1, sizeof(state.pathBuffer) - 1);
-        if (pathResult.submitted) editor.ApplyPathBuffer();
+        const std::string albedoLabel = EditorAssetPathDisplayLabel(
+                draft->definition.path, "assets/images/");
+        if (engine::Button(ui, config, input, assets,
+                    "sector_editor_material_registry_path_picker",
+                    Rectangle{fieldX, y, fieldWidth, RowHeight}, smallFont,
+                    albedoLabel.empty() ? "Choose PNG..." : albedoLabel.c_str(),
+                    engine::UITextJustify::Left)) {
+            editor.OpenAlbedoPicker();
+        }
         y += RowHeight + Gap;
 
         label("Filtering");

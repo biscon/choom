@@ -33,7 +33,15 @@ public:
     bool SelectIndex(int index);
     void AddMaterial();
     void ApplyIdBuffer();
-    void ApplyPathBuffer();
+    void OpenAlbedoPicker();
+    void OpenAlbedoPickerFromRoot(const std::filesystem::path& assetsRoot);
+    void ApplyAlbedoPickerFilter();
+    bool SelectAlbedoPickerIndex(int index);
+    bool HasAlbedoPickerSelection() const;
+    std::string SelectedAlbedoPickerPath() const;
+    bool ConfirmAlbedoPicker(engine::AssetManager& assets);
+    void CancelAlbedoPicker(engine::AssetManager* assets);
+    void EnsureAlbedoPickerPreview(engine::AssetManager& assets);
     bool RequestDeleteSelected();
     void CancelDelete();
     void ConfirmDeleteSelected();
@@ -45,6 +53,8 @@ private:
     void Close(engine::AssetManager* assets);
     void SyncBuffers();
     void RebuildListLabels();
+    void RebuildAlbedoPickerList(const std::string& preferredPath = {});
+    bool ApplyAlbedoPath(const std::string& path);
     bool ValidateDrafts(std::string& error) const;
     bool CurrentDocumentReferences(std::string_view id) const;
 
