@@ -540,6 +540,75 @@ void DrawSectorEditorPreviewObjectProbeOverlay(
     EndMode3D();
 }
 
+void DrawSectorEditorPreviewReflectionProbeOverlay(
+        const SectorTopologyMap& topologyMap,
+        const SectorEditorPreviewState& previewState,
+        const SelectionState& selectionState,
+        const SectorMeshRenderer& preview)
+{
+    if (!preview.IsRendererReady()
+            || previewState.overlay.activePreviewDebugOverlayTab
+                    != PreviewDebugOverlayTab::Probes
+            || selectionState.selectedAuthoring.kind
+                    != SectorAuthoringSelectionKind::ReflectionProbe) {
+        return;
+    }
+
+    const int selectedId = selectionState.selectedAuthoring.reflectionProbeId;
+    const auto selected = std::find_if(
+            topologyMap.compiledReflectionProbes.begin(),
+            topologyMap.compiledReflectionProbes.end(),
+            [selectedId](const SectorCompiledReflectionProbe& probe) {
+                return probe.sourceAuthoringProbeId == selectedId;
+            });
+    if (selected == topologyMap.compiledReflectionProbes.end()) return;
+
+    const SectorCompiledReflectionProbe& probe = *selected;
+    const float c = std::cos(probe.yawRadians);
+    const float s = std::sin(probe.yawRadians);
+    Vector3 corners[8]{};
+    for (int index = 0; index < 8; ++index) {
+        const Vector3 local{
+                (index & 1) != 0
+                        ? probe.halfExtentsWorld.x : -probe.halfExtentsWorld.x,
+                (index & 2) != 0
+                        ? probe.halfExtentsWorld.y : -probe.halfExtentsWorld.y,
+                (index & 4) != 0
+                        ? probe.halfExtentsWorld.z : -probe.halfExtentsWorld.z};
+        corners[index] = Vector3Add(
+                probe.influenceCenterWorld,
+                Vector3{
+                        local.x * c - local.z * s,
+                        local.y,
+                        local.x * s + local.z * c});
+    }
+
+    const Color boxColor = LinearOverlaySwatch(
+            probe.enabled
+                    ? Color{204, 126, 255, 245}
+                    : Color{150, 150, 160, 205});
+    const Color linkColor = LinearOverlaySwatch(Color{255, 204, 92, 220});
+    const Color captureColor = LinearOverlaySwatch(Color{255, 224, 122, 255});
+    const Color centerColor = LinearOverlaySwatch(Color{114, 224, 255, 255});
+
+    BeginMode3D(preview.RenderCamera());
+    for (int index = 0; index < 8; ++index) {
+        for (int axis = 0; axis < 3; ++axis) {
+            const int neighbor = index ^ (1 << axis);
+            if (index < neighbor) DrawLine3D(corners[index], corners[neighbor], boxColor);
+        }
+    }
+    DrawLine3D(
+            probe.capturePositionWorld,
+            probe.influenceCenterWorld,
+            linkColor);
+    DrawSphereWires(
+            probe.capturePositionWorld, 0.12f, 8, 12, captureColor);
+    DrawSphereWires(
+            probe.influenceCenterWorld, 0.08f, 8, 12, centerColor);
+    EndMode3D();
+}
+
 void DrawSectorEditorPreviewNavigationOverlay(
         const SectorEditorPreviewOverlayState& overlayState,
         const SectorNavigationWorld& navigation,

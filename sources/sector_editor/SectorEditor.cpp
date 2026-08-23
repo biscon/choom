@@ -3972,6 +3972,7 @@ void SectorEditor::RenderPreview3DOverlays()
         DrawPreviewSurfaceHighlights();
         DrawPreviewSpotLightOverlay();
         DrawPreviewObjectProbeOverlay();
+        DrawPreviewReflectionProbeOverlay();
         DrawSectorEditorPreviewNavigationOverlay(
                 previewState.overlay,
                 sceneRuntime.Navigation(),
@@ -4063,6 +4064,15 @@ void SectorEditor::DrawPreviewObjectProbeOverlay() const
             TopologyMap(),
             previewState,
             sceneRuntime.RuntimeObjects(),
+            sceneRuntime.Renderer());
+}
+
+void SectorEditor::DrawPreviewReflectionProbeOverlay() const
+{
+    DrawSectorEditorPreviewReflectionProbeOverlay(
+            TopologyMap(),
+            previewState,
+            selectionState,
             sceneRuntime.Renderer());
 }
 

@@ -193,6 +193,7 @@ private:
     void DrawPreviewSurfaceHighlights() const;
     void DrawPreviewSpotLightOverlay() const;
     void DrawPreviewObjectProbeOverlay() const;
+    void DrawPreviewReflectionProbeOverlay() const;
     void RefreshPreviewObjectProbeDebugData();
     bool IsPreviewOverlayMouseInteractive() const;
     Rectangle BuildPreviewOverlayInteractionRect() const;

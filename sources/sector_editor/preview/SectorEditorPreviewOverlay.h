@@ -94,6 +94,11 @@ void DrawSectorEditorPreviewObjectProbeOverlay(
         const SectorEditorPreviewState& previewState,
         const SectorRuntimeObjectState& runtimeObjects,
         const SectorMeshRenderer& preview);
+void DrawSectorEditorPreviewReflectionProbeOverlay(
+        const SectorTopologyMap& topologyMap,
+        const SectorEditorPreviewState& previewState,
+        const SelectionState& selectionState,
+        const SectorMeshRenderer& preview);
 void DrawSectorEditorPreviewNavigationOverlay(
         const SectorEditorPreviewOverlayState& overlayState,
         const SectorNavigationWorld& navigation,
