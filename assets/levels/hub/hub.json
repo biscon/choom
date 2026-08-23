@@ -3999,9 +3999,9 @@
     {
       "id": 6,
       "position": [
-        -200.0,
+        -141.0,
         -2.6000003814697266,
-        -48.0
+        -101.0
       ],
       "radius": 64.0,
       "intensity": 1.0,
@@ -4010,8 +4010,7 @@
         "g": 250,
         "b": 242,
         "a": 255
-      },
-      "enabled": false
+      }
     }
   ],
   "dynamicSpotLights": [
@@ -4461,6 +4460,12 @@
         "height": 2048
       }
     ]
+  },
+  "bakedReflectionProbes": {
+    "path": "assets/levels/hub/hub.reflection-probes.bin",
+    "version": 1,
+    "count": 6,
+    "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
     "gridSize": 1
@@ -19587,6 +19592,104 @@
         "noiseScaleWorld": 0.15000000596046448,
         "noiseAmount": 0.25,
         "flowDirectionDegrees": 90.0
+      }
+    ],
+    "reflectionProbes": [
+      {
+        "id": 1,
+        "x": 64,
+        "z": 448,
+        "yWorld": 1.6875,
+        "influenceOffsetWorld": [
+          0.0,
+          0.0,
+          2.5
+        ],
+        "halfExtentsWorld": [
+          3.25,
+          1.6875,
+          8.0
+        ]
+      },
+      {
+        "id": 2,
+        "x": -1136,
+        "z": 896,
+        "yWorld": 1.6875,
+        "influenceOffsetWorld": [
+          -0.125,
+          0.0,
+          -0.4375
+        ],
+        "halfExtentsWorld": [
+          5.0,
+          1.6875,
+          3.5625
+        ]
+      },
+      {
+        "id": 3,
+        "x": -2320,
+        "z": 1488,
+        "yWorld": 0.0,
+        "influenceOffsetWorld": [
+          3.5,
+          0.0,
+          0.4375
+        ],
+        "halfExtentsWorld": [
+          5.25,
+          3.375,
+          1.4375
+        ]
+      },
+      {
+        "id": 4,
+        "x": -5056,
+        "z": 1488,
+        "yWorld": -0.3125,
+        "influenceOffsetWorld": [
+          1.0,
+          0.0,
+          -4.125
+        ],
+        "halfExtentsWorld": [
+          14.5,
+          3.3125,
+          6.5
+        ]
+      },
+      {
+        "id": 5,
+        "x": -3872,
+        "z": -640,
+        "yWorld": -0.125,
+        "influenceOffsetWorld": [
+          0.25,
+          0.0,
+          0.0
+        ],
+        "halfExtentsWorld": [
+          9.0,
+          2.0,
+          4.0
+        ]
+      },
+      {
+        "id": 6,
+        "x": -2224,
+        "z": -48,
+        "yWorld": 0.012499988079071045,
+        "influenceOffsetWorld": [
+          -0.0,
+          0.0,
+          -4.5625
+        ],
+        "halfExtentsWorld": [
+          2.125,
+          1.8624999523162842,
+          9.9375
+        ]
       }
     ],
     "levelMarkers": [

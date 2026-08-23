@@ -79,6 +79,12 @@ struct SectorDoorDrawContext {
     const RuntimePortalVisibilityResult* visibility = nullptr;
     const TextureCubemap* environment = nullptr;
     float environmentExposure = 0.15f;
+    Vector3 environmentCapturePosition = {};
+    Vector3 environmentInfluenceCenter = {};
+    Vector3 environmentHalfExtents = {1.0f, 1.0f, 1.0f};
+    float environmentYaw = 0.0f;
+    float environmentMaxLod = 8.0f;
+    bool environmentBoxProjection = false;
     bool staticSpecularEligible = false;
     const Texture2D* defaultMaterialTexture = nullptr;
     std::string* renderDebugText = nullptr;
@@ -96,6 +102,12 @@ struct SectorDoorOpaqueShaderLocations {
     int environmentExposure = -1;
     int indirectDiffuseScale = -1;
     int environmentSpecularScale = -1;
+    int environmentBoxProjection = -1;
+    int environmentCapturePosition = -1;
+    int environmentInfluenceCenter = -1;
+    int environmentHalfExtents = -1;
+    int environmentYaw = -1;
+    int environmentMaxLod = -1;
     int pbrDiagnosticMode = -1;
     int useStaticSpecularLighting = -1;
     int dynamicLightCount = -1;

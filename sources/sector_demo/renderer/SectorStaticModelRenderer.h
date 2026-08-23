@@ -6,6 +6,7 @@
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorStaticSpecularLighting.h"
+#include "sector_demo/renderer/SectorPbrEnvironment.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
 #include "sector_demo/SectorStaticModelShadow.h"
 
@@ -289,7 +290,8 @@ public:
             const std::vector<engine::TextureHandle>& lightmapTextures,
             const TextureCubemap* environment,
             bool useBakedAmbientOcclusion,
-            std::string& renderDebugText);
+            std::string& renderDebugText,
+            bool staticCaptureOnly = false);
 
     void DrawViewmodel(
             const engine::ModelAsset& asset,
@@ -318,6 +320,10 @@ public:
     void SetPbrDiagnosticSelectedObjectId(int objectId)
     {
         diagnosticSelectedObjectId = objectId;
+    }
+    void SetEnvironmentProjection(SectorPbrEnvironmentSelection selection)
+    {
+        environmentSelection = selection;
     }
     const SectorPbrDrawDiagnostics& WorldPbrDiagnostics() const
     {
@@ -397,6 +403,13 @@ private:
     int diagnosticModeLoc = -1;
     int indirectDiffuseScaleLoc = -1;
     int environmentSpecularScaleLoc = -1;
+    int environmentBoxProjectionLoc = -1;
+    int environmentCapturePositionLoc = -1;
+    int environmentInfluenceCenterLoc = -1;
+    int environmentHalfExtentsLoc = -1;
+    int environmentYawLoc = -1;
+    int environmentMaxLodLoc = -1;
+    int environmentIntensityLoc = -1;
     int lightmapScaleBiasLoc = -1;
     int hasStaticLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
@@ -437,6 +450,7 @@ private:
     int shadowMap1Loc = -1;
     SectorFogShaderLocations fogShaderLocations;
     SectorPbrContributionSettings contributionSettings;
+    SectorPbrEnvironmentSelection environmentSelection;
     SectorPbrDrawDiagnostics worldDiagnostics;
     SectorPbrDrawDiagnostics viewmodelDiagnostics;
     int diagnosticSelectedObjectId = -1;

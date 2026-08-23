@@ -99,7 +99,16 @@ public:
             bool useBakedAmbientOcclusion = true,
             engine::World* runtimeObjectWorld = nullptr,
             SectorRuntimeDoorLightingContext doorLighting = {},
-            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
+            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{},
+            bool staticCaptureOnly = false);
+    bool CaptureReflectionProbe(
+            engine::AssetManager& assets,
+            Vector3 capturePosition,
+            int resolution,
+            engine::World* runtimeObjectWorld,
+            SectorRuntimeDoorLightingContext doorLighting,
+            std::vector<Vector4>& outFacePixels,
+            std::string& error);
     bool ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
@@ -327,6 +336,13 @@ private:
     int environmentExposureLoc = -1;
     int indirectDiffuseScaleLoc = -1;
     int environmentSpecularScaleLoc = -1;
+    int environmentBoxProjectionLoc = -1;
+    int environmentCapturePositionLoc = -1;
+    int environmentInfluenceCenterLoc = -1;
+    int environmentHalfExtentsLoc = -1;
+    int environmentYawLoc = -1;
+    int environmentMaxLodLoc = -1;
+    int environmentIntensityLoc = -1;
     int pbrDiagnosticModeLoc = -1;
     int useStaticSpecularLightingLoc = -1;
     int alphaTestLoc = -1;

@@ -137,6 +137,13 @@ uniform int useVerticalObjectProbeLighting;
 uniform int pbrDiagnosticMode;
 uniform float indirectDiffuseScale;
 uniform float environmentSpecularScale;
+uniform int environmentBoxProjection;
+uniform vec3 environmentCapturePosition;
+uniform vec3 environmentInfluenceCenter;
+uniform vec3 environmentHalfExtents;
+uniform float environmentYaw;
+uniform float environmentMaxLod;
+uniform float environmentIntensity;
 uniform int useStaticSpecularLighting;
 
 uniform int fogEnabled;
@@ -532,16 +539,35 @@ void main()
     vec3 environmentSpecular = vec3(0.0);
     if (hasEnvironment != 0) {
         vec3 reflected = reflect(-viewDirection, worldNormal);
+        if (environmentBoxProjection != 0) {
+            float c = cos(-environmentYaw);
+            float s = sin(-environmentYaw);
+            vec3 origin = fragWorldPosition-environmentInfluenceCenter;
+            vec3 localOrigin = vec3(origin.x*c-origin.z*s, origin.y, origin.x*s+origin.z*c);
+            vec3 localDirection = vec3(reflected.x*c-reflected.z*s, reflected.y, reflected.x*s+reflected.z*c);
+            vec3 safeDirection = mix(vec3(-1.0), vec3(1.0), step(vec3(0.0), localDirection))
+                    * max(abs(localDirection), vec3(0.00001));
+            vec3 exitPlane = mix(-environmentHalfExtents, environmentHalfExtents, step(vec3(0.0), localDirection));
+            vec3 exitDistance = (exitPlane-localOrigin)/safeDirection;
+            float distanceToBox = min(exitDistance.x, min(exitDistance.y, exitDistance.z));
+            vec3 localHit = localOrigin+localDirection*max(distanceToBox, 0.0);
+            vec3 captureOffset = environmentCapturePosition-environmentInfluenceCenter;
+            vec3 localCapture = vec3(captureOffset.x*c-captureOffset.z*s, captureOffset.y, captureOffset.x*s+captureOffset.z*c);
+            vec3 localLookup = localHit-localCapture;
+            c = cos(environmentYaw); s = sin(environmentYaw);
+            reflected = normalize(vec3(localLookup.x*c-localLookup.z*s, localLookup.y, localLookup.x*s+localLookup.z*c));
+        }
         vec3 environment = textureLod(
                 environmentTexture,
                 reflected,
-                roughness * 8.0).rgb;
+                roughness * max(environmentMaxLod, 0.0)).rgb;
         vec2 environmentBrdf = EnvironmentBrdfApprox(
                 roughness,
                 max(dot(worldNormal, viewDirection), 0.0));
         environmentSpecular = environment
                 * (f0 * environmentBrdf.x + environmentBrdf.y)
                 * environmentExposure
+                * environmentIntensity
                 * environmentSpecularScale
                 * materialAo;
     }
@@ -968,6 +994,13 @@ bool SectorStaticModelRenderer::Load()
             shader, "indirectDiffuseScale");
     environmentSpecularScaleLoc = GetShaderLocation(
             shader, "environmentSpecularScale");
+    environmentBoxProjectionLoc = GetShaderLocation(shader, "environmentBoxProjection");
+    environmentCapturePositionLoc = GetShaderLocation(shader, "environmentCapturePosition");
+    environmentInfluenceCenterLoc = GetShaderLocation(shader, "environmentInfluenceCenter");
+    environmentHalfExtentsLoc = GetShaderLocation(shader, "environmentHalfExtents");
+    environmentYawLoc = GetShaderLocation(shader, "environmentYaw");
+    environmentMaxLodLoc = GetShaderLocation(shader, "environmentMaxLod");
+    environmentIntensityLoc = GetShaderLocation(shader, "environmentIntensity");
     useStaticSpecularLightingLoc = GetShaderLocation(
             shader, "useStaticSpecularLighting");
     cameraPositionLoc = GetShaderLocation(shader, "cameraPosition");
@@ -1082,6 +1115,13 @@ void SectorStaticModelRenderer::Shutdown()
     diagnosticModeLoc = -1;
     indirectDiffuseScaleLoc = -1;
     environmentSpecularScaleLoc = -1;
+    environmentBoxProjectionLoc = -1;
+    environmentCapturePositionLoc = -1;
+    environmentInfluenceCenterLoc = -1;
+    environmentHalfExtentsLoc = -1;
+    environmentYawLoc = -1;
+    environmentMaxLodLoc = -1;
+    environmentIntensityLoc = -1;
     useStaticSpecularLightingLoc = -1;
     cameraPositionLoc = -1;
     environmentExposureLoc = -1;
@@ -1144,9 +1184,19 @@ void SectorStaticModelRenderer::UploadPbrDrawState(
     if (indirectDiffuseScaleLoc >= 0) SetShaderValue(shader, indirectDiffuseScaleLoc, &state.indirectDiffuseScale, SHADER_UNIFORM_FLOAT);
     if (environmentSpecularScaleLoc >= 0) SetShaderValue(shader, environmentSpecularScaleLoc, &state.environmentSpecularScale, SHADER_UNIFORM_FLOAT);
     if (useStaticSpecularLightingLoc >= 0) SetShaderValue(shader, useStaticSpecularLightingLoc, &useStaticSpecular, SHADER_UNIFORM_INT);
-    if (environmentExposureLoc >= 0) SetShaderValue(shader, environmentExposureLoc, &state.environmentExposure, SHADER_UNIFORM_FLOAT);
+    const float environmentExposure = environmentSelection.localProbe
+            ? 1.0f : state.environmentExposure;
+    if (environmentExposureLoc >= 0) SetShaderValue(shader, environmentExposureLoc, &environmentExposure, SHADER_UNIFORM_FLOAT);
     if (outputBrightnessMultiplierLoc >= 0) SetShaderValue(shader, outputBrightnessMultiplierLoc, &state.outputBrightnessMultiplier, SHADER_UNIFORM_FLOAT);
     if (hasEnvironmentLoc >= 0) SetShaderValue(shader, hasEnvironmentLoc, &hasEnvironment, SHADER_UNIFORM_INT);
+    const int boxProjection = environmentSelection.boxProjection ? 1 : 0;
+    if (environmentBoxProjectionLoc >= 0) SetShaderValue(shader, environmentBoxProjectionLoc, &boxProjection, SHADER_UNIFORM_INT);
+    if (environmentCapturePositionLoc >= 0) SetShaderValue(shader, environmentCapturePositionLoc, &environmentSelection.capturePosition, SHADER_UNIFORM_VEC3);
+    if (environmentInfluenceCenterLoc >= 0) SetShaderValue(shader, environmentInfluenceCenterLoc, &environmentSelection.influenceCenter, SHADER_UNIFORM_VEC3);
+    if (environmentHalfExtentsLoc >= 0) SetShaderValue(shader, environmentHalfExtentsLoc, &environmentSelection.halfExtents, SHADER_UNIFORM_VEC3);
+    if (environmentYawLoc >= 0) SetShaderValue(shader, environmentYawLoc, &environmentSelection.yawRadians, SHADER_UNIFORM_FLOAT);
+    if (environmentMaxLodLoc >= 0) SetShaderValue(shader, environmentMaxLodLoc, &environmentSelection.maxLod, SHADER_UNIFORM_FLOAT);
+    if (environmentIntensityLoc >= 0) SetShaderValue(shader, environmentIntensityLoc, &environmentSelection.intensity, SHADER_UNIFORM_FLOAT);
     if (useObjectProbeLightingLoc >= 0) SetShaderValue(shader, useObjectProbeLightingLoc, &useObjectProbe, SHADER_UNIFORM_INT);
     if (useVerticalObjectProbeLightingLoc >= 0) SetShaderValue(shader, useVerticalObjectProbeLightingLoc, &useVerticalProbe, SHADER_UNIFORM_INT);
 }
@@ -1490,7 +1540,8 @@ void SectorStaticModelRenderer::Draw(
         const std::vector<engine::TextureHandle>& lightmapTextures,
         const TextureCubemap* environment,
         bool useBakedAmbientOcclusion,
-        std::string& renderDebugText)
+        std::string& renderDebugText,
+        bool staticCaptureOnly)
 {
     if (!shaderLoaded || shader.id == 0) {
         AppendStaticModelDebugText(renderDebugText, 0, 0, 0, 0);
@@ -1840,6 +1891,7 @@ void SectorStaticModelRenderer::Draw(
              &drawn,
              &portalCulled,
              &skipped,
+             staticCaptureOnly,
              &runtimeObjectWorld](
                     engine::Entity entity,
                     SectorObjectTransform& transform,
@@ -1847,6 +1899,7 @@ void SectorStaticModelRenderer::Draw(
                     SectorObjectLighting& lighting,
                     SectorDynamicModel& dynamicModel,
                     engine::AnimatedModelInstance& instance) {
+                if (staticCaptureOnly) return;
                 ++considered;
                 if (!ShouldDrawRuntimeSectorForVisibility(object.currentSectorId, visibility)) {
                     ++portalCulled;

@@ -12,4 +12,5 @@ CMakeSettings.json
 # Generated baked-illumination atlases, probe/static-model sidecars, and staging files.
 *.lightmap.*
 *.object_probes.bin*
+*.reflection-probes.bin*
 .venv/

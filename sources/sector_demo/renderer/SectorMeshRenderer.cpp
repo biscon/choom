@@ -169,6 +169,13 @@ uniform int hasEnvironment;
 uniform float environmentExposure;
 uniform float indirectDiffuseScale;
 uniform float environmentSpecularScale;
+uniform int environmentBoxProjection;
+uniform vec3 environmentCapturePosition;
+uniform vec3 environmentInfluenceCenter;
+uniform vec3 environmentHalfExtents;
+uniform float environmentYaw;
+uniform float environmentMaxLod;
+uniform float environmentIntensity;
 uniform int pbrDiagnosticMode;
 uniform int alphaTest;
 uniform float alphaCutoff;
@@ -593,14 +600,51 @@ void main()
     vec3 environmentSpecular = vec3(0.0);
     if (hasEnvironment != 0 && environmentSpecularScale > 0.0) {
         vec3 reflected = reflect(-viewDirection, worldNormal);
+        if (environmentBoxProjection != 0) {
+            float c = cos(-environmentYaw);
+            float s = sin(-environmentYaw);
+            vec3 origin = fragWorldPosition - environmentInfluenceCenter;
+            vec3 localOrigin = vec3(
+                    origin.x * c - origin.z * s,
+                    origin.y,
+                    origin.x * s + origin.z * c);
+            vec3 localDirection = vec3(
+                    reflected.x * c - reflected.z * s,
+                    reflected.y,
+                    reflected.x * s + reflected.z * c);
+            vec3 safeDirection = vec3(
+                    abs(localDirection.x) < 0.00001 ? (localDirection.x < 0.0 ? -0.00001 : 0.00001) : localDirection.x,
+                    abs(localDirection.y) < 0.00001 ? (localDirection.y < 0.0 ? -0.00001 : 0.00001) : localDirection.y,
+                    abs(localDirection.z) < 0.00001 ? (localDirection.z < 0.0 ? -0.00001 : 0.00001) : localDirection.z);
+            vec3 exitPlane = mix(-environmentHalfExtents, environmentHalfExtents,
+                    step(vec3(0.0), localDirection));
+            vec3 exitDistance = (exitPlane - localOrigin) / safeDirection;
+            float distanceToBox = min(exitDistance.x,
+                    min(exitDistance.y, exitDistance.z));
+            vec3 localHit = localOrigin + localDirection * max(distanceToBox, 0.0);
+            vec3 captureOffset = environmentCapturePosition - environmentInfluenceCenter;
+            vec3 localCapture = vec3(
+                    captureOffset.x * c - captureOffset.z * s,
+                    captureOffset.y,
+                    captureOffset.x * s + captureOffset.z * c);
+            vec3 localLookup = localHit - localCapture;
+            c = cos(environmentYaw);
+            s = sin(environmentYaw);
+            reflected = normalize(vec3(
+                    localLookup.x * c - localLookup.z * s,
+                    localLookup.y,
+                    localLookup.x * s + localLookup.z * c));
+        }
         vec3 environment = textureLod(
-                environmentTexture, reflected, roughness * 8.0).rgb;
+                environmentTexture, reflected,
+                roughness * max(environmentMaxLod, 0.0)).rgb;
         vec2 environmentBrdf = EnvironmentBrdfApprox(
                 roughness,
                 max(dot(worldNormal, viewDirection), 0.0));
         environmentSpecular = environment
                 * (f0 * environmentBrdf.x + environmentBrdf.y)
                 * environmentExposure
+                * environmentIntensity
                 * environmentSpecularScale;
     }
 
@@ -832,6 +876,13 @@ bool LoadPreviewMaterial(
         int& environmentExposureLoc,
         int& indirectDiffuseScaleLoc,
         int& environmentSpecularScaleLoc,
+        int& environmentBoxProjectionLoc,
+        int& environmentCapturePositionLoc,
+        int& environmentInfluenceCenterLoc,
+        int& environmentHalfExtentsLoc,
+        int& environmentYawLoc,
+        int& environmentMaxLodLoc,
+        int& environmentIntensityLoc,
         int& pbrDiagnosticModeLoc,
         int& useStaticSpecularLightingLoc,
         SectorStaticSpecularShaderLocations& staticSpecularLocations,
@@ -901,6 +952,13 @@ bool LoadPreviewMaterial(
             material.shader, "indirectDiffuseScale");
     environmentSpecularScaleLoc = GetShaderLocation(
             material.shader, "environmentSpecularScale");
+    environmentBoxProjectionLoc = GetShaderLocation(material.shader, "environmentBoxProjection");
+    environmentCapturePositionLoc = GetShaderLocation(material.shader, "environmentCapturePosition");
+    environmentInfluenceCenterLoc = GetShaderLocation(material.shader, "environmentInfluenceCenter");
+    environmentHalfExtentsLoc = GetShaderLocation(material.shader, "environmentHalfExtents");
+    environmentYawLoc = GetShaderLocation(material.shader, "environmentYaw");
+    environmentMaxLodLoc = GetShaderLocation(material.shader, "environmentMaxLod");
+    environmentIntensityLoc = GetShaderLocation(material.shader, "environmentIntensity");
     pbrDiagnosticModeLoc = GetShaderLocation(
             material.shader, "pbrDiagnosticMode");
     useStaticSpecularLightingLoc = GetShaderLocation(
@@ -1323,6 +1381,13 @@ bool SectorMeshRenderer::RebuildRendererResources(
                 environmentExposureLoc,
                 indirectDiffuseScaleLoc,
                 environmentSpecularScaleLoc,
+                environmentBoxProjectionLoc,
+                environmentCapturePositionLoc,
+                environmentInfluenceCenterLoc,
+                environmentHalfExtentsLoc,
+                environmentYawLoc,
+                environmentMaxLodLoc,
+                environmentIntensityLoc,
                 pbrDiagnosticModeLoc,
                 useStaticSpecularLightingLoc,
                 staticSpecularLocations,
@@ -1542,7 +1607,8 @@ void SectorMeshRenderer::DrawScene(
         bool useBakedAmbientOcclusion,
         engine::World* runtimeObjectWorld,
         SectorRuntimeDoorLightingContext doorLighting,
-        const SectorTopologyFogSettings& fogSettings)
+        const SectorTopologyFogSettings& fogSettings,
+        bool staticCaptureOnly)
 {
     if (!initialized) {
         return;
@@ -1578,27 +1644,11 @@ void SectorMeshRenderer::DrawScene(
             ? dynamicLightState.ShadowMapDepthTexture(1) : nullptr;
     material.maps[MATERIAL_MAP_ROUGHNESS].texture = shadowMap0 != nullptr ? *shadowMap0 : Texture2D{};
     material.maps[MATERIAL_MAP_OCCLUSION].texture = shadowMap1 != nullptr ? *shadowMap1 : Texture2D{};
-    const TextureCubemap* environmentTexture = assets.GetCubemap(
-            pbrEnvironment.cubemap);
-    const bool environmentReady = IsSectorPbrEnvironmentActive(
-            pbrEnvironment, environmentTexture);
-    const int hasEnvironment = environmentReady
-                    && pbrContributionSettings.worldEnvironmentSpecularScale > 0.0f
-            ? 1
-            : 0;
-    material.maps[MATERIAL_MAP_CUBEMAP].texture = environmentReady
-            ? *environmentTexture
-            : Texture2D{};
     constexpr float SectorSurfaceEnvironmentExposure = 0.15f;
     const int pbrDiagnosticMode = static_cast<int>(
             pbrContributionSettings.diagnosticMode);
     if (cameraPositionLoc >= 0) SetShaderValue(
             material.shader, cameraPositionLoc, &camera.position, SHADER_UNIFORM_VEC3);
-    if (hasEnvironmentLoc >= 0) SetShaderValue(
-            material.shader, hasEnvironmentLoc, &hasEnvironment, SHADER_UNIFORM_INT);
-    if (environmentExposureLoc >= 0) SetShaderValue(
-            material.shader, environmentExposureLoc,
-            &SectorSurfaceEnvironmentExposure, SHADER_UNIFORM_FLOAT);
     if (indirectDiffuseScaleLoc >= 0) SetShaderValue(
             material.shader, indirectDiffuseScaleLoc,
             &pbrContributionSettings.worldIndirectDiffuseScale,
@@ -1670,6 +1720,46 @@ void SectorMeshRenderer::DrawScene(
                             meshes.sectorReceiverBounds, batch.sectorId);
             const SectorReceiverBounds fallbackBounds{
                     batch.sectorId, camera.position, camera.position};
+            const SectorReceiverBounds& environmentBounds = receiverBounds != nullptr
+                    ? *receiverBounds : fallbackBounds;
+            const Vector3 environmentReceiver = Vector3Scale(
+                    Vector3Add(environmentBounds.min, environmentBounds.max),
+                    0.5f);
+            const SectorPbrEnvironmentSelection environmentSelection =
+                    SelectSectorPbrEnvironment(
+                            pbrEnvironment, environmentReceiver, batch.sectorId);
+            const TextureCubemap* selectedEnvironment = assets.GetCubemap(
+                    environmentSelection.cubemap);
+            const int hasEnvironment = selectedEnvironment != nullptr
+                            && selectedEnvironment->id != 0
+                            && pbrContributionSettings.worldEnvironmentSpecularScale > 0.0f
+                    ? 1 : 0;
+            material.maps[MATERIAL_MAP_CUBEMAP].texture = hasEnvironment != 0
+                    ? *selectedEnvironment : Texture2D{};
+            const float environmentExposure = environmentSelection.localProbe
+                    ? 1.0f : SectorSurfaceEnvironmentExposure;
+            const int boxProjection = environmentSelection.boxProjection ? 1 : 0;
+            if (hasEnvironmentLoc >= 0) SetShaderValue(material.shader,
+                    hasEnvironmentLoc, &hasEnvironment, SHADER_UNIFORM_INT);
+            if (environmentExposureLoc >= 0) SetShaderValue(material.shader,
+                    environmentExposureLoc, &environmentExposure, SHADER_UNIFORM_FLOAT);
+            if (environmentBoxProjectionLoc >= 0) SetShaderValue(material.shader,
+                    environmentBoxProjectionLoc, &boxProjection, SHADER_UNIFORM_INT);
+            if (environmentCapturePositionLoc >= 0) SetShaderValue(material.shader,
+                    environmentCapturePositionLoc,
+                    &environmentSelection.capturePosition, SHADER_UNIFORM_VEC3);
+            if (environmentInfluenceCenterLoc >= 0) SetShaderValue(material.shader,
+                    environmentInfluenceCenterLoc,
+                    &environmentSelection.influenceCenter, SHADER_UNIFORM_VEC3);
+            if (environmentHalfExtentsLoc >= 0) SetShaderValue(material.shader,
+                    environmentHalfExtentsLoc,
+                    &environmentSelection.halfExtents, SHADER_UNIFORM_VEC3);
+            if (environmentYawLoc >= 0) SetShaderValue(material.shader,
+                    environmentYawLoc, &environmentSelection.yawRadians, SHADER_UNIFORM_FLOAT);
+            if (environmentMaxLodLoc >= 0) SetShaderValue(material.shader,
+                    environmentMaxLodLoc, &environmentSelection.maxLod, SHADER_UNIFORM_FLOAT);
+            if (environmentIntensityLoc >= 0) SetShaderValue(material.shader,
+                    environmentIntensityLoc, &environmentSelection.intensity, SHADER_UNIFORM_FLOAT);
             const SectorStaticSpecularLightContext staticSpecularContext =
                     SelectSectorStaticSpecularLights(
                             staticSpecularLightState,
@@ -1814,6 +1904,12 @@ void SectorMeshRenderer::DrawScene(
         DrawMesh(batch.mesh, material, MatrixIdentity());
     }
     if (runtimeObjectWorld != nullptr) {
+        const SectorPbrEnvironmentSelection objectEnvironmentSelection =
+                SelectSectorPbrEnvironment(pbrEnvironment, camera.position);
+        const TextureCubemap* environmentTexture = assets.GetCubemap(
+                objectEnvironmentSelection.cubemap);
+        const bool environmentReady = environmentTexture != nullptr
+                && environmentTexture->id != 0;
         SectorDoorDrawContext doorDrawContext;
         doorDrawContext.assets = &assets;
         doorDrawContext.runtimeObjectWorld = runtimeObjectWorld;
@@ -1834,6 +1930,15 @@ void SectorMeshRenderer::DrawScene(
         doorDrawContext.environment = environmentReady
                 ? environmentTexture
                 : nullptr;
+        doorDrawContext.environmentExposure = objectEnvironmentSelection.localProbe
+                ? objectEnvironmentSelection.intensity
+                : SectorSurfaceEnvironmentExposure;
+        doorDrawContext.environmentCapturePosition = objectEnvironmentSelection.capturePosition;
+        doorDrawContext.environmentInfluenceCenter = objectEnvironmentSelection.influenceCenter;
+        doorDrawContext.environmentHalfExtents = objectEnvironmentSelection.halfExtents;
+        doorDrawContext.environmentYaw = objectEnvironmentSelection.yawRadians;
+        doorDrawContext.environmentMaxLod = objectEnvironmentSelection.maxLod;
+        doorDrawContext.environmentBoxProjection = objectEnvironmentSelection.boxProjection;
         doorDrawContext.staticSpecularEligible = objectProbeBakeCurrent
                 && doorLighting.objectLightProbes != nullptr
                 && !doorLighting.objectLightProbes->probes.empty();
@@ -1842,13 +1947,9 @@ void SectorMeshRenderer::DrawScene(
         doorRenderer.Draw(doorDrawContext);
 
         const SectorBillboardDynamicLightContext billboardLightContext = BuildBillboardDynamicLightContext();
-        const TextureCubemap* pbrEnvironmentTexture = assets.GetCubemap(
-                pbrEnvironment.cubemap);
-        if (!IsSectorPbrEnvironmentActive(
-                    pbrEnvironment,
-                    pbrEnvironmentTexture)) {
-            pbrEnvironmentTexture = nullptr;
-        }
+        const TextureCubemap* pbrEnvironmentTexture = environmentReady
+                ? environmentTexture : nullptr;
+        staticModelRenderer.SetEnvironmentProjection(objectEnvironmentSelection);
         staticModelRenderer.Draw(
                 assets,
                 *runtimeObjectWorld,
@@ -1864,24 +1965,122 @@ void SectorMeshRenderer::DrawScene(
                 lightmapTextures,
                 pbrEnvironmentTexture,
                 useBakedAmbientOcclusion,
-                renderDebugText);
-        SectorDynamicModelShadowDrawContext modelShadowContext;
-        modelShadowContext.assets = &assets;
-        modelShadowContext.world = runtimeObjectWorld;
-        modelShadowContext.collisionWorld = visibilityLookupWorldValid
-                ? &visibilityLookupWorld
-                : nullptr;
-        modelShadowContext.visibility = &visibilityResult;
-        dynamicModelShadowRenderer.Draw(modelShadowContext);
-        billboardRenderer.Draw(
-                assets,
-                *runtimeObjectWorld,
-                camera,
-                billboardLightContext,
-                fogContext,
-                renderDebugText);
+                renderDebugText,
+                staticCaptureOnly);
+        if (!staticCaptureOnly) {
+            SectorDynamicModelShadowDrawContext modelShadowContext;
+            modelShadowContext.assets = &assets;
+            modelShadowContext.world = runtimeObjectWorld;
+            modelShadowContext.collisionWorld = visibilityLookupWorldValid
+                    ? &visibilityLookupWorld
+                    : nullptr;
+            modelShadowContext.visibility = &visibilityResult;
+            dynamicModelShadowRenderer.Draw(modelShadowContext);
+            billboardRenderer.Draw(
+                    assets,
+                    *runtimeObjectWorld,
+                    camera,
+                    billboardLightContext,
+                    fogContext,
+                    renderDebugText);
+        }
     }
     EndMode3D();
+}
+
+bool SectorMeshRenderer::CaptureReflectionProbe(
+        engine::AssetManager& assets,
+        Vector3 capturePosition,
+        int resolution,
+        engine::World* runtimeObjectWorld,
+        SectorRuntimeDoorLightingContext doorLighting,
+        std::vector<Vector4>& outFacePixels,
+        std::string& error)
+{
+    outFacePixels.clear();
+    if (!initialized || (resolution != 64 && resolution != 128 && resolution != 256)) {
+        error = "Reflection capture requires a ready renderer and a 64, 128, or 256 resolution";
+        return false;
+    }
+    engine::RenderTarget target;
+    engine::RenderTargetDescriptor descriptor;
+    descriptor.debugName = "sector-reflection-probe-capture";
+    descriptor.width = resolution;
+    descriptor.height = resolution;
+    descriptor.colorFormat = engine::RenderTargetColorFormat::Rgba16Float;
+    descriptor.filter = engine::RenderTargetFilter::Bilinear;
+    descriptor.wrap = engine::RenderTargetWrap::Clamp;
+    descriptor.depth = engine::RenderTargetDepthKind::Renderbuffer;
+    if (!engine::LoadRenderTarget(descriptor, target, &error)) return false;
+
+    const SectorViewPose savedPose = RendererPose();
+    const float savedFov = verticalFovDegrees;
+    const bool savedDynamicLighting = dynamicLightingEnabled;
+    const SectorPbrContributionSettings savedPbr = pbrContributionSettings;
+    const RuntimePortalVisibilityResult savedVisibility = visibilityResult;
+    dynamicLightingEnabled = false;
+    SectorPbrContributionSettings capturePbr = savedPbr;
+    capturePbr.worldEnvironmentSpecularScale = 0.0f;
+    capturePbr.diagnosticMode = SectorPbrDiagnosticMode::Full;
+    SetPbrContributionSettings(capturePbr);
+    SetVerticalFovDegrees(90.0f);
+
+    const std::array<SectorViewPose, 6> poses{{
+            {capturePosition, 0.0f, 0.0f, 0.0f},
+            {capturePosition, PI, 0.0f, 0.0f},
+            {capturePosition, PI * 0.5f, PI * 0.5f, 0.0f},
+            {capturePosition, PI * 0.5f, -PI * 0.5f, 0.0f},
+            {capturePosition, PI * 0.5f, 0.0f, 0.0f},
+            {capturePosition, -PI * 0.5f, 0.0f, 0.0f}}};
+    const std::size_t facePixelCount = static_cast<std::size_t>(resolution)
+            * static_cast<std::size_t>(resolution);
+    std::vector<float> readback(facePixelCount * 4u);
+    outFacePixels.resize(facePixelCount * 6u);
+    const SectorTopologyFogSettings noFog{};
+    bool succeeded = true;
+    for (int face = 0; face < 6; ++face) {
+        ApplyRendererPose(poses[static_cast<std::size_t>(face)], true);
+        BeginTextureMode(target.native);
+        ClearBackground(BLACK);
+        DrawScene(assets, true, runtimeObjectWorld, doorLighting, noFog, true);
+        rlDrawRenderBatchActive();
+        glReadPixels(0, 0, resolution, resolution, GL_RGBA, GL_FLOAT, readback.data());
+        const GLenum glError = glGetError();
+        EndTextureMode();
+        if (glError != GL_NO_ERROR) {
+            error = "OpenGL readback failed while capturing reflection probe";
+            succeeded = false;
+            break;
+        }
+        // The preview camera basis is mirrored relative to OpenGL cubemap face
+        // coordinates; convert the framebuffer image before prefiltering/upload.
+        for (int y = 0; y < resolution; ++y) {
+            const int sourceY = resolution - 1 - y;
+            for (int x = 0; x < resolution; ++x) {
+                const int sourceX = resolution - 1 - x;
+                const std::size_t source = static_cast<std::size_t>(
+                        (sourceY * resolution + sourceX) * 4);
+                const std::size_t destination = static_cast<std::size_t>(face)
+                                * facePixelCount
+                        + static_cast<std::size_t>(y * resolution + x);
+                outFacePixels[destination] = Vector4{
+                        readback[source], readback[source + 1],
+                        readback[source + 2], readback[source + 3]};
+            }
+        }
+    }
+    ApplyRendererPose(savedPose, false);
+    SetVerticalFovDegrees(savedFov);
+    dynamicLightingEnabled = savedDynamicLighting;
+    SetPbrContributionSettings(savedPbr);
+    visibilityResult = savedVisibility;
+    engine::UnloadRenderTarget(target);
+    if (!succeeded) {
+        outFacePixels.clear();
+        return false;
+    }
+    error.clear();
+    return true;
 }
 
 void SectorMeshRenderer::DrawDepthPrepass(
@@ -1966,11 +2165,12 @@ void SectorMeshRenderer::DrawViewmodel(
         const SectorViewmodelLightingContext& attachmentLighting)
 {
     BeginMode3D(viewmodelCamera);
+    const SectorPbrEnvironmentSelection viewmodelEnvironment =
+            SelectSectorPbrEnvironment(
+                    pbrEnvironment, viewmodelCamera.position, receiverSectorId);
     const TextureCubemap* pbrEnvironmentTexture = assets.GetCubemap(
-            pbrEnvironment.cubemap);
-    if (!IsSectorPbrEnvironmentActive(
-                pbrEnvironment,
-                pbrEnvironmentTexture)) {
+            viewmodelEnvironment.cubemap);
+    if (pbrEnvironmentTexture != nullptr && pbrEnvironmentTexture->id == 0) {
         pbrEnvironmentTexture = nullptr;
     }
     const SectorReceiverBounds receiverBounds{
@@ -1988,6 +2188,7 @@ void SectorMeshRenderer::DrawViewmodel(
                     receiverSectorId,
                     visibilityResult,
                     currentProbeForDraw && validProbe);
+    staticModelRenderer.SetEnvironmentProjection(viewmodelEnvironment);
     staticModelRenderer.DrawViewmodel(
             asset, instance, viewmodelCamera, transform,
             attachmentAsset, attachmentTransform,

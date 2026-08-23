@@ -3,6 +3,7 @@
 #include "engine/assets/AssetManager.h"
 #include "engine/render/ColorTransfer.h"
 #include "sector_demo/SectorAssetPaths.h"
+#include "sector_demo/SectorReflectionProbes.h"
 #include "sector_demo/SectorSkyCylinder.h"
 #include "sector_demo/SectorTopologyMap.h"
 
@@ -13,6 +14,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <string>
 #include <vector>
 
 namespace game {
@@ -159,6 +162,34 @@ Image BuildCubemapImage(const Image& source, const SectorTopologySkySettings& se
     return image;
 }
 
+Image BuildLocalProbeImage(const SectorBakedReflectionProbeRecord& record)
+{
+    Image image{};
+    const std::size_t expected = SectorReflectionProbeHalfCount(
+            record.resolution, record.mipCount);
+    if (expected == 0 || record.rgba16.size() != expected) return image;
+    const std::size_t bytes = expected * sizeof(std::uint16_t);
+    image.data = MemAlloc(static_cast<unsigned int>(bytes));
+    if (image.data == nullptr) return image;
+    std::memcpy(image.data, record.rgba16.data(), bytes);
+    image.width = record.resolution;
+    image.height = record.resolution * 6;
+    image.mipmaps = record.mipCount;
+    image.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
+    return image;
+}
+
+Vector3 ToProbeLocal(Vector3 point, const SectorCompiledReflectionProbe& probe)
+{
+    const float c = std::cos(-probe.yawRadians);
+    const float s = std::sin(-probe.yawRadians);
+    const Vector3 relative = Vector3Subtract(point, probe.influenceCenterWorld);
+    return Vector3{
+            relative.x * c - relative.z * s,
+            relative.y,
+            relative.x * s + relative.z * c};
+}
+
 } // namespace
 
 bool BuildSectorPbrEnvironment(
@@ -168,6 +199,58 @@ bool BuildSectorPbrEnvironment(
         SectorPbrEnvironment& outEnvironment)
 {
     outEnvironment = {};
+    SectorBakedReflectionProbeArtifact artifact;
+    std::string artifactError;
+    if (!map.bakedReflectionProbes.path.empty()
+            && map.bakedReflectionProbes.version == SectorReflectionProbeBakeVersion
+            && map.bakedReflectionProbes.format == "rgba16f-cubemap-mips"
+            && ReadSectorReflectionProbeArtifact(
+                    ResolveSectorAssetPath(map.bakedReflectionProbes.path),
+                    artifact,
+                    artifactError)
+            && static_cast<int>(artifact.probes.size())
+                    == map.bakedReflectionProbes.count) {
+        outEnvironment.localProbes.reserve(map.compiledReflectionProbes.size());
+        int staleProbeCount = 0;
+        for (const SectorCompiledReflectionProbe& probe : map.compiledReflectionProbes) {
+            if (!probe.enabled) continue;
+            const SectorBakedReflectionProbeRecord* record =
+                    FindSectorBakedReflectionProbeRecord(
+                            artifact, probe.sourceAuthoringProbeId);
+            if (record == nullptr
+                    || record->sourceHash
+                            != ComputeSectorReflectionProbeSourceHash(map, probe)) {
+                ++staleProbeCount;
+                continue;
+            }
+            Image image = BuildLocalProbeImage(*record);
+            if (image.data == nullptr) continue;
+            const std::string key = "sector_reflection_probe_"
+                    + std::to_string(probe.sourceAuthoringProbeId) + "_"
+                    + record->sourceHash;
+            const engine::TextureHandle cubemap = assets.CreateCubemapFromImage(
+                    scope,
+                    key.c_str(),
+                    image,
+                    engine::TextureColorUsage::LinearData,
+                    CUBEMAP_LAYOUT_LINE_VERTICAL);
+            UnloadImage(image);
+            if (engine::IsNull(cubemap)) continue;
+            outEnvironment.localProbes.push_back(
+                    SectorPbrEnvironment::LocalProbe{
+                            probe, cubemap, record->mipCount});
+        }
+        if (staleProbeCount > 0) {
+            std::fprintf(stderr,
+                    "[SectorMeshRenderer WARNING] %d reflection probe capture%s stale or missing; rebake reflection probes\n",
+                    staleProbeCount, staleProbeCount == 1 ? " is" : "s are");
+        }
+    } else if (!map.bakedReflectionProbes.path.empty()) {
+        if (artifactError.empty()) artifactError = "artifact count does not match level metadata";
+        std::fprintf(stderr,
+                "[SectorMeshRenderer WARNING] Reflection probes unavailable: %s\n",
+                artifactError.c_str());
+    }
     Image source{};
     const SectorMaterialDefinition* skyTexture = FindSkyTexture(map);
     if (ShouldRenderSkyCylinder(map) && skyTexture != nullptr) {
@@ -178,6 +261,7 @@ bool BuildSectorPbrEnvironment(
         // No real environment is different from a neutral environment. Keep
         // the handle and eligibility clear so map switches cannot retain a
         // previous sky contribution.
+        outEnvironment.active = !outEnvironment.localProbes.empty();
         return true;
     }
     const SectorTopologySkySettings settings = NormalizeSectorTopologySkySettings(map.skySettings);
@@ -194,8 +278,65 @@ bool BuildSectorPbrEnvironment(
             engine::TextureColorUsage::SceneSrgb,
             CUBEMAP_LAYOUT_LINE_VERTICAL);
     UnloadImage(cubemapImage);
-    outEnvironment.active = !engine::IsNull(outEnvironment.cubemap);
+    outEnvironment.active = !engine::IsNull(outEnvironment.cubemap)
+            || !outEnvironment.localProbes.empty();
     return outEnvironment.active;
+}
+
+SectorPbrEnvironmentSelection SelectSectorPbrEnvironment(
+        const SectorPbrEnvironment& environment,
+        Vector3 receiverPosition,
+        int receiverSectorId)
+{
+    const SectorPbrEnvironment::LocalProbe* best = nullptr;
+    float bestDistanceSquared = 0.0f;
+    for (const SectorPbrEnvironment::LocalProbe& candidate : environment.localProbes) {
+        const SectorCompiledReflectionProbe& probe = candidate.definition;
+        if (!probe.enabled || engine::IsNull(candidate.cubemap)) continue;
+        const Vector3 local = ToProbeLocal(receiverPosition, probe);
+        if (std::fabs(local.x) > probe.halfExtentsWorld.x
+                || std::fabs(local.y) > probe.halfExtentsWorld.y
+                || std::fabs(local.z) > probe.halfExtentsWorld.z) {
+            continue;
+        }
+        const float distanceSquared = Vector3DistanceSqr(
+                receiverPosition, probe.influenceCenterWorld);
+        const bool better = best == nullptr
+                || probe.priority > best->definition.priority
+                || (probe.priority == best->definition.priority
+                        && probe.topologySectorId == receiverSectorId
+                        && best->definition.topologySectorId != receiverSectorId)
+                || (probe.priority == best->definition.priority
+                        && (probe.topologySectorId == receiverSectorId)
+                                == (best->definition.topologySectorId == receiverSectorId)
+                        && (distanceSquared < bestDistanceSquared
+                                || (distanceSquared == bestDistanceSquared
+                                        && probe.sourceAuthoringProbeId
+                                                < best->definition.sourceAuthoringProbeId)));
+        if (better) {
+            best = &candidate;
+            bestDistanceSquared = distanceSquared;
+        }
+    }
+    if (best != nullptr) {
+        const SectorCompiledReflectionProbe& probe = best->definition;
+        return SectorPbrEnvironmentSelection{
+                best->cubemap,
+                probe.capturePositionWorld,
+                probe.influenceCenterWorld,
+                probe.halfExtentsWorld,
+                probe.yawRadians,
+                probe.intensity,
+                static_cast<float>(std::max(0, best->mipCount - 1)),
+                true,
+                true};
+    }
+    if (!engine::IsNull(environment.cubemap)) {
+        return SectorPbrEnvironmentSelection{
+                environment.cubemap, {}, {}, {1.0f, 1.0f, 1.0f},
+                0.0f, 1.0f, 8.0f, false, false};
+    }
+    return {};
 }
 
 } // namespace game

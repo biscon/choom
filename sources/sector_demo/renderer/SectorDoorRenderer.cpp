@@ -70,6 +70,12 @@ uniform int hasEnvironment;
 uniform float environmentExposure;
 uniform float indirectDiffuseScale;
 uniform float environmentSpecularScale;
+uniform int environmentBoxProjection;
+uniform vec3 environmentCapturePosition;
+uniform vec3 environmentInfluenceCenter;
+uniform vec3 environmentHalfExtents;
+uniform float environmentYaw;
+uniform float environmentMaxLod;
 uniform int pbrDiagnosticMode;
 
 #define MAX_STATIC_SPECULAR_LIGHTS 4
@@ -431,8 +437,26 @@ void main()
     vec3 environmentSpecular = vec3(0.0);
     if (hasEnvironment != 0 && environmentSpecularScale > 0.0) {
         vec3 reflected = reflect(-viewDirection, worldNormal);
+        if (environmentBoxProjection != 0) {
+            float c = cos(-environmentYaw);
+            float s = sin(-environmentYaw);
+            vec3 origin = fragWorldPosition - environmentInfluenceCenter;
+            vec3 localOrigin = vec3(origin.x*c-origin.z*s, origin.y, origin.x*s+origin.z*c);
+            vec3 localDirection = vec3(reflected.x*c-reflected.z*s, reflected.y, reflected.x*s+reflected.z*c);
+            vec3 safeDirection = mix(vec3(-1.0), vec3(1.0), step(vec3(0.0), localDirection))
+                    * max(abs(localDirection), vec3(0.00001));
+            vec3 exitPlane = mix(-environmentHalfExtents, environmentHalfExtents, step(vec3(0.0), localDirection));
+            vec3 exitDistance = (exitPlane-localOrigin)/safeDirection;
+            float distanceToBox = min(exitDistance.x, min(exitDistance.y, exitDistance.z));
+            vec3 localHit = localOrigin + localDirection * max(distanceToBox, 0.0);
+            vec3 captureOffset = environmentCapturePosition-environmentInfluenceCenter;
+            vec3 localCapture = vec3(captureOffset.x*c-captureOffset.z*s, captureOffset.y, captureOffset.x*s+captureOffset.z*c);
+            vec3 localLookup = localHit-localCapture;
+            c = cos(environmentYaw); s = sin(environmentYaw);
+            reflected = normalize(vec3(localLookup.x*c-localLookup.z*s, localLookup.y, localLookup.x*s+localLookup.z*c));
+        }
         vec3 environment = textureLod(
-                environmentTexture, reflected, roughness * 8.0).rgb;
+                environmentTexture, reflected, roughness * max(environmentMaxLod, 0.0)).rgb;
         vec2 environmentBrdf = EnvironmentBrdfApprox(
                 roughness,
                 max(dot(worldNormal, viewDirection), 0.0));
@@ -616,6 +640,12 @@ bool SectorDoorRenderer::LoadOpaqueResources()
     opaqueShaderLocations.environmentExposure = GetShaderLocation(opaqueShader, "environmentExposure");
     opaqueShaderLocations.indirectDiffuseScale = GetShaderLocation(opaqueShader, "indirectDiffuseScale");
     opaqueShaderLocations.environmentSpecularScale = GetShaderLocation(opaqueShader, "environmentSpecularScale");
+    opaqueShaderLocations.environmentBoxProjection = GetShaderLocation(opaqueShader, "environmentBoxProjection");
+    opaqueShaderLocations.environmentCapturePosition = GetShaderLocation(opaqueShader, "environmentCapturePosition");
+    opaqueShaderLocations.environmentInfluenceCenter = GetShaderLocation(opaqueShader, "environmentInfluenceCenter");
+    opaqueShaderLocations.environmentHalfExtents = GetShaderLocation(opaqueShader, "environmentHalfExtents");
+    opaqueShaderLocations.environmentYaw = GetShaderLocation(opaqueShader, "environmentYaw");
+    opaqueShaderLocations.environmentMaxLod = GetShaderLocation(opaqueShader, "environmentMaxLod");
     opaqueShaderLocations.pbrDiagnosticMode = GetShaderLocation(opaqueShader, "pbrDiagnosticMode");
     opaqueShaderLocations.useStaticSpecularLighting = GetShaderLocation(
             opaqueShader, "useStaticSpecularLighting");
@@ -896,6 +926,25 @@ void SectorDoorRenderer::Draw(const SectorDoorDrawContext& context)
             doorOpaqueLocations.environmentSpecularScale,
             &pbr.worldEnvironmentSpecularScale,
             SHADER_UNIFORM_FLOAT);
+    const int boxProjection = context.environmentBoxProjection ? 1 : 0;
+    if (doorOpaqueLocations.environmentBoxProjection >= 0) SetShaderValue(
+            doorOpaqueMaterial.shader, doorOpaqueLocations.environmentBoxProjection,
+            &boxProjection, SHADER_UNIFORM_INT);
+    if (doorOpaqueLocations.environmentCapturePosition >= 0) SetShaderValue(
+            doorOpaqueMaterial.shader, doorOpaqueLocations.environmentCapturePosition,
+            &context.environmentCapturePosition, SHADER_UNIFORM_VEC3);
+    if (doorOpaqueLocations.environmentInfluenceCenter >= 0) SetShaderValue(
+            doorOpaqueMaterial.shader, doorOpaqueLocations.environmentInfluenceCenter,
+            &context.environmentInfluenceCenter, SHADER_UNIFORM_VEC3);
+    if (doorOpaqueLocations.environmentHalfExtents >= 0) SetShaderValue(
+            doorOpaqueMaterial.shader, doorOpaqueLocations.environmentHalfExtents,
+            &context.environmentHalfExtents, SHADER_UNIFORM_VEC3);
+    if (doorOpaqueLocations.environmentYaw >= 0) SetShaderValue(
+            doorOpaqueMaterial.shader, doorOpaqueLocations.environmentYaw,
+            &context.environmentYaw, SHADER_UNIFORM_FLOAT);
+    if (doorOpaqueLocations.environmentMaxLod >= 0) SetShaderValue(
+            doorOpaqueMaterial.shader, doorOpaqueLocations.environmentMaxLod,
+            &context.environmentMaxLod, SHADER_UNIFORM_FLOAT);
     const int pbrDiagnosticMode = static_cast<int>(pbr.diagnosticMode);
     if (doorOpaqueLocations.pbrDiagnosticMode >= 0) SetShaderValue(
             doorOpaqueMaterial.shader,

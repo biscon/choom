@@ -350,6 +350,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.cpp
             sources/sector_editor/services/lights/SectorEditorLightEditingService.cpp
             sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
+            sources/sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.cpp
             sources/sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.cpp
             sources/sector_editor/services/triggers/SectorEditorTriggerEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
@@ -462,6 +463,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorGeneratedGeometry.cpp
             sources/sector_demo/SectorLightmap.cpp
             sources/sector_demo/SectorLightmapReport.cpp
+            sources/sector_demo/SectorReflectionProbes.cpp
             sources/sector_demo/SectorStaticModelLightmap.cpp
             sources/sector_demo/SectorTextureTypes.cpp
             sources/sector_demo/SectorTopologyGeometry.cpp

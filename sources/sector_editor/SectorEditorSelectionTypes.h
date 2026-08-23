@@ -50,6 +50,7 @@ enum class SectorAuthoringSelectionKind {
     Vertex,
     FaceAnchor,
     FogVolume,
+    ReflectionProbe,
     LevelMarker,
     Trigger
 };
@@ -60,6 +61,7 @@ struct SectorAuthoringSelectionTarget {
     int vertexId = -1;
     int faceAnchorId = -1;
     int fogVolumeId = -1;
+    int reflectionProbeId = -1;
     int levelMarkerId = -1;
     int triggerId = -1;
 };
@@ -108,6 +110,16 @@ struct AuthoringFogVolumeDragState {
     std::string errorMessage;
 };
 
+struct AuthoringReflectionProbeDragState {
+    bool active = false;
+    int reflectionProbeId = -1;
+    SectorTopologyCoordPoint originalPoint = {};
+    SectorTopologyCoordPoint previewPoint = {};
+    bool hasPreviewPoint = false;
+    bool previewResolved = false;
+    std::string errorMessage;
+};
+
 enum class SpotLightHandle {
     Origin,
     Target
@@ -126,6 +138,7 @@ enum class SectorEditorPickKind {
     AuthoringLine,
     AuthoringFaceAnchor,
     AuthoringFogVolume,
+    AuthoringReflectionProbe,
     LevelMarker,
     Trigger
 };

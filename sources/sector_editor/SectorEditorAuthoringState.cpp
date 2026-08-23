@@ -55,6 +55,7 @@ void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap
     target.audioSettings = source.audioSettings;
     target.lightmapSettings = source.lightmapSettings;
     target.bakedLightmap = source.bakedLightmap;
+    target.bakedReflectionProbes = source.bakedReflectionProbes;
 }
 
 void InvalidateEditorTopologyRenderCache(
@@ -1076,6 +1077,12 @@ std::string FormatAuthoringDerivationDiagnostic(
     case SectorAuthoringDerivationDiagnosticKind::NonIntegerVertex:
         objectLabel = "Vertex";
         break;
+    case SectorAuthoringDerivationDiagnosticKind::UnresolvedFogVolume:
+        objectLabel = "Fog volume";
+        break;
+    case SectorAuthoringDerivationDiagnosticKind::UnresolvedReflectionProbe:
+        objectLabel = "Reflection probe";
+        break;
     case SectorAuthoringDerivationDiagnosticKind::AuthoringReference:
     case SectorAuthoringDerivationDiagnosticKind::Planarization:
     case SectorAuthoringDerivationDiagnosticKind::FaceExtraction:
@@ -1426,6 +1433,16 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringFogVolumeSelectionTarget(int f
     return target;
 }
 
+SectorAuthoringSelectionTarget MakeSectorAuthoringReflectionProbeSelectionTarget(int probeId)
+{
+    SectorAuthoringSelectionTarget target;
+    if (IsValidSectorAuthoringId(probeId)) {
+        target.kind = SectorAuthoringSelectionKind::ReflectionProbe;
+        target.reflectionProbeId = probeId;
+    }
+    return target;
+}
+
 SectorAuthoringSelectionTarget MakeSectorAuthoringLevelMarkerSelectionTarget(int markerId)
 {
     SectorAuthoringSelectionTarget target;
@@ -1455,6 +1472,7 @@ bool SectorAuthoringSelectionTargetsEqual(
             && lhs.vertexId == rhs.vertexId
             && lhs.faceAnchorId == rhs.faceAnchorId
             && lhs.fogVolumeId == rhs.fogVolumeId
+            && lhs.reflectionProbeId == rhs.reflectionProbeId
             && lhs.levelMarkerId == rhs.levelMarkerId
             && lhs.triggerId == rhs.triggerId;
 }
@@ -1466,7 +1484,8 @@ bool IsSectorAuthoringSelectionTargetValid(
     switch (target.kind) {
     case SectorAuthoringSelectionKind::None:
         return target.lineId == -1 && target.vertexId == -1 && target.faceAnchorId == -1
-                && target.fogVolumeId == -1 && target.levelMarkerId == -1 && target.triggerId == -1;
+                && target.fogVolumeId == -1 && target.reflectionProbeId == -1
+                && target.levelMarkerId == -1 && target.triggerId == -1;
     case SectorAuthoringSelectionKind::Line:
         return target.vertexId == -1
                 && target.faceAnchorId == -1
@@ -1495,6 +1514,12 @@ bool IsSectorAuthoringSelectionTargetValid(
                 && target.levelMarkerId == -1
                 && target.triggerId == -1
                 && FindSectorAuthoringFogVolume(graph, target.fogVolumeId) != nullptr;
+    case SectorAuthoringSelectionKind::ReflectionProbe:
+        return target.lineId == -1 && target.vertexId == -1
+                && target.faceAnchorId == -1 && target.fogVolumeId == -1
+                && target.levelMarkerId == -1 && target.triggerId == -1
+                && FindSectorAuthoringReflectionProbe(
+                        graph, target.reflectionProbeId) != nullptr;
     case SectorAuthoringSelectionKind::LevelMarker:
         return target.lineId == -1
                 && target.vertexId == -1
@@ -1634,6 +1659,20 @@ bool SelectSectorEditorAuthoringFogVolume(
     return true;
 }
 
+bool SelectSectorEditorAuthoringReflectionProbe(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int probeId)
+{
+    const SectorAuthoringSelectionTarget target =
+            MakeSectorAuthoringReflectionProbeSelectionTarget(probeId);
+    if (target.kind != SectorAuthoringSelectionKind::ReflectionProbe
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) return false;
+    selectionState.selectedAuthoring = target;
+    selectionState.selectedAuthoringFaceAnchorIds.clear();
+    return true;
+}
+
 bool SelectSectorEditorAuthoringLevelMarker(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
@@ -1711,6 +1750,19 @@ bool SetHoveredSectorEditorAuthoringFogVolume(
             || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
         return false;
     }
+    selectionState.hoveredAuthoring = target;
+    return true;
+}
+
+bool SetHoveredSectorEditorAuthoringReflectionProbe(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int probeId)
+{
+    const SectorAuthoringSelectionTarget target =
+            MakeSectorAuthoringReflectionProbeSelectionTarget(probeId);
+    if (target.kind != SectorAuthoringSelectionKind::ReflectionProbe
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) return false;
     selectionState.hoveredAuthoring = target;
     return true;
 }
@@ -3349,6 +3401,15 @@ SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::AuthoringFogVolume;
         target.fogVolumeId = selectionState.selectedAuthoring.fogVolumeId;
+        return target;
+    }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::ReflectionProbe
+            && FindSectorAuthoringReflectionProbe(
+                    authoringGraph,
+                    selectionState.selectedAuthoring.reflectionProbeId) != nullptr) {
+        SectorEditorInspectorTarget target;
+        target.kind = SectorEditorInspectorTargetKind::AuthoringReflectionProbe;
+        target.reflectionProbeId = selectionState.selectedAuthoring.reflectionProbeId;
         return target;
     }
     if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::LevelMarker

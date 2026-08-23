@@ -6,6 +6,7 @@
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
+#include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
@@ -38,6 +39,7 @@ struct SectorEditorToolContext {
     engine::Input* input = nullptr;
     Rectangle canvasRect = {};
     SectorEditorAuthoringFogVolumeEditingService* fogVolumeEditing = nullptr;
+    SectorEditorReflectionProbeEditingService* reflectionProbeEditing = nullptr;
     SectorEditorLevelMarkerEditingService* levelMarkerEditing = nullptr;
     SectorEditorAuthoringFaceMergeService* authoringFaceMerge = nullptr;
     SectorEditorTriggerEditingService* triggerEditing = nullptr;

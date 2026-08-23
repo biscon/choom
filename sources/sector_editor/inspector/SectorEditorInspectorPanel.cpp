@@ -389,6 +389,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringFogVolume
             ? FindSectorAuthoringFogVolume(authoringGraph, inspectorTarget.fogVolumeId)
             : nullptr;
+    const SectorAuthoringReflectionProbe* selectedReflectionProbe =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringReflectionProbe
+            ? FindSectorAuthoringReflectionProbe(
+                    authoringGraph, inspectorTarget.reflectionProbeId)
+            : nullptr;
     const SectorAuthoringLevelMarker* selectedLevelMarker =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringLevelMarker
             ? FindSectorAuthoringLevelMarker(authoringGraph, inspectorTarget.levelMarkerId)
@@ -567,6 +572,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     *selectedAuthoringFogVolume,
                     rowH,
                     gap);
+        }
+        if (selectedReflectionProbe != nullptr) {
+            return 38.0f + 16.0f * (rowH + gap) + 42.0f;
         }
         if (selectedLevelMarker != nullptr) {
             return MeasureSectorEditorLevelMarkerInspectorContentHeight(
@@ -2524,6 +2532,158 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     Rectangle{0.0f, y, contentW, rowH},
                     font, "Delete Fog Volume")) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedFogVolumeConfirmation);
+        }
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
+    if (selectedReflectionProbe != nullptr) {
+        SectorEditorReflectionProbeEditingService& editing =
+                context.reflectionProbeEditing;
+        ReflectionProbeEditingUiState& probeUi = context.reflectionProbeUiState;
+        const int probeId = selectedReflectionProbe->id;
+        engine::Text(ui, config, assets, {0.0f, y, contentW, 34.0f}, font,
+                TextFormat("Reflection Probe: %d", probeId),
+                engine::UITextJustify::Left, config.textColor);
+        y += 38.0f;
+
+        bool enabled = selectedReflectionProbe->enabled;
+        if (engine::Checkbox(ui, config, input, assets,
+                    "sector_editor_reflection_probe_enabled",
+                    {0.0f, y, contentW, rowH}, font, "Enabled", enabled)) {
+            editing.MutateById(probeId, "Updated reflection probe",
+                    [enabled](SectorAuthoringReflectionProbe& probe) {
+                        if (probe.enabled == enabled) return false;
+                        probe.enabled = enabled;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+
+        const auto drawFloat = [&](const char* id, const char* label,
+                                   float current, std::size_t inputIndex,
+                                   float minimum, float maximum,
+                                   const std::function<void(SectorAuthoringReflectionProbe&, float)>& set) {
+            const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(
+                    y, contentW, rowH, gap);
+            const SectorEditorFloatInputResult value = DrawLabeledFloatInput(
+                    ui, config, input, assets, font, id, label,
+                    layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right,
+                    current, probeUi.floatInputs[inputIndex],
+                    minimum, maximum, 3);
+            if (value.changed && value.value != current) {
+                editing.MutateById(probeId, "Updated reflection probe",
+                        [&](SectorAuthoringReflectionProbe& probe) {
+                            set(probe, value.value);
+                            return true;
+                        });
+            }
+            y += rowH + gap;
+        };
+        const auto drawCoord = [&](const char* id, const char* label,
+                                   bool xAxis, std::size_t inputIndex) {
+            const float current = SectorCoordToVisibleAuthoring(
+                    xAxis ? selectedReflectionProbe->x : selectedReflectionProbe->z);
+            const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(
+                    y, contentW, rowH, gap);
+            const SectorEditorFloatInputResult value = DrawLabeledFloatInput(
+                    ui, config, input, assets, font, id, label,
+                    layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right,
+                    current, probeUi.floatInputs[inputIndex],
+                    -8192.0f, 8192.0f, 3);
+            if (value.changed && value.value != current) {
+                SectorCoord coord = 0;
+                if (VisibleAuthoringToSectorCoord(value.value, coord)) {
+                    SectorTopologyCoordPoint point{
+                            selectedReflectionProbe->x, selectedReflectionProbe->z};
+                    if (xAxis) point.x = coord; else point.y = coord;
+                    editing.SetPosition(probeId, point, "Moved reflection probe");
+                }
+            }
+            y += rowH + gap;
+        };
+
+        drawCoord("sector_editor_reflection_probe_x", "Capture X", true, 0);
+        drawCoord("sector_editor_reflection_probe_z", "Capture Z", false, 1);
+        drawFloat("sector_editor_reflection_probe_y", "Capture Y",
+                selectedReflectionProbe->yWorld, 2, -128.0f, 128.0f,
+                [](auto& probe, float value) { probe.yWorld = value; });
+        drawFloat("sector_editor_reflection_probe_yaw", "Box yaw",
+                selectedReflectionProbe->yawDegrees, 3, 0.0f, 360.0f,
+                [](auto& probe, float value) { probe.yawDegrees = value; });
+        drawFloat("sector_editor_reflection_probe_offset_x", "Box offset X",
+                selectedReflectionProbe->influenceOffsetWorld.x, 4, -128.0f, 128.0f,
+                [](auto& probe, float value) { probe.influenceOffsetWorld.x = value; });
+        drawFloat("sector_editor_reflection_probe_offset_y", "Box offset Y",
+                selectedReflectionProbe->influenceOffsetWorld.y, 5, -128.0f, 128.0f,
+                [](auto& probe, float value) { probe.influenceOffsetWorld.y = value; });
+        drawFloat("sector_editor_reflection_probe_offset_z", "Box offset Z",
+                selectedReflectionProbe->influenceOffsetWorld.z, 6, -128.0f, 128.0f,
+                [](auto& probe, float value) { probe.influenceOffsetWorld.z = value; });
+        drawFloat("sector_editor_reflection_probe_extent_x", "Half extent X",
+                selectedReflectionProbe->halfExtentsWorld.x, 7, 0.1f, 128.0f,
+                [](auto& probe, float value) { probe.halfExtentsWorld.x = value; });
+        drawFloat("sector_editor_reflection_probe_extent_y", "Half extent Y",
+                selectedReflectionProbe->halfExtentsWorld.y, 8, 0.1f, 128.0f,
+                [](auto& probe, float value) { probe.halfExtentsWorld.y = value; });
+        drawFloat("sector_editor_reflection_probe_extent_z", "Half extent Z",
+                selectedReflectionProbe->halfExtentsWorld.z, 9, 0.1f, 128.0f,
+                [](auto& probe, float value) { probe.halfExtentsWorld.z = value; });
+        drawFloat("sector_editor_reflection_probe_intensity", "Intensity",
+                selectedReflectionProbe->intensity, 10, 0.0f, 8.0f,
+                [](auto& probe, float value) { probe.intensity = value; });
+
+        const auto priorityLayout = BuildSectorEditorInspectorRightIntRowLayout(
+                y, contentW, rowH, gap);
+        const SectorEditorIntInputResult priority = DrawLabeledIntInput(
+                ui, config, input, assets, font,
+                "sector_editor_reflection_probe_priority", "Priority",
+                priorityLayout.labelRect, priorityLayout.inputRect,
+                engine::UITextJustify::Right,
+                selectedReflectionProbe->priority, probeUi.priorityInput,
+                -1000, 1000, 1);
+        if (priority.changed && priority.value != selectedReflectionProbe->priority) {
+            editing.MutateById(probeId, "Updated reflection probe priority",
+                    [&](SectorAuthoringReflectionProbe& probe) {
+                        probe.priority = priority.value;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+
+        const char* const resolutionOptions[] = {"64", "128", "256"};
+        int resolutionIndex = selectedReflectionProbe->resolution == 64 ? 0
+                : selectedReflectionProbe->resolution == 256 ? 2 : 1;
+        const auto resolutionLayout = BuildSectorEditorInspectorStackedOptionRowLayout(
+                y, contentW, rowH, gap);
+        engine::Text(ui, config, assets, resolutionLayout.labelRect, font,
+                "Resolution", engine::UITextJustify::Left, config.mutedTextColor);
+        if (engine::Option(ui, config, input, assets,
+                    "sector_editor_reflection_probe_resolution",
+                    resolutionLayout.fieldRect, font,
+                    resolutionOptions, std::size(resolutionOptions), resolutionIndex)) {
+            const int resolution = resolutionIndex == 0 ? 64
+                    : resolutionIndex == 2 ? 256 : 128;
+            editing.MutateById(probeId, "Updated reflection probe resolution",
+                    [resolution](SectorAuthoringReflectionProbe& probe) {
+                        probe.resolution = resolution;
+                        return true;
+                    });
+        }
+        y += resolutionLayout.height + gap;
+
+        if (engine::Button(ui, config, input, assets,
+                    "sector_editor_reflection_probe_fit", {0.0f, y, contentW, rowH},
+                    font, "Fit to Sector")) editing.FitToSector(probeId);
+        y += rowH + gap;
+        if (engine::Button(ui, config, input, assets,
+                    "sector_editor_reflection_probe_delete", {0.0f, y, contentW, rowH},
+                    font, "Delete Reflection Probe")) {
+            AppendRequest(result,
+                    SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedReflectionProbeConfirmation);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);

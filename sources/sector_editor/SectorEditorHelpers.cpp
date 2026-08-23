@@ -656,6 +656,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::Npc: return "NPC";
         case SectorEditorTool::Door: return "Door";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume";
+        case SectorEditorTool::ReflectionProbe: return "Reflection Probe";
         case SectorEditorTool::Trigger: return "Trigger";
         case SectorEditorTool::LevelMarker: return "Level Marker";
         case SectorEditorTool::StaticLight: return "Static Light";
@@ -1149,6 +1150,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::Npc: return "NPC: click inside a derived sector to place a character";
         case SectorEditorTool::Door: return "Door: click a two-sided portal line to place a sliding door";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume: click strictly inside a sector to place local fog";
+        case SectorEditorTool::ReflectionProbe: return "Reflection Probe: click inside a sector to place a local baked reflection capture";
         case SectorEditorTool::Trigger: return "Trigger: choose Rectangle or Polygon, then draw snapped points; right click/Esc cancels";
         case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place a baked point light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place a baked spot light";

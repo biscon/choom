@@ -997,9 +997,20 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 const char* objectProbeStatus = context.runtimeObjects.objectProbeStatus.empty()
                         ? "none"
                         : context.runtimeObjects.objectProbeStatus.c_str();
-                addKeyValueStyled("status", objectProbeStatus, smallConfig.mutedTextColor, true);
+                addKeyValueStyled("object probe status", objectProbeStatus, smallConfig.mutedTextColor, true);
                 const size_t totalProbeCount = context.runtimeObjects.objectLightProbes.probes.size();
-                addKeyValue("probe count", TextFormat("%zu", totalProbeCount));
+                addKeyValue("object probe count", TextFormat("%zu", totalProbeCount));
+                const std::size_t reflectionProbeCount = topologyMap.compiledReflectionProbes.size();
+                addKeyValue("reflection probes", TextFormat(
+                        "placed %zu | baked %d",
+                        reflectionProbeCount,
+                        topologyMap.bakedReflectionProbes.count));
+                const bool selectedReflectionProbe =
+                        selectionState.selectedAuthoring.kind
+                                == SectorAuthoringSelectionKind::ReflectionProbe;
+                addKeyValue("selected reflection", selectedReflectionProbe
+                        ? TextFormat("%d", selectionState.selectedAuthoring.reflectionProbeId)
+                        : "none");
                 if (overlayState.showObjectProbeDebugOverlay) {
                     const float maxDistanceWorld = NormalizeSectorPreviewSettings(
                             topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
@@ -2170,6 +2181,52 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     smallFont,
                     "Show Object Probes",
                     engine::UITextJustify::Left,
+                    smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+
+        const bool selectedReflectionProbe =
+                selectionState.selectedAuthoring.kind
+                        == SectorAuthoringSelectionKind::ReflectionProbe;
+        const float bakeGap = 8.0f;
+        const float bakeWidth = (contentW - bakeGap) * 0.5f;
+        const Rectangle bakeSelectedRect{panel.x + padding, y, bakeWidth, rowH};
+        const Rectangle bakeAllRect{
+                bakeSelectedRect.x + bakeWidth + bakeGap, y, bakeWidth, rowH};
+        if (mouseInteractive && selectedReflectionProbe) {
+            if (engine::Button(
+                        ui, smallConfig, input, assets,
+                        "sector_editor_preview_bake_selected_reflection_probe",
+                        bakeSelectedRect, smallFont, "Bake Selected Reflection")) {
+                result.requestBakeSelectedReflectionProbe = true;
+            }
+        } else {
+            DrawRectangleRec(bakeSelectedRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(
+                    bakeSelectedRect, config.borderThickness, config.borderColor);
+            engine::Text(
+                    smallConfig, assets, bakeSelectedRect, smallFont,
+                    selectedReflectionProbe
+                            ? "Bake Selected Reflection"
+                            : "Select Reflection in 2D",
+                    engine::UITextJustify::Center,
+                    smallConfig.mutedTextColor);
+        }
+        if (mouseInteractive && !topologyMap.compiledReflectionProbes.empty()) {
+            if (engine::Button(
+                        ui, smallConfig, input, assets,
+                        "sector_editor_preview_bake_all_reflection_probes",
+                        bakeAllRect, smallFont, "Bake All Reflections")) {
+                result.requestBakeAllReflectionProbes = true;
+            }
+        } else {
+            DrawRectangleRec(bakeAllRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(
+                    bakeAllRect, config.borderThickness, config.borderColor);
+            engine::Text(
+                    smallConfig, assets, bakeAllRect, smallFont,
+                    "Bake All Reflections",
+                    engine::UITextJustify::Center,
                     smallConfig.mutedTextColor);
         }
         y += rowH + 6.0f;

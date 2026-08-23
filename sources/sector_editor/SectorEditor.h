@@ -35,6 +35,7 @@
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_editor/services/lightmap_bake/SectorEditorLightmapBakeController.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
+#include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
 #include "sector_editor/services/footsteps/SectorEditorFootstepService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
@@ -183,7 +184,9 @@ private:
     void DrawTopologySnapCrosshair() const;
     void DrawAuthoringVertexMoveOverlay() const;
     void DrawAuthoringFogVolumes() const;
+    void DrawAuthoringReflectionProbes() const;
     void DrawAuthoringFogVolumeMoveOverlay() const;
+    void DrawAuthoringReflectionProbeMoveOverlay() const;
     void DrawLightMoveOverlay() const;
     void DrawCanvasOverlay(engine::AssetManager& assets, engine::FontHandle font) const;
     void RenderPreview3D(engine::AssetManager& assets);
@@ -510,6 +513,8 @@ private:
     bool StartLightmapBake(SectorLightmapBakeQualityPreset qualityPreset);
     void PollLightmapBakeResult(engine::AssetManager& assets);
     bool InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult& result, engine::AssetManager& assets);
+    void ProcessPendingReflectionProbeBake(engine::EngineContext& context);
+    bool BakeReflectionProbes(engine::EngineContext& context, int selectedProbeId);
     SectorEditorState state;
     SectorEditorDocumentState documentState;
     SectorEditorPreviewState previewState;
@@ -531,7 +536,9 @@ private:
     MaterialEditingState materialEditingState;
     MaterialEditingUiState materialEditingUiState;
     FogVolumeEditingUiState fogVolumeEditingUiState;
+    ReflectionProbeEditingUiState reflectionProbeEditingUiState;
     std::optional<SectorEditorAuthoringFogVolumeEditingService> fogVolumeEditingService;
+    std::optional<SectorEditorReflectionProbeEditingService> reflectionProbeEditingService;
     LevelMarkerEditingState levelMarkerEditingState;
     LevelMarkerEditingUiState levelMarkerEditingUiState;
     SectorEditorAuthoringFaceMergeState authoringFaceMergeState;
@@ -541,6 +548,8 @@ private:
     TriggerEditingUiState triggerEditingUiState;
     std::optional<SectorEditorTriggerEditingService> triggerEditingService;
     SectorEditorLightmapBakeController lightmapBake;
+    bool reflectionProbeBakePending = false;
+    int reflectionProbeBakeSelectedId = -1;
     Rectangle canvasRect = {};
     std::string statusText;
     SectorSceneRuntime sceneRuntime;

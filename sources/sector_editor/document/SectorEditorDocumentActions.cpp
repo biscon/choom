@@ -45,8 +45,10 @@ bool BuildLevelPaths(const std::string& name, LevelPaths& paths, std::string& er
     paths.directoryPath = std::filesystem::path(ASSETS_PATH) / relativeDirectory;
     paths.jsonFilePath = paths.directoryPath / (name + ".json");
     paths.lightmapFilePath = paths.directoryPath / (name + ".lightmap.bin");
+    paths.reflectionProbeFilePath = paths.directoryPath / (name + ".reflection-probes.bin");
     paths.jsonAssetPath = (std::filesystem::path("assets") / relativeDirectory / (name + ".json")).generic_string();
     paths.lightmapAssetPath = (std::filesystem::path("assets") / relativeDirectory / (name + ".lightmap.bin")).generic_string();
+    paths.reflectionProbeAssetPath = (std::filesystem::path("assets") / relativeDirectory / (name + ".reflection-probes.bin")).generic_string();
     error.clear();
     return true;
 }

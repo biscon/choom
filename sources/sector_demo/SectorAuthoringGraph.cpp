@@ -2,6 +2,8 @@
 #include "sector_demo/SectorTriggers.h"
 #include "sector_demo/SectorUnits.h"
 
+#include <raymath.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <cmath>
@@ -30,6 +32,8 @@ constexpr float FogNoiseAmountMin = 0.0f;
 constexpr float FogNoiseAmountMax = 1.0f;
 constexpr float FogFlowSpeedMin = 0.0f;
 constexpr float FogFlowSpeedMax = 8.0f;
+constexpr float ReflectionProbeExtentMin = 0.10f;
+constexpr float ReflectionProbeExtentMax = 128.0f;
 
 float ClampFiniteFogValue(float value, float minimum, float maximum, float fallback)
 {
@@ -1794,6 +1798,85 @@ void CompileAuthoringFogVolumes(
     }
 }
 
+void CompileAuthoringReflectionProbes(
+        const SectorAuthoringGraph& graph,
+        const SectorAuthoringPlanarizationResult& planar,
+        const SectorAuthoringFaceExtractionResult& faces,
+        const FaceContainmentInfo& containment,
+        SectorTopologyMap& topology,
+        SectorAuthoringDerivationMapping& mapping,
+        std::vector<SectorAuthoringDerivationDiagnostic>& diagnostics)
+{
+    topology.compiledReflectionProbes.reserve(graph.reflectionProbes.size());
+    mapping.reflectionProbes.reserve(graph.reflectionProbes.size());
+    for (const SectorAuthoringReflectionProbe& authored : graph.reflectionProbes) {
+        const double px = static_cast<double>(authored.x);
+        const double py = static_cast<double>(authored.z);
+        const SectorAuthoringExtractedFace* bestFace = nullptr;
+        int bestDepth = std::numeric_limits<int>::min();
+        bool onBoundary = false;
+        for (const SectorAuthoringExtractedFace& face : faces.faces) {
+            if (FacePointIsOnBoundary(planar, face, px, py)) {
+                onBoundary = true;
+                continue;
+            }
+            if (!FaceContainsPoint(planar, face, px, py, false)) continue;
+            const auto depthIt = containment.depthByFaceId.find(face.id);
+            const int depth = depthIt == containment.depthByFaceId.end() ? 0 : depthIt->second;
+            if (bestFace == nullptr || depth > bestDepth) {
+                bestFace = &face;
+                bestDepth = depth;
+            }
+        }
+
+        SectorAuthoringDerivedReflectionProbeMapping probeMapping;
+        probeMapping.authoringReflectionProbeId = authored.id;
+        if (!onBoundary && bestFace != nullptr) {
+            probeMapping.extractedFaceId = bestFace->id;
+            for (const SectorAuthoringResolvedFaceMapping& faceMapping : mapping.resolvedFaces) {
+                if (faceMapping.extractedFaceId == bestFace->id
+                        && faceMapping.kind == SectorAuthoringFaceResolutionKind::DerivedSector) {
+                    probeMapping.topologySectorId = faceMapping.topologySectorId;
+                    probeMapping.resolved = true;
+                    break;
+                }
+            }
+        }
+        mapping.reflectionProbes.push_back(probeMapping);
+        if (!probeMapping.resolved) {
+            AddDerivationDiagnostic(
+                    diagnostics,
+                    SectorAuthoringDerivationDiagnosticKind::UnresolvedReflectionProbe,
+                    authored.id,
+                    onBoundary
+                            ? "Reflection probe capture point lies on a face boundary"
+                            : "Reflection probe capture point is not inside a non-void derived face",
+                    SectorAuthoringValidationSeverity::Warning);
+            continue;
+        }
+
+        const SectorAuthoringReflectionProbe probe =
+                NormalizeSectorAuthoringReflectionProbe(authored);
+        const Vector3 capture{
+                SectorAuthoringToWorldDistance(
+                        static_cast<float>(probe.x) / static_cast<float>(SectorCoordSubdivisions)),
+                probe.yWorld,
+                SectorAuthoringToWorldDistance(
+                        static_cast<float>(probe.z) / static_cast<float>(SectorCoordSubdivisions))};
+        topology.compiledReflectionProbes.push_back(SectorCompiledReflectionProbe{
+                probe.id,
+                probeMapping.topologySectorId,
+                probe.enabled,
+                capture,
+                Vector3Add(capture, probe.influenceOffsetWorld),
+                probe.halfExtentsWorld,
+                probe.yawDegrees * DEG2RAD,
+                probe.priority,
+                probe.intensity,
+                probe.resolution});
+    }
+}
+
 } // namespace
 
 bool IsValidSectorAuthoringId(int id)
@@ -1819,6 +1902,11 @@ int AllocateSectorAuthoringFaceAnchorId(const SectorAuthoringGraph& graph)
 int AllocateSectorAuthoringFogVolumeId(const SectorAuthoringGraph& graph)
 {
     return AllocateNextId(graph.fogVolumes);
+}
+
+int AllocateSectorAuthoringReflectionProbeId(const SectorAuthoringGraph& graph)
+{
+    return AllocateNextId(graph.reflectionProbes);
 }
 
 int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph)
@@ -1966,6 +2054,54 @@ const SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(
 SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(SectorAuthoringGraph& graph, int id)
 {
     return FindById(graph.fogVolumes, id);
+}
+
+const SectorAuthoringReflectionProbe* FindSectorAuthoringReflectionProbe(
+        const SectorAuthoringGraph& graph,
+        int id)
+{
+    return FindById(graph.reflectionProbes, id);
+}
+
+SectorAuthoringReflectionProbe* FindSectorAuthoringReflectionProbe(
+        SectorAuthoringGraph& graph,
+        int id)
+{
+    return FindById(graph.reflectionProbes, id);
+}
+
+SectorAuthoringReflectionProbe NormalizeSectorAuthoringReflectionProbe(
+        SectorAuthoringReflectionProbe probe)
+{
+    const SectorAuthoringReflectionProbe defaults;
+    auto finiteClamp = [](float value, float minimum, float maximum, float fallback) {
+        return std::isfinite(value) ? std::clamp(value, minimum, maximum) : fallback;
+    };
+    probe.yWorld = finiteClamp(probe.yWorld, -128.0f, 128.0f, defaults.yWorld);
+    probe.yawDegrees = std::isfinite(probe.yawDegrees)
+            ? std::fmod(probe.yawDegrees, 360.0f) : defaults.yawDegrees;
+    if (probe.yawDegrees < 0.0f) probe.yawDegrees += 360.0f;
+    probe.influenceOffsetWorld.x = finiteClamp(
+            probe.influenceOffsetWorld.x, -128.0f, 128.0f, 0.0f);
+    probe.influenceOffsetWorld.y = finiteClamp(
+            probe.influenceOffsetWorld.y, -128.0f, 128.0f, 0.0f);
+    probe.influenceOffsetWorld.z = finiteClamp(
+            probe.influenceOffsetWorld.z, -128.0f, 128.0f, 0.0f);
+    probe.halfExtentsWorld.x = finiteClamp(
+            probe.halfExtentsWorld.x, ReflectionProbeExtentMin,
+            ReflectionProbeExtentMax, defaults.halfExtentsWorld.x);
+    probe.halfExtentsWorld.y = finiteClamp(
+            probe.halfExtentsWorld.y, ReflectionProbeExtentMin,
+            ReflectionProbeExtentMax, defaults.halfExtentsWorld.y);
+    probe.halfExtentsWorld.z = finiteClamp(
+            probe.halfExtentsWorld.z, ReflectionProbeExtentMin,
+            ReflectionProbeExtentMax, defaults.halfExtentsWorld.z);
+    probe.intensity = finiteClamp(probe.intensity, 0.0f, 8.0f, defaults.intensity);
+    if (probe.resolution != 64 && probe.resolution != 128 && probe.resolution != 256) {
+        probe.resolution = defaults.resolution;
+    }
+    probe.priority = std::clamp(probe.priority, -1000, 1000);
+    return probe;
 }
 
 const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
@@ -2396,6 +2532,32 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
                 || volume.flowSpeedWorld < FogFlowSpeedMin || volume.flowSpeedWorld > FogFlowSpeedMax
                 || volume.bottomOffsetWorld < FogBottomOffsetMin || volume.bottomOffsetWorld > FogBottomOffsetMax) {
             AddIssue(issues, SectorAuthoringObjectKind::FogVolume, volume.id, "Authoring fog volume settings are outside supported ranges");
+        }
+    }
+
+    std::set<int> reflectionProbeIds;
+    for (const SectorAuthoringReflectionProbe& source : graph.reflectionProbes) {
+        if (!IsValidSectorAuthoringId(source.id)) {
+            AddIssue(issues, SectorAuthoringObjectKind::ReflectionProbe, source.id,
+                    "Invalid reflection probe ID");
+        } else if (!reflectionProbeIds.insert(source.id).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::ReflectionProbe, source.id,
+                    "Duplicate reflection probe ID");
+        }
+        const SectorAuthoringReflectionProbe probe =
+                NormalizeSectorAuthoringReflectionProbe(source);
+        if (probe.yWorld != source.yWorld || probe.yawDegrees != source.yawDegrees
+                || probe.influenceOffsetWorld.x != source.influenceOffsetWorld.x
+                || probe.influenceOffsetWorld.y != source.influenceOffsetWorld.y
+                || probe.influenceOffsetWorld.z != source.influenceOffsetWorld.z
+                || probe.halfExtentsWorld.x != source.halfExtentsWorld.x
+                || probe.halfExtentsWorld.y != source.halfExtentsWorld.y
+                || probe.halfExtentsWorld.z != source.halfExtentsWorld.z
+                || probe.priority != source.priority
+                || probe.intensity != source.intensity
+                || probe.resolution != source.resolution) {
+            AddIssue(issues, SectorAuthoringObjectKind::ReflectionProbe, source.id,
+                    "Reflection probe settings are outside supported ranges");
         }
     }
 
@@ -2914,6 +3076,14 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
             result.topology,
             result.mapping,
             result.diagnostics);
+    CompileAuthoringReflectionProbes(
+            graph,
+            result.planar,
+            result.faces,
+            faceContainment,
+            result.topology,
+            result.mapping,
+            result.diagnostics);
 
     result.topology.levelMarkers.reserve(graph.levelMarkers.size());
     constexpr float DegreesToRadians = 3.14159265358979323846f / 180.0f;
@@ -2973,6 +3143,7 @@ SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopolog
     graph.faceAnchors.reserve(map.sectors.size());
     graph.levelMarkers.reserve(map.levelMarkers.size());
     graph.triggers.reserve(map.triggers.size());
+    graph.reflectionProbes.reserve(map.compiledReflectionProbes.size());
 
     for (const SectorTopologyVertex& topologyVertex : map.vertices) {
         SectorAuthoringVertex vertex;
@@ -3007,6 +3178,34 @@ SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopolog
         CopySectorPropertiesToFaceAnchor(sector, anchor);
         SetFaceAnchorAveragePosition(map, sector, anchor);
         graph.faceAnchors.push_back(anchor);
+    }
+
+    constexpr float RadiansToDegreesForProbe = 180.0f / 3.14159265358979323846f;
+    for (const SectorCompiledReflectionProbe& compiled : map.compiledReflectionProbes) {
+        SectorCoord x = 0;
+        SectorCoord z = 0;
+        if (!VisibleAuthoringToSectorCoord(
+                    SectorWorldToAuthoringDistance(compiled.capturePositionWorld.x), x)
+                || !VisibleAuthoringToSectorCoord(
+                    SectorWorldToAuthoringDistance(compiled.capturePositionWorld.z), z)) {
+            continue;
+        }
+        SectorAuthoringReflectionProbe probe;
+        probe.id = IsValidSectorAuthoringId(compiled.sourceAuthoringProbeId)
+                ? compiled.sourceAuthoringProbeId
+                : AllocateSectorAuthoringReflectionProbeId(graph);
+        probe.x = x;
+        probe.z = z;
+        probe.yWorld = compiled.capturePositionWorld.y;
+        probe.enabled = compiled.enabled;
+        probe.yawDegrees = compiled.yawRadians * RadiansToDegreesForProbe;
+        probe.influenceOffsetWorld = Vector3Subtract(
+                compiled.influenceCenterWorld, compiled.capturePositionWorld);
+        probe.halfExtentsWorld = compiled.halfExtentsWorld;
+        probe.priority = compiled.priority;
+        probe.intensity = compiled.intensity;
+        probe.resolution = compiled.resolution;
+        graph.reflectionProbes.push_back(probe);
     }
 
 

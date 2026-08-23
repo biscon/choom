@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_demo/SectorLightmapTypes.h"
+#include "sector_demo/SectorReflectionProbeTypes.h"
 #include "sector_demo/SectorTopologyTypes.h"
 #include "sector_demo/SectorTextureTypes.h"
 
@@ -320,8 +321,10 @@ struct SectorTopologyMap {
     SectorTopologyFogSettings fogSettings;
     SectorLevelAudioSettings audioSettings;
     std::vector<SectorCompiledLocalFogVolume> compiledLocalFogVolumes;
+    std::vector<SectorCompiledReflectionProbe> compiledReflectionProbes;
     SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;
+    SectorBakedReflectionProbeMetadata bakedReflectionProbes;
 };
 
 // Transient lookup data. Index vectors intentionally retain duplicate IDs so

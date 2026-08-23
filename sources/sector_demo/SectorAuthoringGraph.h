@@ -94,6 +94,20 @@ struct SectorAuthoringFogVolume {
     float flowSpeedWorld = 0.20f;
 };
 
+struct SectorAuthoringReflectionProbe {
+    int id = -1;
+    SectorCoord x = 0;
+    SectorCoord z = 0;
+    float yWorld = 1.5f;
+    bool enabled = true;
+    float yawDegrees = 0.0f;
+    Vector3 influenceOffsetWorld = {};
+    Vector3 halfExtentsWorld = {2.0f, 1.5f, 2.0f};
+    int priority = 0;
+    float intensity = 1.0f;
+    int resolution = 128;
+};
+
 struct SectorAuthoringLevelMarker {
     int id = -1;
     std::string referenceId;
@@ -120,6 +134,7 @@ struct SectorAuthoringGraph {
     std::vector<SectorAuthoringLineSide> lineSides;
     std::vector<SectorAuthoringFaceAnchor> faceAnchors;
     std::vector<SectorAuthoringFogVolume> fogVolumes;
+    std::vector<SectorAuthoringReflectionProbe> reflectionProbes;
     std::vector<SectorAuthoringLevelMarker> levelMarkers;
     std::vector<SectorAuthoringTrigger> triggers;
 };
@@ -136,6 +151,7 @@ enum class SectorAuthoringObjectKind {
     Side,
     FaceAnchor,
     FogVolume,
+    ReflectionProbe,
     LevelMarker,
     Trigger
 };
@@ -244,7 +260,8 @@ enum class SectorAuthoringDerivationDiagnosticKind {
     InvalidSideProjection,
     NonIntegerVertex,
     InvalidTopology,
-    UnresolvedFogVolume
+    UnresolvedFogVolume,
+    UnresolvedReflectionProbe
 };
 
 struct SectorAuthoringDerivationDiagnostic {
@@ -289,6 +306,13 @@ struct SectorAuthoringDerivedFogVolumeMapping {
     bool resolved = false;
 };
 
+struct SectorAuthoringDerivedReflectionProbeMapping {
+    int authoringReflectionProbeId = -1;
+    int extractedFaceId = -1;
+    int topologySectorId = -1;
+    bool resolved = false;
+};
+
 enum class SectorAuthoringFaceResolutionKind {
     Unresolved,
     DerivedSector,
@@ -309,6 +333,7 @@ struct SectorAuthoringDerivationMapping {
     std::vector<SectorAuthoringDerivedSectorMapping> sectors;
     std::vector<SectorAuthoringResolvedFaceMapping> resolvedFaces;
     std::vector<SectorAuthoringDerivedFogVolumeMapping> fogVolumes;
+    std::vector<SectorAuthoringDerivedReflectionProbeMapping> reflectionProbes;
 };
 
 struct SectorAuthoringDerivationResult {
@@ -343,6 +368,7 @@ int AllocateSectorAuthoringVertexId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringLineId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringFaceAnchorId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringFogVolumeId(const SectorAuthoringGraph& graph);
+int AllocateSectorAuthoringReflectionProbeId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringTriggerId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringGraph& graph);
@@ -374,6 +400,15 @@ const SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(
         int id);
 SectorAuthoringFogVolume* FindSectorAuthoringFogVolume(SectorAuthoringGraph& graph, int id);
 SectorAuthoringFogVolume NormalizeSectorAuthoringFogVolume(SectorAuthoringFogVolume volume);
+
+const SectorAuthoringReflectionProbe* FindSectorAuthoringReflectionProbe(
+        const SectorAuthoringGraph& graph,
+        int id);
+SectorAuthoringReflectionProbe* FindSectorAuthoringReflectionProbe(
+        SectorAuthoringGraph& graph,
+        int id);
+SectorAuthoringReflectionProbe NormalizeSectorAuthoringReflectionProbe(
+        SectorAuthoringReflectionProbe probe);
 
 const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
         const SectorAuthoringGraph& graph,

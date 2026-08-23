@@ -325,6 +325,7 @@ game::SectorAuthoringDocument MakeAuthoringDocumentFromMap(const SectorTopologyM
     document.mapData.fogSettings = map.fogSettings;
     document.mapData.lightmapSettings = map.lightmapSettings;
     document.mapData.bakedLightmap = map.bakedLightmap;
+    document.mapData.bakedReflectionProbes = map.bakedReflectionProbes;
     document.derivation = game::DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
     return document;
 }
@@ -4245,6 +4246,17 @@ void TestGraphNativeMapLevelRoundTrip()
     source.bakedLightmap.staticModels.modelCount = 2;
     source.bakedLightmap.staticModels.objectCount = 5;
     source.bakedLightmap.staticModels.format = "staticModelUvRemapF32LE";
+    source.compiledReflectionProbes.push_back(game::SectorCompiledReflectionProbe{
+            41, 1, true,
+            Vector3{0.25f, 1.5f, 0.25f},
+            Vector3{0.30f, 1.5f, 0.30f},
+            Vector3{0.25f, 1.5f, 0.25f},
+            0.5f, 3, 1.25f, 128});
+    source.bakedReflectionProbes = game::SectorBakedReflectionProbeMetadata{
+            "assets/levels/test/test.reflection-probes.bin",
+            game::SectorReflectionProbeBakeVersion,
+            1,
+            "rgba16f-cubemap-mips"};
 
     const game::SectorAuthoringDocument original = MakeAuthoringDocumentFromMap(source);
     const Json saved = Json::parse(SaveAuthoringText(original));
@@ -4303,6 +4315,10 @@ void TestGraphNativeMapLevelRoundTrip()
           "graph-native additional lightmap atlas metadata is persisted");
     Check(saved["bakedLightmap"]["objectProbes"].is_object(),
           "graph-native baked object probe metadata is persisted");
+    Check(saved["authoringGraph"]["reflectionProbes"].size() == 1
+                  && saved["authoringGraph"]["reflectionProbes"][0]["id"] == 41
+                  && saved["bakedReflectionProbes"]["count"] == 1,
+          "graph-native reflection probe authoring and bake metadata are persisted");
     Check(saved["bakedLightmap"]["objectProbes"]["path"]
                   == "assets/levels/test/test.lightmap.object_probes.bin",
           "graph-native baked object probe sidecar path is persisted");
@@ -4381,6 +4397,12 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.mapData.bakedLightmap.staticModels.modelCount == 2
                   && loaded.mapData.bakedLightmap.staticModels.objectCount == 5,
           "graph-native map-level fields round-trip");
+    Check(loaded.graph.reflectionProbes.size() == 1
+                  && loaded.graph.reflectionProbes[0].id == 41
+                  && Near(loaded.graph.reflectionProbes[0].intensity, 1.25f)
+                  && loaded.derivation.topology.compiledReflectionProbes.size() == 1
+                  && loaded.mapData.bakedReflectionProbes.count == 1,
+          "graph-native reflection probes round-trip and compile");
     Check(loaded.derivation.success
                   && loaded.derivation.topology.audioSettings.musicPath
                           == "music/graph_theme.ogg"
@@ -4415,7 +4437,8 @@ void TestGraphNativeMapLevelRoundTrip()
                           == "assets/levels/test/test.lightmap.object_probes.bin"
                   && loaded.derivation.topology.bakedLightmap.objectProbes.count == 7
                   && loaded.derivation.topology.bakedLightmap.staticModels.path
-                          == "assets/levels/test/test.lightmap.static_models.bin",
+                          == "assets/levels/test/test.lightmap.static_models.bin"
+                  && loaded.derivation.topology.bakedReflectionProbes.count == 1,
           "derived topology receives map-level fields after load");
 
     const Json resaved = Json::parse(SaveAuthoringText(loaded));
@@ -4427,6 +4450,8 @@ void TestGraphNativeMapLevelRoundTrip()
                   && resaved["bakedLightmap"]["objectProbes"] == saved["bakedLightmap"]["objectProbes"]
                   && resaved["bakedLightmap"]["staticModels"] == saved["bakedLightmap"]["staticModels"],
           "graph-native save/load/save preserves baked lightmap metadata");
+    Check(resaved["bakedReflectionProbes"] == saved["bakedReflectionProbes"],
+          "graph-native save/load/save preserves reflection probe bake metadata");
 
     Json legacyProbeMetadata = saved;
     legacyProbeMetadata["bakedLightmap"]["objectProbes"].erase("probeLowerHeightWorld");

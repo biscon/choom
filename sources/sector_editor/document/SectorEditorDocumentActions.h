@@ -16,8 +16,10 @@ namespace game {
 struct LevelPaths {
     std::string jsonAssetPath;
     std::string lightmapAssetPath;
+    std::string reflectionProbeAssetPath;
     std::filesystem::path jsonFilePath;
     std::filesystem::path lightmapFilePath;
+    std::filesystem::path reflectionProbeFilePath;
     std::filesystem::path directoryPath;
 };
 

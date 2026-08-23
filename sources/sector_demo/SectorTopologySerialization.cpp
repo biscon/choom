@@ -1621,6 +1621,23 @@ SectorBakedStaticModelLightmapMetadata ReadBakedStaticModelLightmapMetadata(
     return metadata;
 }
 
+SectorBakedReflectionProbeMetadata ReadBakedReflectionProbeMetadata(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) Fail(context + " must be an object");
+    SectorBakedReflectionProbeMetadata metadata;
+    metadata.path = ReadString(value, "path", context);
+    metadata.version = ReadInt(value, "version", context);
+    metadata.count = ReadInt(value, "count", context);
+    metadata.format = ReadString(value, "format", context);
+    if (metadata.path.empty()) Fail(context + ".path must not be empty");
+    if (metadata.version <= 0) Fail(context + ".version must be positive");
+    if (metadata.count < 0) Fail(context + ".count must not be negative");
+    if (metadata.format.empty()) Fail(context + ".format must not be empty");
+    return metadata;
+}
+
 SectorLightmapAtlasMetadata ReadLightmapAtlasMetadata(
         const Json& value,
         const std::string& context)
@@ -2765,6 +2782,16 @@ Json WriteBakedStaticModelLightmapMetadata(
     };
 }
 
+Json WriteBakedReflectionProbeMetadata(
+        const SectorBakedReflectionProbeMetadata& metadata)
+{
+    return Json{
+            {"path", metadata.path},
+            {"version", metadata.version},
+            {"count", metadata.count},
+            {"format", metadata.format}};
+}
+
 Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
 {
     std::vector<std::string> atlasPaths{metadata.path};
@@ -3473,6 +3500,12 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
     if (bakedLightmapIt != root.end() && allowBakedLightmap) {
         map.bakedLightmap = ReadBakedLightmap(*bakedLightmapIt, "root.bakedLightmap");
     }
+    const auto bakedReflectionProbesIt = root.find("bakedReflectionProbes");
+    if (bakedReflectionProbesIt != root.end() && allowBakedLightmap) {
+        map.bakedReflectionProbes = ReadBakedReflectionProbeMetadata(
+                *bakedReflectionProbesIt,
+                "root.bakedReflectionProbes");
+    }
 
     map.previewSettings = NormalizeSectorPreviewSettings(map.previewSettings);
     map.skySettings = NormalizeSectorTopologySkySettings(map.skySettings);
@@ -3654,6 +3687,49 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    const auto reflectionProbesIt = value.find("reflectionProbes");
+    if (reflectionProbesIt != value.end()) {
+        if (!reflectionProbesIt->is_array()) {
+            Fail("root.authoringGraph.reflectionProbes must be an array");
+        }
+        for (size_t i = 0; i < reflectionProbesIt->size(); ++i) {
+            const Json& probeJson = (*reflectionProbesIt)[i];
+            const std::string context =
+                    "root.authoringGraph.reflectionProbes[" + std::to_string(i) + "]";
+            if (!probeJson.is_object()) Fail(context + " must be an object");
+            SectorAuthoringReflectionProbe probe;
+            probe.id = ReadInt(probeJson, "id", context);
+            probe.x = ReadCoord(probeJson, "x", context);
+            probe.z = ReadCoord(probeJson, "z", context);
+            probe.yWorld = ReadOptionalFloat(probeJson, "yWorld", context, probe.yWorld);
+            probe.enabled = ReadOptionalBool(probeJson, "enabled", context, probe.enabled);
+            probe.yawDegrees = ReadOptionalFloat(
+                    probeJson, "yawDegrees", context, probe.yawDegrees);
+            const auto offsetIt = probeJson.find("influenceOffsetWorld");
+            if (offsetIt != probeJson.end()) {
+                probe.influenceOffsetWorld = ReadVector3(
+                        *offsetIt, context + ".influenceOffsetWorld");
+            }
+            const auto extentsIt = probeJson.find("halfExtentsWorld");
+            if (extentsIt != probeJson.end()) {
+                probe.halfExtentsWorld = ReadVector3(
+                        *extentsIt, context + ".halfExtentsWorld");
+            }
+            probe.priority = ReadOptionalClampedInt(
+                    probeJson, "priority", context, probe.priority, -1000, 1000);
+            probe.intensity = ReadOptionalClampedFloat(
+                    probeJson, "intensity", context, probe.intensity, 0.0f, 8.0f);
+            probe.resolution = ReadOptionalClampedInt(
+                    probeJson, "resolution", context, probe.resolution, 64, 256);
+            if (probe.resolution != 64 && probe.resolution != 128
+                    && probe.resolution != 256) {
+                Fail(context + ".resolution must be 64, 128, or 256");
+            }
+            graph.reflectionProbes.push_back(
+                    NormalizeSectorAuthoringReflectionProbe(probe));
+        }
+    }
+
     const auto levelMarkersIt = value.find("levelMarkers");
     if (levelMarkersIt != value.end()) {
         if (!levelMarkersIt->is_array()) {
@@ -3741,6 +3817,8 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
     document.derivation.topology.audioSettings = document.mapData.audioSettings;
     document.derivation.topology.lightmapSettings = document.mapData.lightmapSettings;
     document.derivation.topology.bakedLightmap = document.mapData.bakedLightmap;
+    document.derivation.topology.bakedReflectionProbes =
+            document.mapData.bakedReflectionProbes;
 }
 
 SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
@@ -3873,6 +3951,12 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
             && map.bakedLightmap.height > 0
             && !map.bakedLightmap.sourceHash.empty()) {
         root["bakedLightmap"] = WriteBakedLightmap(map.bakedLightmap);
+    }
+    if (includeBakedLightmap
+            && !map.bakedReflectionProbes.path.empty()
+            && map.bakedReflectionProbes.version > 0) {
+        root["bakedReflectionProbes"] =
+                WriteBakedReflectionProbeMetadata(map.bakedReflectionProbes);
     }
 }
 
@@ -4015,6 +4099,40 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             if (volume.flowDirectionDegrees != defaults.flowDirectionDegrees) fogJson["flowDirectionDegrees"] = volume.flowDirectionDegrees;
             if (volume.flowSpeedWorld != defaults.flowSpeedWorld) fogJson["flowSpeedWorld"] = volume.flowSpeedWorld;
             graphJson["fogVolumes"].push_back(std::move(fogJson));
+        }
+    }
+
+    if (!graph.reflectionProbes.empty()) {
+        graphJson["reflectionProbes"] = Json::array();
+        const SectorAuthoringReflectionProbe defaults;
+        for (const SectorAuthoringReflectionProbe* source
+                : SortedById(graph.reflectionProbes)) {
+            const SectorAuthoringReflectionProbe probe =
+                    NormalizeSectorAuthoringReflectionProbe(*source);
+            const std::string context =
+                    "reflection probe " + std::to_string(probe.id);
+            Json probeJson{{"id", probe.id}, {"x", probe.x}, {"z", probe.z}};
+            if (probe.yWorld != defaults.yWorld) probeJson["yWorld"] = probe.yWorld;
+            if (probe.enabled != defaults.enabled) probeJson["enabled"] = probe.enabled;
+            if (probe.yawDegrees != defaults.yawDegrees) probeJson["yawDegrees"] = probe.yawDegrees;
+            if (probe.influenceOffsetWorld.x != 0.0f
+                    || probe.influenceOffsetWorld.y != 0.0f
+                    || probe.influenceOffsetWorld.z != 0.0f) {
+                probeJson["influenceOffsetWorld"] = WriteVector3(
+                        probe.influenceOffsetWorld,
+                        context + ".influenceOffsetWorld");
+            }
+            if (probe.halfExtentsWorld.x != defaults.halfExtentsWorld.x
+                    || probe.halfExtentsWorld.y != defaults.halfExtentsWorld.y
+                    || probe.halfExtentsWorld.z != defaults.halfExtentsWorld.z) {
+                probeJson["halfExtentsWorld"] = WriteVector3(
+                        probe.halfExtentsWorld,
+                        context + ".halfExtentsWorld");
+            }
+            if (probe.priority != defaults.priority) probeJson["priority"] = probe.priority;
+            if (probe.intensity != defaults.intensity) probeJson["intensity"] = probe.intensity;
+            if (probe.resolution != defaults.resolution) probeJson["resolution"] = probe.resolution;
+            graphJson["reflectionProbes"].push_back(std::move(probeJson));
         }
     }
 
