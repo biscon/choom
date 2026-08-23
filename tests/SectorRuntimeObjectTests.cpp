@@ -6514,10 +6514,24 @@ void TestStaticModelSpotlightShadowCasterCollectionAndRevision()
     Check(collection.revision == initialRevision,
           "unchanged static prop shadow casters preserve the cache revision");
 
+    world.Get<game::SectorStaticModel>(visible).castsShadow = false;
+    game::UpdateSectorStaticModelShadowCasters(collection, &world);
+    const uint64_t disabledRevision = collection.revision;
+    Check(collection.casters.empty()
+                  && disabledRevision != initialRevision,
+          "disabling static prop shadow casting removes it from dynamic-light casters");
+
+    world.Get<game::SectorStaticModel>(visible).castsShadow = true;
+    game::UpdateSectorStaticModelShadowCasters(collection, &world);
+    const uint64_t reenabledRevision = collection.revision;
+    Check(collection.casters.size() == 1
+                  && reenabledRevision != disabledRevision,
+          "reenabling static prop shadow casting restores it and invalidates shadows");
+
     world.Get<game::SectorObjectTransform>(visible).position.x += 0.5f;
     game::UpdateSectorStaticModelShadowCasters(collection, &world);
     const uint64_t movedRevision = collection.revision;
-    Check(movedRevision != initialRevision,
+    Check(movedRevision != reenabledRevision,
           "moving a static prop invalidates the spotlight shadow caster revision");
 
     world.Get<game::SectorObject>(visible).visible = false;

@@ -1621,6 +1621,15 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedStaticModelCollision)
                   == staticModelHash,
           "hash excludes static prop gameplay collision");
+    game::SectorTopologyMap changedStaticModelShadow = changedStaticModel;
+    changedStaticModelShadow.runtimeObjects[0].staticModel.castsShadow = false;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticModelShadow)
+                  != staticModelHash,
+          "hash changes when static prop shadow casting is disabled");
+    changedStaticModelShadow.runtimeObjects[0].staticModel.castsShadow = true;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticModelShadow)
+                  == staticModelHash,
+          "default static prop shadow state preserves the existing source hash");
     game::SectorTopologyMap changedStaticModelScale = changedStaticModel;
     changedStaticModelScale.runtimeObjects[0].staticModel.scale = 2.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedStaticModelScale)
@@ -4298,10 +4307,12 @@ void TestStaticModelPreparationReusesReadyEditorModels()
     first.position = Vector3{2.0f, 0.0f, 2.0f};
     first.staticModel.modelPath = modelPath.string();
     first.staticModel.scale = 1.5f;
+    first.staticModel.castsShadow = false;
     map.runtimeObjects.push_back(first);
     game::SectorPlacedRuntimeObject repeated = first;
     repeated.id = 92;
     repeated.position.x = 3.0f;
+    repeated.staticModel.castsShadow = true;
     map.runtimeObjects.push_back(repeated);
 
     engine::AssetManager assets;
@@ -4334,8 +4345,10 @@ void TestStaticModelPreparationReusesReadyEditorModels()
                   && prepared.objects[0].modelIndex
                           == prepared.objects[1].modelIndex
                   && Near(prepared.objects[0].scale, 1.5f)
-                  && Near(prepared.objects[1].scale, 1.5f),
-          "reused ready models are looked up and copied once for repeated prop paths");
+                  && Near(prepared.objects[1].scale, 1.5f)
+                  && !prepared.objects[0].castsShadow
+                  && prepared.objects[1].castsShadow,
+          "reused ready models preserve per-prop bake settings while copying shared geometry once");
 
     Check(assets.Initialize()
                   && assets.GlobalScope().index == 0,
@@ -4690,8 +4703,57 @@ void TestStaticModelReceivesAndCastsBakedLighting()
                   baselineResult,
                   error),
           "static model shadow comparison baseline bakes");
+
+    game::SectorTopologyMap noShadowMap = map;
+    noShadowMap.runtimeObjects[0].staticModel.castsShadow = false;
+    game::SectorStaticModelLightmapData noShadowStaticModels = staticModels;
+    noShadowStaticModels.objects[0].castsShadow = false;
+    const std::filesystem::path noShadowPath =
+            Phase01bSandboxDir() / "static_model_no_shadow.lightmap.png";
+    game::SectorTopologyLightmapBakeInput noShadowInput;
+    noShadowInput.mapSnapshot = noShadowMap;
+    noShadowInput.staticModels = noShadowStaticModels;
+    noShadowInput.expectedSourceHash =
+            game::ComputeSectorLightmapSourceHash(noShadowMap);
+    noShadowInput.temporaryOutputPath = noShadowPath.string();
+    game::SectorLightmapBakeResult noShadowResult;
+    Check(game::BakeSectorLightmap(
+                  noShadowInput,
+                  {},
+                  noShadowResult,
+                  error),
+          "static model with disabled shadow casting bakes as a receiver");
+    game::SectorLightmapArtifactData noShadowImage;
+    const bool noShadowImageLoaded = ReadHdrLightmap(
+            noShadowPath,
+            noShadowImage);
+    Check(noShadowImageLoaded,
+          "disabled-shadow static model HDR lightmap loads");
+    game::SectorStaticModelLightmapData noShadowInstalledData;
+    Check(game::ReadSectorStaticModelLightmapSidecar(
+                  noShadowResult.staticModels.path,
+                  &noShadowResult.staticModels,
+                  noShadowInstalledData,
+                  error),
+          "disabled-shadow static model keeps receiver remap metadata");
+    if (noShadowImageLoaded
+            && !noShadowInstalledData.objects.empty()
+            && !noShadowInstalledData.objects[0].meshPlacements.empty()) {
+        const auto& placement =
+                noShadowInstalledData.objects[0].meshPlacements[0];
+        const int x = static_cast<int>(std::floor(
+                (placement.atlasBias.x + placement.atlasScale.x * 0.5f)
+                * static_cast<float>(noShadowImage.width)));
+        const int y = static_cast<int>(std::floor(
+                (placement.atlasBias.y + placement.atlasScale.y * 0.5f)
+                * static_cast<float>(noShadowImage.height)));
+        const Vector4 sample = HdrLightmapTexel(noShadowImage, x, y);
+        Check(sample.x + sample.y + sample.z > 0.1f,
+              "disabled-shadow static model still receives baked direct lighting");
+    }
     if (floorSurfaceIndex >= 0
-            && floorSurfaceIndex < static_cast<int>(layout.charts.size())) {
+            && floorSurfaceIndex < static_cast<int>(layout.charts.size())
+            && noShadowImageLoaded) {
         const game::SectorLightmapChart& chart =
                 layout.charts[static_cast<size_t>(floorSurfaceIndex)];
         game::SectorLightmapArtifactData baked;
@@ -4705,6 +4767,16 @@ void TestStaticModelReceivesAndCastsBakedLighting()
                       > propFloorSample.x + propFloorSample.y
                               + propFloorSample.z + 0.05f,
               "opaque double-sided static model triangles cast baked shadows onto sector floors");
+        const Vector4 noShadowFloorSample = HdrLightmapTexel(
+                noShadowImage,
+                chart.usableX + chart.usableWidth / 2,
+                chart.usableY + chart.usableHeight / 2);
+        const float baselineFloorLuminance = baselineFloorSample.x
+                + baselineFloorSample.y + baselineFloorSample.z;
+        const float noShadowFloorLuminance = noShadowFloorSample.x
+                + noShadowFloorSample.y + noShadowFloorSample.z;
+        Check(std::fabs(noShadowFloorLuminance - baselineFloorLuminance) < 0.05f,
+              "disabled static prop shadow casting restores direct light behind the prop");
     }
 }
 

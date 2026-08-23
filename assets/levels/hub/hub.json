@@ -1684,7 +1684,7 @@
         "collision": true
       },
       "position": [
-        -113.5,
+        -114.5,
         -16.0,
         -82.0
       ],
@@ -1716,7 +1716,7 @@
       "position": [
         -116.0,
         -16.0,
-        -63.0
+        -68.0
       ],
       "yawDegrees": 90.0
     },
@@ -1729,9 +1729,9 @@
         "collision": true
       },
       "position": [
-        -60.0,
+        -59.5,
         -16.0,
-        -72.0
+        -56.0
       ],
       "yawDegrees": -90.0
     },
@@ -1765,6 +1765,99 @@
         -28.5
       ],
       "yawDegrees": 180.0
+    },
+    {
+      "id": 114,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/furniture/carpet.glb",
+        "heightOffsetWorld": 0.0010000000474974513,
+        "scale": 0.75
+      },
+      "position": [
+        -77.0,
+        -16.0,
+        -72.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 115,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/furniture/horse_painting.glb",
+        "heightOffsetWorld": 1.0,
+        "scale": 3.5
+      },
+      "position": [
+        -56.150001525878906,
+        -6.0,
+        -56.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 116,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/furniture/side_table_dresser.glb",
+        "scale": 1.2999999523162842,
+        "collision": true
+      },
+      "position": [
+        -88.0,
+        -16.0,
+        -92.69999694824219
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 117,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/antique_lamp.glb",
+        "scale": 1.149999976158142,
+        "collision": true,
+        "castsShadow": false
+      },
+      "position": [
+        -61.0,
+        -16.0,
+        -76.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 118,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/lamp_02_lowpoly.glb",
+        "heightOffsetWorld": 1.4049999713897705,
+        "scale": 0.800000011920929,
+        "castsShadow": false
+      },
+      "position": [
+        -88.0,
+        -16.0,
+        -76.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 119,
+      "kind": "static_model",
+      "staticModel": {
+        "modelPath": "assets/models/lighting/lamp_02_lowpoly.glb",
+        "heightOffsetWorld": 1.4049999713897705,
+        "scale": 0.800000011920929,
+        "castsShadow": false
+      },
+      "position": [
+        -88.0,
+        -16.0,
+        -44.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [
@@ -3466,6 +3559,23 @@
         "b": 241,
         "a": 255
       }
+    },
+    {
+      "id": 56,
+      "position": [
+        -61.0,
+        -3.399761199951172,
+        -76.0
+      ],
+      "radius": 16.0,
+      "sourceRadius": 4.0,
+      "intensity": 1.5,
+      "color": {
+        "r": 235,
+        "g": 200,
+        "b": 130,
+        "a": 255
+      }
     }
   ],
   "staticSpotLights": [
@@ -3782,6 +3892,197 @@
             "brightness": 0.02500000037252903,
             "maxExtinction": 0.0,
             "edgeSoftness": 0.75
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "position": [
+        -61.0,
+        -1.0,
+        -76.0
+      ],
+      "target": [
+        -61.0,
+        -34.233726501464844,
+        -76.0
+      ],
+      "range": 64.0,
+      "sourceRadius": 0.0,
+      "intensity": 2.5,
+      "color": {
+        "r": 235,
+        "g": 200,
+        "b": 130,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "centerOffsetWorld": [
+              -0.025188446044921875,
+              -0.5247108936309814,
+              0.0032186508178710938
+            ],
+            "brightness": 0.10000000149011612,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 235,
+              "g": 200,
+              "b": 130,
+              "a": 255
+            }
+          },
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              0.012816429138183594,
+              0.11399093270301819,
+              -0.004677772521972656
+            ],
+            "lengthScale": 0.25,
+            "widthScale": 0.800000011920929,
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 235,
+              "g": 200,
+              "b": 130,
+              "a": 255
+            }
+          }
+        },
+        "dust": {
+          "enabled": true,
+          "extentScale": 0.25,
+          "minimumSizeWorld": 0.004999999888241291,
+          "maximumSizeWorld": 0.01600000075995922,
+          "opacity": 0.15000000596046448,
+          "scatteringTint": {
+            "r": 235,
+            "g": 200,
+            "b": 130,
+            "a": 255
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "position": [
+        -61.0,
+        -5.0,
+        -76.0
+      ],
+      "target": [
+        -61.0,
+        34.22999954223633,
+        -76.0
+      ],
+      "range": 24.0,
+      "sourceRadius": 0.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 235,
+        "g": 200,
+        "b": 130,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0,
+      "castsShadow": false
+    },
+    {
+      "id": 10,
+      "position": [
+        -88.04553985595703,
+        7.267064094543457,
+        -77.4753646850586
+      ],
+      "target": [
+        -88.04553985595703,
+        -25.36666488647461,
+        -77.4753646850586
+      ],
+      "range": 64.0,
+      "sourceRadius": 0.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 225,
+        "a": 255
+      },
+      "outerConeDegrees": 55.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.017907142639160156,
+              0.2630476951599121,
+              0.018918991088867188
+            ],
+            "lengthScale": 0.25,
+            "widthScale": 0.6000000238418579,
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 245,
+              "b": 210,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "position": [
+        -88.04122924804688,
+        7.730865955352783,
+        -45.569435119628906
+      ],
+      "target": [
+        -88.04122924804688,
+        -24.90285873413086,
+        -45.569435119628906
+      ],
+      "range": 64.0,
+      "sourceRadius": 0.0,
+      "intensity": 1.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 225,
+        "a": 255
+      },
+      "outerConeDegrees": 55.0,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "originOffsetWorld": [
+              -0.017999999225139618,
+              0.2630000114440918,
+              0.01899999938905239
+            ],
+            "lengthScale": 0.25,
+            "widthScale": 0.6000000238418579,
+            "brightness": 0.014999999664723873,
+            "maxExtinction": 0.0,
+            "edgeSoftness": 0.75,
+            "scatteringTint": {
+              "r": 255,
+              "g": 245,
+              "b": 210,
+              "a": 255
+            }
           }
         }
       }
@@ -4132,25 +4433,6 @@
       }
     },
     {
-      "id": 6,
-      "position": [
-        -72.0,
-        5.0,
-        -80.0
-      ],
-      "radius": 64.0,
-      "intensity": 2.0,
-      "color": {
-        "r": 255,
-        "g": 200,
-        "b": 130,
-        "a": 255
-      },
-      "castsShadow": true,
-      "shadowStrength": 0.800000011920929,
-      "shadowSoftness": 4.0
-    },
-    {
       "id": 7,
       "position": [
         -200.0,
@@ -4164,6 +4446,80 @@
         "g": 214,
         "b": 81,
         "a": 255
+      }
+    },
+    {
+      "id": 8,
+      "position": [
+        -88.02798461914063,
+        7.433874130249023,
+        -77.52836608886719
+      ],
+      "radius": 4.0,
+      "intensity": 8.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 200,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.18000000715255737,
+            "centerOffsetWorld": [
+              0.012088775634765625,
+              0.030463993549346924,
+              0.0002613067626953125
+            ],
+            "brightness": 2.0,
+            "edgeSoftness": 1.0,
+            "scatteringTint": {
+              "r": 255,
+              "g": 245,
+              "b": 225,
+              "a": 255
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "position": [
+        -88.08348083496094,
+        7.633390426635742,
+        -45.52684783935547
+      ],
+      "radius": 4.0,
+      "intensity": 8.0,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 200,
+        "a": 255
+      },
+      "atmosphere": {
+        "proxy": {
+          "halo": {
+            "enabled": true,
+            "radiusWorld": 0.18000000715255737,
+            "centerOffsetWorld": [
+              0.012000000104308128,
+              0.029999999329447746,
+              0.0
+            ],
+            "brightness": 2.0,
+            "edgeSoftness": 1.0,
+            "scatteringTint": {
+              "r": 255,
+              "g": 245,
+              "b": 225,
+              "a": 255
+            }
+          }
+        }
       }
     }
   ],
@@ -4445,6 +4801,118 @@
           }
         }
       }
+    },
+    {
+      "id": 5,
+      "position": [
+        -66.00068664550781,
+        -2.400377035140991,
+        -76.02399444580078
+      ],
+      "target": [
+        -37.676082611083984,
+        -18.569955825805664,
+        -74.91877746582031
+      ],
+      "range": 12.0,
+      "intensity": 8.0,
+      "color": {
+        "r": 235,
+        "g": 200,
+        "b": 130,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0
+    },
+    {
+      "id": 6,
+      "position": [
+        -60.0,
+        -1.6000003814697266,
+        -82.0
+      ],
+      "target": [
+        -71.22402954101563,
+        -15.688535690307617,
+        -54.78797149658203
+      ],
+      "range": 12.0,
+      "intensity": 8.0,
+      "color": {
+        "r": 235,
+        "g": 200,
+        "b": 130,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0
+    },
+    {
+      "id": 7,
+      "position": [
+        -59.0,
+        -1.6000003814697266,
+        -72.0
+      ],
+      "target": [
+        -71.19950103759766,
+        -21.43760108947754,
+        -94.86048889160156
+      ],
+      "range": 12.0,
+      "intensity": 8.0,
+      "color": {
+        "r": 235,
+        "g": 200,
+        "b": 130,
+        "a": 255
+      },
+      "outerConeDegrees": 45.0
+    },
+    {
+      "id": 8,
+      "position": [
+        -88.53213500976563,
+        -10.0,
+        -77.86339569091797
+      ],
+      "target": [
+        -88.53213500976563,
+        34.22999954223633,
+        -77.86339569091797
+      ],
+      "range": 32.0,
+      "intensity": 0.5,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 225,
+        "a": 255
+      },
+      "innerConeDegrees": 30.0,
+      "outerConeDegrees": 75.0
+    },
+    {
+      "id": 9,
+      "position": [
+        -88.0,
+        -10.0,
+        -45.0
+      ],
+      "target": [
+        -88.0,
+        34.22999954223633,
+        -45.0
+      ],
+      "range": 32.0,
+      "intensity": 0.5,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 225,
+        "a": 255
+      },
+      "innerConeDegrees": 30.0,
+      "outerConeDegrees": 75.0
     }
   ],
   "dynamicRectLights": [],
@@ -4455,7 +4923,8 @@
     "indirectBounceStrength": 0.20000000298023224,
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
-    "objectProbeUpperHeightWorld": 1.5
+    "objectProbeUpperHeightWorld": 1.5,
+    "qualityPreset": "high"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -4533,7 +5002,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "66cff6ca20f28d5e",
+    "sourceHash": "c91555b5c28a5910",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -4541,19 +5010,19 @@
         0.0
       ],
       "rgbMax": [
-        2.216796875,
-        1.45703125,
-        1.390625
+        2.2421875,
+        1.46875,
+        1.396484375
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 4194304,
-      "rgbChannelsAboveOne": 725
+      "sampleCount": 8388608,
+      "rgbChannelsAboveOne": 2701
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "66cff6ca20f28d5e",
+      "sourceHash": "c91555b5c28a5910",
       "count": 2667,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -4566,24 +5035,31 @@
           0.0
         ],
         "rgbMax": [
-          2.192941665649414,
-          1.9389466047286987,
-          1.8518656492233276
+          2.19494366645813,
+          1.9382474422454834,
+          1.8512030839920044
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 16002,
-        "rgbChannelsAboveOne": 33
+        "rgbChannelsAboveOne": 36
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "66cff6ca20f28d5e",
-      "modelCount": 45,
-      "objectCount": 97,
+      "sourceHash": "c91555b5c28a5910",
+      "modelCount": 47,
+      "objectCount": 103,
       "format": "staticModelUvRemapF32LE"
-    }
+    },
+    "additionalAtlases": [
+      {
+        "path": "assets/levels/hub/hub.lightmap.1.bin",
+        "width": 2048,
+        "height": 2048
+      }
+    ]
   },
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",
@@ -20953,11 +21429,11 @@
         },
         "ambientColor": {
           "r": 255,
-          "g": 250,
-          "b": 241,
+          "g": 245,
+          "b": 225,
           "a": 255
         },
-        "ambientIntensity": 0.019999999552965164,
+        "ambientIntensity": 0.02500000037252903,
         "defaultWall": {
           "materialId": "plastered_wall_02",
           "uv": {
@@ -21030,11 +21506,11 @@
         },
         "ambientColor": {
           "r": 255,
-          "g": 250,
-          "b": 241,
+          "g": 245,
+          "b": 225,
           "a": 255
         },
-        "ambientIntensity": 0.019999999552965164,
+        "ambientIntensity": 0.02500000037252903,
         "defaultWall": {
           "materialId": "plastered_wall_02",
           "uv": {
@@ -21282,8 +21758,7 @@
           3.9375,
           1.9375,
           4.375
-        ],
-        "intensity": 2.0
+        ]
       }
     ],
     "levelMarkers": [

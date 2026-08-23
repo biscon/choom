@@ -1214,6 +1214,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
     staticModel.staticModel.heightOffsetWorld = 0.75f;
     staticModel.staticModel.scale = 1.5f;
     staticModel.staticModel.collision = true;
+    staticModel.staticModel.castsShadow = false;
     staticModelMap.runtimeObjects.push_back(staticModel);
     const Json staticModelSaved = Json::parse(SaveText(staticModelMap));
     Check(staticModelSaved["runtimeObjects"][0]["kind"] == "static_model"
@@ -1237,6 +1238,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
                           -0.75f * 180.0f / PI)
                   && staticModelSaved["runtimeObjects"][0]["staticModel"]["collision"]
                              .get<bool>()
+                  && !staticModelSaved["runtimeObjects"][0]["staticModel"]["castsShadow"]
+                             .get<bool>()
                   && Near(
                           staticModelSaved["runtimeObjects"][0]["position"][1].get<float>(),
                           -2.5f),
@@ -1255,6 +1258,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && Near(loadedStaticModel->staticModel.rotationXRadians, 0.25f)
                   && Near(loadedStaticModel->staticModel.rotationZRadians, -0.75f)
                   && loadedStaticModel->staticModel.collision
+                  && !loadedStaticModel->staticModel.castsShadow
                   && Near(loadedStaticModel->position, Vector3{12.0f, -2.5f, 20.0f})
                   && Near(loadedStaticModel->yawRadians, 0.5f),
           "static prop JSON round-trip preserves payload and common transform");
@@ -1275,8 +1279,15 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && Near(unassignedStaticModel->staticModel.rotationZRadians, 0.0f)
                   && Near(unassignedStaticModel->staticModel.heightOffsetWorld, 0.0f)
                   && Near(unassignedStaticModel->staticModel.scale, 1.0f)
-                  && !unassignedStaticModel->staticModel.collision,
+                  && !unassignedStaticModel->staticModel.collision
+                  && unassignedStaticModel->staticModel.castsShadow,
           "missing static prop payload fields use backward-compatible defaults");
+
+    Json invalidStaticModelShadow = staticModelSaved;
+    invalidStaticModelShadow["runtimeObjects"][0]["staticModel"]["castsShadow"] = "yes";
+    ExpectRejected(
+            invalidStaticModelShadow,
+            "non-boolean static prop castsShadow is rejected");
 
     Json missingModelPath = staticModelSaved;
     missingModelPath["runtimeObjects"][0]["staticModel"].erase("modelPath");

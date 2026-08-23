@@ -90,7 +90,9 @@ void UpdateSectorStaticModelShadowCasters(
                         SectorObjectTransform& transform,
                         SectorObject& object,
                         SectorStaticModel& staticModel) {
-                    if (!object.visible || engine::IsNull(staticModel.model)) {
+                    if (!object.visible
+                            || !staticModel.castsShadow
+                            || engine::IsNull(staticModel.model)) {
                         return;
                     }
                     if (collection.casters.size()

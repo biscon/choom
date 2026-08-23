@@ -968,6 +968,11 @@ SectorPlacedStaticModel ReadPlacedStaticModel(const Json& value, const std::stri
             "collision",
             context,
             staticModel.collision);
+    staticModel.castsShadow = ReadOptionalBool(
+            value,
+            "castsShadow",
+            context,
+            staticModel.castsShadow);
     return staticModel;
 }
 
@@ -2083,6 +2088,9 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             }
             if (object.staticModel.collision) {
                 staticModel["collision"] = true;
+            }
+            if (!object.staticModel.castsShadow) {
+                staticModel["castsShadow"] = false;
             }
             json["kind"] = object.kind;
             json["staticModel"] = std::move(staticModel);

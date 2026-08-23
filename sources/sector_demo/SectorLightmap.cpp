@@ -76,6 +76,7 @@ struct BakeTriangle {
     SectorGeneratedSurfaceRef surfaceRef;
     int sourceSurfaceIndex = -1;
     int triangleIndex = -1;
+    bool castsDirectShadow = true;
 };
 
 struct RasterHit {
@@ -1229,7 +1230,11 @@ bool RaycastBakeTrianglesAnyHit(
             for (int i = 0; i < node.triangleCount; ++i) {
                 const int triangleIndex = bvh.orderedTriangleIndices[static_cast<size_t>(node.firstTriangle + i)];
                 const BakeTriangle& tri = triangles[static_cast<size_t>(triangleIndex)];
-                if (IsExactSourceTriangle(tri, sourceSurfaceIndex, sourceTriangleIndex)) {
+                if (!tri.castsDirectShadow
+                        || IsExactSourceTriangle(
+                                tri,
+                                sourceSurfaceIndex,
+                                sourceTriangleIndex)) {
                     continue;
                 }
                 if (stats != nullptr) {
@@ -1297,6 +1302,7 @@ RayHit RaycastBakeTrianglesClosest(
         const SectorGeneratedSurfaceRef& sourceSurfaceRef,
         int sourceSurfaceIndex,
         int sourceTriangleIndex,
+        bool directShadowOnly,
         SectorLightmapRaycastStats* stats)
 {
     if (stats != nullptr) {
@@ -1319,7 +1325,11 @@ RayHit RaycastBakeTrianglesClosest(
             for (int i = 0; i < node.triangleCount; ++i) {
                 const int triangleIndex = bvh.orderedTriangleIndices[static_cast<size_t>(node.firstTriangle + i)];
                 const BakeTriangle& tri = triangles[static_cast<size_t>(triangleIndex)];
-                if (IsExactSourceTriangle(tri, sourceSurfaceIndex, sourceTriangleIndex)) {
+                if ((directShadowOnly && !tri.castsDirectShadow)
+                        || IsExactSourceTriangle(
+                                tri,
+                                sourceSurfaceIndex,
+                                sourceTriangleIndex)) {
                     continue;
                 }
 
@@ -1487,6 +1497,7 @@ bool RaycastBakeOcclusionAlphaAware(
                 sourceSurfaceRef,
                 sourceSurfaceIndex,
                 sourceTriangleIndex,
+                true,
                 stats);
         const AlphaRayHit alphaHit = RaycastAlphaOccludersClosest(
                 alphaOccluders,
@@ -1582,6 +1593,7 @@ RayHit TraceRay(
             sourceSurfaceRef,
             sourceSurfaceIndex,
             sourceTriangleIndex,
+            false,
             stats
     );
 }
@@ -2770,7 +2782,8 @@ std::vector<BakeTriangle> BuildBakeTriangles(
                         placement.atlasIndex,
                         surfaceRef,
                         staticSurfaceIndex,
-                        static_cast<int>(i / 3)});
+                        static_cast<int>(i / 3),
+                        object.castsShadow});
             }
             ++staticSurfaceIndex;
         }
@@ -5755,6 +5768,9 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
             }
             FnvAppendFloat(hash, object->staticModel.heightOffsetWorld);
             FnvAppendFloat(hash, object->staticModel.scale);
+            if (!object->staticModel.castsShadow) {
+                FnvAppendString(hash, "static-model-no-shadow");
+            }
             FnvAppendString(
                     hash,
                     object->staticModel.geometryFingerprint);
