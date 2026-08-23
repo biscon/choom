@@ -19635,14 +19635,15 @@
         "yWorld": 0.0,
         "influenceOffsetWorld": [
           3.5,
-          15.0,
+          0.0,
           0.4375
         ],
         "halfExtentsWorld": [
           5.25,
           3.375,
           1.4375
-        ]
+        ],
+        "intensity": 3.0
       },
       {
         "id": 4,

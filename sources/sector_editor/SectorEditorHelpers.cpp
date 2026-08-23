@@ -716,6 +716,7 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
         case SectorEditorPickKind::AuthoringLine: return "authoring line";
         case SectorEditorPickKind::AuthoringFaceAnchor: return "authoring face";
         case SectorEditorPickKind::AuthoringFogVolume: return "fog volume";
+        case SectorEditorPickKind::AuthoringReflectionProbe: return "reflection probe";
         case SectorEditorPickKind::Trigger: return "trigger";
         case SectorEditorPickKind::LevelMarker: return "level marker";
     }
@@ -741,6 +742,7 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
         case SectorEditorPickKind::StaticLight:
         case SectorEditorPickKind::AuthoringVertex:
         case SectorEditorPickKind::AuthoringFogVolume:
+        case SectorEditorPickKind::AuthoringReflectionProbe:
         case SectorEditorPickKind::Trigger:
         case SectorEditorPickKind::LevelMarker:
             return target.id >= 0;
@@ -764,6 +766,7 @@ int SectorEditorPickPriority(SectorEditorPickKind kind)
 {
     switch (kind) {
         case SectorEditorPickKind::LevelMarker: return 0;
+        case SectorEditorPickKind::AuthoringReflectionProbe: return 0;
         case SectorEditorPickKind::RuntimeObject: return 1;
         case SectorEditorPickKind::DynamicSpotLight: return 2;
         case SectorEditorPickKind::DynamicRectLight: return 2;

@@ -18,6 +18,7 @@
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
+#include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
@@ -10902,6 +10903,20 @@ void TestEditorUnifiedSelectPickOrderingCyclingAndDragGate()
     Check(game::IsSectorEditorPickTargetMovable(
                   game::SectorEditorPickTarget{game::SectorEditorPickKind::LevelMarker, 5}),
           "Level Marker pick target is movable");
+    Check(game::IsSectorEditorPickTargetMovable(
+                  game::SectorEditorPickTarget{
+                          game::SectorEditorPickKind::AuthoringReflectionProbe, 6})
+                  && std::string(game::SectorEditorPickKindName(
+                          game::SectorEditorPickKind::AuthoringReflectionProbe))
+                          == "reflection probe",
+          "reflection probe pick target is a named high-priority movable point primitive");
+    const std::vector<game::SectorEditorPickCandidate> probePriority =
+            game::SortSectorEditorPickCandidates({
+                    {{game::SectorEditorPickKind::AuthoringFaceAnchor, 1}, 0.0f},
+                    {{game::SectorEditorPickKind::AuthoringReflectionProbe, 6}, 0.0f}});
+    Check(probePriority.front().target.kind
+                          == game::SectorEditorPickKind::AuthoringReflectionProbe,
+          "reflection probe point marker picks ahead of overlapping authoring faces");
     Check(!game::IsSectorEditorPickTargetMovable(
                   game::SectorEditorPickTarget{game::SectorEditorPickKind::AuthoringLine, 9}),
           "authoring line pick target is selectable but not movable");
@@ -13093,6 +13108,120 @@ void TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce()
           "fog volume placement fails clearly outside derived faces");
 }
 
+void TestReflectionProbeSelectManipulationCommitsSnappedMove()
+{
+    game::SectorEditorDocumentState documentState;
+    documentState.authoring.authoringGraph = MakeGraphFromConnectedLines(
+            {{0, 0}, {160, 0}, {160, 160}, {0, 160}},
+            {{1, 2}, {2, 3}, {3, 4}, {4, 1}});
+    documentState.derivation.authoringDerivation =
+            game::DeriveSectorTopologyMapFromAuthoringGraph(
+                    documentState.authoring.authoringGraph);
+    documentState.map.topologyMap = documentState.derivation.authoringDerivation.topology;
+    documentState.derivation.lastValidAuthoringDerivedTopology =
+            documentState.map.topologyMap;
+    documentState.derivation.authoringDerivationState =
+            game::SectorEditorAuthoringDerivationState::ValidCurrent;
+    documentState.derivation.authoringDerivedTopologyStale = false;
+
+    game::SectorEditorState editorState;
+    editorState.topologyRenderCache.valid = true;
+    game::SelectionState selection;
+    game::ManipulationState manipulation;
+    std::string status;
+    game::SectorEditorReflectionProbeEditingService editing{
+            game::SectorEditorReflectionProbeEditingServiceContext{
+                    game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                    documentState.map.topologyMap,
+                    documentState.authoring.authoringGraph,
+                    game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                    editorState.topologyRenderRevision,
+                    editorState.topologyRenderCache,
+                    selection,
+                    manipulation,
+                    status}};
+
+    int probeId = -1;
+    Check(editing.Place(game::SectorTopologyCoordPoint{80, 80}, &probeId),
+          "reflection probe editing service places into authoring graph");
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    editorState.topologyRenderCache.valid = true;
+
+    game::LightEditingState lightState;
+    game::RuntimeObjectDragState runtimeObjectDrag;
+    game::SectorEditorTool tool = game::SectorEditorTool::Select;
+    game::SectorEditorManipulationServiceContext manipulationContext{
+            tool,
+            documentState.map.topologyMap,
+            documentState.authoring.authoringGraph,
+            manipulation,
+            lightState,
+            runtimeObjectDrag,
+            status};
+    manipulationContext.reflectionProbeEditing = &editing;
+    manipulationContext.screenToMap = [](Vector2 point) { return point; };
+    manipulationContext.snapMapPoint = [](Vector2 point) {
+        return Vector2{std::round(point.x), std::round(point.y)};
+    };
+
+    game::StartSectorEditorSelectedManipulation(
+            manipulationContext,
+            game::SectorEditorPickTarget{
+                    game::SectorEditorPickKind::AuthoringReflectionProbe, probeId},
+            Vector2{5.0f, 5.0f});
+    game::UpdateActiveSectorEditorMapPointManipulations(
+            manipulationContext, Vector2{6.0f, 5.0f});
+    Check(manipulation.authoringReflectionProbeDrag.active
+                  && manipulation.authoringReflectionProbeDrag.previewPoint.x == 96
+                  && manipulation.authoringReflectionProbeDrag.previewPoint.y == 80
+                  && documentState.authoring.authoringGraph.reflectionProbes[0].x == 80
+                  && !documentState.lifecycle.topologyDocumentDirty,
+          "Select manipulation previews a snapped reflection probe move without mutation");
+
+    game::FinishActiveSectorEditorManipulation(manipulationContext);
+    Check(!manipulation.authoringReflectionProbeDrag.active
+                  && documentState.authoring.authoringGraph.reflectionProbes[0].x == 96
+                  && documentState.map.topologyMap.compiledReflectionProbes.size() == 1
+                  && Near(documentState.map.topologyMap.compiledReflectionProbes[0]
+                                  .capturePositionWorld.x,
+                          game::SectorAuthoringToWorldDistance(6.0f))
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && !editorState.topologyRenderCache.valid,
+          "Select manipulation commits reflection probe authoring and compiled positions once");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    editorState.topologyRenderCache.valid = true;
+    game::StartSectorEditorSelectedManipulation(
+            manipulationContext,
+            game::SectorEditorPickTarget{
+                    game::SectorEditorPickKind::AuthoringReflectionProbe, probeId},
+            Vector2{6.0f, 5.0f});
+    game::UpdateActiveSectorEditorMapPointManipulations(
+            manipulationContext, Vector2{7.0f, 5.0f});
+    game::CancelActiveSectorEditorManipulation(
+            manipulationContext,
+            "Cancelled reflection probe move",
+            "Cancelled light move",
+            "Cancelled object move");
+    Check(!manipulation.authoringReflectionProbeDrag.active
+                  && documentState.authoring.authoringGraph.reflectionProbes[0].x == 96
+                  && !documentState.lifecycle.topologyDocumentDirty
+                  && !documentState.lifecycle.hasUnsavedChanges
+                  && editorState.topologyRenderCache.valid,
+          "cancelled reflection probe Select drag leaves the document unchanged");
+    Check(!editing.SetPosition(
+                  probeId,
+                  game::SectorTopologyCoordPoint{400, 400},
+                  "Moved reflection probe")
+                  && documentState.authoring.authoringGraph.reflectionProbes[0].x == 96
+                  && !documentState.lifecycle.topologyDocumentDirty
+                  && editorState.topologyRenderCache.valid,
+          "reflection probe move rejects destinations outside derived non-void faces");
+}
+
 void TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache()
 {
     game::SectorEditorDocumentState documentState;
@@ -13321,6 +13450,7 @@ int main()
     TestAuthoringFogVolumeDerivationAndUnresolvedWarning();
     TestAuthoringFogVolumeSerializationRoundTrip();
     TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce();
+    TestReflectionProbeSelectManipulationCommitsSnappedMove();
     TestLevelMarkerEditingServicePlacesSnapsAndInvalidatesCache();
     TestTriggerEditingServiceCommitsAuthoringAndDragOnce();
     TestEmptyGraph();
