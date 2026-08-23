@@ -498,6 +498,7 @@ private:
     void MarkTopologyDocumentEdited(const char* status);
     void RefreshResolvedMaterials();
     bool OpenDeleteSelectedLightConfirmation();
+    bool ConvertSelectedLight();
     SectorEditorToolContext BuildToolContext(engine::Input* input);
     void AddRuntimeObjectAt(Vector2 mapPoint);
     void AddStaticModelAt(Vector2 mapPoint);

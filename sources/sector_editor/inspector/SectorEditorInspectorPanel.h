@@ -38,6 +38,7 @@ enum class SectorEditorInspectorPanelRequestKind {
     DeleteSelectedAuthoringVertex,
     DeleteSelectedRuntimeObject,
     OpenDeleteSelectedLightConfirmation,
+    ConvertSelectedLight,
     OpenDeleteSelectedFogVolumeConfirmation,
     OpenDeleteSelectedReflectionProbeConfirmation,
     OpenDeleteSelectedLevelMarkerConfirmation,

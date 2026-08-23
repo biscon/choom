@@ -904,6 +904,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool bakeRequested = false;
         bool sourceRefreshRequested = false;
         DrawSelectedStaticLightInspector(
@@ -921,10 +922,14 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
+                convertRequested,
                 bakeRequested,
                 sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (convertRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         }
         if (bakeRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
@@ -939,13 +944,15 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedStaticRectLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool bakeRequested = false;
         bool refreshRequested = false;
         DrawSelectedStaticRectLightInspector(ui, config, input, assets, font, scroll,
                 contentW, rowH, gap, *selectedStaticRectLight(), uiState,
                 context.inspectorIdUiState, lightEditing, deleteRequested,
-                bakeRequested, refreshRequested);
+                convertRequested, bakeRequested, refreshRequested);
         if (deleteRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        if (convertRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         if (bakeRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
         if (refreshRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
@@ -955,11 +962,14 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedDynamicRectLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool refreshRequested = false;
         DrawSelectedDynamicRectLightInspector(ui, config, input, assets, font, scroll,
                 contentW, rowH, gap, *selectedDynamicRectLight(), uiState,
-                context.inspectorIdUiState, lightEditing, deleteRequested, refreshRequested);
+                context.inspectorIdUiState, lightEditing, deleteRequested,
+                convertRequested, refreshRequested);
         if (deleteRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        if (convertRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         if (refreshRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
@@ -968,6 +978,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedStaticSpotLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool bakeRequested = false;
         bool sourceRefreshRequested = false;
         DrawSelectedStaticSpotLightInspector(
@@ -985,10 +996,14 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
+                convertRequested,
                 bakeRequested,
                 sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (convertRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         }
         if (bakeRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
@@ -1003,6 +1018,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedDynamicLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool sourceRefreshRequested = false;
         DrawSelectedDynamicLightInspector(
                 ui,
@@ -1019,9 +1035,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
+                convertRequested,
                 sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (convertRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         }
         if (sourceRefreshRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
@@ -1033,6 +1053,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedDynamicSpotLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool sourceRefreshRequested = false;
         DrawSelectedDynamicSpotLightInspector(
                 ui,
@@ -1050,9 +1071,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
+                convertRequested,
                 sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (convertRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         }
         if (sourceRefreshRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);

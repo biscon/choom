@@ -33,6 +33,7 @@ bool DrawSelectedStaticLightInspector(
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
+        bool& convertRequested,
         bool& bakeRequested,
         bool& sourceRefreshRequested);
 
@@ -51,6 +52,7 @@ bool DrawSelectedStaticSpotLightInspector(
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
+        bool& convertRequested,
         bool& bakeRequested,
         bool& sourceRefreshRequested);
 
@@ -69,6 +71,7 @@ bool DrawSelectedDynamicLightInspector(
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
+        bool& convertRequested,
         bool& sourceRefreshRequested);
 
 bool DrawSelectedDynamicSpotLightInspector(
@@ -87,17 +90,18 @@ bool DrawSelectedDynamicSpotLightInspector(
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
+        bool& convertRequested,
         bool& sourceRefreshRequested);
 
 bool DrawSelectedStaticRectLightInspector(
         engine::UIContext&, const engine::UIConfig&, engine::Input&, engine::AssetManager&,
         engine::FontHandle, engine::UIScrollAreaResult, float, float, float,
         SectorTopologyStaticRectLight&, SectorEditorUiState&, InspectorIdUiState&,
-        SectorEditorLightEditingService&, bool&, bool&, bool&);
+        SectorEditorLightEditingService&, bool&, bool&, bool&, bool&);
 bool DrawSelectedDynamicRectLightInspector(
         engine::UIContext&, const engine::UIConfig&, engine::Input&, engine::AssetManager&,
         engine::FontHandle, engine::UIScrollAreaResult, float, float, float,
         SectorTopologyDynamicRectLight&, SectorEditorUiState&, InspectorIdUiState&,
-        SectorEditorLightEditingService&, bool&, bool&);
+        SectorEditorLightEditingService&, bool&, bool&, bool&);
 
 } // namespace game

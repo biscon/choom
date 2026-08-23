@@ -125,6 +125,7 @@ public:
     SectorEditorLightMutationResult AddDynamicLight(int sectorId, Vector2 mapPoint);
     SectorEditorLightMutationResult AddDynamicSpotLight(int sectorId, Vector2 mapPoint);
     SectorEditorLightMutationResult AddDynamicRectLight(int sectorId, Vector2 mapPoint);
+    SectorEditorLightMutationResult ConvertSelectedLight();
     SectorEditorLightMutationResult DeleteSelectedLightConfirmed();
 
     bool BeginLightDrag(TopologySelectionKind kind, int topologyLightId, SpotLightHandle spotHandle);

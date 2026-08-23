@@ -345,7 +345,7 @@ float StaticLightInspectorContentHeight(float rowH, float gap, bool hasIdError, 
     if (hasIdError) {
         height += 36.0f;
     }
-    height += rowH + gap; // Delete.
+    height += 2.0f * (rowH + gap); // Delete and convert.
     height += rowH + gap; // Shadow.
     height += 6.0f * (rowH + gap); // Position/intensity/radius/source radius.
     height += 3.0f * (rowH + gap); // RGB.
@@ -362,7 +362,7 @@ float StaticSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdErr
     if (hasIdError) {
         height += 36.0f;
     }
-    height += rowH + gap; // Delete.
+    height += 2.0f * (rowH + gap); // Delete and convert.
     height += rowH + gap; // Shadow.
     height += 12.0f * (rowH + gap); // Position/target/point down/intensity/range/source/cones.
     height += 3.0f * (rowH + gap); // RGB.
@@ -379,7 +379,7 @@ float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError,
     if (hasIdError) {
         height += 36.0f;
     }
-    height += rowH + gap; // Delete.
+    height += 2.0f * (rowH + gap); // Delete and convert.
     height += rowH + gap; // Enabled.
     height += 3.0f * (rowH + gap); // Flicker controls.
     height += 5.0f * (rowH + gap); // Shadow controls.
@@ -397,7 +397,7 @@ float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdEr
     if (hasIdError) {
         height += 36.0f;
     }
-    height += rowH + gap; // Delete.
+    height += 2.0f * (rowH + gap); // Delete and convert.
     height += rowH + gap; // Enabled.
     height += 3.0f * (rowH + gap); // Flicker controls.
     height += 5.0f * (rowH + gap); // Shadow controls.
@@ -424,6 +424,7 @@ bool DrawSelectedStaticLightInspector(
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
+        bool& convertRequested,
         bool& bakeRequested,
         bool& sourceRefreshRequested)
 {
@@ -444,6 +445,13 @@ bool DrawSelectedStaticLightInspector(
 
     if (engine::Button(ui, config, input, assets, "sector_editor_delete_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
         deleteRequested = true;
+        return true;
+    }
+    y += rowH + gap;
+
+    if (engine::Button(ui, config, input, assets, "sector_editor_convert_static_light",
+                Rectangle{0.0f, y, contentW, rowH}, font, "Convert to Dynamic Light")) {
+        convertRequested = true;
         return true;
     }
     y += rowH + gap;
@@ -615,6 +623,7 @@ bool DrawSelectedStaticSpotLightInspector(
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
+        bool& convertRequested,
         bool& bakeRequested,
         bool& sourceRefreshRequested)
 {
@@ -635,6 +644,13 @@ bool DrawSelectedStaticSpotLightInspector(
 
     if (engine::Button(ui, config, input, assets, "sector_editor_delete_static_spot_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
         deleteRequested = true;
+        return true;
+    }
+    y += rowH + gap;
+
+    if (engine::Button(ui, config, input, assets, "sector_editor_convert_static_spot_light",
+                Rectangle{0.0f, y, contentW, rowH}, font, "Convert to Dynamic Light")) {
+        convertRequested = true;
         return true;
     }
     y += rowH + gap;
@@ -844,6 +860,7 @@ bool DrawSelectedDynamicLightInspector(
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
+        bool& convertRequested,
         bool& sourceRefreshRequested)
 {
     const SectorTopologyDynamicPointLight sourceBefore = light;
@@ -863,6 +880,13 @@ bool DrawSelectedDynamicLightInspector(
 
     if (engine::Button(ui, config, input, assets, "sector_editor_delete_dynamic_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
         deleteRequested = true;
+        return true;
+    }
+    y += rowH + gap;
+
+    if (engine::Button(ui, config, input, assets, "sector_editor_convert_dynamic_light",
+                Rectangle{0.0f, y, contentW, rowH}, font, "Convert to Static Light")) {
+        convertRequested = true;
         return true;
     }
     y += rowH + gap;
@@ -1079,6 +1103,7 @@ bool DrawSelectedDynamicSpotLightInspector(
         InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& lightEditing,
         bool& deleteRequested,
+        bool& convertRequested,
         bool& sourceRefreshRequested)
 {
     const SectorTopologyDynamicSpotLight sourceBefore = light;
@@ -1099,6 +1124,13 @@ bool DrawSelectedDynamicSpotLightInspector(
 
     if (engine::Button(ui, config, input, assets, "sector_editor_delete_dynamic_spot_light", Rectangle{0.0f, y, contentW, rowH}, font, "Delete Light")) {
         deleteRequested = true;
+        return true;
+    }
+    y += rowH + gap;
+
+    if (engine::Button(ui, config, input, assets, "sector_editor_convert_dynamic_spot_light",
+                Rectangle{0.0f, y, contentW, rowH}, font, "Convert to Static Light")) {
+        convertRequested = true;
         return true;
     }
     y += rowH + gap;
@@ -1419,7 +1451,7 @@ float RectLightInspectorContentHeight(
         const SectorLightAtmosphereSettings& atmosphere)
 {
     float height = 38.0f + rowH + gap + (hasIdError ? 36.0f : 0.0f);
-    height += rowH + gap; // Delete.
+    height += 2.0f * (rowH + gap); // Delete and convert.
     height += (dynamic ? 9.0f : 1.0f) * (rowH + gap); // Runtime and shadow controls.
     height += 13.0f * (rowH + gap); // Position, target, Point Down, roll, size, range, intensity.
     height += 3.0f * (rowH + gap) + 36.0f + gap;
@@ -1435,7 +1467,7 @@ bool DrawRectLightInspector(
         engine::UIScrollAreaResult scroll, float contentW, float rowH, float gap,
         Light& light, SectorEditorUiState& uiState, InspectorIdUiState& inspectorIdUiState,
         SectorEditorLightEditingService& editing, bool& deleteRequested,
-        bool* bakeRequested, bool& sourceRefreshRequested)
+        bool& convertRequested, bool* bakeRequested, bool& sourceRefreshRequested)
 {
     constexpr bool Dynamic = std::is_same_v<Light, SectorTopologyDynamicRectLight>;
     float y = 0.0f;
@@ -1457,6 +1489,14 @@ bool DrawRectLightInspector(
                 ? "sector_editor_delete_dynamic_rect_light" : "sector_editor_delete_static_rect_light",
                 {0.0f, y, contentW, rowH}, font, "Delete Light")) {
         deleteRequested = true;
+        return true;
+    }
+    y += rowH + gap;
+    if (engine::Button(ui, config, input, assets, Dynamic
+                ? "sector_editor_convert_dynamic_rect_light" : "sector_editor_convert_static_rect_light",
+                {0.0f, y, contentW, rowH}, font,
+                Dynamic ? "Convert to Static Light" : "Convert to Dynamic Light")) {
+        convertRequested = true;
         return true;
     }
     y += rowH + gap;
@@ -1654,11 +1694,11 @@ bool DrawSelectedStaticRectLightInspector(
         float contentW, float rowH, float gap, SectorTopologyStaticRectLight& light,
         SectorEditorUiState& state, InspectorIdUiState& idState,
         SectorEditorLightEditingService& editing, bool& deleteRequested,
-        bool& bakeRequested, bool& sourceRefreshRequested)
+        bool& convertRequested, bool& bakeRequested, bool& sourceRefreshRequested)
 {
     return DrawRectLightInspector(ui, config, input, assets, font, scroll, contentW,
             rowH, gap, light, state, idState, editing, deleteRequested,
-            &bakeRequested, sourceRefreshRequested);
+            convertRequested, &bakeRequested, sourceRefreshRequested);
 }
 
 bool DrawSelectedDynamicRectLightInspector(
@@ -1667,11 +1707,11 @@ bool DrawSelectedDynamicRectLightInspector(
         float contentW, float rowH, float gap, SectorTopologyDynamicRectLight& light,
         SectorEditorUiState& state, InspectorIdUiState& idState,
         SectorEditorLightEditingService& editing, bool& deleteRequested,
-        bool& sourceRefreshRequested)
+        bool& convertRequested, bool& sourceRefreshRequested)
 {
     return DrawRectLightInspector(ui, config, input, assets, font, scroll, contentW,
             rowH, gap, light, state, idState, editing, deleteRequested,
-            nullptr, sourceRefreshRequested);
+            convertRequested, nullptr, sourceRefreshRequested);
 }
 
 } // namespace game

@@ -3319,6 +3319,26 @@ bool SectorEditor::OpenDeleteSelectedLightConfirmation()
     return true;
 }
 
+bool SectorEditor::ConvertSelectedLight()
+{
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    const SectorEditorLightMutationResult result = lightEditing.ConvertSelectedLight();
+    if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
+        ResetSectorFreeflyController(
+                previewState.controller.freeflyController,
+                previewState.controller.lightPilotPreviewRestore.originalPreviewPose);
+        SetSectorFreeflyMouseLookEnabled(
+                previewState.controller.freeflyController,
+                previewState.controller.lightPilotPreviewRestore.originalMouseLookEnabled);
+        previewState.controller.lightPilotPreviewRestore = LightPilotPreviewRestoreState{};
+        sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
+    }
+    if (result.dynamicLightRendererRefreshNeeded) {
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
+    }
+    return result.changed;
+}
+
 SectorEditorRuntimeObjectEditingService
 SectorEditor::BuildRuntimeObjectEditingService(
         SectorEditorSelectionServiceContext* selectionService)
@@ -5584,6 +5604,9 @@ void SectorEditor::DrawSectorsPanel(
             break;
         case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation:
             OpenDeleteSelectedLightConfirmation();
+            break;
+        case SectorEditorInspectorPanelRequestKind::ConvertSelectedLight:
+            ConvertSelectedLight();
             break;
         case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedFogVolumeConfirmation:
             OpenConfirmation(
