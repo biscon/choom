@@ -4396,7 +4396,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "c8a560cee66801d3",
+    "sourceHash": "be1e30b7c74f412e",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -4416,7 +4416,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "c8a560cee66801d3",
+      "sourceHash": "be1e30b7c74f412e",
       "count": 2519,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -4442,7 +4442,7 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "c8a560cee66801d3",
+      "sourceHash": "be1e30b7c74f412e",
       "modelCount": 37,
       "objectCount": 88,
       "format": "staticModelUvRemapF32LE"
@@ -19424,7 +19424,7 @@
         "y": -706,
         "floorZ": -17.0,
         "ceilingZ": 15.0,
-        "floorMaterialId": "dark_wooden_planks",
+        "floorMaterialId": "old_wooden_floor_03",
         "ceilingMaterialId": "worn_white_ceiling_512",
         "floorUv": {
           "scale": [
@@ -19491,7 +19491,8 @@
               0.0
             ]
           }
-        }
+        },
+        "footstepSet": "Parquet_Floor_Mono"
       }
     ],
     "fogVolumes": [
@@ -19668,8 +19669,7 @@
           9.0,
           2.0,
           4.0
-        ],
-        "intensity": 1.5
+        ]
       },
       {
         "id": 6,
