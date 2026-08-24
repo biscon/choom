@@ -2026,6 +2026,25 @@
         -50.0
       ],
       "yawDegrees": 90.0
+    },
+    {
+      "id": 130,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "old_radio",
+        "useTitle": "Radio",
+        "onUseScript": "toggleRadio",
+        "modelPath": "assets/models/radio_game_ready_free.glb",
+        "heightOffsetWorld": 0.8999999761581421,
+        "scale": 1.25,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -89.0,
+        -16.0,
+        -93.0
+      ],
+      "yawDegrees": 15.0
     }
   ],
   "staticLights": [
@@ -5336,6 +5355,10 @@
   "audio": {
     "roomtoneFadeMilliseconds": 3000,
     "sounds": {
+      "deskfan_sound": {
+        "path": "sfx/deskfan-sound.mp3",
+        "type": "music"
+      },
       "door_close_01": {
         "path": "doors/door_close_01.mp3",
         "type": "sound"
@@ -5351,6 +5374,10 @@
       "horror_ambience": {
         "path": "ambience/horror_ambience.ogg",
         "type": "music"
+      },
+      "light_switch_on_01": {
+        "path": "sfx/light-switch-on-01.wav",
+        "type": "sound"
       },
       "old_radio_music": {
         "path": "music/old-radio-music.mp3",
@@ -22284,11 +22311,12 @@
     "soundEmitters": [
       {
         "editorId": 1,
-        "id": "sound_emitter_1",
-        "x": -1664,
+        "id": "radio_emitter",
+        "x": -1424,
         "y": -16.0,
-        "z": -1328,
-        "soundId": "door_open_01",
+        "z": -1488,
+        "soundId": "old_radio_music",
+        "volume": 0.75,
         "loop": true
       }
     ],

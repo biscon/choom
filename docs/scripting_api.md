@@ -64,9 +64,11 @@ playMapSound("light_switch_click", 0.8, 1.05)
 ### `playSoundEmitter(emitterId [, volume [, pitch]]) -> true | false, reason`
 
 Plays the positional Sound Emitter with the stable string ID authored in the
-editor. Omitted volume uses the emitter's authored volume. A looping emitter
-continues until stopped; a non-looping emitter plays once. Calling this for an
-already-playing loop updates its volume and pitch without restarting it.
+editor. Emitters accept buffered Sound entries or independently streamed Music
+entries; both use positional attenuation, stereo pan, and occlusion. Omitted
+volume uses the emitter's authored volume. A looping emitter continues until
+stopped; a non-looping emitter plays once. Calling this for an already-playing
+loop updates its volume and pitch without restarting it.
 
 ```lua
 playSoundEmitter("generator_motor")

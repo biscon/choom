@@ -4,6 +4,7 @@
 #include "sector_demo/SectorAssetPaths.h"
 #include "sector_editor/SectorEditorHelpers.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
+#include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 
 #include <algorithm>
 #include <utility>
@@ -187,8 +188,10 @@ bool SectorEditorSoundService::OpenDoorPicker(
     ClosePicker();
     SoundPickerState& picker = context_.state.soundPicker;
     picker.open = true;
-    picker.target = target;
-    picker.runtimeObjectId = runtimeObjectId;
+    picker.targetKind = target == SectorEditorDoorSoundTarget::Open
+            ? SectorEditorSoundPickerTargetKind::DoorOpen
+            : SectorEditorSoundPickerTargetKind::DoorClose;
+    picker.targetId = runtimeObjectId;
     picker.soundIds.push_back({});
     picker.labelStorage.push_back("<None>");
     const std::vector<std::string> ids = SortedIds(SectorSoundType::Sound);
@@ -203,6 +206,44 @@ bool SectorEditorSoundService::OpenDoorPicker(
         picker.optionLabels.push_back(picker.labelStorage[i].c_str());
         if (picker.soundIds[i] == current) {
             picker.selectedSoundIndex = static_cast<int>(i);
+        }
+    }
+    return true;
+}
+
+bool SectorEditorSoundService::OpenSoundEmitterPicker(int emitterId)
+{
+    const SectorAuthoringSoundEmitter* emitter =
+            FindSectorAuthoringSoundEmitter(context_.authoringGraph, emitterId);
+    if (emitter == nullptr) return false;
+    ClosePicker();
+    SoundPickerState& picker = context_.state.soundPicker;
+    picker.open = true;
+    picker.targetKind = SectorEditorSoundPickerTargetKind::SoundEmitter;
+    picker.targetId = emitterId;
+    picker.soundIds.push_back({});
+    picker.labelStorage.push_back("<None>");
+
+    std::vector<std::string> ids;
+    ids.reserve(context_.authoringGraph.audioSettings.soundsById.size());
+    for (const auto& entry : context_.authoringGraph.audioSettings.soundsById) {
+        ids.push_back(entry.first);
+    }
+    std::sort(ids.begin(), ids.end());
+    for (const std::string& id : ids) {
+        const SectorSoundDefinition& definition =
+                context_.authoringGraph.audioSettings.soundsById.at(id);
+        picker.soundIds.push_back(id);
+        picker.labelStorage.push_back(id + "  ["
+                + (definition.type == SectorSoundType::Music ? "Music" : "Sound")
+                + "]");
+    }
+    picker.selectedSoundIndex = 0;
+    picker.optionLabels.reserve(picker.labelStorage.size());
+    for (size_t index = 0; index < picker.labelStorage.size(); ++index) {
+        picker.optionLabels.push_back(picker.labelStorage[index].c_str());
+        if (picker.soundIds[index] == emitter->soundId) {
+            picker.selectedSoundIndex = static_cast<int>(index);
         }
     }
     return true;
@@ -224,22 +265,40 @@ bool SectorEditorSoundService::ApplyPickerSelection()
         return false;
     }
     const std::string selected = picker.soundIds[static_cast<size_t>(picker.selectedSoundIndex)];
-    const int objectId = picker.runtimeObjectId;
-    const SectorEditorDoorSoundTarget target = picker.target;
+    const int targetId = picker.targetId;
+    const SectorEditorSoundPickerTargetKind targetKind = picker.targetKind;
     ClosePicker();
+
+    if (targetKind == SectorEditorSoundPickerTargetKind::SoundEmitter) {
+        if (context_.soundEmitterEditing == nullptr
+                || context_.soundEmitterEditing->Selected() == nullptr
+                || context_.soundEmitterEditing->Selected()->id != targetId) {
+            context_.statusText = "Sound Emitter target unavailable";
+            return false;
+        }
+        const bool changed = context_.soundEmitterEditing->Selected()->soundId != selected
+                && context_.soundEmitterEditing->SetSelectedSoundId(selected);
+        context_.statusText = changed
+                ? "Selected Sound Emitter sound "
+                        + (selected.empty() ? std::string{"<none>"} : selected)
+                : "Sound Emitter sound unchanged";
+        return changed;
+    }
+
     if (context_.runtimeObjectEditing == nullptr) return false;
     const SectorPlacedRuntimeObject* object = context_.runtimeObjectEditing->SelectedObject();
-    if (object == nullptr || object->id != objectId || object->kind != "door") {
+    if (object == nullptr || object->id != targetId || object->kind != "door") {
         context_.statusText = "Door sound target unavailable";
         return false;
     }
+    const bool opening = targetKind == SectorEditorSoundPickerTargetKind::DoorOpen;
     const bool changed = context_.runtimeObjectEditing->MutateSelected(
-            target == SectorEditorDoorSoundTarget::Open
+            opening
                     ? "Updated door open sound"
                     : "Updated door close sound",
-            [selected, target](SectorPlacedRuntimeObject& edited) {
+            [selected, opening](SectorPlacedRuntimeObject& edited) {
                 if (edited.kind != "door") return false;
-                std::string& field = target == SectorEditorDoorSoundTarget::Open
+                std::string& field = opening
                         ? edited.door.openSoundId
                         : edited.door.closeSoundId;
                 if (field == selected) return false;
@@ -248,7 +307,7 @@ bool SectorEditorSoundService::ApplyPickerSelection()
             });
     context_.statusText = changed
             ? TextFormat("Selected door %s sound %s",
-                    target == SectorEditorDoorSoundTarget::Open ? "open" : "close",
+                    opening ? "open" : "close",
                     selected.empty() ? "<none>" : selected.c_str())
             : "Door sound unchanged";
     return changed;
@@ -264,10 +323,20 @@ void SectorEditorSoundService::PreviewPickerSelection()
     }
     StopPreview(picker.preview, false);
     const std::string& id = picker.soundIds[static_cast<size_t>(picker.selectedSoundIndex)];
-    picker.preview.type = SectorSoundType::Sound;
+    const SectorSoundDefinition* definition = Find(id);
+    if (definition == nullptr) {
+        picker.message = "Sound is unavailable";
+        return;
+    }
+    picker.preview.type = definition->type;
     picker.preview.key = id;
-    picker.preview.sound = SoundHandleForId(id);
-    picker.preview.pending = !engine::IsNull(picker.preview.sound);
+    if (definition->type == SectorSoundType::Music) {
+        picker.preview.music = MusicHandleForId(id);
+        picker.preview.pending = !engine::IsNull(picker.preview.music);
+    } else {
+        picker.preview.sound = SoundHandleForId(id);
+        picker.preview.pending = !engine::IsNull(picker.preview.sound);
+    }
     picker.message = picker.preview.pending
             ? "Loading preview..."
             : "Sound is unavailable";
@@ -300,8 +369,11 @@ void SectorEditorSoundService::DrawPickerModal(
     DrawRectangleRec(modal, Color{20, 24, 32, 245});
     DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
     engine::Text(config, assets, Rectangle{modal.x + 22.0f, modal.y + 18.0f, modal.width - 44.0f, 36.0f},
-            font, picker.target == SectorEditorDoorSoundTarget::Open
-                    ? "Pick Door Open Sound" : "Pick Door Close Sound");
+            font,
+            picker.targetKind == SectorEditorSoundPickerTargetKind::SoundEmitter
+                    ? "Pick Sound Emitter Audio"
+                    : picker.targetKind == SectorEditorSoundPickerTargetKind::DoorOpen
+                            ? "Pick Door Open Sound" : "Pick Door Close Sound");
     const Rectangle listBounds{modal.x + 22.0f, modal.y + 68.0f, 330.0f, 400.0f};
     const Vector2 contentSize{
             ScrollContentWidth(listBounds.width, config),

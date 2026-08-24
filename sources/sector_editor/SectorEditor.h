@@ -475,7 +475,8 @@ private:
     SectorEditorRuntimeObjectEditingService BuildRuntimeObjectEditingService(
             SectorEditorSelectionServiceContext* selectionService = nullptr);
     SectorEditorSoundService BuildSoundService(
-            SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr);
+            SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr,
+            SectorEditorSoundEmitterEditingService* soundEmitterEditing = nullptr);
     SectorEditorSoundEditorService BuildSoundEditorService();
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorNpcEditorService BuildNpcEditorService();

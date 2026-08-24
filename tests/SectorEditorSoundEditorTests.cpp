@@ -98,6 +98,8 @@ void TestKnownReferencesLockIdentityButAllowPathReplacement()
             "sfx/machine.wav");
     AddSound(fixture.graph, "door_click", game::SectorSoundType::Sound,
             "sfx/door.wav");
+    AddSound(fixture.graph, "radio_music", game::SectorSoundType::Music,
+            "music/radio.mp3");
 
     game::SectorAuthoringFaceAnchor anchor;
     anchor.id = 7;
@@ -115,6 +117,11 @@ void TestKnownReferencesLockIdentityButAllowPathReplacement()
     emitter.referenceId = "generator";
     emitter.soundId = "machine";
     fixture.graph.soundEmitters.push_back(emitter);
+    game::SectorAuthoringSoundEmitter radioEmitter;
+    radioEmitter.id = 10;
+    radioEmitter.referenceId = "office_radio";
+    radioEmitter.soundId = "radio_music";
+    fixture.graph.soundEmitters.push_back(radioEmitter);
 
     game::SectorPlacedRuntimeObject door;
     door.id = 12;
@@ -128,11 +135,13 @@ void TestKnownReferencesLockIdentityButAllowPathReplacement()
     int officeIndex = -1;
     int machineIndex = -1;
     int doorIndex = -1;
+    int radioIndex = -1;
     for (size_t index = 0; index < fixture.state.drafts.size(); ++index) {
         const std::string& id = fixture.state.drafts[index].definition.id;
         if (id == "office_tone") officeIndex = static_cast<int>(index);
         if (id == "machine") machineIndex = static_cast<int>(index);
         if (id == "door_click") doorIndex = static_cast<int>(index);
+        if (id == "radio_music") radioIndex = static_cast<int>(index);
     }
 
     editor.SelectIndex(officeIndex);
@@ -158,6 +167,13 @@ void TestKnownReferencesLockIdentityButAllowPathReplacement()
     Check(fixture.state.usageText.find("Door \"office_door\" open sound")
                     != std::string::npos,
             "door open/close usage is reported");
+    editor.SelectIndex(radioIndex);
+    Check(fixture.state.usageText.find("Sound Emitter \"office_radio\"")
+                    != std::string::npos,
+            "streaming Music Sound Emitter usage is reported");
+    Check(editor.SetSelectedPath("music/radio-remastered.ogg")
+                    && editor.SaveAndClose(),
+            "a referenced streaming Music Sound Emitter remains valid on save");
 }
 
 void TestUnusedEntriesCanChangeAndRoomtoneFadeSynchronizes()

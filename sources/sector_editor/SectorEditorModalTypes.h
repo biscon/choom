@@ -81,10 +81,17 @@ enum class SectorEditorDoorSoundTarget {
     Close
 };
 
+enum class SectorEditorSoundPickerTargetKind {
+    DoorOpen,
+    DoorClose,
+    SoundEmitter
+};
+
 struct SoundPickerState {
     bool open = false;
-    SectorEditorDoorSoundTarget target = SectorEditorDoorSoundTarget::Open;
-    int runtimeObjectId = -1;
+    SectorEditorSoundPickerTargetKind targetKind =
+            SectorEditorSoundPickerTargetKind::DoorOpen;
+    int targetId = -1;
     int selectedSoundIndex = -1;
     engine::UIScrollState scroll;
     std::vector<std::string> soundIds;

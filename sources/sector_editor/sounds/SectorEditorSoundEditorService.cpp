@@ -388,12 +388,6 @@ bool SectorEditorSoundEditorService::ValidateDrafts(std::string& error) const
             }
         }
         if (draft.definition.type != SectorSoundType::Sound) {
-            for (const SectorAuthoringSoundEmitter& emitter : authoringGraph_.soundEmitters) {
-                if (emitter.soundId == draft.definition.id) {
-                    error = "Sound Emitter sound '" + draft.definition.id + "' must be Sound";
-                    return false;
-                }
-            }
             for (const SectorPlacedRuntimeObject& object : topologyMap_.runtimeObjects) {
                 if (object.kind == "door" && (object.door.openSoundId == draft.definition.id
                         || object.door.closeSoundId == draft.definition.id)) {

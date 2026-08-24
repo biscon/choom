@@ -404,6 +404,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringSoundEmitter
             ? FindSectorAuthoringSoundEmitter(authoringGraph, inspectorTarget.soundEmitterId)
             : nullptr;
+    if (selectedSoundEmitter == nullptr) {
+        context.soundEmitterUiState.bufferedEmitterId = -1;
+        context.soundEmitterUiState.bufferedSoundId.clear();
+    }
     const SectorAuthoringTrigger* selectedTrigger =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringTrigger
             ? FindSectorAuthoringTrigger(authoringGraph, inspectorTarget.triggerId)
@@ -2872,7 +2876,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         const bool deleteRequested = DrawSectorEditorSoundEmitterInspector(
                 ui, config, input, assets, font, contentW, rowH, gap,
                 *selectedSoundEmitter, context.soundEmitterUiState,
-                context.soundEmitterEditing);
+                context.soundEmitterEditing, context.sounds);
         if (deleteRequested) {
             AppendRequest(result,
                     SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedSoundEmitterConfirmation);

@@ -233,7 +233,7 @@ SectorEditorSoundEditorPanelResult DrawSectorEditorSoundEditorPanel(
         engine::Text(ui, config, assets, {0.0f, y, formScroll.viewport.width, 34.0f},
                 smallFont,
                 draft->definition.type == SectorSoundType::Music
-                        ? "Music is streamed and is used for roomtones."
+                        ? "Music is streamed and is used for roomtones or long Sound Emitter audio."
                         : "Sound is buffered and is used for emitters, doors, and scripts.",
                 engine::UITextJustify::Left, config.mutedTextColor, true);
         y += 44.0f;

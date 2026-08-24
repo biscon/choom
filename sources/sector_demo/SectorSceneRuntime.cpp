@@ -425,6 +425,9 @@ void SectorSceneRuntime::StopLevelAudio(engine::EngineContext& context)
         if (!engine::IsNull(emitter.playback)) {
             context.audio.StopSound(context.assets, emitter.playback);
         }
+        if (!engine::IsNull(emitter.music)) {
+            context.audio.StopMusic(context.assets, emitter.music);
+        }
     }
     if (!engine::IsNull(audioScope)) {
         context.assets.UnloadScope(audioScope);
@@ -545,45 +548,77 @@ bool SectorSceneRuntime::PlaySoundEmitter(
         return false;
     }
     SoundEmitterPlayback& emitter = *found;
-    if (engine::IsNull(emitter.sound)) {
-        error = "sound emitter has no valid buffered Sound: " + id;
+    const bool streaming = !engine::IsNull(emitter.music);
+    if (engine::IsNull(emitter.sound) && !streaming) {
+        error = "sound emitter has no valid Sound/Music: " + id;
         return false;
     }
-    if (!context.assets.IsReady(emitter.sound)) {
-        error = context.assets.HasFailed(emitter.sound)
-                ? "sound emitter asset failed to load: " + id
-                : "sound emitter asset is not ready: " + id;
+    const bool ready = streaming
+            ? context.assets.IsReady(emitter.music)
+            : context.assets.IsReady(emitter.sound);
+    if (!ready) {
+        const bool failed = streaming
+                ? context.assets.HasFailed(emitter.music)
+                : context.assets.HasFailed(emitter.sound);
+        error = failed ? "sound emitter asset failed to load: " + id
+                       : "sound emitter asset is not ready: " + id;
         return false;
     }
     emitter.pitch = pitch;
     const float playbackVolume = volumeOverride != nullptr
             ? *volumeOverride : emitter.volume;
     emitter.playbackVolume = playbackVolume;
-    engine::SoundPlaybackSettings settings;
-    settings.volume = playbackVolume;
-    settings.pitch = pitch;
-    settings.looping = emitter.loop;
-    if (emitter.loop && context.audio.IsSoundPlaying(emitter.playback)) {
-        if (!context.audio.SetSoundPlaybackSettings(
-                    context.assets, emitter.playback, settings)) {
-            error = "sound emitter settings could not be updated: " + id;
-            return false;
-        }
-        emitter.loopRequested = true;
-        emitter.autoStartPending = false;
-        error.clear();
-        return true;
-    }
-    if (context.audio.IsSoundPlaying(emitter.playback)) {
-        context.audio.StopSound(context.assets, emitter.playback);
-    }
     engine::PositionalSoundSettings positional;
     positional.position = emitter.positionWorld;
-    emitter.playback = context.audio.PlaySoundAt(
-            context.assets, emitter.sound, positional, settings);
-    if (engine::IsNull(emitter.playback)) {
-        error = "sound emitter could not start: " + id;
-        return false;
+    if (streaming) {
+        engine::MusicPlaybackSettings settings;
+        settings.volume = playbackVolume;
+        settings.pitch = pitch;
+        settings.looping = emitter.loop;
+        if (context.audio.IsMusicPlaying(emitter.music)) {
+            if (emitter.loop) {
+                if (!context.audio.PlayMusicAt(
+                            context.assets, emitter.music, positional, settings)) {
+                    error = "sound emitter settings could not be updated: " + id;
+                    return false;
+                }
+                emitter.loopRequested = true;
+                emitter.autoStartPending = false;
+                error.clear();
+                return true;
+            }
+            context.audio.StopMusic(context.assets, emitter.music);
+        }
+        if (!context.audio.PlayMusicAt(
+                    context.assets, emitter.music, positional, settings)) {
+            error = "sound emitter could not start: " + id;
+            return false;
+        }
+    } else {
+        engine::SoundPlaybackSettings settings;
+        settings.volume = playbackVolume;
+        settings.pitch = pitch;
+        settings.looping = emitter.loop;
+        if (emitter.loop && context.audio.IsSoundPlaying(emitter.playback)) {
+            if (!context.audio.SetSoundPlaybackSettings(
+                        context.assets, emitter.playback, settings)) {
+                error = "sound emitter settings could not be updated: " + id;
+                return false;
+            }
+            emitter.loopRequested = true;
+            emitter.autoStartPending = false;
+            error.clear();
+            return true;
+        }
+        if (context.audio.IsSoundPlaying(emitter.playback)) {
+            context.audio.StopSound(context.assets, emitter.playback);
+        }
+        emitter.playback = context.audio.PlaySoundAt(
+                context.assets, emitter.sound, positional, settings);
+        if (engine::IsNull(emitter.playback)) {
+            error = "sound emitter could not start: " + id;
+            return false;
+        }
     }
     emitter.loopRequested = emitter.loop;
     emitter.autoStartPending = false;
@@ -605,6 +640,9 @@ bool SectorSceneRuntime::StopSoundEmitter(
     }
     if (context.audio.IsSoundPlaying(found->playback)) {
         context.audio.StopSound(context.assets, found->playback);
+    }
+    if (context.audio.IsMusicPlaying(found->music)) {
+        context.audio.StopMusic(context.assets, found->music);
     }
     found->playback = engine::NullSoundPlaybackHandle();
     found->loopRequested = false;
@@ -725,7 +763,17 @@ void SectorSceneRuntime::BeginLevelAudio(
         emitter.loop = source.loop;
         emitter.loopRequested = source.loop;
         emitter.autoStartPending = source.loop;
-        emitter.sound = FindLevelSound(source.soundId);
+        const auto definition = map.audioSettings.soundsById.find(source.soundId);
+        if (definition != map.audioSettings.soundsById.end()
+                && definition->second.type == SectorSoundType::Music) {
+            const std::string path = ResolveSectorAudioAssetPath(
+                    definition->second.path);
+            const std::string instanceKey = "sound_emitter:" + source.id;
+            emitter.music = context.assets.RequestMusicInstance(
+                    audioScope, instanceKey.c_str(), path.c_str());
+        } else {
+            emitter.sound = FindLevelSound(source.soundId);
+        }
         soundEmitterPlaybacks.push_back(std::move(emitter));
     }
 }
@@ -868,33 +916,50 @@ void SectorSceneRuntime::UpdateLevelAudio(
     for (SoundEmitterPlayback& emitter : soundEmitterPlaybacks) {
         if (!emitter.loop || !emitter.loopRequested
                 || (!emitter.autoStartPending
-                    && context.audio.IsSoundPlaying(emitter.playback))) {
+                    && (context.audio.IsSoundPlaying(emitter.playback)
+                        || context.audio.IsMusicPlaying(emitter.music)))) {
             continue;
         }
-        if (engine::IsNull(emitter.sound)) {
+        const bool streaming = !engine::IsNull(emitter.music);
+        if (engine::IsNull(emitter.sound) && !streaming) {
             if (!emitter.failureReported && !emitter.soundId.empty()) {
                 TraceLog(LOG_WARNING,
-                        "Sound emitter '%s' references missing or non-Sound map sound '%s'",
+                        "Sound emitter '%s' references missing map Sound/Music '%s'",
                         emitter.id.c_str(), emitter.soundId.c_str());
                 emitter.failureReported = true;
             }
             emitter.autoStartPending = false;
             continue;
         }
-        if (!context.assets.IsReady(emitter.sound)) {
-            if (context.assets.HasFailed(emitter.sound)) {
+        const bool ready = streaming
+                ? context.assets.IsReady(emitter.music)
+                : context.assets.IsReady(emitter.sound);
+        if (!ready) {
+            const bool failed = streaming
+                    ? context.assets.HasFailed(emitter.music)
+                    : context.assets.HasFailed(emitter.sound);
+            if (failed) {
                 emitter.autoStartPending = false;
             }
             continue;
         }
-        engine::SoundPlaybackSettings settings;
-        settings.volume = emitter.playbackVolume;
-        settings.pitch = emitter.pitch;
-        settings.looping = true;
         engine::PositionalSoundSettings positional;
         positional.position = emitter.positionWorld;
-        emitter.playback = context.audio.PlaySoundAt(
-                context.assets, emitter.sound, positional, settings);
+        if (streaming) {
+            engine::MusicPlaybackSettings settings;
+            settings.volume = emitter.playbackVolume;
+            settings.pitch = emitter.pitch;
+            settings.looping = true;
+            context.audio.PlayMusicAt(
+                    context.assets, emitter.music, positional, settings);
+        } else {
+            engine::SoundPlaybackSettings settings;
+            settings.volume = emitter.playbackVolume;
+            settings.pitch = emitter.pitch;
+            settings.looping = true;
+            emitter.playback = context.audio.PlaySoundAt(
+                    context.assets, emitter.sound, positional, settings);
+        }
         emitter.autoStartPending = false;
     }
 }

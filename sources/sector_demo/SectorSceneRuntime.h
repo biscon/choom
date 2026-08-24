@@ -179,6 +179,7 @@ private:
         std::string id;
         std::string soundId;
         engine::SoundHandle sound = engine::NullSoundHandle();
+        engine::MusicHandle music = engine::NullMusicHandle();
         engine::SoundPlaybackHandle playback = engine::NullSoundPlaybackHandle();
         Vector3 positionWorld = {};
         float volume = 1.0f;

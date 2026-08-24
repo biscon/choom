@@ -2996,6 +2996,17 @@ void ValidateSoundReference(
     }
 }
 
+void ValidateSoundEmitterReference(
+        const SectorLevelAudioSettings& audio,
+        const std::string& soundId,
+        const std::string& context)
+{
+    if (soundId.empty()) return;
+    if (audio.soundsById.find(soundId) == audio.soundsById.end()) {
+        Fail(context + " must be empty or reference a registered Sound/Music map sound ID");
+    }
+}
+
 void ValidateCompiledSoundReferences(const SectorTopologyMap& map)
 {
     for (const SectorTopologySector& sector : map.sectors) {
@@ -3006,8 +3017,7 @@ void ValidateCompiledSoundReferences(const SectorTopologyMap& map)
         }
     }
     for (const SectorCompiledSoundEmitter& emitter : map.soundEmitters) {
-        ValidateSoundReference(map.audioSettings, emitter.soundId,
-                SectorSoundType::Sound,
+        ValidateSoundEmitterReference(map.audioSettings, emitter.soundId,
                 "sound emitter " + std::to_string(emitter.sourceAuthoringEmitterId));
     }
 }
@@ -3022,8 +3032,7 @@ void ValidateAuthoringSoundReferences(const SectorAuthoringGraph& graph)
         }
     }
     for (const SectorAuthoringSoundEmitter& emitter : graph.soundEmitters) {
-        ValidateSoundReference(graph.audioSettings, emitter.soundId,
-                SectorSoundType::Sound,
+        ValidateSoundEmitterReference(graph.audioSettings, emitter.soundId,
                 "sound emitter " + std::to_string(emitter.id));
     }
 }

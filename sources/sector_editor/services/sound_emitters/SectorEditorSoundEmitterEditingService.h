@@ -31,6 +31,7 @@ public:
     const SectorAuthoringSoundEmitter* Selected() const;
     bool Place(Vector2 snappedMapPoint, int* outId = nullptr);
     bool ValidateSelectedReferenceId(const std::string& referenceId, std::string& error) const;
+    bool ValidateSelectedSoundId(const std::string& soundId, std::string& error) const;
     bool RenameSelected(const std::string& referenceId);
     bool SetSelectedPosition(Vector3 authoringPosition);
     bool SetSelectedSoundId(const std::string& soundId);

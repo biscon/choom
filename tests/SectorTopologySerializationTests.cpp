@@ -2746,7 +2746,19 @@ void TestAudioSettingsRoundTripAndValidation()
     ExpectRejected(invalid, "roomtone rejects a buffered Sound ID");
     invalid = saved;
     invalid["soundEmitters"][0]["soundId"] = "alarm";
-    ExpectRejected(invalid, "sound emitter rejects a streaming Music ID");
+    SectorTopologyMap streamingEmitter;
+    error.clear();
+    Check(LoadText(invalid.dump(), streamingEmitter, error)
+                  && streamingEmitter.soundEmitters[0].soundId == "alarm",
+          "sound emitter accepts a streaming Music ID");
+    invalid["soundEmitters"][0]["soundId"] = "";
+    SectorTopologyMap silentEmitter;
+    error.clear();
+    Check(LoadText(invalid.dump(), silentEmitter, error)
+                  && silentEmitter.soundEmitters[0].soundId.empty(),
+          "sound emitter accepts an intentionally empty sound ID");
+    invalid["soundEmitters"][0]["soundId"] = "missing_audio";
+    ExpectRejected(invalid, "sound emitter rejects an unknown map audio ID");
     invalid = saved;
     invalid["audio"]["roomtoneFadeMilliseconds"] = "slow";
     ExpectRejected(invalid, "non-integer roomtone fade is rejected");

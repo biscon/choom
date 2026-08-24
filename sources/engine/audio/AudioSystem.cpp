@@ -200,6 +200,35 @@ void AudioSystem::UpdatePositionalSoundOcclusion(
                 playback.occlusionTargetScale,
                 maximumDelta);
     }
+    for (MusicPlaybackSlot& playback : musicPlaybacks) {
+        if (!playback.active || !playback.positional) continue;
+        playback.occlusionQueryRemainingSeconds -= dt;
+        if (!playback.occlusionInitialized
+                || playback.occlusionQueryRemainingSeconds <= 0.0f) {
+            const float queried = query == nullptr
+                    ? 1.0f
+                    : query(
+                            queryContext,
+                            listener.position,
+                            playback.positionalSettings.position);
+            playback.occlusionTargetScale = std::clamp(
+                    FiniteOr(queried, 1.0f), 0.0f, 1.0f);
+            playback.occlusionQueryRemainingSeconds =
+                    PositionalOcclusionQueryIntervalSeconds;
+            if (!playback.occlusionInitialized) {
+                playback.occlusionVolumeScale =
+                        playback.occlusionTargetScale;
+                playback.occlusionInitialized = true;
+            }
+        }
+        const float maximumDelta = PositionalOcclusionBlendSeconds > 0.0f
+                ? dt / PositionalOcclusionBlendSeconds
+                : 1.0f;
+        playback.occlusionVolumeScale = MoveTowards(
+                playback.occlusionVolumeScale,
+                playback.occlusionTargetScale,
+                maximumDelta);
+    }
 }
 
 void AudioSystem::Update(AssetManager& assets)
@@ -227,7 +256,7 @@ void AudioSystem::Update(AssetManager& assets)
             continue;
         }
         Music stream = asset->stream;
-        stream.looping = playback.settings.looping;
+        ApplyMusicMix(stream, playback);
         UpdateMusicStream(stream);
         if (!::IsMusicStreamPlaying(stream)) playback = {};
     }
@@ -305,6 +334,24 @@ bool AudioSystem::PlayMusic(
         MusicHandle music,
         const MusicPlaybackSettings& unnormalizedSettings)
 {
+    return PlayMusicInternal(assets, music, unnormalizedSettings, nullptr);
+}
+
+bool AudioSystem::PlayMusicAt(
+        AssetManager& assets,
+        MusicHandle music,
+        const PositionalSoundSettings& positional,
+        const MusicPlaybackSettings& unnormalizedSettings)
+{
+    return PlayMusicInternal(assets, music, unnormalizedSettings, &positional);
+}
+
+bool AudioSystem::PlayMusicInternal(
+        AssetManager& assets,
+        MusicHandle music,
+        const MusicPlaybackSettings& unnormalizedSettings,
+        const PositionalSoundSettings* positional)
+{
     if (!deviceReady || suspended || IsNull(music)) return false;
     const MusicAsset* asset = assets.GetMusic(music);
     if (asset == nullptr) return false;
@@ -315,10 +362,19 @@ bool AudioSystem::PlayMusic(
     for (MusicPlaybackSlot& playback : musicPlaybacks) {
         if (playback.active && playback.music == music) {
             playback.settings = settings;
+            const bool wasPositional = playback.positional;
+            playback.positional = positional != nullptr;
+            if (positional != nullptr) {
+                playback.positionalSettings = NormalizePositional(*positional);
+                if (!wasPositional) {
+                    playback.occlusionVolumeScale = 1.0f;
+                    playback.occlusionTargetScale = 1.0f;
+                    playback.occlusionQueryRemainingSeconds = 0.0f;
+                    playback.occlusionInitialized = false;
+                }
+            }
             Music stream = asset->stream;
-            SetMusicVolume(stream, settings.volume);
-            SetMusicPitch(stream, settings.pitch);
-            SetMusicPan(stream, ToRaylibPan(settings.pan));
+            ApplyMusicMix(stream, playback);
             return true;
         }
         if (!playback.active && freeSlot == nullptr) freeSlot = &playback;
@@ -329,14 +385,15 @@ bool AudioSystem::PlayMusic(
         return false;
     }
     Music stream = asset->stream;
-    stream.looping = settings.looping;
-    SetMusicVolume(stream, settings.volume);
-    SetMusicPitch(stream, settings.pitch);
-    SetMusicPan(stream, ToRaylibPan(settings.pan));
-    ::PlayMusicStream(stream);
     freeSlot->active = true;
+    freeSlot->positional = positional != nullptr;
     freeSlot->music = music;
     freeSlot->settings = settings;
+    if (positional != nullptr) {
+        freeSlot->positionalSettings = NormalizePositional(*positional);
+    }
+    ApplyMusicMix(stream, *freeSlot);
+    ::PlayMusicStream(stream);
     return true;
 }
 
@@ -557,6 +614,25 @@ void AudioSystem::ApplySoundMix(
     ::SetSoundPitch(voice, playback.settings.pitch);
     ::SetSoundPan(voice, ToRaylibPan(pan));
     ::SetSoundLooping(voice, playback.settings.looping);
+}
+
+void AudioSystem::ApplyMusicMix(
+        Music& stream,
+        const MusicPlaybackSlot& playback) const
+{
+    float volume = playback.settings.volume;
+    float pan = playback.settings.pan;
+    if (playback.positional) {
+        const AudioSpatialization spatial = ComputeAudioSpatialization(
+                listener,
+                playback.positionalSettings);
+        volume *= spatial.volumeScale * playback.occlusionVolumeScale;
+        pan = spatial.pan;
+    }
+    stream.looping = playback.settings.looping;
+    ::SetMusicVolume(stream, volume);
+    ::SetMusicPitch(stream, playback.settings.pitch);
+    ::SetMusicPan(stream, ToRaylibPan(pan));
 }
 
 void AudioSystem::DeactivateSoundSlot(

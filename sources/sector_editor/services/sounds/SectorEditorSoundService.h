@@ -13,6 +13,7 @@
 namespace game {
 
 class SectorEditorRuntimeObjectEditingService;
+class SectorEditorSoundEmitterEditingService;
 
 struct SectorEditorSoundServiceContext {
     SectorEditorState& state;
@@ -23,6 +24,7 @@ struct SectorEditorSoundServiceContext {
     std::string& statusText;
     engine::EngineContext& engineContext;
     SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr;
+    SectorEditorSoundEmitterEditingService* soundEmitterEditing = nullptr;
 };
 
 class SectorEditorSoundService {
@@ -38,6 +40,7 @@ public:
     void Shutdown();
 
     bool OpenDoorPicker(int runtimeObjectId, SectorEditorDoorSoundTarget target);
+    bool OpenSoundEmitterPicker(int emitterId);
     void ClosePicker();
     bool ApplyPickerSelection();
     void DrawPickerModal(

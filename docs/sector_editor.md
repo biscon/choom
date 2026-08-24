@@ -477,6 +477,13 @@ Remove stage registry changes until Save. The details pane edits the ID, picks
 or replaces a file below `assets/audio`, previews it through the shared audio
 picker, and chooses whether it is a buffered Sound or streaming Music.
 
+Sound Emitters accept either type. Buffered Sound is suitable for short effects;
+streaming Music is suitable for long positional sources such as radios. Each
+streaming emitter owns independent playback, so it can coexist with roomtones
+and other emitters using the same map audio entry. The emitter inspector accepts
+an exact ID or opens a picker containing all registered entries; invalid text is
+not committed and is restored to the authored value.
+
 IDs used by sector roomtones, Sound Emitters, or door open/close sounds cannot
 be renamed, retyped, or removed. The details pane reports those known level
 references in a word-wrapped usage box. Replacing the audio file remains

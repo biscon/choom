@@ -96,6 +96,11 @@ public:
             AssetManager& assets,
             MusicHandle music,
             const MusicPlaybackSettings& settings = {});
+    bool PlayMusicAt(
+            AssetManager& assets,
+            MusicHandle music,
+            const PositionalSoundSettings& positional,
+            const MusicPlaybackSettings& settings = {});
     bool StopMusic(AssetManager& assets, MusicHandle music);
     bool IsMusicPlaying(MusicHandle music) const;
 
@@ -123,9 +128,15 @@ private:
 
     struct MusicPlaybackSlot {
         bool active = false;
+        bool positional = false;
         bool pausedBySystem = false;
         MusicHandle music = NullMusicHandle();
         MusicPlaybackSettings settings;
+        PositionalSoundSettings positionalSettings;
+        float occlusionVolumeScale = 1.0f;
+        float occlusionTargetScale = 1.0f;
+        float occlusionQueryRemainingSeconds = 0.0f;
+        bool occlusionInitialized = false;
     };
 
     SoundPlaybackHandle PlaySoundInternal(
@@ -143,6 +154,14 @@ private:
             size_t slotIndex,
             bool stopVoice);
     bool IsValidPlayback(SoundPlaybackHandle handle) const;
+    bool PlayMusicInternal(
+            AssetManager& assets,
+            MusicHandle music,
+            const MusicPlaybackSettings& settings,
+            const PositionalSoundSettings* positional);
+    void ApplyMusicMix(
+            Music& stream,
+            const MusicPlaybackSlot& playback) const;
 
     bool deviceReady = false;
     bool suspended = false;

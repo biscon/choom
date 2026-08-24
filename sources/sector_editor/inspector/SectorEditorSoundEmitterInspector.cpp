@@ -1,9 +1,11 @@
 #include "sector_editor/inspector/SectorEditorSoundEmitterInspector.h"
 
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "sector_editor/services/sounds/SectorEditorSoundService.h"
 #include "sector_demo/SectorTopologyUnits.h"
 
 #include <cstdio>
+#include <utility>
 
 namespace game {
 
@@ -11,24 +13,32 @@ float MeasureSectorEditorSoundEmitterInspectorContentHeight(
         const SoundEmitterEditingUiState& uiState, float rowHeight, float gap)
 {
     return 38.0f + (rowHeight + gap) * 8.0f
-            + (uiState.referenceIdError.empty() ? 0.0f : 36.0f);
+            + (uiState.referenceIdError.empty() ? 0.0f : 36.0f)
+            + (uiState.soundIdError.empty() ? 0.0f : 36.0f);
 }
 
 bool DrawSectorEditorSoundEmitterInspector(
         engine::UIContext& ui, const engine::UIConfig& config,
         engine::Input& input, engine::AssetManager& assets,
         engine::FontHandle font, float contentWidth, float rowHeight, float gap,
-        const SectorAuthoringSoundEmitter& emitter,
+        const SectorAuthoringSoundEmitter& sourceEmitter,
         SoundEmitterEditingUiState& uiState,
-        SectorEditorSoundEmitterEditingService& editing)
+        SectorEditorSoundEmitterEditingService& editing,
+        SectorEditorSoundService& sounds)
 {
-    if (uiState.bufferedEmitterId != emitter.id) {
+    // Editing may refresh derivation and replace authoring storage mid-draw.
+    // Keep this frame's displayed values independent of that storage lifetime.
+    const SectorAuthoringSoundEmitter emitter = sourceEmitter;
+    if (uiState.bufferedEmitterId != emitter.id
+            || uiState.bufferedSoundId != emitter.soundId) {
         std::snprintf(uiState.referenceIdBuffer, sizeof(uiState.referenceIdBuffer),
                 "%s", emitter.referenceId.c_str());
         std::snprintf(uiState.soundIdBuffer, sizeof(uiState.soundIdBuffer),
                 "%s", emitter.soundId.c_str());
         uiState.bufferedEmitterId = emitter.id;
+        uiState.bufferedSoundId = emitter.soundId;
         uiState.referenceIdError.clear();
+        uiState.soundIdError.clear();
         uiState.xInput = {}; uiState.yInput = {}; uiState.zInput = {}; uiState.volumeInput = {};
     }
 
@@ -67,10 +77,67 @@ bool DrawSectorEditorSoundEmitterInspector(
         y += 36.0f;
     }
 
-    const engine::UITextInputResult soundResult = textRow(
-            "sector_editor_sound_emitter_sound", "Sound ID",
-            uiState.soundIdBuffer, sizeof(uiState.soundIdBuffer));
-    if (soundResult.submitted) editing.SetSelectedSoundId(uiState.soundIdBuffer);
+    engine::Text(ui, config, assets, {0.0f, y, LabelWidth, rowHeight}, font,
+            "Sound ID", engine::UITextJustify::Left, config.mutedTextColor);
+    constexpr float PickButtonWidth = 76.0f;
+    const engine::UITextInputResult soundResult = engine::TextInput(
+            ui, config, input, assets, "sector_editor_sound_emitter_sound",
+            {LabelWidth, y,
+                    contentWidth - LabelWidth - PickButtonWidth - gap, rowHeight},
+            font, uiState.soundIdBuffer, sizeof(uiState.soundIdBuffer), 0,
+            sizeof(uiState.soundIdBuffer) - 1, engine::UITextJustify::Left);
+    if (engine::Button(ui, config, input, assets,
+                "sector_editor_sound_emitter_pick_sound",
+                {contentWidth - PickButtonWidth, y, PickButtonWidth, rowHeight},
+                font, "Pick")) {
+        sounds.OpenSoundEmitterPicker(emitter.id);
+    }
+    y += rowHeight + gap;
+
+    const auto restoreSoundIdBuffer = [&]() {
+        std::snprintf(uiState.soundIdBuffer, sizeof(uiState.soundIdBuffer),
+                "%s", emitter.soundId.c_str());
+        uiState.bufferedSoundId = emitter.soundId;
+    };
+    if (soundResult.cancelled) {
+        restoreSoundIdBuffer();
+        uiState.soundIdError.clear();
+    } else {
+        const std::string requested{uiState.soundIdBuffer};
+        std::string error;
+        const bool valid = editing.ValidateSelectedSoundId(requested, error);
+        bool updateFailed = false;
+        if (soundResult.changed && valid) {
+            if (requested == emitter.soundId) {
+                uiState.bufferedSoundId = requested;
+                uiState.soundIdError.clear();
+            } else {
+                editing.SetSelectedSoundId(requested);
+                const SectorAuthoringSoundEmitter* selected = editing.Selected();
+                if (selected != nullptr && selected->soundId == requested) {
+                    uiState.bufferedSoundId = requested;
+                    uiState.soundIdError.clear();
+                } else {
+                    uiState.soundIdError = "Sound ID could not be updated";
+                    restoreSoundIdBuffer();
+                    updateFailed = true;
+                }
+            }
+        }
+        if ((soundResult.submitted || soundResult.focusLost) && !valid) {
+            uiState.soundIdError = std::move(error);
+            restoreSoundIdBuffer();
+        } else if ((soundResult.submitted || soundResult.focusLost)
+                && valid && !updateFailed) {
+            uiState.soundIdError.clear();
+        }
+    }
+    if (!uiState.soundIdError.empty()) {
+        engine::Text(ui, config, assets, {0.0f, y, contentWidth, 34.0f}, font,
+                uiState.soundIdError.c_str(), engine::UITextJustify::Left,
+                config.invalidColor, true);
+        y += 36.0f;
+    }
 
     const auto positionRow = [&](const char* controlId, const char* label,
                                  float current, engine::UIFloatInputState& state, int axis) {

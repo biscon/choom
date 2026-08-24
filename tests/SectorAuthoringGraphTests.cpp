@@ -21,6 +21,7 @@
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
@@ -13664,11 +13665,85 @@ void TestTriggerEditingServiceCommitsAuthoringAndDragOnce()
           "trigger deletion removes authoring and compiled runtime data");
 }
 
+void TestSoundEmitterEditingAcceptsBufferedAndStreamingAudio()
+{
+    game::SectorEditorState editorState;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& graph = documentState.authoring.authoringGraph;
+    graph = game::ImportSectorTopologyMapToAuthoringGraph(MakeSingleSectorSquareMap());
+    graph.audioSettings.soundsById.emplace(
+            "door_click", game::SectorSoundDefinition{
+                    "door_click", "doors/click.wav", game::SectorSoundType::Sound});
+    graph.audioSettings.soundsById.emplace(
+            "radio_music", game::SectorSoundDefinition{
+                    "radio_music", "music/radio.mp3", game::SectorSoundType::Music});
+    graph.soundEmitters.push_back(game::SectorAuthoringSoundEmitter{
+            1, "radio", 16, 16, 1.0f, "door_click", 0.75f, true});
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(
+                  editorState,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "Sound Emitter editing setup derives current topology");
+    game::SelectionState selection;
+    Check(game::SelectSectorEditorAuthoringSoundEmitter(graph, selection, 1),
+          "Sound Emitter editing setup selects the emitter");
+
+    game::SoundEmitterEditingState editingState;
+    std::string status;
+    editorState.topologyRenderCache.valid = true;
+    const uint64_t originalRevision = editorState.topologyRenderRevision;
+    const std::string originalLightmapHash =
+            game::ComputeSectorLightmapSourceHash(documentState.map.topologyMap);
+    game::SectorEditorSoundEmitterEditingService editing{
+            game::SectorEditorSoundEmitterEditingServiceContext{
+                    game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                    documentState.map.topologyMap,
+                    graph,
+                    game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                    editorState.topologyRenderRevision,
+                    editorState.topologyRenderCache,
+                    selection,
+                    editingState,
+                    status}};
+
+    std::string error;
+    Check(editing.ValidateSelectedSoundId("radio_music", error)
+                  && editing.SetSelectedSoundId("radio_music"),
+          "Sound Emitter accepts a registered streaming Music ID");
+    Check(editing.Selected() != nullptr
+                  && editing.Selected()->soundId == "radio_music"
+                  && documentState.map.topologyMap.soundEmitters.size() == 1
+                  && documentState.map.topologyMap.soundEmitters[0].soundId
+                          == "radio_music",
+          "Sound Emitter Music edit synchronizes authoring and compiled topology");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && !editorState.topologyRenderCache.valid
+                  && editorState.topologyRenderRevision > originalRevision,
+          "Sound Emitter Music edit marks dirty and invalidates the 2D cache");
+    Check(game::ComputeSectorLightmapSourceHash(documentState.map.topologyMap)
+                  == originalLightmapHash,
+          "Sound Emitter audio edits remain excluded from the lightmap hash");
+
+    Check(!editing.ValidateSelectedSoundId("missing_audio", error)
+                  && !editing.SetSelectedSoundId("missing_audio")
+                  && editing.Selected()->soundId == "radio_music",
+          "Sound Emitter rejects an unknown map audio ID without mutation");
+    Check(editing.SetSelectedSoundId("")
+                  && editing.Selected()->soundId.empty()
+                  && documentState.map.topologyMap.soundEmitters[0].soundId.empty(),
+          "Sound Emitter accepts an intentionally unassigned audio ID");
+}
+
 int main()
 {
     TestLevelMarkerAuthoringSelectionCacheAndPicking();
     TestLevelMarkerModulesStayIndependentOfSectorEditor();
     TestAuthoringFogVolumeDerivationAndUnresolvedWarning();
+    TestSoundEmitterEditingAcceptsBufferedAndStreamingAudio();
     TestAuthoringFogVolumeSerializationRoundTrip();
     TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce();
     TestReflectionProbeSelectManipulationCommitsSnappedMove();

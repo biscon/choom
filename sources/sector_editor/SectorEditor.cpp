@@ -3410,7 +3410,8 @@ SectorEditor::BuildRuntimeObjectEditingService(
 }
 
 SectorEditorSoundService SectorEditor::BuildSoundService(
-        SectorEditorRuntimeObjectEditingService* runtimeObjectEditing)
+        SectorEditorRuntimeObjectEditingService* runtimeObjectEditing,
+        SectorEditorSoundEmitterEditingService* soundEmitterEditing)
 {
     return SectorEditorSoundService{
             SectorEditorSoundServiceContext{
@@ -3421,7 +3422,8 @@ SectorEditorSoundService SectorEditor::BuildSoundService(
                     audioAssetPickerSessionState,
                     statusText,
                     *engineContext,
-                    runtimeObjectEditing}};
+                    runtimeObjectEditing,
+                    soundEmitterEditing}};
 }
 
 SectorEditorSoundEditorService SectorEditor::BuildSoundEditorService()
@@ -5638,7 +5640,8 @@ void SectorEditor::DrawSectorsPanel(
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
     SectorEditorFootstepService footsteps = BuildFootstepService();
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    SectorEditorSoundService sounds = BuildSoundService(&runtimeObjectEditing);
+    SectorEditorSoundService sounds = BuildSoundService(
+            &runtimeObjectEditing, &soundEmitterEditingService.value());
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
     SectorEditorInspectorPanelContext context{
             ui,
@@ -5791,7 +5794,8 @@ void SectorEditor::DrawSoundPickerModal(
     SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
     SectorEditorRuntimeObjectEditingService runtimeObjectEditing =
             BuildRuntimeObjectEditingService(&selection);
-    BuildSoundService(&runtimeObjectEditing).DrawPickerModal(ui, config, input, font);
+    BuildSoundService(&runtimeObjectEditing, &soundEmitterEditingService.value())
+            .DrawPickerModal(ui, config, input, font);
 }
 
 void SectorEditor::DrawTexturePickerModal(

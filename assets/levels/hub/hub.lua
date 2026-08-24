@@ -33,6 +33,7 @@ function setOfficeLight(enabled)
 end
 
 function toggleOfficeLights()
+    playMapSound("light_switch_on_01", 0.8)
     if officeLightsOn then
         playPropAnimation(
                 "light_switch_01",
@@ -51,7 +52,22 @@ function toggleOfficeLights()
     setOfficeLight(officeLightsOn)
 end
 
+local radioOn = true
+
+function toggleRadio()
+    log("radio toggled")
+    playMapSound("light_switch_on_01", 0.8)
+    if radioOn then
+        radioOn = false
+        stopSoundEmitter("radio_emitter")
+    else
+        radioOn = true
+        playSoundEmitter("radio_emitter")
+    end
+end
+
 function toggleCeilingVent()
+    playMapSound("light_switch_on_01", 0.8)
     if ceilingVentOn then
         playPropAnimation(
                 "ceiling_switch_01",

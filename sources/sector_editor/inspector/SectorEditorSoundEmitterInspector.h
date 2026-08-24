@@ -7,6 +7,8 @@
 
 namespace game {
 
+class SectorEditorSoundService;
+
 float MeasureSectorEditorSoundEmitterInspectorContentHeight(
         const SoundEmitterEditingUiState& uiState, float rowHeight, float gap);
 
@@ -21,6 +23,7 @@ bool DrawSectorEditorSoundEmitterInspector(
         float gap,
         const SectorAuthoringSoundEmitter& emitter,
         SoundEmitterEditingUiState& uiState,
-        SectorEditorSoundEmitterEditingService& editing);
+        SectorEditorSoundEmitterEditingService& editing,
+        SectorEditorSoundService& sounds);
 
 } // namespace game

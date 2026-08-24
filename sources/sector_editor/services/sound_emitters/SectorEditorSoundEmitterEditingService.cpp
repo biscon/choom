@@ -127,6 +127,23 @@ bool SectorEditorSoundEmitterEditingService::RenameSelected(const std::string& r
     });
 }
 
+bool SectorEditorSoundEmitterEditingService::ValidateSelectedSoundId(
+        const std::string& soundId, std::string& error) const
+{
+    if (Selected() == nullptr) {
+        error = "No Sound Emitter is selected";
+        return false;
+    }
+    if (!soundId.empty()
+            && context_.authoringGraph.audioSettings.soundsById.find(soundId)
+                    == context_.authoringGraph.audioSettings.soundsById.end()) {
+        error = "Sound ID must be empty or match a registered map Sound/Music ID";
+        return false;
+    }
+    error.clear();
+    return true;
+}
+
 bool SectorEditorSoundEmitterEditingService::SetSelectedPosition(Vector3 position)
 {
     if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
@@ -148,13 +165,10 @@ bool SectorEditorSoundEmitterEditingService::SetSelectedPosition(Vector3 positio
 
 bool SectorEditorSoundEmitterEditingService::SetSelectedSoundId(const std::string& soundId)
 {
-    if (!soundId.empty()) {
-        const auto found = context_.topologyMap.audioSettings.soundsById.find(soundId);
-        if (found == context_.topologyMap.audioSettings.soundsById.end()
-                || found->second.type != SectorSoundType::Sound) {
-            context_.statusText = "Sound Emitter must reference a Sound map sound ID";
-            return false;
-        }
+    std::string error;
+    if (!ValidateSelectedSoundId(soundId, error)) {
+        context_.statusText = error;
+        return false;
     }
     return MutateSelected("Updated Sound Emitter sound", [&soundId](SectorAuthoringSoundEmitter& emitter) {
         if (emitter.soundId == soundId) return false;
