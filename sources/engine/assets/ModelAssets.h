@@ -155,8 +155,14 @@ struct ModelNodeAnimationClip {
     std::vector<ModelNodeAnimationChannel> channels;
 };
 
+struct ModelGltfSkinAsset {
+    std::vector<uint32_t> jointNodeIndices;
+    std::vector<Matrix> inverseBindMatrices;
+};
+
 struct ModelMeshNodeBinding {
     int nodeIndex = -1;
+    int skinIndex = -1;
     Matrix inverseBindWorldMatrix = {};
     bool skinned = false;
 };
@@ -177,12 +183,13 @@ struct ModelAsset {
     std::vector<ModelNodeAsset> nodes;
     std::vector<uint32_t> nodeEvaluationOrder;
     std::vector<ModelMeshNodeBinding> meshNodeBindings;
+    ModelGltfSkinAsset gltfSkin;
     std::vector<ModelNodeAnimationClip> nodeAnimationClips;
     std::vector<ModelMaterialAsset> materials;
     BoundingBox localBounds = {};
-    // Conservative bounds covering loaded skeletal animation poses. These are
-    // generated once during model finalization and are used as a cheap raycast
-    // broad phase; exact hits still test the current skinned triangles.
+    // Conservative bounds covering loaded skeletal and glTF node animation
+    // poses. These are generated once during model finalization and are used
+    // as a cheap raycast broad phase; exact hits test the current pose.
     BoundingBox animatedLocalBounds = {};
     ModelOrientedBounds localCollisionBounds = {};
     bool hasLocalBounds = false;
@@ -212,6 +219,14 @@ bool SampleModelNodeAnimation(
         std::vector<Matrix>& nodeLocalMatrices,
         std::vector<Matrix>& nodeWorldMatrices,
         std::vector<Matrix>& meshNodeMatrices);
+
+// Builds mesh-local palettes for raylib's world-baked glTF vertices. The
+// output contains model.meshCount * model.skeleton.boneCount matrices and must
+// be allocated during instance preparation.
+bool BuildModelMeshSkinMatrices(
+        const ModelAsset& asset,
+        const std::vector<Matrix>& nodeWorldMatrices,
+        std::vector<Matrix>& meshBoneMatrices);
 
 // Returns the full DrawMesh transform for one mesh. authoredTransform excludes
 // Model::transform, matching the existing animated-model rendering contract.

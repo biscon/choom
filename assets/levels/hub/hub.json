@@ -120,6 +120,7 @@
       "id": 11,
       "kind": "dynamic_model",
       "dynamicModel": {
+        "instanceId": "prop_11",
         "modelPath": "assets/models/characters/TestCharacter.glb",
         "collision": true,
         "animation": "Sitting Idle",
@@ -1943,6 +1944,58 @@
         -87.0
       ],
       "yawDegrees": 35.0
+    },
+    {
+      "id": 126,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "ceiling_vent_01",
+        "modelPath": "assets/models/dynamic/ceiling_ventilator_fixed.glb",
+        "heightOffsetWorld": 3.75,
+        "animationSpeed": 0.5,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -88.0,
+        -16.0,
+        -60.0
+      ],
+      "yawDegrees": 0.0
+    },
+    {
+      "id": 127,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "ceiling_switch_01",
+        "modelPath": "assets/models/dynamic/switch_outlet.glb",
+        "heightOffsetWorld": 0.20000000298023224,
+        "scale": 1.25,
+        "loop": false,
+        "shadowMode": "none"
+      },
+      "position": [
+        -119.94999694824219,
+        -6.0,
+        -55.0
+      ],
+      "yawDegrees": 90.0
+    },
+    {
+      "id": 128,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "prop_128",
+        "modelPath": "assets/models/dynamic/old_fan.glb",
+        "heightOffsetWorld": 0.9599999785423279,
+        "scale": 1.100000023841858,
+        "shadowMode": "dynamic"
+      },
+      "position": [
+        -116.0,
+        -16.0,
+        -83.0
+      ],
+      "yawDegrees": 110.0
     }
   ],
   "staticLights": [
@@ -4041,6 +4094,31 @@
       }
     },
     {
+      "id": 8,
+      "position": [
+        -88.53213500976563,
+        -10.0,
+        -77.86339569091797
+      ],
+      "target": [
+        -88.53213500976563,
+        34.22999954223633,
+        -77.86339569091797
+      ],
+      "range": 32.0,
+      "sourceRadius": 0.0,
+      "intensity": 0.5,
+      "color": {
+        "r": 255,
+        "g": 245,
+        "b": 225,
+        "a": 255
+      },
+      "innerConeDegrees": 30.0,
+      "outerConeDegrees": 75.0,
+      "castsShadow": false
+    },
+    {
       "id": 9,
       "position": [
         -61.0,
@@ -4065,42 +4143,29 @@
       "castsShadow": false
     },
     {
-      "id": 13,
+      "id": 10,
       "position": [
-        -116.4275894165039,
-        -3.235325813293457,
-        -86.10370635986328
+        -88.0,
+        -10.0,
+        -45.0
       ],
       "target": [
-        -105.78089141845703,
-        -30.69568634033203,
-        -72.04893493652344
+        -88.0,
+        34.22999954223633,
+        -45.0
       ],
-      "range": 12.0,
+      "range": 32.0,
       "sourceRadius": 0.0,
-      "intensity": 2.0,
+      "intensity": 0.5,
       "color": {
         "r": 255,
-        "g": 250,
-        "b": 200,
+        "g": 245,
+        "b": 225,
         "a": 255
       },
-      "atmosphere": {
-        "proxy": {
-          "shaft": {
-            "enabled": true,
-            "widthScale": 0.949999988079071,
-            "brightness": 0.004999999888241291,
-            "maxExtinction": 0.0,
-            "scatteringTint": {
-              "r": 255,
-              "g": 250,
-              "b": 225,
-              "a": 255
-            }
-          }
-        }
-      }
+      "innerConeDegrees": 30.0,
+      "outerConeDegrees": 75.0,
+      "castsShadow": false
     }
   ],
   "staticRectLights": [
@@ -4952,52 +5017,6 @@
       "outerConeDegrees": 45.0
     },
     {
-      "id": 8,
-      "position": [
-        -88.53213500976563,
-        -10.0,
-        -77.86339569091797
-      ],
-      "target": [
-        -88.53213500976563,
-        34.22999954223633,
-        -77.86339569091797
-      ],
-      "range": 32.0,
-      "intensity": 0.5,
-      "color": {
-        "r": 255,
-        "g": 245,
-        "b": 225,
-        "a": 255
-      },
-      "innerConeDegrees": 30.0,
-      "outerConeDegrees": 75.0
-    },
-    {
-      "id": 9,
-      "position": [
-        -88.0,
-        -10.0,
-        -45.0
-      ],
-      "target": [
-        -88.0,
-        34.22999954223633,
-        -45.0
-      ],
-      "range": 32.0,
-      "intensity": 0.5,
-      "color": {
-        "r": 255,
-        "g": 245,
-        "b": 225,
-        "a": 255
-      },
-      "innerConeDegrees": 30.0,
-      "outerConeDegrees": 75.0
-    },
-    {
       "id": 10,
       "position": [
         -61.0,
@@ -5164,6 +5183,44 @@
           }
         }
       }
+    },
+    {
+      "id": 13,
+      "position": [
+        -116.4275894165039,
+        -3.235325813293457,
+        -86.10370635986328
+      ],
+      "target": [
+        -105.78089141845703,
+        -30.69568634033203,
+        -72.04893493652344
+      ],
+      "range": 12.0,
+      "intensity": 2.0,
+      "color": {
+        "r": 255,
+        "g": 250,
+        "b": 200,
+        "a": 255
+      },
+      "castsShadow": true,
+      "atmosphere": {
+        "proxy": {
+          "shaft": {
+            "enabled": true,
+            "widthScale": 0.949999988079071,
+            "brightness": 0.004999999888241291,
+            "maxExtinction": 0.0,
+            "scatteringTint": {
+              "r": 255,
+              "g": 250,
+              "b": 225,
+              "a": 255
+            }
+          }
+        }
+      }
     }
   ],
   "dynamicRectLights": [],
@@ -5175,7 +5232,7 @@
     "objectProbeSpacingWorld": 1.0,
     "objectProbeLowerHeightWorld": 0.6000000238418579,
     "objectProbeUpperHeightWorld": 1.5,
-    "qualityPreset": "high"
+    "qualityPreset": "draft"
   },
   "previewSettings": {
     "walkSpeed": 2.5,
@@ -5253,7 +5310,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "4a83945c25fee580",
+    "sourceHash": "38da45f929ba1cb1",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -5261,19 +5318,19 @@
         0.0
       ],
       "rgbMax": [
-        2.2421875,
-        1.626953125,
-        1.396484375
+        2.203125,
+        1.4501953125,
+        1.3837890625
       ],
       "auxiliaryMin": 0.45068359375,
       "auxiliaryMax": 1.0,
-      "sampleCount": 8388608,
-      "rgbChannelsAboveOne": 1338
+      "sampleCount": 4194304,
+      "rgbChannelsAboveOne": 177
     },
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "4a83945c25fee580",
+      "sourceHash": "38da45f929ba1cb1",
       "count": 2667,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -5286,31 +5343,24 @@
           0.0
         ],
         "rgbMax": [
-          2.19494366645813,
-          1.9382474422454834,
-          1.8512030839920044
+          2.204270601272583,
+          1.935850739479065,
+          1.8489267826080322
         ],
         "auxiliaryMin": 0.0,
         "auxiliaryMax": 0.0,
         "sampleCount": 16002,
-        "rgbChannelsAboveOne": 32
+        "rgbChannelsAboveOne": 35
       }
     },
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "4a83945c25fee580",
+      "sourceHash": "38da45f929ba1cb1",
       "modelCount": 47,
       "objectCount": 110,
       "format": "staticModelUvRemapF32LE"
-    },
-    "additionalAtlases": [
-      {
-        "path": "assets/levels/hub/hub.lightmap.1.bin",
-        "width": 2048,
-        "height": 2048
-      }
-    ]
+    }
   },
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",

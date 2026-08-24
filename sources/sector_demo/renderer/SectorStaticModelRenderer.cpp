@@ -1386,22 +1386,16 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
         bool objectProbeBakeCurrent,
         const TextureCubemap* environment,
         bool allowSkinning,
+        const engine::AnimatedModelInstance* animatedInstance,
         const std::vector<Matrix>* meshNodeMatrices,
         float opacity)
 {
-    const bool canSkin = allowSkinning
-            && model.skeleton.boneCount > 0
-            && model.skeleton.boneCount <= engine::MaxAnimatedModelBones
-            && model.boneMatrices != nullptr
-            && shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] >= 0;
-    const int useSkinning = canSkin ? 1 : 0;
     const int noStaticLightmap = 0;
     const int noBakedAo = 0;
     opacity = std::isfinite(opacity) ? std::clamp(opacity, 0.0f, 1.0f) : 1.0f;
     if (modelOpacityLoc >= 0) {
         SetShaderValue(shader, modelOpacityLoc, &opacity, SHADER_UNIFORM_FLOAT);
     }
-    if (useSkinningLoc >= 0) SetShaderValue(shader, useSkinningLoc, &useSkinning, SHADER_UNIFORM_INT);
     if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &noStaticLightmap, SHADER_UNIFORM_INT);
     if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &noBakedAo, SHADER_UNIFORM_INT);
     if (containingSectorAmbientLoc >= 0) {
@@ -1426,14 +1420,6 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
             ? lighting.upperHeightWorld : lowerProbeHeight;
     if (objectAmbientCubeLowerHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeLowerHeightLoc, &lowerProbeHeight, SHADER_UNIFORM_FLOAT);
     if (objectAmbientCubeUpperHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeUpperHeightLoc, &upperProbeHeight, SHADER_UNIFORM_FLOAT);
-    if (canSkin) {
-        rlEnableShader(shader.id);
-        rlSetUniformMatrices(
-                shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS],
-                model.boneMatrices,
-                model.skeleton.boneCount);
-    }
-
     const bool validProbe = lighting.lower.valid || lighting.upper.valid;
     const SectorStaticSpecularLightContext staticSpecularContext =
             SelectSectorStaticSpecularLights(
@@ -1453,6 +1439,41 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
         if (materialIndex < 0 || materialIndex >= model.materialCount) continue;
         const Material& source = model.materials[materialIndex];
         if (source.maps == nullptr) continue;
+
+        int meshBoneCount = 0;
+        const Matrix* meshBoneMatrices = nullptr;
+        if (allowSkinning && animatedInstance != nullptr) {
+            meshBoneMatrices = engine::AnimatedModelMeshBoneMatrices(
+                    modelAsset,
+                    *animatedInstance,
+                    meshIndex,
+                    meshBoneCount);
+        } else if (allowSkinning
+                && model.skeleton.boneCount > 0
+                && model.skeleton.boneCount
+                        <= engine::MaxAnimatedModelBones
+                && model.boneMatrices != nullptr) {
+            meshBoneMatrices = model.boneMatrices;
+            meshBoneCount = model.skeleton.boneCount;
+        }
+        const bool canSkin = meshBoneMatrices != nullptr
+                && meshBoneCount > 0
+                && shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] >= 0;
+        const int useSkinning = canSkin ? 1 : 0;
+        if (useSkinningLoc >= 0) {
+            SetShaderValue(
+                    shader,
+                    useSkinningLoc,
+                    &useSkinning,
+                    SHADER_UNIFORM_INT);
+        }
+        if (canSkin) {
+            rlEnableShader(shader.id);
+            rlSetUniformMatrices(
+                    shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS],
+                    meshBoneMatrices,
+                    meshBoneCount);
+        }
 
         std::array<MaterialMap, SectorStaticModelMaterialMapCount> maps{};
         std::copy_n(source.maps, SectorStaticModelMaterialMapCount, maps.begin());
@@ -1977,6 +1998,7 @@ void SectorStaticModelRenderer::Draw(
                         objectProbeBakeCurrent,
                         environment,
                         true,
+                        &instance,
                         &instance.meshNodeMatrices,
                         dynamicModel.opacity);
                 if (fading) {

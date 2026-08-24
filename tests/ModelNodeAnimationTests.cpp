@@ -27,6 +27,13 @@ bool Near(float left, float right, float epsilon = 0.0001f)
     return std::fabs(left - right) <= epsilon;
 }
 
+bool Near(Vector3 left, Vector3 right, float epsilon = 0.0001f)
+{
+    return Near(left.x, right.x, epsilon)
+            && Near(left.y, right.y, epsilon)
+            && Near(left.z, right.z, epsilon);
+}
+
 void AppendFloat(std::vector<uint8_t>& bytes, float value)
 {
     const size_t offset = bytes.size();
@@ -90,6 +97,76 @@ void WriteGeneratedRigidAnimationGltf(const std::filesystem::path& directory)
       {"sampler": 0, "target": {"node": 1, "path": "translation"}},
       {"sampler": 1, "target": {"node": 1, "path": "rotation"}},
       {"sampler": 2, "target": {"node": 1, "path": "scale"}}
+    ]
+  }]
+})json";
+}
+
+void WriteGeneratedSkinnedAnimationGltf(
+        const std::filesystem::path& directory)
+{
+    std::vector<uint8_t> bytes;
+    for (float value : {
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                -1.0f, 0.0f, 0.0f, 1.0f}) {
+        AppendFloat(bytes, value);
+    }
+    for (float value : {0.0f, 1.0f}) AppendFloat(bytes, value);
+    for (float value : {
+                0.0f, 0.0f, 0.0f, 1.0f,
+                0.0f, 0.0f, 0.70710678f, 0.70710678f}) {
+        AppendFloat(bytes, value);
+    }
+
+    std::ofstream binary(directory / "skin.bin", std::ios::binary);
+    binary.write(
+            reinterpret_cast<const char*>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
+
+    std::ofstream gltf(directory / "skin.gltf");
+    gltf << R"json({
+  "asset": {"version": "2.0"},
+  "buffers": [{"uri": "skin.bin", "byteLength": 104}],
+  "bufferViews": [
+    {"buffer": 0, "byteOffset": 0, "byteLength": 64},
+    {"buffer": 0, "byteOffset": 64, "byteLength": 8},
+    {"buffer": 0, "byteOffset": 72, "byteLength": 32}
+  ],
+  "accessors": [
+    {"bufferView": 0, "componentType": 5126, "count": 1, "type": "MAT4"},
+    {"bufferView": 1, "componentType": 5126, "count": 2, "type": "SCALAR"},
+    {"bufferView": 2, "componentType": 5126, "count": 2, "type": "VEC4"}
+  ],
+  "meshes": [
+    {"primitives": [{"attributes": {}}]},
+    {"primitives": [{"attributes": {}}]}
+  ],
+  "skins": [{
+    "inverseBindMatrices": 0,
+    "skeleton": 1,
+    "joints": [1]
+  }],
+  "nodes": [
+    {
+      "rotation": [0.70710678, 0, 0, 0.70710678],
+      "scale": [2, 2, 2],
+      "children": [1, 2, 3]
+    },
+    {"translation": [1, 0, 0]},
+    {"mesh": 0, "skin": 0},
+    {"mesh": 1, "skin": 0, "translation": [0, 3, 0]}
+  ],
+  "scenes": [{"nodes": [0]}],
+  "scene": 0,
+  "animations": [{
+    "name": "fan",
+    "samplers": [
+      {"input": 1, "output": 2, "interpolation": "LINEAR"}
+    ],
+    "channels": [
+      {"sampler": 0, "target": {"node": 1, "path": "rotation"}}
     ]
   }]
 })json";
@@ -163,11 +240,103 @@ void TestGeneratedRigidAnimationImportAndSampling()
     std::filesystem::remove_all(directory);
 }
 
+void TestGeneratedSkinnedAnimationImportAndSampling()
+{
+    const std::filesystem::path directory =
+            std::filesystem::temp_directory_path()
+            / "engine_model_skin_animation_tests";
+    std::filesystem::remove_all(directory);
+    std::filesystem::create_directories(directory);
+    WriteGeneratedSkinnedAnimationGltf(directory);
+
+    engine::ModelAsset asset;
+    asset.model.meshCount = 2;
+    asset.model.skeleton.boneCount = 1;
+    Check(
+            engine::LoadModelNodeAnimationsFromGltf(
+                    (directory / "skin.gltf").string().c_str(),
+                    asset),
+            "generated skinned glTF data should import");
+    Check(asset.gltfSkin.jointNodeIndices.size() == 1
+                    && asset.gltfSkin.jointNodeIndices[0] == 1,
+            "skin joint should map to its source glTF node");
+    Check(asset.gltfSkin.inverseBindMatrices.size() == 1,
+            "inverse-bind matrix should import");
+    Check(asset.meshNodeBindings.size() == 2
+                    && asset.meshNodeBindings[0].skinIndex == 0
+                    && asset.meshNodeBindings[1].skinIndex == 0,
+            "each skinned mesh should retain its skin association");
+
+    std::vector<Transform> local(asset.nodes.size());
+    std::vector<Matrix> localMatrices(asset.nodes.size());
+    std::vector<Matrix> worldMatrices(asset.nodes.size());
+    std::vector<Matrix> meshMatrices(2);
+    std::vector<Matrix> meshBoneMatrices(2);
+    Check(engine::SampleModelNodeAnimation(
+                    asset,
+                    0,
+                    0.0f,
+                    local,
+                    localMatrices,
+                    worldMatrices,
+                    meshMatrices)
+                    && engine::BuildModelMeshSkinMatrices(
+                            asset,
+                            worldMatrices,
+                            meshBoneMatrices),
+            "bind-time glTF skin palette should evaluate");
+
+    const Vector3 firstBakedVertex{4.0f, 0.0f, 0.0f};
+    const Vector3 secondBakedVertex{4.0f, 0.0f, 6.0f};
+    Check(Near(
+                    Vector3Transform(
+                            firstBakedVertex,
+                            meshBoneMatrices[0]),
+                    Vector3{4.0f, 0.0f, 0.0f}),
+            "bind palette should preserve a normally bound mesh");
+    Check(Near(
+                    Vector3Transform(
+                            secondBakedVertex,
+                            meshBoneMatrices[1]),
+                    Vector3{4.0f, 0.0f, 0.0f}),
+            "per-mesh palette should remove each baked mesh-node transform");
+
+    Check(engine::SampleModelNodeAnimation(
+                    asset,
+                    0,
+                    1.0f,
+                    local,
+                    localMatrices,
+                    worldMatrices,
+                    meshMatrices)
+                    && engine::BuildModelMeshSkinMatrices(
+                            asset,
+                            worldMatrices,
+                            meshBoneMatrices),
+            "animated glTF skin palette should evaluate");
+    const Vector3 expectedRotatedVertex{2.0f, 0.0f, 2.0f};
+    Check(Near(
+                    Vector3Transform(
+                            firstBakedVertex,
+                            meshBoneMatrices[0]),
+                    expectedRotatedVertex),
+            "joint should rotate around its translated pivot on the ancestor-transformed axis");
+    Check(Near(
+                    Vector3Transform(
+                            secondBakedVertex,
+                            meshBoneMatrices[1]),
+                    expectedRotatedVertex),
+            "separate mesh-node bind transforms should produce the same skinned pose");
+
+    std::filesystem::remove_all(directory);
+}
+
 } // namespace
 
 int main()
 {
     TestGeneratedRigidAnimationImportAndSampling();
+    TestGeneratedSkinnedAnimationImportAndSampling();
     if (failures != 0) {
         std::cerr << failures << " model node animation test(s) failed\n";
         return 1;

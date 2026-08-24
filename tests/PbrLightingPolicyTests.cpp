@@ -888,6 +888,9 @@ void TestHdrEffectShaderAndPassPolicies()
                             !=std::string::npos
                     &&dynamicLightingShadows.find("BuildAnimatedModelPoseView")
                             !=std::string::npos
+                    &&dynamicLightingShadows.find(
+                               "AnimatedModelMeshBoneMatrices")
+                            !=std::string::npos
                     &&dynamicLightingShadows.find("dynamicModelShadowCasters")
                             !=std::string::npos
                     &&dynamicLightingShadows.find("contentFingerprint")

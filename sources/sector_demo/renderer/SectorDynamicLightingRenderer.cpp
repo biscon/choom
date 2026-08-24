@@ -1871,35 +1871,40 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                 Model posedModel = engine::BuildAnimatedModelPoseView(
                         *asset,
                         instance);
-                const bool canSkin = posedModel.skeleton.boneCount > 0
-                        && posedModel.skeleton.boneCount
-                                <= engine::MaxAnimatedModelBones
-                        && posedModel.boneMatrices != nullptr
-                        && activeMaterial.shader
-                                   .locs[SHADER_LOC_MATRIX_BONETRANSFORMS]
-                                >= 0;
-                const int useSkinning = canSkin ? 1 : 0;
-                if (activeUseSkinningLoc >= 0) {
-                    SetShaderValue(
-                            activeMaterial.shader,
-                            activeUseSkinningLoc,
-                            &useSkinning,
-                            SHADER_UNIFORM_INT);
-                }
-                if (canSkin) {
-                    rlEnableShader(activeMaterial.shader.id);
-                    rlSetUniformMatrices(
-                            activeMaterial.shader
-                                    .locs[SHADER_LOC_MATRIX_BONETRANSFORMS],
-                            posedModel.boneMatrices,
-                            posedModel.skeleton.boneCount);
-                }
                 ++shadowRenderStats.objectCastersDrawn;
                 for (int meshIndex = 0;
                         meshIndex < posedModel.meshCount;
                         ++meshIndex) {
                     if (posedModel.meshes[meshIndex].vertexCount <= 0) {
                         continue;
+                    }
+                    int meshBoneCount = 0;
+                    const Matrix* meshBoneMatrices =
+                            engine::AnimatedModelMeshBoneMatrices(
+                                    *asset,
+                                    instance,
+                                    meshIndex,
+                                    meshBoneCount);
+                    const bool canSkin = meshBoneMatrices != nullptr
+                            && meshBoneCount > 0
+                            && activeMaterial.shader
+                                       .locs[SHADER_LOC_MATRIX_BONETRANSFORMS]
+                                    >= 0;
+                    const int useSkinning = canSkin ? 1 : 0;
+                    if (activeUseSkinningLoc >= 0) {
+                        SetShaderValue(
+                                activeMaterial.shader,
+                                activeUseSkinningLoc,
+                                &useSkinning,
+                                SHADER_UNIFORM_INT);
+                    }
+                    if (canSkin) {
+                        rlEnableShader(activeMaterial.shader.id);
+                        rlSetUniformMatrices(
+                                activeMaterial.shader
+                                        .locs[SHADER_LOC_MATRIX_BONETRANSFORMS],
+                                meshBoneMatrices,
+                                meshBoneCount);
                     }
                     DrawMesh(
                             posedModel.meshes[meshIndex],

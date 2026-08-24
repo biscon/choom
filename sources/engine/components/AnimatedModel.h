@@ -13,6 +13,11 @@ static constexpr uint32_t InvalidModelAnimationIndex = UINT32_MAX;
 static constexpr int MaxAnimatedModelBones = 128;
 static constexpr float GltfAnimationFramesPerSecond = 60.0f;
 
+enum class AnimatedModelPoseSource : uint8_t {
+    RaylibSkeletal,
+    GltfScene
+};
+
 // Per-instance mutable pose storage. The ModelAsset retains ownership of the
 // shared meshes, materials, skeleton, and animation clips.
 struct AnimatedModelInstance {
@@ -23,6 +28,9 @@ struct AnimatedModelInstance {
     std::vector<Matrix> nodeLocalMatrices;
     std::vector<Matrix> nodeWorldMatrices;
     std::vector<Matrix> meshNodeMatrices;
+    std::vector<Matrix> meshBoneMatrices;
+    AnimatedModelPoseSource poseSource =
+            AnimatedModelPoseSource::RaylibSkeletal;
     bool poseReady = false;
     bool poseFailed = false;
 };

@@ -57,4 +57,13 @@ Model BuildAnimatedModelPoseView(
         const ModelAsset& asset,
         AnimatedModelInstance& instance);
 
+// Returns the palette used by one mesh. Dynamic props using GltfScene receive
+// their mesh-relative glTF palette; other animated models retain raylib's
+// shared skeletal palette.
+const Matrix* AnimatedModelMeshBoneMatrices(
+        const ModelAsset& asset,
+        const AnimatedModelInstance& instance,
+        int meshIndex,
+        int& outBoneCount);
+
 } // namespace engine

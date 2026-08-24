@@ -36,6 +36,7 @@ struct ParsedModelNodeAnimations {
     std::vector<ModelNodeAsset> nodes;
     std::vector<uint32_t> evaluationOrder;
     std::vector<ModelMeshNodeBinding> meshBindings;
+    ModelGltfSkinAsset skin;
     std::vector<ModelNodeAnimationClip> clips;
 };
 
@@ -267,6 +268,80 @@ ParsedModelNodeAnimations ParseModelNodeAnimations(
         return parsed;
     }
 
+    if (data->skins_count > 0) {
+        const cgltf_skin& skin = data->skins[0];
+        const bool jointCountMatchesRaylib =
+                model.skeleton.boneCount > 0
+                && skin.joints_count
+                        == static_cast<cgltf_size>(
+                                model.skeleton.boneCount);
+        const bool inverseBindAccessorValid =
+                skin.inverse_bind_matrices == nullptr
+                || (skin.inverse_bind_matrices->count == skin.joints_count
+                        && skin.inverse_bind_matrices->type
+                                == cgltf_type_mat4
+                        && skin.inverse_bind_matrices->component_type
+                                == cgltf_component_type_r_32f);
+        bool skinValid = jointCountMatchesRaylib
+                && inverseBindAccessorValid;
+        if (skinValid) {
+            parsed.skin.jointNodeIndices.resize(skin.joints_count);
+            parsed.skin.inverseBindMatrices.assign(
+                    skin.joints_count,
+                    MatrixIdentity());
+            for (cgltf_size jointIndex = 0;
+                    jointIndex < skin.joints_count;
+                    ++jointIndex) {
+                if (skin.joints[jointIndex] == nullptr) {
+                    skinValid = false;
+                    break;
+                }
+                const cgltf_size nodeIndex = cgltf_node_index(
+                        data,
+                        skin.joints[jointIndex]);
+                if (nodeIndex >= data->nodes_count) {
+                    skinValid = false;
+                    break;
+                }
+                parsed.skin.jointNodeIndices[jointIndex] =
+                        static_cast<uint32_t>(nodeIndex);
+                if (skin.inverse_bind_matrices != nullptr) {
+                    cgltf_float values[16] = {};
+                    if (!cgltf_accessor_read_float(
+                                skin.inverse_bind_matrices,
+                                jointIndex,
+                                values,
+                                16)) {
+                        skinValid = false;
+                        break;
+                    }
+                    for (float value : values) {
+                        if (!std::isfinite(value)) {
+                            skinValid = false;
+                            break;
+                        }
+                    }
+                    if (!skinValid) break;
+                    parsed.skin.inverseBindMatrices[jointIndex] =
+                            CgltfMatrix(values);
+                }
+            }
+        }
+        if (!skinValid) {
+            parsed.skin = {};
+            std::fprintf(
+                    stderr,
+                    "[AssetManager WARNING] glTF skin metadata does not match raylib's loaded skeleton; exact dynamic-prop skinning disabled: %s\n",
+                    path.c_str());
+        }
+        if (data->skins_count > 1) {
+            std::fprintf(
+                    stderr,
+                    "[AssetManager WARNING] glTF has multiple skins; exact dynamic-prop skinning supports the first skin only: %s\n",
+                    path.c_str());
+        }
+    }
+
     parsed.meshBindings.reserve(static_cast<size_t>(std::max(0, model.meshCount)));
     for (cgltf_size nodeIndex = 0;
             nodeIndex < data->nodes_count;
@@ -282,6 +357,9 @@ ParsedModelNodeAnimations ParseModelNodeAnimations(
             ModelMeshNodeBinding binding;
             binding.nodeIndex = static_cast<int>(nodeIndex);
             binding.skinned = node.skin != nullptr;
+            binding.skinIndex = node.skin == nullptr
+                    ? -1
+                    : (node.skin == &data->skins[0] ? 0 : -2);
             const Matrix bindWorld =
                     parsed.nodes[nodeIndex].bindWorldMatrix;
             const float determinant = MatrixDeterminant(bindWorld);
@@ -886,7 +964,7 @@ bool ComputeAnimatedModelLocalBounds(
     return true;
 }
 
-bool ComputeRigidAnimatedModelLocalBounds(
+bool ComputeGltfAnimatedModelLocalBounds(
         const ModelAsset& asset,
         BoundingBox localBounds,
         bool hasLocalBounds,
@@ -910,6 +988,18 @@ bool ComputeRigidAnimatedModelLocalBounds(
     std::vector<ModelBoundsAccumulator> meshBounds(
             static_cast<size_t>(
                     std::max(0, asset.model.meshCount)));
+    const int boneCount = std::max(
+            0,
+            asset.model.skeleton.boneCount);
+    const bool hasExactSkin = boneCount > 0
+            && asset.gltfSkin.jointNodeIndices.size()
+                    == static_cast<size_t>(boneCount)
+            && asset.gltfSkin.inverseBindMatrices.size()
+                    == static_cast<size_t>(boneCount);
+    std::vector<ModelBoundsAccumulator> meshBoneBounds(
+            static_cast<size_t>(
+                    std::max(0, asset.model.meshCount))
+                    * static_cast<size_t>(boneCount));
     for (int meshIndex = 0;
             meshIndex < asset.model.meshCount;
             ++meshIndex) {
@@ -918,12 +1008,43 @@ bool ComputeRigidAnimatedModelLocalBounds(
         for (int vertexIndex = 0;
                 vertexIndex < mesh.vertexCount;
                 ++vertexIndex) {
+            const Vector3 vertex{
+                    mesh.vertices[vertexIndex * 3],
+                    mesh.vertices[vertexIndex * 3 + 1],
+                    mesh.vertices[vertexIndex * 3 + 2]};
             IncludeModelBoundsPoint(
                     meshBounds[static_cast<size_t>(meshIndex)],
-                    Vector3{
-                            mesh.vertices[vertexIndex * 3],
-                            mesh.vertices[vertexIndex * 3 + 1],
-                            mesh.vertices[vertexIndex * 3 + 2]});
+                    vertex);
+            if (!hasExactSkin
+                    || asset.meshNodeBindings[
+                               static_cast<size_t>(meshIndex)]
+                               .skinIndex != 0
+                    || mesh.boneIndices == nullptr
+                    || mesh.boneWeights == nullptr) {
+                continue;
+            }
+            for (int influenceIndex = 0;
+                    influenceIndex < 4;
+                    ++influenceIndex) {
+                const int influenceOffset =
+                        vertexIndex * 4 + influenceIndex;
+                const float weight =
+                        mesh.boneWeights[influenceOffset];
+                const int influencedBone =
+                        mesh.boneIndices[influenceOffset];
+                if (!std::isfinite(weight)
+                        || weight <= 0.0f
+                        || influencedBone < 0
+                        || influencedBone >= boneCount) {
+                    continue;
+                }
+                IncludeModelBoundsPoint(
+                        meshBoneBounds[
+                                static_cast<size_t>(meshIndex)
+                                        * static_cast<size_t>(boneCount)
+                                + static_cast<size_t>(influencedBone)],
+                        vertex);
+            }
         }
     }
 
@@ -933,9 +1054,17 @@ bool ComputeRigidAnimatedModelLocalBounds(
     std::vector<Matrix> meshMatrices(
             static_cast<size_t>(
                     std::max(0, asset.model.meshCount)));
+    std::vector<Matrix> meshBoneMatrices(
+            static_cast<size_t>(
+                    std::max(0, asset.model.meshCount))
+                    * static_cast<size_t>(boneCount),
+            MatrixIdentity());
     ModelBoundsAccumulator animatedBounds;
     IncludeModelBoundsPoint(animatedBounds, localBounds.min);
     IncludeModelBoundsPoint(animatedBounds, localBounds.max);
+    IncludeModelBoundsPoint(
+            animatedBounds,
+            Vector3Transform(Vector3{}, asset.model.transform));
     for (size_t clipIndex = 0;
             clipIndex < asset.nodeAnimationClips.size();
             ++clipIndex) {
@@ -959,9 +1088,39 @@ bool ComputeRigidAnimatedModelLocalBounds(
                         meshMatrices)) {
                 continue;
             }
+            const bool skinPoseValid = hasExactSkin
+                    && BuildModelMeshSkinMatrices(
+                            asset,
+                            worldMatrices,
+                            meshBoneMatrices);
             for (int meshIndex = 0;
                     meshIndex < asset.model.meshCount;
                     ++meshIndex) {
+                const ModelMeshNodeBinding& binding =
+                        asset.meshNodeBindings[
+                                static_cast<size_t>(meshIndex)];
+                if (binding.skinIndex == 0
+                        && binding.nodeIndex >= 0
+                        && skinPoseValid) {
+                    for (int boneIndex = 0;
+                            boneIndex < boneCount;
+                            ++boneIndex) {
+                        IncludeTransformedModelBounds(
+                                animatedBounds,
+                                meshBoneBounds[
+                                        static_cast<size_t>(meshIndex)
+                                                * static_cast<size_t>(boneCount)
+                                        + static_cast<size_t>(boneIndex)],
+                                MatrixMultiply(
+                                        meshBoneMatrices[
+                                                static_cast<size_t>(meshIndex)
+                                                        * static_cast<size_t>(boneCount)
+                                                + static_cast<size_t>(boneIndex)],
+                                        asset.model.transform));
+                    }
+                    continue;
+                }
+                if (binding.skinned) continue;
                 IncludeTransformedModelBounds(
                         animatedBounds,
                         meshBounds[static_cast<size_t>(meshIndex)],
@@ -1003,6 +1162,7 @@ bool LoadModelNodeAnimationsFromGltf(
     asset.nodes = std::move(parsed.nodes);
     asset.nodeEvaluationOrder = std::move(parsed.evaluationOrder);
     asset.meshNodeBindings = std::move(parsed.meshBindings);
+    asset.gltfSkin = std::move(parsed.skin);
     asset.nodeAnimationClips = std::move(parsed.clips);
     return !asset.nodes.empty();
 }
@@ -1228,6 +1388,56 @@ bool SampleModelNodeAnimation(
                                 static_cast<size_t>(
                                         binding.nodeIndex)])
                 : MatrixIdentity();
+    }
+    return true;
+}
+
+bool BuildModelMeshSkinMatrices(
+        const ModelAsset& asset,
+        const std::vector<Matrix>& nodeWorldMatrices,
+        std::vector<Matrix>& meshBoneMatrices)
+{
+    const int meshCount = std::max(0, asset.model.meshCount);
+    const int boneCount = std::max(0, asset.model.skeleton.boneCount);
+    const size_t expectedMatrixCount =
+            static_cast<size_t>(meshCount)
+            * static_cast<size_t>(boneCount);
+    if (boneCount <= 0
+            || nodeWorldMatrices.size() != asset.nodes.size()
+            || asset.meshNodeBindings.size()
+                    != static_cast<size_t>(meshCount)
+            || asset.gltfSkin.jointNodeIndices.size()
+                    != static_cast<size_t>(boneCount)
+            || asset.gltfSkin.inverseBindMatrices.size()
+                    != static_cast<size_t>(boneCount)
+            || meshBoneMatrices.size() != expectedMatrixCount) {
+        return false;
+    }
+
+    std::fill(
+            meshBoneMatrices.begin(),
+            meshBoneMatrices.end(),
+            MatrixIdentity());
+    for (int meshIndex = 0; meshIndex < meshCount; ++meshIndex) {
+        const ModelMeshNodeBinding& binding =
+                asset.meshNodeBindings[static_cast<size_t>(meshIndex)];
+        if (binding.skinIndex != 0 || binding.nodeIndex < 0) continue;
+        Matrix* palette = meshBoneMatrices.data()
+                + static_cast<size_t>(meshIndex)
+                        * static_cast<size_t>(boneCount);
+        for (int boneIndex = 0; boneIndex < boneCount; ++boneIndex) {
+            const uint32_t jointNodeIndex =
+                    asset.gltfSkin.jointNodeIndices[
+                            static_cast<size_t>(boneIndex)];
+            if (jointNodeIndex >= nodeWorldMatrices.size()) return false;
+            const Matrix jointSkinMatrix = MatrixMultiply(
+                    asset.gltfSkin.inverseBindMatrices[
+                            static_cast<size_t>(boneIndex)],
+                    nodeWorldMatrices[jointNodeIndex]);
+            palette[boneIndex] = MatrixMultiply(
+                    binding.inverseBindWorldMatrix,
+                    jointSkinMatrix);
+        }
     }
     return true;
 }
@@ -1686,35 +1896,35 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                     localBounds,
                     hasLocalBounds,
                     animatedLocalBounds);
-            BoundingBox rigidAnimatedBounds{};
-            const bool hasRigidAnimatedBounds =
-                    ComputeRigidAnimatedModelLocalBounds(
+            BoundingBox gltfAnimatedBounds{};
+            const bool hasGltfAnimatedBounds =
+                    ComputeGltfAnimatedModelLocalBounds(
                             nodeAnimationAsset,
                             localBounds,
                             hasLocalBounds,
-                            rigidAnimatedBounds);
-            if (hasRigidAnimatedBounds) {
+                            gltfAnimatedBounds);
+            if (hasGltfAnimatedBounds) {
                 if (hasAnimatedLocalBounds) {
                     animatedLocalBounds.min.x = std::min(
                             animatedLocalBounds.min.x,
-                            rigidAnimatedBounds.min.x);
+                            gltfAnimatedBounds.min.x);
                     animatedLocalBounds.min.y = std::min(
                             animatedLocalBounds.min.y,
-                            rigidAnimatedBounds.min.y);
+                            gltfAnimatedBounds.min.y);
                     animatedLocalBounds.min.z = std::min(
                             animatedLocalBounds.min.z,
-                            rigidAnimatedBounds.min.z);
+                            gltfAnimatedBounds.min.z);
                     animatedLocalBounds.max.x = std::max(
                             animatedLocalBounds.max.x,
-                            rigidAnimatedBounds.max.x);
+                            gltfAnimatedBounds.max.x);
                     animatedLocalBounds.max.y = std::max(
                             animatedLocalBounds.max.y,
-                            rigidAnimatedBounds.max.y);
+                            gltfAnimatedBounds.max.y);
                     animatedLocalBounds.max.z = std::max(
                             animatedLocalBounds.max.z,
-                            rigidAnimatedBounds.max.z);
+                            gltfAnimatedBounds.max.z);
                 } else {
-                    animatedLocalBounds = rigidAnimatedBounds;
+                    animatedLocalBounds = gltfAnimatedBounds;
                     hasAnimatedLocalBounds = true;
                 }
             }
@@ -1823,6 +2033,8 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                             nodeAnimationAsset.nodeEvaluationOrder);
                     slot.asset.meshNodeBindings = std::move(
                             nodeAnimationAsset.meshNodeBindings);
+                    slot.asset.gltfSkin = std::move(
+                            nodeAnimationAsset.gltfSkin);
                     slot.asset.nodeAnimationClips = std::move(
                             nodeAnimationAsset.nodeAnimationClips);
                     slot.asset.materials = std::move(parsed.materials);

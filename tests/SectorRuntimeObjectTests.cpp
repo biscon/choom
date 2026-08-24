@@ -4954,6 +4954,8 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     const game::SectorDynamicModel& dynamic = world.Get<game::SectorDynamicModel>(entity);
     const engine::AnimatedModelAnimator& animator =
             world.Get<engine::AnimatedModelAnimator>(entity);
+    const engine::AnimatedModelInstance& animatedModel =
+            world.Get<engine::AnimatedModelInstance>(entity);
     Check(Near(transform.position, Vector3{0.25f, 1.625f, 0.25f})
                   && Near(transform.yawRadians, 0.75f)
                   && Near(transform.rotationXRadians, 0.25f)
@@ -4963,6 +4965,9 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
                   && dynamic.shadowMode
                           == game::SectorDynamicModelShadowMode::Dynamic,
           "dynamic prop copies its stable ID, movable authored transform, scale, and shadow mode");
+    Check(animatedModel.poseSource
+                    == engine::AnimatedModelPoseSource::GltfScene,
+          "dynamic props opt into exact glTF scene and skin evaluation");
     Check(dynamic.requestedAnimation == "Standard Walk"
                   && !dynamic.animationResolved
                   && !animator.loop
@@ -5066,6 +5071,8 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
             world.Get<game::SectorDynamicModel>(entity);
     const engine::AnimatedModelAnimator& animator =
             world.Get<engine::AnimatedModelAnimator>(entity);
+    const engine::AnimatedModelInstance& animatedModel =
+            world.Get<engine::AnimatedModelInstance>(entity);
     const game::SectorObjectTransform& transform =
             world.Get<game::SectorObjectTransform>(entity);
     Check(npc.definitionId == "runtime_test_npc"
@@ -5097,6 +5104,9 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
                   && Near(transform.rotationXRadians, 0.0f)
                   && Near(transform.rotationZRadians, 0.0f),
           "NPC runtime loops semantic Idle with floor transform, scale, and shadow settings");
+    Check(animatedModel.poseSource
+                    == engine::AnimatedModelPoseSource::RaylibSkeletal,
+          "NPCs retain raylib skeletal evaluation and transition blending");
 }
 
 void TestNpcFootstepCadenceUsesResolvedTravel()
@@ -6213,6 +6223,40 @@ void TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose()
           "a blended transition into a non-looping clip also applies and holds its terminal pose");
 }
 
+void TestAnimatedModelGltfSkinPreparationBuildsBindPose()
+{
+    Transform bindPose{};
+    bindPose.rotation = QuaternionIdentity();
+    bindPose.scale = Vector3{1.0f, 1.0f, 1.0f};
+    engine::ModelAsset asset;
+    asset.model.meshCount = 1;
+    asset.model.skeleton.boneCount = 1;
+    asset.model.skeleton.bindPose = &bindPose;
+    asset.nodes.resize(2);
+    asset.nodes[0].bindLocalMatrix = MatrixIdentity();
+    asset.nodes[0].bindWorldMatrix = MatrixIdentity();
+    asset.nodes[1].bindLocalMatrix = MatrixIdentity();
+    asset.nodes[1].bindWorldMatrix = MatrixIdentity();
+    asset.meshNodeBindings.resize(1);
+    asset.meshNodeBindings[0].nodeIndex = 1;
+    asset.meshNodeBindings[0].skinIndex = 0;
+    asset.meshNodeBindings[0].skinned = true;
+    asset.meshNodeBindings[0].inverseBindWorldMatrix = MatrixIdentity();
+    asset.gltfSkin.jointNodeIndices.push_back(0);
+    asset.gltfSkin.inverseBindMatrices.push_back(MatrixIdentity());
+
+    engine::AnimatedModelInstance instance;
+    instance.poseSource = engine::AnimatedModelPoseSource::GltfScene;
+    Check(engine::PrepareAnimatedModelInstance(instance, asset)
+                  && instance.meshBoneMatrices.size() == 1
+                  && Near(
+                          Vector3Transform(
+                                  Vector3{1.0f, 2.0f, 3.0f},
+                                  instance.meshBoneMatrices[0]),
+                          Vector3{1.0f, 2.0f, 3.0f}),
+          "glTF dynamic props prepare an exact bind palette before their first animation update");
+}
+
 void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
 {
     std::array<float, 9> vertices{
@@ -6236,6 +6280,10 @@ void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
     asset.model.meshCount = 1;
     asset.model.meshes = &mesh;
     asset.model.skeleton.boneCount = 1;
+    asset.meshNodeBindings.resize(1);
+    asset.meshNodeBindings[0].nodeIndex = 0;
+    asset.meshNodeBindings[0].skinIndex = 0;
+    asset.meshNodeBindings[0].skinned = true;
     asset.animatedLocalBounds = {
             Vector3{-0.5f, 0.0f, -0.1f},
             Vector3{2.0f, 1.5f, 0.1f}};
@@ -6243,7 +6291,10 @@ void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
 
     engine::AnimatedModelInstance instance;
     instance.model = engine::ModelHandle{17, 3};
-    instance.boneMatrices.push_back(MatrixTranslate(0.5f, 0.0f, 0.0f));
+    instance.poseSource = engine::AnimatedModelPoseSource::GltfScene;
+    instance.boneMatrices.push_back(MatrixIdentity());
+    instance.meshBoneMatrices.push_back(
+            MatrixTranslate(0.5f, 0.0f, 0.0f));
     instance.poseReady = true;
 
     const Matrix authored = game::BuildSectorStaticModelAuthoredTransform(
@@ -6285,7 +6336,7 @@ void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
                   == engine::AnimatedModelRaycastStatus::Miss,
           "a ray inside broad-phase bounds but outside posed triangles passes through");
 
-    instance.boneMatrices[0] = MatrixTranslate(0.8f, 0.0f, 0.0f);
+    instance.meshBoneMatrices[0] = MatrixTranslate(0.8f, 0.0f, 0.0f);
     Vector3 movedAnchor{};
     Check(engine::ResolveAnimatedModelSurfaceAnchor(
                   asset,
@@ -6628,10 +6679,17 @@ void TestDynamicModelShadowCasterCollectionAndRevision()
     Check(posedRevision != initialRevision,
           "changing an animated pose invalidates the dynamic caster revision");
 
+    world.Get<engine::AnimatedModelInstance>(dynamic).meshBoneMatrices.push_back(
+            MatrixTranslate(0.2f, 0.0f, 0.0f));
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    const uint64_t meshPosedRevision = collection.revision;
+    Check(meshPosedRevision != posedRevision,
+          "changing an exact per-mesh skin pose invalidates the dynamic caster revision");
+
     world.Get<game::SectorObjectVisualOffset>(dynamic).position.y += 0.2f;
     game::UpdateSectorDynamicModelShadowCasters(collection, &world);
     const uint64_t movedRevision = collection.revision;
-    Check(movedRevision != posedRevision,
+    Check(movedRevision != meshPosedRevision,
           "changing the rendered dynamic-model transform invalidates its caster revision");
 
     world.Get<game::SectorDynamicModel>(dynamic).shadowMode =
@@ -8641,6 +8699,7 @@ int main()
     TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip();
     TestAnimatedModelSelectionAndBlendApi();
     TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose();
+    TestAnimatedModelGltfSkinPreparationBuildsBindPose();
     TestAnimatedModelRaycastUsesCurrentSkinnedGeometry();
     TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();

@@ -1262,7 +1262,10 @@ void SpawnPlacedRuntimeObjects(
                     false,
                     1.0f,
                     placedObject.dynamicModel.shadowMode});
-            world.Add(entity, engine::AnimatedModelInstance{model});
+            engine::AnimatedModelInstance animatedModel{model};
+            animatedModel.poseSource =
+                    engine::AnimatedModelPoseSource::GltfScene;
+            world.Add(entity, std::move(animatedModel));
             engine::AnimatedModelAnimator animator;
             animator.speed = placedObject.dynamicModel.animationSpeed;
             animator.loop = placedObject.dynamicModel.loop;

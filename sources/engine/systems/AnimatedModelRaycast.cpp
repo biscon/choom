@@ -2,6 +2,7 @@
 
 #include "engine/assets/ModelAssets.h"
 #include "engine/components/AnimatedModel.h"
+#include "engine/systems/AnimatedModelSystem.h"
 
 #include <raymath.h>
 
@@ -109,6 +110,7 @@ bool SkinnedVertex(
         const ModelAsset& asset,
         const AnimatedModelInstance& instance,
         const Mesh& mesh,
+        int meshIndex,
         uint32_t vertexIndex,
         Matrix modelTransform,
         Vector3& outVertex)
@@ -123,10 +125,16 @@ bool SkinnedVertex(
             mesh.vertices[positionOffset + 1],
             mesh.vertices[positionOffset + 2]};
     Vector3 posed = source;
+    int meshBoneCount = 0;
+    const Matrix* meshBoneMatrices = AnimatedModelMeshBoneMatrices(
+            asset,
+            instance,
+            meshIndex,
+            meshBoneCount);
     const bool canSkin = mesh.boneIndices != nullptr
             && mesh.boneWeights != nullptr
-            && asset.model.skeleton.boneCount > 0
-            && !instance.boneMatrices.empty();
+            && meshBoneMatrices != nullptr
+            && meshBoneCount > 0;
     if (canSkin) {
         posed = {};
         bool usedInfluence = false;
@@ -135,13 +143,13 @@ bool SkinnedVertex(
             const float weight = mesh.boneWeights[influenceOffset];
             const uint32_t boneIndex = mesh.boneIndices[influenceOffset];
             if (!std::isfinite(weight) || weight <= 0.0f) continue;
-            if (boneIndex >= instance.boneMatrices.size()) return false;
+            if (boneIndex >= static_cast<uint32_t>(meshBoneCount)) return false;
             posed = Vector3Add(
                     posed,
                     Vector3Scale(
                             Vector3Transform(
                                     source,
-                                    instance.boneMatrices[boneIndex]),
+                                    meshBoneMatrices[boneIndex]),
                             weight));
             usedInfluence = true;
         }
@@ -233,13 +241,13 @@ AnimatedModelRaycastStatus RaycastAnimatedModel(
             if (!MeshTriangleVertexIndices(mesh, triangleIndex, indices)) continue;
             std::array<Vector3, 3> vertices{};
             if (!SkinnedVertex(
-                        asset, instance, mesh, indices[0],
+                        asset, instance, mesh, meshIndex, indices[0],
                         modelTransform, vertices[0])
                     || !SkinnedVertex(
-                        asset, instance, mesh, indices[1],
+                        asset, instance, mesh, meshIndex, indices[1],
                         modelTransform, vertices[1])
                     || !SkinnedVertex(
-                        asset, instance, mesh, indices[2],
+                        asset, instance, mesh, meshIndex, indices[2],
                         modelTransform, vertices[2])) {
                 continue;
             }
@@ -296,6 +304,7 @@ bool ResolveAnimatedModelSurfaceAnchor(
                     asset,
                     instance,
                     mesh,
+                    static_cast<int>(anchor.meshIndex),
                     anchor.vertexIndices[corner],
                     modelTransform,
                     vertices[corner])) {

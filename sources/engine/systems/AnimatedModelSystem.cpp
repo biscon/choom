@@ -220,9 +220,37 @@ bool PrepareAnimatedModelInstance(AnimatedModelInstance& instance, const ModelAs
     instance.nodeLocalTransforms.resize(asset.nodes.size());
     instance.nodeLocalMatrices.resize(asset.nodes.size());
     instance.nodeWorldMatrices.resize(asset.nodes.size());
+    for (size_t nodeIndex = 0;
+            nodeIndex < asset.nodes.size();
+            ++nodeIndex) {
+        instance.nodeLocalTransforms[nodeIndex] =
+                asset.nodes[nodeIndex].bindLocal;
+        instance.nodeLocalMatrices[nodeIndex] =
+                asset.nodes[nodeIndex].bindLocalMatrix;
+        instance.nodeWorldMatrices[nodeIndex] =
+                asset.nodes[nodeIndex].bindWorldMatrix;
+    }
     instance.meshNodeMatrices.assign(
             static_cast<size_t>(std::max(0, asset.model.meshCount)),
             MatrixIdentity());
+    if (instance.poseSource == AnimatedModelPoseSource::GltfScene
+            && boneCount > 0
+            && asset.gltfSkin.jointNodeIndices.size()
+                    == static_cast<size_t>(boneCount)
+            && asset.gltfSkin.inverseBindMatrices.size()
+                    == static_cast<size_t>(boneCount)) {
+        instance.meshBoneMatrices.assign(
+                static_cast<size_t>(
+                        std::max(0, asset.model.meshCount))
+                        * static_cast<size_t>(boneCount),
+                MatrixIdentity());
+        if (!BuildModelMeshSkinMatrices(
+                    asset,
+                    instance.nodeWorldMatrices,
+                    instance.meshBoneMatrices)) {
+            instance.meshBoneMatrices.clear();
+        }
+    }
     instance.poseReady = true;
     return true;
 }
@@ -239,6 +267,49 @@ Model BuildAnimatedModelPoseView(
         model.boneMatrices = instance.boneMatrices.data();
     }
     return model;
+}
+
+const Matrix* AnimatedModelMeshBoneMatrices(
+        const ModelAsset& asset,
+        const AnimatedModelInstance& instance,
+        int meshIndex,
+        int& outBoneCount)
+{
+    outBoneCount = 0;
+    const int boneCount = asset.model.skeleton.boneCount;
+    if (meshIndex < 0
+            || meshIndex >= asset.model.meshCount
+            || boneCount <= 0
+            || boneCount > MaxAnimatedModelBones) {
+        return nullptr;
+    }
+
+    if (instance.poseSource == AnimatedModelPoseSource::GltfScene
+            && asset.meshNodeBindings.size()
+                    == static_cast<size_t>(asset.model.meshCount)) {
+        const ModelMeshNodeBinding& binding =
+                asset.meshNodeBindings[static_cast<size_t>(meshIndex)];
+        if (!binding.skinned) return nullptr;
+        const size_t expectedMatrixCount =
+                static_cast<size_t>(asset.model.meshCount)
+                * static_cast<size_t>(boneCount);
+        if (binding.skinIndex == 0
+                && binding.nodeIndex >= 0
+                && instance.meshBoneMatrices.size()
+                        == expectedMatrixCount) {
+            outBoneCount = boneCount;
+            return instance.meshBoneMatrices.data()
+                    + static_cast<size_t>(meshIndex)
+                            * static_cast<size_t>(boneCount);
+        }
+    }
+
+    if (instance.boneMatrices.size()
+            < static_cast<size_t>(boneCount)) {
+        return nullptr;
+    }
+    outBoneCount = boneCount;
+    return instance.boneMatrices.data();
 }
 
 void AnimatedModelSystem(World& world, AssetManager& assets, float dt)
@@ -260,9 +331,12 @@ void AnimatedModelSystem(World& world, AssetManager& assets, float dt)
                         && IsModelAnimationValid(
                                 asset->model,
                                 asset->animations[animator.animationIndex]);
-                const bool nodeValid = ValidNodeAnimationIndex(
-                        *asset,
-                        animator.nodeAnimationIndex);
+                const bool nodeValid =
+                        instance.poseSource
+                                == AnimatedModelPoseSource::GltfScene
+                        && ValidNodeAnimationIndex(
+                                *asset,
+                                animator.nodeAnimationIndex);
                 if (!skeletalValid && !nodeValid) return;
 
                 const int keyframeCount = nodeValid
@@ -359,6 +433,15 @@ void AnimatedModelSystem(World& world, AssetManager& assets, float dt)
                                 instance.meshNodeMatrices.begin(),
                                 instance.meshNodeMatrices.end(),
                                 MatrixIdentity());
+                    } else if (!instance.meshBoneMatrices.empty()
+                            && !BuildModelMeshSkinMatrices(
+                                    *asset,
+                                    instance.nodeWorldMatrices,
+                                    instance.meshBoneMatrices)) {
+                        std::fprintf(
+                                stderr,
+                                "[AnimatedModel WARNING] glTF skin pose storage is invalid; falling back to raylib skinning.\n");
+                        instance.meshBoneMatrices.clear();
                     }
                 }
                 animator.poseDirty = false;
