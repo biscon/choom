@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 namespace game {
@@ -559,6 +560,11 @@ int AllocateSectorPlacedRuntimeObjectId(const SectorTopologyMap& map)
 
 bool IsValidSectorDynamicModelInstanceId(std::string_view id)
 {
+    return IsValidSectorScriptInstanceId(id);
+}
+
+bool IsValidSectorScriptInstanceId(std::string_view id)
+{
     if (id.empty() || id.size() > 63) return false;
     return std::all_of(id.begin(), id.end(), [](char character) {
         return (character >= 'A' && character <= 'Z')
@@ -566,6 +572,14 @@ bool IsValidSectorDynamicModelInstanceId(std::string_view id)
                 || (character >= '0' && character <= '9')
                 || character == '_'
                 || character == '-';
+    });
+}
+
+bool IsValidSectorUseTitle(std::string_view title)
+{
+    if (title.empty() || title.size() > 127) return false;
+    return std::all_of(title.begin(), title.end(), [](unsigned char character) {
+        return character >= 0x20 && character != 0x7f;
     });
 }
 
@@ -602,6 +616,99 @@ void AssignMissingSectorDynamicModelInstanceIds(SectorTopologyMap& map)
         object->dynamicModel.instanceId =
                 AllocateSectorDynamicModelInstanceId(map, object->id);
     }
+}
+
+std::string AllocateSectorDoorInstanceId(
+        const SectorTopologyMap& map,
+        int placedObjectId)
+{
+    const std::string base = "door_" + std::to_string(placedObjectId);
+    const auto available = [&map](const std::string& candidate) {
+        return std::none_of(
+                map.runtimeObjects.begin(), map.runtimeObjects.end(),
+                [&candidate](const SectorPlacedRuntimeObject& object) {
+                    return object.kind == "door"
+                            && object.door.instanceId == candidate;
+                });
+    };
+    if (available(base)) return base;
+    for (int suffix = 2; suffix < std::numeric_limits<int>::max(); ++suffix) {
+        const std::string candidate = base + "_" + std::to_string(suffix);
+        if (candidate.size() > 63) break;
+        if (available(candidate)) return candidate;
+    }
+    return {};
+}
+
+void AssignMissingSectorDoorInstanceIds(SectorTopologyMap& map)
+{
+    std::vector<SectorPlacedRuntimeObject*> missing;
+    missing.reserve(map.runtimeObjects.size());
+    for (SectorPlacedRuntimeObject& object : map.runtimeObjects) {
+        if (object.kind == "door" && object.door.instanceId.empty()) {
+            missing.push_back(&object);
+        }
+    }
+    std::sort(missing.begin(), missing.end(), [](const auto* left, const auto* right) {
+        return left->id < right->id;
+    });
+    for (SectorPlacedRuntimeObject* object : missing) {
+        object->door.instanceId = AllocateSectorDoorInstanceId(map, object->id);
+    }
+}
+
+namespace {
+
+bool DynamicLightInstanceIdAvailable(
+        const SectorTopologyMap& map,
+        std::string_view candidate)
+{
+    const auto matches = [candidate](const auto& light) {
+        return light.instanceId == candidate;
+    };
+    return std::none_of(map.dynamicPointLights.begin(), map.dynamicPointLights.end(), matches)
+            && std::none_of(map.dynamicSpotLights.begin(), map.dynamicSpotLights.end(), matches)
+            && std::none_of(map.dynamicRectLights.begin(), map.dynamicRectLights.end(), matches);
+}
+
+} // namespace
+
+std::string AllocateSectorDynamicLightInstanceId(
+        const SectorTopologyMap& map,
+        const char* kind,
+        int lightId)
+{
+    const std::string base = std::string{"light_"}
+            + (kind != nullptr ? kind : "dynamic")
+            + "_" + std::to_string(lightId);
+    if (DynamicLightInstanceIdAvailable(map, base)) return base;
+    for (int suffix = 2; suffix < std::numeric_limits<int>::max(); ++suffix) {
+        const std::string candidate = base + "_" + std::to_string(suffix);
+        if (candidate.size() > 63) break;
+        if (DynamicLightInstanceIdAvailable(map, candidate)) return candidate;
+    }
+    return {};
+}
+
+void AssignMissingSectorDynamicLightInstanceIds(SectorTopologyMap& map)
+{
+    const auto assign = [&map](auto& lights, const char* kind) {
+        std::vector<typename std::decay_t<decltype(lights)>::value_type*> missing;
+        missing.reserve(lights.size());
+        for (auto& light : lights) {
+            if (light.instanceId.empty()) missing.push_back(&light);
+        }
+        std::sort(missing.begin(), missing.end(), [](const auto* left, const auto* right) {
+            return left->id < right->id;
+        });
+        for (auto* light : missing) {
+            light->instanceId = AllocateSectorDynamicLightInstanceId(
+                    map, kind, light->id);
+        }
+    };
+    assign(map.dynamicPointLights, "point");
+    assign(map.dynamicSpotLights, "spot");
+    assign(map.dynamicRectLights, "rect");
 }
 
 const SectorTopologyVertex* FindSectorTopologyVertex(const SectorTopologyMap& map, int id)

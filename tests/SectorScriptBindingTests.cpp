@@ -82,13 +82,14 @@ engine::Entity AddDoor(
         game::SectorRuntimeObjectState& objects)
 {
     const engine::Entity entity = context.world.CreateEntity();
-    context.world.Add(entity, game::SectorDoor{42, true});
+    context.world.Add(entity, game::SectorDoor{42, true, "test_door"});
     context.world.Add(entity, game::SectorDoorMotion{
             game::SectorDoorMotionType::SlideVertical,
             0.0f,
             0.0f,
             1.0f,
             2.0f});
+    context.world.Add(entity, game::SectorDoorInteraction{});
     objects.placedObjectEntities.push_back({42, entity});
     return entity;
 }
@@ -758,6 +759,87 @@ end
     game::ResetSectorScriptHost(host);
 }
 
+void StableDoorAndDynamicLightBindingsMutateRuntimeTargets()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    const engine::Entity door = AddDoor(context, objects);
+    game::SectorTopologyDynamicPointLight light;
+    light.id = 7;
+    light.instanceId = "warning_light";
+    map.dynamicPointLights.push_back(light);
+    ScriptFiles files;
+
+    game::InitializeSectorScriptHost(host, objects, map, runtime);
+    files.Write(R"(
+function init()
+    local opened = openDoor("test_door")
+    local disabled = setDynamicLightEnabled("warning_light", false)
+    local intensity = setDynamicLightIntensity("warning_light", 3.5)
+    local colored = setDynamicLightColor("warning_light", 255, 40, 20)
+    setPersistentBool("bindings_ok", opened and disabled and intensity and colored)
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    assert(persistent.bools.at("bindings_ok"));
+    assert(context.world.Get<game::SectorDoorMotion>(door).targetOpenFraction == 1.0f);
+    assert(!map.dynamicPointLights[0].enabled);
+    assert(std::fabs(map.dynamicPointLights[0].intensity - 3.5f) < 0.0001f);
+    assert(map.dynamicPointLights[0].color.r == 255
+            && map.dynamicPointLights[0].color.g == 40
+            && map.dynamicPointLights[0].color.b == 20);
+    assert(host.dynamicLightsDirty);
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+}
+
+void DoorPermissionCallbacksCanYieldAndMustReturnTrue()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    const engine::Entity door = AddDoor(context, objects);
+    game::SectorDoorInteraction& interaction =
+            context.world.Get<game::SectorDoorInteraction>(door);
+    interaction.canOpenScript = "allowOpenLater";
+    interaction.canCloseScript = "denyClose";
+    ScriptFiles files;
+
+    game::InitializeSectorScriptHost(host, objects, map, runtime);
+    files.Write(R"(
+function allowOpenLater()
+    delay(0)
+    return true
+end
+function denyClose()
+    return false
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    assert(game::RequestSectorScriptDoorUse(context, host, door));
+    assert(host.doorPermission.active);
+    assert(context.world.Get<game::SectorDoorMotion>(door).targetOpenFraction == 0.0f);
+    engine::ScriptSystemUpdate(context, runtime, 0.0f);
+    game::UpdateSectorScriptDoorPermission(context, host);
+    assert(!host.doorPermission.active);
+    assert(context.world.Get<game::SectorDoorMotion>(door).targetOpenFraction == 1.0f);
+
+    game::SectorDoorMotion& motion = context.world.Get<game::SectorDoorMotion>(door);
+    motion.openFraction = 1.0f;
+    motion.targetOpenFraction = 1.0f;
+    assert(game::RequestSectorScriptDoorUse(context, host, door));
+    assert(motion.targetOpenFraction == 1.0f);
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+}
+
 void TravelPreservesFirstRequest()
 {
     engine::EngineContext context;
@@ -895,6 +977,8 @@ void TriggerContainmentUsesExplicitCoordinateSpaces()
 void RunSectorScriptBindingTests()
 {
     DoorCompletionAndCancellationShareTheBackend();
+    StableDoorAndDynamicLightBindingsMutateRuntimeTargets();
+    DoorPermissionCallbacksCanYieldAndMustReturnTrue();
     BlockingNpcMoveCompletesAfterPhysicalArrival();
     BackgroundNpcPatrolYieldsWhenNavigationIsPrepared();
     KillingMovingNpcStopsRunawayPatrolWithoutFreezing();

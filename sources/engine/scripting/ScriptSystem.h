@@ -38,6 +38,17 @@ ScriptCallOutcome ScriptSystemCallForegroundHook(
         ScriptRuntime& runtime,
         const std::string& functionName);
 
+// Starts a foreground hook whose eventual result can be collected after a
+// yield. Immediate completions are still returned directly in ScriptCallOutcome.
+ScriptCallOutcome ScriptSystemCallObservedForegroundHook(
+        ScriptRuntime& runtime,
+        const std::string& functionName);
+
+bool ScriptSystemTakeObservedCallOutcome(
+        ScriptRuntime& runtime,
+        ScriptTaskHandle task,
+        ScriptObservedCallOutcome& outOutcome);
+
 bool ScriptSystemQueueBackground(
         ScriptRuntime& runtime,
         const std::string& functionName,

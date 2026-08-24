@@ -50,6 +50,16 @@ struct RuntimeObjectEditingUiState {
     char dynamicModelInstanceIdBuffer[64] = {};
     int dynamicModelInstanceIdObjectId = -1;
     std::string dynamicModelInstanceIdError;
+    char dynamicModelUseTitleBuffer[128] = {};
+    char dynamicModelOnUseScriptBuffer[128] = {};
+    std::string dynamicModelUseError;
+    int dynamicModelUseObjectId = -1;
+    char doorInstanceIdBuffer[64] = {};
+    char doorUseTitleBuffer[128] = {};
+    char doorCanOpenScriptBuffer[128] = {};
+    char doorCanCloseScriptBuffer[128] = {};
+    int doorScriptFieldsObjectId = -1;
+    std::string doorInstanceIdError;
     engine::UIFloatInputState xInput;
     engine::UIFloatInputState yInput;
     engine::UIFloatInputState zInput;
@@ -71,6 +81,7 @@ struct RuntimeObjectEditingUiState {
     engine::UIFloatInputState initialOpenFractionInput;
     engine::UIFloatInputState autoOpenDistanceInput;
     engine::UIFloatInputState interactionDistanceInput;
+    engine::UIFloatInputState dynamicModelUseDistanceInput;
     engine::UIFloatInputState originXInput;
     engine::UIFloatInputState originYInput;
 };

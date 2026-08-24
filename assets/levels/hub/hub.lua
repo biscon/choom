@@ -1,5 +1,7 @@
 function init()
     log("hub script initialized")
+    setPropAnimationProgress("ceiling_switch_01", 0.0, "switch|switchAction")
+    setPropAnimationProgress("ceiling_vent_01", 0.0, "Ventilator")
     startScript("patrolZombie01")
     startScript("patrolZombie02")
     startScript("patrolZombie03")
@@ -15,6 +17,33 @@ end
 
 function trigger_2()
     log("trigger_2")
+end
+
+local ceilingVentOn = false
+local ceilingVentStarted = false
+
+function toggleCeilingVent()
+    if ceilingVentOn then
+        playPropAnimation(
+                "ceiling_switch_01",
+                "switch|switchAction",
+                "once_reverse")
+        pausePropAnimation("ceiling_vent_01")
+        ceilingVentOn = false
+        return
+    end
+
+    playPropAnimation(
+            "ceiling_switch_01",
+            "switch|switchAction",
+            "once")
+    if ceilingVentStarted then
+        resumePropAnimation("ceiling_vent_01")
+    else
+        playPropAnimation("ceiling_vent_01", "Ventilator", "loop")
+        ceilingVentStarted = true
+    end
+    ceilingVentOn = true
 end
 
 local function movePatrolNpc(instanceId, markerId, gait)

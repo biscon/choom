@@ -112,6 +112,7 @@ private:
     FpsApplicationSettings graphicsSettingsDraft;
     bool graphicsSettingsOpen = false;
     bool editorAttachedToGame = false;
+    engine::FontHandle usePromptFont = engine::NullFontHandle();
     bool initialized = false;
 };
 

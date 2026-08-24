@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace game {
 
@@ -15,16 +16,14 @@ namespace {
 
 Vector3 GameplayForward(const SectorEditorPreviewControllerState& controller)
 {
-    const SectorViewPose pose = SectorFpsControllerVisualPose(
+    const SectorViewPose pose = SectorFpsControllerPose(
             controller.fpsControllerState,
-            controller.fpsControllerConfig,
-            controller.visualStepOffsetY,
-            controller.headBobState.offset,
-            controller.landingDipState.offsetY);
+            controller.fpsControllerConfig);
+    const float horizontal = std::cos(pose.pitchRadians);
     return Vector3{
-            std::cos(pose.yawRadians),
-            0.0f,
-            std::sin(pose.yawRadians)};
+            std::cos(pose.yawRadians) * horizontal,
+            std::sin(pose.pitchRadians),
+            std::sin(pose.yawRadians) * horizontal};
 }
 
 void UpdateAudioListener(
@@ -175,6 +174,8 @@ bool SectorGameSession::StartNew(
     levelPath = path;
     controller = SectorEditorPreviewControllerState{};
     collision = SectorEditorPreviewCollisionState{};
+    useTarget = {};
+    usePromptTitle = {};
     navigationDebug = SectorGameNavigationDebugState{};
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
             topologyMap.previewSettings);
@@ -275,6 +276,8 @@ void SectorGameSession::Pause()
         return;
     }
     paused = true;
+    useTarget = {};
+    usePromptTitle = {};
     LeaveSectorFreeflyController();
 }
 
@@ -339,21 +342,6 @@ void SectorGameSession::Update(
             &playerObstacle);
     UpdateSectorScriptOperations(context, scriptHost);
     SectorRuntimeObjectState& objects = scene.RuntimeObjects();
-
-    if (!consoleInputCaptured) context.input.ForEachEvent(
-            engine::InputEventType::KeyPressed,
-            true,
-            [this, &context](engine::InputEvent& event) {
-                if (event.key.key != KEY_F) {
-                    return;
-                }
-                if (ToggleTargetedSectorDoorInteractionSystem(
-                            context.world,
-                            controller.fpsControllerState.feetPosition,
-                            GameplayForward(controller))) {
-                    engine::ConsumeEvent(event);
-                }
-            });
 
     SectorFpsControllerInput input;
     if (!consoleInputCaptured) {
@@ -434,7 +422,78 @@ void SectorGameSession::Update(
                     controller.fpsControllerState.feetPosition.x,
                     controller.fpsControllerState.feetPosition.z},
             dt);
+    const SectorViewPose interactionPose = SectorFpsControllerPose(
+            controller.fpsControllerState,
+            controller.fpsControllerConfig);
+    useTarget = FindSectorUseTarget(
+            context.world,
+            &context.assets,
+            interactionPose.position,
+            GameplayForward(controller),
+            collision.sectorCollisionWorldValid
+                    ? &collision.sectorCollisionWorld : nullptr,
+            true);
+    usePromptTitle = {};
+    const std::string_view promptTitle = SectorUseTargetTitle(
+            context.world, useTarget);
+    if (!promptTitle.empty()) {
+        std::snprintf(
+                usePromptTitle.data(),
+                usePromptTitle.size(),
+                "%.*s",
+                static_cast<int>(promptTitle.size()),
+                promptTitle.data());
+    }
+    if (!consoleInputCaptured) context.input.ForEachEvent(
+            engine::InputEventType::KeyPressed,
+            true,
+            [this, &context](engine::InputEvent& event) {
+                if (event.key.key != KEY_E
+                        || useTarget.kind == SectorUseTargetKind::None) {
+                    return;
+                }
+                bool handled = false;
+                if (useTarget.kind == SectorUseTargetKind::Door) {
+                    handled = RequestSectorScriptDoorUse(
+                            context, scriptHost, useTarget.entity);
+                } else if (useTarget.kind == SectorUseTargetKind::DynamicProp
+                        && context.world.IsAlive(useTarget.entity)
+                        && context.world.Has<SectorDynamicModel>(useTarget.entity)) {
+                    SectorDynamicModel& prop =
+                            context.world.Get<SectorDynamicModel>(useTarget.entity);
+                    const engine::ScriptCallOutcome outcome =
+                            engine::ScriptSystemCallForegroundHook(
+                                    scripts, prop.onUseScript);
+                    handled = outcome.result != engine::ScriptCallResult::ForegroundBusy
+                            && outcome.result != engine::ScriptCallResult::AlreadyRunning;
+                    if (handled && prop.singleUse
+                            && (outcome.result == engine::ScriptCallResult::Completed
+                                    || outcome.result == engine::ScriptCallResult::Started)) {
+                        prop.useConsumed = true;
+                    }
+                    if (outcome.result == engine::ScriptCallResult::Missing) {
+                        TraceLog(
+                                LOG_WARNING,
+                                "[Lua WARNING] prop '%s' has no callable use function '%s'",
+                                prop.instanceId.c_str(),
+                                prop.onUseScript.c_str());
+                    } else if (outcome.result == engine::ScriptCallResult::Error) {
+                        TraceLog(
+                                LOG_ERROR,
+                                "[Lua ERROR] prop '%s' use function '%s' failed: %s",
+                                prop.instanceId.c_str(),
+                                prop.onUseScript.c_str(),
+                                outcome.error.c_str());
+                    }
+                }
+                if (handled) engine::ConsumeEvent(event);
+            });
     engine::ScriptSystemUpdate(context, scripts, dt);
+    UpdateSectorScriptDoorPermission(context, scriptHost);
+    if (scriptHost.dynamicLightsDirty) {
+        scene.Renderer().RefreshDynamicLightSources(topologyMap);
+        scriptHost.dynamicLightsDirty = false;
+    }
     if (controller.frameEvents.footstep && applicationSettings != nullptr) {
         scene.PlayFootstepForSector(
                 context,
@@ -660,6 +719,7 @@ void SectorGameSession::RenderViewmodel(
 void SectorGameSession::RenderHud(
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle usePromptFont,
         Rectangle playableViewport) const
 {
     if (IsActive() && weaponRegistry != nullptr) {
@@ -669,6 +729,10 @@ void SectorGameSession::RenderHud(
                 assets.GetFont(font),
                 &playerHealth,
                 &playerStamina);
+        DrawSectorUsePrompt(
+                playableViewport,
+                assets.GetFont(usePromptFont),
+                usePromptTitle.data());
     }
 }
 

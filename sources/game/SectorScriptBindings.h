@@ -60,6 +60,13 @@ struct SectorScriptNpcMoveDiagnostics {
     std::array<char, 192> lastOutcome{};
 };
 
+struct SectorScriptDoorPermission {
+    engine::ScriptTaskHandle task{};
+    engine::Entity entity = engine::NullEntity();
+    float targetOpenFraction = 0.0f;
+    bool active = false;
+};
+
 struct SectorScriptHost {
     SectorRuntimeObjectState* runtimeObjects = nullptr;
     SectorNavigationWorld* navigation = nullptr;
@@ -70,8 +77,10 @@ struct SectorScriptHost {
     std::vector<SectorScriptNpcMove> npcMoves;
     std::vector<SectorScriptTriggerState> triggers;
     SectorScriptNpcMoveDiagnostics npcMoveDiagnostics;
+    SectorScriptDoorPermission doorPermission;
     uint64_t nextDoorMoveToken = 1;
     uint64_t nextNpcMoveToken = 1;
+    bool dynamicLightsDirty = false;
 };
 
 void InitializeSectorScriptHost(
@@ -100,5 +109,14 @@ bool SetSectorScriptTriggerEnabled(
         const std::string& triggerId,
         bool enabled,
         std::string& error);
+
+bool RequestSectorScriptDoorUse(
+        engine::EngineContext& context,
+        SectorScriptHost& host,
+        engine::Entity doorEntity);
+
+void UpdateSectorScriptDoorPermission(
+        engine::EngineContext& context,
+        SectorScriptHost& host);
 
 } // namespace game

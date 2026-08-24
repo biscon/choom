@@ -348,6 +348,7 @@
       "id": 29,
       "kind": "door",
       "door": {
+        "instanceId": "door_29",
         "anchor": {
           "lineDefId": 96,
           "frontSectorId": 24,
@@ -387,6 +388,7 @@
       "id": 30,
       "kind": "door",
       "door": {
+        "instanceId": "door_30",
         "anchor": {
           "lineDefId": 119,
           "frontSectorId": 29,
@@ -455,6 +457,7 @@
       "id": 33,
       "kind": "door",
       "door": {
+        "instanceId": "door_33",
         "anchor": {
           "lineDefId": 127,
           "frontSectorId": 33,
@@ -1426,6 +1429,7 @@
       "id": 92,
       "kind": "door",
       "door": {
+        "instanceId": "door_92",
         "anchor": {
           "lineDefId": 234,
           "frontSectorId": 50,
@@ -1952,6 +1956,7 @@
         "instanceId": "ceiling_vent_01",
         "modelPath": "assets/models/dynamic/ceiling_ventilator_fixed.glb",
         "heightOffsetWorld": 3.75,
+        "loop": false,
         "animationSpeed": 0.5,
         "shadowMode": "dynamic"
       },
@@ -1967,10 +1972,14 @@
       "kind": "dynamic_model",
       "dynamicModel": {
         "instanceId": "ceiling_switch_01",
+        "useTitle": "switch",
+        "useDistance": 2.0,
+        "onUseScript": "toggleCeilingVent",
         "modelPath": "assets/models/dynamic/switch_outlet.glb",
         "heightOffsetWorld": 0.20000000298023224,
         "scale": 1.25,
         "loop": false,
+        "animationSpeed": 3.0,
         "shadowMode": "none"
       },
       "position": [
@@ -4402,6 +4411,7 @@
   "dynamicPointLights": [
     {
       "id": 2,
+      "instanceId": "light_point_2",
       "position": [
         -392.0,
         20.0,
@@ -4434,6 +4444,7 @@
     },
     {
       "id": 4,
+      "instanceId": "light_point_4",
       "position": [
         -180.77577209472656,
         -11.300065994262695,
@@ -4475,6 +4486,7 @@
     },
     {
       "id": 5,
+      "instanceId": "light_point_5",
       "position": [
         -180.5950469970703,
         -11.266918182373047,
@@ -4514,6 +4526,7 @@
     },
     {
       "id": 7,
+      "instanceId": "light_point_7",
       "position": [
         -200.0,
         -2.6000003814697266,
@@ -4530,6 +4543,7 @@
     },
     {
       "id": 8,
+      "instanceId": "light_point_8",
       "position": [
         -88.02798461914063,
         7.433874130249023,
@@ -4567,6 +4581,7 @@
     },
     {
       "id": 9,
+      "instanceId": "light_point_9",
       "position": [
         -88.08348083496094,
         7.633390426635742,
@@ -4604,6 +4619,7 @@
     },
     {
       "id": 10,
+      "instanceId": "light_point_10",
       "position": [
         -61.17213439941406,
         -4.033847332000732,
@@ -4620,6 +4636,7 @@
     },
     {
       "id": 11,
+      "instanceId": "light_point_11",
       "position": [
         -72.07403564453125,
         -1.200300693511963,
@@ -4656,6 +4673,7 @@
     },
     {
       "id": 12,
+      "instanceId": "light_point_12",
       "position": [
         -117.3318862915039,
         -1.0319961309432983,
@@ -4674,6 +4692,7 @@
   "dynamicSpotLights": [
     {
       "id": 1,
+      "instanceId": "light_spot_1",
       "position": [
         -49.0,
         20.800823211669922,
@@ -4736,6 +4755,7 @@
     },
     {
       "id": 2,
+      "instanceId": "light_spot_2",
       "position": [
         -158.0,
         -0.4666459262371063,
@@ -4812,6 +4832,7 @@
     },
     {
       "id": 3,
+      "instanceId": "light_spot_3",
       "position": [
         -270.4984436035156,
         -15.500404357910156,
@@ -4887,6 +4908,7 @@
     },
     {
       "id": 4,
+      "instanceId": "light_spot_4",
       "position": [
         -273.9549255371094,
         -15.433775901794434,
@@ -4952,6 +4974,7 @@
     },
     {
       "id": 5,
+      "instanceId": "light_spot_5",
       "position": [
         -66.00068664550781,
         -2.400377035140991,
@@ -4974,6 +4997,7 @@
     },
     {
       "id": 6,
+      "instanceId": "light_spot_6",
       "position": [
         -60.0,
         -1.6000003814697266,
@@ -4996,6 +5020,7 @@
     },
     {
       "id": 7,
+      "instanceId": "light_spot_7",
       "position": [
         -59.0,
         -1.6000003814697266,
@@ -5018,6 +5043,7 @@
     },
     {
       "id": 10,
+      "instanceId": "light_spot_10",
       "position": [
         -61.0,
         -2.759999990463257,
@@ -5092,6 +5118,7 @@
     },
     {
       "id": 11,
+      "instanceId": "light_spot_11",
       "position": [
         -88.04553985595703,
         7.267064094543457,
@@ -5139,6 +5166,7 @@
     },
     {
       "id": 12,
+      "instanceId": "light_spot_12",
       "position": [
         -88.04122924804688,
         7.730865955352783,
@@ -5186,6 +5214,7 @@
     },
     {
       "id": 13,
+      "instanceId": "light_spot_13",
       "position": [
         -116.4275894165039,
         -3.235325813293457,
@@ -5205,6 +5234,7 @@
         "a": 255
       },
       "castsShadow": true,
+      "shadowStrength": 0.800000011920929,
       "atmosphere": {
         "proxy": {
           "shaft": {

@@ -177,6 +177,10 @@ enum class SectorDynamicModelShadowMode {
 struct SectorPlacedDynamicModel {
     std::string modelPath;
     std::string instanceId;
+    std::string useTitle = "object";
+    float useDistance = 1.5f;
+    std::string onUseScript;
+    bool singleUse = false;
     float rotationXRadians = 0.0f;
     float rotationZRadians = 0.0f;
     float heightOffsetWorld = 0.0f;
@@ -236,6 +240,10 @@ struct SectorDoorAnchor {
 };
 
 struct SectorPlacedDoor {
+    std::string instanceId;
+    std::string useTitle = "door";
+    std::string canOpenScript;
+    std::string canCloseScript;
     SectorDoorAnchor anchor;
     float width = 0.0f;
     float height = 0.0f;
@@ -371,10 +379,21 @@ int AllocateSectorTopologyDynamicSpotLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyDynamicRectLightId(const SectorTopologyMap& map);
 int AllocateSectorPlacedRuntimeObjectId(const SectorTopologyMap& map);
 bool IsValidSectorDynamicModelInstanceId(std::string_view id);
+bool IsValidSectorScriptInstanceId(std::string_view id);
+bool IsValidSectorUseTitle(std::string_view title);
 std::string AllocateSectorDynamicModelInstanceId(
         const SectorTopologyMap& map,
         int placedObjectId);
 void AssignMissingSectorDynamicModelInstanceIds(SectorTopologyMap& map);
+std::string AllocateSectorDoorInstanceId(
+        const SectorTopologyMap& map,
+        int placedObjectId);
+void AssignMissingSectorDoorInstanceIds(SectorTopologyMap& map);
+std::string AllocateSectorDynamicLightInstanceId(
+        const SectorTopologyMap& map,
+        const char* kind,
+        int lightId);
+void AssignMissingSectorDynamicLightInstanceIds(SectorTopologyMap& map);
 
 const SectorTopologyVertex* FindSectorTopologyVertex(const SectorTopologyMap& map, int id);
 SectorTopologyVertex* FindSectorTopologyVertex(SectorTopologyMap& map, int id);

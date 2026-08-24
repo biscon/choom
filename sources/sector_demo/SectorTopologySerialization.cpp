@@ -603,6 +603,13 @@ void ValidatePlacedBillboard(const SectorPlacedBillboard& billboard, const std::
 
 void ValidatePlacedDoorForSerialization(const SectorPlacedDoor& door, const std::string& context)
 {
+    if (!IsValidSectorUseTitle(door.useTitle)) {
+        Fail(context + ".useTitle is invalid");
+    }
+    if (!IsValidSectorTriggerScriptName(door.canOpenScript)
+            || !IsValidSectorTriggerScriptName(door.canCloseScript)) {
+        Fail(context + " permission callbacks must be empty or valid Lua global function names");
+    }
     if (!IsValidSectorTopologyId(door.anchor.lineDefId)
             || !IsValidSectorTopologyId(door.anchor.frontSectorId)
             || !IsValidSectorTopologyId(door.anchor.backSectorId)
@@ -864,6 +871,12 @@ SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
     }
 
     SectorPlacedDoor door;
+    door.instanceId = ReadOptionalString(value, "instanceId", context, door.instanceId);
+    door.useTitle = ReadOptionalString(value, "useTitle", context, door.useTitle);
+    door.canOpenScript = ReadOptionalString(
+            value, "canOpenScript", context, door.canOpenScript);
+    door.canCloseScript = ReadOptionalString(
+            value, "canCloseScript", context, door.canCloseScript);
     door.anchor = ReadSectorDoorAnchor(RequireObjectField(value, "anchor", context),
             context + ".anchor");
     door.width = ReadOptionalFloat(value, "width", context, door.width);
@@ -985,6 +998,12 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
     SectorPlacedDynamicModel model;
     model.modelPath = ReadOptionalString(value, "modelPath", context, model.modelPath);
     model.instanceId = ReadOptionalString(value, "instanceId", context, model.instanceId);
+    model.useTitle = ReadOptionalString(value, "useTitle", context, model.useTitle);
+    model.useDistance = ReadOptionalPositiveFloat(
+            value, "useDistance", context, model.useDistance);
+    model.onUseScript = ReadOptionalString(
+            value, "onUseScript", context, model.onUseScript);
+    model.singleUse = ReadOptionalBool(value, "singleUse", context, model.singleUse);
     model.rotationXRadians = DegreesToRadians(ReadOptionalFloat(
             value, "rotationXDegrees", context, 0.0f));
     model.rotationZRadians = DegreesToRadians(ReadOptionalFloat(
@@ -1954,8 +1973,12 @@ Json WriteDoorFaceUvSet(const SectorDoorFaceUvSet& uvs, const std::string& conte
 Json WritePlacedDoor(const SectorPlacedDoor& door)
 {
     Json json{
+            {"instanceId", door.instanceId},
             {"anchor", WriteSectorDoorAnchor(door.anchor)}
     };
+    if (door.useTitle != "door") json["useTitle"] = door.useTitle;
+    if (!door.canOpenScript.empty()) json["canOpenScript"] = door.canOpenScript;
+    if (!door.canCloseScript.empty()) json["canCloseScript"] = door.canCloseScript;
     if (door.width != 0.0f) {
         json["width"] = door.width;
     }
@@ -2118,6 +2141,10 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
                 Fail(context + ".dynamicModel.instanceId is invalid");
             }
             dynamicModel["instanceId"] = model.instanceId;
+            if (model.useTitle != "object") dynamicModel["useTitle"] = model.useTitle;
+            if (model.useDistance != 1.5f) dynamicModel["useDistance"] = model.useDistance;
+            if (!model.onUseScript.empty()) dynamicModel["onUseScript"] = model.onUseScript;
+            if (model.singleUse) dynamicModel["singleUse"] = true;
             if (!model.modelPath.empty()) dynamicModel["modelPath"] = model.modelPath;
             if (rotationXDegrees != 0.0f) dynamicModel["rotationXDegrees"] = rotationXDegrees;
             if (rotationZDegrees != 0.0f) dynamicModel["rotationZDegrees"] = rotationZDegrees;
@@ -2481,6 +2508,7 @@ Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const st
     const float shadowSoftness = ClampDynamicSpotLightShadowSoftness(light.shadowSoftness);
     Json lightJson{
             {"id", light.id},
+            {"instanceId", light.instanceId},
             {"position", WriteVector3(light.position, context + ".position")},
             {"target", WriteVector3(light.target, context + ".target")},
             {"range", light.range},
@@ -2529,6 +2557,7 @@ Json WriteDynamicPointLight(const SectorTopologyDynamicPointLight& light, const 
     const float shadowSoftness = ClampDynamicSpotLightShadowSoftness(light.shadowSoftness);
     Json lightJson{
             {"id", light.id},
+            {"instanceId", light.instanceId},
             {"position", WriteVector3(light.position, context + ".position")},
             {"radius", light.radius},
             {"intensity", light.intensity},
@@ -2619,6 +2648,7 @@ Json WriteDynamicRectLight(const SectorTopologyDynamicRectLight& light, const st
     RequireFinite(light.shadowStrength, context + ".shadowStrength");
     RequireFinite(light.shadowSoftness, context + ".shadowSoftness");
     Json lightJson = WriteRectLightCommon(light, context);
+    lightJson["instanceId"] = light.instanceId;
     if (!light.enabled) lightJson["enabled"] = false;
     WriteDynamicLightFlickerFields(lightJson, light, context);
     if (light.castsShadow) lightJson["castsShadow"] = true;
@@ -2897,6 +2927,7 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
     objectIds.reserve(map.runtimeObjects.size());
     std::set<std::string> npcInstanceIds;
     std::set<std::string> dynamicModelInstanceIds;
+    std::set<std::string> doorInstanceIds;
     for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
         const std::string objectContext = context + ".runtimeObjects[" + std::to_string(object.id) + "]";
         if (!IsValidSectorTopologyId(object.id)) {
@@ -2929,6 +2960,16 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                 if (!dynamicModelInstanceIds.insert(model.instanceId).second) {
                     Fail(objectContext
                             + ".dynamicModel.instanceId duplicates another dynamic prop instance ID");
+                }
+                if (!IsValidSectorUseTitle(model.useTitle)) {
+                    Fail(objectContext + ".dynamicModel.useTitle is invalid");
+                }
+                if (!std::isfinite(model.useDistance)
+                        || model.useDistance <= 0.0f) {
+                    Fail(objectContext + ".dynamicModel.useDistance must be finite and positive");
+                }
+                if (!IsValidSectorTriggerScriptName(model.onUseScript)) {
+                    Fail(objectContext + ".dynamicModel.onUseScript is invalid");
                 }
                 if (!std::isfinite(model.rotationXRadians)
                         || !std::isfinite(model.rotationZRadians)
@@ -2969,6 +3010,13 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                 }
             } else if (object.kind == RuntimeObjectKindDoor) {
                 ValidatePlacedDoorForSerialization(object.door, objectContext + ".door");
+                if (!IsValidSectorScriptInstanceId(object.door.instanceId)) {
+                    Fail(objectContext + ".door.instanceId is invalid");
+                }
+                if (!doorInstanceIds.insert(object.door.instanceId).second) {
+                    Fail(objectContext
+                            + ".door.instanceId duplicates another door instance ID");
+                }
             } else {
                 Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'npc', or 'door'");
             }
@@ -2986,6 +3034,25 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
         }
         objectIds.push_back(object.id);
     }
+
+    std::set<std::string> dynamicLightInstanceIds;
+    const auto validateDynamicLights = [&dynamicLightInstanceIds, &context](
+            const auto& lights,
+            const char* kind) {
+        for (const auto& light : lights) {
+            if (!IsValidSectorScriptInstanceId(light.instanceId)) {
+                Fail(context + "." + kind + "[" + std::to_string(light.id)
+                        + "].instanceId is invalid");
+            }
+            if (!dynamicLightInstanceIds.insert(light.instanceId).second) {
+                Fail(context + "." + kind + "[" + std::to_string(light.id)
+                        + "].instanceId duplicates another dynamic light instance ID");
+            }
+        }
+    };
+    validateDynamicLights(map.dynamicPointLights, "dynamicPointLights");
+    validateDynamicLights(map.dynamicSpotLights, "dynamicSpotLights");
+    validateDynamicLights(map.dynamicRectLights, "dynamicRectLights");
 }
 
 void ReadTextures(const Json& root, SectorTopologyMap& map)
@@ -3211,6 +3278,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             map.runtimeObjects.push_back(ReadRuntimeObject(runtimeObjects[i], context));
         }
         AssignMissingSectorDynamicModelInstanceIds(map);
+        AssignMissingSectorDoorInstanceIds(map);
     }
 
     const auto staticLightsIt = root.find("staticLights");
@@ -3320,6 +3388,8 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
 
             SectorTopologyDynamicPointLight light;
             light.id = ReadInt(value, "id", context);
+            light.instanceId = ReadOptionalString(
+                    value, "instanceId", context, light.instanceId);
             light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
             light.radius = ReadFloat(value, "radius", context);
             light.intensity = ReadFloat(value, "intensity", context);
@@ -3381,6 +3451,8 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
 
             SectorTopologyDynamicSpotLight light;
             light.id = ReadInt(value, "id", context);
+            light.instanceId = ReadOptionalString(
+                    value, "instanceId", context, light.instanceId);
             light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
             light.target = ReadVector3(RequireField(value, "target", context), context + ".target");
             light.range = ReadFloat(value, "range", context);
@@ -3461,6 +3533,8 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             if (!value.is_object()) Fail(context + " must be an object");
             SectorTopologyDynamicRectLight light;
             light.id = ReadInt(value, "id", context);
+            light.instanceId = ReadOptionalString(
+                    value, "instanceId", context, light.instanceId);
             light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
             light.target = ReadVector3(RequireField(value, "target", context), context + ".target");
             light.rollDegrees = ReadOptionalFloat(value, "rollDegrees", context, 0.0f);
@@ -3492,6 +3566,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             map.dynamicRectLights.push_back(light);
         }
     }
+    AssignMissingSectorDynamicLightInstanceIds(map);
 
     const auto lightmapSettingsIt = root.find("lightmapSettings");
     if (lightmapSettingsIt != root.end()) {
@@ -4220,13 +4295,17 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
 
 Json SerializeAuthoringDocument(const SectorAuthoringDocument& document)
 {
-    ValidateAuthoringMapData(document.mapData);
+    SectorTopologyMap normalizedMap = document.mapData;
+    AssignMissingSectorDynamicModelInstanceIds(normalizedMap);
+    AssignMissingSectorDoorInstanceIds(normalizedMap);
+    AssignMissingSectorDynamicLightInstanceIds(normalizedMap);
+    ValidateAuthoringMapData(normalizedMap);
 
     Json root;
     root["formatVersion"] = 4;
     root["topology"] = "authoringGraph";
     root["coordSubdivisions"] = SectorCoordSubdivisions;
-    WriteMapLevelFields(root, document.mapData, true);
+    WriteMapLevelFields(root, normalizedMap, true);
     WriteAuthoringEditorSettings(root, document.editorSettings);
     root["authoringGraph"] = WriteAuthoringGraph(document.graph);
     return root;
@@ -4337,8 +4416,13 @@ SectorTopologyMap ParseMap(const Json& root)
     return map;
 }
 
-Json SerializeMap(const SectorTopologyMap& map)
+Json SerializeMap(const SectorTopologyMap& sourceMap)
 {
+    SectorTopologyMap normalizedMap = sourceMap;
+    AssignMissingSectorDynamicModelInstanceIds(normalizedMap);
+    AssignMissingSectorDoorInstanceIds(normalizedMap);
+    AssignMissingSectorDynamicLightInstanceIds(normalizedMap);
+    const SectorTopologyMap& map = normalizedMap;
     ValidateForSerialization(map);
     ValidateRuntimeObjects(map, "root");
 

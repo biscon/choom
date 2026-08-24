@@ -42,6 +42,12 @@ bool GameApplication::Init(
             22,
             engine::FontLoad_BilinearFilter);
     engine::DebugConsoleInitialize(debugConsole, consoleFont);
+    usePromptFont = context.assets.RequestFont(
+            context.assets.GlobalScope(),
+            "game_use_prompt_ibm_plex_sans_bold_48",
+            ASSETS_PATH "fonts/IBMPlexSans-Bold.ttf",
+            48,
+            engine::FontLoad_BilinearFilter);
     if (applicationSettings.consoleEnabled) {
         engine::FlushPendingDebugConsoleLogs(debugConsole);
     }
@@ -502,9 +508,11 @@ void GameApplication::Render3DHud(
         Rectangle playableViewport) const
 {
     if (BackgroundScreen() == ApplicationScreen::Game) {
-        gameSession.RenderHud(assets, font, playableViewport);
+        gameSession.RenderHud(
+                assets, font, usePromptFont, playableViewport);
     } else {
-        editor.RenderPreview3DHud(playableViewport);
+        editor.RenderPreview3DHud(
+                assets, usePromptFont, playableViewport);
     }
 }
 

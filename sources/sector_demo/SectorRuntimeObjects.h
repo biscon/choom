@@ -78,6 +78,11 @@ struct SectorDynamicModel {
     bool animationFallback = false;
     float opacity = 1.0f;
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
+    std::string useTitle = "object";
+    float useDistance = 1.5f;
+    std::string onUseScript;
+    bool singleUse = false;
+    bool useConsumed = false;
 };
 
 } // namespace game

@@ -30,6 +30,7 @@ bool AdvanceFrame(
         bool& playing,
         bool& finished,
         bool loop,
+        bool reverse,
         float speed,
         int keyframeCount,
         float dt)
@@ -38,15 +39,17 @@ bool AdvanceFrame(
         return false;
     }
 
-    frame += dt * GltfAnimationFramesPerSecond * speed;
+    frame += dt * GltfAnimationFramesPerSecond * speed
+            * (reverse ? -1.0f : 1.0f);
     const float frameCount = static_cast<float>(keyframeCount);
     if (loop) {
         frame = std::fmod(frame, frameCount);
         if (frame < 0.0f) {
             frame += frameCount;
         }
-    } else if (frame >= frameCount - 1.0f) {
-        frame = std::max(0.0f, frameCount - 1.0f);
+    } else if ((!reverse && frame >= frameCount - 1.0f)
+            || (reverse && frame <= 0.0f)) {
+        frame = reverse ? 0.0f : std::max(0.0f, frameCount - 1.0f);
         finished = true;
         playing = false;
     }
@@ -170,6 +173,7 @@ bool AdvanceAnimatedModelAnimator(
             animator.playing,
             animator.finished,
             animator.loop,
+            animator.reverse,
             animator.speed,
             keyframeCount,
             dt);
@@ -365,6 +369,7 @@ void AnimatedModelSystem(World& world, AssetManager& assets, float dt)
                                 targetPlaying,
                                 animator.targetFinished,
                                 animator.targetLoop,
+                                false,
                                 animator.speed,
                                 target.keyframeCount,
                                 dt);

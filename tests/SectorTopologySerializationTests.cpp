@@ -685,6 +685,9 @@ void TestDynamicPointLightRoundTrip()
     Check(saved["dynamicPointLights"][0]["id"].get<int>() == 5
                   && saved["dynamicPointLights"][1]["id"].get<int>() == 11,
           "dynamic point lights serialize sorted by stable ID");
+    Check(saved["dynamicPointLights"][0]["instanceId"] == "light_point_5"
+                  && saved["dynamicPointLights"][1]["instanceId"] == "light_point_11",
+          "missing dynamic-light script IDs are generated deterministically on save");
     Check(saved["dynamicPointLights"][0].find("enabled") == saved["dynamicPointLights"][0].end(),
           "default enabled dynamic point light omits enabled field");
     Check(saved["dynamicPointLights"][1]["enabled"] == false,
@@ -715,6 +718,8 @@ void TestDynamicPointLightRoundTrip()
                       && std::fabs(light->position.y - 18.0f) <= 0.0001f
                       && std::fabs(light->position.z + 4.25f) <= 0.0001f,
               "round-tripped dynamic point light preserves authored position values");
+        Check(light->instanceId == "light_point_11",
+              "round-tripped dynamic point light preserves its generated script ID");
         Check(light->color.r == 255 && light->color.g == 120 && light->color.b == 64,
               "round-tripped dynamic point light preserves color");
         Check(std::fabs(light->intensity - 3.0f) <= 0.0001f
@@ -1525,6 +1530,10 @@ void TestRuntimeObjectsRoundTripAndValidation()
 
     SectorTopologyMap doorMap = MakeSquare();
     doorMap.runtimeObjects.push_back(MakeDoorRuntimeObject(30));
+    doorMap.runtimeObjects[0].door.instanceId = "main_door";
+    doorMap.runtimeObjects[0].door.useTitle = "airlock";
+    doorMap.runtimeObjects[0].door.canOpenScript = "canOpenAirlock";
+    doorMap.runtimeObjects[0].door.canCloseScript = "canCloseAirlock";
     doorMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].scale = {2.0f, 3.0f};
     doorMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].offset = {0.25f, 0.5f};
     doorMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Left)].scale = {4.0f, 5.0f};
@@ -1536,6 +1545,10 @@ void TestRuntimeObjectsRoundTripAndValidation()
           "door runtime object writes kind and nested door payload");
     const Json& savedDoor = doorSaved["runtimeObjects"][0]["door"];
     Check(savedDoor["anchor"]["lineDefId"].get<int>() == 2
+                  && savedDoor["instanceId"] == "main_door"
+                  && savedDoor["useTitle"] == "airlock"
+                  && savedDoor["canOpenScript"] == "canOpenAirlock"
+                  && savedDoor["canCloseScript"] == "canCloseAirlock"
                   && savedDoor["anchor"]["frontSectorId"].get<int>() == 1
                   && savedDoor["anchor"]["backSectorId"].get<int>() == 2
                   && savedDoor["anchor"]["frontSideDefId"].get<int>() == 2
@@ -1579,6 +1592,10 @@ void TestRuntimeObjectsRoundTripAndValidation()
     Check(loadedDoor != nullptr
                   && loadedDoor->kind == "door"
                   && loadedDoor->door.anchor.lineDefId == 2
+                  && loadedDoor->door.instanceId == "main_door"
+                  && loadedDoor->door.useTitle == "airlock"
+                  && loadedDoor->door.canOpenScript == "canOpenAirlock"
+                  && loadedDoor->door.canCloseScript == "canCloseAirlock"
                   && loadedDoor->door.anchor.frontSectorId == 1
                   && loadedDoor->door.anchor.backSectorId == 2
                   && loadedDoor->door.anchor.frontSideDefId == 2
@@ -1610,6 +1627,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
           "door payload round-trips authored fields and face UVs");
 
     Json oldDoorJson = doorSaved;
+    oldDoorJson["runtimeObjects"][0]["door"].erase("instanceId");
     oldDoorJson["runtimeObjects"][0]["door"].erase("faceUvs");
     oldDoorJson["runtimeObjects"][0]["door"].erase("heightOffsetWorld");
     SectorTopologyMap oldDoorLoaded;
@@ -1621,6 +1639,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && Near(loadedOldDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].scale, Vector2{1.0f, 1.0f})
                   && Near(loadedOldDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Bottom)].offset, Vector2{0.0f, 0.0f})
                   && loadedOldDoor->door.visual == game::SectorDoorVisualType::Procedural
+                  && loadedOldDoor->door.instanceId == "door_30"
                   && loadedOldDoor->door.modelAssetId.empty()
                   && loadedOldDoor->door.modelFit == game::SectorDoorModelFit::FitInside
                   && Near(loadedOldDoor->door.modelScale, 1.0f)
@@ -2007,6 +2026,10 @@ void TestDynamicModelRoundTripAndDefaultOmission()
     object.dynamicModel.loop = false;
     object.dynamicModel.animationSpeed = 1.25f;
     object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
+    object.dynamicModel.useTitle = "main lever";
+    object.dynamicModel.useDistance = 2.25f;
+    object.dynamicModel.onUseScript = "toggleMainLever";
+    object.dynamicModel.singleUse = true;
     map.runtimeObjects.push_back(object);
 
     const Json saved = Json::parse(SaveText(map));
@@ -2018,6 +2041,10 @@ void TestDynamicModelRoundTripAndDefaultOmission()
                   && !payload["loop"].get<bool>()
                   && Near(payload["animationSpeed"].get<float>(), 1.25f)
                   && payload["shadowMode"] == "dynamic"
+                  && payload["useTitle"] == "main lever"
+                  && Near(payload["useDistance"].get<float>(), 2.25f)
+                  && payload["onUseScript"] == "toggleMainLever"
+                  && payload["singleUse"].get<bool>()
                   && payload["collision"].get<bool>(),
           "dynamic prop writes model, animation, playback, shadow, and collision fields");
 
@@ -2034,6 +2061,10 @@ void TestDynamicModelRoundTripAndDefaultOmission()
                   && !roundTripped->dynamicModel.loop
                   && roundTripped->dynamicModel.shadowMode
                           == game::SectorDynamicModelShadowMode::Dynamic
+                  && roundTripped->dynamicModel.useTitle == "main lever"
+                  && Near(roundTripped->dynamicModel.useDistance, 2.25f)
+                  && roundTripped->dynamicModel.onUseScript == "toggleMainLever"
+                  && roundTripped->dynamicModel.singleUse
                   && Near(roundTripped->dynamicModel.animationSpeed, 1.25f)
                   && Near(roundTripped->dynamicModel.rotationXRadians, 0.25f)
                   && Near(roundTripped->dynamicModel.rotationZRadians, -0.5f),
@@ -2048,6 +2079,10 @@ void TestDynamicModelRoundTripAndDefaultOmission()
                   && !defaults.contains("animationSpeed")
                   && !defaults.contains("scale")
                   && !defaults.contains("shadowMode")
+                  && !defaults.contains("useTitle")
+                  && !defaults.contains("useDistance")
+                  && !defaults.contains("onUseScript")
+                  && !defaults.contains("singleUse")
                   && !defaults.contains("collision"),
           "dynamic prop default playback, shadow, and transform fields are omitted");
 

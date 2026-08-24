@@ -107,7 +107,15 @@ struct ScriptTask {
     ScriptOperationHandle waitingOperation{};
     bool stopRequested = false;
     bool lifecycleInitTask = false;
+    bool observeCompletion = false;
     std::string lastError;
+};
+
+struct ScriptObservedCallOutcome {
+    ScriptTaskHandle task{};
+    ScriptTaskState state = ScriptTaskState::Failed;
+    std::vector<ScriptValue> values;
+    std::string error;
 };
 
 struct ScriptOperation {
@@ -191,6 +199,7 @@ struct ScriptRuntime {
     std::vector<ScriptStartRequest> startScratch;
     size_t activeStartScratchIndex = static_cast<size_t>(-1);
     std::vector<ScriptCompletionRecord> completionScratch;
+    std::vector<ScriptObservedCallOutcome> observedCallOutcomes;
 
     bool mapChangeRequested = false;
     std::string requestedMapId;

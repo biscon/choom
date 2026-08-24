@@ -185,6 +185,7 @@ ScriptTaskHandle AllocateTask(ScriptRuntime& runtime)
     task.waitingOperation = {};
     task.stopRequested = false;
     task.lifecycleInitTask = false;
+    task.observeCompletion = false;
     task.lastError.clear();
     return ScriptTaskHandle{index, generation};
 }
@@ -212,6 +213,7 @@ void FreeTask(ScriptRuntime& runtime, ScriptTaskHandle handle)
     task->waitingOperation = {};
     task->stopRequested = false;
     task->lifecycleInitTask = false;
+    task->observeCompletion = false;
     task->lastError.clear();
     runtime.freeTaskSlots.push_back(handle.index);
 }
@@ -394,6 +396,18 @@ int FinishOperationWait(lua_State* state, int status, lua_KContext context)
     return lua_gettop(state) - originalTop;
 }
 
+void RecordObservedCallOutcome(
+        ScriptRuntime& runtime,
+        ScriptObservedCallOutcome outcome)
+{
+    if (runtime.observedCallOutcomes.size()
+            == runtime.observedCallOutcomes.capacity()) {
+        Log(runtime, "WARNING",
+                "observed call outcome capacity exceeded; scheduler allocation may occur");
+    }
+    runtime.observedCallOutcomes.push_back(std::move(outcome));
+}
+
 void ProcessResumeResult(
         ScriptRuntime& runtime,
         ScriptTaskHandle handle,
@@ -421,6 +435,10 @@ void ProcessResumeResult(
             MarkInitTerminal(runtime, false, task->lastError);
         }
         if (outError != nullptr) *outError = task->lastError;
+        if (task->observeCompletion && immediateValues == nullptr) {
+            RecordObservedCallOutcome(runtime, ScriptObservedCallOutcome{
+                    handle, ScriptTaskState::Failed, {}, task->lastError});
+        }
         Log(runtime, "ERROR", task->lastError);
         FreeTask(runtime, handle);
         return;
@@ -428,16 +446,21 @@ void ProcessResumeResult(
 
     if (status == LUA_OK) {
         bool valuesValid = true;
-        if (immediateValues != nullptr && resultCount > 0) {
+        std::vector<ScriptValue> observedValues;
+        std::vector<ScriptValue>* returnValues = immediateValues;
+        if (task->observeCompletion && immediateValues == nullptr) {
+            returnValues = &observedValues;
+        }
+        if (returnValues != nullptr && resultCount > 0) {
             const int first = lua_gettop(task->thread) - resultCount + 1;
-            immediateValues->reserve(static_cast<size_t>(resultCount));
+            returnValues->reserve(static_cast<size_t>(resultCount));
             for (int index = first; index <= lua_gettop(task->thread); ++index) {
                 ScriptValue value;
                 if (!ReadScriptValue(task->thread, index, value)) {
                     valuesValid = false;
                     break;
                 }
-                immediateValues->push_back(std::move(value));
+                returnValues->push_back(std::move(value));
             }
         }
         lua_settop(task->thread, 0);
@@ -456,6 +479,13 @@ void ProcessResumeResult(
             task->state = ScriptTaskState::Completed;
             if (task->lifecycleInitTask) MarkInitTerminal(runtime, true, {});
         }
+        if (task->observeCompletion && immediateValues == nullptr) {
+            RecordObservedCallOutcome(runtime, ScriptObservedCallOutcome{
+                    handle,
+                    task->state,
+                    std::move(observedValues),
+                    task->lastError});
+        }
         FreeTask(runtime, handle);
         return;
     }
@@ -465,6 +495,10 @@ void ProcessResumeResult(
             task->thread, runtime, task, "managed task failed");
     lua_settop(task->thread, 0);
     if (outError != nullptr) *outError = task->lastError;
+    if (task->observeCompletion && immediateValues == nullptr) {
+        RecordObservedCallOutcome(runtime, ScriptObservedCallOutcome{
+                handle, ScriptTaskState::Failed, {}, task->lastError});
+    }
     if (task->lifecycleInitTask) MarkInitTerminal(runtime, false, task->lastError);
     Log(runtime, "ERROR", task->lastError);
     FreeTask(runtime, handle);
@@ -474,7 +508,8 @@ ScriptCallOutcome StartManagedFunction(
         ScriptRuntime& runtime,
         const std::string& functionName,
         ScriptLaunchLane lane,
-        bool lifecycleInitTask)
+        bool lifecycleInitTask,
+        bool observeCompletion = false)
 {
     ScriptCallOutcome outcome;
     if (runtime.vm == nullptr
@@ -513,6 +548,7 @@ ScriptCallOutcome StartManagedFunction(
     task->lane = lane;
     task->functionName = functionName;
     task->lifecycleInitTask = lifecycleInitTask;
+    task->observeCompletion = observeCompletion;
 
     task->thread = lua_newthread(runtime.vm);
     task->threadRegistryRef = luaL_ref(runtime.vm, LUA_REGISTRYINDEX);
@@ -582,6 +618,13 @@ void CancelTaskNow(
         task->state = ScriptTaskState::Cancelled;
         if (task->lifecycleInitTask) {
             MarkInitTerminal(runtime, false, "init() was cancelled");
+        }
+        if (task->observeCompletion) {
+            RecordObservedCallOutcome(runtime, ScriptObservedCallOutcome{
+                    handle,
+                    ScriptTaskState::Cancelled,
+                    {},
+                    "script call was cancelled"});
         }
         FreeTask(runtime, handle);
     }
@@ -1015,6 +1058,7 @@ void PrepareRuntimeStorage(ScriptRuntime& runtime)
     runtime.taskScratch.reserve(InitialTaskCapacity);
     runtime.startScratch.reserve(InitialTaskCapacity);
     runtime.completionScratch.reserve(InitialOperationCapacity);
+    runtime.observedCallOutcomes.reserve(InitialTaskCapacity);
     runtime.timers.reserve(InitialOperationCapacity);
     runtime.taskByThread.reserve(InitialTaskCapacity);
     runtime.taskByName.reserve(InitialTaskCapacity);
@@ -1047,6 +1091,7 @@ void ResetRuntimeForCreate(ScriptRuntime& runtime)
     runtime.startScratch.clear();
     runtime.activeStartScratchIndex = static_cast<size_t>(-1);
     runtime.completionScratch.clear();
+    runtime.observedCallOutcomes.clear();
     runtime.timers.clear();
     runtime.mapChangeRequested = false;
     runtime.requestedMapId.clear();
@@ -1302,6 +1347,7 @@ void ScriptSystemShutdownForMap(
 
     runtime.pendingStarts.clear();
     runtime.pendingCompletions.clear();
+    runtime.observedCallOutcomes.clear();
     {
         std::lock_guard<std::mutex> lock(runtime.completionInboxMutex);
         runtime.completionInbox.clear();
@@ -1368,6 +1414,35 @@ ScriptCallOutcome ScriptSystemCallForegroundHook(
 {
     return StartManagedFunction(
             runtime, functionName, ScriptLaunchLane::Foreground, false);
+}
+
+ScriptCallOutcome ScriptSystemCallObservedForegroundHook(
+        ScriptRuntime& runtime,
+        const std::string& functionName)
+{
+    return StartManagedFunction(
+            runtime,
+            functionName,
+            ScriptLaunchLane::Foreground,
+            false,
+            true);
+}
+
+bool ScriptSystemTakeObservedCallOutcome(
+        ScriptRuntime& runtime,
+        ScriptTaskHandle task,
+        ScriptObservedCallOutcome& outOutcome)
+{
+    const auto found = std::find_if(
+            runtime.observedCallOutcomes.begin(),
+            runtime.observedCallOutcomes.end(),
+            [task](const ScriptObservedCallOutcome& outcome) {
+                return outcome.task == task;
+            });
+    if (found == runtime.observedCallOutcomes.end()) return false;
+    outOutcome = std::move(*found);
+    runtime.observedCallOutcomes.erase(found);
+    return true;
 }
 
 bool ScriptSystemQueueBackground(

@@ -988,7 +988,9 @@ void SpawnPlacedRuntimeObjects(
                     worldPosition,
                     object.currentSectorId,
                     &map));
-            world.Add(entity, SectorDoor{placedObject.id, true});
+            SectorDoor runtimeDoor{placedObject.id, true};
+            runtimeDoor.instanceId = placedObject.door.instanceId;
+            world.Add(entity, std::move(runtimeDoor));
             world.Add(entity, runtimeAnchor);
             world.Add(entity, runtimeMotion);
             world.Add(entity, SectorDoorOpenControl{});
@@ -1002,7 +1004,10 @@ void SpawnPlacedRuntimeObjects(
             world.Add(entity, SectorDoorInteraction{
                     placedObject.door.autoOpen,
                     placedObject.door.interactionDistance,
-                    placedObject.door.autoOpenDistance});
+                    placedObject.door.autoOpenDistance,
+                    placedObject.door.useTitle,
+                    placedObject.door.canOpenScript,
+                    placedObject.door.canCloseScript});
             world.Add(entity, runtimeRender);
             world.Add(entity, SectorDoorCollider{});
             world.Add(entity, SectorDoorPortalBlocker{
@@ -1261,7 +1266,12 @@ void SpawnPlacedRuntimeObjects(
                     false,
                     false,
                     1.0f,
-                    placedObject.dynamicModel.shadowMode});
+                    placedObject.dynamicModel.shadowMode,
+                    placedObject.dynamicModel.useTitle,
+                    placedObject.dynamicModel.useDistance,
+                    placedObject.dynamicModel.onUseScript,
+                    placedObject.dynamicModel.singleUse,
+                    false});
             engine::AnimatedModelInstance animatedModel{model};
             animatedModel.poseSource =
                     engine::AnimatedModelPoseSource::GltfScene;

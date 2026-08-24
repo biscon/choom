@@ -44,12 +44,14 @@
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
 #include "sector_demo/SectorSceneRuntime.h"
+#include "sector_demo/SectorUseInteraction.h"
 #include "sector_demo/SectorMaterialRegistry.h"
 #include "game/FpsWeaponRegistry.h"
 
 #include <raylib.h>
 
 #include <functional>
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -92,7 +94,10 @@ public:
     void RenderPreview3DScene(engine::EngineContext& context);
     void RenderPreview3DViewmodel(engine::AssetManager& assets);
     void RenderPreview3DOverlays();
-    void RenderPreview3DHud(Rectangle playableViewport) const;
+    void RenderPreview3DHud(
+            engine::AssetManager& assets,
+            engine::FontHandle usePromptFont,
+            Rectangle playableViewport) const;
     void ApplyPreview3DWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             bool collectGpuDiagnostics = false);
@@ -563,6 +568,8 @@ private:
     std::string applicationSettingsPath;
     std::string weaponRegistryPath;
     std::string weaponRegistryError;
+    SectorUseTarget previewUseTarget;
+    std::array<char, 128> previewUsePromptTitle{};
     engine::EngineContext* engineContext = nullptr;
     bool initialized = false;
 };

@@ -172,6 +172,7 @@ public:
             SectorLightAtmosphereSettings settings);
 
     bool SetDynamicLightEnabled(SectorTopologyDynamicPointLight& light, bool enabled);
+    bool SetDynamicLightInstanceId(SectorTopologyDynamicPointLight& light, const std::string& value, std::string& error);
     bool SetDynamicLightFlicker(SectorTopologyDynamicPointLight& light, bool flicker);
     bool SetDynamicLightFlickerSpeed(SectorTopologyDynamicPointLight& light, float flickerSpeed);
     bool SetDynamicLightFlickerAmount(SectorTopologyDynamicPointLight& light, float flickerAmount);
@@ -189,6 +190,7 @@ public:
             SectorLightAtmosphereSettings settings);
 
     bool SetDynamicSpotLightEnabled(SectorTopologyDynamicSpotLight& light, bool enabled);
+    bool SetDynamicLightInstanceId(SectorTopologyDynamicSpotLight& light, const std::string& value, std::string& error);
     bool SetDynamicSpotLightFlicker(SectorTopologyDynamicSpotLight& light, bool flicker);
     bool SetDynamicSpotLightFlickerSpeed(SectorTopologyDynamicSpotLight& light, float flickerSpeed);
     bool SetDynamicSpotLightFlickerAmount(SectorTopologyDynamicSpotLight& light, float flickerAmount);
@@ -221,6 +223,7 @@ public:
     bool SetStaticRectLightColor(SectorTopologyStaticRectLight& light, Color value);
     bool SetStaticRectLightAtmosphere(SectorTopologyStaticRectLight& light, SectorLightAtmosphereSettings value);
     bool SetDynamicRectLightPosition(SectorTopologyDynamicRectLight& light, Vector3 value);
+    bool SetDynamicLightInstanceId(SectorTopologyDynamicRectLight& light, const std::string& value, std::string& error);
     bool SetDynamicRectLightTarget(SectorTopologyDynamicRectLight& light, Vector3 value);
     bool PointDynamicRectLightDown(SectorTopologyDynamicRectLight& light);
     bool SetDynamicRectLightRoll(SectorTopologyDynamicRectLight& light, float value);

@@ -42,6 +42,7 @@ struct AnimatedModelAnimator {
     float speed = 1.0f;
     bool playing = true;
     bool loop = true;
+    bool reverse = false;
     bool finished = false;
     bool poseDirty = true;
 

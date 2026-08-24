@@ -598,6 +598,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/SectorUseInteraction.cpp
             sources/sector_demo/renderer/SectorImpactParticleSystem.cpp
             sources/sector_demo/SectorSwingDoorCatalog.cpp
             sources/sector_demo/SectorStaticModelCollision.cpp

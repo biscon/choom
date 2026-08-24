@@ -18,6 +18,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
+#include "sector_demo/SectorUseInteraction.h"
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -54,6 +55,69 @@ void Check(bool condition, const char* description)
         std::fprintf(stderr, "FAIL: %s\n", description);
         ++failures;
     }
+}
+
+void TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+
+    const engine::Entity propEntity = world.CreateEntity();
+    game::SectorDynamicModel prop;
+    prop.instanceId = "switch_1";
+    prop.useTitle = "switch";
+    prop.useDistance = 3.0f;
+    prop.onUseScript = "useSwitch";
+    world.Add(propEntity, prop);
+    world.Add(propEntity, game::SectorObjectTransform{
+            Vector3{2.0f, 0.0f, 0.0f}});
+    world.Add(propEntity, engine::AnimatedModelInstance{});
+
+    const engine::Entity doorEntity = world.CreateEntity();
+    world.Add(doorEntity, game::SectorDoor{2, true, "door_2"});
+    game::SectorDoorResolvedAnchor anchor;
+    anchor.endpointA = {2.0f, 0.5f};
+    anchor.endpointB = {2.0f, 1.5f};
+    anchor.openBottom = -1.0f;
+    anchor.openTop = 2.0f;
+    world.Add(doorEntity, anchor);
+    world.Add(doorEntity, game::SectorDoorInteraction{
+            false, 3.0f, 2.0f, "door"});
+
+    const game::SectorUseTarget centered = game::FindSectorUseTarget(
+            world,
+            nullptr,
+            Vector3{},
+            Vector3{1.0f, 0.0f, 0.0f},
+            nullptr,
+            true);
+    Check(centered.kind == game::SectorUseTargetKind::DynamicProp
+                  && centered.entity == propEntity,
+          "use targeting prefers the eligible prop closest to view center");
+    Check(game::SectorUseTargetTitle(world, centered) == "switch",
+          "use targeting exposes the authored presentation title");
+
+    world.Get<game::SectorDynamicModel>(propEntity).useConsumed = true;
+    const game::SectorUseTarget afterConsume = game::FindSectorUseTarget(
+            world,
+            nullptr,
+            Vector3{},
+            Vector3{1.0f, 0.0f, 0.0f},
+            nullptr,
+            true);
+    Check(afterConsume.kind == game::SectorUseTargetKind::Door
+                  && afterConsume.entity == doorEntity,
+          "consumed props are removed from use targeting");
+
+    const game::SectorUseTarget facingAway = game::FindSectorUseTarget(
+            world,
+            nullptr,
+            Vector3{},
+            Vector3{-1.0f, 0.0f, 0.0f},
+            nullptr,
+            true);
+    Check(facingAway.kind == game::SectorUseTargetKind::None,
+          "use targeting rejects objects outside the forward view cone");
 }
 
 bool Near(float actual, float expected, float epsilon = 0.00001f)
@@ -6206,6 +6270,19 @@ void TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose()
           "finished animated models hold their cached terminal pose without advancing again");
 
     animator = {};
+    animator.frame = 1.0f;
+    animator.playing = true;
+    animator.loop = false;
+    animator.reverse = true;
+    animator.poseDirty = false;
+    Check(engine::AdvanceAnimatedModelAnimator(animator, 10, 0.1f)
+                  && Near(animator.frame, 0.0f)
+                  && !animator.playing
+                  && animator.finished
+                  && animator.poseDirty,
+          "reverse non-looping animated models apply and hold their initial frame");
+
+    animator = {};
     animator.animationIndex = 0;
     animator.poseDirty = false;
     engine::SetAnimatedModelAnimation(animator, 1, 0.25f, true);
@@ -8588,6 +8665,7 @@ int main()
 {
     extern void RunSectorScriptBindingTests();
     RunSectorScriptBindingTests();
+    TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
     TestNpcVocalPriorityDelayAndShufflePolicy();
     TestSectorSpatialSoundOcclusion();
     TestResolveSectorDoorAnchorValidPortal();

@@ -2,6 +2,7 @@
 
 #include "engine/EngineContext.h"
 #include "engine/scripting/ScriptSystem.h"
+#include "engine/systems/AnimatedModelSystem.h"
 #include "game/navigation/SectorNavigationWorld.h"
 #include "game/npc/NpcNavigationSystem.h"
 #include "sector_demo/SectorDoorRuntime.h"
@@ -16,6 +17,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <string_view>
 
 namespace game {
 namespace {
@@ -85,6 +87,63 @@ engine::Entity FindPlacedObjectEntity(
     return found != objects.placedObjectEntities.end()
                     && world.IsAlive(found->entity)
             ? found->entity : engine::NullEntity();
+}
+
+engine::Entity FindDoorEntity(
+        engine::World& world,
+        std::string_view instanceId)
+{
+    engine::Entity found = engine::NullEntity();
+    world.ForEach<SectorDoor>(
+            [&](engine::Entity entity, SectorDoor& door) {
+                if (engine::IsNull(found) && door.instanceId == instanceId) {
+                    found = entity;
+                }
+            });
+    return found;
+}
+
+engine::Entity FindPropEntity(
+        engine::World& world,
+        std::string_view instanceId)
+{
+    engine::Entity found = engine::NullEntity();
+    world.ForEach<SectorDynamicModel>(
+            [&](engine::Entity entity, SectorDynamicModel& prop) {
+                if (engine::IsNull(found) && prop.instanceId == instanceId) {
+                    found = entity;
+                }
+            });
+    return found;
+}
+
+bool ReadDoorReference(
+        lua_State* state,
+        int argument,
+        engine::World& world,
+        const SectorRuntimeObjectState& objects,
+        int& placedObjectId)
+{
+    if (lua_type(state, argument) == LUA_TSTRING) {
+        size_t length = 0;
+        const char* value = lua_tolstring(state, argument, &length);
+        const engine::Entity entity = FindDoorEntity(
+                world, std::string_view{value, length});
+        if (engine::IsNull(entity)) {
+            luaL_argerror(state, argument, "door instance ID was not found");
+            return false;
+        }
+        placedObjectId = world.Get<SectorDoor>(entity).placedObjectId;
+        return true;
+    }
+    const lua_Integer rawId = luaL_checkinteger(state, argument);
+    if (rawId <= 0 || rawId > std::numeric_limits<int>::max()) {
+        luaL_argerror(state, argument, "door ID must be a positive integer or instance ID string");
+        return false;
+    }
+    placedObjectId = static_cast<int>(rawId);
+    (void)objects;
+    return true;
 }
 
 SectorScriptDoorMove* FindDoorMove(SectorScriptHost& host, uint64_t token)
@@ -522,16 +581,15 @@ void BindDoorOperation(
 
 bool ParseDoorMove(
         lua_State* state,
+        engine::World& world,
+        const SectorRuntimeObjectState& objects,
         int& placedObjectId,
         float& targetFraction,
         float& durationMs)
 {
-    const lua_Integer rawId = luaL_checkinteger(state, 1);
     const lua_Number rawTarget = luaL_checknumber(state, 2);
     const lua_Number rawDuration = luaL_checknumber(state, 3);
-    if (rawId <= 0 || rawId > std::numeric_limits<int>::max()) {
-        luaL_argerror(state, 1, "door ID must be a positive integer");
-    }
+    ReadDoorReference(state, 1, world, objects, placedObjectId);
     if (!std::isfinite(static_cast<double>(rawTarget))
             || rawTarget < 0.0 || rawTarget > 1.0) {
         luaL_argerror(state, 2, "target fraction must be between 0 and 1");
@@ -539,7 +597,6 @@ bool ParseDoorMove(
     if (!std::isfinite(static_cast<double>(rawDuration)) || rawDuration < 0.0) {
         luaL_argerror(state, 3, "duration must be finite and non-negative");
     }
-    placedObjectId = static_cast<int>(rawId);
     targetFraction = static_cast<float>(rawTarget);
     durationMs = static_cast<float>(rawDuration);
     return true;
@@ -551,11 +608,17 @@ int LuaMoveDoor(lua_State* state)
     int placedObjectId = 0;
     float targetFraction = 0.0f;
     float durationMs = 0.0f;
-    ParseDoorMove(state, placedObjectId, targetFraction, durationMs);
     engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
     const engine::ScriptTaskHandle task = engine::ScriptSystemCurrentTaskFromLua(state);
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     SectorScriptHost& host = HostFromLua(state);
+    ParseDoorMove(
+            state,
+            context.world,
+            *host.runtimeObjects,
+            placedObjectId,
+            targetFraction,
+            durationMs);
     const BeginDoorMoveResult begin = BeginDoorMove(
             context, host, placedObjectId, targetFraction, durationMs);
     if (!begin.started) {
@@ -585,7 +648,6 @@ int LuaStartMoveDoor(lua_State* state)
     int placedObjectId = 0;
     float targetFraction = 0.0f;
     float durationMs = 0.0f;
-    ParseDoorMove(state, placedObjectId, targetFraction, durationMs);
     engine::ScriptRuntime& scripts = engine::ScriptSystemRuntimeFromLua(state);
     if (scripts.phase != engine::ScriptRuntimePhase::Loading
             && scripts.phase != engine::ScriptRuntimePhase::Active) {
@@ -595,6 +657,13 @@ int LuaStartMoveDoor(lua_State* state)
     }
     engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
     SectorScriptHost& host = HostFromLua(state);
+    ParseDoorMove(
+            state,
+            context.world,
+            *host.runtimeObjects,
+            placedObjectId,
+            targetFraction,
+            durationMs);
     const BeginDoorMoveResult begin = BeginDoorMove(
             context, host, placedObjectId, targetFraction, durationMs);
     if (!begin.started) {
@@ -616,6 +685,321 @@ int LuaStartMoveDoor(lua_State* state)
         BindDoorOperation(host, begin.token, operation);
     }
     engine::ScriptSystemPushOperationUserdata(state, operation);
+    return 1;
+}
+
+int PushBindingError(lua_State* state, const std::string& error)
+{
+    lua_pushboolean(state, 0);
+    lua_pushlstring(state, error.data(), error.size());
+    return 2;
+}
+
+bool ResolvePropAnimation(
+        lua_State* state,
+        int nameArgument,
+        engine::World& world,
+        engine::AssetManager& assets,
+        engine::Entity& entity,
+        SectorDynamicModel*& prop,
+        engine::AnimatedModelInstance*& instance,
+        engine::AnimatedModelAnimator*& animator,
+        const engine::ModelAsset*& asset,
+        int& clipIndex,
+        std::string& error)
+{
+    size_t idLength = 0;
+    const char* rawId = luaL_checklstring(state, 1, &idLength);
+    entity = FindPropEntity(world, std::string_view{rawId, idLength});
+    if (engine::IsNull(entity)
+            || !world.Has<engine::AnimatedModelInstance>(entity)
+            || !world.Has<engine::AnimatedModelAnimator>(entity)) {
+        error = "dynamic prop not found: " + std::string{rawId, idLength};
+        return false;
+    }
+    prop = &world.Get<SectorDynamicModel>(entity);
+    instance = &world.Get<engine::AnimatedModelInstance>(entity);
+    animator = &world.Get<engine::AnimatedModelAnimator>(entity);
+    asset = assets.GetModelAsset(instance->model);
+    if (asset == nullptr) {
+        error = "dynamic prop model is not ready";
+        return false;
+    }
+    if (!lua_isnoneornil(state, nameArgument)) {
+        const char* name = luaL_checkstring(state, nameArgument);
+        clipIndex = engine::FindModelAnimationClipIndex(*asset, name);
+        if (clipIndex < 0) {
+            error = "animation was not found: " + std::string{name};
+            return false;
+        }
+    } else if (animator->nodeAnimationIndex != engine::InvalidModelAnimationIndex) {
+        clipIndex = static_cast<int>(animator->nodeAnimationIndex);
+    } else if (animator->animationIndex != engine::InvalidModelAnimationIndex) {
+        clipIndex = static_cast<int>(animator->animationIndex);
+    } else {
+        error = "dynamic prop has no selected animation";
+        return false;
+    }
+    return true;
+}
+
+int LuaPlayPropAnimation(lua_State* state)
+{
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    engine::Entity entity;
+    SectorDynamicModel* prop = nullptr;
+    engine::AnimatedModelInstance* instance = nullptr;
+    engine::AnimatedModelAnimator* animator = nullptr;
+    const engine::ModelAsset* asset = nullptr;
+    int clipIndex = -1;
+    std::string error;
+    if (!ResolvePropAnimation(
+            state, 2, context.world, context.assets, entity, prop,
+            instance, animator, asset, clipIndex, error)) {
+        return PushBindingError(state, error);
+    }
+    std::string_view mode = "once";
+    if (!lua_isnoneornil(state, 3)) {
+        size_t length = 0;
+        const char* rawMode = luaL_checklstring(state, 3, &length);
+        mode = std::string_view{rawMode, length};
+    }
+    const bool loop = mode == "loop" || mode == "loop_reverse";
+    const bool reverse = mode == "once_reverse" || mode == "loop_reverse";
+    if (mode != "once" && mode != "once_reverse"
+            && mode != "loop" && mode != "loop_reverse") {
+        return luaL_argerror(
+                state, 3,
+                "mode must be 'once', 'once_reverse', 'loop', or 'loop_reverse'");
+    }
+    if (!engine::SetAnimatedModelClip(
+            *animator, *asset, static_cast<uint32_t>(clipIndex), true)) {
+        return PushBindingError(state, "animation could not be selected");
+    }
+    const int keyframeCount = engine::ModelAnimationClipKeyframeCount(
+            *asset, static_cast<size_t>(clipIndex));
+    animator->loop = loop;
+    animator->reverse = reverse;
+    animator->frame = reverse && keyframeCount > 0
+            ? static_cast<float>(keyframeCount - 1) : 0.0f;
+    animator->playing = true;
+    animator->finished = false;
+    animator->poseDirty = true;
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaPausePropAnimation(lua_State* state)
+{
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    const engine::Entity entity = FindPropEntity(
+            context.world, std::string_view{rawId, length});
+    if (engine::IsNull(entity)
+            || !context.world.Has<engine::AnimatedModelAnimator>(entity)) {
+        return PushBindingError(state, "dynamic prop was not found");
+    }
+    context.world.Get<engine::AnimatedModelAnimator>(entity).playing = false;
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaResumePropAnimation(lua_State* state)
+{
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    const engine::Entity entity = FindPropEntity(
+            context.world, std::string_view{rawId, length});
+    if (engine::IsNull(entity)
+            || !context.world.Has<engine::AnimatedModelAnimator>(entity)) {
+        return PushBindingError(state, "dynamic prop was not found");
+    }
+    engine::AnimatedModelAnimator& animator =
+            context.world.Get<engine::AnimatedModelAnimator>(entity);
+    animator.playing = true;
+    animator.finished = false;
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaStopPropAnimation(lua_State* state)
+{
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    const engine::Entity entity = FindPropEntity(
+            context.world, std::string_view{rawId, length});
+    if (engine::IsNull(entity)
+            || !context.world.Has<engine::AnimatedModelAnimator>(entity)) {
+        return PushBindingError(state, "dynamic prop was not found");
+    }
+    engine::AnimatedModelAnimator& animator =
+            context.world.Get<engine::AnimatedModelAnimator>(entity);
+    animator.playing = false;
+    animator.finished = false;
+    animator.reverse = false;
+    animator.frame = 0.0f;
+    animator.poseDirty = true;
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaSetPropAnimationProgress(lua_State* state)
+{
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    const lua_Number rawProgress = luaL_checknumber(state, 2);
+    if (!std::isfinite(static_cast<double>(rawProgress))
+            || rawProgress < 0.0 || rawProgress > 1.0) {
+        return luaL_argerror(state, 2, "progress must be between 0 and 1");
+    }
+    engine::Entity entity;
+    SectorDynamicModel* prop = nullptr;
+    engine::AnimatedModelInstance* instance = nullptr;
+    engine::AnimatedModelAnimator* animator = nullptr;
+    const engine::ModelAsset* asset = nullptr;
+    int clipIndex = -1;
+    std::string error;
+    if (!ResolvePropAnimation(
+            state, 3, context.world, context.assets, entity, prop,
+            instance, animator, asset, clipIndex, error)) {
+        return PushBindingError(state, error);
+    }
+    if (!lua_isnoneornil(state, 3)
+            && !engine::SetAnimatedModelClip(
+                    *animator, *asset, static_cast<uint32_t>(clipIndex), true)) {
+        return PushBindingError(state, "animation could not be selected");
+    }
+    const int keyframeCount = engine::ModelAnimationClipKeyframeCount(
+            *asset, static_cast<size_t>(clipIndex));
+    if (keyframeCount <= 0) {
+        return PushBindingError(state, "animation has no keyframes");
+    }
+    animator->frame = static_cast<float>(rawProgress)
+            * static_cast<float>(keyframeCount - 1);
+    animator->playing = false;
+    animator->finished = rawProgress >= 1.0;
+    animator->poseDirty = true;
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaSetDoorTarget(lua_State* state, int requestedTarget)
+{
+    engine::EngineContext& context = engine::ScriptSystemEngineFromLua(state);
+    SectorScriptHost& host = HostFromLua(state);
+    int placedObjectId = 0;
+    ReadDoorReference(
+            state, 1, context.world, *host.runtimeObjects, placedObjectId);
+    const engine::Entity entity = FindPlacedObjectEntity(
+            *host.runtimeObjects, context.world, placedObjectId);
+    if (engine::IsNull(entity)
+            || !context.world.Has<SectorDoor>(entity)
+            || !context.world.Has<SectorDoorMotion>(entity)) {
+        return PushBindingError(state, "door was not found");
+    }
+    if (!context.world.Get<SectorDoor>(entity).enabled) {
+        return PushBindingError(state, "door is disabled");
+    }
+    if (DoorMoveAlreadyActive(host, placedObjectId)) {
+        return PushBindingError(state, "door already has a scripted move");
+    }
+    SectorDoorMotion& motion = context.world.Get<SectorDoorMotion>(entity);
+    float target = static_cast<float>(requestedTarget);
+    if (requestedTarget < 0) {
+        target = motion.targetOpenFraction > 0.5f
+                        || motion.openFraction > 0.5f
+                ? 0.0f : 1.0f;
+    }
+    motion.targetOpenFraction = target;
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaOpenDoor(lua_State* state) { return LuaSetDoorTarget(state, 1); }
+int LuaCloseDoor(lua_State* state) { return LuaSetDoorTarget(state, 0); }
+int LuaToggleDoor(lua_State* state) { return LuaSetDoorTarget(state, -1); }
+
+template <typename Callback>
+bool MutateDynamicLight(
+        SectorTopologyMap& map,
+        std::string_view id,
+        Callback callback)
+{
+    for (SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
+        if (light.instanceId == id) { callback(light); return true; }
+    }
+    for (SectorTopologyDynamicSpotLight& light : map.dynamicSpotLights) {
+        if (light.instanceId == id) { callback(light); return true; }
+    }
+    for (SectorTopologyDynamicRectLight& light : map.dynamicRectLights) {
+        if (light.instanceId == id) { callback(light); return true; }
+    }
+    return false;
+}
+
+int LuaSetDynamicLightEnabled(lua_State* state)
+{
+    SectorScriptHost& host = HostFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    luaL_checktype(state, 2, LUA_TBOOLEAN);
+    const bool enabled = lua_toboolean(state, 2) != 0;
+    if (host.map == nullptr || !MutateDynamicLight(
+            *host.map, std::string_view{rawId, length},
+            [enabled](auto& light) { light.enabled = enabled; })) {
+        return PushBindingError(state, "dynamic light was not found");
+    }
+    host.dynamicLightsDirty = true;
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaSetDynamicLightIntensity(lua_State* state)
+{
+    SectorScriptHost& host = HostFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    const lua_Number rawIntensity = luaL_checknumber(state, 2);
+    if (!std::isfinite(static_cast<double>(rawIntensity)) || rawIntensity < 0.0) {
+        return luaL_argerror(state, 2, "intensity must be finite and non-negative");
+    }
+    const float intensity = static_cast<float>(rawIntensity);
+    if (host.map == nullptr || !MutateDynamicLight(
+            *host.map, std::string_view{rawId, length},
+            [intensity](auto& light) { light.intensity = intensity; })) {
+        return PushBindingError(state, "dynamic light was not found");
+    }
+    host.dynamicLightsDirty = true;
+    lua_pushboolean(state, 1);
+    return 1;
+}
+
+int LuaSetDynamicLightColor(lua_State* state)
+{
+    SectorScriptHost& host = HostFromLua(state);
+    size_t length = 0;
+    const char* rawId = luaL_checklstring(state, 1, &length);
+    const lua_Integer red = luaL_checkinteger(state, 2);
+    const lua_Integer green = luaL_checkinteger(state, 3);
+    const lua_Integer blue = luaL_checkinteger(state, 4);
+    if (red < 0 || red > 255 || green < 0 || green > 255
+            || blue < 0 || blue > 255) {
+        return luaL_error(state, "light color channels must be between 0 and 255");
+    }
+    const Color color{
+            static_cast<unsigned char>(red),
+            static_cast<unsigned char>(green),
+            static_cast<unsigned char>(blue),
+            255};
+    if (host.map == nullptr || !MutateDynamicLight(
+            *host.map, std::string_view{rawId, length},
+            [color](auto& light) { light.color = color; })) {
+        return PushBindingError(state, "dynamic light was not found");
+    }
+    host.dynamicLightsDirty = true;
+    lua_pushboolean(state, 1);
     return 1;
 }
 
@@ -710,6 +1094,8 @@ void InitializeSectorScriptHost(
     host.npcMoves.reserve(navigation != nullptr
             ? navigation->Capacities().agentCapacity : 64);
     host.npcMoveDiagnostics = {};
+    host.doorPermission = {};
+    host.dynamicLightsDirty = false;
     host.triggers.clear();
     host.triggers.reserve(map.triggers.size());
     std::vector<size_t> triggerIndices(map.triggers.size());
@@ -732,17 +1118,117 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.doorMoves.clear();
     host.npcMoves.clear();
     host.triggers.clear();
+    host.doorPermission = {};
+    host.dynamicLightsDirty = false;
 }
 
 void RegisterSectorScriptBindings(lua_State* state)
 {
     Register(state, "moveDoor", LuaMoveDoor);
     Register(state, "startMoveDoor", LuaStartMoveDoor);
+    Register(state, "openDoor", LuaOpenDoor);
+    Register(state, "closeDoor", LuaCloseDoor);
+    Register(state, "toggleDoor", LuaToggleDoor);
+    Register(state, "playPropAnimation", LuaPlayPropAnimation);
+    Register(state, "pausePropAnimation", LuaPausePropAnimation);
+    Register(state, "resumePropAnimation", LuaResumePropAnimation);
+    Register(state, "stopPropAnimation", LuaStopPropAnimation);
+    Register(state, "setPropAnimationProgress", LuaSetPropAnimationProgress);
+    Register(state, "setDynamicLightEnabled", LuaSetDynamicLightEnabled);
+    Register(state, "setDynamicLightIntensity", LuaSetDynamicLightIntensity);
+    Register(state, "setDynamicLightColor", LuaSetDynamicLightColor);
     Register(state, "moveNpc", LuaMoveNpc);
     Register(state, "startMoveNpc", LuaStartMoveNpc);
     Register(state, "changeMap", LuaChangeMap);
     Register(state, "enableTrigger", LuaEnableTrigger);
     Register(state, "disableTrigger", LuaDisableTrigger);
+}
+
+bool ReturnedTrue(const std::vector<engine::ScriptValue>& values)
+{
+    return !values.empty()
+            && std::holds_alternative<bool>(values.front())
+            && std::get<bool>(values.front());
+}
+
+bool RequestSectorScriptDoorUse(
+        engine::EngineContext& context,
+        SectorScriptHost& host,
+        engine::Entity doorEntity)
+{
+    if (host.scripts == nullptr || host.doorPermission.active
+            || !context.world.IsAlive(doorEntity)
+            || !context.world.Has<SectorDoor>(doorEntity)
+            || !context.world.Has<SectorDoorMotion>(doorEntity)
+            || !context.world.Has<SectorDoorInteraction>(doorEntity)) {
+        return false;
+    }
+    const SectorDoor& door = context.world.Get<SectorDoor>(doorEntity);
+    SectorDoorMotion& motion = context.world.Get<SectorDoorMotion>(doorEntity);
+    const SectorDoorInteraction& interaction =
+            context.world.Get<SectorDoorInteraction>(doorEntity);
+    if (!door.enabled || interaction.autoOpen) return false;
+    const float target = motion.targetOpenFraction > 0.5f
+                    || motion.openFraction > 0.5f
+            ? 0.0f : 1.0f;
+    const std::string& callback = target > 0.5f
+            ? interaction.canOpenScript : interaction.canCloseScript;
+    if (callback.empty()) {
+        motion.targetOpenFraction = target;
+        return true;
+    }
+    engine::ScriptCallOutcome outcome =
+            engine::ScriptSystemCallObservedForegroundHook(
+                    *host.scripts, callback);
+    if (outcome.result == engine::ScriptCallResult::Completed) {
+        if (ReturnedTrue(outcome.immediateValues)) {
+            motion.targetOpenFraction = target;
+        }
+    } else if (outcome.result == engine::ScriptCallResult::Started) {
+        host.doorPermission = SectorScriptDoorPermission{
+                outcome.task, doorEntity, target, true};
+    } else if (outcome.result == engine::ScriptCallResult::Missing) {
+        TraceLog(
+                LOG_WARNING,
+                "[Lua WARNING] door '%s' has no callable permission function '%s'",
+                door.instanceId.c_str(),
+                callback.c_str());
+    } else if (outcome.result == engine::ScriptCallResult::Error) {
+        TraceLog(
+                LOG_ERROR,
+                "[Lua ERROR] door '%s' permission function '%s' failed: %s",
+                door.instanceId.c_str(),
+                callback.c_str(),
+                outcome.error.c_str());
+    }
+    return true;
+}
+
+void UpdateSectorScriptDoorPermission(
+        engine::EngineContext& context,
+        SectorScriptHost& host)
+{
+    if (!host.doorPermission.active || host.scripts == nullptr) return;
+    engine::ScriptObservedCallOutcome outcome;
+    if (!engine::ScriptSystemTakeObservedCallOutcome(
+            *host.scripts, host.doorPermission.task, outcome)) {
+        return;
+    }
+    if (outcome.state == engine::ScriptTaskState::Completed
+            && ReturnedTrue(outcome.values)
+            && context.world.IsAlive(host.doorPermission.entity)
+            && context.world.Has<SectorDoor>(host.doorPermission.entity)
+            && context.world.Has<SectorDoorMotion>(host.doorPermission.entity)
+            && context.world.Get<SectorDoor>(host.doorPermission.entity).enabled) {
+        context.world.Get<SectorDoorMotion>(host.doorPermission.entity)
+                .targetOpenFraction = host.doorPermission.targetOpenFraction;
+    } else if (outcome.state == engine::ScriptTaskState::Failed) {
+        TraceLog(
+                LOG_ERROR,
+                "[Lua ERROR] door permission callback failed: %s",
+                outcome.error.c_str());
+    }
+    host.doorPermission = {};
 }
 
 void UpdateSectorScriptOperations(

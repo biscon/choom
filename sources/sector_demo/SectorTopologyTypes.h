@@ -283,6 +283,7 @@ struct SectorTopologyDynamicPointLight {
     float shadowBias = DynamicSpotLightDefaultShadowBias;
     float shadowStrength = DynamicSpotLightDefaultShadowStrength;
     float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
+    std::string instanceId;
 };
 
 struct SectorTopologyDynamicSpotLight {
@@ -304,6 +305,7 @@ struct SectorTopologyDynamicSpotLight {
     float shadowStrength = DynamicSpotLightDefaultShadowStrength;
     float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
     SectorLightAtmosphereSettings atmosphere;
+    std::string instanceId;
 };
 
 struct SectorTopologyDynamicRectLight {
@@ -326,6 +328,7 @@ struct SectorTopologyDynamicRectLight {
     float shadowStrength = DynamicSpotLightDefaultShadowStrength;
     float shadowSoftness = DynamicSpotLightDefaultShadowSoftness;
     SectorLightAtmosphereSettings atmosphere;
+    std::string instanceId;
 };
 
 enum class SectorTopologyValidationSeverity {

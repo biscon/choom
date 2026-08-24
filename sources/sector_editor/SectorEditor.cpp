@@ -55,6 +55,7 @@
 #include <raymath.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -616,23 +617,50 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         const bool canInteractWithDoors = previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
                 && previewState.controller.freeflyController.mouseLookEnabled
                 && !uiState.keyboardCaptured;
+        UpdatePreview3D(input, assets, dt);
+        previewUseTarget = {};
+        previewUsePromptTitle = {};
         if (canInteractWithDoors) {
+            const SectorViewPose pose = SectorFpsControllerPose(
+                    previewState.controller.fpsControllerState,
+                    previewState.controller.fpsControllerConfig);
+            previewUseTarget = FindSectorUseTarget(
+                    context.world,
+                    &assets,
+                    pose.position,
+                    PreviewForwardFromPose(pose),
+                    previewState.collision.sectorCollisionWorldValid
+                            ? &previewState.collision.sectorCollisionWorld : nullptr,
+                    false);
+            const std::string_view title = SectorUseTargetTitle(
+                    context.world, previewUseTarget);
+            if (!title.empty()) {
+                std::snprintf(
+                        previewUsePromptTitle.data(),
+                        previewUsePromptTitle.size(),
+                        "%.*s",
+                        static_cast<int>(title.size()),
+                        title.data());
+            }
             input.ForEachEvent(
                     engine::InputEventType::KeyPressed,
                     true,
                     [this, &context](engine::InputEvent& event) {
-                        if (event.key.key != KEY_F) {
+                        if (event.key.key != KEY_E
+                                || previewUseTarget.kind != SectorUseTargetKind::Door
+                                || !context.world.IsAlive(previewUseTarget.entity)
+                                || !context.world.Has<SectorDoorMotion>(previewUseTarget.entity)) {
                             return;
                         }
-                        if (ToggleTargetedSectorDoorInteractionSystem(
-                                    context.world,
-                                    previewState.controller.freeflyController.pose.position,
-                                    PreviewForwardFromPose(previewState.controller.freeflyController.pose))) {
-                            engine::ConsumeEvent(event);
-                        }
+                        SectorDoorMotion& motion = context.world.Get<SectorDoorMotion>(
+                                previewUseTarget.entity);
+                        motion.targetOpenFraction =
+                                motion.targetOpenFraction > 0.5f
+                                        || motion.openFraction > 0.5f
+                                ? 0.0f : 1.0f;
+                        engine::ConsumeEvent(event);
                     });
         }
-        UpdatePreview3D(input, assets, dt);
         if (state.mode == SectorEditorMode::Preview3D) {
             if (ProcessFpsWeaponFire(input)) {
                 ApplyGameplayPoseToPreview();
@@ -4002,7 +4030,10 @@ void SectorEditor::RenderPreview3DOverlays()
     }
 }
 
-void SectorEditor::RenderPreview3DHud(Rectangle playableViewport) const
+void SectorEditor::RenderPreview3DHud(
+        engine::AssetManager& assets,
+        engine::FontHandle usePromptFont,
+        Rectangle playableViewport) const
 {
     if (state.mode == SectorEditorMode::Preview3D) {
         fpsPlayer.RenderHud(
@@ -4010,6 +4041,10 @@ void SectorEditor::RenderPreview3DHud(Rectangle playableViewport) const
                 weaponEditorState.open
                         ? weaponEditorState.draftRegistry
                         : weaponRegistry);
+        DrawSectorUsePrompt(
+                playableViewport,
+                assets.GetFont(usePromptFont),
+                previewUsePromptTitle.data());
     }
 }
 

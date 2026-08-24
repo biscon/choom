@@ -13,6 +13,10 @@ struct InspectorIdUiState {
     char selectedLightIdBuffer[64] = {};
     int idBufferLightIndex = -1;
     std::string idEditError;
+    char dynamicLightInstanceIdBuffer[64] = {};
+    int dynamicLightInstanceIdNumericId = -1;
+    int dynamicLightInstanceIdKind = -1;
+    std::string dynamicLightInstanceIdError;
 };
 
 struct ReflectionProbeEditingUiState {

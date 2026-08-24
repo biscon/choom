@@ -396,6 +396,38 @@ bool SectorEditorRuntimeObjectEditingService::SetSelectedDynamicModelInstanceId(
             });
 }
 
+bool SectorEditorRuntimeObjectEditingService::SetSelectedDoorInstanceId(
+        const std::string& instanceId,
+        std::string& outError)
+{
+    const SectorPlacedRuntimeObject* selected = SelectedObject();
+    if (selected == nullptr || selected->kind != "door") {
+        outError = "No door is selected";
+        return false;
+    }
+    if (!IsValidSectorScriptInstanceId(instanceId)) {
+        outError =
+                "Instance ID must contain 1-63 letters, digits, underscores, or dashes";
+        return false;
+    }
+    for (const SectorPlacedRuntimeObject& object : context_.map.runtimeObjects) {
+        if (object.id != selected->id && object.kind == "door"
+                && object.door.instanceId == instanceId) {
+            outError = "Instance ID must be unique among doors in this map";
+            return false;
+        }
+    }
+    outError.clear();
+    if (selected->door.instanceId == instanceId) return true;
+    return MutateSelected(
+            "Updated door instance ID",
+            [&instanceId](SectorPlacedRuntimeObject& object) {
+                if (object.kind != "door") return false;
+                object.door.instanceId = instanceId;
+                return true;
+            });
+}
+
 bool SectorEditorRuntimeObjectEditingService::SelectedDoorRuntimeTargetOpen(
         bool& outOpen) const
 {
