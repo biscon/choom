@@ -41,6 +41,8 @@
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
+#include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
+#include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingState.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
 #include "sector_demo/SectorSceneRuntime.h"
@@ -551,6 +553,9 @@ private:
     SectorEditorAuthoringFaceMergeState authoringFaceMergeState;
     std::optional<SectorEditorAuthoringFaceMergeService> authoringFaceMergeService;
     std::optional<SectorEditorLevelMarkerEditingService> levelMarkerEditingService;
+    SoundEmitterEditingState soundEmitterEditingState;
+    SoundEmitterEditingUiState soundEmitterEditingUiState;
+    std::optional<SectorEditorSoundEmitterEditingService> soundEmitterEditingService;
     TriggerEditingState triggerEditingState;
     TriggerEditingUiState triggerEditingUiState;
     std::optional<SectorEditorTriggerEditingService> triggerEditingService;

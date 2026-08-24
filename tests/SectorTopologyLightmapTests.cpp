@@ -1755,13 +1755,19 @@ void TestSourceHashChanges()
           "hash ignores NPC-to-NPC collision policy");
 
     game::SectorTopologyMap changedAudio = base;
-    changedAudio.audioSettings.musicPath = "music/level_theme.ogg";
-    changedAudio.audioSettings.musicVolume = 0.35f;
+    changedAudio.audioSettings.roomtoneFadeMilliseconds = 1750;
     changedAudio.audioSettings.soundsById.emplace(
             "door_open", game::SectorSoundDefinition{
                     "door_open", "shared/door_open.wav", game::SectorSoundType::Sound});
+    changedAudio.sectors[0].roomtone.mode = game::SectorRoomtoneMode::Play;
+    changedAudio.sectors[0].roomtone.soundId = "ambient_stream";
+    changedAudio.sectors[0].roomtone.volume = 0.4f;
+    changedAudio.sectors[0].roomtone.fadeMilliseconds = 2500;
+    changedAudio.soundEmitters.push_back(game::SectorCompiledSoundEmitter{
+            9, "machine_hum", Vector3{1.0f, 2.0f, 3.0f},
+            "door_open", 0.7f, true});
     Check(game::ComputeSectorLightmapSourceHash(changedAudio) == hash,
-          "hash ignores runtime-only audio settings");
+          "hash ignores roomtones, sound emitters, and other runtime-only audio settings");
 
     game::SectorTopologyMap changedSky = base;
     changedSky.skySettings.materialId = "storm_panorama";

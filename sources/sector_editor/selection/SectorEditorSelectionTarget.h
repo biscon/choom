@@ -21,6 +21,7 @@ enum class SectorEditorSelectionTargetKind {
     AuthoringFogVolume,
     AuthoringReflectionProbe,
     AuthoringLevelMarker,
+    AuthoringSoundEmitter,
     AuthoringTrigger,
     RuntimeObject,
     StaticLight,
@@ -66,6 +67,7 @@ inline bool IsTopologyTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
         case SectorEditorSelectionTargetKind::AuthoringReflectionProbe:
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
+        case SectorEditorSelectionTargetKind::AuthoringSoundEmitter:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
         case SectorEditorSelectionTargetKind::RuntimeObject:
         case SectorEditorSelectionTargetKind::StaticLight:
@@ -87,6 +89,7 @@ inline bool IsAuthoringTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
         case SectorEditorSelectionTargetKind::AuthoringReflectionProbe:
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
+        case SectorEditorSelectionTargetKind::AuthoringSoundEmitter:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
             return target.id >= 0;
         case SectorEditorSelectionTargetKind::None:
@@ -134,6 +137,7 @@ inline bool IsLightTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
         case SectorEditorSelectionTargetKind::AuthoringReflectionProbe:
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
+        case SectorEditorSelectionTargetKind::AuthoringSoundEmitter:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
         case SectorEditorSelectionTargetKind::RuntimeObject:
         case SectorEditorSelectionTargetKind::PreviewSurface:

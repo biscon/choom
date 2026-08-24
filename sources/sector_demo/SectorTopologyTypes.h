@@ -12,6 +12,22 @@
 
 namespace game {
 
+enum class SectorRoomtoneMode {
+    Inherit,
+    Play,
+    Silence
+};
+
+struct SectorRoomtoneSettings {
+    static constexpr float DefaultVolume = 0.6f;
+    static constexpr int UseMapFadeMilliseconds = -1;
+
+    SectorRoomtoneMode mode = SectorRoomtoneMode::Inherit;
+    std::string soundId;
+    float volume = DefaultVolume;
+    int fadeMilliseconds = UseMapFadeMilliseconds;
+};
+
 constexpr float DynamicLightFlickerBaseRateHz = 8.0f;
 constexpr float DynamicLightFlickerTransitionFraction = 0.18f;
 constexpr float DynamicLightFlickerDefaultSpeed = 1.0f;
@@ -159,6 +175,7 @@ struct SectorTopologySector {
     // Empty uses the application-wide default footstep set.
     std::string footstepSet;
     bool ceilingSky = false;
+    SectorRoomtoneSettings roomtone;
 
     SectorTopologyUvSettings floorUv;
     SectorTopologyUvSettings ceilingUv;
@@ -344,7 +361,8 @@ enum class SectorTopologyObjectKind {
     Sector,
     StaticLight,
     DynamicLight,
-    LevelMarker
+    LevelMarker,
+    SoundEmitter
 };
 
 struct SectorTopologyValidationIssue {

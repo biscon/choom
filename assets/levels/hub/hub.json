@@ -5334,8 +5334,7 @@
     "brightness": 0.75
   },
   "audio": {
-    "music": "ambience/horror_ambience.wav",
-    "musicVolume": 1.0,
+    "roomtoneFadeMilliseconds": 3000,
     "sounds": {
       "door_close_01": {
         "path": "doors/door_close_01.mp3",
@@ -5348,6 +5347,18 @@
       "door_open_01": {
         "path": "doors/door_open_01.mp3",
         "type": "sound"
+      },
+      "horror_ambience": {
+        "path": "ambience/horror_ambience.ogg",
+        "type": "music"
+      },
+      "roomtone_02": {
+        "path": "ambience/room-tone-1.mp3",
+        "type": "music"
+      },
+      "roomtone_03": {
+        "path": "ambience/big-room-ambience-3.mp3",
+        "type": "music"
       },
       "slidingdoor_03": {
         "path": "doors/SlidingDoor_03.wav",
@@ -17402,6 +17413,10 @@
               0.0
             ]
           }
+        },
+        "roomtone": {
+          "mode": "play",
+          "soundId": "horror_ambience"
         }
       },
       {
@@ -19150,7 +19165,11 @@
             ]
           }
         },
-        "footstepSet": "PavementTiles_Mono"
+        "footstepSet": "PavementTiles_Mono",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "horror_ambience"
+        }
       },
       {
         "id": 24,
@@ -19227,7 +19246,12 @@
             ]
           }
         },
-        "footstepSet": "Parquet_Floor_Mono"
+        "footstepSet": "Parquet_Floor_Mono",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "roomtone_02",
+          "volume": 1.0
+        }
       },
       {
         "id": 25,
@@ -19380,7 +19404,11 @@
             ]
           }
         },
-        "footstepSet": "LowMetal_Mono"
+        "footstepSet": "LowMetal_Mono",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "horror_ambience"
+        }
       },
       {
         "id": 27,
@@ -19912,6 +19940,11 @@
               0.0
             ]
           }
+        },
+        "roomtone": {
+          "mode": "play",
+          "soundId": "roomtone_03",
+          "volume": 0.75
         }
       },
       {
@@ -20675,7 +20708,11 @@
             ]
           }
         },
-        "footstepSet": "PavementTiles_Mono"
+        "footstepSet": "PavementTiles_Mono",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "roomtone_03"
+        }
       },
       {
         "id": 44,
@@ -21290,7 +21327,12 @@
             ]
           }
         },
-        "footstepSet": "BootsLinoleum"
+        "footstepSet": "BootsLinoleum",
+        "roomtone": {
+          "mode": "play",
+          "soundId": "roomtone_02",
+          "volume": 1.0
+        }
       },
       {
         "id": 52,

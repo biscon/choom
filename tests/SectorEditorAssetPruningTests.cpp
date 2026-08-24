@@ -46,7 +46,15 @@ void TestPruneKeepsAllReferenceKindsAndDefaults()
     anchor.defaultLower.decal.materialId = "default_lower_decal";
     anchor.defaultUpper.materialId = "default_upper";
     anchor.defaultUpper.decal.materialId = "default_upper_decal";
+    anchor.roomtone.mode = game::SectorRoomtoneMode::Play;
+    anchor.roomtone.soundId = "office_roomtone";
     graph.faceAnchors.push_back(anchor);
+
+    game::SectorAuthoringSoundEmitter emitter;
+    emitter.id = 7;
+    emitter.referenceId = "machine";
+    emitter.soundId = "machine_hum";
+    graph.soundEmitters.push_back(emitter);
 
     game::SectorAuthoringLineSide side;
     side.wall.materialId = "side_wall";
@@ -81,6 +89,8 @@ void TestPruneKeepsAllReferenceKindsAndDefaults()
     AddTexture(map, "unused_texture");
     AddSound(map, "door_open");
     AddSound(map, "door_close");
+    AddSound(map, "office_roomtone");
+    AddSound(map, "machine_hum");
     AddSound(map, "unused_sound");
 
     const game::SectorEditorAssetPruneResult result =
@@ -98,6 +108,11 @@ void TestPruneKeepsAllReferenceKindsAndDefaults()
     Check(map.audioSettings.soundsById.find("door_close")
                   != map.audioSettings.soundsById.end(),
           "combined prune retains the door close sound");
+    Check(map.audioSettings.soundsById.find("office_roomtone")
+                      != map.audioSettings.soundsById.end()
+                  && map.audioSettings.soundsById.find("machine_hum")
+                      != map.audioSettings.soundsById.end(),
+          "combined prune retains roomtone and Sound Emitter references");
 }
 
 void TestPruneCategoriesAreIndependent()

@@ -11351,8 +11351,7 @@ void TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics()
 void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
 {
     game::SectorTopologyMap source = MakeSingleSectorSquareMap();
-    source.audioSettings.musicPath = "ambience/import_theme.wav";
-    source.audioSettings.musicVolume = 1.0f;
+    source.audioSettings.roomtoneFadeMilliseconds = 1250;
     source.audioSettings.soundsById.emplace(
             "import_hum", game::SectorSoundDefinition{
                     "import_hum", "ambience/import_hum.ogg", game::SectorSoundType::Sound});
@@ -11376,9 +11375,7 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
           "legacy topology import uses the default editor grid size");
     Check(game::HasAuthoringGraphData(authoringGraph), "legacy topology import synthesizes authoring graph");
     Check(documentState.derivation.authoringDerivation.success, "legacy topology import derives authoring graph");
-    Check(documentState.map.topologyMap.audioSettings.musicPath
-                      == source.audioSettings.musicPath
-                  && Near(documentState.map.topologyMap.audioSettings.musicVolume, 1.0f)
+    Check(documentState.map.topologyMap.audioSettings.roomtoneFadeMilliseconds == 1250
                   && documentState.map.topologyMap.audioSettings.soundsById.at(
                              "import_hum").path
                              == "ambience/import_hum.ogg",
@@ -11393,8 +11390,7 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
     Check(saved["topology"] == "authoringGraph",
           "save after topology-v2 import writes graph-native marker");
     Check(saved.contains("authoringGraph"), "save after topology-v2 import writes authoring graph");
-    Check(saved["audio"]["music"] == "ambience/import_theme.wav"
-                  && Near(saved["audio"]["musicVolume"].get<float>(), 1.0f)
+    Check(saved["audio"]["roomtoneFadeMilliseconds"] == 1250
                   && saved["audio"]["sounds"]["import_hum"]["path"]
                              == "ambience/import_hum.ogg",
           "save after topology-v2 import preserves map-level audio settings");
@@ -11592,9 +11588,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     documentState.map.topologyMap.directionalLight.enabled = true;
     documentState.map.topologyMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
     documentState.map.topologyMap.directionalLight.intensity = 1.5f;
-    documentState.map.topologyMap.audioSettings.musicPath =
-            "ambience/graph_theme.wav";
-    documentState.map.topologyMap.audioSettings.musicVolume = 1.0f;
+    documentState.map.topologyMap.audioSettings.roomtoneFadeMilliseconds = 1350;
     documentState.map.topologyMap.audioSettings.soundsById.emplace(
             "graph_hum", game::SectorSoundDefinition{
                     "graph_hum", "ambience/graph_hum.ogg", game::SectorSoundType::Sound});
@@ -11631,8 +11625,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     Check(saved["skySettings"]["materialId"] == "sky", "editor graph-native save persists sky settings");
     Check(saved["directionalLight"]["enabled"] == true,
           "editor graph-native save persists directional light");
-    Check(saved["audio"]["music"] == "ambience/graph_theme.wav"
-                  && Near(saved["audio"]["musicVolume"].get<float>(), 1.0f)
+    Check(saved["audio"]["roomtoneFadeMilliseconds"] == 1350
                   && saved["audio"]["sounds"]["graph_hum"]["path"]
                              == "ambience/graph_hum.ogg",
           "editor graph-native save persists map-level audio settings");
@@ -11665,9 +11658,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
                   && loaded.mapData.skySettings.materialId == "sky"
                   && loaded.mapData.directionalLight.enabled
-                  && loaded.mapData.audioSettings.musicPath
-                             == "ambience/graph_theme.wav"
-                  && Near(loaded.mapData.audioSettings.musicVolume, 1.0f)
+                  && loaded.mapData.audioSettings.roomtoneFadeMilliseconds == 1350
                   && loaded.mapData.audioSettings.soundsById.at("graph_hum").path
                              == "ambience/graph_hum.ogg"
                   && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f)
@@ -11688,11 +11679,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && loadedDocumentState.map.topologyMap.resolvedMaterialsById.empty()
                   && loadedDocumentState.map.topologyMap.staticLights.size() == 1
                   && loadedDocumentState.map.topologyMap.skySettings.materialId == "sky"
-                  && loadedDocumentState.map.topologyMap.audioSettings.musicPath
-                             == "ambience/graph_theme.wav"
-                  && Near(
-                             loadedDocumentState.map.topologyMap.audioSettings.musicVolume,
-                             1.0f)
+                  && loadedDocumentState.map.topologyMap.audioSettings.roomtoneFadeMilliseconds == 1350
                   && loadedDocumentState.map.topologyMap.audioSettings.soundsById.at(
                              "graph_hum").path
                              == "ambience/graph_hum.ogg"

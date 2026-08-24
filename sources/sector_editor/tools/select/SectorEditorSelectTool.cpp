@@ -109,6 +109,12 @@ bool SelectPickTarget(
             SelectSectorEditorAuthoringLevelMarkerTarget(selectionContext, target.id);
             return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::LevelMarker
                     && context.selectionState.selectedAuthoring.levelMarkerId == target.id;
+        case SectorEditorPickKind::SoundEmitter:
+            ClearSectorEditorSelection(selectionContext);
+            SelectSectorEditorAuthoringSoundEmitter(
+                    context.authoringGraph, context.selectionState, target.id);
+            return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::SoundEmitter
+                    && context.selectionState.selectedAuthoring.soundEmitterId == target.id;
         case SectorEditorPickKind::Trigger:
             ClearSectorEditorSelection(selectionContext);
             SelectSectorEditorAuthoringTrigger(context.authoringGraph, context.selectionState, target.id);
@@ -164,6 +170,9 @@ void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
                     context.authoringGraph,
                     context.selectionState,
                     target.id);
+        } else if (target.kind == SectorEditorPickKind::SoundEmitter) {
+            SetHoveredSectorEditorAuthoringSoundEmitter(
+                    context.authoringGraph, context.selectionState, target.id);
         } else if (target.kind == SectorEditorPickKind::Trigger) {
             SetHoveredSectorEditorAuthoringTrigger(
                     context.authoringGraph,

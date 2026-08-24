@@ -73,6 +73,30 @@ bool NavigationBuildTerminal(SectorNavigationState state)
             || state == SectorNavigationState::Stale;
 }
 
+SectorScriptAudioApi MakeSectorScriptAudioApi(SectorSceneRuntime& scene)
+{
+    SectorScriptAudioApi api;
+    api.userData = &scene;
+    api.playMapSound = [](void* userData, engine::EngineContext& context,
+                              const std::string& id, float volume, float pitch,
+                              std::string& error) {
+        return static_cast<SectorSceneRuntime*>(userData)->PlayLevelSound(
+                context, id, volume, pitch, error);
+    };
+    api.playSoundEmitter = [](void* userData, engine::EngineContext& context,
+                                  const std::string& id, const float* volume,
+                                  float pitch, std::string& error) {
+        return static_cast<SectorSceneRuntime*>(userData)->PlaySoundEmitter(
+                context, id, volume, pitch, error);
+    };
+    api.stopSoundEmitter = [](void* userData, engine::EngineContext& context,
+                                  const std::string& id, std::string& error) {
+        return static_cast<SectorSceneRuntime*>(userData)->StopSoundEmitter(
+                context, id, error);
+    };
+    return api;
+}
+
 float NavigationLoadProgress(const SectorNavigationWorld& navigation)
 {
     const SectorNavigationState state = navigation.State();
@@ -216,7 +240,8 @@ bool SectorGameSession::StartNew(
             topologyMap,
             scripts,
             &scene.Navigation(),
-            &scene.NpcNavigation());
+            &scene.NpcNavigation(),
+            MakeSectorScriptAudioApi(scene));
     pendingLoadingSave = loadingSave;
     BeginGameLevelLoading(loading);
     error.clear();
@@ -339,6 +364,7 @@ void SectorGameSession::Update(
             topologyMap,
             dt,
             &playerPosition,
+            controller.fpsControllerState.currentSectorId,
             &playerObstacle);
     UpdateSectorScriptOperations(context, scriptHost);
     SectorRuntimeObjectState& objects = scene.RuntimeObjects();
@@ -811,7 +837,8 @@ bool SectorGameSession::RebuildFromMap(
             topologyMap,
             scripts,
             &scene.Navigation(),
-            &scene.NpcNavigation());
+            &scene.NpcNavigation(),
+            MakeSectorScriptAudioApi(scene));
     pendingLoadingSave = false;
     BeginGameLevelLoading(loading);
     error.clear();

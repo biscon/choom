@@ -20,6 +20,7 @@ struct SoundPlaybackSettings {
     float volume = 1.0f;
     float pitch = 1.0f;
     float pan = 0.0f;
+    bool looping = false;
 };
 
 struct PositionalSoundSettings {
@@ -83,6 +84,10 @@ public:
     bool SetSoundPosition(
             SoundPlaybackHandle playback,
             Vector3 position);
+    bool SetSoundPlaybackSettings(
+            AssetManager& assets,
+            SoundPlaybackHandle playback,
+            const SoundPlaybackSettings& settings);
     bool StopSound(AssetManager& assets, SoundPlaybackHandle playback);
     void StopSoundAsset(AssetManager& assets, SoundHandle sound);
     bool IsSoundPlaying(SoundPlaybackHandle playback) const;

@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace game {
 
@@ -42,6 +43,7 @@ public:
             const SectorTopologyMap& map,
             float dt,
             const Vector3* playerPosition,
+            int playerSectorId,
             const SectorDoorPlayerObstacle* playerObstacle = nullptr);
     void UpdateLoadPreparation(
             engine::EngineContext& context,
@@ -104,6 +106,22 @@ public:
     bool IsReady() const { return renderer.IsRendererReady(); }
     engine::SoundHandle FindLevelSound(const std::string& id) const;
     engine::MusicHandle FindLevelMusic(const std::string& id) const;
+    bool PlayLevelSound(
+            engine::EngineContext& context,
+            const std::string& id,
+            float volume,
+            float pitch,
+            std::string& error);
+    bool PlaySoundEmitter(
+            engine::EngineContext& context,
+            const std::string& id,
+            const float* volumeOverride,
+            float pitch,
+            std::string& error);
+    bool StopSoundEmitter(
+            engine::EngineContext& context,
+            const std::string& id,
+            std::string& error);
     engine::SoundPlaybackHandle PlayFootstepForSector(
             engine::EngineContext& context,
             int sectorId,
@@ -121,7 +139,11 @@ private:
             const char* scopeName,
             const std::string& defaultFootstepSet,
             float footstepVolume);
-    void UpdateLevelAudio(engine::EngineContext& context);
+    void UpdateLevelAudio(
+            engine::EngineContext& context,
+            const SectorTopologyMap& map,
+            float dt,
+            int playerSectorId);
     void BindRuntimeObjectAudio(engine::World& world);
     void PlayPendingNpcFootsteps(engine::EngineContext& context);
 
@@ -139,10 +161,35 @@ private:
     std::unordered_map<int, std::string> footstepSetBySectorId;
     FootstepPlaybackState footstepPlayback;
     float footstepVolume = 1.0f;
-    engine::MusicHandle backgroundMusic = engine::NullMusicHandle();
-    float levelMusicVolume = SectorLevelAudioSettings::DefaultMusicVolume;
-    bool levelMusicStartPending = false;
-    bool levelMusicFailureReported = false;
+
+    struct RoomtonePlayback {
+        std::string soundId;
+        engine::MusicHandle music = engine::NullMusicHandle();
+        float startVolume = 0.0f;
+        float currentVolume = 0.0f;
+        float targetVolume = 0.0f;
+        bool failureReported = false;
+    };
+    std::vector<RoomtonePlayback> roomtonePlaybacks;
+    int lastRoomtoneSectorId = -1;
+    float roomtoneTransitionElapsedSeconds = 0.0f;
+    float roomtoneTransitionDurationSeconds = 0.0f;
+
+    struct SoundEmitterPlayback {
+        std::string id;
+        std::string soundId;
+        engine::SoundHandle sound = engine::NullSoundHandle();
+        engine::SoundPlaybackHandle playback = engine::NullSoundPlaybackHandle();
+        Vector3 positionWorld = {};
+        float volume = 1.0f;
+        float playbackVolume = 1.0f;
+        float pitch = 1.0f;
+        bool loop = false;
+        bool loopRequested = false;
+        bool autoStartPending = false;
+        bool failureReported = false;
+    };
+    std::vector<SoundEmitterPlayback> soundEmitterPlaybacks;
 };
 
 } // namespace game

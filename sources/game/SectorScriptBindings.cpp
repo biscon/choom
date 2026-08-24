@@ -1067,6 +1067,96 @@ int LuaDisableTrigger(lua_State* state)
     return LuaSetTriggerEnabled(state, false);
 }
 
+bool ReadAudioPlaybackArguments(
+        lua_State* state,
+        int volumeArgument,
+        bool volumeOptional,
+        float& volume,
+        bool& hasVolume,
+        float& pitch)
+{
+    hasVolume = !lua_isnoneornil(state, volumeArgument);
+    volume = hasVolume
+            ? static_cast<float>(luaL_checknumber(state, volumeArgument))
+            : 1.0f;
+    pitch = lua_isnoneornil(state, volumeArgument + 1)
+            ? 1.0f
+            : static_cast<float>(luaL_checknumber(state, volumeArgument + 1));
+    if ((!volumeOptional || hasVolume)
+            && (!std::isfinite(volume) || volume < 0.0f || volume > 1.0f)) {
+        luaL_argerror(state, volumeArgument, "volume must be finite and between 0 and 1");
+        return false;
+    }
+    if (!std::isfinite(pitch) || pitch < 0.01f || pitch > 4.0f) {
+        luaL_argerror(state, volumeArgument + 1, "pitch must be finite and between 0.01 and 4");
+        return false;
+    }
+    return true;
+}
+
+int PushAudioResult(lua_State* state, bool success, const std::string& error)
+{
+    lua_pushboolean(state, success);
+    if (success) return 1;
+    lua_pushlstring(state, error.data(), error.size());
+    return 2;
+}
+
+int LuaPlayMapSound(lua_State* state)
+{
+    size_t idLength = 0;
+    const char* rawId = luaL_checklstring(state, 1, &idLength);
+    const std::string id{rawId, idLength};
+    float volume = 1.0f;
+    float pitch = 1.0f;
+    bool hasVolume = false;
+    ReadAudioPlaybackArguments(state, 2, false, volume, hasVolume, pitch);
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.audio.playMapSound == nullptr) {
+        return PushAudioResult(state, false, "level audio runtime is unavailable");
+    }
+    std::string error;
+    const bool success = host.audio.playMapSound(
+            host.audio.userData, engine::ScriptSystemEngineFromLua(state),
+            id, volume, pitch, error);
+    return PushAudioResult(state, success, error);
+}
+
+int LuaPlaySoundEmitter(lua_State* state)
+{
+    size_t idLength = 0;
+    const char* rawId = luaL_checklstring(state, 1, &idLength);
+    const std::string id{rawId, idLength};
+    float volume = 1.0f;
+    float pitch = 1.0f;
+    bool hasVolume = false;
+    ReadAudioPlaybackArguments(state, 2, true, volume, hasVolume, pitch);
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.audio.playSoundEmitter == nullptr) {
+        return PushAudioResult(state, false, "level audio runtime is unavailable");
+    }
+    std::string error;
+    const bool success = host.audio.playSoundEmitter(
+            host.audio.userData, engine::ScriptSystemEngineFromLua(state), id,
+            hasVolume ? &volume : nullptr, pitch, error);
+    return PushAudioResult(state, success, error);
+}
+
+int LuaStopSoundEmitter(lua_State* state)
+{
+    size_t idLength = 0;
+    const char* rawId = luaL_checklstring(state, 1, &idLength);
+    const std::string id{rawId, idLength};
+    SectorScriptHost& host = HostFromLua(state);
+    if (host.audio.stopSoundEmitter == nullptr) {
+        return PushAudioResult(state, false, "level audio runtime is unavailable");
+    }
+    std::string error;
+    const bool success = host.audio.stopSoundEmitter(
+            host.audio.userData, engine::ScriptSystemEngineFromLua(state), id, error);
+    return PushAudioResult(state, success, error);
+}
+
 void Register(lua_State* state, const char* name, lua_CFunction function)
 {
     lua_pushcfunction(state, function);
@@ -1081,12 +1171,14 @@ void InitializeSectorScriptHost(
         SectorTopologyMap& map,
         engine::ScriptRuntime& scripts,
         SectorNavigationWorld* navigation,
-        NpcNavigationRuntime* npcNavigation)
+        NpcNavigationRuntime* npcNavigation,
+        SectorScriptAudioApi audio)
 {
     host.runtimeObjects = &runtimeObjects;
     host.navigation = navigation;
     host.npcNavigation = npcNavigation;
     host.map = &map;
+    host.audio = audio;
     host.scripts = &scripts;
     host.doorMoves.clear();
     host.doorMoves.reserve(64);
@@ -1114,6 +1206,7 @@ void ResetSectorScriptHost(SectorScriptHost& host)
     host.navigation = nullptr;
     host.npcNavigation = nullptr;
     host.map = nullptr;
+    host.audio = {};
     host.scripts = nullptr;
     host.doorMoves.clear();
     host.npcMoves.clear();
@@ -1142,6 +1235,9 @@ void RegisterSectorScriptBindings(lua_State* state)
     Register(state, "changeMap", LuaChangeMap);
     Register(state, "enableTrigger", LuaEnableTrigger);
     Register(state, "disableTrigger", LuaDisableTrigger);
+    Register(state, "playMapSound", LuaPlayMapSound);
+    Register(state, "playSoundEmitter", LuaPlaySoundEmitter);
+    Register(state, "stopSoundEmitter", LuaStopSoundEmitter);
 }
 
 bool ReturnedTrue(const std::vector<engine::ScriptValue>& values)

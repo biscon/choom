@@ -342,6 +342,12 @@ bool SectorEditor::Init(engine::EngineContext& context)
                     selectionState,
                     levelMarkerEditingState,
                     statusText});
+    soundEmitterEditingService.emplace(
+            SectorEditorSoundEmitterEditingServiceContext{
+                    Lifecycle(), TopologyMap(), AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    state.topologyRenderRevision, state.topologyRenderCache,
+                    selectionState, soundEmitterEditingState, statusText});
     triggerEditingService.emplace(
             SectorEditorTriggerEditingServiceContext{
                     Lifecycle(), TopologyMap(), AuthoringGraph(),
@@ -406,6 +412,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     reflectionProbeEditingUiState = ReflectionProbeEditingUiState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    soundEmitterEditingState = SoundEmitterEditingState{};
+    soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
     authoringFaceMergeState = SectorEditorAuthoringFaceMergeState{};
@@ -413,6 +421,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     reflectionProbeEditingService.reset();
     authoringFaceMergeService.reset();
     levelMarkerEditingService.reset();
+    soundEmitterEditingService.reset();
     triggerEditingService.reset();
     playerAudio = PlayerAudioRuntime{};
     canvasRect = {};
@@ -567,6 +576,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         if (levelMarkerEditingService) {
             levelMarkerEditingService->CancelMove(nullptr);
         }
+        if (soundEmitterEditingService) {
+            soundEmitterEditingService->CancelMove(nullptr);
+        }
         return;
     }
 
@@ -591,6 +603,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 TopologyMap(),
                 dt,
                 &playerPosition,
+                previewState.controller.fpsControllerState.currentSectorId,
                 playerObstaclePtr);
         UpdateFpsViewmodel(assets, dt);
         const bool hasBlockingModal = state.texturePicker.open
@@ -1012,6 +1025,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
             : nullptr;
     context.levelMarkerEditing = levelMarkerEditingService
             ? &levelMarkerEditingService.value()
+            : nullptr;
+    context.soundEmitterEditing = soundEmitterEditingService
+            ? &soundEmitterEditingService.value()
             : nullptr;
     context.authoringFaceMerge = authoringFaceMergeService
             ? &authoringFaceMergeService.value()
@@ -1772,6 +1788,11 @@ SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
                 SectorEditorPickKind::LevelMarker,
                 selectionState.selectedAuthoring.levelMarkerId};
     }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::SoundEmitter
+            && selectionState.selectedAuthoring.soundEmitterId >= 0) {
+        return {SectorEditorPickKind::SoundEmitter,
+                selectionState.selectedAuthoring.soundEmitterId};
+    }
     if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Trigger
             && selectionState.selectedAuthoring.triggerId >= 0) {
         return SectorEditorPickTarget{SectorEditorPickKind::Trigger,
@@ -1794,6 +1815,7 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             + AuthoringGraph().fogVolumes.size()
             + AuthoringGraph().reflectionProbes.size()
             + AuthoringGraph().levelMarkers.size()
+            + AuthoringGraph().soundEmitters.size()
             + AuthoringGraph().triggers.size()
             + 3);
 
@@ -1840,6 +1862,9 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             screenPoint,
             ScreenLightPickPixels,
             candidates);
+    AppendCachedSoundEmitterPickCandidates(
+            state.topologyRenderCache, pickContext, screenPoint,
+            ScreenLightPickPixels, candidates);
     if (triggerEditingService) {
         const Vector2 mapPoint = ScreenToMap(screenPoint);
         const Vector2 tolerancePoint = ScreenToMap(Vector2{screenPoint.x + ScreenLightPickPixels, screenPoint.y});
@@ -2862,6 +2887,9 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
             : nullptr;
     context.levelMarkerEditing = levelMarkerEditingService
             ? &levelMarkerEditingService.value()
+            : nullptr;
+    context.soundEmitterEditing = soundEmitterEditingService
+            ? &soundEmitterEditingService.value()
             : nullptr;
     context.triggerEditing = triggerEditingService ? &triggerEditingService.value() : nullptr;
     context.screenToMap = [this](Vector2 screenPoint) {
@@ -4458,6 +4486,10 @@ void SectorEditor::DrawTopologyDocument()
             state.topologyRenderCache,
             drawContext,
             levelMarkerEditingService ? &levelMarkerEditingService->Drag() : nullptr);
+    DrawCachedSoundEmitters(
+            state.topologyRenderCache,
+            drawContext,
+            soundEmitterEditingService ? &soundEmitterEditingService->Drag() : nullptr);
     DrawLightMoveOverlay();
     const auto drawToolOverlay = [this](SectorEditorTool tool) {
         if (const SectorEditorToolModule* lineModule = FindSectorEditorToolModule(tool)) {
@@ -5147,8 +5179,8 @@ void SectorEditor::DrawToolsPanel(
     };
     const float toolsContentH =
             sectionLabelH + rowsHeight(5)
-            + separatorH + sectionLabelH + rowsHeight(13)
-            + separatorH + rowsHeight(7)
+            + separatorH + sectionLabelH + rowsHeight(14)
+            + separatorH + rowsHeight(8)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
             + separatorH + rowsHeight(1)
@@ -5253,6 +5285,11 @@ void SectorEditor::DrawToolsPanel(
                 && tool != SectorEditorTool::Select) {
             levelMarkerEditingService->CancelMove("Cancelled Level Marker move");
         }
+        if (soundEmitterEditingService
+                && soundEmitterEditingService->Drag().active
+                && tool != SectorEditorTool::Select) {
+            soundEmitterEditingService->CancelMove("Cancelled Sound Emitter move");
+        }
         if (triggerEditingService
                 && triggerEditingService->IsMoving()
                 && tool != SectorEditorTool::Select) {
@@ -5307,6 +5344,8 @@ void SectorEditor::DrawToolsPanel(
             statusText = "Reflection Probe: click inside a sector";
         } else if (tool == SectorEditorTool::LevelMarker) {
             statusText = "Level Marker: click strictly inside a sector";
+        } else if (tool == SectorEditorTool::SoundEmitter) {
+            statusText = "Sound Emitter: click inside a sector";
         } else if (tool == SectorEditorTool::Trigger) {
             statusText = triggerEditingState.drawMode == TriggerDrawMode::Rectangle
                     ? "Trigger Rectangle: click first corner"
@@ -5352,6 +5391,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::Door,
             SectorEditorTool::Trigger,
             SectorEditorTool::LevelMarker,
+            SectorEditorTool::SoundEmitter,
             SectorEditorTool::AuthoringFogVolume,
             SectorEditorTool::ReflectionProbe,
             SectorEditorTool::StaticLight,
@@ -5410,6 +5450,22 @@ void SectorEditor::DrawToolsPanel(
     y += rowH + gap;
     if (engine::Button(ui, config, input, assets, "sector_editor_add_map_sound", Rectangle{0.0f, y, contentW, rowH}, font, "Add Map Sound")) {
         BuildSoundService().OpenAddModal();
+    }
+    y += rowH + gap;
+    const float roomtoneFadeLabelW = 150.0f;
+    const SectorEditorIntInputResult roomtoneFadeResult = DrawLabeledIntInput(
+            ui, config, input, assets, font,
+            "sector_editor_roomtone_map_fade", "Roomtone Fade ms",
+            {0.0f, y, roomtoneFadeLabelW, rowH},
+            {roomtoneFadeLabelW + gap, y,
+                    std::max(0.0f, contentW - roomtoneFadeLabelW - gap), rowH},
+            engine::UITextJustify::Left,
+            TopologyMap().audioSettings.roomtoneFadeMilliseconds,
+            uiState.roomtoneMapFadeInput, 0, 60000, 50);
+    if (roomtoneFadeResult.changed
+            && roomtoneFadeResult.value != TopologyMap().audioSettings.roomtoneFadeMilliseconds) {
+        TopologyMap().audioSettings.roomtoneFadeMilliseconds = roomtoneFadeResult.value;
+        MarkTopologyDocumentEdited("Updated default roomtone fade");
     }
     y += rowH + gap;
     if (engine::Button(ui, config, input, assets, "sector_editor_prune_assets", Rectangle{0.0f, y, contentW, rowH}, font, "Prune Assets")) {
@@ -5605,6 +5661,7 @@ void SectorEditor::DrawSectorsPanel(
             fogVolumeEditingUiState,
             reflectionProbeEditingUiState,
             levelMarkerEditingUiState,
+            soundEmitterEditingUiState,
             triggerEditingUiState,
             statusText,
             selection,
@@ -5618,6 +5675,7 @@ void SectorEditor::DrawSectorsPanel(
             fogVolumeEditingService.value(),
             reflectionProbeEditingService.value(),
             levelMarkerEditingService.value(),
+            soundEmitterEditingService.value(),
             triggerEditingService.value(),
             authoringFaceMergeService.value(),
             engineContext};
@@ -5671,6 +5729,14 @@ void SectorEditor::DrawSectorsPanel(
                         if (levelMarkerEditingService) {
                             levelMarkerEditingService->DeleteSelected();
                         }
+                    });
+            break;
+        case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedSoundEmitterConfirmation:
+            OpenConfirmation(
+                    "Delete Sound Emitter",
+                    "Delete the selected Sound Emitter?",
+                    [this]() {
+                        if (soundEmitterEditingService) soundEmitterEditingService->DeleteSelected();
                     });
             break;
         case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedTriggerConfirmation:
@@ -6495,6 +6561,8 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    soundEmitterEditingState = SoundEmitterEditingState{};
+    soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
     previewState.controller = SectorEditorPreviewControllerState{};
@@ -6544,6 +6612,9 @@ bool SectorEditor::LoadLevel(
     }
     if (levelMarkerEditingService) {
         levelMarkerEditingService->CancelMove(nullptr);
+    }
+    if (soundEmitterEditingService) {
+        soundEmitterEditingService->CancelMove(nullptr);
     }
     CancelLightDrag(nullptr);
     bool loadedAuthoringGraph = false;
@@ -6641,6 +6712,8 @@ bool SectorEditor::LoadLevel(
     manipulationState = ManipulationState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    soundEmitterEditingState = SoundEmitterEditingState{};
+    soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
     runtimeObjectEditingState = RuntimeObjectEditingState{};
@@ -6801,6 +6874,9 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     }
     if (levelMarkerEditingService) {
         levelMarkerEditingService->CancelMove(nullptr);
+    }
+    if (soundEmitterEditingService) {
+        soundEmitterEditingService->CancelMove(nullptr);
     }
     ui.hotId = 0;
     ui.activeId = 0;

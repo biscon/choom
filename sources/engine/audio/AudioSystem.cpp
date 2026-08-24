@@ -262,6 +262,20 @@ bool AudioSystem::SetSoundPosition(
     return true;
 }
 
+bool AudioSystem::SetSoundPlaybackSettings(
+        AssetManager& assets,
+        SoundPlaybackHandle playback,
+        const SoundPlaybackSettings& settings)
+{
+    if (!IsValidPlayback(playback)) return false;
+    SoundPlaybackSlot& slot = soundPlaybacks[playback.index];
+    slot.settings = NormalizeSettings(settings);
+    const Sound* voice = assets.GetSoundVoice(slot.sound, slot.voiceIndex);
+    if (voice == nullptr) return false;
+    ApplySoundMix(*voice, slot);
+    return true;
+}
+
 bool AudioSystem::StopSound(
         AssetManager& assets,
         SoundPlaybackHandle playback)
@@ -542,6 +556,7 @@ void AudioSystem::ApplySoundMix(
     ::SetSoundVolume(voice, volume);
     ::SetSoundPitch(voice, playback.settings.pitch);
     ::SetSoundPan(voice, ToRaylibPan(pan));
+    ::SetSoundLooping(voice, playback.settings.looping);
 }
 
 void AudioSystem::DeactivateSoundSlot(
@@ -556,6 +571,7 @@ void AudioSystem::DeactivateSoundSlot(
                 playback.sound,
                 playback.voiceIndex);
         if (voice != nullptr) {
+            ::SetSoundLooping(*voice, false);
             if (playback.pausedBySystem) ::ResumeSound(*voice);
             ::StopSound(*voice);
         }

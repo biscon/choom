@@ -46,6 +46,42 @@ in seconds:
 elapsed = elapsed + FrameDelta
 ```
 
+## Level audio
+
+Map audio IDs come from the editor's **Add Map Sound** registry. Roomtones use
+entries authored as `Music (streaming)`; the APIs below use buffered `Sound`
+entries. Invalid IDs or assets that are not ready return `false, reason`.
+
+### `playMapSound(soundId [, volume [, pitch]]) -> true | false, reason`
+
+Plays a non-positional one-shot. Volume defaults to `1.0` and is limited to
+`0.0..1.0`; pitch defaults to `1.0` and is limited to `0.01..4.0`.
+
+```lua
+playMapSound("light_switch_click", 0.8, 1.05)
+```
+
+### `playSoundEmitter(emitterId [, volume [, pitch]]) -> true | false, reason`
+
+Plays the positional Sound Emitter with the stable string ID authored in the
+editor. Omitted volume uses the emitter's authored volume. A looping emitter
+continues until stopped; a non-looping emitter plays once. Calling this for an
+already-playing loop updates its volume and pitch without restarting it.
+
+```lua
+playSoundEmitter("generator_motor")
+playSoundEmitter("steam_vent", 0.65, 0.9)
+```
+
+### `stopSoundEmitter(emitterId) -> true | false, reason`
+
+Stops the emitter if it is playing and prevents an authored looping emitter
+from automatically restarting. Calling it again is harmless.
+
+```lua
+stopSoundEmitter("generator_motor")
+```
+
 ## Tasks and timing
 
 ### `delay(milliseconds) -> true`

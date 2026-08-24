@@ -67,11 +67,22 @@ struct SectorScriptDoorPermission {
     bool active = false;
 };
 
+struct SectorScriptAudioApi {
+    void* userData = nullptr;
+    bool (*playMapSound)(void*, engine::EngineContext&, const std::string&,
+            float, float, std::string&) = nullptr;
+    bool (*playSoundEmitter)(void*, engine::EngineContext&, const std::string&,
+            const float*, float, std::string&) = nullptr;
+    bool (*stopSoundEmitter)(void*, engine::EngineContext&, const std::string&,
+            std::string&) = nullptr;
+};
+
 struct SectorScriptHost {
     SectorRuntimeObjectState* runtimeObjects = nullptr;
     SectorNavigationWorld* navigation = nullptr;
     NpcNavigationRuntime* npcNavigation = nullptr;
     SectorTopologyMap* map = nullptr;
+    SectorScriptAudioApi audio;
     engine::ScriptRuntime* scripts = nullptr;
     std::vector<SectorScriptDoorMove> doorMoves;
     std::vector<SectorScriptNpcMove> npcMoves;
@@ -89,7 +100,8 @@ void InitializeSectorScriptHost(
         SectorTopologyMap& map,
         engine::ScriptRuntime& scripts,
         SectorNavigationWorld* navigation = nullptr,
-        NpcNavigationRuntime* npcNavigation = nullptr);
+        NpcNavigationRuntime* npcNavigation = nullptr,
+        SectorScriptAudioApi audio = {});
 
 void ResetSectorScriptHost(SectorScriptHost& host);
 

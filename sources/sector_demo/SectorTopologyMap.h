@@ -106,10 +106,9 @@ struct SectorSoundDefinition {
 };
 
 struct SectorLevelAudioSettings {
-    static constexpr float DefaultMusicVolume = 0.6f;
+    static constexpr int DefaultRoomtoneFadeMilliseconds = 1000;
 
-    std::string musicPath;
-    float musicVolume = DefaultMusicVolume;
+    int roomtoneFadeMilliseconds = DefaultRoomtoneFadeMilliseconds;
     std::unordered_map<std::string, SectorSoundDefinition> soundsById;
 };
 
@@ -140,6 +139,15 @@ struct SectorCompiledLevelMarker {
     std::string id;
     Vector3 position = {};
     float yawRadians = 0.0f;
+};
+
+struct SectorCompiledSoundEmitter {
+    int sourceAuthoringEmitterId = -1;
+    std::string id;
+    Vector3 positionWorld = {};
+    std::string soundId;
+    float volume = 1.0f;
+    bool loop = false;
 };
 
 struct SectorPlacedBillboard {
@@ -325,6 +333,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologyDynamicRectLight> dynamicRectLights;
     std::vector<SectorPlacedRuntimeObject> runtimeObjects;
     std::vector<SectorCompiledLevelMarker> levelMarkers;
+    std::vector<SectorCompiledSoundEmitter> soundEmitters;
     std::vector<SectorCompiledTrigger> triggers;
     SectorPreviewSettings previewSettings;
     SectorTopologySkySettings skySettings;

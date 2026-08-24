@@ -659,6 +659,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::ReflectionProbe: return "Reflection Probe";
         case SectorEditorTool::Trigger: return "Trigger";
         case SectorEditorTool::LevelMarker: return "Level Marker";
+        case SectorEditorTool::SoundEmitter: return "Sound Emitter";
         case SectorEditorTool::StaticLight: return "Static Light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot";
         case SectorEditorTool::StaticRectLight: return "Static Rect Light";
@@ -678,6 +679,7 @@ bool IsGraphAuthoringTool(SectorEditorTool tool)
             || tool == SectorEditorTool::AuthoringFogVolume
             || tool == SectorEditorTool::Trigger
             || tool == SectorEditorTool::LevelMarker
+            || tool == SectorEditorTool::SoundEmitter
             || tool == SectorEditorTool::AuthoringMove;
 }
 
@@ -719,6 +721,7 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
         case SectorEditorPickKind::AuthoringReflectionProbe: return "reflection probe";
         case SectorEditorPickKind::Trigger: return "trigger";
         case SectorEditorPickKind::LevelMarker: return "level marker";
+        case SectorEditorPickKind::SoundEmitter: return "sound emitter";
     }
     return "unknown";
 }
@@ -745,6 +748,7 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
         case SectorEditorPickKind::AuthoringReflectionProbe:
         case SectorEditorPickKind::Trigger:
         case SectorEditorPickKind::LevelMarker:
+        case SectorEditorPickKind::SoundEmitter:
             return target.id >= 0;
         case SectorEditorPickKind::None:
         case SectorEditorPickKind::AuthoringLine:

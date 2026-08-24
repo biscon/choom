@@ -635,6 +635,35 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
         }
     }
 
+    std::unordered_set<int> emitterSourceIds;
+    std::unordered_set<std::string> emitterReferenceIds;
+    for (const SectorCompiledSoundEmitter& emitter : map.soundEmitters) {
+        if (!IsValidSectorTopologyId(emitter.sourceAuthoringEmitterId)) {
+            AddIssue(&issues, SectorTopologyObjectKind::SoundEmitter,
+                     emitter.sourceAuthoringEmitterId, "source authoring ID must be positive");
+        } else if (!emitterSourceIds.insert(emitter.sourceAuthoringEmitterId).second) {
+            AddIssue(&issues, SectorTopologyObjectKind::SoundEmitter,
+                     emitter.sourceAuthoringEmitterId, "source authoring ID must be unique");
+        }
+        if (!validMarkerReferenceId(emitter.id)) {
+            AddIssue(&issues, SectorTopologyObjectKind::SoundEmitter,
+                     emitter.sourceAuthoringEmitterId,
+                     "reference ID must contain 1-63 letters, digits, underscores, or dashes");
+        } else if (!emitterReferenceIds.insert(emitter.id).second) {
+            AddIssue(&issues, SectorTopologyObjectKind::SoundEmitter,
+                     emitter.sourceAuthoringEmitterId, "reference ID must be unique");
+        }
+        if (!std::isfinite(emitter.positionWorld.x)
+                || !std::isfinite(emitter.positionWorld.y)
+                || !std::isfinite(emitter.positionWorld.z)
+                || !std::isfinite(emitter.volume)
+                || emitter.volume < 0.0f || emitter.volume > 1.0f) {
+            AddIssue(&issues, SectorTopologyObjectKind::SoundEmitter,
+                     emitter.sourceAuthoringEmitterId,
+                     "transform and volume must be finite and volume must be between 0 and 1");
+        }
+    }
+
     for (const SectorTopologyStaticPointLight& light : map.staticLights) {
         if (!std::isfinite(light.position.x)
                 || !std::isfinite(light.position.y)
@@ -984,11 +1013,29 @@ std::vector<SectorTopologyValidationIssue> ValidateSectorTopologyMap(
     }
 
     for (const SectorTopologySector& sector : map.sectors) {
+        const SectorRoomtoneSettings& roomtone = sector.roomtone;
+        if ((roomtone.mode != SectorRoomtoneMode::Inherit
+                    && roomtone.mode != SectorRoomtoneMode::Play
+                    && roomtone.mode != SectorRoomtoneMode::Silence)
+                || (roomtone.mode == SectorRoomtoneMode::Play && roomtone.soundId.empty())
+                || !std::isfinite(roomtone.volume)
+                || roomtone.volume < 0.0f || roomtone.volume > 1.0f
+                || roomtone.fadeMilliseconds < SectorRoomtoneSettings::UseMapFadeMilliseconds
+                || roomtone.fadeMilliseconds > 60000) {
+            AddIssue(&issues, SectorTopologyObjectKind::Sector, sector.id,
+                     "has invalid roomtone settings");
+        }
         if (!CanExtractSector(map, indexes, sector.id)) {
             continue;
         }
         SectorTopologyLoopSet loops;
         ExtractSectorTopologyLoops(map, indexes, sector.id, loops, &issues);
+    }
+
+    if (map.audioSettings.roomtoneFadeMilliseconds < 0
+            || map.audioSettings.roomtoneFadeMilliseconds > 60000) {
+        AddIssue(&issues, SectorTopologyObjectKind::Map, -1,
+                 "roomtone fade must be between 0 and 60000 milliseconds");
     }
 
     return issues;
@@ -1040,6 +1087,9 @@ std::string FormatSectorTopologyValidationIssue(
             break;
         case SectorTopologyObjectKind::LevelMarker:
             objectName = "LevelMarker";
+            break;
+        case SectorTopologyObjectKind::SoundEmitter:
+            objectName = "SoundEmitter";
             break;
     }
 

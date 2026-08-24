@@ -672,6 +672,16 @@ SectorEditorTopologyRenderCache BuildSectorEditorTopologyRenderCache(
         cache.levelMarkers.push_back(std::move(cached));
     }
 
+    cache.soundEmitters.reserve(authoringGraph.soundEmitters.size());
+    for (const SectorAuthoringSoundEmitter& emitter : authoringGraph.soundEmitters) {
+        CachedAuthoringSoundEmitterDraw cached;
+        cached.emitterId = emitter.id;
+        cached.referenceId = emitter.referenceId;
+        cached.map = {SectorCoordToVisibleAuthoring(emitter.x),
+                SectorCoordToVisibleAuthoring(emitter.z)};
+        cache.soundEmitters.push_back(std::move(cached));
+    }
+
     cache.triggers.reserve(authoringGraph.triggers.size());
     for (const SectorAuthoringTrigger& trigger : authoringGraph.triggers) {
         CachedAuthoringTriggerDraw cached;
@@ -1034,6 +1044,26 @@ void AppendCachedLevelMarkerPickCandidates(
             outCandidates.push_back(SectorEditorPickCandidate{
                     SectorEditorPickTarget{SectorEditorPickKind::LevelMarker, marker.markerId},
                     distance2});
+        }
+    }
+}
+
+void AppendCachedSoundEmitterPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates)
+{
+    if (!cache.valid || tolerancePixels < 0.0f) return;
+    const float tolerance2 = tolerancePixels * tolerancePixels;
+    for (const CachedAuthoringSoundEmitterDraw& emitter : cache.soundEmitters) {
+        const Vector2 center = CachedMapToScreen(context, emitter.map);
+        const float dx = center.x - screenPoint.x;
+        const float dy = center.y - screenPoint.y;
+        const float distance2 = dx * dx + dy * dy;
+        if (distance2 <= tolerance2) {
+            outCandidates.push_back({{SectorEditorPickKind::SoundEmitter, emitter.emitterId}, distance2});
         }
     }
 }
@@ -1793,6 +1823,41 @@ void DrawCachedLevelMarkers(
         DrawLineEx(center, tip, selected ? 3.0f : 2.0f, color);
         DrawEditorMarkerDisc(tip, selected ? 3.5f : 3.0f, color);
         DrawText(marker.referenceId.c_str(), static_cast<int>(center.x + 11.0f),
+                static_cast<int>(center.y - 16.0f), 12, color);
+    }
+}
+
+void DrawCachedSoundEmitters(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        const SoundEmitterDragState* drag)
+{
+    const Color outline{18, 30, 34, 255};
+    const Color normal{72, 212, 170, 255};
+    const Color selectedColor{248, 232, 102, 255};
+    const Color hoveredColor{142, 246, 211, 255};
+    for (const CachedAuthoringSoundEmitterDraw& emitter : cache.soundEmitters) {
+        Vector2 map = emitter.map;
+        if (drag != nullptr && drag->active && drag->emitterId == emitter.emitterId) {
+            map = {SectorCoordToVisibleAuthoring(drag->previewX),
+                    SectorCoordToVisibleAuthoring(drag->previewZ)};
+        }
+        const bool selected = context.selectedAuthoring.kind == SectorAuthoringSelectionKind::SoundEmitter
+                && context.selectedAuthoring.soundEmitterId == emitter.emitterId;
+        const bool hovered = context.hoveredAuthoring.kind == SectorAuthoringSelectionKind::SoundEmitter
+                && context.hoveredAuthoring.soundEmitterId == emitter.emitterId;
+        const Color color = selected ? selectedColor : hovered ? hoveredColor : normal;
+        const Vector2 center = CachedMapToScreen(context, map);
+        const float radius = selected ? 9.0f : 7.0f;
+        DrawCircleV(center, radius, color);
+        DrawCircleLines(static_cast<int>(center.x), static_cast<int>(center.y), radius, outline);
+        DrawLineEx({center.x - 3.0f, center.y - 4.0f},
+                {center.x - 3.0f, center.y + 4.0f}, 2.0f, outline);
+        DrawLineEx({center.x + 1.0f, center.y - 3.0f},
+                {center.x + 5.0f, center.y - 6.0f}, 2.0f, outline);
+        DrawLineEx({center.x + 1.0f, center.y + 3.0f},
+                {center.x + 5.0f, center.y + 6.0f}, 2.0f, outline);
+        DrawText(emitter.referenceId.c_str(), static_cast<int>(center.x + 11.0f),
                 static_cast<int>(center.y - 16.0f), 12, color);
     }
 }

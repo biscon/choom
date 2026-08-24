@@ -450,8 +450,17 @@ void TestAuthoringFaceInspectorHeightIncludesAllSections()
                     rowH,
                     gap,
                     anchorSummaryHeight);
-    Check(Near(height, 1434.0f),
-          "authoring face height includes merge, ceiling sky, audio, materials, decals, and padding");
+    Check(Near(height, 1626.0f),
+          "authoring face height includes roomtone, merge, ceiling sky, audio, materials, decals, and padding");
+
+    anchor.roomtone.fadeMilliseconds = 500;
+    const float overriddenFadeHeight =
+            game::MeasureSectorEditorAuthoringFaceInspectorContentHeight(
+                    anchor, rowH, gap, anchorSummaryHeight);
+    Check(Near(overriddenFadeHeight - height, rowH + gap),
+          "authoring face height includes an overridden roomtone fade row");
+    anchor.roomtone.fadeMilliseconds =
+            game::SectorRoomtoneSettings::UseMapFadeMilliseconds;
 
     anchor.floorDecal.materialId = "floor_decal";
     anchor.floorDecal.emissive = true;

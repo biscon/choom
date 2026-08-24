@@ -972,6 +972,61 @@ void TriggerContainmentUsesExplicitCoordinateSpaces()
     assert(!game::SectorTriggerContainsWorldPoint(hubLikeTrigger, 0.0f, 28.0f));
 }
 
+void MapAudioBindingsForwardOptionalPlaybackSettings()
+{
+    struct Capture {
+        bool mapPlayed = false;
+        bool emitterPlayed = false;
+        bool emitterStopped = false;
+    } capture;
+    game::SectorScriptAudioApi audio;
+    audio.userData = &capture;
+    audio.playMapSound = [](void* userData, engine::EngineContext&,
+                                const std::string& id, float volume, float pitch,
+                                std::string&) {
+        Capture& value = *static_cast<Capture*>(userData);
+        value.mapPlayed = id == "switch_click"
+                && std::fabs(volume - 0.4f) < 0.001f
+                && std::fabs(pitch - 1.2f) < 0.001f;
+        return value.mapPlayed;
+    };
+    audio.playSoundEmitter = [](void* userData, engine::EngineContext&,
+                                    const std::string& id, const float* volume,
+                                    float pitch, std::string&) {
+        Capture& value = *static_cast<Capture*>(userData);
+        value.emitterPlayed = id == "office_fan" && volume == nullptr
+                && std::fabs(pitch - 0.8f) < 0.001f;
+        return value.emitterPlayed;
+    };
+    audio.stopSoundEmitter = [](void* userData, engine::EngineContext&,
+                                    const std::string& id, std::string&) {
+        Capture& value = *static_cast<Capture*>(userData);
+        value.emitterStopped = id == "office_fan";
+        return value.emitterStopped;
+    };
+
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    ScriptFiles files;
+    game::InitializeSectorScriptHost(
+            host, objects, map, runtime, nullptr, nullptr, audio);
+    files.Write(R"(
+function init()
+    assert(playMapSound("switch_click", 0.4, 1.2))
+    assert(playSoundEmitter("office_fan", nil, 0.8))
+    assert(stopSoundEmitter("office_fan"))
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    assert(capture.mapPlayed && capture.emitterPlayed && capture.emitterStopped);
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+}
+
 } // namespace
 
 void RunSectorScriptBindingTests()
@@ -989,5 +1044,6 @@ void RunSectorScriptBindingTests()
     NpcMoveRebuildDeletionUnloadAndImmediateFailuresResolve();
     TravelPreservesFirstRequest();
     TriggerContainmentUsesExplicitCoordinateSpaces();
+    MapAudioBindingsForwardOptionalPlaybackSettings();
     TriggerDispatchDelayRepeatAndEnableControls();
 }

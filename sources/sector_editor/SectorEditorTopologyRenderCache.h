@@ -73,6 +73,12 @@ void AppendCachedLevelMarkerPickCandidates(
         Vector2 screenPoint,
         float tolerancePixels,
         std::vector<SectorEditorPickCandidate>& outCandidates);
+void AppendCachedSoundEmitterPickCandidates(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        Vector2 screenPoint,
+        float tolerancePixels,
+        std::vector<SectorEditorPickCandidate>& outCandidates);
 
 void DrawCachedTopologySectors(
         const SectorEditorTopologyRenderCache& cache,
@@ -102,6 +108,10 @@ void DrawCachedLevelMarkers(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,
         const LevelMarkerDragState* drag = nullptr);
+void DrawCachedSoundEmitters(
+        const SectorEditorTopologyRenderCache& cache,
+        const SectorEditorTopologyDrawContext& context,
+        const SoundEmitterDragState* drag = nullptr);
 void DrawCachedTriggers(
         const SectorEditorTopologyRenderCache& cache,
         const SectorEditorTopologyDrawContext& context,

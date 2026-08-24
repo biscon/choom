@@ -65,10 +65,23 @@ std::unordered_set<std::string> CollectUsedTextureIds(
     return usedTextureIds;
 }
 
-std::unordered_set<std::string> CollectUsedSoundIds(const SectorTopologyMap& map)
+std::unordered_set<std::string> CollectUsedSoundIds(
+        const SectorAuthoringGraph& authoringGraph,
+        const SectorTopologyMap& map)
 {
     std::unordered_set<std::string> usedSoundIds;
-    usedSoundIds.reserve(map.runtimeObjects.size() * 2);
+    usedSoundIds.reserve(map.runtimeObjects.size() * 2
+            + authoringGraph.faceAnchors.size()
+            + authoringGraph.soundEmitters.size());
+    for (const SectorAuthoringFaceAnchor& anchor : authoringGraph.faceAnchors) {
+        if (anchor.roomtone.mode == SectorRoomtoneMode::Play
+                && !anchor.roomtone.soundId.empty()) {
+            usedSoundIds.insert(anchor.roomtone.soundId);
+        }
+    }
+    for (const SectorAuthoringSoundEmitter& emitter : authoringGraph.soundEmitters) {
+        if (!emitter.soundId.empty()) usedSoundIds.insert(emitter.soundId);
+    }
     for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
         if (object.kind != "door") continue;
         if (!object.door.openSoundId.empty()) {
@@ -114,7 +127,7 @@ SectorEditorAssetPruneResult PruneUnusedSectorEditorAssets(
     if (options.pruneSounds) {
         result.removedSoundCount = EraseUnusedAssets(
                 map.audioSettings.soundsById,
-                CollectUsedSoundIds(map));
+                CollectUsedSoundIds(authoringGraph, map));
     }
     return result;
 }

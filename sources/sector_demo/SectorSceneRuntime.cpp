@@ -7,6 +7,7 @@
 #include <raylib.h>
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 
 namespace game {
@@ -148,9 +149,10 @@ void SectorSceneRuntime::Update(
         const SectorTopologyMap& map,
         float dt,
         const Vector3* playerPosition,
+        int playerSectorId,
         const SectorDoorPlayerObstacle* playerObstacle)
 {
-    UpdateLevelAudio(context);
+    UpdateLevelAudio(context, map, dt, playerSectorId);
     PrepareNpcDoorTraversalAndHoldsSystem(
             context.world,
             navigation,
@@ -416,8 +418,13 @@ void SectorSceneRuntime::StopLevelAudio(engine::EngineContext& context)
     for (const auto& entry : levelMusicById) {
         context.audio.StopMusic(context.assets, entry.second);
     }
-    if (!engine::IsNull(backgroundMusic)) {
-        context.audio.StopMusic(context.assets, backgroundMusic);
+    for (const RoomtonePlayback& playback : roomtonePlaybacks) {
+        context.audio.StopMusic(context.assets, playback.music);
+    }
+    for (SoundEmitterPlayback& emitter : soundEmitterPlaybacks) {
+        if (!engine::IsNull(emitter.playback)) {
+            context.audio.StopSound(context.assets, emitter.playback);
+        }
     }
     if (!engine::IsNull(audioScope)) {
         context.assets.UnloadScope(audioScope);
@@ -429,10 +436,11 @@ void SectorSceneRuntime::StopLevelAudio(engine::EngineContext& context)
     footstepSetBySectorId.clear();
     footstepPlayback = FootstepPlaybackState{};
     footstepVolume = 1.0f;
-    backgroundMusic = engine::NullMusicHandle();
-    levelMusicVolume = SectorLevelAudioSettings::DefaultMusicVolume;
-    levelMusicStartPending = false;
-    levelMusicFailureReported = false;
+    roomtonePlaybacks.clear();
+    lastRoomtoneSectorId = -1;
+    roomtoneTransitionElapsedSeconds = 0.0f;
+    roomtoneTransitionDurationSeconds = 0.0f;
+    soundEmitterPlaybacks.clear();
 }
 
 engine::SoundPlaybackHandle SectorSceneRuntime::PlayFootstepForSector(
@@ -493,6 +501,118 @@ engine::MusicHandle SectorSceneRuntime::FindLevelMusic(
             : found->second;
 }
 
+bool SectorSceneRuntime::PlayLevelSound(
+        engine::EngineContext& context,
+        const std::string& id,
+        float volume,
+        float pitch,
+        std::string& error)
+{
+    const engine::SoundHandle sound = FindLevelSound(id);
+    if (engine::IsNull(sound)) {
+        error = "map Sound ID was not found: " + id;
+        return false;
+    }
+    if (!context.assets.IsReady(sound)) {
+        error = context.assets.HasFailed(sound)
+                ? "map Sound failed to load: " + id
+                : "map Sound is not ready: " + id;
+        return false;
+    }
+    engine::SoundPlaybackSettings settings;
+    settings.volume = volume;
+    settings.pitch = pitch;
+    if (engine::IsNull(context.audio.PlaySound(context.assets, sound, settings))) {
+        error = "map Sound could not start: " + id;
+        return false;
+    }
+    error.clear();
+    return true;
+}
+
+bool SectorSceneRuntime::PlaySoundEmitter(
+        engine::EngineContext& context,
+        const std::string& id,
+        const float* volumeOverride,
+        float pitch,
+        std::string& error)
+{
+    auto found = std::find_if(
+            soundEmitterPlaybacks.begin(), soundEmitterPlaybacks.end(),
+            [&id](const SoundEmitterPlayback& emitter) { return emitter.id == id; });
+    if (found == soundEmitterPlaybacks.end()) {
+        error = "sound emitter was not found: " + id;
+        return false;
+    }
+    SoundEmitterPlayback& emitter = *found;
+    if (engine::IsNull(emitter.sound)) {
+        error = "sound emitter has no valid buffered Sound: " + id;
+        return false;
+    }
+    if (!context.assets.IsReady(emitter.sound)) {
+        error = context.assets.HasFailed(emitter.sound)
+                ? "sound emitter asset failed to load: " + id
+                : "sound emitter asset is not ready: " + id;
+        return false;
+    }
+    emitter.pitch = pitch;
+    const float playbackVolume = volumeOverride != nullptr
+            ? *volumeOverride : emitter.volume;
+    emitter.playbackVolume = playbackVolume;
+    engine::SoundPlaybackSettings settings;
+    settings.volume = playbackVolume;
+    settings.pitch = pitch;
+    settings.looping = emitter.loop;
+    if (emitter.loop && context.audio.IsSoundPlaying(emitter.playback)) {
+        if (!context.audio.SetSoundPlaybackSettings(
+                    context.assets, emitter.playback, settings)) {
+            error = "sound emitter settings could not be updated: " + id;
+            return false;
+        }
+        emitter.loopRequested = true;
+        emitter.autoStartPending = false;
+        error.clear();
+        return true;
+    }
+    if (context.audio.IsSoundPlaying(emitter.playback)) {
+        context.audio.StopSound(context.assets, emitter.playback);
+    }
+    engine::PositionalSoundSettings positional;
+    positional.position = emitter.positionWorld;
+    emitter.playback = context.audio.PlaySoundAt(
+            context.assets, emitter.sound, positional, settings);
+    if (engine::IsNull(emitter.playback)) {
+        error = "sound emitter could not start: " + id;
+        return false;
+    }
+    emitter.loopRequested = emitter.loop;
+    emitter.autoStartPending = false;
+    error.clear();
+    return true;
+}
+
+bool SectorSceneRuntime::StopSoundEmitter(
+        engine::EngineContext& context,
+        const std::string& id,
+        std::string& error)
+{
+    auto found = std::find_if(
+            soundEmitterPlaybacks.begin(), soundEmitterPlaybacks.end(),
+            [&id](const SoundEmitterPlayback& emitter) { return emitter.id == id; });
+    if (found == soundEmitterPlaybacks.end()) {
+        error = "sound emitter was not found: " + id;
+        return false;
+    }
+    if (context.audio.IsSoundPlaying(found->playback)) {
+        context.audio.StopSound(context.assets, found->playback);
+    }
+    found->playback = engine::NullSoundPlaybackHandle();
+    found->loopRequested = false;
+    found->autoStartPending = false;
+    error.clear();
+    return true;
+}
+
 void SectorSceneRuntime::BeginLevelAudio(
         engine::EngineContext& context,
         const SectorTopologyMap& map,
@@ -540,8 +660,8 @@ void SectorSceneRuntime::BeginLevelAudio(
                 defaultFootstepSet.c_str());
     }
 
-    if (map.audioSettings.musicPath.empty()
-            && map.audioSettings.soundsById.empty()
+    if (map.audioSettings.soundsById.empty()
+            && map.soundEmitters.empty()
             && usedFootstepSets.empty()) {
         return;
     }
@@ -593,12 +713,20 @@ void SectorSceneRuntime::BeginLevelAudio(
             footstepPlayback,
             maximumVariationCount,
             maximumSetIdLength);
-    if (!map.audioSettings.musicPath.empty()) {
-        const std::string path = ResolveSectorAudioAssetPath(
-                map.audioSettings.musicPath);
-        backgroundMusic = context.assets.RequestMusic(audioScope, path.c_str());
-        levelMusicVolume = map.audioSettings.musicVolume;
-        levelMusicStartPending = !engine::IsNull(backgroundMusic);
+    roomtonePlaybacks.reserve(levelMusicById.size());
+    soundEmitterPlaybacks.reserve(map.soundEmitters.size());
+    for (const SectorCompiledSoundEmitter& source : map.soundEmitters) {
+        SoundEmitterPlayback emitter;
+        emitter.id = source.id;
+        emitter.soundId = source.soundId;
+        emitter.positionWorld = source.positionWorld;
+        emitter.volume = source.volume;
+        emitter.playbackVolume = source.volume;
+        emitter.loop = source.loop;
+        emitter.loopRequested = source.loop;
+        emitter.autoStartPending = source.loop;
+        emitter.sound = FindLevelSound(source.soundId);
+        soundEmitterPlaybacks.push_back(std::move(emitter));
     }
 }
 
@@ -635,26 +763,139 @@ void SectorSceneRuntime::PlayPendingNpcFootsteps(
     }
 }
 
-void SectorSceneRuntime::UpdateLevelAudio(engine::EngineContext& context)
+void SectorSceneRuntime::UpdateLevelAudio(
+        engine::EngineContext& context,
+        const SectorTopologyMap& map,
+        float rawDt,
+        int playerSectorId)
 {
-    if (!levelMusicStartPending || engine::IsNull(backgroundMusic)) return;
-    if (context.assets.IsReady(backgroundMusic)) {
-        engine::MusicPlaybackSettings settings;
-        settings.volume = levelMusicVolume;
-        if (context.audio.PlayMusic(
-                    context.assets,
-                    backgroundMusic,
-                    settings)) {
-            levelMusicStartPending = false;
+    const float dt = std::isfinite(rawDt) ? std::max(0.0f, rawDt) : 0.0f;
+
+    if (playerSectorId != lastRoomtoneSectorId) {
+        lastRoomtoneSectorId = playerSectorId;
+        const SectorTopologySector* sector = FindSectorTopologySector(map, playerSectorId);
+        if (sector != nullptr && sector->roomtone.mode != SectorRoomtoneMode::Inherit) {
+            const int fadeMilliseconds = sector->roomtone.fadeMilliseconds
+                            == SectorRoomtoneSettings::UseMapFadeMilliseconds
+                    ? map.audioSettings.roomtoneFadeMilliseconds
+                    : sector->roomtone.fadeMilliseconds;
+            roomtoneTransitionElapsedSeconds = 0.0f;
+            roomtoneTransitionDurationSeconds =
+                    static_cast<float>(fadeMilliseconds) / 1000.0f;
+            for (RoomtonePlayback& playback : roomtonePlaybacks) {
+                playback.startVolume = playback.currentVolume;
+                playback.targetVolume = 0.0f;
+            }
+
+            if (sector->roomtone.mode == SectorRoomtoneMode::Play) {
+                const engine::MusicHandle requested = FindLevelMusic(
+                        sector->roomtone.soundId);
+                if (engine::IsNull(requested)) {
+                    TraceLog(
+                            LOG_WARNING,
+                            "Sector %d roomtone '%s' is missing or is not streaming Music",
+                            sector->id,
+                            sector->roomtone.soundId.c_str());
+                    roomtoneTransitionDurationSeconds = 0.0f;
+                    for (RoomtonePlayback& playback : roomtonePlaybacks) {
+                        playback.targetVolume = playback.startVolume;
+                    }
+                } else {
+                    auto existing = std::find_if(
+                            roomtonePlaybacks.begin(), roomtonePlaybacks.end(),
+                            [requested](const RoomtonePlayback& playback) {
+                                return playback.music == requested;
+                            });
+                    if (existing == roomtonePlaybacks.end()) {
+                        RoomtonePlayback incoming;
+                        incoming.soundId = sector->roomtone.soundId;
+                        incoming.music = requested;
+                        incoming.targetVolume = sector->roomtone.volume;
+                        roomtonePlaybacks.push_back(std::move(incoming));
+                    } else {
+                        existing->targetVolume = sector->roomtone.volume;
+                    }
+                }
+            }
         }
-        return;
     }
-    if (context.assets.HasFailed(backgroundMusic)) {
-        if (!levelMusicFailureReported) {
-            TraceLog(LOG_WARNING, "Configured level music failed to load");
-            levelMusicFailureReported = true;
+
+    const float transitionT = roomtoneTransitionDurationSeconds <= 0.0f
+            ? 1.0f
+            : std::clamp(
+                    (roomtoneTransitionElapsedSeconds + dt)
+                            / roomtoneTransitionDurationSeconds,
+                    0.0f,
+                    1.0f);
+    constexpr float HalfPi = 1.57079632679489661923f;
+    for (RoomtonePlayback& playback : roomtonePlaybacks) {
+        if (playback.targetVolume >= playback.startVolume) {
+            playback.currentVolume = playback.startVolume
+                    + (playback.targetVolume - playback.startVolume)
+                            * std::sin(transitionT * HalfPi);
+        } else {
+            playback.currentVolume = playback.targetVolume
+                    + (playback.startVolume - playback.targetVolume)
+                            * std::cos(transitionT * HalfPi);
         }
-        levelMusicStartPending = false;
+        engine::MusicPlaybackSettings settings;
+        settings.volume = playback.currentVolume;
+        if (context.assets.IsReady(playback.music)) {
+            if (context.audio.PlayMusic(context.assets, playback.music, settings)) {
+            }
+        } else if (context.assets.HasFailed(playback.music)
+                && !playback.failureReported) {
+            TraceLog(LOG_WARNING, "Roomtone '%s' failed to load",
+                    playback.soundId.c_str());
+            playback.failureReported = true;
+            playback.targetVolume = 0.0f;
+        }
+    }
+    roomtoneTransitionElapsedSeconds += dt;
+    if (transitionT >= 1.0f) {
+        for (size_t index = roomtonePlaybacks.size(); index > 0; --index) {
+            RoomtonePlayback& playback = roomtonePlaybacks[index - 1];
+            playback.currentVolume = playback.targetVolume;
+            playback.startVolume = playback.targetVolume;
+            if (playback.targetVolume <= 0.0f) {
+                context.audio.StopMusic(context.assets, playback.music);
+                roomtonePlaybacks.erase(roomtonePlaybacks.begin()
+                        + static_cast<std::ptrdiff_t>(index - 1));
+            }
+        }
+    }
+
+    for (SoundEmitterPlayback& emitter : soundEmitterPlaybacks) {
+        if (!emitter.loop || !emitter.loopRequested
+                || (!emitter.autoStartPending
+                    && context.audio.IsSoundPlaying(emitter.playback))) {
+            continue;
+        }
+        if (engine::IsNull(emitter.sound)) {
+            if (!emitter.failureReported && !emitter.soundId.empty()) {
+                TraceLog(LOG_WARNING,
+                        "Sound emitter '%s' references missing or non-Sound map sound '%s'",
+                        emitter.id.c_str(), emitter.soundId.c_str());
+                emitter.failureReported = true;
+            }
+            emitter.autoStartPending = false;
+            continue;
+        }
+        if (!context.assets.IsReady(emitter.sound)) {
+            if (context.assets.HasFailed(emitter.sound)) {
+                emitter.autoStartPending = false;
+            }
+            continue;
+        }
+        engine::SoundPlaybackSettings settings;
+        settings.volume = emitter.playbackVolume;
+        settings.pitch = emitter.pitch;
+        settings.looping = true;
+        engine::PositionalSoundSettings positional;
+        positional.position = emitter.positionWorld;
+        emitter.playback = context.audio.PlaySoundAt(
+                context.assets, emitter.sound, positional, settings);
+        emitter.autoStartPending = false;
     }
 }
 

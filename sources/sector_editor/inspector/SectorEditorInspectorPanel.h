@@ -19,6 +19,8 @@
 #include "sector_editor/services/footsteps/SectorEditorFootstepService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
+#include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
+#include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingState.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 
@@ -42,6 +44,7 @@ enum class SectorEditorInspectorPanelRequestKind {
     OpenDeleteSelectedFogVolumeConfirmation,
     OpenDeleteSelectedReflectionProbeConfirmation,
     OpenDeleteSelectedLevelMarkerConfirmation,
+    OpenDeleteSelectedSoundEmitterConfirmation,
     OpenDeleteSelectedTriggerConfirmation,
     BakeLightmaps,
     RefreshPreviewLightSources
@@ -82,6 +85,7 @@ struct SectorEditorInspectorPanelContext {
     FogVolumeEditingUiState& fogVolumeUiState;
     ReflectionProbeEditingUiState& reflectionProbeUiState;
     LevelMarkerEditingUiState& levelMarkerUiState;
+    SoundEmitterEditingUiState& soundEmitterUiState;
     TriggerEditingUiState& triggerUiState;
     std::string& statusText;
 
@@ -96,6 +100,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorAuthoringFogVolumeEditingService& fogVolumeEditing;
     SectorEditorReflectionProbeEditingService& reflectionProbeEditing;
     SectorEditorLevelMarkerEditingService& levelMarkerEditing;
+    SectorEditorSoundEmitterEditingService& soundEmitterEditing;
     SectorEditorTriggerEditingService& triggerEditing;
     SectorEditorAuthoringFaceMergeService& authoringFaceMerge;
     engine::EngineContext* engineContext = nullptr;
@@ -133,6 +138,11 @@ inline float MeasureSectorEditorAuthoringFaceInspectorContentHeight(
 
     height += 18.0f + 30.0f; // Audio separator/title.
     height += SectorEditorInspectorTextureRowHeight() + gap; // Footsteps.
+    height += 4.0f * (rowHeight + gap); // Roomtone mode, sound, volume, fade override.
+    if (anchor.roomtone.fadeMilliseconds
+            != SectorRoomtoneSettings::UseMapFadeMilliseconds) {
+        height += rowHeight + gap;
+    }
 
     height += 18.0f + 30.0f; // Lighting separator/title.
     height += 4.0f * (rowHeight + gap); // Intensity and RGB.

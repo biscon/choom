@@ -2648,20 +2648,24 @@ void TestPreviewSettingsRoundTripAndValidation()
 void TestAudioSettingsRoundTripAndValidation()
 {
     SectorTopologyMap original = MakeSquare();
-    original.audioSettings.musicPath = "music/level_theme.ogg";
-    original.audioSettings.musicVolume = 0.35f;
+    original.audioSettings.roomtoneFadeMilliseconds = 1750;
     original.audioSettings.soundsById.emplace(
             "door_open", SectorSoundDefinition{
                     "door_open", "shared/doors/open.wav", SectorSoundType::Sound});
     original.audioSettings.soundsById.emplace(
             "alarm", SectorSoundDefinition{
                     "alarm", "ambience/alarm.mp3", SectorSoundType::Music});
+    original.sectors[0].roomtone.mode = game::SectorRoomtoneMode::Play;
+    original.sectors[0].roomtone.soundId = "alarm";
+    original.sectors[0].roomtone.volume = 0.45f;
+    original.sectors[0].roomtone.fadeMilliseconds = 2250;
+    original.soundEmitters.push_back(game::SectorCompiledSoundEmitter{
+            77, "office_fan", Vector3{1.0f, 2.0f, 3.0f},
+            "door_open", 0.7f, true});
 
     const Json saved = Json::parse(SaveText(original));
-    Check(saved["audio"]["music"] == "music/level_theme.ogg",
-          "level music path is serialized relative to assets/audio");
-    Check(Near(saved["audio"]["musicVolume"].get<float>(), 0.35f),
-          "non-default level music volume is serialized");
+    Check(saved["audio"]["roomtoneFadeMilliseconds"] == 1750,
+          "non-default roomtone fade is serialized");
     Check(saved["audio"]["sounds"]["door_open"]["path"]
                   == "shared/doors/open.wav"
                   && saved["audio"]["sounds"]["door_open"]["type"] == "sound"
@@ -2669,12 +2673,21 @@ void TestAudioSettingsRoundTripAndValidation()
                   == "ambience/alarm.mp3"
                   && saved["audio"]["sounds"]["alarm"]["type"] == "music",
           "typed level sounds are serialized");
+    Check(saved["sectors"][0]["roomtone"]["mode"] == "play"
+                  && saved["sectors"][0]["roomtone"]["soundId"] == "alarm"
+                  && Near(saved["sectors"][0]["roomtone"]["volume"].get<float>(), 0.45f)
+                  && saved["sectors"][0]["roomtone"]["fadeMilliseconds"] == 2250,
+          "sector roomtone settings are serialized");
+    Check(saved["soundEmitters"].size() == 1
+                  && saved["soundEmitters"][0]["id"] == "office_fan"
+                  && saved["soundEmitters"][0]["soundId"] == "door_open"
+                  && saved["soundEmitters"][0]["loop"] == true,
+          "compiled sound emitters are serialized");
 
     SectorTopologyMap loaded;
     std::string error;
     Check(LoadText(saved.dump(), loaded, error), "level audio JSON loads");
-    Check(loaded.audioSettings.musicPath == "music/level_theme.ogg"
-                  && Near(loaded.audioSettings.musicVolume, 0.35f)
+    Check(loaded.audioSettings.roomtoneFadeMilliseconds == 1750
                   && loaded.audioSettings.soundsById.at("door_open").path
                   == "shared/doors/open.wav"
                   && loaded.audioSettings.soundsById.at("door_open").type
@@ -2682,7 +2695,13 @@ void TestAudioSettingsRoundTripAndValidation()
                   && loaded.audioSettings.soundsById.at("alarm").path
                   == "ambience/alarm.mp3"
                   && loaded.audioSettings.soundsById.at("alarm").type
-                  == SectorSoundType::Music,
+                  == SectorSoundType::Music
+                  && loaded.sectors[0].roomtone.mode == game::SectorRoomtoneMode::Play
+                  && loaded.sectors[0].roomtone.soundId == "alarm"
+                  && Near(loaded.sectors[0].roomtone.volume, 0.45f)
+                  && loaded.soundEmitters.size() == 1
+                  && loaded.soundEmitters[0].id == "office_fan"
+                  && loaded.soundEmitters[0].loop,
           "level audio settings round-trip");
 
     Json legacySounds = saved;
@@ -2694,31 +2713,28 @@ void TestAudioSettingsRoundTripAndValidation()
           "legacy string sound registry entry defaults to sound type");
 
     Json legacy = saved;
-    legacy["audio"].erase("musicVolume");
+    legacy["audio"]["music"] = "music/removed_theme.ogg";
+    legacy["audio"]["musicVolume"] = 0.25f;
     Check(LoadText(legacy.dump(), loaded, error),
-          "level audio without music volume remains compatible");
-    Check(Near(
-                  loaded.audioSettings.musicVolume,
-                  game::SectorLevelAudioSettings::DefaultMusicVolume),
-          "omitted level music volume uses the default");
+          "removed legacy map music fields are ignored compatibly");
+    Check(loaded.audioSettings.roomtoneFadeMilliseconds == 1750,
+          "legacy map music does not affect roomtone settings");
 
-    SectorTopologyMap defaultVolume = MakeSquare();
-    defaultVolume.audioSettings.musicPath = "music/default_volume.ogg";
-    const Json defaultVolumeSaved = Json::parse(SaveText(defaultVolume));
-    Check(defaultVolumeSaved["audio"].find("musicVolume")
-                  == defaultVolumeSaved["audio"].end(),
-          "default level music volume is omitted on save");
+    SectorTopologyMap defaultFade = MakeSquare();
+    const Json defaultFadeSaved = Json::parse(SaveText(defaultFade));
+    Check(defaultFadeSaved.find("audio") == defaultFadeSaved.end(),
+          "default roomtone fade is omitted on save");
 
     const Json defaults = Json::parse(SaveText(MakeSquare()));
     Check(defaults.find("audio") == defaults.end(),
           "empty level audio settings are omitted");
+    Check(defaults["sectors"][0].find("roomtone") == defaults["sectors"][0].end()
+                  && defaults.find("soundEmitters") == defaults.end(),
+          "default roomtone and absent sound emitters are omitted");
 
     Json invalid = saved;
     invalid["audio"] = "music/level_theme.ogg";
     ExpectRejected(invalid, "non-object level audio is rejected");
-    invalid = saved;
-    invalid["audio"]["music"] = "../outside.ogg";
-    ExpectRejected(invalid, "traversing level music path is rejected");
     invalid = saved;
     invalid["audio"]["sounds"]["door_open"] = "shared/door.flac";
     ExpectRejected(invalid, "unsupported level sound format is rejected");
@@ -2726,21 +2742,24 @@ void TestAudioSettingsRoundTripAndValidation()
     invalid["audio"]["sounds"]["door_open"]["type"] = "voice";
     ExpectRejected(invalid, "unknown level sound registry type is rejected");
     invalid = saved;
-    invalid["audio"]["musicVolume"] = "loud";
-    ExpectRejected(invalid, "non-numeric level music volume is rejected");
+    invalid["sectors"][0]["roomtone"]["soundId"] = "door_open";
+    ExpectRejected(invalid, "roomtone rejects a buffered Sound ID");
     invalid = saved;
-    invalid["audio"]["musicVolume"] = -0.01f;
-    ExpectRejected(invalid, "negative level music volume is rejected");
+    invalid["soundEmitters"][0]["soundId"] = "alarm";
+    ExpectRejected(invalid, "sound emitter rejects a streaming Music ID");
     invalid = saved;
-    invalid["audio"]["musicVolume"] = 1.01f;
-    ExpectRejected(invalid, "level music volume above one is rejected");
+    invalid["audio"]["roomtoneFadeMilliseconds"] = "slow";
+    ExpectRejected(invalid, "non-integer roomtone fade is rejected");
+    invalid = saved;
+    invalid["audio"]["roomtoneFadeMilliseconds"] = -1;
+    ExpectRejected(invalid, "negative roomtone fade is rejected");
+    invalid = saved;
+    invalid["audio"]["roomtoneFadeMilliseconds"] = 60001;
+    ExpectRejected(invalid, "roomtone fade above the maximum is rejected");
 
     SectorTopologyMap invalidSave = original;
-    invalidSave.audioSettings.musicPath = "/absolute/theme.ogg";
-    ExpectSaveRejected(invalidSave, "absolute level music path is rejected on save");
-    invalidSave = original;
-    invalidSave.audioSettings.musicVolume = -0.01f;
-    ExpectSaveRejected(invalidSave, "invalid level music volume is rejected on save");
+    invalidSave.audioSettings.roomtoneFadeMilliseconds = -1;
+    ExpectSaveRejected(invalidSave, "invalid roomtone fade is rejected on save");
 }
 
 void TestSkySettingsRoundTripAndValidation()
@@ -4290,11 +4309,18 @@ void TestGraphNativeMapLevelRoundTrip()
             3.0f
     });
     source.previewSettings.walkSpeed = 9.0f;
-    source.audioSettings.musicPath = "music/graph_theme.ogg";
-    source.audioSettings.musicVolume = 0.4f;
+    source.audioSettings.roomtoneFadeMilliseconds = 1400;
     source.audioSettings.soundsById.emplace(
             "ambient_hum", SectorSoundDefinition{
                     "ambient_hum", "ambience/hum.wav", SectorSoundType::Sound});
+    source.audioSettings.soundsById.emplace(
+            "great_hall", SectorSoundDefinition{
+                    "great_hall", "ambience/great_hall.ogg", SectorSoundType::Music});
+    source.sectors[0].roomtone.mode = game::SectorRoomtoneMode::Play;
+    source.sectors[0].roomtone.soundId = "great_hall";
+    source.soundEmitters.push_back(game::SectorCompiledSoundEmitter{
+            63, "vent", Vector3{2.0f, 1.0f, 2.0f},
+            "ambient_hum", 0.8f, true});
     source.skySettings.materialId = "sky";
     source.skySettings.yawOffsetDegrees = 17.0f;
     source.directionalLight.enabled = true;
@@ -4371,8 +4397,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(saved["dynamicSpotLights"][0]["shadowSoftness"].get<float>(), 3.0f),
           "graph-native dynamic spot lights are persisted");
     Check(saved["previewSettings"]["walkSpeed"] == 9.0f, "graph-native preview settings are persisted");
-    Check(saved["audio"]["music"] == "music/graph_theme.ogg"
-                  && Near(saved["audio"]["musicVolume"].get<float>(), 0.4f)
+    Check(saved["audio"]["roomtoneFadeMilliseconds"] == 1400
                   && saved["audio"]["sounds"]["ambient_hum"]["path"]
                   == "ambience/hum.wav",
           "graph-native audio settings are persisted");
@@ -4402,6 +4427,12 @@ void TestGraphNativeMapLevelRoundTrip()
                   && saved["authoringGraph"]["reflectionProbes"][0]["id"] == 41
                   && saved["bakedReflectionProbes"]["count"] == 1,
           "graph-native reflection probe authoring and bake metadata are persisted");
+    Check(saved["authoringGraph"]["faceAnchors"][0]["roomtone"]["soundId"]
+                      == "great_hall"
+                  && saved["authoringGraph"]["soundEmitters"][0]["id"] == "vent"
+                  && saved["authoringGraph"]["soundEmitters"][0]["soundId"]
+                      == "ambient_hum",
+          "graph-native roomtones and sound emitters are persisted");
     Check(saved["bakedLightmap"]["objectProbes"]["path"]
                   == "assets/levels/test/test.lightmap.object_probes.bin",
           "graph-native baked object probe sidecar path is persisted");
@@ -4451,9 +4482,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.mapData.dynamicSpotLights[0].shadowStrength, 0.8f)
                   && Near(loaded.mapData.dynamicSpotLights[0].shadowSoftness, 3.0f)
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
-                  && loaded.mapData.audioSettings.musicPath
-                          == "music/graph_theme.ogg"
-                  && Near(loaded.mapData.audioSettings.musicVolume, 0.4f)
+                  && loaded.mapData.audioSettings.roomtoneFadeMilliseconds == 1400
                   && loaded.mapData.audioSettings.soundsById.at("ambient_hum").path
                           == "ambience/hum.wav"
                   && loaded.mapData.skySettings.materialId == "sky"
@@ -4486,10 +4515,13 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.derivation.topology.compiledReflectionProbes.size() == 1
                   && loaded.mapData.bakedReflectionProbes.count == 1,
           "graph-native reflection probes round-trip and compile");
+    Check(loaded.graph.faceAnchors[0].roomtone.soundId == "great_hall"
+                  && loaded.graph.soundEmitters.size() == 1
+                  && loaded.graph.soundEmitters[0].referenceId == "vent"
+                  && loaded.derivation.topology.soundEmitters.size() == 1,
+          "graph-native roomtones and sound emitters round-trip and compile");
     Check(loaded.derivation.success
-                  && loaded.derivation.topology.audioSettings.musicPath
-                          == "music/graph_theme.ogg"
-                  && Near(loaded.derivation.topology.audioSettings.musicVolume, 0.4f)
+                  && loaded.derivation.topology.audioSettings.roomtoneFadeMilliseconds == 1400
                   && loaded.derivation.topology.audioSettings.soundsById.at(
                           "ambient_hum").path == "ambience/hum.wav"
                   && loaded.derivation.topology.resolvedMaterialsById.empty()

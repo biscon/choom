@@ -159,6 +159,16 @@ execute_process(
 if(NOT RAYLIB_GLTF_ENDPOINT_PATCH_RESULT EQUAL 0)
     message(FATAL_ERROR "Failed to apply the raylib glTF animation endpoint backport")
 endif()
+execute_process(
+        COMMAND ${CMAKE_COMMAND}
+                "-DRAYLIB_SOURCE_DIR=${raylib_SOURCE_DIR}"
+                "-DRAYLIB_PATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/raylib-6.0-sound-looping.patch"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyRaylibSoundLoopingPatch.cmake"
+        RESULT_VARIABLE RAYLIB_SOUND_LOOP_PATCH_RESULT
+)
+if(NOT RAYLIB_SOUND_LOOP_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to apply the raylib sound-looping patch")
+endif()
 target_compile_definitions(raylib PRIVATE
     SUPPORT_FILEFORMAT_JPG=1
     SUPPORT_GPU_SKINNING=1
@@ -361,6 +371,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
             sources/sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.cpp
             sources/sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.cpp
+            sources/sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.cpp
             sources/sector_editor/services/triggers/SectorEditorTriggerEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
