@@ -15,6 +15,7 @@
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/fog_volumes/SectorEditorFogVolumeEditingState.h"
+#include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/footsteps/SectorEditorFootstepService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
@@ -37,7 +38,9 @@ enum class SectorEditorInspectorPanelRequestKind {
     DeleteSelectedAuthoringVertex,
     DeleteSelectedRuntimeObject,
     OpenDeleteSelectedLightConfirmation,
+    ConvertSelectedLight,
     OpenDeleteSelectedFogVolumeConfirmation,
+    OpenDeleteSelectedReflectionProbeConfirmation,
     OpenDeleteSelectedLevelMarkerConfirmation,
     OpenDeleteSelectedTriggerConfirmation,
     BakeLightmaps,
@@ -77,6 +80,7 @@ struct SectorEditorInspectorPanelContext {
     InspectorIdUiState& inspectorIdUiState;
     MaterialEditingUiState& materialUiState;
     FogVolumeEditingUiState& fogVolumeUiState;
+    ReflectionProbeEditingUiState& reflectionProbeUiState;
     LevelMarkerEditingUiState& levelMarkerUiState;
     TriggerEditingUiState& triggerUiState;
     std::string& statusText;
@@ -90,6 +94,7 @@ struct SectorEditorInspectorPanelContext {
     SectorEditorSoundService& sounds;
     SectorEditorLightEditingService& lightEditing;
     SectorEditorAuthoringFogVolumeEditingService& fogVolumeEditing;
+    SectorEditorReflectionProbeEditingService& reflectionProbeEditing;
     SectorEditorLevelMarkerEditingService& levelMarkerEditing;
     SectorEditorTriggerEditingService& triggerEditing;
     SectorEditorAuthoringFaceMergeService& authoringFaceMerge;
@@ -106,7 +111,7 @@ inline float MeasureSectorEditorAuthoringFaceInspectorContentHeight(
             const SectorTopologyDecalLayer& decal,
             bool includeTintAndFit) {
         float height = SectorEditorInspectorTextureRowHeight() + gap;
-        if (decal.textureId.empty()) {
+        if (decal.materialId.empty()) {
             return height;
         }
         height += rowHeight + gap; // Opacity.

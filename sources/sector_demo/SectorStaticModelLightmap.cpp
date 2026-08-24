@@ -1308,6 +1308,7 @@ bool PrepareSectorStaticModelsForLightmapBake(
         preparedObject.rotationZRadians =
                 object->staticModel.rotationZRadians;
         preparedObject.scale = object->staticModel.scale;
+        preparedObject.castsShadow = object->staticModel.castsShadow;
         preparedObject.meshPlacements.resize(
                 outData.models[static_cast<size_t>(modelIndex->second)]
                         .meshes.size());

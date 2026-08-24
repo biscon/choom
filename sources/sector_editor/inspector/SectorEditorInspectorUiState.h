@@ -1,5 +1,8 @@
 #pragma once
 
+#include "engine/ui/UI.h"
+
+#include <array>
 #include <string>
 
 namespace game {
@@ -10,6 +13,11 @@ struct InspectorIdUiState {
     char selectedLightIdBuffer[64] = {};
     int idBufferLightIndex = -1;
     std::string idEditError;
+};
+
+struct ReflectionProbeEditingUiState {
+    std::array<engine::UIFloatInputState, 12> floatInputs{};
+    engine::UIIntInputState priorityInput;
 };
 
 } // namespace game

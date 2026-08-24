@@ -7,6 +7,7 @@
 #include "sector_editor/SectorEditorSelectionTypes.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
+#include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_demo/SectorAuthoringGraph.h"
@@ -48,6 +49,7 @@ struct SectorEditorManipulationServiceContext {
 
     const SectorEditorMoveProvider* placedObjectMoveProvider = nullptr;
     SectorEditorAuthoringFogVolumeEditingService* fogVolumeEditing = nullptr;
+    SectorEditorReflectionProbeEditingService* reflectionProbeEditing = nullptr;
     SectorEditorLevelMarkerEditingService* levelMarkerEditing = nullptr;
     SectorEditorTriggerEditingService* triggerEditing = nullptr;
     std::function<Vector2(Vector2)> screenToMap;

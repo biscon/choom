@@ -164,7 +164,7 @@ void DrawSectorEditorDecalTintModal(SectorEditorDecalTintModalContext& context)
             : nullptr;
     const bool targetValid = context.callbacks.isTargetValid
             && context.callbacks.isTargetValid(target);
-    if (!targetValid || decal == nullptr || decal->textureId.empty()) {
+    if (!targetValid || decal == nullptr || decal->materialId.empty()) {
         modalState.errorMessage = "Decal target is no longer valid.";
         context.statusText = modalState.errorMessage;
         return;

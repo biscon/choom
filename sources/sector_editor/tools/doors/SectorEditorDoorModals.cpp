@@ -95,7 +95,7 @@ bool ApplySelectedDoorFaceUvFit(
             object->door.thickness,
             object->door.normalOffset,
             object->door.heightOffsetWorld,
-            object->door.textureId,
+            object->door.materialId,
             object->door.faceUvs,
             WHITE,
             true};

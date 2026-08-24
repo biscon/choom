@@ -16,6 +16,7 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringLineSelectionTarget(int lineId
 SectorAuthoringSelectionTarget MakeSectorAuthoringVertexSelectionTarget(int vertexId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringFaceAnchorSelectionTarget(int faceAnchorId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringFogVolumeSelectionTarget(int fogVolumeId);
+SectorAuthoringSelectionTarget MakeSectorAuthoringReflectionProbeSelectionTarget(int probeId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringLevelMarkerSelectionTarget(int markerId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringTriggerSelectionTarget(int triggerId);
 
@@ -54,6 +55,10 @@ bool SelectSectorEditorAuthoringFogVolume(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int fogVolumeId);
+bool SelectSectorEditorAuthoringReflectionProbe(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int probeId);
 bool SelectSectorEditorAuthoringLevelMarker(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
@@ -76,6 +81,10 @@ bool SetHoveredSectorEditorAuthoringFogVolume(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int fogVolumeId);
+bool SetHoveredSectorEditorAuthoringReflectionProbe(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int probeId);
 bool SetHoveredSectorEditorAuthoringLevelMarker(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
@@ -300,6 +309,7 @@ enum class SectorEditorInspectorTargetKind {
     AuthoringFaceAnchor,
     AuthoringVertex,
     AuthoringFogVolume,
+    AuthoringReflectionProbe,
     AuthoringLevelMarker,
     AuthoringTrigger,
     AuthoringUnavailable,
@@ -312,6 +322,7 @@ struct SectorEditorInspectorTarget {
     int faceAnchorId = -1;
     int vertexId = -1;
     int fogVolumeId = -1;
+    int reflectionProbeId = -1;
     int levelMarkerId = -1;
     int triggerId = -1;
     SectorAuthoringSideId side;

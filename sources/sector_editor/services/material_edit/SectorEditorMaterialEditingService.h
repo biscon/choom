@@ -8,6 +8,7 @@
 #include "sector_editor/SectorEditorTypes.h"
 #include "sector_editor/selection/SectorEditorSelectionState.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingState.h"
+#include "sector_demo/SectorMaterialRegistry.h"
 
 #include <functional>
 #include <string>
@@ -17,7 +18,7 @@ namespace game {
 struct SectorEditorAuthoringMaterialTarget {
     TopologySurfaceEditTarget target;
     TopologyMaterialLayer layer = TopologyMaterialLayer::Base;
-    std::string* textureId = nullptr;
+    std::string* materialId = nullptr;
     SectorTopologyUvSettings* uv = nullptr;
     SectorTopologyDecalLayer* decal = nullptr;
     SectorTopologyWallPartSettings* wallPart = nullptr;
@@ -28,6 +29,7 @@ using SectorEditorAuthoringMaterialActionFn =
 
 struct SectorEditorMaterialEditingServiceContext {
     SectorEditorDocumentLifecycleAccess lifecycle;
+    const SectorMaterialRegistry& materialRegistry;
     SectorTopologyMap& topologyMap;
     SectorAuthoringGraph& authoringGraph;
     SectorEditorDerivationDocumentAccess derivation;

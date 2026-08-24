@@ -901,7 +901,7 @@ SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
             "autoOpenDistance",
             context,
             door.autoOpenDistance);
-    door.textureId = ReadOptionalString(value, "textureId", context, door.textureId);
+    door.materialId = ReadOptionalString(value, "materialId", context, door.materialId);
     door.openSoundId = ReadOptionalString(value, "openSoundId", context, door.openSoundId);
     door.closeSoundId = ReadOptionalString(value, "closeSoundId", context, door.closeSoundId);
     ReadOptionalDoorFaceUvs(value, "faceUvs", context, door.faceUvs);
@@ -968,6 +968,11 @@ SectorPlacedStaticModel ReadPlacedStaticModel(const Json& value, const std::stri
             "collision",
             context,
             staticModel.collision);
+    staticModel.castsShadow = ReadOptionalBool(
+            value,
+            "castsShadow",
+            context,
+            staticModel.castsShadow);
     return staticModel;
 }
 
@@ -1104,9 +1109,9 @@ SectorTopologyDecalLayer ReadDecal(const Json& value, const std::string& context
     }
 
     SectorTopologyDecalLayer decal;
-    decal.textureId = ReadString(value, "textureId", context);
-    if (decal.textureId.empty()) {
-        Fail(context + ".textureId must not be empty");
+    decal.materialId = ReadString(value, "materialId", context);
+    if (decal.materialId.empty()) {
+        Fail(context + ".materialId must not be empty");
     }
     decal.uv = ReadUv(RequireField(value, "uv", context), context + ".uv");
     const auto opacityIt = value.find("opacity");
@@ -1171,7 +1176,7 @@ SectorTopologyWallPartSettings ReadWallPart(const Json& value, const std::string
         Fail(context + " must be an object");
     }
     SectorTopologyWallPartSettings part;
-    part.textureId = ReadString(value, "textureId", context);
+    part.materialId = ReadString(value, "materialId", context);
     part.uv = ReadUv(RequireField(value, "uv", context), context + ".uv");
     ReadOptionalDecal(value, "decal", context, part.decal);
     return part;
@@ -1386,9 +1391,9 @@ SectorTopologySkySettings ReadSkySettings(const Json& value, const std::string& 
     }
 
     SectorTopologySkySettings settings = DefaultSectorTopologySkySettings();
-    const auto textureIdIt = value.find("textureId");
-    if (textureIdIt != value.end()) {
-        settings.textureId = ReadString(value, "textureId", context);
+    const auto materialIdIt = value.find("materialId");
+    if (materialIdIt != value.end()) {
+        settings.materialId = ReadString(value, "materialId", context);
     }
     const auto yawIt = value.find("yawOffsetDegrees");
     if (yawIt != value.end()) {
@@ -1621,6 +1626,23 @@ SectorBakedStaticModelLightmapMetadata ReadBakedStaticModelLightmapMetadata(
     return metadata;
 }
 
+SectorBakedReflectionProbeMetadata ReadBakedReflectionProbeMetadata(
+        const Json& value,
+        const std::string& context)
+{
+    if (!value.is_object()) Fail(context + " must be an object");
+    SectorBakedReflectionProbeMetadata metadata;
+    metadata.path = ReadString(value, "path", context);
+    metadata.version = ReadInt(value, "version", context);
+    metadata.count = ReadInt(value, "count", context);
+    metadata.format = ReadString(value, "format", context);
+    if (metadata.path.empty()) Fail(context + ".path must not be empty");
+    if (metadata.version <= 0) Fail(context + ".version must be positive");
+    if (metadata.count < 0) Fail(context + ".count must not be negative");
+    if (metadata.format.empty()) Fail(context + ".format must not be empty");
+    return metadata;
+}
+
 SectorLightmapAtlasMetadata ReadLightmapAtlasMetadata(
         const Json& value,
         const std::string& context)
@@ -1753,33 +1775,33 @@ Color ReadColor(const Json& value, const std::string& context)
     };
 }
 
-SectorTextureFilter ReadTextureFilter(const std::string& value, const std::string& context)
+SectorMaterialFilter ReadTextureFilter(const std::string& value, const std::string& context)
 {
     if (value == "point") {
-        return SectorTextureFilter::Point;
+        return SectorMaterialFilter::Point;
     }
     if (value == "linear") {
-        return SectorTextureFilter::Bilinear;
+        return SectorMaterialFilter::Bilinear;
     }
     if (value == "trilinear") {
-        return SectorTextureFilter::Trilinear;
+        return SectorMaterialFilter::Trilinear;
     }
     if (value == "anisotropic8x" || value == "bilinear") {
-        return SectorTextureFilter::Anisotropic8x;
+        return SectorMaterialFilter::Anisotropic8x;
     }
     Fail(context + ".filter must be 'point', 'linear', 'trilinear', or 'anisotropic8x'");
 }
 
-const char* WriteTextureFilter(SectorTextureFilter filter)
+const char* WriteTextureFilter(SectorMaterialFilter filter)
 {
     switch (filter) {
-        case SectorTextureFilter::Point:
+        case SectorMaterialFilter::Point:
             return "point";
-        case SectorTextureFilter::Bilinear:
+        case SectorMaterialFilter::Bilinear:
             return "linear";
-        case SectorTextureFilter::Trilinear:
+        case SectorMaterialFilter::Trilinear:
             return "trilinear";
-        case SectorTextureFilter::Anisotropic8x:
+        case SectorMaterialFilter::Anisotropic8x:
             return "anisotropic8x";
     }
     Fail("texture definition has an invalid filter value");
@@ -1993,8 +2015,8 @@ Json WritePlacedDoor(const SectorPlacedDoor& door)
     if (door.autoOpenDistance != 2.0f) {
         json["autoOpenDistance"] = door.autoOpenDistance;
     }
-    if (!door.textureId.empty()) {
-        json["textureId"] = door.textureId;
+    if (!door.materialId.empty()) {
+        json["materialId"] = door.materialId;
     }
     if (!door.openSoundId.empty()) {
         json["openSoundId"] = door.openSoundId;
@@ -2066,6 +2088,9 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             }
             if (object.staticModel.collision) {
                 staticModel["collision"] = true;
+            }
+            if (!object.staticModel.castsShadow) {
+                staticModel["castsShadow"] = false;
             }
             json["kind"] = object.kind;
             json["staticModel"] = std::move(staticModel);
@@ -2154,7 +2179,7 @@ Json WriteUv(const SectorTopologyUvSettings& uv, const std::string& context)
 
 bool HasDecal(const SectorTopologyDecalLayer& decal)
 {
-    return !decal.textureId.empty();
+    return !decal.materialId.empty();
 }
 
 bool IsDefaultUv(const SectorTopologyUvSettings& uv)
@@ -2167,7 +2192,7 @@ bool IsDefaultUv(const SectorTopologyUvSettings& uv)
 
 bool HasNonDefaultWallPart(const SectorTopologyWallPartSettings& part)
 {
-    return !part.textureId.empty()
+    return !part.materialId.empty()
             || !IsDefaultUv(part.uv)
             || HasDecal(part.decal);
 }
@@ -2216,7 +2241,7 @@ Json WriteDecal(const SectorTopologyDecalLayer& decal, const std::string& contex
         Fail(context + ".bloomIntensity must be a finite float between 0 and 10");
     }
     return Json{
-            {"textureId", decal.textureId},
+            {"materialId", decal.materialId},
             {"uv", WriteUv(decal.uv, context + ".uv")},
             {"opacity", decal.opacity},
             {"emissive", decal.emissive},
@@ -2228,7 +2253,7 @@ Json WriteDecal(const SectorTopologyDecalLayer& decal, const std::string& contex
 Json WriteWallPart(const SectorTopologyWallPartSettings& part, const std::string& context)
 {
     Json value{
-            {"textureId", part.textureId},
+            {"materialId", part.materialId},
             {"uv", WriteUv(part.uv, context + ".uv")}
     };
     if (HasDecal(part.decal)) {
@@ -2608,7 +2633,7 @@ Json WriteSkySettings(const SectorTopologySkySettings& settings)
 {
     const SectorTopologySkySettings normalized = NormalizeSectorTopologySkySettings(settings);
     return Json{
-            {"textureId", normalized.textureId},
+            {"materialId", normalized.materialId},
             {"yawOffsetDegrees", normalized.yawOffsetDegrees},
             {"verticalOffset", normalized.verticalOffset},
             {"verticalScale", normalized.verticalScale},
@@ -2620,7 +2645,7 @@ bool IsDefaultSkySettings(const SectorTopologySkySettings& settings)
 {
     const SectorTopologySkySettings normalized = NormalizeSectorTopologySkySettings(settings);
     const SectorTopologySkySettings defaults = DefaultSectorTopologySkySettings();
-    return normalized.textureId == defaults.textureId
+    return normalized.materialId == defaults.materialId
             && normalized.yawOffsetDegrees == defaults.yawOffsetDegrees
             && normalized.verticalOffset == defaults.verticalOffset
             && normalized.verticalScale == defaults.verticalScale
@@ -2763,6 +2788,16 @@ Json WriteBakedStaticModelLightmapMetadata(
             {"objectCount", metadata.objectCount},
             {"format", metadata.format}
     };
+}
+
+Json WriteBakedReflectionProbeMetadata(
+        const SectorBakedReflectionProbeMetadata& metadata)
+{
+    return Json{
+            {"path", metadata.path},
+            {"version", metadata.version},
+            {"count", metadata.count},
+            {"format", metadata.format}};
 }
 
 Json WriteBakedLightmap(const SectorLightmapMetadata& metadata)
@@ -2951,14 +2986,14 @@ void ReadTextures(const Json& root, SectorTopologyMap& map)
         if (!entry.value().is_object()) {
             Fail(context + " must be an object");
         }
-        SectorTextureDefinition texture;
+        SectorMaterialDefinition texture;
         texture.id = entry.key();
         texture.path = ReadString(entry.value(), "path", context);
         if (texture.path.empty()) {
             Fail(context + ".path must not be empty");
         }
         texture.filter = ReadTextureFilter(ReadString(entry.value(), "filter", context), context);
-        map.texturesById.emplace(texture.id, std::move(texture));
+        map.resolvedMaterialsById.emplace(texture.id, std::move(texture));
     }
 }
 
@@ -3473,6 +3508,12 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
     if (bakedLightmapIt != root.end() && allowBakedLightmap) {
         map.bakedLightmap = ReadBakedLightmap(*bakedLightmapIt, "root.bakedLightmap");
     }
+    const auto bakedReflectionProbesIt = root.find("bakedReflectionProbes");
+    if (bakedReflectionProbesIt != root.end() && allowBakedLightmap) {
+        map.bakedReflectionProbes = ReadBakedReflectionProbeMetadata(
+                *bakedReflectionProbesIt,
+                "root.bakedReflectionProbes");
+    }
 
     map.previewSettings = NormalizeSectorPreviewSettings(map.previewSettings);
     map.skySettings = NormalizeSectorTopologySkySettings(map.skySettings);
@@ -3553,8 +3594,8 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         anchor.isVoid = ReadOptionalBool(faceAnchors[i], "isVoid", context, false);
         anchor.floorZ = ReadFloat(faceAnchors[i], "floorZ", context);
         anchor.ceilingZ = ReadFloat(faceAnchors[i], "ceilingZ", context);
-        anchor.floorTextureId = ReadString(faceAnchors[i], "floorTextureId", context);
-        anchor.ceilingTextureId = ReadString(faceAnchors[i], "ceilingTextureId", context);
+        anchor.floorMaterialId = ReadString(faceAnchors[i], "floorMaterialId", context);
+        anchor.ceilingMaterialId = ReadString(faceAnchors[i], "ceilingMaterialId", context);
         anchor.footstepSet = ReadOptionalString(faceAnchors[i], "footstepSet", context);
         ValidateOptionalFootstepSet(anchor.footstepSet, context + ".footstepSet");
         anchor.ceilingSky = ReadOptionalBool(faceAnchors[i], "ceilingSky", context, false);
@@ -3654,6 +3695,49 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    const auto reflectionProbesIt = value.find("reflectionProbes");
+    if (reflectionProbesIt != value.end()) {
+        if (!reflectionProbesIt->is_array()) {
+            Fail("root.authoringGraph.reflectionProbes must be an array");
+        }
+        for (size_t i = 0; i < reflectionProbesIt->size(); ++i) {
+            const Json& probeJson = (*reflectionProbesIt)[i];
+            const std::string context =
+                    "root.authoringGraph.reflectionProbes[" + std::to_string(i) + "]";
+            if (!probeJson.is_object()) Fail(context + " must be an object");
+            SectorAuthoringReflectionProbe probe;
+            probe.id = ReadInt(probeJson, "id", context);
+            probe.x = ReadCoord(probeJson, "x", context);
+            probe.z = ReadCoord(probeJson, "z", context);
+            probe.yWorld = ReadOptionalFloat(probeJson, "yWorld", context, probe.yWorld);
+            probe.enabled = ReadOptionalBool(probeJson, "enabled", context, probe.enabled);
+            probe.yawDegrees = ReadOptionalFloat(
+                    probeJson, "yawDegrees", context, probe.yawDegrees);
+            const auto offsetIt = probeJson.find("influenceOffsetWorld");
+            if (offsetIt != probeJson.end()) {
+                probe.influenceOffsetWorld = ReadVector3(
+                        *offsetIt, context + ".influenceOffsetWorld");
+            }
+            const auto extentsIt = probeJson.find("halfExtentsWorld");
+            if (extentsIt != probeJson.end()) {
+                probe.halfExtentsWorld = ReadVector3(
+                        *extentsIt, context + ".halfExtentsWorld");
+            }
+            probe.priority = ReadOptionalClampedInt(
+                    probeJson, "priority", context, probe.priority, -1000, 1000);
+            probe.intensity = ReadOptionalClampedFloat(
+                    probeJson, "intensity", context, probe.intensity, 0.0f, 8.0f);
+            probe.resolution = ReadOptionalClampedInt(
+                    probeJson, "resolution", context, probe.resolution, 64, 256);
+            if (probe.resolution != 64 && probe.resolution != 128
+                    && probe.resolution != 256) {
+                Fail(context + ".resolution must be 64, 128, or 256");
+            }
+            graph.reflectionProbes.push_back(
+                    NormalizeSectorAuthoringReflectionProbe(probe));
+        }
+    }
+
     const auto levelMarkersIt = value.find("levelMarkers");
     if (levelMarkersIt != value.end()) {
         if (!levelMarkersIt->is_array()) {
@@ -3727,7 +3811,6 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
         return;
     }
 
-    document.derivation.topology.texturesById = document.mapData.texturesById;
     document.derivation.topology.staticLights = document.mapData.staticLights;
     document.derivation.topology.staticSpotLights = document.mapData.staticSpotLights;
     document.derivation.topology.staticRectLights = document.mapData.staticRectLights;
@@ -3742,6 +3825,8 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
     document.derivation.topology.audioSettings = document.mapData.audioSettings;
     document.derivation.topology.lightmapSettings = document.mapData.lightmapSettings;
     document.derivation.topology.bakedLightmap = document.mapData.bakedLightmap;
+    document.derivation.topology.bakedReflectionProbes =
+            document.mapData.bakedReflectionProbes;
 }
 
 SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
@@ -3750,8 +3835,8 @@ SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
         Fail("Authoring JSON root must be an object");
     }
 
-    if (ReadInt(root, "formatVersion", "root") != 3) {
-        Fail("root.formatVersion must be 3");
+    if (ReadInt(root, "formatVersion", "root") != 4) {
+        Fail("root.formatVersion must be 4");
     }
     if (ReadString(root, "topology", "root") != "authoringGraph") {
         Fail("root.topology must be 'authoringGraph'");
@@ -3762,7 +3847,6 @@ SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
 
     SectorAuthoringDocument document;
     document.editorSettings = ReadAuthoringEditorSettings(root);
-    ReadTextures(root, document.mapData);
     ReadMapLevelFields(root, document.mapData, true);
     ValidateAuthoringMapData(document.mapData);
     document.graph = ReadAuthoringGraph(RequireField(root, "authoringGraph", "root"));
@@ -3775,14 +3859,14 @@ void WriteTextureFields(Json& root, const SectorTopologyMap& map)
 {
     root["textures"] = Json::object();
 
-    std::vector<std::string> textureIds;
-    textureIds.reserve(map.texturesById.size());
-    for (const auto& entry : map.texturesById) {
-        textureIds.push_back(entry.first);
+    std::vector<std::string> materialIds;
+    materialIds.reserve(map.resolvedMaterialsById.size());
+    for (const auto& entry : map.resolvedMaterialsById) {
+        materialIds.push_back(entry.first);
     }
-    std::sort(textureIds.begin(), textureIds.end());
-    for (const std::string& id : textureIds) {
-        const SectorTextureDefinition& texture = map.texturesById.at(id);
+    std::sort(materialIds.begin(), materialIds.end());
+    for (const std::string& id : materialIds) {
+        const SectorMaterialDefinition& texture = map.resolvedMaterialsById.at(id);
         if (id.empty() || texture.id != id || texture.path.empty()) {
             Fail("texture '" + id + "' must have a matching non-empty ID and path");
         }
@@ -3876,6 +3960,12 @@ void WriteMapLevelFields(Json& root, const SectorTopologyMap& map, bool includeB
             && !map.bakedLightmap.sourceHash.empty()) {
         root["bakedLightmap"] = WriteBakedLightmap(map.bakedLightmap);
     }
+    if (includeBakedLightmap
+            && !map.bakedReflectionProbes.path.empty()
+            && map.bakedReflectionProbes.version > 0) {
+        root["bakedReflectionProbes"] =
+                WriteBakedReflectionProbeMetadata(map.bakedReflectionProbes);
+    }
 }
 
 Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
@@ -3947,8 +4037,8 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
                 {"y", anchor->y},
                 {"floorZ", anchor->floorZ},
                 {"ceilingZ", anchor->ceilingZ},
-                {"floorTextureId", anchor->floorTextureId},
-                {"ceilingTextureId", anchor->ceilingTextureId},
+                {"floorMaterialId", anchor->floorMaterialId},
+                {"ceilingMaterialId", anchor->ceilingMaterialId},
                 {"floorUv", WriteUv(anchor->floorUv, context + ".floorUv")},
                 {"ceilingUv", WriteUv(anchor->ceilingUv, context + ".ceilingUv")},
                 {"ambientColor", WriteColor(anchor->ambientColor)},
@@ -4020,6 +4110,40 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         }
     }
 
+    if (!graph.reflectionProbes.empty()) {
+        graphJson["reflectionProbes"] = Json::array();
+        const SectorAuthoringReflectionProbe defaults;
+        for (const SectorAuthoringReflectionProbe* source
+                : SortedById(graph.reflectionProbes)) {
+            const SectorAuthoringReflectionProbe probe =
+                    NormalizeSectorAuthoringReflectionProbe(*source);
+            const std::string context =
+                    "reflection probe " + std::to_string(probe.id);
+            Json probeJson{{"id", probe.id}, {"x", probe.x}, {"z", probe.z}};
+            if (probe.yWorld != defaults.yWorld) probeJson["yWorld"] = probe.yWorld;
+            if (probe.enabled != defaults.enabled) probeJson["enabled"] = probe.enabled;
+            if (probe.yawDegrees != defaults.yawDegrees) probeJson["yawDegrees"] = probe.yawDegrees;
+            if (probe.influenceOffsetWorld.x != 0.0f
+                    || probe.influenceOffsetWorld.y != 0.0f
+                    || probe.influenceOffsetWorld.z != 0.0f) {
+                probeJson["influenceOffsetWorld"] = WriteVector3(
+                        probe.influenceOffsetWorld,
+                        context + ".influenceOffsetWorld");
+            }
+            if (probe.halfExtentsWorld.x != defaults.halfExtentsWorld.x
+                    || probe.halfExtentsWorld.y != defaults.halfExtentsWorld.y
+                    || probe.halfExtentsWorld.z != defaults.halfExtentsWorld.z) {
+                probeJson["halfExtentsWorld"] = WriteVector3(
+                        probe.halfExtentsWorld,
+                        context + ".halfExtentsWorld");
+            }
+            if (probe.priority != defaults.priority) probeJson["priority"] = probe.priority;
+            if (probe.intensity != defaults.intensity) probeJson["intensity"] = probe.intensity;
+            if (probe.resolution != defaults.resolution) probeJson["resolution"] = probe.resolution;
+            graphJson["reflectionProbes"].push_back(std::move(probeJson));
+        }
+    }
+
     if (!graph.levelMarkers.empty()) {
         const std::vector<SectorAuthoringValidationIssue> issues =
                 ValidateSectorAuthoringGraphReferences(graph);
@@ -4085,10 +4209,9 @@ Json SerializeAuthoringDocument(const SectorAuthoringDocument& document)
     ValidateAuthoringMapData(document.mapData);
 
     Json root;
-    root["formatVersion"] = 3;
+    root["formatVersion"] = 4;
     root["topology"] = "authoringGraph";
     root["coordSubdivisions"] = SectorCoordSubdivisions;
-    WriteTextureFields(root, document.mapData);
     WriteMapLevelFields(root, document.mapData, true);
     WriteAuthoringEditorSettings(root, document.editorSettings);
     root["authoringGraph"] = WriteAuthoringGraph(document.graph);
@@ -4174,8 +4297,8 @@ SectorTopologyMap ParseMap(const Json& root)
         sector.name = ReadString(value, "name", context);
         sector.floorZ = ReadFloat(value, "floorZ", context);
         sector.ceilingZ = ReadFloat(value, "ceilingZ", context);
-        sector.floorTextureId = ReadString(value, "floorTextureId", context);
-        sector.ceilingTextureId = ReadString(value, "ceilingTextureId", context);
+        sector.floorMaterialId = ReadString(value, "floorMaterialId", context);
+        sector.ceilingMaterialId = ReadString(value, "ceilingMaterialId", context);
         sector.footstepSet = ReadOptionalString(value, "footstepSet", context);
         ValidateOptionalFootstepSet(sector.footstepSet, context + ".footstepSet");
         sector.ceilingSky = ReadOptionalBool(value, "ceilingSky", context, false);
@@ -4211,14 +4334,14 @@ Json SerializeMap(const SectorTopologyMap& map)
     root["coordSubdivisions"] = SectorCoordSubdivisions;
     root["textures"] = Json::object();
 
-    std::vector<std::string> textureIds;
-    textureIds.reserve(map.texturesById.size());
-    for (const auto& entry : map.texturesById) {
-        textureIds.push_back(entry.first);
+    std::vector<std::string> materialIds;
+    materialIds.reserve(map.resolvedMaterialsById.size());
+    for (const auto& entry : map.resolvedMaterialsById) {
+        materialIds.push_back(entry.first);
     }
-    std::sort(textureIds.begin(), textureIds.end());
-    for (const std::string& id : textureIds) {
-        const SectorTextureDefinition& texture = map.texturesById.at(id);
+    std::sort(materialIds.begin(), materialIds.end());
+    for (const std::string& id : materialIds) {
+        const SectorMaterialDefinition& texture = map.resolvedMaterialsById.at(id);
         if (id.empty() || texture.id != id || texture.path.empty()) {
             Fail("texture '" + id + "' must have a matching non-empty ID and path");
         }
@@ -4287,8 +4410,8 @@ Json SerializeMap(const SectorTopologyMap& map)
                 {"name", sector->name},
                 {"floorZ", sector->floorZ},
                 {"ceilingZ", sector->ceilingZ},
-                {"floorTextureId", sector->floorTextureId},
-                {"ceilingTextureId", sector->ceilingTextureId},
+                {"floorMaterialId", sector->floorMaterialId},
+                {"ceilingMaterialId", sector->ceilingMaterialId},
                 {"floorUv", WriteUv(sector->floorUv, context + ".floorUv")},
                 {"ceilingUv", WriteUv(sector->ceilingUv, context + ".ceilingUv")},
                 {"ambientColor", WriteColor(sector->ambientColor)},

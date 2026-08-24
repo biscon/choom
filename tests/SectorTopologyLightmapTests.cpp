@@ -2,6 +2,7 @@
 #include "engine/assets/AssetManager.h"
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
+#include "sector_demo/SectorReflectionProbes.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/renderer/SectorLightAtmosphere.h"
@@ -33,9 +34,9 @@ void Check(bool condition, const char* description)
     }
 }
 
-game::SectorTextureDefinition Texture(const char* id)
+game::SectorMaterialDefinition Texture(const char* id)
 {
-    game::SectorTextureDefinition texture;
+    game::SectorMaterialDefinition texture;
     texture.id = id;
     texture.path = std::string("assets/textures/") + id + ".png";
     return texture;
@@ -86,6 +87,12 @@ bool Near(float a, float b, float tolerance = 0.001f)
 bool SameVector(Vector3 a, Vector3 b)
 {
     return Near(a.x, b.x) && Near(a.y, b.y) && Near(a.z, b.z);
+}
+
+std::vector<Vector4> NeutralDirectionalTexels(size_t count)
+{
+    return std::vector<Vector4>(
+            count, Vector4{0.5f, 0.5f, 1.0f, 0.0f});
 }
 
 void TestLightmapBakeReportFormatting()
@@ -281,6 +288,8 @@ void WriteInstallTestTemps(const game::SectorLightmapBakeAsyncResult& result)
             static_cast<size_t>(result.bakeResult.width)
                     * static_cast<size_t>(result.bakeResult.height),
             Vector4{2.0f, 0.5f, 0.25f, 0.75f});
+    const std::vector<Vector4> directionalTexels =
+            NeutralDirectionalTexels(texels.size());
     game::SectorIlluminationStatistics preEncodeStatistics;
     game::SectorIlluminationStatistics storedStatistics;
     std::string atlasError;
@@ -289,6 +298,7 @@ void WriteInstallTestTemps(const game::SectorLightmapBakeAsyncResult& result)
                   result.bakeResult.width,
                   result.bakeResult.height,
                   texels.data(),
+                  directionalTexels.data(),
                   texels.size(),
                   result.bakeResult.sourceHash,
                   preEncodeStatistics,
@@ -534,6 +544,8 @@ void TestLightmapBakeInstallBoundaryHandlesMultipleAtlases()
             static_cast<size_t>(result.bakeResult.width)
                     * static_cast<size_t>(result.bakeResult.height),
             Vector4{3.0f, 0.25f, 0.5f, 1.0f});
+    const std::vector<Vector4> secondDirectionalTexels =
+            NeutralDirectionalTexels(secondAtlasTexels.size());
     game::SectorIlluminationStatistics secondPreEncode;
     game::SectorIlluminationStatistics secondStored;
     std::string secondAtlasError;
@@ -542,6 +554,7 @@ void TestLightmapBakeInstallBoundaryHandlesMultipleAtlases()
                   result.bakeResult.width,
                   result.bakeResult.height,
                   secondAtlasTexels.data(),
+                  secondDirectionalTexels.data(),
                   secondAtlasTexels.size(),
                   result.bakeResult.sourceHash,
                   secondPreEncode,
@@ -716,10 +729,10 @@ void WriteSolidRgbTexture(
     UnloadImage(image);
 }
 
-game::SectorTopologyWallPartSettings Part(const char* textureId)
+game::SectorTopologyWallPartSettings Part(const char* materialId)
 {
     game::SectorTopologyWallPartSettings part;
-    part.textureId = textureId;
+    part.materialId = materialId;
     return part;
 }
 
@@ -730,8 +743,8 @@ game::SectorTopologySector Sector(int id, float floorZ = 0.0f, float ceilingZ = 
     sector.name = "sector-" + std::to_string(id);
     sector.floorZ = floorZ;
     sector.ceilingZ = ceilingZ;
-    sector.floorTextureId = "floor";
-    sector.ceilingTextureId = "ceiling";
+    sector.floorMaterialId = "floor";
+    sector.ceilingMaterialId = "ceiling";
     sector.ambientColor = Color{200, 180, 160, 255};
     sector.ambientIntensity = 0.5f;
     sector.defaultWall = Part("wall");
@@ -743,7 +756,7 @@ game::SectorTopologySector Sector(int id, float floorZ = 0.0f, float ceilingZ = 
 void AddTextureDefaults(game::SectorTopologyMap& map)
 {
     for (const char* id : {"floor", "ceiling", "wall", "lower", "upper", "alt"}) {
-        map.texturesById.emplace(id, Texture(id));
+        map.resolvedMaterialsById.emplace(id, Texture(id));
     }
 }
 
@@ -979,6 +992,26 @@ game::SectorTopologyMap MakeProbeHoleSector()
     return map;
 }
 
+game::SectorTopologyMap MakeThinProbeRing()
+{
+    game::SectorTopologyMap map = MakeProbeRectangle(1024, 1024);
+    map.vertices.insert(map.vertices.end(), {
+            {5, 16, 16},
+            {6, 1008, 16},
+            {7, 1008, 1008},
+            {8, 16, 1008}});
+    for (int i = 5; i <= 8; ++i) {
+        const int end = i == 8 ? 5 : i + 1;
+        const int frontSideId = i;
+        const int backSideId = i + 4;
+        map.lineDefs.push_back({i, i, end, frontSideId, backSideId});
+        AddSide(map, frontSideId, i, game::SectorTopologySideKind::Front, 20);
+        AddSide(map, backSideId, i, game::SectorTopologySideKind::Back, 10);
+    }
+    map.sectors.push_back(Sector(20, 8.0f, 24.0f));
+    return map;
+}
+
 int CountWallChartsForLine(const game::SectorTopologyMap& map, int lineDefId)
 {
     game::SectorGeneratedGeometry geometry;
@@ -1096,6 +1129,7 @@ struct LightmapImageMetrics {
     long long softShadowSourceRays = 0;
     int ceilingCenterRgb = 0;
     int floorCenterRgb = 0;
+    Vector4 floorCenterDirectional = {};
 };
 
 bool ReadHdrLightmap(
@@ -1195,6 +1229,11 @@ LightmapImageMetrics BakeAndMeasure(game::SectorTopologyMap map, const char* fil
                 game::SectorLightmapBinary16ToFloat(image.rgba16[base])
                 + game::SectorLightmapBinary16ToFloat(image.rgba16[base + 1u])
                 + game::SectorLightmapBinary16ToFloat(image.rgba16[base + 2u]))));
+        metrics.floorCenterDirectional = Vector4{
+                static_cast<float>(image.directionalRgba8[base]) / 255.0f,
+                static_cast<float>(image.directionalRgba8[base + 1u]) / 255.0f,
+                static_cast<float>(image.directionalRgba8[base + 2u]) / 255.0f,
+                static_cast<float>(image.directionalRgba8[base + 3u]) / 255.0f};
     }
     metrics.averageRgb = rgbSum / static_cast<double>(pixelCount);
     std::error_code removeError;
@@ -1224,10 +1263,10 @@ void TestHdrBakeAccumulationPreservesAboveOneRadiance()
 game::SectorTopologyMap MakeAlphaMiddleOcclusionBakeMap(const std::filesystem::path& texturePath)
 {
     game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
-    game::SectorTextureDefinition texture;
+    game::SectorMaterialDefinition texture;
     texture.id = "bars";
     texture.path = texturePath.string();
-    map.texturesById["bars"] = texture;
+    map.resolvedMaterialsById["bars"] = texture;
 
     game::SectorTopologySideDef* frontMiddle = game::FindSectorTopologySideDef(map, 2);
     game::SectorTopologySideDef* backMiddle = game::FindSectorTopologySideDef(map, 8);
@@ -1354,6 +1393,20 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(markerMap) == hash,
           "hash excludes Level Markers because they do not affect baked geometry or lighting");
 
+    game::SectorTopologyMap reflectionProbeMap = base;
+    reflectionProbeMap.compiledReflectionProbes.push_back(
+            game::SectorCompiledReflectionProbe{
+                    5, 10, true,
+                    Vector3{1.0f, 1.0f, 1.0f},
+                    Vector3{1.0f, 1.0f, 1.0f},
+                    Vector3{2.0f, 2.0f, 2.0f},
+                    0.0f, 0, 1.0f, 128});
+    reflectionProbeMap.bakedReflectionProbes = {
+            "assets/levels/test/test.reflection-probes.bin", 1, 1,
+            "rgba16f-cubemap-mips"};
+    Check(game::ComputeSectorLightmapSourceHash(reflectionProbeMap) == hash,
+          "lightmap source hash excludes reflection probe authoring and artifacts");
+
     game::SectorTopologyMap navigationOnlyMap = base;
     navigationOnlyMap.previewSettings.stepHeight += 0.15f;
     navigationOnlyMap.lineDefs.front().flags.blocksPlayer = true;
@@ -1368,7 +1421,7 @@ void TestSourceHashChanges()
     changedSector.sectors[0].floorZ += 1.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedSector) != hash, "hash changes when sector floor changes");
     changedSector = base;
-    changedSector.sectors[0].ceilingTextureId = "alt";
+    changedSector.sectors[0].ceilingMaterialId = "alt";
     Check(game::ComputeSectorLightmapSourceHash(changedSector) != hash, "hash changes when sector texture changes");
     changedSector = base;
     changedSector.sectors[0].ceilingSky = true;
@@ -1379,7 +1432,7 @@ void TestSourceHashChanges()
           "hash excludes runtime-only sector footstep assignments");
 
     game::SectorTopologyMap changedSideDef = base;
-    changedSideDef.sideDefs[0].wall.textureId = "alt";
+    changedSideDef.sideDefs[0].wall.materialId = "alt";
     Check(game::ComputeSectorLightmapSourceHash(changedSideDef) != hash, "hash changes when sidedef wall texture changes");
 
     game::SectorTopologyMap changedLight = base;
@@ -1568,6 +1621,15 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedStaticModelCollision)
                   == staticModelHash,
           "hash excludes static prop gameplay collision");
+    game::SectorTopologyMap changedStaticModelShadow = changedStaticModel;
+    changedStaticModelShadow.runtimeObjects[0].staticModel.castsShadow = false;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticModelShadow)
+                  != staticModelHash,
+          "hash changes when static prop shadow casting is disabled");
+    changedStaticModelShadow.runtimeObjects[0].staticModel.castsShadow = true;
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticModelShadow)
+                  == staticModelHash,
+          "default static prop shadow state preserves the existing source hash");
     game::SectorTopologyMap changedStaticModelScale = changedStaticModel;
     changedStaticModelScale.runtimeObjects[0].staticModel.scale = 2.0f;
     Check(game::ComputeSectorLightmapSourceHash(changedStaticModelScale)
@@ -1700,7 +1762,7 @@ void TestSourceHashChanges()
           "hash ignores runtime-only audio settings");
 
     game::SectorTopologyMap changedSky = base;
-    changedSky.skySettings.textureId = "storm_panorama";
+    changedSky.skySettings.materialId = "storm_panorama";
     Check(game::ComputeSectorLightmapSourceHash(changedSky) == hash,
           "hash ignores sky texture ID");
     changedSky = base;
@@ -1766,7 +1828,7 @@ void TestSourceHashIncludesMiddleTextureData()
     const std::string hash = game::ComputeSectorLightmapSourceHash(base);
 
     game::SectorTopologyMap withMiddle = base;
-    withMiddle.texturesById.emplace("bars", Texture("bars"));
+    withMiddle.resolvedMaterialsById.emplace("bars", Texture("bars"));
     game::FindSectorTopologySideDef(withMiddle, 2)->middle = Part("bars");
     const std::string middleHash = game::ComputeSectorLightmapSourceHash(withMiddle);
     Check(middleHash != hash, "hash changes when middle receiver texture is added");
@@ -1777,12 +1839,12 @@ void TestSourceHashIncludesMiddleTextureData()
           "hash changes when middle receiver UV changes");
 
     game::SectorTopologyMap changedTextureDefinition = withMiddle;
-    changedTextureDefinition.texturesById["bars"].path = "assets/images/alternate_bars.png";
+    changedTextureDefinition.resolvedMaterialsById["bars"].path = "assets/images/alternate_bars.png";
     Check(game::ComputeSectorLightmapSourceHash(changedTextureDefinition) != middleHash,
           "hash changes when a middle-only referenced texture definition changes");
 
     game::SectorTopologyMap unreferencedTexture = base;
-    unreferencedTexture.texturesById.emplace("bars", Texture("bars"));
+    unreferencedTexture.resolvedMaterialsById.emplace("bars", Texture("bars"));
     Check(game::ComputeSectorLightmapSourceHash(unreferencedTexture) == hash,
           "hash ignores unreferenced middle texture table entries");
 }
@@ -1848,8 +1910,8 @@ void TestSourceHashStableWhenVectorsReordered()
 
 void TestBakeVersionInvalidatesOldLightmaps()
 {
-    Check(game::kSectorLightmapBakeVersion == 15,
-          "lightmap bake version is bumped for linear HDR artifacts");
+    Check(game::kSectorLightmapBakeVersion == 18,
+          "lightmap bake version is bumped for horizontal object probe clearance");
 
     const std::filesystem::path lightmapPath = Phase01bSandboxDir() / "phase06a_status_lightmap.png";
     WriteSolidAlphaTestTexture(lightmapPath, 255);
@@ -2189,7 +2251,7 @@ void TestSmallSyntheticMultiAtlasBake()
 void TestMiddleSurfacesReceiveLightmapsWithoutOccluding()
 {
     game::SectorTopologyMap map = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
-    map.texturesById.emplace("bars", Texture("bars"));
+    map.resolvedMaterialsById.emplace("bars", Texture("bars"));
     game::FindSectorTopologySideDef(map, 2)->middle = Part("bars");
 
     game::SectorGeneratedGeometry geometry;
@@ -2255,7 +2317,7 @@ void TestAlphaTestMiddleOccluderCollection()
     Check(skyOccluders.empty(), "sky surfaces do not become alpha-test occluders");
 
     game::SectorTopologyMap middleMap = MakeAdjacent(0.0f, 24.0f, 0.0f, 24.0f);
-    middleMap.texturesById.emplace("bars", Texture("bars"));
+    middleMap.resolvedMaterialsById.emplace("bars", Texture("bars"));
     game::SectorTopologySideDef* middleSide = game::FindSectorTopologySideDef(middleMap, 2);
     Check(middleSide != nullptr, "alpha occluder middle sidedef exists");
     if (middleSide != nullptr) {
@@ -2279,7 +2341,7 @@ void TestAlphaTestMiddleOccluderCollection()
 
     if (!middleOccluders.empty()) {
         const game::SectorLightmapAlphaOccluderTriangle& occluder = middleOccluders.front();
-        Check(occluder.textureId == "bars", "alpha occluder preserves texture id");
+        Check(occluder.materialId == "bars", "alpha occluder preserves texture id");
         Check(std::fabs(occluder.alphaCutoff - 0.5f) < 0.0001f, "alpha occluder preserves alpha cutoff");
         Check(occluder.sourceSurfaceIndex >= 0, "alpha occluder preserves source surface index");
         Check(occluder.triangleIndex >= 0, "alpha occluder preserves triangle index");
@@ -2290,9 +2352,9 @@ void TestAlphaTestMiddleOccluderCollection()
 
     game::SectorGeneratedGeometry decalGeometry = opaqueGeometry;
     if (!decalGeometry.surfaces.empty()) {
-        decalGeometry.surfaces.front().decalTextureId = "bars";
+        decalGeometry.surfaces.front().decalMaterialId = "bars";
         decalGeometry.surfaces.front().alphaTest = true;
-        decalGeometry.surfaces.front().textureId = "wall";
+        decalGeometry.surfaces.front().materialId = "wall";
     }
     const std::vector<game::SectorLightmapAlphaOccluderTriangle> decalOccluders =
             game::CollectSectorLightmapAlphaOccluders(decalGeometry);
@@ -2305,10 +2367,10 @@ void TestAlphaMaskCacheSampling()
     WriteAlphaMaskTestTexture(texturePath);
 
     game::SectorTopologyMap map;
-    game::SectorTextureDefinition texture;
+    game::SectorMaterialDefinition texture;
     texture.id = "mask";
     texture.path = texturePath.string();
-    map.texturesById.emplace("mask", texture);
+    map.resolvedMaterialsById.emplace("mask", texture);
 
     game::SectorLightmapAlphaMaskCache cache;
     const game::SectorLightmapAlphaSample transparent =
@@ -2336,10 +2398,10 @@ void TestAlphaMaskCacheSampling()
     Check(cache.CachedTextureCount() == 1, "alpha mask cache stores one loaded texture entry");
 
     game::SectorTopologyMap missingMap;
-    game::SectorTextureDefinition missingTexture;
+    game::SectorMaterialDefinition missingTexture;
     missingTexture.id = "missing";
     missingTexture.path = (Phase01bSandboxDir() / "missing.png").string();
-    missingMap.texturesById.emplace("missing", missingTexture);
+    missingMap.resolvedMaterialsById.emplace("missing", missingTexture);
 
     game::SectorLightmapAlphaMaskCache missingCache;
     const game::SectorLightmapAlphaSample missing =
@@ -2363,18 +2425,18 @@ void TestAlphaAwareStaticRayOcclusion()
 
     auto makeMap = [](const std::filesystem::path& texturePath) {
         game::SectorTopologyMap map;
-        game::SectorTextureDefinition texture;
+        game::SectorMaterialDefinition texture;
         texture.id = "bars";
         texture.path = texturePath.string();
-        map.texturesById["bars"] = texture;
-        map.texturesById.emplace("wall", Texture("wall"));
+        map.resolvedMaterialsById["bars"] = texture;
+        map.resolvedMaterialsById.emplace("wall", Texture("wall"));
         return map;
     };
 
-    auto makeTriangleSurface = [](game::SectorGeneratedSurfaceKind kind, const char* textureId, float x) {
+    auto makeTriangleSurface = [](game::SectorGeneratedSurfaceKind kind, const char* materialId, float x) {
         game::SectorGeneratedSurface surface;
         surface.ref.kind = kind;
-        surface.textureId = textureId;
+        surface.materialId = materialId;
         surface.alphaTest = kind == game::SectorGeneratedSurfaceKind::Middle;
         surface.alphaCutoff = 0.5f;
         surface.normal = Vector3{-1.0f, 0.0f, 0.0f};
@@ -2570,39 +2632,37 @@ void TestDirectionalLightBakeBehavior()
     Check(pointMetrics.minAlpha < 255, "ambient occlusion alpha behavior remains present");
 }
 
-void TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting()
+void TestGeneratedSurfaceNormalMapConventionAndBakeIndependence()
 {
     const std::filesystem::path root =
             Phase01bSandboxDir() / "generated_surface_normal_maps";
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
 
-    Check(game::SectorTextureNormalMapPath("assets/images/stone.png")
+    Check(game::SectorMaterialNormalMapPath("assets/images/stone.png")
                   == "assets/images/stone_normal.png",
           "normal-map convention inserts suffix before extension");
-    Check(game::SectorTextureNormalMapPath("/tmp/stone.wall.png")
+    Check(game::SectorMaterialNormalMapPath("/tmp/stone.wall.png")
                   == "/tmp/stone.wall_normal.png",
           "normal-map convention preserves dotted stems and directories");
-    Check(game::SectorTextureNormalMapPath("stone") == "stone_normal",
+    Check(game::SectorMaterialNormalMapPath("stone") == "stone_normal",
           "normal-map convention supports extensionless texture paths");
-    Check(game::IsSectorTextureNormalMapPath("assets/images/stone_normal.png")
-                  && game::IsSectorTextureNormalMapPath("stone.wall_normal.PNG")
-                  && game::IsSectorTextureNormalMapPath("stone_normal_512.png")
-                  && !game::IsSectorTextureNormalMapPath("assets/images/normal_stone.png")
-                  && !game::IsSectorTextureNormalMapPath("assets/images/abnormal_stone.png")
-                  && !game::IsSectorTextureNormalMapPath("assets/images/stone.png"),
+    Check(game::IsSectorMaterialNormalMapPath("assets/images/stone_normal.png")
+                  && game::IsSectorMaterialNormalMapPath("stone.wall_normal.PNG")
+                  && game::IsSectorMaterialNormalMapPath("stone_normal_512.png")
+                  && !game::IsSectorMaterialNormalMapPath("assets/images/normal_stone.png")
+                  && !game::IsSectorMaterialNormalMapPath("assets/images/abnormal_stone.png")
+                  && !game::IsSectorMaterialNormalMapPath("assets/images/stone.png"),
           "normal-map convention identifies the automatic filename marker");
 
-    const std::filesystem::path flatBasePath = root / "flat_floor.png";
-    const std::filesystem::path mappedBasePath = root / "mapped_floor.png";
-    const std::filesystem::path mappedNormalPath = root / "mapped_floor_normal.png";
-    WriteSolidRgbTexture(flatBasePath, WHITE);
-    WriteSolidRgbTexture(mappedBasePath, WHITE);
-    WriteSolidRgbTexture(mappedNormalPath, Color{255, 128, 128, 255});
+    const std::filesystem::path floorBasePath = root / "floor.png";
+    const std::filesystem::path floorNormalPath = root / "floor_normal.png";
+    WriteSolidRgbTexture(floorBasePath, WHITE);
+    std::filesystem::remove(floorNormalPath);
 
     auto makeDirectionalMap = [](const std::filesystem::path& floorTexturePath) {
         game::SectorTopologyMap map = MakeSquare();
-        map.texturesById["floor"].path = floorTexturePath.string();
+        map.resolvedMaterialsById["floor"].path = floorTexturePath.string();
         map.staticLights.clear();
         map.staticSpotLights.clear();
         map.sectors[0].ceilingSky = true;
@@ -2615,35 +2675,48 @@ void TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting()
         return map;
     };
 
-    const LightmapImageMetrics flat = BakeAndMeasure(
-            makeDirectionalMap(flatBasePath),
-            "generated_surface_flat_normal.lightmap.png");
-    const LightmapImageMetrics mapped = BakeAndMeasure(
-            makeDirectionalMap(mappedBasePath),
-            "generated_surface_mapped_normal.lightmap.png");
-    Check(flat.floorCenterRgb > 600,
+    const game::SectorTopologyMap directionalMap =
+            makeDirectionalMap(floorBasePath);
+    const LightmapImageMetrics withoutNormal = BakeAndMeasure(
+            directionalMap,
+            "generated_surface_without_normal.lightmap.png");
+    WriteSolidRgbTexture(floorNormalPath, Color{255, 128, 128, 255});
+    const LightmapImageMetrics withNormal = BakeAndMeasure(
+            directionalMap,
+            "generated_surface_with_normal.lightmap.png");
+    Check(withoutNormal.floorCenterRgb > 600,
           "missing companion normal map preserves geometric direct lighting");
-    Check(mapped.floorCenterRgb + 300 < flat.floorCenterRgb,
-          "companion normal map changes baked direct-light response");
+    Check(Near(withoutNormal.floorCenterDirectional.x, 0.5f, 0.01f)
+                  && Near(withoutNormal.floorCenterDirectional.y, 1.0f, 0.01f)
+                  && Near(withoutNormal.floorCenterDirectional.z, 0.5f, 0.01f)
+                  && Near(withoutNormal.floorCenterDirectional.w, 1.0f, 0.01f),
+          "directional companion stores the dominant incoming direction and direct fraction");
+    Check(withNormal.floorCenterRgb == withoutNormal.floorCenterRgb,
+          "companion normal map does not change baked direct-light response");
 
     const std::filesystem::path hashBasePath = root / "hash_surface.png";
     const std::filesystem::path hashNormalPath = root / "hash_surface_normal.png";
     WriteSolidRgbTexture(hashBasePath, WHITE);
     std::filesystem::remove(hashNormalPath);
     game::SectorTopologyMap hashMap = MakeSquare();
-    hashMap.texturesById["floor"].path = hashBasePath.string();
+    hashMap.resolvedMaterialsById["floor"].path = hashBasePath.string();
     const std::string missingNormalHash =
             game::ComputeSectorLightmapSourceHash(hashMap);
+    hashMap.resolvedMaterialsById["floor"].metallicFactor = 0.85f;
+    hashMap.resolvedMaterialsById["floor"].roughnessFactor = 0.15f;
+    hashMap.resolvedMaterialsById["floor"].normalStrength = 0.25f;
+    Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
+          "runtime-only material PBR scalars do not change the source hash");
     WriteSolidRgbTexture(hashNormalPath, Color{128, 128, 255, 255});
     const std::string presentNormalHash =
             game::ComputeSectorLightmapSourceHash(hashMap);
-    Check(presentNormalHash != missingNormalHash,
-          "adding a referenced companion normal map changes the source hash");
+    Check(presentNormalHash == missingNormalHash,
+          "adding a referenced companion normal map does not change the source hash");
     WriteSolidRgbTexture(hashNormalPath, Color{255, 128, 128, 255}, 3, 2);
     const std::string changedNormalHash =
             game::ComputeSectorLightmapSourceHash(hashMap);
-    Check(changedNormalHash != presentNormalHash,
-          "changing referenced normal-map content changes the source hash");
+    Check(changedNormalHash == presentNormalHash,
+          "changing referenced normal-map content does not change the source hash");
     std::filesystem::remove(hashNormalPath);
     Check(game::ComputeSectorLightmapSourceHash(hashMap) == missingNormalHash,
           "removing a companion normal map restores the missing-map source hash");
@@ -2651,10 +2724,10 @@ void TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting()
     const std::filesystem::path unusedBasePath = root / "unused.png";
     const std::filesystem::path unusedNormalPath = root / "unused_normal.png";
     WriteSolidRgbTexture(unusedBasePath, WHITE);
-    game::SectorTextureDefinition unusedTexture;
+    game::SectorMaterialDefinition unusedTexture;
     unusedTexture.id = "unused";
     unusedTexture.path = unusedBasePath.string();
-    hashMap.texturesById[unusedTexture.id] = unusedTexture;
+    hashMap.resolvedMaterialsById[unusedTexture.id] = unusedTexture;
     const std::string withoutUnusedNormal =
             game::ComputeSectorLightmapSourceHash(hashMap);
     WriteSolidRgbTexture(unusedNormalPath, Color{255, 128, 128, 255});
@@ -3639,6 +3712,42 @@ void TestObjectLightProbePlacementRejectsHoles()
           "object light probe placement still places probes in the sector inside the hole");
 }
 
+void TestObjectLightProbePlacementSkipsThinSectors()
+{
+    std::vector<game::SectorBakedObjectLightProbePlacementDiagnostic> diagnostics;
+    const std::vector<game::SectorBakedObjectLightProbe> narrowRectangle =
+            BuildObjectProbePlacementsForTest(
+                    MakeProbeRectangle(16, 1024), &diagnostics);
+    Check(CountProbesForSector(narrowRectangle, 10) == 0,
+          "sector narrower than twice the surface clearance receives no object probes");
+
+    bool sawNarrowRectangleSkip = false;
+    for (const game::SectorBakedObjectLightProbePlacementDiagnostic& diagnostic : diagnostics) {
+        sawNarrowRectangleSkip = sawNarrowRectangleSkip
+                || (diagnostic.sectorId == 10
+                    && diagnostic.message.find("skipped") != std::string::npos
+                    && diagnostic.message.find("surface clearance") != std::string::npos);
+    }
+    Check(sawNarrowRectangleSkip,
+          "thin rectangle object probe skip records a sector-specific clearance diagnostic");
+
+    const std::vector<game::SectorBakedObjectLightProbe> thinRing =
+            BuildObjectProbePlacementsForTest(MakeThinProbeRing(), &diagnostics);
+    Check(CountProbesForSector(thinRing, 10) == 0,
+          "thin ring sector around a hole receives no object probes");
+    Check(CountProbesForSector(thinRing, 20) == 8,
+          "normal sector inside a skipped thin ring still receives object probes");
+
+    bool sawThinRingSkip = false;
+    for (const game::SectorBakedObjectLightProbePlacementDiagnostic& diagnostic : diagnostics) {
+        sawThinRingSkip = sawThinRingSkip
+                || (diagnostic.sectorId == 10
+                    && diagnostic.message.find("skipped") != std::string::npos);
+    }
+    Check(sawThinRingSkip,
+          "thin ring object probe skip records the skipped sector ID");
+}
+
 void TestObjectLightProbePlacementFallbackAndLowCeiling()
 {
     game::SectorTopologyMap small = MakeSquare();
@@ -4198,10 +4307,12 @@ void TestStaticModelPreparationReusesReadyEditorModels()
     first.position = Vector3{2.0f, 0.0f, 2.0f};
     first.staticModel.modelPath = modelPath.string();
     first.staticModel.scale = 1.5f;
+    first.staticModel.castsShadow = false;
     map.runtimeObjects.push_back(first);
     game::SectorPlacedRuntimeObject repeated = first;
     repeated.id = 92;
     repeated.position.x = 3.0f;
+    repeated.staticModel.castsShadow = true;
     map.runtimeObjects.push_back(repeated);
 
     engine::AssetManager assets;
@@ -4234,8 +4345,10 @@ void TestStaticModelPreparationReusesReadyEditorModels()
                   && prepared.objects[0].modelIndex
                           == prepared.objects[1].modelIndex
                   && Near(prepared.objects[0].scale, 1.5f)
-                  && Near(prepared.objects[1].scale, 1.5f),
-          "reused ready models are looked up and copied once for repeated prop paths");
+                  && Near(prepared.objects[1].scale, 1.5f)
+                  && !prepared.objects[0].castsShadow
+                  && prepared.objects[1].castsShadow,
+          "reused ready models preserve per-prop bake settings while copying shared geometry once");
 
     Check(assets.Initialize()
                   && assets.GlobalScope().index == 0,
@@ -4590,8 +4703,57 @@ void TestStaticModelReceivesAndCastsBakedLighting()
                   baselineResult,
                   error),
           "static model shadow comparison baseline bakes");
+
+    game::SectorTopologyMap noShadowMap = map;
+    noShadowMap.runtimeObjects[0].staticModel.castsShadow = false;
+    game::SectorStaticModelLightmapData noShadowStaticModels = staticModels;
+    noShadowStaticModels.objects[0].castsShadow = false;
+    const std::filesystem::path noShadowPath =
+            Phase01bSandboxDir() / "static_model_no_shadow.lightmap.png";
+    game::SectorTopologyLightmapBakeInput noShadowInput;
+    noShadowInput.mapSnapshot = noShadowMap;
+    noShadowInput.staticModels = noShadowStaticModels;
+    noShadowInput.expectedSourceHash =
+            game::ComputeSectorLightmapSourceHash(noShadowMap);
+    noShadowInput.temporaryOutputPath = noShadowPath.string();
+    game::SectorLightmapBakeResult noShadowResult;
+    Check(game::BakeSectorLightmap(
+                  noShadowInput,
+                  {},
+                  noShadowResult,
+                  error),
+          "static model with disabled shadow casting bakes as a receiver");
+    game::SectorLightmapArtifactData noShadowImage;
+    const bool noShadowImageLoaded = ReadHdrLightmap(
+            noShadowPath,
+            noShadowImage);
+    Check(noShadowImageLoaded,
+          "disabled-shadow static model HDR lightmap loads");
+    game::SectorStaticModelLightmapData noShadowInstalledData;
+    Check(game::ReadSectorStaticModelLightmapSidecar(
+                  noShadowResult.staticModels.path,
+                  &noShadowResult.staticModels,
+                  noShadowInstalledData,
+                  error),
+          "disabled-shadow static model keeps receiver remap metadata");
+    if (noShadowImageLoaded
+            && !noShadowInstalledData.objects.empty()
+            && !noShadowInstalledData.objects[0].meshPlacements.empty()) {
+        const auto& placement =
+                noShadowInstalledData.objects[0].meshPlacements[0];
+        const int x = static_cast<int>(std::floor(
+                (placement.atlasBias.x + placement.atlasScale.x * 0.5f)
+                * static_cast<float>(noShadowImage.width)));
+        const int y = static_cast<int>(std::floor(
+                (placement.atlasBias.y + placement.atlasScale.y * 0.5f)
+                * static_cast<float>(noShadowImage.height)));
+        const Vector4 sample = HdrLightmapTexel(noShadowImage, x, y);
+        Check(sample.x + sample.y + sample.z > 0.1f,
+              "disabled-shadow static model still receives baked direct lighting");
+    }
     if (floorSurfaceIndex >= 0
-            && floorSurfaceIndex < static_cast<int>(layout.charts.size())) {
+            && floorSurfaceIndex < static_cast<int>(layout.charts.size())
+            && noShadowImageLoaded) {
         const game::SectorLightmapChart& chart =
                 layout.charts[static_cast<size_t>(floorSurfaceIndex)];
         game::SectorLightmapArtifactData baked;
@@ -4605,6 +4767,16 @@ void TestStaticModelReceivesAndCastsBakedLighting()
                       > propFloorSample.x + propFloorSample.y
                               + propFloorSample.z + 0.05f,
               "opaque double-sided static model triangles cast baked shadows onto sector floors");
+        const Vector4 noShadowFloorSample = HdrLightmapTexel(
+                noShadowImage,
+                chart.usableX + chart.usableWidth / 2,
+                chart.usableY + chart.usableHeight / 2);
+        const float baselineFloorLuminance = baselineFloorSample.x
+                + baselineFloorSample.y + baselineFloorSample.z;
+        const float noShadowFloorLuminance = noShadowFloorSample.x
+                + noShadowFloorSample.y + noShadowFloorSample.z;
+        Check(std::fabs(noShadowFloorLuminance - baselineFloorLuminance) < 0.05f,
+              "disabled static prop shadow casting restores direct light behind the prop");
     }
 }
 
@@ -4651,16 +4823,21 @@ void TestHdrArtifactAndBakeColorContract()
     const std::vector<Vector4> texels{
             Vector4{4.5f, 2.0f, 0.125f, 0.25f},
             Vector4{1.25f, 0.0f, 32.0f, 1.0f}};
+    const std::vector<Vector4> directionalTexels{
+            Vector4{0.5f, 1.0f, 0.0f, 0.25f},
+            Vector4{1.0f, 0.5f, 0.5f, 0.75f}};
     game::SectorIlluminationStatistics firstPre;
     game::SectorIlluminationStatistics firstStored;
     game::SectorIlluminationStatistics secondPre;
     game::SectorIlluminationStatistics secondStored;
     std::string error;
     Check(game::WriteSectorLightmapArtifact(
-                  firstPath.string(), 2, 1, texels.data(), texels.size(),
+                  firstPath.string(), 2, 1, texels.data(),
+                  directionalTexels.data(), texels.size(),
                   "hdr-contract-hash", firstPre, firstStored, error)
                   && game::WriteSectorLightmapArtifact(
-                             secondPath.string(), 2, 1, texels.data(), texels.size(),
+                             secondPath.string(), 2, 1, texels.data(),
+                             directionalTexels.data(), texels.size(),
                              "hdr-contract-hash", secondPre, secondStored, error),
           "HDR artifact writer stores and reopens representative radiance");
     game::SectorLightmapMetadata expected;
@@ -4676,6 +4853,12 @@ void TestHdrArtifactAndBakeColorContract()
                   && Near(HdrLightmapTexel(loaded, 0, 0).x, 4.5f)
                   && Near(HdrLightmapTexel(loaded, 1, 0).z, 32.0f)
                   && Near(HdrLightmapTexel(loaded, 0, 0).w, 0.25f)
+                  && loaded.directionalRgba8.size() == 8
+                  && loaded.directionalRgba8[0] == 128
+                  && loaded.directionalRgba8[1] == 255
+                  && loaded.directionalRgba8[2] == 0
+                  && loaded.directionalRgba8[3] == 64
+                  && loaded.directionalRgba8[7] == 191
                   && loaded.storedStatistics.rgbMax.z > 1.0f
                   && loaded.storedStatistics.rgbChannelsAboveOne == 4,
           "HDR artifact round trip preserves above-one RGB and bounded AO");
@@ -4695,7 +4878,7 @@ void TestHdrArtifactAndBakeColorContract()
     Check(firstBytes == secondBytes
                   && firstBytes.size() > 8
                   && firstBytes[0] == 'S' && firstBytes[1] == 'L'
-                  && firstBytes[4] == 1 && firstBytes[5] == 0
+                  && firstBytes[4] == 2 && firstBytes[5] == 0
                   && firstBytes[6] == 0 && firstBytes[7] == 0,
           "HDR artifact output is deterministic with fixed-width little-endian fields");
 
@@ -4716,6 +4899,62 @@ void TestHdrArtifactAndBakeColorContract()
     Check(!game::ReadSectorLightmapArtifact(
                   legacyPath.string(), &expected, loaded, error),
           "legacy RGBA8 artifacts are rejected rather than reinterpreted");
+    std::filesystem::remove_all(sandbox);
+}
+
+void TestReflectionProbePrefilterAndArtifactRoundTrip()
+{
+    constexpr int Resolution = 64;
+    std::vector<Vector4> capture(static_cast<std::size_t>(Resolution)
+            * Resolution * 6u);
+    for (std::size_t i = 0; i < capture.size(); ++i) {
+        const float face = static_cast<float>(i / (Resolution * Resolution));
+        capture[i] = Vector4{1.0f + face, 0.25f, 0.5f, 1.0f};
+    }
+    game::SectorBakedReflectionProbeRecord record;
+    std::string error;
+    Check(game::BuildSectorReflectionProbeRecord(
+                  7, Resolution, "probe-hash", capture, record, error),
+          "reflection probe capture builds a GGX-prefiltered mip chain");
+    Check(record.mipCount == game::SectorReflectionProbeMipCount(Resolution)
+                  && record.rgba16.size()
+                          == game::SectorReflectionProbeHalfCount(
+                                  Resolution, record.mipCount),
+          "reflection probe prefilter has the expected complete mip payload");
+
+    game::SectorTopologyMap hashMap = MakeSquare();
+    game::SectorCompiledReflectionProbe probe{
+            7, 10, true, Vector3{1.0f, 1.0f, 1.0f},
+            Vector3{1.0f, 1.0f, 1.0f}, Vector3{2.0f, 2.0f, 2.0f},
+            0.0f, 0, 1.0f, Resolution};
+    const std::string firstHash = game::ComputeSectorReflectionProbeSourceHash(
+            hashMap, probe);
+    probe.intensity = 2.0f;
+    Check(game::ComputeSectorReflectionProbeSourceHash(hashMap, probe) != firstHash,
+          "reflection probe source hash includes probe settings");
+    probe.intensity = 1.0f;
+    hashMap.resolvedMaterialsById.begin()->second.roughnessFactor = 0.25f;
+    Check(game::ComputeSectorReflectionProbeSourceHash(hashMap, probe) != firstHash,
+          "reflection probe source hash includes captured PBR material inputs");
+
+    const std::filesystem::path sandbox =
+            std::filesystem::temp_directory_path()
+            / "sector_reflection_probe_round_trip";
+    std::filesystem::remove_all(sandbox);
+    std::filesystem::create_directories(sandbox);
+    const std::filesystem::path path = sandbox / "test.reflection-probes.bin";
+    game::SectorBakedReflectionProbeArtifact artifact;
+    artifact.version = game::SectorReflectionProbeBakeVersion;
+    artifact.probes.push_back(record);
+    Check(game::WriteSectorReflectionProbeArtifact(path, artifact, error),
+          "reflection probe artifact writes atomically");
+    game::SectorBakedReflectionProbeArtifact loaded;
+    Check(game::ReadSectorReflectionProbeArtifact(path, loaded, error)
+                  && loaded.probes.size() == 1
+                  && loaded.probes[0].probeId == 7
+                  && loaded.probes[0].sourceHash == "probe-hash"
+                  && loaded.probes[0].rgba16 == record.rgba16,
+          "reflection probe artifact round-trips without changing HDR half data");
     std::filesystem::remove_all(sandbox);
 }
 
@@ -4751,6 +4990,7 @@ int main()
     TestObjectLightProbePlacementGridCounts();
     TestObjectLightProbePlacementRejectsConcaveVoid();
     TestObjectLightProbePlacementRejectsHoles();
+    TestObjectLightProbePlacementSkipsThinSectors();
     TestObjectLightProbePlacementFallbackAndLowCeiling();
     TestObjectLightProbePlacementConfiguredSingleLayerAndValidation();
     TestObjectLightProbePointAndDirectionalLighting();
@@ -4773,7 +5013,7 @@ int main()
     TestAlphaAwareStaticRayOcclusion();
     TestAlphaAwareStaticLightBakePaths();
     TestDirectionalLightBakeBehavior();
-    TestGeneratedSurfaceNormalMapConventionAndBakedDirectLighting();
+    TestGeneratedSurfaceNormalMapConventionAndBakeIndependence();
     TestStaticSpotlightBakeBehavior();
     TestStaticModelUvPreparationAndImportedTransforms();
     TestVerySmallStaticModelUvNormalization();
@@ -4782,6 +5022,7 @@ int main()
     TestStaticModelFingerprintRefreshAndHashInputs();
     TestStaticModelReceivesAndCastsBakedLighting();
     TestHdrArtifactAndBakeColorContract();
+    TestReflectionProbePrefilterAndArtifactRoundTrip();
 
     if (failures != 0) {
         std::fprintf(stderr, "%d sector topology lightmap test(s) failed\n", failures);

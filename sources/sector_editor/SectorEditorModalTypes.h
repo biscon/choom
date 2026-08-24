@@ -53,8 +53,11 @@ struct TexturePickerState {
     int runtimeObjectId = -1;
     int selectedTextureIndex = -1;
     engine::UIScrollState scroll;
-    std::vector<std::string> textureIds;
+    std::vector<std::string> allMaterialIds;
+    std::vector<std::string> materialIds;
     std::vector<const char*> optionLabels;
+    char filterBuffer[256] = {};
+    std::string filterMessage;
 };
 
 struct FootstepPickerState {
@@ -73,24 +76,6 @@ struct FootstepPickerState {
     bool previewPending = false;
 };
 
-struct AddMapTextureState {
-    bool open = false;
-    bool scanned = false;
-    std::string scanMessage;
-    engine::UIScrollState scroll;
-    std::vector<std::string> paths;
-    std::vector<std::string> optionLabelStorage;
-    std::vector<const char*> optionLabels;
-    int selectedPathIndex = -1;
-    char textureIdBuffer[96] = {};
-    SectorTextureFilter filter = SectorTextureFilter::Anisotropic8x;
-    std::string validationMessage;
-    engine::AssetScopeHandle previewScope = engine::NullAssetScopeHandle();
-    engine::TextureHandle previewTexture = engine::NullTextureHandle();
-    std::string previewPath;
-    SectorTextureFilter previewFilter = SectorTextureFilter::Anisotropic8x;
-};
-
 enum class SectorEditorDoorSoundTarget {
     Open,
     Close
@@ -106,7 +91,7 @@ struct AddMapSoundState {
 
 struct SectorEditorAssetPruneModalState {
     bool open = false;
-    bool pruneTextures = true;
+    bool pruneTextures = false;
     bool pruneSounds = true;
 };
 

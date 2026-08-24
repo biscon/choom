@@ -28,7 +28,7 @@ bool SameBoundaryCutPoint(
             && a.point.y == b.point.y;
 }
 
-const SectorTextureDefinition* FindSectorTopologyTexture(
+const SectorMaterialDefinition* FindSectorTopologyTexture(
         const SectorTopologyMap& map,
         const std::string& id)
 {
@@ -36,15 +36,15 @@ const SectorTextureDefinition* FindSectorTopologyTexture(
         return nullptr;
     }
 
-    const auto it = map.texturesById.find(id);
-    return it == map.texturesById.end() ? nullptr : &it->second;
+    const auto it = map.resolvedMaterialsById.find(id);
+    return it == map.resolvedMaterialsById.end() ? nullptr : &it->second;
 }
 
 std::vector<std::string> SortedSectorTopologyTextureIds(const SectorTopologyMap& map)
 {
     std::vector<std::string> ids;
-    ids.reserve(map.texturesById.size());
-    for (const auto& texture : map.texturesById) {
+    ids.reserve(map.resolvedMaterialsById.size());
+    for (const auto& texture : map.resolvedMaterialsById) {
         ids.push_back(texture.first);
     }
     std::sort(ids.begin(), ids.end());
@@ -311,7 +311,7 @@ std::vector<std::string> ScanAssetImagePngs(
             ec.clear();
             continue;
         }
-        if (IsSectorTextureNormalMapPath(entry.path().filename().string())) {
+        if (IsSectorMaterialNormalMapPath(entry.path().filename().string())) {
             continue;
         }
 
@@ -656,6 +656,7 @@ const char* ToolName(SectorEditorTool tool)
         case SectorEditorTool::Npc: return "NPC";
         case SectorEditorTool::Door: return "Door";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume";
+        case SectorEditorTool::ReflectionProbe: return "Reflection Probe";
         case SectorEditorTool::Trigger: return "Trigger";
         case SectorEditorTool::LevelMarker: return "Level Marker";
         case SectorEditorTool::StaticLight: return "Static Light";
@@ -715,6 +716,7 @@ const char* SectorEditorPickKindName(SectorEditorPickKind kind)
         case SectorEditorPickKind::AuthoringLine: return "authoring line";
         case SectorEditorPickKind::AuthoringFaceAnchor: return "authoring face";
         case SectorEditorPickKind::AuthoringFogVolume: return "fog volume";
+        case SectorEditorPickKind::AuthoringReflectionProbe: return "reflection probe";
         case SectorEditorPickKind::Trigger: return "trigger";
         case SectorEditorPickKind::LevelMarker: return "level marker";
     }
@@ -740,6 +742,7 @@ bool IsSectorEditorPickTargetMovable(SectorEditorPickTarget target)
         case SectorEditorPickKind::StaticLight:
         case SectorEditorPickKind::AuthoringVertex:
         case SectorEditorPickKind::AuthoringFogVolume:
+        case SectorEditorPickKind::AuthoringReflectionProbe:
         case SectorEditorPickKind::Trigger:
         case SectorEditorPickKind::LevelMarker:
             return target.id >= 0;
@@ -763,6 +766,7 @@ int SectorEditorPickPriority(SectorEditorPickKind kind)
 {
     switch (kind) {
         case SectorEditorPickKind::LevelMarker: return 0;
+        case SectorEditorPickKind::AuthoringReflectionProbe: return 0;
         case SectorEditorPickKind::RuntimeObject: return 1;
         case SectorEditorPickKind::DynamicSpotLight: return 2;
         case SectorEditorPickKind::DynamicRectLight: return 2;
@@ -1079,7 +1083,7 @@ Color DecalTintPreviewColor(Vector3 tint)
 
 bool IsDefaultDecalLayer(const SectorTopologyDecalLayer& decal)
 {
-    return decal.textureId.empty()
+    return decal.materialId.empty()
             && IsDefaultTopologyUv(decal.uv)
             && decal.opacity == 1.0f
             && !decal.emissive
@@ -1089,14 +1093,14 @@ bool IsDefaultDecalLayer(const SectorTopologyDecalLayer& decal)
 
 bool IsDefaultWallPartSettings(const SectorTopologyWallPartSettings& part)
 {
-    return part.textureId.empty()
+    return part.materialId.empty()
             && IsDefaultTopologyUv(part.uv)
             && IsDefaultDecalLayer(part.decal);
 }
 
 void ResetDecalLayer(SectorTopologyDecalLayer& decal)
 {
-    decal.textureId.clear();
+    decal.materialId.clear();
     ResetTopologyUv(decal.uv);
     decal.opacity = 1.0f;
     decal.emissive = false;
@@ -1149,6 +1153,7 @@ const char* ToolHelpText(SectorEditorTool tool)
         case SectorEditorTool::Npc: return "NPC: click inside a derived sector to place a character";
         case SectorEditorTool::Door: return "Door: click a two-sided portal line to place a sliding door";
         case SectorEditorTool::AuthoringFogVolume: return "Fog Volume: click strictly inside a sector to place local fog";
+        case SectorEditorTool::ReflectionProbe: return "Reflection Probe: click inside a sector to place a local baked reflection capture";
         case SectorEditorTool::Trigger: return "Trigger: choose Rectangle or Polygon, then draw snapped points; right click/Esc cancels";
         case SectorEditorTool::StaticLight: return "Static Light: click inside a sector to place a baked point light";
         case SectorEditorTool::StaticSpotLight: return "Static Spot: click inside a sector to place a baked spot light";
@@ -1163,20 +1168,20 @@ const char* ToolHelpText(SectorEditorTool tool)
 const char* TopologySectorTextureFieldLabel(TopologySectorTextureField field)
 {
     switch (field) {
-        case TopologySectorTextureField::Floor: return "floor texture";
-        case TopologySectorTextureField::Ceiling: return "ceiling texture";
-        case TopologySectorTextureField::DefaultWall: return "default wall texture";
-        case TopologySectorTextureField::DefaultLower: return "default lower texture";
-        case TopologySectorTextureField::DefaultUpper: return "default upper texture";
+        case TopologySectorTextureField::Floor: return "floor material";
+        case TopologySectorTextureField::Ceiling: return "ceiling material";
+        case TopologySectorTextureField::DefaultWall: return "default wall material";
+        case TopologySectorTextureField::DefaultLower: return "default lower material";
+        case TopologySectorTextureField::DefaultUpper: return "default upper material";
         case TopologySectorTextureField::None: break;
     }
-    return "texture";
+    return "material";
 }
 
 const char* TopologyPickerTargetLabel(const TexturePickerState& picker)
 {
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::MapSky) {
-        return "sky texture";
+        return "sky material";
     }
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::SideDef
             || picker.topologyTargetKind == TopologyTexturePickerTargetKind::AuthoringSide) {
@@ -1184,13 +1189,13 @@ const char* TopologyPickerTargetLabel(const TexturePickerState& picker)
                 ? "authoring side"
                 : "sidedef";
         return picker.topologyLayer == TopologyMaterialLayer::Decal
-                ? TextFormat("%s %s decal texture", TopologyWallPartStatusName(picker.topologyWallPart), sideTarget)
-                : TextFormat("%s %s texture", TopologyWallPartStatusName(picker.topologyWallPart), sideTarget);
+                ? TextFormat("%s %s decal material", TopologyWallPartStatusName(picker.topologyWallPart), sideTarget)
+                : TextFormat("%s %s material", TopologyWallPartStatusName(picker.topologyWallPart), sideTarget);
     }
     if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
         switch (picker.topologyField) {
-            case TopologySectorTextureField::Floor: return "floor decal texture";
-            case TopologySectorTextureField::Ceiling: return "ceiling decal texture";
+            case TopologySectorTextureField::Floor: return "floor decal material";
+            case TopologySectorTextureField::Ceiling: return "ceiling decal material";
             case TopologySectorTextureField::DefaultWall:
             case TopologySectorTextureField::DefaultLower:
             case TopologySectorTextureField::DefaultUpper:
@@ -1211,7 +1216,7 @@ bool SameSkySettings(const SectorTopologySkySettings& left, const SectorTopology
 {
     const SectorTopologySkySettings a = NormalizeSectorTopologySkySettings(left);
     const SectorTopologySkySettings b = NormalizeSectorTopologySkySettings(right);
-    return a.textureId == b.textureId
+    return a.materialId == b.materialId
             && a.yawOffsetDegrees == b.yawOffsetDegrees
             && a.verticalOffset == b.verticalOffset
             && a.verticalScale == b.verticalScale
@@ -1593,7 +1598,7 @@ const SectorTopologyLoopEdge* FindVisibleTopologyWallPartNeighborEdge(
             continue;
         }
         if (layer == TopologyMaterialLayer::Decal
-                && TopologyWallPartSettingsFor(*sideDef, wallPart).decal.textureId.empty()) {
+                && TopologyWallPartSettingsFor(*sideDef, wallPart).decal.materialId.empty()) {
             continue;
         }
         return &edge;

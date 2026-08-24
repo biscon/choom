@@ -1291,7 +1291,7 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
     door.autoOpen = true;
     door.interactionDistance = 2.25f;
     door.autoOpenDistance = 3.5f;
-    door.textureId = "test_door";
+    door.materialId = "test_door";
     door.openSoundId = "door_open";
     door.closeSoundId = "door_close";
     map.runtimeObjects.push_back(MakePlacedDoor(35, door));
@@ -1386,7 +1386,7 @@ void TestSpawnPlacedDoorCopiesResolvedPayloadToEcs()
                   && Near(render.height, 1.5f)
                   && Near(render.thickness, 0.375f)
                   && Near(render.normalOffset, 0.125f)
-                  && render.textureId == "test_door"
+                  && render.materialId == "test_door"
                   && render.visible,
             "valid placed door render component stores dimensions and material ID");
 
@@ -2435,6 +2435,20 @@ void TestSectorDoorReceiverBoundsUseAnimatedSlabGeometry()
                   && Near(bounds[1].min, bounds[0].min)
                   && Near(bounds[1].max, bounds[0].max),
             "door receiver bounds cover the current slab AABB including vertical extent");
+
+    game::SectorReceiverBounds singleBounds;
+    Check(game::BuildSectorDoorReceiverBounds(
+                  world.Get<game::SectorObjectTransform>(door),
+                  world.Get<game::SectorObject>(door),
+                  world.Get<game::SectorDoor>(door),
+                  world.Get<game::SectorDoorResolvedAnchor>(door),
+                  world.Get<game::SectorDoorRender>(door),
+                  10,
+                  singleBounds)
+                  && singleBounds.sectorId == 10
+                  && Near(singleBounds.min, bounds[0].min)
+                  && Near(singleBounds.max, bounds[0].max),
+            "allocation-free door receiver bounds match collected slab bounds");
 
     game::SectorDoorMotion& motion = world.Get<game::SectorDoorMotion>(door);
     motion.openFraction = 0.5f;
@@ -6500,10 +6514,24 @@ void TestStaticModelSpotlightShadowCasterCollectionAndRevision()
     Check(collection.revision == initialRevision,
           "unchanged static prop shadow casters preserve the cache revision");
 
+    world.Get<game::SectorStaticModel>(visible).castsShadow = false;
+    game::UpdateSectorStaticModelShadowCasters(collection, &world);
+    const uint64_t disabledRevision = collection.revision;
+    Check(collection.casters.empty()
+                  && disabledRevision != initialRevision,
+          "disabling static prop shadow casting removes it from dynamic-light casters");
+
+    world.Get<game::SectorStaticModel>(visible).castsShadow = true;
+    game::UpdateSectorStaticModelShadowCasters(collection, &world);
+    const uint64_t reenabledRevision = collection.revision;
+    Check(collection.casters.size() == 1
+                  && reenabledRevision != disabledRevision,
+          "reenabling static prop shadow casting restores it and invalidates shadows");
+
     world.Get<game::SectorObjectTransform>(visible).position.x += 0.5f;
     game::UpdateSectorStaticModelShadowCasters(collection, &world);
     const uint64_t movedRevision = collection.revision;
-    Check(movedRevision != initialRevision,
+    Check(movedRevision != reenabledRevision,
           "moving a static prop invalidates the spotlight shadow caster revision");
 
     world.Get<game::SectorObject>(visible).visible = false;

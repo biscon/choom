@@ -1678,7 +1678,7 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
             const float alphaCutoff = batch.alphaCutoff;
             const Texture2D* texture = nullptr;
             if (batch.alphaTest && context.textureResolver != nullptr) {
-                texture = context.textureResolver(context.userData, *context.assets, batch.textureId);
+                texture = context.textureResolver(context.userData, *context.assets, batch.materialId);
                 if (texture == nullptr || texture->id == 0) {
                     lightCacheable = false;
                 }

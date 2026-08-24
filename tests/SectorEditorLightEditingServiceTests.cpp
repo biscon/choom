@@ -149,6 +149,259 @@ void CheckClean(const game::SectorEditorState& state, const game::SectorEditorDo
     Check(statusText == expectedStatus, "no-op/cancel preserves expected status text");
 }
 
+game::SectorLightAtmosphereSettings TestAtmosphere()
+{
+    game::SectorLightAtmosphereSettings atmosphere;
+    atmosphere.proxy.halo.enabled = true;
+    atmosphere.proxy.halo.radiusWorld = 3.25f;
+    atmosphere.proxy.halo.centerOffsetWorld = Vector3{0.25f, -0.5f, 0.75f};
+    atmosphere.proxy.halo.brightness = 2.0f;
+    atmosphere.proxy.halo.scatteringTint = Color{11, 22, 33, 255};
+    atmosphere.proxy.shaft.enabled = true;
+    atmosphere.proxy.shaft.originOffsetWorld = Vector3{-0.75f, 0.5f, 0.25f};
+    atmosphere.proxy.shaft.lengthScale = 0.8f;
+    atmosphere.proxy.shaft.widthScale = 0.6f;
+    atmosphere.proxy.shaft.scatteringTint = Color{44, 55, 66, 255};
+    atmosphere.dust.enabled = true;
+    atmosphere.dust.amount = 17;
+    atmosphere.dust.extentScale = 0.9f;
+    atmosphere.dust.scatteringTint = Color{77, 88, 99, 255};
+    return atmosphere;
+}
+
+void CheckAtmospherePreserved(
+        const game::SectorLightAtmosphereSettings& atmosphere,
+        const char* message)
+{
+    Check(atmosphere.proxy.halo.enabled
+                  && Near(atmosphere.proxy.halo.radiusWorld, 3.25f)
+                  && Near(atmosphere.proxy.halo.centerOffsetWorld.x, 0.25f)
+                  && atmosphere.proxy.halo.scatteringTint.g == 22
+                  && atmosphere.proxy.shaft.enabled
+                  && Near(atmosphere.proxy.shaft.originOffsetWorld.x, -0.75f)
+                  && Near(atmosphere.proxy.shaft.lengthScale, 0.8f)
+                  && atmosphere.proxy.shaft.scatteringTint.b == 66
+                  && atmosphere.dust.enabled
+                  && atmosphere.dust.amount == 17
+                  && Near(atmosphere.dust.extentScale, 0.9f)
+                  && atmosphere.dust.scatteringTint.r == 77,
+          message);
+}
+
+void TestConvertPointLightsPreservesSharedFieldsAndHandlesIdCollision()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+    game::SectorTopologyStaticPointLight source;
+    source.id = 7;
+    source.position = Vector3{1.0f, 2.0f, 3.0f};
+    source.color = Color{20, 40, 60, 255};
+    source.intensity = 2.5f;
+    source.radius = 48.0f;
+    source.sourceRadius = 4.0f;
+    source.atmosphere = TestAtmosphere();
+    source.castsShadow = true;
+    documentState.map.topologyMap.staticLights.push_back(source);
+    documentState.map.topologyMap.dynamicPointLights.push_back(
+            game::SectorTopologyDynamicPointLight{7});
+
+    game::SelectionState selectionState;
+    selectionState.topologySelectionKind = game::TopologySelectionKind::StaticLight;
+    selectionState.selectedTopologyLightId = 7;
+    selectionState.hoveredTopologyLightId = 7;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    lightState.lightPilot.active = true;
+    lightState.lightPilot.kind = game::LightPilotKind::StaticPoint;
+    lightState.lightPilot.lightId = 7;
+    lightState.lightPilot.originalPosition = source.position;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(
+            state, documentState, documentState.map.topologyMap,
+            TestPreviewSelectionState(), selectionState, manipulationState,
+            lightState, uiState, inspectorIdUiState, statusText);
+
+    const game::SectorEditorLightMutationResult converted = service.ConvertSelectedLight();
+    const game::SectorTopologyDynamicPointLight* dynamic =
+            game::FindSectorTopologyDynamicLight(documentState.map.topologyMap, 8);
+    Check(converted.changed && converted.dynamicLightRendererRefreshNeeded
+                  && converted.previewPoseRestoreNeeded && !lightState.lightPilot.active,
+          "static point conversion reports change and safely ends an active pilot");
+    Check(documentState.map.topologyMap.staticLights.empty()
+                  && documentState.map.topologyMap.dynamicPointLights.size() == 2
+                  && dynamic != nullptr,
+          "static point conversion replaces the source and allocates around a destination ID collision");
+    Check(dynamic != nullptr
+                  && Near(dynamic->position.x, 1.0f)
+                  && dynamic->color.g == 40
+                  && Near(dynamic->intensity, 2.5f)
+                  && Near(dynamic->radius, 48.0f)
+                  && dynamic->castsShadow,
+          "static point conversion preserves shared light fields");
+    Check(dynamic != nullptr && dynamic->enabled && !dynamic->flicker
+                  && Near(dynamic->flickerSpeed, game::DynamicLightFlickerDefaultSpeed)
+                  && Near(dynamic->shadowBias, game::DynamicSpotLightDefaultShadowBias),
+          "static point conversion uses dynamic-only defaults");
+    if (dynamic != nullptr) CheckAtmospherePreserved(
+            dynamic->atmosphere, "static point conversion preserves haze shaft and dust");
+    Check(selectionState.topologySelectionKind == game::TopologySelectionKind::DynamicLight
+                  && selectionState.selectedTopologyDynamicLightId == 8
+                  && selectionState.hoveredTopologyLightId < 0,
+          "static point conversion selects the destination and clears stale hover");
+    CheckDirtyOnce(state, documentState, statusText,
+            "Converted static light 7 to dynamic light 8");
+
+    ResetDirty(state, documentState, statusText);
+    const game::SectorEditorLightMutationResult convertedBack = service.ConvertSelectedLight();
+    const game::SectorTopologyStaticPointLight* staticLight =
+            game::FindSectorTopologyStaticLight(documentState.map.topologyMap, 8);
+    Check(convertedBack.changed && staticLight != nullptr
+                  && Near(staticLight->sourceRadius, 0.0f)
+                  && staticLight->castsShadow,
+          "dynamic point conversion retains its ID and uses the static source-radius default");
+    if (staticLight != nullptr) CheckAtmospherePreserved(
+            staticLight->atmosphere, "dynamic point conversion preserves atmosphere");
+    CheckDirtyOnce(state, documentState, statusText,
+            "Converted dynamic light 8 to static light 8");
+}
+
+void TestConvertSpotAndRectLightsPreservesShapeAndAtmosphere()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+    game::SectorTopologyStaticSpotLight spot;
+    spot.id = 12;
+    spot.position = Vector3{1.0f, 2.0f, 3.0f};
+    spot.target = Vector3{4.0f, 5.0f, 6.0f};
+    spot.color = Color{12, 34, 56, 255};
+    spot.intensity = 3.0f;
+    spot.range = 72.0f;
+    spot.innerConeDegrees = 14.0f;
+    spot.outerConeDegrees = 39.0f;
+    spot.sourceRadius = 5.0f;
+    spot.castsShadow = false;
+    spot.atmosphere = TestAtmosphere();
+    documentState.map.topologyMap.staticSpotLights.push_back(spot);
+
+    game::SelectionState selectionState;
+    selectionState.topologySelectionKind = game::TopologySelectionKind::StaticSpotLight;
+    selectionState.selectedTopologyStaticSpotLightId = 12;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(
+            state, documentState, documentState.map.topologyMap,
+            TestPreviewSelectionState(), selectionState, manipulationState,
+            lightState, uiState, inspectorIdUiState, statusText);
+
+    service.ConvertSelectedLight();
+    const game::SectorTopologyDynamicSpotLight* dynamicSpot =
+            game::FindSectorTopologyDynamicSpotLight(documentState.map.topologyMap, 12);
+    Check(dynamicSpot != nullptr
+                  && Near(dynamicSpot->target.z, 6.0f)
+                  && Near(dynamicSpot->range, 72.0f)
+                  && Near(dynamicSpot->innerConeDegrees, 14.0f)
+                  && Near(dynamicSpot->outerConeDegrees, 39.0f)
+                  && !dynamicSpot->castsShadow,
+          "static spot conversion preserves target cones range and shadow intent");
+    if (dynamicSpot != nullptr) CheckAtmospherePreserved(
+            dynamicSpot->atmosphere, "static spot conversion preserves shaft haze and dust");
+    ResetDirty(state, documentState, statusText);
+    service.ConvertSelectedLight();
+    const game::SectorTopologyStaticSpotLight* staticSpot =
+            game::FindSectorTopologyStaticSpotLight(documentState.map.topologyMap, 12);
+    Check(staticSpot != nullptr && Near(staticSpot->sourceRadius, 0.0f)
+                  && Near(staticSpot->target.z, 6.0f),
+          "dynamic spot conversion uses the static source-radius default and preserves its target");
+    CheckDirtyOnce(state, documentState, statusText,
+            "Converted dynamic spot 12 to static spot 12");
+
+    game::SectorTopologyDynamicRectLight rect;
+    rect.id = 21;
+    rect.position = Vector3{7.0f, 8.0f, 9.0f};
+    rect.target = Vector3{10.0f, 11.0f, 12.0f};
+    rect.rollDegrees = -32.0f;
+    rect.width = 13.0f;
+    rect.height = 2.0f;
+    rect.color = Color{90, 80, 70, 255};
+    rect.intensity = 1.75f;
+    rect.range = 96.0f;
+    rect.enabled = false;
+    rect.flicker = true;
+    rect.castsShadow = true;
+    rect.atmosphere = TestAtmosphere();
+    documentState.map.topologyMap.dynamicRectLights.push_back(rect);
+    selectionState.topologySelectionKind = game::TopologySelectionKind::DynamicRectLight;
+    selectionState.selectedTopologyDynamicSpotLightId = 21;
+    selectionState.selectedTopologyDynamicLightId = -1;
+    ResetDirty(state, documentState, statusText);
+
+    service.ConvertSelectedLight();
+    const game::SectorTopologyStaticRectLight* staticRect =
+            game::FindSectorTopologyStaticRectLight(documentState.map.topologyMap, 21);
+    Check(staticRect != nullptr
+                  && Near(staticRect->position.y, 8.0f)
+                  && Near(staticRect->target.x, 10.0f)
+                  && Near(staticRect->rollDegrees, -32.0f)
+                  && Near(staticRect->width, 13.0f)
+                  && Near(staticRect->height, 2.0f)
+                  && Near(staticRect->range, 96.0f)
+                  && staticRect->castsShadow,
+          "dynamic rect conversion preserves its shared shape and lighting fields");
+    if (staticRect != nullptr) CheckAtmospherePreserved(
+            staticRect->atmosphere, "dynamic rect conversion preserves shaft haze and dust");
+    Check(selectionState.topologySelectionKind == game::TopologySelectionKind::StaticRectLight
+                  && selectionState.selectedTopologyStaticSpotLightId == 21,
+          "dynamic rect conversion selects the static rect destination");
+    CheckDirtyOnce(state, documentState, statusText,
+            "Converted dynamic rect light 21 to static rect light 21");
+
+    ResetDirty(state, documentState, statusText);
+    service.ConvertSelectedLight();
+    const game::SectorTopologyDynamicRectLight* dynamicRect =
+            game::FindSectorTopologyDynamicRectLight(documentState.map.topologyMap, 21);
+    Check(dynamicRect != nullptr && dynamicRect->enabled && !dynamicRect->flicker
+                  && Near(dynamicRect->width, 13.0f)
+                  && Near(dynamicRect->rollDegrees, -32.0f)
+                  && dynamicRect->castsShadow,
+          "static rect conversion preserves shape and uses dynamic runtime defaults");
+    if (dynamicRect != nullptr) CheckAtmospherePreserved(
+            dynamicRect->atmosphere, "static rect conversion preserves shaft haze and dust");
+    CheckDirtyOnce(state, documentState, statusText,
+            "Converted static rect light 21 to dynamic rect light 21");
+}
+
+void TestConvertSelectedLightFailureIsClean()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    documentState.map.topologyMap = MakeMap();
+    game::SelectionState selectionState;
+    game::ManipulationState manipulationState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    game::LightEditingState lightState;
+    std::string statusText;
+    ResetDirty(state, documentState, statusText);
+    game::SectorEditorLightEditingService service = MakeService(
+            state, documentState, documentState.map.topologyMap,
+            TestPreviewSelectionState(), selectionState, manipulationState,
+            lightState, uiState, inspectorIdUiState, statusText);
+
+    const game::SectorEditorLightMutationResult result = service.ConvertSelectedLight();
+    Check(!result.changed, "conversion without a selected light reports unchanged");
+    CheckClean(state, documentState, statusText,
+            "Light conversion failed: no light selected");
+}
+
 void TestAddStaticLightDirtiesAndSelects()
 {
     game::SectorEditorState state;
@@ -1076,6 +1329,9 @@ void TestProxyPlacementApplyAndCancelTiming()
 
 int main()
 {
+    TestConvertPointLightsPreservesSharedFieldsAndHandlesIdCollision();
+    TestConvertSpotAndRectLightsPreservesShapeAndAtmosphere();
+    TestConvertSelectedLightFailureIsClean();
     TestAddStaticLightDirtiesAndSelects();
     TestAddDynamicLightDirtiesAndSelects();
     TestAddRectLightsPointDownByDefault();

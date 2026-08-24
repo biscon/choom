@@ -31,6 +31,7 @@ std::string ApplicationLevelAssetPath(const std::string& name)
 
 bool LoadSectorRuntimeLevel(
         const std::string& path,
+        const SectorMaterialRegistry& materials,
         SectorTopologyMap& outMap,
         std::string& error)
 {
@@ -42,22 +43,16 @@ bool LoadSectorRuntimeLevel(
             return false;
         }
         outMap = std::move(authoring.derivation.topology);
+        const std::vector<std::string> missing =
+                ResolveSectorMaterialsForMap(outMap, materials);
+        for (const std::string& id : missing) {
+            TraceLog(LOG_WARNING, "Level references missing global material: %s", id.c_str());
+        }
         error.clear();
         return true;
     }
-
-    std::string topologyError;
-    if (LoadSectorTopologyMap(path.c_str(), outMap, &topologyError)) {
-        error.clear();
-        return true;
-    }
-
-    error = "Could not load level '" + path + "' as an authoring-graph or linedef map";
-    if (!authoringError.empty()) {
-        error += ": " + authoringError;
-    } else if (!topologyError.empty()) {
-        error += ": " + topologyError;
-    }
+    error = "Could not load v4 authoring level '" + path + "'";
+    if (!authoringError.empty()) error += ": " + authoringError;
     return false;
 }
 

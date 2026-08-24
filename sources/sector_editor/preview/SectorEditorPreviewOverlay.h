@@ -64,6 +64,8 @@ struct SectorEditorPreviewOverlayResult {
     bool openWeaponEditor = false;
     bool markTopologyDocumentEdited = false;
     bool requestNavigationRebuild = false;
+    bool requestBakeSelectedReflectionProbe = false;
+    bool requestBakeAllReflectionProbes = false;
     const char* topologyDocumentEditStatus = nullptr;
 };
 
@@ -91,6 +93,11 @@ void DrawSectorEditorPreviewObjectProbeOverlay(
         const SectorTopologyMap& topologyMap,
         const SectorEditorPreviewState& previewState,
         const SectorRuntimeObjectState& runtimeObjects,
+        const SectorMeshRenderer& preview);
+void DrawSectorEditorPreviewReflectionProbeOverlay(
+        const SectorTopologyMap& topologyMap,
+        const SectorEditorPreviewState& previewState,
+        const SelectionState& selectionState,
         const SectorMeshRenderer& preview);
 void DrawSectorEditorPreviewNavigationOverlay(
         const SectorEditorPreviewOverlayState& overlayState,

@@ -469,8 +469,8 @@ bool CreateSectorTopologyPolygon(
             : options.sectorName;
     sector.floorZ = options.floorZ;
     sector.ceilingZ = options.ceilingZ;
-    sector.floorTextureId = options.floorTextureId;
-    sector.ceilingTextureId = options.ceilingTextureId;
+    sector.floorMaterialId = options.floorMaterialId;
+    sector.ceilingMaterialId = options.ceilingMaterialId;
     sector.floorUv = options.floorUv;
     sector.ceilingUv = options.ceilingUv;
     sector.ambientColor = options.ambientColor;

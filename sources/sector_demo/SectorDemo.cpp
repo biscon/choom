@@ -3,6 +3,8 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologySerialization.h"
 #include "sector_demo/SectorStaticModelLightmap.h"
+#include "sector_demo/SectorMaterialRegistry.h"
+#include "game/SectorLevelLoader.h"
 #include "engine/systems/AnimatedModelSystem.h"
 
 #include <raylib.h>
@@ -28,7 +30,10 @@ bool SectorDemo::Init(engine::EngineContext& context, const char* mapPath)
 
     engine::AssetManager& assets = context.assets;
     std::string error;
-    if (!LoadSectorTopologyMap(mapPath, topologyMap, &error)) {
+    SectorMaterialRegistry materials;
+    if (!LoadSectorMaterialRegistry(
+                ASSETS_PATH "materials/materials.json", materials, error)
+            || !LoadSectorRuntimeLevel(mapPath, materials, topologyMap, error)) {
         std::fprintf(stderr, "[SectorDemo ERROR] %s\n", error.c_str());
         return false;
     }

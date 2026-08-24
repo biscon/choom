@@ -57,7 +57,7 @@ SectorEditorAssetPruneModalResult DrawSectorEditorAssetPruneModal(
             assets,
             Rectangle{left, y, contentWidth, 34.0f},
             font,
-            "Remove map assets that have no level references.",
+            "Remove map-local sounds that have no level references.",
             engine::UITextJustify::Left,
             config.mutedTextColor);
     y += 38.0f;
@@ -66,20 +66,15 @@ SectorEditorAssetPruneModalResult DrawSectorEditorAssetPruneModal(
             assets,
             Rectangle{left, y, contentWidth, 34.0f},
             font,
-            "Pruned assets must be re-added before they can be used again.",
+            "Global materials are managed by the Material Editor.",
             engine::UITextJustify::Left,
             config.mutedTextColor);
     y += 44.0f;
 
     engine::Checkbox(
             ui, config, input, assets,
-            "sector_editor_prune_textures",
-            Rectangle{left, y, contentWidth * 0.5f, rowHeight},
-            font, "Textures", state.pruneTextures);
-    engine::Checkbox(
-            ui, config, input, assets,
             "sector_editor_prune_sounds",
-            Rectangle{left + contentWidth * 0.5f, y, contentWidth * 0.5f, rowHeight},
+            Rectangle{left, y, contentWidth, rowHeight},
             font, "Sounds", state.pruneSounds);
 
     const float buttonWidth = 140.0f;
@@ -91,7 +86,7 @@ SectorEditorAssetPruneModalResult DrawSectorEditorAssetPruneModal(
             buttonWidth,
             buttonHeight};
     bool okayRequested = false;
-    if (state.pruneTextures || state.pruneSounds) {
+    if (state.pruneSounds) {
         okayRequested = engine::Button(
                 ui, config, input, assets,
                 "sector_editor_prune_assets_okay",

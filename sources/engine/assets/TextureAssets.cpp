@@ -211,6 +211,63 @@ TextureCubemap UploadSrgbVerticalCubemap(const Image& source)
     return cubemap;
 }
 
+TextureCubemap UploadLinearHdrVerticalCubemap(const Image& source)
+{
+    TextureCubemap cubemap{};
+    if (source.data == nullptr || source.width <= 0
+            || source.height != source.width * 6
+            || source.format != PIXELFORMAT_UNCOMPRESSED_R16G16B16A16) {
+        return cubemap;
+    }
+    const TextureUploadBindings bindings = CaptureTextureUploadBindings();
+    glGenTextures(1, &cubemap.id);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap.id);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    ClearGlErrors();
+    const auto* pixels = static_cast<const unsigned char*>(source.data);
+    std::size_t offset = 0;
+    int size = source.width;
+    for (int mip = 0; mip < source.mipmaps; ++mip) {
+        const std::size_t faceBytes = static_cast<std::size_t>(size)
+                * static_cast<std::size_t>(size) * 4u * sizeof(std::uint16_t);
+        for (int face = 0; face < 6; ++face) {
+            glTexImage2D(
+                    GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
+                    mip,
+                    GL_RGBA16F,
+                    size,
+                    size,
+                    0,
+                    GL_RGBA,
+                    GL_HALF_FLOAT,
+                    pixels + offset + faceBytes * static_cast<std::size_t>(face));
+        }
+        offset += faceBytes * 6u;
+        size = std::max(1, size / 2);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER,
+            source.mipmaps > 1 ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    int actualFormat = 0;
+    glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0,
+            GL_TEXTURE_INTERNAL_FORMAT, &actualFormat);
+    const bool valid = glGetError() == GL_NO_ERROR
+            && actualFormat == static_cast<int>(GL_RGBA16F);
+    RestoreTextureUploadBindings(bindings);
+    if (!valid) {
+        if (cubemap.id != 0) rlUnloadTexture(cubemap.id);
+        return {};
+    }
+    cubemap.width = source.width;
+    cubemap.height = source.width;
+    cubemap.mipmaps = source.mipmaps;
+    cubemap.format = source.format;
+    return cubemap;
+}
+
 } // namespace
 
 unsigned int TextureInternalFormatForColorUsage(
@@ -399,6 +456,10 @@ TextureHandle TextureAssets::CreateCubemapFromImage(
     TextureCubemap uploaded = colorUsage == TextureColorUsage::SceneSrgb
             && layout == CUBEMAP_LAYOUT_LINE_VERTICAL
             ? UploadSrgbVerticalCubemap(image)
+            : colorUsage == TextureColorUsage::LinearData
+                            && layout == CUBEMAP_LAYOUT_LINE_VERTICAL
+                            && image.format == PIXELFORMAT_UNCOMPRESSED_R16G16B16A16
+                    ? UploadLinearHdrVerticalCubemap(image)
             : colorUsage == TextureColorUsage::SceneSrgb
                     ? TextureCubemap{}
                     : LoadTextureCubemap(image, layout);

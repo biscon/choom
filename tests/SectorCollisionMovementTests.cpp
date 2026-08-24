@@ -13,8 +13,8 @@
 namespace {
 
 using game::SectorCoord;
-using game::SectorTextureDefinition;
-using game::SectorTextureFilter;
+using game::SectorMaterialDefinition;
+using game::SectorMaterialFilter;
 using game::SectorTopologyLineDef;
 using game::SectorTopologyMap;
 using game::SectorTopologySector;
@@ -330,9 +330,9 @@ void TestMiddleTexturePortalMovement()
 {
     const Vector2 start = game::SectorCoordToWorldPosition2(Coord(60), Coord(32));
     SectorTopologyMap map = MakeAdjacent(0.0f, 0.0f);
-    map.texturesById.emplace("bars", SectorTextureDefinition{
-            "bars", "textures/bars.png", SectorTextureFilter::Point});
-    map.sideDefs[1].middle.textureId = "bars";
+    map.resolvedMaterialsById.emplace("bars", SectorMaterialDefinition{
+            "bars", "textures/bars.png", SectorMaterialFilter::Point});
+    map.sideDefs[1].middle.materialId = "bars";
 
     game::SectorCollisionWorld world = BuildWorld(map);
     game::SectorCollisionMoveResult result = Move(world, start, Vector2{2.0f, 0.0f}, 10, true);

@@ -98,6 +98,13 @@ bool SelectPickTarget(
             SelectSectorEditorAuthoringFogVolumeTarget(selectionContext, target.id);
             return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::FogVolume
                     && context.selectionState.selectedAuthoring.fogVolumeId == target.id;
+        case SectorEditorPickKind::AuthoringReflectionProbe:
+            ClearSectorEditorSelection(selectionContext);
+            SelectSectorEditorAuthoringReflectionProbe(
+                    context.authoringGraph, context.selectionState, target.id);
+            return context.selectionState.selectedAuthoring.kind
+                            == SectorAuthoringSelectionKind::ReflectionProbe
+                    && context.selectionState.selectedAuthoring.reflectionProbeId == target.id;
         case SectorEditorPickKind::LevelMarker:
             SelectSectorEditorAuthoringLevelMarkerTarget(selectionContext, target.id);
             return context.selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::LevelMarker
@@ -144,6 +151,11 @@ void UpdateSelectHover(SectorEditorToolContext& context, Vector2)
                     target.id);
         } else if (target.kind == SectorEditorPickKind::AuthoringFogVolume) {
             SetHoveredSectorEditorAuthoringFogVolume(
+                    context.authoringGraph,
+                    context.selectionState,
+                    target.id);
+        } else if (target.kind == SectorEditorPickKind::AuthoringReflectionProbe) {
+            SetHoveredSectorEditorAuthoringReflectionProbe(
                     context.authoringGraph,
                     context.selectionState,
                     target.id);

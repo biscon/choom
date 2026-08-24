@@ -135,7 +135,7 @@ struct SectorDoorRender {
     float normalOffset = 0.0f;
     // Final world-space vertical nudge for the slab and any model frame.
     float heightOffsetWorld = 0.0f;
-    std::string textureId;
+    std::string materialId;
     SectorDoorFaceUvSet faceUvs;
     Color tint = WHITE;
     bool visible = true;
@@ -325,6 +325,15 @@ bool BuildSectorDoorStaticLightingColors(
         const SectorBakedObjectLightProbeRuntimeData& objectLightProbes,
         const SectorTopologyMap* mapForFallback,
         std::vector<Vector3>& outLighting);
+
+bool BuildSectorDoorReceiverBounds(
+        const SectorObjectTransform& transform,
+        const SectorObject& object,
+        const SectorDoor& door,
+        const SectorDoorResolvedAnchor& anchor,
+        const SectorDoorRender& render,
+        int sectorId,
+        SectorReceiverBounds& outBounds);
 
 bool AppendSectorDoorReceiverBounds(
         const SectorObjectTransform& transform,

@@ -60,6 +60,16 @@ bool GameApplication::Init(
             context.assets,
             applicationSettings.playerSounds,
             playerAudio);
+    std::string materialError;
+    if (!LoadSectorMaterialRegistry(
+                ASSETS_PATH "materials/materials.json",
+                materialRegistry,
+                materialError)) {
+        menuStatus = materialError.empty()
+                ? "Material registry initialization failed"
+                : materialError;
+        return false;
+    }
     if (!editor.Init(context)) {
         menuStatus = "Editor initialization failed";
         return false;
@@ -89,6 +99,7 @@ void GameApplication::Shutdown(engine::EngineContext& context)
     playerAudio = PlayerAudioRuntime{};
     persistentScripts = engine::PersistentScriptStore{};
     weaponRegistry = FpsWeaponRegistry{};
+    materialRegistry = SectorMaterialRegistry{};
     menuStatus.clear();
     pendingMenuAction.reset();
     pendingSettingsAction.reset();
@@ -615,6 +626,7 @@ void GameApplication::StartNewGame(engine::EngineContext& context)
                 context,
                 gameScene,
                 SectorLevelEntryRequest{applicationSettings.firstLevel, std::nullopt},
+                materialRegistry,
                 weaponRegistry,
                 applicationSettings,
                 playerAudio,

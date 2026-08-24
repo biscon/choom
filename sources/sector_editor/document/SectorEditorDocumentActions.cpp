@@ -45,8 +45,10 @@ bool BuildLevelPaths(const std::string& name, LevelPaths& paths, std::string& er
     paths.directoryPath = std::filesystem::path(ASSETS_PATH) / relativeDirectory;
     paths.jsonFilePath = paths.directoryPath / (name + ".json");
     paths.lightmapFilePath = paths.directoryPath / (name + ".lightmap.bin");
+    paths.reflectionProbeFilePath = paths.directoryPath / (name + ".reflection-probes.bin");
     paths.jsonAssetPath = (std::filesystem::path("assets") / relativeDirectory / (name + ".json")).generic_string();
     paths.lightmapAssetPath = (std::filesystem::path("assets") / relativeDirectory / (name + ".lightmap.bin")).generic_string();
+    paths.reflectionProbeAssetPath = (std::filesystem::path("assets") / relativeDirectory / (name + ".reflection-probes.bin")).generic_string();
     error.clear();
     return true;
 }
@@ -54,23 +56,6 @@ bool BuildLevelPaths(const std::string& name, LevelPaths& paths, std::string& er
 namespace {
 
 using Json = nlohmann::ordered_json;
-
-template<typename TextureMap>
-void PopulateDefaultSectorTextures(TextureMap& texturesById)
-{
-    const auto addTexture = [&texturesById](const char* id, const char* path) {
-        SectorTextureDefinition definition;
-        definition.id = id;
-        definition.path = path;
-        definition.filter = SectorTextureFilter::Anisotropic8x;
-        texturesById.emplace(id, std::move(definition));
-    };
-    addTexture("wall", "assets/images/wall.png");
-    addTexture("floor", "assets/images/floor.png");
-    addTexture("ceiling", "assets/images/ceiling.png");
-    addTexture("step_wall", "assets/images/wall.png");
-    addTexture("upper_wall", "assets/images/wall.png");
-}
 
 bool ReadTextFile(const std::string& filePath, std::string& outText, std::string& errorMessage)
 {
@@ -116,7 +101,7 @@ SectorEditorDocumentFormat DetectSectorEditorDocumentFormat(
 
         const int version = versionIt->get<int>();
         const std::string topology = topologyIt->get<std::string>();
-        if (version == 3 && topology == "authoringGraph") {
+        if (version == 4 && topology == "authoringGraph") {
             errorMessage.clear();
             return SectorEditorDocumentFormat::AuthoringGraph;
         }
@@ -158,9 +143,7 @@ SectorAuthoringDocument BuildSectorAuthoringDocument(
 
 SectorTopologyMap CreateEmptySectorTopologyDocument()
 {
-    SectorTopologyMap map;
-    PopulateDefaultSectorTextures(map.texturesById);
-    return map;
+    return SectorTopologyMap{};
 }
 
 void ResetEditorTopologyDocumentState(

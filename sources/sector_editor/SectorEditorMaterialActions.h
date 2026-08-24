@@ -43,7 +43,7 @@ bool CopyMaterialSurface(
 SectorEditorMaterialActionResult PasteMaterialToFields(
         TopologySurfaceEditTarget target,
         const TopologyMaterialPayload& payload,
-        std::string& textureId,
+        std::string& materialId,
         SectorTopologyUvSettings& uv);
 SectorEditorMaterialActionResult ApplySurfaceUvValueToSettings(
         TopologySurfaceEditTarget target,

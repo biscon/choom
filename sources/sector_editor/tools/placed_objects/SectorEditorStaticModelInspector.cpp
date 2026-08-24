@@ -65,7 +65,7 @@ float MeasureSectorEditorStaticModelInspectorContentHeight(
         const SectorEditorPlacedObjectInspectorMeasureContext&,
         const SectorPlacedRuntimeObject&)
 {
-    return 38.0f * 2.0f + 48.0f * 8.0f + 8.0f * 10.0f + 40.0f
+    return 38.0f * 2.0f + 48.0f * 9.0f + 8.0f * 11.0f + 40.0f
             + 48.0f;
 }
 
@@ -315,6 +315,32 @@ void DrawSectorEditorStaticModelInspector(
                         return false;
                     }
                     target.staticModel.collision = collision;
+                    return true;
+                });
+    }
+    y += rowH + gap;
+    object = context.editing.SelectedObject();
+    if (object == nullptr) return;
+
+    bool castsShadow = object->staticModel.castsShadow;
+    if (engine::Checkbox(
+                context.ui,
+                context.config,
+                context.input,
+                context.assets,
+                "sector_editor_static_model_casts_shadow",
+                Rectangle{0.0f, y, contentW, rowH},
+                context.font,
+                "Cast Shadow",
+                castsShadow)) {
+        context.editing.MutateSelected(
+                "Updated 3D prop shadow casting",
+                [castsShadow](SectorPlacedRuntimeObject& target) {
+                    if (target.kind != "static_model"
+                            || target.staticModel.castsShadow == castsShadow) {
+                        return false;
+                    }
+                    target.staticModel.castsShadow = castsShadow;
                     return true;
                 });
     }

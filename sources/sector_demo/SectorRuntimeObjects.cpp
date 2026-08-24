@@ -932,7 +932,7 @@ void SpawnPlacedRuntimeObjects(
                     fallbackThickness,
                     placedObject.door.normalOffset,
                     placedObject.door.heightOffsetWorld,
-                    placedObject.door.textureId,
+                    placedObject.door.materialId,
                     placedObject.door.faceUvs,
                     WHITE,
                     true};
@@ -1064,7 +1064,8 @@ void SpawnPlacedRuntimeObjects(
                     StaticModelEnvironmentExposure(
                             map,
                             object.currentSectorId,
-                            sectorAmbient)});
+                            sectorAmbient),
+                    placedObject.staticModel.castsShadow});
             if (placedObject.staticModel.collision) {
                 world.Add(entity, SectorStaticModelCollider{
                         placedObject.id});

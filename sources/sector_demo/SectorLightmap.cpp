@@ -22,7 +22,6 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
-#include <mutex>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -77,6 +76,7 @@ struct BakeTriangle {
     SectorGeneratedSurfaceRef surfaceRef;
     int sourceSurfaceIndex = -1;
     int triangleIndex = -1;
+    bool castsDirectShadow = true;
 };
 
 struct RasterHit {
@@ -105,7 +105,7 @@ struct AlphaRayHit {
     bool hit = false;
     float distance = 0.0f;
     Vector2 uv = {};
-    std::string textureId;
+    std::string materialId;
     float alphaCutoff = 0.5f;
 };
 
@@ -120,29 +120,6 @@ struct BakeTexel {
     Vector3 position = {};
     Vector3 normal = {};
     Vector3 geometricNormal = {};
-};
-
-struct SectorLightmapNormalMap {
-    bool valid = false;
-    int width = 0;
-    int height = 0;
-    std::vector<Color> pixels;
-};
-
-class SectorLightmapNormalMapCache {
-public:
-    bool Sample(
-            const SectorTopologyMap& map,
-            const std::string& textureId,
-            Vector2 uv,
-            Vector3& outTangentNormal);
-
-private:
-    const SectorLightmapNormalMap& LoadOrGet(
-            const SectorTopologyMap& map,
-            const std::string& textureId);
-
-    std::unordered_map<std::string, SectorLightmapNormalMap> mapsByPath;
 };
 
 struct LightmapWorldPointLight {
@@ -232,9 +209,9 @@ constexpr float Pi = 3.14159265358979323846f;
 constexpr char kObjectProbeSidecarMagic[4] = {'S', 'O', 'P', 'B'};
 constexpr char kLightmapArtifactMagic[4] = {'S', 'L', 'M', 'H'};
 constexpr uint32_t kLightmapArtifactFixedHeaderBytes = 52;
-constexpr uint32_t kLightmapArtifactChannels = 4;
-constexpr uint32_t kLightmapArtifactEncodingRgbaBinary16 = 1;
-constexpr uint32_t kLightmapArtifactSemanticsLinearHdrRgbAo = 1;
+constexpr uint32_t kLightmapArtifactChannels = 8;
+constexpr uint32_t kLightmapArtifactEncodingMixedRgba16Rgba8 = 2;
+constexpr uint32_t kLightmapArtifactSemanticsHdrRgbAoDominantDirection = 2;
 constexpr uint32_t kObjectProbeFixedHeaderBytes = 48;
 
 bool RayIntersectsTriangle(
@@ -281,93 +258,6 @@ std::string HashToString(uint64_t hash)
     return buffer;
 }
 
-struct NormalMapFingerprintCacheEntry {
-    uintmax_t fileSize = 0;
-    std::filesystem::file_time_type modifiedTime = {};
-    std::string fingerprint;
-};
-
-std::unordered_map<std::string, NormalMapFingerprintCacheEntry>& NormalMapFingerprintCache()
-{
-    static std::unordered_map<std::string, NormalMapFingerprintCacheEntry> cache;
-    return cache;
-}
-
-std::mutex& NormalMapFingerprintCacheMutex()
-{
-    static std::mutex mutex;
-    return mutex;
-}
-
-std::string ComputeNormalMapFingerprint(const SectorTextureDefinition& texture)
-{
-    const std::string normalMapPath = SectorTextureNormalMapPath(texture.path);
-    if (normalMapPath.empty()) {
-        return "missing";
-    }
-
-    std::error_code pathError;
-    std::filesystem::path resolvedPath = std::filesystem::absolute(
-            ResolveSectorAssetPath(normalMapPath),
-            pathError);
-    if (pathError) {
-        resolvedPath = std::filesystem::path(
-                ResolveSectorAssetPath(normalMapPath));
-        pathError.clear();
-    }
-    resolvedPath = resolvedPath.lexically_normal();
-    if (!std::filesystem::is_regular_file(resolvedPath, pathError)
-            || pathError) {
-        return pathError ? "unreadable" : "missing";
-    }
-    const uintmax_t fileSize = std::filesystem::file_size(
-            resolvedPath,
-            pathError);
-    if (pathError) {
-        return "unreadable";
-    }
-    const std::filesystem::file_time_type modifiedTime =
-            std::filesystem::last_write_time(resolvedPath, pathError);
-    if (pathError) {
-        return "unreadable";
-    }
-
-    const std::string cacheKey = resolvedPath.generic_string();
-    std::lock_guard<std::mutex> lock(NormalMapFingerprintCacheMutex());
-    auto& cache = NormalMapFingerprintCache();
-    const auto cached = cache.find(cacheKey);
-    if (cached != cache.end()
-            && cached->second.fileSize == fileSize
-            && cached->second.modifiedTime == modifiedTime) {
-        return cached->second.fingerprint;
-    }
-
-    std::ifstream input(resolvedPath, std::ios::binary);
-    if (!input) {
-        return "unreadable";
-    }
-    uint64_t hash = 14695981039346656037ull;
-    FnvAppendString(hash, "sector-generated-normal-map-v1");
-    std::array<char, 64 * 1024> buffer{};
-    while (input) {
-        input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-        const std::streamsize count = input.gcount();
-        for (std::streamsize i = 0; i < count; ++i) {
-            hash = FnvAppendByte(hash, static_cast<uint8_t>(buffer[static_cast<size_t>(i)]));
-        }
-    }
-    if (!input.eof()) {
-        return "unreadable";
-    }
-
-    const std::string fingerprint = "present:" + HashToString(hash);
-    cache[cacheKey] = NormalMapFingerprintCacheEntry{
-            fileSize,
-            modifiedTime,
-            fingerprint};
-    return fingerprint;
-}
-
 unsigned char FloatToByte(float value)
 {
     return ClampColorByte(value * 255.0f);
@@ -407,194 +297,6 @@ Vector2 Interpolate(Vector2 a, Vector2 b, Vector2 c, float wa, float wb, float w
             a.x * wa + b.x * wb + c.x * wc,
             a.y * wa + b.y * wb + c.y * wc
     };
-}
-
-int WrapPixelIndex(int value, int size)
-{
-    if (size <= 0) {
-        return 0;
-    }
-    const int wrapped = value % size;
-    return wrapped < 0 ? wrapped + size : wrapped;
-}
-
-Vector3 DecodeTangentNormal(Color color)
-{
-    return Vector3{
-            static_cast<float>(color.r) * (2.0f / 255.0f) - 1.0f,
-            static_cast<float>(color.g) * (2.0f / 255.0f) - 1.0f,
-            static_cast<float>(color.b) * (2.0f / 255.0f) - 1.0f};
-}
-
-const SectorLightmapNormalMap& SectorLightmapNormalMapCache::LoadOrGet(
-        const SectorTopologyMap& map,
-        const std::string& textureId)
-{
-    static const SectorLightmapNormalMap missing;
-    const auto textureIt = map.texturesById.find(textureId);
-    if (textureIt == map.texturesById.end()) {
-        return missing;
-    }
-
-    const std::string normalMapPath = SectorTextureNormalMapPath(
-            textureIt->second.path);
-    const std::string resolvedPath = ResolveSectorAssetPath(normalMapPath);
-    auto existing = mapsByPath.find(resolvedPath);
-    if (existing != mapsByPath.end()) {
-        return existing->second;
-    }
-
-    SectorLightmapNormalMap normalMap;
-    std::error_code fileError;
-    if (normalMapPath.empty()
-            || !std::filesystem::is_regular_file(resolvedPath, fileError)
-            || fileError) {
-        return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
-    }
-
-    Image image = LoadImage(resolvedPath.c_str());
-    if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
-        TraceLog(
-                LOG_WARNING,
-                "Sector lightmap normal map could not load '%s'",
-                resolvedPath.c_str());
-        if (image.data != nullptr) {
-            UnloadImage(image);
-        }
-        return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
-    }
-
-    Color* colors = LoadImageColors(image);
-    if (colors == nullptr) {
-        TraceLog(
-                LOG_WARNING,
-                "Sector lightmap normal map could not read pixels from '%s'",
-                resolvedPath.c_str());
-        UnloadImage(image);
-        return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
-    }
-
-    normalMap.valid = true;
-    normalMap.width = image.width;
-    normalMap.height = image.height;
-    normalMap.pixels.assign(
-            colors,
-            colors + static_cast<size_t>(image.width * image.height));
-    UnloadImageColors(colors);
-    UnloadImage(image);
-    return mapsByPath.emplace(resolvedPath, std::move(normalMap)).first->second;
-}
-
-bool SectorLightmapNormalMapCache::Sample(
-        const SectorTopologyMap& map,
-        const std::string& textureId,
-        Vector2 uv,
-        Vector3& outTangentNormal)
-{
-    outTangentNormal = Vector3{0.0f, 0.0f, 1.0f};
-    const SectorLightmapNormalMap& normalMap = LoadOrGet(map, textureId);
-    if (!normalMap.valid
-            || normalMap.width <= 0
-            || normalMap.height <= 0
-            || normalMap.pixels.empty()
-            || !std::isfinite(uv.x)
-            || !std::isfinite(uv.y)) {
-        return false;
-    }
-
-    const float wrappedU = uv.x - std::floor(uv.x);
-    const float wrappedV = uv.y - std::floor(uv.y);
-    const float pixelX = wrappedU * static_cast<float>(normalMap.width) - 0.5f;
-    const float pixelY = wrappedV * static_cast<float>(normalMap.height) - 0.5f;
-    const int x0 = static_cast<int>(std::floor(pixelX));
-    const int y0 = static_cast<int>(std::floor(pixelY));
-    const int x1 = x0 + 1;
-    const int y1 = y0 + 1;
-    const float tx = pixelX - std::floor(pixelX);
-    const float ty = pixelY - std::floor(pixelY);
-    const auto sample = [&normalMap](int x, int y) {
-        const int wrappedX = WrapPixelIndex(x, normalMap.width);
-        const int wrappedY = WrapPixelIndex(y, normalMap.height);
-        return DecodeTangentNormal(normalMap.pixels[static_cast<size_t>(
-                wrappedY * normalMap.width + wrappedX)]);
-    };
-    const Vector3 top = Vector3Lerp(sample(x0, y0), sample(x1, y0), tx);
-    const Vector3 bottom = Vector3Lerp(sample(x0, y1), sample(x1, y1), tx);
-    outTangentNormal = Vector3Lerp(top, bottom, ty);
-    return Vector3LengthSqr(outTangentNormal) > BakeEpsilon;
-}
-
-Vector3 TransformTangentNormalToWorld(
-        const SectorGeneratedVertex& vertex0,
-        const SectorGeneratedVertex& vertex1,
-        const SectorGeneratedVertex& vertex2,
-        Vector3 geometricNormal,
-        Vector3 tangentNormal)
-{
-    const Vector3 edge1 = Vector3Subtract(vertex1.position, vertex0.position);
-    const Vector3 edge2 = Vector3Subtract(vertex2.position, vertex0.position);
-    const Vector2 uvEdge1 = Vector2Subtract(vertex1.uv, vertex0.uv);
-    const Vector2 uvEdge2 = Vector2Subtract(vertex2.uv, vertex0.uv);
-    const float determinant = uvEdge1.x * uvEdge2.y - uvEdge1.y * uvEdge2.x;
-    if (std::fabs(determinant) <= BakeEpsilon) {
-        return geometricNormal;
-    }
-
-    const float inverseDeterminant = 1.0f / determinant;
-    Vector3 tangent = Vector3Scale(
-            Vector3Subtract(
-                    Vector3Scale(edge1, uvEdge2.y),
-                    Vector3Scale(edge2, uvEdge1.y)),
-            inverseDeterminant);
-    const Vector3 sourceBitangent = Vector3Scale(
-            Vector3Subtract(
-                    Vector3Scale(edge2, uvEdge1.x),
-                    Vector3Scale(edge1, uvEdge2.x)),
-            inverseDeterminant);
-    tangent = Vector3Subtract(
-            tangent,
-            Vector3Scale(geometricNormal, Vector3DotProduct(tangent, geometricNormal)));
-    if (Vector3LengthSqr(tangent) <= BakeEpsilon
-            || Vector3LengthSqr(sourceBitangent) <= BakeEpsilon) {
-        return geometricNormal;
-    }
-    tangent = Vector3Normalize(tangent);
-    const float handedness = Vector3DotProduct(
-            Vector3CrossProduct(geometricNormal, tangent),
-            sourceBitangent) < 0.0f ? -1.0f : 1.0f;
-    const Vector3 bitangent = Vector3Scale(
-            Vector3Normalize(Vector3CrossProduct(geometricNormal, tangent)),
-            handedness);
-    const Vector3 worldNormal = Vector3Add(
-            Vector3Add(
-                    Vector3Scale(tangent, tangentNormal.x),
-                    Vector3Scale(bitangent, tangentNormal.y)),
-            Vector3Scale(geometricNormal, tangentNormal.z));
-    return Vector3LengthSqr(worldNormal) > BakeEpsilon
-            ? Vector3Normalize(worldNormal)
-            : geometricNormal;
-}
-
-Vector3 ResolveSurfaceShadingNormal(
-        const SectorTopologyMap& map,
-        const SectorGeneratedSurface& surface,
-        const RasterHit& hit,
-        SectorLightmapNormalMapCache& normalMapCache)
-{
-    Vector3 tangentNormal{};
-    if (!normalMapCache.Sample(map, surface.textureId, hit.uv, tangentNormal)) {
-        return hit.geometricNormal;
-    }
-    const size_t vertexIndex = static_cast<size_t>(hit.triangleIndex) * 3u;
-    if (hit.triangleIndex < 0 || vertexIndex + 2u >= surface.vertices.size()) {
-        return hit.geometricNormal;
-    }
-    return TransformTangentNormalToWorld(
-            surface.vertices[vertexIndex + 0u],
-            surface.vertices[vertexIndex + 1u],
-            surface.vertices[vertexIndex + 2u],
-            hit.geometricNormal,
-            tangentNormal);
 }
 
 bool RasterizeSurfacePoint(
@@ -1029,6 +731,68 @@ bool IsStrictlyInsideProbePolygon(
     return true;
 }
 
+double ProbePointSegmentDistanceSquared(
+        SectorTopologyCoordPoint point,
+        SectorTopologyCoordPoint a,
+        SectorTopologyCoordPoint b)
+{
+    const double segmentX = static_cast<double>(b.x) - static_cast<double>(a.x);
+    const double segmentY = static_cast<double>(b.y) - static_cast<double>(a.y);
+    const double pointX = static_cast<double>(point.x) - static_cast<double>(a.x);
+    const double pointY = static_cast<double>(point.y) - static_cast<double>(a.y);
+    const double lengthSquared = segmentX * segmentX + segmentY * segmentY;
+    if (!(lengthSquared > 0.0) || !std::isfinite(lengthSquared)) {
+        return pointX * pointX + pointY * pointY;
+    }
+
+    const double t = std::clamp(
+            (pointX * segmentX + pointY * segmentY) / lengthSquared,
+            0.0,
+            1.0);
+    const double closestX = static_cast<double>(a.x) + t * segmentX;
+    const double closestY = static_cast<double>(a.y) + t * segmentY;
+    const double dx = static_cast<double>(point.x) - closestX;
+    const double dy = static_cast<double>(point.y) - closestY;
+    return dx * dx + dy * dy;
+}
+
+bool HasProbeLoopBoundaryClearance(
+        const std::vector<SectorTopologyCoordPoint>& loop,
+        SectorTopologyCoordPoint point,
+        double clearanceSquared)
+{
+    for (size_t index = 0; index < loop.size(); ++index) {
+        const SectorTopologyCoordPoint a = loop[index];
+        const SectorTopologyCoordPoint b = loop[(index + 1) % loop.size()];
+        if (ProbePointSegmentDistanceSquared(point, a, b) < clearanceSquared) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsValidProbePolygonPoint(
+        const std::vector<SectorTopologyCoordPoint>& outer,
+        const std::vector<std::vector<SectorTopologyCoordPoint>>& holes,
+        SectorTopologyCoordPoint point,
+        double boundaryClearanceCoord)
+{
+    if (!IsStrictlyInsideProbePolygon(outer, holes, point)) {
+        return false;
+    }
+
+    const double clearanceSquared = boundaryClearanceCoord * boundaryClearanceCoord;
+    if (!HasProbeLoopBoundaryClearance(outer, point, clearanceSquared)) {
+        return false;
+    }
+    for (const std::vector<SectorTopologyCoordPoint>& hole : holes) {
+        if (!HasProbeLoopBoundaryClearance(hole, point, clearanceSquared)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 SectorTopologyCoordPoint ProbePolygonAabbCenter(
         SectorCoord minX,
         SectorCoord minY,
@@ -1049,10 +813,12 @@ bool FindRepresentativeProbePoint(
         SectorCoord minY,
         SectorCoord maxX,
         SectorCoord maxY,
+        double boundaryClearanceCoord,
         SectorTopologyCoordPoint& outPoint)
 {
     const SectorTopologyCoordPoint center = ProbePolygonAabbCenter(minX, minY, maxX, maxY);
-    if (IsStrictlyInsideProbePolygon(outer, holes, center)) {
+    if (IsValidProbePolygonPoint(
+                outer, holes, center, boundaryClearanceCoord)) {
         outPoint = center;
         return true;
     }
@@ -1067,7 +833,8 @@ bool FindRepresentativeProbePoint(
         const SectorTopologyCoordPoint centroid{
                 static_cast<SectorCoord>(sumX / static_cast<int64_t>(outer.size())),
                 static_cast<SectorCoord>(sumY / static_cast<int64_t>(outer.size()))};
-        if (IsStrictlyInsideProbePolygon(outer, holes, centroid)) {
+        if (IsValidProbePolygonPoint(
+                    outer, holes, centroid, boundaryClearanceCoord)) {
             outPoint = centroid;
             return true;
         }
@@ -1085,7 +852,8 @@ bool FindRepresentativeProbePoint(
             const SectorTopologyCoordPoint candidate{
                     static_cast<SectorCoord>(x),
                     static_cast<SectorCoord>(y)};
-            if (IsStrictlyInsideProbePolygon(outer, holes, candidate)) {
+            if (IsValidProbePolygonPoint(
+                        outer, holes, candidate, boundaryClearanceCoord)) {
                 outPoint = candidate;
                 return true;
             }
@@ -1365,7 +1133,7 @@ bool CastsAlphaTestLightmapOcclusion(const SectorGeneratedSurface& surface)
 {
     return surface.ref.kind == SectorGeneratedSurfaceKind::Middle
             && surface.alphaTest
-            && !surface.textureId.empty();
+            && !surface.materialId.empty();
 }
 
 bool IntersectRayAabb(const Ray& ray, const BakeAabb& bounds, float maxDistance, float& outEntryDistance)
@@ -1462,7 +1230,11 @@ bool RaycastBakeTrianglesAnyHit(
             for (int i = 0; i < node.triangleCount; ++i) {
                 const int triangleIndex = bvh.orderedTriangleIndices[static_cast<size_t>(node.firstTriangle + i)];
                 const BakeTriangle& tri = triangles[static_cast<size_t>(triangleIndex)];
-                if (IsExactSourceTriangle(tri, sourceSurfaceIndex, sourceTriangleIndex)) {
+                if (!tri.castsDirectShadow
+                        || IsExactSourceTriangle(
+                                tri,
+                                sourceSurfaceIndex,
+                                sourceTriangleIndex)) {
                     continue;
                 }
                 if (stats != nullptr) {
@@ -1530,6 +1302,7 @@ RayHit RaycastBakeTrianglesClosest(
         const SectorGeneratedSurfaceRef& sourceSurfaceRef,
         int sourceSurfaceIndex,
         int sourceTriangleIndex,
+        bool directShadowOnly,
         SectorLightmapRaycastStats* stats)
 {
     if (stats != nullptr) {
@@ -1552,7 +1325,11 @@ RayHit RaycastBakeTrianglesClosest(
             for (int i = 0; i < node.triangleCount; ++i) {
                 const int triangleIndex = bvh.orderedTriangleIndices[static_cast<size_t>(node.firstTriangle + i)];
                 const BakeTriangle& tri = triangles[static_cast<size_t>(triangleIndex)];
-                if (IsExactSourceTriangle(tri, sourceSurfaceIndex, sourceTriangleIndex)) {
+                if ((directShadowOnly && !tri.castsDirectShadow)
+                        || IsExactSourceTriangle(
+                                tri,
+                                sourceSurfaceIndex,
+                                sourceTriangleIndex)) {
                     continue;
                 }
 
@@ -1677,7 +1454,7 @@ AlphaRayHit RaycastAlphaOccludersClosest(
         closest.hit = true;
         closest.distance = distance;
         closest.uv = Interpolate(tri.uv0, tri.uv1, tri.uv2, barycentric0, barycentric1, barycentric2);
-        closest.textureId = tri.textureId;
+        closest.materialId = tri.materialId;
         closest.alphaCutoff = tri.alphaCutoff;
     }
     return closest;
@@ -1720,6 +1497,7 @@ bool RaycastBakeOcclusionAlphaAware(
                 sourceSurfaceRef,
                 sourceSurfaceIndex,
                 sourceTriangleIndex,
+                true,
                 stats);
         const AlphaRayHit alphaHit = RaycastAlphaOccludersClosest(
                 alphaOccluders,
@@ -1738,7 +1516,7 @@ bool RaycastBakeOcclusionAlphaAware(
         }
 
         const SectorLightmapAlphaSample alphaSample =
-                alphaMaskCache.Sample(map, alphaHit.textureId, alphaHit.uv, alphaHit.alphaCutoff);
+                alphaMaskCache.Sample(map, alphaHit.materialId, alphaHit.uv, alphaHit.alphaCutoff);
         if (alphaSample.opaque) {
             return true;
         }
@@ -1815,6 +1593,7 @@ RayHit TraceRay(
             sourceSurfaceRef,
             sourceSurfaceIndex,
             sourceTriangleIndex,
+            false,
             stats
     );
 }
@@ -1872,7 +1651,26 @@ Vector3 GeometricNormalForHit(const RasterHit& hit)
             : hit.normal;
 }
 
-Vector3 EvaluateDirectLightSample(
+struct DirectLightEvaluation {
+    Vector3 radiance = {};
+    Vector3 directionMoment = {};
+};
+
+float LinearLuminance(Vector3 value)
+{
+    return value.x * 0.2126f + value.y * 0.7152f + value.z * 0.0722f;
+}
+
+DirectLightEvaluation MakeDirectLightEvaluation(
+        Vector3 radiance,
+        Vector3 directionToLight)
+{
+    return DirectLightEvaluation{
+            radiance,
+            Vector3Scale(directionToLight, std::max(LinearLuminance(radiance), 0.0f))};
+}
+
+DirectLightEvaluation EvaluateDirectLightSample(
         const SectorTopologyMap& map,
         const LightmapWorldPointLight& light,
         Vector3 lightPosition,
@@ -1889,13 +1687,13 @@ Vector3 EvaluateDirectLightSample(
     const Vector3 toLight = Vector3Subtract(lightPosition, hit.position);
     const float distance = Vector3Length(toLight);
     if (distance <= RayHitEpsilon || distance > light.radius) {
-        return Vector3{};
+        return {};
     }
 
     const Vector3 lightDir = Vector3Scale(toLight, 1.0f / distance);
     const float lambert = std::max(Vector3DotProduct(hit.normal, lightDir), 0.0f);
     if (lambert <= 0.0f) {
-        return Vector3{};
+        return {};
     }
 
     if (light.castsShadow && IsOccluded(
@@ -1912,13 +1710,14 @@ Vector3 EvaluateDirectLightSample(
                 alphaMaskCache,
                 softShadowSample,
                 stats)) {
-        return Vector3{};
+        return {};
     }
 
     const float t = std::clamp(1.0f - distance / light.radius, 0.0f, 1.0f);
     const float attenuation = t * t;
     const float scale = light.intensity * attenuation * lambert;
-    return Vector3Scale(light.linearColor, scale);
+    return MakeDirectLightEvaluation(
+            Vector3Scale(light.linearColor, scale), lightDir);
 }
 
 float SmoothStep(float edge0, float edge1, float value)
@@ -1940,7 +1739,7 @@ Vector3 NormalizeOrFallback(Vector3 value, Vector3 fallback)
     return NormalizeVector3OrFallback(value, fallback, 0.00000001f);
 }
 
-Vector3 EvaluateDirectLightSample(
+DirectLightEvaluation EvaluateDirectLightSample(
         const SectorTopologyMap& map,
         const LightmapWorldSpotLight& light,
         Vector3 lightPosition,
@@ -1957,13 +1756,13 @@ Vector3 EvaluateDirectLightSample(
     const Vector3 toLight = Vector3Subtract(lightPosition, hit.position);
     const float distance = Vector3Length(toLight);
     if (distance <= RayHitEpsilon || distance > light.range) {
-        return Vector3{};
+        return {};
     }
 
     const Vector3 lightDir = Vector3Scale(toLight, 1.0f / distance);
     const float lambert = std::max(Vector3DotProduct(hit.normal, lightDir), 0.0f);
     if (lambert <= 0.0f) {
-        return Vector3{};
+        return {};
     }
 
     const Vector3 spotDirection = NormalizeOrFallback(
@@ -1977,7 +1776,7 @@ Vector3 EvaluateDirectLightSample(
     const float outerConeCos = ConeCosine(outerDegrees);
     const float coneAttenuation = SmoothStep(outerConeCos, innerConeCos, coneDot);
     if (coneAttenuation <= 0.0f) {
-        return Vector3{};
+        return {};
     }
 
     if (light.castsShadow && IsOccluded(
@@ -1994,16 +1793,17 @@ Vector3 EvaluateDirectLightSample(
                 alphaMaskCache,
                 softShadowSample,
                 stats)) {
-        return Vector3{};
+        return {};
     }
 
     const float t = std::clamp(1.0f - distance / light.range, 0.0f, 1.0f);
     const float attenuation = t * t;
     const float scale = light.intensity * attenuation * lambert * coneAttenuation;
-    return Vector3Scale(light.linearColor, scale);
+    return MakeDirectLightEvaluation(
+            Vector3Scale(light.linearColor, scale), lightDir);
 }
 
-Vector3 EvaluateDirectLightSample(
+DirectLightEvaluation EvaluateDirectLightSample(
         const SectorTopologyMap& map,
         const LightmapWorldRectLight& light,
         Vector3 samplePosition,
@@ -2018,25 +1818,26 @@ Vector3 EvaluateDirectLightSample(
 {
     const Vector3 fromEmitter = Vector3Subtract(hit.position, samplePosition);
     const float distance = Vector3Length(fromEmitter);
-    if (distance <= RayHitEpsilon || distance > light.range) return Vector3{};
+    if (distance <= RayHitEpsilon || distance > light.range) return {};
     const Vector3 emitterToHit = Vector3Scale(fromEmitter, 1.0f / distance);
     const float emitterCosine = Vector3DotProduct(light.basis.forward, emitterToHit);
-    if (emitterCosine <= 0.0f) return Vector3{};
+    if (emitterCosine <= 0.0f) return {};
     const Vector3 directionToLight = Vector3Scale(emitterToHit, -1.0f);
     const float lambert = std::max(Vector3DotProduct(hit.normal, directionToLight), 0.0f);
-    if (lambert <= 0.0f) return Vector3{};
+    if (lambert <= 0.0f) return {};
     if (light.castsShadow && IsOccluded(
                 map, hit.position, GeometricNormalForHit(hit), samplePosition,
                 surfaceRef, surfaceIndex, hit.triangleIndex, bvh, triangles,
                 alphaOccluders, alphaMaskCache, true, stats)) {
-        return Vector3{};
+        return {};
     }
     const float t = std::clamp(1.0f - distance / light.range, 0.0f, 1.0f);
     const float scale = light.intensity * t * t * lambert * emitterCosine;
-    return Vector3Scale(light.linearColor, scale);
+    return MakeDirectLightEvaluation(
+            Vector3Scale(light.linearColor, scale), directionToLight);
 }
 
-Vector3 EvaluateDirectLight(
+DirectLightEvaluation EvaluateDirectLight(
         const SectorTopologyMap& map,
         const LightmapWorldPointLight& light,
         const RasterHit& hit,
@@ -2050,7 +1851,7 @@ Vector3 EvaluateDirectLight(
         BakeRayStats& stats)
 {
     if (light.radius <= 0.0f || light.intensity <= 0.0f) {
-        return Vector3{};
+        return {};
     }
 
     const float sourceRadius = std::min(std::clamp(light.sourceRadius, 0.0f, 8.0f), light.radius * 0.5f);
@@ -2070,13 +1871,11 @@ Vector3 EvaluateDirectLight(
                 stats);
     }
 
-    Vector3 direct{};
+    DirectLightEvaluation direct;
     for (int i = 0; i < softShadowSampleCount; ++i) {
         const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, softShadowSampleCount), sourceRadius);
         const Vector3 samplePosition = Vector3Add(light.position, sampleOffset);
-        direct = Vector3Add(
-                direct,
-                EvaluateDirectLightSample(
+        const DirectLightEvaluation sample = EvaluateDirectLightSample(
                         map,
                         light,
                         samplePosition,
@@ -2088,12 +1887,18 @@ Vector3 EvaluateDirectLight(
                         alphaOccluders,
                         alphaMaskCache,
                         true,
-                        stats));
+                        stats);
+        direct.radiance = Vector3Add(direct.radiance, sample.radiance);
+        direct.directionMoment = Vector3Add(
+                direct.directionMoment, sample.directionMoment);
     }
-    return Vector3Scale(direct, 1.0f / static_cast<float>(softShadowSampleCount));
+    const float inverseSamples = 1.0f / static_cast<float>(softShadowSampleCount);
+    direct.radiance = Vector3Scale(direct.radiance, inverseSamples);
+    direct.directionMoment = Vector3Scale(direct.directionMoment, inverseSamples);
+    return direct;
 }
 
-Vector3 EvaluateDirectLight(
+DirectLightEvaluation EvaluateDirectLight(
         const SectorTopologyMap& map,
         const LightmapWorldRectLight& light,
         const RasterHit& hit,
@@ -2107,7 +1912,7 @@ Vector3 EvaluateDirectLight(
         BakeRayStats& stats)
 {
     if (light.range <= 0.0f || light.width <= 0.0f || light.height <= 0.0f
-            || light.intensity <= 0.0f) return Vector3{};
+            || light.intensity <= 0.0f) return {};
     const int samples = std::max(1, sampleCount);
     auto radicalInverse = [](int index, int base) {
         float value = 0.0f;
@@ -2119,7 +1924,7 @@ Vector3 EvaluateDirectLight(
         }
         return value;
     };
-    Vector3 direct{};
+    DirectLightEvaluation direct;
     for (int i = 0; i < samples; ++i) {
         const float u = radicalInverse(i + 1, 2) - 0.5f;
         const float v = radicalInverse(i + 1, 3) - 0.5f;
@@ -2128,14 +1933,20 @@ Vector3 EvaluateDirectLight(
                 Vector3Add(
                         Vector3Scale(light.basis.right, u * light.width),
                         Vector3Scale(light.basis.up, v * light.height)));
-        direct = Vector3Add(direct, EvaluateDirectLightSample(
+        const DirectLightEvaluation sample = EvaluateDirectLightSample(
                 map, light, samplePosition, hit, surfaceRef, surfaceIndex, bvh,
-                triangles, alphaOccluders, alphaMaskCache, stats));
+                triangles, alphaOccluders, alphaMaskCache, stats);
+        direct.radiance = Vector3Add(direct.radiance, sample.radiance);
+        direct.directionMoment = Vector3Add(
+                direct.directionMoment, sample.directionMoment);
     }
-    return Vector3Scale(direct, 1.0f / static_cast<float>(samples));
+    const float inverseSamples = 1.0f / static_cast<float>(samples);
+    direct.radiance = Vector3Scale(direct.radiance, inverseSamples);
+    direct.directionMoment = Vector3Scale(direct.directionMoment, inverseSamples);
+    return direct;
 }
 
-Vector3 EvaluateDirectLight(
+DirectLightEvaluation EvaluateDirectLight(
         const SectorTopologyMap& map,
         const LightmapWorldSpotLight& light,
         const RasterHit& hit,
@@ -2149,7 +1960,7 @@ Vector3 EvaluateDirectLight(
         BakeRayStats& stats)
 {
     if (light.range <= 0.0f || light.intensity <= 0.0f) {
-        return Vector3{};
+        return {};
     }
 
     const float sourceRadius = std::min(std::clamp(light.sourceRadius, 0.0f, 8.0f), light.range * 0.5f);
@@ -2169,13 +1980,11 @@ Vector3 EvaluateDirectLight(
                 stats);
     }
 
-    Vector3 direct{};
+    DirectLightEvaluation direct;
     for (int i = 0; i < softShadowSampleCount; ++i) {
         const Vector3 sampleOffset = Vector3Scale(FibonacciSphereSample(i, softShadowSampleCount), sourceRadius);
         const Vector3 samplePosition = Vector3Add(light.position, sampleOffset);
-        direct = Vector3Add(
-                direct,
-                EvaluateDirectLightSample(
+        const DirectLightEvaluation sample = EvaluateDirectLightSample(
                         map,
                         light,
                         samplePosition,
@@ -2187,9 +1996,15 @@ Vector3 EvaluateDirectLight(
                         alphaOccluders,
                         alphaMaskCache,
                         true,
-                        stats));
+                        stats);
+        direct.radiance = Vector3Add(direct.radiance, sample.radiance);
+        direct.directionMoment = Vector3Add(
+                direct.directionMoment, sample.directionMoment);
     }
-    return Vector3Scale(direct, 1.0f / static_cast<float>(softShadowSampleCount));
+    const float inverseSamples = 1.0f / static_cast<float>(softShadowSampleCount);
+    direct.radiance = Vector3Scale(direct.radiance, inverseSamples);
+    direct.directionMoment = Vector3Scale(direct.directionMoment, inverseSamples);
+    return direct;
 }
 
 bool IsSkyOwnedLightmapSurface(
@@ -2234,7 +2049,7 @@ bool IsDirectionOccluded(
     );
 }
 
-Vector3 EvaluateDirectionalLight(
+DirectLightEvaluation EvaluateDirectionalLight(
         const SectorTopologyMap& map,
         const LightmapWorldDirectionalLight& light,
         const RasterHit& hit,
@@ -2248,11 +2063,11 @@ Vector3 EvaluateDirectionalLight(
         BakeRayStats& stats)
 {
     if (!light.enabled || light.intensity <= 0.0f) {
-        return Vector3{};
+        return {};
     }
     const float lambert = std::max(Vector3DotProduct(hit.normal, light.directionToLight), 0.0f);
     if (lambert <= 0.0f) {
-        return Vector3{};
+        return {};
     }
     if (IsDirectionOccluded(
                 map,
@@ -2268,11 +2083,12 @@ Vector3 EvaluateDirectionalLight(
                 alphaOccluders,
                 alphaMaskCache,
                 stats)) {
-        return Vector3{};
+        return {};
     }
 
     const float scale = light.intensity * lambert;
-    return Vector3Scale(light.linearColor, scale);
+    return MakeDirectLightEvaluation(
+            Vector3Scale(light.linearColor, scale), light.directionToLight);
 }
 
 Vector3 SanitizeNonNegativeRadiance(Vector3 value)
@@ -2599,7 +2415,7 @@ Vector3 EvaluateProbePointLight(
             alphaOccluders,
             alphaMaskCache,
             softShadowSampleCount,
-            stats);
+            stats).radiance;
 }
 
 Vector3 EvaluateProbeSpotLight(
@@ -2630,7 +2446,7 @@ Vector3 EvaluateProbeSpotLight(
             alphaOccluders,
             alphaMaskCache,
             softShadowSampleCount,
-            stats);
+            stats).radiance;
 }
 
 Vector3 EvaluateProbeRectLight(
@@ -2651,7 +2467,7 @@ Vector3 EvaluateProbeRectLight(
     hit.normal = faceDirection;
     hit.triangleIndex = -1;
     return EvaluateDirectLight(map, light, hit, SectorGeneratedSurfaceRef{}, -1,
-            bvh, triangles, alphaOccluders, alphaMaskCache, sampleCount, stats);
+            bvh, triangles, alphaOccluders, alphaMaskCache, sampleCount, stats).radiance;
 }
 
 Vector3 EvaluateProbeDirectionalLight(
@@ -2682,7 +2498,7 @@ Vector3 EvaluateProbeDirectionalLight(
             triangles,
             alphaOccluders,
             alphaMaskCache,
-            stats);
+            stats).radiance;
 }
 
 void BakeProbeAmbientCube(
@@ -2966,7 +2782,8 @@ std::vector<BakeTriangle> BuildBakeTriangles(
                         placement.atlasIndex,
                         surfaceRef,
                         staticSurfaceIndex,
-                        static_cast<int>(i / 3)});
+                        static_cast<int>(i / 3),
+                        object.castsShadow});
             }
             ++staticSurfaceIndex;
         }
@@ -2998,7 +2815,7 @@ std::vector<SectorLightmapAlphaOccluderTriangle> BuildAlphaTestOccluderTriangles
                     surface.vertices[i + 0].uv,
                     surface.vertices[i + 1].uv,
                     surface.vertices[i + 2].uv,
-                    surface.textureId,
+                    surface.materialId,
                     surface.alphaCutoff,
                     surface.ref,
                     static_cast<int>(surfaceIndex),
@@ -3386,7 +3203,7 @@ void FnvAppendTopologyUv(uint64_t& hash, const SectorTopologyUvSettings& uv)
 
 void FnvAppendTopologyWallPart(uint64_t& hash, const SectorTopologyWallPartSettings& part)
 {
-    FnvAppendString(hash, part.textureId);
+    FnvAppendString(hash, part.materialId);
     FnvAppendTopologyUv(hash, part.uv);
 }
 
@@ -3452,10 +3269,10 @@ std::vector<const T*> SortedLightmapHashRecords(const std::vector<T>& values)
     return sorted;
 }
 
-void AddReferencedLightmapTexture(std::unordered_set<std::string>& textureIds, const std::string& textureId)
+void AddReferencedLightmapTexture(std::unordered_set<std::string>& materialIds, const std::string& materialId)
 {
-    if (!textureId.empty()) {
-        textureIds.insert(textureId);
+    if (!materialId.empty()) {
+        materialIds.insert(materialId);
     }
 }
 
@@ -3463,24 +3280,24 @@ std::vector<std::string> SortedReferencedLightmapTextureIds(const SectorTopology
 {
     std::unordered_set<std::string> referenced;
     for (const SectorTopologySideDef& sideDef : map.sideDefs) {
-        AddReferencedLightmapTexture(referenced, sideDef.wall.textureId);
-        AddReferencedLightmapTexture(referenced, sideDef.lower.textureId);
-        AddReferencedLightmapTexture(referenced, sideDef.upper.textureId);
-        AddReferencedLightmapTexture(referenced, sideDef.middle.textureId);
+        AddReferencedLightmapTexture(referenced, sideDef.wall.materialId);
+        AddReferencedLightmapTexture(referenced, sideDef.lower.materialId);
+        AddReferencedLightmapTexture(referenced, sideDef.upper.materialId);
+        AddReferencedLightmapTexture(referenced, sideDef.middle.materialId);
     }
     for (const SectorTopologySector& sector : map.sectors) {
-        AddReferencedLightmapTexture(referenced, sector.floorTextureId);
-        AddReferencedLightmapTexture(referenced, sector.ceilingTextureId);
-        AddReferencedLightmapTexture(referenced, sector.defaultWall.textureId);
-        AddReferencedLightmapTexture(referenced, sector.defaultLower.textureId);
-        AddReferencedLightmapTexture(referenced, sector.defaultUpper.textureId);
+        AddReferencedLightmapTexture(referenced, sector.floorMaterialId);
+        AddReferencedLightmapTexture(referenced, sector.ceilingMaterialId);
+        AddReferencedLightmapTexture(referenced, sector.defaultWall.materialId);
+        AddReferencedLightmapTexture(referenced, sector.defaultLower.materialId);
+        AddReferencedLightmapTexture(referenced, sector.defaultUpper.materialId);
     }
 
     std::vector<std::string> ids;
     ids.reserve(referenced.size());
-    for (const std::string& textureId : referenced) {
-        if (map.texturesById.find(textureId) != map.texturesById.end()) {
-            ids.push_back(textureId);
+    for (const std::string& materialId : referenced) {
+        if (map.resolvedMaterialsById.find(materialId) != map.resolvedMaterialsById.end()) {
+            ids.push_back(materialId);
         }
     }
     std::sort(ids.begin(), ids.end());
@@ -3631,6 +3448,7 @@ bool WriteSectorLightmapArtifact(
         int width,
         int height,
         const Vector4* linearRgba,
+        const Vector4* directionalRgba,
         size_t texelCount,
         const std::string& sourceHash,
         SectorIlluminationStatistics& outPreEncodeStatistics,
@@ -3641,21 +3459,21 @@ bool WriteSectorLightmapArtifact(
     outPreEncodeStatistics = {};
     outStoredStatistics = {};
     if (path.empty() || width <= 0 || height <= 0 || linearRgba == nullptr
-            || sourceHash.empty()) {
+            || directionalRgba == nullptr || sourceHash.empty()) {
         outError = "HDR lightmap write failed: invalid arguments";
         return false;
     }
     const uint64_t expectedTexels = static_cast<uint64_t>(width)
             * static_cast<uint64_t>(height);
     if (expectedTexels != texelCount
-            || expectedTexels > std::numeric_limits<uint64_t>::max() / 8u
+            || expectedTexels > std::numeric_limits<uint64_t>::max() / 12u
             || sourceHash.size() > std::numeric_limits<uint32_t>::max()) {
         outError = "HDR lightmap write failed: invalid dimensions or source hash";
         return false;
     }
 
     std::vector<uint8_t> payload;
-    payload.reserve(texelCount * 8u);
+    payload.reserve(texelCount * 12u);
     for (size_t index = 0; index < texelCount; ++index) {
         const Vector4 value = linearRgba[index];
         const Vector3 rgb{value.x, value.y, value.z};
@@ -3677,6 +3495,22 @@ bool WriteSectorLightmapArtifact(
             payload.push_back(static_cast<uint8_t>((channel >> 8u) & 0xffu));
         }
     }
+    for (size_t index = 0; index < texelCount; ++index) {
+        const Vector4 value = directionalRgba[index];
+        if (!std::isfinite(value.x) || !std::isfinite(value.y)
+                || !std::isfinite(value.z) || !std::isfinite(value.w)
+                || value.x < 0.0f || value.x > 1.0f
+                || value.y < 0.0f || value.y > 1.0f
+                || value.z < 0.0f || value.z > 1.0f
+                || value.w < 0.0f || value.w > 1.0f) {
+            outError = "HDR lightmap write failed: invalid directional sample";
+            return false;
+        }
+        payload.push_back(static_cast<uint8_t>(std::lround(value.x * 255.0f)));
+        payload.push_back(static_cast<uint8_t>(std::lround(value.y * 255.0f)));
+        payload.push_back(static_cast<uint8_t>(std::lround(value.z * 255.0f)));
+        payload.push_back(static_cast<uint8_t>(std::lround(value.w * 255.0f)));
+    }
 
     const std::filesystem::path outputPath(path);
     std::error_code ec;
@@ -3697,8 +3531,8 @@ bool WriteSectorLightmapArtifact(
             || !WriteU32LE(output, static_cast<uint32_t>(width))
             || !WriteU32LE(output, static_cast<uint32_t>(height))
             || !WriteU32LE(output, kLightmapArtifactChannels)
-            || !WriteU32LE(output, kLightmapArtifactEncodingRgbaBinary16)
-            || !WriteU32LE(output, kLightmapArtifactSemanticsLinearHdrRgbAo)
+            || !WriteU32LE(output, kLightmapArtifactEncodingMixedRgba16Rgba8)
+            || !WriteU32LE(output, kLightmapArtifactSemanticsHdrRgbAoDominantDirection)
             || !WriteU32LE(output, static_cast<uint32_t>(sourceHash.size()))
             || !WriteU64LE(output, static_cast<uint64_t>(payload.size()))
             || !WriteU64LE(output, Fnv1aBytes(payload))) {
@@ -3773,15 +3607,15 @@ bool ReadSectorLightmapArtifact(
     if (version != static_cast<uint32_t>(kSectorLightmapArtifactVersion)
             || headerBytes != kLightmapArtifactFixedHeaderBytes + sourceHashBytes
             || width == 0 || height == 0 || channels != kLightmapArtifactChannels
-            || encoding != kLightmapArtifactEncodingRgbaBinary16
-            || semantics != kLightmapArtifactSemanticsLinearHdrRgbAo
+            || encoding != kLightmapArtifactEncodingMixedRgba16Rgba8
+            || semantics != kLightmapArtifactSemanticsHdrRgbAoDominantDirection
             || sourceHashBytes == 0 || sourceHashBytes > 1024u) {
         outError = "HDR lightmap read failed: unsupported or invalid header";
         return false;
     }
     const uint64_t texelCount = static_cast<uint64_t>(width) * height;
-    if (texelCount > std::numeric_limits<uint64_t>::max() / 8u
-            || payloadBytes != texelCount * 8u
+    if (texelCount > std::numeric_limits<uint64_t>::max() / 12u
+            || payloadBytes != texelCount * 12u
             || payloadBytes > std::numeric_limits<size_t>::max()) {
         outError = "HDR lightmap read failed: invalid payload size";
         return false;
@@ -3823,6 +3657,10 @@ bool ReadSectorLightmapArtifact(
                         static_cast<uint16_t>(payload[byteIndex + 1u]) << 8u);
         outData.rgba16[channelIndex] = bits;
     }
+    const size_t directionalByteOffset = static_cast<size_t>(texelCount) * 8u;
+    outData.directionalRgba8.assign(
+            payload.begin() + static_cast<std::ptrdiff_t>(directionalByteOffset),
+            payload.end());
     for (size_t texelIndex = 0; texelIndex < static_cast<size_t>(texelCount); ++texelIndex) {
         const size_t base = texelIndex * 4u;
         const Vector3 rgb{
@@ -3842,21 +3680,21 @@ bool ReadSectorLightmapArtifact(
     return true;
 }
 
-std::string SectorLightmapAlphaMaskCache::CacheKey(const SectorTopologyMap& map, const std::string& textureId)
+std::string SectorLightmapAlphaMaskCache::CacheKey(const SectorTopologyMap& map, const std::string& materialId)
 {
-    const auto it = map.texturesById.find(textureId);
-    if (it == map.texturesById.end()) {
-        return textureId + "\n\n";
+    const auto it = map.resolvedMaterialsById.find(materialId);
+    if (it == map.resolvedMaterialsById.end()) {
+        return materialId + "\n\n";
     }
 
-    return textureId + "\n" + it->second.id + "\n" + it->second.path;
+    return materialId + "\n" + it->second.id + "\n" + it->second.path;
 }
 
 const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::LoadOrGet(
         const SectorTopologyMap& map,
-        const std::string& textureId)
+        const std::string& materialId)
 {
-    const std::string key = CacheKey(map, textureId);
+    const std::string key = CacheKey(map, materialId);
     const auto found = masksByKey.find(key);
     if (found != masksByKey.end()) {
         return found->second;
@@ -3865,9 +3703,9 @@ const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::Loa
     ++loadAttemptsByKey[key];
 
     AlphaMask mask;
-    const auto textureIt = map.texturesById.find(textureId);
-    if (textureIt == map.texturesById.end()) {
-        TraceLog(LOG_WARNING, "Sector lightmap alpha cache missing texture id '%s'", textureId.c_str());
+    const auto textureIt = map.resolvedMaterialsById.find(materialId);
+    if (textureIt == map.resolvedMaterialsById.end()) {
+        TraceLog(LOG_WARNING, "Sector lightmap alpha cache missing texture id '%s'", materialId.c_str());
         return masksByKey.emplace(key, std::move(mask)).first->second;
     }
 
@@ -3876,7 +3714,7 @@ const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::Loa
     if (image.data == nullptr || image.width <= 0 || image.height <= 0) {
         TraceLog(LOG_WARNING,
                  "Sector lightmap alpha cache could not load texture '%s' from '%s'",
-                 textureId.c_str(),
+                 materialId.c_str(),
                  resolvedPath.c_str());
         if (image.data != nullptr) {
             UnloadImage(image);
@@ -3888,7 +3726,7 @@ const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::Loa
     if (colors == nullptr) {
         TraceLog(LOG_WARNING,
                  "Sector lightmap alpha cache could not read pixels for texture '%s' from '%s'",
-                 textureId.c_str(),
+                 materialId.c_str(),
                  resolvedPath.c_str());
         UnloadImage(image);
         return masksByKey.emplace(key, std::move(mask)).first->second;
@@ -3909,11 +3747,11 @@ const SectorLightmapAlphaMaskCache::AlphaMask& SectorLightmapAlphaMaskCache::Loa
 
 SectorLightmapAlphaSample SectorLightmapAlphaMaskCache::Sample(
         const SectorTopologyMap& map,
-        const std::string& textureId,
+        const std::string& materialId,
         Vector2 uv,
         float alphaCutoff)
 {
-    const AlphaMask& mask = LoadOrGet(map, textureId);
+    const AlphaMask& mask = LoadOrGet(map, materialId);
     SectorLightmapAlphaSample sample;
     sample.valid = mask.valid;
     sample.width = mask.width;
@@ -3946,9 +3784,9 @@ size_t SectorLightmapAlphaMaskCache::CachedTextureCount() const
     return masksByKey.size();
 }
 
-int SectorLightmapAlphaMaskCache::LoadAttemptCount(const SectorTopologyMap& map, const std::string& textureId) const
+int SectorLightmapAlphaMaskCache::LoadAttemptCount(const SectorTopologyMap& map, const std::string& materialId) const
 {
-    const std::string key = CacheKey(map, textureId);
+    const std::string key = CacheKey(map, materialId);
     const auto found = loadAttemptsByKey.find(key);
     return found == loadAttemptsByKey.end() ? 0 : found->second;
 }
@@ -3990,6 +3828,10 @@ bool BuildSectorBakedObjectLightProbePlacements(
         outError = "Object probe placement failed: invalid probe spacing";
         return false;
     }
+    const double boundaryClearanceCoord =
+            static_cast<double>(SectorWorldToAuthoringDistance(
+                    kObjectProbeSurfaceClearanceWorld))
+            * static_cast<double>(SectorCoordSubdivisions);
 
     const SectorTopologyIndexes indexes = BuildSectorTopologyIndexes(map);
     for (const SectorTopologySector& sector : map.sectors) {
@@ -4046,7 +3888,8 @@ bool BuildSectorBakedObjectLightProbePlacements(
                 const SectorTopologyCoordPoint candidate{
                         static_cast<SectorCoord>(std::llround(x)),
                         static_cast<SectorCoord>(std::llround(y))};
-                if (!IsStrictlyInsideProbePolygon(outer, holes, candidate)) {
+                if (!IsValidProbePolygonPoint(
+                            outer, holes, candidate, boundaryClearanceCoord)) {
                     continue;
                 }
 
@@ -4060,10 +3903,21 @@ bool BuildSectorBakedObjectLightProbePlacements(
 
         if (outProbes.size() == beforeCount) {
             SectorTopologyCoordPoint representative;
-            if (!FindRepresentativeProbePoint(outer, holes, minX, minY, maxX, maxY, representative)) {
-                outError = "Object probe placement failed: could not place a probe in sector "
-                        + std::to_string(sector.id);
-                return false;
+            if (!FindRepresentativeProbePoint(
+                        outer,
+                        holes,
+                        minX,
+                        minY,
+                        maxX,
+                        maxY,
+                        boundaryClearanceCoord,
+                        representative)) {
+                if (outDiagnostics != nullptr) {
+                    outDiagnostics->push_back(SectorBakedObjectLightProbePlacementDiagnostic{
+                            sector.id,
+                            "Object probe placement skipped the sector because no candidate satisfied the required surface clearance"});
+                }
+                continue;
             }
 
             AppendObjectProbeLayers(
@@ -5022,7 +4876,10 @@ bool BakeSectorLightmapForMap(
     ReportProgress(callbacks, SectorLightmapBakePhase::Preparing, 0, 1);
     const std::string artifactSourceHash = ComputeSectorLightmapSourceHash(map);
     std::vector<Vector4> pixels(totalPixelCount, Vector4{0.0f, 0.0f, 0.0f, 1.0f});
+    std::vector<Vector4> directionalPixels(
+            totalPixelCount, Vector4{0.5f, 0.5f, 1.0f, 0.0f});
     std::vector<Vector3> directLightingFloat(totalPixelCount, Vector3{});
+    std::vector<Vector3> directDirectionMoments(totalPixelCount, Vector3{});
     std::vector<Vector3> indirectLightingFloat(totalPixelCount, Vector3{});
     std::vector<float> ambientOcclusionFloat(totalPixelCount, 1.0f);
     std::vector<unsigned char> validChartTexel(totalPixelCount, 0);
@@ -5030,7 +4887,6 @@ bool BakeSectorLightmapForMap(
     const std::vector<SectorLightmapAlphaOccluderTriangle> alphaOccluders =
             CollectSectorLightmapAlphaOccluders(geometry);
     SectorLightmapAlphaMaskCache alphaMaskCache;
-    SectorLightmapNormalMapCache normalMapCache;
     const std::vector<BakeTriangle> triangles =
             BuildBakeTriangles(geometry, layout, staticModels);
     ReportProgress(callbacks, SectorLightmapBakePhase::BuildingBvh, 0, 1);
@@ -5099,12 +4955,6 @@ bool BakeSectorLightmapForMap(
                     continue;
                 }
 
-                const Vector3 shadingNormal = ResolveSurfaceShadingNormal(
-                        map,
-                        surface,
-                        hit,
-                        normalMapCache);
-
                 const size_t pixelIndex = static_cast<size_t>(chart.atlasIndex)
                         * atlasPixelCount
                         + static_cast<size_t>(y * width + x);
@@ -5117,7 +4967,7 @@ bool BakeSectorLightmapForMap(
                         chart.surfaceIndex,
                         hit.triangleIndex,
                         hit.position,
-                        shadingNormal,
+                        hit.geometricNormal,
                         hit.geometricNormal
                 });
                 validChartTexel[pixelIndex] = 1;
@@ -5215,10 +5065,9 @@ bool BakeSectorLightmapForMap(
             hit.triangleIndex = texel.triangleIndex;
 
             Vector3 direct{};
+            Vector3 directionMoment{};
             for (const LightmapWorldPointLight& light : worldLights) {
-                direct = Vector3Add(
-                        direct,
-                        EvaluateDirectLight(
+                const DirectLightEvaluation evaluation = EvaluateDirectLight(
                                 map,
                                 light,
                                 hit,
@@ -5229,12 +5078,13 @@ bool BakeSectorLightmapForMap(
                                 alphaOccluders,
                                 alphaMaskCache,
                                 quality.directSoftShadowSampleCount,
-                                stats));
+                                stats);
+                direct = Vector3Add(direct, evaluation.radiance);
+                directionMoment = Vector3Add(
+                        directionMoment, evaluation.directionMoment);
             }
             for (const LightmapWorldSpotLight& light : worldSpotLights) {
-                direct = Vector3Add(
-                        direct,
-                        EvaluateDirectLight(
+                const DirectLightEvaluation evaluation = EvaluateDirectLight(
                                 map,
                                 light,
                                 hit,
@@ -5245,18 +5095,22 @@ bool BakeSectorLightmapForMap(
                                 alphaOccluders,
                                 alphaMaskCache,
                                 quality.directSoftShadowSampleCount,
-                                stats));
+                                stats);
+                direct = Vector3Add(direct, evaluation.radiance);
+                directionMoment = Vector3Add(
+                        directionMoment, evaluation.directionMoment);
             }
             for (const LightmapWorldRectLight& light : worldRectLights) {
-                direct = Vector3Add(direct, EvaluateDirectLight(
+                const DirectLightEvaluation evaluation = EvaluateDirectLight(
                         map, light, hit, texel.surfaceRef, texel.sourceSurfaceIndex,
                         bvh, triangles, alphaOccluders, alphaMaskCache,
-                        quality.directSoftShadowSampleCount, stats));
+                        quality.directSoftShadowSampleCount, stats);
+                direct = Vector3Add(direct, evaluation.radiance);
+                directionMoment = Vector3Add(
+                        directionMoment, evaluation.directionMoment);
             }
             if (IsSkyOwnedLightmapSurface(map, texel.surfaceRef)) {
-                direct = Vector3Add(
-                        direct,
-                        EvaluateDirectionalLight(
+                const DirectLightEvaluation evaluation = EvaluateDirectionalLight(
                                 map,
                                 directionalLight,
                                 hit,
@@ -5267,9 +5121,13 @@ bool BakeSectorLightmapForMap(
                                 triangles,
                                 alphaOccluders,
                                 alphaMaskCache,
-                                stats));
+                                stats);
+                direct = Vector3Add(direct, evaluation.radiance);
+                directionMoment = Vector3Add(
+                        directionMoment, evaluation.directionMoment);
             }
             directLightingFloat[texel.pixelIndex] = direct;
+            directDirectionMoments[texel.pixelIndex] = directionMoment;
             ++completedTexels;
             if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
                 ReportProgress(callbacks, SectorLightmapBakePhase::DirectLighting, completedTexels, static_cast<uint32_t>(bakeTexels.size()));
@@ -5410,6 +5268,7 @@ bool BakeSectorLightmapForMap(
             0,
             exportWorkTotal);
     std::vector<unsigned char> exportValid = validChartTexel;
+    std::vector<unsigned char> directionalExportValid = validChartTexel;
     completedTexels = 0;
     for (const BakeTexel& texel : bakeTexels) {
         const Vector3 finalRgb = Vector3Add(
@@ -5425,6 +5284,22 @@ bool BakeSectorLightmapForMap(
                 finalRgb.y,
                 finalRgb.z,
                 std::clamp(ambientOcclusionFloat[texel.pixelIndex], 0.0f, 1.0f)};
+        const Vector3 directionMoment = directDirectionMoments[texel.pixelIndex];
+        const float directionLength = Vector3Length(directionMoment);
+        const float directLuminance = std::max(
+                LinearLuminance(directLightingFloat[texel.pixelIndex]), 0.0f);
+        const float totalLuminance = directLuminance + std::max(
+                LinearLuminance(indirectLightingFloat[texel.pixelIndex]), 0.0f);
+        if (directionLength > BakeEpsilon && directLuminance > BakeEpsilon
+                && totalLuminance > BakeEpsilon) {
+            const Vector3 direction = Vector3Scale(
+                    directionMoment, 1.0f / directionLength);
+            directionalPixels[texel.pixelIndex] = Vector4{
+                    direction.x * 0.5f + 0.5f,
+                    direction.y * 0.5f + 0.5f,
+                    direction.z * 0.5f + 0.5f,
+                    std::clamp(directLuminance / totalLuminance, 0.0f, 1.0f)};
+        }
         ++completedTexels;
         if ((completedTexels % kSectorLightmapProgressChunk) == 0) {
             ReportProgress(
@@ -5440,6 +5315,12 @@ bool BakeSectorLightmapForMap(
     uint32_t completedExportWork = static_cast<uint32_t>(bakeTexels.size());
     for (const SectorLightmapChart& chart : layout.charts) {
         DilateChart(chart, pixels, exportValid, width, height);
+        DilateChart(
+                chart,
+                directionalPixels,
+                directionalExportValid,
+                width,
+                height);
         ++completedExportWork;
         ReportProgress(
                 callbacks,
@@ -5458,6 +5339,12 @@ bool BakeSectorLightmapForMap(
                         PlacementAsChart(placement),
                         pixels,
                         exportValid,
+                        width,
+                        height);
+                DilateChart(
+                        PlacementAsChart(placement),
+                        directionalPixels,
+                        directionalExportValid,
                         width,
                         height);
                 ++completedExportWork;
@@ -5493,6 +5380,8 @@ bool BakeSectorLightmapForMap(
                     width,
                     height,
                     pixels.data() + static_cast<size_t>(atlasIndex) * atlasPixelCount,
+                    directionalPixels.data()
+                            + static_cast<size_t>(atlasIndex) * atlasPixelCount,
                     atlasPixelCount,
                     artifactSourceHash,
                     preEncodeStatistics,
@@ -5787,16 +5676,14 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
     FnvAppendDirectionalLightSettings(hash, map.directionalLight);
     FnvAppendInt(hash, SectorCoordSubdivisions);
 
-    const std::vector<std::string> textureIds = SortedReferencedLightmapTextureIds(map);
-    FnvAppendInt(hash, static_cast<int>(textureIds.size()));
-    for (const std::string& textureId : textureIds) {
-        const SectorTextureDefinition& texture = map.texturesById.at(textureId);
-        FnvAppendString(hash, textureId);
+    const std::vector<std::string> materialIds = SortedReferencedLightmapTextureIds(map);
+    FnvAppendInt(hash, static_cast<int>(materialIds.size()));
+    for (const std::string& materialId : materialIds) {
+        const SectorMaterialDefinition& texture = map.resolvedMaterialsById.at(materialId);
+        FnvAppendString(hash, materialId);
         FnvAppendString(hash, texture.id);
         FnvAppendString(hash, texture.path);
         FnvAppendInt(hash, static_cast<int>(texture.filter));
-        FnvAppendString(hash, SectorTextureNormalMapPath(texture.path));
-        FnvAppendString(hash, ComputeNormalMapFingerprint(texture));
     }
 
     const std::vector<const SectorTopologyVertex*> vertices = SortedLightmapHashRecords(map.vertices);
@@ -5837,8 +5724,8 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
         FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector->floorZ));
         FnvAppendFloat(hash, SectorAuthoringToWorldDistance(sector->ceilingZ));
         FnvAppendInt(hash, sector->ceilingSky ? 1 : 0);
-        FnvAppendString(hash, sector->floorTextureId);
-        FnvAppendString(hash, sector->ceilingTextureId);
+        FnvAppendString(hash, sector->floorMaterialId);
+        FnvAppendString(hash, sector->ceilingMaterialId);
         FnvAppendTopologyUv(hash, sector->floorUv);
         FnvAppendTopologyUv(hash, sector->ceilingUv);
         FnvAppendColor(hash, sector->ambientColor);
@@ -5881,6 +5768,9 @@ std::string ComputeSectorLightmapSourceHash(const SectorTopologyMap& map)
             }
             FnvAppendFloat(hash, object->staticModel.heightOffsetWorld);
             FnvAppendFloat(hash, object->staticModel.scale);
+            if (!object->staticModel.castsShadow) {
+                FnvAppendString(hash, "static-model-no-shadow");
+            }
             FnvAppendString(
                     hash,
                     object->staticModel.geometryFingerprint);

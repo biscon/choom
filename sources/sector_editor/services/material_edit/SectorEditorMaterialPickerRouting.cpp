@@ -191,23 +191,23 @@ void AssignDecalTexture(
         const std::string& selectedTexture,
         bool& changed)
 {
-    if (decal.textureId.empty()) {
+    if (decal.materialId.empty()) {
         ResetTopologyUv(decal.uv);
         decal.opacity = 1.0f;
         decal.emissive = false;
         decal.tint = Vector3{1.0f, 1.0f, 1.0f};
         decal.bloomIntensity = 1.0f;
     }
-    if (decal.textureId != selectedTexture) {
-        decal.textureId = selectedTexture;
+    if (decal.materialId != selectedTexture) {
+        decal.materialId = selectedTexture;
         changed = true;
     }
 }
 
-void AssignTexture(std::string& textureId, const std::string& selectedTexture, bool& changed)
+void AssignTexture(std::string& materialId, const std::string& selectedTexture, bool& changed)
 {
-    if (textureId != selectedTexture) {
-        textureId = selectedTexture;
+    if (materialId != selectedTexture) {
+        materialId = selectedTexture;
         changed = true;
     }
 }
@@ -224,7 +224,7 @@ bool AssignSelectedTextureToAuthoringFaceAnchor(
             if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
                 AssignDecalTexture(anchor.floorDecal, selectedTexture, changed);
             } else {
-                AssignTexture(anchor.floorTextureId, selectedTexture, changed);
+                AssignTexture(anchor.floorMaterialId, selectedTexture, changed);
             }
             result.status = picker.topologyLayer == TopologyMaterialLayer::Decal
                     ? "Selected floor decal texture."
@@ -234,7 +234,7 @@ bool AssignSelectedTextureToAuthoringFaceAnchor(
             if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
                 AssignDecalTexture(anchor.ceilingDecal, selectedTexture, changed);
             } else {
-                AssignTexture(anchor.ceilingTextureId, selectedTexture, changed);
+                AssignTexture(anchor.ceilingMaterialId, selectedTexture, changed);
             }
             result.status = picker.topologyLayer == TopologyMaterialLayer::Decal
                     ? "Selected ceiling decal texture."
@@ -244,7 +244,7 @@ bool AssignSelectedTextureToAuthoringFaceAnchor(
             if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
                 AssignDecalTexture(anchor.defaultWall.decal, selectedTexture, changed);
             } else {
-                AssignTexture(anchor.defaultWall.textureId, selectedTexture, changed);
+                AssignTexture(anchor.defaultWall.materialId, selectedTexture, changed);
             }
             result.status = TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
             break;
@@ -252,7 +252,7 @@ bool AssignSelectedTextureToAuthoringFaceAnchor(
             if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
                 AssignDecalTexture(anchor.defaultLower.decal, selectedTexture, changed);
             } else {
-                AssignTexture(anchor.defaultLower.textureId, selectedTexture, changed);
+                AssignTexture(anchor.defaultLower.materialId, selectedTexture, changed);
             }
             result.status = TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
             break;
@@ -260,7 +260,7 @@ bool AssignSelectedTextureToAuthoringFaceAnchor(
             if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
                 AssignDecalTexture(anchor.defaultUpper.decal, selectedTexture, changed);
             } else {
-                AssignTexture(anchor.defaultUpper.textureId, selectedTexture, changed);
+                AssignTexture(anchor.defaultUpper.materialId, selectedTexture, changed);
             }
             result.status = TextFormat("Changed %s", TopologySectorTextureFieldLabel(picker.topologyField));
             break;
@@ -288,7 +288,7 @@ bool AssignSelectedTextureToAuthoringSide(
                 "Selected %s decal texture.",
                 TopologyWallPartStatusName(picker.topologyWallPart));
     } else {
-        AssignTexture(part.textureId, selectedTexture, changed);
+        AssignTexture(part.materialId, selectedTexture, changed);
         result.status = picker.topologyWallPart == TopologyWallPart::Middle
                 ? "Selected middle texture."
                 : TextFormat(
@@ -359,8 +359,8 @@ std::string CurrentSectorEditorMaterialPickerTexture(
                             ? TopologyMaterialLayer::Base
                             : picker.topologyLayer;
                     return layer == TopologyMaterialLayer::Decal
-                            ? part.decal.textureId
-                            : part.textureId;
+                            ? part.decal.materialId
+                            : part.materialId;
                 }
             }
         } else {
@@ -373,8 +373,8 @@ std::string CurrentSectorEditorMaterialPickerTexture(
                         ? TopologyMaterialLayer::Base
                         : picker.topologyLayer;
                 return layer == TopologyMaterialLayer::Decal
-                        ? part.decal.textureId
-                        : part.textureId;
+                        ? part.decal.materialId
+                        : part.materialId;
             }
         }
         return std::string{};
@@ -396,24 +396,24 @@ std::string CurrentSectorEditorMaterialPickerTexture(
         switch (picker.topologyField) {
             case TopologySectorTextureField::Floor:
                 return picker.topologyLayer == TopologyMaterialLayer::Decal
-                        ? anchor->floorDecal.textureId
-                        : anchor->floorTextureId;
+                        ? anchor->floorDecal.materialId
+                        : anchor->floorMaterialId;
             case TopologySectorTextureField::Ceiling:
                 return picker.topologyLayer == TopologyMaterialLayer::Decal
-                        ? anchor->ceilingDecal.textureId
-                        : anchor->ceilingTextureId;
+                        ? anchor->ceilingDecal.materialId
+                        : anchor->ceilingMaterialId;
             case TopologySectorTextureField::DefaultWall:
                 return picker.topologyLayer == TopologyMaterialLayer::Decal
-                        ? anchor->defaultWall.decal.textureId
-                        : anchor->defaultWall.textureId;
+                        ? anchor->defaultWall.decal.materialId
+                        : anchor->defaultWall.materialId;
             case TopologySectorTextureField::DefaultLower:
                 return picker.topologyLayer == TopologyMaterialLayer::Decal
-                        ? anchor->defaultLower.decal.textureId
-                        : anchor->defaultLower.textureId;
+                        ? anchor->defaultLower.decal.materialId
+                        : anchor->defaultLower.materialId;
             case TopologySectorTextureField::DefaultUpper:
                 return picker.topologyLayer == TopologyMaterialLayer::Decal
-                        ? anchor->defaultUpper.decal.textureId
-                        : anchor->defaultUpper.textureId;
+                        ? anchor->defaultUpper.decal.materialId
+                        : anchor->defaultUpper.materialId;
             case TopologySectorTextureField::None:
                 break;
         }
@@ -427,18 +427,18 @@ std::string CurrentSectorEditorMaterialPickerTexture(
     switch (picker.topologyField) {
         case TopologySectorTextureField::Floor:
             return picker.topologyLayer == TopologyMaterialLayer::Decal
-                    ? sector->floorDecal.textureId
-                    : sector->floorTextureId;
+                    ? sector->floorDecal.materialId
+                    : sector->floorMaterialId;
         case TopologySectorTextureField::Ceiling:
             return picker.topologyLayer == TopologyMaterialLayer::Decal
-                    ? sector->ceilingDecal.textureId
-                    : sector->ceilingTextureId;
+                    ? sector->ceilingDecal.materialId
+                    : sector->ceilingMaterialId;
         case TopologySectorTextureField::DefaultWall:
-            return sector->defaultWall.textureId;
+            return sector->defaultWall.materialId;
         case TopologySectorTextureField::DefaultLower:
-            return sector->defaultLower.textureId;
+            return sector->defaultLower.materialId;
         case TopologySectorTextureField::DefaultUpper:
-            return sector->defaultUpper.textureId;
+            return sector->defaultUpper.materialId;
         case TopologySectorTextureField::None:
             break;
     }
@@ -456,6 +456,7 @@ std::string CurrentSectorEditorMaterialPickerTexture(
 
 bool OpenSectorEditorMaterialPickerForDerivedSector(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -490,13 +491,14 @@ bool OpenSectorEditorMaterialPickerForDerivedSector(
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(topologyMap),
+            materialIds,
             CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
 bool OpenSectorEditorMaterialPickerForDerivedSector(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -506,6 +508,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSector(
 {
     return OpenSectorEditorMaterialPickerForDerivedSector(
             picker,
+            materialIds,
             topologyMap,
             authoring.graph,
             derivation,
@@ -516,6 +519,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSector(
 
 bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -552,13 +556,14 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(topologyMap),
+            materialIds,
             CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
 bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -568,6 +573,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
 {
     return OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
             picker,
+            materialIds,
             topologyMap,
             authoring.graph,
             derivation,
@@ -578,6 +584,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
 
 bool OpenSectorEditorMaterialPickerForDerivedSideDef(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -617,13 +624,14 @@ bool OpenSectorEditorMaterialPickerForDerivedSideDef(
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(topologyMap),
+            materialIds,
             CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
 bool OpenSectorEditorMaterialPickerForDerivedSideDef(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -633,6 +641,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSideDef(
 {
     return OpenSectorEditorMaterialPickerForDerivedSideDef(
             picker,
+            materialIds,
             topologyMap,
             authoring.graph,
             derivation,
@@ -643,6 +652,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSideDef(
 
 bool OpenSectorEditorMaterialPickerForAuthoringSide(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -678,13 +688,14 @@ bool OpenSectorEditorMaterialPickerForAuthoringSide(
 
     OpenSectorEditorTexturePicker(
             picker,
-            SortedSectorTopologyTextureIds(topologyMap),
+            materialIds,
             CurrentSectorEditorMaterialPickerTexture(topologyMap, authoringGraph, derivation, picker));
     return true;
 }
 
 bool OpenSectorEditorMaterialPickerForAuthoringSide(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -694,6 +705,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringSide(
 {
     return OpenSectorEditorMaterialPickerForAuthoringSide(
             picker,
+            materialIds,
             topologyMap,
             authoring.graph,
             derivation,
@@ -727,7 +739,7 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
         return closeAndReturn();
     }
 
-    const std::string selectedTexture = selected.textureId;
+    const std::string selectedTexture = selected.materialId;
     result.rebuildPreviewOnApply = picker.rebuildPreviewOnApply;
     const SectorEditorConstDerivationDocumentAccess constDerivation =
             MakeSectorEditorConstDerivationDocumentAccess(derivation);
@@ -756,68 +768,68 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
                             switch (picker.topologyField) {
                                 case TopologySectorTextureField::Floor:
                                     if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
-                                        if (anchor.floorDecal.textureId == selectedTexture) {
+                                        if (anchor.floorDecal.materialId == selectedTexture) {
                                             return false;
                                         }
-                                        anchor.floorDecal.textureId = selectedTexture;
+                                        anchor.floorDecal.materialId = selectedTexture;
                                     } else {
-                                        if (anchor.floorTextureId == selectedTexture) {
+                                        if (anchor.floorMaterialId == selectedTexture) {
                                             return false;
                                         }
-                                        anchor.floorTextureId = selectedTexture;
+                                        anchor.floorMaterialId = selectedTexture;
                                     }
                                     return true;
                                 case TopologySectorTextureField::Ceiling:
                                     if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
-                                        if (anchor.ceilingDecal.textureId == selectedTexture) {
+                                        if (anchor.ceilingDecal.materialId == selectedTexture) {
                                             return false;
                                         }
-                                        anchor.ceilingDecal.textureId = selectedTexture;
+                                        anchor.ceilingDecal.materialId = selectedTexture;
                                     } else {
-                                        if (anchor.ceilingTextureId == selectedTexture) {
+                                        if (anchor.ceilingMaterialId == selectedTexture) {
                                             return false;
                                         }
-                                        anchor.ceilingTextureId = selectedTexture;
+                                        anchor.ceilingMaterialId = selectedTexture;
                                     }
                                     return true;
                                 case TopologySectorTextureField::DefaultWall:
                                     if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
-                                        if (anchor.defaultWall.decal.textureId == selectedTexture) {
+                                        if (anchor.defaultWall.decal.materialId == selectedTexture) {
                                             return false;
                                         }
-                                        anchor.defaultWall.decal.textureId = selectedTexture;
+                                        anchor.defaultWall.decal.materialId = selectedTexture;
                                         return true;
                                     }
-                                    if (anchor.defaultWall.textureId == selectedTexture) {
+                                    if (anchor.defaultWall.materialId == selectedTexture) {
                                         return false;
                                     }
-                                    anchor.defaultWall.textureId = selectedTexture;
+                                    anchor.defaultWall.materialId = selectedTexture;
                                     return true;
                                 case TopologySectorTextureField::DefaultLower:
                                     if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
-                                        if (anchor.defaultLower.decal.textureId == selectedTexture) {
+                                        if (anchor.defaultLower.decal.materialId == selectedTexture) {
                                             return false;
                                         }
-                                        anchor.defaultLower.decal.textureId = selectedTexture;
+                                        anchor.defaultLower.decal.materialId = selectedTexture;
                                         return true;
                                     }
-                                    if (anchor.defaultLower.textureId == selectedTexture) {
+                                    if (anchor.defaultLower.materialId == selectedTexture) {
                                         return false;
                                     }
-                                    anchor.defaultLower.textureId = selectedTexture;
+                                    anchor.defaultLower.materialId = selectedTexture;
                                     return true;
                                 case TopologySectorTextureField::DefaultUpper:
                                     if (picker.topologyLayer == TopologyMaterialLayer::Decal) {
-                                        if (anchor.defaultUpper.decal.textureId == selectedTexture) {
+                                        if (anchor.defaultUpper.decal.materialId == selectedTexture) {
                                             return false;
                                         }
-                                        anchor.defaultUpper.decal.textureId = selectedTexture;
+                                        anchor.defaultUpper.decal.materialId = selectedTexture;
                                         return true;
                                     }
-                                    if (anchor.defaultUpper.textureId == selectedTexture) {
+                                    if (anchor.defaultUpper.materialId == selectedTexture) {
                                         return false;
                                     }
-                                    anchor.defaultUpper.textureId = selectedTexture;
+                                    anchor.defaultUpper.materialId = selectedTexture;
                                     return true;
                                 case TopologySectorTextureField::None:
                                     break;
@@ -887,8 +899,8 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
                             SectorTopologyWallPartSettings& part =
                                     TopologyWallPartSettingsFor(side, picker.topologyWallPart);
                             std::string& target = layer == TopologyMaterialLayer::Decal
-                                    ? part.decal.textureId
-                                    : part.textureId;
+                                    ? part.decal.materialId
+                                    : part.materialId;
                             if (target == selectedTexture) {
                                 return false;
                             }
@@ -1072,7 +1084,7 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
                 picker.topologySideDefId,
                 "Updated authoring side texture",
                 [&](SectorAuthoringLineSide& side) {
-                    return AssignSelectedTextureToAuthoringSide(side, picker, selected.textureId, result);
+                    return AssignSelectedTextureToAuthoringSide(side, picker, selected.materialId, result);
                 });
         if (!refreshed && result.changed) {
             result.changed = false;
@@ -1099,7 +1111,7 @@ SectorEditorTexturePickerApplyResult ApplySectorEditorMaterialTexturePickerSelec
                 picker.topologySectorId,
                 "Updated authoring face anchor texture",
                 [&](SectorAuthoringFaceAnchor& anchor) {
-                    return AssignSelectedTextureToAuthoringFaceAnchor(anchor, picker, selected.textureId, result);
+                    return AssignSelectedTextureToAuthoringFaceAnchor(anchor, picker, selected.materialId, result);
                 });
         if (!refreshed && result.changed) {
             result.changed = false;

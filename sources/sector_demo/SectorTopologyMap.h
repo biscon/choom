@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sector_demo/SectorLightmapTypes.h"
+#include "sector_demo/SectorReflectionProbeTypes.h"
 #include "sector_demo/SectorTopologyTypes.h"
 #include "sector_demo/SectorTextureTypes.h"
 
@@ -49,7 +50,7 @@ struct SectorPreviewSettings {
 };
 
 struct SectorTopologySkySettings {
-    std::string textureId = "sky_cylinder";
+    std::string materialId = "sky_cylinder";
     float yawOffsetDegrees = 0.0f;
     float verticalOffset = 0.0f;
     float verticalScale = 1.0f;
@@ -161,6 +162,7 @@ struct SectorPlacedStaticModel {
     float heightOffsetWorld = 0.0f;
     float scale = 1.0f;
     bool collision = false;
+    bool castsShadow = true;
     // Transient bake input. Refreshed only during explicit model preparation.
     std::string geometryFingerprint;
 };
@@ -255,7 +257,7 @@ struct SectorPlacedDoor {
     bool autoOpen = false;
     float interactionDistance = 1.5f;
     float autoOpenDistance = 2.0f;
-    std::string textureId;
+    std::string materialId;
     std::string openSoundId;
     std::string closeSoundId;
     SectorDoorFaceUvSet faceUvs;
@@ -300,7 +302,7 @@ struct SectorPlacedRuntimeObject {
 };
 
 struct SectorTopologyMap {
-    std::unordered_map<std::string, SectorTextureDefinition> texturesById;
+    std::unordered_map<std::string, SectorMaterialDefinition> resolvedMaterialsById;
     std::vector<SectorTopologyVertex> vertices;
     std::vector<SectorTopologyLineDef> lineDefs;
     std::vector<SectorTopologySideDef> sideDefs;
@@ -320,8 +322,10 @@ struct SectorTopologyMap {
     SectorTopologyFogSettings fogSettings;
     SectorLevelAudioSettings audioSettings;
     std::vector<SectorCompiledLocalFogVolume> compiledLocalFogVolumes;
+    std::vector<SectorCompiledReflectionProbe> compiledReflectionProbes;
     SectorLightmapBakeSettings lightmapSettings;
     SectorLightmapMetadata bakedLightmap;
+    SectorBakedReflectionProbeMetadata bakedReflectionProbes;
 };
 
 // Transient lookup data. Index vectors intentionally retain duplicate IDs so

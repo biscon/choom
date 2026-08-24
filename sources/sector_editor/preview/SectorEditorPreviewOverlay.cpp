@@ -540,6 +540,75 @@ void DrawSectorEditorPreviewObjectProbeOverlay(
     EndMode3D();
 }
 
+void DrawSectorEditorPreviewReflectionProbeOverlay(
+        const SectorTopologyMap& topologyMap,
+        const SectorEditorPreviewState& previewState,
+        const SelectionState& selectionState,
+        const SectorMeshRenderer& preview)
+{
+    if (!preview.IsRendererReady()
+            || previewState.overlay.activePreviewDebugOverlayTab
+                    != PreviewDebugOverlayTab::Probes
+            || selectionState.selectedAuthoring.kind
+                    != SectorAuthoringSelectionKind::ReflectionProbe) {
+        return;
+    }
+
+    const int selectedId = selectionState.selectedAuthoring.reflectionProbeId;
+    const auto selected = std::find_if(
+            topologyMap.compiledReflectionProbes.begin(),
+            topologyMap.compiledReflectionProbes.end(),
+            [selectedId](const SectorCompiledReflectionProbe& probe) {
+                return probe.sourceAuthoringProbeId == selectedId;
+            });
+    if (selected == topologyMap.compiledReflectionProbes.end()) return;
+
+    const SectorCompiledReflectionProbe& probe = *selected;
+    const float c = std::cos(probe.yawRadians);
+    const float s = std::sin(probe.yawRadians);
+    Vector3 corners[8]{};
+    for (int index = 0; index < 8; ++index) {
+        const Vector3 local{
+                (index & 1) != 0
+                        ? probe.halfExtentsWorld.x : -probe.halfExtentsWorld.x,
+                (index & 2) != 0
+                        ? probe.halfExtentsWorld.y : -probe.halfExtentsWorld.y,
+                (index & 4) != 0
+                        ? probe.halfExtentsWorld.z : -probe.halfExtentsWorld.z};
+        corners[index] = Vector3Add(
+                probe.influenceCenterWorld,
+                Vector3{
+                        local.x * c - local.z * s,
+                        local.y,
+                        local.x * s + local.z * c});
+    }
+
+    const Color boxColor = LinearOverlaySwatch(
+            probe.enabled
+                    ? Color{204, 126, 255, 245}
+                    : Color{150, 150, 160, 205});
+    const Color linkColor = LinearOverlaySwatch(Color{255, 204, 92, 220});
+    const Color captureColor = LinearOverlaySwatch(Color{255, 224, 122, 255});
+    const Color centerColor = LinearOverlaySwatch(Color{114, 224, 255, 255});
+
+    BeginMode3D(preview.RenderCamera());
+    for (int index = 0; index < 8; ++index) {
+        for (int axis = 0; axis < 3; ++axis) {
+            const int neighbor = index ^ (1 << axis);
+            if (index < neighbor) DrawLine3D(corners[index], corners[neighbor], boxColor);
+        }
+    }
+    DrawLine3D(
+            probe.capturePositionWorld,
+            probe.influenceCenterWorld,
+            linkColor);
+    DrawSphereWires(
+            probe.capturePositionWorld, 0.12f, 8, 12, captureColor);
+    DrawSphereWires(
+            probe.influenceCenterWorld, 0.08f, 8, 12, centerColor);
+    EndMode3D();
+}
+
 void DrawSectorEditorPreviewNavigationOverlay(
         const SectorEditorPreviewOverlayState& overlayState,
         const SectorNavigationWorld& navigation,
@@ -720,7 +789,6 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 addKeyValue("dynamic", preview.DynamicLightingEnabled() ? "on" : "off");
                 addKeyValue("AO", overlayState.useBakedAmbientOcclusion ? "on" : "off");
                 addKeyValue("lightmap", preview.RendererLightmapStatusText());
-                addKeyValue("door mode", SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()));
                 addKeyValue("dynamic lights", TextFormat(
                         "selected %zu | portal eligible %zu | sources %zu",
                         preview.SelectedDynamicLights().size(),
@@ -963,7 +1031,7 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                             "viewmodel static specular",
                             viewmodelStaticSpecular.str());
                 }
-                addWrappedLine("AO/metallic/roughness/normals are bounded scene-linear diagnostic values and still pass through the shared HDR presentation transform.");
+                addWrappedLine("Metallic / Roughness uses R=metallic and G=effective roughness. Tangent-Space Normal shows raw normal RGB; magenta means missing or not ready. Shading Normal shows the final world-space normal. Diagnostics bypass fog and still pass through the shared HDR presentation transform.");
                 break;
             }
             case PreviewDebugOverlayTab::Objects: {
@@ -998,9 +1066,20 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 const char* objectProbeStatus = context.runtimeObjects.objectProbeStatus.empty()
                         ? "none"
                         : context.runtimeObjects.objectProbeStatus.c_str();
-                addKeyValueStyled("status", objectProbeStatus, smallConfig.mutedTextColor, true);
+                addKeyValueStyled("object probe status", objectProbeStatus, smallConfig.mutedTextColor, true);
                 const size_t totalProbeCount = context.runtimeObjects.objectLightProbes.probes.size();
-                addKeyValue("probe count", TextFormat("%zu", totalProbeCount));
+                addKeyValue("object probe count", TextFormat("%zu", totalProbeCount));
+                const std::size_t reflectionProbeCount = topologyMap.compiledReflectionProbes.size();
+                addKeyValue("reflection probes", TextFormat(
+                        "placed %zu | baked %d",
+                        reflectionProbeCount,
+                        topologyMap.bakedReflectionProbes.count));
+                const bool selectedReflectionProbe =
+                        selectionState.selectedAuthoring.kind
+                                == SectorAuthoringSelectionKind::ReflectionProbe;
+                addKeyValue("selected reflection", selectedReflectionProbe
+                        ? TextFormat("%d", selectionState.selectedAuthoring.reflectionProbeId)
+                        : "none");
                 if (overlayState.showObjectProbeDebugOverlay) {
                     const float maxDistanceWorld = NormalizeSectorPreviewSettings(
                             topologyMap.previewSettings).objectProbeDebugDrawMaxDistanceWorld;
@@ -1969,54 +2048,6 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
         }
         y += rowH + gap;
     }
-    if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Lighting) {
-        const char* doorModeOptions[] = {
-                "Normal",
-                "AlbedoOnly",
-                "BakedOnly",
-                "DynamicOnly",
-                "NormalVisualize",
-                "FlatColorNoTexture"};
-        const float labelW = 86.0f;
-        const Rectangle labelRect{panel.x + padding, y, labelW, rowH};
-        const Rectangle modeRect{panel.x + padding + labelW + gap, y, 220.0f, rowH};
-        int selectedMode = static_cast<int>(preview.DoorLightingDebugMode());
-        engine::Text(
-                smallConfig,
-                assets,
-                labelRect,
-                smallFont,
-                "Door Debug",
-                engine::UITextJustify::Left,
-                smallConfig.textColor);
-        if (mouseInteractive) {
-            if (engine::Option(
-                        ui,
-                        smallConfig,
-                        input,
-                        assets,
-                        "sector_editor_preview_door_lighting_debug_mode",
-                        modeRect,
-                        smallFont,
-                        doorModeOptions,
-                        sizeof(doorModeOptions) / sizeof(doorModeOptions[0]),
-                        selectedMode)) {
-                preview.SetDoorLightingDebugMode(static_cast<SectorDoorLightingDebugMode>(selectedMode));
-            }
-        } else {
-            DrawRectangleRec(modeRect, Color{24, 30, 38, 155});
-            DrawRectangleLinesEx(modeRect, config.borderThickness, config.borderColor);
-            engine::Text(
-                    smallConfig,
-                    assets,
-                    modeRect,
-                    smallFont,
-                    SectorDoorLightingDebugModeName(preview.DoorLightingDebugMode()),
-                    engine::UITextJustify::Center,
-                    smallConfig.mutedTextColor);
-        }
-        y += rowH + 6.0f;
-    }
     if (drawExpanded && overlayState.activePreviewDebugOverlayTab == PreviewDebugOverlayTab::Pbr) {
         SectorPbrContributionSettings settings = preview.PbrContributionSettings();
         const char* modeOptions[] = {
@@ -2029,7 +2060,8 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                 "Emissive",
                 "Material AO",
                 "Metallic / Roughness",
-                "Shading Normal"};
+                "Shading Normal",
+                "Tangent-Space Normal"};
         int selectedMode = static_cast<int>(settings.diagnosticMode);
         engine::Text(smallConfig, assets,
                 Rectangle{panel.x + padding, y, 94.0f, rowH},
@@ -2218,6 +2250,52 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
                     smallFont,
                     "Show Object Probes",
                     engine::UITextJustify::Left,
+                    smallConfig.mutedTextColor);
+        }
+        y += rowH + 6.0f;
+
+        const bool selectedReflectionProbe =
+                selectionState.selectedAuthoring.kind
+                        == SectorAuthoringSelectionKind::ReflectionProbe;
+        const float bakeGap = 8.0f;
+        const float bakeWidth = (contentW - bakeGap) * 0.5f;
+        const Rectangle bakeSelectedRect{panel.x + padding, y, bakeWidth, rowH};
+        const Rectangle bakeAllRect{
+                bakeSelectedRect.x + bakeWidth + bakeGap, y, bakeWidth, rowH};
+        if (mouseInteractive && selectedReflectionProbe) {
+            if (engine::Button(
+                        ui, smallConfig, input, assets,
+                        "sector_editor_preview_bake_selected_reflection_probe",
+                        bakeSelectedRect, smallFont, "Bake Selected Reflection")) {
+                result.requestBakeSelectedReflectionProbe = true;
+            }
+        } else {
+            DrawRectangleRec(bakeSelectedRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(
+                    bakeSelectedRect, config.borderThickness, config.borderColor);
+            engine::Text(
+                    smallConfig, assets, bakeSelectedRect, smallFont,
+                    selectedReflectionProbe
+                            ? "Bake Selected Reflection"
+                            : "Select Reflection in 2D",
+                    engine::UITextJustify::Center,
+                    smallConfig.mutedTextColor);
+        }
+        if (mouseInteractive && !topologyMap.compiledReflectionProbes.empty()) {
+            if (engine::Button(
+                        ui, smallConfig, input, assets,
+                        "sector_editor_preview_bake_all_reflection_probes",
+                        bakeAllRect, smallFont, "Bake All Reflections")) {
+                result.requestBakeAllReflectionProbes = true;
+            }
+        } else {
+            DrawRectangleRec(bakeAllRect, Color{24, 30, 38, 155});
+            DrawRectangleLinesEx(
+                    bakeAllRect, config.borderThickness, config.borderColor);
+            engine::Text(
+                    smallConfig, assets, bakeAllRect, smallFont,
+                    "Bake All Reflections",
+                    engine::UITextJustify::Center,
                     smallConfig.mutedTextColor);
         }
         y += rowH + 6.0f;

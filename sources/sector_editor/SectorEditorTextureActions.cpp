@@ -44,24 +44,6 @@ std::string ChooseBillboardClipName(
 
 } // namespace
 
-void RefreshAddMapTextureScan(AddMapTextureState& modalState)
-{
-    modalState.paths = ScanAssetImagePngs(modalState.scanMessage);
-    modalState.optionLabelStorage.clear();
-    modalState.optionLabelStorage.reserve(modalState.paths.size());
-    for (const std::string& path : modalState.paths) {
-        modalState.optionLabelStorage.push_back(
-                EditorAssetPathDisplayLabel(path, "assets/images/"));
-    }
-    modalState.optionLabels.clear();
-    modalState.optionLabels.reserve(modalState.optionLabelStorage.size());
-    for (const std::string& label : modalState.optionLabelStorage) {
-        modalState.optionLabels.push_back(label.c_str());
-    }
-    modalState.scanned = true;
-    modalState.selectedPathIndex = modalState.paths.empty() ? -1 : 0;
-}
-
 void RefreshSpritePickerScan(SpritePickerState& picker)
 {
     picker.sprites = ScanAssetSpriteAsepriteJsons(picker.scanMessage);
@@ -220,13 +202,13 @@ std::string CurrentTextureForPickerTarget(
     }
     if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::MapSky) {
         return state.previewSettingsModal.open
-                ? state.previewSettingsModal.draftSkySettings.textureId
-                : topologyMap.skySettings.textureId;
+                ? state.previewSettingsModal.draftSkySettings.materialId
+                : topologyMap.skySettings.materialId;
     }
     if (state.texturePicker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDoor) {
         const SectorPlacedRuntimeObject* object =
                 FindSectorPlacedRuntimeObject(topologyMap, state.texturePicker.runtimeObjectId);
-        return object != nullptr && object->kind == "door" ? object->door.textureId : std::string{};
+        return object != nullptr && object->kind == "door" ? object->door.materialId : std::string{};
     }
 
     return std::string{};
@@ -256,8 +238,8 @@ bool OpenMapSkyTexturePicker(
             picker,
             textureCatalog.TextureIds(),
             state.previewSettingsModal.open
-                    ? state.previewSettingsModal.draftSkySettings.textureId
-                    : topologyMap.skySettings.textureId);
+                    ? state.previewSettingsModal.draftSkySettings.materialId
+                    : topologyMap.skySettings.materialId);
     return true;
 }
 
@@ -290,7 +272,7 @@ bool OpenRuntimeDoorTexturePicker(
     OpenSectorEditorTexturePicker(
             picker,
             textureCatalog.TextureIds(),
-            object->door.textureId);
+            object->door.materialId);
     return true;
 }
 
@@ -320,13 +302,13 @@ SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(
         return result;
     }
 
-    const std::string selectedTexture = selected.textureId;
+    const std::string selectedTexture = selected.materialId;
     result.rebuildPreviewOnApply = picker.rebuildPreviewOnApply;
 
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::MapSky) {
         if (state.previewSettingsModal.open
-                && state.previewSettingsModal.draftSkySettings.textureId != selectedTexture) {
-            state.previewSettingsModal.draftSkySettings.textureId = selectedTexture;
+                && state.previewSettingsModal.draftSkySettings.materialId != selectedTexture) {
+            state.previewSettingsModal.draftSkySettings.materialId = selectedTexture;
             state.previewSettingsModal.errorMessage.clear();
         }
         CloseSectorEditorTexturePicker(picker);
@@ -336,8 +318,8 @@ SectorEditorTexturePickerApplyResult ApplyTexturePickerSelection(
     if (picker.topologyTargetKind == TopologyTexturePickerTargetKind::RuntimeDoor) {
         SectorPlacedRuntimeObject* object =
                 FindSectorPlacedRuntimeObject(topologyMap, picker.runtimeObjectId);
-        if (object != nullptr && object->kind == "door" && object->door.textureId != selectedTexture) {
-            object->door.textureId = selectedTexture;
+        if (object != nullptr && object->kind == "door" && object->door.materialId != selectedTexture) {
+            object->door.materialId = selectedTexture;
             result.changed = true;
             result.status = "Selected door texture.";
         }

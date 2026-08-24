@@ -257,11 +257,11 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
         y += 36.0f + gap;
     }
 
-    auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologyWallPart wallPart, TopologyMaterialLayer layer) {
+    auto drawTextureRow = [&](const char* id, const char* label, const std::string& materialId, TopologyWallPart wallPart, TopologyMaterialLayer layer) {
         const float buttonW = 38.0f;
         const float labelColumnW = 74.0f;
         const Rectangle row{0.0f, y, contentW, 36.0f};
-        const bool missing = !textureId.empty() && !textureCatalog.HasTexture(textureId);
+        const bool missing = !materialId.empty() && !textureCatalog.HasTexture(materialId);
         engine::Text(ui, config, assets, Rectangle{row.x, row.y, labelColumnW, row.height}, font, label, engine::UITextJustify::Left, config.mutedTextColor);
         engine::Text(
                 ui,
@@ -269,7 +269,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
                 assets,
                 Rectangle{row.x + labelColumnW, row.y, row.width - labelColumnW - buttonW - gap, row.height},
                 smallFont,
-                textureId.empty() ? "<none>" : textureId.c_str(),
+                materialId.empty() ? "<none>" : materialId.c_str(),
                 engine::UITextJustify::Left,
                 missing ? config.invalidColor : config.mutedTextColor);
         if (engine::Button(ui, config, input, assets, id, Rectangle{row.x + row.width - buttonW, row.y, buttonW, row.height}, font, ">")) {
@@ -373,12 +373,12 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
             : selectionState.activeTopologyMaterialLayer;
     drawTextureRow(
             "sector_editor_topology_sidedef_pick_selected_part",
-            "Texture:",
-            layer == TopologyMaterialLayer::Decal ? selectedPart.decal.textureId : selectedPart.textureId,
+            "Material:",
+            layer == TopologyMaterialLayer::Decal ? selectedPart.decal.materialId : selectedPart.materialId,
             selectionState.selectedTopologyWallPart,
             layer);
 
-    if (selectedMiddle && selectedPart.textureId.empty()) {
+    if (selectedMiddle && selectedPart.materialId.empty()) {
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 32.0f}, font, "No middle texture assigned", engine::UITextJustify::Left, config.mutedTextColor);
         y += 32.0f + gap;
         if (!IsDefaultWallPartSettings(selectedPart)) {
@@ -398,7 +398,7 @@ bool DrawTopologySideDefMaterialInspector(SectorEditorMaterialInspectorContext& 
         return true;
     }
 
-    if (layer == TopologyMaterialLayer::Decal && selectedPart.decal.textureId.empty()) {
+    if (layer == TopologyMaterialLayer::Decal && selectedPart.decal.materialId.empty()) {
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 32.0f}, font, "No decal assigned", engine::UITextJustify::Left, config.mutedTextColor);
         y += 32.0f + gap;
         return true;

@@ -177,7 +177,7 @@ float AuthoringInspectorDecalBlockHeight(
         bool includeTintAndFit)
 {
     float height = AuthoringInspectorTextureRowTotalHeight(gap);
-    if (!decal.textureId.empty()) {
+    if (!decal.materialId.empty()) {
         height += AuthoringInspectorAssignedDecalControlsHeight(
                 decal.emissive,
                 rowH,
@@ -389,6 +389,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringFogVolume
             ? FindSectorAuthoringFogVolume(authoringGraph, inspectorTarget.fogVolumeId)
             : nullptr;
+    const SectorAuthoringReflectionProbe* selectedReflectionProbe =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringReflectionProbe
+            ? FindSectorAuthoringReflectionProbe(
+                    authoringGraph, inspectorTarget.reflectionProbeId)
+            : nullptr;
     const SectorAuthoringLevelMarker* selectedLevelMarker =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringLevelMarker
             ? FindSectorAuthoringLevelMarker(authoringGraph, inspectorTarget.levelMarkerId)
@@ -567,6 +572,9 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     *selectedAuthoringFogVolume,
                     rowH,
                     gap);
+        }
+        if (selectedReflectionProbe != nullptr) {
+            return 38.0f + 16.0f * (rowH + gap) + 42.0f;
         }
         if (selectedLevelMarker != nullptr) {
             return MeasureSectorEditorLevelMarkerInspectorContentHeight(
@@ -896,6 +904,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool bakeRequested = false;
         bool sourceRefreshRequested = false;
         DrawSelectedStaticLightInspector(
@@ -913,10 +922,14 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
+                convertRequested,
                 bakeRequested,
                 sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (convertRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         }
         if (bakeRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
@@ -931,13 +944,15 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedStaticRectLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool bakeRequested = false;
         bool refreshRequested = false;
         DrawSelectedStaticRectLightInspector(ui, config, input, assets, font, scroll,
                 contentW, rowH, gap, *selectedStaticRectLight(), uiState,
                 context.inspectorIdUiState, lightEditing, deleteRequested,
-                bakeRequested, refreshRequested);
+                convertRequested, bakeRequested, refreshRequested);
         if (deleteRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        if (convertRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         if (bakeRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
         if (refreshRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
@@ -947,11 +962,14 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedDynamicRectLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool refreshRequested = false;
         DrawSelectedDynamicRectLightInspector(ui, config, input, assets, font, scroll,
                 contentW, rowH, gap, *selectedDynamicRectLight(), uiState,
-                context.inspectorIdUiState, lightEditing, deleteRequested, refreshRequested);
+                context.inspectorIdUiState, lightEditing, deleteRequested,
+                convertRequested, refreshRequested);
         if (deleteRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        if (convertRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         if (refreshRequested) AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);
@@ -960,6 +978,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedStaticSpotLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool bakeRequested = false;
         bool sourceRefreshRequested = false;
         DrawSelectedStaticSpotLightInspector(
@@ -977,10 +996,14 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
+                convertRequested,
                 bakeRequested,
                 sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (convertRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         }
         if (bakeRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::BakeLightmaps);
@@ -995,6 +1018,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedDynamicLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool sourceRefreshRequested = false;
         DrawSelectedDynamicLightInspector(
                 ui,
@@ -1011,9 +1035,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
+                convertRequested,
                 sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (convertRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         }
         if (sourceRefreshRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
@@ -1025,6 +1053,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
 
     if (hasSelectedDynamicSpotLight) {
         bool deleteRequested = false;
+        bool convertRequested = false;
         bool sourceRefreshRequested = false;
         DrawSelectedDynamicSpotLightInspector(
                 ui,
@@ -1042,9 +1071,13 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                 context.inspectorIdUiState,
                 lightEditing,
                 deleteRequested,
+                convertRequested,
                 sourceRefreshRequested);
         if (deleteRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation);
+        }
+        if (convertRequested) {
+            AppendRequest(result, SectorEditorInspectorPanelRequestKind::ConvertSelectedLight);
         }
         if (sourceRefreshRequested) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::RefreshPreviewLightSources);
@@ -1192,7 +1225,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                         if (authoringSide == nullptr) {
                             return std::string{};
                         }
-                        return TopologyWallPartSettingsFor(*authoringSide, part).textureId;
+                        return TopologyWallPartSettingsFor(*authoringSide, part).materialId;
                     };
                     const auto decalForPart = [authoringSide](TopologyWallPart part) -> SectorTopologyDecalLayer {
                         if (authoringSide == nullptr) {
@@ -1239,11 +1272,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 const float buttonW = 38.0f;
                                 const bool canClear = part == TopologyWallPart::Middle;
                                 const float clearW = canClear ? 58.0f : 0.0f;
-                                const std::string textureId = textureForPart(part);
+                                const std::string materialId = textureForPart(part);
                                 const SectorEditorInspectorTextureRowLayout row =
                                         BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
-                                const bool missing = !textureId.empty()
-                                        && !textureCatalog.HasTexture(textureId);
+                                const bool missing = !materialId.empty()
+                                        && !textureCatalog.HasTexture(materialId);
                                 engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
@@ -1251,7 +1284,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                         assets,
                                         row.valueRect,
                                         smallFont,
-                                        textureId.empty() ? "<none>" : textureId.c_str(),
+                                        materialId.empty() ? "<none>" : materialId.c_str(),
                                         engine::UITextJustify::Left,
                                         missing ? config.invalidColor : config.mutedTextColor);
                                 if (canClear
@@ -1301,8 +1334,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 const float clearW = 92.0f;
                                 const SectorEditorInspectorTextureRowLayout row =
                                         BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
-                                const bool missing = !decal.textureId.empty()
-                                        && !textureCatalog.HasTexture(decal.textureId);
+                                const bool missing = !decal.materialId.empty()
+                                        && !textureCatalog.HasTexture(decal.materialId);
                                 engine::Text(ui, config, assets, row.labelRect, font, title, engine::UITextJustify::Left, config.mutedTextColor);
                                 engine::Text(
                                         ui,
@@ -1310,7 +1343,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                         assets,
                                         row.valueRect,
                                         smallFont,
-                                        decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                                        decal.materialId.empty() ? "<none>" : decal.materialId.c_str(),
                                         engine::UITextJustify::Left,
                                         missing ? config.invalidColor : config.mutedTextColor);
                                 if (engine::Button(
@@ -1352,7 +1385,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 }
                                 y += row.height + gap;
 
-                                if (decal.textureId.empty()) {
+                                if (decal.materialId.empty()) {
                                     return;
                                 }
 
@@ -1380,7 +1413,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                             [part, value = opacityResult.value](SectorAuthoringLineSide& side) {
                                                 SectorTopologyDecalLayer& target =
                                                         TopologyWallPartSettingsFor(side, part).decal;
-                                                if (target.textureId.empty() || target.opacity == value) {
+                                                if (target.materialId.empty() || target.opacity == value) {
                                                     return false;
                                                 }
                                                 target.opacity = value;
@@ -1405,7 +1438,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                             [part, emissive](SectorAuthoringLineSide& side) {
                                                 SectorTopologyDecalLayer& target =
                                                         TopologyWallPartSettingsFor(side, part).decal;
-                                                if (target.textureId.empty() || target.emissive == emissive) {
+                                                if (target.materialId.empty() || target.emissive == emissive) {
                                                     return false;
                                                 }
                                                 target.emissive = emissive;
@@ -1439,7 +1472,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                                 [part, value = emissiveStrengthResult.value](SectorAuthoringLineSide& side) {
                                                     SectorTopologyDecalLayer& target =
                                                             TopologyWallPartSettingsFor(side, part).decal;
-                                                    if (target.textureId.empty() || target.bloomIntensity == value) {
+                                                    if (target.materialId.empty() || target.bloomIntensity == value) {
                                                         return false;
                                                     }
                                                     target.bloomIntensity = value;
@@ -1836,11 +1869,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         drawAmbientChannel("sector_editor_authoring_face_ambient_g", "G:", selectedAuthoringFaceAnchor->ambientColor.g, uiState.ambientGreenInput, 1);
         drawAmbientChannel("sector_editor_authoring_face_ambient_b", "B:", selectedAuthoringFaceAnchor->ambientColor.b, uiState.ambientBlueInput, 2);
 
-        const auto drawTextureRow = [&](const char* id, const char* label, const std::string& textureId, TopologySectorTextureField field) {
+        const auto drawTextureRow = [&](const char* id, const char* label, const std::string& materialId, TopologySectorTextureField field) {
             const float buttonW = 38.0f;
             const SectorEditorInspectorTextureRowLayout row =
                     BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, 0.0f);
-            const bool missing = !textureId.empty() && !textureCatalog.HasTexture(textureId);
+            const bool missing = !materialId.empty() && !textureCatalog.HasTexture(materialId);
             engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
             engine::Text(
                     ui,
@@ -1848,7 +1881,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     assets,
                     row.valueRect,
                     smallFont,
-                    textureId.empty() ? "<none>" : textureId.c_str(),
+                    materialId.empty() ? "<none>" : materialId.c_str(),
                     engine::UITextJustify::Left,
                     missing ? config.invalidColor : config.mutedTextColor);
             if (engine::Button(ui, config, input, assets, id, row.pickerButtonRect, font, ">")) {
@@ -1891,8 +1924,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     const float clearW = 92.0f;
                     const SectorEditorInspectorTextureRowLayout row =
                             BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
-                    const bool missing = !decal.textureId.empty()
-                            && !textureCatalog.HasTexture(decal.textureId);
+                    const bool missing = !decal.materialId.empty()
+                            && !textureCatalog.HasTexture(decal.materialId);
                     engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,
@@ -1900,7 +1933,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                             assets,
                             row.valueRect,
                             smallFont,
-                            decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                            decal.materialId.empty() ? "<none>" : decal.materialId.c_str(),
                             engine::UITextJustify::Left,
                             missing ? config.invalidColor : config.mutedTextColor);
                     if (engine::Button(
@@ -1946,7 +1979,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     }
                     y += row.height + gap;
 
-                    if (decal.textureId.empty()) {
+                    if (decal.materialId.empty()) {
                         return;
                     }
 
@@ -1975,7 +2008,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                     SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
                                             ? &anchor.floorDecal
                                             : &anchor.ceilingDecal;
-                                    if (target->textureId.empty() || target->opacity == value) {
+                                    if (target->materialId.empty() || target->opacity == value) {
                                         return false;
                                     }
                                     target->opacity = value;
@@ -2001,7 +2034,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                     SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
                                             ? &anchor.floorDecal
                                             : &anchor.ceilingDecal;
-                                    if (target->textureId.empty() || target->emissive == emissive) {
+                                    if (target->materialId.empty() || target->emissive == emissive) {
                                         return false;
                                     }
                                     target->emissive = emissive;
@@ -2036,7 +2069,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                         SectorTopologyDecalLayer* target = field == TopologySectorTextureField::Floor
                                                 ? &anchor.floorDecal
                                                 : &anchor.ceilingDecal;
-                                        if (target->textureId.empty() || target->bloomIntensity == value) {
+                                        if (target->materialId.empty() || target->bloomIntensity == value) {
                                             return false;
                                         }
                                         target->bloomIntensity = value;
@@ -2093,8 +2126,8 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     const float clearW = 92.0f;
                     const SectorEditorInspectorTextureRowLayout row =
                             BuildSectorEditorInspectorTextureRowLayout(y, contentW, gap, buttonW, clearW);
-                    const bool missing = !decal.textureId.empty()
-                            && !textureCatalog.HasTexture(decal.textureId);
+                    const bool missing = !decal.materialId.empty()
+                            && !textureCatalog.HasTexture(decal.materialId);
                     engine::Text(ui, config, assets, row.labelRect, font, label, engine::UITextJustify::Left, config.mutedTextColor);
                     engine::Text(
                             ui,
@@ -2102,7 +2135,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                             assets,
                             row.valueRect,
                             smallFont,
-                            decal.textureId.empty() ? "<none>" : decal.textureId.c_str(),
+                            decal.materialId.empty() ? "<none>" : decal.materialId.c_str(),
                             engine::UITextJustify::Left,
                             missing ? config.invalidColor : config.mutedTextColor);
                     auto defaultDecalForField = [field](SectorAuthoringFaceAnchor& anchor) -> SectorTopologyDecalLayer* {
@@ -2155,7 +2188,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     }
                     y += row.height + gap;
 
-                    if (decal.textureId.empty()) {
+                    if (decal.materialId.empty()) {
                         return;
                     }
 
@@ -2182,7 +2215,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 "Updated authoring default decal opacity",
                                 [defaultDecalForField, value = opacityResult.value](SectorAuthoringFaceAnchor& anchor) {
                                     SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
-                                    if (target == nullptr || target->textureId.empty() || target->opacity == value) {
+                                    if (target == nullptr || target->materialId.empty() || target->opacity == value) {
                                         return false;
                                     }
                                     target->opacity = value;
@@ -2206,7 +2239,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                 "Updated authoring default decal emissive",
                                 [defaultDecalForField, emissive](SectorAuthoringFaceAnchor& anchor) {
                                     SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
-                                    if (target == nullptr || target->textureId.empty() || target->emissive == emissive) {
+                                    if (target == nullptr || target->materialId.empty() || target->emissive == emissive) {
                                         return false;
                                     }
                                     target->emissive = emissive;
@@ -2239,7 +2272,7 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                                     "Updated authoring default decal emissive strength",
                                     [defaultDecalForField, value = emissiveStrengthResult.value](SectorAuthoringFaceAnchor& anchor) {
                                         SectorTopologyDecalLayer* target = defaultDecalForField(anchor);
-                                        if (target == nullptr || target->textureId.empty() || target->bloomIntensity == value) {
+                                        if (target == nullptr || target->materialId.empty() || target->bloomIntensity == value) {
                                             return false;
                                         }
                                         target->bloomIntensity = value;
@@ -2254,11 +2287,11 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         y += 18.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Materials", engine::UITextJustify::Left, config.textColor);
         y += 30.0f;
-        drawTextureRow("sector_editor_authoring_face_pick_floor", "Floor:", selectedAuthoringFaceAnchor->floorTextureId, TopologySectorTextureField::Floor);
-        drawTextureRow("sector_editor_authoring_face_pick_ceiling", "Ceiling:", selectedAuthoringFaceAnchor->ceilingTextureId, TopologySectorTextureField::Ceiling);
-        drawTextureRow("sector_editor_authoring_face_pick_default_wall", "Wall:", selectedAuthoringFaceAnchor->defaultWall.textureId, TopologySectorTextureField::DefaultWall);
-        drawTextureRow("sector_editor_authoring_face_pick_default_lower", "Lower:", selectedAuthoringFaceAnchor->defaultLower.textureId, TopologySectorTextureField::DefaultLower);
-        drawTextureRow("sector_editor_authoring_face_pick_default_upper", "Upper:", selectedAuthoringFaceAnchor->defaultUpper.textureId, TopologySectorTextureField::DefaultUpper);
+        drawTextureRow("sector_editor_authoring_face_pick_floor", "Floor:", selectedAuthoringFaceAnchor->floorMaterialId, TopologySectorTextureField::Floor);
+        drawTextureRow("sector_editor_authoring_face_pick_ceiling", "Ceiling:", selectedAuthoringFaceAnchor->ceilingMaterialId, TopologySectorTextureField::Ceiling);
+        drawTextureRow("sector_editor_authoring_face_pick_default_wall", "Wall:", selectedAuthoringFaceAnchor->defaultWall.materialId, TopologySectorTextureField::DefaultWall);
+        drawTextureRow("sector_editor_authoring_face_pick_default_lower", "Lower:", selectedAuthoringFaceAnchor->defaultLower.materialId, TopologySectorTextureField::DefaultLower);
+        drawTextureRow("sector_editor_authoring_face_pick_default_upper", "Upper:", selectedAuthoringFaceAnchor->defaultUpper.materialId, TopologySectorTextureField::DefaultUpper);
         drawFlatDecalControls("sector_editor_authoring_face_floor_decal", "Floor Decal:", selectedAuthoringFaceAnchor->floorDecal, TopologySectorTextureField::Floor, 0);
         drawFlatDecalControls("sector_editor_authoring_face_ceiling_decal", "Ceiling Decal:", selectedAuthoringFaceAnchor->ceilingDecal, TopologySectorTextureField::Ceiling, 1);
         drawDefaultDecalControls("sector_editor_authoring_face_default_wall_decal", "Wall Decal:", selectedAuthoringFaceAnchor->defaultWall.decal, TopologySectorTextureField::DefaultWall, 0);
@@ -2524,6 +2557,158 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     Rectangle{0.0f, y, contentW, rowH},
                     font, "Delete Fog Volume")) {
             AppendRequest(result, SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedFogVolumeConfirmation);
+        }
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
+    if (selectedReflectionProbe != nullptr) {
+        SectorEditorReflectionProbeEditingService& editing =
+                context.reflectionProbeEditing;
+        ReflectionProbeEditingUiState& probeUi = context.reflectionProbeUiState;
+        const int probeId = selectedReflectionProbe->id;
+        engine::Text(ui, config, assets, {0.0f, y, contentW, 34.0f}, font,
+                TextFormat("Reflection Probe: %d", probeId),
+                engine::UITextJustify::Left, config.textColor);
+        y += 38.0f;
+
+        bool enabled = selectedReflectionProbe->enabled;
+        if (engine::Checkbox(ui, config, input, assets,
+                    "sector_editor_reflection_probe_enabled",
+                    {0.0f, y, contentW, rowH}, font, "Enabled", enabled)) {
+            editing.MutateById(probeId, "Updated reflection probe",
+                    [enabled](SectorAuthoringReflectionProbe& probe) {
+                        if (probe.enabled == enabled) return false;
+                        probe.enabled = enabled;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+
+        const auto drawFloat = [&](const char* id, const char* label,
+                                   float current, std::size_t inputIndex,
+                                   float minimum, float maximum,
+                                   const std::function<void(SectorAuthoringReflectionProbe&, float)>& set) {
+            const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(
+                    y, contentW, rowH, gap);
+            const SectorEditorFloatInputResult value = DrawLabeledFloatInput(
+                    ui, config, input, assets, font, id, label,
+                    layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right,
+                    current, probeUi.floatInputs[inputIndex],
+                    minimum, maximum, 3);
+            if (value.changed && value.value != current) {
+                editing.MutateById(probeId, "Updated reflection probe",
+                        [&](SectorAuthoringReflectionProbe& probe) {
+                            set(probe, value.value);
+                            return true;
+                        });
+            }
+            y += rowH + gap;
+        };
+        const auto drawCoord = [&](const char* id, const char* label,
+                                   bool xAxis, std::size_t inputIndex) {
+            const float current = SectorCoordToVisibleAuthoring(
+                    xAxis ? selectedReflectionProbe->x : selectedReflectionProbe->z);
+            const auto layout = BuildSectorEditorInspectorRightFloatRowLayout(
+                    y, contentW, rowH, gap);
+            const SectorEditorFloatInputResult value = DrawLabeledFloatInput(
+                    ui, config, input, assets, font, id, label,
+                    layout.labelRect, layout.inputRect,
+                    engine::UITextJustify::Right,
+                    current, probeUi.floatInputs[inputIndex],
+                    -8192.0f, 8192.0f, 3);
+            if (value.changed && value.value != current) {
+                SectorCoord coord = 0;
+                if (VisibleAuthoringToSectorCoord(value.value, coord)) {
+                    SectorTopologyCoordPoint point{
+                            selectedReflectionProbe->x, selectedReflectionProbe->z};
+                    if (xAxis) point.x = coord; else point.y = coord;
+                    editing.SetPosition(probeId, point, "Moved reflection probe");
+                }
+            }
+            y += rowH + gap;
+        };
+
+        drawCoord("sector_editor_reflection_probe_x", "Capture X", true, 0);
+        drawCoord("sector_editor_reflection_probe_z", "Capture Z", false, 1);
+        drawFloat("sector_editor_reflection_probe_y", "Capture Y",
+                selectedReflectionProbe->yWorld, 2, -128.0f, 128.0f,
+                [](auto& probe, float value) { probe.yWorld = value; });
+        drawFloat("sector_editor_reflection_probe_yaw", "Box yaw",
+                selectedReflectionProbe->yawDegrees, 3, 0.0f, 360.0f,
+                [](auto& probe, float value) { probe.yawDegrees = value; });
+        drawFloat("sector_editor_reflection_probe_offset_x", "Box offset X",
+                selectedReflectionProbe->influenceOffsetWorld.x, 4, -128.0f, 128.0f,
+                [](auto& probe, float value) { probe.influenceOffsetWorld.x = value; });
+        drawFloat("sector_editor_reflection_probe_offset_y", "Box offset Y",
+                selectedReflectionProbe->influenceOffsetWorld.y, 5, -128.0f, 128.0f,
+                [](auto& probe, float value) { probe.influenceOffsetWorld.y = value; });
+        drawFloat("sector_editor_reflection_probe_offset_z", "Box offset Z",
+                selectedReflectionProbe->influenceOffsetWorld.z, 6, -128.0f, 128.0f,
+                [](auto& probe, float value) { probe.influenceOffsetWorld.z = value; });
+        drawFloat("sector_editor_reflection_probe_extent_x", "Half extent X",
+                selectedReflectionProbe->halfExtentsWorld.x, 7, 0.1f, 128.0f,
+                [](auto& probe, float value) { probe.halfExtentsWorld.x = value; });
+        drawFloat("sector_editor_reflection_probe_extent_y", "Half extent Y",
+                selectedReflectionProbe->halfExtentsWorld.y, 8, 0.1f, 128.0f,
+                [](auto& probe, float value) { probe.halfExtentsWorld.y = value; });
+        drawFloat("sector_editor_reflection_probe_extent_z", "Half extent Z",
+                selectedReflectionProbe->halfExtentsWorld.z, 9, 0.1f, 128.0f,
+                [](auto& probe, float value) { probe.halfExtentsWorld.z = value; });
+        drawFloat("sector_editor_reflection_probe_intensity", "Intensity",
+                selectedReflectionProbe->intensity, 10, 0.0f, 8.0f,
+                [](auto& probe, float value) { probe.intensity = value; });
+
+        const auto priorityLayout = BuildSectorEditorInspectorRightIntRowLayout(
+                y, contentW, rowH, gap);
+        const SectorEditorIntInputResult priority = DrawLabeledIntInput(
+                ui, config, input, assets, font,
+                "sector_editor_reflection_probe_priority", "Priority",
+                priorityLayout.labelRect, priorityLayout.inputRect,
+                engine::UITextJustify::Right,
+                selectedReflectionProbe->priority, probeUi.priorityInput,
+                -1000, 1000, 1);
+        if (priority.changed && priority.value != selectedReflectionProbe->priority) {
+            editing.MutateById(probeId, "Updated reflection probe priority",
+                    [&](SectorAuthoringReflectionProbe& probe) {
+                        probe.priority = priority.value;
+                        return true;
+                    });
+        }
+        y += rowH + gap;
+
+        const char* const resolutionOptions[] = {"64", "128", "256"};
+        int resolutionIndex = selectedReflectionProbe->resolution == 64 ? 0
+                : selectedReflectionProbe->resolution == 256 ? 2 : 1;
+        const auto resolutionLayout = BuildSectorEditorInspectorStackedOptionRowLayout(
+                y, contentW, rowH, gap);
+        engine::Text(ui, config, assets, resolutionLayout.labelRect, font,
+                "Resolution", engine::UITextJustify::Left, config.mutedTextColor);
+        if (engine::Option(ui, config, input, assets,
+                    "sector_editor_reflection_probe_resolution",
+                    resolutionLayout.fieldRect, font,
+                    resolutionOptions, std::size(resolutionOptions), resolutionIndex)) {
+            const int resolution = resolutionIndex == 0 ? 64
+                    : resolutionIndex == 2 ? 256 : 128;
+            editing.MutateById(probeId, "Updated reflection probe resolution",
+                    [resolution](SectorAuthoringReflectionProbe& probe) {
+                        probe.resolution = resolution;
+                        return true;
+                    });
+        }
+        y += resolutionLayout.height + gap;
+
+        if (engine::Button(ui, config, input, assets,
+                    "sector_editor_reflection_probe_fit", {0.0f, y, contentW, rowH},
+                    font, "Fit to Sector")) editing.FitToSector(probeId);
+        y += rowH + gap;
+        if (engine::Button(ui, config, input, assets,
+                    "sector_editor_reflection_probe_delete", {0.0f, y, contentW, rowH},
+                    font, "Delete Reflection Probe")) {
+            AppendRequest(result,
+                    SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedReflectionProbeConfirmation);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);

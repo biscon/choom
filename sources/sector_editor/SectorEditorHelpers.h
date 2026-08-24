@@ -33,7 +33,7 @@ inline constexpr float PreviewHighlightLift = 0.006f;
 inline constexpr float GameplayFloorSnapEpsilon = 0.001f;
 
 bool SameBoundaryCutPoint(const SectorTopologyBoundaryCutPoint& a, const SectorTopologyBoundaryCutPoint& b);
-const SectorTextureDefinition* FindSectorTopologyTexture(const SectorTopologyMap& map, const std::string& id);
+const SectorMaterialDefinition* FindSectorTopologyTexture(const SectorTopologyMap& map, const std::string& id);
 std::vector<std::string> SortedSectorTopologyTextureIds(const SectorTopologyMap& map);
 Vector2 SectorTopologyVertexToMap(const SectorTopologyVertex& vertex);
 SectorPoint SectorTopologyCoordPointToSectorPoint(SectorTopologyCoordPoint point);

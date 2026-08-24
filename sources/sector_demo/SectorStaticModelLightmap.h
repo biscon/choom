@@ -63,6 +63,8 @@ struct SectorStaticModelLightmapObject {
     float rotationXRadians = 0.0f;
     float rotationZRadians = 0.0f;
     float scale = 1.0f;
+    // Transient bake input; the persisted sidecar only needs receiver UV data.
+    bool castsShadow = true;
     std::vector<SectorStaticModelLightmapMeshPlacement> meshPlacements;
 };
 

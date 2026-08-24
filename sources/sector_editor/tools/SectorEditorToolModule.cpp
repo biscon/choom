@@ -5,6 +5,7 @@
 #include "sector_editor/tools/line/SectorEditorLineTool.h"
 #include "sector_editor/tools/level_marker/SectorEditorLevelMarkerTool.h"
 #include "sector_editor/tools/rectangle/SectorEditorRectangleTool.h"
+#include "sector_editor/tools/reflection_probe/SectorEditorReflectionProbeTool.h"
 #include "sector_editor/tools/select/SectorEditorSelectTool.h"
 #include "sector_editor/tools/trigger/SectorEditorTriggerTool.h"
 
@@ -26,6 +27,9 @@ const SectorEditorToolModule* FindSectorEditorToolModule(SectorEditorTool tool)
     }
     if (tool == SectorEditorTool::AuthoringFogVolume) {
         return &SectorEditorFogVolumeToolModule();
+    }
+    if (tool == SectorEditorTool::ReflectionProbe) {
+        return &SectorEditorReflectionProbeToolModule();
     }
     if (tool == SectorEditorTool::LevelMarker) {
         return &SectorEditorLevelMarkerToolModule();

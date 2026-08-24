@@ -1,12 +1,12 @@
 # Sector Editor
 
-The sector editor works on `SectorTopologyMap` topology v2 documents. It is a
-Doom-like topology editor built around vertices, linedefs, sidedefs, sectors,
-map-local texture definitions, static baked lights, lightmap settings, and
-optional baked lightmap metadata.
+The sector editor saves strict authoring-graph v4 documents and derives a
+`SectorTopologyMap` for preview, runtime, collision, and baking. It is a
+Doom-like editor built around vertices, lines, faces, global materials, static
+baked lights, lightmap settings, and optional baked lightmap metadata.
 
 The editor has a 2D authoring mode for topology creation and inspection, plus a
-3D preview/edit mode for checking generated geometry and editing surface texture
+3D preview/edit mode for checking generated geometry and editing surface material
 and UV settings.
 
 ## File Layout And JSON Format
@@ -20,17 +20,13 @@ assets/levels/<level_name>/<level_name>.lightmap.png
 
 Level names may contain only letters, digits, underscores, and dashes.
 
-Current level JSON is topology v2:
+Current level JSON is authoring-graph v4:
 
 ```text
-formatVersion: 2
-topology: "linedef"
+formatVersion: 4
+topology: "authoringGraph"
 coordSubdivisions: 16
-textures
-vertices
-linedefs
-sidedefs
-sectors
+authoringGraph
 staticLights
 lightmapSettings
 bakedLightmap
@@ -86,8 +82,8 @@ views and maps to world Z for generated 3D geometry.
   confirmation before loading.
 - `Save`: save the current topology document, or save as a named level.
 - `Reload`: confirm and reload the current saved level.
-- `Add Map Texture`: add or update a texture entry from a PNG under
-  `assets/images`.
+- `Material Editor`: add, remove, rename, and edit global materials and their
+  albedo/filter/PBR scalar properties.
 - Billboard tool: place a generic authored billboard marker inside a sector.
 - Door tool: place a portal-attached procedural door on a valid two-sided
   linedef.
@@ -120,10 +116,8 @@ Gameplay movement.
 
 Sectors can mark their ceiling as sky/open. A sky ceiling does not generate the
 normal ceiling surface. In 3D preview, sky ceilings show a basic visual-only
-panorama cylinder when the map-level sky texture ID resolves to a loaded map
-texture. The default sky texture ID is `sky_cylinder`; the local test asset is
-`assets/images/sky/sky_cylinder.png`, but texture paths are not hardcoded and
-the texture must be present in the map texture table. Sky textures should be
+panorama cylinder when the map-level sky material ID resolves to a loaded global
+material. Texture paths are not hardcoded. Sky albedos should be
 horizontally seamless panoramas such as 4:1, with a small flat top band matching
 the cap color; the renderer samples slightly inside that band to reduce cap seams.
 Map-level sky settings are edited in `Preview Settings -> Sky`. The yaw offset
@@ -427,49 +421,56 @@ lights in X/Z and keeps their Y value unchanged. The inspector edits position,
 color, intensity, radius, and sourceRadius. Deleting a selected light removes it
 from the topology document after confirmation.
 
-## Texture Picker And Add Map Texture
+## Global Materials And Material Picker
 
-Map textures live in `topologyMap.texturesById`. Texture fields store texture
-IDs, not file paths or raylib texture objects. The texture picker choices come
-from the current map texture table.
+Global materials live in `assets/materials/materials.json`. Level fields store
+material IDs, not file paths, raylib texture objects, or local material
+definitions. The level v4 JSON therefore has no `textures` table. Every map
+shares the same material-picker catalog, while preview/runtime resolve and load
+only the materials referenced by that map's generated surfaces, decals, sky,
+and procedural doors.
 
-Texture pickers are used for:
+Material pickers are used for:
 
-- sector floor and ceiling textures
-- sector default wall/lower/upper textures
-- sidedef wall/lower/upper/middle textures
-- 3D surface panel texture targets
+- sector floor and ceiling materials
+- sector default wall/lower/upper materials
+- sidedef wall/lower/upper/middle materials
+- decals, sky, procedural doors, and 3D surface-panel targets
+
+The shared material picker filters the global catalog by material ID as text is
+entered in its case-insensitive Filter field.
 
 Surface materials can be copied and pasted between matching surface types from
 the 2D inspectors and the 3D surface panel. The copied material includes the
-texture ID and UV scale/offset only. Floor materials paste only to floors,
+material ID and UV scale/offset only. Floor materials paste only to floors,
 ceiling materials paste only to ceilings, and wall/lower/upper materials paste
 only to the matching concrete sidedef wall part. Paste mutates only the selected
 target surface; it does not edit the opposite sidedef, sector defaults, ambient
 lighting, or geometry. Keyboard shortcuts are not implemented for this workflow
 yet, so use the inspector or 3D panel buttons.
 
-`Add Map Texture` scans `assets/images` recursively for PNG files. It can add or
-update a texture ID in the map texture table and choose point, bilinear,
-trilinear, or anisotropic 8x filtering. Legacy saved `"bilinear"` texture
-filters load as anisotropic 8x; exact bilinear filtering serializes as
-`"linear"`. Companion files with the `_normal` filename marker, including
-names such as `stone_normal.png` and `stone_normal_512.png`, are omitted because
-the renderer and lightmap baker discover them automatically from their base
-texture. The modal does not copy external files into the project.
+The Material Editor has a scrolling material list and an albedo preview. Each
+definition exposes editable ID, albedo PNG selection, filtering, metalness,
+roughness, and normal strength. The albedo button opens a modal that rescans
+`assets/images` recursively, filters relative paths as you type, and previews
+the selected image before it is applied. Automatic `_normal.png` companions are
+excluded from the albedo list, and displayed paths omit the common
+`assets/images/` prefix. IDs may be edited. Renaming an ID updates all valid
+saved v4 levels transactionally and the open document; deleting a referenced
+material is blocked. Saved albedo paths remain normalized PNG paths below
+`assets/images`.
+
+Normal maps retain the OpenGL Y+ filename convention: an albedo such as
+`stone.png` discovers `stone_normal.png`. The editor displays whether that
+companion is present. Normal strength is consumed by dynamic sector lighting;
+metalness and roughness are stored now for the later sector GGX path. Sky,
+decal, and procedural-door consumers currently use the material albedo only.
 
 ## Prune Map Assets
 
 The left tools pane `Prune Assets` button removes unused entries from the map's
-texture and sound registries. The modal can prune textures, sounds, or both;
-both categories are selected by default. Pruned assets are unloaded from the
-editor and disappear from the corresponding pickers. They must be added again
-before the map can use them later.
-
-Texture references on authored floor, ceiling, wall, lower, upper, and middle
-base/decal materials are retained, as are map sky and procedural-door texture
-references. The built-in `wall`, `floor`, and `ceiling` texture IDs are always
-retained. Door open/close sound references are retained. Background music,
+sound registry. Global materials are managed only by the Material Editor and
+are never pruned from one map. Door open/close sound references are retained. Background music,
 footsteps, NPC-definition audio, sprites, and models are separate from these
 registries and are not changed by this command.
 
@@ -872,6 +873,12 @@ lightmap resolution does not increase the number of screen fragments, but it
 does increase memory, upload, and texture-cache costs and can add atlas-bound
 draw batches.
 
+Generated sector surfaces use their geometric normals during baking. Automatic
+`_normal` companion textures are runtime material detail for dynamic lighting;
+they are deliberately not sampled into the low-resolution baked lightmap.
+Directional baked normal response would require a directional-lightmap path and
+is deferred.
+
 `Preview Settings -> Lighting` edits the map-level outdoor directional light.
 Its `directionToLight` vector points from the shaded surface toward the light
 source. The light contributes only to baked lightmap samples whose generated
@@ -887,15 +894,18 @@ for the bake. If the document changed during the bake, the temporary result is
 discarded.
 
 The source hash is deterministic over the topology lightmap bake version
-(`15`), atlas constants, resolved quality density/sample counts, coordinate
-subdivision value, map texture definitions referenced by baked surface fields,
+(`16`), atlas constants, resolved quality density/sample counts, coordinate
+subdivision value, global material path/filter definitions referenced by baked surface fields,
 vertex/linedef/sidedef/sector
-IDs and geometry, sector and sidedef texture and UV fields, static lights, and
+IDs and geometry, sector and sidedef material and UV fields, static lights, and
 bake settings. Directional light enabled state, normalized direction, RGB color,
 and intensity are included, so directional changes invalidate baked lightmaps.
 Middle texture receiver data is included because it affects lightmap chart
 layout. Sky visual settings do not invalidate baked lightmaps. The hash does not
-include the installed baked-lightmap metadata itself.
+include automatic companion normal-map presence/content or scalar metalness,
+roughness, and normal-strength metadata because those values are runtime-only
+for generated sector surfaces. It also does not include the
+installed baked-lightmap metadata itself.
 
 Each baked artifact stores direct static-light contribution and one-bounce indirect
 light in RGB, and ambient occlusion in alpha. 3D Mode binds the atlas assigned
@@ -937,7 +947,9 @@ deferred.
   Model leaves/frames do not enter
   static lightmaps, and middle/transparent alpha-aware door shadows are not
   supported.
-- No material maps, PBR material editing, or texture search UI.
+- Material metalness/roughness metadata is authored but not yet consumed by the
+  sector surface shader; the directional companion lightmap and sector GGX path
+  remain future work. There is no material search/filter field yet.
 - No 3D geometry editing beyond texture and UV edits on generated surfaces.
 - No direct linedef or sidedef deletion.
 - No standalone direct-topology vertex deletion; authoring vertices support

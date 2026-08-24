@@ -325,6 +325,123 @@ bool SameAtmosphere(
             && sameColor(left.dust.scatteringTint, right.dust.scatteringTint);
 }
 
+SectorTopologyDynamicPointLight ToDynamicLight(
+        const SectorTopologyStaticPointLight& source,
+        int id)
+{
+    SectorTopologyDynamicPointLight result;
+    result.id = id;
+    result.position = source.position;
+    result.color = source.color;
+    result.intensity = source.intensity;
+    result.radius = source.radius;
+    result.atmosphere = source.atmosphere;
+    result.castsShadow = source.castsShadow;
+    return result;
+}
+
+SectorTopologyStaticPointLight ToStaticLight(
+        const SectorTopologyDynamicPointLight& source,
+        int id)
+{
+    SectorTopologyStaticPointLight result;
+    result.id = id;
+    result.position = source.position;
+    result.color = source.color;
+    result.intensity = source.intensity;
+    result.radius = source.radius;
+    result.atmosphere = source.atmosphere;
+    result.castsShadow = source.castsShadow;
+    return result;
+}
+
+SectorTopologyDynamicSpotLight ToDynamicSpotLight(
+        const SectorTopologyStaticSpotLight& source,
+        int id)
+{
+    SectorTopologyDynamicSpotLight result;
+    result.id = id;
+    result.position = source.position;
+    result.target = source.target;
+    result.color = source.color;
+    result.intensity = source.intensity;
+    result.range = source.range;
+    result.innerConeDegrees = source.innerConeDegrees;
+    result.outerConeDegrees = source.outerConeDegrees;
+    result.castsShadow = source.castsShadow;
+    result.atmosphere = source.atmosphere;
+    return result;
+}
+
+SectorTopologyStaticSpotLight ToStaticSpotLight(
+        const SectorTopologyDynamicSpotLight& source,
+        int id)
+{
+    SectorTopologyStaticSpotLight result;
+    result.id = id;
+    result.position = source.position;
+    result.target = source.target;
+    result.color = source.color;
+    result.intensity = source.intensity;
+    result.range = source.range;
+    result.innerConeDegrees = source.innerConeDegrees;
+    result.outerConeDegrees = source.outerConeDegrees;
+    result.atmosphere = source.atmosphere;
+    result.castsShadow = source.castsShadow;
+    return result;
+}
+
+SectorTopologyDynamicRectLight ToDynamicRectLight(
+        const SectorTopologyStaticRectLight& source,
+        int id)
+{
+    SectorTopologyDynamicRectLight result;
+    result.id = id;
+    result.position = source.position;
+    result.target = source.target;
+    result.rollDegrees = source.rollDegrees;
+    result.width = source.width;
+    result.height = source.height;
+    result.color = source.color;
+    result.intensity = source.intensity;
+    result.range = source.range;
+    result.castsShadow = source.castsShadow;
+    result.atmosphere = source.atmosphere;
+    return result;
+}
+
+SectorTopologyStaticRectLight ToStaticRectLight(
+        const SectorTopologyDynamicRectLight& source,
+        int id)
+{
+    SectorTopologyStaticRectLight result;
+    result.id = id;
+    result.position = source.position;
+    result.target = source.target;
+    result.rollDegrees = source.rollDegrees;
+    result.width = source.width;
+    result.height = source.height;
+    result.color = source.color;
+    result.intensity = source.intensity;
+    result.range = source.range;
+    result.atmosphere = source.atmosphere;
+    result.castsShadow = source.castsShadow;
+    return result;
+}
+
+LightPilotKind PilotKindForSelection(TopologySelectionKind kind)
+{
+    switch (kind) {
+        case TopologySelectionKind::StaticLight: return LightPilotKind::StaticPoint;
+        case TopologySelectionKind::StaticSpotLight: return LightPilotKind::StaticSpot;
+        case TopologySelectionKind::StaticRectLight: return LightPilotKind::StaticRect;
+        case TopologySelectionKind::DynamicLight: return LightPilotKind::DynamicPoint;
+        case TopologySelectionKind::DynamicSpotLight: return LightPilotKind::DynamicSpot;
+        case TopologySelectionKind::DynamicRectLight: return LightPilotKind::DynamicRect;
+        default: return LightPilotKind::None;
+    }
+}
+
 } // namespace
 
 SectorEditorLightEditingService::SectorEditorLightEditingService(
@@ -456,6 +573,155 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::AddDynamicRectL
     SelectLight(context_.selection, context_.ui, TopologySelectionKind::DynamicRectLight, add.lightId);
     FinishTopologyActionResult({true, add.status});
     return FinishLightMutationResult(true);
+}
+
+SectorEditorLightMutationResult SectorEditorLightEditingService::ConvertSelectedLight()
+{
+    const TopologySelectionKind sourceKind = context_.selection.topologySelectionKind;
+    int sourceId = -1;
+    TopologySelectionKind destinationKind = TopologySelectionKind::None;
+    int destinationId = -1;
+
+    if (sourceKind == TopologySelectionKind::StaticLight
+            && context_.selection.selectedTopologyLightId >= 0) {
+        sourceId = context_.selection.selectedTopologyLightId;
+        destinationKind = TopologySelectionKind::DynamicLight;
+        if (FindSectorTopologyStaticLight(context_.map, sourceId) != nullptr) {
+            destinationId = FindSectorTopologyDynamicLight(context_.map, sourceId) == nullptr
+                    ? sourceId
+                    : AllocateSectorTopologyDynamicLightId(context_.map);
+        }
+    } else if (sourceKind == TopologySelectionKind::DynamicLight
+            && context_.selection.selectedTopologyDynamicLightId >= 0) {
+        sourceId = context_.selection.selectedTopologyDynamicLightId;
+        destinationKind = TopologySelectionKind::StaticLight;
+        if (FindSectorTopologyDynamicLight(context_.map, sourceId) != nullptr) {
+            destinationId = FindSectorTopologyStaticLight(context_.map, sourceId) == nullptr
+                    ? sourceId
+                    : AllocateSectorTopologyStaticLightId(context_.map);
+        }
+    } else if (sourceKind == TopologySelectionKind::StaticSpotLight
+            && context_.selection.selectedTopologyStaticSpotLightId >= 0) {
+        sourceId = context_.selection.selectedTopologyStaticSpotLightId;
+        destinationKind = TopologySelectionKind::DynamicSpotLight;
+        if (FindSectorTopologyStaticSpotLight(context_.map, sourceId) != nullptr) {
+            destinationId = FindSectorTopologyDynamicSpotLight(context_.map, sourceId) == nullptr
+                    ? sourceId
+                    : AllocateSectorTopologyDynamicSpotLightId(context_.map);
+        }
+    } else if (sourceKind == TopologySelectionKind::DynamicSpotLight
+            && context_.selection.selectedTopologyDynamicSpotLightId >= 0) {
+        sourceId = context_.selection.selectedTopologyDynamicSpotLightId;
+        destinationKind = TopologySelectionKind::StaticSpotLight;
+        if (FindSectorTopologyDynamicSpotLight(context_.map, sourceId) != nullptr) {
+            destinationId = FindSectorTopologyStaticSpotLight(context_.map, sourceId) == nullptr
+                    ? sourceId
+                    : AllocateSectorTopologyStaticSpotLightId(context_.map);
+        }
+    } else if (sourceKind == TopologySelectionKind::StaticRectLight
+            && context_.selection.selectedTopologyStaticSpotLightId >= 0) {
+        sourceId = context_.selection.selectedTopologyStaticSpotLightId;
+        destinationKind = TopologySelectionKind::DynamicRectLight;
+        if (FindSectorTopologyStaticRectLight(context_.map, sourceId) != nullptr) {
+            destinationId = FindSectorTopologyDynamicRectLight(context_.map, sourceId) == nullptr
+                    ? sourceId
+                    : AllocateSectorTopologyDynamicRectLightId(context_.map);
+        }
+    } else if (sourceKind == TopologySelectionKind::DynamicRectLight
+            && context_.selection.selectedTopologyDynamicSpotLightId >= 0) {
+        sourceId = context_.selection.selectedTopologyDynamicSpotLightId;
+        destinationKind = TopologySelectionKind::StaticRectLight;
+        if (FindSectorTopologyDynamicRectLight(context_.map, sourceId) != nullptr) {
+            destinationId = FindSectorTopologyStaticRectLight(context_.map, sourceId) == nullptr
+                    ? sourceId
+                    : AllocateSectorTopologyStaticRectLightId(context_.map);
+        }
+    }
+
+    if (!IsValidSectorTopologyId(destinationId)) {
+        context_.statusText = sourceId < 0
+                ? "Light conversion failed: no light selected"
+                : TextFormat("Light conversion failed for light %d", sourceId);
+        return {};
+    }
+
+    SectorEditorLightMutationResult result;
+    const LightPilotKind sourcePilotKind = PilotKindForSelection(sourceKind);
+    if (context_.lightState.lightPilot.active
+            && context_.lightState.lightPilot.kind == sourcePilotKind
+            && context_.lightState.lightPilot.lightId == sourceId) {
+        result = CancelLightPilotData(nullptr);
+    }
+    if (context_.lightState.proxyPlacement.active
+            && context_.lightState.proxyPlacement.kind == sourcePilotKind
+            && context_.lightState.proxyPlacement.lightId == sourceId) {
+        const SectorEditorLightMutationResult cancel = CancelProxyPlacementData(nullptr);
+        result.dynamicLightRendererRefreshNeeded =
+                result.dynamicLightRendererRefreshNeeded || cancel.dynamicLightRendererRefreshNeeded;
+    }
+    if (context_.lightState.lightEdit.active
+            && context_.lightState.lightEdit.kind == sourceKind
+            && context_.lightState.lightEdit.topologyLightId == sourceId) {
+        CancelLightDragData(nullptr);
+    }
+    if (context_.lightState.lightDrag.topologyLightId == sourceId) {
+        context_.lightState.lightDrag = LightDragState{};
+    }
+
+    if (sourceKind == TopologySelectionKind::StaticLight) {
+        const SectorTopologyStaticPointLight source =
+                *FindSectorTopologyStaticLight(context_.map, sourceId);
+        context_.map.dynamicPointLights.push_back(ToDynamicLight(source, destinationId));
+        RemoveSectorTopologyStaticLight(context_.map, sourceId);
+    } else if (sourceKind == TopologySelectionKind::DynamicLight) {
+        const SectorTopologyDynamicPointLight source =
+                *FindSectorTopologyDynamicLight(context_.map, sourceId);
+        context_.map.staticLights.push_back(ToStaticLight(source, destinationId));
+        RemoveSectorTopologyDynamicLight(context_.map, sourceId);
+    } else if (sourceKind == TopologySelectionKind::StaticSpotLight) {
+        const SectorTopologyStaticSpotLight source =
+                *FindSectorTopologyStaticSpotLight(context_.map, sourceId);
+        context_.map.dynamicSpotLights.push_back(ToDynamicSpotLight(source, destinationId));
+        RemoveSectorTopologyStaticSpotLight(context_.map, sourceId);
+    } else if (sourceKind == TopologySelectionKind::DynamicSpotLight) {
+        const SectorTopologyDynamicSpotLight source =
+                *FindSectorTopologyDynamicSpotLight(context_.map, sourceId);
+        context_.map.staticSpotLights.push_back(ToStaticSpotLight(source, destinationId));
+        RemoveSectorTopologyDynamicSpotLight(context_.map, sourceId);
+    } else if (sourceKind == TopologySelectionKind::StaticRectLight) {
+        const SectorTopologyStaticRectLight source =
+                *FindSectorTopologyStaticRectLight(context_.map, sourceId);
+        context_.map.dynamicRectLights.push_back(ToDynamicRectLight(source, destinationId));
+        RemoveSectorTopologyStaticRectLight(context_.map, sourceId);
+    } else {
+        const SectorTopologyDynamicRectLight source =
+                *FindSectorTopologyDynamicRectLight(context_.map, sourceId);
+        context_.map.staticRectLights.push_back(ToStaticRectLight(source, destinationId));
+        RemoveSectorTopologyDynamicRectLight(context_.map, sourceId);
+    }
+
+    if (context_.selection.hoveredTopologyLightId == sourceId) {
+        context_.selection.hoveredTopologyLightId = -1;
+    }
+    if (context_.selection.hoveredTopologyStaticSpotLightId == sourceId) {
+        context_.selection.hoveredTopologyStaticSpotLightId = -1;
+    }
+    if (context_.selection.hoveredTopologyDynamicLightId == sourceId) {
+        context_.selection.hoveredTopologyDynamicLightId = -1;
+    }
+    if (context_.selection.hoveredTopologyDynamicSpotLightId == sourceId) {
+        context_.selection.hoveredTopologyDynamicSpotLightId = -1;
+    }
+    SelectLight(context_.selection, context_.ui, destinationKind, destinationId);
+    MarkEdited(TextFormat(
+            "Converted %s %d to %s %d",
+            LightName(sourcePilotKind),
+            sourceId,
+            LightName(PilotKindForSelection(destinationKind)),
+            destinationId));
+    result.changed = true;
+    result.dynamicLightRendererRefreshNeeded = true;
+    return result;
 }
 
 SectorEditorLightMutationResult SectorEditorLightEditingService::DeleteSelectedLightConfirmed()

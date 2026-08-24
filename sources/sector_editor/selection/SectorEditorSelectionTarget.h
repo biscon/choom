@@ -19,6 +19,7 @@ enum class SectorEditorSelectionTargetKind {
     AuthoringLine,
     AuthoringFaceAnchor,
     AuthoringFogVolume,
+    AuthoringReflectionProbe,
     AuthoringLevelMarker,
     AuthoringTrigger,
     RuntimeObject,
@@ -63,6 +64,7 @@ inline bool IsTopologyTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringLine:
         case SectorEditorSelectionTargetKind::AuthoringFaceAnchor:
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
+        case SectorEditorSelectionTargetKind::AuthoringReflectionProbe:
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
         case SectorEditorSelectionTargetKind::RuntimeObject:
@@ -83,6 +85,7 @@ inline bool IsAuthoringTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringLine:
         case SectorEditorSelectionTargetKind::AuthoringFaceAnchor:
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
+        case SectorEditorSelectionTargetKind::AuthoringReflectionProbe:
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
             return target.id >= 0;
@@ -129,6 +132,7 @@ inline bool IsLightTarget(SectorEditorSelectionTarget target)
         case SectorEditorSelectionTargetKind::AuthoringLine:
         case SectorEditorSelectionTargetKind::AuthoringFaceAnchor:
         case SectorEditorSelectionTargetKind::AuthoringFogVolume:
+        case SectorEditorSelectionTargetKind::AuthoringReflectionProbe:
         case SectorEditorSelectionTargetKind::AuthoringLevelMarker:
         case SectorEditorSelectionTargetKind::AuthoringTrigger:
         case SectorEditorSelectionTargetKind::RuntimeObject:

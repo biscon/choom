@@ -47,7 +47,7 @@ struct SectorLightmapAlphaOccluderTriangle {
     Vector2 uv0 = {};
     Vector2 uv1 = {};
     Vector2 uv2 = {};
-    std::string textureId;
+    std::string materialId;
     float alphaCutoff = 0.5f;
     SectorGeneratedSurfaceRef surfaceRef;
     int sourceSurfaceIndex = -1;
@@ -66,12 +66,12 @@ class SectorLightmapAlphaMaskCache {
 public:
     SectorLightmapAlphaSample Sample(
             const SectorTopologyMap& map,
-            const std::string& textureId,
+            const std::string& materialId,
             Vector2 uv,
             float alphaCutoff);
 
     size_t CachedTextureCount() const;
-    int LoadAttemptCount(const SectorTopologyMap& map, const std::string& textureId) const;
+    int LoadAttemptCount(const SectorTopologyMap& map, const std::string& materialId) const;
 
 private:
     struct AlphaMask {
@@ -81,8 +81,8 @@ private:
         std::vector<unsigned char> alpha;
     };
 
-    const AlphaMask& LoadOrGet(const SectorTopologyMap& map, const std::string& textureId);
-    static std::string CacheKey(const SectorTopologyMap& map, const std::string& textureId);
+    const AlphaMask& LoadOrGet(const SectorTopologyMap& map, const std::string& materialId);
+    static std::string CacheKey(const SectorTopologyMap& map, const std::string& materialId);
 
     std::unordered_map<std::string, AlphaMask> masksByKey;
     std::unordered_map<std::string, int> loadAttemptsByKey;
@@ -188,11 +188,11 @@ constexpr int SectorLightmapAtlasWidth = 2048;
 constexpr int SectorLightmapAtlasHeight = 2048;
 constexpr int SectorLightmapGutterTexels = 2;
 constexpr float SectorLightmapTexelsPerWorldUnit = 8.0f;
-// Version 15: baked illumination is linear HDR end to end.
-constexpr int kSectorLightmapBakeVersion = 15;
-constexpr int kSectorLightmapArtifactVersion = 1;
+// Version 18: object probes require horizontal surface clearance and may skip thin sectors.
+constexpr int kSectorLightmapBakeVersion = 18;
+constexpr int kSectorLightmapArtifactVersion = 2;
 constexpr const char* kSectorLightmapArtifactFormat =
-        "rgba16fLinearHdrRgbAoLE";
+        "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE";
 constexpr int kSectorBakedObjectLightProbeSidecarVersion = 3;
 constexpr const char* kSectorBakedObjectLightProbeSidecarFormat =
         "layeredAmbientCubeLinearHdrF32LE";
@@ -286,6 +286,7 @@ bool WriteSectorLightmapArtifact(
         int width,
         int height,
         const Vector4* linearRgba,
+        const Vector4* directionalRgba,
         size_t texelCount,
         const std::string& sourceHash,
         SectorIlluminationStatistics& outPreEncodeStatistics,

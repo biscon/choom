@@ -8,6 +8,7 @@
 #include "sector_editor/document/SectorEditorDocumentModals.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
+#include "sector_editor/materials/SectorEditorMaterialRegistryEditorPanel.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
@@ -43,6 +44,7 @@
 #include "sector_demo/SectorGeneratedGeometry.h"
 #include "sector_demo/SectorLightmap.h"
 #include "sector_demo/SectorPortalVisibility.h"
+#include "sector_demo/SectorReflectionProbes.h"
 #include "sector_demo/SectorTextureTypes.h"
 #include "sector_demo/SectorTopologyGeometry.h"
 #include "sector_demo/SectorTopologySerialization.h"
@@ -317,6 +319,17 @@ bool SectorEditor::Init(engine::EngineContext& context)
                     selectionState,
                     manipulationState,
                     statusText});
+    reflectionProbeEditingService.emplace(
+            SectorEditorReflectionProbeEditingServiceContext{
+                    Lifecycle(),
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    state.topologyRenderRevision,
+                    state.topologyRenderCache,
+                    selectionState,
+                    manipulationState,
+                    statusText});
     levelMarkerEditingService.emplace(
             SectorEditorLevelMarkerEditingServiceContext{
                     Lifecycle(),
@@ -356,6 +369,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     BuildNpcEditorService().Shutdown(assets);
     audioPicker.Close(weaponEditorState.audioPicker);
     BuildWeaponEditorService().Shutdown();
+    BuildMaterialRegistryEditorService().Shutdown(assets);
     if (state.footstepPicker.open
             || !engine::IsNull(state.footstepPicker.previewScope)) {
         BuildFootstepService().Close();
@@ -369,9 +383,6 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     if (!engine::IsNull(textureCatalogState.editorTextureScope)) {
         assets.UnloadScope(textureCatalogState.editorTextureScope);
     }
-    if (!engine::IsNull(state.addMapTexture.previewScope)) {
-        assets.UnloadScope(state.addMapTexture.previewScope);
-    }
     if (!engine::IsNull(runtimeObjectEditingState.spritePicker.previewScope)) {
         assets.UnloadScope(runtimeObjectEditingState.spritePicker.previewScope);
     }
@@ -383,6 +394,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     npcEditorSessionState = SectorEditorNpcEditorSessionState{};
     weaponEditorState = SectorEditorWeaponEditorState{};
     weaponEditorSessionState = SectorEditorWeaponEditorSessionState{};
+    materialRegistryEditorState = SectorEditorMaterialRegistryEditorState{};
     audioAssetPickerSessionState = SectorEditorAudioAssetPickerSessionState{};
     textureCatalogState = TextureCatalogState{};
     soundCatalogState = SectorEditorSoundCatalogState{};
@@ -390,12 +402,14 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     materialEditingState = MaterialEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
+    reflectionProbeEditingUiState = ReflectionProbeEditingUiState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
     authoringFaceMergeState = SectorEditorAuthoringFaceMergeState{};
     fogVolumeEditingService.reset();
+    reflectionProbeEditingService.reset();
     authoringFaceMergeService.reset();
     levelMarkerEditingService.reset();
     triggerEditingService.reset();
@@ -534,6 +548,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
 {
     engine::Input& input = context.input;
     engine::AssetManager& assets = context.assets;
+    ProcessPendingReflectionProbeBake(context);
     if (state.footstepPicker.open) {
         BuildFootstepService().UpdatePreview();
     }
@@ -544,6 +559,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         CancelPendingAuthoringRectangle(nullptr);
         if (fogVolumeEditingService) {
             fogVolumeEditingService->CancelMove(nullptr);
+        }
+        if (reflectionProbeEditingService) {
+            reflectionProbeEditingService->CancelMove(nullptr);
         }
         if (levelMarkerEditingService) {
             levelMarkerEditingService->CancelMove(nullptr);
@@ -634,7 +652,6 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
     if (state.texturePicker.open
             || state.soundPicker.open
             || state.footstepPicker.open
-            || state.addMapTexture.open
             || state.addMapSound.open
             || npcEditorState.open
             || weaponEditorState.open
@@ -706,6 +723,12 @@ void SectorEditor::RenderUI(
             engine::EndUI(ui, config, input, assets);
             return;
         }
+        if (materialRegistryEditorState.open) {
+            DrawMaterialRegistryEditor(ui, config, input, assets, font, smallFont);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
         if (previewState.overlay.previewUiHidden) {
             ui.hotId = 0;
             ui.activeId = 0;
@@ -773,6 +796,12 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
+    if (materialRegistryEditorState.open) {
+        DrawMaterialRegistryEditor(ui, config, input, assets, font, smallFont);
+        uiState.keyboardCaptured = true;
+        engine::EndUI(ui, config, input, assets);
+        return;
+    }
     if (npcEditorState.open) {
         DrawNpcEditorModal(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
@@ -818,12 +847,6 @@ void SectorEditor::RenderUI(
     if (state.previewSettingsModal.open) {
         DrawPreviewSettingsModal(ui, config, input, assets, font);
         DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
-        uiState.keyboardCaptured = true;
-        engine::EndUI(ui, config, input, assets);
-        return;
-    }
-    if (state.addMapTexture.open) {
-        DrawAddMapTextureModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -875,7 +898,6 @@ void SectorEditor::RenderUI(
     DrawSectorsPanel(ui, config, input, assets, font, smallFont);
     DrawStatusPanel(ui, config, assets, smallFont);
     DrawSetAllModal(ui, config, input, assets, font);
-    DrawAddMapTextureModal(ui, config, input, assets, font);
     DrawAddMapSoundModal(ui, config, input, font);
     DrawAssetPruneModal(ui, config, input, assets, font);
     DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
@@ -887,7 +909,6 @@ void SectorEditor::RenderUI(
     if (state.texturePicker.open
             || state.soundPicker.open
             || state.footstepPicker.open
-            || state.addMapTexture.open
             || state.addMapSound.open
             || state.assetPruneModal.open
             || npcEditorState.open
@@ -957,6 +978,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
             canvasRect};
     context.fogVolumeEditing = fogVolumeEditingService
             ? &fogVolumeEditingService.value()
+            : nullptr;
+    context.reflectionProbeEditing = reflectionProbeEditingService
+            ? &reflectionProbeEditingService.value()
             : nullptr;
     context.levelMarkerEditing = levelMarkerEditingService
             ? &levelMarkerEditingService.value()
@@ -1709,6 +1733,11 @@ SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
                 SectorEditorPickKind::AuthoringFogVolume,
                 selectionState.selectedAuthoring.fogVolumeId};
     }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::ReflectionProbe
+            && selectionState.selectedAuthoring.reflectionProbeId >= 0) {
+        return {SectorEditorPickKind::AuthoringReflectionProbe,
+                selectionState.selectedAuthoring.reflectionProbeId};
+    }
     if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::LevelMarker
             && selectionState.selectedAuthoring.levelMarkerId >= 0) {
         return SectorEditorPickTarget{
@@ -1735,6 +1764,7 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             + TopologyMap().staticRectLights.size()
             + TopologyMap().staticLights.size()
             + AuthoringGraph().fogVolumes.size()
+            + AuthoringGraph().reflectionProbes.size()
             + AuthoringGraph().levelMarkers.size()
             + AuthoringGraph().triggers.size()
             + 3);
@@ -1839,6 +1869,17 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             candidates.push_back(SectorEditorPickCandidate{
                     SectorEditorPickTarget{SectorEditorPickKind::AuthoringFogVolume, fogVolumeId},
                     0.0f});
+        }
+    }
+    if (reflectionProbeEditingService) {
+        const Vector2 mapPoint = ScreenToMap(screenPoint);
+        const Vector2 tolerancePoint = ScreenToMap(
+                Vector2{screenPoint.x + ScreenLightPickPixels, screenPoint.y});
+        const int probeId = reflectionProbeEditingService->FindAtMapPoint(
+                mapPoint, std::fabs(tolerancePoint.x - mapPoint.x));
+        if (probeId >= 0) {
+            candidates.push_back({
+                    {SectorEditorPickKind::AuthoringReflectionProbe, probeId}, 0.0f});
         }
     }
 
@@ -2788,6 +2829,9 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
     context.fogVolumeEditing = fogVolumeEditingService
             ? &fogVolumeEditingService.value()
             : nullptr;
+    context.reflectionProbeEditing = reflectionProbeEditingService
+            ? &reflectionProbeEditingService.value()
+            : nullptr;
     context.levelMarkerEditing = levelMarkerEditingService
             ? &levelMarkerEditingService.value()
             : nullptr;
@@ -3094,6 +3138,15 @@ void SectorEditor::MarkTopologyDocumentEdited(const char* status)
             status);
 }
 
+void SectorEditor::RefreshResolvedMaterials()
+{
+    const std::vector<std::string> missing =
+            ResolveSectorMaterialsForMap(TopologyMap(), materialRegistry);
+    for (const std::string& id : missing) {
+        TraceLog(LOG_WARNING, "Editor map references missing global material: %s", id.c_str());
+    }
+}
+
 bool SectorEditor::FinishTopologyActionResult(const SectorEditorTopologyActionResult& result)
 {
     if (!result.changed) {
@@ -3264,6 +3317,26 @@ bool SectorEditor::OpenDeleteSelectedLightConfirmation()
                 }
             });
     return true;
+}
+
+bool SectorEditor::ConvertSelectedLight()
+{
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    const SectorEditorLightMutationResult result = lightEditing.ConvertSelectedLight();
+    if (result.previewPoseRestoreNeeded && state.mode == SectorEditorMode::Preview3D) {
+        ResetSectorFreeflyController(
+                previewState.controller.freeflyController,
+                previewState.controller.lightPilotPreviewRestore.originalPreviewPose);
+        SetSectorFreeflyMouseLookEnabled(
+                previewState.controller.freeflyController,
+                previewState.controller.lightPilotPreviewRestore.originalMouseLookEnabled);
+        previewState.controller.lightPilotPreviewRestore = LightPilotPreviewRestoreState{};
+        sceneRuntime.Renderer().ApplyRendererPose(previewState.controller.freeflyController.pose);
+    }
+    if (result.dynamicLightRendererRefreshNeeded) {
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
+    }
+    return result.changed;
 }
 
 SectorEditorRuntimeObjectEditingService
@@ -3482,6 +3555,8 @@ bool SectorEditor::StartLightmapBake(
     const std::string finalOutputPath = levelPaths.lightmapFilePath.string();
     const std::string temporaryOutputPath = MakeTemporaryLightmapPath(finalOutputPath);
 
+    RefreshResolvedMaterials();
+
     if (engineContext == nullptr) {
         statusText = "Bake failed: asset manager is unavailable";
         return false;
@@ -3594,6 +3669,14 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
             installPayload.bakeResult.staticModels;
     // Data files are installed and validated before this single metadata publish.
     TopologyMap().bakedLightmap = std::move(installedMetadata);
+    // Reflection captures contain the baked lighting and must be explicitly
+    // regenerated after any lightmap install.
+    TopologyMap().bakedReflectionProbes = {};
+    documentState.derivation.authoringDerivation.topology.bakedReflectionProbes = {};
+    if (documentState.derivation.lastValidAuthoringDerivedTopology.has_value()) {
+        documentState.derivation.lastValidAuthoringDerivedTopology
+                ->bakedReflectionProbes = {};
+    }
     Lifecycle().hasUnsavedChanges = true;
     Lifecycle().topologyDocumentDirty = true;
 
@@ -3621,6 +3704,145 @@ bool SectorEditor::InstallLightmapBakeResult(const SectorLightmapBakeAsyncResult
                     "Baked %zu lightmap atlases in %.1fs",
                     atlasCount,
                     result.bakeResult.totalBakeSeconds);
+    return true;
+}
+
+void SectorEditor::ProcessPendingReflectionProbeBake(engine::EngineContext& context)
+{
+    if (!reflectionProbeBakePending) return;
+    const int selectedProbeId = reflectionProbeBakeSelectedId;
+    reflectionProbeBakePending = false;
+    reflectionProbeBakeSelectedId = -1;
+    BakeReflectionProbes(context, selectedProbeId);
+}
+
+bool SectorEditor::BakeReflectionProbes(
+        engine::EngineContext& context,
+        int selectedProbeId)
+{
+    if (state.mode != SectorEditorMode::Preview3D
+            || !sceneRuntime.Renderer().IsRendererReady()) {
+        statusText = "Enter 3D preview and use the Probes tab to bake reflection probes";
+        return false;
+    }
+    if (Lifecycle().currentLevelName.empty()) {
+        statusText = "Save the level before baking reflection probes";
+        return false;
+    }
+    if (GetSectorLightmapStatus(TopologyMap()) != SectorLightmapStatus::Valid) {
+        statusText = "Bake current static lightmaps before reflection probes";
+        return false;
+    }
+    LevelPaths paths;
+    std::string error;
+    if (!BuildLevelPaths(Lifecycle().currentLevelName, paths, error)
+            || !EnsureSaveLevelDirectory(paths, error)) {
+        statusText = "Reflection bake failed: " + error;
+        return false;
+    }
+
+    SectorBakedReflectionProbeArtifact artifact;
+    artifact.version = SectorReflectionProbeBakeVersion;
+    if (selectedProbeId > 0
+            && std::filesystem::exists(paths.reflectionProbeFilePath)) {
+        std::string ignored;
+        ReadSectorReflectionProbeArtifact(
+                paths.reflectionProbeFilePath, artifact, ignored);
+        artifact.version = SectorReflectionProbeBakeVersion;
+    }
+    if (selectedProbeId <= 0) artifact.probes.clear();
+
+    std::vector<const SectorCompiledReflectionProbe*> targets;
+    for (const SectorCompiledReflectionProbe& probe : TopologyMap().compiledReflectionProbes) {
+        if (!probe.enabled) continue;
+        if (selectedProbeId <= 0 || probe.sourceAuthoringProbeId == selectedProbeId) {
+            targets.push_back(&probe);
+        }
+    }
+    if (targets.empty()) {
+        statusText = selectedProbeId > 0
+                ? "Selected reflection probe is disabled or unresolved"
+                : "No enabled reflection probes to bake";
+        return false;
+    }
+
+    const SectorRuntimeDoorLightingContext doorLighting{
+            &sceneRuntime.RuntimeObjects().objectLightProbes,
+            &TopologyMap(),
+            sceneRuntime.RuntimeObjects().staticLightingRevision};
+    const auto started = std::chrono::steady_clock::now();
+    int bakedCount = 0;
+    for (const SectorCompiledReflectionProbe* probe : targets) {
+        statusText = TextFormat("Baking reflection probe %d...",
+                probe->sourceAuthoringProbeId);
+        std::vector<Vector4> capturedFaces;
+        if (!sceneRuntime.Renderer().CaptureReflectionProbe(
+                    context.assets,
+                    probe->capturePositionWorld,
+                    probe->resolution,
+                    &context.world,
+                    doorLighting,
+                    capturedFaces,
+                    error)) {
+            statusText = "Reflection bake failed: " + error;
+            return false;
+        }
+        SectorBakedReflectionProbeRecord record;
+        if (!BuildSectorReflectionProbeRecord(
+                    probe->sourceAuthoringProbeId,
+                    probe->resolution,
+                    ComputeSectorReflectionProbeSourceHash(TopologyMap(), *probe),
+                    capturedFaces,
+                    record,
+                    error)) {
+            statusText = "Reflection prefilter failed: " + error;
+            return false;
+        }
+        auto existing = std::find_if(artifact.probes.begin(), artifact.probes.end(),
+                [probe](const SectorBakedReflectionProbeRecord& value) {
+                    return value.probeId == probe->sourceAuthoringProbeId;
+                });
+        if (existing == artifact.probes.end()) artifact.probes.push_back(std::move(record));
+        else *existing = std::move(record);
+        ++bakedCount;
+    }
+    artifact.probes.erase(
+            std::remove_if(artifact.probes.begin(), artifact.probes.end(),
+                    [this](const SectorBakedReflectionProbeRecord& record) {
+                        return std::none_of(
+                                TopologyMap().compiledReflectionProbes.begin(),
+                                TopologyMap().compiledReflectionProbes.end(),
+                                [&record](const SectorCompiledReflectionProbe& probe) {
+                                    return probe.sourceAuthoringProbeId == record.probeId;
+                                });
+                    }),
+            artifact.probes.end());
+    std::sort(artifact.probes.begin(), artifact.probes.end(),
+            [](const auto& a, const auto& b) { return a.probeId < b.probeId; });
+    if (!WriteSectorReflectionProbeArtifact(
+                paths.reflectionProbeFilePath, artifact, error)) {
+        statusText = "Reflection bake failed: " + error;
+        return false;
+    }
+
+    const SectorBakedReflectionProbeMetadata metadata{
+            paths.reflectionProbeAssetPath,
+            SectorReflectionProbeBakeVersion,
+            static_cast<int>(artifact.probes.size()),
+            "rgba16f-cubemap-mips"};
+    TopologyMap().bakedReflectionProbes = metadata;
+    documentState.derivation.authoringDerivation.topology.bakedReflectionProbes = metadata;
+    if (documentState.derivation.lastValidAuthoringDerivedTopology.has_value()) {
+        documentState.derivation.lastValidAuthoringDerivedTopology
+                ->bakedReflectionProbes = metadata;
+    }
+    Lifecycle().hasUnsavedChanges = true;
+    Lifecycle().topologyDocumentDirty = true;
+    const float seconds = std::chrono::duration<float>(
+            std::chrono::steady_clock::now() - started).count();
+    statusText = TextFormat("Baked %d reflection probe%s in %.1fs",
+            bakedCount, bakedCount == 1 ? "" : "s", seconds);
+    RebuildPreviewMeshesPreservingView(context);
     return true;
 }
 
@@ -3770,6 +3992,7 @@ void SectorEditor::RenderPreview3DOverlays()
         DrawPreviewSurfaceHighlights();
         DrawPreviewSpotLightOverlay();
         DrawPreviewObjectProbeOverlay();
+        DrawPreviewReflectionProbeOverlay();
         DrawSectorEditorPreviewNavigationOverlay(
                 previewState.overlay,
                 sceneRuntime.Navigation(),
@@ -3861,6 +4084,15 @@ void SectorEditor::DrawPreviewObjectProbeOverlay() const
             TopologyMap(),
             previewState,
             sceneRuntime.RuntimeObjects(),
+            sceneRuntime.Renderer());
+}
+
+void SectorEditor::DrawPreviewReflectionProbeOverlay() const
+{
+    DrawSectorEditorPreviewReflectionProbeOverlay(
+            TopologyMap(),
+            previewState,
+            selectionState,
             sceneRuntime.Renderer());
 }
 
@@ -3956,6 +4188,18 @@ void SectorEditor::DrawPreviewOverlay(
                         *engineContext, TopologyMap())
                 ? "Navigation rebuild queued"
                 : "Navigation rebuild failed to initialize";
+    }
+    if (result.requestBakeSelectedReflectionProbe) {
+        reflectionProbeBakeSelectedId =
+                selectionState.selectedAuthoring.kind
+                                == SectorAuthoringSelectionKind::ReflectionProbe
+                        ? selectionState.selectedAuthoring.reflectionProbeId
+                        : -1;
+        reflectionProbeBakePending = reflectionProbeBakeSelectedId > 0;
+    }
+    if (result.requestBakeAllReflectionProbes) {
+        reflectionProbeBakeSelectedId = -1;
+        reflectionProbeBakePending = true;
     }
     if (result.markTopologyDocumentEdited) {
         MarkTopologyDocumentEdited(result.topologyDocumentEditStatus);
@@ -4126,6 +4370,7 @@ void SectorEditor::DrawTopologyDocument()
     DrawCachedTriggers(state.topologyRenderCache, drawContext,
             triggerEditingState.drag.active ? &triggerEditingState.drag : nullptr);
     DrawAuthoringFogVolumes();
+    DrawAuthoringReflectionProbes();
 
     if (drawLegacyTopologySelection) {
         DrawTopologySelectedLineHighlight();
@@ -4136,6 +4381,7 @@ void SectorEditor::DrawTopologyDocument()
     DrawCachedAuthoringDiagnostics(state.topologyRenderCache, drawContext);
     DrawAuthoringVertexMoveOverlay();
     DrawAuthoringFogVolumeMoveOverlay();
+    DrawAuthoringReflectionProbeMoveOverlay();
     DrawCachedTopologyStaticLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyStaticSpotLights(state.topologyRenderCache, drawContext);
     DrawCachedTopologyDynamicLights(state.topologyRenderCache, drawContext);
@@ -4191,6 +4437,7 @@ void SectorEditor::DrawTopologyDocument()
     drawToolOverlay(SectorEditorTool::AuthoringRectangle);
     drawToolOverlay(SectorEditorTool::AuthoringInsertVertex);
     drawToolOverlay(SectorEditorTool::AuthoringFogVolume);
+    drawToolOverlay(SectorEditorTool::ReflectionProbe);
     drawToolOverlay(SectorEditorTool::Trigger);
     DrawTopologySnapCrosshair();
 
@@ -4401,6 +4648,87 @@ void SectorEditor::DrawAuthoringFogVolumeMoveOverlay() const
             radiusX,
             radiusY,
             previewColor);
+}
+
+void SectorEditor::DrawAuthoringReflectionProbes() const
+{
+    const auto drawProbe = [&](const SectorAuthoringReflectionProbe& source,
+                               SectorTopologyCoordPoint capturePoint,
+                               bool selected,
+                               bool hovered,
+                               bool resolved) {
+        const SectorAuthoringReflectionProbe probe =
+                NormalizeSectorAuthoringReflectionProbe(source);
+        const Vector2 capture = MapToScreen({
+                SectorCoordToVisibleAuthoring(capturePoint.x),
+                SectorCoordToVisibleAuthoring(capturePoint.y)});
+        const Vector2 influenceMap{
+                SectorCoordToVisibleAuthoring(capturePoint.x)
+                        + SectorWorldToAuthoringDistance(probe.influenceOffsetWorld.x),
+                SectorCoordToVisibleAuthoring(capturePoint.y)
+                        + SectorWorldToAuthoringDistance(probe.influenceOffsetWorld.z)};
+        const float hx = SectorWorldToAuthoringDistance(probe.halfExtentsWorld.x);
+        const float hz = SectorWorldToAuthoringDistance(probe.halfExtentsWorld.z);
+        const float cosine = std::cos(probe.yawDegrees * DEG2RAD);
+        const float sine = std::sin(probe.yawDegrees * DEG2RAD);
+        std::array<Vector2, 4> corners{};
+        const std::array<Vector2, 4> local{{{-hx, -hz}, {hx, -hz}, {hx, hz}, {-hx, hz}}};
+        for (std::size_t i = 0; i < corners.size(); ++i) {
+            corners[i] = MapToScreen({
+                    influenceMap.x + cosine * local[i].x - sine * local[i].y,
+                    influenceMap.y + sine * local[i].x + cosine * local[i].y});
+        }
+        const Color color = !resolved ? Color{240, 82, 82, 245}
+                : selected ? Color{220, 145, 255, 255}
+                : hovered ? Color{244, 192, 70, 255}
+                : probe.enabled ? Color{173, 112, 230, 230}
+                                : Color{130, 130, 140, 210};
+        for (std::size_t i = 0; i < corners.size(); ++i) {
+            DrawLineEx(corners[i], corners[(i + 1) % corners.size()],
+                    selected ? 2.5f : 1.5f, color);
+        }
+        DrawLineEx(capture, MapToScreen(influenceMap), 1.0f,
+                Color{color.r, color.g, color.b, 150});
+        DrawCircleV(capture, selected ? 7.0f : 5.0f, color);
+        DrawText("RP", static_cast<int>(capture.x + 7.0f),
+                static_cast<int>(capture.y - 18.0f), 14, color);
+    };
+
+    for (const SectorAuthoringReflectionProbe& probe : AuthoringGraph().reflectionProbes) {
+        bool resolved = false;
+        for (const SectorAuthoringDerivedReflectionProbeMapping& mapping
+                : documentState.derivation.authoringDerivation.mapping.reflectionProbes) {
+            if (mapping.authoringReflectionProbeId == probe.id) {
+                resolved = mapping.resolved;
+                break;
+            }
+        }
+        drawProbe(
+                probe,
+                {probe.x, probe.z},
+                selectionState.selectedAuthoring.kind
+                                == SectorAuthoringSelectionKind::ReflectionProbe
+                        && selectionState.selectedAuthoring.reflectionProbeId == probe.id,
+                selectionState.hoveredAuthoring.kind
+                                == SectorAuthoringSelectionKind::ReflectionProbe
+                        && selectionState.hoveredAuthoring.reflectionProbeId == probe.id,
+                resolved);
+    }
+}
+
+void SectorEditor::DrawAuthoringReflectionProbeMoveOverlay() const
+{
+    const AuthoringReflectionProbeDragState& drag =
+            manipulationState.authoringReflectionProbeDrag;
+    if (!drag.active || !drag.hasPreviewPoint) return;
+    const Vector2 center = MapToScreen({
+            SectorCoordToVisibleAuthoring(drag.previewPoint.x),
+            SectorCoordToVisibleAuthoring(drag.previewPoint.y)});
+    const Color color = drag.previewResolved
+            ? Color{220, 145, 255, 230} : Color{240, 82, 82, 245};
+    DrawCircleV(center, 8.0f, color);
+    DrawCircleLines(static_cast<int>(center.x), static_cast<int>(center.y),
+            11.0f, color);
 }
 
 void SectorEditor::DrawTopologySelectedLineHighlight() const
@@ -4940,6 +5268,8 @@ void SectorEditor::DrawToolsPanel(
             statusText = "Door: click a two-sided portal line";
         } else if (tool == SectorEditorTool::AuthoringFogVolume) {
             statusText = "Fog Volume: click strictly inside a sector";
+        } else if (tool == SectorEditorTool::ReflectionProbe) {
+            statusText = "Reflection Probe: click inside a sector";
         } else if (tool == SectorEditorTool::LevelMarker) {
             statusText = "Level Marker: click strictly inside a sector";
         } else if (tool == SectorEditorTool::Trigger) {
@@ -4988,6 +5318,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::Trigger,
             SectorEditorTool::LevelMarker,
             SectorEditorTool::AuthoringFogVolume,
+            SectorEditorTool::ReflectionProbe,
             SectorEditorTool::StaticLight,
             SectorEditorTool::StaticSpotLight,
             SectorEditorTool::StaticRectLight,
@@ -5038,8 +5369,8 @@ void SectorEditor::DrawToolsPanel(
     }
     y += rowH + gap;
 
-    if (engine::Button(ui, config, input, assets, "sector_editor_add_map_texture", Rectangle{0.0f, y, contentW, rowH}, font, "Add Map Texture")) {
-        OpenAddMapTextureModal(assets);
+    if (engine::Button(ui, config, input, assets, "sector_editor_material_editor", Rectangle{0.0f, y, contentW, rowH}, font, "Material Editor")) {
+        BuildMaterialRegistryEditorService().Open();
     }
     y += rowH + gap;
     if (engine::Button(ui, config, input, assets, "sector_editor_add_map_sound", Rectangle{0.0f, y, contentW, rowH}, font, "Add Map Sound")) {
@@ -5237,6 +5568,7 @@ void SectorEditor::DrawSectorsPanel(
             inspectorIdUiState,
             materialEditingUiState,
             fogVolumeEditingUiState,
+            reflectionProbeEditingUiState,
             levelMarkerEditingUiState,
             triggerEditingUiState,
             statusText,
@@ -5249,6 +5581,7 @@ void SectorEditor::DrawSectorsPanel(
             sounds,
             lightEditing,
             fogVolumeEditingService.value(),
+            reflectionProbeEditingService.value(),
             levelMarkerEditingService.value(),
             triggerEditingService.value(),
             authoringFaceMergeService.value(),
@@ -5272,6 +5605,9 @@ void SectorEditor::DrawSectorsPanel(
         case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLightConfirmation:
             OpenDeleteSelectedLightConfirmation();
             break;
+        case SectorEditorInspectorPanelRequestKind::ConvertSelectedLight:
+            ConvertSelectedLight();
+            break;
         case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedFogVolumeConfirmation:
             OpenConfirmation(
                     "Delete Fog Volume",
@@ -5279,6 +5615,16 @@ void SectorEditor::DrawSectorsPanel(
                     [this]() {
                         if (fogVolumeEditingService) {
                             fogVolumeEditingService->DeleteSelected();
+                        }
+                    });
+            break;
+        case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedReflectionProbeConfirmation:
+            OpenConfirmation(
+                    "Delete Reflection Probe",
+                    "Delete the selected reflection probe?",
+                    [this]() {
+                        if (reflectionProbeEditingService) {
+                            reflectionProbeEditingService->DeleteSelected();
                         }
                     });
             break;
@@ -5312,28 +5658,6 @@ void SectorEditor::DrawSectorsPanel(
             break;
         }
     }
-}
-
-void SectorEditor::DrawAddMapTextureModal(
-        engine::UIContext& ui,
-        const engine::UIConfig& config,
-        engine::Input& input,
-        engine::AssetManager& assets,
-        engine::FontHandle font)
-{
-    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    const SectorEditorAddTextureModalCallbacks callbacks{
-            [this, &assets]() { CloseAddMapTextureModal(assets); },
-            [this, &assets]() { return AddSelectedMapTexture(assets); },
-            [&textureCatalog, this](int pathIndex) {
-                textureCatalog.SelectAddMapTexturePath(state.addMapTexture, pathIndex);
-            },
-            [this, &assets]() { game::RefreshAddMapTexturePreview(state.addMapTexture, assets); },
-            [&textureCatalog, this](std::string& error) {
-                return textureCatalog.ValidateAddMapTextureId(state.addMapTexture, error);
-            }
-    };
-    game::DrawAddMapTextureModal(ui, config, input, assets, font, state.addMapTexture, callbacks);
 }
 
 void SectorEditor::DrawAddMapSoundModal(
@@ -5789,6 +6113,28 @@ void SectorEditor::DrawWeaponEditor(
     }
 }
 
+void SectorEditor::DrawMaterialRegistryEditor(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
+{
+    SectorEditorMaterialRegistryEditorService editor =
+            BuildMaterialRegistryEditorService();
+    const SectorEditorMaterialRegistryEditorResult result =
+            game::DrawSectorEditorMaterialRegistryEditor(
+                    ui, config, input, assets, font, smallFont, editor);
+    if (result == SectorEditorMaterialRegistryEditorResult::Saved) {
+        SectorEditorTextureCatalogService catalog = MakeTextureCatalogService();
+        catalog.RefreshTextureHandles(assets);
+        catalog.RefreshDefaultTextureIds();
+        RefreshResolvedMaterials();
+        state.lightmapSourceHashRevision = 0;
+    }
+}
+
 void SectorEditor::DrawSaveLevelModal(
         engine::UIContext& ui,
         const engine::UIConfig& config,
@@ -6097,9 +6443,6 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     if (!engine::IsNull(textureCatalogState.editorTextureScope)) {
         assets.UnloadScope(textureCatalogState.editorTextureScope);
     }
-    if (!engine::IsNull(state.addMapTexture.previewScope)) {
-        assets.UnloadScope(state.addMapTexture.previewScope);
-    }
     if (!engine::IsNull(runtimeObjectEditingState.spritePicker.previewScope)) {
         assets.UnloadScope(runtimeObjectEditingState.spritePicker.previewScope);
     }
@@ -6211,6 +6554,7 @@ bool SectorEditor::LoadLevel(
                 MakeLiveDerivationAccess(documentState.derivation),
                 topologyMap);
     }
+    RefreshResolvedMaterials();
     std::string fingerprintError;
     if (!RefreshSectorStaticModelGeometryFingerprints(
                 topologyMap,
@@ -6437,6 +6781,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
         return false;
     }
 
+    RefreshResolvedMaterials();
     std::string fingerprintError;
     if (!RefreshSectorStaticModelGeometryFingerprints(
                 TopologyMap(),
@@ -7027,7 +7372,7 @@ SectorEditorTextureCatalogService SectorEditor::MakeTextureCatalogService()
 {
     return SectorEditorTextureCatalogService{
             SectorEditorTextureCatalogServiceContext{
-                    TopologyMap(),
+                    materialRegistry,
                     textureCatalogState,
                     state.defaultFloorTextureId,
                     state.defaultCeilingTextureId,
@@ -7057,6 +7402,20 @@ SectorEditorWeaponEditorService SectorEditor::BuildWeaponEditorService()
             applicationSettingsPath};
 }
 
+SectorEditorMaterialRegistryEditorService SectorEditor::BuildMaterialRegistryEditorService()
+{
+    return SectorEditorMaterialRegistryEditorService{
+            materialRegistryEditorState,
+            materialRegistry,
+            AuthoringGraph(),
+            TopologyMap(),
+            MakeLiveDerivationAccess(documentState.derivation),
+            Lifecycle(),
+            statusText,
+            std::filesystem::path(ASSETS_PATH) / "materials" / "materials.json",
+            std::filesystem::path(ASSETS_PATH) / "levels"};
+}
+
 void SectorEditor::OpenWeaponEditor(bool fromPreview3D)
 {
     const FpsWeaponDefinition* slotOneWeapon =
@@ -7078,47 +7437,10 @@ void SectorEditor::OpenWeaponEditor(bool fromPreview3D)
     }
 }
 
-void SectorEditor::OpenAddMapTextureModal(engine::AssetManager& assets)
-{
-    CloseAddMapTextureModal(assets);
-    state.addMapTexture.open = true;
-    game::RefreshAddMapTextureScan(state.addMapTexture);
-    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    textureCatalog.SelectAddMapTexturePath(
-            state.addMapTexture,
-            state.addMapTexture.selectedPathIndex);
-    statusText = "Add topology texture";
-}
-
-void SectorEditor::CloseAddMapTextureModal(engine::AssetManager& assets)
-{
-    if (!engine::IsNull(state.addMapTexture.previewScope)) {
-        assets.UnloadScope(state.addMapTexture.previewScope);
-    }
-    state.addMapTexture = AddMapTextureState{};
-}
-
-bool SectorEditor::AddSelectedMapTexture(engine::AssetManager& assets)
-{
-    SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    const SectorEditorAddTextureResult result =
-            textureCatalog.RegisterSelectedMapTexture(state.addMapTexture);
-    if (!result.success) {
-        return false;
-    }
-
-    textureCatalog.RefreshTextureHandles(assets);
-    Lifecycle().hasUnsavedChanges = true;
-    Lifecycle().topologyDocumentDirty = true;
-    statusText = TextFormat("%s texture %s", result.replacing ? "Updated" : "Added", result.textureId.c_str());
-    CloseAddMapTextureModal(assets);
-    return true;
-}
-
 void SectorEditor::ApplyAssetPrune(engine::AssetManager& assets)
 {
     const SectorEditorAssetPruneOptions options{
-            state.assetPruneModal.pruneTextures,
+            false,
             state.assetPruneModal.pruneSounds};
     const SectorEditorAssetPruneResult result = PruneUnusedSectorEditorAssets(
             AuthoringGraph(),
@@ -7793,6 +8115,7 @@ SectorEditorMaterialEditingService SectorEditor::BuildMaterialEditingService()
     return SectorEditorMaterialEditingService{
             SectorEditorMaterialEditingServiceContext{
                     Lifecycle(),
+                    materialRegistry,
                     TopologyMap(),
                     AuthoringGraph(),
                     MakeLiveDerivationAccess(documentState.derivation),
@@ -7947,6 +8270,7 @@ bool SectorEditor::RebuildPreviewMeshesPreservingView(engine::EngineContext& con
     const SectorSurfaceRef selected = previewState.selection.selectedSurface3D;
     const TopologySurfaceEditTarget selectedTarget = previewState.selection.selectedTopologySurface3D;
 
+    RefreshResolvedMaterials();
     std::string fingerprintError;
     if (!RefreshSectorStaticModelGeometryFingerprints(
                 TopologyMap(),
@@ -8006,6 +8330,7 @@ std::string SectorEditor::CurrentTextureForPickerTarget() const
         SectorEditorMaterialEditingServiceContext serviceContext{
                 MakeSectorEditorDocumentLifecycleAccess(
                         const_cast<SectorEditorDocumentLifecycleState&>(documentState.lifecycle)),
+                materialRegistry,
                 const_cast<SectorTopologyMap&>(TopologyMap()),
                 const_cast<SectorAuthoringGraph&>(AuthoringGraph()),
                 MakeLiveDerivationAccess(const_cast<SectorEditorDerivationState&>(documentState.derivation)),
@@ -8106,7 +8431,7 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
         }
 
         const int targetObjectId = picker.runtimeObjectId;
-        const std::string selectedTexture = selected.textureId;
+        const std::string selectedTexture = selected.materialId;
         CloseSectorEditorTexturePicker(picker);
 
         if (selectionState.selectedRuntimeObjectId != targetObjectId) {
@@ -8117,10 +8442,10 @@ void SectorEditor::ApplyTexturePickerSelection(engine::AssetManager& assets)
         const bool changed = MutateSelectedRuntimeObject(
                 "Updated door texture",
                 [&selectedTexture](SectorPlacedRuntimeObject& object) {
-                    if (object.kind != "door" || object.door.textureId == selectedTexture) {
+                    if (object.kind != "door" || object.door.materialId == selectedTexture) {
                         return false;
                     }
-                    object.door.textureId = selectedTexture;
+                    object.door.materialId = selectedTexture;
                     return true;
                 });
         statusText = changed

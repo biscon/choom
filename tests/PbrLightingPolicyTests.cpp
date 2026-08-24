@@ -35,6 +35,10 @@ void TestDiagnosticModesAndScales()
           "world indirect diffuse defaults to one");
     Check(Near(settings.worldEnvironmentSpecularScale, 1.0f),
           "world environment specular defaults to one");
+    Check(static_cast<int>(game::SectorPbrDiagnosticMode::ShadingNormal) == 9
+                    && static_cast<int>(
+                               game::SectorPbrDiagnosticMode::TangentNormal) == 10,
+          "raw tangent-normal diagnostics append without renumbering existing modes");
 
     settings.diagnosticMode = static_cast<game::SectorPbrDiagnosticMode>(999);
     settings.worldIndirectDiffuseScale = -2.0f;
@@ -352,6 +356,132 @@ std::string ReadSource(const char* path)
             std::istreambuf_iterator<char>());
 }
 
+void TestSectorRuntimeNormalMappingPolicy()
+{
+    const std::string source = ReadSource(SECTOR_SHADER_SOURCE_PATH);
+    const std::string door = ReadSource(DOOR_SHADER_SOURCE_PATH);
+    Check(!source.empty(),
+          "sector runtime normal-mapping policy can read the active renderer");
+    Check(source.find("engine::TextureColorUsage::LinearData")
+                    != std::string::npos
+                    && source.find("normalTextureHandlesById.emplace(")
+                            != std::string::npos,
+          "automatic sector normal maps load as linear texture data");
+    Check(source.find(
+                      "float uvDeterminant = uvDx.x * uvDy.y - uvDx.y * uvDy.x")
+                    != std::string::npos
+                    && source.find(
+                               "uvDeterminant * uvDeterminant\n"
+                               "                    <= uvDerivativeScaleSq * 0.00000001")
+                            != std::string::npos
+                    && source.find("float inverseUvDeterminant = 1.0 / uvDeterminant")
+                            != std::string::npos
+                    && source.find(
+                               "tangent -= geometricNormal * dot(tangent, geometricNormal)")
+                    != std::string::npos
+                    && source.find(
+                               "dot(cross(geometricNormal, tangent), sourceBitangent) < 0.0")
+                            != std::string::npos
+                    && source.find("cross(geometricNormal, tangent)")
+                            != std::string::npos
+                    && source.find(
+                               "mat3(tangent, bitangent, geometricNormal) * mappedNormal")
+                            != std::string::npos,
+          "sector runtime normal mapping builds an orthonormal handed tangent basis");
+    Check(source.find("inverseBasisLength") == std::string::npos
+                    && source.find(
+                               "dot(tangent, tangent) <= 0.00000001")
+                            == std::string::npos
+                    && source.find(
+                               "dot(sourceBitangent, sourceBitangent) <= 0.00000001")
+                            == std::string::npos,
+          "sector tangent validity is independent of screen-derivative magnitude");
+    Check(source.find("vec3 worldNormal = SurfaceNormal(\n"
+                      "            geometricNormal, tangentNormalSample)")
+                    != std::string::npos
+                    && source.find("dot(worldNormal, lightDirection)")
+                            != std::string::npos,
+          "dynamic sector lights evaluate the mapped world normal");
+    Check(source.find("uniform sampler2D directionalLightmapTexture")
+                    != std::string::npos
+                    && source.find("vec3 ApplyDirectionalLightmap(")
+                            != std::string::npos
+                    && source.find(
+                               "mappedResponse / geometricResponse, 0.0, 4.0")
+                            != std::string::npos,
+          "normal-mapped sector surfaces evaluate bounded directional baked diffuse at runtime");
+    Check(source.find("float DistributionGgx(") != std::string::npos
+                    && source.find("dynamicDirectSpecular +=")
+                            != std::string::npos
+                    && source.find("staticDirectSpecular +=")
+                            != std::string::npos
+                    && source.find("staticSpecularLightCount")
+                            != std::string::npos,
+          "sector dynamic and bounded authored-static lights use GGX specular");
+    Check(source.find("metallicFactorById.emplace") != std::string::npos
+                    && source.find("roughnessFactorById.emplace")
+                            != std::string::npos
+                    && source.find("mix(vec3(0.04), surfaceRgb, metallic)")
+                            != std::string::npos
+                    && source.find("textureLod(\n"
+                               "                environmentTexture")
+                            != std::string::npos,
+          "sector material scalars drive metallic-roughness shading and environment specular");
+    Check(source.find("InitializeSectorSurfaceSamplerUnits(material.shader)")
+                    != std::string::npos
+                    && source.find(
+                               "for (int textureUnit = MATERIAL_MAP_ALBEDO;")
+                            != std::string::npos,
+          "sector material samplers receive deterministic fixed texture units");
+
+    const std::string model = ReadSource(PBR_SHADER_SOURCE_PATH);
+    Check(source.find("pbrDiagnosticMode == 10") != std::string::npos
+                    && model.find("pbrDiagnosticMode == 10")
+                            != std::string::npos
+                    && source.find("? tangentNormalSample\n"
+                               "                : vec3(1.0, 0.0, 1.0)")
+                            != std::string::npos
+                    && model.find("? tangentNormalSample\n"
+                               "                : vec3(1.0, 0.0, 1.0)")
+                            != std::string::npos,
+          "sector and model raw-normal diagnostics show sampled RGB or magenta when absent");
+    Check(source.find("if (pbrDiagnosticMode == 0) {\n"
+                      "        surfaceOutput = ApplySectorFog(")
+                    != std::string::npos,
+          "sector PBR diagnostics bypass fog while full rendering retains it");
+    Check(door.find("uniform sampler2D normalTexture") != std::string::npos
+                    && door.find("float uvDeterminant = uvDx.x * uvDy.y - uvDx.y * uvDy.x")
+                            != std::string::npos
+                    && door.find("mat3(tangent, bitangent, geometricNormal) * mappedNormal")
+                            != std::string::npos,
+          "procedural doors apply OpenGL tangent-space normal maps at runtime");
+    Check(door.find("float DistributionGgx(") != std::string::npos
+                    && door.find("dynamicDirectSpecular +=") != std::string::npos
+                    && door.find("staticDirectSpecular +=") != std::string::npos
+                    && door.find("mix(vec3(0.04), surfaceRgb, metallic)")
+                            != std::string::npos
+                    && door.find("textureLod(\n"
+                               "                environmentTexture")
+                            != std::string::npos,
+          "procedural door material scalars drive dynamic static and environment GGX lighting");
+    Check(door.find("pbrDiagnosticMode == 8") != std::string::npos
+                    && door.find("pbrDiagnosticMode == 9") != std::string::npos
+                    && door.find("pbrDiagnosticMode == 10") != std::string::npos
+                    && door.find("doorDebugMode") == std::string::npos
+                    && door.find("DOOR_DEBUG_") == std::string::npos,
+          "procedural doors use shared PBR diagnostics without the legacy door-only modes");
+    Check(door.find("if (pbrDiagnosticMode == 0) {\n"
+                      "        outputRgb = ApplySectorFog(")
+                    != std::string::npos,
+          "door PBR diagnostics bypass fog while full rendering retains it");
+    Check(source.find("NormalMappedRendererMaterialIds(map, generatedGeometry)")
+                            != std::string::npos
+                    && source.find("ResolveDoorMaterial(") != std::string::npos
+                    && source.find("normalTextureHandlesById.find(materialId)")
+                            != std::string::npos,
+          "procedural door materials resolve their global normal and scalar metadata");
+}
+
 void TestBakedHdrConsumersStayUnclamped()
 {
     const std::string sector = ReadSource(SECTOR_SHADER_SOURCE_PATH);
@@ -442,18 +572,18 @@ void TestDistanceFogUsesDarknessGatedScattering()
                     && model.find("mix(surfaceRgb, fogColor, fogAmount)") == std::string::npos,
           "direct light-intensity scaling and constant emissive fog mixing stay removed");
     Check(sector.find(
-                      "staticAtmosphericLighting = max(fragColor.rgb + bakedDirect, vec3(0.0))")
+                      "fragColor.rgb + bakedSample.rgb, vec3(0.0)")
                             != std::string::npos
                     && sector.find(
-                               "ApplySectorFog(\n"
-                               "            surfaceOutput,\n"
-                               "            staticAtmosphericLighting,")
+                               "surfaceOutput = ApplySectorFog(\n"
+                               "                surfaceOutput,\n"
+                               "                staticAtmosphericLighting,")
                             != std::string::npos,
-          "sector fog uses ambient and baked direct light without baked AO or dynamic light");
+          "sector fog uses ambient and uncorrected baked light without baked AO or dynamic light");
     Check(door.find(
-                      "ApplySectorFog(\n"
-                      "            surfaceRgb * tint * lighting,\n"
-                      "            staticProbeLighting,")
+                      "outputRgb = ApplySectorFog(\n"
+                      "                outputRgb,\n"
+                      "                staticProbeLighting,")
                             != std::string::npos
                     && billboard.find(
                                "ApplySectorFog(\n"
@@ -878,6 +1008,7 @@ int main()
     TestMaterialTextureSemantics();
     TestEnvironmentEligibility();
     TestRemovedShaderPathsStayRemoved();
+    TestSectorRuntimeNormalMappingPolicy();
     TestBakedHdrConsumersStayUnclamped();
     TestDistanceFogUsesDarknessGatedScattering();
     TestHdrEffectShaderAndPassPolicies();

@@ -5,6 +5,8 @@
 #include "sector_demo/SectorMeshTypes.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
 #include "sector_demo/renderer/SectorFog.h"
+#include "sector_demo/renderer/SectorStaticModelRenderer.h"
+#include "sector_demo/renderer/SectorStaticSpecularLighting.h"
 
 #include <raylib.h>
 
@@ -23,18 +25,8 @@ namespace game {
 
 struct SectorBakedObjectLightProbeRuntimeData;
 struct SectorDoorShadowCaster;
+struct RuntimePortalVisibilityResult;
 struct SectorTopologyMap;
-
-enum class SectorDoorLightingDebugMode {
-    Normal = 0,
-    AlbedoOnly = 1,
-    BakedOnly = 2,
-    DynamicOnly = 3,
-    NormalVisualize = 4,
-    FlatColorNoTexture = 5
-};
-
-const char* SectorDoorLightingDebugModeName(SectorDoorLightingDebugMode mode);
 
 struct SectorRuntimeDoorLightingContext {
     const SectorBakedObjectLightProbeRuntimeData* objectLightProbes = nullptr;
@@ -48,11 +40,19 @@ struct SectorDoorRenderStats {
     size_t skipped = 0;
 };
 
-struct SectorDoorTextureResolver {
-    using ResolveFn = const Texture2D* (*)(
+struct SectorDoorResolvedMaterial {
+    const Texture2D* albedo = nullptr;
+    const Texture2D* normal = nullptr;
+    float normalStrength = 1.0f;
+    float metallicFactor = 0.0f;
+    float roughnessFactor = 0.8f;
+};
+
+struct SectorDoorMaterialResolver {
+    using ResolveFn = SectorDoorResolvedMaterial (*)(
             void* userData,
             engine::AssetManager& assets,
-            const std::string& textureId);
+            const std::string& materialId);
 
     void* userData = nullptr;
     ResolveFn resolve = nullptr;
@@ -72,13 +72,44 @@ struct SectorDoorDrawContext {
     SectorRuntimeDoorLightingContext lighting;
     SectorDoorDynamicLightContext dynamicLighting;
     SectorFogRenderContext fog;
-    SectorDoorTextureResolver textureResolver;
+    SectorDoorMaterialResolver materialResolver;
+    Camera3D camera = {};
+    SectorPbrContributionSettings pbr;
+    const SectorStaticSpecularLightState* staticSpecularLights = nullptr;
+    const RuntimePortalVisibilityResult* visibility = nullptr;
+    const TextureCubemap* environment = nullptr;
+    float environmentExposure = 0.15f;
+    Vector3 environmentCapturePosition = {};
+    Vector3 environmentInfluenceCenter = {};
+    Vector3 environmentHalfExtents = {1.0f, 1.0f, 1.0f};
+    float environmentYaw = 0.0f;
+    float environmentMaxLod = 8.0f;
+    bool environmentBoxProjection = false;
+    bool staticSpecularEligible = false;
     const Texture2D* defaultMaterialTexture = nullptr;
     std::string* renderDebugText = nullptr;
 };
 
 struct SectorDoorOpaqueShaderLocations {
     int texture = -1;
+    int normalTexture = -1;
+    int hasNormalMap = -1;
+    int normalStrength = -1;
+    int metallicFactor = -1;
+    int roughnessFactor = -1;
+    int cameraPosition = -1;
+    int hasEnvironment = -1;
+    int environmentExposure = -1;
+    int indirectDiffuseScale = -1;
+    int environmentSpecularScale = -1;
+    int environmentBoxProjection = -1;
+    int environmentCapturePosition = -1;
+    int environmentInfluenceCenter = -1;
+    int environmentHalfExtents = -1;
+    int environmentYaw = -1;
+    int environmentMaxLod = -1;
+    int pbrDiagnosticMode = -1;
+    int useStaticSpecularLighting = -1;
     int dynamicLightCount = -1;
     int dynamicLightPositions = -1;
     int dynamicLightColors = -1;
@@ -101,8 +132,8 @@ struct SectorDoorOpaqueShaderLocations {
     int shadowStrength = -1;
     int shadowSoftness = -1;
     int shadowAtlasTilesPerRow = -1;
-    int debugMode = -1;
     int tint = -1;
+    SectorStaticSpecularShaderLocations staticSpecular;
     SectorFogShaderLocations fog;
 };
 
@@ -142,9 +173,6 @@ public:
     Material& OpaqueMaterial() { return opaqueMaterial; }
     const Texture2D& OpaqueDefaultMaterialTexture() const { return opaqueDefaultMaterialTexture; }
     const SectorDoorOpaqueShaderLocations& OpaqueShaderLocations() const { return opaqueShaderLocations; }
-    SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorLightingDebugMode; }
-    void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorLightingDebugMode = mode; }
-    int DoorLightingDebugModeShaderValue() const { return static_cast<int>(doorLightingDebugMode); }
     const SectorDoorRenderStats& RenderStats() const { return renderStats; }
 
 private:
@@ -175,7 +203,6 @@ private:
     Material opaqueMaterial = {};
     Texture2D opaqueDefaultMaterialTexture = {};
     bool opaqueMaterialLoaded = false;
-    SectorDoorLightingDebugMode doorLightingDebugMode = SectorDoorLightingDebugMode::Normal;
     SectorDoorRenderStats renderStats;
 };
 

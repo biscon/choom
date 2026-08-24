@@ -99,7 +99,16 @@ public:
             bool useBakedAmbientOcclusion = true,
             engine::World* runtimeObjectWorld = nullptr,
             SectorRuntimeDoorLightingContext doorLighting = {},
-            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{});
+            const SectorTopologyFogSettings& fogSettings = SectorTopologyFogSettings{},
+            bool staticCaptureOnly = false);
+    bool CaptureReflectionProbe(
+            engine::AssetManager& assets,
+            Vector3 capturePosition,
+            int resolution,
+            engine::World* runtimeObjectWorld,
+            SectorRuntimeDoorLightingContext doorLighting,
+            std::vector<Vector4>& outFacePixels,
+            std::string& error);
     bool ApplyWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             const SectorTopologyMap& map,
@@ -194,8 +203,6 @@ public:
                 dynamicLightFadeInSeconds);
         depthPrepassEnabled = depthPrepass;
     }
-    SectorDoorLightingDebugMode DoorLightingDebugMode() const { return doorRenderer.DoorLightingDebugMode(); }
-    void SetDoorLightingDebugMode(SectorDoorLightingDebugMode mode) { doorRenderer.SetDoorLightingDebugMode(mode); }
     const std::vector<SectorPreviewDynamicPointLightUniform>& SelectedDynamicLights() const
     {
         return dynamicLightState.SelectedLights();
@@ -219,11 +226,12 @@ public:
     size_t DoorSkippedCount() const { return doorRenderer.RenderStats().skipped; }
     SectorPbrContributionSettings PbrContributionSettings() const
     {
-        return staticModelRenderer.PbrContributionSettings();
+        return pbrContributionSettings;
     }
     void SetPbrContributionSettings(SectorPbrContributionSettings settings)
     {
-        staticModelRenderer.SetPbrContributionSettings(settings);
+        pbrContributionSettings = NormalizeSectorPbrContributionSettings(settings);
+        staticModelRenderer.SetPbrContributionSettings(pbrContributionSettings);
     }
     void SetPbrDiagnosticSelectedObjectId(int objectId)
     {
@@ -278,15 +286,19 @@ private:
             bool end) const;
     void RefreshAtmosphereDiagnostics(
             const SectorBillboardDynamicLightContext& dynamicLights);
-    engine::TextureHandle TextureForId(const std::string& textureId) const;
-    engine::TextureHandle NormalTextureForId(const std::string& textureId) const;
+    engine::TextureHandle TextureForId(const std::string& materialId) const;
+    engine::TextureHandle NormalTextureForId(const std::string& materialId) const;
     void UpdateCamera();
     SectorBillboardDynamicLightContext BuildBillboardDynamicLightContext() const;
     void DrawDepthPrepass(engine::AssetManager& assets, engine::World* runtimeObjectWorld);
     static const Texture2D* ResolveShadowCasterTexture(
             void* userData,
             engine::AssetManager& assets,
-            const std::string& textureId);
+            const std::string& materialId);
+    static SectorDoorResolvedMaterial ResolveDoorMaterial(
+            void* userData,
+            engine::AssetManager& assets,
+            const std::string& materialId);
 
     SectorMeshBuildResult meshes;
     SectorGeneratedGeometry generatedGeometry;
@@ -300,7 +312,11 @@ private:
     bool visibilityLookupWorldValid = false;
     std::unordered_map<std::string, engine::TextureHandle> textureHandlesById;
     std::unordered_map<std::string, engine::TextureHandle> normalTextureHandlesById;
+    std::unordered_map<std::string, float> normalStrengthById;
+    std::unordered_map<std::string, float> metallicFactorById;
+    std::unordered_map<std::string, float> roughnessFactorById;
     std::vector<engine::TextureHandle> lightmapTextures;
+    std::vector<engine::TextureHandle> directionalLightmapTextures;
     engine::AssetScopeHandle assetScope = engine::NullAssetScopeHandle();
     Material material = {};
     Texture2D defaultMaterialTexture = {};
@@ -310,7 +326,25 @@ private:
     int useLightmapLoc = -1;
     int useBakedAmbientOcclusionLoc = -1;
     int hasLightmapLoc = -1;
+    int hasDirectionalLightmapLoc = -1;
     int hasNormalMapLoc = -1;
+    int normalStrengthLoc = -1;
+    int metallicFactorLoc = -1;
+    int roughnessFactorLoc = -1;
+    int cameraPositionLoc = -1;
+    int hasEnvironmentLoc = -1;
+    int environmentExposureLoc = -1;
+    int indirectDiffuseScaleLoc = -1;
+    int environmentSpecularScaleLoc = -1;
+    int environmentBoxProjectionLoc = -1;
+    int environmentCapturePositionLoc = -1;
+    int environmentInfluenceCenterLoc = -1;
+    int environmentHalfExtentsLoc = -1;
+    int environmentYawLoc = -1;
+    int environmentMaxLodLoc = -1;
+    int environmentIntensityLoc = -1;
+    int pbrDiagnosticModeLoc = -1;
+    int useStaticSpecularLightingLoc = -1;
     int alphaTestLoc = -1;
     int alphaCutoffLoc = -1;
     int hasDecalLoc = -1;
@@ -376,6 +410,8 @@ private:
     SectorBillboardRenderer billboardRenderer;
     SectorStaticModelRenderer staticModelRenderer;
     SectorStaticSpecularLightState staticSpecularLightState;
+    SectorStaticSpecularShaderLocations staticSpecularLocations;
+    SectorPbrContributionSettings pbrContributionSettings;
     SectorDoorRenderer doorRenderer;
     SectorDynamicLightingRenderer dynamicLightState;
     SectorDynamicModelShadowRenderer dynamicModelShadowRenderer;

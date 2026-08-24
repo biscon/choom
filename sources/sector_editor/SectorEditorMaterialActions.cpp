@@ -106,7 +106,7 @@ const SectorTopologyUvSettings* UvForMaterialSurface(
     }
     if (layer == TopologyMaterialLayer::Decal) {
         const SectorTopologyDecalLayer* decal = DecalForMaterialSurface(map, target);
-        return decal == nullptr || decal->textureId.empty() ? nullptr : &decal->uv;
+        return decal == nullptr || decal->materialId.empty() ? nullptr : &decal->uv;
     }
 
     if (IsFlatTarget(target.kind)) {
@@ -129,7 +129,7 @@ const SectorTopologyUvSettings* UvForMaterialSurface(
 bool IsMaterialDecalAssigned(const SectorTopologyMap& map, TopologySurfaceEditTarget target)
 {
     const SectorTopologyDecalLayer* decal = DecalForMaterialSurface(map, target);
-    return decal != nullptr && !decal->textureId.empty();
+    return decal != nullptr && !decal->materialId.empty();
 }
 
 std::string CurrentTextureForMaterialSurface(
@@ -142,7 +142,7 @@ std::string CurrentTextureForMaterialSurface(
     }
     if (layer == TopologyMaterialLayer::Decal) {
         const SectorTopologyDecalLayer* decal = DecalForMaterialSurface(map, target);
-        return decal == nullptr ? std::string{} : decal->textureId;
+        return decal == nullptr ? std::string{} : decal->materialId;
     }
 
     if (IsFlatTarget(target.kind)) {
@@ -151,8 +151,8 @@ std::string CurrentTextureForMaterialSurface(
             return std::string{};
         }
         return target.kind == TopologySurfaceEditTargetKind::SectorFloor
-                ? sector->floorTextureId
-                : sector->ceilingTextureId;
+                ? sector->floorMaterialId
+                : sector->ceilingMaterialId;
     }
 
     const SectorTopologySideDef* sideDef = FindSectorTopologySideDef(map, target.sideDefId);
@@ -161,13 +161,13 @@ std::string CurrentTextureForMaterialSurface(
     }
     switch (target.kind) {
         case TopologySurfaceEditTargetKind::SideDefWall:
-            return sideDef->wall.textureId;
+            return sideDef->wall.materialId;
         case TopologySurfaceEditTargetKind::SideDefLower:
-            return sideDef->lower.textureId;
+            return sideDef->lower.materialId;
         case TopologySurfaceEditTargetKind::SideDefUpper:
-            return sideDef->upper.textureId;
+            return sideDef->upper.materialId;
         case TopologySurfaceEditTargetKind::SideDefMiddle:
-            return sideDef->middle.textureId;
+            return sideDef->middle.materialId;
         case TopologySurfaceEditTargetKind::SectorFloor:
         case TopologySurfaceEditTargetKind::SectorCeiling:
         case TopologySurfaceEditTargetKind::None:
@@ -198,10 +198,10 @@ bool CopyMaterialSurface(
             return false;
         }
         if (target.kind == TopologySurfaceEditTargetKind::SectorFloor) {
-            payload.textureId = sector->floorTextureId;
+            payload.materialId = sector->floorMaterialId;
             payload.uv = sector->floorUv;
         } else {
-            payload.textureId = sector->ceilingTextureId;
+            payload.materialId = sector->ceilingMaterialId;
             payload.uv = sector->ceilingUv;
         }
     } else {
@@ -213,7 +213,7 @@ bool CopyMaterialSurface(
         const SectorTopologyWallPartSettings& part = TopologyWallPartSettingsFor(
                 *sideDef,
                 TopologyEditTargetWallPart(target.kind));
-        payload.textureId = part.textureId;
+        payload.materialId = part.materialId;
         payload.uv = part.uv;
     }
 
@@ -225,7 +225,7 @@ bool CopyMaterialSurface(
 SectorEditorMaterialActionResult PasteMaterialToFields(
         TopologySurfaceEditTarget target,
         const TopologyMaterialPayload& payload,
-        std::string& textureId,
+        std::string& materialId,
         SectorTopologyUvSettings& uv)
 {
     if (!payload.valid) {
@@ -238,7 +238,7 @@ SectorEditorMaterialActionResult PasteMaterialToFields(
                 TopologyMaterialKindName(target.kind)));
     }
 
-    textureId = payload.textureId;
+    materialId = payload.materialId;
     uv = payload.uv;
     return Changed(TextFormat("Pasted %s material.", TopologyMaterialKindName(target.kind)));
 }
@@ -281,7 +281,7 @@ SectorEditorMaterialActionResult ApplySurfaceDecalOpacityToLayer(
         return {};
     }
     opacity = std::clamp(opacity, 0.0f, 1.0f);
-    if (decal.textureId.empty()) {
+    if (decal.materialId.empty()) {
         return Failure("No decal assigned.");
     }
     if (decal.opacity == opacity) {
@@ -297,7 +297,7 @@ SectorEditorMaterialActionResult ApplySurfaceDecalEmissiveToLayer(
         bool emissive,
         SectorTopologyDecalLayer& decal)
 {
-    if (decal.textureId.empty()) {
+    if (decal.materialId.empty()) {
         return Failure("No decal assigned.");
     }
     if (decal.emissive == emissive) {
@@ -316,7 +316,7 @@ SectorEditorMaterialActionResult ApplySurfaceDecalTintToLayer(
     if (!IsValidDecalTint(tint)) {
         return Failure("Invalid decal tint.");
     }
-    if (decal.textureId.empty()) {
+    if (decal.materialId.empty()) {
         return Failure("No decal assigned.");
     }
     if (SameTint(decal.tint, tint)) {
@@ -333,7 +333,7 @@ SectorEditorMaterialActionResult ApplySurfaceDecalEmissiveStrengthToLayer(
         SectorTopologyDecalLayer& decal)
 {
     emissiveStrength = ClampDecalEmissiveStrength(emissiveStrength);
-    if (decal.textureId.empty()) {
+    if (decal.materialId.empty()) {
         return Failure("No decal assigned.");
     }
     if (decal.bloomIntensity == emissiveStrength) {
@@ -355,7 +355,7 @@ bool BuildDecalTintModal(
         return false;
     }
     const SectorTopologyDecalLayer* decal = DecalForMaterialSurface(map, target);
-    if (decal == nullptr || decal->textureId.empty()) {
+    if (decal == nullptr || decal->materialId.empty()) {
         status = "No decal assigned.";
         return false;
     }
@@ -610,7 +610,7 @@ SectorEditorMaterialActionResult FitSelectedWallMaterialToUv(
     const TopologyWallPart wallPart = TopologyEditTargetWallPart(target.kind);
     if (wallPart == TopologyWallPart::Middle
             && layer == TopologyMaterialLayer::Base
-            && sideDef->middle.textureId.empty()) {
+            && sideDef->middle.materialId.empty()) {
         return Failure("No middle texture assigned.");
     }
 

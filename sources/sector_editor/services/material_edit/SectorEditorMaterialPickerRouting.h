@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace game {
 
@@ -38,6 +39,7 @@ std::string CurrentSectorEditorMaterialPickerTexture(
 
 bool OpenSectorEditorMaterialPickerForDerivedSector(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -46,6 +48,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSector(
         TopologyMaterialLayer layer);
 bool OpenSectorEditorMaterialPickerForDerivedSector(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -54,6 +57,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSector(
         TopologyMaterialLayer layer);
 bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -62,6 +66,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         TopologyMaterialLayer layer);
 bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -70,6 +75,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringFaceAnchor(
         TopologyMaterialLayer layer);
 bool OpenSectorEditorMaterialPickerForDerivedSideDef(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -78,6 +84,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSideDef(
         TopologyMaterialLayer layer);
 bool OpenSectorEditorMaterialPickerForDerivedSideDef(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -86,6 +93,7 @@ bool OpenSectorEditorMaterialPickerForDerivedSideDef(
         TopologyMaterialLayer layer);
 bool OpenSectorEditorMaterialPickerForAuthoringSide(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorAuthoringGraph& authoringGraph,
         SectorEditorConstDerivationDocumentAccess derivation,
@@ -94,6 +102,7 @@ bool OpenSectorEditorMaterialPickerForAuthoringSide(
         TopologyMaterialLayer layer);
 bool OpenSectorEditorMaterialPickerForAuthoringSide(
         TexturePickerState& picker,
+        const std::vector<std::string>& materialIds,
         const SectorTopologyMap& topologyMap,
         SectorEditorAuthoringDocumentAccess authoring,
         SectorEditorConstDerivationDocumentAccess derivation,

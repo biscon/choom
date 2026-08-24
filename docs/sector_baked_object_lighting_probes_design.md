@@ -340,15 +340,19 @@ Implemented placement behavior:
 4. The outer loop AABB is scanned on a half-cell-offset grid.
 5. Grid spacing converts world units through `SectorWorldToAuthoringDistance()`
    and `SectorCoordSubdivisions`.
-6. `IsStrictlyInsideProbePolygon()` keeps only candidates classified `Inside`
-   the outer polygon and `Outside` every hole. Boundary points are rejected.
+6. Candidates must be classified `Inside` the outer polygon and `Outside` every
+   hole, and must remain at least `kObjectProbeSurfaceClearanceWorld` from all
+   outer and hole boundary segments.
 7. Accepted topology X/Y coordinates are converted to world X/Z with
    `SectorCoordToWorldDistance()`.
 8. If the requested floor-relative Y is at or above the ceiling, Y is clamped to
    the midpoint between floor and ceiling and a placement diagnostic is recorded.
 9. If no grid point survives for a sector, `FindRepresentativeProbePoint()` tries
    the AABB center, the outer-vertex centroid, then a 16x16 interior fallback
-   search. A successful fallback records a diagnostic.
+   search with the same horizontal clearance requirement. A successful fallback
+   records a diagnostic. If no candidate has enough clearance, the sector is
+   skipped with a diagnostic and the bake continues; other sectors still produce
+   probes normally.
 
 Current limitations:
 
@@ -629,6 +633,8 @@ Implemented probe versioning behavior:
 - `kSectorLightmapBakeVersion` was bumped to 10 when object probe sidecar output
   became part of successful lightmap bakes. Old bakes do not contain object
   probes and stale through the source hash.
+- `kSectorLightmapBakeVersion` was bumped to 18 when horizontal probe clearance
+  and valid zero-probe thin sectors changed placement output.
 - `ComputeSectorLightmapSourceHash()` includes the bake version, probe placement
   spacing/height settings after clamping, and the static world/light inputs that
   affect surface and probe bake results.
@@ -651,8 +657,8 @@ Implemented:
 - Binary probe sidecar write/read helpers with versioned validation.
 - Compact JSON metadata under `bakedLightmap.objectProbes`.
 - Lightmap bake version/source-hash integration for probe-affecting settings.
-- Per-sector polygon-aware placement with holes, fallback points, and low-ceiling
-  diagnostics.
+- Per-sector polygon-aware placement with holes, horizontal surface clearance,
+  fallback points, valid zero-probe thin sectors, and low-ceiling diagnostics.
 - Ambient cube baking from sector ambient, static point lights, static spotlights,
   directional light, opaque occlusion, source-radius soft shadows, and
   alpha-tested middle occlusion.
@@ -689,8 +695,8 @@ Covered behaviors include:
   sampling fallback behavior.
 - Successful bake sidecar output, metadata, timing/report fields, and
   cancellation cleanup.
-- Placement counts, concave-sector rejection, hole rejection, small-sector
-  fallback, and low-ceiling clamping.
+- Placement counts, concave-sector rejection, hole rejection, thin-sector
+  skipping, small-sector fallback, and low-ceiling clamping.
 - Static point, static spotlight, directional, wall-occluded, alpha-occluded,
   ambient, and degenerate finite probe lighting.
 - JSON serialization defaults and compact object probe metadata without embedded
