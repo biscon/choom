@@ -21,6 +21,35 @@ end
 
 local ceilingVentOn = false
 local ceilingVentStarted = false
+local officeLightsOn = true
+
+function setOfficeLight(enabled)
+    setDynamicLightEnabled("office_spot_1", enabled)
+    setDynamicLightEnabled("office_spot_2", enabled)
+    setDynamicLightEnabled("light_point_8", enabled)
+    setDynamicLightEnabled("light_point_9", enabled)
+    setDynamicLightEnabled("light_point_12", enabled)
+    setDynamicLightEnabled("light_point_11", enabled)
+end
+
+function toggleOfficeLights()
+    if officeLightsOn then
+        playPropAnimation(
+                "light_switch_01",
+                "switch|switchAction",
+                "once_reverse")
+        officeLightsOn = false
+        setOfficeLight(officeLightsOn)
+        return
+    end
+
+    officeLightsOn = true
+    playPropAnimation(
+            "light_switch_01",
+            "switch|switchAction",
+            "once")
+    setOfficeLight(officeLightsOn)
+end
 
 function toggleCeilingVent()
     if ceilingVentOn then

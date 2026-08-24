@@ -1985,7 +1985,7 @@
       "position": [
         -119.94999694824219,
         -6.0,
-        -55.0
+        -54.0
       ],
       "yawDegrees": 90.0
     },
@@ -2005,6 +2005,27 @@
         -83.0
       ],
       "yawDegrees": 110.0
+    },
+    {
+      "id": 129,
+      "kind": "dynamic_model",
+      "dynamicModel": {
+        "instanceId": "light_switch_01",
+        "useTitle": "light switch",
+        "onUseScript": "toggleOfficeLights",
+        "modelPath": "assets/models/dynamic/switch_outlet.glb",
+        "heightOffsetWorld": 0.20000000298023224,
+        "scale": 1.25,
+        "loop": false,
+        "animationSpeed": 3.0,
+        "shadowMode": "none"
+      },
+      "position": [
+        -119.94999694824219,
+        -6.0,
+        -50.0
+      ],
+      "yawDegrees": 90.0
     }
   ],
   "staticLights": [
@@ -5118,7 +5139,7 @@
     },
     {
       "id": 11,
-      "instanceId": "light_spot_11",
+      "instanceId": "office_spot_1",
       "position": [
         -88.04553985595703,
         7.267064094543457,
@@ -5166,7 +5187,7 @@
     },
     {
       "id": 12,
-      "instanceId": "light_spot_12",
+      "instanceId": "office_spot_2",
       "position": [
         -88.04122924804688,
         7.730865955352783,
