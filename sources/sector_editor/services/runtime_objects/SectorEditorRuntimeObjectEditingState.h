@@ -47,6 +47,9 @@ struct RuntimeObjectEditingState {
 };
 
 struct RuntimeObjectEditingUiState {
+    char dynamicModelInstanceIdBuffer[64] = {};
+    int dynamicModelInstanceIdObjectId = -1;
+    std::string dynamicModelInstanceIdError;
     engine::UIFloatInputState xInput;
     engine::UIFloatInputState yInput;
     engine::UIFloatInputState zInput;

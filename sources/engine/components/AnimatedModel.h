@@ -19,12 +19,17 @@ struct AnimatedModelInstance {
     ModelHandle model;
     std::vector<::Transform> currentPose;
     std::vector<Matrix> boneMatrices;
+    std::vector<::Transform> nodeLocalTransforms;
+    std::vector<Matrix> nodeLocalMatrices;
+    std::vector<Matrix> nodeWorldMatrices;
+    std::vector<Matrix> meshNodeMatrices;
     bool poseReady = false;
     bool poseFailed = false;
 };
 
 struct AnimatedModelAnimator {
     uint32_t animationIndex = InvalidModelAnimationIndex;
+    uint32_t nodeAnimationIndex = InvalidModelAnimationIndex;
     float frame = 0.0f;
     float speed = 1.0f;
     bool playing = true;

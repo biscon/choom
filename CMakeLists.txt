@@ -226,6 +226,14 @@ if(BUILD_TESTING)
     target_link_libraries(render_color_foundations_tests PRIVATE raylib)
     add_test(NAME render_color_foundations COMMAND render_color_foundations_tests)
 
+    add_executable(model_node_animation_tests
+            tests/ModelNodeAnimationTests.cpp
+            sources/engine/assets/ModelAssets.cpp
+    )
+    target_include_directories(model_node_animation_tests PRIVATE sources)
+    target_link_libraries(model_node_animation_tests PRIVATE raylib)
+    add_test(NAME model_node_animation COMMAND model_node_animation_tests)
+
     add_executable(application_flow_tests
             tests/ApplicationFlowTests.cpp
             sources/game/ApplicationFlow.cpp

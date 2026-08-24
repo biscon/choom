@@ -490,28 +490,37 @@ void ResolveDynamicModelAnimations(
                     return;
                 }
 
-                if (asset->animationCount <= 0 || asset->animations == nullptr) {
+                const size_t clipCount =
+                        engine::ModelAnimationClipCount(*asset);
+                if (clipCount == 0) {
                     dynamicModel.animationResolved = true;
                     return;
                 }
 
-                uint32_t animationIndex = engine::FindModelAnimationIndex(
+                int clipIndex = engine::FindModelAnimationClipIndex(
                         *asset,
                         dynamicModel.requestedAnimation.c_str());
-                if (animationIndex == engine::InvalidModelAnimationIndex) {
-                    animationIndex = 0;
+                if (clipIndex < 0) {
+                    clipIndex = 0;
                     dynamicModel.animationFallback = !dynamicModel.requestedAnimation.empty();
                     if (dynamicModel.animationFallback) {
+                        const char* fallbackName =
+                                engine::ModelAnimationClipName(*asset, 0);
                         std::fprintf(
                                 stderr,
                                 "[SectorRuntimeObjects WARNING] Animation '%s' was not found for dynamic model object %d; using '%s'.\n",
                                 dynamicModel.requestedAnimation.c_str(),
                                 dynamicModel.placedObjectId,
-                                asset->animations[0].name);
+                                fallbackName != nullptr
+                                        ? fallbackName
+                                        : "");
                     }
                 }
 
-                engine::SetAnimatedModelAnimation(animator, animationIndex);
+                engine::SetAnimatedModelClip(
+                        animator,
+                        *asset,
+                        static_cast<uint32_t>(clipIndex));
                 if (!animator.loop) {
                     animator.playing = false;
                     animator.frame = 0.0f;
@@ -1169,6 +1178,7 @@ void SpawnPlacedRuntimeObjects(
             world.Add(entity, SectorObjectVisualOffset{});
             world.Add(entity, SectorDynamicModel{
                     placedObject.id,
+                    {},
                     sectorAmbient,
                     placedObject.npc.scale,
                     StaticModelEnvironmentExposure(
@@ -1243,6 +1253,7 @@ void SpawnPlacedRuntimeObjects(
                     &map));
             world.Add(entity, SectorDynamicModel{
                     placedObject.id,
+                    placedObject.dynamicModel.instanceId,
                     sectorAmbient,
                     placedObject.dynamicModel.scale,
                     StaticModelEnvironmentExposure(map, object.currentSectorId, sectorAmbient),

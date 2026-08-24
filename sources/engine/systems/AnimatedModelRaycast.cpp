@@ -218,11 +218,14 @@ AnimatedModelRaycastStatus RaycastAnimatedModel(
 
     bool hit = false;
     float closestDistance = maximumDistance;
-    const Matrix modelTransform = MatrixMultiply(
-            asset.model.transform, authoredTransform);
     for (int meshIndex = 0; meshIndex < asset.model.meshCount; ++meshIndex) {
         const Mesh& mesh = asset.model.meshes[meshIndex];
         if (mesh.vertices == nullptr || mesh.triangleCount <= 0) continue;
+        const Matrix modelTransform = AnimatedModelMeshTransform(
+                asset,
+                instance.meshNodeMatrices,
+                meshIndex,
+                authoredTransform);
         for (int triangleIndex = 0;
                 triangleIndex < mesh.triangleCount;
                 ++triangleIndex) {
@@ -283,8 +286,11 @@ bool ResolveAnimatedModelSurfaceAnchor(
     }
     const Mesh& mesh = asset.model.meshes[anchor.meshIndex];
     std::array<Vector3, 3> vertices{};
-    const Matrix modelTransform = MatrixMultiply(
-            asset.model.transform, authoredTransform);
+    const Matrix modelTransform = AnimatedModelMeshTransform(
+            asset,
+            instance.meshNodeMatrices,
+            static_cast<int>(anchor.meshIndex),
+            authoredTransform);
     for (size_t corner = 0; corner < vertices.size(); ++corner) {
         if (!SkinnedVertex(
                     asset,

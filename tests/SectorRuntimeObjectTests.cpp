@@ -4928,6 +4928,7 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     object.kind = "dynamic_model";
     object.position = Vector3{2.0f, 8.0f, 2.0f};
     object.yawRadians = 0.75f;
+    object.dynamicModel.instanceId = "prop_27";
     object.dynamicModel.rotationXRadians = 0.25f;
     object.dynamicModel.rotationZRadians = -0.5f;
     object.dynamicModel.heightOffsetWorld = 0.625f;
@@ -4957,10 +4958,11 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
                   && Near(transform.yawRadians, 0.75f)
                   && Near(transform.rotationXRadians, 0.25f)
                   && Near(transform.rotationZRadians, -0.5f)
+                  && dynamic.instanceId == "prop_27"
                   && Near(dynamic.scale, 1.75f)
                   && dynamic.shadowMode
                           == game::SectorDynamicModelShadowMode::Dynamic,
-          "dynamic prop copies the movable authored transform, scale, and shadow mode");
+          "dynamic prop copies its stable ID, movable authored transform, scale, and shadow mode");
     Check(dynamic.requestedAnimation == "Standard Walk"
                   && !dynamic.animationResolved
                   && !animator.loop

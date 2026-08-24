@@ -58,6 +58,9 @@ public:
             const std::function<bool(SectorPlacedRuntimeObject&)>& mutate);
     bool AssignSelectedStaticModel(const std::string& modelPath);
     bool AssignSelectedDynamicModel(const std::string& modelPath);
+    bool SetSelectedDynamicModelInstanceId(
+            const std::string& instanceId,
+            std::string& outError);
     bool AssignSelectedNpcDefinition(const std::string& definitionId);
     bool SetSelectedNpcInstanceId(
             const std::string& instanceId,

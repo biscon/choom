@@ -984,6 +984,7 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
 
     SectorPlacedDynamicModel model;
     model.modelPath = ReadOptionalString(value, "modelPath", context, model.modelPath);
+    model.instanceId = ReadOptionalString(value, "instanceId", context, model.instanceId);
     model.rotationXRadians = DegreesToRadians(ReadOptionalFloat(
             value, "rotationXDegrees", context, 0.0f));
     model.rotationZRadians = DegreesToRadians(ReadOptionalFloat(
@@ -2113,6 +2114,10 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             const float rotationXDegrees = RadiansToDegrees(model.rotationXRadians);
             const float rotationZDegrees = RadiansToDegrees(model.rotationZRadians);
             Json dynamicModel = Json::object();
+            if (!IsValidSectorDynamicModelInstanceId(model.instanceId)) {
+                Fail(context + ".dynamicModel.instanceId is invalid");
+            }
+            dynamicModel["instanceId"] = model.instanceId;
             if (!model.modelPath.empty()) dynamicModel["modelPath"] = model.modelPath;
             if (rotationXDegrees != 0.0f) dynamicModel["rotationXDegrees"] = rotationXDegrees;
             if (rotationZDegrees != 0.0f) dynamicModel["rotationZDegrees"] = rotationZDegrees;
@@ -2891,6 +2896,7 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
     std::vector<int> objectIds;
     objectIds.reserve(map.runtimeObjects.size());
     std::set<std::string> npcInstanceIds;
+    std::set<std::string> dynamicModelInstanceIds;
     for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
         const std::string objectContext = context + ".runtimeObjects[" + std::to_string(object.id) + "]";
         if (!IsValidSectorTopologyId(object.id)) {
@@ -2917,6 +2923,13 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                 }
             } else if (object.kind == RuntimeObjectKindDynamicModel) {
                 const SectorPlacedDynamicModel& model = object.dynamicModel;
+                if (!IsValidSectorDynamicModelInstanceId(model.instanceId)) {
+                    Fail(objectContext + ".dynamicModel.instanceId is invalid");
+                }
+                if (!dynamicModelInstanceIds.insert(model.instanceId).second) {
+                    Fail(objectContext
+                            + ".dynamicModel.instanceId duplicates another dynamic prop instance ID");
+                }
                 if (!std::isfinite(model.rotationXRadians)
                         || !std::isfinite(model.rotationZRadians)
                         || !std::isfinite(model.heightOffsetWorld)) {
@@ -3197,6 +3210,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             const std::string context = "root.runtimeObjects[" + std::to_string(i) + "]";
             map.runtimeObjects.push_back(ReadRuntimeObject(runtimeObjects[i], context));
         }
+        AssignMissingSectorDynamicModelInstanceIds(map);
     }
 
     const auto staticLightsIt = root.find("staticLights");

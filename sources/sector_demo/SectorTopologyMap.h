@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -175,6 +176,7 @@ enum class SectorDynamicModelShadowMode {
 
 struct SectorPlacedDynamicModel {
     std::string modelPath;
+    std::string instanceId;
     float rotationXRadians = 0.0f;
     float rotationZRadians = 0.0f;
     float heightOffsetWorld = 0.0f;
@@ -368,6 +370,11 @@ int AllocateSectorTopologyDynamicLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyDynamicSpotLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyDynamicRectLightId(const SectorTopologyMap& map);
 int AllocateSectorPlacedRuntimeObjectId(const SectorTopologyMap& map);
+bool IsValidSectorDynamicModelInstanceId(std::string_view id);
+std::string AllocateSectorDynamicModelInstanceId(
+        const SectorTopologyMap& map,
+        int placedObjectId);
+void AssignMissingSectorDynamicModelInstanceIds(SectorTopologyMap& map);
 
 const SectorTopologyVertex* FindSectorTopologyVertex(const SectorTopologyMap& map, int id);
 SectorTopologyVertex* FindSectorTopologyVertex(SectorTopologyMap& map, int id);
@@ -411,6 +418,9 @@ bool RemoveSectorTopologyDynamicRectLight(SectorTopologyMap& map, int id);
 
 const SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(const SectorTopologyMap& map, int id);
 SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
+const SectorPlacedRuntimeObject* FindSectorPlacedDynamicModelByInstanceId(
+        const SectorTopologyMap& map,
+        std::string_view instanceId);
 
 bool RemoveSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
 

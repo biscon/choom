@@ -69,6 +69,7 @@ struct SectorStaticModel {
 
 struct SectorDynamicModel {
     int placedObjectId = 0;
+    std::string instanceId;
     Vector3 containingSectorAmbient = {0.15f, 0.15f, 0.15f};
     float scale = 1.0f;
     float environmentExposure = 0.15f;

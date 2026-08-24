@@ -371,6 +371,7 @@ private:
             bool objectProbeBakeCurrent,
             const TextureCubemap* environment,
             bool allowSkinning,
+            const std::vector<Matrix>* meshNodeMatrices = nullptr,
             float opacity = 1.0f);
     const CachedModel* FindCachedModel(
             engine::ModelHandle handle,

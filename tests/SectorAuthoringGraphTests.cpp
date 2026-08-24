@@ -12745,6 +12745,7 @@ void TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag()
                   && map.runtimeObjects[0].kind == "dynamic_model"
                   && Near(map.runtimeObjects[0].position, Vector3{24.0f, 16.0f, 24.0f})
                   && map.runtimeObjects[0].dynamicModel.modelPath.empty()
+                  && map.runtimeObjects[0].dynamicModel.instanceId == "prop_1"
                   && map.runtimeObjects[0].dynamicModel.loop
                   && map.runtimeObjects[0].dynamicModel.shadowMode
                           == game::SectorDynamicModelShadowMode::Contact
@@ -12763,6 +12764,18 @@ void TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag()
                   && map.runtimeObjects[0].dynamicModel.animation.empty()
                   && !renderCache.valid,
           "dynamic prop model assignment reuses the model picker mutation path and clears stale animation selection");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    std::string instanceIdError;
+    Check(editing.SetSelectedDynamicModelInstanceId("desk_fan", instanceIdError)
+                  && instanceIdError.empty()
+                  && map.runtimeObjects[0].dynamicModel.instanceId == "desk_fan"
+                  && !renderCache.valid,
+          "dynamic prop instance ID editing persists and invalidates the 2D cache");
+    Check(!editing.SetSelectedDynamicModelInstanceId("bad instance", instanceIdError)
+                  && !instanceIdError.empty()
+                  && map.runtimeObjects[0].dynamicModel.instanceId == "desk_fan",
+          "dynamic prop instance ID editing rejects invalid identifiers");
 
     FillRuntimeObjectTestSectorCache(renderCache, map);
     Check(editing.MutateSelected(

@@ -3,6 +3,8 @@
 #include "engine/components/AnimatedModel.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 
+#include <algorithm>
+#include <cstdio>
 #include <functional>
 #include <string>
 #include <vector>
@@ -29,10 +31,16 @@ const engine::AnimatedModelInstance* RuntimeModelInstance(
 } // namespace
 
 float MeasureSectorEditorDynamicModelInspectorContentHeight(
-        const SectorEditorPlacedObjectInspectorMeasureContext&,
+        const SectorEditorPlacedObjectInspectorMeasureContext& context,
         const SectorPlacedRuntimeObject&)
 {
-    return 38.0f * 2.0f + 48.0f * 14.0f + 8.0f * 16.0f + 70.0f;
+    return 38.0f * 2.0f
+            + 48.0f * 14.0f
+            + 8.0f * 16.0f
+            + 70.0f
+            + context.rowH
+            + context.gap
+            + 40.0f;
 }
 
 void DrawSectorEditorDynamicModelInspector(
@@ -80,6 +88,47 @@ void DrawSectorEditorDynamicModelInspector(
             modelStatus, engine::UITextJustify::Left,
             modelAsset != nullptr ? context.config.accentColor : context.config.mutedTextColor);
     y += 34.0f + gap;
+
+    if (context.uiState.dynamicModelInstanceIdObjectId != object->id) {
+        std::snprintf(
+                context.uiState.dynamicModelInstanceIdBuffer,
+                sizeof(context.uiState.dynamicModelInstanceIdBuffer),
+                "%s",
+                object->dynamicModel.instanceId.c_str());
+        context.uiState.dynamicModelInstanceIdObjectId = object->id;
+        context.uiState.dynamicModelInstanceIdError.clear();
+    }
+    engine::Text(
+            context.ui, context.config, context.assets,
+            Rectangle{0.0f, y, 118.0f, rowH}, context.font,
+            "Instance ID", engine::UITextJustify::Left,
+            context.config.mutedTextColor);
+    const engine::UITextInputResult instanceResult = engine::TextInput(
+            context.ui, context.config, context.input, context.assets,
+            "sector_editor_dynamic_model_instance_id",
+            Rectangle{122.0f, y, std::max(0.0f, contentW - 122.0f), rowH},
+            context.font,
+            context.uiState.dynamicModelInstanceIdBuffer,
+            sizeof(context.uiState.dynamicModelInstanceIdBuffer),
+            1,
+            sizeof(context.uiState.dynamicModelInstanceIdBuffer) - 1,
+            engine::UITextJustify::Left);
+    if (instanceResult.submitted) {
+        context.editing.SetSelectedDynamicModelInstanceId(
+                std::string{context.uiState.dynamicModelInstanceIdBuffer},
+                context.uiState.dynamicModelInstanceIdError);
+    }
+    y += rowH + gap;
+    if (!context.uiState.dynamicModelInstanceIdError.empty()) {
+        engine::Text(
+                context.ui, context.config, context.assets,
+                Rectangle{0.0f, y, contentW, 36.0f}, context.smallFont,
+                context.uiState.dynamicModelInstanceIdError.c_str(),
+                engine::UITextJustify::Left,
+                context.config.invalidColor,
+                true);
+        y += 40.0f;
+    }
 
     if (engine::Button(
                 context.ui, context.config, context.input, context.assets,
@@ -185,13 +234,18 @@ void DrawSectorEditorDynamicModelInspector(
     modelAsset = runtimeInstance == nullptr
             ? nullptr
             : context.assets.GetModelAsset(runtimeInstance->model);
-    if (modelAsset != nullptr && modelAsset->animationCount > 0) {
+    const size_t clipCount = modelAsset != nullptr
+            ? engine::ModelAnimationClipCount(*modelAsset)
+            : 0;
+    if (modelAsset != nullptr && clipCount > 0) {
         std::vector<std::string> names;
-        names.reserve(static_cast<size_t>(modelAsset->animationCount));
+        names.reserve(clipCount);
         int selected = 0;
         bool authoredAnimationFound = object->dynamicModel.animation.empty();
-        for (int i = 0; i < modelAsset->animationCount; ++i) {
-            names.emplace_back(modelAsset->animations[i].name);
+        for (size_t i = 0; i < clipCount; ++i) {
+            const char* name =
+                    engine::ModelAnimationClipName(*modelAsset, i);
+            names.emplace_back(name != nullptr ? name : "");
             if (names.back() == object->dynamicModel.animation) {
                 selected = i;
                 authoredAnimationFound = true;

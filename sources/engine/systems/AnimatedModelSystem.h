@@ -10,6 +10,14 @@ class World;
 
 uint32_t FindModelAnimationIndex(const ModelAsset& asset, const char* name);
 
+// Selects one entry from ModelAnimationClipCount(). A glTF entry may drive
+// both raylib skeletal data and project-owned rigid node channels.
+bool SetAnimatedModelClip(
+        AnimatedModelAnimator& animator,
+        const ModelAsset& asset,
+        uint32_t clipIndex,
+        bool restart = true);
+
 // A zero blend duration switches immediately. A positive duration keeps the
 // current clip as the blend source and advances both source and target clips.
 void SetAnimatedModelAnimation(

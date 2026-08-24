@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <limits>
 #include <unordered_set>
 #include <utility>
@@ -22,6 +23,7 @@ namespace {
 
 constexpr int RaylibMaterialMapCount = 12;
 constexpr int PbrMaterialMapCount = 6;
+constexpr float ModelGltfAnimationFramesPerSecond = 60.0f;
 static_assert(PbrMaterialMapCount == static_cast<int>(ModelMaterialTextureRoleCount));
 
 struct ParsedModelMaterials {
@@ -29,6 +31,336 @@ struct ParsedModelMaterials {
     std::vector<std::array<std::string, PbrMaterialMapCount>> textureSources;
     bool hasUnsupportedMaterial = false;
 };
+
+struct ParsedModelNodeAnimations {
+    std::vector<ModelNodeAsset> nodes;
+    std::vector<uint32_t> evaluationOrder;
+    std::vector<ModelMeshNodeBinding> meshBindings;
+    std::vector<ModelNodeAnimationClip> clips;
+};
+
+Matrix CgltfMatrix(const cgltf_float values[16])
+{
+    return Matrix{
+            values[0], values[4], values[8], values[12],
+            values[1], values[5], values[9], values[13],
+            values[2], values[6], values[10], values[14],
+            values[3], values[7], values[11], values[15]};
+}
+
+::Transform CgltfNodeBindTransform(const cgltf_node& node)
+{
+    return ::Transform{
+            node.has_translation
+                    ? Vector3{
+                            node.translation[0],
+                            node.translation[1],
+                            node.translation[2]}
+                    : Vector3{},
+            node.has_rotation
+                    ? Quaternion{
+                            node.rotation[0],
+                            node.rotation[1],
+                            node.rotation[2],
+                            node.rotation[3]}
+                    : Quaternion{0.0f, 0.0f, 0.0f, 1.0f},
+            node.has_scale
+                    ? Vector3{
+                            node.scale[0],
+                            node.scale[1],
+                            node.scale[2]}
+                    : Vector3{1.0f, 1.0f, 1.0f}};
+}
+
+bool AppendNodeEvaluationOrder(
+        uint32_t nodeIndex,
+        const cgltf_data& data,
+        std::vector<uint8_t>& visits,
+        std::vector<uint32_t>& order)
+{
+    if (nodeIndex >= data.nodes_count) return false;
+    uint8_t& visit = visits[nodeIndex];
+    if (visit == 2) return true;
+    if (visit == 1) return false;
+    visit = 1;
+    const cgltf_node& node = data.nodes[nodeIndex];
+    if (node.parent != nullptr) {
+        const cgltf_size parentIndex = cgltf_node_index(&data, node.parent);
+        if (parentIndex >= data.nodes_count
+                || !AppendNodeEvaluationOrder(
+                        static_cast<uint32_t>(parentIndex),
+                        data,
+                        visits,
+                        order)) {
+            return false;
+        }
+    }
+    visit = 2;
+    order.push_back(nodeIndex);
+    return true;
+}
+
+bool ReadAnimationChannel(
+        const cgltf_data& data,
+        const cgltf_animation_channel& source,
+        ModelNodeAnimationChannel& outChannel)
+{
+    if (source.target_node == nullptr
+            || source.sampler == nullptr
+            || source.sampler->input == nullptr
+            || source.sampler->output == nullptr
+            || source.target_node->has_matrix) {
+        return false;
+    }
+    const cgltf_size nodeIndex = cgltf_node_index(&data, source.target_node);
+    if (nodeIndex >= data.nodes_count) return false;
+
+    int componentCount = 0;
+    switch (source.target_path) {
+        case cgltf_animation_path_type_translation:
+            outChannel.path = ModelNodeAnimationPath::Translation;
+            componentCount = 3;
+            break;
+        case cgltf_animation_path_type_rotation:
+            outChannel.path = ModelNodeAnimationPath::Rotation;
+            componentCount = 4;
+            break;
+        case cgltf_animation_path_type_scale:
+            outChannel.path = ModelNodeAnimationPath::Scale;
+            componentCount = 3;
+            break;
+        default:
+            return false;
+    }
+    switch (source.sampler->interpolation) {
+        case cgltf_interpolation_type_step:
+            outChannel.interpolation = ModelNodeAnimationInterpolation::Step;
+            break;
+        case cgltf_interpolation_type_linear:
+            outChannel.interpolation = ModelNodeAnimationInterpolation::Linear;
+            break;
+        case cgltf_interpolation_type_cubic_spline:
+            outChannel.interpolation =
+                    ModelNodeAnimationInterpolation::CubicSpline;
+            break;
+        default:
+            return false;
+    }
+
+    const cgltf_accessor& input = *source.sampler->input;
+    const cgltf_accessor& output = *source.sampler->output;
+    if (input.count == 0
+            || input.type != cgltf_type_scalar
+            || input.component_type != cgltf_component_type_r_32f
+            || output.component_type != cgltf_component_type_r_32f
+            || (componentCount == 3 && output.type != cgltf_type_vec3)
+            || (componentCount == 4 && output.type != cgltf_type_vec4)) {
+        return false;
+    }
+    const size_t valueMultiplier =
+            outChannel.interpolation == ModelNodeAnimationInterpolation::CubicSpline
+            ? 3u
+            : 1u;
+    if (output.count != input.count * valueMultiplier) return false;
+
+    outChannel.nodeIndex = static_cast<uint32_t>(nodeIndex);
+    outChannel.times.resize(input.count);
+    outChannel.values.resize(output.count);
+    float previous = -std::numeric_limits<float>::infinity();
+    for (cgltf_size key = 0; key < input.count; ++key) {
+        float time = 0.0f;
+        if (!cgltf_accessor_read_float(&input, key, &time, 1)
+                || !std::isfinite(time)
+                || time < 0.0f
+                || time <= previous) {
+            return false;
+        }
+        outChannel.times[key] = time;
+        previous = time;
+    }
+    for (cgltf_size valueIndex = 0; valueIndex < output.count; ++valueIndex) {
+        float values[4] = {};
+        if (!cgltf_accessor_read_float(
+                    &output,
+                    valueIndex,
+                    values,
+                    static_cast<cgltf_size>(componentCount))) {
+            return false;
+        }
+        Vector4& value = outChannel.values[valueIndex];
+        value = Vector4{values[0], values[1], values[2],
+                componentCount == 4 ? values[3] : 0.0f};
+        if (!std::isfinite(value.x)
+                || !std::isfinite(value.y)
+                || !std::isfinite(value.z)
+                || !std::isfinite(value.w)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+ParsedModelNodeAnimations ParseModelNodeAnimations(
+        const std::string& path,
+        const Model& model,
+        int skeletalAnimationCount)
+{
+    ParsedModelNodeAnimations parsed;
+    if (!IsFileExtension(path.c_str(), ".gltf;.glb")) return parsed;
+
+    cgltf_options options{};
+    cgltf_data* data = nullptr;
+    if (cgltf_parse_file(&options, path.c_str(), &data)
+                    != cgltf_result_success
+            || data == nullptr) {
+        std::fprintf(
+                stderr,
+                "[AssetManager WARNING] Could not parse glTF node animations: %s\n",
+                path.c_str());
+        return parsed;
+    }
+    const cgltf_result bufferResult =
+            cgltf_load_buffers(&options, data, path.c_str());
+    if (bufferResult != cgltf_result_success) {
+        std::fprintf(
+                stderr,
+                "[AssetManager WARNING] Could not load glTF node animation buffers: %s\n",
+                path.c_str());
+        cgltf_free(data);
+        return parsed;
+    }
+
+    parsed.nodes.resize(data->nodes_count);
+    parsed.evaluationOrder.reserve(data->nodes_count);
+    std::vector<uint8_t> visits(data->nodes_count, 0);
+    bool hierarchyValid = true;
+    for (cgltf_size nodeIndex = 0;
+            nodeIndex < data->nodes_count;
+            ++nodeIndex) {
+        const cgltf_node& source = data->nodes[nodeIndex];
+        ModelNodeAsset& target = parsed.nodes[nodeIndex];
+        target.parentIndex = source.parent != nullptr
+                ? static_cast<int>(cgltf_node_index(data, source.parent))
+                : -1;
+        target.bindLocal = CgltfNodeBindTransform(source);
+        cgltf_float localValues[16] = {};
+        cgltf_float worldValues[16] = {};
+        cgltf_node_transform_local(&source, localValues);
+        cgltf_node_transform_world(&source, worldValues);
+        target.bindLocalMatrix = CgltfMatrix(localValues);
+        target.bindWorldMatrix = CgltfMatrix(worldValues);
+        target.usesMatrix = source.has_matrix;
+        hierarchyValid = hierarchyValid
+                && AppendNodeEvaluationOrder(
+                        static_cast<uint32_t>(nodeIndex),
+                        *data,
+                        visits,
+                        parsed.evaluationOrder);
+    }
+    if (!hierarchyValid) {
+        std::fprintf(
+                stderr,
+                "[AssetManager WARNING] glTF node hierarchy is cyclic or invalid: %s\n",
+                path.c_str());
+        parsed = {};
+        cgltf_free(data);
+        return parsed;
+    }
+
+    parsed.meshBindings.reserve(static_cast<size_t>(std::max(0, model.meshCount)));
+    for (cgltf_size nodeIndex = 0;
+            nodeIndex < data->nodes_count;
+            ++nodeIndex) {
+        const cgltf_node& node = data->nodes[nodeIndex];
+        if (node.mesh == nullptr) continue;
+        for (cgltf_size primitiveIndex = 0;
+                primitiveIndex < node.mesh->primitives_count;
+                ++primitiveIndex) {
+            const cgltf_primitive& primitive =
+                    node.mesh->primitives[primitiveIndex];
+            if (primitive.type != cgltf_primitive_type_triangles) continue;
+            ModelMeshNodeBinding binding;
+            binding.nodeIndex = static_cast<int>(nodeIndex);
+            binding.skinned = node.skin != nullptr;
+            const Matrix bindWorld =
+                    parsed.nodes[nodeIndex].bindWorldMatrix;
+            const float determinant = MatrixDeterminant(bindWorld);
+            if (!std::isfinite(determinant)
+                    || std::fabs(determinant) <= 0.0000001f) {
+                binding.nodeIndex = -1;
+                std::fprintf(
+                        stderr,
+                        "[AssetManager WARNING] glTF mesh node has a non-invertible bind transform; rigid animation disabled for that mesh: %s\n",
+                        path.c_str());
+            } else {
+                binding.inverseBindWorldMatrix = MatrixInvert(bindWorld);
+            }
+            parsed.meshBindings.push_back(binding);
+        }
+    }
+    if (parsed.meshBindings.size()
+            != static_cast<size_t>(std::max(0, model.meshCount))) {
+        std::fprintf(
+                stderr,
+                "[AssetManager WARNING] glTF mesh/node mapping did not match raylib mesh order; rigid animation disabled: %s\n",
+                path.c_str());
+        parsed.meshBindings.assign(
+                static_cast<size_t>(std::max(0, model.meshCount)),
+                ModelMeshNodeBinding{});
+    }
+
+    parsed.clips.reserve(data->animations_count);
+    bool warnedUnsupportedPath = false;
+    for (cgltf_size animationIndex = 0;
+            animationIndex < data->animations_count;
+            ++animationIndex) {
+        const cgltf_animation& source = data->animations[animationIndex];
+        ModelNodeAnimationClip clip;
+        if (source.name != nullptr) clip.name = source.name;
+        clip.skeletalAnimationIndex =
+                animationIndex < static_cast<cgltf_size>(
+                        std::max(0, skeletalAnimationCount))
+                ? static_cast<int>(animationIndex)
+                : -1;
+        clip.channels.reserve(source.channels_count);
+        for (cgltf_size channelIndex = 0;
+                channelIndex < source.channels_count;
+                ++channelIndex) {
+            ModelNodeAnimationChannel channel;
+            if (!ReadAnimationChannel(
+                        *data,
+                        source.channels[channelIndex],
+                        channel)) {
+                if (source.channels[channelIndex].target_path
+                                == cgltf_animation_path_type_weights
+                        && !warnedUnsupportedPath) {
+                    std::fprintf(
+                            stderr,
+                            "[AssetManager WARNING] glTF morph-weight animations are unsupported and will be ignored: %s\n",
+                            path.c_str());
+                    warnedUnsupportedPath = true;
+                }
+                continue;
+            }
+            clip.durationSeconds = std::max(
+                    clip.durationSeconds,
+                    channel.times.back());
+            clip.channels.push_back(std::move(channel));
+        }
+        clip.keyframeCount = std::max(
+                1,
+                static_cast<int>(
+                        std::floor(
+                                clip.durationSeconds
+                                * ModelGltfAnimationFramesPerSecond))
+                        + 1);
+        if (clip.skeletalAnimationIndex >= 0 || !clip.channels.empty()) {
+            parsed.clips.push_back(std::move(clip));
+        }
+    }
+    cgltf_free(data);
+    return parsed;
+}
 
 bool ModelMaterialHasTextureRole(
         const ModelMaterialAsset& material,
@@ -554,7 +886,370 @@ bool ComputeAnimatedModelLocalBounds(
     return true;
 }
 
+bool ComputeRigidAnimatedModelLocalBounds(
+        const ModelAsset& asset,
+        BoundingBox localBounds,
+        bool hasLocalBounds,
+        BoundingBox& outBounds)
+{
+    if (!hasLocalBounds
+            || asset.nodeAnimationClips.empty()
+            || asset.nodes.empty()
+            || asset.meshNodeBindings.size()
+                    != static_cast<size_t>(
+                            std::max(0, asset.model.meshCount))) {
+        return false;
+    }
+    bool hasRigidChannels = false;
+    for (const ModelNodeAnimationClip& clip :
+            asset.nodeAnimationClips) {
+        hasRigidChannels = hasRigidChannels || !clip.channels.empty();
+    }
+    if (!hasRigidChannels) return false;
+
+    std::vector<ModelBoundsAccumulator> meshBounds(
+            static_cast<size_t>(
+                    std::max(0, asset.model.meshCount)));
+    for (int meshIndex = 0;
+            meshIndex < asset.model.meshCount;
+            ++meshIndex) {
+        const Mesh& mesh = asset.model.meshes[meshIndex];
+        if (mesh.vertices == nullptr || mesh.vertexCount <= 0) continue;
+        for (int vertexIndex = 0;
+                vertexIndex < mesh.vertexCount;
+                ++vertexIndex) {
+            IncludeModelBoundsPoint(
+                    meshBounds[static_cast<size_t>(meshIndex)],
+                    Vector3{
+                            mesh.vertices[vertexIndex * 3],
+                            mesh.vertices[vertexIndex * 3 + 1],
+                            mesh.vertices[vertexIndex * 3 + 2]});
+        }
+    }
+
+    std::vector<::Transform> localTransforms(asset.nodes.size());
+    std::vector<Matrix> localMatrices(asset.nodes.size());
+    std::vector<Matrix> worldMatrices(asset.nodes.size());
+    std::vector<Matrix> meshMatrices(
+            static_cast<size_t>(
+                    std::max(0, asset.model.meshCount)));
+    ModelBoundsAccumulator animatedBounds;
+    IncludeModelBoundsPoint(animatedBounds, localBounds.min);
+    IncludeModelBoundsPoint(animatedBounds, localBounds.max);
+    for (size_t clipIndex = 0;
+            clipIndex < asset.nodeAnimationClips.size();
+            ++clipIndex) {
+        const ModelNodeAnimationClip& clip =
+                asset.nodeAnimationClips[clipIndex];
+        if (clip.channels.empty()) continue;
+        for (int frameIndex = 0;
+                frameIndex < clip.keyframeCount;
+                ++frameIndex) {
+            const float timeSeconds = std::min(
+                    clip.durationSeconds,
+                    static_cast<float>(frameIndex)
+                            / ModelGltfAnimationFramesPerSecond);
+            if (!SampleModelNodeAnimation(
+                        asset,
+                        clipIndex,
+                        timeSeconds,
+                        localTransforms,
+                        localMatrices,
+                        worldMatrices,
+                        meshMatrices)) {
+                continue;
+            }
+            for (int meshIndex = 0;
+                    meshIndex < asset.model.meshCount;
+                    ++meshIndex) {
+                IncludeTransformedModelBounds(
+                        animatedBounds,
+                        meshBounds[static_cast<size_t>(meshIndex)],
+                        MatrixMultiply(
+                                meshMatrices[
+                                        static_cast<size_t>(meshIndex)],
+                                asset.model.transform));
+            }
+        }
+    }
+    if (!animatedBounds.valid) return false;
+    const Vector3 size = Vector3Subtract(
+            animatedBounds.maximum,
+            animatedBounds.minimum);
+    const float padding = std::max(
+            0.025f,
+            Vector3Length(size) * 0.025f);
+    outBounds = {
+            Vector3Subtract(
+                    animatedBounds.minimum,
+                    Vector3{padding, padding, padding}),
+            Vector3Add(
+                    animatedBounds.maximum,
+                    Vector3{padding, padding, padding})};
+    return true;
+}
+
 } // namespace
+
+bool LoadModelNodeAnimationsFromGltf(
+        const char* path,
+        ModelAsset& asset)
+{
+    if (path == nullptr || path[0] == '\0') return false;
+    ParsedModelNodeAnimations parsed = ParseModelNodeAnimations(
+            path,
+            asset.model,
+            asset.animationCount);
+    asset.nodes = std::move(parsed.nodes);
+    asset.nodeEvaluationOrder = std::move(parsed.evaluationOrder);
+    asset.meshNodeBindings = std::move(parsed.meshBindings);
+    asset.nodeAnimationClips = std::move(parsed.clips);
+    return !asset.nodes.empty();
+}
+
+size_t ModelAnimationClipCount(const ModelAsset& asset)
+{
+    return !asset.nodeAnimationClips.empty()
+            ? asset.nodeAnimationClips.size()
+            : static_cast<size_t>(std::max(0, asset.animationCount));
+}
+
+const char* ModelAnimationClipName(const ModelAsset& asset, size_t clipIndex)
+{
+    if (!asset.nodeAnimationClips.empty()) {
+        if (clipIndex >= asset.nodeAnimationClips.size()) return nullptr;
+        const ModelNodeAnimationClip& clip =
+                asset.nodeAnimationClips[clipIndex];
+        if (!clip.name.empty()) return clip.name.c_str();
+        if (clip.skeletalAnimationIndex >= 0
+                && clip.skeletalAnimationIndex < asset.animationCount
+                && asset.animations != nullptr) {
+            return asset.animations[clip.skeletalAnimationIndex].name;
+        }
+        return "";
+    }
+    return asset.animations != nullptr
+                    && clipIndex
+                            < static_cast<size_t>(
+                                    std::max(0, asset.animationCount))
+            ? asset.animations[clipIndex].name
+            : nullptr;
+}
+
+int FindModelAnimationClipIndex(const ModelAsset& asset, const char* name)
+{
+    if (name == nullptr || name[0] == '\0') return -1;
+    const size_t count = ModelAnimationClipCount(asset);
+    for (size_t index = 0; index < count; ++index) {
+        const char* candidate = ModelAnimationClipName(asset, index);
+        if (candidate != nullptr && std::strcmp(candidate, name) == 0) {
+            return static_cast<int>(index);
+        }
+    }
+    return -1;
+}
+
+int ModelAnimationClipKeyframeCount(
+        const ModelAsset& asset,
+        size_t clipIndex)
+{
+    if (!asset.nodeAnimationClips.empty()) {
+        if (clipIndex >= asset.nodeAnimationClips.size()) return 0;
+        return asset.nodeAnimationClips[clipIndex].keyframeCount;
+    }
+    if (asset.animations == nullptr
+            || clipIndex
+                    >= static_cast<size_t>(
+                            std::max(0, asset.animationCount))) {
+        return 0;
+    }
+    return asset.animations[clipIndex].keyframeCount;
+}
+
+namespace {
+
+Vector4 SampleModelNodeAnimationChannel(
+        const ModelNodeAnimationChannel& channel,
+        float timeSeconds)
+{
+    if (channel.times.empty() || channel.values.empty()) return {};
+    const auto upper = std::upper_bound(
+            channel.times.begin(),
+            channel.times.end(),
+            timeSeconds);
+    size_t first = upper == channel.times.begin()
+            ? 0
+            : static_cast<size_t>(
+                    std::distance(channel.times.begin(), upper) - 1);
+    if (first + 1 >= channel.times.size()) {
+        const size_t valueIndex =
+                channel.interpolation
+                                == ModelNodeAnimationInterpolation::CubicSpline
+                ? first * 3 + 1
+                : first;
+        return channel.values[valueIndex];
+    }
+    if (channel.interpolation == ModelNodeAnimationInterpolation::Step) {
+        return channel.values[first];
+    }
+
+    const float firstTime = channel.times[first];
+    const float secondTime = channel.times[first + 1];
+    const float duration = secondTime - firstTime;
+    const float amount = duration > 0.0f
+            ? std::clamp(
+                    (timeSeconds - firstTime) / duration,
+                    0.0f,
+                    1.0f)
+            : 0.0f;
+    if (channel.interpolation == ModelNodeAnimationInterpolation::Linear) {
+        if (channel.path == ModelNodeAnimationPath::Rotation) {
+            return QuaternionSlerp(
+                    channel.values[first],
+                    channel.values[first + 1],
+                    amount);
+        }
+        return Vector4Lerp(
+                channel.values[first],
+                channel.values[first + 1],
+                amount);
+    }
+
+    const Vector4 firstValue = channel.values[first * 3 + 1];
+    Vector4 firstTangent = Vector4Scale(
+            channel.values[first * 3 + 2],
+            duration);
+    const Vector4 secondValue =
+            channel.values[(first + 1) * 3 + 1];
+    Vector4 secondTangent = Vector4Scale(
+            channel.values[(first + 1) * 3],
+            duration);
+    if (channel.path == ModelNodeAnimationPath::Rotation) {
+        return QuaternionNormalize(QuaternionCubicHermiteSpline(
+                QuaternionNormalize(firstValue),
+                firstTangent,
+                QuaternionNormalize(secondValue),
+                secondTangent,
+                amount));
+    }
+    const Vector3 value = Vector3CubicHermite(
+            Vector3{firstValue.x, firstValue.y, firstValue.z},
+            Vector3{firstTangent.x, firstTangent.y, firstTangent.z},
+            Vector3{secondValue.x, secondValue.y, secondValue.z},
+            Vector3{secondTangent.x, secondTangent.y, secondTangent.z},
+            amount);
+    return Vector4{value.x, value.y, value.z, 0.0f};
+}
+
+} // namespace
+
+bool SampleModelNodeAnimation(
+        const ModelAsset& asset,
+        size_t clipIndex,
+        float timeSeconds,
+        std::vector<::Transform>& nodeLocalTransforms,
+        std::vector<Matrix>& nodeLocalMatrices,
+        std::vector<Matrix>& nodeWorldMatrices,
+        std::vector<Matrix>& meshNodeMatrices)
+{
+    if (clipIndex >= asset.nodeAnimationClips.size()
+            || nodeLocalTransforms.size() != asset.nodes.size()
+            || nodeLocalMatrices.size() != asset.nodes.size()
+            || nodeWorldMatrices.size() != asset.nodes.size()
+            || meshNodeMatrices.size()
+                    != static_cast<size_t>(
+                            std::max(0, asset.model.meshCount))
+            || asset.meshNodeBindings.size()
+                    != static_cast<size_t>(
+                            std::max(0, asset.model.meshCount))) {
+        return false;
+    }
+    const ModelNodeAnimationClip& clip =
+            asset.nodeAnimationClips[clipIndex];
+    timeSeconds = std::isfinite(timeSeconds)
+            ? std::clamp(timeSeconds, 0.0f, clip.durationSeconds)
+            : 0.0f;
+    for (size_t nodeIndex = 0;
+            nodeIndex < asset.nodes.size();
+            ++nodeIndex) {
+        nodeLocalTransforms[nodeIndex] =
+                asset.nodes[nodeIndex].bindLocal;
+    }
+    for (const ModelNodeAnimationChannel& channel : clip.channels) {
+        if (channel.nodeIndex >= nodeLocalTransforms.size()) continue;
+        const Vector4 value =
+                SampleModelNodeAnimationChannel(channel, timeSeconds);
+        ::Transform& transform =
+                nodeLocalTransforms[channel.nodeIndex];
+        switch (channel.path) {
+            case ModelNodeAnimationPath::Translation:
+                transform.translation =
+                        Vector3{value.x, value.y, value.z};
+                break;
+            case ModelNodeAnimationPath::Rotation:
+                transform.rotation = QuaternionNormalize(value);
+                break;
+            case ModelNodeAnimationPath::Scale:
+                transform.scale = Vector3{value.x, value.y, value.z};
+                break;
+        }
+    }
+    for (size_t nodeIndex = 0;
+            nodeIndex < asset.nodes.size();
+            ++nodeIndex) {
+        nodeLocalMatrices[nodeIndex] =
+                asset.nodes[nodeIndex].usesMatrix
+                ? asset.nodes[nodeIndex].bindLocalMatrix
+                : ModelPoseTransformMatrix(
+                        nodeLocalTransforms[nodeIndex]);
+    }
+    for (uint32_t nodeIndex : asset.nodeEvaluationOrder) {
+        if (nodeIndex >= asset.nodes.size()) return false;
+        const int parentIndex = asset.nodes[nodeIndex].parentIndex;
+        nodeWorldMatrices[nodeIndex] = parentIndex >= 0
+                ? MatrixMultiply(
+                        nodeLocalMatrices[nodeIndex],
+                        nodeWorldMatrices[
+                                static_cast<size_t>(parentIndex)])
+                : nodeLocalMatrices[nodeIndex];
+    }
+    for (size_t meshIndex = 0;
+            meshIndex < meshNodeMatrices.size();
+            ++meshIndex) {
+        const ModelMeshNodeBinding& binding =
+                asset.meshNodeBindings[meshIndex];
+        meshNodeMatrices[meshIndex] = binding.nodeIndex >= 0
+                        && !binding.skinned
+                        && static_cast<size_t>(binding.nodeIndex)
+                                < nodeWorldMatrices.size()
+                ? MatrixMultiply(
+                        binding.inverseBindWorldMatrix,
+                        nodeWorldMatrices[
+                                static_cast<size_t>(
+                                        binding.nodeIndex)])
+                : MatrixIdentity();
+    }
+    return true;
+}
+
+Matrix AnimatedModelMeshTransform(
+        const ModelAsset& asset,
+        const std::vector<Matrix>& meshNodeMatrices,
+        int meshIndex,
+        Matrix authoredTransform)
+{
+    Matrix transform = MatrixMultiply(
+            asset.model.transform,
+            authoredTransform);
+    if (meshIndex >= 0
+            && static_cast<size_t>(meshIndex)
+                    < meshNodeMatrices.size()) {
+        transform = MatrixMultiply(
+                meshNodeMatrices[static_cast<size_t>(meshIndex)],
+                transform);
+    }
+    return transform;
+}
 
 bool ComputeModelOrientedBounds(
         const Model& model,
@@ -963,6 +1658,7 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
         }
 
         ParsedModelMaterials parsed;
+        ModelAsset nodeAnimationAsset;
         BoundingBox localBounds{};
         BoundingBox animatedLocalBounds{};
         ModelOrientedBounds localCollisionBounds{};
@@ -971,6 +1667,13 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
         bool hasLocalCollisionBounds = false;
         if (loadedModel) {
             parsed = ParseModelMaterials(path, loaded.materialCount);
+            if ((flags & ModelLoad_Animations) != 0) {
+                nodeAnimationAsset.model = loaded;
+                nodeAnimationAsset.animationCount = loadedAnimationCount;
+                LoadModelNodeAnimationsFromGltf(
+                        path.c_str(),
+                        nodeAnimationAsset);
+            }
             GenerateMissingTangents(loaded);
             hasLocalBounds = ComputeModelLocalBounds(loaded, localBounds);
             hasLocalCollisionBounds = ComputeModelOrientedBounds(
@@ -983,6 +1686,38 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                     localBounds,
                     hasLocalBounds,
                     animatedLocalBounds);
+            BoundingBox rigidAnimatedBounds{};
+            const bool hasRigidAnimatedBounds =
+                    ComputeRigidAnimatedModelLocalBounds(
+                            nodeAnimationAsset,
+                            localBounds,
+                            hasLocalBounds,
+                            rigidAnimatedBounds);
+            if (hasRigidAnimatedBounds) {
+                if (hasAnimatedLocalBounds) {
+                    animatedLocalBounds.min.x = std::min(
+                            animatedLocalBounds.min.x,
+                            rigidAnimatedBounds.min.x);
+                    animatedLocalBounds.min.y = std::min(
+                            animatedLocalBounds.min.y,
+                            rigidAnimatedBounds.min.y);
+                    animatedLocalBounds.min.z = std::min(
+                            animatedLocalBounds.min.z,
+                            rigidAnimatedBounds.min.z);
+                    animatedLocalBounds.max.x = std::max(
+                            animatedLocalBounds.max.x,
+                            rigidAnimatedBounds.max.x);
+                    animatedLocalBounds.max.y = std::max(
+                            animatedLocalBounds.max.y,
+                            rigidAnimatedBounds.max.y);
+                    animatedLocalBounds.max.z = std::max(
+                            animatedLocalBounds.max.z,
+                            rigidAnimatedBounds.max.z);
+                } else {
+                    animatedLocalBounds = rigidAnimatedBounds;
+                    hasAnimatedLocalBounds = true;
+                }
+            }
         }
 
         {
@@ -1082,6 +1817,14 @@ void ModelAssets::UpdateMainThread(float maxMilliseconds)
                     slot.asset.model = loaded;
                     slot.asset.animations = loadedAnimations;
                     slot.asset.animationCount = loadedAnimationCount;
+                    slot.asset.nodes = std::move(
+                            nodeAnimationAsset.nodes);
+                    slot.asset.nodeEvaluationOrder = std::move(
+                            nodeAnimationAsset.nodeEvaluationOrder);
+                    slot.asset.meshNodeBindings = std::move(
+                            nodeAnimationAsset.meshNodeBindings);
+                    slot.asset.nodeAnimationClips = std::move(
+                            nodeAnimationAsset.nodeAnimationClips);
                     slot.asset.materials = std::move(parsed.materials);
                     slot.asset.localBounds = localBounds;
                     slot.asset.animatedLocalBounds = animatedLocalBounds;

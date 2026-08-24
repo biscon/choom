@@ -51,6 +51,12 @@ uint64_t CasterFingerprint(
     for (const Matrix& boneMatrix : instance.boneMatrices) {
         hash = HashMatrix(hash, boneMatrix);
     }
+    const uint64_t meshNodeCount =
+            static_cast<uint64_t>(instance.meshNodeMatrices.size());
+    hash = HashBytes(hash, &meshNodeCount, sizeof(meshNodeCount));
+    for (const Matrix& meshNodeMatrix : instance.meshNodeMatrices) {
+        hash = HashMatrix(hash, meshNodeMatrix);
+    }
     return hash;
 }
 

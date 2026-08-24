@@ -1997,6 +1997,7 @@ void TestDynamicModelRoundTripAndDefaultOmission()
     object.position = Vector3{12.0f, 16.0f, 20.0f};
     object.yawRadians = 0.5f;
     object.dynamicModel.modelPath = "assets/models/characters/test.glb";
+    object.dynamicModel.instanceId = "lever_main";
     object.dynamicModel.rotationXRadians = 0.25f;
     object.dynamicModel.rotationZRadians = -0.5f;
     object.dynamicModel.heightOffsetWorld = 0.75f;
@@ -2011,6 +2012,7 @@ void TestDynamicModelRoundTripAndDefaultOmission()
     const Json saved = Json::parse(SaveText(map));
     const Json& payload = saved["runtimeObjects"][0]["dynamicModel"];
     Check(saved["runtimeObjects"][0]["kind"] == "dynamic_model"
+                  && payload["instanceId"] == "lever_main"
                   && payload["modelPath"] == object.dynamicModel.modelPath
                   && payload["animation"] == "Standard Walk"
                   && !payload["loop"].get<bool>()
@@ -2026,6 +2028,7 @@ void TestDynamicModelRoundTripAndDefaultOmission()
             game::FindSectorPlacedRuntimeObject(loaded, 41);
     Check(roundTripped != nullptr
                   && roundTripped->kind == "dynamic_model"
+                  && roundTripped->dynamicModel.instanceId == "lever_main"
                   && roundTripped->dynamicModel.modelPath == object.dynamicModel.modelPath
                   && roundTripped->dynamicModel.animation == "Standard Walk"
                   && !roundTripped->dynamicModel.loop
@@ -2037,14 +2040,38 @@ void TestDynamicModelRoundTripAndDefaultOmission()
           "dynamic prop fields round-trip");
 
     map.runtimeObjects[0].dynamicModel = game::SectorPlacedDynamicModel{};
+    map.runtimeObjects[0].dynamicModel.instanceId = "prop_41";
     const Json defaults = Json::parse(SaveText(map))["runtimeObjects"][0]["dynamicModel"];
-    Check(!defaults.contains("animation")
+    Check(defaults["instanceId"] == "prop_41"
+                  && !defaults.contains("animation")
                   && !defaults.contains("loop")
                   && !defaults.contains("animationSpeed")
                   && !defaults.contains("scale")
                   && !defaults.contains("shadowMode")
                   && !defaults.contains("collision"),
           "dynamic prop default playback, shadow, and transform fields are omitted");
+
+    Json missingId = saved;
+    missingId["runtimeObjects"][0]["dynamicModel"].erase("instanceId");
+    Check(LoadText(missingId.dump(), loaded, error),
+          "legacy dynamic prop without an instance ID loads");
+    const SectorPlacedRuntimeObject* backfilled =
+            game::FindSectorPlacedRuntimeObject(loaded, 41);
+    Check(backfilled != nullptr
+                  && backfilled->dynamicModel.instanceId == "prop_41",
+          "legacy dynamic prop receives a deterministic generated instance ID");
+
+    Json generatedCollision = missingId;
+    Json explicitlyNamed = saved["runtimeObjects"][0];
+    explicitlyNamed["id"] = 43;
+    explicitlyNamed["dynamicModel"]["instanceId"] = "prop_41";
+    generatedCollision["runtimeObjects"].push_back(explicitlyNamed);
+    Check(LoadText(generatedCollision.dump(), loaded, error),
+          "legacy dynamic prop ID generation avoids explicit IDs");
+    backfilled = game::FindSectorPlacedRuntimeObject(loaded, 41);
+    Check(backfilled != nullptr
+                  && backfilled->dynamicModel.instanceId == "prop_41_2",
+          "generated dynamic prop IDs receive deterministic collision suffixes");
 
     map.runtimeObjects[0].dynamicModel.shadowMode =
             game::SectorDynamicModelShadowMode::None;
@@ -2055,6 +2082,16 @@ void TestDynamicModelRoundTripAndDefaultOmission()
     invalid["runtimeObjects"][0]["dynamicModel"]["shadowMode"] = "cinematic";
     Check(!LoadText(invalid.dump(), loaded, error),
           "dynamic prop rejects unknown shadow modes");
+
+    invalid = saved;
+    invalid["runtimeObjects"][0]["dynamicModel"]["instanceId"] = "bad instance";
+    ExpectRejected(invalid, "dynamic prop rejects an invalid instance ID");
+
+    Json duplicate = saved;
+    Json second = duplicate["runtimeObjects"][0];
+    second["id"] = 43;
+    duplicate["runtimeObjects"].push_back(second);
+    ExpectRejected(duplicate, "dynamic prop instance IDs must be unique within a map");
 
     Json legacy = saved;
     legacy["runtimeObjects"][0]["dynamicModel"]["shadowMode"] =

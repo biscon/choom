@@ -159,6 +159,13 @@ bool SectorEditorRuntimeObjectEditingService::AddDynamicModel(Vector2 mapPoint)
     object.kind = "dynamic_model";
     object.position = Vector3{mapPoint.x, sector->floorZ, mapPoint.y};
     object.dynamicModel = SectorPlacedDynamicModel{};
+    object.dynamicModel.instanceId =
+            AllocateSectorDynamicModelInstanceId(context_.map, objectId);
+    if (object.dynamicModel.instanceId.empty()) {
+        context_.statusText =
+                "Dynamic prop placement failed: no instance IDs available";
+        return false;
+    }
     context_.map.runtimeObjects.push_back(std::move(object));
     SelectObject(objectId);
     MarkEdited(TextFormat("Added dynamic prop %d", objectId));
@@ -354,6 +361,37 @@ bool SectorEditorRuntimeObjectEditingService::SetSelectedNpcInstanceId(
             [&instanceId](SectorPlacedRuntimeObject& object) {
                 if (object.kind != "npc") return false;
                 object.npc.instanceId = instanceId;
+                return true;
+            });
+}
+
+bool SectorEditorRuntimeObjectEditingService::SetSelectedDynamicModelInstanceId(
+        const std::string& instanceId,
+        std::string& outError)
+{
+    const SectorPlacedRuntimeObject* selected = SelectedObject();
+    if (selected == nullptr || selected->kind != "dynamic_model") {
+        outError = "No dynamic prop is selected";
+        return false;
+    }
+    if (!IsValidSectorDynamicModelInstanceId(instanceId)) {
+        outError =
+                "Instance ID must contain 1-63 letters, digits, underscores, or dashes";
+        return false;
+    }
+    const SectorPlacedRuntimeObject* existing =
+            FindSectorPlacedDynamicModelByInstanceId(context_.map, instanceId);
+    if (existing != nullptr && existing->id != selected->id) {
+        outError = "Instance ID must be unique among dynamic props in this map";
+        return false;
+    }
+    outError.clear();
+    if (selected->dynamicModel.instanceId == instanceId) return true;
+    return MutateSelected(
+            "Updated dynamic prop instance ID",
+            [&instanceId](SectorPlacedRuntimeObject& object) {
+                if (object.kind != "dynamic_model") return false;
+                object.dynamicModel.instanceId = instanceId;
                 return true;
             });
 }

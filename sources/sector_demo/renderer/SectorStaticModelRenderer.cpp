@@ -1386,6 +1386,7 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
         bool objectProbeBakeCurrent,
         const TextureCubemap* environment,
         bool allowSkinning,
+        const std::vector<Matrix>* meshNodeMatrices,
         float opacity)
 {
     const bool canSkin = allowSkinning
@@ -1521,7 +1522,15 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
                     pbrMaterial,
                     staticSpecularContext);
         }
-        DrawMesh(model.meshes[meshIndex], material, modelTransform);
+        const Matrix meshTransform = meshNodeMatrices != nullptr
+                        && static_cast<size_t>(meshIndex)
+                                < meshNodeMatrices->size()
+                ? MatrixMultiply(
+                        (*meshNodeMatrices)[
+                                static_cast<size_t>(meshIndex)],
+                        modelTransform)
+                : modelTransform;
+        DrawMesh(model.meshes[meshIndex], material, meshTransform);
         drewMesh = true;
     }
     return drewMesh;
@@ -1928,10 +1937,16 @@ void SectorStaticModelRenderer::Draw(
                         transform.rotationZRadians,
                         dynamicModel.scale);
                 const Matrix modelTransform = MatrixMultiply(model.transform, authoredTransform);
+                const BoundingBox* receiverLocalBounds =
+                        modelAsset->hasAnimatedLocalBounds
+                        ? &modelAsset->animatedLocalBounds
+                        : (modelAsset->hasLocalBounds
+                                ? &modelAsset->localBounds
+                                : nullptr);
                 const SectorReceiverBounds receiverBounds =
-                        modelAsset->hasLocalBounds
+                        receiverLocalBounds != nullptr
                         ? TransformSectorStaticSpecularReceiverBounds(
-                                modelAsset->localBounds,
+                                *receiverLocalBounds,
                                 authoredTransform,
                                 object.currentSectorId,
                                 renderPosition)
@@ -1962,6 +1977,7 @@ void SectorStaticModelRenderer::Draw(
                         objectProbeBakeCurrent,
                         environment,
                         true,
+                        &instance.meshNodeMatrices,
                         dynamicModel.opacity);
                 if (fading) {
                     rlDisableColorBlend();

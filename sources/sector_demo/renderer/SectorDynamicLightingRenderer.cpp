@@ -1904,7 +1904,11 @@ void SectorDynamicLightingRenderer::RenderShadowMaps(
                     DrawMesh(
                             posedModel.meshes[meshIndex],
                             activeMaterial,
-                            modelTransform);
+                            engine::AnimatedModelMeshTransform(
+                                    *asset,
+                                    instance.meshNodeMatrices,
+                                    meshIndex,
+                                    caster.transform));
                 }
             }
             if (activeUseSkinningLoc >= 0) {

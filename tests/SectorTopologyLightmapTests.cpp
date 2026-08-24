@@ -1352,17 +1352,19 @@ void TestSourceHashChanges()
     dynamicProp.kind = "dynamic_model";
     dynamicProp.position = Vector3{24.0f, 0.0f, 24.0f};
     dynamicProp.dynamicModel.modelPath = "assets/models/characters/synthetic.glb";
+    dynamicProp.dynamicModel.instanceId = "prop_77";
     dynamicProp.dynamicModel.animation = "Walk";
     dynamicPropMap.runtimeObjects.push_back(dynamicProp);
     Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
           "hash excludes dynamic props because they are neither baked receivers nor occluders");
     dynamicPropMap.runtimeObjects[0].position.x += 16.0f;
     dynamicPropMap.runtimeObjects[0].dynamicModel.animation = "Idle";
+    dynamicPropMap.runtimeObjects[0].dynamicModel.instanceId = "renamed_prop";
     dynamicPropMap.runtimeObjects[0].dynamicModel.animationSpeed = 2.0f;
     dynamicPropMap.runtimeObjects[0].dynamicModel.shadowMode =
             game::SectorDynamicModelShadowMode::Dynamic;
     Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
-          "hash excludes dynamic prop transform, playback, and runtime shadow changes");
+          "hash excludes dynamic prop ID, transform, playback, and runtime shadow changes");
 
     game::SectorTopologyMap npcMap = base;
     game::SectorPlacedRuntimeObject npc;
