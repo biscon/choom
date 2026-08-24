@@ -3012,19 +3012,17 @@ void ValidateCompiledSoundReferences(const SectorTopologyMap& map)
     }
 }
 
-void ValidateAuthoringSoundReferences(
-        const SectorTopologyMap& map,
-        const SectorAuthoringGraph& graph)
+void ValidateAuthoringSoundReferences(const SectorAuthoringGraph& graph)
 {
     for (const SectorAuthoringFaceAnchor& anchor : graph.faceAnchors) {
         if (anchor.roomtone.mode == SectorRoomtoneMode::Play) {
-            ValidateSoundReference(map.audioSettings, anchor.roomtone.soundId,
+            ValidateSoundReference(graph.audioSettings, anchor.roomtone.soundId,
                     SectorSoundType::Music,
                     "face anchor " + std::to_string(anchor.id) + " roomtone");
         }
     }
     for (const SectorAuthoringSoundEmitter& emitter : graph.soundEmitters) {
-        ValidateSoundReference(map.audioSettings, emitter.soundId,
+        ValidateSoundReference(graph.audioSettings, emitter.soundId,
                 SectorSoundType::Sound,
                 "sound emitter " + std::to_string(emitter.id));
     }
@@ -4078,7 +4076,7 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
     document.derivation.topology.skySettings = document.mapData.skySettings;
     document.derivation.topology.directionalLight = document.mapData.directionalLight;
     document.derivation.topology.fogSettings = document.mapData.fogSettings;
-    document.derivation.topology.audioSettings = document.mapData.audioSettings;
+    document.derivation.topology.audioSettings = document.graph.audioSettings;
     document.derivation.topology.lightmapSettings = document.mapData.lightmapSettings;
     document.derivation.topology.bakedLightmap = document.mapData.bakedLightmap;
     document.derivation.topology.bakedReflectionProbes =
@@ -4106,7 +4104,8 @@ SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
     ReadMapLevelFields(root, document.mapData, true);
     ValidateAuthoringMapData(document.mapData);
     document.graph = ReadAuthoringGraph(RequireField(root, "authoringGraph", "root"));
-    ValidateAuthoringSoundReferences(document.mapData, document.graph);
+    document.graph.audioSettings = document.mapData.audioSettings;
+    ValidateAuthoringSoundReferences(document.graph);
     document.derivation = DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
     CopyMapLevelFieldsToDerivedTopology(document);
     return document;
@@ -4495,11 +4494,12 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
 Json SerializeAuthoringDocument(const SectorAuthoringDocument& document)
 {
     SectorTopologyMap normalizedMap = document.mapData;
+    normalizedMap.audioSettings = document.graph.audioSettings;
     AssignMissingSectorDynamicModelInstanceIds(normalizedMap);
     AssignMissingSectorDoorInstanceIds(normalizedMap);
     AssignMissingSectorDynamicLightInstanceIds(normalizedMap);
     ValidateAuthoringMapData(normalizedMap);
-    ValidateAuthoringSoundReferences(normalizedMap, document.graph);
+    ValidateAuthoringSoundReferences(document.graph);
 
     Json root;
     root["formatVersion"] = 4;

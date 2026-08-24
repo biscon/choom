@@ -48,8 +48,8 @@ elapsed = elapsed + FrameDelta
 
 ## Level audio
 
-Map audio IDs come from the editor's **Add Map Sound** registry. Roomtones use
-entries authored as `Music (streaming)`; the APIs below use buffered `Sound`
+Map audio IDs come from the level's **Sound Editor**. Roomtones use entries
+authored as `Music (streaming)`; the APIs below use buffered `Sound`
 entries. Invalid IDs or assets that are not ready return `false, reason`.
 
 ### `playMapSound(soundId [, volume [, pitch]]) -> true | false, reason`

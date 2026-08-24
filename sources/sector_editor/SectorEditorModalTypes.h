@@ -81,20 +81,6 @@ enum class SectorEditorDoorSoundTarget {
     Close
 };
 
-struct AddMapSoundState {
-    bool open = false;
-    SectorEditorAudioAssetPickerState assetPicker;
-    char soundIdBuffer[96] = {};
-    SectorSoundType type = SectorSoundType::Sound;
-    std::string validationMessage;
-};
-
-struct SectorEditorAssetPruneModalState {
-    bool open = false;
-    bool pruneTextures = false;
-    bool pruneSounds = true;
-};
-
 struct SoundPickerState {
     bool open = false;
     SectorEditorDoorSoundTarget target = SectorEditorDoorSoundTarget::Open;

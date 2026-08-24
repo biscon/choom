@@ -3,8 +3,8 @@
 #include "engine/EngineContext.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorTypes.h"
-#include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/services/sounds/SectorEditorSoundCatalogState.h"
+#include "sector_demo/SectorAuthoringGraph.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <string>
@@ -16,7 +16,7 @@ class SectorEditorRuntimeObjectEditingService;
 
 struct SectorEditorSoundServiceContext {
     SectorEditorState& state;
-    SectorEditorDocumentLifecycleAccess lifecycle;
+    SectorAuthoringGraph& authoringGraph;
     SectorTopologyMap& map;
     SectorEditorSoundCatalogState& catalog;
     SectorEditorAudioAssetPickerSessionState& audioAssetPickerSession;
@@ -37,15 +37,6 @@ public:
     void RefreshCatalogHandles();
     void Shutdown();
 
-    void OpenAddModal();
-    void CloseAddModal();
-    bool AddSelected();
-    void DrawAddModal(
-            engine::UIContext& ui,
-            const engine::UIConfig& config,
-            engine::Input& input,
-            engine::FontHandle font);
-
     bool OpenDoorPicker(int runtimeObjectId, SectorEditorDoorSoundTarget target);
     void ClosePicker();
     bool ApplyPickerSelection();
@@ -56,9 +47,6 @@ public:
             engine::FontHandle font);
 
 private:
-    void SelectAddPath(int pathIndex);
-    bool ValidateAdd(std::string& error) const;
-    void PreviewAddSelection();
     void PreviewPickerSelection();
     void StopPreview(SectorEditorAudioPreviewState& preview, bool unloadScope);
     void UpdatePreview(

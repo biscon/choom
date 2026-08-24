@@ -11588,10 +11588,11 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     documentState.map.topologyMap.directionalLight.enabled = true;
     documentState.map.topologyMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
     documentState.map.topologyMap.directionalLight.intensity = 1.5f;
-    documentState.map.topologyMap.audioSettings.roomtoneFadeMilliseconds = 1350;
-    documentState.map.topologyMap.audioSettings.soundsById.emplace(
+    authoringGraph.audioSettings.roomtoneFadeMilliseconds = 1350;
+    authoringGraph.audioSettings.soundsById.emplace(
             "graph_hum", game::SectorSoundDefinition{
                     "graph_hum", "ambience/graph_hum.ogg", game::SectorSoundType::Sound});
+    documentState.map.topologyMap.audioSettings = authoringGraph.audioSettings;
     documentState.map.topologyMap.lightmapSettings.ambientOcclusionStrength = 0.25f;
     documentState.map.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             44,

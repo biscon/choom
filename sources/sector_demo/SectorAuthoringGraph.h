@@ -141,6 +141,7 @@ struct SectorAuthoringTrigger {
 };
 
 struct SectorAuthoringGraph {
+    SectorLevelAudioSettings audioSettings;
     std::vector<SectorAuthoringVertex> vertices;
     std::vector<SectorAuthoringLine> lines;
     std::vector<SectorAuthoringLineSide> lineSides;

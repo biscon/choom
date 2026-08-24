@@ -5352,6 +5352,10 @@
         "path": "ambience/horror_ambience.ogg",
         "type": "music"
       },
+      "old_radio_music": {
+        "path": "music/old-radio-music.mp3",
+        "type": "music"
+      },
       "roomtone_02": {
         "path": "ambience/room-tone-1.mp3",
         "type": "music"
@@ -22275,6 +22279,17 @@
         "y": -27.0,
         "z": 992,
         "orientationDegrees": 0.0
+      }
+    ],
+    "soundEmitters": [
+      {
+        "editorId": 1,
+        "id": "sound_emitter_1",
+        "x": -1664,
+        "y": -16.0,
+        "z": -1328,
+        "soundId": "door_open_01",
+        "loop": true
       }
     ],
     "triggers": [

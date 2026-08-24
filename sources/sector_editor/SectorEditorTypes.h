@@ -105,8 +105,6 @@ struct SectorEditorState {
     bool showSectorIds = true;
     TexturePickerState texturePicker;
     FootstepPickerState footstepPicker;
-    AddMapSoundState addMapSound;
-    SectorEditorAssetPruneModalState assetPruneModal;
     SoundPickerState soundPicker;
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;

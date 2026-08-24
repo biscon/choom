@@ -20,6 +20,8 @@
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/sounds/SectorEditorSoundCatalogState.h"
 #include "sector_editor/services/sounds/SectorEditorSoundService.h"
+#include "sector_editor/sounds/SectorEditorSoundEditorService.h"
+#include "sector_editor/sounds/SectorEditorSoundEditorState.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogState.h"
@@ -262,17 +264,13 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
-    void DrawAddMapSoundModal(
-            engine::UIContext& ui,
-            const engine::UIConfig& config,
-            engine::Input& input,
-            engine::FontHandle font);
-    void DrawAssetPruneModal(
+    void DrawSoundEditor(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
             engine::AssetManager& assets,
-            engine::FontHandle font);
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawSoundPickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -424,7 +422,6 @@ private:
     void OpenPreviewSettingsModal();
     void ApplyPreviewSettingsModal(engine::AssetManager& assets);
     void OpenDoorTextureSettingsModal();
-    void ApplyAssetPrune(engine::AssetManager& assets);
     SectorEditorManipulationServiceContext BuildManipulationServiceContext();
     SectorEditorSelectionServiceContext BuildSelectionServiceContext();
     SectorAuthoringGraph& AuthoringGraph();
@@ -479,6 +476,7 @@ private:
             SectorEditorSelectionServiceContext* selectionService = nullptr);
     SectorEditorSoundService BuildSoundService(
             SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr);
+    SectorEditorSoundEditorService BuildSoundEditorService();
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorNpcEditorService BuildNpcEditorService();
     SectorEditorWeaponEditorService BuildWeaponEditorService();
@@ -538,6 +536,7 @@ private:
     SectorEditorWeaponEditorState weaponEditorState;
     SectorEditorWeaponEditorSessionState weaponEditorSessionState;
     SectorEditorMaterialRegistryEditorState materialRegistryEditorState;
+    SectorEditorSoundEditorState soundEditorState;
     SectorEditorAudioAssetPickerSessionState audioAssetPickerSessionState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;

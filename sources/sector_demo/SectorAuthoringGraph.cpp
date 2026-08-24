@@ -3053,6 +3053,7 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
         const SectorAuthoringGraph& graph)
 {
     SectorAuthoringDerivationResult result;
+    result.topology.audioSettings = graph.audioSettings;
 
     const std::vector<SectorAuthoringValidationIssue> referenceIssues =
             ValidateSectorAuthoringGraphReferences(graph);
@@ -3224,6 +3225,7 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
 SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopologyMap& map)
 {
     SectorAuthoringGraph graph;
+    graph.audioSettings = map.audioSettings;
     graph.vertices.reserve(map.vertices.size());
     graph.lines.reserve(map.lineDefs.size());
     graph.lineSides.reserve(map.sideDefs.size());

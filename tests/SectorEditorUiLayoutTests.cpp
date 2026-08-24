@@ -6,6 +6,7 @@
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
+#include "sector_editor/sounds/SectorEditorSoundEditorPanel.h"
 #include "sector_demo/SectorLightmap.h"
 
 #include <cmath>
@@ -629,6 +630,28 @@ void TestNpcEditorModalSplitPaneLayout()
           "NPC Save and Cancel controls fit without overlap");
 }
 
+void TestSoundEditorSplitPaneLayout()
+{
+    const game::SectorEditorSoundEditorLayout layout =
+            game::BuildSectorEditorSoundEditorLayoutForViewport(1920.0f, 1080.0f);
+    const Rectangle viewport{0.0f, 0.0f, 1920.0f, 1080.0f};
+    Check(Contains(viewport, layout.modal),
+          "Sound Editor modal fits inside the editor viewport");
+    Check(Contains(layout.modal, layout.listPane)
+                  && Contains(layout.modal, layout.formBounds),
+          "Sound Editor list and details panes stay inside the modal");
+    Check(!Overlaps(layout.listPane, layout.formBounds),
+          "Sound Editor list and details panes do not overlap");
+    Check(!Overlaps(layout.addButton, layout.deleteButton)
+                  && Contains(layout.listPane, layout.addButton)
+                  && Contains(layout.listPane, layout.deleteButton),
+          "Sound Editor Add and Remove controls fit without overlap");
+    Check(!Overlaps(layout.saveButton, layout.cancelButton)
+                  && Contains(layout.modal, layout.saveButton)
+                  && Contains(layout.modal, layout.cancelButton),
+          "Sound Editor Save and Cancel controls fit without overlap");
+}
+
 void TestPreviewSettingsModalFogDraftApplyAndReset()
 {
     game::SectorTopologyMap map;
@@ -780,6 +803,7 @@ int main()
     TestPreviewSettingsModalNormalizesLayeredProbeSettings();
     TestPreviewSettingsFogTabLayout();
     TestNpcEditorModalSplitPaneLayout();
+    TestSoundEditorSplitPaneLayout();
     TestWeaponEditorLayouts();
     TestPreviewSettingsModalFogDraftApplyAndReset();
     TestPreviewNavigationTabLayout();

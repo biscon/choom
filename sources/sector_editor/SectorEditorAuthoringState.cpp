@@ -53,7 +53,6 @@ void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap
     target.skySettings = source.skySettings;
     target.directionalLight = source.directionalLight;
     target.fogSettings = source.fogSettings;
-    target.audioSettings = source.audioSettings;
     target.lightmapSettings = source.lightmapSettings;
     target.bakedLightmap = source.bakedLightmap;
     target.bakedReflectionProbes = source.bakedReflectionProbes;

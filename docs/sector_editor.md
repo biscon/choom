@@ -84,6 +84,9 @@ views and maps to world Z for generated 3D geometry.
 - `Reload`: confirm and reload the current saved level.
 - `Material Editor`: add, remove, rename, and edit global materials and their
   albedo/filter/PBR scalar properties.
+- `Sound Editor`: add, remove, rename, retype, and replace map-local Sound and
+  Music entries. Referenced IDs, types, and removals are locked while their
+  underlying audio files may still be replaced.
 - Billboard tool: place a generic authored billboard marker inside a sector.
 - Door tool: place a portal-attached procedural door on a valid two-sided
   linedef.
@@ -466,13 +469,20 @@ companion is present. Normal strength is consumed by dynamic sector lighting;
 metalness and roughness are stored now for the later sector GGX path. Sky,
 decal, and procedural-door consumers currently use the material albedo only.
 
-## Prune Map Assets
+## Sound Editor
 
-The left tools pane `Prune Assets` button removes unused entries from the map's
-sound registry. Global materials are managed only by the Material Editor and
-are never pruned from one map. Door open/close sound references are retained. Background music,
-footsteps, NPC-definition audio, sprites, and models are separate from these
-registries and are not changed by this command.
+The left tools pane opens the Sound Editor directly below the Weapon Editor.
+Its scrollable left pane lists every map-local Sound and Music ID; Add and
+Remove stage registry changes until Save. The details pane edits the ID, picks
+or replaces a file below `assets/audio`, previews it through the shared audio
+picker, and chooses whether it is a buffered Sound or streaming Music.
+
+IDs used by sector roomtones, Sound Emitters, or door open/close sounds cannot
+be renamed, retyped, or removed. The details pane reports those known level
+references in a word-wrapped usage box. Replacing the audio file remains
+available because it preserves the stable ID and loading role. Lua may refer to
+IDs dynamically or from external scripts, so script strings are not treated as
+statically discoverable references.
 
 ## Move, Split, And Delete Tools
 
