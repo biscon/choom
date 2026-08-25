@@ -1009,7 +1009,9 @@ int main(int argc, char** argv)
                             dst.y + editorUiTopInset * dst.height
                                     / static_cast<float>(INTERNAL_HEIGHT)))
                     : 0;
-            DrawFPS(10, editorMenuScreenBottom + 10);
+            if (application.ApplicationSettings().graphics.showFpsCounter) {
+                DrawFPS(10, editorMenuScreenBottom + 10);
+            }
             if (application.ApplicationSettings().graphics.performanceOverlay) {
                 performanceProfiler.Draw(
                         currentWorldRenderScale,

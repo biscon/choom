@@ -79,12 +79,35 @@ enum class UIMenuItemKind : uint8_t {
     Submenu
 };
 
+struct UIMenuShortcut {
+    int key = 0;
+    bool control = false;
+    bool shift = false;
+    bool alt = false;
+};
+
+constexpr bool MatchesUIMenuShortcut(
+        const UIMenuShortcut& shortcut,
+        int pressedKey,
+        bool control,
+        bool shift,
+        bool alt)
+{
+    return shortcut.key != 0
+            && shortcut.key == pressedKey
+            && shortcut.control == control
+            && shortcut.shift == shift
+            && shortcut.alt == alt;
+}
+
 struct UIMenuItem {
     const char* label = "";
     uint32_t commandId = 0;
     UIMenuItemKind kind = UIMenuItemKind::Action;
     bool enabled = true;
     bool checked = false;
+    const char* shortcutLabel = "";
+    UIMenuShortcut shortcut = {};
     const UIMenuItem* children = nullptr;
     size_t childCount = 0;
 };
@@ -125,6 +148,7 @@ struct UIContext {
     struct MainMenuOverlayRow {
         Rectangle bounds = {};
         const char* label = "";
+        const char* shortcutLabel = "";
         UIMenuItemKind kind = UIMenuItemKind::Action;
         bool enabled = true;
         bool checked = false;
@@ -140,6 +164,7 @@ struct UIContext {
     struct MainMenuOverlay {
         bool active = false;
         FontHandle font = NullFontHandle();
+        FontHandle shortcutFont = NullFontHandle();
         std::array<MainMenuOverlayPopup, UIMainMenuMaxDepth> popups = {};
         size_t popupCount = 0;
         std::array<MainMenuOverlayRow, UIMainMenuMaxOverlayRows> rows = {};
@@ -399,9 +424,16 @@ UIMainMenuResult MainMenu(
         AssetManager& assets,
         Rectangle bounds,
         FontHandle font,
+        FontHandle shortcutFont,
         const UIMenuRoot* roots,
         size_t rootCount,
         UIMainMenuState& state,
+        bool enabled = true);
+
+UIMainMenuResult ActivateMainMenuShortcut(
+        Input& input,
+        const UIMenuRoot* roots,
+        size_t rootCount,
         bool enabled = true);
 
 void CloseMainMenu(UIMainMenuState& state);

@@ -65,6 +65,7 @@
 namespace game {
 
 struct SectorEditorToolContext;
+struct SectorEditorSaveLevelPlan;
 
 class SectorEditor {
 public:
@@ -408,7 +409,12 @@ private:
     void OpenSaveLevelModal();
     void OpenLoadLevelModal();
     void OpenConfirmation(const char* title, const char* message, std::function<void()> onOkay);
+    bool SaveCurrentLevel();
     bool SaveLevelFromModal(bool overwriteConfirmed = false);
+    bool SaveLevelWithPlan(
+            const std::string& name,
+            const SectorEditorSaveLevelPlan& savePlan,
+            std::string& errorMessage);
     void RefreshLevelList();
     bool HasDocumentModalOpen() const;
     bool TryEnterPreview3D(engine::EngineContext& context, engine::UIContext& ui);

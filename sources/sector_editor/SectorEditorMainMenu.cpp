@@ -21,20 +21,26 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         const SectorEditorState& editorState,
         engine::UIMainMenuState& menuState,
         bool canCopyConfig,
         bool canPasteConfig,
+        bool visible,
         bool enabled)
 {
-    const std::array<engine::UIMenuItem, 4> levelItems{{
+    const std::array<engine::UIMenuItem, 5> levelItems{{
             {"New", CommandId(SectorEditorMainMenuCommand::NewLevel)},
-            {"Load", CommandId(SectorEditorMainMenuCommand::LoadLevel)},
-            {"Save", CommandId(SectorEditorMainMenuCommand::SaveLevel)},
+            {"Load", CommandId(SectorEditorMainMenuCommand::LoadLevel),
+                    engine::UIMenuItemKind::Action, true, false, "CTRL-O",
+                    engine::UIMenuShortcut{KEY_O, true}},
+            {"Save", CommandId(SectorEditorMainMenuCommand::SaveLevel),
+                    engine::UIMenuItemKind::Action, true, false, "CTRL-S",
+                    engine::UIMenuShortcut{KEY_S, true}},
+            {"Save As...", CommandId(SectorEditorMainMenuCommand::SaveLevelAs)},
             {"Reload", CommandId(SectorEditorMainMenuCommand::ReloadLevel)}
     }};
-    const std::array<engine::UIMenuItem, 5> editorItems{{
-            {"3D Mode", CommandId(SectorEditorMainMenuCommand::Toggle3DMode)},
+    const std::array<engine::UIMenuItem, 4> editorItems{{
             {"Material Editor", CommandId(SectorEditorMainMenuCommand::OpenMaterialEditor)},
             {"Sound Editor", CommandId(SectorEditorMainMenuCommand::OpenSoundEditor)},
             {"NPC Editor", CommandId(SectorEditorMainMenuCommand::OpenNpcEditor)},
@@ -42,11 +48,16 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
     }};
     const std::array<engine::UIMenuItem, 2> editItems{{
             {"Copy config", CommandId(SectorEditorMainMenuCommand::CopyConfig),
-                    engine::UIMenuItemKind::Action, canCopyConfig},
+                    engine::UIMenuItemKind::Action, canCopyConfig, false, "CTRL-C",
+                    engine::UIMenuShortcut{KEY_C, true}},
             {"Paste config", CommandId(SectorEditorMainMenuCommand::PasteConfig),
-                    engine::UIMenuItemKind::Action, canPasteConfig}
+                    engine::UIMenuItemKind::Action, canPasteConfig, false, "CTRL-V",
+                    engine::UIMenuShortcut{KEY_V, true}}
     }};
-    const std::array<engine::UIMenuItem, 3> viewItems{{
+    const std::array<engine::UIMenuItem, 4> viewItems{{
+            {"3D Mode", CommandId(SectorEditorMainMenuCommand::Toggle3DMode),
+                    engine::UIMenuItemKind::Action, true, false, "CTRL-D",
+                    engine::UIMenuShortcut{KEY_D, true}},
             {"Show Grid", CommandId(SectorEditorMainMenuCommand::ToggleShowGrid),
                     engine::UIMenuItemKind::Checkbox, true, editorState.showGrid},
             {"Show Axes", CommandId(SectorEditorMainMenuCommand::ToggleShowAxes),
@@ -65,6 +76,22 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             {"Settings", settingsItems.data(), settingsItems.size()}
     }};
 
+    const engine::UIMainMenuResult shortcutResult =
+            engine::ActivateMainMenuShortcut(
+                    input,
+                    roots.data(),
+                    roots.size(),
+                    enabled && ui.focusedId == 0);
+    if (shortcutResult.activated) {
+        engine::CloseMainMenu(menuState);
+        return static_cast<SectorEditorMainMenuCommand>(
+                shortcutResult.commandId);
+    }
+    if (!visible) {
+        engine::CloseMainMenu(menuState);
+        return SectorEditorMainMenuCommand::None;
+    }
+
     const engine::UIMainMenuResult result = engine::MainMenu(
             ui,
             config,
@@ -72,6 +99,7 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             assets,
             Rectangle{0.0f, 0.0f, EditorWidth, EditorMainMenuHeight},
             font,
+            smallFont,
             roots.data(),
             roots.size(),
             menuState,

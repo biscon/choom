@@ -1296,6 +1296,33 @@ void EndUI(
                 Rectangle textBounds = row.bounds;
                 textBounds.x += 28.0f;
                 textBounds.width = std::max(0.0f, textBounds.width - 56.0f);
+                const char* shortcutLabel = row.shortcutLabel == nullptr
+                        ? "" : row.shortcutLabel;
+                if (shortcutLabel[0] != '\0') {
+                    const Vector2 shortcutSize = MeasureTextWithFont(
+                            assets,
+                            overlay.shortcutFont,
+                            shortcutLabel,
+                            config.fontSize,
+                            config.textSpacing);
+                    textBounds.width = std::max(
+                            0.0f,
+                            textBounds.width - shortcutSize.x - config.paddingX);
+                    Text(
+                            config,
+                            assets,
+                            Rectangle{
+                                    row.bounds.x + row.bounds.width
+                                            - shortcutSize.x - config.paddingX,
+                                    row.bounds.y,
+                                    shortcutSize.x,
+                                    row.bounds.height},
+                            overlay.shortcutFont,
+                            shortcutLabel,
+                            UITextJustify::Right,
+                            row.enabled ? config.mutedTextColor
+                                        : config.disabledColor);
+                }
                 Text(
                         config,
                         assets,
@@ -2686,6 +2713,7 @@ UIMainMenuResult MainMenu(
         AssetManager& assets,
         Rectangle bounds,
         FontHandle font,
+        FontHandle shortcutFont,
         const UIMenuRoot* roots,
         size_t rootCount,
         UIMainMenuState& state,
@@ -2820,6 +2848,7 @@ UIMainMenuResult MainMenu(
         overlay = UIContext::MainMenuOverlay{};
         overlay.active = true;
         overlay.font = font;
+        overlay.shortcutFont = shortcutFont;
 
         const Rectangle visibleBounds = ResolveOverlayBounds(config);
         const float rowHeight = std::max(1.0f, config.listItemHeight);
@@ -2843,9 +2872,20 @@ UIMainMenuResult MainMenu(
                         item.label,
                         config.fontSize,
                         config.textSpacing);
+                const Vector2 shortcutMeasured = MeasureTextWithFont(
+                        assets,
+                        shortcutFont,
+                        item.shortcutLabel,
+                        config.fontSize,
+                        config.textSpacing);
+                float itemWidth = measured.x
+                        + config.paddingX * 2.0f + 56.0f;
+                if (shortcutMeasured.x > 0.0f) {
+                    itemWidth += shortcutMeasured.x + config.paddingX;
+                }
                 popupWidth = std::max(
                         popupWidth,
-                        measured.x + config.paddingX * 2.0f + 56.0f);
+                        itemWidth);
             }
             popupWidth = std::min(popupWidth, visibleBounds.width);
 
@@ -2926,6 +2966,7 @@ UIMainMenuResult MainMenu(
                         overlay.rows[overlay.rowCount++];
                 overlayRow.bounds = row;
                 overlayRow.label = item.label;
+                overlayRow.shortcutLabel = item.shortcutLabel;
                 overlayRow.kind = item.kind;
                 overlayRow.enabled = item.enabled;
                 overlayRow.checked = item.checked;
@@ -3037,6 +3078,87 @@ UIMainMenuResult MainMenu(
     if (!result.open) {
         ui.mainMenuOverlay = UIContext::MainMenuOverlay{};
     }
+    return result;
+}
+
+UIMainMenuResult ActivateMainMenuShortcut(
+        Input& input,
+        const UIMenuRoot* roots,
+        size_t rootCount,
+        bool enabled)
+{
+    UIMainMenuResult result;
+    if (!enabled || roots == nullptr || rootCount == 0) {
+        return result;
+    }
+
+    const bool control = input.IsKeyDown(KEY_LEFT_CONTROL)
+            || input.IsKeyDown(KEY_RIGHT_CONTROL);
+    const bool shift = input.IsKeyDown(KEY_LEFT_SHIFT)
+            || input.IsKeyDown(KEY_RIGHT_SHIFT);
+    const bool alt = input.IsKeyDown(KEY_LEFT_ALT)
+            || input.IsKeyDown(KEY_RIGHT_ALT);
+
+    const auto activateItems = [&](const auto& self,
+                                   const UIMenuItem* items,
+                                   size_t itemCount,
+                                   InputEvent& event,
+                                   size_t depth) -> bool {
+        if (items == nullptr || depth >= UIMainMenuMaxDepth) return false;
+        for (size_t itemIndex = 0; itemIndex < itemCount; ++itemIndex) {
+            const UIMenuItem& item = items[itemIndex];
+            if (!item.enabled || item.kind == UIMenuItemKind::Separator) {
+                continue;
+            }
+            if (item.kind == UIMenuItemKind::Submenu) {
+                if (self(
+                            self,
+                            item.children,
+                            item.childCount,
+                            event,
+                            depth + 1)) {
+                    return true;
+                }
+                continue;
+            }
+            if (!MatchesUIMenuShortcut(
+                        item.shortcut,
+                        event.key.key,
+                        control,
+                        shift,
+                        alt)) {
+                continue;
+            }
+            result.activated = true;
+            result.commandId = item.commandId;
+            ConsumeEvent(event);
+            return true;
+        }
+        return false;
+    };
+
+    input.ForEachEvent(
+            InputEventType::KeyPressed,
+            true,
+            [&](InputEvent& event) {
+                if (result.activated) return;
+                const size_t visibleRootCount =
+                        std::min(rootCount, UIMainMenuMaxRoots);
+                for (size_t rootIndex = 0;
+                        rootIndex < visibleRootCount;
+                        ++rootIndex) {
+                    const UIMenuRoot& root = roots[rootIndex];
+                    if (!root.enabled) continue;
+                    if (activateItems(
+                                activateItems,
+                                root.items,
+                                root.itemCount,
+                                event,
+                                0)) {
+                        return;
+                    }
+                }
+            });
     return result;
 }
 

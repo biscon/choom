@@ -10,6 +10,7 @@ enum class SectorEditorMainMenuCommand : uint32_t {
     NewLevel,
     LoadLevel,
     SaveLevel,
+    SaveLevelAs,
     ReloadLevel,
     CopyConfig,
     PasteConfig,
@@ -30,10 +31,12 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         engine::Input& input,
         engine::AssetManager& assets,
         engine::FontHandle font,
+        engine::FontHandle smallFont,
         const SectorEditorState& editorState,
         engine::UIMainMenuState& menuState,
         bool canCopyConfig,
         bool canPasteConfig,
+        bool visible,
         bool enabled);
 
 } // namespace game

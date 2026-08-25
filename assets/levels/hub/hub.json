@@ -2239,6 +2239,20 @@
         -83.0
       ],
       "yawDegrees": -84.99999237060547
+    },
+    {
+      "id": 134,
+      "kind": "static_model",
+      "staticModel": {
+        "instanceId": "prop_134",
+        "modelPath": "assets/models/furniture/metalshopshelf.glb"
+      },
+      "position": [
+        -264.0,
+        -17.0,
+        -47.0
+      ],
+      "yawDegrees": 0.0
     }
   ],
   "staticLights": [

@@ -773,31 +773,29 @@ void SectorEditor::RenderUI(
     engine::BeginUI(ui, input);
     const bool mainMenuVisible = state.mode != SectorEditorMode::Preview3D
             || !previewState.overlay.previewUiHidden;
-    if (mainMenuVisible) {
-        const SectorEditorConfigTarget configTarget =
-                ResolveSectorEditorConfigTarget(
-                        state.mode,
-                        TopologyMap(),
-                        AuthoringGraph(),
-                        MakeLiveConstDerivationAccess(documentState.derivation),
-                        selectionState,
-                        previewState.selection);
-        const SectorEditorMainMenuCommand command = DrawSectorEditorMainMenu(
-                ui,
-                config,
-                input,
-                assets,
-                font,
-                state,
-                uiState.mainMenu,
-                configTarget.kind != SectorEditorConfigKind::None,
-                configTarget.kind != SectorEditorConfigKind::None
-                        && configTarget.kind == configClipboardState.kind,
-                IsMainMenuInteractionEnabled());
-        HandleMainMenuCommand(command, ui, assets);
-    } else {
-        engine::CloseMainMenu(uiState.mainMenu);
-    }
+    const SectorEditorConfigTarget configTarget =
+            ResolveSectorEditorConfigTarget(
+                    state.mode,
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveConstDerivationAccess(documentState.derivation),
+                    selectionState,
+                    previewState.selection);
+    const SectorEditorMainMenuCommand command = DrawSectorEditorMainMenu(
+            ui,
+            config,
+            input,
+            assets,
+            font,
+            smallFont,
+            state,
+            uiState.mainMenu,
+            configTarget.kind != SectorEditorConfigKind::None,
+            configTarget.kind != SectorEditorConfigKind::None
+                    && configTarget.kind == configClipboardState.kind,
+            mainMenuVisible,
+            IsMainMenuInteractionEnabled());
+    HandleMainMenuCommand(command, ui, assets);
 
     if (state.mode == SectorEditorMode::Preview3D) {
         if (lightmapBake.IsBlocking()) {
@@ -1362,6 +1360,9 @@ void SectorEditor::HandleMainMenuCommand(
             OpenLoadLevelModal();
             break;
         case SectorEditorMainMenuCommand::SaveLevel:
+            SaveCurrentLevel();
+            break;
+        case SectorEditorMainMenuCommand::SaveLevelAs:
             OpenSaveLevelModal();
             break;
         case SectorEditorMainMenuCommand::ReloadLevel:
@@ -6822,7 +6823,45 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
         return false;
     }
 
-    if (!EnsureSaveLevelDirectory(savePlan.paths, modal.errorMessage)) {
+    return SaveLevelWithPlan(name, savePlan, modal.errorMessage);
+}
+
+bool SectorEditor::SaveCurrentLevel()
+{
+    if (!Lifecycle().hasCurrentLevelPath) {
+        OpenSaveLevelModal();
+        return false;
+    }
+
+    SectorEditorSaveLevelPlan savePlan;
+    std::string errorMessage;
+    if (!PrepareSaveLevelPlan(
+                Lifecycle().currentLevelName,
+                true,
+                Lifecycle().currentLevelPath,
+                false,
+                savePlan,
+                errorMessage)) {
+        statusText = errorMessage.empty()
+                ? "Save failed"
+                : "Save failed: " + errorMessage;
+        return false;
+    }
+    return SaveLevelWithPlan(
+            Lifecycle().currentLevelName,
+            savePlan,
+            errorMessage);
+}
+
+bool SectorEditor::SaveLevelWithPlan(
+        const std::string& name,
+        const SectorEditorSaveLevelPlan& savePlan,
+        std::string& errorMessage)
+{
+    if (!EnsureSaveLevelDirectory(savePlan.paths, errorMessage)) {
+        statusText = errorMessage.empty()
+                ? "Save failed"
+                : "Save failed: " + errorMessage;
         return false;
     }
 
@@ -6832,7 +6871,7 @@ bool SectorEditor::SaveLevelFromModal(bool overwriteConfirmed)
                 documentState.map,
                 documentState.derivation,
                 SectorAuthoringEditorSettings{state.gridSize},
-                modal.errorMessage)) {
+                errorMessage)) {
         statusText = TextFormat("Save failed: %s", savePlan.paths.jsonAssetPath.c_str());
         return false;
     }

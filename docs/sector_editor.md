@@ -78,9 +78,12 @@ views and maps to world Z for generated 3D geometry.
   unchanged.
 - `Escape`: clear selection, then return to Select tool.
 - `New`: confirm and reset to a blank topology level.
-- `Load`: select a level under `assets/levels`; unsaved edits require
+- `Load` (`Ctrl+O`): select a level under `assets/levels`; unsaved edits require
   confirmation before loading.
-- `Save`: save the current topology document, or save as a named level.
+- `Save` (`Ctrl+S`): save directly to the current level path. An unnamed level
+  opens `Save As...` instead.
+- `Save As...`: open the level naming dialog and confirm before overwriting a
+  different existing level.
 - `Reload`: confirm and reload the current saved level.
 - `Material Editor`: add, remove, rename, and edit global materials and their
   albedo/filter/PBR scalar properties.
@@ -91,7 +94,14 @@ views and maps to world Z for generated 3D geometry.
 - Door tool: place a portal-attached procedural door on a valid two-sided
   linedef.
 - `Bake Lightmaps`: bake topology static lights into the level lightmap atlas.
-- `3D Mode`: rebuild the 3D preview from the current in-memory topology map.
+- `3D Mode` (`Ctrl+D`, under `View`): rebuild the 3D preview from the current
+  in-memory topology map, or return to 2D from preview mode.
+- `Copy config` / `Paste config` (`Ctrl+C` / `Ctrl+V`): copy and paste the
+  selected compatible editor configuration. Disabled commands do not fire.
+
+The application-wide Graphics Settings screen includes an `FPS counter`
+checkbox for raylib's green FPS display. It defaults off and is separate from
+the F9 performance overlay and from level settings.
 
 ## Topology Model
 
@@ -449,8 +459,8 @@ material ID and UV scale/offset only. Floor materials paste only to floors,
 ceiling materials paste only to ceilings, and wall/lower/upper materials paste
 only to the matching concrete sidedef wall part. Paste mutates only the selected
 target surface; it does not edit the opposite sidedef, sector defaults, ambient
-lighting, or geometry. Keyboard shortcuts are not implemented for this workflow
-yet, so use the inspector or 3D panel buttons.
+lighting, or geometry. `Ctrl+C` and `Ctrl+V` invoke the same enabled copy/paste
+commands as the inspector and 3D panel buttons.
 
 The Material Editor has a scrolling material list and an albedo preview. Each
 definition exposes editable ID, albedo PNG selection, filtering, metalness,

@@ -15,6 +15,7 @@
     "maxShadowLightUpdatesPerFrame": 2,
     "dynamicLightFadeInSeconds": 0.25,
     "depthPrepass": false,
+    "showFpsCounter": false,
     "performanceOverlay": false,
     "vsync": true,
     "horizontalFovDegrees": 95

@@ -1,4 +1,5 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
+#include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorLightmapModal.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/preview/SectorEditorLightProxyPlacement.h"
@@ -36,6 +37,23 @@ bool Overlaps(Rectangle a, Rectangle b)
             && a.x + a.width > b.x
             && a.y < b.y + b.height
             && a.y + a.height > b.y;
+}
+
+void TestMainMenuShortcutMatching()
+{
+    const engine::UIMenuShortcut save{KEY_S, true, false, false};
+    Check(engine::MatchesUIMenuShortcut(
+                  save, KEY_S, true, false, false),
+          "menu shortcut matches its exact Ctrl key chord");
+    Check(!engine::MatchesUIMenuShortcut(
+                  save, KEY_S, true, true, false),
+          "menu shortcut rejects an extra Shift modifier");
+    Check(!engine::MatchesUIMenuShortcut(
+                  save, KEY_S, false, false, false),
+          "menu shortcut requires its Ctrl modifier");
+    Check(!engine::MatchesUIMenuShortcut(
+                  save, KEY_O, true, false, false),
+          "menu shortcut rejects a different key");
 }
 
 void TestLightmapBakeSetupModalStateLifecycle()
@@ -854,6 +872,7 @@ void TestLightProxyPlacementMath()
 
 int main()
 {
+    TestMainMenuShortcutMatching();
     TestLightmapBakeSetupModalStateLifecycle();
     TestModelFilenameExtraction();
     TestAudioAssetPickerScrollSession();
