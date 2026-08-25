@@ -106,6 +106,10 @@ public:
     const Sound* GetSoundVoice(SoundHandle handle, size_t voiceIndex) const;
 
     MusicHandle RequestMusic(AssetScopeHandle scope, const char* path);
+    MusicHandle RequestMusicInstance(
+            AssetScopeHandle scope,
+            const char* instanceKey,
+            const char* path);
     bool IsReady(MusicHandle handle) const;
     bool IsFinished(MusicHandle handle) const;
     bool HasFailed(MusicHandle handle) const;

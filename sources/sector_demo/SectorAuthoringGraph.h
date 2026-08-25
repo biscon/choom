@@ -56,6 +56,7 @@ struct SectorAuthoringFaceAnchor {
     // Empty uses the application-wide default footstep set.
     std::string footstepSet;
     bool ceilingSky = false;
+    SectorRoomtoneSettings roomtone;
 
     SectorTopologyUvSettings floorUv;
     SectorTopologyUvSettings ceilingUv;
@@ -117,6 +118,17 @@ struct SectorAuthoringLevelMarker {
     float orientationDegrees = 0.0f;
 };
 
+struct SectorAuthoringSoundEmitter {
+    int id = -1;
+    std::string referenceId;
+    SectorCoord x = 0;
+    SectorCoord z = 0;
+    float y = 0.0f;
+    std::string soundId;
+    float volume = 1.0f;
+    bool loop = false;
+};
+
 struct SectorAuthoringTrigger {
     int editorId = -1;
     std::string id;
@@ -129,6 +141,7 @@ struct SectorAuthoringTrigger {
 };
 
 struct SectorAuthoringGraph {
+    SectorLevelAudioSettings audioSettings;
     std::vector<SectorAuthoringVertex> vertices;
     std::vector<SectorAuthoringLine> lines;
     std::vector<SectorAuthoringLineSide> lineSides;
@@ -136,6 +149,7 @@ struct SectorAuthoringGraph {
     std::vector<SectorAuthoringFogVolume> fogVolumes;
     std::vector<SectorAuthoringReflectionProbe> reflectionProbes;
     std::vector<SectorAuthoringLevelMarker> levelMarkers;
+    std::vector<SectorAuthoringSoundEmitter> soundEmitters;
     std::vector<SectorAuthoringTrigger> triggers;
 };
 
@@ -153,6 +167,7 @@ enum class SectorAuthoringObjectKind {
     FogVolume,
     ReflectionProbe,
     LevelMarker,
+    SoundEmitter,
     Trigger
 };
 
@@ -370,10 +385,13 @@ int AllocateSectorAuthoringFaceAnchorId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringFogVolumeId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringReflectionProbeId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph);
+int AllocateSectorAuthoringSoundEmitterId(const SectorAuthoringGraph& graph);
 int AllocateSectorAuthoringTriggerId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringLevelMarkerReferenceId(const SectorAuthoringGraph& graph);
+std::string AllocateSectorAuthoringSoundEmitterReferenceId(const SectorAuthoringGraph& graph);
 std::string AllocateSectorAuthoringTriggerReferenceId(const SectorAuthoringGraph& graph);
 bool IsValidSectorAuthoringLevelMarkerReferenceId(const std::string& id);
+bool IsValidSectorAuthoringSoundEmitterReferenceId(const std::string& id);
 bool IsValidSectorTriggerReferenceId(const std::string& id);
 bool IsValidSectorTriggerScriptName(const std::string& name);
 
@@ -417,6 +435,15 @@ SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarker(
         SectorAuthoringGraph& graph,
         int id);
 const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarkerByReferenceId(
+        const SectorAuthoringGraph& graph,
+        const std::string& referenceId);
+const SectorAuthoringSoundEmitter* FindSectorAuthoringSoundEmitter(
+        const SectorAuthoringGraph& graph,
+        int id);
+SectorAuthoringSoundEmitter* FindSectorAuthoringSoundEmitter(
+        SectorAuthoringGraph& graph,
+        int id);
+const SectorAuthoringSoundEmitter* FindSectorAuthoringSoundEmitterByReferenceId(
         const SectorAuthoringGraph& graph,
         const std::string& referenceId);
 const SectorAuthoringTrigger* FindSectorAuthoringTrigger(

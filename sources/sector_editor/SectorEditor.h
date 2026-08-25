@@ -20,6 +20,8 @@
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/sounds/SectorEditorSoundCatalogState.h"
 #include "sector_editor/services/sounds/SectorEditorSoundService.h"
+#include "sector_editor/sounds/SectorEditorSoundEditorService.h"
+#include "sector_editor/sounds/SectorEditorSoundEditorState.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogState.h"
@@ -41,15 +43,19 @@
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingState.h"
+#include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
+#include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingState.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingState.h"
 #include "sector_demo/SectorSceneRuntime.h"
+#include "sector_demo/SectorUseInteraction.h"
 #include "sector_demo/SectorMaterialRegistry.h"
 #include "game/FpsWeaponRegistry.h"
 
 #include <raylib.h>
 
 #include <functional>
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -92,7 +98,10 @@ public:
     void RenderPreview3DScene(engine::EngineContext& context);
     void RenderPreview3DViewmodel(engine::AssetManager& assets);
     void RenderPreview3DOverlays();
-    void RenderPreview3DHud(Rectangle playableViewport) const;
+    void RenderPreview3DHud(
+            engine::AssetManager& assets,
+            engine::FontHandle usePromptFont,
+            Rectangle playableViewport) const;
     void ApplyPreview3DWorldAtmosphere(
             engine::RenderTarget& sceneTarget,
             bool collectGpuDiagnostics = false);
@@ -255,17 +264,13 @@ private:
             engine::Input& input,
             engine::AssetManager& assets,
             engine::FontHandle font);
-    void DrawAddMapSoundModal(
-            engine::UIContext& ui,
-            const engine::UIConfig& config,
-            engine::Input& input,
-            engine::FontHandle font);
-    void DrawAssetPruneModal(
+    void DrawSoundEditor(
             engine::UIContext& ui,
             const engine::UIConfig& config,
             engine::Input& input,
             engine::AssetManager& assets,
-            engine::FontHandle font);
+            engine::FontHandle font,
+            engine::FontHandle smallFont);
     void DrawSoundPickerModal(
             engine::UIContext& ui,
             const engine::UIConfig& config,
@@ -417,7 +422,6 @@ private:
     void OpenPreviewSettingsModal();
     void ApplyPreviewSettingsModal(engine::AssetManager& assets);
     void OpenDoorTextureSettingsModal();
-    void ApplyAssetPrune(engine::AssetManager& assets);
     SectorEditorManipulationServiceContext BuildManipulationServiceContext();
     SectorEditorSelectionServiceContext BuildSelectionServiceContext();
     SectorAuthoringGraph& AuthoringGraph();
@@ -471,7 +475,9 @@ private:
     SectorEditorRuntimeObjectEditingService BuildRuntimeObjectEditingService(
             SectorEditorSelectionServiceContext* selectionService = nullptr);
     SectorEditorSoundService BuildSoundService(
-            SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr);
+            SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr,
+            SectorEditorSoundEmitterEditingService* soundEmitterEditing = nullptr);
+    SectorEditorSoundEditorService BuildSoundEditorService();
     SectorEditorTextureCatalogService MakeTextureCatalogService();
     SectorEditorNpcEditorService BuildNpcEditorService();
     SectorEditorWeaponEditorService BuildWeaponEditorService();
@@ -531,6 +537,7 @@ private:
     SectorEditorWeaponEditorState weaponEditorState;
     SectorEditorWeaponEditorSessionState weaponEditorSessionState;
     SectorEditorMaterialRegistryEditorState materialRegistryEditorState;
+    SectorEditorSoundEditorState soundEditorState;
     SectorEditorAudioAssetPickerSessionState audioAssetPickerSessionState;
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
@@ -546,6 +553,9 @@ private:
     SectorEditorAuthoringFaceMergeState authoringFaceMergeState;
     std::optional<SectorEditorAuthoringFaceMergeService> authoringFaceMergeService;
     std::optional<SectorEditorLevelMarkerEditingService> levelMarkerEditingService;
+    SoundEmitterEditingState soundEmitterEditingState;
+    SoundEmitterEditingUiState soundEmitterEditingUiState;
+    std::optional<SectorEditorSoundEmitterEditingService> soundEmitterEditingService;
     TriggerEditingState triggerEditingState;
     TriggerEditingUiState triggerEditingUiState;
     std::optional<SectorEditorTriggerEditingService> triggerEditingService;
@@ -563,6 +573,8 @@ private:
     std::string applicationSettingsPath;
     std::string weaponRegistryPath;
     std::string weaponRegistryError;
+    SectorUseTarget previewUseTarget;
+    std::array<char, 128> previewUsePromptTitle{};
     engine::EngineContext* engineContext = nullptr;
     bool initialized = false;
 };

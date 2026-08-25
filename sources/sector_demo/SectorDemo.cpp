@@ -102,7 +102,7 @@ void SectorDemo::Update(engine::EngineContext& context, float dt)
                 engine::InputEventType::KeyPressed,
                 true,
                 [this, &context, &playerPosition](engine::InputEvent& event) {
-                    if (event.key.key != KEY_F) {
+                    if (event.key.key != KEY_E) {
                         return;
                     }
                     if (ToggleTargetedSectorDoorInteractionSystem(
@@ -146,7 +146,7 @@ void SectorDemo::RenderOverlay(engine::AssetManager& assets)
 
     const Vector3 position = preview.Position();
     DrawText("Sector Mesh Demo", 40, 36, 30, RAYWHITE);
-    DrawText("WASD move  |  Mouse look  |  Space/Ctrl up/down  |  F interact  |  F4 dynamic lights  |  F10 borderless  |  F11 cursor", 40, 76, 20, LIGHTGRAY);
+    DrawText("WASD move  |  Mouse look  |  Space/Ctrl up/down  |  E interact  |  F4 dynamic lights  |  F10 borderless  |  F11 cursor", 40, 76, 20, LIGHTGRAY);
     DrawText(
             TextFormat(
                     "pos %.2f %.2f %.2f   sectors %zu   batches %zu   assets %.0f%%",

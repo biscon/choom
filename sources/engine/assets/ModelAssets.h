@@ -113,6 +113,60 @@ struct ModelOrientedBounds {
     float top = 0.0f;
 };
 
+enum class ModelNodeAnimationPath : uint8_t {
+    Translation,
+    Rotation,
+    Scale
+};
+
+enum class ModelNodeAnimationInterpolation : uint8_t {
+    Step,
+    Linear,
+    CubicSpline
+};
+
+struct ModelNodeAsset {
+    int parentIndex = -1;
+    ::Transform bindLocal = {
+            Vector3{},
+            Quaternion{0.0f, 0.0f, 0.0f, 1.0f},
+            Vector3{1.0f, 1.0f, 1.0f}};
+    Matrix bindLocalMatrix = {};
+    Matrix bindWorldMatrix = {};
+    bool usesMatrix = false;
+};
+
+struct ModelNodeAnimationChannel {
+    uint32_t nodeIndex = 0;
+    ModelNodeAnimationPath path = ModelNodeAnimationPath::Translation;
+    ModelNodeAnimationInterpolation interpolation =
+            ModelNodeAnimationInterpolation::Linear;
+    std::vector<float> times;
+    // Translation/scale use xyz and rotation uses xyzw. Cubic-spline tracks
+    // retain glTF's in-tangent/value/out-tangent triplets.
+    std::vector<Vector4> values;
+};
+
+struct ModelNodeAnimationClip {
+    std::string name;
+    float durationSeconds = 0.0f;
+    int keyframeCount = 1;
+    int skeletalAnimationIndex = -1;
+    std::vector<ModelNodeAnimationChannel> channels;
+};
+
+struct ModelGltfSkinAsset {
+    std::vector<uint32_t> jointNodeIndices;
+    std::vector<Matrix> inverseBindMatrices;
+};
+
+struct ModelMeshNodeBinding {
+    int nodeIndex = -1;
+    int skinIndex = -1;
+    Matrix inverseBindWorldMatrix = {};
+    bool skinned = false;
+};
+
 // Computes a tight XZ footprint after applying Model::transform. Model loading
 // calls this once so runtime collision never scans model vertices.
 bool ComputeModelOrientedBounds(
@@ -123,17 +177,64 @@ struct ModelAsset {
     Model model = {};
     ModelAnimation* animations = nullptr;
     int animationCount = 0;
+    // Project-owned glTF scene/node animation data. raylib keeps ownership of
+    // mesh/material/skeletal resources but flattens rigid node transforms into
+    // vertices, so unskinned mesh instances use animated bind-relative deltas.
+    std::vector<ModelNodeAsset> nodes;
+    std::vector<uint32_t> nodeEvaluationOrder;
+    std::vector<ModelMeshNodeBinding> meshNodeBindings;
+    ModelGltfSkinAsset gltfSkin;
+    std::vector<ModelNodeAnimationClip> nodeAnimationClips;
     std::vector<ModelMaterialAsset> materials;
     BoundingBox localBounds = {};
-    // Conservative bounds covering loaded skeletal animation poses. These are
-    // generated once during model finalization and are used as a cheap raycast
-    // broad phase; exact hits still test the current skinned triangles.
+    // Conservative bounds covering loaded skeletal and glTF node animation
+    // poses. These are generated once during model finalization and are used
+    // as a cheap raycast broad phase; exact hits test the current pose.
     BoundingBox animatedLocalBounds = {};
     ModelOrientedBounds localCollisionBounds = {};
     bool hasLocalBounds = false;
     bool hasAnimatedLocalBounds = false;
     bool hasLocalCollisionBounds = false;
 };
+
+// CPU-side glTF scene/animation import used while finalizing a loaded raylib
+// model. Exposed separately so importer behavior can be tested without a GPU
+// context; model.meshCount must match the raylib model that owns the meshes.
+bool LoadModelNodeAnimationsFromGltf(
+        const char* path,
+        ModelAsset& asset);
+
+size_t ModelAnimationClipCount(const ModelAsset& asset);
+const char* ModelAnimationClipName(const ModelAsset& asset, size_t clipIndex);
+int FindModelAnimationClipIndex(const ModelAsset& asset, const char* name);
+int ModelAnimationClipKeyframeCount(const ModelAsset& asset, size_t clipIndex);
+
+// All output vectors must already match their corresponding asset sizes. This
+// function performs no allocation and samples at an arbitrary glTF time.
+bool SampleModelNodeAnimation(
+        const ModelAsset& asset,
+        size_t clipIndex,
+        float timeSeconds,
+        std::vector<::Transform>& nodeLocalTransforms,
+        std::vector<Matrix>& nodeLocalMatrices,
+        std::vector<Matrix>& nodeWorldMatrices,
+        std::vector<Matrix>& meshNodeMatrices);
+
+// Builds mesh-local palettes for raylib's world-baked glTF vertices. The
+// output contains model.meshCount * model.skeleton.boneCount matrices and must
+// be allocated during instance preparation.
+bool BuildModelMeshSkinMatrices(
+        const ModelAsset& asset,
+        const std::vector<Matrix>& nodeWorldMatrices,
+        std::vector<Matrix>& meshBoneMatrices);
+
+// Returns the full DrawMesh transform for one mesh. authoredTransform excludes
+// Model::transform, matching the existing animated-model rendering contract.
+Matrix AnimatedModelMeshTransform(
+        const ModelAsset& asset,
+        const std::vector<Matrix>& meshNodeMatrices,
+        int meshIndex,
+        Matrix authoredTransform);
 
 enum class ModelState {
     Unloaded,

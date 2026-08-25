@@ -1352,17 +1352,19 @@ void TestSourceHashChanges()
     dynamicProp.kind = "dynamic_model";
     dynamicProp.position = Vector3{24.0f, 0.0f, 24.0f};
     dynamicProp.dynamicModel.modelPath = "assets/models/characters/synthetic.glb";
+    dynamicProp.dynamicModel.instanceId = "prop_77";
     dynamicProp.dynamicModel.animation = "Walk";
     dynamicPropMap.runtimeObjects.push_back(dynamicProp);
     Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
           "hash excludes dynamic props because they are neither baked receivers nor occluders");
     dynamicPropMap.runtimeObjects[0].position.x += 16.0f;
     dynamicPropMap.runtimeObjects[0].dynamicModel.animation = "Idle";
+    dynamicPropMap.runtimeObjects[0].dynamicModel.instanceId = "renamed_prop";
     dynamicPropMap.runtimeObjects[0].dynamicModel.animationSpeed = 2.0f;
     dynamicPropMap.runtimeObjects[0].dynamicModel.shadowMode =
             game::SectorDynamicModelShadowMode::Dynamic;
     Check(game::ComputeSectorLightmapSourceHash(dynamicPropMap) == hash,
-          "hash excludes dynamic prop transform, playback, and runtime shadow changes");
+          "hash excludes dynamic prop ID, transform, playback, and runtime shadow changes");
 
     game::SectorTopologyMap npcMap = base;
     game::SectorPlacedRuntimeObject npc;
@@ -1621,6 +1623,12 @@ void TestSourceHashChanges()
     Check(game::ComputeSectorLightmapSourceHash(changedStaticModelCollision)
                   == staticModelHash,
           "hash excludes static prop gameplay collision");
+    game::SectorTopologyMap changedStaticModelInstanceId = changedStaticModel;
+    changedStaticModelInstanceId.runtimeObjects[0].staticModel.instanceId =
+            "script_only_prop_id";
+    Check(game::ComputeSectorLightmapSourceHash(changedStaticModelInstanceId)
+                  == staticModelHash,
+          "hash excludes static prop script instance IDs");
     game::SectorTopologyMap changedStaticModelShadow = changedStaticModel;
     changedStaticModelShadow.runtimeObjects[0].staticModel.castsShadow = false;
     Check(game::ComputeSectorLightmapSourceHash(changedStaticModelShadow)
@@ -1753,13 +1761,19 @@ void TestSourceHashChanges()
           "hash ignores NPC-to-NPC collision policy");
 
     game::SectorTopologyMap changedAudio = base;
-    changedAudio.audioSettings.musicPath = "music/level_theme.ogg";
-    changedAudio.audioSettings.musicVolume = 0.35f;
+    changedAudio.audioSettings.roomtoneFadeMilliseconds = 1750;
     changedAudio.audioSettings.soundsById.emplace(
             "door_open", game::SectorSoundDefinition{
                     "door_open", "shared/door_open.wav", game::SectorSoundType::Sound});
+    changedAudio.sectors[0].roomtone.mode = game::SectorRoomtoneMode::Play;
+    changedAudio.sectors[0].roomtone.soundId = "ambient_stream";
+    changedAudio.sectors[0].roomtone.volume = 0.4f;
+    changedAudio.sectors[0].roomtone.fadeMilliseconds = 2500;
+    changedAudio.soundEmitters.push_back(game::SectorCompiledSoundEmitter{
+            9, "machine_hum", Vector3{1.0f, 2.0f, 3.0f},
+            "door_open", 0.7f, true});
     Check(game::ComputeSectorLightmapSourceHash(changedAudio) == hash,
-          "hash ignores runtime-only audio settings");
+          "hash ignores roomtones, sound emitters, and other runtime-only audio settings");
 
     game::SectorTopologyMap changedSky = base;
     changedSky.skySettings.materialId = "storm_panorama";

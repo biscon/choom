@@ -2,13 +2,13 @@
 
 #include "engine/input/InputEvents.h"
 #include "sector_editor/SectorEditorAuthoringState.h"
-#include "sector_editor/SectorEditorAssetPruneModal.h"
 #include "sector_editor/SectorEditorDirtyState.h"
 #include "sector_editor/document/SectorEditorDocumentActions.h"
 #include "sector_editor/document/SectorEditorDocumentModals.h"
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 #include "sector_editor/materials/SectorEditorMaterialRegistryEditorPanel.h"
+#include "sector_editor/sounds/SectorEditorSoundEditorPanel.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/selection/SectorEditorSelectionService.h"
@@ -24,7 +24,6 @@
 #include "sector_editor/preview/SectorEditorPreviewUvPanel.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
-#include "sector_editor/services/asset_pruning/SectorEditorAssetPruning.h"
 #include "sector_editor/services/sounds/SectorEditorSoundService.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
 #include "sector_editor/services/texture_picker/SectorEditorTexturePickerService.h"
@@ -55,6 +54,7 @@
 #include <raymath.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -341,6 +341,12 @@ bool SectorEditor::Init(engine::EngineContext& context)
                     selectionState,
                     levelMarkerEditingState,
                     statusText});
+    soundEmitterEditingService.emplace(
+            SectorEditorSoundEmitterEditingServiceContext{
+                    Lifecycle(), TopologyMap(), AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    state.topologyRenderRevision, state.topologyRenderCache,
+                    selectionState, soundEmitterEditingState, statusText});
     triggerEditingService.emplace(
             SectorEditorTriggerEditingServiceContext{
                     Lifecycle(), TopologyMap(), AuthoringGraph(),
@@ -366,6 +372,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     SectorEditorAudioAssetPickerService audioPicker{
             context, audioAssetPickerSessionState};
     audioPicker.Close(npcEditorState.audioPicker.assetPicker);
+    audioPicker.Close(soundEditorState.assetPicker);
     BuildNpcEditorService().Shutdown(assets);
     audioPicker.Close(weaponEditorState.audioPicker);
     BuildWeaponEditorService().Shutdown();
@@ -395,6 +402,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     weaponEditorState = SectorEditorWeaponEditorState{};
     weaponEditorSessionState = SectorEditorWeaponEditorSessionState{};
     materialRegistryEditorState = SectorEditorMaterialRegistryEditorState{};
+    soundEditorState = SectorEditorSoundEditorState{};
     audioAssetPickerSessionState = SectorEditorAudioAssetPickerSessionState{};
     textureCatalogState = TextureCatalogState{};
     soundCatalogState = SectorEditorSoundCatalogState{};
@@ -405,6 +413,8 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     reflectionProbeEditingUiState = ReflectionProbeEditingUiState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    soundEmitterEditingState = SoundEmitterEditingState{};
+    soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
     authoringFaceMergeState = SectorEditorAuthoringFaceMergeState{};
@@ -412,6 +422,7 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     reflectionProbeEditingService.reset();
     authoringFaceMergeService.reset();
     levelMarkerEditingService.reset();
+    soundEmitterEditingService.reset();
     triggerEditingService.reset();
     playerAudio = PlayerAudioRuntime{};
     canvasRect = {};
@@ -480,7 +491,7 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
     const bool uiCaptured = uiState.keyboardCaptured
             || state.texturePicker.open
             || state.soundPicker.open
-            || state.addMapSound.open
+            || soundEditorState.open
             || state.footstepPicker.open
             || state.decalTintModal.open
             || state.previewSettingsModal.open
@@ -566,6 +577,9 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         if (levelMarkerEditingService) {
             levelMarkerEditingService->CancelMove(nullptr);
         }
+        if (soundEmitterEditingService) {
+            soundEmitterEditingService->CancelMove(nullptr);
+        }
         return;
     }
 
@@ -590,11 +604,12 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
                 TopologyMap(),
                 dt,
                 &playerPosition,
+                previewState.controller.fpsControllerState.currentSectorId,
                 playerObstaclePtr);
         UpdateFpsViewmodel(assets, dt);
         const bool hasBlockingModal = state.texturePicker.open
                 || state.soundPicker.open
-                || state.addMapSound.open
+                || soundEditorState.open
                 || state.footstepPicker.open
                 || runtimeObjectEditingState.spritePicker.open
                 || runtimeObjectEditingState.staticModelPicker.open
@@ -616,23 +631,50 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         const bool canInteractWithDoors = previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay
                 && previewState.controller.freeflyController.mouseLookEnabled
                 && !uiState.keyboardCaptured;
+        UpdatePreview3D(input, assets, dt);
+        previewUseTarget = {};
+        previewUsePromptTitle = {};
         if (canInteractWithDoors) {
+            const SectorViewPose pose = SectorFpsControllerPose(
+                    previewState.controller.fpsControllerState,
+                    previewState.controller.fpsControllerConfig);
+            previewUseTarget = FindSectorUseTarget(
+                    context.world,
+                    &assets,
+                    pose.position,
+                    PreviewForwardFromPose(pose),
+                    previewState.collision.sectorCollisionWorldValid
+                            ? &previewState.collision.sectorCollisionWorld : nullptr,
+                    false);
+            const std::string_view title = SectorUseTargetTitle(
+                    context.world, previewUseTarget);
+            if (!title.empty()) {
+                std::snprintf(
+                        previewUsePromptTitle.data(),
+                        previewUsePromptTitle.size(),
+                        "%.*s",
+                        static_cast<int>(title.size()),
+                        title.data());
+            }
             input.ForEachEvent(
                     engine::InputEventType::KeyPressed,
                     true,
                     [this, &context](engine::InputEvent& event) {
-                        if (event.key.key != KEY_F) {
+                        if (event.key.key != KEY_E
+                                || previewUseTarget.kind != SectorUseTargetKind::Door
+                                || !context.world.IsAlive(previewUseTarget.entity)
+                                || !context.world.Has<SectorDoorMotion>(previewUseTarget.entity)) {
                             return;
                         }
-                        if (ToggleTargetedSectorDoorInteractionSystem(
-                                    context.world,
-                                    previewState.controller.freeflyController.pose.position,
-                                    PreviewForwardFromPose(previewState.controller.freeflyController.pose))) {
-                            engine::ConsumeEvent(event);
-                        }
+                        SectorDoorMotion& motion = context.world.Get<SectorDoorMotion>(
+                                previewUseTarget.entity);
+                        motion.targetOpenFraction =
+                                motion.targetOpenFraction > 0.5f
+                                        || motion.openFraction > 0.5f
+                                ? 0.0f : 1.0f;
+                        engine::ConsumeEvent(event);
                     });
         }
-        UpdatePreview3D(input, assets, dt);
         if (state.mode == SectorEditorMode::Preview3D) {
             if (ProcessFpsWeaponFire(input)) {
                 ApplyGameplayPoseToPreview();
@@ -652,7 +694,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
     if (state.texturePicker.open
             || state.soundPicker.open
             || state.footstepPicker.open
-            || state.addMapSound.open
+            || soundEditorState.open
             || npcEditorState.open
             || weaponEditorState.open
             || runtimeObjectEditingState.spritePicker.open
@@ -851,14 +893,8 @@ void SectorEditor::RenderUI(
         engine::EndUI(ui, config, input, assets);
         return;
     }
-    if (state.addMapSound.open) {
-        DrawAddMapSoundModal(ui, config, input, font);
-        uiState.keyboardCaptured = true;
-        engine::EndUI(ui, config, input, assets);
-        return;
-    }
-    if (state.assetPruneModal.open) {
-        DrawAssetPruneModal(ui, config, input, assets, font);
+    if (soundEditorState.open) {
+        DrawSoundEditor(ui, config, input, assets, font, smallFont);
         uiState.keyboardCaptured = true;
         engine::EndUI(ui, config, input, assets);
         return;
@@ -898,8 +934,7 @@ void SectorEditor::RenderUI(
     DrawSectorsPanel(ui, config, input, assets, font, smallFont);
     DrawStatusPanel(ui, config, assets, smallFont);
     DrawSetAllModal(ui, config, input, assets, font);
-    DrawAddMapSoundModal(ui, config, input, font);
-    DrawAssetPruneModal(ui, config, input, assets, font);
+    DrawSoundEditor(ui, config, input, assets, font, smallFont);
     DrawTexturePickerModal(ui, config, input, assets, font, smallFont);
     DrawSoundPickerModal(ui, config, input, font);
     DrawFootstepPickerModal(ui, config, input, assets, font);
@@ -909,8 +944,7 @@ void SectorEditor::RenderUI(
     if (state.texturePicker.open
             || state.soundPicker.open
             || state.footstepPicker.open
-            || state.addMapSound.open
-            || state.assetPruneModal.open
+            || soundEditorState.open
             || npcEditorState.open
             || weaponEditorState.open
             || runtimeObjectEditingState.spritePicker.open
@@ -984,6 +1018,9 @@ SectorEditorToolContext SectorEditor::BuildToolContext(engine::Input* input)
             : nullptr;
     context.levelMarkerEditing = levelMarkerEditingService
             ? &levelMarkerEditingService.value()
+            : nullptr;
+    context.soundEmitterEditing = soundEmitterEditingService
+            ? &soundEmitterEditingService.value()
             : nullptr;
     context.authoringFaceMerge = authoringFaceMergeService
             ? &authoringFaceMergeService.value()
@@ -1744,6 +1781,11 @@ SectorEditorPickTarget SectorEditor::CurrentPickSelectionTarget() const
                 SectorEditorPickKind::LevelMarker,
                 selectionState.selectedAuthoring.levelMarkerId};
     }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::SoundEmitter
+            && selectionState.selectedAuthoring.soundEmitterId >= 0) {
+        return {SectorEditorPickKind::SoundEmitter,
+                selectionState.selectedAuthoring.soundEmitterId};
+    }
     if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Trigger
             && selectionState.selectedAuthoring.triggerId >= 0) {
         return SectorEditorPickTarget{SectorEditorPickKind::Trigger,
@@ -1766,6 +1808,7 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             + AuthoringGraph().fogVolumes.size()
             + AuthoringGraph().reflectionProbes.size()
             + AuthoringGraph().levelMarkers.size()
+            + AuthoringGraph().soundEmitters.size()
             + AuthoringGraph().triggers.size()
             + 3);
 
@@ -1812,6 +1855,9 @@ std::vector<SectorEditorPickCandidate> SectorEditor::BuildSelectPickCandidates(V
             screenPoint,
             ScreenLightPickPixels,
             candidates);
+    AppendCachedSoundEmitterPickCandidates(
+            state.topologyRenderCache, pickContext, screenPoint,
+            ScreenLightPickPixels, candidates);
     if (triggerEditingService) {
         const Vector2 mapPoint = ScreenToMap(screenPoint);
         const Vector2 tolerancePoint = ScreenToMap(Vector2{screenPoint.x + ScreenLightPickPixels, screenPoint.y});
@@ -2835,6 +2881,9 @@ SectorEditorManipulationServiceContext SectorEditor::BuildManipulationServiceCon
     context.levelMarkerEditing = levelMarkerEditingService
             ? &levelMarkerEditingService.value()
             : nullptr;
+    context.soundEmitterEditing = soundEmitterEditingService
+            ? &soundEmitterEditingService.value()
+            : nullptr;
     context.triggerEditing = triggerEditingService ? &triggerEditingService.value() : nullptr;
     context.screenToMap = [this](Vector2 screenPoint) {
         return ScreenToMap(screenPoint);
@@ -3361,18 +3410,31 @@ SectorEditor::BuildRuntimeObjectEditingService(
 }
 
 SectorEditorSoundService SectorEditor::BuildSoundService(
-        SectorEditorRuntimeObjectEditingService* runtimeObjectEditing)
+        SectorEditorRuntimeObjectEditingService* runtimeObjectEditing,
+        SectorEditorSoundEmitterEditingService* soundEmitterEditing)
 {
     return SectorEditorSoundService{
             SectorEditorSoundServiceContext{
                     state,
-                    Lifecycle(),
+                    AuthoringGraph(),
                     TopologyMap(),
                     soundCatalogState,
                     audioAssetPickerSessionState,
                     statusText,
                     *engineContext,
-                    runtimeObjectEditing}};
+                    runtimeObjectEditing,
+                    soundEmitterEditing}};
+}
+
+SectorEditorSoundEditorService SectorEditor::BuildSoundEditorService()
+{
+    return SectorEditorSoundEditorService{
+            soundEditorState,
+            AuthoringGraph(),
+            TopologyMap(),
+            MakeLiveDerivationAccess(documentState.derivation),
+            Lifecycle(),
+            statusText};
 }
 
 void SectorEditor::AddRuntimeObjectAt(Vector2 mapPoint)
@@ -4002,7 +4064,10 @@ void SectorEditor::RenderPreview3DOverlays()
     }
 }
 
-void SectorEditor::RenderPreview3DHud(Rectangle playableViewport) const
+void SectorEditor::RenderPreview3DHud(
+        engine::AssetManager& assets,
+        engine::FontHandle usePromptFont,
+        Rectangle playableViewport) const
 {
     if (state.mode == SectorEditorMode::Preview3D) {
         fpsPlayer.RenderHud(
@@ -4010,6 +4075,10 @@ void SectorEditor::RenderPreview3DHud(Rectangle playableViewport) const
                 weaponEditorState.open
                         ? weaponEditorState.draftRegistry
                         : weaponRegistry);
+        DrawSectorUsePrompt(
+                playableViewport,
+                assets.GetFont(usePromptFont),
+                previewUsePromptTitle.data());
     }
 }
 
@@ -4423,6 +4492,10 @@ void SectorEditor::DrawTopologyDocument()
             state.topologyRenderCache,
             drawContext,
             levelMarkerEditingService ? &levelMarkerEditingService->Drag() : nullptr);
+    DrawCachedSoundEmitters(
+            state.topologyRenderCache,
+            drawContext,
+            soundEmitterEditingService ? &soundEmitterEditingService->Drag() : nullptr);
     DrawLightMoveOverlay();
     const auto drawToolOverlay = [this](SectorEditorTool tool) {
         if (const SectorEditorToolModule* lineModule = FindSectorEditorToolModule(tool)) {
@@ -5112,8 +5185,8 @@ void SectorEditor::DrawToolsPanel(
     };
     const float toolsContentH =
             sectionLabelH + rowsHeight(5)
-            + separatorH + sectionLabelH + rowsHeight(13)
-            + separatorH + rowsHeight(7)
+            + separatorH + sectionLabelH + rowsHeight(14)
+            + separatorH + rowsHeight(8)
             + lightmapLabelH + rowsHeight(5)
             + separatorH + rowsHeight(4)
             + separatorH + rowsHeight(1)
@@ -5218,6 +5291,11 @@ void SectorEditor::DrawToolsPanel(
                 && tool != SectorEditorTool::Select) {
             levelMarkerEditingService->CancelMove("Cancelled Level Marker move");
         }
+        if (soundEmitterEditingService
+                && soundEmitterEditingService->Drag().active
+                && tool != SectorEditorTool::Select) {
+            soundEmitterEditingService->CancelMove("Cancelled Sound Emitter move");
+        }
         if (triggerEditingService
                 && triggerEditingService->IsMoving()
                 && tool != SectorEditorTool::Select) {
@@ -5272,6 +5350,8 @@ void SectorEditor::DrawToolsPanel(
             statusText = "Reflection Probe: click inside a sector";
         } else if (tool == SectorEditorTool::LevelMarker) {
             statusText = "Level Marker: click strictly inside a sector";
+        } else if (tool == SectorEditorTool::SoundEmitter) {
+            statusText = "Sound Emitter: click inside a sector";
         } else if (tool == SectorEditorTool::Trigger) {
             statusText = triggerEditingState.drawMode == TriggerDrawMode::Rectangle
                     ? "Trigger Rectangle: click first corner"
@@ -5317,6 +5397,7 @@ void SectorEditor::DrawToolsPanel(
             SectorEditorTool::Door,
             SectorEditorTool::Trigger,
             SectorEditorTool::LevelMarker,
+            SectorEditorTool::SoundEmitter,
             SectorEditorTool::AuthoringFogVolume,
             SectorEditorTool::ReflectionProbe,
             SectorEditorTool::StaticLight,
@@ -5373,15 +5454,6 @@ void SectorEditor::DrawToolsPanel(
         BuildMaterialRegistryEditorService().Open();
     }
     y += rowH + gap;
-    if (engine::Button(ui, config, input, assets, "sector_editor_add_map_sound", Rectangle{0.0f, y, contentW, rowH}, font, "Add Map Sound")) {
-        BuildSoundService().OpenAddModal();
-    }
-    y += rowH + gap;
-    if (engine::Button(ui, config, input, assets, "sector_editor_prune_assets", Rectangle{0.0f, y, contentW, rowH}, font, "Prune Assets")) {
-        OpenSectorEditorAssetPruneModal(state.assetPruneModal);
-        statusText = "Choose map asset categories to prune";
-    }
-    y += rowH + gap;
     if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_2d", Rectangle{0.0f, y, contentW, rowH}, font, "Settings")) {
         OpenPreviewSettingsModal();
     }
@@ -5400,6 +5472,29 @@ void SectorEditor::DrawToolsPanel(
                 Rectangle{0.0f, y, contentW, rowH},
                 font, "Weapon Editor")) {
         OpenWeaponEditor(false);
+    }
+    y += rowH + gap;
+    if (engine::Button(
+                ui, config, input, assets,
+                "sector_editor_sound_editor",
+                Rectangle{0.0f, y, contentW, rowH},
+                font, "Sound Editor")) {
+        BuildSoundEditorService().Open();
+    }
+    y += rowH + gap;
+    const float roomtoneFadeLabelW = 150.0f;
+    const SectorEditorIntInputResult roomtoneFadeResult = DrawLabeledIntInput(
+            ui, config, input, assets, font,
+            "sector_editor_roomtone_map_fade", "Roomtone Fade ms",
+            {0.0f, y, roomtoneFadeLabelW, rowH},
+            {roomtoneFadeLabelW + gap, y,
+                    std::max(0.0f, contentW - roomtoneFadeLabelW - gap), rowH},
+            engine::UITextJustify::Left,
+            AuthoringGraph().audioSettings.roomtoneFadeMilliseconds,
+            uiState.roomtoneMapFadeInput, 0, 60000, 50);
+    if (roomtoneFadeResult.changed) {
+        BuildSoundEditorService().SetRoomtoneFadeMilliseconds(
+                roomtoneFadeResult.value);
     }
     y += rowH + gap;
 
@@ -5545,7 +5640,8 @@ void SectorEditor::DrawSectorsPanel(
     SectorEditorMaterialEditingService materialEditing = BuildMaterialEditingService();
     SectorEditorFootstepService footsteps = BuildFootstepService();
     SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-    SectorEditorSoundService sounds = BuildSoundService(&runtimeObjectEditing);
+    SectorEditorSoundService sounds = BuildSoundService(
+            &runtimeObjectEditing, &soundEmitterEditingService.value());
     SectorEditorLightEditingService lightEditing = BuildLightEditingService();
     SectorEditorInspectorPanelContext context{
             ui,
@@ -5570,6 +5666,7 @@ void SectorEditor::DrawSectorsPanel(
             fogVolumeEditingUiState,
             reflectionProbeEditingUiState,
             levelMarkerEditingUiState,
+            soundEmitterEditingUiState,
             triggerEditingUiState,
             statusText,
             selection,
@@ -5583,6 +5680,7 @@ void SectorEditor::DrawSectorsPanel(
             fogVolumeEditingService.value(),
             reflectionProbeEditingService.value(),
             levelMarkerEditingService.value(),
+            soundEmitterEditingService.value(),
             triggerEditingService.value(),
             authoringFaceMergeService.value(),
             engineContext};
@@ -5638,6 +5736,14 @@ void SectorEditor::DrawSectorsPanel(
                         }
                     });
             break;
+        case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedSoundEmitterConfirmation:
+            OpenConfirmation(
+                    "Delete Sound Emitter",
+                    "Delete the selected Sound Emitter?",
+                    [this]() {
+                        if (soundEmitterEditingService) soundEmitterEditingService->DeleteSelected();
+                    });
+            break;
         case SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedTriggerConfirmation:
             OpenConfirmation(
                     "Delete Trigger",
@@ -5660,32 +5766,22 @@ void SectorEditor::DrawSectorsPanel(
     }
 }
 
-void SectorEditor::DrawAddMapSoundModal(
-        engine::UIContext& ui,
-        const engine::UIConfig& config,
-        engine::Input& input,
-        engine::FontHandle font)
-{
-    BuildSoundService().DrawAddModal(ui, config, input, font);
-}
-
-void SectorEditor::DrawAssetPruneModal(
+void SectorEditor::DrawSoundEditor(
         engine::UIContext& ui,
         const engine::UIConfig& config,
         engine::Input& input,
         engine::AssetManager& assets,
-        engine::FontHandle font)
+        engine::FontHandle font,
+        engine::FontHandle smallFont)
 {
-    const SectorEditorAssetPruneModalResult result =
-            DrawSectorEditorAssetPruneModal(
-                    ui,
-                    config,
-                    input,
-                    assets,
-                    font,
-                    state.assetPruneModal);
-    if (result == SectorEditorAssetPruneModalResult::Confirmed) {
-        ApplyAssetPrune(assets);
+    SectorEditorSoundEditorService editor = BuildSoundEditorService();
+    SectorEditorAudioAssetPickerService audioPicker{
+            *engineContext, audioAssetPickerSessionState};
+    if (DrawSectorEditorSoundEditorPanel(
+                ui, config, input, assets, font, smallFont,
+                editor, audioPicker)
+            == SectorEditorSoundEditorPanelResult::Saved) {
+        BuildSoundService().RefreshCatalogHandles();
     }
 }
 
@@ -5698,7 +5794,8 @@ void SectorEditor::DrawSoundPickerModal(
     SectorEditorSelectionServiceContext selection = BuildSelectionServiceContext();
     SectorEditorRuntimeObjectEditingService runtimeObjectEditing =
             BuildRuntimeObjectEditingService(&selection);
-    BuildSoundService(&runtimeObjectEditing).DrawPickerModal(ui, config, input, font);
+    BuildSoundService(&runtimeObjectEditing, &soundEmitterEditingService.value())
+            .DrawPickerModal(ui, config, input, font);
 }
 
 void SectorEditor::DrawTexturePickerModal(
@@ -6460,6 +6557,8 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    soundEmitterEditingState = SoundEmitterEditingState{};
+    soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
     previewState.controller = SectorEditorPreviewControllerState{};
@@ -6509,6 +6608,9 @@ bool SectorEditor::LoadLevel(
     }
     if (levelMarkerEditingService) {
         levelMarkerEditingService->CancelMove(nullptr);
+    }
+    if (soundEmitterEditingService) {
+        soundEmitterEditingService->CancelMove(nullptr);
     }
     CancelLightDrag(nullptr);
     bool loadedAuthoringGraph = false;
@@ -6583,8 +6685,7 @@ bool SectorEditor::LoadLevel(
     previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
     state.texturePicker = TexturePickerState{};
     state.soundPicker = SoundPickerState{};
-    state.addMapSound = AddMapSoundState{};
-    state.assetPruneModal = SectorEditorAssetPruneModalState{};
+    soundEditorState = SectorEditorSoundEditorState{};
     state.loadLevelModal = LoadLevelModalState{};
     state.saveLevelModal = SaveLevelModalState{};
     state.confirmationModal = ConfirmationModalState{};
@@ -6606,6 +6707,8 @@ bool SectorEditor::LoadLevel(
     manipulationState = ManipulationState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
     levelMarkerEditingUiState = LevelMarkerEditingUiState{};
+    soundEmitterEditingState = SoundEmitterEditingState{};
+    soundEmitterEditingUiState = SoundEmitterEditingUiState{};
     triggerEditingState = TriggerEditingState{};
     triggerEditingUiState = TriggerEditingUiState{};
     runtimeObjectEditingState = RuntimeObjectEditingState{};
@@ -6744,7 +6847,6 @@ bool SectorEditor::HasDocumentModalOpen() const
             || state.loadLevelModal.open
             || state.confirmationModal.open
             || state.setAllModal.open
-            || state.assetPruneModal.open
             || state.decalTintModal.open
             || state.doorTextureSettingsModal.open
             || state.lightmapBakeSetupModal.open
@@ -6766,6 +6868,9 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     }
     if (levelMarkerEditingService) {
         levelMarkerEditingService->CancelMove(nullptr);
+    }
+    if (soundEmitterEditingService) {
+        soundEmitterEditingService->CancelMove(nullptr);
     }
     ui.hotId = 0;
     ui.activeId = 0;
@@ -7437,60 +7542,9 @@ void SectorEditor::OpenWeaponEditor(bool fromPreview3D)
     }
 }
 
-void SectorEditor::ApplyAssetPrune(engine::AssetManager& assets)
-{
-    const SectorEditorAssetPruneOptions options{
-            false,
-            state.assetPruneModal.pruneSounds};
-    const SectorEditorAssetPruneResult result = PruneUnusedSectorEditorAssets(
-            AuthoringGraph(),
-            TopologyMap(),
-            options);
-
-    if (result.removedTextureCount > 0) {
-        SectorEditorTextureCatalogService textureCatalog = MakeTextureCatalogService();
-        textureCatalog.RefreshDefaultTextureIds();
-        textureCatalog.RefreshTextureHandles(assets);
-    }
-    if (result.removedSoundCount > 0) {
-        BuildSoundService().RefreshCatalogHandles();
-    }
-
-    const std::size_t removedCount =
-            result.removedTextureCount + result.removedSoundCount;
-    if (removedCount > 0) {
-        Lifecycle().topologyDocumentDirty = true;
-        Lifecycle().hasUnsavedChanges = true;
-    }
-
-    if (options.pruneTextures && options.pruneSounds) {
-        statusText = removedCount == 0
-                ? "No unused map textures or sounds found"
-                : TextFormat(
-                        "Pruned %zu texture%s and %zu sound%s",
-                        result.removedTextureCount,
-                        result.removedTextureCount == 1 ? "" : "s",
-                        result.removedSoundCount,
-                        result.removedSoundCount == 1 ? "" : "s");
-    } else if (options.pruneTextures) {
-        statusText = result.removedTextureCount == 0
-                ? "No unused map textures found"
-                : TextFormat(
-                        "Pruned %zu texture%s",
-                        result.removedTextureCount,
-                        result.removedTextureCount == 1 ? "" : "s");
-    } else {
-        statusText = result.removedSoundCount == 0
-                ? "No unused map sounds found"
-                : TextFormat(
-                        "Pruned %zu sound%s",
-                        result.removedSoundCount,
-                        result.removedSoundCount == 1 ? "" : "s");
-    }
-    CloseSectorEditorAssetPruneModal(state.assetPruneModal);
-}
-
-bool SectorEditor::PointInTopologyLoop(Vector2 mapPoint, const SectorTopologyLoop& loop) const
+bool SectorEditor::PointInTopologyLoop(
+        Vector2 mapPoint,
+        const SectorTopologyLoop& loop) const
 {
     std::vector<SectorPoint> points;
     points.reserve(loop.vertexIds.size());

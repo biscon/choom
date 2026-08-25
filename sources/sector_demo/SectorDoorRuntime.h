@@ -68,6 +68,7 @@ struct SectorDoorShadowCasterRevisionState {
 struct SectorDoor {
     int placedObjectId = 0;
     bool enabled = true;
+    std::string instanceId;
 };
 
 struct SectorDoorResolvedAnchor {
@@ -125,6 +126,9 @@ struct SectorDoorInteraction {
     bool autoOpen = false;
     float interactionDistance = 1.5f;
     float autoOpenDistance = kSectorDoorAutoOpenFallbackDistance;
+    std::string useTitle = "door";
+    std::string canOpenScript;
+    std::string canCloseScript;
 };
 
 struct SectorDoorRender {

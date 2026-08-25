@@ -37,9 +37,22 @@ void ScopeDeduplication()
     assert(!engine::IsNull(musicGlobal));
     assert(musicGlobal == musicLevel);
 
+    const engine::MusicHandle emitterA = assets.RequestMusicInstance(
+            level, "emitter_a", "/tmp/audio_test/music.ogg");
+    const engine::MusicHandle emitterARepeat = assets.RequestMusicInstance(
+            level, "emitter_a", "/tmp/audio_test/alternate.ogg");
+    const engine::MusicHandle emitterB = assets.RequestMusicInstance(
+            level, "emitter_b", "/tmp/audio_test/music.ogg");
+    assert(!engine::IsNull(emitterA));
+    assert(emitterA == emitterARepeat);
+    assert(emitterA != emitterB);
+    assert(emitterA != musicGlobal && emitterB != musicGlobal);
+
     assets.UnloadScope(level);
     assert(!assets.IsFinished(soundGlobal));
     assert(!assets.IsFinished(musicGlobal));
+    assert(assets.IsFinished(emitterA));
+    assert(assets.IsFinished(emitterB));
     assets.UnloadScope(global);
     assert(assets.IsFinished(soundGlobal));
     assert(assets.IsFinished(musicGlobal));

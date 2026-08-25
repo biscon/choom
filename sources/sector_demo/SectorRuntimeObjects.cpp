@@ -490,28 +490,37 @@ void ResolveDynamicModelAnimations(
                     return;
                 }
 
-                if (asset->animationCount <= 0 || asset->animations == nullptr) {
+                const size_t clipCount =
+                        engine::ModelAnimationClipCount(*asset);
+                if (clipCount == 0) {
                     dynamicModel.animationResolved = true;
                     return;
                 }
 
-                uint32_t animationIndex = engine::FindModelAnimationIndex(
+                int clipIndex = engine::FindModelAnimationClipIndex(
                         *asset,
                         dynamicModel.requestedAnimation.c_str());
-                if (animationIndex == engine::InvalidModelAnimationIndex) {
-                    animationIndex = 0;
+                if (clipIndex < 0) {
+                    clipIndex = 0;
                     dynamicModel.animationFallback = !dynamicModel.requestedAnimation.empty();
                     if (dynamicModel.animationFallback) {
+                        const char* fallbackName =
+                                engine::ModelAnimationClipName(*asset, 0);
                         std::fprintf(
                                 stderr,
                                 "[SectorRuntimeObjects WARNING] Animation '%s' was not found for dynamic model object %d; using '%s'.\n",
                                 dynamicModel.requestedAnimation.c_str(),
                                 dynamicModel.placedObjectId,
-                                asset->animations[0].name);
+                                fallbackName != nullptr
+                                        ? fallbackName
+                                        : "");
                     }
                 }
 
-                engine::SetAnimatedModelAnimation(animator, animationIndex);
+                engine::SetAnimatedModelClip(
+                        animator,
+                        *asset,
+                        static_cast<uint32_t>(clipIndex));
                 if (!animator.loop) {
                     animator.playing = false;
                     animator.frame = 0.0f;
@@ -979,7 +988,9 @@ void SpawnPlacedRuntimeObjects(
                     worldPosition,
                     object.currentSectorId,
                     &map));
-            world.Add(entity, SectorDoor{placedObject.id, true});
+            SectorDoor runtimeDoor{placedObject.id, true};
+            runtimeDoor.instanceId = placedObject.door.instanceId;
+            world.Add(entity, std::move(runtimeDoor));
             world.Add(entity, runtimeAnchor);
             world.Add(entity, runtimeMotion);
             world.Add(entity, SectorDoorOpenControl{});
@@ -993,7 +1004,10 @@ void SpawnPlacedRuntimeObjects(
             world.Add(entity, SectorDoorInteraction{
                     placedObject.door.autoOpen,
                     placedObject.door.interactionDistance,
-                    placedObject.door.autoOpenDistance});
+                    placedObject.door.autoOpenDistance,
+                    placedObject.door.useTitle,
+                    placedObject.door.canOpenScript,
+                    placedObject.door.canCloseScript});
             world.Add(entity, runtimeRender);
             world.Add(entity, SectorDoorCollider{});
             world.Add(entity, SectorDoorPortalBlocker{
@@ -1065,7 +1079,9 @@ void SpawnPlacedRuntimeObjects(
                             map,
                             object.currentSectorId,
                             sectorAmbient),
-                    placedObject.staticModel.castsShadow});
+                    placedObject.staticModel.castsShadow,
+                    placedObject.staticModel.instanceId,
+                    1.0f});
             if (placedObject.staticModel.collision) {
                 world.Add(entity, SectorStaticModelCollider{
                         placedObject.id});
@@ -1169,6 +1185,7 @@ void SpawnPlacedRuntimeObjects(
             world.Add(entity, SectorObjectVisualOffset{});
             world.Add(entity, SectorDynamicModel{
                     placedObject.id,
+                    {},
                     sectorAmbient,
                     placedObject.npc.scale,
                     StaticModelEnvironmentExposure(
@@ -1243,6 +1260,7 @@ void SpawnPlacedRuntimeObjects(
                     &map));
             world.Add(entity, SectorDynamicModel{
                     placedObject.id,
+                    placedObject.dynamicModel.instanceId,
                     sectorAmbient,
                     placedObject.dynamicModel.scale,
                     StaticModelEnvironmentExposure(map, object.currentSectorId, sectorAmbient),
@@ -1250,8 +1268,16 @@ void SpawnPlacedRuntimeObjects(
                     false,
                     false,
                     1.0f,
-                    placedObject.dynamicModel.shadowMode});
-            world.Add(entity, engine::AnimatedModelInstance{model});
+                    placedObject.dynamicModel.shadowMode,
+                    placedObject.dynamicModel.useTitle,
+                    placedObject.dynamicModel.useDistance,
+                    placedObject.dynamicModel.onUseScript,
+                    placedObject.dynamicModel.singleUse,
+                    false});
+            engine::AnimatedModelInstance animatedModel{model};
+            animatedModel.poseSource =
+                    engine::AnimatedModelPoseSource::GltfScene;
+            world.Add(entity, std::move(animatedModel));
             engine::AnimatedModelAnimator animator;
             animator.speed = placedObject.dynamicModel.animationSpeed;
             animator.loop = placedObject.dynamicModel.loop;

@@ -685,6 +685,9 @@ void TestDynamicPointLightRoundTrip()
     Check(saved["dynamicPointLights"][0]["id"].get<int>() == 5
                   && saved["dynamicPointLights"][1]["id"].get<int>() == 11,
           "dynamic point lights serialize sorted by stable ID");
+    Check(saved["dynamicPointLights"][0]["instanceId"] == "light_point_5"
+                  && saved["dynamicPointLights"][1]["instanceId"] == "light_point_11",
+          "missing dynamic-light script IDs are generated deterministically on save");
     Check(saved["dynamicPointLights"][0].find("enabled") == saved["dynamicPointLights"][0].end(),
           "default enabled dynamic point light omits enabled field");
     Check(saved["dynamicPointLights"][1]["enabled"] == false,
@@ -715,6 +718,8 @@ void TestDynamicPointLightRoundTrip()
                       && std::fabs(light->position.y - 18.0f) <= 0.0001f
                       && std::fabs(light->position.z + 4.25f) <= 0.0001f,
               "round-tripped dynamic point light preserves authored position values");
+        Check(light->instanceId == "light_point_11",
+              "round-tripped dynamic point light preserves its generated script ID");
         Check(light->color.r == 255 && light->color.g == 120 && light->color.b == 64,
               "round-tripped dynamic point light preserves color");
         Check(std::fabs(light->intensity - 3.0f) <= 0.0001f
@@ -1209,6 +1214,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
     staticModel.position = Vector3{12.0f, -2.5f, 20.0f};
     staticModel.yawRadians = 0.5f;
     staticModel.staticModel.modelPath = "assets/models/props/nested/crate.glb";
+    staticModel.staticModel.instanceId = "crate_18";
     staticModel.staticModel.rotationXRadians = 0.25f;
     staticModel.staticModel.rotationZRadians = -0.75f;
     staticModel.staticModel.heightOffsetWorld = 0.75f;
@@ -1218,6 +1224,8 @@ void TestRuntimeObjectsRoundTripAndValidation()
     staticModelMap.runtimeObjects.push_back(staticModel);
     const Json staticModelSaved = Json::parse(SaveText(staticModelMap));
     Check(staticModelSaved["runtimeObjects"][0]["kind"] == "static_model"
+                  && staticModelSaved["runtimeObjects"][0]["staticModel"]["instanceId"]
+                             == "crate_18"
                   && staticModelSaved["runtimeObjects"][0]["staticModel"]["modelPath"]
                              == "assets/models/props/nested/crate.glb"
                   && Near(
@@ -1251,6 +1259,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
             game::FindSectorPlacedRuntimeObject(staticModelLoaded, 18);
     Check(loadedStaticModel != nullptr
                   && loadedStaticModel->kind == "static_model"
+                  && loadedStaticModel->staticModel.instanceId == "crate_18"
                   && loadedStaticModel->staticModel.modelPath
                           == "assets/models/props/nested/crate.glb"
                   && Near(loadedStaticModel->staticModel.heightOffsetWorld, 0.75f)
@@ -1266,14 +1275,17 @@ void TestRuntimeObjectsRoundTripAndValidation()
     staticModelMap.runtimeObjects[0].staticModel = game::SectorPlacedStaticModel{};
     const Json unassignedStaticModelSaved = Json::parse(SaveText(staticModelMap));
     Check(unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"].is_object()
-                  && unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"].empty(),
-          "unassigned static prop saves an empty payload and omits default fields");
+                  && unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"].size() == 1
+                  && unassignedStaticModelSaved["runtimeObjects"][0]["staticModel"]["instanceId"]
+                             == "prop_18",
+          "unassigned static prop saves its generated ID and omits other default fields");
     SectorTopologyMap unassignedStaticModelLoaded;
     Check(LoadText(unassignedStaticModelSaved.dump(), unassignedStaticModelLoaded, error),
           "unassigned static prop with missing optional fields loads");
     const SectorPlacedRuntimeObject* unassignedStaticModel =
             game::FindSectorPlacedRuntimeObject(unassignedStaticModelLoaded, 18);
     Check(unassignedStaticModel != nullptr
+                  && unassignedStaticModel->staticModel.instanceId == "prop_18"
                   && unassignedStaticModel->staticModel.modelPath.empty()
                   && Near(unassignedStaticModel->staticModel.rotationXRadians, 0.0f)
                   && Near(unassignedStaticModel->staticModel.rotationZRadians, 0.0f)
@@ -1282,6 +1294,53 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && !unassignedStaticModel->staticModel.collision
                   && unassignedStaticModel->staticModel.castsShadow,
           "missing static prop payload fields use backward-compatible defaults");
+
+    Json missingStaticInstanceId = staticModelSaved;
+    missingStaticInstanceId["runtimeObjects"][0]["staticModel"].erase(
+            "instanceId");
+    SectorTopologyMap migratedStaticModel;
+    Check(LoadText(missingStaticInstanceId.dump(), migratedStaticModel, error),
+          "legacy static prop without an instance ID loads");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(
+            migratedStaticModel,
+            18);
+    Check(loadedStaticModel != nullptr
+                  && loadedStaticModel->staticModel.instanceId == "prop_18",
+          "legacy static prop receives a deterministic generated instance ID");
+
+    Json generatedStaticCollision = missingStaticInstanceId;
+    generatedStaticCollision["runtimeObjects"].push_back(Json{
+            {"id", 19},
+            {"kind", "dynamic_model"},
+            {"position", Json::array({0.0f, 0.0f, 0.0f})},
+            {"yawDegrees", 0.0f},
+            {"dynamicModel", Json{{"instanceId", "prop_18"}}}});
+    Check(LoadText(generatedStaticCollision.dump(), migratedStaticModel, error),
+          "legacy static prop ID generation avoids explicit dynamic prop IDs");
+    loadedStaticModel = game::FindSectorPlacedRuntimeObject(
+            migratedStaticModel,
+            18);
+    Check(loadedStaticModel != nullptr
+                  && loadedStaticModel->staticModel.instanceId == "prop_18_2",
+          "generated static prop IDs receive deterministic collision suffixes");
+
+    Json invalidStaticInstanceId = staticModelSaved;
+    invalidStaticInstanceId["runtimeObjects"][0]["staticModel"]["instanceId"] =
+            "bad instance";
+    ExpectRejected(
+            invalidStaticInstanceId,
+            "static prop rejects an invalid instance ID");
+
+    Json duplicatePropInstanceId = staticModelSaved;
+    duplicatePropInstanceId["runtimeObjects"].push_back(Json{
+            {"id", 19},
+            {"kind", "dynamic_model"},
+            {"position", Json::array({0.0f, 0.0f, 0.0f})},
+            {"yawDegrees", 0.0f},
+            {"dynamicModel", Json{{"instanceId", "crate_18"}}}});
+    ExpectRejected(
+            duplicatePropInstanceId,
+            "static and dynamic prop instance IDs share one namespace");
 
     Json invalidStaticModelShadow = staticModelSaved;
     invalidStaticModelShadow["runtimeObjects"][0]["staticModel"]["castsShadow"] = "yes";
@@ -1525,6 +1584,10 @@ void TestRuntimeObjectsRoundTripAndValidation()
 
     SectorTopologyMap doorMap = MakeSquare();
     doorMap.runtimeObjects.push_back(MakeDoorRuntimeObject(30));
+    doorMap.runtimeObjects[0].door.instanceId = "main_door";
+    doorMap.runtimeObjects[0].door.useTitle = "airlock";
+    doorMap.runtimeObjects[0].door.canOpenScript = "canOpenAirlock";
+    doorMap.runtimeObjects[0].door.canCloseScript = "canCloseAirlock";
     doorMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].scale = {2.0f, 3.0f};
     doorMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].offset = {0.25f, 0.5f};
     doorMap.runtimeObjects[0].door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Left)].scale = {4.0f, 5.0f};
@@ -1536,6 +1599,10 @@ void TestRuntimeObjectsRoundTripAndValidation()
           "door runtime object writes kind and nested door payload");
     const Json& savedDoor = doorSaved["runtimeObjects"][0]["door"];
     Check(savedDoor["anchor"]["lineDefId"].get<int>() == 2
+                  && savedDoor["instanceId"] == "main_door"
+                  && savedDoor["useTitle"] == "airlock"
+                  && savedDoor["canOpenScript"] == "canOpenAirlock"
+                  && savedDoor["canCloseScript"] == "canCloseAirlock"
                   && savedDoor["anchor"]["frontSectorId"].get<int>() == 1
                   && savedDoor["anchor"]["backSectorId"].get<int>() == 2
                   && savedDoor["anchor"]["frontSideDefId"].get<int>() == 2
@@ -1579,6 +1646,10 @@ void TestRuntimeObjectsRoundTripAndValidation()
     Check(loadedDoor != nullptr
                   && loadedDoor->kind == "door"
                   && loadedDoor->door.anchor.lineDefId == 2
+                  && loadedDoor->door.instanceId == "main_door"
+                  && loadedDoor->door.useTitle == "airlock"
+                  && loadedDoor->door.canOpenScript == "canOpenAirlock"
+                  && loadedDoor->door.canCloseScript == "canCloseAirlock"
                   && loadedDoor->door.anchor.frontSectorId == 1
                   && loadedDoor->door.anchor.backSectorId == 2
                   && loadedDoor->door.anchor.frontSideDefId == 2
@@ -1610,6 +1681,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
           "door payload round-trips authored fields and face UVs");
 
     Json oldDoorJson = doorSaved;
+    oldDoorJson["runtimeObjects"][0]["door"].erase("instanceId");
     oldDoorJson["runtimeObjects"][0]["door"].erase("faceUvs");
     oldDoorJson["runtimeObjects"][0]["door"].erase("heightOffsetWorld");
     SectorTopologyMap oldDoorLoaded;
@@ -1621,6 +1693,7 @@ void TestRuntimeObjectsRoundTripAndValidation()
                   && Near(loadedOldDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Front)].scale, Vector2{1.0f, 1.0f})
                   && Near(loadedOldDoor->door.faceUvs.faces[static_cast<int>(game::SectorDoorFace::Bottom)].offset, Vector2{0.0f, 0.0f})
                   && loadedOldDoor->door.visual == game::SectorDoorVisualType::Procedural
+                  && loadedOldDoor->door.instanceId == "door_30"
                   && loadedOldDoor->door.modelAssetId.empty()
                   && loadedOldDoor->door.modelFit == game::SectorDoorModelFit::FitInside
                   && Near(loadedOldDoor->door.modelScale, 1.0f)
@@ -1997,6 +2070,7 @@ void TestDynamicModelRoundTripAndDefaultOmission()
     object.position = Vector3{12.0f, 16.0f, 20.0f};
     object.yawRadians = 0.5f;
     object.dynamicModel.modelPath = "assets/models/characters/test.glb";
+    object.dynamicModel.instanceId = "lever_main";
     object.dynamicModel.rotationXRadians = 0.25f;
     object.dynamicModel.rotationZRadians = -0.5f;
     object.dynamicModel.heightOffsetWorld = 0.75f;
@@ -2006,16 +2080,25 @@ void TestDynamicModelRoundTripAndDefaultOmission()
     object.dynamicModel.loop = false;
     object.dynamicModel.animationSpeed = 1.25f;
     object.dynamicModel.shadowMode = game::SectorDynamicModelShadowMode::Dynamic;
+    object.dynamicModel.useTitle = "main lever";
+    object.dynamicModel.useDistance = 2.25f;
+    object.dynamicModel.onUseScript = "toggleMainLever";
+    object.dynamicModel.singleUse = true;
     map.runtimeObjects.push_back(object);
 
     const Json saved = Json::parse(SaveText(map));
     const Json& payload = saved["runtimeObjects"][0]["dynamicModel"];
     Check(saved["runtimeObjects"][0]["kind"] == "dynamic_model"
+                  && payload["instanceId"] == "lever_main"
                   && payload["modelPath"] == object.dynamicModel.modelPath
                   && payload["animation"] == "Standard Walk"
                   && !payload["loop"].get<bool>()
                   && Near(payload["animationSpeed"].get<float>(), 1.25f)
                   && payload["shadowMode"] == "dynamic"
+                  && payload["useTitle"] == "main lever"
+                  && Near(payload["useDistance"].get<float>(), 2.25f)
+                  && payload["onUseScript"] == "toggleMainLever"
+                  && payload["singleUse"].get<bool>()
                   && payload["collision"].get<bool>(),
           "dynamic prop writes model, animation, playback, shadow, and collision fields");
 
@@ -2026,25 +2109,58 @@ void TestDynamicModelRoundTripAndDefaultOmission()
             game::FindSectorPlacedRuntimeObject(loaded, 41);
     Check(roundTripped != nullptr
                   && roundTripped->kind == "dynamic_model"
+                  && roundTripped->dynamicModel.instanceId == "lever_main"
                   && roundTripped->dynamicModel.modelPath == object.dynamicModel.modelPath
                   && roundTripped->dynamicModel.animation == "Standard Walk"
                   && !roundTripped->dynamicModel.loop
                   && roundTripped->dynamicModel.shadowMode
                           == game::SectorDynamicModelShadowMode::Dynamic
+                  && roundTripped->dynamicModel.useTitle == "main lever"
+                  && Near(roundTripped->dynamicModel.useDistance, 2.25f)
+                  && roundTripped->dynamicModel.onUseScript == "toggleMainLever"
+                  && roundTripped->dynamicModel.singleUse
                   && Near(roundTripped->dynamicModel.animationSpeed, 1.25f)
                   && Near(roundTripped->dynamicModel.rotationXRadians, 0.25f)
                   && Near(roundTripped->dynamicModel.rotationZRadians, -0.5f),
           "dynamic prop fields round-trip");
 
     map.runtimeObjects[0].dynamicModel = game::SectorPlacedDynamicModel{};
+    map.runtimeObjects[0].dynamicModel.instanceId = "prop_41";
     const Json defaults = Json::parse(SaveText(map))["runtimeObjects"][0]["dynamicModel"];
-    Check(!defaults.contains("animation")
+    Check(defaults["instanceId"] == "prop_41"
+                  && !defaults.contains("animation")
                   && !defaults.contains("loop")
                   && !defaults.contains("animationSpeed")
                   && !defaults.contains("scale")
                   && !defaults.contains("shadowMode")
+                  && !defaults.contains("useTitle")
+                  && !defaults.contains("useDistance")
+                  && !defaults.contains("onUseScript")
+                  && !defaults.contains("singleUse")
                   && !defaults.contains("collision"),
           "dynamic prop default playback, shadow, and transform fields are omitted");
+
+    Json missingId = saved;
+    missingId["runtimeObjects"][0]["dynamicModel"].erase("instanceId");
+    Check(LoadText(missingId.dump(), loaded, error),
+          "legacy dynamic prop without an instance ID loads");
+    const SectorPlacedRuntimeObject* backfilled =
+            game::FindSectorPlacedRuntimeObject(loaded, 41);
+    Check(backfilled != nullptr
+                  && backfilled->dynamicModel.instanceId == "prop_41",
+          "legacy dynamic prop receives a deterministic generated instance ID");
+
+    Json generatedCollision = missingId;
+    Json explicitlyNamed = saved["runtimeObjects"][0];
+    explicitlyNamed["id"] = 43;
+    explicitlyNamed["dynamicModel"]["instanceId"] = "prop_41";
+    generatedCollision["runtimeObjects"].push_back(explicitlyNamed);
+    Check(LoadText(generatedCollision.dump(), loaded, error),
+          "legacy dynamic prop ID generation avoids explicit IDs");
+    backfilled = game::FindSectorPlacedRuntimeObject(loaded, 41);
+    Check(backfilled != nullptr
+                  && backfilled->dynamicModel.instanceId == "prop_41_2",
+          "generated dynamic prop IDs receive deterministic collision suffixes");
 
     map.runtimeObjects[0].dynamicModel.shadowMode =
             game::SectorDynamicModelShadowMode::None;
@@ -2055,6 +2171,16 @@ void TestDynamicModelRoundTripAndDefaultOmission()
     invalid["runtimeObjects"][0]["dynamicModel"]["shadowMode"] = "cinematic";
     Check(!LoadText(invalid.dump(), loaded, error),
           "dynamic prop rejects unknown shadow modes");
+
+    invalid = saved;
+    invalid["runtimeObjects"][0]["dynamicModel"]["instanceId"] = "bad instance";
+    ExpectRejected(invalid, "dynamic prop rejects an invalid instance ID");
+
+    Json duplicate = saved;
+    Json second = duplicate["runtimeObjects"][0];
+    second["id"] = 43;
+    duplicate["runtimeObjects"].push_back(second);
+    ExpectRejected(duplicate, "dynamic prop instance IDs must be unique within a map");
 
     Json legacy = saved;
     legacy["runtimeObjects"][0]["dynamicModel"]["shadowMode"] =
@@ -2576,20 +2702,24 @@ void TestPreviewSettingsRoundTripAndValidation()
 void TestAudioSettingsRoundTripAndValidation()
 {
     SectorTopologyMap original = MakeSquare();
-    original.audioSettings.musicPath = "music/level_theme.ogg";
-    original.audioSettings.musicVolume = 0.35f;
+    original.audioSettings.roomtoneFadeMilliseconds = 1750;
     original.audioSettings.soundsById.emplace(
             "door_open", SectorSoundDefinition{
                     "door_open", "shared/doors/open.wav", SectorSoundType::Sound});
     original.audioSettings.soundsById.emplace(
             "alarm", SectorSoundDefinition{
                     "alarm", "ambience/alarm.mp3", SectorSoundType::Music});
+    original.sectors[0].roomtone.mode = game::SectorRoomtoneMode::Play;
+    original.sectors[0].roomtone.soundId = "alarm";
+    original.sectors[0].roomtone.volume = 0.45f;
+    original.sectors[0].roomtone.fadeMilliseconds = 2250;
+    original.soundEmitters.push_back(game::SectorCompiledSoundEmitter{
+            77, "office_fan", Vector3{1.0f, 2.0f, 3.0f},
+            "door_open", 0.7f, true});
 
     const Json saved = Json::parse(SaveText(original));
-    Check(saved["audio"]["music"] == "music/level_theme.ogg",
-          "level music path is serialized relative to assets/audio");
-    Check(Near(saved["audio"]["musicVolume"].get<float>(), 0.35f),
-          "non-default level music volume is serialized");
+    Check(saved["audio"]["roomtoneFadeMilliseconds"] == 1750,
+          "non-default roomtone fade is serialized");
     Check(saved["audio"]["sounds"]["door_open"]["path"]
                   == "shared/doors/open.wav"
                   && saved["audio"]["sounds"]["door_open"]["type"] == "sound"
@@ -2597,12 +2727,21 @@ void TestAudioSettingsRoundTripAndValidation()
                   == "ambience/alarm.mp3"
                   && saved["audio"]["sounds"]["alarm"]["type"] == "music",
           "typed level sounds are serialized");
+    Check(saved["sectors"][0]["roomtone"]["mode"] == "play"
+                  && saved["sectors"][0]["roomtone"]["soundId"] == "alarm"
+                  && Near(saved["sectors"][0]["roomtone"]["volume"].get<float>(), 0.45f)
+                  && saved["sectors"][0]["roomtone"]["fadeMilliseconds"] == 2250,
+          "sector roomtone settings are serialized");
+    Check(saved["soundEmitters"].size() == 1
+                  && saved["soundEmitters"][0]["id"] == "office_fan"
+                  && saved["soundEmitters"][0]["soundId"] == "door_open"
+                  && saved["soundEmitters"][0]["loop"] == true,
+          "compiled sound emitters are serialized");
 
     SectorTopologyMap loaded;
     std::string error;
     Check(LoadText(saved.dump(), loaded, error), "level audio JSON loads");
-    Check(loaded.audioSettings.musicPath == "music/level_theme.ogg"
-                  && Near(loaded.audioSettings.musicVolume, 0.35f)
+    Check(loaded.audioSettings.roomtoneFadeMilliseconds == 1750
                   && loaded.audioSettings.soundsById.at("door_open").path
                   == "shared/doors/open.wav"
                   && loaded.audioSettings.soundsById.at("door_open").type
@@ -2610,7 +2749,13 @@ void TestAudioSettingsRoundTripAndValidation()
                   && loaded.audioSettings.soundsById.at("alarm").path
                   == "ambience/alarm.mp3"
                   && loaded.audioSettings.soundsById.at("alarm").type
-                  == SectorSoundType::Music,
+                  == SectorSoundType::Music
+                  && loaded.sectors[0].roomtone.mode == game::SectorRoomtoneMode::Play
+                  && loaded.sectors[0].roomtone.soundId == "alarm"
+                  && Near(loaded.sectors[0].roomtone.volume, 0.45f)
+                  && loaded.soundEmitters.size() == 1
+                  && loaded.soundEmitters[0].id == "office_fan"
+                  && loaded.soundEmitters[0].loop,
           "level audio settings round-trip");
 
     Json legacySounds = saved;
@@ -2622,31 +2767,28 @@ void TestAudioSettingsRoundTripAndValidation()
           "legacy string sound registry entry defaults to sound type");
 
     Json legacy = saved;
-    legacy["audio"].erase("musicVolume");
+    legacy["audio"]["music"] = "music/removed_theme.ogg";
+    legacy["audio"]["musicVolume"] = 0.25f;
     Check(LoadText(legacy.dump(), loaded, error),
-          "level audio without music volume remains compatible");
-    Check(Near(
-                  loaded.audioSettings.musicVolume,
-                  game::SectorLevelAudioSettings::DefaultMusicVolume),
-          "omitted level music volume uses the default");
+          "removed legacy map music fields are ignored compatibly");
+    Check(loaded.audioSettings.roomtoneFadeMilliseconds == 1750,
+          "legacy map music does not affect roomtone settings");
 
-    SectorTopologyMap defaultVolume = MakeSquare();
-    defaultVolume.audioSettings.musicPath = "music/default_volume.ogg";
-    const Json defaultVolumeSaved = Json::parse(SaveText(defaultVolume));
-    Check(defaultVolumeSaved["audio"].find("musicVolume")
-                  == defaultVolumeSaved["audio"].end(),
-          "default level music volume is omitted on save");
+    SectorTopologyMap defaultFade = MakeSquare();
+    const Json defaultFadeSaved = Json::parse(SaveText(defaultFade));
+    Check(defaultFadeSaved.find("audio") == defaultFadeSaved.end(),
+          "default roomtone fade is omitted on save");
 
     const Json defaults = Json::parse(SaveText(MakeSquare()));
     Check(defaults.find("audio") == defaults.end(),
           "empty level audio settings are omitted");
+    Check(defaults["sectors"][0].find("roomtone") == defaults["sectors"][0].end()
+                  && defaults.find("soundEmitters") == defaults.end(),
+          "default roomtone and absent sound emitters are omitted");
 
     Json invalid = saved;
     invalid["audio"] = "music/level_theme.ogg";
     ExpectRejected(invalid, "non-object level audio is rejected");
-    invalid = saved;
-    invalid["audio"]["music"] = "../outside.ogg";
-    ExpectRejected(invalid, "traversing level music path is rejected");
     invalid = saved;
     invalid["audio"]["sounds"]["door_open"] = "shared/door.flac";
     ExpectRejected(invalid, "unsupported level sound format is rejected");
@@ -2654,21 +2796,36 @@ void TestAudioSettingsRoundTripAndValidation()
     invalid["audio"]["sounds"]["door_open"]["type"] = "voice";
     ExpectRejected(invalid, "unknown level sound registry type is rejected");
     invalid = saved;
-    invalid["audio"]["musicVolume"] = "loud";
-    ExpectRejected(invalid, "non-numeric level music volume is rejected");
+    invalid["sectors"][0]["roomtone"]["soundId"] = "door_open";
+    ExpectRejected(invalid, "roomtone rejects a buffered Sound ID");
     invalid = saved;
-    invalid["audio"]["musicVolume"] = -0.01f;
-    ExpectRejected(invalid, "negative level music volume is rejected");
+    invalid["soundEmitters"][0]["soundId"] = "alarm";
+    SectorTopologyMap streamingEmitter;
+    error.clear();
+    Check(LoadText(invalid.dump(), streamingEmitter, error)
+                  && streamingEmitter.soundEmitters[0].soundId == "alarm",
+          "sound emitter accepts a streaming Music ID");
+    invalid["soundEmitters"][0]["soundId"] = "";
+    SectorTopologyMap silentEmitter;
+    error.clear();
+    Check(LoadText(invalid.dump(), silentEmitter, error)
+                  && silentEmitter.soundEmitters[0].soundId.empty(),
+          "sound emitter accepts an intentionally empty sound ID");
+    invalid["soundEmitters"][0]["soundId"] = "missing_audio";
+    ExpectRejected(invalid, "sound emitter rejects an unknown map audio ID");
     invalid = saved;
-    invalid["audio"]["musicVolume"] = 1.01f;
-    ExpectRejected(invalid, "level music volume above one is rejected");
+    invalid["audio"]["roomtoneFadeMilliseconds"] = "slow";
+    ExpectRejected(invalid, "non-integer roomtone fade is rejected");
+    invalid = saved;
+    invalid["audio"]["roomtoneFadeMilliseconds"] = -1;
+    ExpectRejected(invalid, "negative roomtone fade is rejected");
+    invalid = saved;
+    invalid["audio"]["roomtoneFadeMilliseconds"] = 60001;
+    ExpectRejected(invalid, "roomtone fade above the maximum is rejected");
 
     SectorTopologyMap invalidSave = original;
-    invalidSave.audioSettings.musicPath = "/absolute/theme.ogg";
-    ExpectSaveRejected(invalidSave, "absolute level music path is rejected on save");
-    invalidSave = original;
-    invalidSave.audioSettings.musicVolume = -0.01f;
-    ExpectSaveRejected(invalidSave, "invalid level music volume is rejected on save");
+    invalidSave.audioSettings.roomtoneFadeMilliseconds = -1;
+    ExpectSaveRejected(invalidSave, "invalid roomtone fade is rejected on save");
 }
 
 void TestSkySettingsRoundTripAndValidation()
@@ -4218,11 +4375,18 @@ void TestGraphNativeMapLevelRoundTrip()
             3.0f
     });
     source.previewSettings.walkSpeed = 9.0f;
-    source.audioSettings.musicPath = "music/graph_theme.ogg";
-    source.audioSettings.musicVolume = 0.4f;
+    source.audioSettings.roomtoneFadeMilliseconds = 1400;
     source.audioSettings.soundsById.emplace(
             "ambient_hum", SectorSoundDefinition{
                     "ambient_hum", "ambience/hum.wav", SectorSoundType::Sound});
+    source.audioSettings.soundsById.emplace(
+            "great_hall", SectorSoundDefinition{
+                    "great_hall", "ambience/great_hall.ogg", SectorSoundType::Music});
+    source.sectors[0].roomtone.mode = game::SectorRoomtoneMode::Play;
+    source.sectors[0].roomtone.soundId = "great_hall";
+    source.soundEmitters.push_back(game::SectorCompiledSoundEmitter{
+            63, "vent", Vector3{2.0f, 1.0f, 2.0f},
+            "ambient_hum", 0.8f, true});
     source.skySettings.materialId = "sky";
     source.skySettings.yawOffsetDegrees = 17.0f;
     source.directionalLight.enabled = true;
@@ -4299,8 +4463,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(saved["dynamicSpotLights"][0]["shadowSoftness"].get<float>(), 3.0f),
           "graph-native dynamic spot lights are persisted");
     Check(saved["previewSettings"]["walkSpeed"] == 9.0f, "graph-native preview settings are persisted");
-    Check(saved["audio"]["music"] == "music/graph_theme.ogg"
-                  && Near(saved["audio"]["musicVolume"].get<float>(), 0.4f)
+    Check(saved["audio"]["roomtoneFadeMilliseconds"] == 1400
                   && saved["audio"]["sounds"]["ambient_hum"]["path"]
                   == "ambience/hum.wav",
           "graph-native audio settings are persisted");
@@ -4330,6 +4493,12 @@ void TestGraphNativeMapLevelRoundTrip()
                   && saved["authoringGraph"]["reflectionProbes"][0]["id"] == 41
                   && saved["bakedReflectionProbes"]["count"] == 1,
           "graph-native reflection probe authoring and bake metadata are persisted");
+    Check(saved["authoringGraph"]["faceAnchors"][0]["roomtone"]["soundId"]
+                      == "great_hall"
+                  && saved["authoringGraph"]["soundEmitters"][0]["id"] == "vent"
+                  && saved["authoringGraph"]["soundEmitters"][0]["soundId"]
+                      == "ambient_hum",
+          "graph-native roomtones and sound emitters are persisted");
     Check(saved["bakedLightmap"]["objectProbes"]["path"]
                   == "assets/levels/test/test.lightmap.object_probes.bin",
           "graph-native baked object probe sidecar path is persisted");
@@ -4379,9 +4548,7 @@ void TestGraphNativeMapLevelRoundTrip()
                   && Near(loaded.mapData.dynamicSpotLights[0].shadowStrength, 0.8f)
                   && Near(loaded.mapData.dynamicSpotLights[0].shadowSoftness, 3.0f)
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
-                  && loaded.mapData.audioSettings.musicPath
-                          == "music/graph_theme.ogg"
-                  && Near(loaded.mapData.audioSettings.musicVolume, 0.4f)
+                  && loaded.mapData.audioSettings.roomtoneFadeMilliseconds == 1400
                   && loaded.mapData.audioSettings.soundsById.at("ambient_hum").path
                           == "ambience/hum.wav"
                   && loaded.mapData.skySettings.materialId == "sky"
@@ -4414,10 +4581,13 @@ void TestGraphNativeMapLevelRoundTrip()
                   && loaded.derivation.topology.compiledReflectionProbes.size() == 1
                   && loaded.mapData.bakedReflectionProbes.count == 1,
           "graph-native reflection probes round-trip and compile");
+    Check(loaded.graph.faceAnchors[0].roomtone.soundId == "great_hall"
+                  && loaded.graph.soundEmitters.size() == 1
+                  && loaded.graph.soundEmitters[0].referenceId == "vent"
+                  && loaded.derivation.topology.soundEmitters.size() == 1,
+          "graph-native roomtones and sound emitters round-trip and compile");
     Check(loaded.derivation.success
-                  && loaded.derivation.topology.audioSettings.musicPath
-                          == "music/graph_theme.ogg"
-                  && Near(loaded.derivation.topology.audioSettings.musicVolume, 0.4f)
+                  && loaded.derivation.topology.audioSettings.roomtoneFadeMilliseconds == 1400
                   && loaded.derivation.topology.audioSettings.soundsById.at(
                           "ambient_hum").path == "ambience/hum.wav"
                   && loaded.derivation.topology.resolvedMaterialsById.empty()

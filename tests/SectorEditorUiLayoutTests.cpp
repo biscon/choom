@@ -6,6 +6,7 @@
 #include "sector_editor/inspector/SectorEditorInspectorPanel.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorModal.h"
 #include "sector_editor/weapons/SectorEditorWeaponEditorPanel.h"
+#include "sector_editor/sounds/SectorEditorSoundEditorPanel.h"
 #include "sector_demo/SectorLightmap.h"
 
 #include <cmath>
@@ -329,8 +330,11 @@ void TestDoorInspectorHeightCountsConditionalRows()
             true);
     const float stacked =
             game::SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;
+    const float scriptRowsAndValidation =
+            (rowH + gap) * 4.0f + 36.0f;
     const float expectedProceduralSlideHeight =
             38.0f + 34.0f
+            + scriptRowsAndValidation
             + anchorStatusHeight + gap
             + (rowH + gap) * 4.0f
             + stacked
@@ -339,7 +343,7 @@ void TestDoorInspectorHeightCountsConditionalRows()
             + assetStatusHeight + gap
             + (rowH + gap) * 5.0f;
     Check(Near(proceduralSlideHeight, expectedProceduralSlideHeight),
-          "door inspector height includes target dimensions, normal offset, and height offset rows");
+          "door inspector height includes script fields, validation space, target dimensions, normal offset, and height offset rows");
     Check(Near(proceduralSwingHeight - proceduralSlideHeight, stacked * 2.0f),
           "procedural swing inspector reserves two additional stacked hinge/side rows without clipping later controls");
     Check(modelSwingHeight > proceduralSwingHeight
@@ -450,8 +454,17 @@ void TestAuthoringFaceInspectorHeightIncludesAllSections()
                     rowH,
                     gap,
                     anchorSummaryHeight);
-    Check(Near(height, 1434.0f),
-          "authoring face height includes merge, ceiling sky, audio, materials, decals, and padding");
+    Check(Near(height, 1626.0f),
+          "authoring face height includes roomtone, merge, ceiling sky, audio, materials, decals, and padding");
+
+    anchor.roomtone.fadeMilliseconds = 500;
+    const float overriddenFadeHeight =
+            game::MeasureSectorEditorAuthoringFaceInspectorContentHeight(
+                    anchor, rowH, gap, anchorSummaryHeight);
+    Check(Near(overriddenFadeHeight - height, rowH + gap),
+          "authoring face height includes an overridden roomtone fade row");
+    anchor.roomtone.fadeMilliseconds =
+            game::SectorRoomtoneSettings::UseMapFadeMilliseconds;
 
     anchor.floorDecal.materialId = "floor_decal";
     anchor.floorDecal.emissive = true;
@@ -620,6 +633,28 @@ void TestNpcEditorModalSplitPaneLayout()
           "NPC Save and Cancel controls fit without overlap");
 }
 
+void TestSoundEditorSplitPaneLayout()
+{
+    const game::SectorEditorSoundEditorLayout layout =
+            game::BuildSectorEditorSoundEditorLayoutForViewport(1920.0f, 1080.0f);
+    const Rectangle viewport{0.0f, 0.0f, 1920.0f, 1080.0f};
+    Check(Contains(viewport, layout.modal),
+          "Sound Editor modal fits inside the editor viewport");
+    Check(Contains(layout.modal, layout.listPane)
+                  && Contains(layout.modal, layout.formBounds),
+          "Sound Editor list and details panes stay inside the modal");
+    Check(!Overlaps(layout.listPane, layout.formBounds),
+          "Sound Editor list and details panes do not overlap");
+    Check(!Overlaps(layout.addButton, layout.deleteButton)
+                  && Contains(layout.listPane, layout.addButton)
+                  && Contains(layout.listPane, layout.deleteButton),
+          "Sound Editor Add and Remove controls fit without overlap");
+    Check(!Overlaps(layout.saveButton, layout.cancelButton)
+                  && Contains(layout.modal, layout.saveButton)
+                  && Contains(layout.modal, layout.cancelButton),
+          "Sound Editor Save and Cancel controls fit without overlap");
+}
+
 void TestPreviewSettingsModalFogDraftApplyAndReset()
 {
     game::SectorTopologyMap map;
@@ -771,6 +806,7 @@ int main()
     TestPreviewSettingsModalNormalizesLayeredProbeSettings();
     TestPreviewSettingsFogTabLayout();
     TestNpcEditorModalSplitPaneLayout();
+    TestSoundEditorSplitPaneLayout();
     TestWeaponEditorLayouts();
     TestPreviewSettingsModalFogDraftApplyAndReset();
     TestPreviewNavigationTabLayout();

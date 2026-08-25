@@ -3,6 +3,8 @@
 #include "engine/components/AnimatedModel.h"
 #include "sector_editor/SectorEditorUiHelpers.h"
 
+#include <algorithm>
+#include <cstdio>
 #include <functional>
 #include <string>
 #include <vector>
@@ -29,10 +31,16 @@ const engine::AnimatedModelInstance* RuntimeModelInstance(
 } // namespace
 
 float MeasureSectorEditorDynamicModelInspectorContentHeight(
-        const SectorEditorPlacedObjectInspectorMeasureContext&,
+        const SectorEditorPlacedObjectInspectorMeasureContext& context,
         const SectorPlacedRuntimeObject&)
 {
-    return 38.0f * 2.0f + 48.0f * 14.0f + 8.0f * 16.0f + 70.0f;
+    return 38.0f * 2.0f
+            + 48.0f * 19.0f
+            + 8.0f * 16.0f
+            + 70.0f
+            + context.rowH
+            + context.gap
+            + 40.0f;
 }
 
 void DrawSectorEditorDynamicModelInspector(
@@ -80,6 +88,47 @@ void DrawSectorEditorDynamicModelInspector(
             modelStatus, engine::UITextJustify::Left,
             modelAsset != nullptr ? context.config.accentColor : context.config.mutedTextColor);
     y += 34.0f + gap;
+
+    if (context.uiState.dynamicModelInstanceIdObjectId != object->id) {
+        std::snprintf(
+                context.uiState.dynamicModelInstanceIdBuffer,
+                sizeof(context.uiState.dynamicModelInstanceIdBuffer),
+                "%s",
+                object->dynamicModel.instanceId.c_str());
+        context.uiState.dynamicModelInstanceIdObjectId = object->id;
+        context.uiState.dynamicModelInstanceIdError.clear();
+    }
+    engine::Text(
+            context.ui, context.config, context.assets,
+            Rectangle{0.0f, y, 118.0f, rowH}, context.font,
+            "Instance ID", engine::UITextJustify::Left,
+            context.config.mutedTextColor);
+    const engine::UITextInputResult instanceResult = engine::TextInput(
+            context.ui, context.config, context.input, context.assets,
+            "sector_editor_dynamic_model_instance_id",
+            Rectangle{122.0f, y, std::max(0.0f, contentW - 122.0f), rowH},
+            context.font,
+            context.uiState.dynamicModelInstanceIdBuffer,
+            sizeof(context.uiState.dynamicModelInstanceIdBuffer),
+            1,
+            sizeof(context.uiState.dynamicModelInstanceIdBuffer) - 1,
+            engine::UITextJustify::Left);
+    if (instanceResult.submitted) {
+        context.editing.SetSelectedDynamicModelInstanceId(
+                std::string{context.uiState.dynamicModelInstanceIdBuffer},
+                context.uiState.dynamicModelInstanceIdError);
+    }
+    y += rowH + gap;
+    if (!context.uiState.dynamicModelInstanceIdError.empty()) {
+        engine::Text(
+                context.ui, context.config, context.assets,
+                Rectangle{0.0f, y, contentW, 36.0f}, context.smallFont,
+                context.uiState.dynamicModelInstanceIdError.c_str(),
+                engine::UITextJustify::Left,
+                context.config.invalidColor,
+                true);
+        y += 40.0f;
+    }
 
     if (engine::Button(
                 context.ui, context.config, context.input, context.assets,
@@ -185,13 +234,18 @@ void DrawSectorEditorDynamicModelInspector(
     modelAsset = runtimeInstance == nullptr
             ? nullptr
             : context.assets.GetModelAsset(runtimeInstance->model);
-    if (modelAsset != nullptr && modelAsset->animationCount > 0) {
+    const size_t clipCount = modelAsset != nullptr
+            ? engine::ModelAnimationClipCount(*modelAsset)
+            : 0;
+    if (modelAsset != nullptr && clipCount > 0) {
         std::vector<std::string> names;
-        names.reserve(static_cast<size_t>(modelAsset->animationCount));
+        names.reserve(clipCount);
         int selected = 0;
         bool authoredAnimationFound = object->dynamicModel.animation.empty();
-        for (int i = 0; i < modelAsset->animationCount; ++i) {
-            names.emplace_back(modelAsset->animations[i].name);
+        for (size_t i = 0; i < clipCount; ++i) {
+            const char* name =
+                    engine::ModelAnimationClipName(*modelAsset, i);
+            names.emplace_back(name != nullptr ? name : "");
             if (names.back() == object->dynamicModel.animation) {
                 selected = i;
                 authoredAnimationFound = true;
@@ -260,6 +314,110 @@ void DrawSectorEditorDynamicModelInspector(
             if (target.kind != "dynamic_model" || target.dynamicModel.loop == loop) return false;
             target.dynamicModel.loop = loop; return true;
         });
+    }
+    y += rowH + gap;
+    object = context.editing.SelectedObject(); if (object == nullptr) return;
+    if (context.uiState.dynamicModelUseObjectId != object->id) {
+        std::snprintf(
+                context.uiState.dynamicModelUseTitleBuffer,
+                sizeof(context.uiState.dynamicModelUseTitleBuffer),
+                "%s",
+                object->dynamicModel.useTitle.c_str());
+        std::snprintf(
+                context.uiState.dynamicModelOnUseScriptBuffer,
+                sizeof(context.uiState.dynamicModelOnUseScriptBuffer),
+                "%s",
+                object->dynamicModel.onUseScript.c_str());
+        context.uiState.dynamicModelUseObjectId = object->id;
+        context.uiState.dynamicModelUseError.clear();
+    }
+    const auto drawTextField = [&] (
+            const char* id,
+            const char* label,
+            char* buffer,
+            size_t capacity,
+            const std::function<bool(SectorPlacedRuntimeObject&, const std::string&)>& apply) {
+        engine::Text(
+                context.ui, context.config, context.assets,
+                Rectangle{0.0f, y, 118.0f, rowH}, context.font,
+                label, engine::UITextJustify::Left,
+                context.config.mutedTextColor);
+        const engine::UITextInputResult result = engine::TextInput(
+                context.ui, context.config, context.input, context.assets,
+                id,
+                Rectangle{122.0f, y, std::max(0.0f, contentW - 122.0f), rowH},
+                context.font,
+                buffer,
+                capacity,
+                0,
+                capacity - 1,
+                engine::UITextJustify::Left);
+        if (result.submitted) {
+            const std::string value{buffer};
+            context.editing.MutateSelected(
+                    "Updated dynamic prop interaction",
+                    [apply, value](SectorPlacedRuntimeObject& target) {
+                        return apply(target, value);
+                    });
+        }
+        y += rowH + gap;
+    };
+    drawTextField(
+            "sector_editor_dynamic_use_title",
+            "Use Title",
+            context.uiState.dynamicModelUseTitleBuffer,
+            sizeof(context.uiState.dynamicModelUseTitleBuffer),
+            [](auto& target, const std::string& value) {
+                if (target.kind != "dynamic_model"
+                        || !IsValidSectorUseTitle(value)
+                        || target.dynamicModel.useTitle == value) return false;
+                target.dynamicModel.useTitle = value;
+                return true;
+            });
+    object = context.editing.SelectedObject(); if (object == nullptr) return;
+    drawTextField(
+            "sector_editor_dynamic_on_use_script",
+            "On Use",
+            context.uiState.dynamicModelOnUseScriptBuffer,
+            sizeof(context.uiState.dynamicModelOnUseScriptBuffer),
+            [](auto& target, const std::string& value) {
+                if (target.kind != "dynamic_model"
+                        || (!value.empty() && !IsValidSectorTriggerScriptName(value))
+                        || target.dynamicModel.onUseScript == value) return false;
+                target.dynamicModel.onUseScript = value;
+                return true;
+            });
+    object = context.editing.SelectedObject(); if (object == nullptr) return;
+    drawFloat(
+            "sector_editor_dynamic_use_distance",
+            "Use Dist",
+            object->dynamicModel.useDistance,
+            context.uiState.dynamicModelUseDistanceInput,
+            [](auto& target, float value) {
+                if (target.kind != "dynamic_model"
+                        || target.dynamicModel.useDistance == value) return false;
+                target.dynamicModel.useDistance = value;
+                return true;
+            },
+            0.001f,
+            100000.0f);
+    object = context.editing.SelectedObject(); if (object == nullptr) return;
+    bool singleUse = object->dynamicModel.singleUse;
+    if (engine::Checkbox(
+                context.ui, context.config, context.input, context.assets,
+                "sector_editor_dynamic_single_use",
+                Rectangle{0.0f, y, contentW, rowH},
+                context.font,
+                "Single use",
+                singleUse)) {
+        context.editing.MutateSelected(
+                "Updated dynamic prop interaction",
+                [singleUse](auto& target) {
+                    if (target.kind != "dynamic_model"
+                            || target.dynamicModel.singleUse == singleUse) return false;
+                    target.dynamicModel.singleUse = singleUse;
+                    return true;
+                });
     }
     y += rowH + gap;
     object = context.editing.SelectedObject(); if (object == nullptr) return;

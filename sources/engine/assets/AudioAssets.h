@@ -81,6 +81,10 @@ class MusicAssets {
 public:
     void OnScopeCreated(AssetScopeHandle scope);
     MusicHandle RequestMusic(AssetScopeHandle scope, const char* path);
+    MusicHandle RequestMusicInstance(
+            AssetScopeHandle scope,
+            const char* instanceKey,
+            const char* path);
 
     bool IsReady(MusicHandle handle) const;
     bool IsFinished(MusicHandle handle) const;
@@ -102,6 +106,7 @@ private:
         uint32_t generation = 1;
         State state = State::Queued;
         uint32_t ownerCount = 0;
+        bool sharedByPath = false;
         std::string path;
         MusicAsset asset;
     };
@@ -109,6 +114,7 @@ private:
     struct ScopeData {
         std::vector<MusicHandle> music;
         std::unordered_map<std::string, MusicHandle> musicByPath;
+        std::unordered_map<std::string, MusicHandle> musicInstancesByKey;
     };
 
     bool IsValidNoLock(MusicHandle handle) const;

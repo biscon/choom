@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <utility>
+#include <string_view>
 
 namespace game {
 namespace {
@@ -671,7 +672,10 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::ConvertSelected
     if (sourceKind == TopologySelectionKind::StaticLight) {
         const SectorTopologyStaticPointLight source =
                 *FindSectorTopologyStaticLight(context_.map, sourceId);
-        context_.map.dynamicPointLights.push_back(ToDynamicLight(source, destinationId));
+        SectorTopologyDynamicPointLight converted = ToDynamicLight(source, destinationId);
+        converted.instanceId = AllocateSectorDynamicLightInstanceId(
+                context_.map, "point", destinationId);
+        context_.map.dynamicPointLights.push_back(std::move(converted));
         RemoveSectorTopologyStaticLight(context_.map, sourceId);
     } else if (sourceKind == TopologySelectionKind::DynamicLight) {
         const SectorTopologyDynamicPointLight source =
@@ -681,7 +685,10 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::ConvertSelected
     } else if (sourceKind == TopologySelectionKind::StaticSpotLight) {
         const SectorTopologyStaticSpotLight source =
                 *FindSectorTopologyStaticSpotLight(context_.map, sourceId);
-        context_.map.dynamicSpotLights.push_back(ToDynamicSpotLight(source, destinationId));
+        SectorTopologyDynamicSpotLight converted = ToDynamicSpotLight(source, destinationId);
+        converted.instanceId = AllocateSectorDynamicLightInstanceId(
+                context_.map, "spot", destinationId);
+        context_.map.dynamicSpotLights.push_back(std::move(converted));
         RemoveSectorTopologyStaticSpotLight(context_.map, sourceId);
     } else if (sourceKind == TopologySelectionKind::DynamicSpotLight) {
         const SectorTopologyDynamicSpotLight source =
@@ -691,7 +698,10 @@ SectorEditorLightMutationResult SectorEditorLightEditingService::ConvertSelected
     } else if (sourceKind == TopologySelectionKind::StaticRectLight) {
         const SectorTopologyStaticRectLight source =
                 *FindSectorTopologyStaticRectLight(context_.map, sourceId);
-        context_.map.dynamicRectLights.push_back(ToDynamicRectLight(source, destinationId));
+        SectorTopologyDynamicRectLight converted = ToDynamicRectLight(source, destinationId);
+        converted.instanceId = AllocateSectorDynamicLightInstanceId(
+                context_.map, "rect", destinationId);
+        context_.map.dynamicRectLights.push_back(std::move(converted));
         RemoveSectorTopologyStaticRectLight(context_.map, sourceId);
     } else {
         const SectorTopologyDynamicRectLight source =
@@ -1560,6 +1570,78 @@ bool SectorEditorLightEditingService::SetDynamicLightEnabled(
         return false;
     }
     MarkEdited(TextFormat("Updated dynamic light %d enabled", light.id));
+    return true;
+}
+
+namespace {
+
+bool DynamicLightInstanceIdAvailable(
+        const SectorTopologyMap& map,
+        std::string_view value,
+        const void* selected)
+{
+    for (const SectorTopologyDynamicPointLight& light : map.dynamicPointLights) {
+        if (&light != selected && light.instanceId == value) return false;
+    }
+    for (const SectorTopologyDynamicSpotLight& light : map.dynamicSpotLights) {
+        if (&light != selected && light.instanceId == value) return false;
+    }
+    for (const SectorTopologyDynamicRectLight& light : map.dynamicRectLights) {
+        if (&light != selected && light.instanceId == value) return false;
+    }
+    return true;
+}
+
+template <typename Light>
+bool SetDynamicLightInstanceIdValue(
+        SectorTopologyMap& map,
+        Light& light,
+        const std::string& value,
+        std::string& error)
+{
+    if (!IsValidSectorScriptInstanceId(value)) {
+        error = "ID must contain 1-63 letters, digits, underscores, or dashes";
+        return false;
+    }
+    if (!DynamicLightInstanceIdAvailable(map, value, &light)) {
+        error = "ID must be unique among all dynamic lights";
+        return false;
+    }
+    error.clear();
+    if (light.instanceId == value) return false;
+    light.instanceId = value;
+    return true;
+}
+
+} // namespace
+
+bool SectorEditorLightEditingService::SetDynamicLightInstanceId(
+        SectorTopologyDynamicPointLight& light,
+        const std::string& value,
+        std::string& error)
+{
+    if (!SetDynamicLightInstanceIdValue(context_.map, light, value, error)) return false;
+    MarkEdited(TextFormat("Updated dynamic light %d instance ID", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetDynamicLightInstanceId(
+        SectorTopologyDynamicSpotLight& light,
+        const std::string& value,
+        std::string& error)
+{
+    if (!SetDynamicLightInstanceIdValue(context_.map, light, value, error)) return false;
+    MarkEdited(TextFormat("Updated dynamic spot %d instance ID", light.id));
+    return true;
+}
+
+bool SectorEditorLightEditingService::SetDynamicLightInstanceId(
+        SectorTopologyDynamicRectLight& light,
+        const std::string& value,
+        std::string& error)
+{
+    if (!SetDynamicLightInstanceIdValue(context_.map, light, value, error)) return false;
+    MarkEdited(TextFormat("Updated dynamic rect %d instance ID", light.id));
     return true;
 }
 

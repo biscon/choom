@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -105,10 +106,9 @@ struct SectorSoundDefinition {
 };
 
 struct SectorLevelAudioSettings {
-    static constexpr float DefaultMusicVolume = 0.6f;
+    static constexpr int DefaultRoomtoneFadeMilliseconds = 1000;
 
-    std::string musicPath;
-    float musicVolume = DefaultMusicVolume;
+    int roomtoneFadeMilliseconds = DefaultRoomtoneFadeMilliseconds;
     std::unordered_map<std::string, SectorSoundDefinition> soundsById;
 };
 
@@ -141,6 +141,15 @@ struct SectorCompiledLevelMarker {
     float yawRadians = 0.0f;
 };
 
+struct SectorCompiledSoundEmitter {
+    int sourceAuthoringEmitterId = -1;
+    std::string id;
+    Vector3 positionWorld = {};
+    std::string soundId;
+    float volume = 1.0f;
+    bool loop = false;
+};
+
 struct SectorPlacedBillboard {
     std::string spriteAnimationPath;
     Vector2 sizeWorld = {1.0f, 1.0f};
@@ -157,6 +166,7 @@ struct SectorPlacedBillboard {
 
 struct SectorPlacedStaticModel {
     std::string modelPath;
+    std::string instanceId;
     float rotationXRadians = 0.0f;
     float rotationZRadians = 0.0f;
     float heightOffsetWorld = 0.0f;
@@ -175,6 +185,11 @@ enum class SectorDynamicModelShadowMode {
 
 struct SectorPlacedDynamicModel {
     std::string modelPath;
+    std::string instanceId;
+    std::string useTitle = "object";
+    float useDistance = 1.5f;
+    std::string onUseScript;
+    bool singleUse = false;
     float rotationXRadians = 0.0f;
     float rotationZRadians = 0.0f;
     float heightOffsetWorld = 0.0f;
@@ -234,6 +249,10 @@ struct SectorDoorAnchor {
 };
 
 struct SectorPlacedDoor {
+    std::string instanceId;
+    std::string useTitle = "door";
+    std::string canOpenScript;
+    std::string canCloseScript;
     SectorDoorAnchor anchor;
     float width = 0.0f;
     float height = 0.0f;
@@ -315,6 +334,7 @@ struct SectorTopologyMap {
     std::vector<SectorTopologyDynamicRectLight> dynamicRectLights;
     std::vector<SectorPlacedRuntimeObject> runtimeObjects;
     std::vector<SectorCompiledLevelMarker> levelMarkers;
+    std::vector<SectorCompiledSoundEmitter> soundEmitters;
     std::vector<SectorCompiledTrigger> triggers;
     SectorPreviewSettings previewSettings;
     SectorTopologySkySettings skySettings;
@@ -368,6 +388,25 @@ int AllocateSectorTopologyDynamicLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyDynamicSpotLightId(const SectorTopologyMap& map);
 int AllocateSectorTopologyDynamicRectLightId(const SectorTopologyMap& map);
 int AllocateSectorPlacedRuntimeObjectId(const SectorTopologyMap& map);
+bool IsValidSectorDynamicModelInstanceId(std::string_view id);
+bool IsValidSectorScriptInstanceId(std::string_view id);
+bool IsValidSectorUseTitle(std::string_view title);
+std::string AllocateSectorDynamicModelInstanceId(
+        const SectorTopologyMap& map,
+        int placedObjectId);
+std::string AllocateSectorPropInstanceId(
+        const SectorTopologyMap& map,
+        int placedObjectId);
+void AssignMissingSectorPropInstanceIds(SectorTopologyMap& map);
+std::string AllocateSectorDoorInstanceId(
+        const SectorTopologyMap& map,
+        int placedObjectId);
+void AssignMissingSectorDoorInstanceIds(SectorTopologyMap& map);
+std::string AllocateSectorDynamicLightInstanceId(
+        const SectorTopologyMap& map,
+        const char* kind,
+        int lightId);
+void AssignMissingSectorDynamicLightInstanceIds(SectorTopologyMap& map);
 
 const SectorTopologyVertex* FindSectorTopologyVertex(const SectorTopologyMap& map, int id);
 SectorTopologyVertex* FindSectorTopologyVertex(SectorTopologyMap& map, int id);
@@ -411,6 +450,12 @@ bool RemoveSectorTopologyDynamicRectLight(SectorTopologyMap& map, int id);
 
 const SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(const SectorTopologyMap& map, int id);
 SectorPlacedRuntimeObject* FindSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
+const SectorPlacedRuntimeObject* FindSectorPlacedDynamicModelByInstanceId(
+        const SectorTopologyMap& map,
+        std::string_view instanceId);
+const SectorPlacedRuntimeObject* FindSectorPlacedModelByInstanceId(
+        const SectorTopologyMap& map,
+        std::string_view instanceId);
 
 bool RemoveSectorPlacedRuntimeObject(SectorTopologyMap& map, int id);
 

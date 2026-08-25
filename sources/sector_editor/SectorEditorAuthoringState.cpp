@@ -28,6 +28,7 @@ bool HasAuthoringGraphData(const SectorAuthoringGraph& graph)
             || !graph.faceAnchors.empty()
             || !graph.fogVolumes.empty()
             || !graph.levelMarkers.empty()
+            || !graph.soundEmitters.empty()
             || !graph.triggers.empty();
 }
 
@@ -52,7 +53,6 @@ void CopyEditorMapLevelFields(SectorTopologyMap& target, const SectorTopologyMap
     target.skySettings = source.skySettings;
     target.directionalLight = source.directionalLight;
     target.fogSettings = source.fogSettings;
-    target.audioSettings = source.audioSettings;
     target.lightmapSettings = source.lightmapSettings;
     target.bakedLightmap = source.bakedLightmap;
     target.bakedReflectionProbes = source.bakedReflectionProbes;
@@ -1453,6 +1453,16 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringLevelMarkerSelectionTarget(int
     return target;
 }
 
+SectorAuthoringSelectionTarget MakeSectorAuthoringSoundEmitterSelectionTarget(int emitterId)
+{
+    SectorAuthoringSelectionTarget target;
+    if (IsValidSectorAuthoringId(emitterId)) {
+        target.kind = SectorAuthoringSelectionKind::SoundEmitter;
+        target.soundEmitterId = emitterId;
+    }
+    return target;
+}
+
 SectorAuthoringSelectionTarget MakeSectorAuthoringTriggerSelectionTarget(int triggerId)
 {
     SectorAuthoringSelectionTarget target;
@@ -1474,6 +1484,7 @@ bool SectorAuthoringSelectionTargetsEqual(
             && lhs.fogVolumeId == rhs.fogVolumeId
             && lhs.reflectionProbeId == rhs.reflectionProbeId
             && lhs.levelMarkerId == rhs.levelMarkerId
+            && lhs.soundEmitterId == rhs.soundEmitterId
             && lhs.triggerId == rhs.triggerId;
 }
 
@@ -1485,12 +1496,14 @@ bool IsSectorAuthoringSelectionTargetValid(
     case SectorAuthoringSelectionKind::None:
         return target.lineId == -1 && target.vertexId == -1 && target.faceAnchorId == -1
                 && target.fogVolumeId == -1 && target.reflectionProbeId == -1
-                && target.levelMarkerId == -1 && target.triggerId == -1;
+                && target.levelMarkerId == -1 && target.soundEmitterId == -1
+                && target.triggerId == -1;
     case SectorAuthoringSelectionKind::Line:
         return target.vertexId == -1
                 && target.faceAnchorId == -1
                 && target.fogVolumeId == -1
                 && target.levelMarkerId == -1
+                && target.soundEmitterId == -1
                 && target.triggerId == -1
                 && FindSectorAuthoringLine(graph, target.lineId) != nullptr;
     case SectorAuthoringSelectionKind::Vertex:
@@ -1498,6 +1511,7 @@ bool IsSectorAuthoringSelectionTargetValid(
                 && target.faceAnchorId == -1
                 && target.fogVolumeId == -1
                 && target.levelMarkerId == -1
+                && target.soundEmitterId == -1
                 && target.triggerId == -1
                 && FindSectorAuthoringVertex(graph, target.vertexId) != nullptr;
     case SectorAuthoringSelectionKind::FaceAnchor:
@@ -1505,6 +1519,7 @@ bool IsSectorAuthoringSelectionTargetValid(
                 && target.vertexId == -1
                 && target.fogVolumeId == -1
                 && target.levelMarkerId == -1
+                && target.soundEmitterId == -1
                 && target.triggerId == -1
                 && FindSectorAuthoringFaceAnchor(graph, target.faceAnchorId) != nullptr;
     case SectorAuthoringSelectionKind::FogVolume:
@@ -1512,12 +1527,14 @@ bool IsSectorAuthoringSelectionTargetValid(
                 && target.vertexId == -1
                 && target.faceAnchorId == -1
                 && target.levelMarkerId == -1
+                && target.soundEmitterId == -1
                 && target.triggerId == -1
                 && FindSectorAuthoringFogVolume(graph, target.fogVolumeId) != nullptr;
     case SectorAuthoringSelectionKind::ReflectionProbe:
         return target.lineId == -1 && target.vertexId == -1
                 && target.faceAnchorId == -1 && target.fogVolumeId == -1
-                && target.levelMarkerId == -1 && target.triggerId == -1
+                && target.levelMarkerId == -1 && target.soundEmitterId == -1
+                && target.triggerId == -1
                 && FindSectorAuthoringReflectionProbe(
                         graph, target.reflectionProbeId) != nullptr;
     case SectorAuthoringSelectionKind::LevelMarker:
@@ -1525,11 +1542,19 @@ bool IsSectorAuthoringSelectionTargetValid(
                 && target.vertexId == -1
                 && target.faceAnchorId == -1
                 && target.fogVolumeId == -1
+                && target.soundEmitterId == -1
                 && target.triggerId == -1
                 && FindSectorAuthoringLevelMarker(graph, target.levelMarkerId) != nullptr;
+    case SectorAuthoringSelectionKind::SoundEmitter:
+        return target.lineId == -1 && target.vertexId == -1
+                && target.faceAnchorId == -1 && target.fogVolumeId == -1
+                && target.reflectionProbeId == -1 && target.levelMarkerId == -1
+                && target.triggerId == -1
+                && FindSectorAuthoringSoundEmitter(graph, target.soundEmitterId) != nullptr;
     case SectorAuthoringSelectionKind::Trigger:
         return target.lineId == -1 && target.vertexId == -1 && target.faceAnchorId == -1
                 && target.fogVolumeId == -1 && target.levelMarkerId == -1
+                && target.soundEmitterId == -1
                 && FindSectorAuthoringTrigger(graph, target.triggerId) != nullptr;
     }
     return false;
@@ -1689,6 +1714,22 @@ bool SelectSectorEditorAuthoringLevelMarker(
     return true;
 }
 
+bool SelectSectorEditorAuthoringSoundEmitter(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int emitterId)
+{
+    const SectorAuthoringSelectionTarget target =
+            MakeSectorAuthoringSoundEmitterSelectionTarget(emitterId);
+    if (target.kind != SectorAuthoringSelectionKind::SoundEmitter
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
+        return false;
+    }
+    selectionState.selectedAuthoring = target;
+    selectionState.selectedAuthoringFaceAnchorIds.clear();
+    return true;
+}
+
 bool SelectSectorEditorAuthoringTrigger(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
@@ -1775,6 +1816,21 @@ bool SetHoveredSectorEditorAuthoringLevelMarker(
     const SectorAuthoringSelectionTarget target =
             MakeSectorAuthoringLevelMarkerSelectionTarget(markerId);
     if (target.kind != SectorAuthoringSelectionKind::LevelMarker
+            || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
+        return false;
+    }
+    selectionState.hoveredAuthoring = target;
+    return true;
+}
+
+bool SetHoveredSectorEditorAuthoringSoundEmitter(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int emitterId)
+{
+    const SectorAuthoringSelectionTarget target =
+            MakeSectorAuthoringSoundEmitterSelectionTarget(emitterId);
+    if (target.kind != SectorAuthoringSelectionKind::SoundEmitter
             || !IsSectorAuthoringSelectionTargetValid(graph, target)) {
         return false;
     }
@@ -3419,6 +3475,15 @@ SectorEditorInspectorTarget ResolveSectorEditorInspectorTarget(
         SectorEditorInspectorTarget target;
         target.kind = SectorEditorInspectorTargetKind::AuthoringLevelMarker;
         target.levelMarkerId = selectionState.selectedAuthoring.levelMarkerId;
+        return target;
+    }
+    if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::SoundEmitter
+            && FindSectorAuthoringSoundEmitter(
+                    authoringGraph,
+                    selectionState.selectedAuthoring.soundEmitterId) != nullptr) {
+        SectorEditorInspectorTarget target;
+        target.kind = SectorEditorInspectorTargetKind::AuthoringSoundEmitter;
+        target.soundEmitterId = selectionState.selectedAuthoring.soundEmitterId;
         return target;
     }
     if (selectionState.selectedAuthoring.kind == SectorAuthoringSelectionKind::Trigger

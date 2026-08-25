@@ -204,7 +204,8 @@ inline float SectorEditorRuntimeObjectInspectorContentHeight(
     if (isBillboard) {
         height += rowH + gap;
     }
-    height += (rowH + gap) * 4.0f;
+    height += (rowH + gap) * 8.0f;
+    height += 36.0f; // Optional door script-instance ID validation message.
     if (isBillboard) {
         height += (rowH + gap) * 2.0f;
         height += rowH + gap;
@@ -233,6 +234,8 @@ inline float SectorEditorDoorInspectorContentHeight(
     float height = 0.0f;
     height += 38.0f;
     height += 34.0f;
+    height += (rowH + gap) * 4.0f;
+    height += 36.0f; // Optional door script-instance ID validation message.
     height += anchorStatusHeight + gap;
     height += (rowH + gap) * 4.0f;
     height += SectorEditorInspectorStackedOptionRowHeight(rowH, gap) + gap;

@@ -1608,7 +1608,8 @@ void SectorMeshRenderer::DrawScene(
         engine::World* runtimeObjectWorld,
         SectorRuntimeDoorLightingContext doorLighting,
         const SectorTopologyFogSettings& fogSettings,
-        bool staticCaptureOnly)
+        bool staticCaptureOnly,
+        SectorUseHighlight useHighlight)
 {
     if (!initialized) {
         return;
@@ -1966,7 +1967,8 @@ void SectorMeshRenderer::DrawScene(
                 pbrEnvironmentTexture,
                 useBakedAmbientOcclusion,
                 renderDebugText,
-                staticCaptureOnly);
+                staticCaptureOnly,
+                useHighlight);
         if (!staticCaptureOnly) {
             SectorDynamicModelShadowDrawContext modelShadowContext;
             modelShadowContext.assets = &assets;

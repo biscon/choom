@@ -11,8 +11,10 @@
 #include "engine/scripting/ScriptSystem.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_demo/SectorSceneRuntime.h"
+#include "sector_demo/SectorUseInteraction.h"
 
 #include <string>
+#include <array>
 
 namespace game {
 
@@ -45,6 +47,7 @@ public:
     void RenderHud(
             engine::AssetManager& assets,
             engine::FontHandle font,
+            engine::FontHandle usePromptFont,
             Rectangle playableViewport) const;
     void RenderNavigationDebugWorld(const SectorSceneRuntime& scene) const;
     void RenderNavigationDebugPanel(
@@ -84,6 +87,10 @@ public:
     }
     std::string TakeFailureError();
     const SectorTopologyMap& Map() const { return topologyMap; }
+    SectorUseHighlight UseHighlight() const
+    {
+        return useHighlightState.highlight;
+    }
     const std::string& LevelName() const { return levelName; }
     const std::string& LevelPath() const { return levelPath; }
     engine::ScriptRuntime* ConsoleScriptRuntime()
@@ -139,6 +146,9 @@ private:
     PlayerWindedCameraState windedCamera;
     PlayerBreathingAudioRuntime breathingAudio;
     std::string failureError;
+    SectorUseTarget useTarget;
+    SectorUseHighlightState useHighlightState;
+    std::array<char, 128> usePromptTitle{};
 };
 
 } // namespace game

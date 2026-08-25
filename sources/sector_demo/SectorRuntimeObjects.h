@@ -65,10 +65,13 @@ struct SectorStaticModel {
     float scale = 1.0f;
     float environmentExposure = 0.15f;
     bool castsShadow = true;
+    std::string instanceId;
+    float emissiveScale = 1.0f;
 };
 
 struct SectorDynamicModel {
     int placedObjectId = 0;
+    std::string instanceId;
     Vector3 containingSectorAmbient = {0.15f, 0.15f, 0.15f};
     float scale = 1.0f;
     float environmentExposure = 0.15f;
@@ -77,6 +80,12 @@ struct SectorDynamicModel {
     bool animationFallback = false;
     float opacity = 1.0f;
     SectorDynamicModelShadowMode shadowMode = SectorDynamicModelShadowMode::Contact;
+    std::string useTitle = "object";
+    float useDistance = 1.5f;
+    std::string onUseScript;
+    bool singleUse = false;
+    bool useConsumed = false;
+    float emissiveScale = 1.0f;
 };
 
 } // namespace game

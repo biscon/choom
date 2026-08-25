@@ -113,6 +113,7 @@ uniform float roughnessFactor;
 uniform float normalScale;
 uniform float occlusionStrength;
 uniform float modelOpacity;
+uniform float interactionHighlightStrength;
 uniform int hasBaseColorTexture;
 uniform int hasMetallicTexture;
 uniform int hasNormalTexture;
@@ -298,6 +299,19 @@ vec2 EnvironmentBrdfApprox(float roughness, float ndotv)
     vec4 r = roughness * c0 + c1;
     float a004 = min(r.x * r.x, exp2(-9.28 * ndotv)) * r.x + r.y;
     return vec2(-1.04, 1.04) * a004 + r.zw;
+}
+
+vec3 ShapeModelEmissive(
+        vec3 emissive,
+        vec3 geometricNormal,
+        vec3 viewDirection)
+{
+    float facing = clamp(abs(dot(geometricNormal, viewDirection)), 0.0, 1.0);
+    float edgeFactor = mix(0.70, 1.0, smoothstep(0.0, 0.60, facing));
+    emissive *= edgeFactor;
+    float peak = max(emissive.r, max(emissive.g, emissive.b));
+    float whitening = 0.70 * smoothstep(1.0, 4.0, peak);
+    return mix(emissive, vec3(peak), whitening);
 }
 
 )"
@@ -578,6 +592,10 @@ void main()
                 emissiveTextureHardwareSrgb);
     }
     emissive *= max(emissiveStrength, 0.0);
+    emissive = ShapeModelEmissive(
+            emissive,
+            geometricNormal,
+            viewDirection);
     vec3 linearColor = indirectDiffuse
             + directDiffuse
             + dynamicDirectSpecular
@@ -605,6 +623,13 @@ void main()
     // only the unavoidable finite RGBA16F storage boundary.
     linearColor = max(linearColor, vec3(0.0));
     if (pbrDiagnosticMode == 0) {
+        // Treat the prop's own albedo as a small emissive-like lift. This
+        // preserves material hue and saturation instead of washing the model
+        // toward a neutral selection color.
+        linearColor += albedo * clamp(
+                interactionHighlightStrength,
+                0.0,
+                0.14);
         linearColor *= outputBrightnessMultiplier;
         linearColor = ApplySectorFog(
                 linearColor,
@@ -979,6 +1004,8 @@ bool SectorStaticModelRenderer::Load()
     normalScaleLoc = GetShaderLocation(shader, "normalScale");
     occlusionStrengthLoc = GetShaderLocation(shader, "occlusionStrength");
     modelOpacityLoc = GetShaderLocation(shader, "modelOpacity");
+    interactionHighlightStrengthLoc = GetShaderLocation(
+            shader, "interactionHighlightStrength");
     hasBaseColorTextureLoc = GetShaderLocation(shader, "hasBaseColorTexture");
     hasMetallicTextureLoc = GetShaderLocation(shader, "hasMetallicTexture");
     hasNormalTextureLoc = GetShaderLocation(shader, "hasNormalTexture");
@@ -1104,6 +1131,7 @@ void SectorStaticModelRenderer::Shutdown()
     normalScaleLoc = -1;
     occlusionStrengthLoc = -1;
     modelOpacityLoc = -1;
+    interactionHighlightStrengthLoc = -1;
     hasBaseColorTextureLoc = -1;
     hasMetallicTextureLoc = -1;
     hasNormalTextureLoc = -1;
@@ -1386,21 +1414,28 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
         bool objectProbeBakeCurrent,
         const TextureCubemap* environment,
         bool allowSkinning,
-        float opacity)
+        const engine::AnimatedModelInstance* animatedInstance,
+        const std::vector<Matrix>* meshNodeMatrices,
+        float emissiveScale,
+        float opacity,
+        float interactionHighlightStrength)
 {
-    const bool canSkin = allowSkinning
-            && model.skeleton.boneCount > 0
-            && model.skeleton.boneCount <= engine::MaxAnimatedModelBones
-            && model.boneMatrices != nullptr
-            && shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] >= 0;
-    const int useSkinning = canSkin ? 1 : 0;
     const int noStaticLightmap = 0;
     const int noBakedAo = 0;
     opacity = std::isfinite(opacity) ? std::clamp(opacity, 0.0f, 1.0f) : 1.0f;
     if (modelOpacityLoc >= 0) {
         SetShaderValue(shader, modelOpacityLoc, &opacity, SHADER_UNIFORM_FLOAT);
     }
-    if (useSkinningLoc >= 0) SetShaderValue(shader, useSkinningLoc, &useSkinning, SHADER_UNIFORM_INT);
+    interactionHighlightStrength = std::isfinite(interactionHighlightStrength)
+            ? std::clamp(interactionHighlightStrength, 0.0f, 0.14f)
+            : 0.0f;
+    if (interactionHighlightStrengthLoc >= 0) {
+        SetShaderValue(
+                shader,
+                interactionHighlightStrengthLoc,
+                &interactionHighlightStrength,
+                SHADER_UNIFORM_FLOAT);
+    }
     if (hasStaticLightmapLoc >= 0) SetShaderValue(shader, hasStaticLightmapLoc, &noStaticLightmap, SHADER_UNIFORM_INT);
     if (useBakedAmbientOcclusionLoc >= 0) SetShaderValue(shader, useBakedAmbientOcclusionLoc, &noBakedAo, SHADER_UNIFORM_INT);
     if (containingSectorAmbientLoc >= 0) {
@@ -1425,14 +1460,6 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
             ? lighting.upperHeightWorld : lowerProbeHeight;
     if (objectAmbientCubeLowerHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeLowerHeightLoc, &lowerProbeHeight, SHADER_UNIFORM_FLOAT);
     if (objectAmbientCubeUpperHeightLoc >= 0) SetShaderValue(shader, objectAmbientCubeUpperHeightLoc, &upperProbeHeight, SHADER_UNIFORM_FLOAT);
-    if (canSkin) {
-        rlEnableShader(shader.id);
-        rlSetUniformMatrices(
-                shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS],
-                model.boneMatrices,
-                model.skeleton.boneCount);
-    }
-
     const bool validProbe = lighting.lower.valid || lighting.upper.valid;
     const SectorStaticSpecularLightContext staticSpecularContext =
             SelectSectorStaticSpecularLights(
@@ -1452,6 +1479,41 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
         if (materialIndex < 0 || materialIndex >= model.materialCount) continue;
         const Material& source = model.materials[materialIndex];
         if (source.maps == nullptr) continue;
+
+        int meshBoneCount = 0;
+        const Matrix* meshBoneMatrices = nullptr;
+        if (allowSkinning && animatedInstance != nullptr) {
+            meshBoneMatrices = engine::AnimatedModelMeshBoneMatrices(
+                    modelAsset,
+                    *animatedInstance,
+                    meshIndex,
+                    meshBoneCount);
+        } else if (allowSkinning
+                && model.skeleton.boneCount > 0
+                && model.skeleton.boneCount
+                        <= engine::MaxAnimatedModelBones
+                && model.boneMatrices != nullptr) {
+            meshBoneMatrices = model.boneMatrices;
+            meshBoneCount = model.skeleton.boneCount;
+        }
+        const bool canSkin = meshBoneMatrices != nullptr
+                && meshBoneCount > 0
+                && shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS] >= 0;
+        const int useSkinning = canSkin ? 1 : 0;
+        if (useSkinningLoc >= 0) {
+            SetShaderValue(
+                    shader,
+                    useSkinningLoc,
+                    &useSkinning,
+                    SHADER_UNIFORM_INT);
+        }
+        if (canSkin) {
+            rlEnableShader(shader.id);
+            rlSetUniformMatrices(
+                    shader.locs[SHADER_LOC_MATRIX_BONETRANSFORMS],
+                    meshBoneMatrices,
+                    meshBoneCount);
+        }
 
         std::array<MaterialMap, SectorStaticModelMaterialMapCount> maps{};
         std::copy_n(source.maps, SectorStaticModelMaterialMapCount, maps.begin());
@@ -1478,6 +1540,9 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
                     maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
         }
         pbrMaterial = NormalizeSectorPbrMaterial(pbrMaterial);
+        pbrMaterial.emissiveStrength = ScaleSectorPbrEmissiveStrength(
+                pbrMaterial.emissiveStrength,
+                emissiveScale);
         if (baseColorFactorLoc >= 0) SetShaderValue(shader, baseColorFactorLoc, &pbrMaterial.baseColorFactor, SHADER_UNIFORM_VEC4);
         if (emissiveFactorLoc >= 0) SetShaderValue(shader, emissiveFactorLoc, &pbrMaterial.emissiveFactor, SHADER_UNIFORM_VEC3);
         if (emissiveStrengthLoc >= 0) SetShaderValue(shader, emissiveStrengthLoc, &pbrMaterial.emissiveStrength, SHADER_UNIFORM_FLOAT);
@@ -1521,7 +1586,15 @@ bool SectorStaticModelRenderer::DrawWorldDynamicModel(
                     pbrMaterial,
                     staticSpecularContext);
         }
-        DrawMesh(model.meshes[meshIndex], material, modelTransform);
+        const Matrix meshTransform = meshNodeMatrices != nullptr
+                        && static_cast<size_t>(meshIndex)
+                                < meshNodeMatrices->size()
+                ? MatrixMultiply(
+                        (*meshNodeMatrices)[
+                                static_cast<size_t>(meshIndex)],
+                        modelTransform)
+                : modelTransform;
+        DrawMesh(model.meshes[meshIndex], material, meshTransform);
         drewMesh = true;
     }
     return drewMesh;
@@ -1541,7 +1614,8 @@ void SectorStaticModelRenderer::Draw(
         const TextureCubemap* environment,
         bool useBakedAmbientOcclusion,
         std::string& renderDebugText,
-        bool staticCaptureOnly)
+        bool staticCaptureOnly,
+        SectorUseHighlight useHighlight)
 {
     if (!shaderLoaded || shader.id == 0) {
         AppendStaticModelDebugText(renderDebugText, 0, 0, 0, 0);
@@ -1550,6 +1624,14 @@ void SectorStaticModelRenderer::Draw(
     const float opaque = 1.0f;
     if (modelOpacityLoc >= 0) {
         SetShaderValue(shader, modelOpacityLoc, &opaque, SHADER_UNIFORM_FLOAT);
+    }
+    const float noInteractionHighlight = 0.0f;
+    if (interactionHighlightStrengthLoc >= 0) {
+        SetShaderValue(
+                shader,
+                interactionHighlightStrengthLoc,
+                &noInteractionHighlight,
+                SHADER_UNIFORM_FLOAT);
     }
 
     SectorDynamicLightShaderLocations dynamicLocations;
@@ -1787,6 +1869,9 @@ void SectorStaticModelRenderer::Draw(
                                 maps[MATERIAL_MAP_DIFFUSE].texture.id != 0;
                     }
                     pbrMaterial = NormalizeSectorPbrMaterial(pbrMaterial);
+                    pbrMaterial.emissiveStrength = ScaleSectorPbrEmissiveStrength(
+                            pbrMaterial.emissiveStrength,
+                            staticModel.emissiveScale);
                     if (baseColorFactorLoc >= 0) {
                         SetShaderValue(
                                 shader,
@@ -1892,7 +1977,8 @@ void SectorStaticModelRenderer::Draw(
              &portalCulled,
              &skipped,
              staticCaptureOnly,
-             &runtimeObjectWorld](
+             &runtimeObjectWorld,
+             useHighlight](
                     engine::Entity entity,
                     SectorObjectTransform& transform,
                     SectorObject& object,
@@ -1928,10 +2014,16 @@ void SectorStaticModelRenderer::Draw(
                         transform.rotationZRadians,
                         dynamicModel.scale);
                 const Matrix modelTransform = MatrixMultiply(model.transform, authoredTransform);
+                const BoundingBox* receiverLocalBounds =
+                        modelAsset->hasAnimatedLocalBounds
+                        ? &modelAsset->animatedLocalBounds
+                        : (modelAsset->hasLocalBounds
+                                ? &modelAsset->localBounds
+                                : nullptr);
                 const SectorReceiverBounds receiverBounds =
-                        modelAsset->hasLocalBounds
+                        receiverLocalBounds != nullptr
                         ? TransformSectorStaticSpecularReceiverBounds(
-                                modelAsset->localBounds,
+                                *receiverLocalBounds,
                                 authoredTransform,
                                 object.currentSectorId,
                                 renderPosition)
@@ -1962,7 +2054,13 @@ void SectorStaticModelRenderer::Draw(
                         objectProbeBakeCurrent,
                         environment,
                         true,
-                        dynamicModel.opacity);
+                        &instance,
+                        &instance.meshNodeMatrices,
+                        dynamicModel.emissiveScale,
+                        dynamicModel.opacity,
+                        entity == useHighlight.entity
+                                ? useHighlight.strength
+                                : 0.0f);
                 if (fading) {
                     rlDisableColorBlend();
                     rlEnableDepthMask();
@@ -2105,6 +2203,14 @@ void SectorStaticModelRenderer::DrawViewmodel(
     const float opaque = 1.0f;
     if (modelOpacityLoc >= 0) {
         SetShaderValue(shader, modelOpacityLoc, &opaque, SHADER_UNIFORM_FLOAT);
+    }
+    const float noInteractionHighlight = 0.0f;
+    if (interactionHighlightStrengthLoc >= 0) {
+        SetShaderValue(
+                shader,
+                interactionHighlightStrengthLoc,
+                &noInteractionHighlight,
+                SHADER_UNIFORM_FLOAT);
     }
 
     SectorDynamicLightShaderLocations dynamicLocations;

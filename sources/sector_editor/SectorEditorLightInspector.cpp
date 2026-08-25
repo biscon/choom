@@ -6,6 +6,7 @@
 #include "sector_demo/SectorUnits.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <type_traits>
 
 namespace game {
@@ -376,6 +377,7 @@ float DynamicLightInspectorContentHeight(float rowH, float gap, bool hasIdError,
 {
     float height = 38.0f; // Light title.
     height += rowH + gap; // Id.
+    height += rowH + gap; // Script instance ID.
     if (hasIdError) {
         height += 36.0f;
     }
@@ -394,6 +396,7 @@ float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdEr
 {
     float height = 38.0f; // Light title.
     height += rowH + gap; // Id.
+    height += rowH + gap; // Script instance ID.
     if (hasIdError) {
         height += 36.0f;
     }
@@ -407,6 +410,63 @@ float DynamicSpotLightInspectorContentHeight(float rowH, float gap, bool hasIdEr
     height += 36.0f + gap; // Swatch.
     height += LightAtmosphereInspectorContentHeight(rowH, gap, atmosphere, true);
     return height;
+}
+
+template <typename Light>
+void DrawDynamicLightInstanceIdRow(
+        engine::UIContext& ui,
+        const engine::UIConfig& config,
+        engine::Input& input,
+        engine::AssetManager& assets,
+        engine::FontHandle font,
+        float contentW,
+        float rowH,
+        float gap,
+        float& y,
+        Light& light,
+        InspectorIdUiState& idState,
+        SectorEditorLightEditingService& editing,
+        const char* controlId)
+{
+    constexpr int kind = std::is_same_v<Light, SectorTopologyDynamicPointLight>
+            ? 0
+            : std::is_same_v<Light, SectorTopologyDynamicSpotLight> ? 1 : 2;
+    if (idState.dynamicLightInstanceIdNumericId != light.id
+            || idState.dynamicLightInstanceIdKind != kind) {
+        std::snprintf(
+                idState.dynamicLightInstanceIdBuffer,
+                sizeof(idState.dynamicLightInstanceIdBuffer),
+                "%s",
+                light.instanceId.c_str());
+        idState.dynamicLightInstanceIdNumericId = light.id;
+        idState.dynamicLightInstanceIdKind = kind;
+        idState.idEditError.clear();
+    }
+    constexpr float labelW = 112.0f;
+    engine::Text(
+            ui, config, assets,
+            Rectangle{0.0f, y, labelW, rowH},
+            font,
+            "Instance ID",
+            engine::UITextJustify::Left,
+            config.mutedTextColor);
+    const engine::UITextInputResult result = engine::TextInput(
+            ui, config, input, assets,
+            controlId,
+            Rectangle{labelW, y, std::max(0.0f, contentW - labelW), rowH},
+            font,
+            idState.dynamicLightInstanceIdBuffer,
+            sizeof(idState.dynamicLightInstanceIdBuffer),
+            1,
+            sizeof(idState.dynamicLightInstanceIdBuffer) - 1,
+            engine::UITextJustify::Left);
+    if (result.submitted) {
+        editing.SetDynamicLightInstanceId(
+                light,
+                std::string{idState.dynamicLightInstanceIdBuffer},
+                idState.idEditError);
+    }
+    y += rowH + gap;
 }
 
 bool DrawSelectedStaticLightInspector(
@@ -873,6 +933,12 @@ bool DrawSelectedDynamicLightInspector(
     engine::Text(ui, config, assets, Rectangle{labelW, y, contentW - labelW, rowH}, font, TextFormat("%d", light.id), engine::UITextJustify::Left, config.textColor);
     y += rowH + gap;
 
+    DrawDynamicLightInstanceIdRow(
+            ui, config, input, assets, font,
+            contentW, rowH, gap, y,
+            light, inspectorIdUiState, lightEditing,
+            "sector_editor_dynamic_light_instance_id");
+
     if (!inspectorIdUiState.idEditError.empty()) {
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, inspectorIdUiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
         y += 36.0f;
@@ -1116,6 +1182,12 @@ bool DrawSelectedDynamicSpotLightInspector(
     engine::Text(ui, config, assets, Rectangle{0.0f, y, labelW, rowH}, font, "Id", engine::UITextJustify::Left, config.mutedTextColor);
     engine::Text(ui, config, assets, Rectangle{labelW, y, contentW - labelW, rowH}, font, TextFormat("%d", light.id), engine::UITextJustify::Left, config.textColor);
     y += rowH + gap;
+
+    DrawDynamicLightInstanceIdRow(
+            ui, config, input, assets, font,
+            contentW, rowH, gap, y,
+            light, inspectorIdUiState, lightEditing,
+            "sector_editor_dynamic_spot_light_instance_id");
 
     if (!inspectorIdUiState.idEditError.empty()) {
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 34.0f}, font, inspectorIdUiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);
@@ -1451,6 +1523,7 @@ float RectLightInspectorContentHeight(
         const SectorLightAtmosphereSettings& atmosphere)
 {
     float height = 38.0f + rowH + gap + (hasIdError ? 36.0f : 0.0f);
+    if (dynamic) height += rowH + gap;
     height += 2.0f * (rowH + gap); // Delete and convert.
     height += (dynamic ? 9.0f : 1.0f) * (rowH + gap); // Runtime and shadow controls.
     height += 13.0f * (rowH + gap); // Position, target, Point Down, roll, size, range, intensity.
@@ -1480,6 +1553,13 @@ bool DrawRectLightInspector(
     engine::Text(ui, config, assets, {88.0f, y, contentW - 88.0f, rowH}, font,
             TextFormat("%d", light.id), engine::UITextJustify::Left, config.textColor);
     y += rowH + gap;
+    if constexpr (Dynamic) {
+        DrawDynamicLightInstanceIdRow(
+                ui, config, input, assets, font,
+                contentW, rowH, gap, y,
+                light, inspectorIdUiState, editing,
+                "sector_editor_dynamic_rect_light_instance_id");
+    }
     if (!inspectorIdUiState.idEditError.empty()) {
         engine::Text(ui, config, assets, {0.0f, y, contentW, 34.0f}, font,
                 inspectorIdUiState.idEditError.c_str(), engine::UITextJustify::Left, config.invalidColor);

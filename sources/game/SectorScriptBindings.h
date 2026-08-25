@@ -60,18 +60,38 @@ struct SectorScriptNpcMoveDiagnostics {
     std::array<char, 192> lastOutcome{};
 };
 
+struct SectorScriptDoorPermission {
+    engine::ScriptTaskHandle task{};
+    engine::Entity entity = engine::NullEntity();
+    float targetOpenFraction = 0.0f;
+    bool active = false;
+};
+
+struct SectorScriptAudioApi {
+    void* userData = nullptr;
+    bool (*playMapSound)(void*, engine::EngineContext&, const std::string&,
+            float, float, std::string&) = nullptr;
+    bool (*playSoundEmitter)(void*, engine::EngineContext&, const std::string&,
+            const float*, float, std::string&) = nullptr;
+    bool (*stopSoundEmitter)(void*, engine::EngineContext&, const std::string&,
+            std::string&) = nullptr;
+};
+
 struct SectorScriptHost {
     SectorRuntimeObjectState* runtimeObjects = nullptr;
     SectorNavigationWorld* navigation = nullptr;
     NpcNavigationRuntime* npcNavigation = nullptr;
     SectorTopologyMap* map = nullptr;
+    SectorScriptAudioApi audio;
     engine::ScriptRuntime* scripts = nullptr;
     std::vector<SectorScriptDoorMove> doorMoves;
     std::vector<SectorScriptNpcMove> npcMoves;
     std::vector<SectorScriptTriggerState> triggers;
     SectorScriptNpcMoveDiagnostics npcMoveDiagnostics;
+    SectorScriptDoorPermission doorPermission;
     uint64_t nextDoorMoveToken = 1;
     uint64_t nextNpcMoveToken = 1;
+    bool dynamicLightsDirty = false;
 };
 
 void InitializeSectorScriptHost(
@@ -80,7 +100,8 @@ void InitializeSectorScriptHost(
         SectorTopologyMap& map,
         engine::ScriptRuntime& scripts,
         SectorNavigationWorld* navigation = nullptr,
-        NpcNavigationRuntime* npcNavigation = nullptr);
+        NpcNavigationRuntime* npcNavigation = nullptr,
+        SectorScriptAudioApi audio = {});
 
 void ResetSectorScriptHost(SectorScriptHost& host);
 
@@ -100,5 +121,14 @@ bool SetSectorScriptTriggerEnabled(
         const std::string& triggerId,
         bool enabled,
         std::string& error);
+
+bool RequestSectorScriptDoorUse(
+        engine::EngineContext& context,
+        SectorScriptHost& host,
+        engine::Entity doorEntity);
+
+void UpdateSectorScriptDoorPermission(
+        engine::EngineContext& context,
+        SectorScriptHost& host);
 
 } // namespace game

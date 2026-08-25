@@ -91,6 +91,7 @@ SectorEditorAddDynamicLightResult AddDynamicLightToSector(
 
     SectorTopologyDynamicPointLight light;
     light.id = lightId;
+    light.instanceId = AllocateSectorDynamicLightInstanceId(map, "point", lightId);
     light.position = Vector3{
             mapPoint.x,
             sector->floorZ + SectorWorldToAuthoringDistance(1.8f),
@@ -175,6 +176,7 @@ SectorEditorAddDynamicSpotLightResult AddDynamicSpotLightToSector(
 
     SectorTopologyDynamicSpotLight light;
     light.id = lightId;
+    light.instanceId = AllocateSectorDynamicLightInstanceId(map, "spot", lightId);
     light.position = Vector3{
             mapPoint.x,
             sector->floorZ + SectorWorldToAuthoringDistance(1.8f),
@@ -225,6 +227,7 @@ SectorEditorAddDynamicRectLightResult AddDynamicRectLightToSector(
     if (!IsValidSectorTopologyId(lightId)) return {false, -1, "Dynamic rect placement failed: no light IDs available"};
     SectorTopologyDynamicRectLight light;
     light.id = lightId;
+    light.instanceId = AllocateSectorDynamicLightInstanceId(map, "rect", lightId);
     light.position = {mapPoint.x, sector->floorZ + SectorWorldToAuthoringDistance(1.8f), mapPoint.y};
     light.target = {mapPoint.x,
             sector->floorZ + SectorWorldToAuthoringDistance(1.0f), mapPoint.y};
@@ -318,6 +321,7 @@ SectorEditorAddDoorResult AddDoorToPortal(
             (startMap.y + endMap.y) * 0.5f};
     object.yawRadians = 0.0f;
     object.door = SectorPlacedDoor{};
+    object.door.instanceId = AllocateSectorDoorInstanceId(map, objectId);
     object.door.anchor.lineDefId = lineDef->id;
     object.door.anchor.frontSectorId = frontSideDef->sectorId;
     object.door.anchor.backSectorId = backSideDef->sectorId;

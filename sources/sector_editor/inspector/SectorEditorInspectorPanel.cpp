@@ -8,8 +8,10 @@
 #include "sector_editor/SectorEditorUiHelpers.h"
 #include "sector_editor/SectorEditorVertexInspector.h"
 #include "sector_editor/inspector/SectorEditorLevelMarkerInspector.h"
+#include "sector_editor/inspector/SectorEditorSoundEmitterInspector.h"
 #include "sector_editor/inspector/SectorEditorTriggerInspector.h"
 #include "sector_editor/services/texture_catalog/SectorEditorTextureCatalogService.h"
+#include "sector_editor/services/sounds/SectorEditorSoundService.h"
 #include "sector_editor/tools/doors/SectorEditorDoorModals.h"
 #include "sector_editor/tools/materials/SectorEditorMaterialInspector.h"
 #include "sector_editor/tools/placed_objects/SectorEditorPlacedObjectInspector.h"
@@ -398,6 +400,14 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringLevelMarker
             ? FindSectorAuthoringLevelMarker(authoringGraph, inspectorTarget.levelMarkerId)
             : nullptr;
+    const SectorAuthoringSoundEmitter* selectedSoundEmitter =
+            inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringSoundEmitter
+            ? FindSectorAuthoringSoundEmitter(authoringGraph, inspectorTarget.soundEmitterId)
+            : nullptr;
+    if (selectedSoundEmitter == nullptr) {
+        context.soundEmitterUiState.bufferedEmitterId = -1;
+        context.soundEmitterUiState.bufferedSoundId.clear();
+    }
     const SectorAuthoringTrigger* selectedTrigger =
             inspectorTarget.kind == SectorEditorInspectorTargetKind::AuthoringTrigger
             ? FindSectorAuthoringTrigger(authoringGraph, inspectorTarget.triggerId)
@@ -581,6 +591,10 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
                     context.levelMarkerUiState,
                     rowH,
                     gap);
+        }
+        if (selectedSoundEmitter != nullptr) {
+            return MeasureSectorEditorSoundEmitterInspectorContentHeight(
+                    context.soundEmitterUiState, rowH, gap);
         }
         if (selectedTrigger != nullptr) {
             return MeasureSectorEditorTriggerInspectorContentHeight(
@@ -1788,6 +1802,126 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
         }
         y += footstepRow.height + gap;
 
+        if (uiState.roomtoneBufferedFaceId != faceAnchorId) {
+            std::snprintf(uiState.roomtoneSoundIdBuffer,
+                    sizeof(uiState.roomtoneSoundIdBuffer), "%s",
+                    selectedAuthoringFaceAnchor->roomtone.soundId.c_str());
+            uiState.roomtoneBufferedFaceId = faceAnchorId;
+            uiState.roomtoneVolumeInput = {};
+            uiState.roomtoneFadeInput = {};
+        }
+
+        const float thirdW = (contentW - gap * 2.0f) / 3.0f;
+        const SectorRoomtoneMode currentMode = selectedAuthoringFaceAnchor->roomtone.mode;
+        const bool inheritClicked = engine::ToolButton(
+                ui, config, input, assets, "sector_editor_roomtone_inherit",
+                {0.0f, y, thirdW, rowH}, font, "Inherit",
+                currentMode == SectorRoomtoneMode::Inherit);
+        const bool playClicked = engine::ToolButton(
+                ui, config, input, assets, "sector_editor_roomtone_play",
+                {thirdW + gap, y, thirdW, rowH}, font, "Play",
+                currentMode == SectorRoomtoneMode::Play);
+        const bool silenceClicked = engine::ToolButton(
+                ui, config, input, assets, "sector_editor_roomtone_silence",
+                {(thirdW + gap) * 2.0f, y, thirdW, rowH}, font, "Silence",
+                currentMode == SectorRoomtoneMode::Silence);
+        if (inheritClicked || playClicked || silenceClicked) {
+            const SectorRoomtoneMode nextMode = inheritClicked
+                    ? SectorRoomtoneMode::Inherit
+                    : playClicked ? SectorRoomtoneMode::Play
+                                  : SectorRoomtoneMode::Silence;
+            mutateFaceAnchor("Updated authoring face roomtone mode",
+                    [nextMode](SectorAuthoringFaceAnchor& anchor) {
+                if (anchor.roomtone.mode == nextMode) return false;
+                anchor.roomtone.mode = nextMode;
+                return true;
+            });
+        }
+        y += rowH + gap;
+
+        constexpr float RoomtoneLabelW = 92.0f;
+        engine::Text(ui, config, assets, {0.0f, y, RoomtoneLabelW, rowH}, font,
+                "Roomtone", engine::UITextJustify::Left, config.mutedTextColor);
+        const engine::UITextInputResult roomtoneSoundResult = engine::TextInput(
+                ui, config, input, assets, "sector_editor_roomtone_sound_id",
+                {RoomtoneLabelW, y, contentW - RoomtoneLabelW, rowH}, font,
+                uiState.roomtoneSoundIdBuffer,
+                sizeof(uiState.roomtoneSoundIdBuffer), 0,
+                sizeof(uiState.roomtoneSoundIdBuffer) - 1,
+                engine::UITextJustify::Left);
+        if (roomtoneSoundResult.submitted) {
+            const std::string soundId{uiState.roomtoneSoundIdBuffer};
+            const SectorSoundDefinition* definition = context.sounds.Find(soundId);
+            if (!soundId.empty()
+                    && (definition == nullptr || definition->type != SectorSoundType::Music)) {
+                statusText = "Roomtone must reference a Music map sound ID";
+            } else {
+                mutateFaceAnchor("Updated authoring face roomtone sound",
+                        [&soundId](SectorAuthoringFaceAnchor& anchor) {
+                    if (anchor.roomtone.soundId == soundId) return false;
+                    anchor.roomtone.soundId = soundId;
+                    return true;
+                });
+            }
+        }
+        y += rowH + gap;
+
+        const SectorEditorInspectorNumericRowLayout roomtoneVolumeLayout =
+                BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+        const SectorEditorFloatInputResult roomtoneVolume = DrawLabeledFloatInput(
+                ui, config, input, assets, font,
+                "sector_editor_roomtone_volume", "Volume",
+                roomtoneVolumeLayout.labelRect, roomtoneVolumeLayout.inputRect,
+                engine::UITextJustify::Right,
+                selectedAuthoringFaceAnchor->roomtone.volume,
+                uiState.roomtoneVolumeInput, 0.0f, 1.0f, 2);
+        if (roomtoneVolume.changed && roomtoneVolume.finite) {
+            mutateFaceAnchor("Updated authoring face roomtone volume",
+                    [value = roomtoneVolume.value](SectorAuthoringFaceAnchor& anchor) {
+                if (anchor.roomtone.volume == value) return false;
+                anchor.roomtone.volume = value;
+                return true;
+            });
+        }
+        y += rowH + gap;
+
+        bool overrideFade = selectedAuthoringFaceAnchor->roomtone.fadeMilliseconds
+                != SectorRoomtoneSettings::UseMapFadeMilliseconds;
+        if (engine::Checkbox(ui, config, input, assets,
+                    "sector_editor_roomtone_fade_override", {0.0f, y, contentW, rowH},
+                    font, "Override Fade", overrideFade)) {
+            mutateFaceAnchor("Updated authoring face roomtone fade override",
+                    [overrideFade, &context](SectorAuthoringFaceAnchor& anchor) {
+                const int next = overrideFade
+                        ? context.topologyMap.audioSettings.roomtoneFadeMilliseconds
+                        : SectorRoomtoneSettings::UseMapFadeMilliseconds;
+                if (anchor.roomtone.fadeMilliseconds == next) return false;
+                anchor.roomtone.fadeMilliseconds = next;
+                return true;
+            });
+        }
+        y += rowH + gap;
+        if (overrideFade) {
+            const SectorEditorInspectorNumericRowLayout fadeLayout =
+                    BuildSectorEditorInspectorRightFloatRowLayout(y, contentW, rowH, gap);
+            const SectorEditorIntInputResult fade = DrawLabeledIntInput(
+                    ui, config, input, assets, font,
+                    "sector_editor_roomtone_fade_ms", "Fade ms",
+                    fadeLayout.labelRect, fadeLayout.inputRect,
+                    engine::UITextJustify::Right,
+                    selectedAuthoringFaceAnchor->roomtone.fadeMilliseconds,
+                    uiState.roomtoneFadeInput, 0, 60000, 50);
+            if (fade.changed) {
+                mutateFaceAnchor("Updated authoring face roomtone fade",
+                        [value = fade.value](SectorAuthoringFaceAnchor& anchor) {
+                    if (anchor.roomtone.fadeMilliseconds == value) return false;
+                    anchor.roomtone.fadeMilliseconds = value;
+                    return true;
+                });
+            }
+            y += rowH + gap;
+        }
+
         engine::Separator(config, Rectangle{scroll.viewport.x, scroll.viewport.y - uiState.inspectorScroll.offset.y + y, contentW, 12.0f});
         y += 18.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 30.0f}, font, "Lighting", engine::UITextJustify::Left, config.textColor);
@@ -2732,6 +2866,20 @@ SectorEditorInspectorPanelResult DrawSectorEditorInspectorPanel(
             AppendRequest(
                     result,
                     SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedLevelMarkerConfirmation);
+        }
+        engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
+        engine::EndPanel(ui, config, panel);
+        return result;
+    }
+
+    if (selectedSoundEmitter != nullptr) {
+        const bool deleteRequested = DrawSectorEditorSoundEmitterInspector(
+                ui, config, input, assets, font, contentW, rowH, gap,
+                *selectedSoundEmitter, context.soundEmitterUiState,
+                context.soundEmitterEditing, context.sounds);
+        if (deleteRequested) {
+            AppendRequest(result,
+                    SectorEditorInspectorPanelRequestKind::OpenDeleteSelectedSoundEmitterConfirmation);
         }
         engine::EndScrollArea(ui, config, input, scroll, uiState.inspectorScroll);
         engine::EndPanel(ui, config, panel);

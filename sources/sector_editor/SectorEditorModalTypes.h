@@ -81,24 +81,17 @@ enum class SectorEditorDoorSoundTarget {
     Close
 };
 
-struct AddMapSoundState {
-    bool open = false;
-    SectorEditorAudioAssetPickerState assetPicker;
-    char soundIdBuffer[96] = {};
-    SectorSoundType type = SectorSoundType::Sound;
-    std::string validationMessage;
-};
-
-struct SectorEditorAssetPruneModalState {
-    bool open = false;
-    bool pruneTextures = false;
-    bool pruneSounds = true;
+enum class SectorEditorSoundPickerTargetKind {
+    DoorOpen,
+    DoorClose,
+    SoundEmitter
 };
 
 struct SoundPickerState {
     bool open = false;
-    SectorEditorDoorSoundTarget target = SectorEditorDoorSoundTarget::Open;
-    int runtimeObjectId = -1;
+    SectorEditorSoundPickerTargetKind targetKind =
+            SectorEditorSoundPickerTargetKind::DoorOpen;
+    int targetId = -1;
     int selectedSoundIndex = -1;
     engine::UIScrollState scroll;
     std::vector<std::string> soundIds;

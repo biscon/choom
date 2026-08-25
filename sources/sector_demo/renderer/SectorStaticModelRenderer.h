@@ -4,6 +4,7 @@
 #include "engine/assets/ModelAssets.h"
 #include "engine/render/HdrEffectPolicy.h"
 #include "sector_demo/renderer/SectorDynamicLightingRenderer.h"
+#include "sector_demo/SectorUseInteraction.h"
 #include "sector_demo/renderer/SectorFog.h"
 #include "sector_demo/renderer/SectorStaticSpecularLighting.h"
 #include "sector_demo/renderer/SectorPbrEnvironment.h"
@@ -154,6 +155,21 @@ inline engine::ModelMaterialAsset NormalizeSectorPbrMaterial(
     return material;
 }
 
+inline float ScaleSectorPbrEmissiveStrength(
+        float authoredStrength,
+        float propScale)
+{
+    const double strength = std::isfinite(authoredStrength)
+            ? std::max(static_cast<double>(authoredStrength), 0.0)
+            : 1.0;
+    const double scale = std::isfinite(propScale)
+            ? std::max(static_cast<double>(propScale), 0.0)
+            : 1.0;
+    return static_cast<float>(std::min(
+            strength * scale,
+            static_cast<double>(engine::Rgba16fMaximumFinite)));
+}
+
 inline SectorPbrDrawState BuildSectorPbrDrawState(
         SectorPbrLightingPath path,
         bool validObjectProbe,
@@ -291,7 +307,8 @@ public:
             const TextureCubemap* environment,
             bool useBakedAmbientOcclusion,
             std::string& renderDebugText,
-            bool staticCaptureOnly = false);
+            bool staticCaptureOnly = false,
+            SectorUseHighlight useHighlight = {});
 
     void DrawViewmodel(
             const engine::ModelAsset& asset,
@@ -371,7 +388,11 @@ private:
             bool objectProbeBakeCurrent,
             const TextureCubemap* environment,
             bool allowSkinning,
-            float opacity = 1.0f);
+            const engine::AnimatedModelInstance* animatedInstance = nullptr,
+            const std::vector<Matrix>* meshNodeMatrices = nullptr,
+            float emissiveScale = 1.0f,
+            float opacity = 1.0f,
+            float interactionHighlightStrength = 0.0f);
     const CachedModel* FindCachedModel(
             engine::ModelHandle handle,
             int lightmapModelIndex) const;
@@ -387,6 +408,7 @@ private:
     int normalScaleLoc = -1;
     int occlusionStrengthLoc = -1;
     int modelOpacityLoc = -1;
+    int interactionHighlightStrengthLoc = -1;
     int hasBaseColorTextureLoc = -1;
     int hasMetallicTextureLoc = -1;
     int hasNormalTextureLoc = -1;

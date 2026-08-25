@@ -1,0 +1,27 @@
+diff --git a/src/raylib.h b/src/raylib.h
+--- a/src/raylib.h
++++ b/src/raylib.h
+@@ -1689,6 +1689,7 @@ RLAPI bool IsSoundPlaying(Sound sound);                               // Check if
+ RLAPI void SetSoundVolume(Sound sound, float volume);                 // Set volume for a sound (1.0 is max level)
+ RLAPI void SetSoundPitch(Sound sound, float pitch);                   // Set pitch for a sound (1.0 is base level)
+ RLAPI void SetSoundPan(Sound sound, float pan);                       // Set pan for a sound (-1.0 left, 0.0 center, 1.0 right)
++RLAPI void SetSoundLooping(Sound sound, bool looping);                // Set whether a sound loops seamlessly
+ RLAPI Wave WaveCopy(Wave wave);                                       // Copy a wave to a new wave
+ RLAPI void WaveCrop(Wave *wave, int initFrame, int finalFrame);       // Crop a wave to defined frames range
+ RLAPI void WaveFormat(Wave *wave, int sampleRate, int sampleSize, int channels); // Convert wave data to desired format
+diff --git a/src/raudio.c b/src/raudio.c
+--- a/src/raudio.c
++++ b/src/raudio.c
+@@ -1242,6 +1242,12 @@ void SetSoundPan(Sound sound, float pan)
+     SetAudioBufferPan(sound.stream.buffer, pan);
+ }
+ 
++// Set whether a sound loops seamlessly
++void SetSoundLooping(Sound sound, bool looping)
++{
++    if (sound.stream.buffer != NULL) sound.stream.buffer->looping = looping;
++}
++
+ // Convert wave data to desired format
+ void WaveFormat(Wave *wave, int sampleRate, int sampleSize, int channels)
+ {

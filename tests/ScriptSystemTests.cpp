@@ -203,6 +203,49 @@ end
     engine::ScriptSystemShutdownForMap(context, runtime);
 }
 
+void ObservedForegroundCallsRetainYieldedReturnValues()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    TestFiles files("observed_foreground");
+    files.Write(files.scriptPath, R"(
+function delayedPermission()
+    delay(0)
+    return true, "allowed"
+end
+function immediatePermission()
+    return false
+end
+)");
+    assert(CreateRuntime(context, runtime, persistent, files));
+
+    const engine::ScriptCallOutcome delayed =
+            engine::ScriptSystemCallObservedForegroundHook(
+                    runtime, "delayedPermission");
+    assert(delayed.result == engine::ScriptCallResult::Started);
+    engine::ScriptSystemUpdate(context, runtime, 0.0f);
+    engine::ScriptObservedCallOutcome completion;
+    assert(engine::ScriptSystemTakeObservedCallOutcome(
+            runtime, delayed.task, completion));
+    assert(completion.state == engine::ScriptTaskState::Completed);
+    assert(completion.values.size() == 2);
+    assert(std::get<bool>(completion.values[0]));
+    assert(std::get<std::string>(completion.values[1]) == "allowed");
+    assert(!engine::ScriptSystemTakeObservedCallOutcome(
+            runtime, delayed.task, completion));
+
+    const engine::ScriptCallOutcome immediate =
+            engine::ScriptSystemCallObservedForegroundHook(
+                    runtime, "immediatePermission");
+    assert(immediate.result == engine::ScriptCallResult::Completed);
+    assert(immediate.immediateValues.size() == 1);
+    assert(!std::get<bool>(immediate.immediateValues[0]));
+    assert(!engine::ScriptSystemTakeObservedCallOutcome(
+            runtime, immediate.task, completion));
+    engine::ScriptSystemShutdownForMap(context, runtime);
+}
+
 void CoreLifecycleLuaBindingsControlQueuedAndActiveTasks()
 {
     engine::EngineContext context;
@@ -580,6 +623,7 @@ int main()
     MissingAndBrokenScriptsFollowLifecyclePolicy();
     YieldedInitPersistenceAndShutdownWork();
     BackgroundStartsAreDeferredAndForegroundIsSerialized();
+    ObservedForegroundCallsRetainYieldedReturnValues();
     CoreLifecycleLuaBindingsControlQueuedAndActiveTasks();
     AsyncOperationsDeliverValuesAndCancelOnce();
     RunawayManagedTaskIsStoppedWithoutFreezingTheRuntime();

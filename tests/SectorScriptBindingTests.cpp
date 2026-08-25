@@ -82,13 +82,14 @@ engine::Entity AddDoor(
         game::SectorRuntimeObjectState& objects)
 {
     const engine::Entity entity = context.world.CreateEntity();
-    context.world.Add(entity, game::SectorDoor{42, true});
+    context.world.Add(entity, game::SectorDoor{42, true, "test_door"});
     context.world.Add(entity, game::SectorDoorMotion{
             game::SectorDoorMotionType::SlideVertical,
             0.0f,
             0.0f,
             1.0f,
             2.0f});
+    context.world.Add(entity, game::SectorDoorInteraction{});
     objects.placedObjectEntities.push_back({42, entity});
     return entity;
 }
@@ -758,6 +759,115 @@ end
     game::ResetSectorScriptHost(host);
 }
 
+void StableDoorAndDynamicLightBindingsMutateRuntimeTargets()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    const engine::Entity door = AddDoor(context, objects);
+    const engine::Entity staticProp = context.world.CreateEntity();
+    game::SectorStaticModel staticModel;
+    staticModel.instanceId = "static_lamp";
+    context.world.Add(staticProp, staticModel);
+    const engine::Entity dynamicProp = context.world.CreateEntity();
+    game::SectorDynamicModel dynamicModel;
+    dynamicModel.instanceId = "dynamic_lamp";
+    context.world.Add(dynamicProp, dynamicModel);
+    game::SectorTopologyDynamicPointLight light;
+    light.id = 7;
+    light.instanceId = "warning_light";
+    map.dynamicPointLights.push_back(light);
+    ScriptFiles files;
+
+    game::InitializeSectorScriptHost(host, objects, map, runtime);
+    files.Write(R"(
+function init()
+    local opened = openDoor("test_door")
+    local disabled = setDynamicLightEnabled("warning_light", false)
+    local intensity = setDynamicLightIntensity("warning_light", 3.5)
+    local colored = setDynamicLightColor("warning_light", 255, 40, 20)
+    local staticEmission = setPropEmissiveScale("static_lamp", 0.0)
+    local dynamicEmission = setPropEmissiveScale("dynamic_lamp", 2.5)
+    local missingEmission, missingReason = setPropEmissiveScale("missing_lamp", 1.0)
+    setPersistentBool("bindings_ok", opened and disabled and intensity and colored
+        and staticEmission and dynamicEmission and not missingEmission
+        and type(missingReason) == "string")
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    assert(persistent.bools.at("bindings_ok"));
+    assert(context.world.Get<game::SectorDoorMotion>(door).targetOpenFraction == 1.0f);
+    assert(!map.dynamicPointLights[0].enabled);
+    assert(std::fabs(map.dynamicPointLights[0].intensity - 3.5f) < 0.0001f);
+    assert(map.dynamicPointLights[0].color.r == 255
+            && map.dynamicPointLights[0].color.g == 40
+            && map.dynamicPointLights[0].color.b == 20);
+    assert(context.world.Get<game::SectorStaticModel>(staticProp).emissiveScale
+            == 0.0f);
+    assert(std::fabs(
+            context.world.Get<game::SectorDynamicModel>(dynamicProp).emissiveScale
+                    - 2.5f) < 0.0001f);
+    assert(host.dynamicLightsDirty);
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+
+    game::InitializeSectorScriptHost(host, objects, map, runtime);
+    files.Write(R"(
+function init()
+    setPropEmissiveScale("static_lamp", -0.5)
+end
+)");
+    assert(!Create(context, runtime, persistent, host, files));
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+}
+
+void DoorPermissionCallbacksCanYieldAndMustReturnTrue()
+{
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    const engine::Entity door = AddDoor(context, objects);
+    game::SectorDoorInteraction& interaction =
+            context.world.Get<game::SectorDoorInteraction>(door);
+    interaction.canOpenScript = "allowOpenLater";
+    interaction.canCloseScript = "denyClose";
+    ScriptFiles files;
+
+    game::InitializeSectorScriptHost(host, objects, map, runtime);
+    files.Write(R"(
+function allowOpenLater()
+    delay(0)
+    return true
+end
+function denyClose()
+    return false
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    assert(game::RequestSectorScriptDoorUse(context, host, door));
+    assert(host.doorPermission.active);
+    assert(context.world.Get<game::SectorDoorMotion>(door).targetOpenFraction == 0.0f);
+    engine::ScriptSystemUpdate(context, runtime, 0.0f);
+    game::UpdateSectorScriptDoorPermission(context, host);
+    assert(!host.doorPermission.active);
+    assert(context.world.Get<game::SectorDoorMotion>(door).targetOpenFraction == 1.0f);
+
+    game::SectorDoorMotion& motion = context.world.Get<game::SectorDoorMotion>(door);
+    motion.openFraction = 1.0f;
+    motion.targetOpenFraction = 1.0f;
+    assert(game::RequestSectorScriptDoorUse(context, host, door));
+    assert(motion.targetOpenFraction == 1.0f);
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+}
+
 void TravelPreservesFirstRequest()
 {
     engine::EngineContext context;
@@ -890,11 +1000,68 @@ void TriggerContainmentUsesExplicitCoordinateSpaces()
     assert(!game::SectorTriggerContainsWorldPoint(hubLikeTrigger, 0.0f, 28.0f));
 }
 
+void MapAudioBindingsForwardOptionalPlaybackSettings()
+{
+    struct Capture {
+        bool mapPlayed = false;
+        bool emitterPlayed = false;
+        bool emitterStopped = false;
+    } capture;
+    game::SectorScriptAudioApi audio;
+    audio.userData = &capture;
+    audio.playMapSound = [](void* userData, engine::EngineContext&,
+                                const std::string& id, float volume, float pitch,
+                                std::string&) {
+        Capture& value = *static_cast<Capture*>(userData);
+        value.mapPlayed = id == "switch_click"
+                && std::fabs(volume - 0.4f) < 0.001f
+                && std::fabs(pitch - 1.2f) < 0.001f;
+        return value.mapPlayed;
+    };
+    audio.playSoundEmitter = [](void* userData, engine::EngineContext&,
+                                    const std::string& id, const float* volume,
+                                    float pitch, std::string&) {
+        Capture& value = *static_cast<Capture*>(userData);
+        value.emitterPlayed = id == "office_fan" && volume == nullptr
+                && std::fabs(pitch - 0.8f) < 0.001f;
+        return value.emitterPlayed;
+    };
+    audio.stopSoundEmitter = [](void* userData, engine::EngineContext&,
+                                    const std::string& id, std::string&) {
+        Capture& value = *static_cast<Capture*>(userData);
+        value.emitterStopped = id == "office_fan";
+        return value.emitterStopped;
+    };
+
+    engine::EngineContext context;
+    engine::ScriptRuntime runtime;
+    engine::PersistentScriptStore persistent;
+    game::SectorRuntimeObjectState objects;
+    game::SectorTopologyMap map;
+    game::SectorScriptHost host;
+    ScriptFiles files;
+    game::InitializeSectorScriptHost(
+            host, objects, map, runtime, nullptr, nullptr, audio);
+    files.Write(R"(
+function init()
+    assert(playMapSound("switch_click", 0.4, 1.2))
+    assert(playSoundEmitter("office_fan", nil, 0.8))
+    assert(stopSoundEmitter("office_fan"))
+end
+)");
+    assert(Create(context, runtime, persistent, host, files));
+    assert(capture.mapPlayed && capture.emitterPlayed && capture.emitterStopped);
+    engine::ScriptSystemShutdownForMap(context, runtime);
+    game::ResetSectorScriptHost(host);
+}
+
 } // namespace
 
 void RunSectorScriptBindingTests()
 {
     DoorCompletionAndCancellationShareTheBackend();
+    StableDoorAndDynamicLightBindingsMutateRuntimeTargets();
+    DoorPermissionCallbacksCanYieldAndMustReturnTrue();
     BlockingNpcMoveCompletesAfterPhysicalArrival();
     BackgroundNpcPatrolYieldsWhenNavigationIsPrepared();
     KillingMovingNpcStopsRunawayPatrolWithoutFreezing();
@@ -905,5 +1072,6 @@ void RunSectorScriptBindingTests()
     NpcMoveRebuildDeletionUnloadAndImmediateFailuresResolve();
     TravelPreservesFirstRequest();
     TriggerContainmentUsesExplicitCoordinateSpaces();
+    MapAudioBindingsForwardOptionalPlaybackSettings();
     TriggerDispatchDelayRepeatAndEnableControls();
 }

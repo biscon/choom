@@ -3,8 +3,8 @@
 #include "engine/EngineContext.h"
 #include "engine/ui/UI.h"
 #include "sector_editor/SectorEditorTypes.h"
-#include "sector_editor/document/SectorEditorDocumentState.h"
 #include "sector_editor/services/sounds/SectorEditorSoundCatalogState.h"
+#include "sector_demo/SectorAuthoringGraph.h"
 #include "sector_demo/SectorTopologyMap.h"
 
 #include <string>
@@ -13,16 +13,18 @@
 namespace game {
 
 class SectorEditorRuntimeObjectEditingService;
+class SectorEditorSoundEmitterEditingService;
 
 struct SectorEditorSoundServiceContext {
     SectorEditorState& state;
-    SectorEditorDocumentLifecycleAccess lifecycle;
+    SectorAuthoringGraph& authoringGraph;
     SectorTopologyMap& map;
     SectorEditorSoundCatalogState& catalog;
     SectorEditorAudioAssetPickerSessionState& audioAssetPickerSession;
     std::string& statusText;
     engine::EngineContext& engineContext;
     SectorEditorRuntimeObjectEditingService* runtimeObjectEditing = nullptr;
+    SectorEditorSoundEmitterEditingService* soundEmitterEditing = nullptr;
 };
 
 class SectorEditorSoundService {
@@ -37,16 +39,8 @@ public:
     void RefreshCatalogHandles();
     void Shutdown();
 
-    void OpenAddModal();
-    void CloseAddModal();
-    bool AddSelected();
-    void DrawAddModal(
-            engine::UIContext& ui,
-            const engine::UIConfig& config,
-            engine::Input& input,
-            engine::FontHandle font);
-
     bool OpenDoorPicker(int runtimeObjectId, SectorEditorDoorSoundTarget target);
+    bool OpenSoundEmitterPicker(int emitterId);
     void ClosePicker();
     bool ApplyPickerSelection();
     void DrawPickerModal(
@@ -56,9 +50,6 @@ public:
             engine::FontHandle font);
 
 private:
-    void SelectAddPath(int pathIndex);
-    bool ValidateAdd(std::string& error) const;
-    void PreviewAddSelection();
     void PreviewPickerSelection();
     void StopPreview(SectorEditorAudioPreviewState& preview, bool unloadScope);
     void UpdatePreview(

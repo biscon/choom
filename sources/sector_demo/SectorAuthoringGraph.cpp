@@ -524,6 +524,7 @@ void CopySectorPropertiesToFaceAnchor(
     anchor.ceilingMaterialId = sector.ceilingMaterialId;
     anchor.footstepSet = sector.footstepSet;
     anchor.ceilingSky = sector.ceilingSky;
+    anchor.roomtone = sector.roomtone;
     anchor.floorUv = sector.floorUv;
     anchor.ceilingUv = sector.ceilingUv;
     anchor.floorDecal = sector.floorDecal;
@@ -546,6 +547,7 @@ void CopyFaceAnchorPropertiesToTopologySector(
     sector.ceilingMaterialId = anchor.ceilingMaterialId;
     sector.footstepSet = anchor.footstepSet;
     sector.ceilingSky = anchor.ceilingSky;
+    sector.roomtone = anchor.roomtone;
     sector.floorUv = anchor.floorUv;
     sector.ceilingUv = anchor.ceilingUv;
     sector.floorDecal = anchor.floorDecal;
@@ -1914,6 +1916,11 @@ int AllocateSectorAuthoringLevelMarkerId(const SectorAuthoringGraph& graph)
     return AllocateNextId(graph.levelMarkers);
 }
 
+int AllocateSectorAuthoringSoundEmitterId(const SectorAuthoringGraph& graph)
+{
+    return AllocateNextId(graph.soundEmitters);
+}
+
 int AllocateSectorAuthoringTriggerId(const SectorAuthoringGraph& graph)
 {
     int next = 1;
@@ -1937,6 +1944,11 @@ bool IsValidSectorAuthoringLevelMarkerReferenceId(const std::string& id)
                 || ch == '_'
                 || ch == '-';
     });
+}
+
+bool IsValidSectorAuthoringSoundEmitterReferenceId(const std::string& id)
+{
+    return IsValidSectorAuthoringLevelMarkerReferenceId(id);
 }
 
 bool IsValidSectorTriggerReferenceId(const std::string& id)
@@ -1976,6 +1988,18 @@ std::string AllocateSectorAuthoringTriggerReferenceId(const SectorAuthoringGraph
     for (int suffix = 1; suffix < std::numeric_limits<int>::max(); ++suffix) {
         const std::string candidate = "trigger_" + std::to_string(suffix);
         if (FindSectorAuthoringTriggerByReferenceId(graph, candidate) == nullptr) return candidate;
+    }
+    return {};
+}
+
+std::string AllocateSectorAuthoringSoundEmitterReferenceId(
+        const SectorAuthoringGraph& graph)
+{
+    for (int suffix = 1; suffix < std::numeric_limits<int>::max(); ++suffix) {
+        const std::string candidate = "sound_emitter_" + std::to_string(suffix);
+        if (FindSectorAuthoringSoundEmitterByReferenceId(graph, candidate) == nullptr) {
+            return candidate;
+        }
     }
     return {};
 }
@@ -2126,6 +2150,30 @@ const SectorAuthoringLevelMarker* FindSectorAuthoringLevelMarkerByReferenceId(
         if (marker.referenceId == referenceId) {
             return &marker;
         }
+    }
+    return nullptr;
+}
+
+const SectorAuthoringSoundEmitter* FindSectorAuthoringSoundEmitter(
+        const SectorAuthoringGraph& graph,
+        int id)
+{
+    return FindById(graph.soundEmitters, id);
+}
+
+SectorAuthoringSoundEmitter* FindSectorAuthoringSoundEmitter(
+        SectorAuthoringGraph& graph,
+        int id)
+{
+    return FindById(graph.soundEmitters, id);
+}
+
+const SectorAuthoringSoundEmitter* FindSectorAuthoringSoundEmitterByReferenceId(
+        const SectorAuthoringGraph& graph,
+        const std::string& referenceId)
+{
+    for (const SectorAuthoringSoundEmitter& emitter : graph.soundEmitters) {
+        if (emitter.referenceId == referenceId) return &emitter;
     }
     return nullptr;
 }
@@ -2584,6 +2632,30 @@ std::vector<SectorAuthoringValidationIssue> ValidateSectorAuthoringGraphReferenc
         }
     }
 
+    std::set<int> emitterIds;
+    std::set<std::string> emitterReferenceIds;
+    for (const SectorAuthoringSoundEmitter& emitter : graph.soundEmitters) {
+        if (!IsValidSectorAuthoringId(emitter.id)) {
+            AddIssue(issues, SectorAuthoringObjectKind::SoundEmitter, emitter.id,
+                     "Invalid authoring sound emitter ID");
+        } else if (!emitterIds.insert(emitter.id).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::SoundEmitter, emitter.id,
+                     "Duplicate authoring sound emitter ID");
+        }
+        if (!IsValidSectorAuthoringSoundEmitterReferenceId(emitter.referenceId)) {
+            AddIssue(issues, SectorAuthoringObjectKind::SoundEmitter, emitter.id,
+                     "Sound emitter ID must contain 1-63 letters, digits, underscores, or dashes");
+        } else if (!emitterReferenceIds.insert(emitter.referenceId).second) {
+            AddIssue(issues, SectorAuthoringObjectKind::SoundEmitter, emitter.id,
+                     "Duplicate sound emitter ID");
+        }
+        if (!std::isfinite(emitter.y) || !std::isfinite(emitter.volume)
+                || emitter.volume < 0.0f || emitter.volume > 1.0f) {
+            AddIssue(issues, SectorAuthoringObjectKind::SoundEmitter, emitter.id,
+                     "Sound emitter transform and volume must be finite and volume must be between 0 and 1");
+        }
+    }
+
     std::set<int> triggerEditorIds;
     std::set<std::string> triggerReferenceIds;
     for (const SectorAuthoringTrigger& trigger : graph.triggers) {
@@ -2981,6 +3053,7 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
         const SectorAuthoringGraph& graph)
 {
     SectorAuthoringDerivationResult result;
+    result.topology.audioSettings = graph.audioSettings;
 
     const std::vector<SectorAuthoringValidationIssue> referenceIssues =
             ValidateSectorAuthoringGraphReferences(graph);
@@ -3099,6 +3172,21 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
         result.topology.levelMarkers.push_back(std::move(compiled));
     }
 
+    result.topology.soundEmitters.reserve(graph.soundEmitters.size());
+    for (const SectorAuthoringSoundEmitter& emitter : graph.soundEmitters) {
+        SectorCompiledSoundEmitter compiled;
+        compiled.sourceAuthoringEmitterId = emitter.id;
+        compiled.id = emitter.referenceId;
+        compiled.positionWorld = SectorAuthoringToWorldPosition(Vector3{
+                SectorCoordToVisibleAuthoring(emitter.x),
+                emitter.y,
+                SectorCoordToVisibleAuthoring(emitter.z)});
+        compiled.soundId = emitter.soundId;
+        compiled.volume = emitter.volume;
+        compiled.loop = emitter.loop;
+        result.topology.soundEmitters.push_back(std::move(compiled));
+    }
+
     result.topology.triggers.reserve(graph.triggers.size());
     for (const SectorAuthoringTrigger& trigger : graph.triggers) {
         result.topology.triggers.push_back(SectorCompiledTrigger{
@@ -3137,11 +3225,13 @@ SectorAuthoringDerivationResult DeriveSectorTopologyMapFromAuthoringGraph(
 SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopologyMap& map)
 {
     SectorAuthoringGraph graph;
+    graph.audioSettings = map.audioSettings;
     graph.vertices.reserve(map.vertices.size());
     graph.lines.reserve(map.lineDefs.size());
     graph.lineSides.reserve(map.sideDefs.size());
     graph.faceAnchors.reserve(map.sectors.size());
     graph.levelMarkers.reserve(map.levelMarkers.size());
+    graph.soundEmitters.reserve(map.soundEmitters.size());
     graph.triggers.reserve(map.triggers.size());
     graph.reflectionProbes.reserve(map.compiledReflectionProbes.size());
 
@@ -3227,6 +3317,22 @@ SectorAuthoringGraph ImportSectorTopologyMapToAuthoringGraph(const SectorTopolog
         marker.y = compiled.position.y;
         marker.orientationDegrees = compiled.yawRadians * RadiansToDegrees;
         graph.levelMarkers.push_back(std::move(marker));
+    }
+
+    for (const SectorCompiledSoundEmitter& compiled : map.soundEmitters) {
+        SectorAuthoringSoundEmitter emitter;
+        emitter.id = IsValidSectorAuthoringId(compiled.sourceAuthoringEmitterId)
+                ? compiled.sourceAuthoringEmitterId
+                : AllocateSectorAuthoringSoundEmitterId(graph);
+        emitter.referenceId = compiled.id;
+        const Vector3 authored = SectorWorldToAuthoringPosition(compiled.positionWorld);
+        VisibleAuthoringToSectorCoord(authored.x, emitter.x);
+        emitter.y = authored.y;
+        VisibleAuthoringToSectorCoord(authored.z, emitter.z);
+        emitter.soundId = compiled.soundId;
+        emitter.volume = compiled.volume;
+        emitter.loop = compiled.loop;
+        graph.soundEmitters.push_back(std::move(emitter));
     }
 
     for (const SectorCompiledTrigger& compiled : map.triggers) {

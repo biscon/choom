@@ -21,6 +21,7 @@
 #include "sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.h"
 #include "sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.h"
 #include "sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.h"
+#include "sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.h"
 #include "sector_editor/services/triggers/SectorEditorTriggerEditingService.h"
 #include "sector_editor/services/runtime_objects/SectorEditorRuntimeObjectEditingService.h"
 #include "sector_editor/services/static_model_picker/SectorEditorStaticModelPickerService.h"
@@ -11351,8 +11352,7 @@ void TestEditorAuthoringDocumentSavePreservesInvalidGraphAndReloadDiagnostics()
 void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
 {
     game::SectorTopologyMap source = MakeSingleSectorSquareMap();
-    source.audioSettings.musicPath = "ambience/import_theme.wav";
-    source.audioSettings.musicVolume = 1.0f;
+    source.audioSettings.roomtoneFadeMilliseconds = 1250;
     source.audioSettings.soundsById.emplace(
             "import_hum", game::SectorSoundDefinition{
                     "import_hum", "ambience/import_hum.ogg", game::SectorSoundType::Sound});
@@ -11376,9 +11376,7 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
           "legacy topology import uses the default editor grid size");
     Check(game::HasAuthoringGraphData(authoringGraph), "legacy topology import synthesizes authoring graph");
     Check(documentState.derivation.authoringDerivation.success, "legacy topology import derives authoring graph");
-    Check(documentState.map.topologyMap.audioSettings.musicPath
-                      == source.audioSettings.musicPath
-                  && Near(documentState.map.topologyMap.audioSettings.musicVolume, 1.0f)
+    Check(documentState.map.topologyMap.audioSettings.roomtoneFadeMilliseconds == 1250
                   && documentState.map.topologyMap.audioSettings.soundsById.at(
                              "import_hum").path
                              == "ambience/import_hum.ogg",
@@ -11393,8 +11391,7 @@ void TestEditorLegacyTopologyImportThenSaveWritesGraphNative()
     Check(saved["topology"] == "authoringGraph",
           "save after topology-v2 import writes graph-native marker");
     Check(saved.contains("authoringGraph"), "save after topology-v2 import writes authoring graph");
-    Check(saved["audio"]["music"] == "ambience/import_theme.wav"
-                  && Near(saved["audio"]["musicVolume"].get<float>(), 1.0f)
+    Check(saved["audio"]["roomtoneFadeMilliseconds"] == 1250
                   && saved["audio"]["sounds"]["import_hum"]["path"]
                              == "ambience/import_hum.ogg",
           "save after topology-v2 import preserves map-level audio settings");
@@ -11592,12 +11589,11 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     documentState.map.topologyMap.directionalLight.enabled = true;
     documentState.map.topologyMap.directionalLight.directionToLight = Vector3{0.0f, 1.0f, 0.0f};
     documentState.map.topologyMap.directionalLight.intensity = 1.5f;
-    documentState.map.topologyMap.audioSettings.musicPath =
-            "ambience/graph_theme.wav";
-    documentState.map.topologyMap.audioSettings.musicVolume = 1.0f;
-    documentState.map.topologyMap.audioSettings.soundsById.emplace(
+    authoringGraph.audioSettings.roomtoneFadeMilliseconds = 1350;
+    authoringGraph.audioSettings.soundsById.emplace(
             "graph_hum", game::SectorSoundDefinition{
                     "graph_hum", "ambience/graph_hum.ogg", game::SectorSoundType::Sound});
+    documentState.map.topologyMap.audioSettings = authoringGraph.audioSettings;
     documentState.map.topologyMap.lightmapSettings.ambientOcclusionStrength = 0.25f;
     documentState.map.topologyMap.runtimeObjects.push_back(MakeBillboardRuntimeObject(
             44,
@@ -11631,8 +11627,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
     Check(saved["skySettings"]["materialId"] == "sky", "editor graph-native save persists sky settings");
     Check(saved["directionalLight"]["enabled"] == true,
           "editor graph-native save persists directional light");
-    Check(saved["audio"]["music"] == "ambience/graph_theme.wav"
-                  && Near(saved["audio"]["musicVolume"].get<float>(), 1.0f)
+    Check(saved["audio"]["roomtoneFadeMilliseconds"] == 1350
                   && saved["audio"]["sounds"]["graph_hum"]["path"]
                              == "ambience/graph_hum.ogg",
           "editor graph-native save persists map-level audio settings");
@@ -11665,9 +11660,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && Near(loaded.mapData.previewSettings.walkSpeed, 9.0f)
                   && loaded.mapData.skySettings.materialId == "sky"
                   && loaded.mapData.directionalLight.enabled
-                  && loaded.mapData.audioSettings.musicPath
-                             == "ambience/graph_theme.wav"
-                  && Near(loaded.mapData.audioSettings.musicVolume, 1.0f)
+                  && loaded.mapData.audioSettings.roomtoneFadeMilliseconds == 1350
                   && loaded.mapData.audioSettings.soundsById.at("graph_hum").path
                              == "ambience/graph_hum.ogg"
                   && Near(loaded.mapData.lightmapSettings.ambientOcclusionStrength, 0.25f)
@@ -11688,11 +11681,7 @@ void TestEditorGraphNativeMapLevelDataRoundTrip()
                   && loadedDocumentState.map.topologyMap.resolvedMaterialsById.empty()
                   && loadedDocumentState.map.topologyMap.staticLights.size() == 1
                   && loadedDocumentState.map.topologyMap.skySettings.materialId == "sky"
-                  && loadedDocumentState.map.topologyMap.audioSettings.musicPath
-                             == "ambience/graph_theme.wav"
-                  && Near(
-                             loadedDocumentState.map.topologyMap.audioSettings.musicVolume,
-                             1.0f)
+                  && loadedDocumentState.map.topologyMap.audioSettings.roomtoneFadeMilliseconds == 1350
                   && loadedDocumentState.map.topologyMap.audioSettings.soundsById.at(
                              "graph_hum").path
                              == "ambience/graph_hum.ogg"
@@ -12545,6 +12534,7 @@ void TestStaticPropEditingPlacementMutationAndFloorRelativeDrag()
                   && map.runtimeObjects[0].kind == "static_model"
                   && Near(map.runtimeObjects[0].position, Vector3{24.0f, 16.0f, 24.0f})
                   && map.runtimeObjects[0].staticModel.modelPath.empty()
+                  && map.runtimeObjects[0].staticModel.instanceId == "prop_1"
                   && Near(map.runtimeObjects[0].staticModel.heightOffsetWorld, 0.0f)
                   && Near(map.runtimeObjects[0].staticModel.scale, 1.0f),
           "static prop placement creates an empty floor-anchored authored object");
@@ -12566,6 +12556,28 @@ void TestStaticPropEditingPlacementMutationAndFloorRelativeDrag()
                   && documentState.lifecycle.topologyDocumentDirty
                   && !renderCache.valid,
           "static prop model assignment is serialized state and invalidates the cache");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    const uint64_t revisionBeforeInstanceId = renderRevision;
+    std::string staticInstanceIdError;
+    Check(editing.SetSelectedStaticModelInstanceId(
+                  "hall_lamp",
+                  staticInstanceIdError)
+                  && staticInstanceIdError.empty()
+                  && map.runtimeObjects[0].staticModel.instanceId == "hall_lamp"
+                  && documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && renderRevision == revisionBeforeInstanceId + 1
+                  && !renderCache.valid,
+          "static prop instance ID editing persists and invalidates the 2D cache");
+    Check(!editing.SetSelectedStaticModelInstanceId(
+                  "bad instance",
+                  staticInstanceIdError)
+                  && !staticInstanceIdError.empty()
+                  && map.runtimeObjects[0].staticModel.instanceId == "hall_lamp",
+          "static prop instance ID editing rejects invalid identifiers");
 
     FillRuntimeObjectTestSectorCache(renderCache, map);
     Check(editing.MutateSelected(
@@ -12745,6 +12757,7 @@ void TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag()
                   && map.runtimeObjects[0].kind == "dynamic_model"
                   && Near(map.runtimeObjects[0].position, Vector3{24.0f, 16.0f, 24.0f})
                   && map.runtimeObjects[0].dynamicModel.modelPath.empty()
+                  && map.runtimeObjects[0].dynamicModel.instanceId == "prop_1"
                   && map.runtimeObjects[0].dynamicModel.loop
                   && map.runtimeObjects[0].dynamicModel.shadowMode
                           == game::SectorDynamicModelShadowMode::Contact
@@ -12763,6 +12776,18 @@ void TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag()
                   && map.runtimeObjects[0].dynamicModel.animation.empty()
                   && !renderCache.valid,
           "dynamic prop model assignment reuses the model picker mutation path and clears stale animation selection");
+
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    std::string instanceIdError;
+    Check(editing.SetSelectedDynamicModelInstanceId("desk_fan", instanceIdError)
+                  && instanceIdError.empty()
+                  && map.runtimeObjects[0].dynamicModel.instanceId == "desk_fan"
+                  && !renderCache.valid,
+          "dynamic prop instance ID editing persists and invalidates the 2D cache");
+    Check(!editing.SetSelectedDynamicModelInstanceId("bad instance", instanceIdError)
+                  && !instanceIdError.empty()
+                  && map.runtimeObjects[0].dynamicModel.instanceId == "desk_fan",
+          "dynamic prop instance ID editing rejects invalid identifiers");
 
     FillRuntimeObjectTestSectorCache(renderCache, map);
     Check(editing.MutateSelected(
@@ -13663,11 +13688,85 @@ void TestTriggerEditingServiceCommitsAuthoringAndDragOnce()
           "trigger deletion removes authoring and compiled runtime data");
 }
 
+void TestSoundEmitterEditingAcceptsBufferedAndStreamingAudio()
+{
+    game::SectorEditorState editorState;
+    game::SectorEditorDocumentState documentState;
+    game::SectorAuthoringGraph& graph = documentState.authoring.authoringGraph;
+    graph = game::ImportSectorTopologyMapToAuthoringGraph(MakeSingleSectorSquareMap());
+    graph.audioSettings.soundsById.emplace(
+            "door_click", game::SectorSoundDefinition{
+                    "door_click", "doors/click.wav", game::SectorSoundType::Sound});
+    graph.audioSettings.soundsById.emplace(
+            "radio_music", game::SectorSoundDefinition{
+                    "radio_music", "music/radio.mp3", game::SectorSoundType::Music});
+    graph.soundEmitters.push_back(game::SectorAuthoringSoundEmitter{
+            1, "radio", 16, 16, 1.0f, "door_click", 0.75f, true});
+
+    Check(game::RefreshSectorEditorAuthoringDerivation(
+                  editorState,
+                  game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                  documentState.map.topologyMap,
+                  graph,
+                  game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation)),
+          "Sound Emitter editing setup derives current topology");
+    game::SelectionState selection;
+    Check(game::SelectSectorEditorAuthoringSoundEmitter(graph, selection, 1),
+          "Sound Emitter editing setup selects the emitter");
+
+    game::SoundEmitterEditingState editingState;
+    std::string status;
+    editorState.topologyRenderCache.valid = true;
+    const uint64_t originalRevision = editorState.topologyRenderRevision;
+    const std::string originalLightmapHash =
+            game::ComputeSectorLightmapSourceHash(documentState.map.topologyMap);
+    game::SectorEditorSoundEmitterEditingService editing{
+            game::SectorEditorSoundEmitterEditingServiceContext{
+                    game::MakeSectorEditorDocumentLifecycleAccess(documentState.lifecycle),
+                    documentState.map.topologyMap,
+                    graph,
+                    game::MakeSectorEditorDerivationDocumentAccess(documentState.derivation),
+                    editorState.topologyRenderRevision,
+                    editorState.topologyRenderCache,
+                    selection,
+                    editingState,
+                    status}};
+
+    std::string error;
+    Check(editing.ValidateSelectedSoundId("radio_music", error)
+                  && editing.SetSelectedSoundId("radio_music"),
+          "Sound Emitter accepts a registered streaming Music ID");
+    Check(editing.Selected() != nullptr
+                  && editing.Selected()->soundId == "radio_music"
+                  && documentState.map.topologyMap.soundEmitters.size() == 1
+                  && documentState.map.topologyMap.soundEmitters[0].soundId
+                          == "radio_music",
+          "Sound Emitter Music edit synchronizes authoring and compiled topology");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && !editorState.topologyRenderCache.valid
+                  && editorState.topologyRenderRevision > originalRevision,
+          "Sound Emitter Music edit marks dirty and invalidates the 2D cache");
+    Check(game::ComputeSectorLightmapSourceHash(documentState.map.topologyMap)
+                  == originalLightmapHash,
+          "Sound Emitter audio edits remain excluded from the lightmap hash");
+
+    Check(!editing.ValidateSelectedSoundId("missing_audio", error)
+                  && !editing.SetSelectedSoundId("missing_audio")
+                  && editing.Selected()->soundId == "radio_music",
+          "Sound Emitter rejects an unknown map audio ID without mutation");
+    Check(editing.SetSelectedSoundId("")
+                  && editing.Selected()->soundId.empty()
+                  && documentState.map.topologyMap.soundEmitters[0].soundId.empty(),
+          "Sound Emitter accepts an intentionally unassigned audio ID");
+}
+
 int main()
 {
     TestLevelMarkerAuthoringSelectionCacheAndPicking();
     TestLevelMarkerModulesStayIndependentOfSectorEditor();
     TestAuthoringFogVolumeDerivationAndUnresolvedWarning();
+    TestSoundEmitterEditingAcceptsBufferedAndStreamingAudio();
     TestAuthoringFogVolumeSerializationRoundTrip();
     TestAuthoringFogVolumeEditingServiceWritesGraphAndCommitsDragOnce();
     TestReflectionProbeSelectManipulationCommitsSnappedMove();

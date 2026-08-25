@@ -39,6 +39,7 @@ enum class SectorEditorTool {
     ReflectionProbe,
     Trigger,
     LevelMarker,
+    SoundEmitter,
     StaticLight,
     StaticSpotLight,
     StaticRectLight,
@@ -104,8 +105,6 @@ struct SectorEditorState {
     bool showSectorIds = true;
     TexturePickerState texturePicker;
     FootstepPickerState footstepPicker;
-    AddMapSoundState addMapSound;
-    SectorEditorAssetPruneModalState assetPruneModal;
     SoundPickerState soundPicker;
     SaveLevelModalState saveLevelModal;
     LoadLevelModalState loadLevelModal;
@@ -126,6 +125,11 @@ struct SectorEditorUiState {
     engine::UIIntInputState ambientRedInput;
     engine::UIIntInputState ambientGreenInput;
     engine::UIIntInputState ambientBlueInput;
+    int roomtoneBufferedFaceId = -1;
+    char roomtoneSoundIdBuffer[64] = {};
+    engine::UIFloatInputState roomtoneVolumeInput;
+    engine::UIIntInputState roomtoneFadeInput;
+    engine::UIIntInputState roomtoneMapFadeInput;
     engine::UIFloatInputState lightXInput;
     engine::UIFloatInputState lightYInput;
     engine::UIFloatInputState lightZInput;

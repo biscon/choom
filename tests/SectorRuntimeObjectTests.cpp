@@ -18,6 +18,7 @@
 #include "sector_demo/SectorTopologyMap.h"
 #include "sector_demo/SectorTopologyUnits.h"
 #include "sector_demo/SectorUnits.h"
+#include "sector_demo/SectorUseInteraction.h"
 #include "util/json.hpp"
 
 #include <algorithm>
@@ -56,6 +57,69 @@ void Check(bool condition, const char* description)
     }
 }
 
+void TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps()
+{
+    engine::World world;
+    game::ReserveSectorRuntimeObjectWorld(world, 2);
+
+    const engine::Entity propEntity = world.CreateEntity();
+    game::SectorDynamicModel prop;
+    prop.instanceId = "switch_1";
+    prop.useTitle = "switch";
+    prop.useDistance = 3.0f;
+    prop.onUseScript = "useSwitch";
+    world.Add(propEntity, prop);
+    world.Add(propEntity, game::SectorObjectTransform{
+            Vector3{2.0f, 0.0f, 0.0f}});
+    world.Add(propEntity, engine::AnimatedModelInstance{});
+
+    const engine::Entity doorEntity = world.CreateEntity();
+    world.Add(doorEntity, game::SectorDoor{2, true, "door_2"});
+    game::SectorDoorResolvedAnchor anchor;
+    anchor.endpointA = {2.0f, 0.5f};
+    anchor.endpointB = {2.0f, 1.5f};
+    anchor.openBottom = -1.0f;
+    anchor.openTop = 2.0f;
+    world.Add(doorEntity, anchor);
+    world.Add(doorEntity, game::SectorDoorInteraction{
+            false, 3.0f, 2.0f, "door"});
+
+    const game::SectorUseTarget centered = game::FindSectorUseTarget(
+            world,
+            nullptr,
+            Vector3{},
+            Vector3{1.0f, 0.0f, 0.0f},
+            nullptr,
+            true);
+    Check(centered.kind == game::SectorUseTargetKind::DynamicProp
+                  && centered.entity == propEntity,
+          "use targeting prefers the eligible prop closest to view center");
+    Check(game::SectorUseTargetTitle(world, centered) == "switch",
+          "use targeting exposes the authored presentation title");
+
+    world.Get<game::SectorDynamicModel>(propEntity).useConsumed = true;
+    const game::SectorUseTarget afterConsume = game::FindSectorUseTarget(
+            world,
+            nullptr,
+            Vector3{},
+            Vector3{1.0f, 0.0f, 0.0f},
+            nullptr,
+            true);
+    Check(afterConsume.kind == game::SectorUseTargetKind::Door
+                  && afterConsume.entity == doorEntity,
+          "consumed props are removed from use targeting");
+
+    const game::SectorUseTarget facingAway = game::FindSectorUseTarget(
+            world,
+            nullptr,
+            Vector3{},
+            Vector3{-1.0f, 0.0f, 0.0f},
+            nullptr,
+            true);
+    Check(facingAway.kind == game::SectorUseTargetKind::None,
+          "use targeting rejects objects outside the forward view cone");
+}
+
 bool Near(float actual, float expected, float epsilon = 0.00001f)
 {
     return std::fabs(actual - expected) <= epsilon;
@@ -72,6 +136,59 @@ bool Near(Vector2 actual, Vector2 expected, float epsilon = 0.00001f)
 {
     return Near(actual.x, expected.x, epsilon)
             && Near(actual.y, expected.y, epsilon);
+}
+
+void TestSectorUseHighlightPulsesAndReleases()
+{
+    const engine::Entity propEntity{7, 3};
+    game::SectorUseTarget target;
+    target.entity = propEntity;
+    target.kind = game::SectorUseTargetKind::DynamicProp;
+
+    game::SectorUseHighlightState state;
+    game::UpdateSectorUseHighlight(state, target, 0.0f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.0f),
+          "dynamic prop use highlight starts at authored brightness");
+    game::UpdateSectorUseHighlight(state, target, 0.6f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.07f),
+          "dynamic prop use highlight rises clearly through the pulse");
+    game::UpdateSectorUseHighlight(state, target, 0.6f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.14f),
+          "dynamic prop use highlight reaches its visible radiance ceiling");
+    game::UpdateSectorUseHighlight(state, target, 0.6f);
+    Check(Near(state.highlight.strength, 0.07f),
+          "dynamic prop use highlight falls smoothly from its peak");
+    game::UpdateSectorUseHighlight(state, target, 0.6f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.0f),
+          "dynamic prop use highlight returns fully to authored brightness");
+
+    game::ResetSectorUseHighlight(state);
+    game::UpdateSectorUseHighlight(state, target, 0.0f);
+    game::UpdateSectorUseHighlight(state, target, 1.2f);
+    const game::SectorUseTarget noTarget;
+    game::UpdateSectorUseHighlight(state, noTarget, 0.0f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.14f),
+          "lost dynamic prop target begins release at its current pulse strength");
+    game::UpdateSectorUseHighlight(state, noTarget, 0.15f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.07f),
+          "lost dynamic prop highlight eases halfway back to neutral");
+    game::UpdateSectorUseHighlight(state, noTarget, 0.15f);
+    Check(engine::IsNull(state.highlight.entity)
+                  && Near(state.highlight.strength, 0.0f),
+          "lost dynamic prop highlight clears after its release");
+
+    game::SectorUseTarget doorTarget;
+    doorTarget.entity = engine::Entity{9, 1};
+    doorTarget.kind = game::SectorUseTargetKind::Door;
+    game::UpdateSectorUseHighlight(state, doorTarget, 1.2f);
+    Check(engine::IsNull(state.highlight.entity),
+          "door use targets never start a dynamic prop highlight");
 }
 
 void TestNpcVocalPriorityDelayAndShufflePolicy()
@@ -4801,6 +4918,7 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
     object.position = Vector3{2.0f, 8.0f, 2.0f};
     object.yawRadians = 0.75f;
     object.staticModel.modelPath = "assets/models/props/missing_fixture.glb";
+    object.staticModel.instanceId = "crate_18";
     object.staticModel.rotationXRadians = 0.25f;
     object.staticModel.rotationZRadians = -0.5f;
     object.staticModel.heightOffsetWorld = 0.625f;
@@ -4843,6 +4961,11 @@ void TestSpawnPlacedStaticModelCopiesAuthoredPayloadToEcs()
           "assigned static prop stores a model asset handle");
     Check(world.Get<game::SectorStaticModel>(entity).placedObjectId == 18,
           "assigned static prop stores its stable placed-object ID");
+    Check(world.Get<game::SectorStaticModel>(entity).instanceId == "crate_18"
+                  && Near(
+                          world.Get<game::SectorStaticModel>(entity).emissiveScale,
+                          1.0f),
+          "static prop copies its script ID and defaults runtime emission to authored strength");
     Check(Near(world.Get<game::SectorStaticModel>(entity).scale, 1.75f),
           "static prop copies authored uniform scale to ECS model data");
     Check(Near(world.Get<game::SectorStaticModel>(entity).environmentExposure, 0.35f),
@@ -4928,6 +5051,7 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     object.kind = "dynamic_model";
     object.position = Vector3{2.0f, 8.0f, 2.0f};
     object.yawRadians = 0.75f;
+    object.dynamicModel.instanceId = "prop_27";
     object.dynamicModel.rotationXRadians = 0.25f;
     object.dynamicModel.rotationZRadians = -0.5f;
     object.dynamicModel.heightOffsetWorld = 0.625f;
@@ -4953,14 +5077,21 @@ void TestSpawnDynamicModelCopiesPlaybackAndLightingPayload()
     const game::SectorDynamicModel& dynamic = world.Get<game::SectorDynamicModel>(entity);
     const engine::AnimatedModelAnimator& animator =
             world.Get<engine::AnimatedModelAnimator>(entity);
+    const engine::AnimatedModelInstance& animatedModel =
+            world.Get<engine::AnimatedModelInstance>(entity);
     Check(Near(transform.position, Vector3{0.25f, 1.625f, 0.25f})
                   && Near(transform.yawRadians, 0.75f)
                   && Near(transform.rotationXRadians, 0.25f)
                   && Near(transform.rotationZRadians, -0.5f)
+                  && dynamic.instanceId == "prop_27"
+                  && Near(dynamic.emissiveScale, 1.0f)
                   && Near(dynamic.scale, 1.75f)
                   && dynamic.shadowMode
                           == game::SectorDynamicModelShadowMode::Dynamic,
-          "dynamic prop copies the movable authored transform, scale, and shadow mode");
+          "dynamic prop copies its stable ID, default emission, movable authored transform, scale, and shadow mode");
+    Check(animatedModel.poseSource
+                    == engine::AnimatedModelPoseSource::GltfScene,
+          "dynamic props opt into exact glTF scene and skin evaluation");
     Check(dynamic.requestedAnimation == "Standard Walk"
                   && !dynamic.animationResolved
                   && !animator.loop
@@ -5064,6 +5195,8 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
             world.Get<game::SectorDynamicModel>(entity);
     const engine::AnimatedModelAnimator& animator =
             world.Get<engine::AnimatedModelAnimator>(entity);
+    const engine::AnimatedModelInstance& animatedModel =
+            world.Get<engine::AnimatedModelInstance>(entity);
     const game::SectorObjectTransform& transform =
             world.Get<game::SectorObjectTransform>(entity);
     Check(npc.definitionId == "runtime_test_npc"
@@ -5095,6 +5228,9 @@ void TestSpawnNpcResolvesDefinitionAndIdlePlayback()
                   && Near(transform.rotationXRadians, 0.0f)
                   && Near(transform.rotationZRadians, 0.0f),
           "NPC runtime loops semantic Idle with floor transform, scale, and shadow settings");
+    Check(animatedModel.poseSource
+                    == engine::AnimatedModelPoseSource::RaylibSkeletal,
+          "NPCs retain raylib skeletal evaluation and transition blending");
 }
 
 void TestNpcFootstepCadenceUsesResolvedTravel()
@@ -6194,6 +6330,19 @@ void TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose()
           "finished animated models hold their cached terminal pose without advancing again");
 
     animator = {};
+    animator.frame = 1.0f;
+    animator.playing = true;
+    animator.loop = false;
+    animator.reverse = true;
+    animator.poseDirty = false;
+    Check(engine::AdvanceAnimatedModelAnimator(animator, 10, 0.1f)
+                  && Near(animator.frame, 0.0f)
+                  && !animator.playing
+                  && animator.finished
+                  && animator.poseDirty,
+          "reverse non-looping animated models apply and hold their initial frame");
+
+    animator = {};
     animator.animationIndex = 0;
     animator.poseDirty = false;
     engine::SetAnimatedModelAnimation(animator, 1, 0.25f, true);
@@ -6209,6 +6358,40 @@ void TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose()
                   && animator.finished
                   && animator.poseDirty,
           "a blended transition into a non-looping clip also applies and holds its terminal pose");
+}
+
+void TestAnimatedModelGltfSkinPreparationBuildsBindPose()
+{
+    Transform bindPose{};
+    bindPose.rotation = QuaternionIdentity();
+    bindPose.scale = Vector3{1.0f, 1.0f, 1.0f};
+    engine::ModelAsset asset;
+    asset.model.meshCount = 1;
+    asset.model.skeleton.boneCount = 1;
+    asset.model.skeleton.bindPose = &bindPose;
+    asset.nodes.resize(2);
+    asset.nodes[0].bindLocalMatrix = MatrixIdentity();
+    asset.nodes[0].bindWorldMatrix = MatrixIdentity();
+    asset.nodes[1].bindLocalMatrix = MatrixIdentity();
+    asset.nodes[1].bindWorldMatrix = MatrixIdentity();
+    asset.meshNodeBindings.resize(1);
+    asset.meshNodeBindings[0].nodeIndex = 1;
+    asset.meshNodeBindings[0].skinIndex = 0;
+    asset.meshNodeBindings[0].skinned = true;
+    asset.meshNodeBindings[0].inverseBindWorldMatrix = MatrixIdentity();
+    asset.gltfSkin.jointNodeIndices.push_back(0);
+    asset.gltfSkin.inverseBindMatrices.push_back(MatrixIdentity());
+
+    engine::AnimatedModelInstance instance;
+    instance.poseSource = engine::AnimatedModelPoseSource::GltfScene;
+    Check(engine::PrepareAnimatedModelInstance(instance, asset)
+                  && instance.meshBoneMatrices.size() == 1
+                  && Near(
+                          Vector3Transform(
+                                  Vector3{1.0f, 2.0f, 3.0f},
+                                  instance.meshBoneMatrices[0]),
+                          Vector3{1.0f, 2.0f, 3.0f}),
+          "glTF dynamic props prepare an exact bind palette before their first animation update");
 }
 
 void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
@@ -6234,6 +6417,10 @@ void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
     asset.model.meshCount = 1;
     asset.model.meshes = &mesh;
     asset.model.skeleton.boneCount = 1;
+    asset.meshNodeBindings.resize(1);
+    asset.meshNodeBindings[0].nodeIndex = 0;
+    asset.meshNodeBindings[0].skinIndex = 0;
+    asset.meshNodeBindings[0].skinned = true;
     asset.animatedLocalBounds = {
             Vector3{-0.5f, 0.0f, -0.1f},
             Vector3{2.0f, 1.5f, 0.1f}};
@@ -6241,7 +6428,10 @@ void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
 
     engine::AnimatedModelInstance instance;
     instance.model = engine::ModelHandle{17, 3};
-    instance.boneMatrices.push_back(MatrixTranslate(0.5f, 0.0f, 0.0f));
+    instance.poseSource = engine::AnimatedModelPoseSource::GltfScene;
+    instance.boneMatrices.push_back(MatrixIdentity());
+    instance.meshBoneMatrices.push_back(
+            MatrixTranslate(0.5f, 0.0f, 0.0f));
     instance.poseReady = true;
 
     const Matrix authored = game::BuildSectorStaticModelAuthoredTransform(
@@ -6283,7 +6473,7 @@ void TestAnimatedModelRaycastUsesCurrentSkinnedGeometry()
                   == engine::AnimatedModelRaycastStatus::Miss,
           "a ray inside broad-phase bounds but outside posed triangles passes through");
 
-    instance.boneMatrices[0] = MatrixTranslate(0.8f, 0.0f, 0.0f);
+    instance.meshBoneMatrices[0] = MatrixTranslate(0.8f, 0.0f, 0.0f);
     Vector3 movedAnchor{};
     Check(engine::ResolveAnimatedModelSurfaceAnchor(
                   asset,
@@ -6626,10 +6816,17 @@ void TestDynamicModelShadowCasterCollectionAndRevision()
     Check(posedRevision != initialRevision,
           "changing an animated pose invalidates the dynamic caster revision");
 
+    world.Get<engine::AnimatedModelInstance>(dynamic).meshBoneMatrices.push_back(
+            MatrixTranslate(0.2f, 0.0f, 0.0f));
+    game::UpdateSectorDynamicModelShadowCasters(collection, &world);
+    const uint64_t meshPosedRevision = collection.revision;
+    Check(meshPosedRevision != posedRevision,
+          "changing an exact per-mesh skin pose invalidates the dynamic caster revision");
+
     world.Get<game::SectorObjectVisualOffset>(dynamic).position.y += 0.2f;
     game::UpdateSectorDynamicModelShadowCasters(collection, &world);
     const uint64_t movedRevision = collection.revision;
-    Check(movedRevision != posedRevision,
+    Check(movedRevision != meshPosedRevision,
           "changing the rendered dynamic-model transform invalidates its caster revision");
 
     world.Get<game::SectorDynamicModel>(dynamic).shadowMode =
@@ -8528,6 +8725,8 @@ int main()
 {
     extern void RunSectorScriptBindingTests();
     RunSectorScriptBindingTests();
+    TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
+    TestSectorUseHighlightPulsesAndReleases();
     TestNpcVocalPriorityDelayAndShufflePolicy();
     TestSectorSpatialSoundOcclusion();
     TestResolveSectorDoorAnchorValidPortal();
@@ -8639,6 +8838,7 @@ int main()
     TestSpawnNpcMissingDefinitionRemainsDiagnosticSkip();
     TestAnimatedModelSelectionAndBlendApi();
     TestAnimatedModelNonLoopingPlaybackAppliesTerminalPose();
+    TestAnimatedModelGltfSkinPreparationBuildsBindPose();
     TestAnimatedModelRaycastUsesCurrentSkinnedGeometry();
     TestRaylibGltfAnimationLoaderSamplesAuthoredEndpoint();
     TestStaticModelAuxiliaryMaterialMapsBindDrawMeshTextures();

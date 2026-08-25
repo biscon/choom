@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <functional>
 #include <iomanip>
 #include <sstream>
@@ -425,6 +426,114 @@ void DrawSectorEditorDoorInspector(
         }
         y += rowH + gap;
     };
+
+    if (uiState.doorScriptFieldsObjectId != selectedObject->id) {
+        std::snprintf(
+                uiState.doorInstanceIdBuffer,
+                sizeof(uiState.doorInstanceIdBuffer),
+                "%s",
+                selectedObject->door.instanceId.c_str());
+        std::snprintf(
+                uiState.doorUseTitleBuffer,
+                sizeof(uiState.doorUseTitleBuffer),
+                "%s",
+                selectedObject->door.useTitle.c_str());
+        std::snprintf(
+                uiState.doorCanOpenScriptBuffer,
+                sizeof(uiState.doorCanOpenScriptBuffer),
+                "%s",
+                selectedObject->door.canOpenScript.c_str());
+        std::snprintf(
+                uiState.doorCanCloseScriptBuffer,
+                sizeof(uiState.doorCanCloseScriptBuffer),
+                "%s",
+                selectedObject->door.canCloseScript.c_str());
+        uiState.doorScriptFieldsObjectId = selectedObject->id;
+        uiState.doorInstanceIdError.clear();
+    }
+    const auto drawDoorText = [&] (
+            const char* id,
+            const char* label,
+            char* buffer,
+            size_t capacity,
+            const std::function<void(const std::string&)>& submit) {
+        engine::Text(
+                ui, config, assets,
+                Rectangle{0.0f, y, 118.0f, rowH}, font,
+                label, engine::UITextJustify::Left, config.mutedTextColor);
+        const engine::UITextInputResult result = engine::TextInput(
+                ui, config, input, assets,
+                id,
+                Rectangle{122.0f, y, std::max(0.0f, contentW - 122.0f), rowH},
+                font,
+                buffer,
+                capacity,
+                0,
+                capacity - 1,
+                engine::UITextJustify::Left);
+        if (result.submitted) submit(std::string{buffer});
+        y += rowH + gap;
+    };
+    drawDoorText(
+            "sector_editor_door_instance_id",
+            "Instance ID",
+            uiState.doorInstanceIdBuffer,
+            sizeof(uiState.doorInstanceIdBuffer),
+            [&](const std::string& value) {
+                editing.SetSelectedDoorInstanceId(
+                        value, uiState.doorInstanceIdError);
+            });
+    if (!uiState.doorInstanceIdError.empty()) {
+        engine::Text(
+                ui, smallConfig, assets,
+                Rectangle{0.0f, y, contentW, 32.0f}, smallFont,
+                uiState.doorInstanceIdError.c_str(),
+                engine::UITextJustify::Left,
+                config.invalidColor,
+                true);
+        y += 36.0f;
+    }
+    drawDoorText(
+            "sector_editor_door_use_title",
+            "Use Title",
+            uiState.doorUseTitleBuffer,
+            sizeof(uiState.doorUseTitleBuffer),
+            [&](const std::string& value) {
+                if (!IsValidSectorUseTitle(value)) return;
+                editing.MutateSelected(
+                        "Updated door use title",
+                        [value](auto& object) {
+                            if (object.kind != "door"
+                                    || object.door.useTitle == value) return false;
+                            object.door.useTitle = value;
+                            return true;
+                        });
+            });
+    const auto submitDoorCallback = [&](bool opening, const std::string& value) {
+        if (!value.empty() && !IsValidSectorTriggerScriptName(value)) return;
+        editing.MutateSelected(
+                opening ? "Updated door open permission" : "Updated door close permission",
+                [opening, value](auto& object) {
+                    if (object.kind != "door") return false;
+                    std::string& callback = opening
+                            ? object.door.canOpenScript : object.door.canCloseScript;
+                    if (callback == value) return false;
+                    callback = value;
+                    return true;
+                });
+    };
+    drawDoorText(
+            "sector_editor_door_can_open_script",
+            "Can Open",
+            uiState.doorCanOpenScriptBuffer,
+            sizeof(uiState.doorCanOpenScriptBuffer),
+            [&](const std::string& value) { submitDoorCallback(true, value); });
+    drawDoorText(
+            "sector_editor_door_can_close_script",
+            "Can Close",
+            uiState.doorCanCloseScriptBuffer,
+            sizeof(uiState.doorCanCloseScriptBuffer),
+            [&](const std::string& value) { submitDoorCallback(false, value); });
 
     const SectorResolvedDoorAnchor resolved =
             ResolveSectorDoorAnchor(context.topologyMap, selectedObject->door);

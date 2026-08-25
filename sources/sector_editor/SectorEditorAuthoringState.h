@@ -18,6 +18,7 @@ SectorAuthoringSelectionTarget MakeSectorAuthoringFaceAnchorSelectionTarget(int 
 SectorAuthoringSelectionTarget MakeSectorAuthoringFogVolumeSelectionTarget(int fogVolumeId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringReflectionProbeSelectionTarget(int probeId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringLevelMarkerSelectionTarget(int markerId);
+SectorAuthoringSelectionTarget MakeSectorAuthoringSoundEmitterSelectionTarget(int emitterId);
 SectorAuthoringSelectionTarget MakeSectorAuthoringTriggerSelectionTarget(int triggerId);
 
 bool SectorAuthoringSelectionTargetsEqual(
@@ -63,6 +64,10 @@ bool SelectSectorEditorAuthoringLevelMarker(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int markerId);
+bool SelectSectorEditorAuthoringSoundEmitter(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int emitterId);
 bool SelectSectorEditorAuthoringTrigger(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
@@ -89,6 +94,10 @@ bool SetHoveredSectorEditorAuthoringLevelMarker(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
         int markerId);
+bool SetHoveredSectorEditorAuthoringSoundEmitter(
+        const SectorAuthoringGraph& graph,
+        SelectionState& selectionState,
+        int emitterId);
 bool SetHoveredSectorEditorAuthoringTrigger(
         const SectorAuthoringGraph& graph,
         SelectionState& selectionState,
@@ -311,6 +320,7 @@ enum class SectorEditorInspectorTargetKind {
     AuthoringFogVolume,
     AuthoringReflectionProbe,
     AuthoringLevelMarker,
+    AuthoringSoundEmitter,
     AuthoringTrigger,
     AuthoringUnavailable,
     LegacyTopology
@@ -324,6 +334,7 @@ struct SectorEditorInspectorTarget {
     int fogVolumeId = -1;
     int reflectionProbeId = -1;
     int levelMarkerId = -1;
+    int soundEmitterId = -1;
     int triggerId = -1;
     SectorAuthoringSideId side;
     std::string status;

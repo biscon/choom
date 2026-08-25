@@ -1597,6 +1597,7 @@ UITextInputResult TextInput(
         UITextJustify justify)
 {
     const uint32_t widgetId = HashId(id);
+    const bool focusedBeforePointerInput = ui.focusedId == widgetId;
     const bool hovered = ContainsWidget(ui, bounds, ui.mousePosition);
     if (hovered) {
         ui.hotId = widgetId;
@@ -1627,6 +1628,7 @@ UITextInputResult TextInput(
     }
 
     UITextInputResult result;
+    result.focusLost = clickedOutside && focusedBeforePointerInput;
     size_t characterCount = CountUtf8Characters(buffer);
     result.valid = characterCount >= minCharacters && characterCount <= maxCharacters;
 
@@ -1712,6 +1714,7 @@ UITextInputResult TextInput(
                 ui.focusedId = 0;
                 ConsumeEvent(event);
             } else if (event.key.key == KEY_ESCAPE) {
+                result.cancelled = true;
                 ui.focusedId = 0;
                 ConsumeEvent(event);
             }

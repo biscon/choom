@@ -114,6 +114,8 @@ struct UIContext {
 struct UITextInputResult {
     bool changed = false;
     bool submitted = false;
+    bool focusLost = false;
+    bool cancelled = false;
     bool valid = false;
 };
 

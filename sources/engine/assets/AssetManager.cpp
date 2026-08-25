@@ -332,6 +332,18 @@ MusicHandle AssetManager::RequestMusic(AssetScopeHandle scope, const char* path)
     return music.RequestMusic(scope, path);
 }
 
+MusicHandle AssetManager::RequestMusicInstance(
+        AssetScopeHandle scope,
+        const char* instanceKey,
+        const char* path)
+{
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        if (!IsValidScopeNoLock(scope)) return NullMusicHandle();
+    }
+    return music.RequestMusicInstance(scope, instanceKey, path);
+}
+
 bool AssetManager::IsReady(MusicHandle handle) const
 {
     return music.IsReady(handle);

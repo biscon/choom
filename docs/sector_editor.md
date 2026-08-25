@@ -84,6 +84,9 @@ views and maps to world Z for generated 3D geometry.
 - `Reload`: confirm and reload the current saved level.
 - `Material Editor`: add, remove, rename, and edit global materials and their
   albedo/filter/PBR scalar properties.
+- `Sound Editor`: add, remove, rename, retype, and replace map-local Sound and
+  Music entries. Referenced IDs, types, and removals are locked while their
+  underlying audio files may still be replaced.
 - Billboard tool: place a generic authored billboard marker inside a sector.
 - Door tool: place a portal-attached procedural door on a valid two-sided
   linedef.
@@ -466,13 +469,27 @@ companion is present. Normal strength is consumed by dynamic sector lighting;
 metalness and roughness are stored now for the later sector GGX path. Sky,
 decal, and procedural-door consumers currently use the material albedo only.
 
-## Prune Map Assets
+## Sound Editor
 
-The left tools pane `Prune Assets` button removes unused entries from the map's
-sound registry. Global materials are managed only by the Material Editor and
-are never pruned from one map. Door open/close sound references are retained. Background music,
-footsteps, NPC-definition audio, sprites, and models are separate from these
-registries and are not changed by this command.
+The left tools pane opens the Sound Editor directly below the Weapon Editor.
+Its scrollable left pane lists every map-local Sound and Music ID; Add and
+Remove stage registry changes until Save. The details pane edits the ID, picks
+or replaces a file below `assets/audio`, previews it through the shared audio
+picker, and chooses whether it is a buffered Sound or streaming Music.
+
+Sound Emitters accept either type. Buffered Sound is suitable for short effects;
+streaming Music is suitable for long positional sources such as radios. Each
+streaming emitter owns independent playback, so it can coexist with roomtones
+and other emitters using the same map audio entry. The emitter inspector accepts
+an exact ID or opens a picker containing all registered entries; invalid text is
+not committed and is restored to the authored value.
+
+IDs used by sector roomtones, Sound Emitters, or door open/close sounds cannot
+be renamed, retyped, or removed. The details pane reports those known level
+references in a word-wrapped usage box. Replacing the audio file remains
+available because it preserves the stable ID and loading role. Lua may refer to
+IDs dynamically or from external scripts, so script strings are not treated as
+statically discoverable references.
 
 ## Move, Split, And Delete Tools
 
@@ -740,6 +757,30 @@ shared point/spot shadow atlas. Atlas updates retain the configured per-frame
 light budget and do not fall back to contact shadows when unavailable. Older
 `projected_silhouette` map values load as `Dynamic` and save back as `dynamic`.
 These runtime shadow choices do not affect baked lightmaps or their source hash.
+
+Static 3D props and dynamic props have stable script instance IDs in one shared
+prop namespace. Static props missing an ID in older maps receive a deterministic
+`prop_<objectId>` ID during load. Editing a static prop ID uses the normal
+runtime-object mutation path, so it dirties the document, invalidates the 2D
+topology render cache, and refreshes preview objects.
+
+All glTF model emission uses the authored emissive texture/factor and
+`KHR_materials_emissive_strength`, followed by a lightweight HDR appearance
+curve. Grazing angles are attenuated to 70 percent at the silhouette and strong
+radiance is blended up to 70 percent toward an equal-channel white core between
+linear values 1 and 4. The maximum channel is preserved, so the shaping does not
+independently push a material across the bloom threshold. This applies to
+static/dynamic models, model doors, and viewmodels without extra textures,
+passes, draw calls, or model naming conventions. It does not repurpose
+roughness, AO, metallic, or normal textures. Scene-wide bloom still depends on
+HDR strength and screen coverage; its default soft threshold begins at linear
+value 1.
+
+Lua may change a static or dynamic prop's runtime emissive scale by stable ID.
+The scale defaults to 1 after spawning, affects every emissive material in that
+prop instance, and does not mutate the shared model asset. Script IDs and
+runtime emissive scales are visual/gameplay state and are excluded from the
+lightmap source hash.
 
 Door interaction is deliberately small. Authored `autoOpen` doors open as the
 player approaches and close when the player leaves the configured distance.

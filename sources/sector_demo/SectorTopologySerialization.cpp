@@ -44,6 +44,10 @@ std::string ReadString(
         const Json& object,
         const char* field,
         const std::string& context);
+int ReadInt(
+        const Json& object,
+        const char* field,
+        const std::string& context);
 
 bool IsValidAudioPath(const std::string& path)
 {
@@ -98,13 +102,9 @@ void ValidateAudioSettings(
         const SectorLevelAudioSettings& settings,
         const std::string& context)
 {
-    if (!settings.musicPath.empty() && !IsValidAudioPath(settings.musicPath)) {
-        Fail(context + ".music must be a relative .ogg, .wav, or .mp3 path beneath assets/audio");
-    }
-    if (!std::isfinite(settings.musicVolume)
-            || settings.musicVolume < 0.0f
-            || settings.musicVolume > 1.0f) {
-        Fail(context + ".musicVolume must be a finite number between 0 and 1");
+    if (settings.roomtoneFadeMilliseconds < 0
+            || settings.roomtoneFadeMilliseconds > 60000) {
+        Fail(context + ".roomtoneFadeMilliseconds must be between 0 and 60000");
     }
     for (const auto& entry : settings.soundsById) {
         const SectorSoundDefinition& sound = entry.second;
@@ -148,18 +148,11 @@ const char* WriteSoundType(SectorSoundType type)
 void ReadAudioSettings(const Json& value, SectorLevelAudioSettings& settings)
 {
     if (!value.is_object()) Fail("root.audio must be an object");
-    const auto musicIt = value.find("music");
-    if (musicIt != value.end()) {
-        if (!musicIt->is_string() || musicIt->get<std::string>().empty()) {
-            Fail("root.audio.music must be a non-empty string");
-        }
-        settings.musicPath = musicIt->get<std::string>();
-    }
-    settings.musicVolume = ReadOptionalFloat(
-            value,
-            "musicVolume",
-            "root.audio",
-            settings.musicVolume);
+    // Legacy map-wide music fields are intentionally ignored. Keeping them
+    // readable allows old maps to load; the writer never emits them.
+    settings.roomtoneFadeMilliseconds = value.contains("roomtoneFadeMilliseconds")
+            ? ReadInt(value, "roomtoneFadeMilliseconds", "root.audio")
+            : settings.roomtoneFadeMilliseconds;
     const auto soundsIt = value.find("sounds");
     if (soundsIt != value.end()) {
         if (!soundsIt->is_object()) Fail("root.audio.sounds must be an object");
@@ -194,13 +187,13 @@ void ReadAudioSettings(const Json& value, SectorLevelAudioSettings& settings)
 void WriteAudioSettings(Json& root, const SectorLevelAudioSettings& settings)
 {
     ValidateAudioSettings(settings, "root.audio");
-    if (settings.musicPath.empty() && settings.soundsById.empty()) return;
+    if (settings.roomtoneFadeMilliseconds
+                    == SectorLevelAudioSettings::DefaultRoomtoneFadeMilliseconds
+            && settings.soundsById.empty()) return;
     Json audio = Json::object();
-    if (!settings.musicPath.empty()) {
-        audio["music"] = settings.musicPath;
-        if (settings.musicVolume != SectorLevelAudioSettings::DefaultMusicVolume) {
-            audio["musicVolume"] = settings.musicVolume;
-        }
+    if (settings.roomtoneFadeMilliseconds
+            != SectorLevelAudioSettings::DefaultRoomtoneFadeMilliseconds) {
+        audio["roomtoneFadeMilliseconds"] = settings.roomtoneFadeMilliseconds;
     }
     if (!settings.soundsById.empty()) {
         audio["sounds"] = Json::object();
@@ -217,6 +210,82 @@ void WriteAudioSettings(Json& root, const SectorLevelAudioSettings& settings)
         }
     }
     root["audio"] = std::move(audio);
+}
+
+SectorRoomtoneSettings ReadRoomtoneSettings(
+        const Json& owner,
+        const std::string& context)
+{
+    SectorRoomtoneSettings settings;
+    const auto it = owner.find("roomtone");
+    if (it == owner.end()) return settings;
+    if (!it->is_object()) Fail(context + ".roomtone must be an object");
+    const Json& value = *it;
+    const std::string roomtoneContext = context + ".roomtone";
+    const std::string mode = ReadString(value, "mode", roomtoneContext);
+    if (mode == "play") {
+        settings.mode = SectorRoomtoneMode::Play;
+        settings.soundId = ReadString(value, "soundId", roomtoneContext);
+        if (settings.soundId.empty()) {
+            Fail(roomtoneContext + ".soundId must not be empty in play mode");
+        }
+        settings.volume = ReadOptionalFloat(
+                value, "volume", roomtoneContext, settings.volume);
+    } else if (mode == "silence") {
+        settings.mode = SectorRoomtoneMode::Silence;
+        if (value.contains("soundId") || value.contains("volume")) {
+            Fail(roomtoneContext + " silence mode cannot contain soundId or volume");
+        }
+    } else {
+        Fail(roomtoneContext + ".mode must be 'play' or 'silence'");
+    }
+    if (!std::isfinite(settings.volume)
+            || settings.volume < 0.0f || settings.volume > 1.0f) {
+        Fail(roomtoneContext + ".volume must be between 0 and 1");
+    }
+    if (value.contains("fadeMilliseconds")) {
+        settings.fadeMilliseconds = ReadInt(
+                value, "fadeMilliseconds", roomtoneContext);
+        if (settings.fadeMilliseconds < 0 || settings.fadeMilliseconds > 60000) {
+            Fail(roomtoneContext + ".fadeMilliseconds must be between 0 and 60000");
+        }
+    }
+    return settings;
+}
+
+void WriteRoomtoneSettings(
+        Json& owner,
+        const SectorRoomtoneSettings& settings,
+        const std::string& context)
+{
+    if (settings.mode == SectorRoomtoneMode::Inherit) return;
+    Json value = Json::object();
+    if (settings.mode == SectorRoomtoneMode::Play) {
+        if (settings.soundId.empty()) {
+            Fail(context + ".roomtone.soundId must not be empty in play mode");
+        }
+        if (!std::isfinite(settings.volume)
+                || settings.volume < 0.0f || settings.volume > 1.0f) {
+            Fail(context + ".roomtone.volume must be between 0 and 1");
+        }
+        value["mode"] = "play";
+        value["soundId"] = settings.soundId;
+        if (settings.volume != SectorRoomtoneSettings::DefaultVolume) {
+            value["volume"] = settings.volume;
+        }
+    } else if (settings.mode == SectorRoomtoneMode::Silence) {
+        value["mode"] = "silence";
+    } else {
+        Fail(context + ".roomtone mode is invalid");
+    }
+    if (settings.fadeMilliseconds
+            != SectorRoomtoneSettings::UseMapFadeMilliseconds) {
+        if (settings.fadeMilliseconds < 0 || settings.fadeMilliseconds > 60000) {
+            Fail(context + ".roomtone.fadeMilliseconds must be between 0 and 60000");
+        }
+        value["fadeMilliseconds"] = settings.fadeMilliseconds;
+    }
+    owner["roomtone"] = std::move(value);
 }
 
 [[noreturn]] void Fail(const std::string& message)
@@ -603,6 +672,13 @@ void ValidatePlacedBillboard(const SectorPlacedBillboard& billboard, const std::
 
 void ValidatePlacedDoorForSerialization(const SectorPlacedDoor& door, const std::string& context)
 {
+    if (!IsValidSectorUseTitle(door.useTitle)) {
+        Fail(context + ".useTitle is invalid");
+    }
+    if (!IsValidSectorTriggerScriptName(door.canOpenScript)
+            || !IsValidSectorTriggerScriptName(door.canCloseScript)) {
+        Fail(context + " permission callbacks must be empty or valid Lua global function names");
+    }
     if (!IsValidSectorTopologyId(door.anchor.lineDefId)
             || !IsValidSectorTopologyId(door.anchor.frontSectorId)
             || !IsValidSectorTopologyId(door.anchor.backSectorId)
@@ -864,6 +940,12 @@ SectorPlacedDoor ReadPlacedDoor(const Json& value, const std::string& context)
     }
 
     SectorPlacedDoor door;
+    door.instanceId = ReadOptionalString(value, "instanceId", context, door.instanceId);
+    door.useTitle = ReadOptionalString(value, "useTitle", context, door.useTitle);
+    door.canOpenScript = ReadOptionalString(
+            value, "canOpenScript", context, door.canOpenScript);
+    door.canCloseScript = ReadOptionalString(
+            value, "canCloseScript", context, door.canCloseScript);
     door.anchor = ReadSectorDoorAnchor(RequireObjectField(value, "anchor", context),
             context + ".anchor");
     door.width = ReadOptionalFloat(value, "width", context, door.width);
@@ -943,6 +1025,8 @@ SectorPlacedStaticModel ReadPlacedStaticModel(const Json& value, const std::stri
 
     SectorPlacedStaticModel staticModel;
     staticModel.modelPath = ReadOptionalString(value, "modelPath", context, staticModel.modelPath);
+    staticModel.instanceId = ReadOptionalString(
+            value, "instanceId", context, staticModel.instanceId);
     staticModel.rotationXRadians = DegreesToRadians(ReadOptionalFloat(
             value,
             "rotationXDegrees",
@@ -984,6 +1068,13 @@ SectorPlacedDynamicModel ReadPlacedDynamicModel(const Json& value, const std::st
 
     SectorPlacedDynamicModel model;
     model.modelPath = ReadOptionalString(value, "modelPath", context, model.modelPath);
+    model.instanceId = ReadOptionalString(value, "instanceId", context, model.instanceId);
+    model.useTitle = ReadOptionalString(value, "useTitle", context, model.useTitle);
+    model.useDistance = ReadOptionalPositiveFloat(
+            value, "useDistance", context, model.useDistance);
+    model.onUseScript = ReadOptionalString(
+            value, "onUseScript", context, model.onUseScript);
+    model.singleUse = ReadOptionalBool(value, "singleUse", context, model.singleUse);
     model.rotationXRadians = DegreesToRadians(ReadOptionalFloat(
             value, "rotationXDegrees", context, 0.0f));
     model.rotationZRadians = DegreesToRadians(ReadOptionalFloat(
@@ -1953,8 +2044,12 @@ Json WriteDoorFaceUvSet(const SectorDoorFaceUvSet& uvs, const std::string& conte
 Json WritePlacedDoor(const SectorPlacedDoor& door)
 {
     Json json{
+            {"instanceId", door.instanceId},
             {"anchor", WriteSectorDoorAnchor(door.anchor)}
     };
+    if (door.useTitle != "door") json["useTitle"] = door.useTitle;
+    if (!door.canOpenScript.empty()) json["canOpenScript"] = door.canOpenScript;
+    if (!door.canCloseScript.empty()) json["canCloseScript"] = door.canCloseScript;
     if (door.width != 0.0f) {
         json["width"] = door.width;
     }
@@ -2071,6 +2166,10 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
                 Fail(context + ".staticModel.scale must be a finite positive value");
             }
             Json staticModel = Json::object();
+            if (!IsValidSectorScriptInstanceId(object.staticModel.instanceId)) {
+                Fail(context + ".staticModel.instanceId is invalid");
+            }
+            staticModel["instanceId"] = object.staticModel.instanceId;
             if (!object.staticModel.modelPath.empty()) {
                 staticModel["modelPath"] = object.staticModel.modelPath;
             }
@@ -2113,6 +2212,14 @@ Json WriteRuntimeObject(const SectorPlacedRuntimeObject& object, const std::stri
             const float rotationXDegrees = RadiansToDegrees(model.rotationXRadians);
             const float rotationZDegrees = RadiansToDegrees(model.rotationZRadians);
             Json dynamicModel = Json::object();
+            if (!IsValidSectorDynamicModelInstanceId(model.instanceId)) {
+                Fail(context + ".dynamicModel.instanceId is invalid");
+            }
+            dynamicModel["instanceId"] = model.instanceId;
+            if (model.useTitle != "object") dynamicModel["useTitle"] = model.useTitle;
+            if (model.useDistance != 1.5f) dynamicModel["useDistance"] = model.useDistance;
+            if (!model.onUseScript.empty()) dynamicModel["onUseScript"] = model.onUseScript;
+            if (model.singleUse) dynamicModel["singleUse"] = true;
             if (!model.modelPath.empty()) dynamicModel["modelPath"] = model.modelPath;
             if (rotationXDegrees != 0.0f) dynamicModel["rotationXDegrees"] = rotationXDegrees;
             if (rotationZDegrees != 0.0f) dynamicModel["rotationZDegrees"] = rotationZDegrees;
@@ -2476,6 +2583,7 @@ Json WriteDynamicSpotLight(const SectorTopologyDynamicSpotLight& light, const st
     const float shadowSoftness = ClampDynamicSpotLightShadowSoftness(light.shadowSoftness);
     Json lightJson{
             {"id", light.id},
+            {"instanceId", light.instanceId},
             {"position", WriteVector3(light.position, context + ".position")},
             {"target", WriteVector3(light.target, context + ".target")},
             {"range", light.range},
@@ -2524,6 +2632,7 @@ Json WriteDynamicPointLight(const SectorTopologyDynamicPointLight& light, const 
     const float shadowSoftness = ClampDynamicSpotLightShadowSoftness(light.shadowSoftness);
     Json lightJson{
             {"id", light.id},
+            {"instanceId", light.instanceId},
             {"position", WriteVector3(light.position, context + ".position")},
             {"radius", light.radius},
             {"intensity", light.intensity},
@@ -2614,6 +2723,7 @@ Json WriteDynamicRectLight(const SectorTopologyDynamicRectLight& light, const st
     RequireFinite(light.shadowStrength, context + ".shadowStrength");
     RequireFinite(light.shadowSoftness, context + ".shadowSoftness");
     Json lightJson = WriteRectLightCommon(light, context);
+    lightJson["instanceId"] = light.instanceId;
     if (!light.enabled) lightJson["enabled"] = false;
     WriteDynamicLightFlickerFields(lightJson, light, context);
     if (light.castsShadow) lightJson["castsShadow"] = true;
@@ -2862,15 +2972,74 @@ std::vector<const T*> SortedById(const std::vector<T>& values)
     return sorted;
 }
 
+void ValidateCompiledSoundReferences(const SectorTopologyMap& map);
+
 void ValidateForSerialization(const SectorTopologyMap& map)
 {
     ValidateAudioSettings(map.audioSettings, "root.audio");
+    ValidateCompiledSoundReferences(map);
     const auto issues = ValidateSectorTopologyMap(map);
     const auto error = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
         return issue.severity == SectorTopologyValidationSeverity::Error;
     });
     if (error != issues.end()) {
         Fail("Topology validation failed: " + FormatSectorTopologyValidationIssue(*error));
+    }
+}
+
+void ValidateSoundReference(
+        const SectorLevelAudioSettings& audio,
+        const std::string& soundId,
+        SectorSoundType expectedType,
+        const std::string& context)
+{
+    const auto found = audio.soundsById.find(soundId);
+    if (soundId.empty() || found == audio.soundsById.end()
+            || found->second.type != expectedType) {
+        Fail(context + " must reference a registered "
+                + (expectedType == SectorSoundType::Music ? "Music" : "Sound")
+                + " map sound ID");
+    }
+}
+
+void ValidateSoundEmitterReference(
+        const SectorLevelAudioSettings& audio,
+        const std::string& soundId,
+        const std::string& context)
+{
+    if (soundId.empty()) return;
+    if (audio.soundsById.find(soundId) == audio.soundsById.end()) {
+        Fail(context + " must be empty or reference a registered Sound/Music map sound ID");
+    }
+}
+
+void ValidateCompiledSoundReferences(const SectorTopologyMap& map)
+{
+    for (const SectorTopologySector& sector : map.sectors) {
+        if (sector.roomtone.mode == SectorRoomtoneMode::Play) {
+            ValidateSoundReference(map.audioSettings, sector.roomtone.soundId,
+                    SectorSoundType::Music,
+                    "sector " + std::to_string(sector.id) + " roomtone");
+        }
+    }
+    for (const SectorCompiledSoundEmitter& emitter : map.soundEmitters) {
+        ValidateSoundEmitterReference(map.audioSettings, emitter.soundId,
+                "sound emitter " + std::to_string(emitter.sourceAuthoringEmitterId));
+    }
+}
+
+void ValidateAuthoringSoundReferences(const SectorAuthoringGraph& graph)
+{
+    for (const SectorAuthoringFaceAnchor& anchor : graph.faceAnchors) {
+        if (anchor.roomtone.mode == SectorRoomtoneMode::Play) {
+            ValidateSoundReference(graph.audioSettings, anchor.roomtone.soundId,
+                    SectorSoundType::Music,
+                    "face anchor " + std::to_string(anchor.id) + " roomtone");
+        }
+    }
+    for (const SectorAuthoringSoundEmitter& emitter : graph.soundEmitters) {
+        ValidateSoundEmitterReference(graph.audioSettings, emitter.soundId,
+                "sound emitter " + std::to_string(emitter.id));
     }
 }
 
@@ -2891,6 +3060,8 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
     std::vector<int> objectIds;
     objectIds.reserve(map.runtimeObjects.size());
     std::set<std::string> npcInstanceIds;
+    std::set<std::string> propInstanceIds;
+    std::set<std::string> doorInstanceIds;
     for (const SectorPlacedRuntimeObject& object : map.runtimeObjects) {
         const std::string objectContext = context + ".runtimeObjects[" + std::to_string(object.id) + "]";
         if (!IsValidSectorTopologyId(object.id)) {
@@ -2902,6 +3073,16 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
             if (object.kind == RuntimeObjectKindBillboard) {
                 ValidatePlacedBillboard(object.billboard, objectContext + ".billboard");
             } else if (object.kind == RuntimeObjectKindStaticModel) {
+                if (!IsValidSectorScriptInstanceId(
+                            object.staticModel.instanceId)) {
+                    Fail(objectContext
+                            + ".staticModel.instanceId is invalid");
+                }
+                if (!propInstanceIds.insert(
+                            object.staticModel.instanceId).second) {
+                    Fail(objectContext
+                            + ".staticModel.instanceId duplicates another prop instance ID");
+                }
                 if (!std::isfinite(object.staticModel.rotationXRadians)) {
                     Fail(objectContext + ".staticModel.rotationXRadians must be finite");
                 }
@@ -2917,6 +3098,23 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                 }
             } else if (object.kind == RuntimeObjectKindDynamicModel) {
                 const SectorPlacedDynamicModel& model = object.dynamicModel;
+                if (!IsValidSectorDynamicModelInstanceId(model.instanceId)) {
+                    Fail(objectContext + ".dynamicModel.instanceId is invalid");
+                }
+                if (!propInstanceIds.insert(model.instanceId).second) {
+                    Fail(objectContext
+                            + ".dynamicModel.instanceId duplicates another prop instance ID");
+                }
+                if (!IsValidSectorUseTitle(model.useTitle)) {
+                    Fail(objectContext + ".dynamicModel.useTitle is invalid");
+                }
+                if (!std::isfinite(model.useDistance)
+                        || model.useDistance <= 0.0f) {
+                    Fail(objectContext + ".dynamicModel.useDistance must be finite and positive");
+                }
+                if (!IsValidSectorTriggerScriptName(model.onUseScript)) {
+                    Fail(objectContext + ".dynamicModel.onUseScript is invalid");
+                }
                 if (!std::isfinite(model.rotationXRadians)
                         || !std::isfinite(model.rotationZRadians)
                         || !std::isfinite(model.heightOffsetWorld)) {
@@ -2956,6 +3154,13 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
                 }
             } else if (object.kind == RuntimeObjectKindDoor) {
                 ValidatePlacedDoorForSerialization(object.door, objectContext + ".door");
+                if (!IsValidSectorScriptInstanceId(object.door.instanceId)) {
+                    Fail(objectContext + ".door.instanceId is invalid");
+                }
+                if (!doorInstanceIds.insert(object.door.instanceId).second) {
+                    Fail(objectContext
+                            + ".door.instanceId duplicates another door instance ID");
+                }
             } else {
                 Fail(objectContext + ".kind must be 'billboard', 'static_model', 'dynamic_model', 'npc', or 'door'");
             }
@@ -2973,6 +3178,25 @@ void ValidateRuntimeObjects(const SectorTopologyMap& map, const std::string& con
         }
         objectIds.push_back(object.id);
     }
+
+    std::set<std::string> dynamicLightInstanceIds;
+    const auto validateDynamicLights = [&dynamicLightInstanceIds, &context](
+            const auto& lights,
+            const char* kind) {
+        for (const auto& light : lights) {
+            if (!IsValidSectorScriptInstanceId(light.instanceId)) {
+                Fail(context + "." + kind + "[" + std::to_string(light.id)
+                        + "].instanceId is invalid");
+            }
+            if (!dynamicLightInstanceIds.insert(light.instanceId).second) {
+                Fail(context + "." + kind + "[" + std::to_string(light.id)
+                        + "].instanceId duplicates another dynamic light instance ID");
+            }
+        }
+    };
+    validateDynamicLights(map.dynamicPointLights, "dynamicPointLights");
+    validateDynamicLights(map.dynamicSpotLights, "dynamicSpotLights");
+    validateDynamicLights(map.dynamicRectLights, "dynamicRectLights");
 }
 
 void ReadTextures(const Json& root, SectorTopologyMap& map)
@@ -3142,6 +3366,26 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
         }
     }
 
+    const auto soundEmittersIt = root.find("soundEmitters");
+    if (soundEmittersIt != root.end()) {
+        if (!soundEmittersIt->is_array()) Fail("root.soundEmitters must be an array");
+        for (size_t i = 0; i < soundEmittersIt->size(); ++i) {
+            const Json& value = (*soundEmittersIt)[i];
+            const std::string context = "root.soundEmitters[" + std::to_string(i) + "]";
+            if (!value.is_object()) Fail(context + " must be an object");
+            SectorCompiledSoundEmitter emitter;
+            emitter.sourceAuthoringEmitterId = ReadInt(value, "editorId", context);
+            emitter.id = ReadString(value, "id", context);
+            emitter.positionWorld = ReadVector3(
+                    RequireField(value, "positionWorld", context),
+                    context + ".positionWorld");
+            emitter.soundId = ReadOptionalString(value, "soundId", context);
+            emitter.volume = ReadOptionalFloat(value, "volume", context, emitter.volume);
+            emitter.loop = ReadOptionalBool(value, "loop", context, emitter.loop);
+            map.soundEmitters.push_back(std::move(emitter));
+        }
+    }
+
     const auto triggersIt = root.find("triggers");
     if (triggersIt != root.end()) {
         if (!triggersIt->is_array()) Fail("root.triggers must be an array");
@@ -3197,6 +3441,8 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             const std::string context = "root.runtimeObjects[" + std::to_string(i) + "]";
             map.runtimeObjects.push_back(ReadRuntimeObject(runtimeObjects[i], context));
         }
+        AssignMissingSectorPropInstanceIds(map);
+        AssignMissingSectorDoorInstanceIds(map);
     }
 
     const auto staticLightsIt = root.find("staticLights");
@@ -3306,6 +3552,8 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
 
             SectorTopologyDynamicPointLight light;
             light.id = ReadInt(value, "id", context);
+            light.instanceId = ReadOptionalString(
+                    value, "instanceId", context, light.instanceId);
             light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
             light.radius = ReadFloat(value, "radius", context);
             light.intensity = ReadFloat(value, "intensity", context);
@@ -3367,6 +3615,8 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
 
             SectorTopologyDynamicSpotLight light;
             light.id = ReadInt(value, "id", context);
+            light.instanceId = ReadOptionalString(
+                    value, "instanceId", context, light.instanceId);
             light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
             light.target = ReadVector3(RequireField(value, "target", context), context + ".target");
             light.range = ReadFloat(value, "range", context);
@@ -3447,6 +3697,8 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             if (!value.is_object()) Fail(context + " must be an object");
             SectorTopologyDynamicRectLight light;
             light.id = ReadInt(value, "id", context);
+            light.instanceId = ReadOptionalString(
+                    value, "instanceId", context, light.instanceId);
             light.position = ReadVector3(RequireField(value, "position", context), context + ".position");
             light.target = ReadVector3(RequireField(value, "target", context), context + ".target");
             light.rollDegrees = ReadOptionalFloat(value, "rollDegrees", context, 0.0f);
@@ -3478,6 +3730,7 @@ void ReadMapLevelFields(const Json& root, SectorTopologyMap& map, bool allowBake
             map.dynamicRectLights.push_back(light);
         }
     }
+    AssignMissingSectorDynamicLightInstanceIds(map);
 
     const auto lightmapSettingsIt = root.find("lightmapSettings");
     if (lightmapSettingsIt != root.end()) {
@@ -3599,6 +3852,7 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         anchor.footstepSet = ReadOptionalString(faceAnchors[i], "footstepSet", context);
         ValidateOptionalFootstepSet(anchor.footstepSet, context + ".footstepSet");
         anchor.ceilingSky = ReadOptionalBool(faceAnchors[i], "ceilingSky", context, false);
+        anchor.roomtone = ReadRoomtoneSettings(faceAnchors[i], context);
         anchor.floorUv = ReadUv(RequireField(faceAnchors[i], "floorUv", context), context + ".floorUv");
         anchor.ceilingUv = ReadUv(RequireField(faceAnchors[i], "ceilingUv", context), context + ".ceilingUv");
         ReadOptionalDecal(faceAnchors[i], "floorDecal", context, anchor.floorDecal);
@@ -3760,6 +4014,30 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
         }
     }
 
+    const auto soundEmittersIt = value.find("soundEmitters");
+    if (soundEmittersIt != value.end()) {
+        if (!soundEmittersIt->is_array()) {
+            Fail("root.authoringGraph.soundEmitters must be an array");
+        }
+        for (size_t i = 0; i < soundEmittersIt->size(); ++i) {
+            const Json& emitterJson = (*soundEmittersIt)[i];
+            const std::string context =
+                    "root.authoringGraph.soundEmitters[" + std::to_string(i) + "]";
+            if (!emitterJson.is_object()) Fail(context + " must be an object");
+            SectorAuthoringSoundEmitter emitter;
+            emitter.id = ReadInt(emitterJson, "editorId", context);
+            emitter.referenceId = ReadString(emitterJson, "id", context);
+            emitter.x = ReadCoord(emitterJson, "x", context);
+            emitter.y = ReadFloat(emitterJson, "y", context);
+            emitter.z = ReadCoord(emitterJson, "z", context);
+            emitter.soundId = ReadOptionalString(emitterJson, "soundId", context);
+            emitter.volume = ReadOptionalFloat(
+                    emitterJson, "volume", context, emitter.volume);
+            emitter.loop = ReadOptionalBool(emitterJson, "loop", context, emitter.loop);
+            graph.soundEmitters.push_back(std::move(emitter));
+        }
+    }
+
     const auto triggersIt = value.find("triggers");
     if (triggersIt != value.end()) {
         if (!triggersIt->is_array()) Fail("root.authoringGraph.triggers must be an array");
@@ -3795,6 +4073,7 @@ SectorAuthoringGraph ReadAuthoringGraph(const Json& value)
             ValidateSectorAuthoringGraphReferences(graph);
     const auto markerError = std::find_if(issues.begin(), issues.end(), [](const auto& issue) {
         return (issue.objectKind == SectorAuthoringObjectKind::LevelMarker
+                        || issue.objectKind == SectorAuthoringObjectKind::SoundEmitter
                         || issue.objectKind == SectorAuthoringObjectKind::Trigger)
                 && issue.severity == SectorAuthoringValidationSeverity::Error;
     });
@@ -3822,7 +4101,7 @@ void CopyMapLevelFieldsToDerivedTopology(SectorAuthoringDocument& document)
     document.derivation.topology.skySettings = document.mapData.skySettings;
     document.derivation.topology.directionalLight = document.mapData.directionalLight;
     document.derivation.topology.fogSettings = document.mapData.fogSettings;
-    document.derivation.topology.audioSettings = document.mapData.audioSettings;
+    document.derivation.topology.audioSettings = document.graph.audioSettings;
     document.derivation.topology.lightmapSettings = document.mapData.lightmapSettings;
     document.derivation.topology.bakedLightmap = document.mapData.bakedLightmap;
     document.derivation.topology.bakedReflectionProbes =
@@ -3850,6 +4129,8 @@ SectorAuthoringDocument ParseAuthoringDocument(const Json& root)
     ReadMapLevelFields(root, document.mapData, true);
     ValidateAuthoringMapData(document.mapData);
     document.graph = ReadAuthoringGraph(RequireField(root, "authoringGraph", "root"));
+    document.graph.audioSettings = document.mapData.audioSettings;
+    ValidateAuthoringSoundReferences(document.graph);
     document.derivation = DeriveSectorTopologyMapFromAuthoringGraph(document.graph);
     CopyMapLevelFieldsToDerivedTopology(document);
     return document;
@@ -4054,6 +4335,7 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
             ValidateOptionalFootstepSet(anchor->footstepSet, context + ".footstepSet");
             anchorJson["footstepSet"] = anchor->footstepSet;
         }
+        WriteRoomtoneSettings(anchorJson, anchor->roomtone, context);
         if (anchor->isVoid) {
             anchorJson["isVoid"] = true;
         }
@@ -4168,6 +4450,36 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
         }
     }
 
+
+    if (!graph.soundEmitters.empty()) {
+        const std::vector<SectorAuthoringValidationIssue> issues =
+                ValidateSectorAuthoringGraphReferences(graph);
+        const auto emitterError = std::find_if(
+                issues.begin(), issues.end(), [](const auto& issue) {
+                    return issue.objectKind == SectorAuthoringObjectKind::SoundEmitter
+                            && issue.severity == SectorAuthoringValidationSeverity::Error;
+                });
+        if (emitterError != issues.end()) {
+            Fail("Invalid authoring sound emitter: " + emitterError->message);
+        }
+        graphJson["soundEmitters"] = Json::array();
+        for (const SectorAuthoringSoundEmitter* emitter
+                : SortedById(graph.soundEmitters)) {
+            RequireFinite(emitter->y, "authoring sound emitter y");
+            RequireFinite(emitter->volume, "authoring sound emitter volume");
+            Json emitterJson{
+                    {"editorId", emitter->id},
+                    {"id", emitter->referenceId},
+                    {"x", emitter->x},
+                    {"y", emitter->y},
+                    {"z", emitter->z}};
+            if (!emitter->soundId.empty()) emitterJson["soundId"] = emitter->soundId;
+            if (emitter->volume != 1.0f) emitterJson["volume"] = emitter->volume;
+            if (emitter->loop) emitterJson["loop"] = true;
+            graphJson["soundEmitters"].push_back(std::move(emitterJson));
+        }
+    }
+
     if (!graph.triggers.empty()) {
         const std::vector<SectorAuthoringValidationIssue> issues =
                 ValidateSectorAuthoringGraphReferences(graph);
@@ -4206,13 +4518,19 @@ Json WriteAuthoringGraph(const SectorAuthoringGraph& graph)
 
 Json SerializeAuthoringDocument(const SectorAuthoringDocument& document)
 {
-    ValidateAuthoringMapData(document.mapData);
+    SectorTopologyMap normalizedMap = document.mapData;
+    normalizedMap.audioSettings = document.graph.audioSettings;
+    AssignMissingSectorPropInstanceIds(normalizedMap);
+    AssignMissingSectorDoorInstanceIds(normalizedMap);
+    AssignMissingSectorDynamicLightInstanceIds(normalizedMap);
+    ValidateAuthoringMapData(normalizedMap);
+    ValidateAuthoringSoundReferences(document.graph);
 
     Json root;
     root["formatVersion"] = 4;
     root["topology"] = "authoringGraph";
     root["coordSubdivisions"] = SectorCoordSubdivisions;
-    WriteMapLevelFields(root, document.mapData, true);
+    WriteMapLevelFields(root, normalizedMap, true);
     WriteAuthoringEditorSettings(root, document.editorSettings);
     root["authoringGraph"] = WriteAuthoringGraph(document.graph);
     return root;
@@ -4302,6 +4620,7 @@ SectorTopologyMap ParseMap(const Json& root)
         sector.footstepSet = ReadOptionalString(value, "footstepSet", context);
         ValidateOptionalFootstepSet(sector.footstepSet, context + ".footstepSet");
         sector.ceilingSky = ReadOptionalBool(value, "ceilingSky", context, false);
+        sector.roomtone = ReadRoomtoneSettings(value, context);
         sector.floorUv = ReadUv(RequireField(value, "floorUv", context), context + ".floorUv");
         sector.ceilingUv = ReadUv(RequireField(value, "ceilingUv", context), context + ".ceilingUv");
         ReadOptionalDecal(value, "floorDecal", context, sector.floorDecal);
@@ -4323,8 +4642,13 @@ SectorTopologyMap ParseMap(const Json& root)
     return map;
 }
 
-Json SerializeMap(const SectorTopologyMap& map)
+Json SerializeMap(const SectorTopologyMap& sourceMap)
 {
+    SectorTopologyMap normalizedMap = sourceMap;
+    AssignMissingSectorPropInstanceIds(normalizedMap);
+    AssignMissingSectorDoorInstanceIds(normalizedMap);
+    AssignMissingSectorDynamicLightInstanceIds(normalizedMap);
+    const SectorTopologyMap& map = normalizedMap;
     ValidateForSerialization(map);
     ValidateRuntimeObjects(map, "root");
 
@@ -4434,6 +4758,7 @@ Json SerializeMap(const SectorTopologyMap& map)
             ValidateOptionalFootstepSet(sector->footstepSet, context + ".footstepSet");
             sectorJson["footstepSet"] = sector->footstepSet;
         }
+        WriteRoomtoneSettings(sectorJson, sector->roomtone, context);
         root["sectors"].push_back(std::move(sectorJson));
     }
 
@@ -4453,6 +4778,30 @@ Json SerializeMap(const SectorTopologyMap& map)
                     {"id", marker->id},
                     {"position", WriteVector3(marker->position, "level marker position")},
                     {"orientationDegrees", marker->yawRadians * (180.0f / Pi)}});
+        }
+    }
+
+
+    if (!map.soundEmitters.empty()) {
+        root["soundEmitters"] = Json::array();
+        std::vector<const SectorCompiledSoundEmitter*> emitters;
+        emitters.reserve(map.soundEmitters.size());
+        for (const SectorCompiledSoundEmitter& emitter : map.soundEmitters) {
+            emitters.push_back(&emitter);
+        }
+        std::sort(emitters.begin(), emitters.end(), [](const auto* left, const auto* right) {
+            return left->sourceAuthoringEmitterId < right->sourceAuthoringEmitterId;
+        });
+        for (const SectorCompiledSoundEmitter* emitter : emitters) {
+            Json emitterJson{
+                    {"editorId", emitter->sourceAuthoringEmitterId},
+                    {"id", emitter->id},
+                    {"positionWorld", WriteVector3(
+                            emitter->positionWorld, "sound emitter positionWorld")}};
+            if (!emitter->soundId.empty()) emitterJson["soundId"] = emitter->soundId;
+            if (emitter->volume != 1.0f) emitterJson["volume"] = emitter->volume;
+            if (emitter->loop) emitterJson["loop"] = true;
+            root["soundEmitters"].push_back(std::move(emitterJson));
         }
     }
 

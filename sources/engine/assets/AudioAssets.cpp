@@ -304,6 +304,7 @@ MusicHandle MusicAssets::RequestMusic(AssetScopeHandle scope, const char* path)
         assert(slots.size() < std::numeric_limits<uint32_t>::max());
         Slot slot;
         slot.ownerCount = 1;
+        slot.sharedByPath = true;
         slot.path = normalizedPath;
         const uint32_t index = static_cast<uint32_t>(slots.size());
         slots.push_back(std::move(slot));
@@ -313,6 +314,34 @@ MusicHandle MusicAssets::RequestMusic(AssetScopeHandle scope, const char* path)
     }
     owner.music.push_back(handle);
     owner.musicByPath.emplace(normalizedPath, handle);
+    return handle;
+}
+
+MusicHandle MusicAssets::RequestMusicInstance(
+        AssetScopeHandle scope,
+        const char* instanceKey,
+        const char* path)
+{
+    const std::string normalizedPath = NormalizePath(path);
+    const std::string key = instanceKey != nullptr ? instanceKey : "";
+    if (normalizedPath.empty() || key.empty()) return NullMusicHandle();
+
+    std::lock_guard<std::mutex> lock(stateMutex);
+    if (scope.index >= scopeData.size()) return NullMusicHandle();
+    ScopeData& owner = scopeData[scope.index];
+    const auto existing = owner.musicInstancesByKey.find(key);
+    if (existing != owner.musicInstancesByKey.end()) return existing->second;
+
+    assert(slots.size() < std::numeric_limits<uint32_t>::max());
+    Slot slot;
+    slot.ownerCount = 1;
+    slot.path = normalizedPath;
+    const uint32_t index = static_cast<uint32_t>(slots.size());
+    slots.push_back(std::move(slot));
+    const MusicHandle handle{index, slots[index].generation};
+    pendingLoads.push_back(handle);
+    owner.music.push_back(handle);
+    owner.musicInstancesByKey.emplace(key, handle);
     return handle;
 }
 
@@ -441,6 +470,7 @@ void MusicAssets::UnloadScope(AssetScopeHandle scope)
     for (MusicHandle handle : owner.music) ReleaseNoLock(handle);
     owner.music.clear();
     owner.musicByPath.clear();
+    owner.musicInstancesByKey.clear();
 }
 
 void MusicAssets::ShutdownMainThread()
@@ -485,7 +515,7 @@ void MusicAssets::ReleaseNoLock(MusicHandle handle)
     Slot& slot = slots[handle.index];
     if (slot.ownerCount > 0) --slot.ownerCount;
     if (slot.ownerCount != 0) return;
-    musicByPath.erase(slot.path);
+    if (slot.sharedByPath) musicByPath.erase(slot.path);
     if (slot.state == State::Ready) UnloadAsset(slot.asset);
     slot.state = State::Unloaded;
     ++slot.generation;

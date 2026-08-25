@@ -46,6 +46,44 @@ in seconds:
 elapsed = elapsed + FrameDelta
 ```
 
+## Level audio
+
+Map audio IDs come from the level's **Sound Editor**. Roomtones use entries
+authored as `Music (streaming)`; the APIs below use buffered `Sound`
+entries. Invalid IDs or assets that are not ready return `false, reason`.
+
+### `playMapSound(soundId [, volume [, pitch]]) -> true | false, reason`
+
+Plays a non-positional one-shot. Volume defaults to `1.0` and is limited to
+`0.0..1.0`; pitch defaults to `1.0` and is limited to `0.01..4.0`.
+
+```lua
+playMapSound("light_switch_click", 0.8, 1.05)
+```
+
+### `playSoundEmitter(emitterId [, volume [, pitch]]) -> true | false, reason`
+
+Plays the positional Sound Emitter with the stable string ID authored in the
+editor. Emitters accept buffered Sound entries or independently streamed Music
+entries; both use positional attenuation, stereo pan, and occlusion. Omitted
+volume uses the emitter's authored volume. A looping emitter continues until
+stopped; a non-looping emitter plays once. Calling this for an already-playing
+loop updates its volume and pitch without restarting it.
+
+```lua
+playSoundEmitter("generator_motor")
+playSoundEmitter("steam_vent", 0.65, 0.9)
+```
+
+### `stopSoundEmitter(emitterId) -> true | false, reason`
+
+Stops the emitter if it is playing and prevents an authored looping emitter
+from automatically restarting. Calling it again is harmless.
+
+```lua
+stopSoundEmitter("generator_motor")
+```
+
 ## Tasks and timing
 
 ### `delay(milliseconds) -> true`
@@ -184,30 +222,142 @@ print("health", 100)
 
 ## Doors
 
-`placedObjectId` is the positive integer ID of a placed door.
+Doors have a stable, editor-visible string `instanceId`. The older positive
+integer `placedObjectId` is still accepted by `moveDoor` and `startMoveDoor`
+for compatibility.
 `targetFraction` is from `0.0` (closed) to `1.0` (open), and `durationMs` is
 finite and non-negative. A zero duration normally completes immediately.
 Closing is deferred while NPC navigation holds the door open. A zero-duration
 close is rejected in that state because it cannot safely bypass the physical
 door sweep; a timed close waits until the final NPC hold is released.
 
-### `moveDoor(placedObjectId, targetFraction, durationMs) -> true | false, reason`
+### `moveDoor(doorId, targetFraction, durationMs) -> true | false, reason`
 
 Blocks until the door reaches its target or the move fails.
 
 ```lua
-local ok, reason = moveDoor(42, 1.0, 750)
+local ok, reason = moveDoor("main_airlock", 1.0, 750)
 ```
 
-### `startMoveDoor(placedObjectId, targetFraction, durationMs) -> operation | nil, reason`
+### `startMoveDoor(doorId, targetFraction, durationMs) -> operation | nil, reason`
 
 Starts the same move asynchronously.
 
 ```lua
-local doorMove, reason = startMoveDoor(42, 0.0, 500)
+local doorMove, reason = startMoveDoor("main_airlock", 0.0, 500)
 ```
 
 Only one scripted move may control a door at a time.
+
+### `openDoor(doorId)`, `closeDoor(doorId)`, `toggleDoor(doorId)`
+
+Sets the normal authored door motion target and returns `true`, or
+`false, reason`. These non-blocking script controls use the stable string ID
+and intentionally bypass the player-use permission callbacks.
+
+```lua
+openDoor("main_airlock")
+toggleDoor("service_hatch")
+```
+
+Manual doors participate in the E-key Use prompt. Their optional
+`canOpenScript` and `canCloseScript` inspector callbacks gate only player use.
+A callback may yield and must eventually return boolean `true` to allow the
+requested open/close; `false`, no return value, a missing function, or an error
+denies it. A blank callback preserves the default engine behavior.
+
+## Dynamic props and animation
+
+A dynamic prop becomes usable when its `onUseScript` inspector field names a
+global Lua function. `useTitle` supplies the text in `Use <title>`, and
+`useDistance` controls its reach. The E-key resolver chooses the eligible prop
+or manual door closest to the center of the player's view. A `singleUse` prop
+is consumed after its callback starts successfully. Callback return values are
+ignored. Foreground callbacks are serialized, so a yielding callback cannot be
+started again while it is still running.
+
+Animation functions use the prop's stable string `instanceId`. Animation names
+are the exact, case-sensitive clip names imported from its model. Omitting the
+name keeps the currently selected clip.
+
+### `playPropAnimation(propId [, animationName [, mode]]) -> true | false, reason`
+
+Restarts and plays a clip. `mode` defaults to `"once"` and accepts `"once"`,
+`"once_reverse"`, `"loop"`, or `"loop_reverse"`.
+
+```lua
+playPropAnimation("wall_switch", "switch|switchAction", "once_reverse")
+playPropAnimation("ceiling_fan", "Ventilator", "loop")
+```
+
+### `pausePropAnimation(propId) -> true | false, reason`
+
+Pauses at the current frame.
+
+### `resumePropAnimation(propId) -> true | false, reason`
+
+Continues the current clip with its current playback mode and direction.
+
+### `stopPropAnimation(propId) -> true | false, reason`
+
+Stops playback and returns the current clip to its initial frame.
+
+### `setPropAnimationProgress(propId, progress [, animationName]) -> true | false, reason`
+
+Selects an optional clip, seeks to normalized progress from `0.0` to `1.0`,
+and leaves it paused. This also provides explicit initial/last-frame control.
+
+```lua
+setPropAnimationProgress("wall_switch", 0.0)
+setPropAnimationProgress("wall_switch", 1.0, "switch|switchAction")
+```
+
+## 3D prop emission
+
+Static 3D props and dynamic props share one stable `instanceId` namespace for
+model presentation controls. Both inspectors expose the ID. New and legacy
+static props receive a deterministic `prop_<objectId>` ID when needed.
+
+### `setPropEmissiveScale(propId, scale) -> true | false, reason`
+
+Multiplies every glTF emissive material in one prop instance. `0` turns model
+emission off, `1` restores the model-authored value, fractional values dim it,
+and values above `1` boost it. The scale must be a finite, non-negative float.
+The model must already contain an emissive factor or texture; this function
+does not infer an emissive mask from ordinary base color.
+
+Prop and dynamic-light IDs use separate namespaces, so a lamp may deliberately
+give both objects the same ID:
+
+```lua
+local function setHallLamp(enabled)
+    setDynamicLightEnabled("hall_lamp", enabled)
+    setPropEmissiveScale("hall_lamp", enabled and 1.0 or 0.0)
+end
+```
+
+## Dynamic lights
+
+Point, spot, and rectangular dynamic lights share one global stable-ID
+namespace. Their `instanceId` is editable in the inspector. Mutations refresh
+runtime dynamic lighting and atmosphere effects; disabling a light therefore
+also removes its halo, shaft, and dust presentation.
+
+### `setDynamicLightEnabled(lightId, enabled) -> true | false, reason`
+
+### `setDynamicLightIntensity(lightId, intensity) -> true | false, reason`
+
+Intensity must be finite and non-negative.
+
+### `setDynamicLightColor(lightId, red, green, blue) -> true | false, reason`
+
+Color channels are integer values from 0 through 255.
+
+```lua
+setDynamicLightEnabled("light_spot_12", false)
+setDynamicLightIntensity("warning_light", 3.5)
+setDynamicLightColor("warning_light", 255, 40, 20)
+```
 
 ## NPC movement
 

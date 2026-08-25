@@ -159,6 +159,16 @@ execute_process(
 if(NOT RAYLIB_GLTF_ENDPOINT_PATCH_RESULT EQUAL 0)
     message(FATAL_ERROR "Failed to apply the raylib glTF animation endpoint backport")
 endif()
+execute_process(
+        COMMAND ${CMAKE_COMMAND}
+                "-DRAYLIB_SOURCE_DIR=${raylib_SOURCE_DIR}"
+                "-DRAYLIB_PATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/raylib-6.0-sound-looping.patch"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplyRaylibSoundLoopingPatch.cmake"
+        RESULT_VARIABLE RAYLIB_SOUND_LOOP_PATCH_RESULT
+)
+if(NOT RAYLIB_SOUND_LOOP_PATCH_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to apply the raylib sound-looping patch")
+endif()
 target_compile_definitions(raylib PRIVATE
     SUPPORT_FILEFORMAT_JPG=1
     SUPPORT_GPU_SKINNING=1
@@ -225,6 +235,14 @@ if(BUILD_TESTING)
     target_include_directories(render_color_foundations_tests PRIVATE sources)
     target_link_libraries(render_color_foundations_tests PRIVATE raylib)
     add_test(NAME render_color_foundations COMMAND render_color_foundations_tests)
+
+    add_executable(model_node_animation_tests
+            tests/ModelNodeAnimationTests.cpp
+            sources/engine/assets/ModelAssets.cpp
+    )
+    target_include_directories(model_node_animation_tests PRIVATE sources)
+    target_link_libraries(model_node_animation_tests PRIVATE raylib)
+    add_test(NAME model_node_animation COMMAND model_node_animation_tests)
 
     add_executable(application_flow_tests
             tests/ApplicationFlowTests.cpp
@@ -327,13 +345,13 @@ if(BUILD_TESTING)
     target_link_libraries(sector_editor_light_editing_service_tests PRIVATE raylib)
     add_test(NAME sector_editor_light_editing_service COMMAND sector_editor_light_editing_service_tests)
 
-    add_executable(sector_editor_asset_pruning_tests
-            tests/SectorEditorAssetPruningTests.cpp
-            sources/sector_editor/services/asset_pruning/SectorEditorAssetPruning.cpp
+    add_executable(sector_editor_sound_editor_tests
+            tests/SectorEditorSoundEditorTests.cpp
+            sources/sector_editor/sounds/SectorEditorSoundEditorService.cpp
     )
-    target_include_directories(sector_editor_asset_pruning_tests PRIVATE sources)
-    target_link_libraries(sector_editor_asset_pruning_tests PRIVATE raylib)
-    add_test(NAME sector_editor_asset_pruning COMMAND sector_editor_asset_pruning_tests)
+    target_include_directories(sector_editor_sound_editor_tests PRIVATE sources)
+    target_link_libraries(sector_editor_sound_editor_tests PRIVATE raylib)
+    add_test(NAME sector_editor_sound_editor COMMAND sector_editor_sound_editor_tests)
 
     add_executable(sector_authoring_graph_tests
             tests/SectorAuthoringGraphTests.cpp
@@ -353,6 +371,7 @@ if(BUILD_TESTING)
             sources/sector_editor/services/fog_volumes/SectorEditorAuthoringFogVolumeEditingService.cpp
             sources/sector_editor/services/reflection_probes/SectorEditorReflectionProbeEditingService.cpp
             sources/sector_editor/services/level_markers/SectorEditorLevelMarkerEditingService.cpp
+            sources/sector_editor/services/sound_emitters/SectorEditorSoundEmitterEditingService.cpp
             sources/sector_editor/services/triggers/SectorEditorTriggerEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialEditingService.cpp
             sources/sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.cpp
@@ -590,6 +609,7 @@ if(BUILD_TESTING)
             sources/sector_demo/SectorDoorRuntime.cpp
             sources/sector_demo/SectorFpsController.cpp
             sources/sector_demo/SectorRuntimeObjects.cpp
+            sources/sector_demo/SectorUseInteraction.cpp
             sources/sector_demo/renderer/SectorImpactParticleSystem.cpp
             sources/sector_demo/SectorSwingDoorCatalog.cpp
             sources/sector_demo/SectorStaticModelCollision.cpp
