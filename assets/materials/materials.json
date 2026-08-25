@@ -1,6 +1,13 @@
 {
   "formatVersion": 1,
   "materials": {
+    "asphalt_06": {
+      "albedoTexturePath": "assets/images/hires/asphalt_06.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.0,
+      "roughnessFactor": 0.699999988079071,
+      "normalStrength": 1.0
+    },
     "asphalt_floor": {
       "albedoTexturePath": "assets/images/hires/asphalt_floor.png",
       "filter": "anisotropic8x",
@@ -152,7 +159,7 @@
       "albedoTexturePath": "assets/images/floors/large_industrial_tiles_512.png",
       "filter": "anisotropic8x",
       "metallicFactor": 0.0,
-      "roughnessFactor": 0.6499999761581421,
+      "roughnessFactor": 0.5,
       "normalStrength": 0.75
     },
     "metal_bars_01": {
@@ -167,6 +174,13 @@
       "filter": "anisotropic8x",
       "metallicFactor": 0.8500000238418579,
       "roughnessFactor": 0.550000011920929,
+      "normalStrength": 1.0
+    },
+    "metal_plate": {
+      "albedoTexturePath": "assets/images/hires/metal_plate.png",
+      "filter": "anisotropic8x",
+      "metallicFactor": 0.6499999761581421,
+      "roughnessFactor": 0.4000000059604645,
       "normalStrength": 1.0
     },
     "old_wooden_floor_02": {

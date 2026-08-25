@@ -50,6 +50,7 @@ public:
             int logicalHeight);
 
     ApplicationContentKind BackgroundContentKind() const;
+    float EditorUiTopInset() const;
     bool ShouldRefreshBackground() const;
     bool IsMenuOpen() const;
     bool QuitRequested() const { return flow.quitRequested; }

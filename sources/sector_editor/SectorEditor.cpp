@@ -17,6 +17,7 @@
 #include "sector_editor/SectorEditorLightmapModal.h"
 #include "sector_editor/SectorEditorMaterialActions.h"
 #include "sector_editor/SectorEditorMaterialModals.h"
+#include "sector_editor/SectorEditorMainMenu.h"
 #include "sector_editor/SectorEditorPreviewActions.h"
 #include "sector_editor/SectorEditorPreviewSettingsModal.h"
 #include "sector_editor/SectorEditorSetAllModal.h"
@@ -497,6 +498,8 @@ bool SectorEditor::ProcessFpsWeaponFire(engine::Input& input)
             || state.previewSettingsModal.open
             || npcEditorState.open
             || weaponEditorState.open
+            || materialRegistryEditorState.open
+            || uiState.mainMenu.openRootIndex >= 0
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen();
@@ -583,6 +586,25 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         return;
     }
 
+    if (state.mode == SectorEditorMode::Preview3D
+            && uiState.mainMenu.openRootIndex >= 0) {
+        input.ForEachEvent(
+                engine::InputEventType::KeyPressed,
+                true,
+                [this](engine::InputEvent& event) {
+                    if (event.key.key != KEY_F2) return;
+                    if (lightEditingState.proxyPlacement.active) {
+                        statusText = "Finish proxy placement before hiding the 3D UI";
+                    } else {
+                        previewState.overlay.previewUiHidden = true;
+                        previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
+                        engine::CloseMainMenu(uiState.mainMenu);
+                        statusText = "3D UI hidden";
+                    }
+                    engine::ConsumeEvent(event);
+                });
+    }
+
     if (state.mode == SectorEditorMode::Preview3D) {
         const Vector3 playerPosition = previewState.controller.freeflyController.pose.position;
         SectorDoorPlayerObstacle playerObstacle;
@@ -610,10 +632,13 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
         const bool hasBlockingModal = state.texturePicker.open
                 || state.soundPicker.open
                 || soundEditorState.open
+                || npcEditorState.open
+                || materialRegistryEditorState.open
                 || state.footstepPicker.open
                 || runtimeObjectEditingState.spritePicker.open
                 || runtimeObjectEditingState.staticModelPicker.open
                 || weaponEditorState.open
+                || uiState.mainMenu.openRootIndex >= 0
                 || HasDocumentModalOpen();
         if (hasBlockingModal) {
             if (previewState.controller.previewControlMode
@@ -697,6 +722,7 @@ void SectorEditor::Update(engine::EngineContext& context, float dt)
             || soundEditorState.open
             || npcEditorState.open
             || weaponEditorState.open
+            || uiState.mainMenu.openRootIndex >= 0
             || runtimeObjectEditingState.spritePicker.open
             || runtimeObjectEditingState.staticModelPicker.open
             || HasDocumentModalOpen()) {
@@ -745,8 +771,25 @@ void SectorEditor::RenderUI(
 {
     PollLightmapBakeResult(assets);
 
+    engine::BeginUI(ui, input);
+    const bool mainMenuVisible = state.mode != SectorEditorMode::Preview3D
+            || !previewState.overlay.previewUiHidden;
+    if (mainMenuVisible) {
+        const SectorEditorMainMenuCommand command = DrawSectorEditorMainMenu(
+                ui,
+                config,
+                input,
+                assets,
+                font,
+                state,
+                uiState.mainMenu,
+                IsMainMenuInteractionEnabled());
+        HandleMainMenuCommand(command, ui, assets);
+    } else {
+        engine::CloseMainMenu(uiState.mainMenu);
+    }
+
     if (state.mode == SectorEditorMode::Preview3D) {
-        engine::BeginUI(ui, input);
         if (lightmapBake.IsBlocking()) {
             DrawLightmapBakeModal(ui, config, input, assets, font);
             uiState.keyboardCaptured = true;
@@ -767,6 +810,36 @@ void SectorEditor::RenderUI(
         }
         if (materialRegistryEditorState.open) {
             DrawMaterialRegistryEditor(ui, config, input, assets, font, smallFont);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
+        if (npcEditorState.open) {
+            DrawNpcEditorModal(ui, config, input, assets, font, smallFont);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
+        if (soundEditorState.open) {
+            DrawSoundEditor(ui, config, input, assets, font, smallFont);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
+        if (state.confirmationModal.open) {
+            DrawConfirmationModal(ui, config, input, assets, font);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
+        if (state.saveLevelModal.open) {
+            DrawSaveLevelModal(ui, config, input, assets, font);
+            uiState.keyboardCaptured = true;
+            engine::EndUI(ui, config, input, assets);
+            return;
+        }
+        if (state.loadLevelModal.open) {
+            DrawLoadLevelModal(ui, config, input, assets, font);
             uiState.keyboardCaptured = true;
             engine::EndUI(ui, config, input, assets);
             return;
@@ -804,7 +877,8 @@ void SectorEditor::RenderUI(
         DrawFootstepPickerModal(ui, config, input, assets, font);
         DrawSpritePickerModal(ui, config, input, assets, font);
         DrawStaticModelPickerModal(ui, config, input, assets, font);
-        uiState.keyboardCaptured = ui.focusedId != 0;
+        uiState.keyboardCaptured = ui.focusedId != 0
+                || uiState.mainMenu.openRootIndex >= 0;
         if (state.texturePicker.open
                 || state.soundPicker.open
                 || state.footstepPicker.open
@@ -819,7 +893,6 @@ void SectorEditor::RenderUI(
         return;
     }
 
-    engine::BeginUI(ui, input);
     if (lightmapBake.IsBlocking()) {
         DrawLightmapBakeModal(ui, config, input, assets, font);
         uiState.keyboardCaptured = true;
@@ -940,7 +1013,8 @@ void SectorEditor::RenderUI(
     DrawFootstepPickerModal(ui, config, input, assets, font);
     DrawSpritePickerModal(ui, config, input, assets, font);
     DrawStaticModelPickerModal(ui, config, input, assets, font);
-    uiState.keyboardCaptured = ui.focusedId != 0;
+    uiState.keyboardCaptured = ui.focusedId != 0
+            || uiState.mainMenu.openRootIndex >= 0;
     if (state.texturePicker.open
             || state.soundPicker.open
             || state.footstepPicker.open
@@ -958,6 +1032,14 @@ void SectorEditor::RenderUI(
 bool SectorEditor::IsPreview3DActive() const
 {
     return state.mode == SectorEditorMode::Preview3D;
+}
+
+float SectorEditor::VisibleMainMenuHeight() const
+{
+    return state.mode == SectorEditorMode::Preview3D
+                    && previewState.overlay.previewUiHidden
+            ? 0.0f
+            : EditorMainMenuHeight;
 }
 
 bool SectorEditor::OpenLevel(
@@ -1224,27 +1306,91 @@ Vector2 SectorEditor::SnapMapPoint(Vector2 map) const
 
 Rectangle SectorEditor::BuildLeftPanelRect() const
 {
-    return Rectangle{0.0f, 0.0f, LeftPanelWidth, EditorHeight - BottomPanelHeight};
+    return BuildSectorEditorWorkspaceLayout().leftPanel;
 }
 
 Rectangle SectorEditor::BuildRightPanelRect() const
 {
-    return Rectangle{EditorWidth - RightPanelWidth, 0.0f, RightPanelWidth, EditorHeight - BottomPanelHeight};
+    return BuildSectorEditorWorkspaceLayout().rightPanel;
 }
 
 Rectangle SectorEditor::BuildBottomPanelRect() const
 {
-    return Rectangle{0.0f, EditorHeight - BottomPanelHeight, EditorWidth, BottomPanelHeight};
+    return BuildSectorEditorWorkspaceLayout().bottomPanel;
 }
 
 Rectangle SectorEditor::BuildCanvasRect() const
 {
-    return Rectangle{
-            LeftPanelWidth + PanelGap,
-            PanelGap,
-            EditorWidth - LeftPanelWidth - RightPanelWidth - PanelGap * 2.0f,
-            EditorHeight - BottomPanelHeight - PanelGap * 2.0f
-    };
+    return BuildSectorEditorWorkspaceLayout().canvas;
+}
+
+bool SectorEditor::IsMainMenuInteractionEnabled() const
+{
+    return !lightmapBake.IsBlocking()
+            && !materialRegistryEditorState.open
+            && !soundEditorState.open
+            && !npcEditorState.open
+            && !weaponEditorState.open
+            && !state.texturePicker.open
+            && !state.soundPicker.open
+            && !state.footstepPicker.open
+            && !runtimeObjectEditingState.spritePicker.open
+            && !runtimeObjectEditingState.staticModelPicker.open
+            && !HasDocumentModalOpen();
+}
+
+void SectorEditor::HandleMainMenuCommand(
+        SectorEditorMainMenuCommand command,
+        engine::UIContext& ui,
+        engine::AssetManager& assets)
+{
+    switch (command) {
+        case SectorEditorMainMenuCommand::NewLevel:
+            OpenNewConfirmation(assets);
+            break;
+        case SectorEditorMainMenuCommand::LoadLevel:
+            OpenLoadLevelModal();
+            break;
+        case SectorEditorMainMenuCommand::SaveLevel:
+            OpenSaveLevelModal();
+            break;
+        case SectorEditorMainMenuCommand::ReloadLevel:
+            OpenReloadConfirmation(assets);
+            break;
+        case SectorEditorMainMenuCommand::Toggle3DMode:
+            if (state.mode == SectorEditorMode::Preview3D) {
+                LeavePreview3D();
+            } else if (engineContext != nullptr) {
+                TryEnterPreview3D(*engineContext, ui);
+            }
+            break;
+        case SectorEditorMainMenuCommand::OpenMaterialEditor:
+            BuildMaterialRegistryEditorService().Open();
+            break;
+        case SectorEditorMainMenuCommand::OpenSoundEditor:
+            BuildSoundEditorService().Open();
+            break;
+        case SectorEditorMainMenuCommand::OpenNpcEditor:
+            BuildNpcEditorService().Open();
+            break;
+        case SectorEditorMainMenuCommand::OpenWeaponEditor:
+            OpenWeaponEditor(state.mode == SectorEditorMode::Preview3D);
+            break;
+        case SectorEditorMainMenuCommand::ToggleShowGrid:
+            state.showGrid = !state.showGrid;
+            break;
+        case SectorEditorMainMenuCommand::ToggleShowAxes:
+            state.showAxes = !state.showAxes;
+            break;
+        case SectorEditorMainMenuCommand::ToggleShowIds:
+            state.showSectorIds = !state.showSectorIds;
+            break;
+        case SectorEditorMainMenuCommand::OpenLevelSettings:
+            OpenPreviewSettingsModal();
+            break;
+        case SectorEditorMainMenuCommand::None:
+            break;
+    }
 }
 
 bool SectorEditor::IsMouseOverCanvas(const engine::Input& input) const
@@ -2288,6 +2434,7 @@ void SectorEditor::UpdatePreview3D(engine::Input& input, engine::AssetManager& a
                     previewState.overlay.previewUiHidden = !previewState.overlay.previewUiHidden;
                     if (previewState.overlay.previewUiHidden) {
                         previewState.selection.hoveredSurface3D = SectorSurfaceHit{};
+                        engine::CloseMainMenu(uiState.mainMenu);
                     }
                     statusText = previewState.overlay.previewUiHidden
                             ? "3D UI hidden"
@@ -5176,21 +5323,10 @@ void SectorEditor::DrawToolsPanel(
 
     const float rowH = 46.0f;
     const float gap = config.rowSpacing;
-    const float separatorH = 22.0f;
-    const float sectionLabelH = 26.0f;
-    const float lightmapLabelH = 32.0f;
-    const float bottomPadding = (rowH + gap * 2.0f) + 100;
-    const auto rowsHeight = [rowH, gap](int count) {
-        return static_cast<float>(count) * (rowH + gap);
-    };
-    const float toolsContentH =
-            sectionLabelH + rowsHeight(5)
-            + separatorH + sectionLabelH + rowsHeight(14)
-            + separatorH + rowsHeight(8)
-            + lightmapLabelH + rowsHeight(5)
-            + separatorH + rowsHeight(4)
-            + separatorH + rowsHeight(1)
-            + bottomPadding;
+    const float toolsContentH = MeasureSectorEditorToolsContentHeight(
+            rowH,
+            gap,
+            state.currentTool == SectorEditorTool::Trigger);
     const float scrollContentW = ScrollAreaContentWidthForVerticalScrollbar(
             panel.contentRect.width,
             config,
@@ -5433,55 +5569,6 @@ void SectorEditor::DrawToolsPanel(
     }
 
     separator();
-
-    const float documentButtonW = (contentW - gap) * 0.5f;
-    if (engine::Button(ui, config, input, assets, "sector_editor_new", Rectangle{0.0f, y, documentButtonW, rowH}, font, "New")) {
-        OpenNewConfirmation(assets);
-    }
-    if (engine::Button(ui, config, input, assets, "sector_editor_load", Rectangle{documentButtonW + gap, y, documentButtonW, rowH}, font, "Load")) {
-        OpenLoadLevelModal();
-    }
-    y += rowH + gap;
-    if (engine::Button(ui, config, input, assets, "sector_editor_save", Rectangle{0.0f, y, documentButtonW, rowH}, font, "Save")) {
-        OpenSaveLevelModal();
-    }
-    if (engine::Button(ui, config, input, assets, "sector_editor_reload", Rectangle{documentButtonW + gap, y, documentButtonW, rowH}, font, "Reload")) {
-        OpenReloadConfirmation(assets);
-    }
-    y += rowH + gap;
-
-    if (engine::Button(ui, config, input, assets, "sector_editor_material_editor", Rectangle{0.0f, y, contentW, rowH}, font, "Material Editor")) {
-        BuildMaterialRegistryEditorService().Open();
-    }
-    y += rowH + gap;
-    if (engine::Button(ui, config, input, assets, "sector_editor_preview_settings_2d", Rectangle{0.0f, y, contentW, rowH}, font, "Settings")) {
-        OpenPreviewSettingsModal();
-    }
-    y += rowH + gap;
-    if (engine::Button(
-                ui, config, input, assets,
-                "sector_editor_npc_editor",
-                Rectangle{0.0f, y, contentW, rowH},
-                font, "NPC Editor")) {
-        BuildNpcEditorService().Open();
-    }
-    y += rowH + gap;
-    if (engine::Button(
-                ui, config, input, assets,
-                "sector_editor_weapon_editor",
-                Rectangle{0.0f, y, contentW, rowH},
-                font, "Weapon Editor")) {
-        OpenWeaponEditor(false);
-    }
-    y += rowH + gap;
-    if (engine::Button(
-                ui, config, input, assets,
-                "sector_editor_sound_editor",
-                Rectangle{0.0f, y, contentW, rowH},
-                font, "Sound Editor")) {
-        BuildSoundEditorService().Open();
-    }
-    y += rowH + gap;
     const float roomtoneFadeLabelW = 150.0f;
     const SectorEditorIntInputResult roomtoneFadeResult = DrawLabeledIntInput(
             ui, config, input, assets, font,
@@ -5497,82 +5584,6 @@ void SectorEditor::DrawToolsPanel(
                 roomtoneFadeResult.value);
     }
     y += rowH + gap;
-
-    engine::Text(ui, config, assets, Rectangle{0.0f, y, contentW, 28.0f}, font, "Lightmap Settings", engine::UITextJustify::Left, config.mutedTextColor);
-    y += 32.0f;
-
-    const float lightmapLabelW = 180.0f;
-    const auto drawLightmapSetting = [&](const char* id, const char* label, float& value, engine::UIFloatInputState& inputState, float minValue, float maxValue, int decimals, const char* status) {
-        const SectorEditorFloatInputResult result = DrawLabeledFloatInput(
-                ui,
-                config,
-                input,
-                assets,
-                font,
-                id,
-                label,
-                Rectangle{0.0f, y, lightmapLabelW, rowH},
-                Rectangle{lightmapLabelW + gap, y, std::max(0.0f, contentW - lightmapLabelW - gap), rowH},
-                engine::UITextJustify::Left,
-                value,
-                inputState,
-                minValue,
-                maxValue,
-                decimals);
-        if (result.changed && result.value != value) {
-            value = result.value;
-            Lifecycle().hasUnsavedChanges = true;
-            Lifecycle().topologyDocumentDirty = true;
-            state.lightmapSourceHashRevision = 0;
-            statusText = status;
-        }
-        y += rowH + gap;
-    };
-
-    TopologyMap().lightmapSettings.ambientOcclusionRadius = ClampAmbientOcclusionRadius(TopologyMap().lightmapSettings.ambientOcclusionRadius);
-    TopologyMap().lightmapSettings.ambientOcclusionStrength = ClampAmbientOcclusionStrength(TopologyMap().lightmapSettings.ambientOcclusionStrength);
-    TopologyMap().lightmapSettings.indirectBounceRadius = ClampIndirectBounceRadius(TopologyMap().lightmapSettings.indirectBounceRadius);
-    TopologyMap().lightmapSettings.indirectBounceStrength = ClampIndirectBounceStrength(TopologyMap().lightmapSettings.indirectBounceStrength);
-    drawLightmapSetting(
-            "sector_editor_ao_radius",
-            "AO radius",
-            TopologyMap().lightmapSettings.ambientOcclusionRadius,
-            uiState.ambientOcclusionRadiusInput,
-            SectorWorldToAuthoringDistance(0.05f),
-            SectorWorldToAuthoringDistance(16.0f),
-            2,
-            "Updated AO radius"
-    );
-    drawLightmapSetting(
-            "sector_editor_ao_strength",
-            "AO strength",
-            TopologyMap().lightmapSettings.ambientOcclusionStrength,
-            uiState.ambientOcclusionStrengthInput,
-            0.0f,
-            1.0f,
-            3,
-            "Updated AO strength"
-    );
-    drawLightmapSetting(
-            "sector_editor_bounce_radius",
-            "Bounce radius",
-            TopologyMap().lightmapSettings.indirectBounceRadius,
-            uiState.indirectBounceRadiusInput,
-            SectorWorldToAuthoringDistance(0.05f),
-            SectorWorldToAuthoringDistance(16.0f),
-            2,
-            "Updated bounce radius"
-    );
-    drawLightmapSetting(
-            "sector_editor_bounce_strength",
-            "Bounce strength",
-            TopologyMap().lightmapSettings.indirectBounceStrength,
-            uiState.indirectBounceStrengthInput,
-            0.0f,
-            1.0f,
-            3,
-            "Updated bounce strength"
-    );
 
     if (engine::Button(ui, config, input, assets, "sector_editor_bake_lightmaps", Rectangle{0.0f, y, contentW, rowH}, font, "Bake Lightmaps")) {
         OpenLightmapBakeSetup();
@@ -5603,21 +5614,6 @@ void SectorEditor::DrawToolsPanel(
         statusText = "Updated grid size";
     }
     y += rowH + gap;
-
-    engine::Checkbox(ui, config, input, assets, "sector_editor_show_grid", Rectangle{0.0f, y, contentW, rowH}, font, "Show grid", state.showGrid);
-    y += rowH + gap;
-    engine::Checkbox(ui, config, input, assets, "sector_editor_show_axes", Rectangle{0.0f, y, contentW, rowH}, font, "Show axes", state.showAxes);
-    y += rowH + gap;
-    engine::Checkbox(ui, config, input, assets, "sector_editor_show_ids", Rectangle{0.0f, y, contentW, rowH}, font, "Show ids", state.showSectorIds);
-    y += rowH + gap;
-
-    separator();
-
-    if (engine::Button(ui, config, input, assets, "sector_editor_preview_3d", Rectangle{0.0f, y, contentW, rowH}, font, "3D Mode")) {
-        if (engineContext != nullptr) {
-            TryEnterPreview3D(*engineContext, ui);
-        }
-    }
 
     engine::EndScrollArea(ui, config, input, scroll, uiState.toolsScroll);
     engine::EndPanel(ui, config, panel);
@@ -6876,6 +6872,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
     ui.activeId = 0;
     ui.openOptionId = 0;
     ui.focusedId = 0;
+    engine::CloseMainMenu(uiState.mainMenu);
     uiState.keyboardCaptured = false;
 
     std::string gateMessage;
@@ -6961,6 +6958,7 @@ bool SectorEditor::TryEnterPreview3D(engine::EngineContext& context, engine::UIC
 
 void SectorEditor::LeavePreview3D()
 {
+    engine::CloseMainMenu(uiState.mainMenu);
     CancelLightProxyPlacement(nullptr);
     CancelLightPilotWithPreviewRestore(nullptr);
     if (previewState.controller.previewControlMode == SectorPreviewControlMode::Gameplay) {
@@ -7347,7 +7345,7 @@ void SectorEditor::OpenPreviewSettingsModal()
     state.previewSettingsModal.draftFogSettings =
             NormalizeSectorTopologyFogSettings(TopologyMap().fogSettings);
     state.previewSettingsModal.draftLightmapSettings =
-            NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
+            NormalizeSectorLevelLightmapSettings(TopologyMap().lightmapSettings);
     state.previewSettingsModal.draftHdrBloom =
             engine::NormalizeHdrBloomSettings(applicationSettings.hdrBloom);
 }
@@ -7374,7 +7372,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     const SectorTopologyFogSettings draftFogSettings =
             NormalizeSectorTopologyFogSettings(state.previewSettingsModal.draftFogSettings);
     const SectorLightmapBakeSettings draftLightmapSettings =
-            NormalizeSectorPreviewObjectProbeSettings(state.previewSettingsModal.draftLightmapSettings);
+            NormalizeSectorLevelLightmapSettings(state.previewSettingsModal.draftLightmapSettings);
     const bool previewChanged = !SamePreviewSettings(
             TopologyMap().previewSettings,
             draftPreviewSettings);
@@ -7387,13 +7385,10 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
             draftDirectionalLight);
     const bool fogChanged = !SameFogSettings(TopologyMap().fogSettings, draftFogSettings);
     const SectorLightmapBakeSettings currentLightmapSettings =
-            NormalizeSectorPreviewObjectProbeSettings(TopologyMap().lightmapSettings);
-    const bool objectProbeSettingsChanged =
-            currentLightmapSettings.objectProbeSpacingWorld != draftLightmapSettings.objectProbeSpacingWorld
-            || currentLightmapSettings.objectProbeLowerHeightWorld
-                    != draftLightmapSettings.objectProbeLowerHeightWorld
-            || currentLightmapSettings.objectProbeUpperHeightWorld
-                    != draftLightmapSettings.objectProbeUpperHeightWorld;
+            NormalizeSectorLevelLightmapSettings(TopologyMap().lightmapSettings);
+    const bool lightmapSettingsChanged = !SameSectorLevelLightmapSettings(
+            currentLightmapSettings,
+            draftLightmapSettings);
     const engine::HdrBloomSettings draftHdrBloom =
             engine::NormalizeHdrBloomSettings(state.previewSettingsModal.draftHdrBloom);
     const engine::HdrBloomSettings currentHdrBloom =
@@ -7404,10 +7399,10 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
             || draftHdrBloom.intensity != currentHdrBloom.intensity
             || draftHdrBloom.radius != currentHdrBloom.radius;
     if (!previewChanged && !skyChanged && !directionalChanged && !fogChanged
-            && !objectProbeSettingsChanged && !bloomChanged) {
+            && !lightmapSettingsChanged && !bloomChanged) {
         ResetSectorPreviewSettingsModalPreservingView(
                 state.previewSettingsModal);
-        statusText = "Preview settings unchanged";
+        statusText = "Level settings unchanged";
         return;
     }
 
@@ -7420,7 +7415,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
     TopologyMap().skySettings = draftSkySettings;
     TopologyMap().directionalLight = draftDirectionalLight;
     ApplySectorPreviewFogSettings(TopologyMap(), draftFogSettings);
-    ApplySectorPreviewObjectProbeSettings(TopologyMap(), draftLightmapSettings);
+    ApplySectorLevelLightmapSettings(TopologyMap(), draftLightmapSettings);
     applicationSettings.hdrBloom = draftHdrBloom;
     if (bloomChanged) {
         std::string saveError;
@@ -7428,8 +7423,8 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
             TraceLog(LOG_WARNING, "Could not persist application settings: %s", saveError.c_str());
         }
     }
-    if (previewChanged || skyChanged || directionalChanged || fogChanged || objectProbeSettingsChanged) {
-        MarkTopologyDocumentEdited("Preview settings updated");
+    if (previewChanged || skyChanged || directionalChanged || fogChanged || lightmapSettingsChanged) {
+        MarkTopologyDocumentEdited("Level settings updated");
     }
     ResetSectorPreviewSettingsModalPreservingView(
             state.previewSettingsModal);
@@ -7460,7 +7455,7 @@ void SectorEditor::ApplyPreviewSettingsModal(engine::AssetManager& assets)
         ApplyGameplayPoseToPreview();
     }
     statusText = TextFormat(
-            "Preview settings updated: walk %.1f run %.1f eye %.1f gravity %.1f radius %.2f height %.2f step %.2f jump %.2f bob %.3f freq %.1f",
+            "Level settings updated: walk %.1f run %.1f eye %.1f gravity %.1f radius %.2f height %.2f step %.2f jump %.2f bob %.3f freq %.1f",
             previewState.controller.fpsControllerConfig.walkSpeed,
             previewState.controller.fpsControllerConfig.runSpeed,
             previewState.controller.fpsControllerConfig.eyeHeight,

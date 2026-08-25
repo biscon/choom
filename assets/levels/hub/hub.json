@@ -5605,7 +5605,7 @@
     "height": 2048,
     "version": 2,
     "format": "rgba16fLinearHdrRgbAo+rgba8DominantDirectionFractionLE",
-    "sourceHash": "36ae38df86fadb22",
+    "sourceHash": "4459dba7579362b7",
     "storedStatistics": {
       "rgbMin": [
         0.0,
@@ -5625,7 +5625,7 @@
     "objectProbes": {
       "path": "assets/levels/hub/hub.lightmap.object_probes.bin",
       "version": 3,
-      "sourceHash": "36ae38df86fadb22",
+      "sourceHash": "4459dba7579362b7",
       "count": 2667,
       "probeSpacingWorld": 1.0,
       "probeLowerHeightWorld": 0.6000000238418579,
@@ -5651,7 +5651,7 @@
     "staticModels": {
       "path": "assets/levels/hub/hub.lightmap.bin.static_models.bin",
       "version": 3,
-      "sourceHash": "36ae38df86fadb22",
+      "sourceHash": "4459dba7579362b7",
       "modelCount": 49,
       "objectCount": 112,
       "format": "staticModelUvRemapF32LE"
@@ -5660,7 +5660,7 @@
   "bakedReflectionProbes": {
     "path": "assets/levels/hub/hub.reflection-probes.bin",
     "version": 1,
-    "count": 7,
+    "count": 8,
     "format": "rgba16f-cubemap-mips"
   },
   "editorSettings": {
@@ -20797,7 +20797,7 @@
         "y": 1530,
         "floorZ": -29.0,
         "ceilingZ": 24.0,
-        "floorMaterialId": "large_industrial_tiles_512",
+        "floorMaterialId": "asphalt_06",
         "ceilingMaterialId": "concrete_floor1",
         "floorUv": {
           "scale": [
@@ -22324,22 +22324,6 @@
         "intensity": 2.0
       },
       {
-        "id": 4,
-        "x": -5056,
-        "z": 1488,
-        "yWorld": -0.3125,
-        "influenceOffsetWorld": [
-          1.0,
-          0.0,
-          -4.125
-        ],
-        "halfExtentsWorld": [
-          14.5,
-          3.3125,
-          6.5
-        ]
-      },
-      {
         "id": 5,
         "x": -3872,
         "z": -640,
@@ -22385,6 +22369,38 @@
           3.9375,
           1.9375,
           4.375
+        ]
+      },
+      {
+        "id": 8,
+        "x": -5632,
+        "z": 1536,
+        "yWorld": -0.3125,
+        "influenceOffsetWorld": [
+          -2.0,
+          0.0,
+          0.0
+        ],
+        "halfExtentsWorld": [
+          9.0,
+          3.3125,
+          12.0
+        ]
+      },
+      {
+        "id": 9,
+        "x": -4224,
+        "z": 1536,
+        "yWorld": -0.3125,
+        "influenceOffsetWorld": [
+          3.0,
+          0.0,
+          0.0
+        ],
+        "halfExtentsWorld": [
+          7.0,
+          3.3125,
+          12.0
         ]
       }
     ],

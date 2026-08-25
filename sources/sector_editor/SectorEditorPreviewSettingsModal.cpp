@@ -59,7 +59,7 @@ void DrawPreviewSettingsModal(
     DrawRectangleLinesEx(modal, config.borderThickness, config.borderColor);
 
     float y = modal.y + 22.0f;
-    engine::Text(config, assets, Rectangle{modal.x + 26.0f, y, modal.width - 52.0f, 42.0f}, font, "Preview Settings");
+    engine::Text(config, assets, Rectangle{modal.x + 26.0f, y, modal.width - 52.0f, 42.0f}, font, "Level Settings");
     y += 54.0f;
 
     const float tabH = 38.0f;
@@ -368,7 +368,7 @@ void DrawPreviewSettingsModal(
                 16.0f,
                 2);
         modalState.draftLightmapSettings =
-                NormalizeSectorPreviewObjectProbeSettings(modalState.draftLightmapSettings);
+                NormalizeSectorLevelLightmapSettings(modalState.draftLightmapSettings);
 
         contentY += 8.0f;
         engine::Text(ui, config, assets, Rectangle{0.0f, contentY, contentW, 34.0f},
@@ -392,6 +392,57 @@ void DrawPreviewSettingsModal(
                 modalState.draftHdrBloom.radius, modalState.bloomRadiusInput,
                 0.25f, 4.0f, 2);
         modalState.draftHdrBloom = engine::NormalizeHdrBloomSettings(modalState.draftHdrBloom);
+
+        contentY += 8.0f;
+        engine::Text(
+                ui,
+                config,
+                assets,
+                Rectangle{0.0f, contentY, contentW, 34.0f},
+                font,
+                "Lightmap Settings",
+                engine::UITextJustify::Left,
+                config.textColor);
+        contentY += 38.0f;
+        drawFloat(
+                contentY,
+                "sector_editor_level_ao_radius",
+                "AO radius",
+                modalState.draftLightmapSettings.ambientOcclusionRadius,
+                modalState.ambientOcclusionRadiusInput,
+                SectorWorldToAuthoringDistance(0.05f),
+                SectorWorldToAuthoringDistance(16.0f),
+                2);
+        drawFloat(
+                contentY,
+                "sector_editor_level_ao_strength",
+                "AO strength",
+                modalState.draftLightmapSettings.ambientOcclusionStrength,
+                modalState.ambientOcclusionStrengthInput,
+                0.0f,
+                1.0f,
+                3);
+        drawFloat(
+                contentY,
+                "sector_editor_level_bounce_radius",
+                "Bounce radius",
+                modalState.draftLightmapSettings.indirectBounceRadius,
+                modalState.indirectBounceRadiusInput,
+                SectorWorldToAuthoringDistance(0.05f),
+                SectorWorldToAuthoringDistance(16.0f),
+                2);
+        drawFloat(
+                contentY,
+                "sector_editor_level_bounce_strength",
+                "Bounce strength",
+                modalState.draftLightmapSettings.indirectBounceStrength,
+                modalState.indirectBounceStrengthInput,
+                0.0f,
+                1.0f,
+                3);
+        modalState.draftLightmapSettings =
+                NormalizeSectorLevelLightmapSettings(
+                        modalState.draftLightmapSettings);
 
         engine::EndScrollArea(ui, config, input, scroll, modalState.lightingScroll);
     };

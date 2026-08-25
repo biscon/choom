@@ -18,6 +18,7 @@ namespace game {
 
 inline constexpr float EditorWidth = 1920.0f;
 inline constexpr float EditorHeight = 1080.0f;
+inline constexpr float EditorMainMenuHeight = 52.0f;
 inline constexpr float LeftPanelWidth = 360.0f;
 inline constexpr float RightPanelWidth = 384.0f;
 inline constexpr float BottomPanelHeight = 78.0f;

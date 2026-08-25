@@ -383,6 +383,13 @@ ApplicationContentKind GameApplication::BackgroundContentKind() const
     return ApplicationContentKind::Empty;
 }
 
+float GameApplication::EditorUiTopInset() const
+{
+    return BackgroundScreen() == ApplicationScreen::Editor
+            ? editor.VisibleMainMenuHeight()
+            : 0.0f;
+}
+
 bool GameApplication::ShouldRefreshBackground() const
 {
     if (gameSession.IsLoadScreenOpaque()) return false;

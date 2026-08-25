@@ -663,7 +663,11 @@ SectorEditorPreviewOverlayResult DrawSectorEditorPreviewOverlay(
     const float stripH = 26.0f;
     const float tabH = 30.0f;
     const float rowH = 24.0f;
-    const Rectangle basePanel{32.0f, 32.0f, panelW, 0.0f};
+    const Rectangle basePanel{
+            32.0f,
+            EditorMainMenuHeight + 32.0f,
+            panelW,
+            0.0f};
     const float contentW = panelW - padding * 2.0f;
     engine::UIConfig smallConfig = SectorEditorSmallFontConfig(config, assets, smallFont);
 

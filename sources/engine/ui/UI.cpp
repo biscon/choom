@@ -66,6 +66,9 @@ Rectangle TransformBounds(const UIContext& ui, Rectangle bounds)
 
 bool AllowsWidgetHit(const UIContext& ui, Vector2 point)
 {
+    if (ui.mainMenuBlocksNormalInput) {
+        return false;
+    }
     if (OpenOptionBlocksPoint(ui, point)) {
         return false;
     }
@@ -1154,6 +1157,8 @@ void BeginUI(UIContext& ui, Input& input)
     ui.mousePosition = input.MousePosition();
     ui.mouseDown = input.IsMouseButtonDown(MOUSE_LEFT_BUTTON);
     ui.optionOverlay = UIContext::OptionOverlay{};
+    ui.mainMenuOverlay = UIContext::MainMenuOverlay{};
+    ui.mainMenuBlocksNormalInput = false;
     ui.openOptionIssuedThisFrame = false;
     ui.openOptionClickPending = false;
     ui.openOptionClickPosition = {};
@@ -1265,6 +1270,65 @@ void EndUI(
         }
 
         DrawSelectablePanelLines(ui, config, overlay.dropdownBounds, visibleCount);
+    }
+
+    if (ui.mainMenuOverlay.active) {
+        const UIContext::MainMenuOverlay& overlay = ui.mainMenuOverlay;
+        for (size_t popupIndex = 0; popupIndex < overlay.popupCount; ++popupIndex) {
+            const UIContext::MainMenuOverlayPopup& popup = overlay.popups[popupIndex];
+            DrawRectangleRec(popup.bounds, config.panelColor);
+            for (size_t rowOffset = 0; rowOffset < popup.rowCount; ++rowOffset) {
+                const UIContext::MainMenuOverlayRow& row =
+                        overlay.rows[popup.firstRow + rowOffset];
+                if (row.kind == UIMenuItemKind::Separator) {
+                    const float lineY = row.bounds.y + row.bounds.height * 0.5f;
+                    DrawLineEx(
+                            Vector2{row.bounds.x + config.paddingX, lineY},
+                            Vector2{row.bounds.x + row.bounds.width - config.paddingX, lineY},
+                            config.borderThickness,
+                            config.borderColor);
+                    continue;
+                }
+
+                const Color fill = row.hovered && row.enabled
+                        ? config.widgetHoverColor : config.widgetColor;
+                DrawRectangleRec(row.bounds, fill);
+                Rectangle textBounds = row.bounds;
+                textBounds.x += 28.0f;
+                textBounds.width = std::max(0.0f, textBounds.width - 56.0f);
+                Text(
+                        config,
+                        assets,
+                        textBounds,
+                        overlay.font,
+                        row.label == nullptr ? "" : row.label,
+                        UITextJustify::Left,
+                        row.enabled ? config.textColor : config.disabledColor);
+                if (row.kind == UIMenuItemKind::Checkbox && row.checked) {
+                    const float x = row.bounds.x + 10.0f;
+                    const float y = row.bounds.y + row.bounds.height * 0.5f;
+                    const Color tint = row.enabled
+                            ? config.accentColor : config.disabledColor;
+                    DrawLineEx(Vector2{x, y}, Vector2{x + 5.0f, y + 5.0f}, 3.0f, tint);
+                    DrawLineEx(Vector2{x + 5.0f, y + 5.0f}, Vector2{x + 14.0f, y - 6.0f}, 3.0f, tint);
+                }
+                if (row.kind == UIMenuItemKind::Submenu) {
+                    const float x = row.bounds.x + row.bounds.width - 14.0f;
+                    const float y = row.bounds.y + row.bounds.height * 0.5f;
+                    const Color tint = row.enabled
+                            ? config.textColor : config.disabledColor;
+                    DrawTriangle(
+                            Vector2{x - 4.0f, y - 6.0f},
+                            Vector2{x - 4.0f, y + 6.0f},
+                            Vector2{x + 4.0f, y},
+                            tint);
+                }
+            }
+            DrawRectangleLinesEx(
+                    popup.bounds,
+                    config.borderThickness,
+                    config.borderColor);
+        }
     }
 
     EndUI(ui, input);
@@ -2605,6 +2669,375 @@ bool Option(
             optionLabels.empty() ? nullptr : optionLabels.data(),
             optionLabels.size(),
             selectedIndex);
+}
+
+void CloseMainMenu(UIMainMenuState& state)
+{
+    state.openRootIndex = -1;
+    state.openDepth = 0;
+    state.openItemIndices.fill(0);
+    state.firstVisibleIndices.fill(0);
+}
+
+UIMainMenuResult MainMenu(
+        UIContext& ui,
+        const UIConfig& config,
+        Input& input,
+        AssetManager& assets,
+        Rectangle bounds,
+        FontHandle font,
+        const UIMenuRoot* roots,
+        size_t rootCount,
+        UIMainMenuState& state,
+        bool enabled)
+{
+    UIMainMenuResult result;
+    const size_t visibleRootCount = std::min(rootCount, UIMainMenuMaxRoots);
+    if (roots == nullptr || visibleRootCount == 0 || bounds.width <= 0.0f
+            || bounds.height <= 0.0f) {
+        CloseMainMenu(state);
+        return result;
+    }
+
+    if (state.openRootIndex < 0
+            || state.openRootIndex >= static_cast<int>(visibleRootCount)) {
+        CloseMainMenu(state);
+    }
+    if (!enabled) {
+        CloseMainMenu(state);
+    }
+
+    std::array<Rectangle, UIMainMenuMaxRoots> rootBounds{};
+    float rootX = bounds.x + config.paddingX * 0.5f;
+    for (size_t index = 0; index < visibleRootCount; ++index) {
+        const Vector2 measured = MeasureTextWithFont(
+                assets,
+                font,
+                roots[index].label,
+                config.fontSize,
+                config.textSpacing);
+        const float width = measured.x + config.paddingX * 2.0f;
+        rootBounds[index] = Rectangle{
+                rootX,
+                bounds.y,
+                std::min(width, std::max(0.0f, bounds.x + bounds.width - rootX)),
+                bounds.height};
+        rootX += width;
+    }
+
+    bool escapeRequested = false;
+    input.ForEachEvent(
+            InputEventType::KeyPressed,
+            true,
+            [&escapeRequested, &state](InputEvent& event) {
+                if (event.key.key == KEY_ESCAPE && state.openRootIndex >= 0) {
+                    escapeRequested = true;
+                    ConsumeEvent(event);
+                }
+            });
+    if (escapeRequested) {
+        CloseMainMenu(state);
+    }
+
+    if (enabled) {
+        input.ForEachEvent(
+                InputEventType::MouseClick,
+                true,
+                [&](InputEvent& event) {
+                    if (event.mouseClick.button != MOUSE_LEFT_BUTTON) return;
+                    for (size_t index = 0; index < visibleRootCount; ++index) {
+                        if (!Contains(rootBounds[index], event.mouseClick.releasePosition)) {
+                            continue;
+                        }
+                        if (!roots[index].enabled || roots[index].items == nullptr
+                                || roots[index].itemCount == 0) {
+                            ConsumeEvent(event);
+                            return;
+                        }
+                        const int requested = static_cast<int>(index);
+                        if (state.openRootIndex == requested) {
+                            CloseMainMenu(state);
+                        } else {
+                            state.openRootIndex = requested;
+                            state.openDepth = 0;
+                            state.openItemIndices.fill(0);
+                            state.firstVisibleIndices.fill(0);
+                            ClearOpenOption(ui);
+                            ui.focusedId = 0;
+                        }
+                        ConsumeEvent(event);
+                        return;
+                    }
+                });
+
+        if (state.openRootIndex >= 0) {
+            for (size_t index = 0; index < visibleRootCount; ++index) {
+                if (static_cast<int>(index) == state.openRootIndex
+                        || !roots[index].enabled
+                        || roots[index].items == nullptr
+                        || roots[index].itemCount == 0) {
+                    continue;
+                }
+                if (Contains(rootBounds[index], ui.mousePosition)) {
+                    state.openRootIndex = static_cast<int>(index);
+                    state.openDepth = 0;
+                    state.openItemIndices.fill(0);
+                    state.firstVisibleIndices.fill(0);
+                    break;
+                }
+            }
+        }
+    }
+
+    DrawRectangleRec(bounds, config.panelHeaderColor);
+    DrawLineEx(
+            Vector2{bounds.x, bounds.y + bounds.height},
+            Vector2{bounds.x + bounds.width, bounds.y + bounds.height},
+            config.borderThickness,
+            config.borderColor);
+    for (size_t index = 0; index < visibleRootCount; ++index) {
+        const bool hovered = Contains(rootBounds[index], ui.mousePosition);
+        const bool selected = state.openRootIndex == static_cast<int>(index);
+        if ((hovered || selected) && enabled && roots[index].enabled) {
+            DrawRectangleRec(
+                    rootBounds[index],
+                    selected ? config.widgetActiveColor : config.widgetHoverColor);
+        }
+        Text(
+                config,
+                assets,
+                rootBounds[index],
+                font,
+                roots[index].label == nullptr ? "" : roots[index].label,
+                UITextJustify::Center,
+                enabled && roots[index].enabled
+                        ? config.textColor : config.disabledColor);
+    }
+
+    const bool menuWasOpened = state.openRootIndex >= 0;
+    if (enabled && state.openRootIndex >= 0) {
+        UIContext::MainMenuOverlay& overlay = ui.mainMenuOverlay;
+        overlay = UIContext::MainMenuOverlay{};
+        overlay.active = true;
+        overlay.font = font;
+
+        const Rectangle visibleBounds = ResolveOverlayBounds(config);
+        const float rowHeight = std::max(1.0f, config.listItemHeight);
+        const UIMenuRoot& root = roots[static_cast<size_t>(state.openRootIndex)];
+        const UIMenuItem* levelItems = root.items;
+        size_t levelItemCount = root.itemCount;
+        Rectangle anchor = rootBounds[static_cast<size_t>(state.openRootIndex)];
+
+        for (size_t depth = 0;
+                depth < UIMainMenuMaxDepth
+                        && levelItems != nullptr
+                        && levelItemCount > 0
+                        && overlay.popupCount < overlay.popups.size();
+                ++depth) {
+            float popupWidth = 180.0f;
+            for (size_t itemIndex = 0; itemIndex < levelItemCount; ++itemIndex) {
+                const UIMenuItem& item = levelItems[itemIndex];
+                const Vector2 measured = MeasureTextWithFont(
+                        assets,
+                        font,
+                        item.label,
+                        config.fontSize,
+                        config.textSpacing);
+                popupWidth = std::max(
+                        popupWidth,
+                        measured.x + config.paddingX * 2.0f + 56.0f);
+            }
+            popupWidth = std::min(popupWidth, visibleBounds.width);
+
+            const size_t fitRows = std::max<size_t>(
+                    1,
+                    static_cast<size_t>(std::floor(visibleBounds.height / rowHeight)));
+            const size_t visibleRows = std::min(levelItemCount, fitRows);
+            size_t& firstVisible = state.firstVisibleIndices[depth];
+            firstVisible = std::min(
+                    firstVisible,
+                    levelItemCount > visibleRows ? levelItemCount - visibleRows : 0u);
+
+            float popupX = depth == 0
+                    ? anchor.x : anchor.x + anchor.width;
+            float popupY = depth == 0
+                    ? anchor.y + anchor.height : anchor.y;
+            const float popupHeight = rowHeight * static_cast<float>(visibleRows);
+            if (depth > 0
+                    && popupX + popupWidth > visibleBounds.x + visibleBounds.width) {
+                popupX = anchor.x - popupWidth;
+            }
+            popupX = visibleBounds.width > popupWidth
+                    ? std::clamp(
+                            popupX,
+                            visibleBounds.x,
+                            visibleBounds.x + visibleBounds.width - popupWidth)
+                    : visibleBounds.x;
+            popupY = visibleBounds.height > popupHeight
+                    ? std::clamp(
+                            popupY,
+                            visibleBounds.y,
+                            visibleBounds.y + visibleBounds.height - popupHeight)
+                    : visibleBounds.y;
+            Rectangle popupBounds{popupX, popupY, popupWidth, popupHeight};
+
+            input.ForEachEvent(
+                    InputEventType::MouseWheel,
+                    true,
+                    [&](InputEvent& event) {
+                        if (!Contains(popupBounds, ui.mousePosition)
+                                || levelItemCount <= visibleRows) {
+                            return;
+                        }
+                        const int delta = event.wheel.value > 0.0f ? -1 : 1;
+                        const int maximum = static_cast<int>(levelItemCount - visibleRows);
+                        firstVisible = static_cast<size_t>(std::clamp(
+                                static_cast<int>(firstVisible) + delta,
+                                0,
+                                maximum));
+                        ConsumeEvent(event);
+                    });
+
+            UIContext::MainMenuOverlayPopup& popup =
+                    overlay.popups[overlay.popupCount++];
+            popup.bounds = popupBounds;
+            popup.firstRow = overlay.rowCount;
+
+            bool pointerInsidePopup = Contains(popupBounds, ui.mousePosition);
+            bool hoveredRowFound = false;
+            Rectangle nextAnchor{};
+            bool hasNextAnchor = false;
+            const UIMenuItem* nextItems = nullptr;
+            size_t nextItemCount = 0;
+
+            for (size_t visibleIndex = 0;
+                    visibleIndex < visibleRows
+                            && overlay.rowCount < overlay.rows.size();
+                    ++visibleIndex) {
+                const size_t itemIndex = firstVisible + visibleIndex;
+                const UIMenuItem& item = levelItems[itemIndex];
+                const Rectangle row{
+                        popupBounds.x,
+                        popupBounds.y + rowHeight * static_cast<float>(visibleIndex),
+                        popupBounds.width,
+                        rowHeight};
+                const bool hovered = Contains(row, ui.mousePosition);
+                UIContext::MainMenuOverlayRow& overlayRow =
+                        overlay.rows[overlay.rowCount++];
+                overlayRow.bounds = row;
+                overlayRow.label = item.label;
+                overlayRow.kind = item.kind;
+                overlayRow.enabled = item.enabled;
+                overlayRow.checked = item.checked;
+                overlayRow.hovered = hovered;
+                ++popup.rowCount;
+
+                if (hovered) {
+                    hoveredRowFound = true;
+                    if (item.enabled
+                            && item.kind == UIMenuItemKind::Submenu
+                            && item.children != nullptr
+                            && item.childCount > 0) {
+                        state.openItemIndices[depth] = itemIndex;
+                        state.openDepth = depth + 1;
+                    } else {
+                        state.openDepth = depth;
+                    }
+                }
+
+                if (depth < state.openDepth
+                        && state.openItemIndices[depth] == itemIndex
+                        && item.enabled
+                        && item.kind == UIMenuItemKind::Submenu
+                        && item.children != nullptr
+                        && item.childCount > 0) {
+                    nextAnchor = row;
+                    hasNextAnchor = true;
+                    nextItems = item.children;
+                    nextItemCount = item.childCount;
+                }
+
+                input.ForEachEvent(
+                        InputEventType::MouseClick,
+                        true,
+                        [&](InputEvent& event) {
+                            if (event.mouseClick.button != MOUSE_LEFT_BUTTON
+                                    || !Contains(row, event.mouseClick.releasePosition)) {
+                                return;
+                            }
+                            ConsumeEvent(event);
+                            if (!item.enabled
+                                    || item.kind == UIMenuItemKind::Separator) {
+                                return;
+                            }
+                            if (item.kind == UIMenuItemKind::Submenu) {
+                                if (item.children != nullptr && item.childCount > 0) {
+                                    state.openItemIndices[depth] = itemIndex;
+                                    state.openDepth = depth + 1;
+                                }
+                                return;
+                            }
+                            result.activated = true;
+                            result.commandId = item.commandId;
+                            CloseMainMenu(state);
+                        });
+            }
+
+            if (result.activated || state.openRootIndex < 0) break;
+            if (pointerInsidePopup && !hoveredRowFound) {
+                state.openDepth = depth;
+            }
+            if (depth >= state.openDepth || !hasNextAnchor) break;
+            anchor = nextAnchor;
+            levelItems = nextItems;
+            levelItemCount = nextItemCount;
+        }
+
+        input.ForEachEvent(
+                InputEventType::MouseClick,
+                true,
+                [&](InputEvent& event) {
+                    if (event.mouseClick.button != MOUSE_LEFT_BUTTON) return;
+                    bool inside = Contains(bounds, event.mouseClick.releasePosition);
+                    for (size_t index = 0; index < overlay.popupCount && !inside; ++index) {
+                        inside = Contains(
+                                overlay.popups[index].bounds,
+                                event.mouseClick.releasePosition);
+                    }
+                    if (!inside) {
+                        CloseMainMenu(state);
+                    }
+                    ConsumeEvent(event);
+                });
+    }
+
+    const bool menuOpenNow = state.openRootIndex >= 0;
+    input.ForEachEvent(
+            InputEventType::MouseButtonPressed,
+            true,
+            [&](InputEvent& event) {
+                if (event.mouseButton.button == MOUSE_LEFT_BUTTON
+                        && (menuOpenNow || menuWasOpened
+                                || Contains(bounds, event.mouseButton.position))) {
+                    ConsumeEvent(event);
+                }
+            });
+    input.ForEachEvent(
+            InputEventType::MouseClick,
+            true,
+            [&](InputEvent& event) {
+                if (event.mouseClick.button == MOUSE_LEFT_BUTTON
+                        && Contains(bounds, event.mouseClick.releasePosition)) {
+                    ConsumeEvent(event);
+                }
+            });
+
+    ui.mainMenuBlocksNormalInput = state.openRootIndex >= 0;
+    result.open = state.openRootIndex >= 0;
+    if (!result.open) {
+        ui.mainMenuOverlay = UIContext::MainMenuOverlay{};
+    }
+    return result;
 }
 
 UIPanelResult BeginPanel(
