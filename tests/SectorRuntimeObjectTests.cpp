@@ -138,50 +138,57 @@ bool Near(Vector2 actual, Vector2 expected, float epsilon = 0.00001f)
             && Near(actual.y, expected.y, epsilon);
 }
 
-void TestSectorUseHighlightPulsesOnlyForDynamicProps()
+void TestSectorUseHighlightPulsesAndReleases()
 {
     const engine::Entity propEntity{7, 3};
     game::SectorUseTarget target;
     target.entity = propEntity;
     target.kind = game::SectorUseTargetKind::DynamicProp;
 
-    const game::SectorUseHighlight start =
-            game::BuildSectorUseHighlight(target, 0.0f);
-    const game::SectorUseHighlight attack =
-            game::BuildSectorUseHighlight(target, 0.09f);
-    const game::SectorUseHighlight quarter =
-            game::BuildSectorUseHighlight(target, 0.6f);
-    const game::SectorUseHighlight peak =
-            game::BuildSectorUseHighlight(target, 1.2f);
-    const game::SectorUseHighlight cycle =
-            game::BuildSectorUseHighlight(target, 2.4f);
-    Check(start.entity == propEntity && Near(start.strength, 0.0f),
+    game::SectorUseHighlightState state;
+    game::UpdateSectorUseHighlight(state, target, 0.0f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.0f),
           "dynamic prop use highlight starts at authored brightness");
-    Check(attack.entity == propEntity
-                  && attack.strength > 0.0f
-                  && attack.strength < quarter.strength,
-          "dynamic prop use highlight fades in without popping");
-    Check(quarter.entity == propEntity && Near(quarter.strength, 0.098f),
+    game::UpdateSectorUseHighlight(state, target, 0.6f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.07f),
           "dynamic prop use highlight rises clearly through the pulse");
-    Check(peak.entity == propEntity && Near(peak.strength, 0.14f),
+    game::UpdateSectorUseHighlight(state, target, 0.6f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.14f),
           "dynamic prop use highlight reaches its visible radiance ceiling");
-    Check(cycle.entity == propEntity && Near(cycle.strength, 0.056f),
-          "dynamic prop use highlight retains a visible floor between peaks");
+    game::UpdateSectorUseHighlight(state, target, 0.6f);
+    Check(Near(state.highlight.strength, 0.07f),
+          "dynamic prop use highlight falls smoothly from its peak");
+    game::UpdateSectorUseHighlight(state, target, 0.6f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.0f),
+          "dynamic prop use highlight returns fully to authored brightness");
 
-    target.kind = game::SectorUseTargetKind::Door;
-    const game::SectorUseHighlight door =
-            game::BuildSectorUseHighlight(target, 1.2f);
-    Check(engine::IsNull(door.entity) && Near(door.strength, 0.0f),
-          "door use targets never receive the dynamic prop highlight");
+    game::ResetSectorUseHighlight(state);
+    game::UpdateSectorUseHighlight(state, target, 0.0f);
+    game::UpdateSectorUseHighlight(state, target, 1.2f);
+    const game::SectorUseTarget noTarget;
+    game::UpdateSectorUseHighlight(state, noTarget, 0.0f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.14f),
+          "lost dynamic prop target begins release at its current pulse strength");
+    game::UpdateSectorUseHighlight(state, noTarget, 0.15f);
+    Check(state.highlight.entity == propEntity
+                  && Near(state.highlight.strength, 0.07f),
+          "lost dynamic prop highlight eases halfway back to neutral");
+    game::UpdateSectorUseHighlight(state, noTarget, 0.15f);
+    Check(engine::IsNull(state.highlight.entity)
+                  && Near(state.highlight.strength, 0.0f),
+          "lost dynamic prop highlight clears after its release");
 
-    target.kind = game::SectorUseTargetKind::DynamicProp;
-    const game::SectorUseHighlight invalidTime =
-            game::BuildSectorUseHighlight(
-                    target,
-                    std::numeric_limits<float>::infinity());
-    Check(engine::IsNull(invalidTime.entity)
-                  && Near(invalidTime.strength, 0.0f),
-          "invalid highlight timing safely disables the effect");
+    game::SectorUseTarget doorTarget;
+    doorTarget.entity = engine::Entity{9, 1};
+    doorTarget.kind = game::SectorUseTargetKind::Door;
+    game::UpdateSectorUseHighlight(state, doorTarget, 1.2f);
+    Check(engine::IsNull(state.highlight.entity),
+          "door use targets never start a dynamic prop highlight");
 }
 
 void TestNpcVocalPriorityDelayAndShufflePolicy()
@@ -8719,7 +8726,7 @@ int main()
     extern void RunSectorScriptBindingTests();
     RunSectorScriptBindingTests();
     TestSectorUseTargetPrefersViewAlignmentAndSkipsConsumedProps();
-    TestSectorUseHighlightPulsesOnlyForDynamicProps();
+    TestSectorUseHighlightPulsesAndReleases();
     TestNpcVocalPriorityDelayAndShufflePolicy();
     TestSectorSpatialSoundOcclusion();
     TestResolveSectorDoorAnchorValidPortal();

@@ -199,7 +199,7 @@ bool SectorGameSession::StartNew(
     controller = SectorEditorPreviewControllerState{};
     collision = SectorEditorPreviewCollisionState{};
     useTarget = {};
-    useTargetElapsedSeconds = 0.0f;
+    ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};
     navigationDebug = SectorGameNavigationDebugState{};
     controller.fpsControllerConfig = SectorFpsControllerConfigFromPreviewSettings(
@@ -283,7 +283,7 @@ void SectorGameSession::Shutdown(
     consoleInputCaptured = false;
     pendingLoadingSave = false;
     useTarget = {};
-    useTargetElapsedSeconds = 0.0f;
+    ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};
     weaponRegistry = nullptr;
     materialRegistry = nullptr;
@@ -306,7 +306,7 @@ void SectorGameSession::Pause()
     }
     paused = true;
     useTarget = {};
-    useTargetElapsedSeconds = 0.0f;
+    ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};
     LeaveSectorFreeflyController();
 }
@@ -456,7 +456,6 @@ void SectorGameSession::Update(
     const SectorViewPose interactionPose = SectorFpsControllerPose(
             controller.fpsControllerState,
             controller.fpsControllerConfig);
-    const SectorUseTarget previousUseTarget = useTarget;
     useTarget = FindSectorUseTarget(
             context.world,
             &context.assets,
@@ -465,15 +464,7 @@ void SectorGameSession::Update(
             collision.sectorCollisionWorldValid
                     ? &collision.sectorCollisionWorld : nullptr,
             true);
-    if (useTarget.kind == SectorUseTargetKind::DynamicProp
-            && previousUseTarget.kind == SectorUseTargetKind::DynamicProp
-            && useTarget.entity == previousUseTarget.entity
-            && std::isfinite(dt)
-            && dt > 0.0f) {
-        useTargetElapsedSeconds += dt;
-    } else {
-        useTargetElapsedSeconds = 0.0f;
-    }
+    UpdateSectorUseHighlight(useHighlightState, useTarget, dt);
     usePromptTitle = {};
     const std::string_view promptTitle = SectorUseTargetTitle(
             context.world, useTarget);
@@ -855,7 +846,7 @@ bool SectorGameSession::RebuildFromMap(
             &scene.NpcNavigation(),
             MakeSectorScriptAudioApi(scene));
     useTarget = {};
-    useTargetElapsedSeconds = 0.0f;
+    ResetSectorUseHighlight(useHighlightState);
     usePromptTitle = {};
     pendingLoadingSave = false;
     BeginGameLevelLoading(loading);

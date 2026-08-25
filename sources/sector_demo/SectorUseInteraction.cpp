@@ -25,9 +25,8 @@ namespace {
 constexpr float UseFacingDotThreshold = 0.65f;
 constexpr float UseOcclusionTolerance = 0.05f;
 constexpr float UseHighlightPeriodSeconds = 2.4f;
-constexpr float UseHighlightAttackSeconds = 0.18f;
-constexpr float UseHighlightMinimumStrengthRatio = 0.4f;
 constexpr float UseHighlightMaximumStrength = 0.14f;
+constexpr float UseHighlightReleaseSeconds = 0.3f;
 
 bool Finite(Vector3 value)
 {
@@ -226,31 +225,66 @@ std::string_view SectorUseTargetTitle(
     return {};
 }
 
-SectorUseHighlight BuildSectorUseHighlight(
-        const SectorUseTarget& target,
-        float targetElapsedSeconds)
+namespace {
+
+float EvaluateUseHighlightPulse(float elapsedSeconds)
 {
-    if (target.kind != SectorUseTargetKind::DynamicProp
-            || engine::IsNull(target.entity)
-            || !std::isfinite(targetElapsedSeconds)
-            || targetElapsedSeconds < 0.0f) {
-        return {};
-    }
     constexpr float Tau = 6.28318530717958647692f;
     const float phase = std::fmod(
-            targetElapsedSeconds,
+            elapsedSeconds,
             UseHighlightPeriodSeconds) / UseHighlightPeriodSeconds;
     const float pulse = 0.5f - 0.5f * std::cos(Tau * phase);
-    const float attack = std::clamp(
-            targetElapsedSeconds / UseHighlightAttackSeconds,
+    return pulse * UseHighlightMaximumStrength;
+}
+
+} // namespace
+
+void ResetSectorUseHighlight(SectorUseHighlightState& state)
+{
+    state = {};
+}
+
+void UpdateSectorUseHighlight(
+        SectorUseHighlightState& state,
+        const SectorUseTarget& target,
+        float dt)
+{
+    dt = std::isfinite(dt) && dt > 0.0f ? dt : 0.0f;
+    const bool hasDynamicPropTarget =
+            target.kind == SectorUseTargetKind::DynamicProp
+            && !engine::IsNull(target.entity);
+    if (hasDynamicPropTarget) {
+        if (state.highlight.entity != target.entity || state.releasing) {
+            state.highlight = SectorUseHighlight{target.entity, 0.0f};
+            state.pulseElapsedSeconds = 0.0f;
+        } else {
+            state.pulseElapsedSeconds += dt;
+        }
+        state.releaseElapsedSeconds = 0.0f;
+        state.releaseStartStrength = 0.0f;
+        state.releasing = false;
+        state.highlight.strength = EvaluateUseHighlightPulse(
+                state.pulseElapsedSeconds);
+        return;
+    }
+
+    if (engine::IsNull(state.highlight.entity)) return;
+    if (!state.releasing) {
+        state.releaseElapsedSeconds = 0.0f;
+        state.releaseStartStrength = state.highlight.strength;
+        state.releasing = true;
+    }
+    state.releaseElapsedSeconds += dt;
+    const float release = std::clamp(
+            state.releaseElapsedSeconds / UseHighlightReleaseSeconds,
             0.0f,
             1.0f);
-    return SectorUseHighlight{
-            target.entity,
-            attack * UseHighlightMaximumStrength
-                    * (UseHighlightMinimumStrengthRatio
-                            + (1.0f - UseHighlightMinimumStrengthRatio)
-                                    * pulse)};
+    const float easedRelease = release * release * (3.0f - 2.0f * release);
+    state.highlight.strength = state.releaseStartStrength
+            * (1.0f - easedRelease);
+    if (release >= 1.0f || state.highlight.strength <= 0.000001f) {
+        ResetSectorUseHighlight(state);
+    }
 }
 
 void DrawSectorUsePrompt(

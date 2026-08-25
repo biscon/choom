@@ -35,6 +35,14 @@ struct SectorUseHighlight {
     float strength = 0.0f;
 };
 
+struct SectorUseHighlightState {
+    SectorUseHighlight highlight;
+    float pulseElapsedSeconds = 0.0f;
+    float releaseElapsedSeconds = 0.0f;
+    float releaseStartStrength = 0.0f;
+    bool releasing = false;
+};
+
 SectorUseTarget FindSectorUseTarget(
         engine::World& world,
         const engine::AssetManager* assets,
@@ -47,9 +55,12 @@ std::string_view SectorUseTargetTitle(
         engine::World& world,
         const SectorUseTarget& target);
 
-SectorUseHighlight BuildSectorUseHighlight(
+void ResetSectorUseHighlight(SectorUseHighlightState& state);
+
+void UpdateSectorUseHighlight(
+        SectorUseHighlightState& state,
         const SectorUseTarget& target,
-        float targetElapsedSeconds);
+        float dt);
 
 void DrawSectorUsePrompt(
         Rectangle viewport,
