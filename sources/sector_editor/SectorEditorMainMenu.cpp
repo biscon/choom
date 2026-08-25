@@ -23,6 +23,8 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         engine::FontHandle font,
         const SectorEditorState& editorState,
         engine::UIMainMenuState& menuState,
+        bool canCopyConfig,
+        bool canPasteConfig,
         bool enabled)
 {
     const std::array<engine::UIMenuItem, 4> levelItems{{
@@ -38,6 +40,12 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
             {"NPC Editor", CommandId(SectorEditorMainMenuCommand::OpenNpcEditor)},
             {"Weapons Editor", CommandId(SectorEditorMainMenuCommand::OpenWeaponEditor)}
     }};
+    const std::array<engine::UIMenuItem, 2> editItems{{
+            {"Copy config", CommandId(SectorEditorMainMenuCommand::CopyConfig),
+                    engine::UIMenuItemKind::Action, canCopyConfig},
+            {"Paste config", CommandId(SectorEditorMainMenuCommand::PasteConfig),
+                    engine::UIMenuItemKind::Action, canPasteConfig}
+    }};
     const std::array<engine::UIMenuItem, 3> viewItems{{
             {"Show Grid", CommandId(SectorEditorMainMenuCommand::ToggleShowGrid),
                     engine::UIMenuItemKind::Checkbox, true, editorState.showGrid},
@@ -49,8 +57,9 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
     const std::array<engine::UIMenuItem, 1> settingsItems{{
             {"Level", CommandId(SectorEditorMainMenuCommand::OpenLevelSettings)}
     }};
-    const std::array<engine::UIMenuRoot, 4> roots{{
+    const std::array<engine::UIMenuRoot, 5> roots{{
             {"Level", levelItems.data(), levelItems.size()},
+            {"Edit", editItems.data(), editItems.size()},
             {"Editors", editorItems.data(), editorItems.size()},
             {"View", viewItems.data(), viewItems.size()},
             {"Settings", settingsItems.data(), settingsItems.size()}

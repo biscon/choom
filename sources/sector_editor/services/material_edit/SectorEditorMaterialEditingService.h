@@ -38,7 +38,6 @@ struct SectorEditorMaterialEditingServiceContext {
     SectorEditorTopologyRenderCache& topologyRenderCache;
     SectorEditorPreviewSelectionState& previewSelectionState;
     SelectionState& selectionState;
-    MaterialEditingState& materialState;
     MaterialEditingUiState& materialUiState;
     TexturePickerState& texturePicker;
     DecalTintModalState& decalTintModal;
@@ -50,8 +49,13 @@ class SectorEditorMaterialEditingService {
 public:
     explicit SectorEditorMaterialEditingService(SectorEditorMaterialEditingServiceContext context);
 
-    bool CopyMaterial(TopologySurfaceEditTarget target);
-    bool PasteMaterial(TopologySurfaceEditTarget target, engine::AssetManager& assets);
+    bool CopyMaterial(
+            TopologySurfaceEditTarget target,
+            TopologyMaterialPayload& outPayload);
+    bool PasteMaterial(
+            TopologySurfaceEditTarget target,
+            const TopologyMaterialPayload& payload,
+            engine::AssetManager& assets);
 
     bool ApplySurfaceUvValue(
             TopologySurfaceEditTarget target,

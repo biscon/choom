@@ -11,6 +11,7 @@
 #include "sector_editor/inspector/SectorEditorInspectorUiState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
+#include "sector_editor/services/config_clipboard/SectorEditorConfigClipboardService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorService.h"
 #include "sector_editor/npcs/SectorEditorNpcEditorState.h"
@@ -477,6 +478,8 @@ private:
     Rectangle BuildPreviewUvPanelRect() const;
     bool SetAuthoringLineDefBlocksPlayer(int lineDefId, bool blocksPlayer);
     SectorEditorMaterialEditingService BuildMaterialEditingService();
+    bool CopySelectedConfig(engine::AssetManager& assets);
+    bool PasteSelectedConfig(engine::AssetManager& assets);
     SectorEditorFootstepService BuildFootstepService();
     SectorEditorLightEditingService BuildLightEditingService();
     SectorEditorRuntimeObjectEditingService BuildRuntimeObjectEditingService(
@@ -549,7 +552,7 @@ private:
     InspectorIdUiState inspectorIdUiState;
     TextureCatalogState textureCatalogState;
     SectorEditorSoundCatalogState soundCatalogState;
-    MaterialEditingState materialEditingState;
+    SectorEditorConfigClipboardState configClipboardState;
     MaterialEditingUiState materialEditingUiState;
     FogVolumeEditingUiState fogVolumeEditingUiState;
     ReflectionProbeEditingUiState reflectionProbeEditingUiState;

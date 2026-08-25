@@ -352,7 +352,9 @@ bool SectorEditorMaterialEditingService::ApplyMaterialAction(
     return false;
 }
 
-bool SectorEditorMaterialEditingService::CopyMaterial(TopologySurfaceEditTarget target)
+bool SectorEditorMaterialEditingService::CopyMaterial(
+        TopologySurfaceEditTarget target,
+        TopologyMaterialPayload& outPayload)
 {
     TopologyMaterialPayload payload;
     std::string status;
@@ -360,26 +362,27 @@ bool SectorEditorMaterialEditingService::CopyMaterial(TopologySurfaceEditTarget 
         context_.statusText = status;
         return false;
     }
-    context_.materialState.copiedMaterial = payload;
+    outPayload = std::move(payload);
     context_.statusText = status;
     return true;
 }
 
 bool SectorEditorMaterialEditingService::PasteMaterial(
         TopologySurfaceEditTarget target,
+        const TopologyMaterialPayload& payload,
         engine::AssetManager& assets)
 {
     return ApplyMaterialAction(
             target,
             &assets,
             TopologyMaterialLayer::Base,
-            [this](SectorEditorAuthoringMaterialTarget& authoringTarget) {
+            [&payload](SectorEditorAuthoringMaterialTarget& authoringTarget) {
                 if (authoringTarget.materialId == nullptr || authoringTarget.uv == nullptr) {
                     return SectorEditorMaterialActionResult{};
                 }
                 return PasteMaterialToFields(
                         authoringTarget.target,
-                        context_.materialState.copiedMaterial,
+                        payload,
                         *authoringTarget.materialId,
                         *authoringTarget.uv);
             });

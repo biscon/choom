@@ -408,7 +408,6 @@ void SectorEditor::Shutdown(engine::EngineContext& context)
     textureCatalogState = TextureCatalogState{};
     soundCatalogState = SectorEditorSoundCatalogState{};
     lightEditingState = LightEditingState{};
-    materialEditingState = MaterialEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
     reflectionProbeEditingUiState = ReflectionProbeEditingUiState{};
@@ -775,6 +774,14 @@ void SectorEditor::RenderUI(
     const bool mainMenuVisible = state.mode != SectorEditorMode::Preview3D
             || !previewState.overlay.previewUiHidden;
     if (mainMenuVisible) {
+        const SectorEditorConfigTarget configTarget =
+                ResolveSectorEditorConfigTarget(
+                        state.mode,
+                        TopologyMap(),
+                        AuthoringGraph(),
+                        MakeLiveConstDerivationAccess(documentState.derivation),
+                        selectionState,
+                        previewState.selection);
         const SectorEditorMainMenuCommand command = DrawSectorEditorMainMenu(
                 ui,
                 config,
@@ -783,6 +790,9 @@ void SectorEditor::RenderUI(
                 font,
                 state,
                 uiState.mainMenu,
+                configTarget.kind != SectorEditorConfigKind::None,
+                configTarget.kind != SectorEditorConfigKind::None
+                        && configTarget.kind == configClipboardState.kind,
                 IsMainMenuInteractionEnabled());
         HandleMainMenuCommand(command, ui, assets);
     } else {
@@ -1356,6 +1366,12 @@ void SectorEditor::HandleMainMenuCommand(
             break;
         case SectorEditorMainMenuCommand::ReloadLevel:
             OpenReloadConfirmation(assets);
+            break;
+        case SectorEditorMainMenuCommand::CopyConfig:
+            CopySelectedConfig(assets);
+            break;
+        case SectorEditorMainMenuCommand::PasteConfig:
+            PasteSelectedConfig(assets);
             break;
         case SectorEditorMainMenuCommand::Toggle3DMode:
             if (state.mode == SectorEditorMode::Preview3D) {
@@ -6548,7 +6564,6 @@ void SectorEditor::ResetToBlankMap(engine::EngineContext& context)
     textureCatalogState = TextureCatalogState{};
     soundCatalogState = SectorEditorSoundCatalogState{};
     lightEditingState = LightEditingState{};
-    materialEditingState = MaterialEditingState{};
     materialEditingUiState = MaterialEditingUiState{};
     fogVolumeEditingUiState = FogVolumeEditingUiState{};
     levelMarkerEditingState = LevelMarkerEditingState{};
@@ -8173,7 +8188,6 @@ SectorEditorMaterialEditingService SectorEditor::BuildMaterialEditingService()
                     state.topologyRenderCache,
                     previewState.selection,
                     selectionState,
-                    materialEditingState,
                     materialEditingUiState,
                     state.texturePicker,
                     state.decalTintModal,
@@ -8186,6 +8200,84 @@ SectorEditorMaterialEditingService SectorEditor::BuildMaterialEditingService()
                         }
                         return true;
                     }}};
+}
+
+bool SectorEditor::CopySelectedConfig(engine::AssetManager& assets)
+{
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    SectorEditorRuntimeObjectEditingService runtimeObjectEditing =
+            BuildRuntimeObjectEditingService();
+    SectorEditorMaterialEditingService materialEditing =
+            BuildMaterialEditingService();
+    SectorEditorConfigClipboardService service{
+            SectorEditorConfigClipboardServiceContext{
+                    state,
+                    Lifecycle(),
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    selectionState,
+                    previewState.selection,
+                    uiState,
+                    configClipboardState,
+                    lightEditing,
+                    runtimeObjectEditing,
+                    materialEditing,
+                    assets,
+                    statusText}};
+    return service.Copy();
+}
+
+bool SectorEditor::PasteSelectedConfig(engine::AssetManager& assets)
+{
+    const SectorEditorConfigTarget target = ResolveSectorEditorConfigTarget(
+            state.mode,
+            TopologyMap(),
+            AuthoringGraph(),
+            MakeLiveConstDerivationAccess(documentState.derivation),
+            selectionState,
+            previewState.selection);
+    SectorEditorLightEditingService lightEditing = BuildLightEditingService();
+    SectorEditorRuntimeObjectEditingService runtimeObjectEditing =
+            BuildRuntimeObjectEditingService();
+    SectorEditorMaterialEditingService materialEditing =
+            BuildMaterialEditingService();
+    SectorEditorConfigClipboardService service{
+            SectorEditorConfigClipboardServiceContext{
+                    state,
+                    Lifecycle(),
+                    TopologyMap(),
+                    AuthoringGraph(),
+                    MakeLiveDerivationAccess(documentState.derivation),
+                    selectionState,
+                    previewState.selection,
+                    uiState,
+                    configClipboardState,
+                    lightEditing,
+                    runtimeObjectEditing,
+                    materialEditing,
+                    assets,
+                    statusText}};
+    const bool changed = service.Paste();
+    if (!changed) return false;
+
+    const bool lightChanged = target.kind == SectorEditorConfigKind::StaticPointLight
+            || target.kind == SectorEditorConfigKind::StaticSpotLight
+            || target.kind == SectorEditorConfigKind::StaticRectLight
+            || target.kind == SectorEditorConfigKind::DynamicPointLight
+            || target.kind == SectorEditorConfigKind::DynamicSpotLight
+            || target.kind == SectorEditorConfigKind::DynamicRectLight;
+    if (lightChanged
+            && state.mode == SectorEditorMode::Preview3D
+            && sceneRuntime.Renderer().IsRendererReady()) {
+        sceneRuntime.Renderer().RefreshDynamicLightSources(TopologyMap());
+    }
+    if (target.kind == SectorEditorConfigKind::Sector
+            && state.mode == SectorEditorMode::Preview3D
+            && engineContext != nullptr) {
+        RebuildPreviewMeshesPreservingView(*engineContext);
+    }
+    return true;
 }
 
 SectorEditorFootstepService SectorEditor::BuildFootstepService()
@@ -8388,7 +8480,6 @@ std::string SectorEditor::CurrentTextureForPickerTarget() const
                 const_cast<SectorEditorTopologyRenderCache&>(state.topologyRenderCache),
                 const_cast<SectorEditorPreviewSelectionState&>(previewState.selection),
                 const_cast<SelectionState&>(selectionState),
-                const_cast<MaterialEditingState&>(materialEditingState),
                 const_cast<MaterialEditingUiState&>(materialEditingUiState),
                 const_cast<TexturePickerState&>(state.texturePicker),
                 const_cast<DecalTintModalState&>(state.decalTintModal),

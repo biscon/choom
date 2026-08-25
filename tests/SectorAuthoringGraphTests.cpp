@@ -15,6 +15,7 @@
 #include "sector_editor/SectorEditorTopologyRenderCache.h"
 #include "sector_editor/selection/SectorEditorManipulationService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialEditingService.h"
+#include "sector_editor/services/config_clipboard/SectorEditorConfigClipboardService.h"
 #include "sector_editor/services/material_edit/SectorEditorMaterialPickerRouting.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingService.h"
 #include "sector_editor/services/authoring_faces/SectorEditorAuthoringFaceMergeService.h"
@@ -812,14 +813,12 @@ game::SectorEditorMaterialEditingService MakeMaterialEditingService(
         bool* previewRebuildRequested = nullptr,
         const game::SectorMaterialRegistry* availableMaterials = nullptr)
 {
-    static game::MaterialEditingState materialState;
     static game::SectorMaterialRegistry inferredMaterialRegistry;
     game::SelectionState& selectionState = TestSelectionState();
     game::SectorEditorPreviewSelectionState& previewSelectionState = TestPreviewSelectionState();
     game::MaterialEditingUiState& materialUiState = TestMaterialEditingUiState();
     (void)uiState;
     selectionState = game::SelectionState{};
-    materialState = game::MaterialEditingState{};
     materialUiState = game::MaterialEditingUiState{};
     if (availableMaterials == nullptr) {
         inferredMaterialRegistry.materialsById =
@@ -838,7 +837,6 @@ game::SectorEditorMaterialEditingService MakeMaterialEditingService(
                     state.topologyRenderCache,
                     previewSelectionState,
                     selectionState,
-                    materialState,
                     materialUiState,
                     state.texturePicker,
                     state.decalTintModal,
@@ -12152,6 +12150,225 @@ void TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime()
             runtimeRefreshState);
 }
 
+void TestDoorConfigClipboardPreservesAnchorAndInstanceId()
+{
+    game::SectorTopologyMap map = MakeAdjacentSectorMap();
+    const game::SectorEditorAddDoorResult add = game::AddDoorToPortal(map, 11);
+    Check(add.changed && map.runtimeObjects.size() == 1,
+          "door config clipboard fixture creates a source door");
+    if (map.runtimeObjects.empty()) return;
+
+    game::SectorPlacedRuntimeObject source = map.runtimeObjects.front();
+    source.id = 501;
+    source.door.instanceId = "source_door";
+    source.door.useTitle = "vault door";
+    source.door.canOpenScript = "can_open_vault";
+    source.door.width = 3.25f;
+    source.door.height = 4.5f;
+    source.door.thickness = 0.6f;
+    source.door.normalOffset = 0.3f;
+    source.door.heightOffsetWorld = 0.2f;
+    source.door.visual = game::SectorDoorVisualType::Model;
+    source.door.modelAssetId = "industrial";
+    source.door.modelFit = game::SectorDoorModelFit::Manual;
+    source.door.modelScale = 1.4f;
+    source.door.motion = game::SectorDoorMotionType::Swing;
+    source.door.hinge = game::SectorDoorHinge::End;
+    source.door.swingSide = game::SectorDoorSwingSide::Back;
+    source.door.openAngleDegrees = 115.0f;
+    source.door.angularSpeedDegrees = 50.0f;
+    source.door.autoOpen = true;
+    source.door.materialId = "steel";
+    source.door.openSoundId = "vault_open";
+    source.door.faceUvs.faces[0].scale = Vector2{2.0f, 3.0f};
+
+    game::SectorPlacedRuntimeObject destination = map.runtimeObjects.front();
+    destination.id = 502;
+    destination.door.instanceId = "destination_door";
+    destination.door.anchor.lineDefId = 999;
+    destination.door.anchor.endpointAX = 123;
+    map.runtimeObjects = {source, destination};
+
+    game::SectorRuntimeObjectState runtimeObjects;
+    game::RuntimeObjectEditingState editingState;
+    game::RuntimeObjectEditingUiState uiState;
+    game::SelectionState selectionState;
+    selectionState.selectedRuntimeObjectId = source.id;
+    game::SectorEditorDocumentState documentState;
+    uint64_t renderRevision = 70;
+    game::SectorEditorTopologyRenderCache renderCache;
+    FillRuntimeObjectTestSectorCache(renderCache, map);
+    std::string statusText;
+    game::SectorEditorRuntimeObjectEditingService editing =
+            MakeRuntimeObjectEditingServiceForTest(
+                    map, runtimeObjects, editingState, uiState, selectionState,
+                    documentState, renderRevision, renderCache, statusText, true);
+
+    game::SectorEditorConfigClipboardState clipboard;
+    Check(editing.CopySelectedDoorConfig(clipboard)
+                  && clipboard.kind == game::SectorEditorConfigKind::Door,
+          "copying a selected door records a door config payload");
+    selectionState.selectedRuntimeObjectId = destination.id;
+    const game::SectorDoorAnchor destinationAnchor = map.runtimeObjects[1].door.anchor;
+    Check(editing.PasteSelectedDoorConfig(clipboard),
+          "pasting a door config into another door succeeds");
+    const game::SectorPlacedDoor& result = map.runtimeObjects[1].door;
+    Check(result.instanceId == "destination_door"
+                  && result.anchor.lineDefId == destinationAnchor.lineDefId
+                  && result.anchor.endpointAX == destinationAnchor.endpointAX,
+          "door config paste preserves destination instance ID and anchor");
+    Check(result.useTitle == "vault door"
+                  && result.canOpenScript == "can_open_vault"
+                  && Near(result.width, 3.25f)
+                  && Near(result.thickness, 0.6f)
+                  && result.visual == game::SectorDoorVisualType::Model
+                  && result.modelAssetId == "industrial"
+                  && result.motion == game::SectorDoorMotionType::Swing
+                  && result.hinge == game::SectorDoorHinge::End
+                  && result.autoOpen
+                  && result.materialId == "steel"
+                  && result.openSoundId == "vault_open"
+                  && Near(result.faceUvs.faces[0].scale.x, 2.0f),
+          "door config paste copies inspector-editable behavior and presentation fields");
+    Check(documentState.lifecycle.topologyDocumentDirty
+                  && documentState.lifecycle.hasUnsavedChanges
+                  && renderRevision == 71
+                  && !renderCache.valid,
+          "door config paste uses the document-edited cache invalidation boundary once");
+
+    documentState.lifecycle.topologyDocumentDirty = false;
+    documentState.lifecycle.hasUnsavedChanges = false;
+    renderCache.valid = true;
+    Check(!editing.PasteSelectedDoorConfig(clipboard)
+                  && renderRevision == 71
+                  && renderCache.valid
+                  && !documentState.lifecycle.topologyDocumentDirty,
+          "repeating an identical door config paste is a clean no-op");
+}
+
+void TestConfigClipboardTargetResolutionPrefersPreviewSurface()
+{
+    game::SectorTopologyMap map;
+    game::SectorTopologySector sector;
+    sector.id = 10;
+    map.sectors.push_back(sector);
+    game::SectorAuthoringGraph graph;
+    game::SectorAuthoringFaceAnchor anchor;
+    anchor.id = 5;
+    graph.faceAnchors.push_back(anchor);
+    game::SectorEditorDerivationState derivationState;
+    game::SelectionState selection;
+    selection.selectedAuthoring.kind = game::SectorAuthoringSelectionKind::FaceAnchor;
+    selection.selectedAuthoring.faceAnchorId = anchor.id;
+    game::SectorEditorPreviewSelectionState previewSelection;
+    previewSelection.selectedTopologySurface3D = {
+            game::TopologySurfaceEditTargetKind::SectorFloor,
+            sector.id};
+
+    const game::SectorEditorConfigTarget previewTarget =
+            game::ResolveSectorEditorConfigTarget(
+                    game::SectorEditorMode::Preview3D,
+                    map,
+                    graph,
+                    game::MakeSectorEditorDerivationDocumentAccess(derivationState),
+                    selection,
+                    previewSelection);
+    Check(previewTarget.kind == game::SectorEditorConfigKind::SurfaceFloor
+                  && previewTarget.surface.sectorId == sector.id,
+          "config target resolution prefers a selected 3D surface over its authoring sector");
+
+    const game::SectorEditorConfigTarget editTarget =
+            game::ResolveSectorEditorConfigTarget(
+                    game::SectorEditorMode::Edit2D,
+                    map,
+                    graph,
+                    game::MakeSectorEditorDerivationDocumentAccess(derivationState),
+                    selection,
+                    previewSelection);
+    Check(editTarget.kind == game::SectorEditorConfigKind::Sector
+                  && editTarget.id == anchor.id,
+          "the same authoring face resolves to sector config in 2D mode");
+    Check(game::SectorEditorSurfaceConfigKind(
+                  game::TopologySurfaceEditTargetKind::SideDefMiddle)
+                  == game::SectorEditorConfigKind::None,
+          "middle material remains outside the generalized config clipboard");
+    Check(game::SectorEditorSurfaceConfigKind(
+                  game::TopologySurfaceEditTargetKind::SideDefUpper)
+                  == game::SectorEditorConfigKind::SurfaceUpper,
+          "supported surface material kinds retain exact compatibility identities");
+}
+
+void TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor()
+{
+    game::SectorAuthoringFaceAnchor source;
+    source.id = 1;
+    source.x = 16;
+    source.y = 32;
+    source.name = "copied sector";
+    source.isVoid = true;
+    source.floorZ = -4.0f;
+    source.ceilingZ = 18.0f;
+    source.floorMaterialId = "floor_a";
+    source.ceilingMaterialId = "ceiling_a";
+    source.footstepSet = "metal";
+    source.ceilingSky = true;
+    source.roomtone.mode = game::SectorRoomtoneMode::Play;
+    source.roomtone.soundId = "roomtone_a";
+    source.roomtone.volume = 0.35f;
+    source.roomtone.fadeMilliseconds = 750;
+    source.floorUv.scale = Vector2{2.0f, 3.0f};
+    source.ceilingUv.offset = Vector2{4.0f, 5.0f};
+    source.floorDecal.materialId = "floor_decal";
+    source.floorDecal.opacity = 0.4f;
+    source.ceilingDecal.emissive = true;
+    source.ceilingDecal.bloomIntensity = 2.5f;
+    source.ambientColor = Color{10, 20, 30, 255};
+    source.ambientIntensity = 0.45f;
+    source.defaultWall.materialId = "wall_a";
+    source.defaultWall.uv.offset = Vector2{6.0f, 7.0f};
+    source.defaultWall.decal.materialId = "wall_decal";
+    source.defaultLower.materialId = "lower_a";
+    source.defaultUpper.materialId = "upper_a";
+
+    game::SectorAuthoringFaceAnchor destination;
+    destination.id = 99;
+    destination.x = 1600;
+    destination.y = 3200;
+    Check(game::ApplySectorEditorSectorConfig(destination, source),
+          "sector config application changes a different destination");
+    Check(destination.id == 99
+                  && destination.x == 1600
+                  && destination.y == 3200,
+          "sector config application preserves destination ID and anchor coordinates");
+    Check(destination.name == "copied sector"
+                  && destination.isVoid
+                  && Near(destination.floorZ, -4.0f)
+                  && Near(destination.ceilingZ, 18.0f)
+                  && destination.floorMaterialId == "floor_a"
+                  && destination.ceilingMaterialId == "ceiling_a"
+                  && destination.footstepSet == "metal"
+                  && destination.ceilingSky,
+          "sector config application copies identity-neutral geometry and material settings");
+    Check(destination.roomtone.soundId == "roomtone_a"
+                  && Near(destination.roomtone.volume, 0.35f)
+                  && destination.roomtone.fadeMilliseconds == 750
+                  && Near(destination.floorUv.scale.x, 2.0f)
+                  && Near(destination.ceilingUv.offset.y, 5.0f)
+                  && destination.floorDecal.materialId == "floor_decal"
+                  && destination.ceilingDecal.emissive
+                  && destination.ambientColor.g == 20
+                  && Near(destination.ambientIntensity, 0.45f),
+          "sector config application copies audio, UV, decal, and ambient settings");
+    Check(destination.defaultWall.materialId == "wall_a"
+                  && Near(destination.defaultWall.uv.offset.x, 6.0f)
+                  && destination.defaultWall.decal.materialId == "wall_decal"
+                  && destination.defaultLower.materialId == "lower_a"
+                  && destination.defaultUpper.materialId == "upper_a",
+          "sector config application copies default wall configuration");
+    Check(!game::ApplySectorEditorSectorConfig(destination, source),
+          "applying identical sector config is a no-op");
+}
+
 void TestStaticModelPickerRecursionFilteringRefreshAndSelection()
 {
     const std::filesystem::path root =
@@ -14013,6 +14230,9 @@ int main()
     TestDynamicPropEditingPlacementAssignmentAndFloorRelativeDrag();
     TestNpcEditingPlacementSelectionPickingAndFloorRelativeDrag();
     TestSwingDoorEditingMutationsInvalidateAndRefreshRuntime();
+    TestDoorConfigClipboardPreservesAnchorAndInstanceId();
+    TestConfigClipboardTargetResolutionPrefersPreviewSurface();
+    TestSectorConfigClipboardCopiesInspectorFieldsAndPreservesAnchor();
     TestRuntimeObjectEditingServicesStayIndependentOfSectorEditor();
 
     if (failures != 0) {

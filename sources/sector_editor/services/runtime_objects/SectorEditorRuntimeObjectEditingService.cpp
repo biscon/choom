@@ -29,6 +29,52 @@ bool PointInOrOnTriangle(Vector2 point, Vector2 a, Vector2 b, Vector2 c)
     return !(hasNegative && hasPositive);
 }
 
+bool SameDoorFaceUvs(
+        const SectorDoorFaceUvSet& a,
+        const SectorDoorFaceUvSet& b)
+{
+    for (int index = 0; index < SectorDoorFaceCount; ++index) {
+        if (a.faces[index].scale.x != b.faces[index].scale.x
+                || a.faces[index].scale.y != b.faces[index].scale.y
+                || a.faces[index].offset.x != b.faces[index].offset.x
+                || a.faces[index].offset.y != b.faces[index].offset.y) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SameDoorConfig(const SectorPlacedDoor& a, const SectorPlacedDoor& b)
+{
+    return a.useTitle == b.useTitle
+            && a.canOpenScript == b.canOpenScript
+            && a.canCloseScript == b.canCloseScript
+            && a.width == b.width
+            && a.height == b.height
+            && a.thickness == b.thickness
+            && a.normalOffset == b.normalOffset
+            && a.heightOffsetWorld == b.heightOffsetWorld
+            && a.visual == b.visual
+            && a.modelAssetId == b.modelAssetId
+            && a.modelFit == b.modelFit
+            && a.modelScale == b.modelScale
+            && a.motion == b.motion
+            && a.hinge == b.hinge
+            && a.swingSide == b.swingSide
+            && a.openAngleDegrees == b.openAngleDegrees
+            && a.angularSpeedDegrees == b.angularSpeedDegrees
+            && a.openDistance == b.openDistance
+            && a.speed == b.speed
+            && a.initialOpenFraction == b.initialOpenFraction
+            && a.autoOpen == b.autoOpen
+            && a.interactionDistance == b.interactionDistance
+            && a.autoOpenDistance == b.autoOpenDistance
+            && a.materialId == b.materialId
+            && a.openSoundId == b.openSoundId
+            && a.closeSoundId == b.closeSoundId
+            && SameDoorFaceUvs(a.faceUvs, b.faceUvs);
+}
+
 } // namespace
 
 SectorEditorRuntimeObjectEditingService::SectorEditorRuntimeObjectEditingService(
@@ -92,6 +138,52 @@ bool SectorEditorRuntimeObjectEditingService::AddDoor(int lineDefId)
     MarkEdited(result.status.c_str());
     RefreshPreviewObjects();
     return true;
+}
+
+bool SectorEditorRuntimeObjectEditingService::CopySelectedDoorConfig(
+        SectorEditorConfigClipboardState& clipboard) const
+{
+    const SectorPlacedRuntimeObject* object = SelectedObject();
+    if (object == nullptr || object->kind != "door") {
+        context_.statusText = "Select a door first.";
+        return false;
+    }
+    clipboard.kind = SectorEditorConfigKind::Door;
+    clipboard.payload = object->door;
+    context_.statusText = "Copied door config.";
+    return true;
+}
+
+bool SectorEditorRuntimeObjectEditingService::PasteSelectedDoorConfig(
+        const SectorEditorConfigClipboardState& clipboard)
+{
+    const auto* source = std::get_if<SectorPlacedDoor>(&clipboard.payload);
+    const SectorPlacedRuntimeObject* selected = SelectedObject();
+    if (clipboard.kind != SectorEditorConfigKind::Door
+            || source == nullptr
+            || selected == nullptr
+            || selected->kind != "door") {
+        context_.statusText = "Copied config does not match the selected door.";
+        return false;
+    }
+    SectorPlacedDoor candidate = *source;
+    candidate.instanceId = selected->door.instanceId;
+    candidate.anchor = selected->door.anchor;
+    if (SameDoorConfig(selected->door, candidate)) {
+        context_.statusText = "Selected door already matches copied config.";
+        return false;
+    }
+    const bool changed = MutateSelected(
+            "Pasted door config",
+            [candidate](SectorPlacedRuntimeObject& object) {
+                if (object.kind != "door") return false;
+                object.door = candidate;
+                return true;
+            });
+    if (changed) {
+        ResetInspectorUi();
+    }
+    return changed;
 }
 
 bool SectorEditorRuntimeObjectEditingService::AddStaticModel(Vector2 mapPoint)

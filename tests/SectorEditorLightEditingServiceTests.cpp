@@ -1325,6 +1325,151 @@ void TestProxyPlacementApplyAndCancelTiming()
     service.CancelProxyPlacementData(nullptr);
 }
 
+void TestConfigClipboardPreservesPlacementAndCopiesRelativeAim()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorTopologyMap map = MakeMap();
+    game::SectorTopologyStaticSpotLight source;
+    source.id = 20;
+    source.position = Vector3{2.0f, 3.0f, 4.0f};
+    source.target = Vector3{7.0f, 1.0f, 2.0f};
+    source.intensity = 9.0f;
+    source.range = 33.0f;
+    source.innerConeDegrees = 11.0f;
+    source.outerConeDegrees = 22.0f;
+    source.sourceRadius = 0.75f;
+    source.castsShadow = false;
+    source.atmosphere.proxy.halo.enabled = true;
+    source.atmosphere.proxy.halo.brightness = 0.8f;
+    source.atmosphere.proxy.shaft.enabled = true;
+    source.atmosphere.proxy.shaft.widthScale = 1.4f;
+    source.atmosphere.dust.enabled = true;
+    source.atmosphere.dust.amount = 77;
+    game::SectorTopologyStaticSpotLight destination;
+    destination.id = 21;
+    destination.position = Vector3{100.0f, 200.0f, 300.0f};
+    destination.target = Vector3{100.0f, 199.0f, 300.0f};
+    map.staticSpotLights = {source, destination};
+
+    game::SectorEditorPreviewSelectionState previewSelectionState;
+    game::SelectionState selectionState;
+    selectionState.topologySelectionKind = game::TopologySelectionKind::StaticSpotLight;
+    selectionState.selectedTopologyStaticSpotLightId = source.id;
+    game::ManipulationState manipulationState;
+    game::LightEditingState lightState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    std::string statusText;
+    game::SectorEditorLightEditingService service = MakeService(
+            state, documentState, map, previewSelectionState, selectionState,
+            manipulationState, lightState, uiState, inspectorIdUiState, statusText);
+
+    game::SectorEditorConfigClipboardState clipboard;
+    Check(service.CopySelectedConfig(clipboard),
+          "copying a selected static spot config succeeds");
+    Check(clipboard.kind == game::SectorEditorConfigKind::StaticSpotLight,
+          "static spot copy records the exact light subtype");
+
+    selectionState.selectedTopologyStaticSpotLightId = destination.id;
+    ResetDirty(state, documentState, statusText);
+    const game::SectorEditorLightMutationResult pasted =
+            service.PasteSelectedConfig(clipboard);
+    const game::SectorTopologyStaticSpotLight& result = map.staticSpotLights[1];
+    Check(pasted.changed && pasted.dynamicLightRendererRefreshNeeded,
+          "static spot config paste reports a preview light refresh");
+    Check(result.id == 21
+                  && Near(result.position.x, 100.0f)
+                  && Near(result.position.y, 200.0f)
+                  && Near(result.position.z, 300.0f),
+          "static spot config paste preserves destination identity and position");
+    Check(Near(result.target.x, 105.0f)
+                  && Near(result.target.y, 198.0f)
+                  && Near(result.target.z, 298.0f),
+          "static spot config paste rebuilds the copied relative aim at the destination");
+    Check(Near(result.intensity, 9.0f)
+                  && Near(result.range, 33.0f)
+                  && Near(result.sourceRadius, 0.75f)
+                  && result.atmosphere.proxy.halo.enabled
+                  && result.atmosphere.proxy.shaft.enabled
+                  && result.atmosphere.dust.enabled
+                  && result.atmosphere.dust.amount == 77,
+          "static spot config paste copies light and atmosphere settings");
+    CheckDirtyOnce(state, documentState, statusText, "Pasted static spot light config");
+
+    ResetDirty(state, documentState, statusText);
+    Check(!service.PasteSelectedConfig(clipboard).changed,
+          "repeating an identical light config paste is a no-op");
+    CheckClean(state, documentState, statusText,
+               "Selected light already matches copied config.");
+}
+
+void TestDynamicConfigClipboardPreservesInstanceIdAndRejectsOtherTypes()
+{
+    game::SectorEditorState state;
+    game::SectorEditorDocumentState documentState;
+    game::SectorTopologyMap map = MakeMap();
+    game::SectorTopologyDynamicPointLight source;
+    source.id = 30;
+    source.position = Vector3{1.0f, 2.0f, 3.0f};
+    source.instanceId = "source_light";
+    source.enabled = false;
+    source.flicker = true;
+    source.flickerSpeed = 2.5f;
+    source.flickerAmount = 0.8f;
+    source.castsShadow = true;
+    source.shadowPriority = 17;
+    source.shadowStrength = 0.4f;
+    source.atmosphere.dust.enabled = true;
+    game::SectorTopologyDynamicPointLight destination;
+    destination.id = 31;
+    destination.position = Vector3{9.0f, 8.0f, 7.0f};
+    destination.instanceId = "destination_light";
+    map.dynamicPointLights = {source, destination};
+    game::SectorTopologyStaticPointLight staticDestination;
+    staticDestination.id = 32;
+    map.staticLights.push_back(staticDestination);
+
+    game::SectorEditorPreviewSelectionState previewSelectionState;
+    game::SelectionState selectionState;
+    selectionState.topologySelectionKind = game::TopologySelectionKind::DynamicLight;
+    selectionState.selectedTopologyDynamicLightId = source.id;
+    game::ManipulationState manipulationState;
+    game::LightEditingState lightState;
+    game::SectorEditorUiState uiState;
+    game::InspectorIdUiState inspectorIdUiState;
+    std::string statusText;
+    game::SectorEditorLightEditingService service = MakeService(
+            state, documentState, map, previewSelectionState, selectionState,
+            manipulationState, lightState, uiState, inspectorIdUiState, statusText);
+
+    game::SectorEditorConfigClipboardState clipboard;
+    Check(service.CopySelectedConfig(clipboard),
+          "copying a dynamic point light config succeeds");
+    selectionState.selectedTopologyDynamicLightId = destination.id;
+    ResetDirty(state, documentState, statusText);
+    Check(service.PasteSelectedConfig(clipboard).changed,
+          "pasting a matching dynamic point light config succeeds");
+    const game::SectorTopologyDynamicPointLight& result = map.dynamicPointLights[1];
+    Check(result.id == 31
+                  && result.instanceId == "destination_light"
+                  && Near(result.position.x, 9.0f)
+                  && !result.enabled
+                  && result.flicker
+                  && result.shadowPriority == 17
+                  && Near(result.shadowStrength, 0.4f)
+                  && result.atmosphere.dust.enabled,
+          "dynamic light paste preserves identity and placement while copying behavior");
+
+    selectionState.topologySelectionKind = game::TopologySelectionKind::StaticLight;
+    selectionState.selectedTopologyLightId = staticDestination.id;
+    ResetDirty(state, documentState, statusText);
+    Check(!service.PasteSelectedConfig(clipboard).changed,
+          "a copied dynamic point config is rejected for a static point light");
+    CheckClean(state, documentState, statusText,
+               "Copied config does not match the selected light type.");
+}
+
 } // namespace
 
 int main()
@@ -1347,6 +1492,8 @@ int main()
     TestStaticShadowEditsUseDocumentMutationBoundary();
     TestAtmosphereEditUsesDocumentMutationBoundary();
     TestProxyPlacementApplyAndCancelTiming();
+    TestConfigClipboardPreservesPlacementAndCopiesRelativeAim();
+    TestDynamicConfigClipboardPreservesInstanceIdAndRejectsOtherTypes();
 
     if (failures != 0) {
         std::cerr << failures << " SectorEditorLightEditingServiceTests failure(s)\n";

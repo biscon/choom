@@ -8,6 +8,7 @@
 #include "sector_editor/SectorEditorTopologyRenderCacheTypes.h"
 #include "sector_editor/selection/SectorEditorManipulationState.h"
 #include "sector_editor/services/lights/SectorEditorLightEditingState.h"
+#include "sector_editor/services/config_clipboard/SectorEditorConfigClipboardTypes.h"
 #include "sector_editor/SectorEditorTopologyActions.h"
 #include "sector_demo/SectorTopologyMap.h"
 
@@ -127,6 +128,9 @@ public:
     SectorEditorLightMutationResult AddDynamicRectLight(int sectorId, Vector2 mapPoint);
     SectorEditorLightMutationResult ConvertSelectedLight();
     SectorEditorLightMutationResult DeleteSelectedLightConfirmed();
+    bool CopySelectedConfig(SectorEditorConfigClipboardState& clipboard) const;
+    SectorEditorLightMutationResult PasteSelectedConfig(
+            const SectorEditorConfigClipboardState& clipboard);
 
     bool BeginLightDrag(TopologySelectionKind kind, int topologyLightId, SpotLightHandle spotHandle);
     SectorEditorLightMutationResult ApplyLightDragToSnappedPosition(Vector3 snappedPosition);

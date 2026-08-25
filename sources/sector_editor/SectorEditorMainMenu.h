@@ -11,6 +11,8 @@ enum class SectorEditorMainMenuCommand : uint32_t {
     LoadLevel,
     SaveLevel,
     ReloadLevel,
+    CopyConfig,
+    PasteConfig,
     Toggle3DMode,
     OpenMaterialEditor,
     OpenSoundEditor,
@@ -30,6 +32,8 @@ SectorEditorMainMenuCommand DrawSectorEditorMainMenu(
         engine::FontHandle font,
         const SectorEditorState& editorState,
         engine::UIMainMenuState& menuState,
+        bool canCopyConfig,
+        bool canPasteConfig,
         bool enabled);
 
 } // namespace game

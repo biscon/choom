@@ -371,30 +371,6 @@ bool DrawTopologySectorInspector(
         drawLayerToggle(uvPrefix);
         const TopologyMaterialLayer layer = selectionState.activeTopologyMaterialLayer;
         if (layer == TopologyMaterialLayer::Base) {
-            const float buttonW = (contentW - gap) * 0.5f;
-            if (engine::Button(
-                        ui,
-                        config,
-                        input,
-                        assets,
-                        TextFormat("%s_copy_material", uvPrefix),
-                        Rectangle{0.0f, y, buttonW, 36.0f},
-                        font,
-                        "Copy")) {
-                materialEditing.CopyMaterial(target);
-            }
-            if (engine::Button(
-                        ui,
-                        config,
-                        input,
-                        assets,
-                        TextFormat("%s_paste_material", uvPrefix),
-                        Rectangle{buttonW + gap, y, buttonW, 36.0f},
-                        font,
-                        "Paste")) {
-                materialEditing.PasteMaterial(target, assets);
-            }
-            y += 36.0f + gap;
             drawTextureRow(textureButtonId, "Material:", materialId, field, TopologyMaterialLayer::Base);
             drawUvSettings(uvPrefix, uv, stateOffset);
             return;

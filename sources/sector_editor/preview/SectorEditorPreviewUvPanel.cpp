@@ -507,31 +507,6 @@ bool DrawSectorEditorPreviewUvPanel(SectorEditorPreviewUvPanelContext& context)
             }
             DrawColorSwatch(config, swatch, DecalTintPreviewColor(decal->tint), config.borderThickness);
         }
-    } else if (!targetIsMiddle && layer == TopologyMaterialLayer::Base) {
-        if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_3d_copy_material",
-                Rectangle{actionX, actionTop, 112.0f, actionH},
-                font,
-                "Copy Material")) {
-            materialEditing.CopyMaterial(target);
-        }
-        actionX += 112.0f + gap;
-
-        if (engine::Button(
-                ui,
-                config,
-                input,
-                assets,
-                "sector_editor_3d_paste_material",
-                Rectangle{actionX, actionTop, 112.0f, actionH},
-                font,
-                "Paste Material")) {
-            materialEditing.PasteMaterial(target, assets);
-        }
     }
 
     input.ForEachEvent(
